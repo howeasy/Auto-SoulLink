@@ -552,6 +552,12 @@ class Gen3Adapter(GameAdapter):
             return name
         return _RR_CALC_NAMES.get(kind, {}).get(name, name)
 
+    def calc_profile(self) -> dict | None:
+        """RR's numbers are verified; vanilla FRLG/Emerald calc support is a later phase."""
+        if self._is_rr:
+            return {"gen": 9, "dex": "rr"}
+        return None
+
     def area_display_name(self, area_id: str) -> str:
         if not area_id:
             return area_id

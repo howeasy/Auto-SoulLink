@@ -623,6 +623,15 @@ class SLinkServer:
         # A class-level dict would be shared across instances, which is worse.
         return self._player_adapters.get(player_id) or self.adapter
 
+    def _calc_profile(self) -> dict | None:
+        """The damage-calc profile shared by both players' adapters, or None if either
+        game has no verified calc numbers yet, or the two players' games disagree."""
+        a = self.adapter_for("a").calc_profile()
+        b = self.adapter_for("b").calc_profile()
+        if a is None or b is None or a != b:
+            return None
+        return a
+
     def _trainer_panel_html(self, area_id: str, player_id: str = "",
                             key_prefix: str = "",
                             highest_party_level: int = 0) -> str:
@@ -973,16 +982,17 @@ class SLinkServer:
 
     def _calc_preview(self, pid: str, enemy_party: list[dict]) -> dict | None:
         """What calc-preview.js needs to run the damage calculator for this player's
-        current matchup, or None. Radical Red only: the calculator is pinned to modern
-        mechanics and would misreport anything older."""
-        if not self.state.is_rr:
+        current matchup, or None when this player's game has no verified calc numbers
+        yet (calc_profile() is None)."""
+        adapter = self.adapter_for(pid)
+        profile = adapter.calc_profile()
+        if not profile:
             return None
         details = self.party_details.get(pid, {})
         atk_key = next((k for k, d in details.items() if d.get("active") and d.get("hp", 0) > 0),
                        next((k for k, d in details.items() if d.get("hp", 0) > 0), None))
         dfn = next((em for em in enemy_party if em.get("active")),
                    next((em for em in enemy_party if em.get("hp", 0) > 0), None))
-        adapter = self.adapter_for(pid)
         # The same names /api/calc/mons hands the full calc: the engine looks moves,
         # abilities and items up by name, never by the cartridge's numeric id.
         atk = _build_mon_entry(atk_key, details[atk_key], adapter) if atk_key else None
@@ -1008,6 +1018,8 @@ class SLinkServer:
             return out
 
         return {
+            "gen": profile.get("gen"),
+            "dex": profile.get("dex"),
             "trainer_key": f"{bs['opponent_class']} {bs['opponent_name']}" if is_trainer else "",
             "is_trainer": is_trainer,
             "is_doubles": bool(bs.get("is_doubles")),
@@ -1060,6 +1072,7 @@ class SLinkServer:
             "standalone": True, "base": "", "tcp_port": self._tcp_port,
             "runs": [self._run_entry()], "run": self._run_entry(),
             "page": page, "panel": panel, "tab": tab, "pinned_run_id": None,
+            "show_calc": bool(self._calc_profile()),
         }
 
     def _rom_label(self) -> str:
@@ -1079,8 +1092,11 @@ class SLinkServer:
                    meta: str | None = None, tabs=None) -> dict:
         """panel_page.html on a standalone run server."""
         run = self._run_entry()
-        tabs = tabs or [("Board", "/", False), ("Calc", "/calc/normal.html", panel == "calc"),
-                        ("Debug", "/debug", panel == "debug")]
+        if tabs is None:
+            tabs = [("Board", "/", False)]
+            if self._calc_profile():
+                tabs.append(("Calc", "/calc/normal.html", panel == "calc"))
+            tabs.append(("Debug", "/debug", panel == "debug"))
         ctx = self._rail_ctx(page="run" if panel in ("calc", "debug") else "broadcast",
                              panel=panel if panel in ("calc", "debug") else "",
                              tab=panel if panel in ("twitch", "obs") else "")
@@ -2515,6 +2531,7 @@ class SLinkServer:
             "sidebar_html": self._build_sidebar_html(request, "run"),
             "tcp_port":     self._tcp_port,
             "game_label":   self._rom_label(),
+            "show_calc":    bool(self._calc_profile()),
         })
         return aiohttp_jinja2.render_template("dashboard.html", request, ctx)
 
@@ -2553,14 +2570,15 @@ class SLinkServer:
         """Return live party + linked mons for both players as Showdown pastes."""
         d = self._build_status_dict()
         s = self.state
-        result = {}
+        result = {"calc": self._calc_profile()}
         for pid in ("a", "b"):
+            adapter = self.adapter_for(pid)
             p = d["players"][pid]
             party, linked = [], []
             # Party mons
             for key in p.get("party_keys", []):
                 detail = p["party_details"].get(key, {})
-                entry = _build_mon_entry(key, detail, self.adapter)
+                entry = _build_mon_entry(key, detail, adapter)
                 if entry:
                     entry["loc"] = "party"
                     entry["hp_pct"] = (
@@ -2587,7 +2605,7 @@ class SLinkServer:
                     "ability_name": "",
                     "moves":        stats.get("moves", []),
                 }
-                entry = _build_mon_entry(mi.key, detail, self.adapter)
+                entry = _build_mon_entry(mi.key, detail, adapter)
                 if entry:
                     entry["loc"] = "box"
                     linked.append(entry)
@@ -2616,7 +2634,7 @@ class SLinkServer:
                         "status_cond":  em.get("status_cond", 0),
                         "stat_stages":  em.get("stat_stages"),
                     }
-                    entry = _build_mon_entry(f"foe-{ei}", detail, self.adapter)
+                    entry = _build_mon_entry(f"foe-{ei}", detail, adapter)
                     if entry:
                         entry["loc"]    = "enemy"
                         entry["active"] = em.get("active", False)
@@ -2625,7 +2643,7 @@ class SLinkServer:
                         entry["trainer_label"] = trainer_label
                         enemy.append(entry)
                 calc_label = _calc_trainer_label(
-                    self.adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
+                    adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
                 for entry in enemy if calc_label else ():
                     entry["trainer_label"] = calc_label
             result[pid] = {

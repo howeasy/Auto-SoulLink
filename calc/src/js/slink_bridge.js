@@ -80,8 +80,11 @@
   var _diffCache      = {};     // "side:trainerKey" → {mode, matched, total}
   var _lastTrainerKey = { a: null, b: null };
   var _setdexReady    = false;
+  var _setdexInitStarted = false; // guards the one-time initSetdex() RR-difficulty-file kickoff
   var _sseSource      = null;
   var _retryTimer     = null;
+  var _dex            = null;   // 'rr' | 'vanilla' | 'purergb' | null — from payload's calc.dex
+  var _warnedMoves    = {};     // dedupe key -> true, for the unknown-move console.warn
 
   // Prep tab state — mode is fixed to the current page (no cross-mode toggle)
   var _pageIsHC      = /hardcore/i.test(window.location.href);
@@ -119,6 +122,46 @@
       }
     }
   });
+
+  // ---------------------------------------------------------------------------
+  // Generation + dex — the calc defaults to Gen 9 (RR).  The payload's top-
+  // level `calc: {gen, dex}` (null for an adapter that doesn't support the
+  // web calc yet) tells us which game this run is and drives the calc's own
+  // gen radios (shared_controls.js ~1246 .gen change handler) to match.
+  // ---------------------------------------------------------------------------
+
+  // RR-only bridge features (Prep tab, HC/normal badge, trainer-set enrichment,
+  // the second setdex file) key off this rather than sniffing species/gen.
+  function _isRR() { return _dex === 'rr'; }
+
+  // Called at the top of every successful /api/calc/mons fetch, before the
+  // species-name normalization / enemy enrichment that depend on the right
+  // gen's pokedex being loaded.
+  function _applyCalcGen(calcInfo) {
+    if (!calcInfo) {
+      console.warn('[SLink bridge] Payload has no "calc" info — staying on Gen 9.');
+      _dex = null;
+      return;
+    }
+    _dex = calcInfo.dex || null;
+    var wantGen = calcInfo.gen;
+    if (!wantGen || window.gen === wantGen) return;
+    var $radio = window.$ && window.$('#gen' + wantGen);
+    if (!$radio || !$radio.length) {
+      console.warn('[SLink bridge] No #gen' + wantGen + ' radio in this template — staying on gen ' + window.gen + '.');
+      return;
+    }
+    $radio.prop('checked', true).change();
+  }
+
+  // The RR difficulty-comparison setdex (initSetdex) is only meaningful for
+  // RR; dex isn't known until the first fetch resolves, so kick it off there
+  // (once) instead of unconditionally at init().
+  function _maybeInitSetdex() {
+    if (_setdexInitStarted || !_isRR()) return;
+    _setdexInitStarted = true;
+    initSetdex();
+  }
 
   // ---------------------------------------------------------------------------
   // SETDEX_HC loading trick
@@ -321,7 +364,7 @@
    * composition and populate moves + rebuild the showdown paste.
    */
   function _enrichEnemyMons() {
-    if (!_data) return;
+    if (!_data || !_isRR()) return; // RR trainer-set matching only; other games keep live data
 
     ['a', 'b'].forEach(function (side) {
       var pd = _data[side];
@@ -776,13 +819,16 @@
     var ss = pokeObj.find('.set-selector');
 
     // ── Enemy mon with a matched setdex key ──────────────────────────────────
-    // Inject the enriched set directly into SETDEX_SV so the change handler
-    // loads it natively, and the dropdown shows the real trainer set name
-    // (e.g. "Stufful (Lass Anne)") confirming the match.
+    // Inject the enriched set directly into the CURRENT gen's setdex (shared_controls.js
+    // ~1220 SETDEX[gen] / ~1270 `setdex = SETDEX[gen]`) so the change handler loads it
+    // natively, and the dropdown shows the real trainer set name (e.g. "Stufful (Lass
+    // Anne)") confirming the match. In gen 9 `window.setdex === window.SETDEX_SV`, so
+    // this is a no-op change for RR.
     if (mon._matched_key) {
       var setName = mon._matched_key;
-      if (!window.SETDEX_SV[species]) window.SETDEX_SV[species] = {};
-      window.SETDEX_SV[species][setName] = {
+      var targetDex = window.setdex || window.SETDEX_SV;
+      if (!targetDex[species]) targetDex[species] = {};
+      targetDex[species][setName] = {
         nature  : mon.nature       || 'Hardy',
         ability : mon.ability_name || '',
         item    : mon.item_name    || '',
@@ -849,7 +895,12 @@
       var moveName = moves[i] || '(No Move)';
       moveObj.attr('data-prev', moveObj.val());
       moveObj.val(moveName);
-      if (!moveObj.val()) moveObj.val('(No Move)'); // fallback if not found
+      if (!moveObj.val()) {
+        // moves[i] was truthy but isn't in the calc's move list for this gen/dex —
+        // an empty slot (moves[i] falsy) is not a warning.
+        if (moves[i]) _warnUnknownMove(species, moves[i]);
+        moveObj.val('(No Move)'); // fallback if not found
+      }
       moveObj.trigger('change');
     }
 
@@ -966,6 +1017,16 @@
       moves:        moves,
       showdown_paste: paste,
     };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Unknown-move warning — dedupe per species+move so a repeated import of
+  // the same mon doesn't spam the console.
+  function _warnUnknownMove(species, moveName) {
+    var key = species + '\u0001' + moveName;
+    if (_warnedMoves[key]) return;
+    _warnedMoves[key] = true;
+    console.warn('[SLink bridge] Unknown move "' + moveName + '" for ' + species + ' — falling back to (No Move).');
   }
 
   // ---------------------------------------------------------------------------
@@ -1112,6 +1173,9 @@
     body.innerHTML = '';
     if (_isCollapsed()) return;
 
+    // Prep tab is RR-only (trainer setdex); bounce off it once we know the game isn't RR.
+    if (_activeTab === 'prep' && !_isRR()) _activeTab = 'a';
+
     // Prep tab is available even without SLink data (it only needs the SETDEX)
     if (!_data && _activeTab !== 'prep') {
       var msg = ce('div');
@@ -1119,18 +1183,20 @@
       msg.textContent = _fetching ? '⟳ Connecting to SLink...' : '⚠ No data';
       body.appendChild(msg);
 
-      // Still render tab row so user can switch to Prep
-      var tabRowFallback = ce('div');
-      css(tabRowFallback, { display: 'flex', borderBottom: '1px solid ' + C.border, marginBottom: '4px' });
-      var prepTabFb = ce('button');
-      css(prepTabFb, {
-        flex: '1', padding: '7px 10px', background: 'transparent', border: 'none',
-        color: C.text, cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px',
-      });
-      prepTabFb.textContent = '📋 Prep';
-      prepTabFb.onclick = function () { _activeTab = 'prep'; refreshPanel(); };
-      tabRowFallback.appendChild(prepTabFb);
-      body.insertBefore(tabRowFallback, msg);
+      // Still render tab row so user can switch to Prep (RR only)
+      if (_isRR()) {
+        var tabRowFallback = ce('div');
+        css(tabRowFallback, { display: 'flex', borderBottom: '1px solid ' + C.border, marginBottom: '4px' });
+        var prepTabFb = ce('button');
+        css(prepTabFb, {
+          flex: '1', padding: '7px 10px', background: 'transparent', border: 'none',
+          color: C.text, cursor: 'pointer', fontFamily: 'monospace', fontSize: '12px',
+        });
+        prepTabFb.textContent = '📋 Prep';
+        prepTabFb.onclick = function () { _activeTab = 'prep'; refreshPanel(); };
+        tabRowFallback.appendChild(prepTabFb);
+        body.insertBefore(tabRowFallback, msg);
+      }
 
       body.appendChild(_statusFooter());
       return;
@@ -1140,10 +1206,12 @@
     var tabRow = ce('div');
     css(tabRow, { display: 'flex', borderBottom: '1px solid ' + C.border });
 
-    ['a', 'b', 'prep'].forEach(function (side) {
+    // Prep tab (trainer prep) is RR-only.
+    var tabSides = _isRR() ? ['a', 'b', 'prep'] : ['a', 'b'];
+    tabSides.forEach(function (side, sideIdx) {
       var isPrep = side === 'prep';
       var pd     = (!isPrep && _data) ? _data[side] : null;
-      var badge  = !isPrep ? getDifficultyBadge(pd, side) : null;
+      var badge  = (!isPrep && _isRR()) ? getDifficultyBadge(pd, side) : null;
 
       var tab = ce('button');
       css(tab, {
@@ -1151,7 +1219,7 @@
         padding       : '7px 10px',
         background    : _activeTab === side ? C.activeTab : 'transparent',
         border        : 'none',
-        borderRight   : side !== 'prep' ? '1px solid ' + C.border : 'none',
+        borderRight   : sideIdx < tabSides.length - 1 ? '1px solid ' + C.border : 'none',
         color         : C.text,
         cursor        : 'pointer',
         fontFamily    : 'monospace',
@@ -1746,8 +1814,17 @@
     var status = _statusCondToCalc(mon.status_cond || 0);
     pokeObj.find('.status').val(status).trigger('change');
 
-    // Stat stages (only present for active battler; null for benched mons)
+    // Stat stages (only present for active battler; null for benched mons).
+    // Wire order is ATK,DEF,SPD,SATK,SDEF,ACC,EVA (docs/protocol.md §4.1; confirmed for
+    // Gen 2 by the Gen 2 lane's lua/gen2/reads.lua read_stat_stages, pokecrystal
+    // wStatLevels order) — same order as this default map for gen 2/3/9.
     var stageMap = ['.at', '.df', '.sp', '.sa', '.sd'];
+    if (window.gen === 1) {
+      // Gen 1 wire order is [atk, def, spd, spc, 6(unused/neutral), acc, eva]
+      // (lua/gen1/client.lua wire_stages ~128); pre-split Special is the .sl row in
+      // gen-1 mode (normal.template.html "sl" row; shared_controls.js LEGACY_STATS_RBY).
+      stageMap = ['.at', '.df', '.sp', '.sl', '.sd'];
+    }
     var stages = mon.stat_stages;
     if (stages) {
       for (var i = 0; i < 5; i++) {
@@ -2133,6 +2210,10 @@
         if (_refetch) { _refetch = false; fetchMons(); }
         _data      = json;
         _connected = true;
+        // Drive the calc to the run's gen/dex BEFORE normalizing/enriching mons, since
+        // both depend on the right gen's pokedex/setdex being loaded.
+        _applyCalcGen(json.calc);
+        _maybeInitSetdex();
         _normalizeAllSpeciesNames();
         _enrichEnemyMons();
         // Don't repaint while the user is typing inside the panel.
@@ -2270,7 +2351,8 @@
 
   function init() {
     buildPanel();
-    initSetdex();
+    // initSetdex() (RR-only) is kicked off by _maybeInitSetdex() once the first fetch
+    // tells us this run's dex — see fetchMons().
     processHashPrefill();
     // Initial fetch; start SSE regardless of whether it succeeds
     fetchMons().then(startSSE).catch(startSSE);

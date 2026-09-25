@@ -708,7 +708,7 @@ $(".set-selector").change(function () {
 				pokeObj.find("." + LEGACY_STATS[gen][i] + " .dvs").val(15);
 			}
 			pokeObj.find(".nature").val("Hardy");
-			setSelectValueIfValid(abilityObj, pokemon.abilities[0], "");
+			setSelectValueIfValid(abilityObj, pokemon.abilities ? pokemon.abilities[0] : "", ""); // Gen 1/2 species have no abilities
 			if (startsWith(pokemonName, "Ogerpon-") && !startsWith(pokemonName, "Ogerpon-Teal")) {
 				itemObj.val(pokemonName.split("-")[1] + " Mask");
 			} else {
@@ -947,6 +947,15 @@ function correctHiddenPower(pokemon) {
 	return pokemon;
 }
 
+// Gen 1/2 don't yet have a dedicated per-stat "stat exp" input (the generic .evs field is a
+// 0-252 modern-EV control that has no effect on Gen 1/2 stats today). Use a ".statexp" input if
+// a later template phase adds one, else default to max stat exp (65535) so behavior stays
+// identical to today, where every mon implicitly had max stat exp (see calc/calc/src/stats.ts).
+function getStatExpOrMax(container) {
+	var $statExp = container.find(".statexp");
+	return $statExp.length ? ~~$statExp.val() : 65535;
+}
+
 function createPokemon(pokeInfo) {
 	if (typeof pokeInfo === "string") { // in this case, pokeInfo is the id of an individual setOptions value whose moveset's tier matches the selected tier(s)
 		var name = pokeInfo.substring(0, pokeInfo.indexOf(" ("));
@@ -961,7 +970,9 @@ function createPokemon(pokeInfo) {
 			var stat = legacyStatToStat(legacyStat);
 
 			ivs[stat] = (gen >= 3 && set.ivs && typeof set.ivs[legacyStat] !== "undefined") ? set.ivs[legacyStat] : 31;
-			evs[stat] = (set.evs && typeof set.evs[legacyStat] !== "undefined") ? set.evs[legacyStat] : 0;
+			// Gen 1/2 sets never declare stat exp (it didn't exist as a settable concept pre-Gen-3
+			// EVs); default to max (65535) so this matches today's "always max stat exp" output.
+			evs[stat] = (set.evs && typeof set.evs[legacyStat] !== "undefined") ? set.evs[legacyStat] : (gen < 3 ? 65535 : 0);
 		}
 		var moveNames = set.moves;
 		if (isRandoms && (gen >= 9 || gen === 7 || gen === 6 || gen === 5 || gen === 4 || gen === 3)) {
@@ -1015,7 +1026,9 @@ function createPokemon(pokeInfo) {
 			var stat = legacyStatToStat(LEGACY_STATS[gen][i]);
 			baseStats[stat === 'spc' ? 'spa' : stat] = ~~pokeInfo.find("." + LEGACY_STATS[gen][i] + " .base").val();
 			ivs[stat] = gen > 2 ? ~~pokeInfo.find("." + LEGACY_STATS[gen][i] + " .ivs").val() : ~~pokeInfo.find("." + LEGACY_STATS[gen][i] + " .dvs").val() * 2 + 1;
-			evs[stat] = ~~pokeInfo.find("." + LEGACY_STATS[gen][i] + " .evs").val();
+			evs[stat] = gen > 2
+				? ~~pokeInfo.find("." + LEGACY_STATS[gen][i] + " .evs").val()
+				: getStatExpOrMax(pokeInfo.find("." + LEGACY_STATS[gen][i]));
 			boosts[stat] = ~~pokeInfo.find("." + LEGACY_STATS[gen][i] + " .boost").val();
 		}
 		if (gen === 1) baseStats.spd = baseStats.spa;
@@ -1190,7 +1203,7 @@ function calcStat(poke, StatID) {
 	var nature, ivs, evs;
 	if (gen < 3) {
 		ivs = ~~stat.find(".dvs").val() * 2;
-		evs = 252;
+		evs = getStatExpOrMax(stat);
 	} else {
 		ivs = ~~stat.find(".ivs").val();
 		evs = ~~stat.find(".evs").val();
@@ -1260,7 +1273,7 @@ $(".gen").change(function () {
 			params.sort();
 			var path = window.location.pathname + '?' + params;
 			window.history.pushState({}, document.title, path);
-			gtag('config', 'UA-26211653-3', {'page_path': path});
+			if (typeof gtag === 'function') gtag('config', 'UA-26211653-3', {'page_path': path}); // SLink: no analytics loaded
 		}
 	}
 	genWasChanged = true;

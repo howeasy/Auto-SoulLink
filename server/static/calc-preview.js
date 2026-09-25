@@ -113,11 +113,12 @@ window.SLinkCalc = (function () {
       var c = JSON.parse(div.getAttribute('data-calc') || '{}');
       var moves = (c.player_moves || []).filter(Boolean);
       if (!c.player_species || !c.enemy_species || !moves.length) return;
-      var gen = window.calc.Generations.get(9);
+      var gen = window.calc.Generations.get(c.gen || 9);
 
       // Trainer battles: pick the difficulty whose set matches the active enemy's level.
+      // The normal/hardcore setdex + trainer_key match is RR-only.
       var difficulty = 'normal', set = null;
-      if (c.is_trainer && c.trainer_key) {
+      if (c.is_trainer && c.trainer_key && (!c.dex || c.dex === 'rr')) {
         var n = (window.SETDEX_NORMAL[c.enemy_species] || {})[c.trainer_key];
         var h = (window.SETDEX_HC[c.enemy_species] || {})[c.trainer_key];
         if (h && h.level == c.enemy_level && !(n && n.level == c.enemy_level)) difficulty = 'hardcore';

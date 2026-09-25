@@ -72,7 +72,9 @@ export class Pokemon implements State.Pokemon {
     this.item = options.item;
     this.nature = options.nature || ('Serious' as I.NatureName);
     this.ivs = Pokemon.withDefault(gen, options.ivs, 31);
-    this.evs = Pokemon.withDefault(gen, options.evs, gen.num >= 3 ? 0 : 252);
+    // Gen 1/2 `evs` is raw stat experience (0-65535); default to max so an unset value
+    // reproduces the old hard-coded "always max stat exp" behavior (see stats.ts calcStatRBYFromDV).
+    this.evs = Pokemon.withDefault(gen, options.evs, gen.num >= 3 ? 0 : 65535);
     this.boosts = Pokemon.withDefault(gen, options.boosts, 0, false);
 
     // Gigantamax 'forms' inherit weight from their base species when not dynamaxed
@@ -182,6 +184,18 @@ export class Pokemon implements State.Pokemon {
   }
 
   private calcStat(gen: I.Generation, stat: I.StatID) {
+    // Gen 1/2: `this.evs[stat]` is raw stat experience (0-65535, real in-game range, default
+    // 65535/max - see the `evs` default above), so this bypasses Stats.calcStat (whose public
+    // `ev` param stays a no-op for gen < 3, see stats.ts) and goes straight to the RBY/GSC path.
+    if (gen.num < 3) {
+      return Stats.calcStatRBY(
+        stat,
+        this.species.baseStats[stat],
+        this.ivs[stat]!,
+        this.level,
+        this.evs[stat]!
+      );
+    }
     return Stats.calcStat(
       gen,
       stat,

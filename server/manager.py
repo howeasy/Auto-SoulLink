@@ -235,6 +235,43 @@ def option_support(key: str, rom_types: list[str]) -> dict:
     return {"ok": ok, "why": why}
 
 
+def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
+    """The web calc's profile for a run, or None when it should stay hidden.
+
+    The Manager has no live adapter instance of its own (each run is a separate process),
+    so this instantiates the same adapters `server.py` would and asks calc_profile(), the
+    way `SLinkServer._calc_profile` compares the two players' adapters. Prefers each
+    connected player's own rom_type (a status payload's `players[pid]['rom_type']`); a
+    player who has not said hello yet falls back to the run's declared game family
+    (`GAMES`/`GAME_MEMBERS` above) — a soul link only ever pairs cartridges from the same
+    family, so one representative rom_type stands for both. None when nothing is known
+    yet, either side's game is unverified, or the two disagree.
+    """
+    from server.adapters import game_id_for_rom_type, get_adapter
+    players = status.get("players") or {}
+    # Unrecognized rom_types ("" or a persisted "?") count as not-yet-known.
+    rom_types = [rt for rt in ((players.get(pid) or {}).get("rom_type") or "" for pid in ("a", "b"))
+                 if game_id_for_rom_type(rt)]
+    if not rom_types:
+        members = GAME_MEMBERS.get(run.get("game") or "", [])
+        if not members:
+            return None
+        rom_types = [members[0]]
+    profile = None
+    for rom_type in rom_types:
+        gid = game_id_for_rom_type(rom_type)
+        if not gid:
+            return None
+        p = get_adapter(gid, is_rr=rom_type.endswith("_rr")).calc_profile()
+        if p is None:
+            return None
+        if profile is None:
+            profile = p
+        elif p != profile:
+            return None
+    return profile
+
+
 def new_run_form() -> dict:
     """Everything the New-run form needs, computed here so the reasons and the greying
     come from one table: per game family, per option, (ok, why)."""
@@ -1011,6 +1048,7 @@ class RunManager:
 
     async def _render_shell(self, request, runs, run, *, page, extra=None):
         status = await self._run_status(request, run) if run else None
+        show_calc = bool(_calc_profile_for_run(run, status)) if run else False
         ctx = {
             "page_title":   "Soul Link",
             "theme":        resolve_theme(request),
@@ -1020,6 +1058,7 @@ class RunManager:
             "page":         page,
             "runs":         [self._augment_for_template(r) for r in runs],
             "run":          self._augment_for_template(run) if run else None,
+            "show_calc":    show_calc,
             "pinned_run_id": self._stream_pin_id,
             "form_json":    _json_for_script(new_run_form()),
             # The creator randomizes as part of creating a Gen 1 run; it needs the same
@@ -1842,10 +1881,15 @@ class RunManager:
             raise web.HTTPNotFound(text="Run not found")
         return runs, run
 
-    def _run_panel_ctx(self, request: web.Request, runs, run, *, panel: str, label: str) -> dict:
+    async def _run_panel_ctx(self, request: web.Request, runs, run, *, panel: str, label: str) -> dict:
         ctx = self._rail_ctx(request, runs, page="run")
         base = f"/runs/{run['run_id']}"
         running = run.get("status") == "running"
+        show_calc = bool(_calc_profile_for_run(run, await self._run_status(request, run)))
+        tabs = [("Board", base, False)]
+        if show_calc:
+            tabs.append(("Calc", f"{base}/calc/normal.html", panel == "calc"))
+        tabs.append(("Debug", f"{base}/debug", panel == "debug"))
         ctx.update({
             "page_title": f"{label} — {run.get('name', '')}",
             "theme": resolve_theme(request),
@@ -1854,8 +1898,8 @@ class RunManager:
             "run": self._augment_for_template(run),
             "panel": panel, "panel_label": label, "base": base, "api_base": base,
             "title": run.get("name", ""), "meta": label,
-            "tabs": [("Board", base, False), ("Calc", f"{base}/calc/normal.html", panel == "calc"),
-                     ("Debug", f"{base}/debug", panel == "debug")],
+            "tabs": tabs,
+            "show_calc": show_calc,
             "available": running,
             "unavailable_html": (f"This run is not running; {label.lower()} needs its server. "
                                  f"<a href=\"{base}\">Start it from the board</a>."),
@@ -1867,7 +1911,7 @@ class RunManager:
         panel is the run server's own (templates/_debug_panel.html); its calls go through
         handle_run_api, SSE included."""
         runs, run = self._run_or_404(request)
-        ctx = self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
+        ctx = await self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
         return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def handle_run_calc(self, request: web.Request) -> web.Response:
@@ -1879,7 +1923,7 @@ class RunManager:
         if not path.endswith(".html"):
             return calc_files.file_response(calc_files.resolve(path))
         runs, run = self._run_or_404(request)
-        ctx = self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
+        ctx = await self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
         try:
             abs_path = calc_files.resolve(path)
         except web.HTTPNotFound:
