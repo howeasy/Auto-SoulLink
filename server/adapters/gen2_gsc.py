@@ -40,6 +40,16 @@ _STATIC = re.compile(r"static_[a-z][a-z0-9_]*_([1-9][0-9]{0,2})\Z")
 _LEGEND = re.compile(r"legend_([1-9][0-9]{0,2})\Z")
 _SPLIT = {"Physical": 0, "Special": 1, "Status": 2}
 
+# Crystal/Gold/Silver display name -> damage-calc GSC name, per kind. Species/moves/
+# items are identical across the three titles, so one shared table covers all of them
+# (tools/gen_gen2_calc_names.py generates it from calc/calc/src/data/*.ts; pinned by
+# tests/unit/test_calc_names_multigen.py). Gen 2 has no abilities.
+_CALC_NAMES: dict[str, dict[str, str]] = {}
+_calc_names_path = _DATA / "gen2_gsc" / "calc_names.json"
+if _calc_names_path.exists():
+    with _calc_names_path.open(encoding="utf-8") as _f:
+        _CALC_NAMES = {k: v for k, v in json.load(_f).items() if isinstance(v, dict)}
+
 
 def _require(condition, message):
     if not condition:
@@ -331,6 +341,43 @@ class Gen2GSCAdapter(GameAdapter):
         return {"name": row["name"], "type_id": row["type_id"], "type_name": row["type"],
                 "power": row["power"], "accuracy": row["accuracy"], "pp": row["pp"],
                 "split": _SPLIT[row["split"]], "effect_chance": row["effect_chance"]}
+
+    def calc_name(self, kind, name):
+        if not name:
+            return name
+        return _CALC_NAMES.get(kind, {}).get(name, name)
+
+    def calc_profile(self):
+        # Crystal/Gold/Silver all decode through the same verified party-struct codec
+        # (gen2_codec) and share one GSC calc name table -- the numbers are trustworthy
+        # for all three titles this adapter serves.
+        return {"gen": 2, "dex": "vanilla"}
+
+    def calc_stats(self, detail):
+        """Decode DVs/stat exp/computed stats from detail["blob_hex"] (the 70-byte
+        party transfer blob, gen2_codec.decode_party_blob shape). None on anything
+        malformed -- untrusted client input, this must never raise."""
+        try:
+            blob_hex = detail.get("blob_hex")
+            if not isinstance(blob_hex, str):
+                return None
+            species_id = int(detail.get("species_id", 0))
+            mon = gen2_codec.decode_party_blob(bytes.fromhex(blob_hex), self._layout,
+                                               species_marker=species_id)
+            base_stats = self._species[mon["species_id"]]["base_stats"]
+            stats = gen2_codec.calc_stats(base_stats, mon["dvs"], mon["stat_exp"], mon["level"])
+            dvs, exp = mon["dvs"], mon["stat_exp"]
+            return {
+                "dvs": {"atk": dvs["attack"], "def": dvs["defense"],
+                       "spe": dvs["speed"], "spc": dvs["special"]},
+                "stat_exp": {"hp": exp["hp"], "atk": exp["attack"], "def": exp["defense"],
+                            "spe": exp["speed"], "spc": exp["special"]},
+                "stats": {"hp": stats["hp"], "atk": stats["attack"], "def": stats["defense"],
+                         "spa": stats["special_attack"], "spd": stats["special_defense"],
+                         "spe": stats["speed"]},
+            }
+        except Exception:
+            return None
 
     def party_blob_size(self):
         return self._layout.party_size + self._layout.name_size + self._layout.nickname_size
