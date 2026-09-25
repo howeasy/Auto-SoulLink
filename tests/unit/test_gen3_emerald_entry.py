@@ -45,10 +45,7 @@ def test_a_clean_emerald_sha1_never_reaches_gen3_run_lua():
     dofile's, `gen3/run.lua` is never in it, however the refusal happens to be worded."""
     loaded: list[str] = []
     with pytest.raises(lupa.LuaError):
-        try:
-            loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_SHA1)
-        finally:
-            pass
+        loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_SHA1)
     assert _NEW_GEN3_CLIENT not in loaded, loaded
 
 

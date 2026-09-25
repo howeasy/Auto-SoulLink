@@ -43,7 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # ── The Gen 3 FRLG load closure (C4-ZIP audit, cx-39772f46) ──────────────────────────────────
 # Traced from lua/slink.lua:101/:110/:139 -> lua/gen3/run.lua:15-17/:57 -> lua/gen3/entry.lua's
-# L(...) calls (:233-359) and Entry.PACK_FILES (:72-79), plus what those modules require:
+# L(...) calls (:262-382) and Entry.PACK_FILES (:79-104), plus what those modules require:
 # connector -> socket -> the LuaSocket DLL. Keep this the ONE place the closure is written down.
 GEN3_FRLG_CLOSURE = (
     "lua/slink.lua",

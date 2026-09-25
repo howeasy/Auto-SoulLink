@@ -54,6 +54,7 @@ def test_profile_has_the_firered_key_set_and_provenance(emerald):
     for section in ("ram", "rom", "derived"):
         only = EMERALD_ONLY_DERIVED if section == "derived" else set()
         assert set(emerald[section]) - only == set(firered[section]), section
+        assert only <= set(emerald[section]), f"{section}: Emerald-only keys missing: {only - set(emerald[section])}"
         for key in emerald[section]:
             field = f"{section}.{key}"  # SE_SONG_HEADERS cites per id: rom.SE_SONG_HEADERS.<id>
             assert any(s == field or s.startswith(field + ".") for s in emerald["_src"]), field

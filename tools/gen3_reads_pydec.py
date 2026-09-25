@@ -203,6 +203,23 @@ def decode_badges_straddle(flags: bytes, first_flag: int) -> int:
     return out
 
 
+def decode_badges_for_profile(flags: bytes, derived: dict) -> tuple[int | None, str | None]:
+    """Profile-driven dispatch mirroring lua/gen3/reads.lua's read_badges (F10): picks
+    decode_badges_straddle vs decode_badges by which derived field the profile carries, and
+    refuses -- (None, reason), the Python shape of Lua's `return nil, why` -- when a profile is
+    self-contradictory (both BADGE_FIRST_FLAG and a non-null SB1_BADGE_BYTE_OFFSET). `flags` is
+    SaveBlock1.flags[] (or a slice covering whichever bytes the chosen path reads)."""
+    first_flag = derived.get("BADGE_FIRST_FLAG")
+    byte_off = derived.get("SB1_BADGE_BYTE_OFFSET")
+    if first_flag is not None:
+        if byte_off is not None:
+            return None, "profile derived sets both BADGE_FIRST_FLAG and SB1_BADGE_BYTE_OFFSET"
+        return decode_badges_straddle(flags, first_flag), None
+    if byte_off is None:
+        return None, "profile has no derived.SB1_FLAGS_OFFSET/SB1_BADGE_BYTE_OFFSET"
+    return decode_badges(flags[byte_off]), None
+
+
 def decode_ball_pocket(raw: bytes, count: int, key: int | None = None) -> dict:
     """ItemSlot{u16 itemId, u16 quantity} (pret include/global.h:400-404), `count` slots back
     to back. `key` is SaveBlock2.encryptionKey (src/item.c GetBagItemQuantity XORs the low 16

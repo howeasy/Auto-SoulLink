@@ -1151,7 +1151,7 @@ EMERALD_DERIVED = {
     "PARTY_CAPACITY": (6, "include/constants/global.h:33", "PARTY_SIZE", ""),
     # Not a number: the FR badges are flags 0x820..0x827 = SaveBlock1.flags byte 0x104 bits
     # 0-7, but the Emerald ones are 0x867..0x86E = byte 0x10C bit 7 + byte 0x10D bits 0-6.  One u8
-    # whose bit i is badge i+1 (lua/gen3/reads.lua:437-442) cannot describe that, so the key stays
+    # whose bit i is badge i+1 (lua/gen3/reads.lua:462-468) cannot describe that, so the key stays
     # null; BADGE_FIRST_FLAG above (E2-ENTRY+BADGE) carries the per-bit path instead.
     "SB1_BADGE_BYTE_OFFSET": (None, "include/constants/flags.h:1348-1366", "FLAG_BADGE01_GET",
                               "resolved via BADGE_FIRST_FLAG: SYSTEM_FLAGS 0x860, "

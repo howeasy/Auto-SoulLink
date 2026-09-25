@@ -440,7 +440,13 @@ function R.new(profile, io, pointers)
     -- leaves SB1_BADGE_BYTE_OFFSET null; each bit is then read from its own flags byte. The
     -- Python twin is tools/gen3_reads_pydec.py's decode_badges_straddle.
     function r.read_badges()
-        if d.BADGE_FIRST_FLAG then
+        if d.BADGE_FIRST_FLAG ~= nil then
+            -- A profile that carries both fields is self-contradictory (one says "straddled,
+            -- read per-bit", the other says "shares one byte"): refuse by name rather than
+            -- picking a side (F10).
+            if d.SB1_BADGE_BYTE_OFFSET ~= nil then
+                return nil, "profile derived sets both BADGE_FIRST_FLAG and SB1_BADGE_BYTE_OFFSET"
+            end
             if not d.SB1_FLAGS_OFFSET then
                 return nil, "profile has no derived.SB1_FLAGS_OFFSET"
             end

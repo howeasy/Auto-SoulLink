@@ -42,10 +42,13 @@ Controls in the test:
 
 ### Recorded limits
 
-- **`derived.SB1_BADGE_BYTE_OFFSET` is `null` (OPEN).** Emerald badge flags are `0x867..0x86E`.
-  They straddle `SaveBlock1.flags` bytes `0x10C` (bit 7) and `0x10D` (bits 0-6). A single badge
-  byte, as `lua/gen3/reads.lua:437-442` reads it, cannot express that, so the reader refuses
-  rather than report shifted badges.
+- **`derived.SB1_BADGE_BYTE_OFFSET` is `null` by design, not OPEN.** Emerald badge flags are
+  `0x867..0x86E`. They straddle `SaveBlock1.flags` bytes `0x10C` (bit 7) and `0x10D` (bits 0-6),
+  which a single byte cannot express, so `derived.BADGE_FIRST_FLAG` (`0x867`) carries the flag
+  id instead: `lua/gen3/reads.lua:442-468`'s `read_badges()` reads each bit from its own byte
+  when `BADGE_FIRST_FLAG` is set (E2-ENTRY+BADGE), and refuses by name if a profile ever sets
+  both derived fields at once. The Python twin is `tools/gen3_reads_pydec.py`'s
+  `decode_badges_straddle` / `decode_badges_for_profile`.
 - **`POKEMON_STORAGE_BASE`** is the base of the ASLR window (`struct PokemonStorageASLR`). The live
   address is `*gPokemonStoragePtr`, the same as FR/LG.
 

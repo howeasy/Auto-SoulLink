@@ -188,6 +188,18 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "engine_signals.json",
         "write_checkpoint.json",
     ],
+    "gen3_emerald": [
+        # Registered (not yet routed -- Entry.ROUTED excludes gen3_emerald until EG4) but every
+        # pack's engine_signals.json is opened unconditionally by Entry.admission_table
+        # (lua/gen3/entry.lua:121-140), so a release zip without this row refuses EVERY GBA
+        # cartridge at "cannot open data/games/gen3_emerald/engine_signals.json" (F1, cx-7b74a808).
+        # Mirrors Entry.PACK_FILES.gen3_emerald (lua/gen3/entry.lua:97-103).
+        "profile.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "gen3_emerald_locations.lua",
+    ],
     "gen4_hgsspt": [
         "gen4_hgsspt_areas.lua",
         "gen4_hgsspt_areas_pt.lua",

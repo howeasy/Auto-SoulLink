@@ -203,6 +203,38 @@ def test_gb_companion_bundle_names_every_pure_overlay_ups():
         assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)
 
 
+def _entry_pack_files() -> dict[str, dict[str, str]]:
+    """`Entry.PACK_FILES` from the real `lua/gen3/entry.lua`, via lupa -- every pack it names is
+    opened unconditionally by `Entry.admission_table` (entry.lua:121-140), routed or not, so a
+    release zip missing one of these paths refuses EVERY GBA cartridge (F1, cx-7b74a808)."""
+    import lupa
+
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    entry_path = os.path.join(_REPO, "lua", "gen3", "entry.lua").replace(os.sep, "/")
+    entry = lua.eval(f'dofile("{entry_path}")')
+    out: dict[str, dict[str, str]] = {}
+    for pack, files in entry.PACK_FILES.items():
+        out[str(pack)] = {str(k): str(v) for k, v in files.items()}
+    return out
+
+
+def test_every_entry_pack_file_is_in_the_release_manifest():
+    """F3: the falsifier for F1 -- a future pack registered in `Entry.PACK_FILES` but left out
+    of `make_release._DATA_GAME_LUA` repeats the gen3_emerald bug (a release zip that refuses
+    every GBA cartridge, not just the unshipped pack's own). MUTATION-CHECK: comment out the
+    "gen3_emerald" row in tools/make_release.py's `_DATA_GAME_LUA` and this test goes red."""
+    manifest_paths = {
+        f"data/games/{gen}/{f}"
+        for gen, files in make_release._DATA_GAME_LUA.items() for f in files
+    }
+    for pack, files in _entry_pack_files().items():
+        for key, rel in files.items():
+            assert rel in manifest_paths, (
+                f"Entry.PACK_FILES.{pack}.{key} = {rel!r} is not in make_release's "
+                "_DATA_GAME_LUA manifest -- a release zip would ship without it"
+            )
+
+
 def test_the_retired_gen3_modules_are_not_shipped(archive):
     """C5-6 (owner ruling 24): the old Gen 3 client is deleted and lua/games/gen3_frlge.lua stays
     only as cited source material; neither may ship in the player ZIP."""

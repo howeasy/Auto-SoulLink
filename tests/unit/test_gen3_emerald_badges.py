@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import re
 import sys
 
 import lupa
@@ -113,3 +114,81 @@ def test_a_pack_without_badge_first_flag_keeps_the_single_byte_path():
     h.poke(SB1_ADDR + 0, bytes(0x1300))  # pad zeroes up to and past byte_addr
     h.poke(SB1_ADDR + byte_addr, bytes([0b0000_0011]))
     assert h.reads.read_badges() == pydec.decode_badges(0b0000_0011) == 0x03
+
+
+@pytest.mark.parametrize("pack,title", [
+    ("gen3_frlg", "firered"), ("gen3_frlg", "leafgreen"), ("gen3_rr", "radical_red"),
+])
+def test_badge_first_flag_is_absent_from_every_frlg_rr_title(pack, title):
+    """F9/F10: BADGE_FIRST_FLAG is genuinely Emerald-only -- not just missing from firered's
+    profile, which the single-title check above would not have caught (leafgreen/radical_red
+    ship their own profile.json)."""
+    derived = json.loads(
+        (REPO / "data" / "games" / pack / "profile.json").read_text(encoding="utf-8")
+    )["titles"][title]["derived"]
+    assert "BADGE_FIRST_FLAG" not in derived
+    assert derived["SB1_BADGE_BYTE_OFFSET"] is not None
+
+
+def test_read_badges_refuses_a_profile_that_sets_both_derived_fields():
+    """F10: a profile carrying both BADGE_FIRST_FLAG and a non-null SB1_BADGE_BYTE_OFFSET is
+    self-contradictory (one says "straddled, read per-bit", the other "shares one byte") --
+    read_badges() refuses by name (nil, reason) rather than silently picking a side."""
+    doctored = dict(_PROFILE)
+    doctored["derived"] = dict(_PROFILE["derived"])
+    doctored["derived"]["SB1_BADGE_BYTE_OFFSET"] = 0x104
+    h = ReadsHarness(profile=doctored)
+    value, why = h.reads.read_badges()
+    assert value is None
+    assert "BADGE_FIRST_FLAG" in why and "SB1_BADGE_BYTE_OFFSET" in why
+
+
+def test_decode_badges_for_profile_refuses_a_profile_that_sets_both_derived_fields():
+    """The pydec mirror of the refusal above (F10)."""
+    doctored_derived = dict(_PROFILE["derived"])
+    doctored_derived["SB1_BADGE_BYTE_OFFSET"] = 0x104
+    value, why = pydec.decode_badges_for_profile(bytes(0x20), doctored_derived)
+    assert value is None
+    assert "BADGE_FIRST_FLAG" in why and "SB1_BADGE_BYTE_OFFSET" in why
+
+
+def test_decode_badges_for_profile_agrees_with_read_badges_on_the_straddle():
+    """The pydec dispatcher (decode_badges_for_profile) picking the straddle path agrees with
+    reads.lua's read_badges on the same bytes -- the profile-driven dispatch on both sides of
+    PLAN §5.7, not just the raw decoders."""
+    h = ReadsHarness()
+    flags = _place_flags(h, byte_0x10c=0b1000_0000, byte_0x10d=0b1101_0101)
+    got = h.reads.read_badges()
+    want, why = pydec.decode_badges_for_profile(bytes(flags), _PROFILE["derived"])
+    assert why is None
+    assert got == want == 0b1010_1011
+
+
+def test_p4_c4_2a_emerald_badge_constants_match_the_pinned_pret_header() -> None:
+    """F5: re-derive BADGE_FIRST_FLAG and SB1_FLAGS_OFFSET from the pinned pret pokeemerald
+    checkout, independent of tools/gen_gen3_profile.py's own EMERALD_DERIVED copies -- the
+    FR pattern (tests/unit/test_gen3_profile.py:502-531), so this harness is not
+    self-referential against the generator it is meant to check."""
+    pin_dir = pathlib.Path("E:/Google Drive/SLink/.cache/pret/pokeemerald")
+    if not pin_dir.exists():
+        pytest.skip("no local pret checkout to re-derive against (BADGE_FIRST_FLAG is still "
+                    "pinned in tools/gen_gen3_profile.py:EMERALD_DERIVED with a file:line citation)")
+    flags_h = (pin_dir / "include" / "constants" / "flags.h").read_text(encoding="utf-8")
+    global_h = (pin_dir / "include" / "global.h").read_text(encoding="utf-8")
+
+    # SYSTEM_FLAGS (TRAINER_FLAGS_END + 1) is a chained macro; its pinned value 0x860 is cited
+    # in the header's own trailing comment (mirrors test_gen3_profile.py's SYS_FLAGS handling --
+    # not re-expanded from TRAINER_FLAGS_END here, just cross-checked).
+    m = re.search(r"^#define SYSTEM_FLAGS\s+\(TRAINER_FLAGS_END \+ 1\) // (0x[0-9A-Fa-f]+)",
+                  flags_h, re.M)
+    assert m, "SYSTEM_FLAGS definition not found in pret's flags.h"
+    system_flags = int(m[1], 16)
+    m = re.search(r"^#define FLAG_BADGE01_GET\s+\(SYSTEM_FLAGS \+ (0x[0-9A-Fa-f]+)\)",
+                  flags_h, re.M)
+    assert m, "FLAG_BADGE01_GET definition not found in pret's flags.h"
+    badge01_offset = int(m[1], 16)
+    assert system_flags + badge01_offset == BADGE_FIRST_FLAG == 0x867
+
+    m = re.search(r"/\*(0x[0-9A-Fa-f]+)\*/ u8 flags\[NUM_FLAG_BYTES\];", global_h)
+    assert m, "SaveBlock1.flags[] offset comment not found in pret's global.h"
+    assert int(m[1], 16) == SB1_FLAGS_OFFSET == 0x1270

@@ -65,7 +65,8 @@ battle{clauses,commit_guard,handoff,version}, cpu, pointers{gPokemonStoragePtr,g
 predicates{…same 10…}, sound, tasks{allowed_overworld_tasks,…}, witnesses{save_dialog_cb}}`.
 
 Entry wiring (`lua/gen3/entry.lua`): `PACKS.gen3_emerald = {rom_type = {emerald = "emerald"},
-header_code = {emerald = "BPEE"}}`, `PACK_FILES.gen3_emerald = {profile=…, sites=…, checkpoint=…,
+header_code = {BPEE = "emerald"}}` (code -> title, matching `gen3_frlg`'s `{BPRE = "firered", ...}`),
+`PACK_FILES.gen3_emerald = {profile=…, sites=…, checkpoint=…,
 area_map=…, locations=…}`. Add `ROUTED.gen3_emerald = true` only at EG4 (ruling 24).
 
 ## T2 Worker card brief (source: `docs/agents/worker_card.md`)
