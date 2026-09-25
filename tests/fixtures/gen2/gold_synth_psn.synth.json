@@ -4,28 +4,98 @@
  "builder": "tools/gen2_synth_fixtures.py",
  "checksums": "restored (primary + backup)",
  "edits": {
-  "party_status": {
-   "hp": 12,
-   "slot": 0,
-   "status": 8
-  }
+  "party_add": [
+   {
+    "dvs": 19497,
+    "hp": 12,
+    "level": 5,
+    "moves": [
+     "SCRATCH",
+     "DEFENSE_CURL"
+    ],
+    "species": "SENTRET",
+    "status": 8
+   }
+  ]
  },
  "fields": [
   {
-   "backup": 4336,
-   "new_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e000045000000050800000c0014000c000c00090009000a",
+   "backup": 4328,
+   "new_hex": "02",
    "offset": 0,
-   "old_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005000000140014000c000c00090009000a",
-   "primary": 10386,
+   "old_hex": "01",
+   "primary": 10378,
+   "size": 1,
+   "symbol": "wPartyCount",
+   "wram": 55842
+  },
+  {
+   "backup": 4329,
+   "new_hex": "9ea1ff00000000",
+   "offset": 0,
+   "old_hex": "9eff0000000000",
+   "primary": 10379,
+   "size": 7,
+   "symbol": "wPartySpecies",
+   "wram": 55843
+  },
+  {
+   "backup": 4384,
+   "new_hex": "a1000a6f0000c4a600007d000000000000000000004c292328000046000000050800000c0012000a000900070009000a",
+   "offset": 48,
+   "old_hex": "000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "primary": 10434,
    "size": 48,
    "symbol": "wPartyMon1",
-   "wram": 55850
+   "wram": 55898
+  },
+  {
+   "backup": 4635,
+   "new_hex": "868e8b8350000000000000",
+   "offset": 11,
+   "old_hex": "0000000000000000000000",
+   "primary": 10685,
+   "size": 11,
+   "symbol": "wPartyMonOTs",
+   "wram": 56149
+  },
+  {
+   "backup": 4701,
+   "new_hex": "92848d9391849350505050",
+   "offset": 11,
+   "old_hex": "0000000000000000000000",
+   "primary": 10751,
+   "size": 11,
+   "symbol": "wPartyMonNicknames",
+   "wram": 56215
+  },
+  {
+   "cart": 11625,
+   "new_hex": "92f5",
+   "offset": 0,
+   "old_hex": "01e9",
+   "size": 2,
+   "symbol": "sChecksum",
+   "wram": null
+  },
+  {
+   "cart": 32365,
+   "new_hex": "92f5",
+   "offset": 0,
+   "old_hex": "01e9",
+   "size": 2,
+   "symbol": "sBackupChecksum",
+   "wram": null
   }
  ],
  "schema": "gen2-synth-disclosure-v1",
- "sha256": "c0093824f303c356e90e02c648719d0c21726a019ee21f291844eb757fbdf608",
+ "sha256": "d2ab69d061ea0ba35e6c608ddf58fb4d7375f4344e38c224cba32a2977b8e05b",
  "source_facts": [
-  "constants/pokemon_data_constants.asm MON_STATUS/MON_HP; macros/ram.asm party_struct"
+  "C engine/battle/core.asm: only the active battler takes ResidualDamage",
+  "constants/charmap.asm names",
+  "data/games/gen2_<title>/moves.json PP",
+  "data/games/gen2_<title>/species_index.json base stats/growth",
+  "macros/ram.asm party_struct"
  ],
  "title": "gold"
 }

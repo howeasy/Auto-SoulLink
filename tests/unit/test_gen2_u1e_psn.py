@@ -1,9 +1,11 @@
 """Card gen2-u1e-poison, O-33 fallback (owner-approved 2026-09-25): Gold's Route 31 Bug Catcher Wade leg is a
 proven, deterministic LOSS with the driver as written (fsw-postrc-rr9/rr10, identical stall @51461 both
-attempts, both party mons end up PSN). gold_synth_psn (tools/gen2_synth_fixtures.py PSN_RECIPES) pins the
-errand base's own lone Totodile to PSN + 12 HP instead, so Gold's poison leg boots already poisoned and skips
-straight to the "tick" phase (lua/tests/gen2_poison_inputs.lua PI.driver facts.start_phase) on its own Route 29
-catch map -- no travel, no hunt, no Wade. Crystal and Silver are untouched (still the natural wild-Weedle legs).
+attempts, both party mons end up PSN). gold_synth_psn (tools/gen2_synth_fixtures.py PSN_RECIPES) appends a
+BENCHED Sentret at PSN + 12/18 HP instead of touching the errand's own lead (fsw-postrc-psn1: pinning PSN onto
+the lead in place fainted it IN the leg's own Route 29 catch battle -- ResidualDamage hits only the active
+battler, C engine/battle/core.asm), so Gold's poison leg boots already poisoned and skips straight to the
+"tick" phase (lua/tests/gen2_poison_inputs.lua PI.driver facts.start_phase) on its own Route 29 catch map -- no
+travel, no hunt, no Wade. Crystal and Silver are untouched (still the natural wild-Weedle legs).
 
 No emulator: fixture-build reproducibility, the disclosure's exact delta and Gold's leg selection are all
 offline/pure checks."""
@@ -45,45 +47,39 @@ def test_build_named_is_reproducible():
     assert a == b
 
 
-def test_disclosure_lists_exactly_the_party_status_delta():
+def test_disclosure_lists_exactly_the_party_add_delta():
     _, disclosure = synth.build_named(NAME)
     fields = disclosure["fields"]
-    non_checksum = [f for f in fields if f["symbol"] not in ("sChecksum", "sBackupChecksum")]
-    assert [f["symbol"] for f in non_checksum] == ["wPartyMon1"]
-    assert disclosure["edits"] == {"party_status": {"slot": 0, "status": synth.PSN, "hp": 12}}
-    # exactly the party struct's own MON_STATUS/MON_HP bytes differ inside that one 48-byte record: nothing
-    # else (species, moves, DVs, stat exp, level, OT id, exp) moved.
-    layout = codec.for_foundation("gold")
-    old = bytes.fromhex(non_checksum[0]["old_hex"])
-    new = bytes.fromhex(non_checksum[0]["new_hex"])
-    before = codec.decode_party_mon(old, layout, species_marker=old[0])
-    after = codec.decode_party_mon(new, layout, species_marker=new[0])
-    changed = {k for k in before if k != "raw_hex" and before[k] != after[k]}
-    assert changed == {"status", "hp"}
-    assert after["status"] == synth.PSN and after["hp"] == 12 and after["max_hp"] == before["max_hp"]
+    non_checksum = {f["symbol"] for f in fields if f["symbol"] not in ("sChecksum", "sBackupChecksum")}
+    assert non_checksum == {"wPartyCount", "wPartySpecies", "wPartyMon1", "wPartyMonOTs", "wPartyMonNicknames"}
+    assert disclosure["edits"] == {"party_add": [{"species": "SENTRET", "level": 5,
+                                                  "moves": ["SCRATCH", "DEFENSE_CURL"], "dvs": 0x4C29,
+                                                  "hp": 12, "status": synth.PSN}]}
+    # the base's own lead (slot 0) is never touched: its wPartyMon1 bytes do not appear among the changed fields
+    mon1 = next(f for f in fields if f["symbol"] == "wPartyMon1")
+    assert mon1["offset"] > 0, "the added mon must land after the existing party, never overwrite slot 0"
 
 
-def test_exactly_one_party_mon_is_psn_and_it_is_the_only_slot():
+def test_added_mon_is_the_only_psn_and_the_lead_is_untouched():
     raw, _ = synth.build_named(NAME)
+    base_raw = (FIX / "gold_battle_errand.SaveRAM").read_bytes()
     layout = codec.for_foundation("gold")
+    base_party = codec.decode_saved_party(base_raw[:0x8000], layout, copy_name="primary")["mons"]
     party = codec.decode_saved_party(raw[:0x8000], layout, copy_name="primary")["mons"]
+    assert len(party) == len(base_party) + 1
     psn = [i for i, mon in enumerate(party) if mon["status"] & synth.PSN]
-    assert psn == [0]
-    for i, mon in enumerate(party):
-        if i != 0:
-            assert mon["status"] == 0 and mon["hp"] == mon["max_hp"], (i, mon)
+    assert psn == [len(base_party)]   # only the appended mon
+    for i, mon in enumerate(base_party):
+        assert party[i] == mon, f"slot {i} (the played party) changed"
+    added = party[-1]
+    assert added["species_id"] == 161 and added["hp"] == 12 and added["max_hp"] == 18   # SENTRET
 
 
-def test_party_status_edit_rejects_a_slot_outside_the_party():
+def test_party_add_rejects_overflowing_the_six_slot_party():
     raw = (FIX / "gold_battle_errand.SaveRAM").read_bytes()
-    with pytest.raises(ValueError, match="slot outside"):
-        synth.build("gold", raw, {"party_status": {"slot": 1, "status": synth.PSN, "hp": 1}})
-
-
-def test_party_status_edit_rejects_hp_above_max():
-    raw = (FIX / "gold_battle_errand.SaveRAM").read_bytes()
-    with pytest.raises(ValueError, match="1..the slot's own MON_MAXHP"):
-        synth.build("gold", raw, {"party_status": {"slot": 0, "status": synth.PSN, "hp": 99}})
+    six = [{"species": "SENTRET", "level": 5, "moves": ["SCRATCH"], "dvs": 0x4C29}] * 6
+    with pytest.raises(ValueError, match="1..\\(6 - the current party size\\)"):
+        synth.build("gold", raw, {"party_add": six})
 
 
 # --- Gold's leg selection ----------------------------------------------------------------------------------------

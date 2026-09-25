@@ -72,9 +72,11 @@ U1_CLOCK = {"crystal": 11, "gold": 11, "silver": 11}
 # LOSS with the driver as written (fsw-postrc-rr9/rr10, identical stall @51461 both attempts, "both mons PSN"),
 # and getting poisoned there was always SETUP, not the behaviour under test (DoPoisonStep.DamageMonIfPoisoned's
 # faint branch, engine/events/poisonstep.asm:88-94). card gen2-u1e-poison O-33 fallback (owner-approved
-# 2026-09-25): gold_synth_psn (tools/gen2_synth_fixtures.py PSN_RECIPES) pins the errand's own lone Totodile to
-# PSN+12HP in the boot fixture, so Gold's tick+park legs run on the SAME Route 29 map the errand's own catch
-# already happened on -- no travel, no hunt, no Wade.
+# 2026-09-25): gold_synth_psn (tools/gen2_synth_fixtures.py PSN_RECIPES) appends a BENCHED Sentret at PSN + 12/18
+# HP to the boot fixture (never the active battler, so the leg's own Route 29 catch battle is unaffected -- a
+# first attempt that pinned PSN onto the errand's own lead instead fainted it IN that battle, fsw-postrc-psn1),
+# so Gold's tick+park legs run on the SAME Route 29 map the errand's own catch already happened on -- no travel,
+# no hunt, no Wade.
 POISON_ROUTE = {"crystal": (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30")),
                 "silver": (("Route29", "west", "CherrygroveCity"), ("CherrygroveCity", "north", "Route30")),
                 "gold": ()}
@@ -566,9 +568,9 @@ def test_engine_sites_fire_at_their_routines(emuhawk, title):  # noqa: F811
     source_path, clock, psn_setup = fixture, None, None
     boot = staged
     if title == "gold":
-        # card gen2-u1e-poison O-33 fallback: boot the disclosed SYNTH fixture (the errand base's lone Totodile
-        # pinned PSN+12HP) instead of the played gold_battle_errand bytes; `staged`/`fixture` above stay the
-        # PLAYED base for qualification/identity, unmodified (same split as the U1_CLOCK trailer swap below).
+        # card gen2-u1e-poison O-33 fallback: boot the disclosed SYNTH fixture (a benched Sentret appended at
+        # PSN+12/18HP) instead of the played gold_battle_errand bytes; `staged`/`fixture` above stay the PLAYED
+        # base for qualification/identity, unmodified (same split as the U1_CLOCK trailer swap below).
         boot, psn_setup = gen2_synth_fixtures.build_named("gold_synth_psn", root=REPO)
     if title in U1_CLOCK:   # set right before the launch: the RTC runs on from here
         boot, clock = gen2_synth_fixtures.day_clock(boot, hour=U1_CLOCK[title], now=int(time.time()), title=title)
