@@ -1,0 +1,43 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario linked_faint_active_clean_gen3
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=77115d023439a1b6d670ba1cc5b989f42d14ad48 tracked_clean=True runner=subagent G5-RR-CLEAN 2026-09-25
+# card: G5-RR-CLEAN task 1 -- fix for the deterministic FAIL at 870e5e5d/c0f6101b
+#   ("the linked lead did not faint: linked_faint_active a: battler 0 has no no-damage
+#   move with PP (turn 31, hp 1, hunts 1)"). Root cause: rr_battle2.sav's lead (Treecko,
+#   level 6, hp 22) carries exactly one power-0 move (Leer, 30 PP); the wild foe chips
+#   damage slowly enough (~0.7 hp/turn observed) that Leer's finite PP runs out before
+#   the lead's hp does -- PP does not regenerate mid-battle, so status_move_slot goes
+#   permanently nil for the rest of the fight. Fix: lua/tests/duo/duo_gen3_main.lua
+#   ctx.lose_active falls back to any_move_slot() (any move with PP, Pound ahead of the
+#   draining Absorb in slot order) once a no-damage move has genuinely been used and
+#   then run dry; if that fallback defeats the foe outright instead of the lead fainting
+#   naturally, that is a bad matchup (not a failure) and the existing STALL_TURNS rehunt
+#   budget is reused (LOSE_REHUNT_WIN) to try a fresh foe.
+--- attempt 1 of 1 (live) ---
+[duo] linked_faint_active_clean_gen3: attempt 1 of 1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=ad7d396a2ce84a46d1f71adc31cdcc3b992b4d458d13f1b3f47bb845b07f70be profile.json=0817b3b16e235609a92afe8556a8b8d7b037c23b85e193db03bfe28ef7080d9b source=77115d023439a1b6d670ba1cc5b989f42d14ad48
+[duo] two EmuHawk instances launched
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked EBEF11DA:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))
+[duo] SAVE_WITNESS_SHA256 inst=a site=98e1b5f2d789b59c92ff2917e5e7697e4b1875eeb4a3d6d05124c71b4a75084e file=98e1b5f2d789b59c92ff2917e5e7697e4b1875eeb4a3d6d05124c71b4a75084e match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=858758bcaec9eac4e87298c1b4a65f19786506d064ab1ac72fd5c846fefce8de file=858758bcaec9eac4e87298c1b4a65f19786506d064ab1ac72fd5c846fefce8de match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] linked_faint_active[wild]: engine faint EBEF11DA:2BDDC8BF -> force_faint -> the hand-off commit on active EBEF11DA:D4223740 -> engine KO in battle with no input; memorials saved (last mon kept: none)
+[duo] MARKER a: ENGINE_FAINT_SITE frame=6140 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint EBEF11DA:2BDDC8BF {"area_id":"route_1","event":"faint","key":"EBEF11DA:2BDDC8BF","player":"a","seq":186}
+[duo] MARKER a: TX memorialize_done EBEF11DA:2BDDC8BF {"box":24,"event":"memorialize_done","key":"EBEF11DA:2BDDC8BF","player":"a","seq":217}
+[duo] MARKER b: READY_ACTIVE EBEF11DA:D4223740 case=wild
+[duo] MARKER b: RX force_faint key=EBEF11DA:D4223740
+[duo] MARKER b: ACTIVE_COMMIT EBEF11DA:D4223740 frame=6932 writes=5 attempted=11 handoff=1 status3=0x80020 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/25/35 why="active faint committed" case=wild
+[duo] MARKER b: HANDOFF EBEF11DA:D4223740 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO EBEF11DA:D4223740 frame=7165 in_battle=1 battle_hp=0 status3=0x80000 pp=35/30/25/35 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=11 case=wild
+[duo] MARKER b: ACTIVE_FAINT_SITE EBEF11DA:D4223740 frame=8859 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER b: ACTIVE_OUTCOME EBEF11DA:D4223740 outcome=4 sent_out=1 whiteout_tx=0
+[duo] MARKER b: TX memorialize_done EBEF11DA:D4223740 {"box":24,"event":"memorialize_done","key":"EBEF11DA:D4223740","player":"b","seq":321}
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_clean_gen3: a=PASS b=PASS
+
+========== summary ==========
+  linked_faint_active_clean_gen3: PASS (attempt 1 of 1)

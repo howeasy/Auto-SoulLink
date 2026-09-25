@@ -1,0 +1,44 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario faint_cmd_clean_gen3
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=3c9d429cae62d87d66c1142bd9d7420886b1b5e6 tracked_clean=True runner=subagent G5-RR-CLEAN 2026-09-25
+# card: G5-RR-CLEAN task 2 -- owner ruling 25(a) (docs/gen3/G4_request_draft.md sec 6):
+#   the second and last clean-side row ("a decent amount", not full S-1..S-11 coverage) --
+#   a basic link+faint on the clean ROM, beside native_absent_gen3 and
+#   linked_faint_active_clean_gen3. New scenario faint_cmd_clean_gen3 in tools/e2e_duo.py
+#   reuses faint_cmd_gen3's own module (lua/tests/duo/scenario_gen3_faint_cmd.lua) and
+#   oracle (assert_faint_cmd_gen3_saved) verbatim, with rom_kind {a: companion, b: clean}:
+#   link the two slot-1 mons, then the server injects A's faint through the debug API.
+#   Nothing here pokes either cartridge but the clients, so it needs no companion-only
+#   mechanism -- the same clean/companion save-comparison machinery already proven live
+#   on linked_faint_active_clean_gen3's B half (this card's task 1).
+#   (First live attempt at e6bd678e FAILed: the SCENARIOS row named oracle
+#   assert_faint_cmd_clean_gen3_saved but the alias assignment was never added --
+#   PYDEC FAIL 'DuoRun' object has no attribute 'assert_faint_cmd_clean_gen3_saved'.
+#   Both halves had already saved correctly (SAVE_WITNESS_SHA256 match=true on both a and
+#   b); only the oracle lookup was missing. Fixed at 3c9d429c.)
+--- attempt 1 of 1 (live) ---
+[duo] faint_cmd_clean_gen3: attempt 1 of 1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=ad7d396a2ce84a46d1f71adc31cdcc3b992b4d458d13f1b3f47bb845b07f70be profile.json=0817b3b16e235609a92afe8556a8b8d7b037c23b85e193db03bfe28ef7080d9b source=3c9d429cae62d87d66c1142bd9d7420886b1b5e6
+[duo] two EmuHawk instances launched
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] queued for a: {'cmd': 'memorialize', 'key': 'F56D8C1D:2BDDC8BF'}
+[duo] queued for a: {'cmd': 'game_over'}
+[duo] injected A faint F56D8C1D:2BDDC8BF -> force_faint B F56D8C1D:D4223740; re-queued to A: ['memorialize', 'game_over']
+[duo] RESULT_LINE a: RESULT: PASS (memorialized F56D8C1D:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (memorialized F56D8C1D:D4223740)
+[duo] SAVE_WITNESS_SHA256 inst=a site=1324dc9cc4c700664e8bd635565fd9c917e73ede051e88b9ba0925ecaca8cccf file=1324dc9cc4c700664e8bd635565fd9c917e73ede051e88b9ba0925ecaca8cccf match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=440be48a0172b3aafe23d234a6c8008c40faafcb0ee37fd830b2c190646fc09b file=440be48a0172b3aafe23d234a6c8008c40faafcb0ee37fd830b2c190646fc09b match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] faint_cmd: F56D8C1D:2BDDC8BF and F56D8C1D:D4223740 saved once each in box 25; B's HP 0 came from an overworld-armed write
+[duo] MARKER a: RX memorialize key=F56D8C1D:2BDDC8BF
+[duo] MARKER a: TX memorialize_done F56D8C1D:2BDDC8BF {"box":24,"event":"memorialize_done","key":"F56D8C1D:2BDDC8BF","player":"a","seq":8}
+[duo] MARKER b: RX force_faint key=F56D8C1D:D4223740
+[duo] MARKER b: FORCED_HP0 F56D8C1D:D4223740 frame=782 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=F56D8C1D:D4223740
+[duo] MARKER b: TX memorialize_done F56D8C1D:D4223740 {"box":24,"event":"memorialize_done","key":"F56D8C1D:D4223740","player":"b","seq":8}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x0202433E +2 frame 782
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_clean_gen3: a=PASS b=PASS
+
+========== summary ==========
+  faint_cmd_clean_gen3: PASS (attempt 1 of 1)
