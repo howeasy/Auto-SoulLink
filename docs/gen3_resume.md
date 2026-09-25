@@ -41,7 +41,13 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
     2. choose FIGHT with the weakest damaging move only when the foe's HP exceeds that move's maximum damage;
     3. rebuild the clean-side fixture with more status PP.
     Check the clean-side fixture's lead first: which moves and PP (rr_battle*.sav clean side).
- (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
+- **OWNER on the G5 gaps (2026-09-25):** "We don't need full test coverage for RR but we need a decent amount." The coordinator proposed the following, pending the owner's confirmation:
+  1. Clean coverage: add ONE clean-side basic link+faint row beside native_absent and linked_faint_active_clean (after the driver fix), and accept that as sufficient.
+  2. Rival swap: PRODUCE one qualifying row, a real swap plus enemy-party readback.
+  3. Opcode gates: sign the 12 deferred gates as a limit (26 live).
+  4. Per-item receipts: accept the existing unit/model evidence (pins, write ownership, native control unit tests).
+  Work: the clean-row driver fix, 1 clean row, 1 rival row, then re-freeze and run both passes.
+- **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
   - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
   - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.
   - server/adapters/__init__.py: Gen 2's side is additive (unrouted_rom_type_reason, persisted_migration_refusal, foundation_for_rom_type, adapter_class_for_rom_type, plus the Gen 2 entries); keep both sets.
@@ -51,9 +57,9 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   - Master since 96ae536d also has: the ruff exclude, the purergb .sym LF fix, the ROM-scan ctime key, test_gen1_trade_patch reading archive/gen1/rc, and the board/connection_state/CSS work.
 - **Merge review:** two Sonnet reviews found no dropped hunks (server.py + gen3_frlge.py; manager/html/make_release/REFERENCE/gen1 client). The three OMP reviews of the merge timed out on the diff size.
 - **NEXT:**
-  1. Finish the FR/LG pass at 870e5e5d (`--resume`) and merge the summary.
-  2. Run `--cut 870e5e5d --title rr`.
-  3. Settle cx-cd3f4189.
+  1. Fix the RR clean-row driver, then add the clean link+faint row and the qualifying rival-swap row (per the owner's G5 direction above).
+  2. Re-freeze the cut and run the FR/LG pass (sharded) plus `--title rr`.
+  3. The merge review is settled: 2 Sonnet reviews, clean.
   4. Fill in `<<FINAL_CUT_SHA>>` = 870e5e5d and the tables, refresh the G5 status, and put the G4 request plus the G5 gap decisions to the owner.
 
 ## CHECKPOINT 18 (2026-09-25, 1-hour block): resume here
