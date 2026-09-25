@@ -135,4 +135,73 @@ of four fixed `writetext` blocks (`patch/gen2/src/phone.asm:113-141`). The calle
 
 ## Appended results
 
-(Detailed designs from `cx-ee02eac7` and `cx-26133223` go here when they land.)
+### PHONE-NAMES detailed design (OMP `cx-ee02eac7`; addresses checked against the linked maps)
+
+**Wire.** Keep `phone` as the discriminator. Add an optional `phone_data`, relative to the receiver:
+`{trainer_name, caller_mon:{species_id, nickname}, receiver_mon:{species_id, nickname}}`
+- It goes on `force_faint`, `force_explode` and `msgbox`.
+- The server builds it in `_propagate_faint` (`server/state.py:3663-3680`), from the source trainer and the recipient.
+- It needs a separate per-recipient object for `first_link` (`:2344-2360`) and for `dead_zone` (`:2662-2681`): today one `linked_box` dict is shared by both queues.
+- Missing data leaves the tag in place and omits `phone_data`, so the client falls back to the fixed text.
+- Schema: `docs/protocol.md:318-363`, `tests/unit/protocol_schema.py:96-108`, with strict nested validation.
+
+**Staging record** in `wUnusedMapBuffer` (Crystal `$C7E8`, G/S `$C6E8`, 24 B), the cookie deliberately last:
+
+| Offset | Size | Field |
+|---|---|---|
+| +0 | 1 | event 1-3 |
+| +1 | 1 | caller species |
+| +2 | 1 | receiver species |
+| +3 | 8 | trainer name (7 glyphs + `$50`) |
+| +11 | 11 | caller nickname (10 + `$50`) |
+| +22 | 1 | reserved, 0 |
+| +23 | 1 | cookie `$A6` (layout v1) |
+
+**Client** (`lua/gen2/phone.lua`):
+- Encode with `T.encode_name`.
+- An invalid or absent `phone_data` stages all zeros, which clears any stale cookie.
+- The queue holds `{id, record}` atomically.
+- Under one permit (the predicate widened to `stage/24` or `mailbox+32/1`), write the record first, then the request byte. A failed stage write blocks the request.
+- While ARMED equals the in-flight id, check the cookie/event each frame (`phone:service()`) and re-stage ONCE if a map change wiped it (`HandleNewMap` → `ClearUnusedMapBuffer`, `home/map.asm:3-8`). No ROM hook on HandleNewMap.
+
+**ROM:**
+- `SlinkPhonePrepareCall` (a `callasm` in `SlinkPhoneCallScript`) validates the whole record (cookie, reserved, event == ARMED, terminators, species 1..251) before touching any buffer.
+- Caller display goes to `wStringBuffer3`: the nickname, or the species via `GetPokemonName` (C `$343B`, G/S `$367E`). Receiver display goes to `wStringBuffer4` as the species name.
+- `wScriptVar` selects the named text, or 0 for the existing fixed text, which stays as the fallback.
+- `GetCallerName` (bank `$24`; C `$43A9`, G/S `$439D`): a same-size 5-byte entry rewrite, `jp SlinkPhoneCallerName` plus the native `jr`. The SLink path requires `wSpecialPhoneCallID == SPECIALCALL_SLINK`, `PHONE_00`, ARMED == the stage event and a valid cookie, and prints the trainer name with no colon. Anything else continues natively.
+- The builder (`tools/build_gen2_companion.py:114-120,288-320,414-451`) adds the verify-once anchor edit, and the binary verifier allows exactly those 5 bytes.
+- Space: ROM0 growth is 0. About 350-550 B goes in the service bank, which has ~13 KB free in both.
+
+**Text** (≤18 tiles per line, worst case checked):
+- Fallen: "BOB's / PIDGEY / fainted! / Your RATTATA / is gone too!"
+- First link: "BOB's / PIDGEY / linked with / your RATTATA / They're linked!"
+- Dead zone names the caller and keeps the current body.
+- The built-byte width test must learn `TX_RAM` (it charges 7 tiles for the trainer name, 10 per mon name).
+
+**Name policy (owner decision).** 24 B can't carry two full nicknames: that needs ~34 B plus metadata, and truncating both is rejected. The recommendation is the caller's mon by nickname and the receiver's mon by species. The server still sends both nicknames, so the policy can change later.
+
+**Tests:**
+- server direction and fallback;
+- the nested protocol schema;
+- Lua staging, order and re-stage-once;
+- ABI linked bytes, buffers, text widths and mutations;
+- the builder hook;
+- profile stage addresses;
+- the live phone gate v2 on C/G/S: the named header and body, max-length names, a map change between arming and ringing (a hook on ClearUnusedMapBuffer proves the wipe and the re-stage), and the fixed-text fallback.
+
+**Re-proof cost.** Any `phone.asm` edit changes all three overlay sha1s. That means a republish of:
+- provenance, sym/map and the UPS;
+- the profiles and admission rows;
+- 12 overlay gate receipts (panel/SFX/W6/phone × C/G/S);
+- the trade receipts that bind the overlay (21 cells).
+
+If G4 is already signed, the overlay grant fingerprint changes and needs re-signing. **Bundle it with the other overlay work (TITLE-VERSION) and KEY-SCOPE-5 into one re-sweep.**
+
+**Size.** About 1,000-1,500 hand-written LOC across 18 files (the list is in `cx-ee02eac7` §7).
+
+**Owner questions:**
+- the asymmetric nickname policy;
+- the wording;
+- whether dead-zone calls name the caller only.
+
+(TITLE-VERSION's detailed design, from `cx-26133223`, goes here when it lands. The design-only OMP cards also in flight: KEY-SCOPE-5 `cx-ee316c45`, SP-LOWWATER `cx-947d9423`, POISON-DUO-CAP `cx-2ea3c763`, BOARD-AMBIGUOUS `cx-8a2f08c6`, PURERGB-OVERLAY-EOL `cx-a84b761e`, TEMP-LANES `cx-1b2b86fe`.)
