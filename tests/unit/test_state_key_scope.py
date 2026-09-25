@@ -5,6 +5,8 @@ BOTH players make that trade they hold equal keys. The server accepted B's key_c
 then rejected A's as a collision, killing the pair (identity_lost). Two players may hold
 equal keys; one player may not."""
 
+import pytest
+
 from server.adapters.gen1_rby import Gen1Adapter
 from server.state import LinkEntry, LinkStatus, MonInfo, SoulLinkState
 from tests.unit.test_state_trade_uncertain import _gen1_applying, _mon, _tick
@@ -313,3 +315,89 @@ def test_a_tick_first_change_onto_a_boxed_twin_still_rejects(tmp_path):
     srv._dispatch("b", {"event": "tick", "party": _snap(ONIX, B2)})
     cmds = srv._dispatch("b", {"event": "key_change", "old_key": B1, "new_key": ONIX, "reason": "npc_trade"})
     assert _named(cmds, "key_change_rejected") and l1.cause == "identity_lost"
+
+
+# ── KEY-SCOPE-5 (OMP cx-ee316c45): raw party census, box-census generation, replay ledger ─────
+
+def _snap5(*keys, no_blob=()):
+    """A party snapshot; slots listed in `no_blob` carry blob_hex="" (a failed Gen 3 blob read)."""
+    return [{**m, "blob_hex": ""} if i in no_blob else m for i, m in enumerate(_snap(*keys))]
+
+
+def _tick5(srv, pid, party, gen=1, boxes=(), event="tick"):
+    """A snapshot with a complete box census (`pc_boxes` + `pc_boxes_generation`)."""
+    return srv._dispatch(pid, {"event": event, "party": party, "pc_boxes": list(boxes),
+                               "pc_boxes_generation": gen})
+
+
+def _change5(srv, pid, old, new=ONIX):
+    return srv._dispatch(pid, {"event": "key_change", "old_key": old, "new_key": new,
+                               "new_species": 0x5F, "reason": "npc_trade"})
+
+
+def test_duplicate_party_keys_are_counted_before_blob_filtering(tmp_path):
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    _tick5(srv, "b", _snap5(ONIX, ONIX, B2, no_blob=(1,)))     # the twin has no blob
+    cmds = _change5(srv, "b", B1)
+    assert len(_named(cmds, "key_change_rejected")) == 1 and not _named(cmds, "key_change_ack")
+    assert srv.state.entry_for("b", B1) is l1 and l1.cause == "identity_lost"
+
+
+def test_same_mon_tick_without_blob_is_self_reported(tmp_path):
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    _tick5(srv, "b", _snap5(ONIX, B2, no_blob=(0,)))
+    ack = _named(_change5(srv, "b", B1), "key_change_ack")
+    assert ack and ack[0]["migrated"] is True
+    assert l1.b.key == ONIX and srv.state.entry_for("b", B1) is None and l1.status == LinkStatus.ALIVE
+
+
+def test_box_twin_with_omitted_census_is_rejected(tmp_path):
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    _tick5(srv, "b", _snap5(B1, B2))                                   # a complete (empty) census
+    srv._dispatch("b", {"event": "tick", "party": _snap5(ONIX, B2)})   # census omitted
+    cmds = _change5(srv, "b", B1)
+    rej = _named(cmds, "key_change_rejected")
+    assert rej and "box census unavailable" in rej[0]["reason"] and not _named(cmds, "key_change_ack")
+    assert srv.state.entry_for("b", ONIX) is None
+
+
+def test_a_client_without_a_census_generation_keeps_presence_semantics(tmp_path):
+    """Gen 3 today: no `pc_boxes_generation`, so an omitted census is not a rejection."""
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    srv._dispatch("b", {"event": "tick", "party": _snap5(ONIX, B2)})
+    assert _named(_change5(srv, "b", B1), "key_change_ack")
+
+
+def test_delayed_old_tick_after_acceptance_does_not_rollback_party(tmp_path):
+    state, (l1, l2) = _two_links(tmp_path)
+    assert _named(_npc_trade(state, "b", B1), "key_change_ack")
+    cmds = state.handle_event("b", {"event": "tick", "party": [_mon(B1, 0x15), _mon(B2, 0x15)]})
+    assert state.party_keys["b"] == {ONIX, B2}
+    a_cmds = state.handle_event("a", {"event": "noop"})
+    assert not [c for c in cmds + a_cmds if c.get("cmd") in ("party_mon", "box_mon")]
+    # an alias and its terminal key in ONE snapshot are two mons: latched, never merged
+    state.handle_event("b", {"event": "tick", "party": [_mon(B1, 0x15), _mon(ONIX, 0x5F), _mon(B2, 0x15)]})
+    assert ONIX in state.ambiguous_keys["b"]
+
+
+def test_both_players_may_migrate_to_the_same_npc_trade_key_with_fresh_censuses(tmp_path):
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    _tick5(srv, "b", _snap5(ONIX, B2))
+    _tick5(srv, "a", _snap5(A1, ONIX))
+    assert _named(_change5(srv, "b", B1), "key_change_ack")
+    assert _named(_change5(srv, "a", A2), "key_change_ack")
+    assert l1.status == l2.status == LinkStatus.ALIVE
+    assert srv.state.entry_for("a", ONIX) is l2 and srv.state.entry_for("b", ONIX) is l1
+    srv.state.handle_event("a", {"event": "faint", "key": ONIX})
+    b_cmds = srv.state.handle_event("b", {"event": "noop"})
+    assert [c["key"] for c in _named(b_cmds, "force_faint")] == [B2] and l1.status == LinkStatus.ALIVE
+
+
+@pytest.mark.parametrize("event", ["safe", "tick"])
+def test_safe_and_tick_self_report_are_identical(tmp_path, event):
+    srv, (l1, l2) = _srv_two_links(tmp_path)
+    _tick5(srv, "b", _snap5(ONIX, B2, no_blob=(0,)), event=event)
+    ack = _named(_change5(srv, "b", B1), "key_change_ack")
+    assert ack and ack[0]["migrated"] is True
+    assert srv.state.entry_for("b", ONIX) is l1 and srv.state.party_keys["b"] == {ONIX, B2}
+    assert srv.state.party_key_census["b"][ONIX] == 1

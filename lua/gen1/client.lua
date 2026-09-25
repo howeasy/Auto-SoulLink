@@ -160,6 +160,7 @@ function Client.new(p)
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
+        box_generation = 0, -- KEY-SCOPE-5: bumped after each successful full rescan_boxes
         -- old_key -> the physical key the cartridge now holds, for a key_change the server
         -- REJECTED: its retirement commands (force_faint / memorialize) name the old key the
         -- server still knows, the mon's bytes carry the new one (review cx-6aacc4f1 #1)
@@ -312,6 +313,12 @@ function Client.new(p)
         return out
     end
 
+    -- KEY-SCOPE-5: pc_boxes is a complete census only alongside a generation; nil before any
+    -- successful scan, so the server never mistakes the initial empty cache for one.
+    local function box_generation()
+        return self.box_generation > 0 and self.box_generation or nil
+    end
+
     -- Rescan every SRAM box (derived.sram_boxes_per_bank x banks) and the active box (WRAM
     -- mirror) into box_cache. The flat CartRAM image spans bank 0 through the last box bank.
     function self:rescan_boxes()
@@ -321,10 +328,11 @@ function Client.new(p)
         -- SRAM boxes are garbage until the game's first ChangeBox initialises them (bit 7 of
         -- wCurrentBoxNum; save.asm EmptyAllSRAMBoxes) — only the WRAM mirror is real before that
         local sram = (cur and cur.initialized) and io.read_range(0, sram_size, "CartRAM") or nil
+        local complete = cur ~= nil and active ~= nil and (sram ~= nil or not cur.initialized)
         for box = 0, box_count - 1 do
             local mons
             if cur and box == cur.index then mons = active
-            elseif sram then mons = reads.read_sram_box(sram, box) end
+            elseif sram then mons = reads.read_sram_box(sram, box); complete = complete and mons ~= nil end
             if mons then
                 for _, m in ipairs(mons) do
                     cache[#cache + 1] = { box = box, slot = m.slot, key = mon_key(m), species_id = m.species,
@@ -333,6 +341,7 @@ function Client.new(p)
             end
         end
         self.box_cache = cache
+        if complete then self.box_generation = self.box_generation + 1 end
         return cache
     end
 
@@ -1810,7 +1819,7 @@ function Client.new(p)
             party = party or arr({}), ot_id = reads.read_player_id(),
             trainer_name = reads.read_player_name(), has_pokeballs = self.has_pokeballs,
             ball_count = ball_count(), badges = reads.read_badges(), area_id = area_id, loc_name = loc,
-            pc_boxes = pc_boxes_wire(), writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
+            pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation(), writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
             in_battle = battle and battle.in_battle ~= 0 or false, rom_content = rom_content,
             -- per CARTRIDGE, not per generation: only a patched one has the panel mailbox
             panel = self.panel and self.panel:present() or false,
@@ -1920,7 +1929,7 @@ function Client.new(p)
             is_trainer_battle = in_battle and battle.is_trainer or false,
             trainer_id = in_battle and battle.is_trainer and battle.cur_opponent or nil,
             enemy_party = enemy_party(battle), badges = reads.read_badges(),
-            trainer_name = reads.read_player_name(), pc_boxes = pc_boxes_wire(),
+            trainer_name = reads.read_player_name(), pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation(),
             safari_type = battle.safari_type, -- pureRGB only (PLAN §3.5); nil elsewhere
             awaiting_save = awaiting_save_field(), -- BURIAL-VISIBLE: the pair board's "awaiting save"
         })

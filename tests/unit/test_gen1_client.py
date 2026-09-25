@@ -3663,3 +3663,25 @@ def test_a_withdraw_past_the_commit_boundary_declares_uncertain():
     w.reply({"cmd": "withdraw_trade", "token": "t51"})
     w.step(2)
     assert _uncertain_done(w) == [("t51", True, False)]
+
+
+def test_a_complete_box_scan_is_stamped_with_a_generation(world):
+    """KEY-SCOPE-5: `pc_boxes` is a complete census only with `pc_boxes_generation`, bumped after
+    each successful full rescan and never on a failed one (the server fails a key_change closed
+    on a missing or stale census)."""
+    def reconnect():
+        world.connected = False
+        world.step(5)
+        world.connected = True
+        world.step(1)
+        return world.events("hello")[-1]
+
+    world.connect()
+    assert world.events("hello")[-1].get("pc_boxes_generation") == 1
+    world.step(30)
+    assert world.events("tick")[-1].get("pc_boxes_generation") == 1
+    world.bus[world.ram["wBoxCount"]] = 0xFF          # the active box reads malformed: the scan fails
+    assert reconnect().get("pc_boxes_generation") == 1
+    world.bus[world.ram["wBoxCount"]] = 0
+    assert reconnect().get("pc_boxes_generation") == 2
+    world.assert_all_conform()

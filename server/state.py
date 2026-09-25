@@ -20,7 +20,7 @@ import json
 import time
 import logging
 import os
-from collections import deque
+from collections import Counter, deque
 from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
@@ -53,6 +53,10 @@ class UnsafeGameMigration(RuntimeError):
 # answers.  Tracked from delivery to answer in SoulLinkState.sync_inflight so the drift
 # reconciler never acts on a key whose command is still on the wire.
 SYNC_COMMANDS = ("party_mon", "box_mon", "memorialize")
+
+# KEY-SCOPE-5: accepted key migrations remembered per player (replay idempotence and stale-snapshot
+# canonicalization). The count, not a clock, is the guarantee window.
+KEY_MIGRATION_LEDGER_LIMIT = 256
 # The Nth reconciler pass after delivery is the first that may re-issue a command; passes 1..N-1
 # suppress it (adapter-guard review: the count is a re-issue window, not an ack deadline).
 # The unit is deliberately the reconciler's own passes, not wall-clock and not client
@@ -270,6 +274,13 @@ class SoulLinkState:
         # player holding two mons with one key; events naming it are refused until an admin
         # resolves it (resolve_ambiguous_key), because the server cannot tell which mon they mean.
         self.ambiguous_keys: dict[str, dict[str, dict]] = {"a": {}, "b": {}}
+        # KEY-SCOPE-5: {player: {key: count}} of the latest party snapshot, taken BEFORE blob filtering;
+        # the key_change self-report proof. In-memory only: a stale observation must never waive a
+        # collision after a restart (every connection re-helloes).
+        self.party_key_census: dict[str, dict[str, int]] = {}
+        # KEY-SCOPE-5: accepted {old_key, new_key} migrations per player, newest last. Persisted.
+        self.key_migration_ledger: dict[str, deque] = {
+            pid: deque(maxlen=KEY_MIGRATION_LEDGER_LIMIT) for pid in ("a", "b")}
         # True once the run is definitively over (no alive links, no pending captures).
         self.run_over: bool = False
         # Manual attempts counter (set by the user via the stream index page).
@@ -709,16 +720,19 @@ class SoulLinkState:
         refused and counted in the persisted latch; routing it by the index would act on the
         surviving twin's link."""
         key = msg.get("key") or msg.get("old_key") or ""
-        latch = self.ambiguous_keys[player_id].get(key)
-        if msg.get("event") not in self.AMBIGUITY_GATED or latch is None:
+        named = {key, msg.get("new_key") or ""} if msg.get("event") == "key_change" else {key}
+        latches = [self.ambiguous_keys[player_id][k] for k in named if k in self.ambiguous_keys[player_id]]
+        if msg.get("event") not in self.AMBIGUITY_GATED or not latches:
             return False
-        latch["refused"] = latch.get("refused", 0) + 1
+        for latch in latches:                          # KEY-SCOPE-5: a latched new_key vetoes too
+            latch["refused"] = latch.get("refused", 0) + 1
         log.error(f"[{player_id}] {msg.get('event')} {key} REFUSED: the key names two of this "
                   f"player's mons (trade clash); resolve with POST /api/debug/resolve_ambiguous_key")
         if msg.get("event") == "key_change":
             self.queued_commands[player_id].append(
                 {"cmd": "key_change_rejected", "old_key": key, "new_key": msg.get("new_key", ""),
                  "reason": "ambiguous key (trade clash)"})
+            msg["_key_change_status"] = "rejected"
         self._save()
         return True
 
@@ -1552,6 +1566,12 @@ class SoulLinkState:
             state.pending_bonus["b"] = deque(saved_pending.get("b", []))
             saved_amb = data.get("ambiguous_keys") or {}
             state.ambiguous_keys = {pid: dict(saved_amb.get(pid) or {}) for pid in ("a", "b")}
+            saved_ledger = data.get("key_migration_ledger") or {}
+            state.key_migration_ledger = {pid: deque(
+                ({"old_key": r["old_key"], "new_key": r["new_key"]} for r in saved_ledger.get(pid) or []
+                 if isinstance(r, dict) and isinstance(r.get("old_key"), str)
+                 and isinstance(r.get("new_key"), str)),
+                maxlen=KEY_MIGRATION_LEDGER_LIMIT) for pid in ("a", "b")}
             # Restore in-flight auto-rebuild context.
             saved_rebuild = data.get("rebuild_pending", {})
             for pid in ("a", "b"):
@@ -1674,9 +1694,9 @@ class SoulLinkState:
         # hello use the optimistic path (exec_box_mon is idempotent if key not in party).
         # This prevents stale party_keys from the previous session blocking sync commands.
         self._has_helld.discard(_partner(player_id))
-        self.party_keys[player_id] = {
+        self.party_keys[player_id] = self._canonical_party_keys(player_id, {
             m["key"] for m in party if m.get("maxHP", 0) > 0
-        }
+        })
         # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
         # slot when a reconnect happens before the Lua sends the faint event back).
         for _k in list(self.party_keys[player_id]):
@@ -3117,7 +3137,8 @@ class SoulLinkState:
         # This pass is a real chance for the client to have answered what we sent it.
         self._expire_inflight(player_id)
 
-        actual_keys = {mon.get("key", "") for mon in party if mon.get("key")}
+        actual_keys = self._canonical_party_keys(
+            player_id, {mon.get("key", "") for mon in party if mon.get("key")})
         # An uncertain/conflicted trade still owns its two keys: until it settles, either key may be
         # on either side, so drift enforcement on them would issue a spurious Unbox/deposit.
         frozen = ({self.pending_trade["a_key"], self.pending_trade["b_key"]}
@@ -3348,9 +3369,17 @@ class SoulLinkState:
             entry = pt["link"]            # mid-trade a player holds the partner's (unswapped) half
 
         def _ack(migrated: bool):
+            msg["_key_change_status"] = "migrated" if migrated else msg.get("_key_change_status", "unknown")
             self.queued_commands[player_id].append(
                 {"cmd": "key_change_ack", "old_key": old_key, "new_key": new_key,
                  "migrated": migrated})
+
+        # KEY-SCOPE-5: the ledger answers a replay even after a reconnect re-reported old_key.
+        if self._newest_migration(player_id, old_key) == {"old_key": old_key, "new_key": new_key}:
+            log.info(f"[{player_id}] key_change replay for {new_key[:8]} (ledger) — already migrated")
+            msg["_key_change_status"] = "replayed"
+            _ack(False)
+            return
 
         if entry is None and not self._key_refs(old_key, player_id):
             if self.entry_for(player_id, new_key) is not None:
@@ -3376,24 +3405,29 @@ class SoulLinkState:
             # KEY-SCOPE-4: this player's own tick can beat its key_change here.  When the latest
             # party snapshot holds new_key exactly once and old_key nowhere, that party hit IS the
             # changing mon; a real twin shows as a second copy, or old_key still in the party.
-            snap = [be.get("key") for be in self.partner_blobs[player_id]]
-            self_report = (snap.count(new_key) == 1 and old_key not in snap
-                           and old_key not in self.party_keys[player_id])
+            # KEY-SCOPE-5: counted on the RAW snapshot, before blob filtering drops entries.
+            raw = self.party_key_census.get(player_id)
+            self_report = raw is not None and raw.get(new_key, 0) == 1 and old_key not in raw
             if self_report:
                 refs -= {"party_keys", "partner_blobs"}
+            hook = self.presentation_key_in_use
+            used = (False if refs or not hook else
+                    hook(new_key, player_id, party=False) if self_report else hook(new_key, player_id))
             if refs:
                 collision = ", ".join(sorted(refs))
-            elif self.presentation_key_in_use and (
-                    self.presentation_key_in_use(new_key, player_id, party=False) if self_report
-                    else self.presentation_key_in_use(new_key, player_id)):
+            elif used is None:               # KEY-SCOPE-5: an advertised box census is missing or stale
+                collision = "box census unavailable"
+            elif used:
                 collision = "presentation cache"
         if collision:
             log.error(f"[{player_id}] key_change REJECTED: {new_key[:8]} is load-bearing "
                       f"({collision}); {old_key[:8]} keeps its identity")
             self.queued_commands[player_id].append(
                 {"cmd": "key_change_rejected", "old_key": old_key, "new_key": new_key,
-                 "reason": f"key collision: {collision}"})
+                 "reason": collision if collision == "box census unavailable"
+                 else f"key collision: {collision}"})
             msg["_rejected"] = True
+            msg["_key_change_status"] = "rejected"
             if entry is not None and entry.status == LinkStatus.ALIVE:
                 # U5: the pair dies -- the mon can no longer be told apart from the other one.
                 self._propagate_faint(player_id, entry, cause="identity_lost")
@@ -3486,6 +3520,7 @@ class SoulLinkState:
                 if n and n[0] == old_key:
                     pt["new"][pid] = (new_key, msg.get("new_species") or n[1])
 
+        self.key_migration_ledger[player_id].append({"old_key": old_key, "new_key": new_key})
         _ack(True)
 
         # A2: a transformation never revives.  The link was already buried under the old
@@ -3505,6 +3540,33 @@ class SoulLinkState:
                          f"{'+'.join(owed)} for {new_key[:8]}")
 
         self._save()
+
+    def _newest_migration(self, player_id: str, key: str) -> dict | None:
+        """KEY-SCOPE-5: the newest ledger record naming `key` (as old or new), or None."""
+        return next((r for r in reversed(self.key_migration_ledger[player_id])
+                     if key in (r["old_key"], r["new_key"])), None)
+
+    def _canonical_party_keys(self, player_id: str, keys: set) -> set:
+        """KEY-SCOPE-5: a stale snapshot's retired alias names its terminal key, so a delayed tick or
+        a reconnect onto an old save cannot roll a migration back. A key whose newest ledger record
+        has it as new_key was legitimately reintroduced and stays. An alias AND its terminal key in
+        one snapshot are two mons: the terminal key is latched ambiguous, never merged."""
+        out = set()
+        for key in keys:
+            canon, seen = key, set()
+            while canon not in seen:
+                seen.add(canon)
+                rec = self._newest_migration(player_id, canon)
+                if rec is None or rec["new_key"] == canon:
+                    break
+                canon = rec["new_key"]
+            if canon != key and canon in keys and canon not in self.ambiguous_keys[player_id]:
+                self.ambiguous_keys[player_id][canon] = {"since": datetime.now(UTC).isoformat(), "refused": 0}
+                log.error(f"[{player_id}] {key} (retired alias) and {canon} are both in the party: "
+                          f"{canon} names two mons; resolve with POST /api/debug/resolve_ambiguous_key")
+                self._save()
+            out.add(canon)
+        return out
 
     def _key_refs(self, key: str, player_id: str) -> set[str]:
         """Names of the live tracking structures that reference `key` (empty = unreferenced).
@@ -3831,6 +3893,9 @@ class SoulLinkState:
         """
         if not isinstance(party, list):
             return
+        # KEY-SCOPE-5: the raw key multiset, before any entry is dropped for its blob
+        self.party_key_census[player_id] = dict(Counter(
+            m["key"] for m in party if isinstance(m, dict) and isinstance(m.get("key"), str) and m["key"]))
         # Per-game blob size — see GameRulesAdapter.party_blob_size. 0 means this game
         # doesn't cache blobs at all, so there is nothing to ingest.
         expected = self.adapter.party_blob_size()
@@ -4107,6 +4172,7 @@ class SoulLinkState:
                 pid: list(q) for pid, q in self.pending_bonus.items()
             },
             "ambiguous_keys": self.ambiguous_keys,
+            "key_migration_ledger": {pid: list(q) for pid, q in self.key_migration_ledger.items()},
             "run_over": self.run_over,
             "attempts_count": self.attempts_count,
             # BLOCKER-1: an applied-but-unsettled trade survives a restart; tokens never restart at t1

@@ -391,6 +391,13 @@ class SLinkServer:
             "b": self.state.trainer_names.get("b", ""),
         }
         self.pc_boxes: dict[str, list] = {"a": [], "b": []}
+        # KEY-SCOPE-5: the key_change collision check's box census, per player. `capable`: this
+        # client session advertises `pc_boxes_generation`; `boxes`: the entries of its newest complete
+        # census (None = missing or stale, which fails closed). Presence-based for other clients.
+        self.box_census: dict[str, dict] = {pid: {"capable": False, "gen": -1, "boxes": None}
+                                            for pid in ("a", "b")}
+        # KEY-SCOPE-5: server-owned connection generation per player; the newest hello wins.
+        self._conn_gen: dict[str, int] = {}
         # key → {level, hp, maxHP, nickname, species_id, gender} — best-effort party snapshot
         self.party_details: dict[str, dict[str, dict]] = {"a": {}, "b": {}}
         # Persistent per-monKey cache of display info (species_id, nickname, level, gender).
@@ -1311,6 +1318,7 @@ class SLinkServer:
         # (`self._last_seq`), which outlived the socket it described — see the guards below.
         last_seq = -1
         hello_seen = False
+        conn_gen: dict[str, int] = {}   # player -> the generation this connection's hello was given
         no_hello_warned = False
         try:
             while not writer.is_closing():
@@ -1506,6 +1514,12 @@ class SLinkServer:
                     last_seq = seq
                 if msg.get("event") == "hello":
                     hello_seen = True
+                    self._conn_gen[player_id] = conn_gen[player_id] = self._conn_gen.get(player_id, 0) + 1
+                elif conn_gen.get(player_id, self._conn_gen.get(player_id)) != self._conn_gen.get(player_id):
+                    # KEY-SCOPE-5: a newer connection helloed as this player; a delayed line from
+                    # this one would roll its party back.
+                    await self._respond(writer, [{"cmd": "noop", "refused": "superseded"}])
+                    continue
 
                 commands = self._dispatch(player_id, msg)
                 await self._respond(writer, commands)
@@ -1864,6 +1878,7 @@ class SLinkServer:
             party_n = len(msg.get("party", []))
             rom     = msg.get("rom_type", "unknown")
             log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
+            self._ingest_box_census(player_id, msg)
 
             # Run state machine first (handles identity lock check).
             cmds = self.state.handle_event(player_id, msg)
@@ -2144,9 +2159,10 @@ class SLinkServer:
             for k, det in self.party_details[player_id].items():
                 self._cache_mon_info(k, det, player_id)
 
+        self._ingest_box_census(player_id, msg)
         cmds = self.state.handle_event(player_id, msg)
 
-        if event == "key_change" and not msg.get("_rejected"):
+        if event == "key_change" and msg.get("_key_change_status") == "migrated":
             self._migrate_presentation_key(player_id, msg.get("old_key", ""), msg.get("new_key", ""))
 
         # Refresh the native in-game panel, but only when its content actually changed — this runs
@@ -4623,12 +4639,13 @@ class SLinkServer:
                     return name
         return key[:8] if key else "?"
 
-    def _memorial_box_indices(self) -> set[int]:
+    def _memorial_box_indices(self, player_id: str | None = None) -> set[int]:
         """Return set of box indices used for memorial storage (primary + overflow).
 
-        The primary memorial box is always excluded. Overflow is calculated from
-        the number of dead/memorial links — each dead link contributes one mon per
-        player to the memorial boxes. Boxes fill at 30 mons each.
+        Each player's memorial storage is its own: its buried halves (DEAD/MEMORIAL links) and
+        its pending memorials, as one key set so a pending burial of a dead link counts once.
+        The primary box holds `mons_per_box`; each further mon spills into the box below it.
+        With `player_id`, that player's boxes only; otherwise the union of both players'.
         """
         from server.state import LinkStatus
         mem_idx = self.adapter.memorial_box_index if self.adapter else -1
@@ -4636,18 +4653,39 @@ class SLinkServer:
             return set()
         indices = {mem_idx}
         mons_per_box = self.adapter.mons_per_box if self.adapter else 30
-        # Count dead/memorial mons: each such link has one mon per player in memorial
-        dead_count = sum(1 for e in self.state.links
-                         if e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL))
-        # Add pending memorials (not yet moved but will be)
-        for pid in ("a", "b"):
-            dead_count += len(self.state.pending_memorials[pid])
-        # How many overflow boxes beyond the primary?
-        overflow_boxes = max(0, (dead_count - mons_per_box) // mons_per_box)
-        for i in range(1, overflow_boxes + 1):
-            if mem_idx - i >= 0:
-                indices.add(mem_idx - i)
+        for pid in ((player_id,) if player_id else ("a", "b")):
+            buried = {getattr(e, pid).key for e in self.state.links
+                      if e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL) and getattr(e, pid) is not None}
+            overflow_boxes = max(0, (len(buried | self.state.pending_memorials[pid]) - 1) // mons_per_box)
+            indices.update(mem_idx - i for i in range(1, overflow_boxes + 1) if mem_idx - i >= 0)
         return indices
+
+    def _ingest_box_census(self, player_id: str, msg: dict) -> None:
+        """KEY-SCOPE-5: keep the collision check's box census. A client advertises a complete
+        census by sending `pc_boxes_generation` (monotonic per client session, bumped after each
+        successful full box scan). A snapshot carrying a newer generation with `pc_boxes`
+        replaces the census; a snapshot without both (or with an older generation) makes it
+        stale until a newer generation arrives. A reported deposit is added, so a census taken
+        before it cannot miss the boxed mon."""
+        event, bc = msg.get("event"), self.box_census[player_id]
+        if event == "hello":
+            bc.update(capable="pc_boxes_generation" in msg, gen=-1, boxes=None)
+        elif "pc_boxes_generation" in msg:
+            bc["capable"] = True
+        if event in ("party_to_box", "stats_cache"):
+            if bc["boxes"] is not None and msg.get("key"):
+                bc["boxes"].append({"key": msg["key"], "box": msg.get("box")})
+            return
+        if event not in ("hello", "tick", "safe") or not bc["capable"]:
+            return
+        gen, boxes = msg.get("pc_boxes_generation"), msg.get("pc_boxes")
+        complete = type(gen) is int and gen >= 0 and isinstance(boxes, list)
+        if complete and gen > bc["gen"]:
+            bc.update(gen=gen, boxes=[dict(e) for e in boxes if isinstance(e, dict)])
+        elif complete and gen == bc["gen"] and bc["boxes"] is not None:
+            pass                                  # the census we hold, resent
+        elif "party" in msg:                      # a snapshot without a usable census
+            bc["boxes"] = None
 
     def _journal_trade(self, rec: dict) -> None:
         """events.json: one trade_<outcome> entry per native-trade outcome; key = the trade token."""
@@ -4655,21 +4693,30 @@ class SLinkServer:
                         f"{rec['a_key']} <-> {rec['b_key']}: {rec['verdict']} {rec['problem']}".strip(),
                         key=rec["token"])
 
-    def _presentation_key_in_use(self, key: str, player_id: str | None = None, party: bool = True) -> bool:
+    def _presentation_key_in_use(self, key: str, player_id: str | None = None,
+                                 party: bool = True) -> bool | None:
         """Is `key` a live mon in the presentation caches?  The state's key_change collision
         preflight asks this (PLAN A1): a party mon or a mon in a non-memorial box of either
-        player is load-bearing; the memorial box holds buried keys, which are reusable, and
-        `_mon_cache` is never pruned, so neither counts. KEY-SCOPE: with a player, only that
-        player's caches count (the partner may hold an equal key). `party=False` skips the party
-        cache (the state already proved that party hit is the key-changing mon itself)."""
-        mem_idx = self.adapter.memorial_box_index if self.adapter else -1
-        for pid in ((player_id,) if player_id else ("a", "b")):
-            if party and key in self.party_details.get(pid, {}):
+        player is load-bearing; the memorial boxes (primary and overflow) hold buried keys,
+        which are reusable, and `_mon_cache` is never pruned, so neither counts. KEY-SCOPE: with
+        a player, only that player's caches count (the partner may hold an equal key).
+        `party=False` skips the party cache (the state already proved that party hit is the
+        key-changing mon itself). KEY-SCOPE-5: a client that advertises a box census is judged
+        on its newest complete census only; None = that census is missing or stale."""
+        pids = (player_id,) if player_id else ("a", "b")
+        if party and any(key in self.party_details.get(pid, {}) for pid in pids):
+            return True
+        unavailable = False
+        for pid in pids:
+            bc = self.box_census[pid]
+            boxes = bc["boxes"] if bc["capable"] else self.pc_boxes.get(pid, [])
+            if boxes is None:
+                unavailable = True
+                continue
+            memorial = self._memorial_box_indices(pid)
+            if any(b.get("key") == key and b.get("box") not in memorial for b in boxes):
                 return True
-            for bentry in self.pc_boxes.get(pid, []):
-                if bentry.get("key") == key and bentry.get("box") != mem_idx:
-                    return True
-        return False
+        return None if unavailable else False
 
     def _migrate_presentation_key(self, player_id: str, old_key: str, new_key: str):
         """Move the presentation caches from old_key to new_key AFTER state accepted the

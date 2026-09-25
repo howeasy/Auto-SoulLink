@@ -465,3 +465,46 @@ async def test_a_companion_patched_vanilla_cartridge_pairs_with_a_clean_one(tmp_
     assert "Mixed artifact kinds" in SLinkServer._mixed_games_error(
         type("S", (), {"state": type("T", (), {"rom_type": "PureRed", "artifact_kind": "clean"})()})(),
         "b", "PureBlue", "overlay")
+
+
+# ── KEY-SCOPE-5 (OMP cx-ee316c45) ─────────────────────────────────────────────────────────
+
+def test_reconnect_old_key_replay_acks_false_without_rollback(tmp_path):
+    srv = _server(tmp_path)
+    _link(srv.state)
+    assert _one(srv._dispatch("a", {"event": "key_change", "old_key": OLD, "new_key": NEW}),
+                "key_change_ack")["migrated"] is True
+    # restart, then a reconnect whose hello still reports the old key (a reload onto an old save)
+    srv.state = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter(variant="red"))
+    srv.state.presentation_key_in_use = srv._presentation_key_in_use
+    srv.state.handle_event("a", {"event": "hello", "party": [{"key": OLD, "hp": 10, "maxHP": 10}]})
+    srv.party_details["a"] = {OLD: {"nickname": "PIKA", "level": 5}}
+    ack = _one(srv._dispatch("a", {"event": "key_change", "old_key": OLD, "new_key": NEW}),
+               "key_change_ack")
+    assert ack["migrated"] is False
+    assert srv.state.links[0].a.key == NEW and srv.state.entry_for("a", NEW) is srv.state.links[0]
+    assert srv.state.party_keys["a"] == {NEW}
+    assert OLD in srv.party_details["a"], "a replay must not migrate the presentation caches again"
+
+
+def test_new_key_ambiguity_latch_rejects_key_change(st):
+    entry = _link(st)
+    st.ambiguous_keys["a"][NEW] = {"since": "t", "refused": 0}
+    _one(_change(st), "key_change_rejected")
+    assert st.ambiguous_keys["a"][NEW]["refused"] == 1
+    assert entry.status == LinkStatus.ALIVE and entry.a.key == OLD and st.entry_for("a", NEW) is None
+
+
+def test_overflow_memorial_box_key_is_reusable(tmp_path):
+    srv = _server(tmp_path)
+    mem, per_box = srv.adapter.memorial_box_index, srv.adapter.mons_per_box
+    for i in range(per_box):
+        _link(srv.state, a_key=f"{i:04X}:30B8:10", b_key=f"{i:04X}:7B0B:10",
+              status=LinkStatus.MEMORIAL, area=f"r{i}")
+    assert srv._memorial_box_indices() == {mem}, "one full memorial box needs no overflow"
+    _link(srv.state, a_key="DEAD:30B8:10", b_key="DEAD:7B0B:10", status=LinkStatus.DEAD, area="r_x")
+    assert srv._memorial_box_indices() == {mem, mem - 1}
+    srv.pc_boxes["a"] = [{"box": mem - 1, "slot": 0, "key": NEW}]
+    assert srv._presentation_key_in_use(NEW, "a") is False
+    srv.pc_boxes["a"] = [{"box": mem - 2, "slot": 0, "key": NEW}]
+    assert srv._presentation_key_in_use(NEW, "a") is True

@@ -93,6 +93,7 @@ function Client.new(p)
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         box_cache = {}, resolved_areas = {}, config = {}, deferred = {},
+        box_generation = 0, -- KEY-SCOPE-5: bumped after each successful full rescan_boxes
         battle = nil, has_pokeballs = false, nuzlocke_announced = false, signals = nil,
         -- Gen 2: the binder needs an operation authority (signals.lua header); the client
         -- owns it as a reset epoch, bumped at every reset/reload boundary.
@@ -282,6 +283,12 @@ function Client.new(p)
         return out
     end
 
+    -- KEY-SCOPE-5: pc_boxes is a complete census only alongside a generation; nil before any
+    -- successful scan, so the server never mistakes the initial empty cache for one.
+    local function box_generation()
+        return self.box_generation > 0 and self.box_generation or nil
+    end
+
     -- Gen 2: fourteen boxes, the current one authoritative in the active sBox shadow and the
     -- rest in their backing SRAM boxes (reads.lua read_box); eggs omitted as in the party.
     function self:rescan_boxes()
@@ -296,6 +303,7 @@ function Client.new(p)
             end
         end
         self.box_cache = cache
+        self.box_generation = self.box_generation + 1
         return cache
     end
 
@@ -1235,7 +1243,7 @@ function Client.new(p)
             has_pokeballs = self.has_pokeballs, ball_count = ball_count(),
             -- Gen 2: two badge bytes; Kanto rides the protocol's second-region field
             badges = badges and badges.johto, kanto_badges = badges and badges.kanto,
-            area_id = area_id, loc_name = loc, pc_boxes = pc_boxes_wire(),
+            area_id = area_id, loc_name = loc, pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation(),
             writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
             in_battle = battle.mode ~= 0,
             -- Gen 2: no rom_content (gen2_gsc.rom_content_fingerprint refuses: not qualified)
@@ -1326,7 +1334,7 @@ function Client.new(p)
             is_trainer_battle = battle.mode == c.TRAINER_BATTLE,
             enemy_party = enemy_party(battle),
             badges = badges and badges.johto, kanto_badges = badges and badges.kanto,
-            trainer_name = player and player.player_name, pc_boxes = pc_boxes_wire(),
+            trainer_name = player and player.player_name, pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation(),
             -- the contest-masked party refuses any trade (9805ac1c): the server offers none meanwhile
             trade_blocked = contest_masked(),
             awaiting_save = awaiting_save_field(), -- BURIAL-VISIBLE: the pair board's "awaiting save"

@@ -153,3 +153,15 @@ async def test_ghost_positions_do_not_wake_sse_listeners(srv, port):
         await c.send(_tick(7))
     assert len(pings) > after_hello, "a tick still notifies"
 
+
+
+@pytest.mark.asyncio
+async def test_a_newer_hello_supersedes_an_older_connection(srv, port):
+    """KEY-SCOPE-5: a delayed tick from a superseded socket must not roll the party back."""
+    async with _Conn(port) as first:
+        await first.send(dict(HELLO_A, seq=1))
+        async with _Conn(port) as second:
+            await second.send(dict(HELLO_A, seq=1))
+            assert (await first.send(_tick(2)))["commands"] == [{"cmd": "noop", "refused": "superseded"}]
+            assert not (await second.send(_tick(2)))["commands"][0].get("refused")
+    assert [d[1] for d in srv.dispatched] == ["hello", "hello", "tick"], srv.dispatched

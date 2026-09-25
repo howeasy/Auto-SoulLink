@@ -66,21 +66,3 @@ def test_the_field_is_cleared_at_battle_end():
         pytest.skip("pokered not cloned")
     with open(path, encoding="utf-8") as f:
         assert "ld [wCurOpponent], a" in f.read()
-
-
-# ── in-game trades ───────────────────────────────────────────────────────────────────
-
-def test_the_server_migrates_every_structure_on_a_key_change():
-    """The half that already existed. If any of these stopped migrating, a traded mon would
-    keep its link while its stats, party membership or pending memorial stayed behind."""
-    with open(os.path.join(_REPO, "server", "state.py"), encoding="utf-8") as f:
-        src = f.read()
-    body = src[src.index("def _handle_key_change"):]
-    body = body[:body.index("\n    def ", 10)]
-    for structure in ("_unindex", "_index_entry", "pending_captures", "party_keys", "mon_stats",
-                      "bonus_keys", "pending_memorials",
-                      # the O2 census additions (PLAN A1): the structures the first cut missed
-                      "sync_inflight", "pending_bonus", "partner_blobs", "rebuild_pending",
-                      "pending_trade", "encounter_a", "encounter_b", "key_change_ack",
-                      "key_change_rejected"):
-        assert structure in body, f"{structure} is no longer migrated on a key change"

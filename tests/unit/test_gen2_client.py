@@ -2239,3 +2239,24 @@ def test_trade_a_held_report_dropped_at_a_boundary_becomes_an_uncertain_declarat
     cart.w.checkpoint_ok = True
     cart.w.frames(3)
     assert uncertain_done(cart.w) == [("t1", True, False)]
+
+
+def test_a_complete_box_scan_is_stamped_with_a_generation():
+    """KEY-SCOPE-5: `pc_boxes` is a complete census only with `pc_boxes_generation`, bumped after
+    each successful full rescan and never on a failed one (the server fails a key_change closed
+    on a missing or stale census)."""
+    def check(world):
+        assert world.hello().get("pc_boxes_generation") == 1
+        world.frames(30)
+        assert world.sent("tick")[-1].get("pc_boxes_generation") == 1
+        world.field("wCurBox", 99)                    # read_current_box_num refuses: the scan fails
+        world.client.pending_rescan = True
+        world.frames(30)
+        assert world.sent("tick")[-1].get("pc_boxes_generation") == 1
+        world.field("wCurBox", 0)
+        world.client.pending_rescan = True
+        world.frames(30)
+        assert world.sent("tick")[-1].get("pc_boxes_generation") == 2
+
+    falsify(check, mutant("lua/gen2/client.lua", ("        self.box_cache = cache\n        self.box_generation = self.box_generation + 1\n",
+                                                  "        self.box_cache = cache\n")))
