@@ -21,7 +21,7 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 | You need | Notes |
 |---|---|
 | **Python 3.11+** | `pip install -r requirements.txt` |
-| **BizHawk 2.9+** | Two instances, one per player. Savestates are version-locked — a state written by a different BizHawk stops the emulator on a modal dialog. |
+| **BizHawk 2.11+ (Gen 1), 2.9+ (Gen 2/3)** | Two instances, one per player. Savestates are version-locked — a state written by a different BizHawk stops the emulator on a modal dialog. |
 | **Two ROMs** | One per player. Both players must run the same **game family** — Red and Blue link, FireRed and LeafGreen link; a Radical Red run needs Radical Red on both sides. |
 | **A full checkout, on both machines** | The launcher scripts are small stubs that `dofile` the real client out of this repo, so a remote friend needs the repo too — sending them just the `.lua` will not work. |
 
