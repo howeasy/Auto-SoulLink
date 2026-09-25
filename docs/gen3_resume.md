@@ -31,6 +31,15 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   3. Opcode gates: 26 live + 12 deferred vs PLAN's 39.
   4. No explicit anchor/md5/grep/write-guard/control receipts in the RR plan.
   The G5 draft status text is stale: it still says "no RR runner rows / no zip receipt".
+- **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
+  - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
+  - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.
+  - server/adapters/__init__.py: Gen 2's side is additive (unrouted_rom_type_reason, persisted_migration_refusal, foundation_for_rom_type, adapter_class_for_rom_type, plus the Gen 2 entries); keep both sets.
+  - gen3_frlge.py is Gen 3's.
+  - Re-run `git merge-tree HEAD master` after Gen 2 lands.
+  - Gen 1 took 48709f39 (the sfx gate case-A fix plus receipts).
+  - Master since 96ae536d also has: the ruff exclude, the purergb .sym LF fix, the ROM-scan ctime key, test_gen1_trade_patch reading archive/gen1/rc, and the board/connection_state/CSS work.
+- **Merge review:** two Sonnet reviews found no dropped hunks (server.py + gen3_frlge.py; manager/html/make_release/REFERENCE/gen1 client). The three OMP reviews of the merge timed out on the diff size.
 - **NEXT:**
   1. Finish the FR/LG pass at 870e5e5d (`--resume`) and merge the summary.
   2. Run `--cut 870e5e5d --title rr`.
