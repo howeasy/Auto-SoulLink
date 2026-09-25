@@ -2560,6 +2560,26 @@ class TradeSim:
         return lines
 
 
+def test_the_canary_arms_at_the_parked_sp_when_a_vblank_copy_has_sp_on_a_buffer(tmp_path, monkeypatch):
+    """df04e065 re-run, C-C trade_timeout A: arm_all ran while a VBlank fast copy had SP on a tilemap ("ld sp, hl",
+    home/video.asm), so the canary sat at $CE58. The real SP is parked in hSPBuffer (little-endian) meanwhile."""
+    t = TradeSim(tmp_path, "a", monkeypatch)
+    t.party(t.mon(16))
+    h = t.profile["hram"]["hSPBuffer"]
+    t.sim.put(h, t.lua.table_from([0xE0, 0xDF]))   # parked SP $DFE0
+    t.sim.regs.SP = 0xCE59                          # SP mid-copy, on a buffer
+    t.go()
+    t.sim.regs.SP = 0xDFE0
+    t.frames(2, pushes=2)
+    stack = json.loads(next(l for l in t.finish("flush") if l.startswith("TRADE_STACK "))[12:])
+    assert stack["canary"]["address"] == 0xDFDF and stack["canary"]["hit"] is True
+
+
+def test_trade_verdict_refuses_a_canary_armed_off_the_stack():
+    s = trade_stream("new", "a")
+    red(edit(s, "TRADE_STACK", lambda v: v["canary"].update(address=0xCE58, sp=0xCE58)), "new", "a", "off the stack")
+
+
 def test_attach_hooks_print_a_committed_proposer_visit_the_verdict_passes(tmp_path, monkeypatch):
     t = TradeSim(tmp_path, "a", monkeypatch)
     own = t.mon(16)

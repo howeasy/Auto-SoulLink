@@ -866,8 +866,16 @@ function T.attach(e)
         local n = 0
         st.armed_start, st.armed_end = bottom, math.min(top, bottom + T.MARGIN + T.EXACT - 1)
         -- the canary: the byte just below the live SP is pushed by the next call; its first write proves the
-        -- hooks live, then it disarms (never counted as an observation)
-        local canary = api.register("SP") - 1
+        -- hooks live, then it disarms (never counted as an observation). A VBlank fast copy points SP at a
+        -- buffer ("ld sp, hl", home/video.asm) after parking the real SP in hSPBuffer (little-endian): arming
+        -- there put the canary on a tilemap (df04e065 re-run, C-C trade_timeout A: canary $CE58, SP $C0B9)
+        local sp = api.register("SP")
+        if sp < bottom or sp > top + 1 then
+            local h = ctx.profile.hram.hSPBuffer
+            sp = u8(h) + 256 * u8(h + 1)
+        end
+        assert(sp >= bottom and sp <= top + 1, fmt("stack canary: no on-stack SP to arm at ($%04X)", sp))
+        local canary = sp - 1
         st.canary = {address=canary, hits=0}
         local okc, hc = pcall(write, function()
             if st.canary.hits > 0 then return end
@@ -1418,6 +1426,9 @@ function T.verdict(lines, json, case, player)
          "stack witness coverage incomplete")
     need(type(canary) == "table" and canary ~= json.null and canary.hit == true and integer(canary.address, 0xC000, 0xDFFF)
          and integer(canary.frame, 0, 2^53), "stack write hooks never proved live (no canary hit)")
+    need(type(canary) ~= "table" or type(canary.address) ~= "number" or type(stack.stack_start) ~= "number"
+         or (canary.address >= stack.stack_start and canary.address <= stack.stack_end),
+         "stack canary armed off the stack (a harness arming fault, not a push)")
     local events, addrs = stack.registration_events or {}, {}
     local cs, ce = stack.coverage_started or {}, stack.coverage_ended or {}
     need(stack.continuous == true and stack.registration_complete_before_first_phase == true
