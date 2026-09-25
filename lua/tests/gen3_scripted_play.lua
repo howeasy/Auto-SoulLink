@@ -62,9 +62,14 @@ local TITLE = SLINK_GEN3_TITLE or os.getenv("SLINK_GEN3_TITLE")
 if not TITLE or TITLE == "" then TITLE = "firered" end
 local S = Syms.for_title(TITLE)
 
--- PROFILE PACK (card C4-LG2): radical_red's profile lives under data/games/gen3_rr, not
--- gen3_frlg's (same split duo_gen3_main.lua already makes for its own pack/checkpoint reads).
-local PROFILE_PACK = TITLE == "radical_red" and "gen3_rr" or "gen3_frlg"
+-- PROFILE PACK (card C4-LG2, extended E2-PLAY-PREP): each title's profile.json lives under
+-- its own data/games/gen3_<pack> directory (same split duo_gen3_main.lua already makes for its
+-- own pack/checkpoint reads). Emerald is a separate pret decomp (data/games/gen3_emerald),
+-- neither FR/LG's pokefirered profile nor RR's hand-patched one.
+local PROFILE_PACK_BY_TITLE = { firered = "gen3_frlg", leafgreen = "gen3_frlg",
+                                 radical_red = "gen3_rr", emerald = "gen3_emerald" }
+local PROFILE_PACK = assert(PROFILE_PACK_BY_TITLE[TITLE],
+    "gen3_scripted_play: no profile pack for title " .. tostring(TITLE))
 local profile_file = assert(io.open(WT .. "/data/games/" .. PROFILE_PACK .. "/profile.json", "rb"))
 local profile = assert(JSON.decode(profile_file:read("a"))).titles[TITLE]
 profile_file:close()
@@ -74,6 +79,14 @@ if TITLE == "radical_red" then
     -- RR/CFRU's box layout is compressed (25 boxes, no BOX_DATA_OFFSET) -- the FR/LG
     -- "uncompressed box layout" invariant below does not apply and must not be asserted here.
     assert(profile.admitted, "radical_red profile is not admitted")
+elseif TITLE == "emerald" then
+    -- Emerald's own profile (data/games/gen3_emerald/profile.json) matches FR/LG's
+    -- uncompressed box layout (BOX_DATA_OFFSET==4, BOXES_PER_STORE==14, same pret PC struct)
+    -- but is not yet flagged `admitted` pending its own live gate -- this driver is authored
+    -- offline ahead of that gate (card E2-PLAY-PREP), so it checks only the two box-layout
+    -- invariants this file's PC legs actually need, not the profile-wide admission flag.
+    assert(profile.derived.BOX_DATA_OFFSET == 4 and profile.derived.BOXES_PER_STORE == 14,
+           "emerald uncompressed box layout is not admitted")
 else
     assert(profile.admitted and not profile.derived.CFRU_NO_ENCRYPT
            and profile.derived.BOX_DATA_OFFSET == 4 and profile.derived.BOXES_PER_STORE == 14,
@@ -2977,6 +2990,421 @@ LEGS[#LEGS + 1] = {
     run = function(cp) G.phase("evolution", "OPEN: earliest is a starter level-up, needs battle grinding") end,
 }
 
+-- ══════════════════════════════════════════════════════════════════════════════════════════
+-- EMERALD: scripted natural play (card E2-PLAY-PREP)
+-- ══════════════════════════════════════════════════════════════════════════════════════════
+-- A SEPARATE ordered table, not appended to the FR/LG/RR LEGS above: LEGS is built
+-- unconditionally at module load regardless of title (every existing leg literal runs
+-- LEGS[#LEGS+1]=... with no title guard), so appending here would hand an Emerald run legs
+-- built entirely from Pallet Town/pokefirered facts. EMERALD_LEGS is declared for every title
+-- (an empty table when TITLE ~= "emerald") so the module's own export table below never indexes
+-- a nil, and populated only inside the guard.
+--
+-- Three INDEPENDENT SYNTH-seeded fixtures (tests/fixtures/gen3/README.md, "emerald_{town,
+-- battle,trainer}[_b].sav"), each already standing where its own group of legs needs it --
+-- unlike the FR/LG story above (one save, threaded start to finish), these do not chain:
+-- emerald_town.sav sits at Oldale Town's heal tile (0.10, 6,17), emerald_battle.sav in Route
+-- 102's tall grass (0.17, 21,16), emerald_trainer.sav one step from Youngster Calvin's sight
+-- line (0.17, 32,16). EMERALD_LEGS is still ONE ordered table (so every leg shares playlib's
+-- SLINK_GEN3_PLAY_FROM resume mechanism and the "open (skipped)" reporting), but the first leg
+-- of each group carries a `check(cp)` that fails loudly if the loaded fixture's tile does not
+-- match the group about to run -- no leg here assumes it can walk in from a DIFFERENT group's
+-- tile. (Oldale Town's own west connection does lead onto Route 102 in principle, but no BFS
+-- path threading all three fixtures together has been computed or verified, so this driver does
+-- not attempt it -- see the report for why three independent starts, not one long walk.)
+local EMERALD_LEGS = {}
+if TITLE == "emerald" then
+
+--- group/num/x/y destination check for a leg's own `check(cp)` -- returns a message (leg
+--- precondition failed) or nil (ok), the shape playlib's `leg.check` wants.
+local function emerald_at(group, num, x, y)
+    return function(cp)
+        local g, n = G.map(cp)
+        local px, py = G.pos(cp)
+        if g ~= group or n ~= num or px ~= x or py ~= y then
+            return string.format(
+                "expected the %s fixture's own tile %d.%d (%d,%d), read %s.%s (%s,%s) -- wrong "
+                .. "fixture loaded for this leg (tests/fixtures/gen3/README.md)",
+                "emerald", group, num, x, y, tostring(g), tostring(n), tostring(px), tostring(py))
+        end
+        return nil
+    end
+end
+
+-- Emerald's own START-menu save path. gen3_boot_check.lua's G.save_via_menu (the FR/LG "save"
+-- leg above uses it) is FR/LG's task-based START menu (sStartMenuOrder / Task_StartMenuHandleInput
+-- -- gen3_title_syms.lua already documents those as `emerald = nil` on purpose, a genuine
+-- architecture change, not a rename); Emerald's is the gMenuCallback-driven design
+-- lua/tests/gen3_emerald_boot_check.lua's own header explains ("that driver's START-menu
+-- witnesses are FR/LG's task-based menu ... Emerald's menu is gMenuCallback-driven"). This is
+-- the SAME witness chain that script already proved live (its own boot-check receipts,
+-- tests/fixtures/gen3/README.md), re-derived here through `cp`/G because that script is a
+-- top-level driver (calls G.finish/G.open itself at module load) and not a reusable library
+-- function this file can dofile mid-leg.
+local EMERALD_START_SYM_NAMES = {
+    "gMenuCallback", "Task_ShowStartMenu", "HandleStartMenuInput", "StartMenuSaveCallback",
+    "SaveStartCallback", "SaveCallback", "sStartMenuCursorPos", "sNumStartMenuActions",
+    "sCurrentStartMenuActions",
+}
+local function load_emerald_start_syms()
+    local want, out = {}, {}
+    for _, n in ipairs(EMERALD_START_SYM_NAMES) do want[n] = true end
+    for line in io.lines(WT .. "/data/gen3/pret/pokeemerald.sym") do
+        local addr, name = line:match("^(%x+) %a+ %x+ (%S+)$")
+        if addr and want[name] then out[name] = tonumber(addr, 16) end
+    end
+    for _, n in ipairs(EMERALD_START_SYM_NAMES) do
+        assert(out[n], "gen3_scripted_play: symbol " .. n .. " missing from pokeemerald.sym")
+    end
+    return out
+end
+local ES = load_emerald_start_syms()
+local function em_thumb(a) return a | 1 end
+local function em_menu_cb() return memory.read_u32_le(ES.gMenuCallback) end
+local function em_menu_ready()
+    return task_active(em_thumb(ES.Task_ShowStartMenu))
+       and em_menu_cb() == em_thumb(ES.HandleStartMenuInput)
+end
+local function em_save_dialog()
+    local c = em_menu_cb()
+    return c == em_thumb(ES.StartMenuSaveCallback) or c == em_thumb(ES.SaveStartCallback)
+        or c == em_thumb(ES.SaveCallback)
+end
+local EM_MENU_ACTION_SAVE = 5  -- src/start_menu.c:51-58 (Emerald's own numbering; FR/LG's is 4)
+local function emerald_save_via_menu(cp)
+    local domain = select(1, G.flash_domain())
+    if not domain then G.finish(false, "emerald_save: no flash memory domain"); return end
+    local before = G.save_counter(domain)
+    G.phase("save-menu", "counter=" .. before)
+    local opened = false
+    for _ = 1, 5 do
+        for _ = 1, 300 do
+            if not G.pred_ok(cp, "field_controls_locked") then break end  -- pred true == free
+            G.advance()
+        end
+        G.tap("Start", 3, 0)
+        for _ = 1, 120 do
+            if em_menu_ready() then opened = true; break end
+            G.advance()
+        end
+        if opened then break end
+    end
+    if not opened then
+        G.shot("stuck")
+        G.finish(false, "emerald_save: the START menu never took input")
+        return
+    end
+    local n = memory.read_u8(ES.sNumStartMenuActions)
+    local row = nil
+    for i = 0, n - 1 do
+        if memory.read_u8(ES.sCurrentStartMenuActions + i) == EM_MENU_ACTION_SAVE then row = i; break end
+    end
+    if not row then
+        G.finish(false, string.format("emerald_save: no SAVE row among %d START items", n))
+        return
+    end
+    for _ = 1, n + 8 do
+        if memory.read_u8(ES.sStartMenuCursorPos) == row then break end
+        if not em_menu_ready() then
+            G.finish(false, "emerald_save: the START menu closed during the row walk")
+            return
+        end
+        G.tap("Down", 3, 13)
+    end
+    if memory.read_u8(ES.sStartMenuCursorPos) ~= row then
+        G.finish(false, "emerald_save: cursor never reached the SAVE row " .. row)
+        return
+    end
+    G.tap("A", 3, 0)
+    local opened_dialog = false
+    for _ = 1, 120 do
+        if em_save_dialog() then opened_dialog = true; break end
+        G.advance()
+    end
+    if not opened_dialog then
+        G.shot("stuck")
+        G.finish(false, "emerald_save: the save dialog never opened")
+        return
+    end
+    G.phase("save-dialog", "row=" .. row .. "/" .. n)
+    -- YES is the default on the save prompt; the flash counter, not the presses, is the verdict.
+    local after, moved = before, false
+    for i = 1, 300 do
+        G.tap("A", 3, 13)
+        after = G.save_counter(domain)
+        if after > before then moved = true; break end
+    end
+    if not moved then
+        G.finish(false, "emerald_save: the save counter never advanced")
+        return
+    end
+    G.phase("saved", string.format("counter=%d->%d", before, after))
+    -- SaveCallback's own success exit is the only one that frees the field controls again.
+    local closed = false
+    for _ = 1, 40 do
+        G.tap("A", 3, 13)
+        if not G.pred_ok(cp, "field_controls_locked") then closed = true; break end
+    end
+    if not closed then
+        G.finish(false, "emerald_save: the save dialog never closed")
+        return
+    end
+    local ok = pcall(client.saveram)
+    if not ok then G.finish(false, "emerald_save: SaveRAM flush failed"); return end
+    G.phase("flushed", play.where(cp))
+end
+
+-- ── TOWN group (emerald_town.sav, Oldale Town 0.10 (6,17)) ─────────────────────────────────
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_enter_pc",
+    exercises = { "map_load" },
+    check = emerald_at(0, 10, 6, 17),
+    source = {
+        "data/maps/OldaleTown/map.json (warp_events: (6,16) -> MAP_OLDALE_TOWN_POKEMON_CENTER_1F warp 0)",
+        "data/maps/OldaleTown_PokemonCenter_1F/map.json (group 2 num 2, warps[0] = (7,8) -> OldaleTown warp 2)",
+        "tools/gba_map.py --game emerald --map 0.10 / --map 2.2 (this card's own additive Emerald "
+        .. "support: Tileset.metatileAttributes is u16@0x10 in pokeemerald, not FR/LG's u32@0x14 -- "
+        .. "include/global.fieldmap.h in both pret trees)",
+    },
+    run = function(cp)
+        -- One step Up presses INTO the door (6,16) from the fixture's own start tile (6,17) --
+        -- the same "press into it, don't just walk onto it" shape every FR/LG door in this file
+        -- uses (play.enter_warp). A real-RAM terminal, not a frame count: the pre-press
+        -- position and the post-press map/tile (verify_destination below) both read G.pos/G.map.
+        local px0, py0 = G.pos(cp)
+        G.phase("emerald_enter_pc-start", string.format("at (%d,%d)", px0, py0))
+        local ok, why = play.enter_warp(cp, "Up", 20)
+        if not ok then
+            G.shot("stuck")
+            G.finish(false, "emerald_enter_pc: the Oldale PC door never fired a warp: " .. tostring(why))
+            return
+        end
+        verify_destination(cp, "emerald_enter_pc", { group = 2, num = 2, x = 7, y = 8 })
+        G.phase("in-pc", play.where(cp))
+    end,
+}
+
+-- ── leg: emerald_pc_deposit/withdraw/box_place/release (OPEN) ──────────────────────────────
+-- All four share one reason: every fixture (town/battle/trainer) carries EXACTLY one party mon
+-- (Mudkip Lv5) and every storage box is empty (tests/fixtures/gen3/README.md "Storage: box
+-- names BOX1..BOX14, default wallpapers, no mons"). Depositing the party's only mon is refused
+-- by the game itself -- MSTATE_ERROR_LAST_PARTY_MON prints MSG_LAST_POKE ("That's your last
+-- POKe MON!") and refuses the deposit (src/pokemon_storage_system.c:2486-2489, the same "state
+-- 3" refusal at :2711-2714 for the party-side move), so pc_deposit cannot run without a second
+-- party mon; and with the boxes empty, pc_withdraw/pc_box_place/pc_release have nothing stored
+-- to act on either. Exercising all four needs a fourth Emerald fixture carrying a second mon or
+-- a boxed mon -- no card has built one yet (parallel to rr_battle2.sav's own "second mon" gap,
+-- tests/fixtures/gen3/README.md).
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_pc_deposit",
+    exercises = { "pc_deposit" },
+    source = { "src/pokemon_storage_system.c:2486-2489 (MSTATE_ERROR_LAST_PARTY_MON -> MSG_LAST_POKE, deposit refused)" },
+    open = true,
+    open_reason = "every emerald_* fixture carries exactly one party mon; depositing it is refused by the game",
+}
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_pc_withdraw",
+    exercises = { "pc_withdraw" },
+    source = { "tests/fixtures/gen3/README.md (Storage: no mons in any box)" },
+    open = true,
+    open_reason = "every box in every emerald_* fixture is empty; nothing to withdraw",
+}
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_pc_box_place",
+    exercises = { "pc_box_place" },
+    source = { "tests/fixtures/gen3/README.md (Storage: no mons in any box)" },
+    open = true,
+    open_reason = "box-to-box placement needs a boxed mon; every box is empty",
+}
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_pc_release",
+    exercises = { "pc_release" },
+    source = { "tests/fixtures/gen3/README.md (Storage: no mons in any box)" },
+    open = true,
+    open_reason = "releasing a boxed mon needs one in a box; every box is empty",
+}
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_save_town",
+    exercises = { "save" },
+    source = {
+        "src/start_menu.c:560-633 (gMenuCallback-driven START menu; HandleStartMenuInput -> "
+        .. "StartMenuSaveCallback -> SaveCallback), :51-58 (MENU_ACTION_SAVE == 5, Emerald's own "
+        .. "numbering -- FR/LG's is 4)",
+        "src/save.c:701 (TrySavingData); the flash sector counter witness (lua/tests/gen3_boot_check.lua "
+        .. "save_counter), no guessed menu row -- the same shape lua/tests/gen3_emerald_boot_check.lua's "
+        .. "own save_via_menu already proved live (its header: 'twin ... every witness below is "
+        .. "Emerald's own'); this leg re-derives the same symbols through `cp`/G because that script "
+        .. "is a top-level driver (calls G.finish/G.open itself), not a reusable library function.",
+    },
+    run = function(cp)
+        local x, y = G.pos(cp)
+        G.phase("emerald_save_town-start", string.format("at (%d,%d)", x, y))
+        emerald_save_via_menu(cp)
+    end,
+}
+
+-- ── BATTLE group (emerald_battle.sav, Route 102 0.17 (21,16), tall grass) ──────────────────
+
+--- Small back-and-forth loop over four confirmed MB_TALL_GRASS(0x02) tiles (verified live by
+--- this card: `python tools/gba_map.py <emerald ROM> --game emerald --map 0.17 --find-behaviour
+--- 0x02` lists (21,16),(22,16),(22,17),(21,17) among the patch, none an object-event tile),
+--- stopping the instant a wild battle starts. Steps with playlib's own P.step (play.step) --
+--- the library's real walking primitive (12 held + 4 idle frames, up to 6 retries), never a raw
+--- G.tap (that primitive is for menu presses) -- with `enc = false` so a battle that starts
+--- mid-step is reported back, not auto-fought by the generic FR-shaped `battle` callback this
+--- file's PL.bind wired up (that callback's own check_whiteout goes through whiteout_destination,
+--- whose landing table is hardcoded to Pallet Town/Viridian City map ids -- wrong for Emerald,
+--- so this leg fights its own battle with emerald_fight_through below instead of letting the
+--- generic path do it). The exact "enc == false: the caller's answer" shape playlib's own
+--- P.step docstring names.
+local function emerald_hunt_grass(cp, max_cycles)
+    local dirs = { "Right", "Down", "Left", "Up" }
+    local start_map = play.map(cp)
+    for _ = 1, max_cycles do
+        for _, d in ipairs(dirs) do
+            if play.in_battle(cp) then return true end
+            play.step(cp, d, start_map, nil, false)
+            if play.in_battle(cp) then return true end
+        end
+    end
+    return play.in_battle(cp)
+end
+
+--- Fight an already-triggered battle to its end, same pinned shape as this file's own
+--- rival_battle leg: gActionSelectionCursor resets to FIGHT(0) on every new battle
+--- (src/battle_controller_player.c, identical source across FR/LG/Emerald), so A,A is FIGHT ->
+--- move slot 1 -- not a guess. What the wild/trainer mon does in response is not controlled.
+local function emerald_fight_through(cp, label)
+    local entered = play.mash_a(250, function() return play.in_battle(cp) end)
+    if not entered then
+        G.shot("stuck")
+        G.finish(false, label .. ": never entered battle")
+        return false
+    end
+    G.phase("battle-begin", label)
+    local ended = play.mash_a(1200, function() return not play.in_battle(cp) end)
+    if not ended then
+        G.shot("stuck")
+        G.finish(false, label .. ": in_battle never cleared within budget")
+        return false
+    end
+    G.phase("battle-end", label)
+    return true
+end
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_route102_wild_battle",
+    exercises = { "battle_begin", "battle_end" },
+    check = emerald_at(0, 17, 21, 16),
+    source = {
+        "data/maps/Route102/map.json; data/tilesets/... (behaviour 0x02 confirmed at (21,16) "
+        .. "et al by tools/gba_map.py --game emerald --map 0.17 --find-behaviour 0x02)",
+        "src/data/wild_encounters.json MAP_ROUTE102 land_mons (Lv3-4 Poochyena/Wurmple/Lotad/"
+        .. "Zigzagoon/Ralts/Seedot, encounter_rate 20)",
+        "src/battle_controller_player.c (gActionSelectionCursor resets to FIGHT(0) each battle)",
+    },
+    run = function(cp)
+        local x, y = G.pos(cp)
+        G.phase("emerald_route102_wild_battle-start", string.format("hunting from (%d,%d)", x, y))
+        if not emerald_hunt_grass(cp, 40) then
+            G.shot("stuck")
+            G.finish(false, "emerald_route102_wild_battle: 40 cycles of the grass loop produced no encounter")
+            return
+        end
+        emerald_fight_through(cp, "emerald_route102_wild_battle")
+    end,
+}
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_route102_catch",
+    exercises = { "capture_wild" },
+    source = {
+        "src/item_menu.c (pret pokeemerald): the bag UI is a dynamically-allocated `struct "
+        .. "BagMenu *gBagMenu` (heap pointer), a real redesign from FR/LG's static "
+        .. "`struct BagStruct gBagMenuState` this driver's FR ball-throw (throw_pokeball_from_bag "
+        .. "above) reads pocket/cursor from -- gen3_title_syms.lua already documents this: "
+        .. "BAG_MENU_STATE_ADDR's `emerald = nil` entry cites the same struct-identity change.",
+    },
+    open = true,
+    open_reason = "Emerald's bag pocket/cursor struct (gBagMenu) has not been reverse-engineered "
+               .. "(BAG_MENU_STATE_ADDR is absent for emerald in gen3_title_syms.lua on purpose); "
+               .. "steering an unverified struct layout risks a wrong press landing on a real menu "
+               .. "action instead of failing loudly -- needs its own research card before a retry "
+               .. "leg can be written, not a blind port of the FR bag-throw sequence",
+}
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_route102_faint",
+    exercises = { "faint" },
+    source = {
+        "src/data/wild_encounters.json MAP_ROUTE102 land_mons (every entry Lv3-4)",
+        "tests/fixtures/gen3/README.md (emerald_battle.sav: one Mudkip Lv5, 20/20 HP)",
+    },
+    open = true,
+    open_reason = "Route 102's wild table tops out at Lv4 (Poochyena/Wurmple/Lotad/Zigzagoon/"
+               .. "Ralts/Seedot); a full-HP Lv5 starter cannot realistically be KO'd by one of "
+               .. "these before winning or the encounter fleeing, and no scripted setup here "
+               .. "stages a forced faint (game-state staging is out of this card's SYNTH-setup "
+               .. "scope, tests/fixtures/gen3/README.md's own O-33 note)",
+}
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_route102_whiteout",
+    exercises = { "whiteout" },
+    source = { "same wild table as emerald_route102_faint -- whiteout needs every party mon fainted first" },
+    open = true,
+    open_reason = "needs emerald_route102_faint's own precondition (a KO'd Mudkip) first, which "
+               .. "is itself OPEN for the same reason -- see that leg",
+}
+
+-- ── TRAINER group (emerald_trainer.sav, Route 102 0.17 (32,16)) ────────────────────────────
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_calvin_trainer_battle",
+    exercises = { "battle_begin", "battle_end" },
+    check = emerald_at(0, 17, 32, 16),
+    source = {
+        "data/maps/Route102/map.json (object_events: OBJ_EVENT_GFX_YOUNGSTER at (33,14), "
+        .. "MOVEMENT_TYPE_FACE_DOWN, trainer_sight_or_berry_tree_id=3, script "
+        .. "Route102_EventScript_Calvin -- a facing-down sight line covers his column x=33, "
+        .. "y=15..17, so one Right step from (32,16) to (33,16) enters it)",
+        "data/maps/Route102/scripts.inc:20-21 (Route102_EventScript_Calvin: "
+        .. "trainerbattle_single TRAINER_CALVIN_1, ...)",
+    },
+    run = function(cp)
+        -- One real walking step (play.step, not a raw G.tap) from the fixture's own tile
+        -- (32,16) onto (33,16), Calvin's sight column. The sight-triggered approach that
+        -- follows (lockall, NPC walk to the player, intro text) is entirely scripted;
+        -- emerald_fight_through's own A-mash clears it, same as this file's rival_battle intro.
+        local px0, py0 = G.pos(cp)
+        G.phase("emerald_calvin_trainer_battle-start", string.format("at (%d,%d)", px0, py0))
+        local moved = play.step(cp, "Right", play.map(cp), true)
+        if not moved then
+            G.shot("stuck")
+            G.finish(false, "emerald_calvin_trainer_battle: the step into Calvin's sight line stalled")
+            return
+        end
+        emerald_fight_through(cp, "emerald_calvin_trainer_battle")
+    end,
+}
+
+-- ── leg: emerald_mon_given (OPEN) ───────────────────────────────────────────────────────────
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_mon_given",
+    exercises = { "mon_given" },
+    source = { "src/data/wild_encounters.json / the Oldale-Route102 scripts carry no `givemon`; "
+            .. "Emerald's own starter givemon (Littleroot) is already applied by every emerald_* "
+            .. "fixture (tests/fixtures/gen3/README.md 'Party: Mudkip Lv5 ...')" },
+    open = true,
+    open_reason = "no reachable Emerald givemon event exists from these three fixtures' tiles "
+               .. "(Oldale Town / Route 102); the earliest post-starter gift is well beyond them "
+               .. "and no pret citation for an in-reach one was found",
+}
+
+end -- if TITLE == "emerald"
+
 -- ── run ──────────────────────────────────────────────────────────────────────────────────────
 
 --- LEGS/PATHS/DEST/verify_starter/verify_rival/parcel-delivery are the Pallet Town INTRO STORY,
@@ -3026,6 +3454,40 @@ local function stopped_legs(stop_after)
 end
 
 local function run()
+    if TITLE == "emerald" then
+        -- A-only boot (no Start pulse): gen3_emerald_boot_check.lua's own boot_to_field is
+        -- A-only too, deliberately not G.boot_to_field's A/Start alternation -- Emerald's own
+        -- title/save-select screens are not proven safe against a stray Start the way FR/LG's
+        -- are (that shared helper was written and tuned for FR/LG only).
+        play.main(EMERALD_LEGS, {
+            name   = "gen3_scripted_play_emerald",  -- patch/build/gen3_scripted_play_emerald_result.txt
+            budget = 900000,
+            save_states = "slink_em_",
+            boot = function(cp)
+                local held = 0
+                for _ = 1, 9000 do
+                    if G.pred_ok(cp, "callback2") and not G.pred_ok(cp, "field_controls_locked") then
+                        held = held + 1
+                        joypad.set({})
+                        if held >= 60 then return end
+                        G.advance()
+                    else
+                        held = 0
+                        joypad.set(G.spent % 16 == 8 and { A = true } or {})
+                        G.advance()
+                    end
+                end
+                G.shot("stuck")
+                G.finish(false, "boot: never reached a free field in 9000 frames")
+            end,
+            shadow = {
+                script = WT .. "/lua/gen3/shadow_run.lua",
+                result = WT .. "/patch/build/gen3_scripted_play_emerald_result.txt",
+                name   = "SLink-gen3-shadow-poll",
+            },
+        })
+        return
+    end
     if TITLE ~= "firered" and TITLE ~= "leafgreen" then
         G.finish(false, "gen3_scripted_play: the Pallet Town story legs (LEGS/PATHS/DEST) are "
                      .. "FireRed/LeafGreen-only; SLINK_GEN3_TITLE=" .. tostring(TITLE))
@@ -3069,6 +3531,7 @@ if (debug.getinfo(1, "S").source or "") == "main" then run() end
 
 return {
     LEGS = LEGS, PATHS = PATHS, play = play,
+    EMERALD_LEGS = EMERALD_LEGS, PROFILE_PACK_BY_TITLE = PROFILE_PACK_BY_TITLE,
     GRASS_LOOP = GRASS_LOOP, GRASS_ORIGIN = GRASS_ORIGIN,
     return_to_grass_origin = return_to_grass_origin,
     hunt_encounter = hunt_encounter,
