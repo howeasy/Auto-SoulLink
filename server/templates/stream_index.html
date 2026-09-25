@@ -639,10 +639,9 @@ function overlayLauncher() {
       if (cur.pauses && this.params.pause !== '2') q.push('pause=' + this.params.pause);
       if (cur.event_filters) {
         var enabled = Array.from(this.activeFilters);
-        // Only emit if the user has diverged from the all-on default
-        if (enabled.length < this.allFilters.length) {
-          q.push('filter=' + enabled.join(','));
-        }
+        // No ?filter= means the server's default-on set, not every type: say `all` when
+        // every pill is on, else the explicit list.
+        q.push('filter=' + (enabled.length >= this.allFilters.length ? 'all' : enabled.join(',')));
       }
       return '/stream/' + cur.slug + (q.length ? '?' + q.join('&') : '');
     },
