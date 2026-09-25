@@ -99,6 +99,10 @@
   var _prepMode      = _pageIsHC ? 'hardcore' : 'normal';
   var _prepTrainer   = localStorage.getItem('slink_prep_trainer')   || '';
   var _prepEncounter = localStorage.getItem('slink_prep_encounter') || '';       // '' = first enc
+  // The dashboard's Calc button also puts the trainer in the URL: a freshly opened calc never
+  // hears the storage event, so read it here and land on the Prep tab.
+  var _prepParam = new URLSearchParams(window.location.search).get('prep');
+  if (_prepParam) { _prepTrainer = _prepParam; _prepEncounter = ''; _activeTab = 'prep'; }
   var _trainerIndex  = { nm: {}, hc: {} };  // baseName → { encounters, encounterOrder }
   var _trainerNames  = [];                  // sorted union of trainer names for datalist
 

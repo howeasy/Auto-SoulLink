@@ -98,3 +98,11 @@ def test_a_stale_mouseup_timer_does_not_end_a_newer_press():
     out = _run("/")
     assert out["swapVetoedWhilePressed"] is True
     assert out["swapVetoedAfterRelease"] is False
+
+
+def test_the_calc_bridge_reads_the_prep_param_the_button_sends():
+    """Source-level only: the bridge is one IIFE over the calc page's DOM. A fresh calc tab
+    never hears the storage event, so ?prep= is what lands it on the Prep tab."""
+    src = (JS.parents[2] / "calc" / "src" / "js" / "slink_bridge.js").read_text(encoding="utf-8")
+    assert "URLSearchParams(window.location.search).get('prep')" in src
+    assert "_activeTab = 'prep'; }" in src
