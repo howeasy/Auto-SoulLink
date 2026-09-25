@@ -140,15 +140,30 @@ def trusted_jars() -> dict[str, str]:
         return {}
 
 
+def _is_remote(path: str) -> bool:
+    """A UNC path (double-backslash host share, //host, the long-path UNC form) or a drive
+    letter mapped to a network share. Either can serve one file to the hash and another
+    to Java."""
+    p = path.replace("/", "\\")
+    if p.startswith("\\\\"):
+        return True
+    drive = os.path.splitdrive(p)[0]
+    if os.name == "nt" and len(drive) == 2 and drive[1] == ":":
+        import ctypes
+        DRIVE_REMOTE = 4
+        return ctypes.windll.kernel32.GetDriveTypeW(drive + "\\") == DRIVE_REMOTE
+    return False
+
+
 def jar_sha256(jar: str) -> str | None:
     """SHA-256 of the file the path really names (symlinks resolved), or None when it is
     not a readable regular file. A UNC path is refused before any I/O: a share the
     requester controls could serve one file to the hash and another to Java.
     ponytail: no (path, mtime, size) cache -- hashing the 1.1 MB jar takes ~1 ms."""
-    if not jar or str(jar).replace("/", "\\").startswith("\\\\"):
+    if not jar or _is_remote(str(jar)):
         return None
     real = os.path.realpath(jar)
-    if not os.path.isfile(real):
+    if _is_remote(real) or not os.path.isfile(real):
         return None
     h = hashlib.sha256()
     try:

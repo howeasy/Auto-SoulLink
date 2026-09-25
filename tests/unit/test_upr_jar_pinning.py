@@ -175,3 +175,23 @@ def test_build_pin_is_idempotent(tmp_path, monkeypatch):
     label = build_upr_fork.pin(jar, digest)
     assert build_upr_fork.pin(jar, digest) == label
     assert json.loads((tmp_path / "upr_jars.json").read_text(encoding="utf-8")) == {label: digest}
+
+
+@pytest.mark.parametrize("path", [
+    "//host/share/PokeRandoZX.jar",
+    "\\\\host\\share\\PokeRandoZX.jar",
+    "\\\\?\\UNC\\host\\share\\PokeRandoZX.jar",
+])
+def test_network_paths_are_never_hashed(path):
+    assert upr_pipeline._is_remote(path)
+    assert upr_pipeline.jar_sha256(path) is None
+
+
+@pytest.mark.skipif(os.name != "nt", reason="drive letters are a Windows concept")
+def test_a_mapped_network_drive_is_refused(monkeypatch):
+    """Z: mapped to \\\\attacker\\share passes a string check; GetDriveTypeW says REMOTE (4)."""
+    import ctypes
+    monkeypatch.setattr(ctypes.windll.kernel32, "GetDriveTypeW", lambda root: 4)
+    assert upr_pipeline._is_remote("Z:\\PokeRandoZX.jar")
+    assert upr_pipeline.jar_sha256("Z:\\PokeRandoZX.jar") is None
+
