@@ -19,11 +19,16 @@ DEF SLINK_STAGE_CALLER EQU 1   ; caller species
 DEF SLINK_STAGE_RECEIVER EQU 2 ; receiver species
 DEF SLINK_STAGE_TRAINER EQU 3  ; 7 glyphs + "@"
 DEF SLINK_STAGE_NICK EQU 11    ; caller nickname, 10 glyphs + "@"; empty = the species name
-DEF SLINK_STAGE_RESERVED EQU 22
+DEF SLINK_STAGE_NONCE EQU 22   ; the request's nonce (1..255), == ARMED_NONCE
 DEF SLINK_STAGE_COOKIE EQU 23
 DEF SLINK_PHONE_COOKIE EQU $a6 ; layout v1
 DEF SLINK_CALL_NAMED EQU 3     ; wScriptVar = ARMED + 3 selects the named text
 ASSERT wUnusedMapBufferEnd - wUnusedMapBuffer == SLINK_STAGE_COOKIE + 1
+; Gen 2 phone-private mailbox tail (free: public 30 + sample 2 + phone 2 = 34 of 39/40 bytes).
+DEF SLINK_OFS_PHONE_HEADER EQU 34      ; ROM: ARMED of the SLink call that is ringing, else 0
+DEF SLINK_OFS_PHONE_NONCE EQU 35       ; host: the next request's nonce, written before +32
+DEF SLINK_OFS_PHONE_ARMED_NONCE EQU 36 ; ROM: that nonce, moved at the ack (0 = a bare post)
+ASSERT SLINK_OFS_PHONE_ARMED_NONCE < SLINK_MAILBOX_SIZE
 
 SECTION "SLink Phone Service", ROMX, BANK[SLINK_SERVICE_BANK]
 SlinkPhoneService::
@@ -59,11 +64,15 @@ SlinkPhoneService::
 .armed_valid
 	and a
 	jr nz, .pending
+	ld [wSlinkMailbox + SLINK_OFS_PHONE_HEADER], a ; nothing armed: no SLink header
 	ld a, [wSlinkMailbox + SLINK_OFS_PHONE_REQUEST]
 	and a
 	jr z, .withdraw
 	ld b, a
+	ld a, [wSlinkMailbox + SLINK_OFS_PHONE_NONCE] ; PHONE-NAMES: this request's record identity
+	ld [wSlinkMailbox + SLINK_OFS_PHONE_ARMED_NONCE], a
 	xor a
+	ld [wSlinkMailbox + SLINK_OFS_PHONE_NONCE], a
 	ld [wSlinkMailbox + SLINK_OFS_PHONE_REQUEST], a ; ACK invalid requests too
 	ld a, b
 	cp SLINK_CALL_FIRST_LINK + 1
@@ -126,7 +135,7 @@ SlinkSpecialPhoneCallList::
 	slink_special_phone_row SpecialCallWhereverYouAre, PHONECONTACT_BIKESHOP, BikeShopPhoneCallerScript
 	slink_special_phone_row SpecialCallWhereverYouAre, PHONECONTACT_MOM, MomPhoneLectureScript
 	slink_special_phone_row SpecialCallOnlyWhenOutside, PHONECONTACT_ELM, ElmPhoneCallerScript
-	slink_special_phone_row SpecialCallWhereverYouAre, PHONE_00, SlinkPhoneCallScript
+	slink_special_phone_row SlinkSpecialCallCondition, PHONE_00, SlinkPhoneCallScript
 SlinkSpecialPhoneCallListEnd::
 ASSERT SlinkSpecialPhoneCallListEnd - SlinkSpecialPhoneCallList == 9 * SPECIALCALL_SIZE
 
@@ -142,6 +151,7 @@ SlinkPhoneCallScript::
 .delivered
 	callasm SlinkPhonePrepareCall ; wScriptVar = ARMED, or ARMED + 3 with the names staged
 	loadmem wSlinkMailbox + SLINK_OFS_PHONE_ARMED, 0
+	loadmem wSlinkMailbox + SLINK_OFS_PHONE_HEADER, 0
 	ifequal SLINK_CALL_FALLEN, .fallen
 	ifequal SLINK_CALL_DEAD_ZONE, .dead_zone
 	ifequal SLINK_CALL_FIRST_LINK, .first_link
@@ -232,6 +242,12 @@ SlinkPhoneNamedFirstLinkText::
 ; valid record copy the names into wStringBuffer3/4/5 and select the named text; anything else
 ; leaves wScriptVar = ARMED, the fixed text. Dead-zone calls keep their body (the header names).
 SlinkPhonePrepareCall:
+	call .prepare
+	xor a ; a record is single-use: never reused by a later call
+	ld [SLINK_PHONE_STAGE + SLINK_STAGE_COOKIE], a
+	ret
+
+.prepare
 	ld a, [wSlinkMailbox + SLINK_OFS_PHONE_ARMED]
 	ld [wScriptVar], a
 	cp SLINK_CALL_DEAD_ZONE
@@ -284,14 +300,18 @@ SlinkPhonePrepareCall:
 	jr nz, .copy
 	ret
 
-; carry = invalid: cookie, reserved, event == ARMED, a non-empty glyph-only trainer name and a
-; glyph-only caller nickname, each terminated inside its field.
+; carry = invalid: cookie, the ARMED request's nonzero nonce, event == ARMED, a non-empty glyph-only
+; trainer name and a glyph-only caller nickname, each terminated inside its field.
 SlinkPhoneCheckRecord:
 	ld a, [SLINK_PHONE_STAGE + SLINK_STAGE_COOKIE]
 	cp SLINK_PHONE_COOKIE
 	jr nz, .bad
-	ld a, [SLINK_PHONE_STAGE + SLINK_STAGE_RESERVED]
+	ld a, [wSlinkMailbox + SLINK_OFS_PHONE_ARMED_NONCE]
 	and a
+	jr z, .bad
+	ld b, a
+	ld a, [SLINK_PHONE_STAGE + SLINK_STAGE_NONCE]
+	cp b
 	jr nz, .bad
 	ld a, [wSlinkMailbox + SLINK_OFS_PHONE_ARMED]
 	and a
@@ -308,7 +328,7 @@ SlinkPhoneCheckRecord:
 	call .name
 	ret c
 	ld hl, SLINK_PHONE_STAGE + SLINK_STAGE_NICK
-	ld c, SLINK_STAGE_RESERVED - SLINK_STAGE_NICK
+	ld c, SLINK_STAGE_NONCE - SLINK_STAGE_NICK
 .name
 	ld a, [hli]
 	cp '@'
@@ -323,11 +343,18 @@ SlinkPhoneCheckRecord:
 
 ; The header: GetCallerName's first four bytes (ld a,c / and a / jr z) become `jp
 ; SlinkPhoneCallerName` + nop (tools/build_gen2_companion.py). Only the SLink special call's
-; WrongNumber contact (TRAINER_NONE, PHONE_00) whose script is SlinkPhoneCallScript, with a valid
-; record for the ARMED call, prints the partner's trainer name (no colon); all else is native.
+; WrongNumber contact (TRAINER_NONE, PHONE_00) whose script is SlinkPhoneCallScript, while that call
+; is ringing (HEADER == ARMED, set by SlinkSpecialCallCondition, cleared on delivery and whenever
+; nothing is armed) and with a valid record for it, prints the partner's trainer name (no colon).
+; All else is native, e.g. an empty Pokegear row (PHONE_00) under a stale wCallerContact pointer.
 ; The special-call id cannot gate this: the service withdraws it during the call's native pause.
 SlinkPhoneCallerNameService:
 	; in: de = the header coord. out: nc = printed; carry = continue natively
+	ld a, [wSlinkMailbox + SLINK_OFS_PHONE_ARMED]
+	ld b, a
+	ld a, [wSlinkMailbox + SLINK_OFS_PHONE_HEADER]
+	cp b
+	jr nz, .native
 	ld a, [wCallerContact + PHONE_CONTACT_SCRIPT2_BANK]
 	cp BANK(SlinkPhoneCallScript)
 	jr nz, .native
@@ -350,6 +377,14 @@ SlinkPhoneCallerNameService:
 	ret
 
 SECTION "SLink Caller Name", ROMX, BANK[$24]
+SlinkSpecialCallCondition:
+	; The ninth row's condition (native SpecialCallWhereverYouAre: scf / ret). CheckSpecialPhoneCall
+	; runs it right before it starts the call: the SLink header is active for this ARMED call.
+	ld a, [wSlinkMailbox + SLINK_OFS_PHONE_ARMED]
+	ld [wSlinkMailbox + SLINK_OFS_PHONE_HEADER], a
+	scf
+	ret
+
 SlinkPhoneCallerName::
 	; in: hl = coord, b = contact, c = trainer class (native GetCallerName)
 	ld a, c

@@ -1,6 +1,6 @@
 {
   "schema": "gen2-overlay-provenance-v1",
-  "generated": "2026-09-25T11:51:23Z",
+  "generated": "2026-09-25T12:47:45Z",
   "sources": {
     "pokecrystal": {
       "url": "https://github.com/pret/pokecrystal",
@@ -65,18 +65,18 @@
       "panel.asm": "05a34133b43a77c21e45dedf527e3447c72dd351cfa1af67e30a5e8ece9d3bf0",
       "panel_flags.asm": "e7d1ab192465c52efc9f868baa6d6159f3b96bd3002a805280c1c3c6d420cb2c",
       "panel_start.asm": "cc65284e800c0fd0aac16f4813a0a7edc74d13721b8bbdd1b20e7d13ae633a13",
-      "phone.asm": "44b44f4c85ca4679885fb03f11efc686741e7dd6c24e508edc24c44d03e506ed",
+      "phone.asm": "a316a26638728a873a9c001b82f0dd4dd8040fb64d2687c790baed2ff6e971c2",
       "phone_flags.asm": "af0b35bad0c70f305208cfc1826f889ef948efaa415e700e0fc2413175fcccbe",
       "sfx.asm": "3d6bd2a55fffd73830db507ce2a9900f7db8c8a7bb3f8ceddb9e394a51ff5ff5",
       "slink.asm": "7cbcbf301afef02be56153be4b0a7b53509d1b3be1a7c9c1322e452e80e8f379",
       "slink_mailbox_crystal.asm": "5a882542b8c4471b276d20bbc2e76d9846e50bb6d98fa284229d9c09713f6b3e",
       "slink_mailbox_goldsilver.asm": "bf28873ff54e02d698ffc5d59ee9ec1acfd951e602589ea7e706d24618863517",
-      "trade_commit.asm": "3be5ba560b99d58098befe26d4eae843170e992d053968315079d8212284065b",
-      "trade_dispatch.asm": "04d5094da4a6510532796acfcd595deb104ab7f0301eb25735989ca041936ceb",
+      "trade_commit.asm": "493e9b7d7b20681fed3c181d66a13c091cac6fef6bc4e853a05eb837b843c790",
+      "trade_dispatch.asm": "423608d21d02b7ed595124db1c3adae56548bf68325440bfb41303a665129fdc",
       "trade_frame.asm": "0e964f60d5356ae6b0c89e9ee8548b73369391bf7ba46423089dd16003f3044b",
       "trade_items.asm": "db511e2feb3339206177ad70c30f4ea4f644dd87ca3c830ae212e4dfe9701ff1",
-      "trade_receptionist.asm": "042c33b6a750a8588bc13e2e97358079a81da8fc03688c6e6f8337f7fd0c8258",
-      "trade_service.asm": "3c2b5277b896fc8cc1bd0272b79f941076b8294de7bb5e3c27e0320463bc1499",
+      "trade_receptionist.asm": "ec397e02f026d6a49d537504f4671ca1ef3a0e17ae3dc6e80b436aea233f7567",
+      "trade_service.asm": "720f8a7930f5bbc7eadc0950a3b776cbece34c7fdcc7d3b77f9a173af23ccf39",
       "trade_snapshot.asm": "deb914bc7a4fce9de9f4b883639172a6c1ba08fdaf1cbbdac142e817e9acd519",
       "version.asm": "e1809728584c34bccf49b1952de0babe006dff0eefb0ef4f9983f2d631815e49",
       "patch/gb/slink_abi.inc": "be0ee30a84330c794a1b5f3a2cf4c1435bdfdf3bf63fa4f010deb02a0291181e"
@@ -134,16 +134,16 @@
       "slink_title": "crystal",
       "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
       "identical_to_clean": false,
-      "sha1": "ae7205d2ccdffcae8af14ce9dac8e71529b99b0e",
-      "md5": "81e9456700e575f49b6a0f41a37a5d5e",
-      "header_crc": "C0AE",
-      "crc32": "E8D4AC7E",
+      "sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057",
+      "md5": "b31474971179ffeb015a6e80fb335b64",
+      "header_crc": "E900",
+      "crc32": "743AFAB1",
       "title": "PM_CRYSTAL\u0000BYTE",
       "size": 2097152,
       "ups": {
         "file": "patch/dist/SLink-Crystal.ups",
-        "size": 10164,
-        "sha256": "46181a3648aeee027fc5f3a6387fba6a1761b3ecd3072343ccad5c9fd4ca64e3"
+        "size": 10214,
+        "sha256": "88ca93d1d64879f98fe309f262d2884aa003177636c03344e0c4e1b9300ec7ea"
       }
     },
     "pokegold": {
@@ -151,16 +151,16 @@
       "slink_title": "gold",
       "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
       "identical_to_clean": false,
-      "sha1": "188391e19dc97aefc7066583c15f8750245c7e0e",
-      "md5": "5b62bcf1c1146369648651b11fbe9a3f",
-      "header_crc": "0964",
-      "crc32": "A3CA7257",
+      "sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
+      "md5": "ad50cc72561e8bbfdabdc847df7ceef9",
+      "header_crc": "23D9",
+      "crc32": "833E84DF",
       "title": "POKEMON_GLDAAUE",
       "size": 2097152,
       "ups": {
         "file": "patch/dist/SLink-Gold.ups",
-        "size": 9225,
-        "sha256": "a7a5184dc90c26b2bb3f0f627ac10b39ecccbd83860f2e960ebf35b0ef58338a"
+        "size": 9275,
+        "sha256": "a40ba8e2b3881d829aa5ed84791d7d88c263a750b4391a071c28fb4b5565ca1a"
       }
     },
     "pokesilver": {
@@ -168,25 +168,25 @@
       "slink_title": "silver",
       "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
       "identical_to_clean": false,
-      "sha1": "54416bf599f207b3b01753f8903720240ea86122",
-      "md5": "704e07a3ca02b94ccf7f16d580f2b267",
-      "header_crc": "B055",
-      "crc32": "816CF1B6",
+      "sha1": "583d8df4deb1831523521d20065504258cbaba28",
+      "md5": "f184ad59dbde870b2b358d808988fddc",
+      "header_crc": "C992",
+      "crc32": "B298FC51",
       "title": "POKEMON_SLVAAXE",
       "size": 2097152,
       "ups": {
         "file": "patch/dist/SLink-Silver.ups",
-        "size": 9227,
-        "sha256": "d534cb357f76c3e8bfaf2a71a898313ab29e5ff7ffb60a36b818d65f89191846"
+        "size": 9277,
+        "sha256": "c9ffe317f696b65a04c810809c9642d7a1c1a7ab1729a126c1d8ad1b91eb3809"
       }
     }
   },
   "symbols": {
-    "crystal_slink.sym": "5ee8059e8d6497a87e264f929bd34a6af7c9f768a98c9f175f95330ab8fa4c3a",
-    "crystal_slink.map": "335144ea58ffb30182dd9c42f3a0813bb07f38e4c0f40dd3b6d6c1b0c0ca2b1d",
-    "gold_slink.sym": "93ec8cd28e5e9fc3ee2c64297775f27e505472cc0d3bfe33bcbc5ebb4e4cfa88",
-    "gold_slink.map": "947281510462f9d8b4ae92173b4080f66fdcc000bbaf37a0dd5aa1faaa9649eb",
-    "silver_slink.sym": "347c719b3e17527e40c23f918f64894bff688be8972ac20cd98b57261e1af038",
-    "silver_slink.map": "0c03baf6cbc0d9cf8a8eb5522a4ff73f9ad31da5ab9ccac250def195cdef521a"
+    "crystal_slink.sym": "4fc39cd4dcc6ccddba53122ff33093dbe3717988bc72274e45d650ca456a05ef",
+    "crystal_slink.map": "a93cad028afa063a82c09c88099d6e9a848a8b2892401eaf4068c3bf0a848ce0",
+    "gold_slink.sym": "d7d80bfb45403458f17d9746b499512eecf88178e1f319a19ec531631d682ea1",
+    "gold_slink.map": "e6b34d337c60f23caf06930cd3628ff17461de4c7db6f829cb76e1da55e75f44",
+    "silver_slink.sym": "bc86f081598c85112f66f3d0b82dbac202d9b3736d5913a66a1c228d63b63b9d",
+    "silver_slink.map": "a5cd19185e252df7db685088ed376e8cdd3b2ffbf6867757f7515aa9dcc2d8c3"
   }
 }

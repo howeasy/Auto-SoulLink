@@ -19,6 +19,7 @@ REPO = pathlib.Path(__file__).resolve().parents[2]
 PHONE = (REPO / "lua" / "gen2" / "phone.lua").as_posix()
 CAP_PHONE = 0x08            # plan §6: SLINK_CAP_PHONE = 1 << 3
 REQ, ARMED = 32, 33         # plan §2.1
+NONCE, ARMED_NONCE = 35, 36  # PHONE-NAMES F2: patch/gen2/src/phone.asm SLINK_OFS_PHONE_NONCE / _ARMED_NONCE
 FALLEN, DEAD_ZONE, FIRST_LINK = 1, 2, 3
 
 
@@ -40,6 +41,7 @@ class PhoneCart(Cart):
         mb = self.mb
         if self.mem[mb + ARMED] == 0 and self.mem[mb + REQ] != 0:
             req, self.mem[mb + REQ] = self.mem[mb + REQ], 0   # ack, also for an invalid id
+            self.mem[mb + ARMED_NONCE], self.mem[mb + NONCE] = self.mem[mb + NONCE], 0   # PHONE-NAMES F2
             if req <= 3:
                 self.mem[mb + ARMED] = req
 
@@ -280,9 +282,42 @@ def test_the_record_layout_and_its_order_before_the_request():
     assert staged[:3] == bytes([FALLEN, 16, 19])
     assert staged[3:11] == encode(c, "BOB") + b"\x50" * 5
     assert staged[11:22] == encode(c, "PIDGE") + b"\x50" * 6
-    assert staged[22:] == bytes([0, 0xA6])
-    assert [a for a, _ in c.writes] == [c.stage, c.mb + REQ]      # the whole record, then the request
-    assert [len(bs) for _, bs in c.writes] == [24, 1]
+    assert staged[22] != 0 and staged[23] == 0xA6
+    # the whole record, then its nonce, then the request; the ROM moved the nonce at the ack
+    assert [a for a, _ in c.writes] == [c.stage, c.mb + NONCE, c.mb + REQ]
+    assert [bs for _, bs in c.writes][1:] == [[staged[22]], [FALLEN]]
+    assert c.mem[c.mb + ARMED_NONCE] == staged[22] and c.mem[c.mb + NONCE] == 0
+
+
+def test_every_request_gets_a_fresh_nonzero_nonce():
+    c = named()
+    seen = []
+    for _ in range(3):
+        c.request("dead_zone", {"trainer_name": "BOB"})
+        c.step(2)
+        seen.append(c.staged()[22])
+        c.deliver()
+        c.frame += c.min_gap
+    assert 0 not in seen and len(set(seen)) == 3
+
+
+def test_a_fixed_text_request_still_stages_zeros_and_a_nonce():
+    c = named()
+    c.mem[c.stage:c.stage + 24] = bytes([1] * 22 + [7, 0xA6])   # an old valid-looking record
+    c.request("fallen")
+    c.step(2)
+    assert c.staged()[:22] == bytes(22) and c.staged()[23] == 0
+
+
+def test_equal_priority_newest_replaces_the_queued_call_and_its_record():
+    """F4: the id and its record travel together; a newer same-priority call wins."""
+    c = named()
+    c.mem[c.mb + ARMED] = 9
+    c.request("dead_zone", {"trainer_name": "EVE"})
+    c.request("dead_zone", {"trainer_name": "ZED"})
+    c.mem[c.mb + ARMED] = 0
+    c.step(2)
+    assert c.posts() == [DEAD_ZONE] and c.staged()[3:6] == encode(c, "ZED")
 
 
 @pytest.mark.parametrize("data, want", [
@@ -340,6 +375,33 @@ def test_no_restage_for_a_fixed_text_call_or_after_delivery():
     assert c.writes == []
     c.deliver()
     c.mem[c.stage:c.stage + 24] = bytes(24)
+    c.step(3)
+    assert c.writes == []
+
+
+@pytest.mark.parametrize("failures, restored", [(1, True), (2, True), (3, False), (10, False)])
+def test_a_failed_restage_retries_then_fails_closed(failures, restored):
+    """F3: `restaged` only after a whole successful stage; at most 3 attempts, then the cookie is zeroed."""
+    c = named()
+    c.request("fallen", DATA)
+    c.step(2)
+    record = c.staged()
+    c.mem[c.stage:c.stage + 24] = bytes(24)          # the map change
+    left = [failures]
+
+    def flaky(addr, value, domain=None):
+        if int(addr) == c.stage + 5 and left[0] > 0:
+            left[0] -= 1
+            raise RuntimeError("bus refused")
+        c._write_u8(addr, value, domain)
+    c.io.write_u8 = flaky
+    c.step(6)
+    if restored:
+        assert c.staged() == record
+    else:
+        assert c.staged()[23] == 0, "fail closed: no cookie, the ROM rings the fixed text"
+    c.mem[c.stage:c.stage + 24] = bytes(24)          # later wipes are never re-staged again
+    c.writes.clear()
     c.step(3)
     assert c.writes == []
 

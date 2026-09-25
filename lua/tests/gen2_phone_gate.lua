@@ -677,11 +677,14 @@ function P.main(real, getenv, SG, F)
         phone = new_phone()
         local xc = arm("named_map_change", 1, "fallen")
         xc.data, xc.named = P.NAMED, {header=P.NAMED.trainer_name, body=P.NAMED.caller_mon.nickname}
-        local posted_record = Phone.record(1, P.NAMED, T.encode_name, ctx.charmap)
+        local expected = Phone.record(1, P.NAMED, T.encode_name, ctx.charmap)
         local wipes_from = #wipes
         post(xc, "binder")
         idle(30)
-        local staged_ok = table.concat(stage_bytes(), ",") == table.concat(posted_record, ",")
+        -- the binder's record: P.NAMED's bytes, its request nonce (+22, nonzero) and the cookie
+        local posted_record = stage_bytes()
+        local staged_ok = posted_record[23] ~= 0 and posted_record[24] == P.COOKIE
+        for i = 1, 22 do staged_ok = staged_ok and posted_record[i] == expected[i] end
         xc.stepping = true
         local crossed
         for _ = 1, 96 do

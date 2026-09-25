@@ -1665,12 +1665,15 @@ class SoulLinkState:
                     # Update trainer name if it changed (e.g. first connect had no name)
                     if incoming_name:
                         self.player_identity[player_id]["trainer_name"] = incoming_name
+                        self.player_identity[player_id].pop("trainer_name_placeholder", None)
                         self._save()
             else:
                 # First hello with a party — lock identity
                 self.player_identity[player_id] = {
                     "ot_id": incoming_ot,
                     "trainer_name": incoming_name or player_id.upper(),
+                    # PHONE-NAMES F8: the slot letter is synthesized, never a name to show
+                    **({} if incoming_name else {"trainer_name_placeholder": True}),
                 }
                 self.identity_error.pop(player_id, None)
                 log.info(f"[{player_id}] Identity locked: {incoming_name or player_id.upper()} (OT {incoming_ot[:8]})")
@@ -3733,9 +3736,10 @@ class SoulLinkState:
                     receiver_mon: MonInfo | None) -> dict | None:
         """PHONE-NAMES (docs/protocol.md section 5): an O-29 call as its receiver hears it. None
         when the caller has no real trainer name, so the client keeps the fixed text."""
-        name = (self.trainer_names.get(caller)
-                or (self.player_identity.get(caller) or {}).get("trainer_name") or "")
-        if not name or name == caller.upper():   # the identity lock's "A"/"B" placeholder
+        identity = self.player_identity.get(caller) or {}
+        name = self.trainer_names.get(caller) or (
+            "" if identity.get("trainer_name_placeholder") else identity.get("trainer_name") or "")
+        if not name:
             return None
         data: dict = {"trainer_name": name}
         for field, mon in (("caller_mon", caller_mon), ("receiver_mon", receiver_mon)):

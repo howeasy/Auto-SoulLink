@@ -1026,7 +1026,8 @@ def test_phone_table_preserves_all_native_rows_and_banked_script(compiled_phone)
     offset = bank * 0x4000 + address - 0x4000
     table = rom_slice(compiled_phone, "SlinkSpecialPhoneCallList", 54)
     assert table[:48] == native[offset:offset + 48]
-    condition = row["SpecialCallWhereverYouAre"][1]
+    assert symbols["SlinkSpecialCallCondition"][0] == 0x24   # PHONE-NAMES F1: sets the header marker
+    condition = symbols["SlinkSpecialCallCondition"][1]
     script_bank, script = symbols["SlinkPhoneCallScript"]
     assert table[48:] == condition.to_bytes(2, "little") + bytes([0, script_bank]) + script.to_bytes(2, "little")
 
@@ -1148,16 +1149,31 @@ def test_phone_named_text_width_parser_catches_an_unknown_ram_buffer(compiled_ph
 
 TRAINER = bytes([0x81, 0x8E, 0x81]) + b"\x50" * 5          # "BOB"
 NICK = bytes([0x8F, 0x88, 0x83, 0x86, 0x84]) + b"\x50" * 6  # "PIDGE"
+HEADER, NONCE, ARMED_NONCE = 34, 35, 36   # phone.asm SLINK_OFS_PHONE_HEADER / _NONCE / _ARMED_NONCE
 
 
-def record(event, caller=16, receiver=19, trainer=TRAINER, nick=NICK, reserved=0, cookie=0xA6):
-    return bytes([event, caller, receiver]) + trainer + nick + bytes([reserved, cookie])
+def record(event, caller=16, receiver=19, trainer=TRAINER, nick=NICK, nonce=7, cookie=0xA6):
+    return bytes([event, caller, receiver]) + trainer + nick + bytes([nonce, cookie])
 
 
 def stage(machine, data):
     base = machine.native["wUnusedMapBuffer"][1]
     assert machine.native["wUnusedMapBufferEnd"][1] - base == len(data) == 24
     machine.ram[base:base + 24] = data
+
+
+def arm(machine, event, nonce=7):
+    """The service accepted request `event` with the host's nonce (ARMED, the ROM's copy of the nonce)."""
+    machine.ram[machine.mailbox + 33] = event
+    machine.ram[machine.mailbox + ARMED_NONCE] = nonce
+
+
+def ring(machine):
+    """The ninth special-call row's condition: the SLink call is starting (sets the header marker)."""
+    machine.bank = 0x24
+    machine.r["f"] = 0
+    machine.run("SlinkSpecialCallCondition")
+    assert machine.r["f"] & 0x10, "the condition must let the call ring (carry)"
 
 
 def string_at(machine, name):
@@ -1169,50 +1185,77 @@ def string_at(machine, name):
 @pytest.mark.parametrize("nick", [NICK, b"\x50" * 11])
 def test_phone_named_call_stages_the_names(compiled_phone, armed, named, nick):
     machine = phone_machine(compiled_phone)
-    machine.ram[machine.mailbox + 33] = armed
+    arm(machine, armed)
+    ring(machine)
     stage(machine, record(armed, nick=nick))
     before = bytes(machine.ram)
     assert execute_phone_script(machine) == machine.symbols[f"SlinkPhone{named}Text"][1]
-    assert machine.ram[machine.mailbox + 33] == 0
+    assert machine.ram[machine.mailbox + 33] == 0 and machine.ram[machine.mailbox + HEADER] == 0
     assert string_at(machine, "wStringBuffer5") == b"\x81\x8e\x81\x50"
     assert string_at(machine, "wStringBuffer3") == (NICK[:6] if nick == NICK else PhoneMachine.species_name(16))
     assert string_at(machine, "wStringBuffer4") == PhoneMachine.species_name(19)
+    cookie = machine.native["wUnusedMapBuffer"][1] + 23
+    assert machine.ram[cookie] == 0, "a record is single-use: the ROM zeroes its cookie"
     buffers = set()
     for name in ("wStringBuffer1", "wStringBuffer3", "wStringBuffer4", "wStringBuffer5"):
         buffers.update(range(machine.native[name][1], machine.native[name][1] + 19))
-    allowed = buffers | {machine.mailbox + 33, machine.native["wScriptVar"][1],
+    allowed = buffers | {machine.mailbox + 33, machine.mailbox + HEADER, cookie, machine.native["wScriptVar"][1],
                          machine.native["wNamedObjectIndex"][1], *range(0xDF00, 0xE000)}
     assert {i for i, (old, new) in enumerate(zip(before, machine.ram, strict=True)) if old != new} <= allowed
 
 
 BAD_RECORDS = {
-    "cookie": dict(cookie=0xA5), "reserved": dict(reserved=1), "caller_species0": dict(caller=0),
+    "cookie": dict(cookie=0xA5), "nonce": dict(nonce=8), "caller_species0": dict(caller=0),
     "receiver_species252": dict(receiver=252), "empty_trainer": dict(trainer=b"\x50" * 8),
     "trainer_unterminated": dict(trainer=bytes([0x81] * 8)), "trainer_control": dict(trainer=b"\x52" + b"\x50" * 7),
     "nick_unterminated": dict(nick=bytes([0x8F] * 11)), "nick_control": dict(nick=b"\x81\x4f" + b"\x50" * 9),
 }
 
 
-@pytest.mark.parametrize("fault", [*BAD_RECORDS, "event", "wiped"])
+@pytest.mark.parametrize("fault", [*BAD_RECORDS, "event", "wiped", "bare_post"])
 @pytest.mark.parametrize("armed", [1, 3])
 def test_phone_invalid_record_keeps_the_fixed_text(compiled_phone, fault, armed):
     machine = phone_machine(compiled_phone)
-    machine.ram[machine.mailbox + 33] = armed
+    arm(machine, armed, nonce=0 if fault == "bare_post" else 7)
+    ring(machine)
     stage(machine, bytes(24) if fault == "wiped" else record(4 - armed if fault == "event" else armed,
                                                             **BAD_RECORDS.get(fault, {})))
     fixed = {1: "Fallen", 3: "FirstLink"}[armed]
     assert execute_phone_script(machine) == machine.symbols[f"SlinkPhone{fixed}Text"][1]
 
 
+def test_phone_an_old_record_and_a_bare_post_ring_the_fixed_text(compiled_phone):
+    """F2: a valid record from an earlier request (even the old reserved-0 layout) is never reused by a
+    request that carried no nonce (a names=nil host): the service moves the host nonce, 0 here."""
+    machine = phone_machine(compiled_phone)
+    for nonce in (7, 0):
+        stage(machine, record(1, nonce=nonce))
+        machine.ram[machine.mailbox + 32] = 1        # a bare post: +35 NONCE never written
+        machine.bridge()
+        assert machine.ram[machine.mailbox + 33] == 1 and machine.ram[machine.mailbox + ARMED_NONCE] == 0
+        ring(machine)
+        assert execute_phone_script(machine) == machine.symbols["SlinkPhoneFallenText"][1]
+
+
+def test_phone_service_moves_the_host_nonce_at_ack(compiled_phone):
+    machine = phone_machine(compiled_phone)
+    machine.ram[machine.mailbox + NONCE] = 9
+    machine.ram[machine.mailbox + 32] = 3
+    machine.bridge()
+    assert machine.ram[machine.mailbox + 32:machine.mailbox + 37] == bytes([0, 3, 0, 0, 9])
+
+
 def test_phone_dead_zone_keeps_its_body_with_a_valid_record(compiled_phone):
     machine = phone_machine(compiled_phone)
-    machine.ram[machine.mailbox + 33] = 2
+    arm(machine, 2)
+    ring(machine)
     stage(machine, record(2))
     assert execute_phone_script(machine) == machine.symbols["SlinkPhoneDeadZoneText"][1]
+    assert machine.ram[machine.native["wUnusedMapBuffer"][1] + 23] == 0
 
 
 def caller_header(machine, *, contact=0, trainer_class=0, script=None):
-    """Run the bank-$24 GetCallerName hook as Phone_TextboxWithName calls it."""
+    """Run the bank-$24 GetCallerName hook as Phone_TextboxWithName (or a Pokegear row) calls it."""
     bank, address = script or machine.symbols["SlinkPhoneCallScript"]
     at = machine.native["wCallerContact"][1] + 9  # PHONE_CONTACT_SCRIPT2_BANK
     machine.ram[at:at + 3] = bytes([bank, address & 255, address >> 8])
@@ -1225,16 +1268,48 @@ def caller_header(machine, *, contact=0, trainer_class=0, script=None):
 @pytest.mark.parametrize("armed", [1, 2, 3])
 def test_phone_header_names_the_partner_without_a_colon(compiled_phone, armed):
     machine = phone_machine(compiled_phone)
-    machine.ram[machine.mailbox + 33] = armed
+    arm(machine, armed)
+    ring(machine)
+    assert machine.ram[machine.mailbox + HEADER] == armed
     stage(machine, record(armed))
     caller_header(machine)
     assert machine.placed == [(0xC4B7, b"\x81\x8e\x81\x50")] and machine.native_paths == []
 
 
-@pytest.mark.parametrize("fault", ["trainer_class", "contact", "script", "armed", "record", "late_record"])
+def test_phone_pokegear_empty_row_after_a_named_call_shows_dashes(compiled_phone):
+    """F1: Pokegear draws an empty PHONE_00 row through GetCallerClassAndName. After a delivered named call
+    (wCallerContact still points at SlinkPhoneCallScript) and a second call that is ARMED but never rang,
+    the row is native "----------", even with a valid record for the armed call."""
+    machine = phone_machine(compiled_phone)
+    arm(machine, 1)
+    ring(machine)
+    stage(machine, record(1))
+    execute_phone_script(machine)                 # call 1 rang and was delivered
+    arm(machine, 3, nonce=8)                      # call 2: accepted, withdrawn (never rang)
+    stage(machine, record(3, nonce=8))
+    machine.placed.clear()
+    caller_header(machine)                        # the stale pointer is still resident
+    assert machine.placed == [] and machine.native_paths == [machine.symbols["GetCallerName.NotTrainer"][1]]
+
+
+def test_phone_service_clears_the_header_marker_when_nothing_is_armed(compiled_phone):
+    machine = phone_machine(compiled_phone)
+    machine.ram[machine.mailbox + HEADER] = 1
+    machine.bridge()
+    assert machine.ram[machine.mailbox + HEADER] == 0
+
+
+@pytest.mark.parametrize("fault", ["trainer_class", "contact", "script", "armed", "record", "late_record",
+                                   "no_ring", "other_call"])
 def test_phone_header_is_native_for_anything_else(compiled_phone, fault):
     machine = phone_machine(compiled_phone)
-    machine.ram[machine.mailbox + 33] = 0 if fault == "armed" else 1
+    arm(machine, 1)
+    if fault != "no_ring":
+        ring(machine)
+    if fault == "armed":
+        machine.ram[machine.mailbox + 33] = 0
+    if fault == "other_call":
+        machine.ram[machine.mailbox + HEADER] = 2   # the marker names another call than the ARMED one
     # late_record: the check fails at the nickname, after it has used b and c (FarCall returns the callee's bc)
     stage(machine, record(1, cookie=0 if fault == "record" else 0xA6,
                           nick=bytes([0x8F] * 11) if fault == "late_record" else NICK))

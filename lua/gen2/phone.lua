@@ -16,10 +16,15 @@ Phone.FIRST_LINK = 3
 Phone.MIN_GAP = 10800
 -- PHONE-NAMES (docs/gen2/POST_RC_CARDS.md): the 24-byte record in wUnusedMapBuffer, cookie LAST.
 -- +0 event, +1 caller species, +2 receiver species, +3 trainer (7+$50), +11 caller nickname
--- (10+$50), +22 reserved 0, +23 cookie. patch/gen2/src/phone.asm SlinkPhoneCheckRecord owns the
--- ROM half; HandleNewMap wipes the buffer, so the binder re-stages once while the call is ARMED.
+-- (10+$50), +22 the request's nonce, +23 cookie. patch/gen2/src/phone.asm SlinkPhoneCheckRecord owns
+-- the ROM half. Every post writes the record, then the same nonce at mailbox +35, then +32; the ROM
+-- moves +35 at the ack, so a record from any other request (or a bare post) never matches, and it
+-- zeroes the cookie when the call is prepared (single use). HandleNewMap wipes the buffer, so the
+-- binder re-stages while the call is ARMED: once, after at most RESTAGE_TRIES attempts.
 Phone.STAGE_SIZE, Phone.COOKIE, Phone.TERMINATOR = 24, 0xA6, 0x50
-Phone.OFF_TRAINER, Phone.OFF_NICK, Phone.OFF_COOKIE = 3, 11, 23
+Phone.OFF_TRAINER, Phone.OFF_NICK, Phone.OFF_NONCE, Phone.OFF_COOKIE = 3, 11, 22, 23
+Phone.OFF_MAILBOX_NONCE = 35   -- patch/gen2/src/phone.asm SLINK_OFS_PHONE_NONCE
+Phone.RESTAGE_TRIES = 3
 
 local function int(v) return type(v) == "number" and math.tointeger(v) or nil end
 local function species(mon)
@@ -51,10 +56,11 @@ end
 --- it every call rings the fixed text, exactly as before PHONE-NAMES.
 function Phone.new(panel, io, writes, log, names)
     local REQ, ARMED = panel.mailbox + Phone.OFF_REQUEST, panel.mailbox + Phone.OFF_ARMED
+    local NONCE = panel.mailbox + Phone.OFF_MAILBOX_NONCE
     local STAGE = type(names) == "table" and int(names.stage) or nil
     log = log or function() end
     local queued, inflight, seen, delivered_at, rang_first_link = nil, nil, false, nil, false
-    local queued_rec, inflight_rec, restaged = nil, nil, false
+    local queued_rec, inflight_rec, restaged, restage_tries, nonce = nil, nil, false, 0, 0
     local self = {}
 
     local function live() return panel:fresh() and panel:caps_has(Phone.CAP) end
@@ -63,7 +69,8 @@ function Phone.new(panel, io, writes, log, names)
         return type(v) == "number" and math.floor(v) % 256 or nil
     end
     local function allow(addr, n)
-        return n == 1 and (addr == REQ or STAGE ~= nil and addr >= STAGE and addr < STAGE + Phone.STAGE_SIZE)
+        return n == 1 and (addr == REQ or STAGE ~= nil and (addr == NONCE
+                                                           or addr >= STAGE and addr < STAGE + Phone.STAGE_SIZE))
     end
     -- one byte per write: the panel permit's "phone" window is n == 1; the cookie lands last
     local function stage(rec)
@@ -75,7 +82,7 @@ function Phone.new(panel, io, writes, log, names)
         local id = Phone.IDS[name]
         if not id or not live() then return false end
         if id == Phone.FIRST_LINK and rang_first_link then return false end
-        if queued == nil or id < queued then
+        if queued == nil or id <= queued then   -- the newest of equal priority wins, with its record
             queued = id
             queued_rec = STAGE and Phone.record(id, data, names.encode, names.charmap) or nil
         end
@@ -97,12 +104,21 @@ function Phone.new(panel, io, writes, log, names)
                 -- a map change (ClearUnusedMapBuffer) wiped a named record: put it back, ONCE
                 if inflight_rec and inflight_rec[Phone.OFF_COOKIE + 1] == Phone.COOKIE and not restaged
                         and (u8(STAGE + Phone.OFF_COOKIE) ~= Phone.COOKIE or u8(STAGE) ~= inflight) then
-                    restaged = true
                     writes:arm("phone", allow)
                     local ok, err = pcall(stage, inflight_rec)
+                    restage_tries = restage_tries + 1
+                    if ok then
+                        restaged = true
+                        log("[SLink-gen2] phone: call " .. inflight .. " re-staged")
+                    elseif restage_tries >= Phone.RESTAGE_TRIES then
+                        -- fail closed: no cookie, so the ROM rings the fixed text
+                        restaged = true
+                        pcall(function() writes:write_bytes(STAGE + Phone.OFF_COOKIE, { 0 }) end)
+                        log("[SLink-gen2] phone: call " .. inflight .. " re-stage failed, fixed text: " .. tostring(err))
+                    else
+                        log("[SLink-gen2] phone: call " .. inflight .. " re-stage retry: " .. tostring(err))
+                    end
                     writes:disarm()
-                    if not ok then error(err, 0) end
-                    log("[SLink-gen2] phone: call " .. inflight .. " re-staged")
                 end
             elseif req == 0 and armed == 0 then
                 if seen then
@@ -116,16 +132,23 @@ function Phone.new(panel, io, writes, log, names)
         if not queued or req ~= 0 or armed ~= 0 then return end
         -- `now < delivered_at`: a savestate load went back past the last call
         if delivered_at and now >= delivered_at and now - delivered_at < Phone.MIN_GAP then return end
+        if queued_rec then
+            nonce = nonce % 255 + 1                    -- 1..255, never 0 (the ROM's "bare post")
+            if queued_rec[Phone.OFF_COOKIE + 1] == Phone.COOKIE then queued_rec[Phone.OFF_NONCE + 1] = nonce end
+        end
         writes:arm("phone", allow)
         local ok, err = pcall(function()
-            if queued_rec then stage(queued_rec) end   -- a failed stage write never posts the request
+            if queued_rec then                         -- a failed stage write never posts the request
+                stage(queued_rec)
+                writes:write_bytes(NONCE, { nonce })
+            end
             writes:write_bytes(REQ, { queued })
         end)
         writes:disarm()
         if not ok then error(err, 0) end
         log("[SLink-gen2] phone: call " .. queued .. " posted")
         if queued == Phone.FIRST_LINK then rang_first_link = true end
-        inflight, queued, inflight_rec, queued_rec, restaged = queued, nil, queued_rec, nil, false
+        inflight, queued, inflight_rec, queued_rec, restaged, restage_tries = queued, nil, queued_rec, nil, false, 0
     end
     return self
 end

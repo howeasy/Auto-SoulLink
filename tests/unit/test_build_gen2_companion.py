@@ -172,7 +172,7 @@ def test_external_source_hashes_includes_the_abi_include_when_present(tmp_path):
     expected_key = (resolved.relative_to(bc.ROOT).as_posix() if resolved.is_relative_to(bc.ROOT)
                     else resolved.as_posix())
     assert expected_key in hashes, f"missing {expected_key!r} in {hashes!r}"
-    assert hashes[expected_key] == bc._sha256(abi_path.read_bytes())
+    assert hashes[expected_key] == bc.source_sha256(abi_path) == bc._sha256(b"; shared ABI\n")  # LF-normalized
     # Shared across both repos: one entry, not one per repo.
     assert len(hashes) == 1
 
@@ -579,7 +579,8 @@ def test_phone_pointer_hook_requires_exactly_two_loads(tmp_path, repo, copies):
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
 @pytest.mark.parametrize("fault", [None, "native_row", "old_table", "contact", "condition", "script", "load",
-                                   "other_code", "bank", "size", "caller_entry", "caller_body", "caller_bank"])
+                                   "other_code", "bank", "size", "caller_entry", "caller_body", "caller_bank",
+                                   "condition_bank"])
 def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault):
     key = "poke" + title
     repo = "pokecrystal" if title == "crystal" else "pokegold"
@@ -597,7 +598,8 @@ def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault
     target = flat(table)
     script = (0x75 if title == "crystal" else 0x13, 0x6000)
     overlay[target:target + 48] = base[source:source + 48]
-    overlay[target + 48:target + 54] = (old["SpecialCallWhereverYouAre"][1].to_bytes(2, "little")
+    condition = 0x7fe8
+    overlay[target + 48:target + 54] = (condition.to_bytes(2, "little")
                                       + bytes([0, script[0]]) + script[1].to_bytes(2, "little"))
     loads = (flat(old["CheckSpecialPhoneCall"]) + 10,
              flat(old["CheckSpecialPhoneCall.DoSpecialPhoneCall"]) + 7)
@@ -616,7 +618,8 @@ def test_phone_binary_pin_rejects_table_or_dispatch_drift(tmp_path, title, fault
     new.write_text(f"{0x25 if fault == 'caller_bank' else 0x24:02x}:{hook:04x} SlinkPhoneCallerName\n"
                    + f"{0x25 if fault == 'bank' else table[0]:02x}:{table[1]:04x} SlinkSpecialPhoneCallList\n"
                    + f"24:{table[1] + (60 if fault == 'size' else 54):04x} SlinkSpecialPhoneCallListEnd\n"
-                   + f"{script[0]:02x}:{script[1]:04x} SlinkPhoneCallScript\n")
+                   + f"{script[0]:02x}:{script[1]:04x} SlinkPhoneCallScript\n"
+                   + f"{0x25 if fault == 'condition_bank' else 0x24:02x}:{condition:04x} SlinkSpecialCallCondition\n")
     if fault:
         with pytest.raises(RuntimeError, match="phone"):
             bc.verify_phone_hook(base, bytes(overlay), clean_sym, new)
@@ -720,3 +723,48 @@ def test_published_provenance_records_the_version():
     assert bc.check_version(overlay["version"])
     assert overlay["version_sha256"] == hashlib.sha256(overlay["version"].encode()).hexdigest()
     assert "version.asm" in overlay["sources_sha256"]
+
+
+# ---------------------------------------------------------------- F5 / F7 (review cx-c87c15b0)
+
+def test_a_normal_build_refuses_a_source_without_version_asm(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / "slink.asm").write_text("; fixture\n")
+    with pytest.raises(RuntimeError, match="version.asm"):
+        bc.build(version="v1.2.3", src_dir=src)
+
+
+def test_no_version_refuses_a_source_with_version_asm(tmp_path):
+    src = tmp_path / "src"
+    src.mkdir()
+    (src / bc.VERSION_FILE).write_text("; fixture\n")
+    with pytest.raises(RuntimeError, match="--no-version"):
+        bc.build(version=None, src_dir=src)
+
+
+@pytest.mark.parametrize("argv, ok", [(["--version", "v1.2.3"], True), (["--no-version"], True),
+                                      ([], False), (["--version", "v1.2.3", "--no-version"], False)])
+def test_cli_takes_exactly_one_of_version_and_no_version(monkeypatch, argv, ok):
+    seen = []
+    monkeypatch.setattr(bc, "build", lambda **kw: seen.append(kw["version"]) or 0)
+    monkeypatch.setattr(bc.sys, "argv", ["build_gen2_companion.py", "--check", *argv])
+    if ok:
+        assert bc.main() == 0 and seen == [argv[1] if len(argv) == 2 else None]
+    else:
+        with pytest.raises(SystemExit):
+            bc.main()
+
+
+def test_source_hashes_are_line_ending_independent(tmp_path):
+    lf, crlf = tmp_path / "lf.asm", tmp_path / "crlf.asm"
+    lf.write_bytes(b"SECTION \"x\", ROM0\n\tnop\n")
+    crlf.write_bytes(b"SECTION \"x\", ROM0\r\n\tnop\r\n")
+    assert bc.source_sha256(lf) == bc.source_sha256(crlf)
+
+
+def test_gitattributes_pins_the_overlay_sources_lf():
+    import subprocess
+    out = subprocess.run(["git", "check-attr", "eol", "--", "patch/gen2/src/phone.asm", "patch/gen2/src/version.asm",
+                          "patch/gb/slink_abi.inc"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    assert out.count("eol: lf") == 3, out

@@ -347,7 +347,7 @@
       "overlay": {
         "artifact": "silver_overlay",
         "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
-        "md5": "704e07a3ca02b94ccf7f16d580f2b267",
+        "md5": "f184ad59dbde870b2b358d808988fddc",
         "phone": {
           "stage": 50920,
           "stage_size": 24
@@ -357,9 +357,9 @@
           "wSlinkMailbox": 49625,
           "wTilemap": 50080
         },
-        "rom_sha1": "54416bf599f207b3b01753f8903720240ea86122",
+        "rom_sha1": "583d8df4deb1831523521d20065504258cbaba28",
         "sym": "silver_slink.sym",
-        "sym_sha256": "347c719b3e17527e40c23f918f64894bff688be8972ac20cd98b57261e1af038",
+        "sym_sha256": "bc86f081598c85112f66f3d0b82dbac202d9b3736d5913a66a1c228d63b63b9d",
         "trade": {
           "ram": {
             "wOTPartyCount": {
@@ -393,7 +393,7 @@
               "bank": 19
             },
             "SlinkTradeCommit": {
-              "addr": 18413,
+              "addr": 18442,
               "bank": 19
             },
             "SlinkTradePromptEntry": {

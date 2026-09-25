@@ -26,6 +26,7 @@ next; this tool includes it automatically when present -- see `overlay_plan()`.
 
     python tools/build_gen2_companion.py --version vX.Y.Z           # build + publish
     python tools/build_gen2_companion.py --version vX.Y.Z --check   # build, compare, publish nothing
+    python tools/build_gen2_companion.py --no-version --src-dir DIR  # a source without version.asm
 
 --version is required (TITLE-VERSION): it is printed on the main menu, so it is part of the ROM
 bytes and is recorded as overlay.version + overlay.version_sha256 in the provenance.
@@ -251,6 +252,11 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def source_sha256(path: pathlib.Path) -> str:
+    """F7: an overlay source's hash, independent of the checkout's line endings (CRLF == LF)."""
+    return _sha256(path.read_bytes().replace(b"\r\n", b"\n"))
+
+
 def rom_facts(data: bytes) -> dict:
     return {
         "sha1": hashlib.sha1(data).hexdigest(),
@@ -396,7 +402,7 @@ def external_source_hashes(
                 continue  # already covered by sources_sha256's src_dir scan
             key = (resolved.relative_to(ROOT).as_posix() if resolved.is_relative_to(ROOT)
                    else resolved.as_posix())
-            hashes[key] = _sha256(resolved.read_bytes())
+            hashes[key] = source_sha256(resolved)
     return hashes
 
 
@@ -460,7 +466,8 @@ def verify_phone_hook(base: bytes, overlay: bytes, clean_sym: pathlib.Path, over
     required = ("SpecialPhoneCallList", "CheckSpecialPhoneCall", "CheckSpecialPhoneCall.DoSpecialPhoneCall",
                 "SpecialCallOnlyWhenOutside", "SpecialCallWhereverYouAre")
     if any(name not in old for name in required) or any(name not in new for name in
-            ("SlinkSpecialPhoneCallList", "SlinkSpecialPhoneCallListEnd", "SlinkPhoneCallScript")):
+            ("SlinkSpecialPhoneCallList", "SlinkSpecialPhoneCallListEnd", "SlinkPhoneCallScript",
+             "SlinkSpecialCallCondition")):
         raise RuntimeError("phone link symbols missing")
 
     def flat(location):
@@ -479,7 +486,10 @@ def verify_phone_hook(base: bytes, overlay: bytes, clean_sym: pathlib.Path, over
         raise RuntimeError("phone native eight-row table changed")
     script_bank, script_address = new["SlinkPhoneCallScript"]
     flat((script_bank, script_address))
-    ninth = (old["SpecialCallWhereverYouAre"][1].to_bytes(2, "little") + bytes([0, script_bank])
+    condition_bank, condition = new["SlinkSpecialCallCondition"]
+    if condition_bank != 0x24:
+        raise RuntimeError("phone ninth-row condition must link in bank24")
+    ninth = (condition.to_bytes(2, "little") + bytes([0, script_bank])
              + script_address.to_bytes(2, "little"))
     if overlay[target + 48:target + 54] != ninth:
         raise RuntimeError("phone ninth row has wrong condition/contact/script")
@@ -543,12 +553,20 @@ def verify_symbol_scope(clean_sym: pathlib.Path, overlay_sym: pathlib.Path, *, p
                 raise RuntimeError(f"{name}: panel START binding must link inside bank 4")
 
 
-def build(*, version: str, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path | None = None,
+def build(*, version: str | None, crystal_repo: pathlib.Path | None = None, gold_repo: pathlib.Path | None = None,
           src_dir: pathlib.Path | None = None, rgbds_bin: pathlib.Path | None = None,
           w64devkit_bin: pathlib.Path | None = None, check: bool = False) -> int:
-    check_version(version)
-    lock, _raw = _load_lock(LOCK_PATH, record=False)
     src_dir = src_dir or SRC_DIR
+    # F5: a normal build is always versioned; --no-version (version None) is for sources without it
+    has_version = (src_dir / VERSION_FILE).is_file()
+    if version is None:
+        if has_version:
+            raise RuntimeError(f"--no-version needs a source without {VERSION_FILE}")
+    else:
+        check_version(version)
+        if not has_version:
+            raise RuntimeError(f"{src_dir / VERSION_FILE} is missing: a versioned build needs it (or --no-version)")
+    lock, _raw = _load_lock(LOCK_PATH, record=False)
     clean_repos = {
         "pokecrystal": (crystal_repo or ROOT / ".cache" / "gen2-build" / "pokecrystal").resolve(),
         "pokegold": (gold_repo or ROOT / ".cache" / "gen2-build" / "pokegold").resolve(),
@@ -609,7 +627,7 @@ def build(*, version: str, crystal_repo: pathlib.Path | None = None, gold_repo: 
               f"identical_to_clean={outputs[key]['identical_to_clean']} ups={len(ups)} bytes",
               file=sys.stderr)
 
-    sources_sha256 = {p.name: _sha256(p.read_bytes()) for p in sorted(src_dir.iterdir())
+    sources_sha256 = {p.name: source_sha256(p) for p in sorted(src_dir.iterdir())
                        if p.suffix in (".asm", ".inc")} if src_dir.is_dir() else {}
     sources_sha256.update(external_source_hashes(clean_repos, src_dir))
 
@@ -622,8 +640,7 @@ def build(*, version: str, crystal_repo: pathlib.Path | None = None, gold_repo: 
                         else src_dir.as_posix()),
             "applied": overlay_applied,
             "sources_sha256": sources_sha256,
-            "version": version,
-            "version_sha256": _sha256(version.encode("utf-8")),
+            **({"version": version, "version_sha256": _sha256(version.encode("utf-8"))} if version else {}),
         },
         "toolchain": toolchain_record,
         "commands": {repo: " ".join(cmd) for repo, cmd in commands.items()},
@@ -669,8 +686,11 @@ def main() -> int:
     ap.add_argument("--rgbds-bin", type=pathlib.Path, default=None)
     ap.add_argument("--w64devkit-bin", type=pathlib.Path, default=None)
     ap.add_argument("--check", action="store_true", help="build and compare, publish nothing")
-    ap.add_argument("--version", required=True,
-                    help="the release version shown on the main menu, vX.Y.Z (the exact release tag)")
+    versioning = ap.add_mutually_exclusive_group(required=True)
+    versioning.add_argument("--version",
+                            help="the release version shown on the main menu, vX.Y.Z (the exact release tag)")
+    versioning.add_argument("--no-version", action="store_true",
+                            help="a source without version.asm (falsifiers); no version provenance")
     args = ap.parse_args()
     try:
         return build(version=args.version, crystal_repo=args.crystal_repo, gold_repo=args.gold_repo, src_dir=args.src_dir,

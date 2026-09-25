@@ -174,9 +174,29 @@ def test_dead_zone_names_only_the_other_trainer():
 
 def test_no_trainer_name_keeps_the_tag_and_omits_phone_data():
     state = make_state_with_link()
-    state.player_identity = {"a": {"ot_id": "1", "trainer_name": "A"}}   # the identity placeholder
+    state.player_identity = {"a": {"ot_id": "1", "trainer_name": "A", "trainer_name_placeholder": True}}
     state.handle_event("a", {"event": "faint", "key": "A:1"})
     assert phone_data(state, "b") == [None] and tagged(state, "b") == [("force_faint", "fallen")]
+
+
+def test_a_real_trainer_name_equal_to_the_slot_letter_is_still_a_name():
+    """F8: the placeholder is an explicit flag, never inferred from name == slot letter."""
+    state = make_state_with_link()
+    state.player_identity = {"a": {"ot_id": "1", "trainer_name": "A"}}
+    state.handle_event("a", {"event": "faint", "key": "A:1"})
+    assert phone_data(state, "b") == [{"trainer_name": "A"}]
+
+
+def test_the_identity_lock_flags_its_synthesized_name_and_a_real_name_clears_it():
+    state = SoulLinkState()
+    party = [{"key": "ABCD:1234:99", "species_id": 1, "level": 5}]
+    state.handle_event("a", {"event": "hello", "rom_type": "gen3_frlge", "party": party, "ot_id": 4660})
+    assert state.player_identity["a"]["trainer_name_placeholder"] is True
+    assert state._phone_data("a", None, None) is None
+    state.handle_event("a", {"event": "hello", "rom_type": "gen3_frlge", "party": party, "ot_id": 4660,
+                             "trainer_name": "ALICE"})
+    assert "trainer_name_placeholder" not in state.player_identity["a"]
+    assert state._phone_data("a", None, None) == {"trainer_name": "ALICE"}
 
 
 @pytest.mark.parametrize("data", [
