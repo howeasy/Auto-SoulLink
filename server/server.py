@@ -1662,12 +1662,14 @@ class SLinkServer:
         alive = sum(1 for e in s.links if e.status == LinkStatus.ALIVE)
         rows.append(f"Pairs alive|{alive}/{npairs}")
         rows.append(f"Dead zones|{len(dead_zones)}")
-        # NOTE for the Gen 1 native panel (Phase 5): this reads SoulLinkState.player_badges,
-        # which is a COUNT set only by the `status` event -- a different attribute from
-        # SLinkServer.player_badges, which holds the BITMASK from hello/tick. Gen 1 never
-        # sends `status`, so this row would read 0/8 there. Correct for Gen 3 as written;
-        # switch it to popcount(self.player_badges[...]) when Gen 1 gets the panel.
-        rows.append(f"Badges|{s.player_badges.get(player_id, 0)}/8")
+        # popcount the BITMASK hello/tick deliver (SLinkServer.player_badges). SoulLinkState's
+        # player_badges was a count only the deleted old Gen 3 client's `status` event set, so
+        # the row read 0/8 on every live client (UI-lane old-client survey, 2026-09-25).
+        try:
+            badges = bin(int(self.player_badges.get(player_id, 0) or 0)).count("1")
+        except (TypeError, ValueError):
+            badges = 0
+        rows.append(f"Badges|{badges}/8")
         # NAME the dead zones. A count tells a player a number; the names tell them where they can
         # no longer catch, which is the part they can act on. Pagination carries the overflow.
         for area_id in dead_zones:
@@ -1681,16 +1683,6 @@ class SLinkServer:
         width = self.adapter.info_panel_width()
         if width and width <= 20:
             npairs_alive = f"{alive}/{npairs}"
-            # popcount the BITMASK here. The row above uses SoulLinkState.player_badges,
-            # which is a count set only by the `status` event -- and Gen 1 never sends one,
-            # so it would always read 0/8. SLinkServer.player_badges holds the bitmask that
-            # hello and tick actually deliver.
-            mask = 0
-            try:
-                mask = int(self.player_badges.get(player_id, 0) or 0)
-            except (TypeError, ValueError):
-                mask = 0
-            badges = bin(mask).count("1")
             compact = [
                 "SOUL LINK",
                 "",

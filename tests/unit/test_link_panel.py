@@ -94,7 +94,7 @@ def test_half_formed_pairs_are_omitted(srv):
 
 def test_summary_rows_report_the_run(srv):
     srv.state.area_states["route_9"] = AreaStatus.DEAD_ZONE
-    srv.state.player_badges["a"] = 5
+    srv.player_badges["a"] = 0b11111   # the hello/tick bitmask; 5 badges
     stats = dict(r.split("|") for r in rows(srv, "a") if r.count("|") == 1)
     assert stats == {"Pairs alive": "1/1", "Dead zones": "1", "Badges": "5/8"}
 
