@@ -1,0 +1,13 @@
+# gen3_final_cut row=zip_check item=§9_item5 cut=157e1ef7d270fcd93a43cc73103c7cc509595e0e
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/check_release_zip.py 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/dist/SLink-player-g4-157e1ef7.zip' --rev 157e1ef7d270fcd93a43cc73103c7cc509595e0e   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-24T20:09:48 cpu=77% emuhawk=6 python=8
+start_utc=2026-09-25T00:09:47Z tracked_clean_before=True
+check_release_zip: SLink-player-g4-157e1ef7.zip  rev=157e1ef7d270fcd93a43cc73103c7cc509595e0e  members=79  mode=manifest
+  note: prefix 'SLink-player-g4-157e1ef7/' stripped from every member
+PASS: 79 members, all blobs equal, no dev-only paths, 23/23 closure files present
+exit=0 end_utc=2026-09-25T00:09:51Z tracked_clean_after=True classification=pass

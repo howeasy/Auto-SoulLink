@@ -1,0 +1,22 @@
+# gen3_final_cut row=release_gate_quick item=§11_gate cut=157e1ef7d270fcd93a43cc73103c7cc509595e0e
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/verify_gen3_release.py --quick   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: SLINK_ARMGCC=E:/Google Drive/SLink\patch\vendor\armgcc\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-24T20:11:23 cpu=66% emuhawk=4 python=7
+start_utc=2026-09-25T00:11:22Z tracked_clean_before=True
+Gen 3 release gate — 4 lanes
+
+[ .. ] unit
+[PASS] unit               2642 passed, 0 skipped (0 unexplained), 0 failed, 0 xfailed, 0 deselected  (82s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] pins
+[PASS] pins               exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (1s)
+
+Fast lanes passed. The emulator lanes were NOT run, so this is not a release verdict — re-run without --quick.
+exit=0 end_utc=2026-09-25T00:12:46Z tracked_clean_after=True classification=pass
