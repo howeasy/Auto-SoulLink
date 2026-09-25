@@ -503,3 +503,13 @@ Update (~03:40Z): the Gen 1 gate finished. 15 lanes PASS; unit, duo-pairs and du
   (b) "fork source not present": .cache/slink-upr has only jars. The UPR fork source checkout isn't on this machine (g1rc doesn't have it either). This is an OWNER/environment item; don't weaken ALLOWED_SKIPS.
 - Re-running now, in sequence: duo-pairs, duo-pairs-purergb, unit (log Temp/gen1-verify2.log).
 - The Gen 1 gate rewrote 4 Gen 1 sfx-gate receipts in the working tree: commit them after the re-runs.
+
+Update (~06:00Z): the Gen 1 gate has converged. Every lane PASSED except unit's single unexplained skip: the UPR fork source is absent, an OWNER environment item, card GEN1-UPR-FORK-SOURCE.
+- unit: 10300 pass, 0 fail. The 10 stale post-sweep assumptions are fixed in dd783f2e and 3f7064b8.
+- Gen 1 harness fixes (GEN1-PCOPS a05ac76dc6fa18aec):
+  - c8a5378c: pc_ops expects the O-35 release kill;
+  - c8b7fc96: admit_randomized launches B first; the type_clause partner-gone counts as a ball-miss retry;
+  - cbb47ed2: a late ball miss doesn't undo an earlier species_clause pass (PureRGB Route 1 Eevee, catch rate 150).
+- Production item found: ADMISSION-MIXED-KINDS-VERDICT (post-RC).
+- The Gen 1 gate rewrote 4 sfx receipts and dropped their provenance header. The committed copies are restored; card GEN1-GATE-REWRITES-RECEIPTS.
+- Final confirmation is running: duo-pairs + duo-pairs-purergb at HEAD (log Temp/gen1-verify4.log). Then STOP and check in with the owner.
