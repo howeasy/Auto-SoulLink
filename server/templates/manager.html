@@ -162,9 +162,11 @@
       <div class="mk-page">
         {# What the last action said when it failed — a start that could not bind its ports,
            mostly. Outside #content so the 2 s morph does not wipe it. #}
-        <div class="mk-banner error" x-data="runNotice()" x-show="notice" x-cloak>
-          <b>Could not start.</b> <span x-text="notice"></span>
-          <button type="button" class="mk-linkbtn" @click="notice = ''">dismiss</button>
+        <div role="alert" x-data="runNotice()" @run-error.window="title = $event.detail.title; notice = $event.detail.message">
+          <div class="mk-banner error" x-show="notice" x-cloak>
+            <b x-text="title"></b> <span x-text="notice"></span>
+            <button type="button" class="mk-linkbtn" @click="notice = ''">dismiss</button>
+          </div>
         </div>
         {% include "_board.html" %}
       </div>
@@ -230,21 +232,38 @@
   function manager() { return {}; }
 
   function runNotice() {
-    return { notice: new URLSearchParams(window.location.search).get('error') || '' };
+    return { title: 'Could not start.', notice: new URLSearchParams(window.location.search).get('error') || '' };
   }
 
   function runActions(runId) {
     return {
       busy: false, launchers: false,
+      // Single-flight; on success the controls stay disabled until the page unloads. A failure
+      // is shown in place (the run page may 404 once a delete went through).
       async act(what, confirmText) {
+        if (this.busy) return;
         if (confirmText && !confirm(confirmText)) return;
         this.busy = true;
+        var navigating = false, error = '';
         try {
-          var res = await fetch('/api/runs/' + runId + '/' + what, { method: 'POST' });
-          var j = await res.json();
-          if (!j.ok) { window.location.href = '/runs/' + runId + '?error=' + encodeURIComponent(j.error || 'Action failed'); return; }
-          window.location.href = what === 'delete' ? '/' : '/runs/' + runId;
-        } finally { this.busy = false; }
+          var res = await fetch('/api/runs/' + runId + '/' + what, { method: 'POST', signal: AbortSignal.timeout(30000) });
+          var text = await res.text(), j = {};
+          try { j = JSON.parse(text); } catch (e) { j = {}; }
+          if (res.ok && j.ok) {
+            navigating = true;
+            window.location.href = what === 'delete' ? '/' : '/runs/' + runId;
+          } else if (what === 'delete' && res.status === 404) {
+            navigating = true;                  // already gone: that is what delete wanted
+            window.location.href = '/';
+          } else {
+            error = j.error || ('The Manager answered HTTP ' + res.status);
+          }
+        } catch (e) {
+          error = e && e.name === 'TimeoutError' ? 'The Manager did not answer within 30 s.' : 'The Manager could not be reached: ' + e;
+        } finally {
+          if (!navigating) this.busy = false;
+        }
+        if (error) window.dispatchEvent(new CustomEvent('run-error', { detail: { title: 'Could not ' + what + '.', message: error } }));
       },
       async pin() {
         this.busy = true;

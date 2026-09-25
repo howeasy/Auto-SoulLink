@@ -239,3 +239,25 @@ async def test_a_clean_delete_removes_the_data_and_the_entry(manager_client, man
     assert (await response.json())["ok"]
     assert not (manager_dir / "r1").exists()
     assert manager._load_registry() == []
+
+
+# -- the run header's actions: single-flight, failures in place, a gone run is not a 404 page --
+@pytest.mark.asyncio
+async def test_run_actions_are_single_flight_and_report_in_place(manager_client):
+    _stopped_run()
+    body = await (await manager_client.get("/runs/r1")).text()
+    act = body[body.index("async act(what, confirmText)"):body.index("async pin()")]
+    assert "if (this.busy) return;" in act
+    assert "AbortSignal.timeout(30000)" in act
+    assert "await res.text()" in act and "JSON.parse(text)" in act and "res.ok && j.ok" in act
+    assert "if (!navigating) this.busy = false;" in act
+    assert "?error=" not in act, "a failure must not redirect to a run page that may 404"
+    assert "new CustomEvent('run-error'" in act
+    assert '<div role="alert" x-data="runNotice()" @run-error.window=' in body
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_missing_run_is_a_404_json_the_page_handles(manager_client):
+    response = await manager_client.post("/api/runs/nope/delete")
+    assert response.status == 404
+    assert await response.json() == {"ok": False, "error": "Run not found"}
