@@ -165,8 +165,8 @@ Battle Frontier/Pyramid/Trainer Hill/Contests/Secret Bases rule support (writes 
 
 | Gate | Signed | Evidence |
 |---|---|---|
-| EG0 | · | |
-| EG1 | · | |
+| EG0 | REQUESTED 2026-09-25 | `docs/gen3_emerald/EG1_request.md` §6.1-6.2 |
+| EG1 | REQUESTED 2026-09-25 | `docs/gen3_emerald/EG1_request.md` (E1 complete at `8ee5869f`) |
 | EG2 | · | |
 | EG3 | · | |
 | EG4 | · | |
