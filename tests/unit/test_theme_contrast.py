@@ -33,7 +33,7 @@ def _rgba(v: str) -> tuple[float, float, float, float]:
 
 def _over(fg, bg):
     a = fg[3]
-    return (*(a * f + (1 - a) * b for f, b in zip(fg[:3], bg[:3])), 1.0)
+    return (*(a * f + (1 - a) * b for f, b in zip(fg[:3], bg[:3], strict=True)), 1.0)
 
 
 def _lum(c):
