@@ -32,7 +32,8 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   4. No explicit anchor/md5/grep/write-guard/control receipts in the RR plan.
   The G5 draft status text is stale: it still says "no RR runner rows / no zip receipt".
 - **Results at the frozen cut 870e5e5d:**
-  - FR/LG shard 1: 13/13 PASS (probe_gates included). Shard 2 was still running at session end (stop-at 12:53Z); resume it with `--resume`.
+  - FR/LG shard 1: 13/13 PASS (probe_gates included). Shard 2: 29/30. Every row PASSed or was CACHED except `release_gate_quick`, which was STOPPED by --stop-at before it ran; it is not a failure. FR/LG therefore stands at 42/43 with only the quick gate left.
+  - Next: `python tools/gen3_final_cut.py --cut 870e5e5d --shard 2/2 --resume --lane .claude/worktrees/gen3-lane-2`. If the STOPPED receipt `fc_release_gate_quick_870e5e5d.txt` blocks the re-run, move it aside first. Then `--merge-summary`.
   - RR `--title rr`: 16/17 (`fc_SUMMARY_870e5e5d_rr.txt`). rr_opcode_gates PASS and the RR zip build/check/boot PASS.
   - The one RR FAIL, `linked_faint_active_clean_gen3_rr_as_a`, failed IDENTICALLY at c0f6101b and at 870e5e5d: "no no-damage move with PP (turn 31, hp 1, hunts 1)". The battle replays deterministically from the fixture, so this is a real driver defect, not chance.
   - FIX NEXT (red first: the receipt is the red): in `ctx.lose_active` (lua/tests/duo/duo_gen3_main.lua about 1307-1350), when the status moves are out of PP and the lead is at low HP, the foe needs only one more hit. Options, in the order to try them:

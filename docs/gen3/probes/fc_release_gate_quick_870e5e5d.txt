@@ -1,0 +1,15 @@
+# gen3_final_cut row=release_gate_quick item=§11_gate cut=870e5e5dd59bcfb26a17e50ea77103b0a7118cd1
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/verify_gen3_release.py --quick   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2)
+# env: SLINK_ARMGCC=E:/Google Drive/SLink\patch\vendor\armgcc\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin
+# verdict: STOPPED (--stop-at)
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T08:52:41 cpu=99% emuhawk=0 python=8
+start_utc=2026-09-25T12:52:39Z tracked_clean_before=True
+Gen 3 release gate — 4 lanes
+
+[ .. ] unit
+
+[final_cut] --stop-at reached: killed PID 33580 tree
+exit=1 end_utc=2026-09-25T12:53:00Z tracked_clean_after=True classification=stopped
