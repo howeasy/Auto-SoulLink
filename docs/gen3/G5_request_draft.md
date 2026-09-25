@@ -1,7 +1,9 @@
 # Gen 3 (P5) Radical Red RC cutover gate request — G5 evidence assembly
 
-**Status: G5 is not yet signable.** RR is live on the new client (lane 2) at **12/13 PASS**. The
-one open row (`whiteout_gen3`, the general Center-writes scenario) is being live-diagnosed by
+**Status: G5 is not yet signable.** RR is live on the new client (lane 2): **11 qualification rows
+PASS + 1 negative-control row PASS (`rival_swap_gen3`) + 1 pending** (`whiteout_gen3`, the general
+Center-writes scenario), of the 13 rows in §2 (a fourteenth, the R5 mega row, is a named SKIP under
+a signed limit and is not part of that count). The pending row is being live-diagnosed by
 another worker right now (checkpoint 17, `docs/gen3_resume.md`). The RR opcode gate port is
 **26/26 PASS**. The rebuilt companion is pinned. Nothing here authorizes a release: ruling 22
 (§8) holds G5 back until G4 is also done, and G4 is itself not yet signable
@@ -23,15 +25,26 @@ P5 row: G5 is the gate at which the **owner plays RR themselves** — the SOULLI
 trade NPC, the ghost walk, Explode, rival swap — and signs the companion build md5
 (`docs/gen3/PLAN.md:207`). **S**
 
-The gate-check cell for P5 (`docs/gen3/PLAN.md:306`) lists: nine RR receipts, RR clean coverage
-rows, the write-sink guard over `native.lua`/`ghost.lua`, the md5 pins, and the extracted-zip
-boot on RR. **The peer ghost is deferred post-RC** (owner ruling, `docs/gen3_resume.md` checkpoint
+The gate-check cell for P5 (`docs/gen3/PLAN.md:306`) lists: nine RR receipts, **RR clean coverage
+rows**, the write-sink guard over `native.lua`/`ghost.lua`, the md5 pins, and the **extracted-zip
+boot on RR**. **The peer ghost is deferred post-RC** (owner ruling, `docs/gen3_resume.md` checkpoint
 6; `docs/gen3/PLAN.md` §0/§10), so the ghost-walk row and `ghost.lua`'s write-sink guard are out of
 scope for this cut — the gate-check cell predates that ruling. RR native text is likewise removed
-from the RC (`docs/gen3/G4_request_draft.md` §6 ruling 6). What remains from that list for this
-release is: the RR duo scenario set (§2), the opcode gates (§3), the companion md5 (§7), and the
-write-sink guard over `native.lua` (carried from G4's write-ownership guard, which is pack-neutral
-— `docs/gen3/G4_request_draft.md` §4 "Write ownership"). **S**
+from the RC (`docs/gen3/G4_request_draft.md` §6 ruling 6). What is unaffected by either deferral —
+and this draft found no ruling dropping them — stays required and **OPEN**, with no receipt in
+this tree:
+
+- **RR clean-artifact coverage rows.** §2's 13 rows all run against the `gen3_rr`/`rr_battle2`
+  companion fixture; none of them is a clean (no companion) RR artifact run. `docs/gen3/PLAN.md:207`'s
+  P5 evidence cell lists this as its own item, distinct from the companion rows. `<<EVIDENCE?>>` —
+  no clean-artifact RR receipt was found under `docs/gen3/probes/`.
+- **The extracted release zip boots RR on the new client.** G4's item 5 (`docs/gen3/G4_request_draft.md`
+  §2) proves this for FR only; no RR-specific zip-boot receipt was found. `<<EVIDENCE?>>`.
+
+What remains from the gate-check list that *is* evidenced for this release is: the RR duo
+scenario set (§2), the opcode gates (§3), the companion md5 (§7), and the write-sink guard over
+`native.lua` (carried from G4's write-ownership guard, which is pack-neutral — `docs/gen3/G4_request_draft.md`
+§4 "Write ownership"). **S**
 
 G5 is the RR cutover gate. It signs RR *on the new client*, replacing the old Gen 3 client's RR
 path. The old client is already deleted (tag `archive/gen3-old-client`, `docs/gen3/G4_request_draft.md`
@@ -43,17 +56,18 @@ any release (§8). **S**
 ## 2. RR duo scenario table
 
 Thirteen rows: the six scenarios FRLG also runs, plus `native_absent_gen3` (RR-only, native trade
-staging) and `rival_swap_gen3` (negative control), plus the five P+H/Explode+H rows that only run
-on RR post-parity (rulings 15-16, 19). `linked_faint_active_mega_gen3` (R5) is a fourteenth row in
-the harness but is a **named SKIP, signed limit** (ruling 20, §6) — it is not counted in the
-12/13.
+staging) and `rival_swap_gen3` (negative control), plus the five P+H/Explode+H rows — the same
+mechanism as FR/LG's G4 rows, run here **on RR** for G5 parity (rulings 15-16, 19; not an
+RR-exclusive mechanism, just RR's own qualification of it). `linked_faint_active_mega_gen3` (R5)
+is a fourteenth row in the harness but is a **named SKIP, signed limit** (ruling 20, §6) — it is
+not counted in the 13.
 
 | # | Row | Verdict | Receipt | Cut |
 |---|---|---|---|---|
 | 1 | `faint_cmd_gen3` | **PASS** | `rr_faint_cmd_gen3_rr_as_a_156a521f.txt` | `156a521f` |
 | 2 | `link_gen3` | **PASS** | `rr_link_gen3_rr_as_a_e99c3760.txt` | `e99c3760` |
 | 3 | `boxsync_gen3` | **PASS** | `rr_boxsync_gen3_rr_as_a_6131930f.txt` | `6131930f` |
-| 4 | `reconnect_gen3` (+ `--wrong-save`) | **PASS** | `rr_reconnect_gen3_rr_as_a_e99c3760.txt` | `e99c3760` |
+| 4 | `reconnect_gen3` (its `b` leg exercises the wrong-save refusal internally — the scenario has no separate `--wrong-save` CLI flag) | **PASS** | `rr_reconnect_gen3_rr_as_a_e99c3760.txt` | `e99c3760` |
 | 5 | `deadzone_gen3` | **PASS** | `rr_deadzone_gen3_rr_as_a_e99c3760.txt` | `e99c3760` |
 | 6 | `whiteout_gen3` (Center writes) | **PENDING** | `<<PENDING: whiteout_gen3>>` | — |
 | 7 | `native_absent_gen3` | **PASS** | `rr_native_absent_gen3_rr_as_a_e99c3760.txt` | `e99c3760` |
@@ -65,7 +79,8 @@ the harness but is a **named SKIP, signed limit** (ruling 20, §6) — it is not
 | 13 | `explode_gen3` (Explode+H) | **PASS** | `ph_explode_gen3_rr_as_a_410d9578.txt` (also PASS at `cc6ec42a`) | `410d9578` |
 | — | `linked_faint_active_mega_gen3` (R5, mega) | **SKIP — signed limit** (ruling 20) | `ph_linked_faint_active_mega_gen3_rr_as_a_6d6227c6.txt`: `SIGNED LIMIT: owner ruling 20` | `6d6227c6` |
 
-**12/13 PASS.** Row 6 (`whiteout_gen3`) is the one open row: it stalls leaving the Viridian
+**11 qualification rows PASS + 1 negative-control row PASS (row 8, `rival_swap_gen3`) + 1
+pending** (row 6). Row 6 (`whiteout_gen3`) is the one open row: it stalls leaving the Viridian
 Pokémon Center — `"step Left stalled at (25,27)"` — first observed at commit `c23a8f46` ("RR's way
 out of Viridian, and the gSpecialVar_Result finding"). Two static path fixes did not explain it;
 it needs a live trace of player/object events at the door exit on RR. Until it lands, its receipt
@@ -128,12 +143,24 @@ Live evidence:
 - `docs/gen3/probes/rr_cpu_irq_bios_2026-09-24.txt` (card G5-RR-CPU-IRQ, W1): a dedicated probe
   script (no client) that reads `emu.getregisters()` before and after installing an
   `event.on_bus_exec` hook, on real hardware (BizHawk 2.11.1, mGBA core, ROM sha1
-  `ea5352f8a3b9...`). With no hook: `R15=0x000001C4`, System mode, ARM (the halt loop). With the
-  hook installed: `R15=0x0000001C`, IRQ mode, ARM, `R14_irq=0x000001C4` — the banked return address
-  points straight at the halt loop the no-hook run already found, confirming the IRQ-entry state is
-  the same instant seen from the other side of the interrupt. **P**
-- `docs/gen3/probes/rr_rows_hello_cpu_park_6d6227c6_2026-09-24.txt` @ `7d730a89`: the full client,
-  same finding (`R15=0x1C`, `CPSR=0x20000092`), and `hello` fires once the clause admits it. **P**
+  `ea5352f8a3b9...`). With no hook: `R15=0x000001C4`, System mode, ARM (the halt loop), **24/25
+  samples** (the 25th, one busy frame, is a different, non-parked PC and is refused as before, not
+  evidence against the park). With the hook installed: `R15=0x0000001C`, IRQ mode, ARM,
+  `R14_irq=0x000001C4`, **20/20 samples** — the banked return address points straight at the halt
+  loop the no-hook run already found, confirming the IRQ-entry state is the same instant seen from
+  the other side of the interrupt. **P**
+- `docs/gen3/probes/rr_rows_hello_cpu_park_6d6227c6_2026-09-24.txt` @ `7d730a89` is the **diagnostic**
+  receipt behind this ruling, not proof the fix works: it shows every RR P+H row FAILing *before*
+  ruling 23 (`hello never sent... R15=0000001C CPSR=20000092... hello_ready=false "safety.lua:113:
+  CPU outside parked checkpoint"`) — the finding that motivated admitting IRQ-vector entry.
+- **The hello-after-admission proof** is
+  `docs/gen3/probes/ph_linked_faint_active_whiteout_gen3_rr_as_a_e9193bb2.txt:5-8`, taken after the
+  ruling-23 clause landed: `VERDICT: FAIL (instrument): the FIRST live RR hello on the new client
+  (both sides, server log below) -- the ruling-23 cpu clause admits`, followed by both sides'
+  server `hello` lines (`[b] hello rom=firered_rr area='route_1' party=1`, `[a] hello rom=firered_rr
+  area='route_1' party=1`). The row itself still failed downstream (a scripted-driver crash on
+  `ACTION_CURSOR_ADDR`, fixed by `64ad170a`, unrelated to the CPU clause), but hello firing on both
+  sides is exactly the proof this section needs. **P**
 
 ---
 
@@ -144,8 +171,11 @@ Live evidence:
   reachable by normal inputs early in RR, and the source shows the Perish path reads no mega
   state. The row stays in the tree as a named SKIP (§2, last row) rather than being deleted. **S**/**P**
 - **The RR lag-frame lost-ball window is a signed limit** (ruling 17, `docs/gen3/G4_request_draft.md`
-  §6 item 17): roughly 1e-4 to 1e-3 probability per commit, only when L (throw) is newly pressed on
-  the exact frame a commit lands. This is the same class of limit as ruling 14 (the FR/LG
+  §6 item 17). The probability is an **INFERRED estimate**, not a measured one — "roughly 1e-4 to
+  1e-3 per commit, multiplied by the chance L was newly pressed on that exact frame"
+  (`docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md:269-278`, §3.5, every row in its
+  table tagged `INFERRED`), derived from the window size in `battle_lag_frame_census_design_2026-09-23.md`
+  §1, not from a live trial count. This is the same class of limit as ruling 14 (the FR/LG
   action-menu lag-frame window) — real and observable, but with no harmful outcome, so no clause
   was added. The companion opcode that would close it (§5.6 of the RR scope research) is not
   built; the owner chose the limit over the opcode. **S**
@@ -173,9 +203,11 @@ Checked against the repo's own pins, not just the request draft's prose:
 - `patch/README.md:27`: "Result md5 should be `6cf77ba4a63634a0fd452be6f206bfc3`" — **matches**. **S**
 - `docs/gen3/probes/rr_gates_live_06724759_2026-09-24.txt`: `6cf77ba4a63634a0fd452be6f206bfc3
   *patch/build/slink_RR.gba` (a measured checksum line, not a pasted pin) — **matches**. **P**
-- `docs/gen3/probes/rr_cpu_irq_bios_2026-09-24.txt`: `ROM ... sha1 ea5352f8a3b9...` — **matches**
-  (truncated in the receipt; full value confirmed via the client identity lines in the P+H
-  receipts, e.g. `ph_linked_faint_active_gen3_rr_as_a_6d6227c6.txt:34`: `(rom ea5352f8)`). **P**
+- `data/games/gen3_rr/engine_signals.json:576`: `"rom_sha1": "ea5352f8a3b9073f8ae20870ad12857925d442cd"`
+  — **matches**, and this is the full-length pin; the probe receipts (e.g.
+  `rr_cpu_irq_bios_2026-09-24.txt`, `ph_linked_faint_active_gen3_rr_as_a_6d6227c6.txt:34`) only ever
+  print an 8-hex prefix (`ea5352f8a3b9...`, `(rom ea5352f8)`) and are not the source of the full
+  value. **S**
 
 Superseded pin (pre-rebuild, do not use): md5 `bf8e94a0…` / sha1 `b7d1e075…`
 (`docs/gen3/G4_request_draft.md` §4, "The RR battle permit + the FORCE_MOVE_SLOT driver" row).
@@ -197,14 +229,28 @@ on that basis — it is an internal gate request, not a release request. **S**
 
 1. **`whiteout_gen3` on RR** (§2 row 6) — the Viridian Center exit stall. In live diagnosis now by
    another worker (checkpoint 17). This is the only failing row in the 13.
-2. **The final-cut pass.** Every PASS row above was taken on a lane cut, not the frozen final cut
-   the gate signs — the same caveat G4's rows carry (`docs/gen3/G4_request_draft.md` §2, "REHEARSED").
-   `tools/gen3_final_cut.py` is rehearsed (zip chain, probe_gates, bootcheck 8/8, release_gate_quick
-   2629/0 skipped — `docs/gen3/G4_request_draft.md` §1a) but has not yet run the RR rows for the
-   record.
-3. **RR extension evidence** — `docs/gen3/G4_request_draft.md` §5 lists the RR save extension as
-   OPEN in the duo harness (compared to a live-RAM copy or reported OPEN, `2cace0a9`). Carried
-   forward here rather than re-litigated, since it is a harness limitation, not an RR-specific gap.
+2. **The final-cut pass has no RR rows to run yet.** `tools/gen3_final_cut.py`'s `ORIENT` map
+   (`:101`) is FR/LG only — `{"gen3_frlg": "fr_as_a", "gen3_lgfr": "lg_as_a"}`, no `gen3_rr` entry
+   — so every PASS row above was taken on a lane cut by hand, not by the runner, and the runner
+   cannot re-take them as written. This is not the same caveat G4's rows carry (those rows the
+   runner already knows how to re-take); RR needs its own orientation and row set added to the
+   runner first. Card **G5-RUNNER-RR** (an RR extension of `gen3_final_cut.py`) is being dispatched
+   now to close this. `tools/gen3_final_cut.py`'s own rehearsal status (zip chain, probe_gates,
+   bootcheck 8/8; `release_gate_quick` only 2629/0 at `2b926be1`, FAIL at the other two rehearsal
+   cuts) is FR/LG-only evidence and does not speak to RR readiness (`docs/gen3/G4_request_draft.md`
+   §1a).
+3. **The RR save-extension freshness is proven live, not OPEN.** `docs/gen3/G4_request_draft.md`
+   §5's "RR extension evidence... OPEN" describes the harness's *capability* (`check_gen3_witness`
+   in `tools/e2e_duo.py:1184-1276`: without a live-RAM copy, `facts["extension"]` stays the string
+   `"OPEN"`), not every RR receipt's outcome. When the driver supplies `ext_ram` (the live EWRAM
+   copy taken inside the same save hook), the function upgrades that field to `"LIVE_RAM_MATCH"`
+   once the saved sectors verify byte-equal to the live copy (`tools/e2e_duo.py:1268-1276`). Every
+   RR row in §2 that saves does exactly that: e.g.
+   `docs/gen3/probes/rr_faint_cmd_gen3_rr_as_a_156a521f.txt:23-24`,
+   `SAVE_WITNESS_SHA256 inst=a ... extension_30_31=LIVE_RAM_MATCH` and the same for `inst=b`. This
+   item is **not open** for the rows this draft cites; it stays a documented *capability* of the
+   harness (falls back to OPEN when a scenario does not pass `ext_ram`), not a gap in the RR
+   evidence above. **P**
 4. **`rival_swap_gen3` is a harness control, not a qualification row.** Its scenario entry
    carries `control` (tools/e2e_duo.py, `rival_swap_gen3`): it qualifies the swap-refusal design
    (stale_battle_id), not a standalone "RR does X" claim. `explode_gen3` is NOT a control any

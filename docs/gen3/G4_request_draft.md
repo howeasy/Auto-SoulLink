@@ -96,20 +96,37 @@ Since the last full pass through this draft, four things changed:
   client was their only code path and neither is in this release (ruling 24, §6). **S**
 - **FR/LG P+H is 8/8 PASS**, not merely built — see item 2b below and ruling 15-16/19 (§6). This
   is REHEARSED evidence (finding H2), re-taken on the frozen cut, not a final gate row yet. **S**/**P**
-- **The 2b trainer rows now boot from cached-native trainer fixtures**: 80 s (FR) / 67 s (LG),
-  down from 23-42 min walking a trainer battle live each time
-  (`ph_linked_faint_active_trainer_gen3_{fr,lg}_as_a_2b926be1.txt` @ `248d6ee9`). This is a harness
-  speed-up, not a behaviour change; the trainer row's verdict is unaffected. **S**/**P**
+- **The 2b trainer rows now boot from cached-native trainer fixtures.** This is a harness
+  speed-up, not a behaviour change; the trainer row's verdict is unaffected
+  (`ph_linked_faint_active_trainer_gen3_{fr,lg}_as_a_2b926be1.txt` @ `248d6ee9`). **UNVERIFIED**:
+  the 80 s (FR) / 67 s (LG) figures and the "23-42 min" prior cost are from `248d6ee9`'s own commit
+  message, not a timed receipt line — no wall-clock field in the receipts themselves was checked
+  against them. **S**
 
 **The final-cut runner (`tools/gen3_final_cut.py`) is rehearsed, not yet run for the record.**
 Three rehearsal passes are committed: `docs/gen3/probes/fc_zip_*` / `fc_probe_gates_*` /
 `fc_bootcheck_*` @ `6e85ddfc` (zip chain + probe_gates PASS), `fc_bootcheck_*` @ `d0a4bba5`
-(cold-boot 8/8 PASS) and `fc_release_gate_quick_*` @ `2b926be1`/`6e85ddfc`/`d0a4bba5` (PASS,
-2629 passed / 0 unexplained skips). None of these three is the frozen cut the gate signs: they rehearse the runner itself at
-whatever HEAD was current (`6e85ddfc`, `d0a4bba5`, `2b926be1`). A pre-cut pass at `157e1ef7`
-(`fc_*_157e1ef7.txt`) collects receipts that `--carry` reuses at the frozen cut where no
-dependency changed.
-**S**/**P**
+(cold-boot 8/8 PASS). `fc_release_gate_quick_*` is **not** a clean three-for-three: only
+`fc_release_gate_quick_2b926be1.txt` PASSes (`2629 passed, 0 skipped (0 unexplained), 0 failed`);
+`fc_release_gate_quick_6e85ddfc.txt` is a **FAIL** (`33 failed, 2571 passed, 3 skipped, 4 errors`)
+and `fc_release_gate_quick_d0a4bba5.txt` is also a **FAIL** (`12 failed, 2608 passed`) — both were
+taken at HEADs mid-edit by concurrent lane work, not the runner's own defect; neither should be
+read as "the gate passed unit at that cut." None of these three is the frozen cut the gate signs:
+they rehearse the runner itself at whatever HEAD was current (`6e85ddfc`, `d0a4bba5`, `2b926be1`).
+
+`fc_SUMMARY_157e1ef7.txt` is a **dress rehearsal of the fast-mode path** (`--carry`/`--shard`/
+`--merge-summary`), not the pre-cut collection stage `--carry` later reuses — commit `58f5c684`
+(after `157e1ef7`) changed `tools/e2e_duo.py` itself (a torn-read fix in `read_result`/
+`_read_receipt`/`_reconnect_events`), so none of `157e1ef7`'s duo receipts carry forward to a cut
+taken after `58f5c684`; the runner would re-take them. As run, it shows `17/22 PASS`, but 5 of the
+7 "FAIL"s are a runner scoring bug, not product failures: `reconnect_gen3_fr_as_a`,
+`center_controls_gen3_fr_as_a`, `center_controls_gen3_lg_as_a`, `active_end_gen3_fr_as_a` and
+`active_end_gen3_lg_as_a` were marked `FAIL skipped` because the verdict regex matched the
+SAVE_WITNESS line's own `saves=0 skipped (no_save)` text as a pytest skip; the receipts themselves
+show both halves PASSing. Fixed in `160bd75a` (`\b\d+ skipped\b` now requires a whitespace/comma
+lead, not a bare substring match); on the fixed scorer those 5 rows rejudge as PASS, leaving
+`22/22` at that dress rehearsal. Not re-run post-fix; the coordinator's real final pass supersedes
+it regardless. **S**/**P**
 
 **When the coordinator freezes a cut and runs the real final pass**, it fills in:
 
@@ -123,20 +140,28 @@ dependency changed.
 These are recorded limits, not blockers, and the receipts behind them are cited where they land
 (§2, §5):
 
-1. **RR's `gSpecialVar_Result` (127) is overwritten the same frame** it is set, by a write this
-   branch suspects but has not proven is a CFRU writer at that address; the checkpoint therefore
-   uses a looser RR PC-exit check than the byte-exact one FR/LG get (`docs/gen3/G5_request_draft.md`
-   carries the RR-side detail; this is an FR/LG-vs-RR asymmetry the owner should see at G4 too,
-   since it is the reason RR and FR/LG are not proven to the same standard on this one predicate).
-   **S**
+1. **The RR *test harness* (not a product checkpoint) uses a looser PC-owner-list-exit check than
+   FR/LG.** `lua/tests/gen3_scripted_play.lua`'s `owner_list_closed()` reads `gSpecialVar_Result`
+   (`sym:231`, `0x020370D0`) to witness the PC owner-list closing; on FR/LG a cancel writes the
+   sentinel `SCR_MENU_CANCEL` (127) there and the harness waits for it, but on RR the live PC-exit
+   trace reads `result=0` at every step, including right after the cancel
+   (`docs/gen3/research/rr_harness_syms_2026-09-24.md` §"gSpecialVar_Result on RR (G5-RR-LAST)").
+   The harness therefore falls back to "the list closed and no PC task took over" on RR
+   (`owner_list_closed` in `lua/tests/gen3_scripted_play.lua:1954-2001`) instead of the byte-exact
+   127 check FR/LG gets. This is a *scripted-play driver* limitation, not a checkpoint predicate or
+   a write-safety gate — nothing in `lua/gen3/safety.lua` or either pack's `write_checkpoint.json`
+   reads `gSpecialVar_Result`. Carried here because it is an FR/LG-vs-RR asymmetry in how PC-exit is
+   proven, even though it costs nothing at G4 (FR/LG use the strict check). **S**
 2. **An AP build with every pinned anchor intact would be admitted.** This is by design — the
    admission check is anchor-based so a randomizer that reshuffles content but keeps the pinned
-   bytes still boots — not a gap found late. Archipelago FRLG is refused today only because no
-   AP-patched dump on disk carries those anchors (ruling 24, §6); a future AP FRLG dump that does
-   would pass admission on its own merits. **S**
-3. **The post-battle stage chip can read stale for up to 30 frames.** Cosmetic only — it is a
-   display value, not a checkpoint predicate or a write gate, and no scenario in §2 depends on it
-   settling faster than that. **S**
+   bytes still boots — not a gap found late. Archipelago FRLG is refused today because no
+   AP-patched dump exists to test against: **none known** on disk in this worktree (a negative,
+   not a receipt); a future AP FRLG dump with intact anchors would pass admission on its own merits
+   (ruling 24, §6). **S**
+3. **UNVERIFIED — the post-battle stage chip can reportedly read stale for up to 30 frames.** No
+   receipt in this tree measures it; it is carried here as a known claim, cosmetic in nature (a
+   display value, not a checkpoint predicate or a write gate) but not confirmed by this draft's own
+   evidence pass. **S**
 
 ---
 
