@@ -314,7 +314,8 @@ function randomizerFields(form) {
         var body = new FormData(); body.append('file', file, file.name);
         var j = await (await fetch('/api/roms', { method: 'POST', body: body })).json();
         if (!j.ok) { this.error = j.error || 'Upload failed'; return; }
-        this.uploadNote = 'Added ' + file.name + '.';
+        this.uploadNote = j.existing ? file.name + ' is already here as ' + j.rom.name + '; picked that.'
+                                     : 'Added ' + file.name + '.';
         if (j.kind === 'jar') { this.rdraft.jar = j.path; }
         else {
           if (!this.roms.some(function (r) { return r.path === j.path; })) this.roms.push(j.rom);

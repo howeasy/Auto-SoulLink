@@ -251,3 +251,46 @@ async def test_rom_upload_concurrent_uploads_do_not_share_a_temp_file(manager_cl
     assert j_a["ok"] and j_b["ok"]
     assert (tmp_path / "roms" / "a.gb").read_bytes() == bytes([0xAA]) * size
     assert (tmp_path / "roms" / "b.gb").read_bytes() == bytes([0xBB]) * size
+
+
+# ── _scan_roms reads each ROM once and caches by (size, mtime) ───────────────────────────
+
+def test_scan_roms_reads_each_file_once_then_hits_the_cache(tmp_path, monkeypatch):
+    import builtins
+    import os
+    rom = tmp_path / "red.gb"
+    rom.write_bytes(b"x" * 100)
+    monkeypatch.setattr(manager, "ROM_DIRS", (str(tmp_path),))
+    reads, real_open = [], builtins.open
+
+    def counting_open(file, mode="r", *a, **k):
+        if str(file) == str(rom) and "r" in mode:
+            reads.append(file)
+        return real_open(file, mode, *a, **k)
+    monkeypatch.setattr(builtins, "open", counting_open)
+
+    first = manager.RunManager._scan_roms("")
+    assert len(reads) == 1, "hash for dedup and describe_rom share one read"
+    assert manager.RunManager._scan_roms("") == first and len(reads) == 1, "unchanged file: cache hit"
+    rom.write_bytes(b"y" * 101)
+    os.utime(rom, ns=(1, 1))
+    assert manager.RunManager._scan_roms("")[0]["sha1"] != first[0]["sha1"] and len(reads) == 2
+
+
+# ── handle_rom_upload: a duplicate answers with the file already there ──────────────────
+
+@pytest.mark.asyncio
+async def test_rom_upload_of_an_existing_rom_returns_that_file(manager_client, tmp_path, monkeypatch):
+    """A copy of a ROM already in the repo root used to land in roms/ and be selected; the
+    next scan deduped the roms/ copy away and the picker went blank."""
+    root, up = tmp_path / "root", tmp_path / "roms"
+    root.mkdir()
+    (root / "Red.gb").write_bytes(b"red bytes")
+    monkeypatch.setattr(manager, "ROM_DIRS", (str(root), str(up)))
+    monkeypatch.setattr(manager, "ROM_UPLOAD_DIR", str(up))
+    form = aiohttp.FormData()
+    form.add_field("file", b"red bytes", filename="copy of red.gb", content_type="application/octet-stream")
+    j = await (await manager_client.post("/api/roms", data=form)).json()
+    assert j["ok"] and j["existing"] and j["path"] == str(root / "Red.gb")
+    assert [r["path"] for r in manager.RunManager._scan_roms("")] == [j["path"]]
+    assert not up.is_dir() or list(up.iterdir()) == []   # no duplicate (and no .part) kept
