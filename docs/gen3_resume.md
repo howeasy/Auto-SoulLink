@@ -47,12 +47,16 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   3. Opcode gates: sign the 12 deferred gates as a limit (26 live).
   4. Per-item receipts: accept the existing unit/model evidence (pins, write ownership, native control unit tests).
   Work: the clean-row driver fix, 1 clean row, 1 rival row, then re-freeze and run both passes.
-- **Ruling 25 (68e6191f) work in flight:**
-  - G5-RR-CLEAN (Sonnet, lane 2): the clean-row driver fix plus a new clean link/faint row.
-  - G5-RR-RIVAL (Opus, branch claude/g5-rr-rival, lane 1): the qualifying rival swap `rival_swap_real_gen3` with fixture `rr_rival.sav` (cached-native at Route 22 (34,6), trainer 331). The first live run FAILED on 2 PRODUCT DEFECTS (receipt rr_rival_swap_real_gen3_gen3_rr_as_a_4202b5d8.txt):
-    1. The client announces trainer_battle_start after the patch's 5-frame swap window (BeginBattleIntroDummy, frames 1012-1016) has closed. The client announced at 1043 because RR "in battle" waits on battle slot 0's maxHP, so the patch refused with window_closed.
-    2. entry.lua always refuses the post-copy refresh, so a good swap would report refresh_failed anyway.
-    The fix in progress is client-only: announce when gTrainerBattleOpponent_A is set, stage the swap, post it when the window opens, and report a good readback as success. If the patch must change instead, the companion ROM needs rebuilding and its md5 re-pinned, which is the owner's call.
+- **Ruling 25 work DONE** (68e6191f is the ruling):
+  - Clean coverage:
+    - linked_faint_active_clean_gen3 fixed. The lose_active fallback now excludes self-damage moves and only re-hunts on a WON outcome (77115d02, bc733fd0).
+    - New row faint_cmd_clean_gen3 (a=companion, b=clean; the oracle proves ROM provenance by hash). Both PASS live (b71815d2). OMP cx-39175521: all 4 findings fixed.
+  - Rival Team Swap: qualifying row rival_swap_real_gen3 with cached-native rr_rival.sav (Route 22 (34,6), trainer 331). Merged c566e808; PASS live at 7fddd3eb; the negative control still PASSes.
+    - Client-only product fix: the RR companion pre-announces when gTrainerBattleOpponent_A turns nonzero on the field, stages the swap, and posts it in the patch's W1 window. Success requires the readback to reach the enemy battler.
+    - Reviews: Opus (4) + OMP cx-3a69802a (9) folded in. OMP F1 (level-guarded rematch announce) was declined because it would re-announce the last trainer after every battle; RR rival ids are distinct.
+  - Integration: faint_cmd_clean_gen3 pinned in the RR lists (a2985d5a). Gen 3 unit suites: 3708 passed.
+- **FROZEN CUT a2985d5a:** FR/LG sharded over both lanes, then `--title rr`.
+- **Gen 1 quick gate on this branch:** FAILED on environment only. The worktree lacks .cache/pret/pokered plus the pure/yellow ROM builds (NO-ROM). Run it in a provisioned lane, or provision per Gen1-Collab2's recipes, before claiming a Gen 1 result.
 - **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
   - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
   - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.
