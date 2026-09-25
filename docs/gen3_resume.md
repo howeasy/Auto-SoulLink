@@ -1,6 +1,45 @@
-# Gen 3 migration — resume note (updated 2026-09-24, checkpoint 17: PAUSE — RR 12/13 live on the new client, old client deleted, final-cut runner rehearsed; RR whiteout + final pass next)
+# Gen 3 migration — resume note (updated 2026-09-25, checkpoint 18: 1-hour block — FR/LG dress rehearsal 41/41, RR whiteout past the door, Gen 3 HUD in the Gen 1/2 pixel font; freeze + final pass next)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
+
+## CHECKPOINT 18 (2026-09-25, 1-hour block): resume here
+
+Owner rules this block: at most 3 subagents (Sonnet preferred, Opus only if needed); headless OMP for reviews, tests and small code the coordinator reviews, never implicitly trusted. Rulings 22-24 stand.
+- **FR/LG G4 dress rehearsal at 157e1ef7** (lane 1, `fc_*_157e1ef7.txt`, 4247835d):
+  - all 41 rows PASS once rejudged. The runner judged 34/41; the 7 "FAIL skipped" rows were its classifier matching `saves=0 skipped (no_save)`, fixed in 160bd75a.
+  - It is NOT the frozen cut, and its duo rows won't carry: 58f5c684 and later changed tools/e2e_duo.py and lua/tests/duo/**.
+- **Harness:**
+  - duo poll 2.0 s → 0.2 s (157e1ef7);
+  - torn-read hardening: complete receipt lines only, events.json retry (58f5c684, OMP cx-aa9c1052).
+- **RR whiteout_gen3 PASS at 1321bbdb** (lane 2, `rr_whiteout_gen3_rr_as_a_1321bbdb.txt`), so the RR battery is 13/13 (12 qualifying + the rival_swap control). Three fixes:
+  - an RR-only follower object (graphics id 20) locking the field at the Center door, from the live trace (eb03c21a); hardened after OMP cx-84088887 in 23f7cddc (witnessed recovery, battles through handle_encounter, battles=false honoured, executable fake-world tests, an RR center_predicates test);
+  - center_state dereferenced RR's literal `pokemon_storage_base` (9598a4e5);
+  - RR's nurse (script 0x0904C64B) is a silent quick-heal with no multichoice, so on RR the negative control holds on the START menu (`field_controls_locked`, 600 frames, attempted=0), in 89caeb0e/74589e3f/1321bbdb (OMP review cx-6c92f636 pending).
+  - Re-run at a8b60954 (hardened follow) PASS: `rr_whiteout_gen3_rr_as_a_a8b60954.txt`.
+- **Runner `--title rr`** (68f5e3f6 + 769a4251, OMP cx-42592031):
+  - 13 RR duo rows, derived from `scenarios_for`, plus `rr_opcode_gates` (own_verdict) and a TODO RR zip-boot row that FAILs;
+  - RR rows are NEVER carried until row_inputs hashes the RR ROMs, fixtures and gate states.
+  - OPEN: RR clean-ROM provisioning, gate-state pins, the RR zip-boot implementation.
+- **G4/G5 drafts** (c524cc2d, e0a1c40e, ba3b4d2c; OMP FACT_CHECK cx-87648b5e verified):
+  - G5 restores RR clean coverage rows and the RR zip boot as OPEN (PLAN:207/306);
+  - the count reads 11 qualifying PASS + 1 control + 1 pending;
+  - placeholders `<<FINAL_CUT_SHA>>`, `<<FINAL_CUT_TABLE>>` and `<<PENDING: whiteout_gen3>>` are left for the coordinator.
+- **HUD (owner: "The way Gen1/2 do it is how I want"):**
+  - master's GB pixel-font commits were ported onto this branch (16d9ee7e; content-identical to master);
+  - the shared default now draws the fceux pixel font on the 160px GBA screen too (f1cc6038). NDS keeps Courier.
+  - Screenshots are from card HUD-SHOT-GEN3. Master itself does not have f1cc6038 yet.
+- **Fake-peer bystander rows** (OMP cx-2bbc6d90, verified): under the strict rule no Gen 3 row qualifies; center_controls and save_then_write only if the owner accepts a setup-only B party read. Owner question.
+- **Queue:**
+  - UI-lane old-client survey: the RR panel's Badges row read a count only the deleted client set (0/8), fixed in 17608b51. Remove the now-unfed `status` handler (state.py :339-340, :520-528, SoulLinkState.player_badges :288). Keep the ghost_pos relay for the post-RC ghost;
+  - HUD: the UI lane's banner-below-wrapped-prompt fix is here as bc1ca258 (master a9bdce38). The GBA pixel font is on local master as 66981144 (not pushed);
+  - the inject_link lost-response retry (independent of the poll rate);
+  - the stale RR-only block comment in tools/e2e_duo.py (explode is no longer a control);
+  - gSpecialVar_Result: OMP cx-72da0fae (verified) found the cancel latch samples only after the 16-frame `G.tap`, so "overwritten the same frame" is unproven. Next: sample during the tap, or arm a write watchpoint on 0x020370D0 before B;
+  - fill the ALLOWED_SKIPS mega reason, or leave it (mega is excluded from `--title rr`).
+- **NEXT:**
+  1. Read OMP cx-6c92f636 (nurse control review) and settle its findings.
+  2. Freeze a cut and run `gen3_final_cut.py --cut <sha> --carry` (FR/LG, sharded over both lanes), then `--title rr`.
+  3. Fill in the G4/G5 placeholders and put the requests to the owner.
 
 ## CHECKPOINT 17 (2026-09-24): PAUSE at the owner's request — resume here
 
