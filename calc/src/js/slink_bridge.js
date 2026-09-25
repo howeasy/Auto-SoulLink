@@ -796,6 +796,82 @@
     return name;
   }
 
+  // ---------------------------------------------------------------------------
+  // Real stat inputs (task 4): IVs/EVs (gen >= 3) or DVs/stat exp (gen 1/2), decoded
+  // by the adapter's calc_stats() from the live blob_hex. mon.calc_stats is null for
+  // box/linked/enemy mons or an unrecognised blob -- _loadMonIntoPanel then leaves the
+  // calc's Blank-Set defaults (31 IV / 0 EV, or 15 DV / max stat exp) alone, same as
+  // before this existed.
+  // ---------------------------------------------------------------------------
+
+  var STAT_ROW = { hp: 'hp', atk: 'at', def: 'df', spa: 'sa', spd: 'sd', spe: 'sp' };
+
+  function _applyCalcStats(pokeObj, mon) {
+    var cs = mon.calc_stats;
+    if (!cs) return;
+    var g = window.gen;
+    if (g >= 3) {
+      if (cs.ivs) {
+        for (var stat in cs.ivs) {
+          if (STAT_ROW[stat]) pokeObj.find('.' + STAT_ROW[stat] + ' .ivs').val(cs.ivs[stat]);
+        }
+      }
+      if (cs.evs) {
+        for (var stat2 in cs.evs) {
+          if (STAT_ROW[stat2]) pokeObj.find('.' + STAT_ROW[stat2] + ' .evs').val(cs.evs[stat2]);
+        }
+      }
+    } else if (cs.dvs) {
+      // Gen 1/2 DVs/stat exp: atk/def/spe map straight to their rows; Special (spc)
+      // goes to .sl in Gen 1 or both .sa/.sd in Gen 2 (one DV/stat-exp value covers
+      // both, same as the template's disabled .sd inputs). HP's DV derives from the
+      // other three's low bit (getHPDVs); its stat exp is independent, set directly.
+      var specRow = g === 1 ? '.sl' : '.sa';
+      pokeObj.find('.at .dvs').val(cs.dvs.atk);
+      pokeObj.find('.df .dvs').val(cs.dvs.def);
+      pokeObj.find('.sp .dvs').val(cs.dvs.spe);
+      pokeObj.find(specRow + ' .dvs').val(cs.dvs.spc);
+      if (g === 2) pokeObj.find('.sd .dvs').val(cs.dvs.spc);
+      pokeObj.find('.hp .dvs').val(getHPDVs(pokeObj));
+      if (cs.stat_exp) {
+        pokeObj.find('.hp .statexp').val(cs.stat_exp.hp);
+        pokeObj.find('.at .statexp').val(cs.stat_exp.atk);
+        pokeObj.find('.df .statexp').val(cs.stat_exp.def);
+        pokeObj.find('.sp .statexp').val(cs.stat_exp.spe);
+        pokeObj.find(specRow + ' .statexp').val(cs.stat_exp.spc);
+        if (g === 2) pokeObj.find('.sd .statexp').val(cs.stat_exp.spc);
+      }
+    } else {
+      return;
+    }
+    // Recompute this panel's stats the same way the template's own DV/IV/EV keyup
+    // handlers do, then compare against the game's own computed stats.
+    calcHP(pokeObj);
+    calcStats(pokeObj);
+    _warnStatMismatch(pokeObj, mon);
+  }
+
+  // Per-game "the numbers are right" signal: the calc's own computed total should
+  // match what the ROM actually stored for that stat. Gen 1 has no Sp. Atk/Sp. Def
+  // rows -- both map to .sl's total.
+  function _warnStatMismatch(pokeObj, mon) {
+    var cs = mon.calc_stats;
+    if (!cs || !cs.stats) return;
+    var g = window.gen;
+    var rows = g === 1
+      ? { hp: 'hp', atk: 'at', def: 'df', spa: 'sl', spd: 'sl', spe: 'sp' }
+      : STAT_ROW;
+    for (var stat in cs.stats) {
+      var row = rows[stat];
+      if (!row) continue;
+      var calc = parseInt(pokeObj.find('.' + row + ' .total').text(), 10);
+      var game = cs.stats[stat];
+      if (calc !== game) {
+        console.warn('[SLink bridge] stat mismatch', mon.species_name, stat, calc, game);
+      }
+    }
+  }
+
   /**
    * Directly populate a calc panel (#p1 or #p2) from a mon object.
    *
@@ -913,6 +989,8 @@
       }
       moveObj.trigger('change');
     }
+
+    _applyCalcStats(pokeObj, mon);
 
     setTimeout(function () { _applyBattleState(pokeObj, mon); }, 0);
 

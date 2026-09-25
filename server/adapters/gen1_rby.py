@@ -428,6 +428,32 @@ class Gen1Adapter(GameAdapter):
             return name
         return _CALC_NAMES.get(kind, {}).get(name, name)
 
+    def calc_stats(self, detail: dict) -> dict | None:
+        """Decode DVs/stat exp/computed stats from the 66-byte party blob (party
+        struct's first 44 bytes; OT/nick tail is ignored). Shared by pureRGB, whose
+        blob layout is identical (Gen1PureRGBAdapter.validate_party_blob decodes the
+        same 44 bytes via the same gen1_codec).
+
+        gen1_codec's DV/stat_exp/stat dicts key the Speed field "spd" (home/move_mon.asm
+        nibble order); the calc_stats contract keys it "spe" -- map on the way out.
+        """
+        blob_hex = detail.get("blob_hex")
+        if not blob_hex:
+            return None
+        try:
+            blob = bytes.fromhex(blob_hex) if isinstance(blob_hex, str) else blob_hex
+            mon = gen1_codec.decode_party_mon(bytes(blob[:gen1_codec.PARTY_MON_SIZE]))
+        except (ValueError, TypeError):
+            return None
+        dvs, exp = mon["dvs"], mon["stat_exp"]
+        return {
+            "dvs": {"atk": dvs["atk"], "def": dvs["def"], "spe": dvs["spd"], "spc": dvs["spc"]},
+            "stat_exp": {"hp": exp["hp"], "atk": exp["atk"], "def": exp["def"],
+                         "spe": exp["spd"], "spc": exp["spc"]},
+            "stats": {"hp": mon["max_hp"], "atk": mon["atk"], "def": mon["def"],
+                      "spa": mon["spc"], "spd": mon["spc"], "spe": mon["spd"]},
+        }
+
     def area_display_name(self, area_id: str) -> str:
         if area_id in _AREA_NAMES:
             return _AREA_NAMES[area_id]

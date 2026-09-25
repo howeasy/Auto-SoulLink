@@ -192,6 +192,7 @@ def _build_mon_entry(key, detail, adapter):
         "slot":          detail.get("slot", 999),
         "active":        detail.get("active", False),
         "showdown_paste": "\n".join(lines),
+        "calc_stats":    detail.get("calc_stats"),
     }
 
 
@@ -1672,6 +1673,10 @@ class SLinkServer:
                 "active": mon.get("active", False),
                 "status_cond": mon.get("status_cond", 0),
                 "stat_stages": mon.get("stat_stages"),
+                # Small decoded dict (DVs/IVs/EVs/stat exp/computed stats), NOT the blob
+                # itself -- party_details goes out on every status push. None when the
+                # adapter can't decode it (box/linked mons, missing/bad blob_hex).
+                "calc_stats": adapter.calc_stats(mon),
             }
             for index, mon in enumerate(party) if mon.get("key")
         }

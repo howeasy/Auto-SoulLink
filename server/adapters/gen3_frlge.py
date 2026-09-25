@@ -26,6 +26,7 @@ from server.pokemon_data import (
     type_name as _type_name,
 )
 
+from . import gen3_codec
 from .base import GameAdapter, humanize_area_id
 
 log = logging.getLogger(__name__)
@@ -588,6 +589,30 @@ class Gen3Adapter(GameAdapter):
             return _NATURE_NAMES[int(key.split(":")[0], 16) % 25]
         except Exception:
             return "Hardy"
+
+    def calc_stats(self, detail: dict) -> dict | None:
+        """Decode IVs/EVs/computed stats from the 100-byte party blob (gen3_codec,
+        the same RR/vanilla substructure-order oracle the Rival Team Swap feature
+        already decodes blob_hex with)."""
+        blob_hex = detail.get("blob_hex")
+        if not blob_hex:
+            return None
+        try:
+            blob = bytes.fromhex(blob_hex) if isinstance(blob_hex, str) else blob_hex
+            mon = gen3_codec.decode_party_mon(bytes(blob), rr=self._is_rr)
+        except (ValueError, TypeError):
+            return None
+
+        def _short(d):
+            return {"hp": d["hp"], "atk": d["attack"], "def": d["defense"],
+                    "spa": d["sp_attack"], "spd": d["sp_defense"], "spe": d["speed"]}
+
+        return {
+            "ivs": _short(mon["ivs"]),
+            "evs": _short(mon["evs"]),
+            "stats": {"hp": mon["max_hp"], "atk": mon["attack"], "def": mon["defense"],
+                      "spa": mon["sp_attack"], "spd": mon["sp_defense"], "spe": mon["speed"]},
+        }
 
     def area_display_name(self, area_id: str) -> str:
         if not area_id:
