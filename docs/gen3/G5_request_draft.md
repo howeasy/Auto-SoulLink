@@ -8,8 +8,8 @@ PASSes too, at `fca70bb2`. `tools/gen3_final_cut.py` now has a `--title rr` plan
 the release zip built/checked/booted on the RR companion (`rr_zip_build`, `rr_zip_check`,
 `zip_boot_radicalred`), summarized to `fc_SUMMARY_<cut8>_rr.txt`. The RR zip chain has PASSed as a
 rehearsal at `58a8951f` (`docs/gen3/probes/fc_SUMMARY_58a8951f_rr.txt`,
-`fc_zip_boot_radicalred_58a8951f.txt`), but **the frozen-cut RR pass at `c0f6101b` has not run
-yet** — `<<PENDING: RR final pass at c0f6101b>>`; the FR/LG frozen-cut pass at that cut is itself
+`fc_zip_boot_radicalred_58a8951f.txt`), but **the frozen-cut RR pass at `382703b3` has not run
+yet** — `<<PENDING: RR final pass at 382703b3>>`; the FR/LG frozen-cut pass at that cut is itself
 still in flight, sharded (`docs/gen3_resume.md` checkpoint 19). The RR opcode gate port is
 **26/26 PASS** live (12 further cases deferred by design, §3). The rebuilt companion is pinned.
 Section 11 also lists owner decisions G5 needs before it can be signed even once the frozen-cut RR
@@ -53,8 +53,8 @@ this tree:
   player a`, server line `hello rom=firered_rr`, `RESULT: PASS the extracted zip booted
   radical_red on the new client`. `tools/gen3_final_cut.py`'s `zip_rows(cut, lane, "radical_red")`
   runs this as three rows (`rr_zip_build`, `rr_zip_check`, `zip_boot_radicalred`) whenever
-  `--title rr` runs; the frozen-cut RR pass at `c0f6101b` re-takes it — `<<PENDING: RR final pass
-  at c0f6101b>>`.
+  `--title rr` runs; the frozen-cut RR pass at `382703b3` re-takes it — `<<PENDING: RR final pass
+  at 382703b3>>`.
 
 What remains from the gate-check list that *is* evidenced for this release is: the RR duo
 scenario set (§2), the opcode gates (§3), the companion md5 (§8), and the write-sink guard over
@@ -108,8 +108,8 @@ and the row was re-taken and PASSed at `fca70bb2`
 `field_controls_locked=0x1` after the START press, then `CONTROL_REFUSED start_menu box_mon ...
 clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged`, plus the save
 witnesses (`SAVE_WITNESS_SHA256 ... match=true`) on both sides. This is the current PASS of record
-for row 6; the frozen-cut RR pass at `c0f6101b` re-runs it again — `<<PENDING: RR final pass at
-c0f6101b>>`. **P**
+for row 6; the frozen-cut RR pass at `382703b3` re-runs it again — `<<PENDING: RR final pass at
+382703b3>>`. **P**
 
 Earlier attempts at rows 9-13 (P+H/Explode+H) failed at cut `6d6227c6` on timeouts and carrier
 bugs before the hand-off's dependencies landed — see `ph_linked_faint_active_whiteout_gen3_rr_as_a_{e9193bb2,64ad170a}.txt`
@@ -281,8 +281,8 @@ on that basis — it is an internal gate request, not a release request. **S**
    cx-42592031). This closes the gap the previous draft flagged: every row in §2 can now be
    re-taken by the runner, not just by hand. What is still open is running it: the RR zip chain
    has only a rehearsal PASS at `58a8951f` (`fc_SUMMARY_58a8951f_rr.txt`), and **the frozen-cut RR
-   pass at `c0f6101b` has not been run** — `<<PENDING: RR final pass at c0f6101b>>`. The FR/LG
-   frozen-cut pass at `c0f6101b` is itself still running sharded as of this draft
+   pass at `382703b3` has not been run** — `<<PENDING: RR final pass at 382703b3>>`. The FR/LG
+   frozen-cut pass at `382703b3` is itself still running sharded as of this draft
    (`docs/gen3_resume.md` checkpoint 19); the RR pass is queued to follow it.
 3. **The RR save-extension freshness is proven live, not OPEN.** `docs/gen3/G4_request_draft.md`
    §5's "RR extension evidence... OPEN" describes the harness's *capability* (`check_gen3_witness`
