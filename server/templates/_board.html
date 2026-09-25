@@ -119,6 +119,7 @@
     {% if p.identity_error %}<div class="identity-warn">&#9888; {{ p.identity_error }}</div>{% endif %}
     {% if p.awaiting_save %}<div class="identity-warn">&#9888; Player {{ pid | upper }}: a burial is awaiting an in-game SAVE.</div>{% endif %}
     {% set stalled = (status.faint_repair_stalled or {}).get(pid) %}{% if stalled %}<div class="identity-warn">&#9888; Player {{ pid | upper }}: {{ stalled | length }} linked faint(s) never landed in game and the server stopped retrying &mdash; check that game.</div>{% endif %}
+    {% set ambiguous = (status.ambiguous_keys or {}).get(pid, {}) %}{% for key, latch in ambiguous.items() %}<div class="identity-warn">&#9888; Player {{ pid | upper }}: key {{ key }} is ambiguous; events naming it are paused (refused: {{ latch.refused or 0 }}). Check the cartridge, then POST /api/debug/resolve_ambiguous_key {"player": "{{ pid }}", "key": "{{ key }}"}.</div>{% endfor %}
     {% if p.admission != 'admitted' %}<div class="identity-warn">&#9888; Player {{ pid | upper }} not admitted: {{ p.admission_reason }}</div>{% endif %}
   {% endfor %}
 

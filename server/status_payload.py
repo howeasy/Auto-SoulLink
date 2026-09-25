@@ -81,6 +81,7 @@ def empty_status_payload() -> dict:
         "bonus_keys": {"a": [], "b": []},
         "pending_bonus": {"a": [], "b": []},
         "faint_repair_stalled": {"a": [], "b": []},
+        "ambiguous_keys": {"a": {}, "b": {}},
         "trade_problem": None,
         "trade_held": [],
         "trade_last": None,

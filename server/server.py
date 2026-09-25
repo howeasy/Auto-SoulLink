@@ -2627,6 +2627,11 @@ class SLinkServer:
                 pid: sorted(s.faint_repair_stalled.get(pid, {}))
                 for pid in ["a", "b"]
             },
+            # KEY-SCOPE-3: keys whose events are refused until an admin resolves the clash.
+            "ambiguous_keys": {
+                pid: dict(s.ambiguous_keys.get(pid, {}))
+                for pid in ["a", "b"]
+            },
             # An uncertain / conflicted native trade awaiting party evidence or a human (None = none).
             "trade_problem": s.trade_problem(),
             "trade_held": s.trade_held(),
