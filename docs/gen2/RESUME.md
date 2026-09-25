@@ -494,3 +494,12 @@ Update (~02:55Z): the Gen 1 gate (log Temp/gen1-verify.log) is still running.
 - unit FAILED on 10 stale post-sweep test assumptions. 9 are fixed in dd783f2e (shipped engine_sites proves the same sites; the inspect_run attestation is a gate receipt). The 10th is still unidentified: re-run tests/unit AFTER the gate, never alongside it.
 - There are also 2 unexplained skips in tests/unit/test_upr_gen1_ini.py: "fork source not present", and "the .cache/purergb-overlay/pokered.gbc ROM is not the admitted build". That's an environment question.
 - duo-pairs FAILED: Gen 1 pc_ops_new, "durable pair did not stay ALIVE ... cause release". GEN1-PCOPS (a05ac76dc6fa18aec) is diagnosing it. Suspects: O-35 release-kills-partner, BOX-MEMORIAL-2 and a4f8e6d6. No live runs until the gate ends.
+
+Update (~03:40Z): the Gen 1 gate finished. 15 lanes PASS; unit, duo-pairs and duo-pairs-purergb FAIL.
+- duo-pairs and duo-pairs-purergb: Gen 1 pc_ops_new expected the pre-O-35 behaviour. Harness fix c8a5378c (GEN1-PCOPS): production correctly kills the partner on release.
+- unit: 9 of the stale post-sweep assumptions are fixed (dd783f2e); the 10th is still to be identified.
+- 2 unexplained skips in tests/unit/test_upr_gen1_ini.py:
+  (a) .cache/purergb-overlay held the BASE ROMs. FIXED: the committed UPS was applied, sha1-verified against data/purergb/overlay_provenance.json (c7ee0bd9/134aed7f/df651ddc), and written there.
+  (b) "fork source not present": .cache/slink-upr has only jars. The UPR fork source checkout isn't on this machine (g1rc doesn't have it either). This is an OWNER/environment item; don't weaken ALLOWED_SKIPS.
+- Re-running now, in sequence: duo-pairs, duo-pairs-purergb, unit (log Temp/gen1-verify2.log).
+- The Gen 1 gate rewrote 4 Gen 1 sfx-gate receipts in the working tree: commit them after the re-runs.
