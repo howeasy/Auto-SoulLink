@@ -1111,7 +1111,12 @@ class RunManager:
                     continue
                 if st.st_size == 0:
                     continue
-                key = (st.st_size, st.st_mtime_ns)
+                # ponytail: size+mtime+ctime, not a re-hash. A cartridge swapped in place that
+                # keeps ALL THREE stamps still returns the cached sha1, so the picker would
+                # label it as the old ROM; ctime catches the replace-the-file case (the common
+                # one: a restore or a Drive sync writes a new file), mtime the ordinary
+                # overwrite. Re-hash every scan if a stale label ever actually bites.
+                key = (st.st_size, st.st_mtime_ns, st.st_ctime_ns)
                 hit = _ROM_INFO_CACHE.get(path)
                 if hit and hit[0] == key:
                     info = hit[1]
