@@ -846,12 +846,14 @@ class RunManager:
         and where to start looking for the jar."""
         if run is not None and run.get("game") not in new_run_form()["gen1_games"]:
             return None
-        from server.upr_pipeline import find_upr_jar, jar_is_fork
+        from server.upr_pipeline import find_upr_jar, jar_is_fork, jar_is_trusted
         from server.upr_settings import option_form
         jar = find_upr_jar() or ""
         return {
             "options": option_form(),
             "jar": jar,
+            # only a jar whose sha256 is in data/upr_jars.json is ever run (upr_pipeline)
+            "jar_trusted": bool(jar) and jar_is_trusted(jar),
             # The pure family randomizes only on the SLink fork jar (upr_pipeline); the
             # page says which jar it found so a greyed pure ROM is explained.
             "jar_fork": bool(jar) and jar_is_fork(jar),
@@ -1301,8 +1303,10 @@ class RunManager:
         """POST /api/roms (multipart `file`) — a ROM chosen with the browser's own file
         dialog lands in <repo>/roms/ (a jar lands as <repo>/PokeRandoZX.jar, where
         find_upr_jar looks first) and the answer describes it like handle_roms would. A
-        same-named file that differs is kept: the upload gets a numbered name."""
-        from server.upr_pipeline import _sha1, describe_rom, jar_is_fork
+        same-named file that differs is kept: the upload gets a numbered name. A jar whose
+        sha256 is not in data/upr_jars.json is refused and never lands: dropped where
+        find_upr_jar looks first, it would shadow the pinned fork."""
+        from server.upr_pipeline import _sha1, describe_rom, jar_is_fork, trusted_jars
         if request.content_type != "multipart/form-data":
             return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
         reader = await request.multipart()
@@ -1320,7 +1324,7 @@ class RunManager:
             dest_dir = ROM_UPLOAD_DIR
         os.makedirs(dest_dir, exist_ok=True)
         tmp = os.path.join(dest_dir, f".upload-{os.getpid()}.part")
-        size, h = 0, hashlib.sha1()
+        size, h, h256 = 0, hashlib.sha1(), hashlib.sha256()
         try:
             with open(tmp, "wb") as f:
                 while chunk := await field.read_chunk(1 << 20):
@@ -1328,7 +1332,13 @@ class RunManager:
                     if size > UPLOAD_MAX:
                         raise web.HTTPRequestEntityTooLarge(max_size=UPLOAD_MAX, actual_size=size)
                     h.update(chunk)
+                    h256.update(chunk)
                     f.write(chunk)
+            if ext == ".jar" and h256.hexdigest() not in trusted_jars():
+                return web.json_response({"ok": False, "error": (
+                    f"unknown randomizer build (sha256 {h256.hexdigest()}): only the SLink UPR "
+                    f"jars in data/upr_jars.json are accepted. Build the fork with "
+                    f"`python tools/build_upr_fork.py --pin`.")}, status=400)
             stem, n = os.path.splitext(name)[0], 1
             dest = os.path.join(dest_dir, name)
             while os.path.exists(dest) and _sha1(dest) != h.hexdigest():
@@ -1339,7 +1349,8 @@ class RunManager:
             if os.path.exists(tmp):
                 os.remove(tmp)
         if ext == ".jar":
-            return web.json_response({"ok": True, "path": dest, "kind": "jar", "jar_fork": jar_is_fork(dest)})
+            return web.json_response({"ok": True, "path": dest, "kind": "jar", "jar_trusted": True,
+                                      "jar_fork": jar_is_fork(dest)})
         return web.json_response({"ok": True, "path": dest, "kind": "rom",
                                   "rom": {"name": os.path.basename(dest), **describe_rom(dest, True)}})
 
