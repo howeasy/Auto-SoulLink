@@ -181,7 +181,9 @@ class World:
         self.bus[self.ram["wJoyIgnore"]] = 0
         self.bus[self.ram["wFontLoaded"]] = 0
 
-    def in_battle(self, opponent, species, level, active_slot=0):
+    def in_battle(self, opponent, species, level, active_slot=0, *,
+                  max_hp=None, moves=(0, 0, 0, 0), status=0, dvs_raw=0, pp=(0, 0, 0, 0),
+                  party_pos=None):
         r = self.ram
         self.bus[r["wIsInBattle"]] = 1 if opponent < 200 else 2
         self.bus[r["wCurOpponent"]] = opponent
@@ -194,6 +196,17 @@ class World:
         p = self.party()[active_slot]
         self.bus[r["wBattleMonSpecies"]] = p["species"]
         self.bus[r["wBattleMonHP"]], self.bus[r["wBattleMonHP"] + 1] = p["hp"] >> 8, p["hp"] & 0xFF
+        # wEnemyMon battle struct (macros/ram.asm:39-59), offsets from wEnemyMon == wEnemyMonSpecies:
+        # +4 status, +8..11 moves, +12..13 DVs, +15..16 maxHP, +25..28 PP. Task 6 (Gen 1 enemy data).
+        base = r["wEnemyMon"]
+        self.bus[r["wEnemyMonStatus"]] = status
+        self.bus[base + 8:base + 12] = bytes(moves)
+        self.bus[base + 12], self.bus[base + 13] = (dvs_raw >> 8) & 0xFF, dvs_raw & 0xFF
+        if max_hp is not None:
+            self.bus[base + 15], self.bus[base + 16] = (max_hp >> 8) & 0xFF, max_hp & 0xFF
+        self.bus[base + 25:base + 29] = bytes(pp)
+        if party_pos is not None:
+            self.bus[r["wEnemyMonPartyPos"]] = party_pos
 
     # -- driving --------------------------------------------------------------------------
     def fire(self, kind):
@@ -415,6 +428,36 @@ def test_trainer_battle_start_is_sent_once_with_the_200_form_id(world):
     world.step(30)
     tick = world.events("tick")[-1]
     assert tick["in_battle"] is True and tick["is_trainer_battle"] is True and tick["trainer_id"] == 0xE1
+    world.assert_all_conform()
+
+
+def test_enemy_party_decodes_the_live_battle_struct_and_only_blobs_in_trainer_battles(world):
+    # HANDOFF task 6: maxHP/moves/status/DVs/PP come off the live 29-byte wEnemyMon struct
+    # in ANY battle (wild included); blob_hex -- the 44-byte party record stat exp lives in
+    # -- only exists for a trainer's roster, so it is gated on is_trainer.
+    world.connect()
+    r, d = world.ram, world.d
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, max_hp=64, moves=(1, 2, 3, 0),
+                     status=0x08, dvs_raw=0xABCD, pp=(12, 20, 5, 0))  # wild Rattata
+    world.fire("wild_begin")
+    world.step(30)
+    foe = world.events("tick")[-1]["enemy_party"][0]
+    assert foe["maxHP"] == 64 and foe["moves"] == [1, 2, 3, 0] and foe["status_cond"] == 0x08
+    assert foe["dvs_raw"] == 0xABCD and foe["pp"] == [12, 20, 5, 0]
+    assert "blob_hex" not in foe, "wild battles have no party record to read stat exp from"
+    world.bus[r["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step(2)
+
+    world.in_battle(opponent=0xE1, species=0xB0, level=5, max_hp=40, moves=(4, 0, 0, 0),
+                     dvs_raw=0x1234, pp=(8, 0, 0, 0), party_pos=0)  # RIVAL1 = class 225
+    record = bytes((i * 7) % 256 for i in range(d["party_struct_size"]))
+    world.bus[r["wEnemyMons"]:r["wEnemyMons"] + d["party_struct_size"]] = record
+    world.fire("battle_begin")
+    world.step(30)
+    foe = world.events("tick")[-1]["enemy_party"][0]
+    assert foe["maxHP"] == 40 and foe["dvs_raw"] == 0x1234
+    assert foe["blob_hex"] == record.hex().upper()
     world.assert_all_conform()
 
 
