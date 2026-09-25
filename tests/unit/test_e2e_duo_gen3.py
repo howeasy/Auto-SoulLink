@@ -2371,9 +2371,11 @@ emu = { frameadvance = function()                           -- one frame: ReadKe
         local move = M.moves[M.cursor + 1]
         M.used[#M.used + 1] = move
         M.ctrl = 0
-        if POWER[move] > 0 then M.over = true              -- the foe goes down first
+        M.pp[M.cursor + 1] = M.pp[M.cursor + 1] - 1
+        if POWER[move] > 0 then M.foe_hp = M.foe_hp - POWER[move] end
+        if POWER[move] > 0 and M.foe_hp <= 0 then
+            M.over = true                                  -- the foe goes down first: no counter
         else
-            M.pp[M.cursor + 1] = M.pp[M.cursor + 1] - 1
             if M.foe_hits then M.lead_hp = math.max(0, M.lead_hp - 9) end
             M.after = { n = 41, to = ACT }
         end
@@ -2391,7 +2393,8 @@ end }
 G = { spent = 0, budget = 1e9, shot = function() end,
       finish = function(_, why) error("G.finish: " .. tostring(why), 0) end }
 function G.advance() emu.frameadvance() end
-play = { in_battle = function() return not M.over end, at = function() return "here" end }
+play = { in_battle = function() return not M.over end, at = function() return "here" end,
+         wait_scene_settled = function() end }
 function action_menu_up() return M.ctrl == ACT end
 function party_menu_up() return false end
 function action_cursor() return 0 end
@@ -2399,8 +2402,8 @@ ACTION_FIGHT = 0
 log, fmt, cp = function(s) LOGS[#LOGS + 1] = s end, string.format, {}
 ctx = { find = function() return { hp = M.lead_hp } end, hp0 = function() return nil end }
 function ctx.run_away() M.ctrl = 0; M.escaped = (M.escaped or 0) + 1; return true end
-function ctx.hunt()                          -- a fresh foe that does attack
-    M.hunts, M.foe_hits = M.hunts + 1, true
+function ctx.hunt()                          -- a fresh foe that does attack, full HP, back in battle
+    M.hunts, M.foe_hits, M.foe_hp, M.over = M.hunts + 1, true, 100, false
     M.after = { n = 40, to = S.HandleInputChooseAction | 1 }
     return true
 end
@@ -2431,7 +2434,7 @@ def battle_model():
                                "local function press(btn, gap) return game_press(btn, joypad.set, G.advance,"
                                " function() return memory.read_u16_le(GMAIN + 0x2C) end, gap, 30) end",
                                _lua_defs(DRIVER, ["steer", "ctx.choose_action", "ctx.status_move_slot",
-                                                  "ctx.use_move", "ctx.lose_active"]),
+                                                  "any_move_slot", "ctx.use_move", "ctx.lose_active"]),
                                "GAME_PRESS = game_press",
                                "function LOSE() local ok, why = ctx.lose_active('K0', 'test')"
                                " return ok, tostring(why) end"]))
@@ -2515,6 +2518,40 @@ def test_lose_active_refuses_a_lead_without_a_no_damage_move(battle_model):
     ok, why = lua.globals().LOSE()
     assert ok is False and "no no-damage move" in why, why
     assert len(lua.globals().M.used) == 0, "never pressed a damaging move"
+
+
+def test_lose_active_falls_back_to_a_damaging_move_once_status_pp_is_spent(battle_model):
+    """G5-RR-CLEAN, live RR clean_gen3 at 870e5e5d: Leer's 30 PP spent at turn 31 (lead hp 1, the
+    foe still up), so status_move_slot goes permanently nil. Model: Tail Whip's PP is almost gone
+    (2), the foe hits for 9/turn, and the foe has plenty of HP left (100) so Tackle (the weakest
+    damaging move with PP, slot 0) never risks a win -- it must only buy the lead its natural
+    faint, never the "no no-damage move with PP" refusal."""
+    lua = battle_model
+    lua.execute("M.pp[2] = 2; M.foe_hp = 100")
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is True, (why, logs)
+    assert list(m.used.values()) == [39, 39, 33], (m.used, logs)
+    assert any(line.startswith("LOSE_FALLBACK K0 turn=3 slot=0") for line in logs), logs
+    assert m.lead_hp == 0 and m.hunts == 0
+
+
+def test_lose_active_rehunts_when_the_fallback_wins_the_battle(battle_model):
+    """The fallback of the test above can also defeat a weak foe outright before the lead faints
+    (live RR clean_gen3: a fresh wild encounter may be far weaker than the one that emptied the
+    status move's PP). That is a bad matchup, not a failure: re-hunt, same as the STALL_TURNS
+    path, and keep using the fallback on the fresh foe until the lead naturally faints."""
+    lua = battle_model
+    lua.execute("M.pp[2] = 1; M.foe_hp = 30")               # Tackle's 40 "damage" KOs a 30-hp foe
+    lua.globals().start(40)
+    ok, why = lua.globals().LOSE()
+    m, logs = lua.globals().M, list(lua.globals().LOGS.values())
+    assert ok is True, (why, logs)
+    assert m.hunts == 1, "exactly one re-hunt, off the fallback's win"
+    assert any(line.startswith("LOSE_REHUNT_WIN K0 turn=") for line in logs), logs
+    assert m.lead_hp == 0
+    assert list(m.used.values())[:2] == [39, 33], "Tail Whip once, then the fallback wins the battle"
 
 
 # ── C4-6j: Codex review of 43b9ccb4 / ad9669b1 ──────────────────────────────────────────────

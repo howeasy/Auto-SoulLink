@@ -1179,6 +1179,22 @@ function ctx.status_move_slot()
     end
 end
 
+--- The first move of battler 0 with PP left, of ANY power: lose_active's once-only fallback,
+--- reached only once a no-damage move has genuinely been used (never as a workaround for a lead
+--- that never had one, or for a mispointed move table -- G5-RR-MOVEPICK's own negative control).
+--- Live RR clean_gen3 870e5e5d: Leer's 30 PP spent by turn 31 (lead hp 1, the foe still up), so
+--- status_move_slot goes permanently nil for the rest of the fight (PP does not regenerate mid-
+--- battle) though the lead still has Pound (slot 0, ahead of the draining Absorb in slot 2 --
+--- healing us would only fight lose_active's whole point).
+local function any_move_slot()
+    local base = S.gBattleMons                            -- battler 0
+    for slot = 0, 3 do
+        local move = memory.read_u16_le(base + 0x0C + slot * 2)
+        local pp = memory.read_u8(base + 0x24 + slot)
+        if move ~= 0 and pp > 0 then return slot end
+    end
+end
+
 --- FIGHT, then move `slot`.
 function ctx.use_move(slot)
     local ok, why = ctx.choose_action(ACTION_FIGHT)
@@ -1316,35 +1332,53 @@ function ctx.lose_active(key, label)
     -- PP". After STALL_TURNS turns with no HP lost, RUN and hunt a fresh foe (G5-RR-MOVEPICK).
     local STALL_TURNS = 6
     local function lead_hp() return memory.read_u16_le(S.gBattleMons + 0x28) end
-    local last_hp, stalled, hunts = nil, 0, 1
+    local last_hp, stalled, hunts, used_status = nil, 0, 1, false
     for turn_no = 1, 120 do
         if fainted() then return true end
         local turn = SP.verify_fight_cursor(cp, "incidental_battle")
         if turn ~= "fight" then
-            return fainted(), "battle left the action menu (" .. tostring(turn) .. ")"
-        end
-        -- Only now: gBattleMons is copied in at BattleIntroDrawTrainersOrMonsSprites (pret
-        -- battle_main.c:2576-2578), long after the encounter step the hunt returns on -- live FR
-        -- 324aea87 read it there and got nil. No damaging fallback: it can KO the foe first.
-        local hp = lead_hp()
-        stalled = (last_hp and hp >= last_hp) and stalled + 1 or 0
-        last_hp = hp
-        if stalled >= STALL_TURNS and hunts < 6 then
-            log(fmt("LOSE_REHUNT %s turn=%d hp=%d foe_hp=%d", key, turn_no, hp,
-                    memory.read_u16_le(S.gBattleMons + 0x58 + 0x28)))
-            local ran, rwhy = ctx.run_away(label .. " rehunt")
-            if not ran then return false, label .. ": re-hunt escape: " .. tostring(rwhy) end
-            if not ctx.hunt(label .. " rehunt") then return false, label .. ": re-hunt found no encounter" end
-            hunts, stalled, last_hp = hunts + 1, 0, nil
-        else
-            local slot = ctx.status_move_slot()
-            if turn_no == 1 then log(fmt("LOSE %s status_move_slot=%s", key, tostring(slot))) end
-            if not slot then
-                return false, fmt("%s: battler 0 has no no-damage move with PP (turn %d, hp %d, hunts %d)",
-                                  label, turn_no, hp, hunts)
+            -- A no-damage move's PP is finite: once it is genuinely spent (used_status), the
+            -- fallback below can defeat the foe instead of our own mon fainting (live RR
+            -- clean_gen3 870e5e5d). That is a bad matchup, not a failure -- hunt a fresh foe,
+            -- same budget as the stall rehunt below.
+            if turn == nil and used_status and hunts < 6 then
+                log(fmt("LOSE_REHUNT_WIN %s turn=%d hunts=%d", key, turn_no, hunts))
+                play.wait_scene_settled(cp, 1800)
+                if not ctx.hunt(label .. " rehunt") then return false, label .. ": re-hunt found no encounter" end
+                hunts, stalled, last_hp = hunts + 1, 0, nil
+            else
+                return fainted(), "battle left the action menu (" .. tostring(turn) .. ")"
             end
-            local ok, why = ctx.use_move(slot)
-            if not ok then return false, label .. ": " .. why end
+        else
+            -- Only now: gBattleMons is copied in at BattleIntroDrawTrainersOrMonsSprites (pret
+            -- battle_main.c:2576-2578), long after the encounter step the hunt returns on -- live
+            -- FR 324aea87 read it there and got nil.
+            local hp = lead_hp()
+            stalled = (last_hp and hp >= last_hp) and stalled + 1 or 0
+            last_hp = hp
+            if stalled >= STALL_TURNS and hunts < 6 then
+                log(fmt("LOSE_REHUNT %s turn=%d hp=%d foe_hp=%d", key, turn_no, hp,
+                        memory.read_u16_le(S.gBattleMons + 0x58 + 0x28)))
+                local ran, rwhy = ctx.run_away(label .. " rehunt")
+                if not ran then return false, label .. ": re-hunt escape: " .. tostring(rwhy) end
+                if not ctx.hunt(label .. " rehunt") then return false, label .. ": re-hunt found no encounter" end
+                hunts, stalled, last_hp = hunts + 1, 0, nil
+            else
+                local slot = ctx.status_move_slot()
+                if turn_no == 1 then log(fmt("LOSE %s status_move_slot=%s", key, tostring(slot))) end
+                if slot then
+                    used_status = true
+                elseif used_status then
+                    slot = any_move_slot()                 -- the no-damage move's PP is spent
+                    if slot then log(fmt("LOSE_FALLBACK %s turn=%d slot=%d hp=%d", key, turn_no, slot, hp)) end
+                end
+                if not slot then
+                    return false, fmt("%s: battler 0 has no no-damage move with PP (turn %d, hp %d, hunts %d)",
+                                      label, turn_no, hp, hunts)
+                end
+                local ok, why = ctx.use_move(slot)
+                if not ok then return false, label .. ": " .. why end
+            end
         end
     end
     return false, label .. ": still standing after 120 turns"
