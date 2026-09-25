@@ -6,11 +6,53 @@ provenance must establish the same origin, including the port. Fetch Metadata
 alone is insufficient for the documented plain-HTTP LAN setup.
 """
 
+import ipaddress
+import os
+import socket
+from fnmatch import fnmatchcase
 from urllib.parse import urlsplit
 
 from aiohttp import web
 
 _SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+ALLOWED_HOSTS_ENV = "SLINK_ALLOWED_HOSTS"
+
+
+def allow_hosts(names) -> None:
+    """Add ``--allow-host`` names (globs like ``*.ts.net`` work) to the Host allow list.
+
+    They go into the environment so run servers the Manager spawns inherit them.
+    """
+    names = [n.strip().lower() for n in names or () if n and n.strip()]
+    if names:
+        current = os.environ.get(ALLOWED_HOSTS_ENV, "")
+        os.environ[ALLOWED_HOSTS_ENV] = ",".join(filter(None, [current, *names]))
+
+
+def _host_allowed(host: str) -> bool:
+    """Is a Host header one this LAN app answers to? Blocks DNS rebinding."""
+    try:
+        name = urlsplit(f"//{host}").hostname
+    except ValueError:
+        return False
+    if not name:
+        return False
+    name = name.rstrip(".")
+    if name == "localhost":
+        return True
+    try:
+        ip = ipaddress.ip_address(name)
+        if ip.is_loopback or ip.is_private or ip.is_link_local:
+            return True
+    except ValueError:
+        pass
+    # ponytail: first-label match ("mypc" == "mypc.lan"); an attacker would have to
+    # know the machine name to abuse it. Tighten to exact names if that ever matters.
+    if name.split(".")[0] == socket.gethostname().lower().split(".")[0]:
+        return True
+    allowed = os.environ.get(ALLOWED_HOSTS_ENV, "")
+    return any(fnmatchcase(name, pattern.strip().lower())
+               for pattern in allowed.split(",") if pattern.strip())
 
 
 def _origin(value: str, *, referer: bool = False) -> tuple[str, str, int] | None:
@@ -62,7 +104,18 @@ def _same_origin_request(request: web.Request) -> bool:
 
 @web.middleware
 async def csrf_protection(request: web.Request, handler):
-    """Reject cross-origin browser mutations before any handler side effects."""
+    """Reject cross-origin browser mutations before any handler side effects.
+
+    Every method also needs a known Host: under DNS rebinding a hostile page reads
+    GETs as same-origin, so the Host header is the only thing that tells.
+    """
+    host = request.headers.get("Host")
+    if host is not None and not _host_allowed(host):
+        return web.json_response(
+            {"ok": False, "error": "Unknown Host; start the server with --allow-host for this name"},
+            status=403,
+            headers={"Cache-Control": "no-store"},
+        )
     if request.method not in _SAFE_METHODS and not _same_origin_request(request):
         return web.json_response(
             {"ok": False, "error": "Cross-origin requests are not allowed"},
@@ -82,6 +135,8 @@ async def theme_cache(request: web.Request, handler):
     """
     response = await handler(request)
     if not response.prepared and response.content_type == "text/html":
+        # Anti-framing only; the app's own iframes (stream index) are same-origin.
+        response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'self'")
         cache = ", ".join(response.headers.getall("Cache-Control", []))
         if "no-cache" not in {token.strip().lower() for token in cache.split(",")}:
             response.headers["Cache-Control"] = f"{cache}, no-cache" if cache else "no-cache"

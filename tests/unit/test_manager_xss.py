@@ -11,10 +11,15 @@ The repo had no XSS coverage of any kind before this file.
 from __future__ import annotations
 
 import json
+import re
+from html.parser import HTMLParser
 
 import pytest
 
+from server import manager
 from server.manager import _json_for_script
+
+pytest_plugins = ["tests.unit.manager_harness"]
 
 PAYLOADS = [
     "</script><img src=x onerror=alert(1)>",
@@ -62,3 +67,43 @@ def test_the_template_still_marks_it_safe():
     assert "form_json | safe" in src, (
         "manager.html no longer injects form_json with | safe — _json_for_script's "
         "escaping may now be double-applied")
+
+
+# -- The run name inside the Archive/Delete @click handlers ---------------------------------
+# `{{ run.name | e }}` inside a JS string is HTML-decoded before Alpine evaluates it, so a
+# quote in the name closed the string. The name now arrives as a JSON literal.
+
+class _Clicks(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.clicks = []
+
+    def handle_starttag(self, tag, attrs):
+        for name, value in attrs:
+            if name == "@click" and value and value.startswith("act('") and "run '" in value:
+                self.clicks.append(value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("name", ["x');alert(1);//", 'a" onmouseover="alert(1)', "back\\slash </b>"])
+async def test_run_name_is_a_json_literal_in_the_action_buttons(manager_client, name):
+    manager._save_registry([{"run_id": "r1", "name": name, "created_at": "2026-09-24T12:00:00",
+                             "tcp_port": 54321, "http_port": 8081, "status": "stopped",
+                             "pid": None, "game": "gen1"}])
+    resp = await manager_client.get("/runs/r1")
+    assert resp.status == 200
+    assert resp.headers["Content-Security-Policy"] == "frame-ancestors 'self'"
+    parser = _Clicks()
+    parser.feed(await resp.text())
+    assert len(parser.clicks) == 2, parser.clicks          # Archive + Delete, attribute intact
+    for click in parser.clicks:
+        literal = re.fullmatch(r"act\('(archive|delete)', '\w+ run ' \+ (\".*\") \+ '[^']*'\)", click)
+        assert literal, click
+        assert json.loads(literal.group(2)) == name
+
+
+@pytest.mark.asyncio
+async def test_new_run_name_is_capped(manager_client):
+    resp = await manager_client.post("/api/runs/new", json={"name": "n" * 81})
+    assert resp.status == 400
+    assert "too long" in (await resp.json())["error"]

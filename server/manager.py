@@ -44,7 +44,7 @@ except ImportError:
 import aiohttp_jinja2
 
 from server import calc_files
-from server.http_safety import csrf_protection, theme_cache
+from server.http_safety import allow_hosts, csrf_protection, theme_cache
 from server.json_files import atomic_write_json
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
@@ -906,6 +906,8 @@ class RunManager:
         name = str(body.get("name", "")).strip()
         if not name:
             return web.json_response({"ok": False, "error": "name is required"}, status=400)
+        if len(name) > 80:
+            return web.json_response({"ok": False, "error": "name is too long (80 characters max)"}, status=400)
 
         runs = _load_registry()
         run_id = "run_" + datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
@@ -1826,7 +1828,11 @@ if __name__ == "__main__":
                         help=f"Manager HTTP port (default: {MANAGER_HTTP_PORT})")
     parser.add_argument("--data-dir", default=None,
                         help="Where runs live (default: data/runs). A fresh directory is a fresh Manager")
+    parser.add_argument("--allow-host", action="append", default=[], metavar="NAME",
+                        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.ts.net' "
+                             "(repeatable; also SLINK_ALLOWED_HOSTS, comma-separated). Runs inherit it")
     args = parser.parse_args()
+    allow_hosts(args.allow_host)
     if args.data_dir:
         MANAGER_DIR = os.path.abspath(args.data_dir)
         REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")

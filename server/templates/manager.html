@@ -153,8 +153,8 @@
             <span class="mk-cap">Load the {% if run.cartridges or run.randomizer %}cartridge{% else %}save{% endif %} first, then the script. It connects to <code class="num">tcp {{ run.tcp_port }}</code>.</span>
           </div>
         </span>
-        {% if run.status != 'archived' %}<button class="mk-btn" :disabled="busy" @click="act('archive', 'Archive run {{ run.name | e }}? The server stops; the data is kept.')">Archive</button>{% endif %}
-        <button class="mk-btn danger" :disabled="busy" @click="act('delete', 'Delete run {{ run.name | e }}? This permanently deletes all run data.')">Delete</button>
+        {% if run.status != 'archived' %}<button class="mk-btn" :disabled="busy" @click="act('archive', 'Archive run ' + {{ run.name | tojson | forceescape }} + '? The server stops; the data is kept.')">Archive</button>{% endif %}
+        <button class="mk-btn danger" :disabled="busy" @click="act('delete', 'Delete run ' + {{ run.name | tojson | forceescape }} + '? This permanently deletes all run data.')">Delete</button>
       </header>
 
       <div class="mk-page">

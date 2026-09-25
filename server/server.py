@@ -32,7 +32,7 @@ from collections import deque
 from datetime import datetime
 
 from server import calc_files
-from server.http_safety import csrf_protection, theme_cache
+from server.http_safety import allow_hosts, csrf_protection, theme_cache
 from server.lua_literals import lua_comment, lua_string
 from server.overlay_catalog import build_index_context as _build_stream_index_context
 from server.ui_capabilities import ui_capabilities
@@ -3403,12 +3403,17 @@ class SLinkServer:
         }
         for pid in ("a", "b"):
             conn_in = body.get("connections", {}).get(pid, {})
-            existing_pw = self.obs._config.get("connections", {}).get(pid, {}).get("password", "")
+            existing = self.obs._config.get("connections", {}).get(pid, {})
+            host = str(conn_in.get("host", ""))
+            port = int(conn_in.get("port", 4455))
+            # Empty password = keep the saved one, but only for the same host:port;
+            # otherwise a page could relay the saved password to a host of its choosing.
+            same_target = (host == str(existing.get("host", ""))
+                           and port == int(existing.get("port", 4455)))
             new_cfg["connections"][pid] = {
-                "host": str(conn_in.get("host", "")),
-                "port": int(conn_in.get("port", 4455)),
-                # Empty password = keep existing; non-empty = update
-                "password": conn_in.get("password") or existing_pw,
+                "host": host,
+                "port": port,
+                "password": conn_in.get("password") or (existing.get("password", "") if same_target else ""),
             }
         # Ensure each trigger has an id
         import uuid as _uuid
@@ -4907,7 +4912,10 @@ if __name__ == "__main__":
         help="Disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
+    parser.add_argument("--allow-host",   action="append", default=[], metavar="NAME",
+        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
     args = parser.parse_args()
+    allow_hosts(args.allow_host)
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,
                      run_name=args.run_name,
                      species_lock=args.species_lock, gender_lock=args.gender_lock,
