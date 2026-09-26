@@ -84,6 +84,7 @@ class World:
             send=lambda line: self.sent.append(json.loads(str(line))),
             receive=lambda: self.replies.pop(0) if self.replies else None,
         )
+        self.io, self.net = io, net
         hud = L.table(
             show=lambda *a: self.hud.append(("show",) + tuple(str(x) if isinstance(x, str) else x for x in a)),
             prompt=lambda *a: self.hud.append(("prompt",) + tuple(str(x) if isinstance(x, str) else x for x in a)),
@@ -702,15 +703,39 @@ def test_a_landed_bench_write_switched_in_is_settled_by_the_active_path(world):
     assert len(world.client.pending_battle_writes) == 0
 
 
-@pytest.mark.parametrize("setup", ["special", "link"])
-def test_bench_write_in_a_special_or_link_battle_still_waits_for_the_checkpoint(world, setup):
+@pytest.mark.parametrize("battle_type,slot,cmd", [(1, 0, "force_faint"), (1, 1, "force_faint"),
+                                                  (2, 0, "force_faint"), (2, 1, "force_explode")])
+def test_special_battle_bench_death_lands_in_battle(world, battle_type, slot, cmd):
+    """O-30 (owner: every faint lands in battle, link excepted). The old man tutorial (1) and a
+    Safari battle (2) never send a player mon out: StartBattle takes .displaySafariZoneBattleMenu
+    for any wBattleType != 0 and loops back to .checkAnyPartyAlive, never MainInBattleLoop
+    (pokered core.asm:164-207). So the loop head never fires and EVERY party mon is bench,
+    slot 0 included (wPlayerMonNumber is only InitBattleVariables' zero, init_battle_variables.asm:16).
+    The write must land on receipt; the checkpoint only re-zeroes it quietly."""
     world.connect()
     world.step(60)
     world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
-    if setup == "special":
-        world.bus[world.ram["wBattleType"]] = 1  # BATTLE_TYPE_OLD_MAN
-    else:
-        world.bus[world.ram["wLinkState"]] = 4  # LINK_STATE_BATTLING
+    world.bus[world.ram["wBattleType"]] = battle_type
+    world.fire("wild_begin")
+    world.step()
+    key = codec.key(world.party()[slot])
+    world.reply({"cmd": cmd, "key": key})
+    world.step()
+    assert world.party()[slot]["hp"] == 0, "lands in battle, on receipt"
+    assert len(_kod(world)) == 1
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.overworld_safe()
+    world.step(2)
+    assert world.party()[slot]["hp"] == 0 and len(_kod(world)) == 1, "quiet backstop, no second banner"
+
+
+def test_bench_write_in_a_link_battle_still_waits_for_the_checkpoint(world):
+    """O-30's one exception: a link battle would desync the other Game Boy."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.bus[world.ram["wLinkState"]] = 4  # LINK_STATE_BATTLING
     world.fire("wild_begin")
     world.step()
     key = codec.key(world.party()[1])
@@ -744,6 +769,45 @@ def test_a_battle_write_that_never_landed_is_applied_after_the_battle(world):
     world.step(2)
     assert world.party()[0]["hp"] == 0
     assert len(world.client.pending_battle_writes) == 0
+
+
+@pytest.mark.parametrize("special", [False, True])
+def test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize(world, special):
+    """The server queues force_faint then memorialize for one key (state.py _propagate_faint).
+    In battle the faint is held in pending_battle_writes; the hand-over used to APPEND it behind
+    the memorialize, which buried the live mon first and then dropped the faint ("key not in
+    party"). Gen 3 684bbb7a, same shape. Two hand-over sites, one leg each:
+    - plain: the ACTIVE battler, the battle ends before a loop head -> the battle_end flush;
+    - special: a BENCH mon in a special battle (wBattleType 2) -> the loop-head fallback, which
+      is the only path for it (the active-battler guard refuses a special battle and keeps the
+      entry, so an active target would still hand over at battle_end -- review O14 F1)."""
+    world.connect()
+    world.step(60)
+    world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+    world.fire("wild_begin")
+    world.step()
+    slot = 1 if special else 0
+    key = codec.key(world.party()[slot])
+    world.reply({"cmd": "force_faint", "key": key}, {"cmd": "memorialize", "key": key})
+    world.step()
+
+    def queued():
+        return [str(world.client.deferred[i]["cmd"]) for i in range(1, len(world.client.deferred) + 1)]
+
+    if special:
+        world.bus[world.ram["wBattleType"]] = 2
+        world.fire("battle_loop_head")
+        assert queued() == ["force_faint", "memorialize"], "loop-head fallback: " + str(queued())
+    world.bus[world.ram["wIsInBattle"]] = 0
+    world.fire("battle_end")
+    world.step()                                # the battle_end signal is handled on the frame
+    assert queued() == ["force_faint", "memorialize"], queued()
+    world.overworld_safe()
+    world.step()                                # one command per frame: the faint lands first
+    assert world.party()[slot]["hp"] == 0 and codec.key(world.party()[slot]) == key,         "the faint must land on the live mon before the memorialize moves it"
+    world.step(3)
+    assert not any("force_faint dropped" in line or "failed" in line for line in world.logs), world.logs
+    assert len(world.events("memorialize_done")) == 1
 
 
 def test_hello_waits_for_the_overworld_checkpoint_not_the_main_menu(world):
@@ -996,6 +1060,30 @@ def test_partner_prompt_and_apply_drive_the_lease_and_report_the_received_mon(wo
     w.assert_all_conform()
 
 
+@pytest.mark.parametrize("result", [1, 3])
+def test_partner_prompt_decline_or_refused_save_is_a_clean_refusal(world, result):
+    """Review 1b33bc31 BLOCKER-2 (Gen 1): a NO to the trade, a NO to the forced save
+    (trade_prompt.asm, both DONE result 1) or an unavailable prompt (3) answers choice 0,
+    releases the lease and leaves no trade state to apply or declare uncertain."""
+    w = _patched_world()
+    rng = random.Random(14)
+    blob = (codec.encode_party_mon(_mon(rng, 0xB1, level=7, nick="PIDGEY")) +
+            codec.encode_name("BLUE") + codec.encode_name("PIDGEY"))
+    base = w.ram["wSerialPartyMonsPatchList"]
+    w.reply({"cmd": "show_menu", "token": "t7", "text": "Trade?", "slot": 0, "blob_hex": blob.hex().upper()})
+    w.step()
+    gen = _overlay(w)[6]
+    w.bus[base + 5], w.bus[base + 8], w.bus[base + 7] = 7, result, gen  # game: DONE, refusal, ack
+    w.step()
+    mr = w.events("menu_result")[-1]
+    assert mr["token"] == "t7" and mr["choice"] == 0
+    assert _overlay(w)[5] == 8, "released after the refusal"
+    assert w.client.trade_state is None and len(w.client.trade_owed) == 0
+    w.step(3)
+    assert w.events("trade_done") == [] and len(w.events("menu_result")) == 1
+    w.assert_all_conform()
+
+
 def test_slink_trade_reports_trade_done_and_never_key_change(world):
     """S-5: a SLINK trade is neither an evolution nor an NPC trade, so it emits no `key_change`.
 
@@ -1106,7 +1194,7 @@ def _patch_panel(world, state=0, abi=3):
 
 
 def _tiles(text):
-    """panel.lua's _tile_for over a row padded/truncated to 20 (memory_gb.lua:1555-1568)."""
+    """panel.lua's _tile_for over a row padded/truncated to 20 (see lua/gen1/panel.lua's _tile_for)."""
     out = []
     for ch in text.ljust(20)[:20]:
         b = ord(ch)
@@ -2005,10 +2093,10 @@ def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(
     separates them is an engine fact rather than a frame count: at this hook nothing has been
     removed yet (site offset 0 on `RemovePokemon`, home/move_mon.asm:20-21), so the key is in the
     BOX either way -- but the withdraw's MoveMon has already installed it in the PARTY and the
-    release has not. The shared protocol has no
-    release event (tests/unit/protocol_schema.py) and `_handle_party_to_box` (state.py:2066-2112)
-    never retires a pair, so a `party_to_box` for a key that was never in the party would be a
-    lie: the client LOGS `RELEASE_SEEN key=<key> box=<index>` and sends nothing.
+    release has not. The shared protocol has a release event (tests/unit/protocol_schema.py) and
+    the server retires the linked pair on it, so a `party_to_box` for a key that was never in the
+    party would be a lie. The client LOGS `RELEASE_SEEN key=<key> box=<index>` and sends
+    `release{key}`; a WITHDRAW sends neither.
     """
     r = world.ram
     rng = random.Random(31)
@@ -2041,7 +2129,8 @@ def test_a_standalone_box_removal_logs_a_release_marker_and_a_withdraw_does_not(
     marks = [ln for ln in world.logs[nlog:] if "RELEASE_SEEN" in ln]
     assert len(marks) == 1, marks
     assert f"RELEASE_SEEN key={codec.key(released)} box=0" in marks[0], marks[0]
-    assert [m for m in world.sent[n:] if m["event"] in ("party_to_box", "box_to_party")] == [],         "no wire event: the pair keeps a phantom boxed half (shared-protocol gap, limits list)"
+    assert [(m["event"], m["key"]) for m in world.sent[n:] if m["event"] in ("party_to_box", "box_to_party", "release")] \
+        == [("release", codec.key(released))], "O-35: a PC release sends release{key}; the server kills the partner"
     world.assert_all_conform()
 def test_an_ambiguous_key_writes_nothing_on_either_lookup_path(world):
     """A8/D-13: the client has TWO key lookups -- `find_party_slot` takes the FIRST match
@@ -2716,6 +2805,95 @@ def test_a_trade_removal_is_suppressed_by_the_apply_state_across_the_whole_movie
     w.assert_all_conform()
 
 
+def _applying(w, token="t30"):
+    """An armed APPLY the cartridge has picked up; returns the armed frame."""
+    rng = random.Random(30)
+    incoming = _mon(rng, 0xB1, level=7, nick="PIDGEY")
+    blob = codec.encode_party_mon(incoming) + codec.encode_name("BLUE") + codec.encode_name("PIDGEY")
+    w.reply({"cmd": "apply_trade", "slot": 0, "blob_hex": blob.hex().upper(),
+             "old_key": codec.key(w.party()[0]), "token": token, "partner_name": "BLUE"})
+    w.step()
+    armed = _overlay(w)
+    assert armed[5] == 5, "apply armed"
+    _fire_trade_service(w)
+    return armed, incoming
+
+
+def _uncertain_done(w):
+    return [(d["token"], d.get("uncertain"), "new_key" in d) for d in w.events("trade_done")]
+
+
+def test_a_native_result_2_is_declared_uncertain_once_and_never_released():
+    """native_trade.asm .unreachableAppendFailure (D=2): the append may or may not have happened.
+    The side declares trade_done{token, uncertain} (no key claim) once; the lease is kept."""
+    w = _patched_world()
+    armed, _ = _applying(w)
+    base = w.ram["wSerialPartyMonsPatchList"]
+    done = bytearray(armed)
+    done[5], done[8], done[7] = 7, 2, done[6]
+    w.bus[base:base + 16] = bytes(done)
+    w.step(5)
+    assert _uncertain_done(w) == [("t30", True, False)]
+    assert [d.get("after_reset") for d in w.events("trade_done")] == [True], \
+        "MAJOR-5: the RAM party is no evidence; only the reloaded save (post-reset hello) is"
+    assert _overlay(w)[5] == 7, "result 2 is never released"
+    assert any("UNCERTAIN" in str(h) for h in w.hud)
+    w.assert_all_conform()
+
+
+def _reset_and_reload(w):
+    """home/init.asm zero-fills WRAM (wPlayerID 0) until CONTINUE reloads the same save."""
+    saved = bytes(w.bus)
+    r = w.ram
+    for a in range(r["wPartyCount"], r["wPartyCount"] + 8):
+        w.bus[a] = 0
+    w.bus[r["wPlayerID"]] = w.bus[r["wPlayerID"] + 1] = 0
+    w.step(90)
+    assert w.events("trade_done") == [], "nothing is declared before the post-reset hello"
+    w.bus[:] = saved
+    w.overworld_safe()
+    w.step(60)
+    assert len(w.events("hello")) == 2
+
+
+def test_a_reset_after_the_commit_boundary_is_declared_uncertain_after_the_new_hello():
+    """Mirror of Gen 2's SlinkTradeCommit latch (lua/gen2/client.lua trade_forget, ed7f87c6): the
+    apply's first mutation is its RemovePokemon (native_trade.asm:156-158, after every .refused
+    check). A reset after it may have saved the trade (SavePartyAndDexData) before DONE."""
+    w = _patched_world()
+    _applying(w)
+    w.bus[w.ram["wRemoveMonFromBox"]] = 0
+    w.bus[w.ram["wWhichPokemon"]] = 0
+    w.fire("remove_pokemon")
+    w.step()
+    _reset_and_reload(w)
+    assert _uncertain_done(w) == [("t30", True, False)]
+    names = [m["event"] for m in w.sent]
+    assert names.index("trade_done") > len(names) - 1 - names[::-1].index("hello"), "after the new hello"
+    w.step(5)
+    assert len(w.events("trade_done")) == 1
+    assert w.client.trade_state is None
+    assert any("UNCERTAIN" in str(h) for h in w.hud)
+    w.assert_all_conform()
+
+
+def test_a_reset_before_the_commit_boundary_reports_a_certain_nothing_changed():
+    """Before the RemovePokemon nothing was mutated or saved, so the reset lost nothing: review m2 --
+    say so after the new hello (a certain none) instead of leaving it to the 17-minute watchdog."""
+    w = _patched_world()
+    old_key = codec.key(w.party()[0])
+    _applying(w)
+    _reset_and_reload(w)
+    w.step(5)
+    assert [(d["token"], d["new_key"], d.get("uncertain")) for d in w.events("trade_done")] == [
+        ("t30", old_key, None)]
+    names = [m["event"] for m in w.sent]
+    assert names.index("trade_done") > len(names) - 1 - names[::-1].index("hello"), "after the new hello"
+    assert w.client.trade_state is None
+    assert not any("UNCERTAIN" in str(h) for h in w.hud)
+    w.assert_all_conform()
+
+
 def test_an_undecodable_snapshot_classifies_nothing_and_says_which_half_was_missing(world):
     """A removal is classified by what the snapshot HOLDS, so an absence only means something when
     both collections decoded. A party that does not decode (client.lua:473-476 returns nil for a
@@ -3315,3 +3493,295 @@ def test_a_battle_begin_with_no_opponent_stages_nothing(world):
     world.fire("battle_begin")
     world.step()
     assert world.client.battle is None and world.events("trainer_battle_start") == []
+
+
+def _hello_model_rom(title):
+    """Only pinned code/checkpoint slices, for MODEL scheduling controls, not a ROM receipt."""
+    image = bytearray(0x100000)
+    for site in SITES[title]["sites"].values():
+        for anchor in (site, site.get("prelude")):
+            if anchor:
+                raw = bytes.fromhex(anchor["expected_hex"])
+                start = anchor["rom_offset"]
+                image[start:start + len(raw)] = raw
+    checkpoint = WS[title]["write_safe"]
+    if "expected_hex" in checkpoint:
+        anchors = {checkpoint[key]: bytes.fromhex(value)
+                   for key, value in checkpoint["expected_hex"].items()}
+    else:
+        # SM83 JP/CALL and the vanilla DelayFrame loop; these only establish the
+        # injected checkpoint predicate for this scheduling model, not ROM evidence.
+        def transfer(opcode, target):
+            return bytes((opcode, target & 255, target >> 8))
+        low = checkpoint["vblank_flag"] & 255
+        anchors = {
+            checkpoint["irq_vector"]: transfer(0xC3, checkpoint["vblank_entry"]),
+            checkpoint["delay_frame"]: bytes((0x3E, 1, 0xE0, low, 0x76, 0xF0, low, 0xA7)),
+            checkpoint["overworld_loop"]: transfer(0xCD, checkpoint["delay_frame"]),
+            checkpoint["overworld_loop_less_delay"]: transfer(0xCD, checkpoint["delay_frame"]),
+        }
+    for start, raw in anchors.items():
+        image[start:start + len(raw)] = raw
+    return bytes(image)
+
+
+def _hello_model_world(monkeypatch):
+    monkeypatch.setitem(globals(), "_rom", _hello_model_rom)
+    world = World("red")
+    world.seed_party([_mon(random.Random(81), 0x99, nick="BULBA")])
+    world.set_map(0x0C)
+    return world
+
+
+def test_model_hello_refuses_failed_queue_then_retries_through_actual_entry(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    send = world.net.send
+    world.net.send = lambda _line: False
+    world.connect()
+    assert world.events("hello") == []
+    assert world.client.hello_sent is False
+    world.net.send = send
+    world.step()
+    assert len(world.events("hello")) == 1 and world.client.hello_sent is True
+
+
+def test_model_hello_identity_change_rehellos_and_clears_old_identity_aliases(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    world.connect()
+    world.client.retired_alias.old = world.lua.table()
+    world.client.key_alias = world.lua.table()
+    world.bus[world.ram["wPlayerID"]:world.ram["wPlayerID"] + 2] = b"\x43\x21"
+    world.step()
+    assert [packet["ot_id"] for packet in world.events("hello")] == [0x1234, 0x4321]
+    assert len(world.client.retired_alias) == 0 and world.client.key_alias is None
+
+
+def test_model_hello_missing_required_save_version_stays_held(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    world.parts.profile.derived.game_internal_version = 7
+    world.connect()
+    assert world.events("hello") == [] and world.client.hello_sent is False
+
+
+def test_model_hello_late_unreadable_party_does_not_send_an_empty_snapshot(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    original = world._read_u8
+    count_reads = 0
+
+    def read(address, domain=None):
+        nonlocal count_reads
+        if int(address) == world.ram["wPartyCount"] and domain != "ROM":
+            count_reads += 1
+            if count_reads == 2:
+                return 255
+        return original(address, domain)
+
+    monkeypatch.setattr(world, "_read_u8", read)
+    world.io.read_u8 = read
+    world.connect()
+    assert world.events("hello") == [] and world.client.hello_sent is False
+    world.step()
+    assert len(world.events("hello")) == 1
+
+
+def test_model_hello_changed_identity_during_payload_build_is_not_queued(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    original = world._read_u8
+    changed = False
+
+    def read(address, domain=None):
+        nonlocal changed
+        result = original(address, domain)
+        if not changed and int(address) == world.ram["wPlayerName"] and domain != "ROM":
+            changed = True
+            world.bus[world.ram["wPlayerID"]:world.ram["wPlayerID"] + 2] = b"\x43\x21"
+        return result
+
+    monkeypatch.setattr(world, "_read_u8", read)
+    world.io.read_u8 = read
+    world.connect()
+    assert world.events("hello") == [] and world.client.hello_sent is False
+    world.step()
+    assert [packet["ot_id"] for packet in world.events("hello")] == [0x4321]
+
+
+def test_model_hello_menu_hold_reconnect_battle_and_reset_remain_supported(monkeypatch):
+    world = _hello_model_world(monkeypatch)
+    world.regs["PC"] = 0x1234
+    world.connect()
+    assert world.events("hello") == []
+    world.overworld_safe()
+    world.step()
+    assert len(world.events("hello")) == 1
+    world.in_battle(opponent=0xA5, species=0xA5, level=3)
+    world.regs["PC"] = 0x1234
+    world.connected = False
+    world.step()
+    world.connected = True
+    world.step()
+    assert len(world.events("hello")) == 2
+    assert world.events("hello")[-1]["in_battle"] is True
+    world.client.hello_session.invalidate(world.client.hello_session, "save_reset")
+    world.step()
+    assert len(world.events("hello")) == 3
+
+
+def test_a_deferred_backing_withdraw_settles_only_after_the_save_witness(world):
+    """gen1-box-durability (mirror of gen2 699930b6): party_mon asks boxes.lua to defer a non-current
+    box removal; the client acks at once and re-runs party_mon (the replay = the settle) only at the
+    first checkpoint after save_witness."""
+    calls = []
+
+    def withdraw(_self, key, stats=None, base=None, nickname=None, opts=None):
+        calls.append((key, bool(opts and opts["defer_backing"])))
+        return (True, "backing removal deferred to the save witness") if len(calls) == 1 else True
+    world.client.boxes = world.lua.table_from({"withdraw": withdraw})
+    world.connect()
+    world.step(60)
+    world.overworld_safe()
+    world.reply({"cmd": "party_mon", "key": "ABCD:0001:99"})
+    world.step(2)
+    assert calls == [("ABCD:0001:99", True)]
+    assert [m["key"] for m in world.events("sync_retrieve_done")] == ["ABCD:0001:99"]
+    world.overworld_safe()
+    world.step(5)
+    assert len(calls) == 1                     # no settle before the native save
+    world.fire("save_witness")
+    world.overworld_safe()
+    world.step(2)
+    assert calls == [("ABCD:0001:99", True), ("ABCD:0001:99", False)]
+
+
+# ── MAJOR-1 (review e9d5e136): the prepare round ─────────────────────────────────────────────────
+
+def test_a_patched_cartridge_declares_and_answers_the_prepare_round():
+    w = _patched_world()
+    assert w.events("hello")[0].get("trade_prepare") is True
+    old_key = codec.key(w.party()[0])
+    w.reply({"cmd": "apply_prepare", "token": "t40", "slot": 0, "old_key": old_key},
+            {"cmd": "apply_prepare", "token": "t41", "slot": 0, "old_key": "0000:0000:01"})
+    w.step()
+    assert [(m["token"], m["ok"]) for m in w.events("apply_ready")] == [("t40", True), ("t41", False)]
+    assert _overlay(w)[5] != 5, "a prepare arms nothing"
+    w.assert_all_conform()
+
+
+def test_an_unpatched_cartridge_declares_no_prepare_round(world):
+    world.connect()
+    world.step(3)
+    assert world.events("hello")[0].get("trade_prepare") is False
+
+
+# ── MAJOR-4 (review e9d5e136): an armed APPLY is withdrawn on the server's word ──────────────────
+
+def test_a_withdrawn_unpicked_apply_restores_the_union_and_reports_nothing_changed():
+    """The Gen 1 service picks APPLY up on any overworld frame (SlinkForeground): an APPLY left armed
+    past the server's settle could commit after a rollback (review probe P3)."""
+    w = _patched_world()
+    base = w.ram["wSerialPartyMonsPatchList"]
+    preimage = _overlay(w)
+    old_key = codec.key(w.party()[0])
+    rng = random.Random(31)
+    incoming = _mon(rng, 0xB1, level=7, nick="PIDGEY")
+    blob = codec.encode_party_mon(incoming) + codec.encode_name("BLUE") + codec.encode_name("PIDGEY")
+    w.reply({"cmd": "apply_trade", "slot": 0, "blob_hex": blob.hex().upper(), "old_key": old_key,
+             "token": "t50", "partner_name": "BLUE"})
+    w.step()
+    assert _overlay(w)[5] == 5
+    w.reply({"cmd": "withdraw_trade", "token": "t50"})
+    w.step()
+    assert _overlay(w) == preimage, "the borrowed union is given back untouched"
+    assert [(d["token"], d["new_key"]) for d in w.events("trade_done")] == [("t50", old_key)]
+    assert w.client.trade_state is None
+    w.assert_all_conform()
+
+
+def test_a_withdraw_past_the_commit_boundary_declares_uncertain():
+    w = _patched_world()
+    _applying(w, token="t51")
+    w.bus[w.ram["wRemoveMonFromBox"]] = 0
+    w.bus[w.ram["wWhichPokemon"]] = 0
+    w.fire("remove_pokemon")
+    w.step()
+    w.reply({"cmd": "withdraw_trade", "token": "t51"})
+    w.step(2)
+    assert _uncertain_done(w) == [("t51", True, False)]
+
+
+def test_a_complete_box_scan_is_stamped_with_a_generation(world):
+    """KEY-SCOPE-5: `pc_boxes` is a complete census only with `pc_boxes_generation`, bumped after
+    each successful full rescan and never on a failed one (the server fails a key_change closed
+    on a missing or stale census)."""
+    def reconnect():
+        world.connected = False
+        world.step(5)
+        world.connected = True
+        world.step(1)
+        return world.events("hello")[-1]
+
+    world.connect()
+    assert world.events("hello")[-1].get("pc_boxes_generation") == 1
+    world.step(30)
+    assert world.events("tick")[-1].get("pc_boxes_generation") == 1
+    world.bus[world.ram["wBoxCount"]] = 0xFF          # the active box reads malformed: the scan fails
+    hello = reconnect()
+    assert "pc_boxes_generation" not in hello and "pc_boxes" in hello   # still sent for display
+    world.bus[world.ram["wBoxCount"]] = 0
+    assert reconnect().get("pc_boxes_generation") == 2
+    world.bus[world.ram["wCurrentBoxNum"]] = 0x80     # boxes initialised, but SRAM box 1+ unreadable
+    assert "pc_boxes_generation" not in reconnect()
+    world.assert_all_conform()
+
+
+def test_the_enemy_on_the_wire_carries_its_max_hp(world):
+    """GEN1-ENEMY-MAXHP: the board divides hp by maxHP; without it every Gen 1 foe drew a full
+    bar and "17/". pret wEnemyMonMaxHP is 2 bytes big-endian (ram/wram.asm battle_struct)."""
+    world.connect()
+    world.in_battle(opponent=0x24, species=0x24, level=3)       # a wild Pidgey
+    r = world.ram
+    world.bus[r["wEnemyMonHP"]], world.bus[r["wEnemyMonHP"] + 1] = 0x00, 0x11
+    max_hp = r["wEnemyMonMaxHP"]
+    world.bus[max_hp], world.bus[max_hp + 1] = 0x01, 0x02
+    world.step(30)
+    foe = world.events("tick")[-1]["enemy_party"][0]
+    assert (foe["hp"], foe.get("maxHP")) == (0x11, 0x102)
+    # LoadEnemyMonData's transition frame: hp above max (or a max outside 1..999) is no max at all
+    for hi, lo in ((0x00, 0x10), (0x00, 0x00), (0x03, 0xE8)):
+        world.bus[max_hp], world.bus[max_hp + 1] = hi, lo
+        world.step(30)
+        assert "maxHP" not in world.events("tick")[-1]["enemy_party"][0], (hi, lo)
+    world.assert_all_conform()
+
+
+def test_a_refused_change_is_resent_after_a_newer_census_and_a_failed_scan_retries(world):
+    """KEY-SCOPE-5 (cx-06ec4e8e F5/F6), the Gen 1 client: a non-terminal refusal keeps the alias
+    and re-sends after a newer complete census; a collision retires; an incomplete scan retries."""
+    world.connect()
+    world.step(30)
+    msg = {"old_key": "0001:0002:03", "new_key": "0004:0005:06", "new_species": 25, "reason": "evolution"}
+    alias = {"old_key": msg["old_key"], "new_key": msg["new_key"], "msg": world.lua.table_from(msg)}
+    world.client.key_alias = world.lua.table_from(alias)
+    world.reply({"cmd": "key_change_rejected", "old_key": msg["old_key"], "new_key": msg["new_key"],
+                 "reason": "box census unavailable"})
+    world.step(30)
+    assert world.client.key_alias is not None and world.client.retired_alias[msg["old_key"]] is None
+    assert [{k: m[k] for k in msg} for m in world.events("key_change")] == [msg]
+    world.reply({"cmd": "key_change_ack", "old_key": msg["old_key"], "new_key": msg["new_key"], "migrated": True})
+    world.step(30)
+    assert world.client.key_alias is None
+    # a collision is terminal: retired, never re-sent
+    world.client.key_alias = world.lua.table_from(alias)
+    world.reply({"cmd": "key_change_rejected", "old_key": msg["old_key"], "new_key": msg["new_key"],
+                 "reason": "key collision: party_keys"})
+    world.step(60)
+    assert world.client.key_alias is None and world.client.retired_alias[msg["old_key"]] is not None
+    assert len(world.events("key_change")) == 1
+    # an incomplete scan retries by itself on the next tick
+    world.bus[world.ram["wBoxCount"]] = 0xFF
+    world.client.rescan_boxes(world.client)
+    world.step(30)
+    assert "pc_boxes_generation" not in world.events("tick")[-1]
+    world.bus[world.ram["wBoxCount"]] = 0
+    world.step(30)
+    assert world.events("tick")[-1].get("pc_boxes_generation", 0) >= 1
+    world.assert_all_conform()

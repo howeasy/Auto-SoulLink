@@ -523,6 +523,7 @@
         "calc_preview": null
       },
       "identity_error": "",
+      "awaiting_save": false,
       "admission": "admitted",
       "admission_reason": "no randomized-ROM contract for this run",
       "capabilities": {
@@ -1409,6 +1410,7 @@
         }
       },
       "identity_error": "",
+      "awaiting_save": false,
       "admission": "admitted",
       "admission_reason": "no randomized-ROM contract for this run",
       "capabilities": {
@@ -2281,6 +2283,17 @@
     "a": [],
     "b": []
   },
+  "faint_repair_stalled": {
+    "a": [],
+    "b": []
+  },
+  "ambiguous_keys": {
+    "a": {},
+    "b": {}
+  },
+  "trade_problem": null,
+  "trade_held": [],
+  "trade_last": null,
   "badge_slugs": [
     [
       1,

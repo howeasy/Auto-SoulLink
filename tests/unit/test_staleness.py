@@ -94,3 +94,12 @@ def test_save_failure_clears_once_a_write_succeeds(srv, tmp_path):
     srv.state.save_failed = "boom"
     srv.state._save()
     assert srv.state.save_failed == ""
+
+
+@pytest.mark.asyncio
+async def test_a_stalled_faint_repair_is_surfaced(srv, page):
+    """The server gave up re-issuing a lost faint; the partner mon may still be standing in game."""
+    assert "never landed in game" not in await page()
+    srv.state.faint_repair_stalled["b"] = {"mon1": 3}
+    html = await page()
+    assert "Player B: 1 linked faint(s) never landed in game" in html

@@ -1,0 +1,53 @@
+DUO_GEN2 {"attempt":1,"case":"silver_battle","fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","player":"b","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","scenario":"gen2_pc_ops","title":"silver"}
+CLIENT {"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":51084,"panel":false,"
+HELLO {"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084}
+  phase loaded @3338
+RX resolved_areas
+RX config
+RX dead_keys
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 A4FC:C78C:9E
+  phase walk @3368 xy=53,12
+  phase battle @3702 xy=52,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":7442,"text":"Partner caught HOOTHOOT in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":9946,"key":"EA47:C78C:13","level":4,"site_id":"capture_party_finalized","slot":1,"species_id":19}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":16,"in_box":false,"key":"EA47:C78C:13","level":4,"maxHP":16,"nickname":"RATTATA","player":"b","seq":222,"species_id":19,"stats":{"level":4,"maxHP
+CAPTURE_SENT {"frame":9946,"key":"EA47:C78C:13","seq":222}
+CAUGHT EA47:C78C:13
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":9948,"text":"HOOTHOOT and RATTATA linked!"}
+RX party_mon key=EA47:C78C:13
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":223}
+TX {"event":"sync_retrieve_done","key":"EA47:C78C:13","player":"b","seq":226}
+  phase save @10006 xy=52,12
+  phase saved @10700 xy=52,12
+MYKEY 0 A4FC:C78C:9E
+MYKEY 1 EA47:C78C:13
+LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"f0c9f5a2ea256bd8a4c5e85c1434c0609f1f705f27c2e8f9a8cbe2bc3a9f8be8","client_saves":1,"frame":10730,"gate_saves":1,"key":"EA47:C78C:13","save_completed_frame":10700,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_pc_ops_s171_b_link_save.SaveRAM"}
+RX box_mon key=EA47:C78C:13
+TX {"event":"stats_cache","key":"EA47:C78C:13","player":"b","seq":461,"stats":{"level":4,"maxHP":16}}
+PC_PARTNER_1 {"box_count":1,"cmd":"box_mon","cur_box":0,"frame":17014,"in_party":false,"key":"EA47:C78C:13","party_count":1}
+RX party_mon key=EA47:C78C:13
+TX {"event":"sync_retrieve_done","key":"EA47:C78C:13","player":"b","seq":470}
+PC_PARTNER_2 {"box_count":0,"cmd":"party_mon","cur_box":0,"frame":17254,"in_party":true,"key":"EA47:C78C:13","party_count":2}
+RX box_mon key=EA47:C78C:13
+TX {"event":"stats_cache","key":"EA47:C78C:13","player":"b","seq":501,"stats":{"level":4,"maxHP":16}}
+PC_PARTNER_3 {"box_count":1,"cmd":"box_mon","cur_box":0,"frame":18154,"in_party":false,"key":"EA47:C78C:13","party_count":1}
+RX force_faint key=EA47:C78C:13
+RX play_sound sound=26
+RX memorialize key=EA47:C78C:13
+RX game_over
+BURIAL_WAIT {"frame":18456,"key":"EA47:C78C:13"}
+  phase save @18456 xy=52,12
+  phase saved @18982 xy=52,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"a691162362e4c40c9e0597848ec93558a78fd64461dfcfaabff65a357a6f14d7","client_saves":2,"flushed_matches":true,"frame":19012,"gate_saves":2,"save_completed_frame":18982,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/saveram_gen2_pc_ops_s171_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_pc_ops_s171_b_witness.SaveRAM"}
+TX {"box":13,"event":"memorialize_done","key":"EA47:C78C:13","player":"b","seq":536}
+MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":19192,"key":"EA47:C78C:13","ticks":528}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"burial_waited":true,"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":9946,"key":"EA47:C78C:13","level":4,"site_id":"capture_party_finalized","slot":1,"species_id":19},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084},"input_mode":"normal_buttons","key":"EA47:C78C:13","link_save":{"cartram_bytes":32768,"cartram_sha256":"f0c9f5a2ea256bd8a4c5e85c1434c0609f1f705f27c2e8f9a8cbe2bc3a9f8be8","client_saves":1,"frame":10730,"gate_saves":1,"key":"EA47:C78C:13","save_completed_frame":10700,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_pc_ops_s171_b_link_save.SaveRAM"},"partner_commands":["box_mon","party_mon","box_mon"],"partner_memorial":{"box":13,"event":"memorialize_done","frame":19192,"key":"EA47:C78C:13","ticks":528},"player":"b","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"a691162362e4c40c9e0597848ec93558a78fd64461dfcfaabff65a357a6f14d7","client_saves":2,"flushed_matches":true,"frame":19012,"gate_saves":2,"save_completed_frame":18982,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/saveram_gen2_pc_ops_s171_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_pc_ops_s171_b_witness.SaveRAM"},"scenario":"gen2_pc_ops","schema":"gen2-duo-pc-ops-v2","title":"silver"}
+RESULT: PASS (followed the partner's PC moves with EA47:C78C:13)

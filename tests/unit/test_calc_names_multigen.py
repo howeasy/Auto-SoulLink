@@ -25,6 +25,7 @@ sys.path.insert(0, str(ROOT))
 from server.adapters import gen1_codec  # noqa: E402
 from server.adapters.gen1_purergb import Gen1PureRGBAdapter  # noqa: E402
 from server.adapters.gen1_rby import Gen1Adapter  # noqa: E402
+from server.adapters.gen2_gsc import Gen2GSCAdapter  # noqa: E402
 from server.adapters.gen3_frlge import Gen3Adapter  # noqa: E402
 from server.data.items.gen3_vanilla import ITEM_NAMES as FRLG_ITEM_NAMES  # noqa: E402
 from server.data.moves.gen3_vanilla import MOVE_NAMES as GEN3_VANILLA_MOVE_NAMES  # noqa: E402
@@ -34,6 +35,7 @@ from tools.gen_rr_priority_trainers import calc_name_sets  # noqa: E402
 
 CALC_GEN1 = calc_name_sets(1)
 CALC_GEN3 = calc_name_sets(3)
+CALC_GEN2 = calc_name_sets(2)
 
 GEN1_MOVES = {int(row["id"]): row["name"] for row in
               json.loads((ROOT / "data/games/gen1_rby/moves.json")
@@ -46,6 +48,9 @@ RBY = Gen1Adapter(rom_type="red")
 PURERGB = Gen1PureRGBAdapter(rom_type="PureRed")
 VANILLA = Gen3Adapter(is_rr=False)
 RR = Gen3Adapter(is_rr=True)
+GEN2_CRYSTAL = Gen2GSCAdapter(title="crystal")
+GEN2_GOLD = Gen2GSCAdapter(title="gold")
+GEN2_SILVER = Gen2GSCAdapter(title="silver")
 
 
 def _norm(s: str) -> str:
@@ -96,6 +101,44 @@ def test_purergb_moves_resolve():
     _assert_resolves(PURERGB, "move", CALC_GEN1["move"], set(PURERGB_MOVES.values()), "pureRGB")
 
 
+# ── Gen 2 (Crystal/Gold/Silver) ────────────────────────────────────────────────
+
+def test_gen2_gsc_species_resolve():
+    names = {GEN2_CRYSTAL.species_name(sid) for sid in range(1, 252)}
+    _assert_resolves(GEN2_CRYSTAL, "species", CALC_GEN2["species"], names, "gen2_gsc")
+
+
+def test_gen2_gsc_moves_resolve():
+    names = {GEN2_CRYSTAL.move_name(mid) for mid in range(1, 252)} - {""}
+    _assert_resolves(GEN2_CRYSTAL, "move", CALC_GEN2["move"], names, "gen2_gsc")
+
+
+def test_gen2_gsc_items_resolve():
+    names = {GEN2_CRYSTAL.item_name(iid) for iid in range(1, 255)} - {""}
+    _assert_resolves(GEN2_CRYSTAL, "item", CALC_GEN2["item"], names, "gen2_gsc")
+
+
+def test_gen2_gsc_shares_one_table_across_titles():
+    """Crystal/Gold/Silver serve the same species/move/item names -- one shared
+    calc_names.json table covers all three (Gen2GSCAdapter docstring)."""
+    for sid in range(1, 252):
+        assert len({a.species_name(sid) for a in (GEN2_CRYSTAL, GEN2_GOLD, GEN2_SILVER)}) == 1
+    for mid in range(1, 252):
+        assert len({a.move_name(mid) for a in (GEN2_CRYSTAL, GEN2_GOLD, GEN2_SILVER)}) == 1
+
+
+def test_gen2_gsc_has_no_abilities():
+    assert not GEN2_CRYSTAL.supports_abilities()
+    assert CALC_GEN2["ability"] == set()
+
+
+def test_gen2_gsc_calc_profile_all_titles():
+    for title in ("crystal", "gold", "silver"):
+        profile = Gen2GSCAdapter(title=title).calc_profile()
+        sets = {"sets": {"file": "Crystal.js", "var": "CUSTOMSETDEX_C"}} if title == "crystal" else {}
+        assert profile == {"gen": 2, "dex": "vanilla", **sets}
+
+
 # ── Vanilla Gen 3 (FireRed/LeafGreen/Emerald) ─────────────────────────────────
 
 def test_vanilla_gen3_species_resolve():
@@ -122,7 +165,8 @@ def test_vanilla_gen3_leaves_rr_alone_and_vice_versa():
 
 def test_table_targets_are_calc_names():
     for kind, table_path, calc in (("gen1_rby", ROOT / "data/games/gen1_rby/calc_names.json", CALC_GEN1),
-                                    ("gen3_vanilla", ROOT / "data/games/gen3_frlge/calc_names_vanilla.json", CALC_GEN3)):
+                                    ("gen3_vanilla", ROOT / "data/games/gen3_frlge/calc_names_vanilla.json", CALC_GEN3),
+                                    ("gen2_gsc", ROOT / "data/games/gen2_gsc/calc_names.json", CALC_GEN2)):
         table = json.loads(table_path.read_text(encoding="utf-8"))
         for k, mapping in table.items():
             if k == "_note":

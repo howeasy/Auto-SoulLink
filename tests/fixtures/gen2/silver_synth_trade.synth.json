@@ -1,0 +1,145 @@
+{
+ "base_fixture": "silver_town",
+ "base_sha256": "74fee08224f2df27081d5667dd571cb1f3ee329d72cf6c20cd4ecec0e03109b5",
+ "builder": "tools/gen2_synth_fixtures.py",
+ "checksums": "restored (primary + backup)",
+ "edits": {
+  "last_spawn": "VIOLET_CITY",
+  "party": [
+   {
+    "dvs": 19497,
+    "hp": 1,
+    "level": 5,
+    "moves": [
+     "SCRATCH",
+     "DEFENSE_CURL"
+    ],
+    "species": "SENTRET",
+    "status": 8
+   },
+   {
+    "dvs": 27448,
+    "egg": true,
+    "happiness": 1,
+    "moves": [
+     "VINE_WHIP",
+     "GROWTH"
+    ],
+    "species": "BELLSPROUT"
+   }
+  ],
+  "poison_step": 3,
+  "step_count": 126
+ },
+ "fields": [
+  {
+   "backup": 4328,
+   "new_hex": "02",
+   "offset": 0,
+   "old_hex": "01",
+   "primary": 10378,
+   "size": 1,
+   "symbol": "wPartyCount",
+   "wram": 55842
+  },
+  {
+   "backup": 4329,
+   "new_hex": "a1fdff00000000",
+   "offset": 0,
+   "old_hex": "9eff0000000000",
+   "primary": 10379,
+   "size": 7,
+   "symbol": "wPartySpecies",
+   "wram": 55843
+  },
+  {
+   "backup": 4336,
+   "new_hex": "a1000a6f0000c78c00007d000000000000000000004c29232800004600000005080000010012000a000900070009000a4500164a0000c78c000087000000000000000000006b380a2800000100000005000000000014000d00090009000c0008000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "9ead0a2b0000c78c00008700000000000000000000a4fc231e00004600000005000000140014000c000b000a000a000b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "primary": 10386,
+   "size": 288,
+   "symbol": "wPartyMon1",
+   "wram": 55850
+  },
+  {
+   "backup": 4624,
+   "new_hex": "92888b958491500000000092888b95849150000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "92888b958491500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "primary": 10674,
+   "size": 66,
+   "symbol": "wPartyMonOTs",
+   "wram": 56138
+  },
+  {
+   "backup": 4690,
+   "new_hex": "92848d939184935050505084868650505050505050500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+   "primary": 10740,
+   "size": 66,
+   "symbol": "wPartyMonNicknames",
+   "wram": 56204
+  },
+  {
+   "backup": 32326,
+   "new_hex": "0a05",
+   "offset": 0,
+   "old_hex": "0000",
+   "primary": 10339,
+   "size": 2,
+   "symbol": "wLastSpawnMapGroup",
+   "wram": 55803
+  },
+  {
+   "backup": 4279,
+   "new_hex": "7e",
+   "offset": 0,
+   "old_hex": "1e",
+   "primary": 10277,
+   "size": 1,
+   "symbol": "wStepCount",
+   "wram": 55741
+  },
+  {
+   "backup": 4280,
+   "new_hex": "03",
+   "offset": 0,
+   "old_hex": "02",
+   "primary": 10278,
+   "size": 1,
+   "symbol": "wPoisonStepCount",
+   "wram": 55742
+  },
+  {
+   "cart": 11625,
+   "new_hex": "6fd0",
+   "offset": 0,
+   "old_hex": "83c5",
+   "size": 2,
+   "symbol": "sChecksum",
+   "wram": null
+  },
+  {
+   "cart": 32365,
+   "new_hex": "6fd0",
+   "offset": 0,
+   "old_hex": "83c5",
+   "size": 2,
+   "symbol": "sBackupChecksum",
+   "wram": null
+  }
+ ],
+ "schema": "gen2-synth-disclosure-v1",
+ "sha256": "8385c3661bfd834fe6bcea8f4d9c032d03c6d0a2449400d8cc7cb5c766493fa9",
+ "source_facts": [
+  "constants/charmap.asm names",
+  "data/games/gen2_<title>/moves.json PP",
+  "data/games/gen2_<title>/species_index.json base stats/growth",
+  "data/maps/spawn_points.asm; engine/events/whiteout.asm GetWhiteoutSpawn",
+  "engine/overworld/events.asm CountStep",
+  "macros/ram.asm party_struct"
+ ],
+ "title": "silver"
+}

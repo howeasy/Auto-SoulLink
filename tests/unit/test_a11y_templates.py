@@ -97,7 +97,7 @@ def test_hp_fraction_is_announced_as_hp(env):
 
 
 def test_hp_without_a_max_is_a_number_not_a_full_bar(env):
-    """The Gen 1 client reads a foe's HP but no max: no bar to fake, no dangling '/'."""
+    """A foe with no max HP (the Gen 1 client omits an implausible one): no bar to fake, no dangling '/'."""
     html = str(env.get_template("_board.html").module.hp({"hp": 17, "maxHP": None}))
     assert "mk-hp-fill" not in html
     assert re.sub(r"<[^>]+>", "", html).strip() == "HP 17"

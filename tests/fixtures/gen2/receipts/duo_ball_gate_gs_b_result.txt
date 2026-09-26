@@ -1,0 +1,76 @@
+DUO_GEN2 {"attempt":1,"case":"silver_town","fixture_sha256":"74fee08224f2df27081d5667dd571cb1f3ee329d72cf6c20cd4ecec0e03109b5","player":"b","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","scenario":"gen2_ball_gate","title":"silver"}
+CLIENT {"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"}
+JITTER requested=0 applied=0 attempt=1
+  phase title @1
+  phase continue @3218
+TX {"area_id":"new_bark_town","artifact_kind":"clean","badges":0,"ball_count":0,"event":"hello","foundation":"gen2_gsc","has_pokeballs":false,"in_battle":false,"kanto_badges":0,"loc_name":"NEW BARK TOWN","ot_id":51084,"pane
+HELLO {"ball_count":0,"frame":3339,"has_pokeballs":false,"ot_id":51084}
+  phase loaded @3339
+RX resolved_areas
+RX config
+RX dead_keys
+BOOTED {"frame":3369,"map_group":24,"map_number":5,"party_count":1,"x":5,"y":3}
+MYKEY 0 A4FC:C78C:9E
+  phase leave-elm @3387 xy=5,3
+  phase to-route29 @4389 xy=6,3
+  phase pre-walk @4637 xy=59,8
+TX {"area_id":"route_29","event":"area_enter","loc_name":"ROUTE 29","player":"b","seq":45}
+  phase pre-grass @4826 xy=53,12
+  phase walk @4856 xy=53,12
+  phase battle @5121 xy=52,12
+  phase encounter @5650 xy=52,12
+  phase battle @5680 xy=52,12
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":86}
+  phase escaped @5895 xy=52,12
+BALL_PRE {"area_id":"route_29","ball_count":0,"foe":163,"frame":5925,"has_pokeballs":false}
+  phase errand-west @5925 xy=52,12
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":126}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":160}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":223}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":260}
+TX {"area_id":"cherrygrove_city","event":"area_enter","loc_name":"CHERRYGROVE CITY","player":"b","seq":271}
+  phase errand-mr-pokemon @11893 xy=6,53
+TX {"area_id":"route_30","event":"area_enter","loc_name":"ROUTE 30","player":"b","seq":294}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":328}
+  phase errand-egg @19630 xy=3,6
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":620}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":670}
+  phase errand-east @23604 xy=17,0
+TX {"area_id":"cherrygrove_city","event":"area_enter","loc_name":"CHERRYGROVE CITY","player":"b","seq":688}
+ENGINE_FAINT {"cause":"battle","frame":34442,"key":"A4FC:C78C:9E","site_id":"battle_faint","slot":0}
+TX {"area_id":"cherrygrove_city","event":"faint","key":"A4FC:C78C:9E","player":"b","seq":1051}
+FAINT_SENT {"frame":34442,"key":"A4FC:C78C:9E","seq":1051}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":1058}
+TX {"area_id":"route_29","event":"area_enter","loc_name":"ROUTE 29","player":"b","seq":1081}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":1118}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":1178}
+  phase errand-elm @38593 xy=0,8
+TX {"area_id":"new_bark_town","event":"area_enter","loc_name":"NEW BARK TOWN","player":"b","seq":1194}
+  phase errand-handoff @42678 xy=5,3
+  phase leave-elm @42679 xy=5,3
+  phase to-route29 @43887 xy=6,3
+  phase route29-grass @44135 xy=59,8
+TX {"area_id":"route_29","event":"area_enter","loc_name":"ROUTE 29","player":"b","seq":1380}
+  phase post-grass @45355 xy=53,12
+BALL_FLIP {"ball_count":5,"frame":45385,"has_pokeballs":true}
+  phase walk @45385 xy=53,12
+  phase battle @45604 xy=52,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":45662,"text":"Partner caught HOOTHOOT in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":49845,"key":"FD89:C78C:A3","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":163}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":17,"in_box":false,"key":"FD89:C78C:A3","level":3,"maxHP":17,"nickname":"HOOTHOOT","player":"b","seq":1571,"species_id":163,"stats":{"level":3,"ma
+CAPTURE_SENT {"frame":49845,"key":"FD89:C78C:A3","seq":1571}
+CAUGHT FD89:C78C:A3
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":49848,"text":"HOOTHOOT and HOOTHOOT linked!"}
+RX party_mon key=FD89:C78C:A3
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":1572}
+TX {"event":"sync_retrieve_done","key":"FD89:C78C:A3","player":"b","seq":1575}
+  phase save @49905 xy=52,12
+  phase saved @50653 xy=52,12
+MYKEY 0 A4FC:C78C:9E
+MYKEY 1 FD89:C78C:A3
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"4839ac9f665eb86804fc8707c749810cdb278f80a5702eca408ab3ca90cbe02c","client_saves":1,"flushed_matches":true,"frame":50683,"gate_saves":1,"save_completed_frame":50653,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_ball_gate_s11_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_ball_gate_s11_b_witness.SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3369,"map_group":24,"map_number":5,"party_count":1,"x":5,"y":3},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":49845,"key":"FD89:C78C:A3","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":163},"case":"silver_town","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"faint":{"cause":"battle","frame":34442,"key":"A4FC:C78C:9E","site_id":"battle_faint","slot":0},"fixture_sha256":"74fee08224f2df27081d5667dd571cb1f3ee329d72cf6c20cd4ecec0e03109b5","flip":{"ball_count":5,"frame":45385,"has_pokeballs":true},"harness_write_scopes":[],"hello":{"ball_count":0,"frame":3339,"has_pokeballs":false,"ot_id":51084},"input_mode":"normal_buttons","key":"FD89:C78C:A3","player":"b","pre_ball":{"area_id":"route_29","ball_count":0,"foe":163,"frame":5925,"has_pokeballs":false},"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"4839ac9f665eb86804fc8707c749810cdb278f80a5702eca408ab3ca90cbe02c","client_saves":1,"flushed_matches":true,"frame":50683,"gate_saves":1,"save_completed_frame":50653,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_ball_gate_s11_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_ball_gate_s11_b_witness.SaveRAM"},"scenario":"gen2_ball_gate","schema":"gen2-duo-ball-gate-v1","synth":[],"title":"silver"}
+RESULT: PASS (pre-Ball encounter and faint withheld; aide's Balls opened the gate; caught FD89:C78C:A3)

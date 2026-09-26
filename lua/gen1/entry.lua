@@ -25,6 +25,10 @@
 -- rand_overlay). The header title only narrows candidates and words the refusal. This file
 -- is the ONLY place a foundation is ever named; everything downstream sees pack data.
 local Entry = {}
+-- One registry instance and ONE bound signals factory own the production hook backend
+-- across repeated builds: the factory holds the only reference to a failed service whose
+-- cleanup is still outstanding, so a per-build rebind would drop that cleanup authority.
+local shared_signals
 
 local function load_json(json, path)
     local f = assert(io.open(path, "rb"), "cannot open " .. path)
@@ -88,46 +92,18 @@ end
 
 -- ── admission ────────────────────────────────────────────────────────────────────────
 
--- Pure-Lua SHA-1 (FIPS 180-4) over `read_u8(i)` for i in [0, n). Lua 5.4 integers; masked to
--- 32 bits. Used once at boot when BizHawk's gameinfo hash is not the loaded bytes' hash
--- (gameinfo.indatabase() true) or is unknown to every pack.
-function Entry.sha1(read_u8, n)
-    local M = 0xFFFFFFFF
-    local function rol(x, k) return ((x << k) | (x >> (32 - k))) & M end
-    local h0, h1, h2, h3, h4 = 0x67452301, 0xEFCDAB89, 0x98BADCFE, 0x10325476, 0xC3D2E1F0
-    -- message + 0x80 + zero pad + 64-bit big-endian bit length, as a byte source
-    local total = n + 1
-    while total % 64 ~= 56 do total = total + 1 end
-    total = total + 8
-    local bits = n * 8
-    local function byte_at(i)
-        if i < n then return read_u8(i) end
-        if i == n then return 0x80 end
-        if i < total - 8 then return 0 end
-        return (bits >> (8 * (total - 1 - i))) & 0xFF
-    end
-    local w = {}
-    for chunk = 0, total - 1, 64 do
-        for t = 0, 15 do
-            local b = chunk + t * 4
-            w[t] = (byte_at(b) << 24) | (byte_at(b + 1) << 16) | (byte_at(b + 2) << 8) | byte_at(b + 3)
-        end
-        for t = 16, 79 do w[t] = rol(w[t - 3] ~ w[t - 8] ~ w[t - 14] ~ w[t - 16], 1) end
-        local a, b, c, d, e = h0, h1, h2, h3, h4
-        for t = 0, 79 do
-            local f, k
-            if t < 20 then f, k = (b & c) | ((~b) & d), 0x5A827999
-            elseif t < 40 then f, k = b ~ c ~ d, 0x6ED9EBA1
-            elseif t < 60 then f, k = (b & c) | (b & d) | (c & d), 0x8F1BBCDC
-            else f, k = b ~ c ~ d, 0xCA62C1D6 end
-            local tmp = (rol(a, 5) + (f & M) + e + k + w[t]) & M
-            e, d, c, b, a = d, c, rol(b, 30), a, tmp
-        end
-        h0, h1, h2, h3, h4 = (h0 + a) & M, (h1 + b) & M, (h2 + c) & M, (h3 + d) & M, (h4 + e) & M
-    end
-    return string.format("%08x%08x%08x%08x%08x", h0, h1, h2, h3, h4)
+-- The public digest helper is retained for existing callers; the implementation
+-- and actual-byte validation live in the shared admission module.
+local entry_dir = debug.getinfo(1, "S").source:match("^@(.+[/\\])[^/\\]+$")
+local cached_admission
+local function admission_core(root)
+    if root then return dofile(root .. "/lua/admission.lua") end
+    if not cached_admission then cached_admission = dofile(assert(entry_dir) .. "../admission.lua") end
+    return cached_admission
 end
-
+function Entry.sha1(read_u8, n)
+    return admission_core().sha1(read_u8, n)
+end
 -- sha1 (lowercase) -> { pack, title, kind, rom_type } over every pack's admission set.
 -- gen1_purergb: admission.json rows; gen1_rby: the per-title profile rom_sha1 (clean).
 function Entry.admission_table(root, json)
@@ -173,25 +149,22 @@ Entry.pack_file = pack_file
 -- by slice through the flat ROM domain and dropped at the first differing byte. Only packs
 -- that ship admission rows take part: a vanilla build with an unknown sha1 keeps run.lua's
 -- named-family fallback.
-local function anchors_hold(root, json, files, title, kind, read_u8, size)
-    local function slice_ok(off, hex)
-        local n = #hex // 2
-        if type(off) ~= "number" or off + n > size then return false end
-        for i = 0, n - 1 do
-            if read_u8(off + i) ~= tonumber(hex:sub(2 * i + 1, 2 * i + 2), 16) then return false end
-        end
-        return true
-    end
+local function anchor_specs(root, json, files, title, kind)
+    local anchors = {}
     local sites = load_json(json, root .. "/" .. pack_file(files, "sites", kind)).titles[title].sites
     for _, site in pairs(sites) do
-        if not slice_ok(site.rom_offset, site.expected_hex) then return false end
-        if site.prelude and not slice_ok(site.prelude.rom_offset, site.prelude.expected_hex) then return false end
+        anchors[#anchors + 1] = {offset=site.rom_offset, hex=site.expected_hex}
+        if site.prelude then anchors[#anchors + 1] = {offset=site.prelude.rom_offset, hex=site.prelude.expected_hex} end
     end
     local ws = load_json(json, root .. "/" .. pack_file(files, "checkpoint", kind))[title].write_safe
     for key, hex in pairs(ws.expected_hex or {}) do
-        if not slice_ok(ws[key], hex) then return false end
+        anchors[#anchors + 1] = {offset=ws[key], hex=hex}
     end
-    return true
+    return anchors
+end
+local function anchors_hold(root, json, files, title, kind, read_u8, size)
+    return admission_core(root).anchors_match(anchor_specs(root, json, files, title, kind),
+                                             {read_u8=read_u8, size=size}, "anchors")
 end
 -- Every admitted (pack, title, base kind) whose anchors all hold in this ROM.
 function Entry.anchor_matches(args, header)
@@ -220,51 +193,95 @@ end
 
 -- Decide the foundation for the loaded cartridge.
 --   args.root, args.json           pack lookup
---   args.rom_sha1                  gameinfo.getromhash() (any case; may be BizHawk's database hash)
---   args.indatabase                gameinfo.indatabase() (true = the hash above is not the bytes')
---   args.read_rom_u8, args.rom_size   the flat ROM domain, for the Lua rehash
+--   args.rom_sha1, args.indatabase  legacy diagnostics; neither bypasses actual-byte hashing
+--   args.read_rom_u8, args.rom_size   required actual flat ROM domain for every admission
 --   args.header                    the header title (Entry.detect_title's second value), for the reason
 -- Returns { pack, title, kind, rom_type, rom_sha1, rehashed, admitted_by } or nil, reason;
 -- admitted_by is "sha1" or "anchors" (kind rand / rand_overlay, rom_sha1 = the hash of the bytes).
-function Entry.admit(args)
-    local table_ = Entry.admission_table(args.root, args.json)
-    local sha = (args.rom_sha1 or ""):lower()
-    local hit = table_[sha]
-    local rehashed = false
-    if (not hit or args.indatabase) and args.read_rom_u8 and args.rom_size then
-        sha = Entry.sha1(args.read_rom_u8, args.rom_size)
-        hit = table_[sha]
-        rehashed = true
+-- Keep Gen 1 catalog/header/randomized policy here. The shared mechanism owns
+-- actual acquisition, hashing, anchor validation, unique-match and immutable result.
+local function admission_candidates(root, json)
+    local by_id, candidates = {}, {}
+    local function add(pack, title, kind, sha, header)
+        local id = pack .. "/" .. title .. "/" .. kind
+        local candidate = by_id[id]
+        if not candidate then
+            candidate = {pack=pack, title=title, kind=kind, hashes={}, headers={},
+                rom_type=Entry.PACKS[pack].rom_type[title]}
+            by_id[id], candidates[#candidates + 1] = candidate, candidate
+        end
+        candidate.hashes[#candidate.hashes + 1] = sha
+        if header then candidate.headers[#candidate.headers + 1] = header end
     end
-    if not hit then
-        local header = tostring(args.header or "")
-        if args.read_rom_u8 and args.rom_size then
-            local matches = Entry.anchor_matches(args, header)
-            if #matches == 1 then
-                local m = matches[1]
-                return { pack = m.pack, title = m.title, rom_type = m.rom_type, rom_sha1 = sha, rehashed = rehashed,
-                         kind = m.kind == "overlay" and "rand_overlay" or "rand", admitted_by = "anchors" }
-            elseif #matches > 1 then
-                local names = {}
-                for i, m in ipairs(matches) do names[i] = m.pack .. "/" .. m.title .. "/" .. m.kind end
-                return nil, "ambiguous: header " .. header .. " matches the anchors of "
-                            .. table.concat(names, ", ") .. ": sha1 " .. sha
+    for pack in pairs(Entry.PACKS) do
+        local files = Entry.PACK_FILES[pack]
+        if files.admission then
+            for _, key in ipairs({"admission", "admission_overlay"}) do
+                if files[key] then
+                    for sha, row in pairs(load_json(json, root .. "/" .. files[key])) do
+                        add(pack, row.title, row.kind or "clean", sha, row.header_title)
+                    end
+                end
+            end
+        else
+            for title, profile in pairs(load_json(json, root .. "/" .. files.profile).titles) do
+                if profile.rom_sha1 then add(pack, title, "clean", profile.rom_sha1) end
             end
         end
-        local reason
-        if header:find("POKEMON RED", 1, true) or header:find("POKEMON BLUE", 1, true)
-           or header:find("POKEMON GREEN", 1, true) then
-            reason = "header " .. header .. " matches no admitted cartridge (a pureRGB or vanilla "
-                     .. "build whose sha1 is not in any pack): sha1 " .. sha
-        else
-            reason = "header " .. header .. " is not an admitted Gen 1 cartridge: sha1 " .. sha
-        end
-        return nil, reason
     end
-    return { pack = hit.pack, title = hit.title, kind = hit.kind, rom_type = hit.rom_type,
-             rom_sha1 = sha, rehashed = rehashed, admitted_by = "sha1" }
+    table.sort(candidates, function(a,b) return a.pack .. a.title .. a.kind < b.pack .. b.title .. b.kind end)
+    return candidates
 end
-
+function Entry.admit(args)
+    local actual_sha
+    local ok, decision, why = pcall(function()
+        local Admission = admission_core(args.root)
+        local policy = {
+            allow_unknown_hash=true, -- Gen 1's explicit existing pureRGB randomizer policy.
+            acquire=function(request)
+                return {size=request.rom_size, read_u8=request.read_rom_u8}
+            end,
+            catalog=function(request, artifact)
+                actual_sha = artifact.sha1
+                return admission_candidates(request.root, request.json)
+            end,
+            hashes=function(candidate) return candidate.hashes end,
+            eligible=function(candidate, mode, _request, artifact)
+                if mode == "sha1" then return true end
+                local header = Entry.header_title(artifact.read_u8)
+                for _, expected in ipairs(candidate.headers) do
+                    if header:find(expected, 1, true) == 1 then return true end
+                end
+                return false, "header does not select an anchor-admitted Gen 1 candidate"
+            end,
+            anchors=function(candidate, mode, request)
+                if mode == "sha1" then return {} end -- exact catalog hash pins every byte
+                return anchor_specs(request.root, request.json, Entry.PACK_FILES[candidate.pack],
+                                    candidate.title, candidate.kind)
+            end,
+            kind=function(candidate, mode)
+                if mode == "sha1" then return candidate.kind end
+                return candidate.kind == "overlay" and "rand_overlay" or "rand"
+            end,
+            describe=function(candidate, kind)
+                return {pack=candidate.pack, title=candidate.title, kind=kind, rom_type=candidate.rom_type}
+            end,
+        }
+        return Admission.new(policy):admit(args)
+    end)
+    if not ok then why, decision = tostring(decision), nil end
+    if decision then return decision end
+    local header, sha = tostring(args.header or ""), actual_sha or tostring(args.rom_sha1 or "")
+    if tostring(why):find("ambiguous", 1, true) then
+        return nil, "ambiguous: header " .. header .. ": sha1 " .. sha .. ": " .. tostring(why)
+    end
+    if header:find("POKEMON RED", 1, true) or header:find("POKEMON BLUE", 1, true)
+        or header:find("POKEMON GREEN", 1, true) then
+        return nil, "header " .. header .. " matches no admitted cartridge (a pureRGB or vanilla build): sha1 "
+            .. sha .. ": " .. tostring(why)
+    end
+    return nil, "header " .. header .. " is not an admitted Gen 1 cartridge: sha1 " .. sha .. ": " .. tostring(why)
+end
 -- ── build ────────────────────────────────────────────────────────────────────────────
 
 -- Reads of $D000-$DFFF go through the flat WRAM domain (bank 1 at 0x1000) when the profile
@@ -301,10 +318,21 @@ function Entry.build(deps)
     local root = assert(deps.root, "deps.root required")
     local L = function(rel) return dofile(root .. "/" .. rel) end
     local json = L("lua/json_codec.lua")
-    local R, S, W, B, Rom = L("lua/gen1/reads.lua"), L("lua/gen1/signals.lua"), L("lua/gen1/writes.lua"),
-                            L("lua/gen1/boxes.lua"), L("lua/gen1/rom.lua")
+    local R, W, B, Rom = L("lua/gen1/reads.lua"), L("lua/gen1/writes.lua"),
+                         L("lua/gen1/boxes.lua"), L("lua/gen1/rom.lua")
     local T, P = L("lua/gen1/trade_overlay.lua"), L("lua/gen1/panel.lua")
-    local safety = L("lua/gen1_write_safety.lua")
+    local Safety = L("lua/gen1_write_safety.lua")
+    local Permit = L("lua/write_permit.lua")
+    local Checkpoint = L("lua/gb_checkpoint.lua")
+    local Scanner = L("lua/token_scanner.lua")
+    local HelloSession, ReplyDispatch = L("lua/hello_session.lua"), L("lua/reply_dispatch.lua")
+    local OwedReports = L("lua/owed_reports.lua")
+    if not shared_signals then
+        shared_signals = L("lua/gen1/signals.lua").bind({registry=L("lua/hook_registry.lua"),
+                                                         gb_binding=L("lua/gb_hook_binding.lua"), owner="SLink-gen1"})
+    end
+    local S = shared_signals
+    local safety = Safety.new(Checkpoint)
     local Client = L("lua/gen1/client.lua")
 
     local pack = deps.pack or "gen1_rby"
@@ -336,24 +364,16 @@ function Entry.build(deps)
         read_u8 = function(addr) return bio.read_u8(addr, "System Bus") end,
         read_range = function(addr, len) return bio.read_range(addr, len, "System Bus") end,
     }
-    local reads = R.new(profile, reads_io)
+    local reads = R.new(profile, reads_io, Scanner)
     profile.charmap = reads.charmap -- the ONE glyph object; the panel reads it from here
-    local writes = W.new(profile, bio)
+    local writes = W.new(profile, bio, Permit)
     -- boxes write through the same armed gate; CartRAM is the flat SRAM image
     local box_io = {
         read_range = reads_io.read_range,
         read_cart = function(off) return bio.read_u8(off, "CartRAM") end,
         write_bytes = function(addr, bytes) return writes:write_bytes(addr, bytes) end,
         write_cart_bytes = function(off, bytes)
-            assert(writes.armed, "cart write refused: no armed write window (W-7)")
-            -- The panel window's allow predicate speaks System Bus addresses and cannot see
-            -- this door at all, so the refusal lives here: painting a menu never touches SRAM.
-            assert(writes.armed ~= "panel", "cart write refused: the panel window writes WRAM only")
-            for i = 1, #bytes do bio.write_u8(off + i - 1, bytes[i], "CartRAM") end
-            -- this door bypasses writes:write_bytes, so the receipt has to be logged here or a
-            -- box move leaves no trace at all in writes.log (A2 scenario finding)
-            writes.log[#writes.log + 1] = { addr = off, n = #bytes, why = writes.armed,
-                                            cart = true, frame = bio.framecount() }
+            return writes:write_cart_bytes(off, bytes)
         end,
     }
     local boxes = B.new(profile, reads, box_io)
@@ -374,9 +394,11 @@ function Entry.build(deps)
         player = assert(deps.player, "deps.player required"), rom_type = pack_def.rom_type[title],
         rom_sha1 = deps.rom_sha1, log = deps.log or function() end,
         foundation = pack, artifact_kind = deps.kind or "clean",
+        hello_session = HelloSession, reply_dispatch = ReplyDispatch, owed_reports = OwedReports,
     })
     return client, { profile = profile, sites = sites, reads = reads, writes = writes, boxes = boxes,
-                     rom = rom, json = json, panel = panel, box_io = box_io, pack = pack }
+                     rom = rom, json = json, panel = panel, box_io = box_io, pack = pack,
+                     signals = S }
 end
 
 -- Header family from the cartridge header (ROM $0134..$0143): "POKEMON RED"/"BLUE"/"YELLOW"/

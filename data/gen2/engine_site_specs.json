@@ -1,0 +1,3069 @@
+{
+  "schema": "gen2-engine-site-specs-v1",
+  "source_commits": {
+    "pokecrystal": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+    "pokegold": "656583c939d30f920a316177311a502dd222b57c"
+  },
+  "inventory": {
+    "wild_battle_start": {
+      "sites": [
+        "wild_ready"
+      ],
+      "remaining": "Natural wild/roamer/contest entry, ready-data and CGB bank/frame firing controls remain OPEN."
+    },
+    "trainer_battle_start": {
+      "sites": [
+        "trainer_ready"
+      ],
+      "remaining": "Natural trainer entry and per-title trainer identity readiness/firing controls remain OPEN."
+    },
+    "battle_end_result": {
+      "sites": [
+        "battle_end"
+      ],
+      "remaining": "Result masking and end/evolution/cleanup lifecycle must be bound and physically witnessed."
+    },
+    "capture_party": {
+      "sites": [
+        "capture_party",
+        "capture_party_finalized"
+      ],
+      "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete."
+    },
+    "capture_box": {
+      "sites": [
+        "capture_box",
+        "capture_box_finalized"
+      ],
+      "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete."
+    },
+    "player_faint": {
+      "sites": [
+        "battle_faint"
+      ],
+      "remaining": "Natural faint sequence and pre-heal identity/HP snapshot qualification remain OPEN."
+    },
+    "poison_faint": {
+      "sites": [
+        "poison_faint"
+      ],
+      "remaining": "Natural poison cause/slot and multi-faint/whiteout differential qualification remain OPEN."
+    },
+    "whiteout": {
+      "sites": [
+        "whiteout_before_heal"
+      ],
+      "remaining": "Implement and physically qualify every CPU dispatch/stack guard, ordinary-heal negatives, battle/poison positives and pre-heal party capture."
+    },
+    "evolution_species": {
+      "sites": [
+        "evolution_species_published"
+      ],
+      "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure."
+    },
+    "npc_trade": {
+      "sites": [
+        "npc_trade_begin",
+        "npc_trade_finalized"
+      ],
+      "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure."
+    },
+    "link_trade": {
+      "sites": [
+        "link_trade_received",
+        "link_trade_saved"
+      ],
+      "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete."
+    },
+    "pc_deposit": {
+      "sites": [
+        "pc_deposit_begin",
+        "pc_deposit_complete"
+      ],
+      "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure."
+    },
+    "pc_withdraw": {
+      "sites": [
+        "pc_withdraw_begin",
+        "pc_withdraw_complete"
+      ],
+      "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure."
+    },
+    "pc_release": {
+      "sites": [
+        "pc_release_party_begin",
+        "pc_release_party_complete",
+        "pc_release_box_begin",
+        "pc_release_box_complete"
+      ],
+      "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure."
+    },
+    "change_box": {
+      "sites": [
+        "change_box_begin",
+        "change_box_loaded"
+      ],
+      "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure."
+    },
+    "map_load": {
+      "sites": [
+        "map_entry_complete"
+      ],
+      "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure."
+    },
+    "bag_ball_received": {
+      "sites": [
+        "bag_ball_received"
+      ],
+      "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete."
+    },
+    "save_completed": {
+      "sites": [
+        "save_completed"
+      ],
+      "remaining": "Bind all save variants/callers, raw CartRAM witness and cold-boot primary/backup recovery; return instruction alone is not durability."
+    },
+    "continue_loaded": {
+      "sites": [
+        "continue_confirmed"
+      ],
+      "remaining": "SOURCE candidates identify only their stated lifecycle phase. Natural positive/refusal controls, causal matching, identity readback and cross-title firing remain OPEN; no physical or F3 closure."
+    },
+    "new_game": {
+      "sites": [
+        "new_game"
+      ],
+      "remaining": "Prove new-campaign lifecycle and admission only after initialized checkpoint; entry does not expose final identity."
+    },
+    "soft_reset": {
+      "sites": [
+        "soft_reset"
+      ],
+      "remaining": "Prove reset lifecycle, queue invalidation and cold-start distinction on each title."
+    },
+    "egg_hatch": {
+      "sites": [
+        "hatch_species",
+        "hatch_finalized"
+      ],
+      "remaining": "SOURCE candidates identify stated phases and mandatory causal guards. Runtime queue matching, reset/failure invalidation, independent identity/readback and cross-title natural firing remain OPEN; F3 is not complete."
+    },
+    "gift_static": {
+      "sites": [
+        "gift_begin",
+        "gift_party_finalized",
+        "gift_box_finalized",
+        "script_wild_staged"
+      ],
+      "remaining": "GivePoke final party/box and CPU scripted-wild staging candidates exist. Per-story static origin joins, story eligibility, reset/failure cleanup and natural final capture controls remain OPEN; staging is not acquisition."
+    },
+    "roamer_capture": {
+      "sites": [
+        "roamer_party_finalized",
+        "roamer_box_finalized"
+      ],
+      "remaining": "Roaming-mode success-only post-name candidates exist. Natural extra-catch legend_<species> zone semantics and readback remain OPEN. Crystal TinTower Suicune is scripted BATTLETYPE_SUICUNE, not roaming; its separate per-story legendary/static classification is SOURCE OPEN and cannot be inferred by this roaming guard."
+    },
+    "contest_capture": {
+      "sites": [
+        "contest_selected",
+        "contest_party_finalized",
+        "contest_box_inserted",
+        "contest_box_finalized"
+      ],
+      "remaining": "Provisional buffer and final party/box identities distinguished. Box final needs success-only insertion latch because BoxFull return also runs on capacity refusal. national_park_contest zone and decline/full-box/reset/readback controls physically OPEN."
+    }
+  },
+  "sites": [
+    {
+      "id": "battle_faint",
+      "signal": "player_faint",
+      "phase": "before_party_copyback",
+      "semantics": "Engine faint handling has selected wCurBattleMon. Battle HP/status copyback has not yet run; snapshot battle and party records separately.",
+      "point_symbols": [
+        "wCurBattleMon",
+        "wBattleMonHP",
+        "wPartyMon1",
+        "wBattleResult"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/battle/core.asm",
+          "symbol": "UpdateFaintedPlayerMon",
+          "source_sha256": "0f5b7011f6206517ca3ee946f82f2a2dcb55120d249673c66d8c9b11723a23c6",
+          "instructions": [
+            "ld a, [wCurBattleMon]",
+            "ld c, a",
+            "ld hl, wBattleParticipantsNotFainted"
+          ],
+          "hook_index": 0,
+          "hook_count": 3,
+          "evidence": [
+            {
+              "file": "engine/battle/core.asm",
+              "excerpt": "\tcall UpdateFaintedPlayerMon\n\tcall CheckPlayerPartyForFitMon"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/battle/core.asm",
+          "symbol": "UpdateFaintedPlayerMon",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "instructions": [
+            "ld a, [wCurBattleMon]",
+            "ld c, a",
+            "ld hl, wBattleParticipantsNotFainted"
+          ],
+          "hook_index": 0,
+          "hook_count": 3,
+          "evidence": [
+            {
+              "file": "engine/battle/core.asm",
+              "excerpt": "\tcall UpdateFaintedPlayerMon\n\tcall CheckPlayerPartyForFitMon"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "battle_end",
+      "signal": "battle_end_result",
+      "phase": "before_end_processing",
+      "semantics": "Entry precedes end-result handling, evolution and cleanup. wBattleResult remains a bitfield; this is not completion or whiteout proof.",
+      "point_symbols": [
+        "wBattleMode",
+        "wBattleResult",
+        "wLinkMode"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/battle/core.asm",
+          "symbol": "ExitBattle",
+          "source_sha256": "0f5b7011f6206517ca3ee946f82f2a2dcb55120d249673c66d8c9b11723a23c6",
+          "instructions": [
+            "call .HandleEndOfBattle",
+            "call CleanUpBattleRAM"
+          ],
+          "hook_index": 0,
+          "hook_count": 2,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/battle/core.asm",
+          "symbol": "ExitBattle",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "instructions": [
+            "call IsLinkBattle",
+            "jr nz, .HandleEndOfBattle"
+          ],
+          "hook_index": 0,
+          "hook_count": 2,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "wild_ready",
+      "signal": "wild_battle_start",
+      "phase": "after_enemy_load",
+      "semantics": "LoadEnemyMon and wild move/PP staging precede this local label; presentation work remains. Source candidate only.",
+      "point_symbols": [
+        "wBattleMode",
+        "wEnemyMonSpecies",
+        "wBattleType"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/battle/core.asm",
+          "symbol": "InitEnemyWildmon.skip_unown",
+          "source_sha256": "0f5b7011f6206517ca3ee946f82f2a2dcb55120d249673c66d8c9b11723a23c6",
+          "instructions": [
+            "ld de, vTiles2"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/battle/core.asm",
+              "excerpt": "InitEnemyWildmon:\n\tld a, WILD_BATTLE\n\tld [wBattleMode], a\n\tfarcall StubbedTrainerRankings_WildBattles\n\tcall LoadEnemyMon\n\tld hl, wEnemyMonMoves\n\tld de, wWildMonMoves\n\tld bc, NUM_MOVES\n\tcall CopyBytes\n\tld hl, wEnemyMonPP\n\tld de, wWildMonPP\n\tld bc, NUM_MOVES\n\tcall CopyBytes\n\tld hl, wEnemyMonDVs\n\tpredef GetUnownLetter\n\tld a, [wCurPartySpecies]\n\tcp UNOWN\n\tjr nz, .skip_unown\n\tld a, [wFirstUnownSeen]\n\tand a\n\tjr nz, .skip_unown\n\tld a, [wUnownLetter]\n\tld [wFirstUnownSeen], a"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/battle/core.asm",
+          "symbol": "InitEnemyWildmon.skip_unown",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "instructions": [
+            "ld de, vTiles2"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/battle/core.asm",
+              "excerpt": "InitEnemyWildmon:\n\tld a, WILD_BATTLE\n\tld [wBattleMode], a\n\tcall LoadEnemyMon\n\tld hl, wEnemyMonMoves\n\tld de, wWildMonMoves\n\tld bc, NUM_MOVES\n\tcall CopyBytes\n\tld hl, wEnemyMonPP\n\tld de, wWildMonPP\n\tld bc, NUM_MOVES\n\tcall CopyBytes\n\tld hl, wEnemyMonDVs\n\tpredef GetUnownLetter\n\tld a, [wCurPartySpecies]\n\tcp UNOWN\n\tjr nz, .skip_unown\n\tld a, [wFirstUnownSeen]\n\tand a\n\tjr nz, .skip_unown\n\tld a, [wUnownLetter]\n\tld [wFirstUnownSeen], a"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "trainer_ready",
+      "signal": "trainer_battle_start",
+      "phase": "return_after_trainer_setup",
+      "semantics": "ReadTrainerParty and trainer-mode assignment precede the return. No claim that a runtime hook has fired.",
+      "point_symbols": [
+        "wBattleMode",
+        "wOtherTrainerClass",
+        "wOtherTrainerID"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/battle/core.asm",
+          "symbol": "InitEnemyTrainer.done",
+          "source_sha256": "0f5b7011f6206517ca3ee946f82f2a2dcb55120d249673c66d8c9b11723a23c6",
+          "instructions": [
+            "ret"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/battle/core.asm",
+              "excerpt": "InitEnemyTrainer:\n\tld [wTrainerClass], a\n\tfarcall StubbedTrainerRankings_TrainerBattles\n\txor a\n\tld [wTempEnemyMonSpecies], a\n\tcallfar GetTrainerAttributes\n\tcallfar ReadTrainerParty\n\n\t; RIVAL1's first mon has no held item\n\tld a, [wTrainerClass]\n\tcp RIVAL1\n\tjr nz, .ok\n\txor a\n\tld [wOTPartyMon1Item], a\n\n.ok\n\tld de, vTiles2\n\tcallfar GetTrainerPic\n\txor a\n\tldh [hGraphicStartTile], a\n\tdec a\n\tld [wEnemyItemState], a\n\thlcoord 12, 0\n\tlb bc, 7, 7\n\tpredef PlaceGraphic\n\tld a, -1\n\tld [wCurOTMon], a\n\tld a, TRAINER_BATTLE\n\tld [wBattleMode], a\n\n\tcall IsGymLeader\n\tjr nc, .done\n\txor a\n\tld [wCurPartyMon], a\n\tld a, [wPartyCount]\n\tld b, a\n.partyloop\n\tpush bc\n\tld a, MON_HP\n\tcall GetPartyParamLocation\n\tld a, [hli]\n\tor [hl]\n\tjr z, .skipfaintedmon\n\tld c, HAPPINESS_GYMBATTLE\n\tcallfar ChangeHappiness\n.skipfaintedmon\n\tpop bc\n\tdec b\n\tjr z, .done\n\tld hl, wCurPartyMon\n\tinc [hl]\n\tjr .partyloop\n.done\n\tret\n"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/battle/core.asm",
+          "symbol": "InitEnemyTrainer.done",
+          "source_sha256": "e3df2ac2d770da8ed3c9595f351a280f9ecc454f9c688d8e482524c9fcacd137",
+          "instructions": [
+            "ret"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/battle/core.asm",
+              "excerpt": "InitEnemyTrainer:\n\tld [wTrainerClass], a\n\txor a\n\tld [wTempEnemyMonSpecies], a\n\tcallfar GetTrainerAttributes\n\tcallfar ReadTrainerParty\n\n\t; RIVAL1's first mon has no held item\n\tld a, [wTrainerClass]\n\tcp RIVAL1\n\tjr nz, .ok\n\txor a\n\tld [wOTPartyMon1Item], a\n\n.ok\n\tld de, vTiles2\n\tcallfar GetTrainerPic\n\txor a\n\tldh [hGraphicStartTile], a\n\tdec a\n\tld [wEnemyItemState], a\n\thlcoord 12, 0\n\tlb bc, 7, 7\n\tpredef PlaceGraphic\n\tld a, -1\n\tld [wCurOTMon], a\n\tld a, TRAINER_BATTLE\n\tld [wBattleMode], a\n\n\tcall IsGymLeader\n\tjr nc, .done\n\txor a\n\tld [wCurPartyMon], a\n\tld a, [wPartyCount]\n\tld b, a\n.partyloop\n\tpush bc\n\tld a, MON_HP\n\tcall GetPartyParamLocation\n\tld a, [hli]\n\tor [hl]\n\tjr z, .skipfaintedmon\n\tld c, HAPPINESS_GYMBATTLE\n\tcallfar ChangeHappiness\n.skipfaintedmon\n\tpop bc\n\tdec b\n\tjr z, .done\n\tld hl, wCurPartyMon\n\tinc [hl]\n\tjr .partyloop\n.done\n\tret\n"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "new_game",
+      "signal": "new_game",
+      "phase": "before_reset_wram",
+      "semantics": "New-game entry precedes ResetWRAM and campaign initialization; it is not an admitted live-session boundary.",
+      "point_symbols": [
+        "wPlayerID"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/menus/intro_menu.asm",
+          "symbol": "NewGame",
+          "source_sha256": "d1777feee7154ee7b130c8397bd78dced74c1cae0e241d393d604a9f57e2b1e0",
+          "instructions": [
+            "xor a",
+            "ld [wDebugFlags], a",
+            "call ResetWRAM"
+          ],
+          "hook_index": 0,
+          "hook_count": 3,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/menus/intro_menu.asm",
+          "symbol": "NewGame",
+          "source_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+          "instructions": [
+            "xor a",
+            "ld [wDebugFlags], a",
+            "call ResetWRAM"
+          ],
+          "hook_index": 0,
+          "hook_count": 3,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "soft_reset",
+      "signal": "soft_reset",
+      "phase": "reset_entry",
+      "semantics": "Reset entry invalidates observations; subsequent Init also has cold-start callers. This is not a new-game classifier.",
+      "point_symbols": [],
+      "sources": {
+        "pokecrystal": {
+          "file": "home/init.asm",
+          "symbol": "Reset",
+          "source_sha256": "5a73c1f85a5ab2c47c60b6508b1b4f622b1d897ff3c62a5ce31ab5b808c902ae",
+          "instructions": [
+            "di",
+            "call InitSound"
+          ],
+          "hook_index": 0,
+          "hook_count": 2,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "home/init.asm",
+          "symbol": "Reset",
+          "source_sha256": "1bb5a1a7f2d877b88f963365bd8f62949de1cc555dfe222d0f30c3a6c99c15b8",
+          "instructions": [
+            "call InitSound",
+            "xor a"
+          ],
+          "hook_index": 0,
+          "hook_count": 2,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "hatch_species",
+      "signal": "egg_hatch",
+      "phase": "after_egg_species_marker",
+      "semantics": "The parallel party species entry has replaced EGG. HP, OT identity and naming still change later; publication must be deferred.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurPartySpecies",
+        "wPartySpecies",
+        "wPartyMon1"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/breeding.asm",
+          "symbol": "HatchEggs.nottogepi",
+          "source_sha256": "6a4a2537eab3aa245abbc04e3809ab8804b6f1b91a3b2a23c2acad6b918f7e29",
+          "instructions": [
+            "pop de",
+            "ld a, [wCurPartySpecies]",
+            "dec de",
+            "ld [de], a",
+            "ld [wNamedObjectIndex], a"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/breeding.asm",
+              "excerpt": "HatchEggs:\n\tld de, wPartySpecies\n\tld hl, wPartyMon1Happiness\n\txor a\n\tld [wCurPartyMon], a\n\n.loop\n\tld a, [de]\n\tinc de\n\tcp -1\n\tjp z, .done\n\tpush de\n\tpush hl\n\tcp EGG\n\tjp nz, .next\n\tld a, [hl]\n\tand a\n\tjp nz, .next\n\tld [hl], $78\n\n\tpush de\n\n\tfarcall SetEggMonCaughtData\n\tfarcall StubbedTrainerRankings_EggsHatched\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMon1Species\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\tld a, [hl]\n\tld [wCurPartySpecies], a\n\tdec a\n\tcall SetSeenAndCaughtMon\n\n\tld a, [wCurPartySpecies]\n\tcp TOGEPI\n\tjr nz, .nottogepi\n\t; set the event flag for hatching togepi\n\tld de, EVENT_TOGEPI_HATCHED\n\tld b, SET_FLAG\n\tcall EventFlagAction"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/pokemon/breeding.asm",
+          "symbol": "HatchEggs.nottogepi",
+          "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+          "instructions": [
+            "pop de",
+            "ld a, [wCurPartySpecies]",
+            "dec de",
+            "ld [de], a",
+            "ld [wNamedObjectIndex], a"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/breeding.asm",
+              "excerpt": "HatchEggs:\n\tld de, wPartySpecies\n\tld hl, wPartyMon1Happiness\n\txor a\n\tld [wCurPartyMon], a\n\n.loop\n\tld a, [de]\n\tinc de\n\tcp -1\n\tjp z, .done\n\tpush de\n\tpush hl\n\tcp EGG\n\tjp nz, .next\n\tld a, [hl]\n\tand a\n\tjp nz, .next\n\tld [hl], $78\n\n\tpush de\n\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMon1Species\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\tld a, [hl]\n\tld [wCurPartySpecies], a\n\tdec a\n\tcall SetSeenAndCaughtMon\n\n\tld a, [wCurPartySpecies]\n\tcp TOGEPI\n\tjr nz, .nottogepi\n\t; set the event flag for hatching togepi\n\tld de, EVENT_TOGEPI_HATCHED\n\tld b, SET_FLAG\n\tcall EventFlagAction"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "save_completed",
+      "signal": "save_completed",
+      "phase": "before_success_return",
+      "semantics": "All _SaveGameData calls have returned at this terminal RET. It is a CPU completion candidate, not CartRAM durability or recovery proof.",
+      "point_symbols": [
+        "wSaveFileExists",
+        "wSavedAtLeastOnce",
+        "wCurBox"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/menus/save.asm",
+          "symbol": "_SaveGameData.ok",
+          "source_sha256": "4bc1defa6239a32fe8525ed39bab6ab560b95abc46ce303443c6a1446514b2cd",
+          "instructions": [
+            "call CloseSRAM",
+            "ret"
+          ],
+          "hook_index": 1,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/menus/save.asm",
+              "excerpt": "_SaveGameData:\n\tld a, TRUE\n\tld [wSaveFileExists], a\n\tfarcall StageRTCTimeForSave\n\tfarcall BackupMysteryGift\n\tcall ValidateSave\n\tcall SaveOptions\n\tcall SavePlayerData\n\tcall SavePokemonData\n\tcall SaveBox\n\tcall SaveChecksum\n\tcall ValidateBackupSave\n\tcall SaveBackupOptions\n\tcall SaveBackupPlayerData\n\tcall SaveBackupPokemonData\n\tcall SaveBackupChecksum\n\tcall UpdateStackTop\n\tfarcall BackupPartyMonMail\n\tfarcall BackupGSBallFlag\n\tfarcall SaveRTC\n\tld a, BANK(sBattleTowerChallengeState)\n\tcall OpenSRAM\n\tld a, [sBattleTowerChallengeState]\n\tcp BATTLETOWER_RECEIVED_REWARD\n\tjr nz, .ok\n\txor a\n\tld [sBattleTowerChallengeState], a\n.ok\n\tcall CloseSRAM\n\tret"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/menus/save.asm",
+          "symbol": "_SaveGameData",
+          "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+          "instructions": [
+            "ld a, TRUE",
+            "ld [wSaveFileExists], a",
+            "farcall StageRTCTimeForSave",
+            "farcall BackupMysteryGift",
+            "call ValidateSave",
+            "call SaveOptions",
+            "call SavePlayerData",
+            "call SavePokemonData",
+            "call SaveBox",
+            "call SaveChecksum",
+            "call ValidateBackupSave",
+            "call SaveBackupOptions",
+            "call SaveBackupPlayerData",
+            "call SaveBackupPokemonData",
+            "call SaveBackupChecksum",
+            "call UpdateStackTop",
+            "farcall BackupPartyMonMail",
+            "farcall SaveRTC",
+            "ret"
+          ],
+          "hook_index": 18,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/menus/save.asm",
+              "excerpt": "_SaveGameData:\n\tld a, TRUE\n\tld [wSaveFileExists], a\n\tfarcall StageRTCTimeForSave\n\tfarcall BackupMysteryGift\n\tcall ValidateSave\n\tcall SaveOptions\n\tcall SavePlayerData\n\tcall SavePokemonData\n\tcall SaveBox\n\tcall SaveChecksum\n\tcall ValidateBackupSave\n\tcall SaveBackupOptions\n\tcall SaveBackupPlayerData\n\tcall SaveBackupPokemonData\n\tcall SaveBackupChecksum\n\tcall UpdateStackTop\n\tfarcall BackupPartyMonMail\n\tfarcall SaveRTC\n\tret"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "poison_faint",
+      "signal": "poison_faint",
+      "phase": "after_poison_hp_zero",
+      "semantics": "This branch follows one HP of poison damage and a zero HP result. Status reset follows; wCurPartyMon identifies the affected slot.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wPartyMon1",
+        "wPoisonStepPartyFlags"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/events/poisonstep.asm",
+          "symbol": "DoPoisonStep.DamageMonIfPoisoned",
+          "source_sha256": "2631d05cf5c52770c61a493e215e26a60bc0f5f739f051e9374efbc6db3f842a",
+          "instructions": [
+            "ld a, MON_STATUS",
+            "call GetPartyParamLocation",
+            "ld a, [hl]",
+            "and 1 << PSN",
+            "ret z",
+            "ld a, MON_HP",
+            "call GetPartyParamLocation",
+            "ld a, [hli]",
+            "ld b, a",
+            "ld c, [hl]",
+            "or c",
+            "ret z",
+            "dec bc",
+            "ld [hl], c",
+            "dec hl",
+            "ld [hl], b",
+            "ld a, b",
+            "or c",
+            "jr nz, .not_fainted",
+            "ld a, MON_STATUS",
+            "call GetPartyParamLocation",
+            "ld [hl], 0"
+          ],
+          "hook_index": 19,
+          "hook_count": 3,
+          "evidence": [
+            {
+              "file": "engine/events/poisonstep.asm",
+              "excerpt": ".loop_check_poison\n\tcall .DamageMonIfPoisoned\n\tjr nc, .not_poisoned"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/events/poisonstep.asm",
+          "symbol": "DoPoisonStep.DamageMonIfPoisoned",
+          "source_sha256": "2631d05cf5c52770c61a493e215e26a60bc0f5f739f051e9374efbc6db3f842a",
+          "instructions": [
+            "ld a, MON_STATUS",
+            "call GetPartyParamLocation",
+            "ld a, [hl]",
+            "and 1 << PSN",
+            "ret z",
+            "ld a, MON_HP",
+            "call GetPartyParamLocation",
+            "ld a, [hli]",
+            "ld b, a",
+            "ld c, [hl]",
+            "or c",
+            "ret z",
+            "dec bc",
+            "ld [hl], c",
+            "dec hl",
+            "ld [hl], b",
+            "ld a, b",
+            "or c",
+            "jr nz, .not_fainted",
+            "ld a, MON_STATUS",
+            "call GetPartyParamLocation",
+            "ld [hl], 0"
+          ],
+          "hook_index": 19,
+          "hook_count": 3,
+          "evidence": [
+            {
+              "file": "engine/events/poisonstep.asm",
+              "excerpt": ".loop_check_poison\n\tcall .DamageMonIfPoisoned\n\tjr nc, .not_poisoned"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "capture_party",
+      "signal": "capture_party",
+      "phase": "post_insert_pre_nickname",
+      "semantics": "Party-count fork selected TryAddMonToParty; its predef has returned. Caught metadata and nickname work remain; retain acquisition until final identity readback.",
+      "point_symbols": [
+        "wPartyCount",
+        "wPartyMon1",
+        "wBattleType",
+        "wCurPartySpecies"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.not_celebi",
+          "source_sha256": "95fe7b6c23c9b3db40259dc23d2ceea6c307349c1b01ae7d66d92cf0ae85e9a5",
+          "instructions": [
+            "ld a, [wPartyCount]",
+            "cp PARTY_LENGTH",
+            "jr z, .SendToPC",
+            "xor a",
+            "ld [wMonType], a",
+            "call ClearSprites",
+            "predef TryAddMonToParty",
+            "farcall SetCaughtData"
+          ],
+          "hook_index": 7,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/item_effects.asm",
+              "excerpt": "\n.skip_pokedex\n\tld a, [wBattleType]\n\tcp BATTLETYPE_CONTEST\n\tjp z, .catch_bug_contest_mon\n\tcp BATTLETYPE_CELEBI\n\tjr nz, .not_celebi\n\tld hl, wBattleResult\n\tset BATTLERESULT_CAUGHT_CELEBI, [hl]\n.not_celebi\n\n\tld a, [wPartyCount]\n\tcp PARTY_LENGTH\n\tjr z, .SendToPC\n\n\txor a ; PARTYMON\n\tld [wMonType], a\n\tcall ClearSprites\n\n\tpredef TryAddMonToParty\n\n\tfarcall SetCaughtData\n\n\tld a, [wCurItem]\n\tcp FRIEND_BALL\n\tjr nz, .SkipPartyMonFriendBall\n\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMon1Happiness\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\n\tld a, FRIEND_BALL_HAPPINESS\n\tld [hl], a\n"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.skip_pokedex",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "instructions": [
+            "ld a, [wBattleType]",
+            "cp BATTLETYPE_CONTEST",
+            "jp z, .catch_bug_contest_mon",
+            "ld a, [wPartyCount]",
+            "cp PARTY_LENGTH",
+            "jr z, .SendToPC",
+            "xor a",
+            "ld [wMonType], a",
+            "call ClearSprites",
+            "predef TryAddMonToParty",
+            "ld a, [wCurItem]"
+          ],
+          "hook_index": 10,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/item_effects.asm",
+              "excerpt": "\n.skip_pokedex\n\tld a, [wBattleType]\n\tcp BATTLETYPE_CONTEST\n\tjp z, .catch_bug_contest_mon\n\tld a, [wPartyCount]\n\tcp PARTY_LENGTH\n\tjr z, .SendToPC\n\n\txor a ; PARTYMON\n\tld [wMonType], a\n\tcall ClearSprites\n\n\tpredef TryAddMonToParty\n\n\tld a, [wCurItem]\n\tcp FRIEND_BALL\n\tjr nz, .SkipPartyMonFriendBall\n\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMon1Happiness\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\n\tld a, FRIEND_BALL_HAPPINESS\n\tld [hl], a\n"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "capture_box",
+      "signal": "capture_box",
+      "phase": "post_insert_pre_nickname",
+      "semantics": "SendMonIntoBox predef has returned on the full-party catch branch, before the box-count full flag check. Final-slot and nonfinal-slot runtime controls remain open.",
+      "point_symbols": [
+        "wPartyCount",
+        "wBattleType",
+        "wCurPartySpecies",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.SendToPC",
+          "source_sha256": "95fe7b6c23c9b3db40259dc23d2ceea6c307349c1b01ae7d66d92cf0ae85e9a5",
+          "instructions": [
+            "call ClearSprites",
+            "predef SendMonIntoBox",
+            "farcall SetBoxMonCaughtData"
+          ],
+          "hook_index": 2,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/item_effects.asm",
+              "excerpt": "\n.skip_pokedex\n\tld a, [wBattleType]\n\tcp BATTLETYPE_CONTEST\n\tjp z, .catch_bug_contest_mon\n\tcp BATTLETYPE_CELEBI\n\tjr nz, .not_celebi\n\tld hl, wBattleResult\n\tset BATTLERESULT_CAUGHT_CELEBI, [hl]\n.not_celebi\n\n\tld a, [wPartyCount]\n\tcp PARTY_LENGTH\n\tjr z, .SendToPC\n\n\txor a ; PARTYMON\n\tld [wMonType], a\n\tcall ClearSprites\n\n\tpredef TryAddMonToParty\n\n\tfarcall SetCaughtData\n\n\tld a, [wCurItem]\n\tcp FRIEND_BALL\n\tjr nz, .SkipPartyMonFriendBall\n\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMon1Happiness\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\n\tld a, FRIEND_BALL_HAPPINESS\n\tld [hl], a\n"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.SendToPC",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "instructions": [
+            "call ClearSprites",
+            "predef SendMonIntoBox",
+            "ld a, BANK(sBoxCount)"
+          ],
+          "hook_index": 2,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/item_effects.asm",
+              "excerpt": "\n.skip_pokedex\n\tld a, [wBattleType]\n\tcp BATTLETYPE_CONTEST\n\tjp z, .catch_bug_contest_mon\n\tld a, [wPartyCount]\n\tcp PARTY_LENGTH\n\tjr z, .SendToPC\n\n\txor a ; PARTYMON\n\tld [wMonType], a\n\tcall ClearSprites\n\n\tpredef TryAddMonToParty\n\n\tld a, [wCurItem]\n\tcp FRIEND_BALL\n\tjr nz, .SkipPartyMonFriendBall\n\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMon1Happiness\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\n\tld a, FRIEND_BALL_HAPPINESS\n\tld [hl], a\n"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "whiteout_before_heal",
+      "signal": "whiteout",
+      "phase": "before_heal_dispatch",
+      "semantics": "CPU Special dispatch runs before HealParty. Every generated DE, script-bank, script-position and two-level CPU return-stack guard is mandatory; ordinary heals must not be treated as whiteout.",
+      "point_symbols": [
+        "wScriptBank",
+        "wScriptPos",
+        "wPartyCount",
+        "wPartyMon1"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/events/specials.asm",
+          "symbol": "Special",
+          "source_sha256": "25c9ed69208e2c9b11779a8fc6d619c68a1368af9864704d4b697c6eb51261c9",
+          "instructions": [
+            "ld hl, SpecialsPointers",
+            "add hl, de",
+            "add hl, de",
+            "add hl, de"
+          ],
+          "hook_index": 0,
+          "hook_count": 4,
+          "evidence": [
+            {
+              "file": "engine/events/whiteout.asm",
+              "excerpt": "Script_Whiteout:\n\twritetext .WhitedOutText\n\twaitbutton\n\tspecial FadeOutToWhite\n\tpause 40\n\tspecial HealParty"
+            },
+            {
+              "file": "engine/overworld/scripting.asm",
+              "excerpt": "Script_special:\n\tcall GetScriptByte\n\tld e, a\n\tcall GetScriptByte\n\tld d, a\n\tfarcall Special\n\tret"
+            },
+            {
+              "file": "home/map.asm",
+              "excerpt": "GetScriptByte::\n; Return byte at wScriptBank:wScriptPos in a.\n\n\tpush hl\n\tpush bc\n\tldh a, [hROMBank]\n\tpush af\n\tld a, [wScriptBank]\n\trst Bankswitch\n\n\tld hl, wScriptPos\n\tld c, [hl]\n\tinc hl\n\tld b, [hl]\n\n\tld a, [bc]\n\n\tinc bc\n\tld [hl], b\n\tdec hl\n\tld [hl], c\n\n\tld b, a\n\tpop af\n\trst Bankswitch\n\tld a, b\n\tpop bc\n\tpop hl\n\tret"
+            },
+            {
+              "file": "macros/scripts/events.asm",
+              "excerpt": "MACRO writetext\n\tdb writetext_command\n\tdw \\1 ; text_pointer\nENDM"
+            },
+            {
+              "file": "macros/scripts/events.asm",
+              "excerpt": "MACRO waitbutton\n\tdb waitbutton_command\nENDM"
+            },
+            {
+              "file": "macros/scripts/events.asm",
+              "excerpt": "MACRO special\n\tdb special_command\n\tdw (\\1Special - SpecialsPointers) / 3\nENDM"
+            },
+            {
+              "file": "macros/scripts/events.asm",
+              "excerpt": "MACRO pause\n\tdb pause_command\n\tdb \\1 ; length\nENDM"
+            },
+            {
+              "file": "home/farcall.asm",
+              "excerpt": "FarCall_hl::\n; Call a:hl.\n; Preserves other registers.\n\tldh [hTempBank], a\n\tldh a, [hROMBank]\n\tpush af\n\tldh a, [hTempBank]\n\trst Bankswitch\n\tcall FarCall_JumpToHL"
+            },
+            {
+              "file": "home/header.asm",
+              "excerpt": "FarCall::\n\tjp FarCall_hl"
+            },
+            {
+              "file": "home/header.asm",
+              "excerpt": "Bankswitch::\n\tldh [hROMBank], a\n\tld [rROMB], a\n\tret"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/events/specials.asm",
+          "symbol": "Special",
+          "source_sha256": "2c86084855998e078e930deb88f70ced8523ec40da1bdd5520fff4393115466b",
+          "instructions": [
+            "ld hl, SpecialsPointers",
+            "add hl, de",
+            "add hl, de",
+            "add hl, de"
+          ],
+          "hook_index": 0,
+          "hook_count": 4,
+          "evidence": [
+            {
+              "file": "engine/events/whiteout.asm",
+              "excerpt": "Script_Whiteout:\n\twritetext .WhitedOutText\n\twaitbutton\n\tspecial FadeOutToWhite\n\tpause 40\n\tspecial HealParty"
+            },
+            {
+              "file": "engine/overworld/scripting.asm",
+              "excerpt": "Script_special:\n\tcall GetScriptByte\n\tld e, a\n\tcall GetScriptByte\n\tld d, a\n\tfarcall Special\n\tret"
+            },
+            {
+              "file": "home/map.asm",
+              "excerpt": "GetScriptByte::\n; Return byte at wScriptBank:wScriptPos in a.\n\n\tpush hl\n\tpush bc\n\tldh a, [hROMBank]\n\tpush af\n\tld a, [wScriptBank]\n\trst Bankswitch\n\n\tld hl, wScriptPos\n\tld c, [hl]\n\tinc hl\n\tld b, [hl]\n\n\tld a, [bc]\n\n\tinc bc\n\tld [hl], b\n\tdec hl\n\tld [hl], c\n\n\tld b, a\n\tpop af\n\trst Bankswitch\n\tld a, b\n\tpop bc\n\tpop hl\n\tret"
+            },
+            {
+              "file": "macros/scripts/events.asm",
+              "excerpt": "MACRO writetext\n\tdb writetext_command\n\tdw \\1 ; text_pointer\nENDM"
+            },
+            {
+              "file": "macros/scripts/events.asm",
+              "excerpt": "MACRO waitbutton\n\tdb waitbutton_command\nENDM"
+            },
+            {
+              "file": "macros/scripts/events.asm",
+              "excerpt": "MACRO special\n\tdb special_command\n\tdw (\\1Special - SpecialsPointers) / 3\nENDM"
+            },
+            {
+              "file": "macros/scripts/events.asm",
+              "excerpt": "MACRO pause\n\tdb pause_command\n\tdb \\1 ; length\nENDM"
+            },
+            {
+              "file": "home/farcall.asm",
+              "excerpt": "FarCall_hl::\n; Call a:hl.\n; Preserves other registers.\n\tld [wTempBank], a\n\tldh a, [hROMBank]\n\tpush af\n\tld a, [wTempBank]\n\trst Bankswitch\n\tcall FarCall_JumpToHL"
+            },
+            {
+              "file": "home/header.asm",
+              "excerpt": "FarCall::\n\tjp FarCall_hl"
+            },
+            {
+              "file": "home/header.asm",
+              "excerpt": "Bankswitch::\n\tldh [hROMBank], a\n\tld [rROMB], a\n\tret"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "pc_deposit_begin",
+      "signal": "pc_deposit",
+      "phase": "before_transfer_attempt",
+      "semantics": "Snapshot selected identity before transfer; full-box/full-party failure must clear the attempt without publication.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "DepositPokemon",
+          "source_sha256": "6e705179cfd528b1813ec6f8e09f5ffaff0cbe5921f6d8e23f958d64752379da",
+          "instructions": [
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld hl, wPartyMonNicknames",
+            "ld a, [wCurPartyMon]",
+            "call GetNickname",
+            "ld a, PC_DEPOSIT",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "predef SendGetMonIntoFromBox"
+          ],
+          "hook_index": 9,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "DepositPokemon",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "instructions": [
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld hl, wPartyMonNicknames",
+            "ld a, [wCurPartyMon]",
+            "call GetNickname",
+            "ld a, PC_DEPOSIT",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "predef SendGetMonIntoFromBox"
+          ],
+          "hook_index": 9,
+          "hook_count": 1,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "pc_deposit_complete",
+      "signal": "pc_deposit",
+      "phase": "after_successful_copy_and_compaction",
+      "semantics": "The carry failure branch was bypassed and removal returned. Consume the prior identity; slot positions may have compacted.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "DepositPokemon",
+          "source_sha256": "6e705179cfd528b1813ec6f8e09f5ffaff0cbe5921f6d8e23f958d64752379da",
+          "instructions": [
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld hl, wPartyMonNicknames",
+            "ld a, [wCurPartyMon]",
+            "call GetNickname",
+            "ld a, PC_DEPOSIT",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "predef SendGetMonIntoFromBox",
+            "jr c, .BoxFull",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox",
+            "ld a, [wCurPartySpecies]"
+          ],
+          "hook_index": 14,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "DepositPokemon",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "instructions": [
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld hl, wPartyMonNicknames",
+            "ld a, [wCurPartyMon]",
+            "call GetNickname",
+            "ld a, PC_DEPOSIT",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "predef SendGetMonIntoFromBox",
+            "jr c, .BoxFull",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox",
+            "ld a, [wCurPartySpecies]"
+          ],
+          "hook_index": 14,
+          "hook_count": 1,
+          "evidence": []
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "pc_deposit_begin"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "pc_withdraw_begin",
+      "signal": "pc_withdraw",
+      "phase": "before_transfer_attempt",
+      "semantics": "Snapshot selected identity before transfer; full-box/full-party failure must clear the attempt without publication.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "TryWithdrawPokemon",
+          "source_sha256": "6e705179cfd528b1813ec6f8e09f5ffaff0cbe5921f6d8e23f958d64752379da",
+          "instructions": [
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld a, BANK(sBoxMonNicknames)",
+            "call OpenSRAM",
+            "ld a, [wCurPartyMon]",
+            "ld hl, sBoxMonNicknames",
+            "call GetNickname",
+            "call CloseSRAM",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "predef SendGetMonIntoFromBox"
+          ],
+          "hook_index": 12,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "TryWithdrawPokemon",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "instructions": [
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld a, BANK(sBoxMonNicknames)",
+            "call OpenSRAM",
+            "ld a, [wCurPartyMon]",
+            "ld hl, sBoxMonNicknames",
+            "call GetNickname",
+            "call CloseSRAM",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "predef SendGetMonIntoFromBox"
+          ],
+          "hook_index": 12,
+          "hook_count": 1,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "pc_withdraw_complete",
+      "signal": "pc_withdraw",
+      "phase": "after_successful_copy_and_compaction",
+      "semantics": "The carry failure branch was bypassed and removal returned. Consume the prior identity; slot positions may have compacted.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "TryWithdrawPokemon",
+          "source_sha256": "6e705179cfd528b1813ec6f8e09f5ffaff0cbe5921f6d8e23f958d64752379da",
+          "instructions": [
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld a, BANK(sBoxMonNicknames)",
+            "call OpenSRAM",
+            "ld a, [wCurPartyMon]",
+            "ld hl, sBoxMonNicknames",
+            "call GetNickname",
+            "call CloseSRAM",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "predef SendGetMonIntoFromBox",
+            "jr c, .PartyFull",
+            "ld a, REMOVE_BOX",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox",
+            "ld a, [wCurPartySpecies]"
+          ],
+          "hook_index": 17,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "TryWithdrawPokemon",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "instructions": [
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld a, BANK(sBoxMonNicknames)",
+            "call OpenSRAM",
+            "ld a, [wCurPartyMon]",
+            "ld hl, sBoxMonNicknames",
+            "call GetNickname",
+            "call CloseSRAM",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "predef SendGetMonIntoFromBox",
+            "jr c, .PartyFull",
+            "ld a, REMOVE_BOX",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox",
+            "ld a, [wCurPartySpecies]"
+          ],
+          "hook_index": 17,
+          "hook_count": 1,
+          "evidence": []
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "pc_withdraw_begin"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "pc_release_party_begin",
+      "signal": "pc_release",
+      "phase": "confirmed_before_removal",
+      "semantics": "Release checks and accepted YesNo precede this call. Snapshot the outgoing record before compaction.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "BillsPCDepositFuncRelease",
+          "source_sha256": "6e705179cfd528b1813ec6f8e09f5ffaff0cbe5921f6d8e23f958d64752379da",
+          "instructions": [
+            "call BillsPC_CheckMail_PreventBlackout",
+            "jr c, BillsPCDepositFuncCancel",
+            "call BillsPC_IsMonAnEgg",
+            "jr c, BillsPCDepositFuncCancel",
+            "ld a, [wMenuCursorY]",
+            "push af",
+            "ld de, PCString_ReleasePKMN",
+            "call BillsPC_PlaceString",
+            "call LoadStandardMenuHeader",
+            "lb bc, 14, 11",
+            "call PlaceYesNoBox",
+            "ld a, [wMenuCursorY]",
+            "dec a",
+            "call ExitMenu",
+            "and a",
+            "jr nz, .failed_release",
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox"
+          ],
+          "hook_index": 22,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "BillsPCDepositFuncRelease",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "instructions": [
+            "call BillsPC_CheckMail_PreventBlackout",
+            "jr c, BillsPCDepositFuncCancel",
+            "call BillsPC_IsMonAnEgg",
+            "jr c, BillsPCDepositFuncCancel",
+            "ld a, [wMenuCursorY]",
+            "push af",
+            "ld de, PCString_ReleasePKMN",
+            "call BillsPC_PlaceString",
+            "call LoadStandardMenuHeader",
+            "lb bc, 14, 11",
+            "call PlaceYesNoBox",
+            "ld a, [wMenuCursorY]",
+            "dec a",
+            "call ExitMenu",
+            "and a",
+            "jr nz, .failed_release",
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox"
+          ],
+          "hook_index": 22,
+          "hook_count": 1,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "pc_release_party_complete",
+      "signal": "pc_release",
+      "phase": "after_confirmed_removal",
+      "semantics": "Removal returned; consume the prior outgoing identity instead of reading its compacted former slot.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "BillsPCDepositFuncRelease",
+          "source_sha256": "6e705179cfd528b1813ec6f8e09f5ffaff0cbe5921f6d8e23f958d64752379da",
+          "instructions": [
+            "call BillsPC_CheckMail_PreventBlackout",
+            "jr c, BillsPCDepositFuncCancel",
+            "call BillsPC_IsMonAnEgg",
+            "jr c, BillsPCDepositFuncCancel",
+            "ld a, [wMenuCursorY]",
+            "push af",
+            "ld de, PCString_ReleasePKMN",
+            "call BillsPC_PlaceString",
+            "call LoadStandardMenuHeader",
+            "lb bc, 14, 11",
+            "call PlaceYesNoBox",
+            "ld a, [wMenuCursorY]",
+            "dec a",
+            "call ExitMenu",
+            "and a",
+            "jr nz, .failed_release",
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox",
+            "call ReleasePKMN_ByePKMN"
+          ],
+          "hook_index": 23,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "BillsPCDepositFuncRelease",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "instructions": [
+            "call BillsPC_CheckMail_PreventBlackout",
+            "jr c, BillsPCDepositFuncCancel",
+            "call BillsPC_IsMonAnEgg",
+            "jr c, BillsPCDepositFuncCancel",
+            "ld a, [wMenuCursorY]",
+            "push af",
+            "ld de, PCString_ReleasePKMN",
+            "call BillsPC_PlaceString",
+            "call LoadStandardMenuHeader",
+            "lb bc, 14, 11",
+            "call PlaceYesNoBox",
+            "ld a, [wMenuCursorY]",
+            "dec a",
+            "call ExitMenu",
+            "and a",
+            "jr nz, .failed_release",
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "xor a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox",
+            "call ReleasePKMN_ByePKMN"
+          ],
+          "hook_index": 23,
+          "hook_count": 1,
+          "evidence": []
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "pc_release_party_begin"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "pc_release_box_begin",
+      "signal": "pc_release",
+      "phase": "confirmed_before_removal",
+      "semantics": "Release checks and accepted YesNo precede this call. Snapshot the outgoing record before compaction.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "BillsPC_Withdraw.release",
+          "source_sha256": "6e705179cfd528b1813ec6f8e09f5ffaff0cbe5921f6d8e23f958d64752379da",
+          "instructions": [
+            "ld a, [wMenuCursorY]",
+            "push af",
+            "call BillsPC_IsMonAnEgg",
+            "jr c, .FailedRelease",
+            "ld de, PCString_ReleasePKMN",
+            "call BillsPC_PlaceString",
+            "call LoadStandardMenuHeader",
+            "lb bc, 14, 11",
+            "call PlaceYesNoBox",
+            "ld a, [wMenuCursorY]",
+            "dec a",
+            "call ExitMenu",
+            "and a",
+            "jr nz, .FailedRelease",
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld a, REMOVE_BOX",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox"
+          ],
+          "hook_index": 20,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "BillsPC_Withdraw.release",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "instructions": [
+            "ld a, [wMenuCursorY]",
+            "push af",
+            "call BillsPC_IsMonAnEgg",
+            "jr c, .FailedRelease",
+            "ld de, PCString_ReleasePKMN",
+            "call BillsPC_PlaceString",
+            "call LoadStandardMenuHeader",
+            "lb bc, 14, 11",
+            "call PlaceYesNoBox",
+            "ld a, [wMenuCursorY]",
+            "dec a",
+            "call ExitMenu",
+            "and a",
+            "jr nz, .FailedRelease",
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld a, REMOVE_BOX",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox"
+          ],
+          "hook_index": 20,
+          "hook_count": 1,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "pc_release_box_complete",
+      "signal": "pc_release",
+      "phase": "after_confirmed_removal",
+      "semantics": "Removal returned; consume the prior outgoing identity instead of reading its compacted former slot.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "BillsPC_Withdraw.release",
+          "source_sha256": "6e705179cfd528b1813ec6f8e09f5ffaff0cbe5921f6d8e23f958d64752379da",
+          "instructions": [
+            "ld a, [wMenuCursorY]",
+            "push af",
+            "call BillsPC_IsMonAnEgg",
+            "jr c, .FailedRelease",
+            "ld de, PCString_ReleasePKMN",
+            "call BillsPC_PlaceString",
+            "call LoadStandardMenuHeader",
+            "lb bc, 14, 11",
+            "call PlaceYesNoBox",
+            "ld a, [wMenuCursorY]",
+            "dec a",
+            "call ExitMenu",
+            "and a",
+            "jr nz, .FailedRelease",
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld a, REMOVE_BOX",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox",
+            "call ReleasePKMN_ByePKMN"
+          ],
+          "hook_index": 21,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/bills_pc.asm",
+          "symbol": "BillsPC_Withdraw.release",
+          "source_sha256": "0086b38b745fbf751937e6c96c601300cc641476920ad2fd3c761ee26f5a29ab",
+          "instructions": [
+            "ld a, [wMenuCursorY]",
+            "push af",
+            "call BillsPC_IsMonAnEgg",
+            "jr c, .FailedRelease",
+            "ld de, PCString_ReleasePKMN",
+            "call BillsPC_PlaceString",
+            "call LoadStandardMenuHeader",
+            "lb bc, 14, 11",
+            "call PlaceYesNoBox",
+            "ld a, [wMenuCursorY]",
+            "dec a",
+            "call ExitMenu",
+            "and a",
+            "jr nz, .FailedRelease",
+            "ld a, [wBillsPC_CursorPosition]",
+            "ld hl, wBillsPC_ScrollPosition",
+            "add [hl]",
+            "ld [wCurPartyMon], a",
+            "ld a, REMOVE_BOX",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "farcall RemoveMonFromPartyOrBox",
+            "call ReleasePKMN_ByePKMN"
+          ],
+          "hook_index": 21,
+          "hook_count": 1,
+          "evidence": []
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "pc_release_box_begin"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "change_box_begin",
+      "signal": "change_box",
+      "phase": "before_confirmation",
+      "semantics": "Box-change attempt; confirmations can still refuse. Retain old-box context.",
+      "point_symbols": [
+        "wCurBox"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/menus/save.asm",
+          "symbol": "ChangeBoxSaveGame",
+          "source_sha256": "4bc1defa6239a32fe8525ed39bab6ab560b95abc46ce303443c6a1446514b2cd",
+          "instructions": [
+            "push de"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/menus/save.asm",
+          "symbol": "ChangeBoxSaveGame",
+          "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+          "instructions": [
+            "push de"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "change_box_loaded",
+      "signal": "change_box",
+      "phase": "after_old_box_save_and_new_box_load",
+      "semantics": "Confirmations passed, SaveBox returned, wCurBox changed and LoadBox returned. UI/game-logic resumption remains.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurBox",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/menus/save.asm",
+          "symbol": "ChangeBoxSaveGame",
+          "source_sha256": "4bc1defa6239a32fe8525ed39bab6ab560b95abc46ce303443c6a1446514b2cd",
+          "instructions": [
+            "push de",
+            "ld hl, ChangeBoxSaveText",
+            "call MenuTextbox",
+            "call YesNoBox",
+            "call ExitMenu",
+            "jr c, .refused",
+            "call AskOverwriteSaveFile",
+            "jr c, .refused",
+            "call PauseGameLogic",
+            "call SavingDontTurnOffThePower",
+            "call SaveBox",
+            "pop de",
+            "ld a, e",
+            "ld [wCurBox], a",
+            "call LoadBox",
+            "call SavedTheGame"
+          ],
+          "hook_index": 15,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/menus/save.asm",
+          "symbol": "ChangeBoxSaveGame",
+          "source_sha256": "3fb984b59aac34d4f4ddc423fca143b8591c8f94efac2c63d01d1553a3d5f3a0",
+          "instructions": [
+            "push de",
+            "ld hl, ChangeBoxSaveText",
+            "call MenuTextbox",
+            "call YesNoBox",
+            "call ExitMenu",
+            "jr c, .refused",
+            "call AskOverwriteSaveFile",
+            "jr c, .refused",
+            "call PauseGameLogic",
+            "call SaveBox",
+            "pop de",
+            "ld a, e",
+            "ld [wCurBox], a",
+            "call LoadBox",
+            "call SavingDontTurnOffThePower"
+          ],
+          "hook_index": 14,
+          "hook_count": 1,
+          "evidence": []
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "change_box_begin"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "evolution_species_published",
+      "signal": "evolution_species",
+      "phase": "after_party_species_list_publish",
+      "semantics": "Evolved struct and move work preceded this point; parallel species marker has now been written. wEvolutionOldSpecies retains old species for key migration.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wEvolutionOldSpecies",
+        "wTempMonSpecies",
+        "wPartySpecies",
+        "wPartyMon1"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/evolve.asm",
+          "symbol": "EvolveAfterBattle_MasterLoop.skip_unown",
+          "source_sha256": "d6813df512fbf14d4d9d4b6ef2ac7f834fcd2e7dd36b576d79bebf71fe1b217e",
+          "instructions": [
+            "pop de",
+            "pop hl",
+            "ld a, [wTempMonSpecies]",
+            "ld [hl], a",
+            "push hl"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/evolve.asm",
+              "excerpt": "\tld hl, wTempMonSpecies\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall CopyBytes\n\n\tld a, [wCurSpecies]\n\tld [wTempSpecies], a\n\txor a\n\tld [wMonType], a\n\tcall LearnLevelMoves\n\tld a, [wTempSpecies]\n\tdec a\n\tcall SetSeenAndCaughtMon\n\n\tld a, [wTempSpecies]\n\tcp UNOWN\n\tjr nz, .skip_unown\n\n\tld hl, wTempMonDVs\n\tpredef GetUnownLetter\n\tcallfar UpdateUnownDex\n\n.skip_unown\n"
+            },
+            {
+              "file": "engine/pokemon/evolve.asm",
+              "excerpt": "\tpush af\n\tcall ClearSprites\n\tpop af\n\tjp c, CancelEvolution"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/pokemon/evolve.asm",
+          "symbol": "EvolveAfterBattle_MasterLoop.skip_unown",
+          "source_sha256": "030c2912f004d4fdcd8c588e9f8c68fc06244ce21bfce1d1859fbddac127fdf7",
+          "instructions": [
+            "pop de",
+            "pop hl",
+            "ld a, [wTempMonSpecies]",
+            "ld [hl], a",
+            "push hl"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/evolve.asm",
+              "excerpt": "\tld hl, wTempMonSpecies\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall CopyBytes\n\n\tld a, [wCurSpecies]\n\tld [wTempSpecies], a\n\txor a\n\tld [wMonType], a\n\tcall LearnLevelMoves\n\tld a, [wTempSpecies]\n\tdec a\n\tcall SetSeenAndCaughtMon\n\n\tld a, [wTempSpecies]\n\tcp UNOWN\n\tjr nz, .skip_unown\n\n\tld hl, wTempMonDVs\n\tpredef GetUnownLetter\n\tcallfar UpdateUnownDex\n\n.skip_unown\n"
+            },
+            {
+              "file": "engine/pokemon/evolve.asm",
+              "excerpt": "\tpush af\n\tcall ClearSprites\n\tpop af\n\tjp c, CancelEvolution"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "npc_trade_begin",
+      "signal": "npc_trade",
+      "phase": "before_npc_trade_replacement",
+      "semantics": "Snapshot selected outgoing party identity before removal and append.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wPartyCount",
+        "wPartyMon1"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/events/npc_trade.asm",
+          "symbol": "DoNPCTrade",
+          "source_sha256": "2dd98bcaf0476c9b0f04a385289bdaa19571dd357fdce3ec1647745356d95f72",
+          "instructions": [
+            "ld e, NPCTRADE_GIVEMON"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/events/npc_trade.asm",
+          "symbol": "DoNPCTrade",
+          "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+          "instructions": [
+            "ld e, NPCTRADE_GIVEMON"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "npc_trade_finalized",
+      "signal": "npc_trade",
+      "phase": "after_npc_trade_identity_and_stats",
+      "semantics": "Name, OT, DVs, OT ID, item and stats are complete. Receiver is PARTY_COUNT_MINUS_ONE; restored wCurPartyMon is the outgoing selection and must not select the receiver.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wPartyCount",
+        "wPartyMon1",
+        "wOTTrademonSpecies"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/events/npc_trade.asm",
+          "symbol": "DoNPCTrade.incomplete",
+          "source_sha256": "2dd98bcaf0476c9b0f04a385289bdaa19571dd357fdce3ec1647745356d95f72",
+          "instructions": [
+            "farcall SetGiftPartyMonCaughtData",
+            "ld e, NPCTRADE_NICKNAME",
+            "call GetTradeAttr",
+            "ld de, wOTTrademonNickname",
+            "call CopyTradeName",
+            "ld hl, wPartyMonNicknames",
+            "ld bc, MON_NAME_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "ld hl, wOTTrademonNickname",
+            "call CopyTradeName",
+            "ld e, NPCTRADE_OT_NAME",
+            "call GetTradeAttr",
+            "push hl",
+            "ld de, wOTTrademonOTName",
+            "call CopyTradeName",
+            "pop hl",
+            "ld de, wOTTrademonSenderName",
+            "call CopyTradeName",
+            "ld hl, wPartyMonOTs",
+            "ld bc, NAME_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "ld hl, wOTTrademonOTName",
+            "call CopyTradeName",
+            "ld e, NPCTRADE_DVS",
+            "call GetTradeAttr",
+            "ld de, wOTTrademonDVs",
+            "call Trade_CopyTwoBytes",
+            "ld hl, wPartyMon1DVs",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "ld hl, wOTTrademonDVs",
+            "call Trade_CopyTwoBytes",
+            "ld e, NPCTRADE_OT_ID",
+            "call GetTradeAttr",
+            "ld de, wOTTrademonID + 1",
+            "call Trade_CopyTwoBytesReverseEndian",
+            "ld hl, wPartyMon1ID",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "ld hl, wOTTrademonID",
+            "call Trade_CopyTwoBytes",
+            "ld e, NPCTRADE_ITEM",
+            "call GetTradeAttr",
+            "push hl",
+            "ld hl, wPartyMon1Item",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "pop hl",
+            "ld a, [hl]",
+            "ld [de], a",
+            "push af",
+            "push bc",
+            "push de",
+            "push hl",
+            "ld a, [wCurPartyMon]",
+            "push af",
+            "ld a, [wPartyCount]",
+            "dec a",
+            "ld [wCurPartyMon], a",
+            "farcall ComputeNPCTrademonStats",
+            "pop af",
+            "ld [wCurPartyMon], a",
+            "pop hl",
+            "pop de",
+            "pop bc",
+            "pop af",
+            "ret"
+          ],
+          "hook_index": 66,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/events/npc_trade.asm",
+              "excerpt": "\tcallfar RemoveMonFromPartyOrBox\n\tpredef TryAddMonToParty"
+            },
+            {
+              "file": "engine/events/npc_trade.asm",
+              "excerpt": "Trade_GetAttributeOfLastPartymon:\n\tld a, [wPartyCount]\n\tdec a\n\tcall AddNTimes\n\tld e, l\n\tld d, h\n\tret"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/events/npc_trade.asm",
+          "symbol": "DoNPCTrade",
+          "source_sha256": "a4d29a818ca5314f488d519b6eeaa3fc4a16512be764945e75c2d260a13f4c33",
+          "instructions": [
+            "ld e, NPCTRADE_GIVEMON",
+            "call GetTradeAttr",
+            "ld a, [hl]",
+            "ld [wPlayerTrademonSpecies], a",
+            "ld e, NPCTRADE_GETMON",
+            "call GetTradeAttr",
+            "ld a, [hl]",
+            "ld [wOTTrademonSpecies], a",
+            "ld a, [wPlayerTrademonSpecies]",
+            "ld de, wPlayerTrademonSpeciesName",
+            "call GetTradeMonName",
+            "call CopyTradeName",
+            "ld a, [wOTTrademonSpecies]",
+            "ld de, wOTTrademonSpeciesName",
+            "call GetTradeMonName",
+            "call CopyTradeName",
+            "ld hl, wPartyMonOTs",
+            "ld bc, NAME_LENGTH",
+            "call Trade_GetAttributeOfCurrentPartymon",
+            "ld de, wPlayerTrademonOTName",
+            "call CopyTradeName",
+            "ld hl, wPlayerName",
+            "ld de, wPlayerTrademonSenderName",
+            "call CopyTradeName",
+            "ld hl, wPartyMon1ID",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfCurrentPartymon",
+            "ld de, wPlayerTrademonID",
+            "call Trade_CopyTwoBytes",
+            "ld hl, wPartyMon1DVs",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfCurrentPartymon",
+            "ld de, wPlayerTrademonDVs",
+            "call Trade_CopyTwoBytes",
+            "ld hl, wPartyMon1Level",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfCurrentPartymon",
+            "ld a, [hl]",
+            "ld [wCurPartyLevel], a",
+            "ld a, [wOTTrademonSpecies]",
+            "ld [wCurPartySpecies], a",
+            "xor a",
+            "ld [wMonType], a",
+            "ld [wPokemonWithdrawDepositParameter], a",
+            "callfar RemoveMonFromPartyOrBox",
+            "predef TryAddMonToParty",
+            "ld e, NPCTRADE_NICKNAME",
+            "call GetTradeAttr",
+            "ld de, wOTTrademonNickname",
+            "call CopyTradeName",
+            "ld hl, wPartyMonNicknames",
+            "ld bc, MON_NAME_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "ld hl, wOTTrademonNickname",
+            "call CopyTradeName",
+            "ld e, NPCTRADE_OT_NAME",
+            "call GetTradeAttr",
+            "push hl",
+            "ld de, wOTTrademonOTName",
+            "call CopyTradeName",
+            "pop hl",
+            "ld de, wOTTrademonSenderName",
+            "call CopyTradeName",
+            "ld hl, wPartyMonOTs",
+            "ld bc, NAME_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "ld hl, wOTTrademonOTName",
+            "call CopyTradeName",
+            "ld e, NPCTRADE_DVS",
+            "call GetTradeAttr",
+            "ld de, wOTTrademonDVs",
+            "call Trade_CopyTwoBytes",
+            "ld hl, wPartyMon1DVs",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "ld hl, wOTTrademonDVs",
+            "call Trade_CopyTwoBytes",
+            "ld e, NPCTRADE_OT_ID",
+            "call GetTradeAttr",
+            "ld de, wOTTrademonID + 1",
+            "call Trade_CopyTwoBytesReverseEndian",
+            "ld hl, wPartyMon1ID",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "ld hl, wOTTrademonID",
+            "call Trade_CopyTwoBytes",
+            "ld e, NPCTRADE_ITEM",
+            "call GetTradeAttr",
+            "push hl",
+            "ld hl, wPartyMon1Item",
+            "ld bc, PARTYMON_STRUCT_LENGTH",
+            "call Trade_GetAttributeOfLastPartymon",
+            "pop hl",
+            "ld a, [hl]",
+            "ld [de], a",
+            "push af",
+            "push bc",
+            "push de",
+            "push hl",
+            "ld a, [wCurPartyMon]",
+            "push af",
+            "ld a, [wPartyCount]",
+            "dec a",
+            "ld [wCurPartyMon], a",
+            "farcall ComputeNPCTrademonStats",
+            "pop af",
+            "ld [wCurPartyMon], a",
+            "pop hl",
+            "pop de",
+            "pop bc",
+            "pop af",
+            "ret"
+          ],
+          "hook_index": 111,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/events/npc_trade.asm",
+              "excerpt": "\tcallfar RemoveMonFromPartyOrBox\n\tpredef TryAddMonToParty"
+            },
+            {
+              "file": "engine/events/npc_trade.asm",
+              "excerpt": "Trade_GetAttributeOfLastPartymon:\n\tld a, [wPartyCount]\n\tdec a\n\tcall AddNTimes\n\tld e, l\n\tld d, h\n\tret"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "npc_trade_begin"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "map_entry_complete",
+      "signal": "map_load",
+      "phase": "after_map_setup_status_publish",
+      "semantics": "RunMapSetupScript returned, entry method cleared, MAPSTATUS_HANDLE published. No write-checkpoint authority.",
+      "point_symbols": [
+        "wMapGroup",
+        "wMapNumber",
+        "wMapStatus"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/overworld/events.asm",
+          "symbol": "EnterMap.dontresetpoison",
+          "source_sha256": "91f7753f6277903dc84a0836614a4a5c71a4261760a9e023ffd39dee46f731c0",
+          "instructions": [
+            "xor a",
+            "ldh [hMapEntryMethod], a",
+            "ld a, MAPSTATUS_HANDLE",
+            "ld [wMapStatus], a",
+            "ret"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/overworld/events.asm",
+              "excerpt": "EnterMap:\n\txor a\n\tld [wXYComparePointer], a\n\tld [wXYComparePointer + 1], a\n\tcall SetUpFiveStepWildEncounterCooldown\n\tfarcall RunMapSetupScript\n\tcall DisableEvents\n\n\tldh a, [hMapEntryMethod]\n\tcp MAPSETUP_CONNECTION\n\tjr nz, .dont_enable\n\tcall EnableEvents\n.dont_enable\n\n\tldh a, [hMapEntryMethod]\n\tcp MAPSETUP_RELOADMAP\n\tjr nz, .dontresetpoison\n\txor a\n\tld [wPoisonStepCount], a\n.dontresetpoison\n\n\txor a ; end map entry\n\tldh [hMapEntryMethod], a\n\tld a, MAPSTATUS_HANDLE\n\tld [wMapStatus], a\n\tret\n\nUnusedWait30Frames:"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/overworld/events.asm",
+          "symbol": "EnterMap.dontresetpoison",
+          "source_sha256": "9802d71eeb6e6e88b3f6a6a2097ea9222112dd6f8edf512e2ba57d411299208d",
+          "instructions": [
+            "xor a",
+            "ldh [hMapEntryMethod], a",
+            "ld a, MAPSTATUS_HANDLE",
+            "ld [wMapStatus], a",
+            "ret"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/overworld/events.asm",
+              "excerpt": "EnterMap:\n\txor a\n\tld [wXYComparePointer], a\n\tld [wXYComparePointer + 1], a\n\tcall SetUpFiveStepWildEncounterCooldown\n\tfarcall RunMapSetupScript\n\tcall DisableEvents\n\n\tldh a, [hMapEntryMethod]\n\tcp MAPSETUP_CONNECTION\n\tjr nz, .dont_enable\n\tcall EnableEvents\n.dont_enable\n\n\tldh a, [hMapEntryMethod]\n\tcp MAPSETUP_RELOADMAP\n\tjr nz, .dontresetpoison\n\txor a\n\tld [wPoisonStepCount], a\n.dontresetpoison\n\n\txor a ; end map entry\n\tldh [hMapEntryMethod], a\n\tld a, MAPSTATUS_HANDLE\n\tld [wMapStatus], a\n\tret\n\nUnusedWait30Frames:"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "continue_confirmed",
+      "signal": "continue_loaded",
+      "phase": "loaded_confirmed_before_map_entry",
+      "semantics": "TryLoadSaveFile succeeded and Continue/RTC confirmations passed. Clock/roamer/mobile/map setup remains; no overworld admission.",
+      "point_symbols": [
+        "wPlayerID",
+        "wPartyCount",
+        "wCurBox"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/menus/intro_menu.asm",
+          "symbol": "Continue.Check2Pass",
+          "source_sha256": "d1777feee7154ee7b130c8397bd78dced74c1cae0e241d393d604a9f57e2b1e0",
+          "instructions": [
+            "ld a, $8"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/menus/intro_menu.asm",
+              "excerpt": "Continue:\n\tfarcall TryLoadSaveFile\n\tjr c, .FailToLoad\n\tfarcall _LoadData\n\tcall LoadStandardMenuHeader\n\tcall DisplaySaveInfoOnContinue\n\tld a, $1\n\tldh [hBGMapMode], a\n\tld c, 20\n\tcall DelayFrames\n\tcall ConfirmContinue\n\tjr nc, .Check1Pass\n\tcall CloseWindow\n\tjr .FailToLoad\n\n.Check1Pass:\n\tcall Continue_CheckRTC_RestartClock\n\tjr nc, .Check2Pass\n\tcall CloseWindow\n\tjr .FailToLoad\n\n.Check2Pass:"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/menus/intro_menu.asm",
+          "symbol": "Continue.Check2Pass",
+          "source_sha256": "d2de02df97f333b0e3a133d0feeda1dbaeaf0a53f3c2ee6bf54679711b7aa8ef",
+          "instructions": [
+            "ld a, $8"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/menus/intro_menu.asm",
+              "excerpt": "Continue:\n\tfarcall TryLoadSaveFile\n\tjr c, .FailToLoad\n\tcall LoadStandardMenuHeader\n\tcall DisplaySaveInfoOnContinue\n\tld a, $1\n\tldh [hBGMapMode], a\n\tld c, 20\n\tcall DelayFrames\n\tcall ConfirmContinue\n\tjr nc, .Check1Pass\n\tcall CloseWindow\n\tjr .FailToLoad\n\n.Check1Pass:\n\tcall Continue_CheckRTC_RestartClock\n\tjr nc, .Check2Pass\n\tcall CloseWindow\n\tjr .FailToLoad\n\n.Check2Pass:"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "capture_party_finalized",
+      "signal": "capture_party",
+      "phase": "after_nickname_requires_acquisition_latch",
+      "semantics": "This common path also runs after failed/tutorial catches. Only a matched prior successful party insertion may publish final identity; without it this site emits nothing.",
+      "point_symbols": [
+        "wBattleType",
+        "wWildMon",
+        "wCurPartySpecies",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "source_sha256": "95fe7b6c23c9b3db40259dc23d2ceea6c307349c1b01ae7d66d92cf0ae85e9a5",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/item_effects.asm",
+              "excerpt": "\n.SkipBoxMonNickname:\n\tld a, BANK(sBoxMonNicknames)\n\tcall OpenSRAM\n\n\tld hl, sBoxMonNicknames\n\tld de, wMonOrItemNameBuffer\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\n\tcall CloseSRAM\n\n\tld hl, BallSentToPCText\n\tcall PrintText\n\n\tcall RotateThreePalettesRight\n\tcall LoadStandardFont\n\tjr .return_from_capture\n\n.catch_bug_contest_mon"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/item_effects.asm",
+              "excerpt": "\n.SkipBoxMonNickname:\n\tld a, BANK(sBoxMonNicknames)\n\tcall OpenSRAM\n\n\tld hl, sBoxMonNicknames\n\tld de, wMonOrItemNameBuffer\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\n\tcall CloseSRAM\n\n\tld hl, BallSentToPCText\n\tcall PrintText\n\n\tcall RotateThreePalettesRight\n\tcall LoadStandardFont\n\tjr .return_from_capture\n\n.catch_bug_contest_mon"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "capture_party"
+          ],
+          "match_symbols": [
+            "wBattleType"
+          ],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "capture_box_finalized",
+      "signal": "capture_box",
+      "phase": "after_nickname_requires_acquisition_latch",
+      "semantics": "This common path also runs after failed/tutorial catches. Only a matched prior successful box insertion may publish final identity; without it this site emits nothing.",
+      "point_symbols": [
+        "wBattleType",
+        "wWildMon",
+        "wCurPartySpecies",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "source_sha256": "95fe7b6c23c9b3db40259dc23d2ceea6c307349c1b01ae7d66d92cf0ae85e9a5",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/item_effects.asm",
+              "excerpt": "\n.SkipBoxMonNickname:\n\tld a, BANK(sBoxMonNicknames)\n\tcall OpenSRAM\n\n\tld hl, sBoxMonNicknames\n\tld de, wMonOrItemNameBuffer\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\n\tcall CloseSRAM\n\n\tld hl, BallSentToPCText\n\tcall PrintText\n\n\tcall RotateThreePalettesRight\n\tcall LoadStandardFont\n\tjr .return_from_capture\n\n.catch_bug_contest_mon"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/item_effects.asm",
+              "excerpt": "\n.SkipBoxMonNickname:\n\tld a, BANK(sBoxMonNicknames)\n\tcall OpenSRAM\n\n\tld hl, sBoxMonNicknames\n\tld de, wMonOrItemNameBuffer\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\n\tcall CloseSRAM\n\n\tld hl, BallSentToPCText\n\tcall PrintText\n\n\tcall RotateThreePalettesRight\n\tcall LoadStandardFont\n\tjr .return_from_capture\n\n.catch_bug_contest_mon"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "capture_box"
+          ],
+          "match_symbols": [
+            "wBattleType"
+          ],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "hatch_finalized",
+      "signal": "egg_hatch",
+      "phase": "after_hatch_metadata_and_name_requires_slot_latch",
+      "semantics": "The next-slot path is shared with unhatched/non-egg skips. Publish gift_daycare only with matching hatch_species latch for current wCurPartyMon; OT/HP/name work completed on that matched path.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wPartySpecies",
+        "wPartyMon1"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/breeding.asm",
+          "symbol": "HatchEggs.next",
+          "source_sha256": "6a4a2537eab3aa245abbc04e3809ab8804b6f1b91a3b2a23c2acad6b918f7e29",
+          "instructions": [
+            "ld hl, wCurPartyMon"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/breeding.asm",
+              "excerpt": "\n\tld hl, MON_OT_ID\n\tadd hl, bc\n\tld a, [wPlayerID]\n\tld [hli], a\n\tld a, [wPlayerID + 1]\n\tld [hl], a\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMonOTs\n\tld bc, NAME_LENGTH\n\tcall AddNTimes\n\tld d, h\n\tld e, l\n\tld hl, wPlayerName\n\tcall CopyBytes\n\tld hl, .Text_HatchEgg\n\tcall PrintText\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMonNicknames\n\tld bc, MON_NAME_LENGTH\n\tcall AddNTimes\n\tld d, h\n\tld e, l\n\tpush de\n\tld hl, .BreedAskNicknameText\n\tcall PrintText\n\tcall YesNoBox\n\tpop de\n\tjr c, .nonickname\n\n\tld a, TRUE\n\tld [wUnusedEggHatchFlag], a\n\txor a\n\tld [wMonType], a\n\tpush de\n\tld b, NAME_MON\n\tfarcall NamingScreen\n\tpop hl\n\tld de, wStringBuffer1\n\tcall InitName\n\tjr .next\n\n.nonickname\n\tld hl, wStringBuffer1\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\n.next\n"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/pokemon/breeding.asm",
+          "symbol": "HatchEggs.next",
+          "source_sha256": "8a47622440f84201c60781b66e84367d11a755ac5204c06ae45388afa854e328",
+          "instructions": [
+            "ld hl, wCurPartyMon"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/breeding.asm",
+              "excerpt": "\n\tld hl, MON_OT_ID\n\tadd hl, bc\n\tld a, [wPlayerID]\n\tld [hli], a\n\tld a, [wPlayerID + 1]\n\tld [hl], a\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMonOTs\n\tld bc, NAME_LENGTH\n\tcall AddNTimes\n\tld d, h\n\tld e, l\n\tld hl, wPlayerName\n\tcall CopyBytes\n\tld hl, .Text_HatchEgg\n\tcall PrintText\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMonNicknames\n\tld bc, MON_NAME_LENGTH\n\tcall AddNTimes\n\tld d, h\n\tld e, l\n\tpush de\n\tld hl, .BreedAskNicknameText\n\tcall PrintText\n\tcall YesNoBox\n\tpop de\n\tjr c, .nonickname\n\n\tld a, TRUE\n\tld [wUnusedEggHatchFlag], a\n\txor a\n\tld [wMonType], a\n\tpush de\n\tld b, NAME_MON\n\tfarcall NamingScreen\n\tpop hl\n\tld de, wStringBuffer1\n\tcall InitName\n\tjr .next\n\n.nonickname\n\tld hl, wStringBuffer1\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\n.next\n"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "hatch_species"
+          ],
+          "match_symbols": [
+            "wCurPartyMon"
+          ],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "link_trade_received",
+      "signal": "link_trade",
+      "phase": "after_animation_before_received_party_copy",
+      "semantics": "Incoming party copy and forced evolution follow. Intermediate transaction marker only, not completed trade or durability. Only LINK_TRADECENTER is admitted by this candidate guard; Time Capsule and mobile modes are excluded.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wCurOTTradePartyMon",
+        "wPartyCount",
+        "wLinkMode"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/link/link.asm",
+          "symbol": "LinkTrade.done_animation",
+          "source_sha256": "fea6772a3ab8d64d4ef5e66319500b8e57f700ae7c00a5496293a2f3d6d8f2e5",
+          "instructions": [
+            "pop af"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "constants/serial_constants.asm",
+              "excerpt": "; wLinkMode\n\tconst_def\n\tconst LINK_NULL        ; 0\n\tconst LINK_TIMECAPSULE ; 1\n\tconst LINK_TRADECENTER ; 2\n\tconst LINK_COLOSSEUM   ; 3\n\tconst LINK_MOBILE      ; 4\n\n"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/link/link.asm",
+          "symbol": "LinkTrade.done_animation",
+          "source_sha256": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+          "instructions": [
+            "pop af"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "constants/serial_constants.asm",
+              "excerpt": "; wLinkMode\n\tconst_def\n\tconst LINK_NULL        ; 0\n\tconst LINK_TIMECAPSULE ; 1\n\tconst LINK_TRADECENTER ; 2\n\tconst LINK_COLOSSEUM   ; 3\n\n"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "memory_link_mode": "LINK_TRADECENTER"
+      }
+    },
+    {
+      "id": "link_trade_saved",
+      "signal": "link_trade",
+      "phase": "after_received_copy_evolution_and_trade_save",
+      "semantics": "SaveAfterLinkTrade returned after AddTempmonToParty and forced evolution. Receiver is appended party slot. Host scenario save and cold reload remain required for durability. Only LINK_TRADECENTER is admitted by this candidate guard; Time Capsule and mobile modes are excluded.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wPartyCount",
+        "wPartyMon1",
+        "wLinkMode"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/link/link.asm",
+          "symbol": "LinkTrade.save",
+          "source_sha256": "fea6772a3ab8d64d4ef5e66319500b8e57f700ae7c00a5496293a2f3d6d8f2e5",
+          "instructions": [
+            "farcall SaveAfterLinkTrade",
+            "farcall StubbedTrainerRankings_Trades"
+          ],
+          "hook_index": 1,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/link/link.asm",
+              "excerpt": "\n.done_animation\n\tpop af\n\tld c, a\n\tld [wCurPartyMon], a\n\tld hl, wOTPartySpecies\n\tld d, 0\n\tld e, a\n\tadd hl, de\n\tld a, [hl]\n\tld [wCurPartySpecies], a\n\tld hl, wOTPartyMon1Species\n\tld a, c\n\tcall GetPartyLocation\n\tld de, wTempMonSpecies\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall CopyBytes\n\tpredef AddTempmonToParty\n\tld a, [wPartyCount]\n\tdec a\n\tld [wCurPartyMon], a\n\tcallfar EvolvePokemon\n\tcall ClearScreen\n\tcall LoadTradeScreenBorderGFX\n\tcall SetTradeRoomBGPals\n\tfarcall Link_WaitBGMap\n\n; Check if either of the Pok\u00e9mon sent was a Mew or Celebi, and send a different\n; byte depending on that. Presumably this would've been some prevention against\n; illicit trade machines, but it doesn't seem like a very effective one.\n; Removing this code breaks link compatibility with the vanilla gen2 games, but\n; has otherwise no consequence.\n\tld b, 1\n\tpop af\n\tld c, a\n\tcp MEW\n\tjr z, .send_checkbyte\n\tld a, [wCurPartySpecies]\n\tcp MEW\n\tjr z, .send_checkbyte\n\tld b, 2\n\tld a, c\n\tcp CELEBI\n\tjr z, .send_checkbyte\n\tld a, [wCurPartySpecies]\n\tcp CELEBI\n\tjr z, .send_checkbyte\n\n; Send the byte in a loop until the desired byte has been received.\n\tld b, 0\n.send_checkbyte\n\tld a, b\n\tld [wPlayerLinkAction], a\n\tpush bc\n\tcall Serial_PlaceWaitingTextAndSyncAndExchangeNybble\n\tpop bc\n\tld a, [wLinkMode]\n\tcp LINK_TIMECAPSULE\n\tjr z, .save\n\tld a, b\n\tand a\n\tjr z, .save\n\tld a, [wOtherPlayerLinkAction]\n\tcp b\n\tjr nz, .send_checkbyte\n\n.save\n"
+            },
+            {
+              "file": "engine/menus/save.asm",
+              "excerpt": "SaveAfterLinkTrade:\n\tcall PauseGameLogic\n\tfarcall StageRTCTimeForSave\n\tfarcall BackupMysteryGift\n\tcall SavePokemonData\n\tcall SaveChecksum\n\tcall SaveBackupPokemonData\n\tcall SaveBackupChecksum\n\tfarcall BackupPartyMonMail\n\tfarcall SaveRTC\n\tcall ResumeGameLogic\n\tret\n\nChangeBoxSaveGame:"
+            },
+            {
+              "file": "constants/serial_constants.asm",
+              "excerpt": "; wLinkMode\n\tconst_def\n\tconst LINK_NULL        ; 0\n\tconst LINK_TIMECAPSULE ; 1\n\tconst LINK_TRADECENTER ; 2\n\tconst LINK_COLOSSEUM   ; 3\n\tconst LINK_MOBILE      ; 4\n\n"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/link/link.asm",
+          "symbol": "LinkTrade.save",
+          "source_sha256": "6de67ce72f328f5a1ff758648de683535edf6c7e2aeac9a809823905087b5597",
+          "instructions": [
+            "farcall SaveAfterLinkTrade",
+            "ld c, 40"
+          ],
+          "hook_index": 1,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/link/link.asm",
+              "excerpt": "\n.done_animation\n\tpop af\n\tld c, a\n\tld [wCurPartyMon], a\n\tld hl, wOTPartySpecies\n\tld d, 0\n\tld e, a\n\tadd hl, de\n\tld a, [hl]\n\tld [wCurPartySpecies], a\n\tld hl, wOTPartyMon1Species\n\tld a, c\n\tcall GetPartyLocation\n\tld de, wTempMonSpecies\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall CopyBytes\n\tpredef AddTempmonToParty\n\tld a, [wPartyCount]\n\tdec a\n\tld [wCurPartyMon], a\n\tcallfar EvolvePokemon\n\tcall ClearTilemap\n\tcall LoadTradeScreenBorderGFX\n\tcall SetTradeRoomBGPals\n\tcall WaitBGMap\n\n; Check if either of the Pok\u00e9mon sent was a Mew or Celebi, and send a different\n; byte depending on that. Presumably this would've been some prevention against\n; illicit trade machines, but it doesn't seem like a very effective one.\n; Removing this code breaks link compatibility with the vanilla gen2 games, but\n; has otherwise no consequence.\n\tld b, 1\n\tpop af\n\tld c, a\n\tcp MEW\n\tjr z, .send_checkbyte\n\tld a, [wCurPartySpecies]\n\tcp MEW\n\tjr z, .send_checkbyte\n\tld b, 2\n\tld a, c\n\tcp CELEBI\n\tjr z, .send_checkbyte\n\tld a, [wCurPartySpecies]\n\tcp CELEBI\n\tjr z, .send_checkbyte\n\n; Send the byte in a loop until the desired byte has been received.\n\tld b, 0\n.send_checkbyte\n\tld a, b\n\tld [wPlayerLinkAction], a\n\tpush bc\n\tcall Serial_PlaceWaitingTextAndSyncAndExchangeNybble\n\tpop bc\n\tld a, [wLinkMode]\n\tcp LINK_TIMECAPSULE\n\tjr z, .save\n\tld a, b\n\tand a\n\tjr z, .save\n\tld a, [wOtherPlayerLinkAction]\n\tcp b\n\tjr nz, .send_checkbyte\n\n.save\n"
+            },
+            {
+              "file": "engine/menus/save.asm",
+              "excerpt": "SaveAfterLinkTrade:\n\tcall PauseGameLogic\n\tfarcall StageRTCTimeForSave\n\tfarcall BackupMysteryGift\n\tcall SavePokemonData\n\tcall SaveChecksum\n\tcall SaveBackupPokemonData\n\tcall SaveBackupChecksum\n\tfarcall BackupPartyMonMail\n\tfarcall SaveRTC\n\tcall ResumeGameLogic\n\tret\n\nChangeBoxSaveGame:"
+            },
+            {
+              "file": "constants/serial_constants.asm",
+              "excerpt": "; wLinkMode\n\tconst_def\n\tconst LINK_NULL        ; 0\n\tconst LINK_TIMECAPSULE ; 1\n\tconst LINK_TRADECENTER ; 2\n\tconst LINK_COLOSSEUM   ; 3\n\n"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "link_trade_received"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        },
+        "memory_link_mode": "LINK_TRADECENTER"
+      }
+    },
+    {
+      "id": "bag_ball_received",
+      "signal": "bag_ball_received",
+      "phase": "after_successful_ball_pocket_write",
+      "semantics": "Only success reaches SCF/RET. DE must point at wNumBalls; reject other pockets. Read back pocket contents and quantity rather than assuming a one-item delta.",
+      "point_symbols": [
+        "wNumBalls",
+        "wBalls",
+        "wCurItem",
+        "wItemQuantityChange"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/items/items.asm",
+          "symbol": "PutItemInPocket.done",
+          "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+          "instructions": [
+            "scf",
+            "ret"
+          ],
+          "hook_index": 1,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/items.asm",
+              "excerpt": "PutItemInPocket:\n\tld d, h\n\tld e, l\n\tinc hl\n\tld a, [wCurItem]\n\tld c, a\n\tld b, 0\n.loop\n\tld a, [hli]\n\tcp -1\n\tjr z, .terminator\n\tcp c\n\tjr nz, .next\n\tld a, MAX_ITEM_STACK\n\tsub [hl]\n\tadd b\n\tld b, a\n\tld a, [wItemQuantityChange]\n\tcp b\n\tjr z, .ok\n\tjr c, .ok\n\n.next\n\tinc hl\n\tjr .loop\n\n.terminator\n\tcall GetPocketCapacity\n\tld a, [de]\n\tcp c\n\tjr c, .ok\n\tand a\n\tret\n\n.ok\n\tld h, d\n\tld l, e\n\tld a, [wCurItem]\n\tld c, a\n\tld a, [wItemQuantityChange]\n\tld [wItemQuantity], a\n.loop2\n\tinc hl\n\tld a, [hli]\n\tcp -1\n\tjr z, .terminator2\n\tcp c\n\tjr nz, .loop2\n\tld a, [wItemQuantity]\n\tadd [hl]\n\tcp MAX_ITEM_STACK + 1\n\tjr nc, .newstack\n\tld [hl], a\n\tjr .done\n\n.newstack\n\tld [hl], MAX_ITEM_STACK\n\tsub MAX_ITEM_STACK\n\tld [wItemQuantity], a\n\tjr .loop2\n\n.terminator2\n\tdec hl\n\tld a, [wCurItem]\n\tld [hli], a\n\tld a, [wItemQuantity]\n\tld [hli], a\n\tld [hl], -1\n\tld h, d\n\tld l, e\n\tinc [hl]\n\n.done\n\tscf\n\tret\n\nRemoveItemFromPocket:"
+            },
+            {
+              "file": "engine/items/items.asm",
+              "excerpt": "_ReceiveItem::\n\tcall DoesHLEqualNumItems\n\tjp nz, PutItemInPocket\n\tpush hl\n\tcall CheckItemPocket\n\tpop de\n\tld a, [wItemAttributeValue]\n\tdec a\n\tld hl, .Pockets\n\trst JumpTable\n\tret\n\n.Pockets:\n; entries correspond to item types\n\tdw .Item\n\tdw .KeyItem\n\tdw .Ball\n\tdw .TMHM\n\n.Item:\n\tld h, d\n\tld l, e\n\tjp PutItemInPocket\n\n.KeyItem:\n\tld h, d\n\tld l, e\n\tjp ReceiveKeyItem\n\n.Ball:\n\tld hl, wNumBalls\n\tjp PutItemInPocket\n\n.TMHM:\n\tld h, d\n\tld l, e\n\tld a, [wCurItem]\n\tld c, a\n\tcall GetTMHMNumber\n\tjp ReceiveTMHM\n\n_TossItem::"
+            },
+            {
+              "file": "engine/items/items.asm",
+              "excerpt": "GetPocketCapacity:\n\tld c, MAX_ITEMS\n\tld a, e\n\tcp LOW(wNumItems)\n\tjr nz, .not_bag\n\tld a, d\n\tcp HIGH(wNumItems)\n\tret z\n\n.not_bag\n\tld c, MAX_PC_ITEMS\n\tld a, e\n\tcp LOW(wNumPCItems)\n\tjr nz, .not_pc\n\tld a, d\n\tcp HIGH(wNumPCItems)\n\tret z\n\n.not_pc\n\tld c, MAX_BALLS\n\tret\n\nPutItemInPocket:"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/items/items.asm",
+          "symbol": "PutItemInPocket.done",
+          "source_sha256": "9113f42d4b67a80ec0cc3ccaa84c9fd4d1a03488a2c7ecbc8718cf096729f2ca",
+          "instructions": [
+            "scf",
+            "ret"
+          ],
+          "hook_index": 1,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/items/items.asm",
+              "excerpt": "PutItemInPocket:\n\tld d, h\n\tld e, l\n\tinc hl\n\tld a, [wCurItem]\n\tld c, a\n\tld b, 0\n.loop\n\tld a, [hli]\n\tcp -1\n\tjr z, .terminator\n\tcp c\n\tjr nz, .next\n\tld a, MAX_ITEM_STACK\n\tsub [hl]\n\tadd b\n\tld b, a\n\tld a, [wItemQuantityChange]\n\tcp b\n\tjr z, .ok\n\tjr c, .ok\n\n.next\n\tinc hl\n\tjr .loop\n\n.terminator\n\tcall GetPocketCapacity\n\tld a, [de]\n\tcp c\n\tjr c, .ok\n\tand a\n\tret\n\n.ok\n\tld h, d\n\tld l, e\n\tld a, [wCurItem]\n\tld c, a\n\tld a, [wItemQuantityChange]\n\tld [wItemQuantity], a\n.loop2\n\tinc hl\n\tld a, [hli]\n\tcp -1\n\tjr z, .terminator2\n\tcp c\n\tjr nz, .loop2\n\tld a, [wItemQuantity]\n\tadd [hl]\n\tcp MAX_ITEM_STACK + 1\n\tjr nc, .newstack\n\tld [hl], a\n\tjr .done\n\n.newstack\n\tld [hl], MAX_ITEM_STACK\n\tsub MAX_ITEM_STACK\n\tld [wItemQuantity], a\n\tjr .loop2\n\n.terminator2\n\tdec hl\n\tld a, [wCurItem]\n\tld [hli], a\n\tld a, [wItemQuantity]\n\tld [hli], a\n\tld [hl], -1\n\tld h, d\n\tld l, e\n\tinc [hl]\n\n.done\n\tscf\n\tret\n\nRemoveItemFromPocket:"
+            },
+            {
+              "file": "engine/items/items.asm",
+              "excerpt": "_ReceiveItem::\n\tcall DoesHLEqualNumItems\n\tjp nz, PutItemInPocket\n\tpush hl\n\tcall CheckItemPocket\n\tpop de\n\tld a, [wItemAttributeValue]\n\tdec a\n\tld hl, .Pockets\n\trst JumpTable\n\tret\n\n.Pockets:\n; entries correspond to item types\n\tdw .Item\n\tdw .KeyItem\n\tdw .Ball\n\tdw .TMHM\n\n.Item:\n\tld h, d\n\tld l, e\n\tjp PutItemInPocket\n\n.KeyItem:\n\tld h, d\n\tld l, e\n\tjp ReceiveKeyItem\n\n.Ball:\n\tld hl, wNumBalls\n\tjp PutItemInPocket\n\n.TMHM:\n\tld h, d\n\tld l, e\n\tld a, [wCurItem]\n\tld c, a\n\tcall GetTMHMNumber\n\tjp ReceiveTMHM\n\n_TossItem::"
+            },
+            {
+              "file": "engine/items/items.asm",
+              "excerpt": "GetPocketCapacity:\n\tld c, MAX_ITEMS\n\tld a, e\n\tcp LOW(wNumItems)\n\tjr nz, .not_bag\n\tld a, d\n\tcp HIGH(wNumItems)\n\tret z\n\n.not_bag\n\tld c, MAX_PC_ITEMS\n\tld a, e\n\tcp LOW(wNumPCItems)\n\tjr nz, .not_pc\n\tld a, d\n\tcp HIGH(wNumPCItems)\n\tret z\n\n.not_pc\n\tld c, MAX_BALLS\n\tret\n\nPutItemInPocket:"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "register_symbols": {
+          "DE": "wNumBalls"
+        },
+        "flags": {
+          "C": 1
+        }
+      }
+    },
+    {
+      "id": "gift_begin",
+      "signal": "gift_static",
+      "phase": "before_gift_insert_attempt",
+      "semantics": "Record script-gift intent before party/box insertion; failure exit is not acquisition.",
+      "point_symbols": [
+        "wCurPartySpecies",
+        "wPartyCount",
+        "wScriptBank",
+        "wCurItem"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/move_mon.asm",
+          "symbol": "GivePoke",
+          "source_sha256": "c19900bb0fa192457279a85bf1c7b86b8705c5b95be4c89fbcffed515d371fb2",
+          "instructions": [
+            "push de"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/move_mon.asm",
+          "symbol": "GivePoke",
+          "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+          "instructions": [
+            "push de"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "gift_party_finalized",
+      "signal": "gift_static",
+      "phase": "after_party_gift_identity_and_name",
+      "semantics": "RET Z is party success after metadata and optional name work. Require Z and B=0; failures return separately with B=2.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "wPartyCount",
+        "wPartyMon1"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/move_mon.asm",
+          "symbol": "GivePoke.skip_nickname",
+          "source_sha256": "c19900bb0fa192457279a85bf1c7b86b8705c5b95be4c89fbcffed515d371fb2",
+          "instructions": [
+            "pop bc",
+            "pop de",
+            "ld a, b",
+            "and a",
+            "ret z"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/move_mon.asm",
+              "excerpt": "GivePoke::\n\tpush de\n\tpush bc\n\txor a ; PARTYMON\n\tld [wMonType], a\n\tcall TryAddMonToParty\n\tjr nc, .failed\n\tld hl, wPartyMonNicknames\n\tld a, [wPartyCount]\n\tdec a\n\tld [wCurPartyMon], a\n\tcall SkipNames\n\tld d, h\n\tld e, l\n\tpop bc\n\tld a, b\n\tld b, 0\n\tpush bc\n\tpush de\n\tpush af\n\tld a, [wCurItem]\n\tand a\n\tjr z, .done\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMon1Item\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\tld a, [wCurItem]\n\tld [hl], a\n\tjr .done\n\n.failed\n\tld a, [wCurPartySpecies]\n\tld [wTempEnemyMonSpecies], a\n\tcallfar LoadEnemyMon\n\tcall SendMonIntoBox\n\tjp nc, .FailedToGiveMon\n\tld a, BOXMON\n\tld [wMonType], a\n\txor a\n\tld [wCurPartyMon], a\n\tld de, wMonOrItemNameBuffer\n\tpop bc\n\tld a, b\n\tld b, 1\n\tpush bc\n\tpush de\n\tpush af\n\tld a, [wCurItem]\n\tand a\n\tjr z, .done\n\tld a, [wCurItem]\n\tld [sBoxMon1Item], a\n\n.done\n\tld a, [wCurPartySpecies]\n\tld [wNamedObjectIndex], a\n\tld [wTempEnemyMonSpecies], a\n\tcall GetPokemonName\n\tld hl, wStringBuffer1\n\tld de, wMonOrItemNameBuffer\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\tpop af\n\tand a\n\tjp z, .wildmon\n\tpop de\n\tpop bc\n\tpop hl\n\tpush bc\n\tpush hl\n\tld a, [wScriptBank]\n\tcall GetFarWord\n\tld bc, MON_NAME_LENGTH\n\tld a, [wScriptBank]\n\tcall FarCopyBytes\n\tpop hl\n\tinc hl\n\tinc hl\n\tld a, [wScriptBank]\n\tcall GetFarWord\n\tpop bc\n\tld a, b\n\tand a\n\tpush de\n\tpush bc\n\tjr nz, .send_to_box\n\n\tpush hl\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMonOTs\n\tcall SkipNames\n\tld d, h\n\tld e, l\n\tpop hl\n.otnameloop\n\tld a, [wScriptBank]\n\tcall GetFarByte\n\tld [de], a\n\tinc hl\n\tinc de\n\tcp '@'\n\tjr nz, .otnameloop\n\tld a, [wScriptBank]\n\tcall GetFarByte\n\tld b, a\n\tpush bc\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMon1ID\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\tld a, HIGH(RANDY_OT_ID)\n\tld [hli], a\n\tld [hl], LOW(RANDY_OT_ID)\n\tpop bc\n\tfarcall SetGiftPartyMonCaughtData\n\tjr .skip_nickname\n\n.send_to_box\n\tld a, BANK(sBoxMonOTs)\n\tcall OpenSRAM\n\tld de, sBoxMonOTs\n.loop\n\tld a, [wScriptBank]\n\tcall GetFarByte\n\tld [de], a\n\tinc hl\n\tinc de\n\tcp '@'\n\tjr nz, .loop\n\tld a, [wScriptBank]\n\tcall GetFarByte\n\tld b, a\n\tld hl, sBoxMon1ID\n\tcall Random\n\tld [hli], a\n\tcall Random\n\tld [hl], a\n\tcall CloseSRAM\n\tfarcall SetGiftBoxMonCaughtData\n\tjr .skip_nickname\n\n.wildmon\n\tpop de\n\tpop bc\n\tpush bc\n\tpush de\n\tld a, b\n\tand a\n\tjr z, .party\n\tfarcall SetBoxMonCaughtData\n\tjr .set_caught_data\n\n.party\n\tfarcall SetCaughtData\n.set_caught_data\n\tfarcall GiveANickname_YesNo\n\tpop de\n\tjr c, .skip_nickname\n\tcall InitNickname\n\n.skip_nickname\n\tpop bc\n\tpop de\n\tld a, b\n\tand a\n\tret z\n\tld hl, WasSentToBillsPCText\n\tcall PrintText\n\tld a, BANK(sBoxMonNicknames)\n\tcall OpenSRAM\n\tld hl, wMonOrItemNameBuffer\n\tld de, sBoxMonNicknames\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\tcall CloseSRAM\n\tld b, $1\n\tret\n\n.FailedToGiveMon:"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/pokemon/move_mon.asm",
+          "symbol": "GivePoke.skip_nickname",
+          "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+          "instructions": [
+            "pop bc",
+            "pop de",
+            "ld a, b",
+            "and a",
+            "ret z"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/move_mon.asm",
+              "excerpt": "GivePoke::\n\tpush de\n\tpush bc\n\txor a ; PARTYMON\n\tld [wMonType], a\n\tcall TryAddMonToParty\n\tjr nc, .failed\n\tld hl, wPartyMonNicknames\n\tld a, [wPartyCount]\n\tdec a\n\tld [wCurPartyMon], a\n\tcall SkipNames\n\tld d, h\n\tld e, l\n\tpop bc\n\tld a, b\n\tld b, 0\n\tpush bc\n\tpush de\n\tpush af\n\tld a, [wCurItem]\n\tand a\n\tjr z, .done\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMon1Item\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\tld a, [wCurItem]\n\tld [hl], a\n\tjr .done\n\n.failed\n\tld a, [wCurPartySpecies]\n\tld [wTempEnemyMonSpecies], a\n\tcallfar LoadEnemyMon\n\tcall SendMonIntoBox\n\tjp nc, .FailedToGiveMon\n\tld a, BOXMON\n\tld [wMonType], a\n\txor a\n\tld [wCurPartyMon], a\n\tld de, wMonOrItemNameBuffer\n\tpop bc\n\tld a, b\n\tld b, 1\n\tpush bc\n\tpush de\n\tpush af\n\tld a, [wCurItem]\n\tand a\n\tjr z, .done\n\tld a, [wCurItem]\n\tld [sBoxMon1Item], a\n\n.done\n\tld a, [wCurPartySpecies]\n\tld [wNamedObjectIndex], a\n\tld [wTempEnemyMonSpecies], a\n\tcall GetPokemonName\n\tld hl, wStringBuffer1\n\tld de, wMonOrItemNameBuffer\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\tpop af\n\tand a\n\tjr z, .wildmon\n\tpop de\n\tpop bc\n\tpop hl\n\tpush bc\n\tpush hl\n\tld a, [wScriptBank]\n\tcall GetFarWord\n\tld bc, MON_NAME_LENGTH\n\tld a, [wScriptBank]\n\tcall FarCopyBytes\n\tpop hl\n\tinc hl\n\tinc hl\n\tld a, [wScriptBank]\n\tcall GetFarWord\n\tpop bc\n\tld a, b\n\tand a\n\tpush de\n\tpush bc\n\tjr nz, .send_to_box\n\n\tpush hl\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMonOTs\n\tcall SkipNames\n\tld d, h\n\tld e, l\n\tpop hl\n\tld a, [wScriptBank]\n\tcall FarCopyBytes\n\tld a, [wCurPartyMon]\n\tld hl, wPartyMon1ID\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\tld a, HIGH(RANDY_OT_ID)\n\tld [hli], a\n\tld [hl], LOW(RANDY_OT_ID)\n\tjr .skip_nickname\n\n.send_to_box\n\tld a, BANK(sBoxMonOTs)\n\tcall OpenSRAM\n\tld de, sBoxMonOTs\n\tld bc, MON_NAME_LENGTH\n\tld a, [wScriptBank]\n\tcall FarCopyBytes\n\tld hl, sBoxMon1ID\n\tcall Random\n\tld [hli], a\n\tcall Random\n\tld [hl], a\n\tcall CloseSRAM\n\tjr .skip_nickname\n\n.wildmon\n\tcallfar GiveANickname_YesNo\n\tpop de\n\tjr c, .skip_nickname\n\tcall InitNickname\n\n.skip_nickname\n\tpop bc\n\tpop de\n\tld a, b\n\tand a\n\tret z\n\tld hl, WasSentToBillsPCText\n\tcall PrintText\n\tld a, BANK(sBoxMonNicknames)\n\tcall OpenSRAM\n\tld hl, wMonOrItemNameBuffer\n\tld de, sBoxMonNicknames\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\tcall CloseSRAM\n\tld b, $1\n\tret\n\n.FailedToGiveMon:"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "gift_begin"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        },
+        "flags": {
+          "Z": 1
+        },
+        "register_values": {
+          "B": 0
+        }
+      }
+    },
+    {
+      "id": "gift_box_finalized",
+      "signal": "gift_static",
+      "phase": "after_box_gift_identity_and_name",
+      "semantics": "Box nickname copy and CloseSRAM completed before B=1 return. Failures return with B=2; receiver is first box slot.",
+      "point_symbols": [
+        "wCurPartyMon",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/move_mon.asm",
+          "symbol": "GivePoke.skip_nickname",
+          "source_sha256": "c19900bb0fa192457279a85bf1c7b86b8705c5b95be4c89fbcffed515d371fb2",
+          "instructions": [
+            "pop bc",
+            "pop de",
+            "ld a, b",
+            "and a",
+            "ret z",
+            "ld hl, WasSentToBillsPCText",
+            "call PrintText",
+            "ld a, BANK(sBoxMonNicknames)",
+            "call OpenSRAM",
+            "ld hl, wMonOrItemNameBuffer",
+            "ld de, sBoxMonNicknames",
+            "ld bc, MON_NAME_LENGTH",
+            "call CopyBytes",
+            "call CloseSRAM",
+            "ld b, $1",
+            "ret"
+          ],
+          "hook_index": 15,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/pokemon/move_mon.asm",
+          "symbol": "GivePoke.skip_nickname",
+          "source_sha256": "6ac5491b9cf23361aa76c017ee5145a17a10f880b6c2cc3f0addb5d79ebd62a7",
+          "instructions": [
+            "pop bc",
+            "pop de",
+            "ld a, b",
+            "and a",
+            "ret z",
+            "ld hl, WasSentToBillsPCText",
+            "call PrintText",
+            "ld a, BANK(sBoxMonNicknames)",
+            "call OpenSRAM",
+            "ld hl, wMonOrItemNameBuffer",
+            "ld de, sBoxMonNicknames",
+            "ld bc, MON_NAME_LENGTH",
+            "call CopyBytes",
+            "call CloseSRAM",
+            "ld b, $1",
+            "ret"
+          ],
+          "hook_index": 15,
+          "hook_count": 1,
+          "evidence": []
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "gift_begin"
+          ],
+          "match_symbols": [],
+          "consume_once": true
+        },
+        "register_values": {
+          "B": 1
+        }
+      }
+    },
+    {
+      "id": "contest_selected",
+      "signal": "contest_capture",
+      "phase": "contest_buffer_selected_before_party_or_box_acquisition",
+      "semantics": "GeneratePartyMonStats completed after first catch or accepted replacement. Decline returns earlier. This is provisional contest buffer, not final party/box capture.",
+      "point_symbols": [
+        "wContestMon",
+        "wTempEnemyMonSpecies"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/events/bug_contest/caught_mon.asm",
+          "symbol": "BugContest_SetCaughtContestMon.firstcatch",
+          "source_sha256": "b525d946949a1aa987ad56287061fccc1a9cf5d6e12321ede713f8f364bde5eb",
+          "instructions": [
+            "call .generatestats",
+            "ld a, [wTempEnemyMonSpecies]"
+          ],
+          "hook_index": 1,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/events/bug_contest/caught_mon.asm",
+              "excerpt": "BugContest_SetCaughtContestMon:\n\tld a, [wContestMon]\n\tand a\n\tjr z, .firstcatch\n\tld [wNamedObjectIndex], a\n\tfarcall DisplayAlreadyCaughtText\n\tfarcall DisplayCaughtContestMonStats\n\tlb bc, 14, 7\n\tcall PlaceYesNoBox\n\tret c\n\n.firstcatch\n\tcall .generatestats\n\tld a, [wTempEnemyMonSpecies]\n\tld [wNamedObjectIndex], a\n\tcall GetPokemonName\n\tld hl, .ContestCaughtMonText\n\tcall PrintText\n\tret\n\n.generatestats\n\tld a, [wTempEnemyMonSpecies]\n\tld [wCurSpecies], a\n\tld [wCurPartySpecies], a\n\tcall GetBaseData\n\txor a\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tld hl, wContestMon\n\tcall ByteFill\n\txor a\n\tld [wMonType], a\n\tld hl, wContestMon\n\tjp GeneratePartyMonStats\n\n.ContestCaughtMonText:"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/events/bug_contest/caught_mon.asm",
+          "symbol": "BugContest_SetCaughtContestMon.firstcatch",
+          "source_sha256": "b525d946949a1aa987ad56287061fccc1a9cf5d6e12321ede713f8f364bde5eb",
+          "instructions": [
+            "call .generatestats",
+            "ld a, [wTempEnemyMonSpecies]"
+          ],
+          "hook_index": 1,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/events/bug_contest/caught_mon.asm",
+              "excerpt": "BugContest_SetCaughtContestMon:\n\tld a, [wContestMon]\n\tand a\n\tjr z, .firstcatch\n\tld [wNamedObjectIndex], a\n\tfarcall DisplayAlreadyCaughtText\n\tfarcall DisplayCaughtContestMonStats\n\tlb bc, 14, 7\n\tcall PlaceYesNoBox\n\tret c\n\n.firstcatch\n\tcall .generatestats\n\tld a, [wTempEnemyMonSpecies]\n\tld [wNamedObjectIndex], a\n\tcall GetPokemonName\n\tld hl, .ContestCaughtMonText\n\tcall PrintText\n\tret\n\n.generatestats\n\tld a, [wTempEnemyMonSpecies]\n\tld [wCurSpecies], a\n\tld [wCurPartySpecies], a\n\tcall GetBaseData\n\txor a\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tld hl, wContestMon\n\tcall ByteFill\n\txor a\n\tld [wMonType], a\n\tld hl, wContestMon\n\tjp GeneratePartyMonStats\n\n.ContestCaughtMonText:"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "contest_party_finalized",
+      "signal": "contest_capture",
+      "phase": "after_contest_party_name_and_metadata",
+      "semantics": "Party copy, OT and nickname finalization complete; Crystal caught location complete. Contest buffer cleared and success published. Receiver PartyCount-1.",
+      "point_symbols": [
+        "wPartyCount",
+        "wPartyMon1",
+        "wScriptVar"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/caught_data.asm",
+          "symbol": "CheckPartyFullAfterContest.Party_SkipNickname",
+          "source_sha256": "303dbd8ac95950d14536ea14dd8a1ba65f3b540dff9356d57107286c916e5773",
+          "instructions": [
+            "ld a, [wPartyCount]",
+            "dec a",
+            "ld hl, wPartyMonNicknames",
+            "call SkipNames",
+            "ld d, h",
+            "ld e, l",
+            "ld hl, wMonOrItemNameBuffer",
+            "call CopyBytes",
+            "ld a, [wPartyCount]",
+            "dec a",
+            "ld hl, wPartyMon1Level",
+            "call GetPartyLocation",
+            "ld a, [hl]",
+            "ld [wCurPartyLevel], a",
+            "call SetCaughtData",
+            "ld a, [wPartyCount]",
+            "dec a",
+            "ld hl, wPartyMon1CaughtLocation",
+            "call GetPartyLocation",
+            "ld a, [hl]",
+            "and CAUGHT_GENDER_MASK",
+            "ld b, LANDMARK_NATIONAL_PARK",
+            "or b",
+            "ld [hl], a",
+            "xor a",
+            "ld [wContestMonSpecies], a",
+            "and a",
+            "ld [wScriptVar], a",
+            "ret"
+          ],
+          "hook_index": 28,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/caught_data.asm",
+              "excerpt": "CheckPartyFullAfterContest:\n\tld a, [wContestMonSpecies]\n\tand a\n\tjp z, .DidntCatchAnything\n\tld [wCurPartySpecies], a\n\tld [wCurSpecies], a\n\tcall GetBaseData\n\tld hl, wPartyCount\n\tld a, [hl]\n\tcp PARTY_LENGTH\n\tjp nc, .TryAddToBox\n\tinc a\n\tld [hl], a\n\tld c, a\n\tld b, 0\n\tadd hl, bc\n\tld a, [wContestMonSpecies]\n\tld [hli], a\n\tld [wCurSpecies], a\n\tld a, -1\n\tld [hl], a\n\tld hl, wPartyMon1Species\n\tld a, [wPartyCount]\n\tdec a\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\tld d, h\n\tld e, l\n\tld hl, wContestMon\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall CopyBytes\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMonOTs\n\tcall SkipNames\n\tld d, h\n\tld e, l\n\tld hl, wPlayerName\n\tcall CopyBytes\n\tld a, [wCurPartySpecies]\n\tld [wNamedObjectIndex], a\n\tcall GetPokemonName\n\tld hl, wStringBuffer1\n\tld de, wMonOrItemNameBuffer\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\tcall GiveANickname_YesNo\n\tjr c, .Party_SkipNickname\n\tld a, [wPartyCount]\n\tdec a\n\tld [wCurPartyMon], a\n\txor a\n\tld [wMonType], a\n\tld de, wMonOrItemNameBuffer\n\tcallfar InitNickname\n\n.Party_SkipNickname:\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMonNicknames\n\tcall SkipNames\n\tld d, h\n\tld e, l\n\tld hl, wMonOrItemNameBuffer\n\tcall CopyBytes\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMon1Level\n\tcall GetPartyLocation\n\tld a, [hl]\n\tld [wCurPartyLevel], a\n\tcall SetCaughtData\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMon1CaughtLocation\n\tcall GetPartyLocation\n\tld a, [hl]\n\tand CAUGHT_GENDER_MASK\n\tld b, LANDMARK_NATIONAL_PARK\n\tor b\n\tld [hl], a\n\txor a\n\tld [wContestMonSpecies], a\n\tand a ; BUGCONTEST_CAUGHT_MON\n\tld [wScriptVar], a\n\tret\n\n.TryAddToBox:"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/pokemon/caught_nickname.asm",
+          "symbol": "CheckPartyFullAfterContest.Party_SkipNickname",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "instructions": [
+            "ld a, [wPartyCount]",
+            "dec a",
+            "ld hl, wPartyMonNicknames",
+            "call SkipNames",
+            "ld d, h",
+            "ld e, l",
+            "ld hl, wMonOrItemNameBuffer",
+            "call CopyBytes",
+            "xor a",
+            "ld [wContestMonSpecies], a",
+            "and a",
+            "ld [wScriptVar], a",
+            "ret"
+          ],
+          "hook_index": 12,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/caught_nickname.asm",
+              "excerpt": "CheckPartyFullAfterContest:\n\tld a, [wContestMonSpecies]\n\tand a\n\tjp z, .DidntCatchAnything\n\tld [wCurPartySpecies], a\n\tld [wCurSpecies], a\n\tcall GetBaseData\n\tld hl, wPartyCount\n\tld a, [hl]\n\tcp PARTY_LENGTH\n\tjp nc, .TryAddToBox\n\tinc a\n\tld [hl], a\n\tld c, a\n\tld b, 0\n\tadd hl, bc\n\tld a, [wContestMonSpecies]\n\tld [hli], a\n\tld [wCurSpecies], a\n\tld a, -1\n\tld [hl], a\n\tld hl, wPartyMon1Species\n\tld a, [wPartyCount]\n\tdec a\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall AddNTimes\n\tld d, h\n\tld e, l\n\tld hl, wContestMon\n\tld bc, PARTYMON_STRUCT_LENGTH\n\tcall CopyBytes\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMonOTs\n\tcall SkipNames\n\tld d, h\n\tld e, l\n\tld hl, wPlayerName\n\tcall CopyBytes\n\tld a, [wCurPartySpecies]\n\tld [wNamedObjectIndex], a\n\tcall GetPokemonName\n\tld hl, wStringBuffer1\n\tld de, wMonOrItemNameBuffer\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\tcall GiveANickname_YesNo\n\tjr c, .Party_SkipNickname\n\tld a, [wPartyCount]\n\tdec a\n\tld [wCurPartyMon], a\n\txor a\n\tld [wMonType], a\n\tld de, wMonOrItemNameBuffer\n\tcallfar InitNickname\n\n.Party_SkipNickname:\n\tld a, [wPartyCount]\n\tdec a\n\tld hl, wPartyMonNicknames\n\tcall SkipNames\n\tld d, h\n\tld e, l\n\tld hl, wMonOrItemNameBuffer\n\tcall CopyBytes\n\txor a\n\tld [wContestMonSpecies], a\n\tand a ; BUGCONTEST_CAUGHT_MON\n\tld [wScriptVar], a\n\tret\n\n.TryAddToBox:"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "contest_box_inserted",
+      "signal": "contest_capture",
+      "phase": "after_successful_contest_box_insert_before_name",
+      "semantics": "Capacity refusal bypasses this site. Record success-only insertion latch before nickname/caught metadata; receiver first box record.",
+      "point_symbols": [
+        "sBoxCount",
+        "sBoxMons",
+        "wCurBox"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/caught_data.asm",
+          "symbol": "CheckPartyFullAfterContest.TryAddToBox",
+          "source_sha256": "303dbd8ac95950d14536ea14dd8a1ba65f3b540dff9356d57107286c916e5773",
+          "instructions": [
+            "ld a, BANK(sBoxCount)",
+            "call OpenSRAM",
+            "ld hl, sBoxCount",
+            "ld a, [hl]",
+            "cp MONS_PER_BOX",
+            "call CloseSRAM",
+            "jr nc, .BoxFull",
+            "xor a",
+            "ld [wCurPartyMon], a",
+            "ld hl, wContestMon",
+            "ld de, wBufferMon",
+            "ld bc, BOXMON_STRUCT_LENGTH",
+            "call CopyBytes",
+            "ld hl, wPlayerName",
+            "ld de, wBufferMonOT",
+            "ld bc, NAME_LENGTH",
+            "call CopyBytes",
+            "callfar InsertPokemonIntoBox",
+            "ld a, [wCurPartySpecies]"
+          ],
+          "hook_index": 18,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/caught_data.asm",
+              "excerpt": "\n.TryAddToBox:\n\tld a, BANK(sBoxCount)\n\tcall OpenSRAM\n\tld hl, sBoxCount\n\tld a, [hl]\n\tcp MONS_PER_BOX\n\tcall CloseSRAM\n\tjr nc, .BoxFull\n\txor a\n\tld [wCurPartyMon], a\n\tld hl, wContestMon\n\tld de, wBufferMon\n\tld bc, BOXMON_STRUCT_LENGTH\n\tcall CopyBytes\n\tld hl, wPlayerName\n\tld de, wBufferMonOT\n\tld bc, NAME_LENGTH\n\tcall CopyBytes\n\tcallfar InsertPokemonIntoBox\n\tld a, [wCurPartySpecies]\n\tld [wNamedObjectIndex], a\n\tcall GetPokemonName\n\tcall GiveANickname_YesNo\n\tld hl, wStringBuffer1\n\tjr c, .Box_SkipNickname\n\tld a, BOXMON\n\tld [wMonType], a\n\tld de, wMonOrItemNameBuffer\n\tcallfar InitNickname\n\tld hl, wMonOrItemNameBuffer\n\n.Box_SkipNickname:"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/pokemon/caught_nickname.asm",
+          "symbol": "CheckPartyFullAfterContest.TryAddToBox",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "instructions": [
+            "ld a, BANK(sBoxCount)",
+            "call OpenSRAM",
+            "ld hl, sBoxCount",
+            "ld a, [hl]",
+            "cp MONS_PER_BOX",
+            "call CloseSRAM",
+            "jr nc, .BoxFull",
+            "xor a",
+            "ld [wCurPartyMon], a",
+            "ld hl, wContestMon",
+            "ld de, wBufferMon",
+            "ld bc, BOXMON_STRUCT_LENGTH",
+            "call CopyBytes",
+            "ld hl, wPlayerName",
+            "ld de, wBufferMonOT",
+            "ld bc, NAME_LENGTH",
+            "call CopyBytes",
+            "callfar InsertPokemonIntoBox",
+            "ld a, [wCurPartySpecies]"
+          ],
+          "hook_index": 18,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/caught_nickname.asm",
+              "excerpt": "\n.TryAddToBox:\n\tld a, BANK(sBoxCount)\n\tcall OpenSRAM\n\tld hl, sBoxCount\n\tld a, [hl]\n\tcp MONS_PER_BOX\n\tcall CloseSRAM\n\tjr nc, .BoxFull\n\txor a\n\tld [wCurPartyMon], a\n\tld hl, wContestMon\n\tld de, wBufferMon\n\tld bc, BOXMON_STRUCT_LENGTH\n\tcall CopyBytes\n\tld hl, wPlayerName\n\tld de, wBufferMonOT\n\tld bc, NAME_LENGTH\n\tcall CopyBytes\n\tcallfar InsertPokemonIntoBox\n\tld a, [wCurPartySpecies]\n\tld [wNamedObjectIndex], a\n\tcall GetPokemonName\n\tcall GiveANickname_YesNo\n\tld hl, wStringBuffer1\n\tjr c, .Box_SkipNickname\n\tld a, BOXMON\n\tld [wMonType], a\n\tld de, wMonOrItemNameBuffer\n\tcallfar InitNickname\n\tld hl, wMonOrItemNameBuffer\n\n.Box_SkipNickname:"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "contest_box_finalized",
+      "signal": "contest_capture",
+      "phase": "after_contest_box_name_requires_insert_latch",
+      "semantics": "Return shared by success and box-capacity refusal. Publish only with contest_box_inserted latch; never trust BUGCONTEST_BOXED_MON alone. Crystal also writes caught metadata on refusal.",
+      "point_symbols": [
+        "sBoxCount",
+        "sBoxMons",
+        "wCurBox",
+        "wScriptVar"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/pokemon/caught_data.asm",
+          "symbol": "CheckPartyFullAfterContest.BoxFull",
+          "source_sha256": "303dbd8ac95950d14536ea14dd8a1ba65f3b540dff9356d57107286c916e5773",
+          "instructions": [
+            "ld a, BANK(sBoxMon1Level)",
+            "call OpenSRAM",
+            "ld a, [sBoxMon1Level]",
+            "ld [wCurPartyLevel], a",
+            "call CloseSRAM",
+            "call SetBoxMonCaughtData",
+            "ld a, BANK(sBoxMon1CaughtLocation)",
+            "call OpenSRAM",
+            "ld hl, sBoxMon1CaughtLocation",
+            "ld a, [hl]",
+            "and CAUGHT_GENDER_MASK",
+            "ld b, LANDMARK_NATIONAL_PARK",
+            "or b",
+            "ld [hl], a",
+            "call CloseSRAM",
+            "xor a",
+            "ld [wContestMon], a",
+            "ld a, BUGCONTEST_BOXED_MON",
+            "ld [wScriptVar], a",
+            "ret"
+          ],
+          "hook_index": 19,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/caught_data.asm",
+              "excerpt": "\n.Box_SkipNickname:\n\tld a, BANK(sBoxMonNicknames)\n\tcall OpenSRAM\n\tld de, sBoxMonNicknames\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\tcall CloseSRAM\n\n.BoxFull:\n\tld a, BANK(sBoxMon1Level)\n\tcall OpenSRAM\n\tld a, [sBoxMon1Level]\n\tld [wCurPartyLevel], a\n\tcall CloseSRAM\n\tcall SetBoxMonCaughtData\n\tld a, BANK(sBoxMon1CaughtLocation)\n\tcall OpenSRAM\n\tld hl, sBoxMon1CaughtLocation\n\tld a, [hl]\n\tand CAUGHT_GENDER_MASK\n\tld b, LANDMARK_NATIONAL_PARK\n\tor b\n\tld [hl], a\n\tcall CloseSRAM\n\txor a\n\tld [wContestMon], a\n\tld a, BUGCONTEST_BOXED_MON\n\tld [wScriptVar], a\n\tret\n\n.DidntCatchAnything:"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/pokemon/caught_nickname.asm",
+          "symbol": "CheckPartyFullAfterContest.BoxFull",
+          "source_sha256": "998fbeda5a5b154a9f57afedda6c792e40500b8e235a369349e1f153d2363d50",
+          "instructions": [
+            "xor a",
+            "ld [wContestMon], a",
+            "ld a, BUGCONTEST_BOXED_MON",
+            "ld [wScriptVar], a",
+            "ret"
+          ],
+          "hook_index": 4,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/pokemon/caught_nickname.asm",
+              "excerpt": "\n.Box_SkipNickname:\n\tld a, BANK(sBoxMonNicknames)\n\tcall OpenSRAM\n\tld de, sBoxMonNicknames\n\tld bc, MON_NAME_LENGTH\n\tcall CopyBytes\n\tcall CloseSRAM\n\n.BoxFull:\n\txor a\n\tld [wContestMon], a\n\tld a, BUGCONTEST_BOXED_MON\n\tld [wScriptVar], a\n\tret\n\n.DidntCatchAnything:"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "contest_box_inserted"
+          ],
+          "match_symbols": [
+            "wCurBox"
+          ],
+          "consume_once": true
+        }
+      }
+    },
+    {
+      "id": "script_wild_staged",
+      "signal": "gift_static",
+      "phase": "after_script_wild_species_and_level_staging",
+      "semantics": "CPU interpreter handler has consumed scripted wild species/level and set battle-script flags. This is origin staging, not catch completion; per-story static policy must join a later success-only capture.",
+      "point_symbols": [
+        "wTempWildMonSpecies",
+        "wCurPartyLevel",
+        "wBattleScriptFlags",
+        "wScriptBank",
+        "wScriptPos",
+        "wMapGroup",
+        "wMapNumber"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/overworld/scripting.asm",
+          "symbol": "Script_loadwildmon",
+          "source_sha256": "78e047e7a77f40a00fe58bd740f55b94ea27b5e3861850f0c7a637945403daa9",
+          "instructions": [
+            "ld a, (1 << 7)",
+            "ld [wBattleScriptFlags], a",
+            "call GetScriptByte",
+            "ld [wTempWildMonSpecies], a",
+            "call GetScriptByte",
+            "ld [wCurPartyLevel], a",
+            "ret"
+          ],
+          "hook_index": 6,
+          "hook_count": 1,
+          "evidence": []
+        },
+        "pokegold": {
+          "file": "engine/overworld/scripting.asm",
+          "symbol": "Script_loadwildmon",
+          "source_sha256": "0b0acf56bed8c2136c803066b0a95ac41296b1d8a245ff228552093d0c6ee71d",
+          "instructions": [
+            "ld a, (1 << 7)",
+            "ld [wBattleScriptFlags], a",
+            "call GetScriptByte",
+            "ld [wTempWildMonSpecies], a",
+            "call GetScriptByte",
+            "ld [wCurPartyLevel], a",
+            "ret"
+          ],
+          "hook_index": 6,
+          "hook_count": 1,
+          "evidence": []
+        }
+      }
+    },
+    {
+      "id": "roamer_party_finalized",
+      "signal": "roamer_capture",
+      "phase": "after_roamer_name_requires_success_and_type_guards",
+      "semantics": "Common return requires BATTLETYPE_ROAMING plus a same-operation successful party insertion latch. Failed catches and ordinary/fixed Suicune encounters are excluded. Final key/species drives legend_<species> policy only after independent readback. This row classifies the same acquisition and must not emit a second capture or consume the latch twice.",
+      "point_symbols": [
+        "wBattleType",
+        "wWildMon",
+        "wCurPartySpecies",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "source_sha256": "95fe7b6c23c9b3db40259dc23d2ceea6c307349c1b01ae7d66d92cf0ae85e9a5",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/overworld/wildmons.asm",
+              "excerpt": "\tld [wTempWildMonSpecies], a\n\tld a, [hl]\n\tld [wCurPartyLevel], a\n\tld a, BATTLETYPE_ROAMING\n\tld [wBattleType], a\n\n\tpop hl\n\tscf\n\tret"
+            },
+            {
+              "file": "constants/battle_constants.asm",
+              "excerpt": "; battle types (wBattleType values)\n\tconst_def\n\tconst BATTLETYPE_NORMAL\n\tconst BATTLETYPE_CANLOSE\n\tconst BATTLETYPE_DEBUG\n\tconst BATTLETYPE_TUTORIAL\n\tconst BATTLETYPE_FISH\n\tconst BATTLETYPE_ROAMING\n\tconst BATTLETYPE_CONTEST\n\tconst BATTLETYPE_FORCESHINY\n\tconst BATTLETYPE_TREE\n\tconst BATTLETYPE_TRAP\n\tconst BATTLETYPE_FORCEITEM\n\tconst BATTLETYPE_CELEBI\n\tconst BATTLETYPE_SUICUNE\n\n; BattleVarPairs indexes"
+            },
+            {
+              "file": "maps/TinTower1F.asm",
+              "excerpt": "\tloadwildmon SUICUNE, 40\n\tloadvar VAR_BATTLETYPE, BATTLETYPE_SUICUNE\n\tstartbattle"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/overworld/wildmons.asm",
+              "excerpt": "\tld [wTempWildMonSpecies], a\n\tld a, [hl]\n\tld [wCurPartyLevel], a\n\tld a, BATTLETYPE_ROAMING\n\tld [wBattleType], a\n\n\tpop hl\n\tscf\n\tret"
+            },
+            {
+              "file": "constants/battle_constants.asm",
+              "excerpt": "; battle types (wBattleType values)\n\tconst_def\n\tconst BATTLETYPE_NORMAL\n\tconst BATTLETYPE_CANLOSE\n\tconst BATTLETYPE_DEBUG\n\tconst BATTLETYPE_TUTORIAL\n\tconst BATTLETYPE_FISH\n\tconst BATTLETYPE_ROAMING\n\tconst BATTLETYPE_CONTEST\n\tconst BATTLETYPE_FORCESHINY\n\tconst BATTLETYPE_TREE\n\tconst BATTLETYPE_TRAP\n\tconst BATTLETYPE_FORCEITEM\n\n; BattleVarPairs indexes"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "capture_party"
+          ],
+          "match_symbols": [
+            "wBattleType"
+          ],
+          "consume_once": true
+        },
+        "memory_battle_type": "BATTLETYPE_ROAMING"
+      },
+      "event_role": "CLASSIFICATION_ONLY"
+    },
+    {
+      "id": "roamer_box_finalized",
+      "signal": "roamer_capture",
+      "phase": "after_roamer_name_requires_success_and_type_guards",
+      "semantics": "Common return requires BATTLETYPE_ROAMING plus a same-operation successful box insertion latch. Failed catches and ordinary/fixed Suicune encounters are excluded. Final key/species drives legend_<species> policy only after independent readback. This row classifies the same acquisition and must not emit a second capture or consume the latch twice.",
+      "point_symbols": [
+        "wBattleType",
+        "wWildMon",
+        "wCurPartySpecies",
+        "wPartyCount",
+        "wPartyMon1",
+        "sBoxCount",
+        "sBoxMons"
+      ],
+      "sources": {
+        "pokecrystal": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "source_sha256": "95fe7b6c23c9b3db40259dc23d2ceea6c307349c1b01ae7d66d92cf0ae85e9a5",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/overworld/wildmons.asm",
+              "excerpt": "\tld [wTempWildMonSpecies], a\n\tld a, [hl]\n\tld [wCurPartyLevel], a\n\tld a, BATTLETYPE_ROAMING\n\tld [wBattleType], a\n\n\tpop hl\n\tscf\n\tret"
+            },
+            {
+              "file": "constants/battle_constants.asm",
+              "excerpt": "; battle types (wBattleType values)\n\tconst_def\n\tconst BATTLETYPE_NORMAL\n\tconst BATTLETYPE_CANLOSE\n\tconst BATTLETYPE_DEBUG\n\tconst BATTLETYPE_TUTORIAL\n\tconst BATTLETYPE_FISH\n\tconst BATTLETYPE_ROAMING\n\tconst BATTLETYPE_CONTEST\n\tconst BATTLETYPE_FORCESHINY\n\tconst BATTLETYPE_TREE\n\tconst BATTLETYPE_TRAP\n\tconst BATTLETYPE_FORCEITEM\n\tconst BATTLETYPE_CELEBI\n\tconst BATTLETYPE_SUICUNE\n\n; BattleVarPairs indexes"
+            }
+          ]
+        },
+        "pokegold": {
+          "file": "engine/items/item_effects.asm",
+          "symbol": "PokeBallEffect.return_from_capture",
+          "source_sha256": "abc27a608baa3da85260fe6e506cf01f0df44a04f76aaa70029e9822e528eabb",
+          "instructions": [
+            "ld a, [wBattleType]"
+          ],
+          "hook_index": 0,
+          "hook_count": 1,
+          "evidence": [
+            {
+              "file": "engine/overworld/wildmons.asm",
+              "excerpt": "\tld [wTempWildMonSpecies], a\n\tld a, [hl]\n\tld [wCurPartyLevel], a\n\tld a, BATTLETYPE_ROAMING\n\tld [wBattleType], a\n\n\tpop hl\n\tscf\n\tret"
+            },
+            {
+              "file": "constants/battle_constants.asm",
+              "excerpt": "; battle types (wBattleType values)\n\tconst_def\n\tconst BATTLETYPE_NORMAL\n\tconst BATTLETYPE_CANLOSE\n\tconst BATTLETYPE_DEBUG\n\tconst BATTLETYPE_TUTORIAL\n\tconst BATTLETYPE_FISH\n\tconst BATTLETYPE_ROAMING\n\tconst BATTLETYPE_CONTEST\n\tconst BATTLETYPE_FORCESHINY\n\tconst BATTLETYPE_TREE\n\tconst BATTLETYPE_TRAP\n\tconst BATTLETYPE_FORCEITEM\n\n; BattleVarPairs indexes"
+            }
+          ]
+        }
+      },
+      "conditions": {
+        "requires_prior": {
+          "site_ids": [
+            "capture_box"
+          ],
+          "match_symbols": [
+            "wBattleType"
+          ],
+          "consume_once": true
+        },
+        "memory_battle_type": "BATTLETYPE_ROAMING"
+      },
+      "event_role": "CLASSIFICATION_ONLY"
+    }
+  ]
+}

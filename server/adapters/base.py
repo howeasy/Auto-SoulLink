@@ -263,6 +263,12 @@ class GameRulesAdapter(ABC):
         """
         return 0
 
+    def reports_box_census(self) -> bool:
+        """KEY-SCOPE-5: whether this foundation's Lua client stamps each complete PC-box scan
+        with `pc_boxes_generation`. When True, a snapshot without one is NO census (a key_change
+        is refused, retiring nothing); when False the server keeps the legacy presence check."""
+        return False
+
     def supports_info_panel(self) -> bool:
         """Whether this game's Lua client can render the native in-game info panel.
 
@@ -304,6 +310,23 @@ class GameRulesAdapter(ABC):
         does not). A pair of mixed kinds never reaches here: the hello check refuses it.
         """
         return None
+
+    @staticmethod
+    def pairing_kind(kind: str) -> str:
+        """Normalize a declared `artifact_kind` for the PAIRING comparison only.
+
+        `_mixed_games_error` asks each foundation's adapter CLASS whether two declared
+        kinds describe the same artifact layout, so this is a pure lookup: static, no
+        instance, no candidate adapter installed to answer a hello that may be refused.
+        The COMMITTED kind is untouched -- `set_artifact_kind` still receives what the
+        client declared.
+
+        Default is today's rule: a companion-patched vanilla cartridge ("named") is a
+        clean-layout artifact, so it pairs with a clean one. A game whose patch is
+        likewise per cartridge overrides this; pureRGB does not (its overlay is a
+        run-level capability, so clean and overlay must never mix).
+        """
+        return {"named": "clean"}.get(kind, kind)
 
     def native_trade_ui(self) -> bool:
         """Whether the cartridge itself drives the trade menus.

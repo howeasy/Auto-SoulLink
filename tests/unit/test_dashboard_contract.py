@@ -255,3 +255,13 @@ async def test_fallen_rows_carry_no_live_numbers(dashboard):
         assert not [n for n in row.walk() if "mk-hp" in _classes(n)], row.get("id")
     if any("mk-item" in _classes(n) for n in dom.walk()):  # Gen 1 has no held items
         assert any("mk-item" in _classes(n) for row in fallen for n in row.walk())
+
+
+@pytest.mark.asyncio
+async def test_an_ambiguous_key_latch_is_on_the_board(populated):
+    """KEY-SCOPE-3: a latched key silently refuses that mon's events; the board must say so."""
+    srv, client = populated
+    srv.state.ambiguous_keys["b"]["DEADBEEF:1234"] = {"since": 0, "refused": 3}
+    text = parse(await (await client.get("/")).text()).text_content()
+    assert "Player B: key DEADBEEF:1234 is ambiguous; events naming it are paused (refused: 3)" in text
+    assert "/api/debug/resolve_ambiguous_key" in text

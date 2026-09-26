@@ -418,10 +418,10 @@ async def test_debug_and_calc_are_manager_pages(manager_client, manager_dir, pat
     """Both wear the rail and the run header; a stopped run gets the empty state instead of
     a panel whose JS would fail against a dead server. The Calc tab only shows for a game
     whose adapter has a calc profile (RR), so the calc case runs on a Radical Red run. The
-    debug case runs on Gen 2 (Crystal), which still has no calc_profile() override as of
-    docs/calc_multigen/HANDOFF.md task 1/5 -- Gen 1 flipped to verified, so it no longer
-    proves the "unverified game hides the calc" half of this contract."""
-    _stopped_run(manager_dir, game="gen3_rr" if panel == "calc" else "gen2")
+    debug case runs on Gen 4 (HG/SS), which still has no calc_profile() override -- Gen 1
+    and Gen 2 (GEN2-CALC) flipped to verified, so they no longer prove the "unverified game
+    hides the calc" half of this contract."""
+    _stopped_run(manager_dir, game="gen3_rr" if panel == "calc" else "gen4_hgss")
     resp = await manager_client.get(path)
     assert resp.status == 200
     body = await resp.text()
@@ -430,7 +430,7 @@ async def test_debug_and_calc_are_manager_pages(manager_client, manager_dir, pat
     assert "window.SLINK_API_BASE = \"/runs/run_1\"" in body
     assert "not running" in body
     if panel == "debug":
-        assert "/runs/run_1/calc/normal.html" not in body, "Gen 2 has no verified calc yet"
+        assert "/runs/run_1/calc/normal.html" not in body, "Gen 4 has no verified calc yet"
 
 
 @pytest.mark.asyncio

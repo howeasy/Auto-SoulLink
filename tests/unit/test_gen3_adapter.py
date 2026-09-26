@@ -458,12 +458,13 @@ class TestMoveData:
         Verify they don't crash AND produce the same output as the no-form call.
         """
         from server.adapters.gen1_rby import Gen1Adapter
-        from server.adapters.gen2_crystal import Gen2CrystalAdapter
+        from server.adapters.gen2_gsc import Gen2GSCAdapter
         from server.adapters.gen3_frlge import Gen3Adapter
         from server.adapters.gen5_bw import Gen5Adapter
-        for cls, sp in [(Gen1Adapter, 25), (Gen2CrystalAdapter, 25),
+        for cls, sp in [(Gen1Adapter, 25), (Gen2GSCAdapter, 25),
                         (Gen3Adapter, 25), (Gen5Adapter, 495)]:
-            a = cls() if cls is not Gen3Adapter else cls(is_rr=False)
+            a = (cls(is_rr=False) if cls is Gen3Adapter
+                 else cls(rom_type="Crystal") if cls is Gen2GSCAdapter else cls())
             # Calling with explicit form arg must not crash AND must equal the no-form output.
             assert a.sprite_html(sp, 0)  == a.sprite_html(sp)
             assert a.sprite_html(sp, 5)  == a.sprite_html(sp)
@@ -551,17 +552,17 @@ class TestCFRUBoxHandling:
             for i in range(5)
         ]
         for bentry in entries:
-            tracker._cache_mon_info(bentry["key"], bentry)
+            tracker._cache_mon_info(bentry["key"], bentry, "a")
         for i in range(5):
             key = f"MON{i}:000{i}"
-            assert tracker.state.mon_stats[key]["level"] == 10 + i
+            assert tracker.state.mon_stats["a"][key]["level"] == 10 + i
 
     def test_mon_stats_no_cross_slot_overwrite(self, tracker):
         """Later slot caching must not overwrite earlier slot's mon_stats entry."""
-        tracker._cache_mon_info("FIRST:0001", {"species_id": 4, "level": 10})
-        tracker._cache_mon_info("SECOND:0002", {"species_id": 7, "level": 20})
-        assert tracker.state.mon_stats["FIRST:0001"]["level"] == 10
-        assert tracker.state.mon_stats["SECOND:0002"]["level"] == 20
+        tracker._cache_mon_info("FIRST:0001", {"species_id": 4, "level": 10}, "a")
+        tracker._cache_mon_info("SECOND:0002", {"species_id": 7, "level": 20}, "a")
+        assert tracker.state.mon_stats["a"]["FIRST:0001"]["level"] == 10
+        assert tracker.state.mon_stats["a"]["SECOND:0002"]["level"] == 20
 
     # ── _lookup_mon_detail: correct slot returned ──────────────────────────
 

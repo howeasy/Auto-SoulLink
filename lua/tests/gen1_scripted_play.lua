@@ -86,6 +86,10 @@ function P.new(ROOT, title, player, opts)
     local rd = dofile(ROOT .. "/lua/gen1/entry.lua").harness_bus_u8()
     local function sym(name) return rd(assert(symbols[name], "no symbol " .. name)) end
     local self = { symbols = symbols, log = opts.log or function() end, modules = modules }
+    local Scripted = dofile(ROOT .. "/lua/scripted_inputs.lua")
+    local function input_host(step)
+        return Scripted.new({step=step, frame=function() return emu.framecount() end, idle=IDLE})
+    end
 
     -- New Game menus, from gen1/rc's bootstrap: A on a 16-frame cadence with Start pulses; the
     -- four-item name menus (wMaxMenuItem 3 at Y2/X1) take Down once then A = the first preset name
@@ -177,50 +181,51 @@ function P.new(ROOT, title, player, opts)
     function self.boot(step, overworld_ok, max_frames)
         assert(type(overworld_ok) == "function", "boot needs the overworld checkpoint predicate")
         max_frames = max_frames or 20000
-        local settled = 0
+        local host = input_host(step)
         -- Idle frames on the title screen move the trainer ID. Random runs every VBlank
         -- (home/vblank.asm:37; engine/math/random.asm:1-13 folds rDIV into hRandomAdd/Sub) and
         -- InitPlayerData2 takes both for wPlayerID (engine/movie/oak_speech/init_player_data.asm:
         -- 4-10), so a different idle count is a different, still deterministic, OT -- what the
         -- A1 second-OT fixture is built with. 0 for every caller that does not ask for it.
-        local idled = 0
-        for _ = 1, (opts.title_idle or 0) do step(IDLE); idled = idled + 1 end
+        local idled = host.idle(opts.title_idle or 0)
         if opts.log then opts.log(("TITLE_IDLE requested=%d applied=%d"):format(opts.title_idle or 0, idled)) end
-        for f = 1, max_frames do
+        local receipt = host.run({name="scripted New Game", terminal="bedroom-settled",
+            max_frames=max_frames, max_phase_frames=max_frames, max_phase_changes=max_frames,
+            settle_frames=30, terminal_idle=false}, function()
             local ok = sym("wCurMap") == F.MAP.REDS_HOUSE_2F and sym("wPartyCount") == 0 and overworld_ok()
-            settled = ok and settled + 1 or 0
-            if settled >= 30 then self.log(string.format("[scripted] bedroom reached after %d frames", f)) return f end
-            step(ok and IDLE or menu_buttons())
-        end
-        error("scripted New Game made no bounded progress (" .. max_frames .. " frames)", 0)
+            return ok and IDLE or menu_buttons(), ok and "bedroom-settled" or "booting"
+        end)
+        self.log(string.format("[scripted] bedroom reached after %d frames", receipt.iterations))
+        return receipt.iterations
     end
 
     -- Run route modules in order to their terminals. on_phase(name, phase, frame) is called on
     -- every phase change. Returns the receipts {module -> frames}.
     function self.run(step, chain, on_phase, max_frames_each)
         max_frames_each = max_frames_each or 120000
+        assert(type(chain) == "table" and #chain > 0 and #chain <= 32, "bounded nonempty route chain required")
+        local seen = {}
+        for key in pairs(chain) do assert(type(key) == "number" and key % 1 == 0 and key >= 1 and key <= #chain, "route chain must be dense") end
+        for _, name in ipairs(chain) do
+            assert(modules[name], "unknown route " .. tostring(name))
+            assert(not seen[name], "duplicate route receipt " .. tostring(name))
+            seen[name] = true
+        end
+        local host = input_host(step)
         local receipts = {}
         for _, name in ipairs(chain) do
             local spec = assert(modules[name], "unknown route " .. tostring(name))
             local driver = assert(dofile(ROOT .. "/lua/tests/" .. spec.file)).new(expected)
-            local last_phase, frames = nil, 0
-            while true do
-                frames = frames + 1
-                assert(frames <= max_frames_each, name .. ": route made no bounded progress")
-                local frame = emu.framecount()
+            local receipt = host.run({name=name, terminal=spec.terminal, max_frames=max_frames_each,
+                max_phase_frames=max_frames_each, max_phase_changes=max_frames_each, terminal_idle=true,
+                -- master: on_phase may park (duo ball_gate_new holds A's rival for the go-file);
+                -- those frames never counted against max_frames_each.
+                phase_callback_may_advance=true}, function(frame)
                 local point = self.point()
                 local buttons, phase = driver.step(handshake, status, point, frame)
-                if phase ~= last_phase then
-                    last_phase = phase
-                    if on_phase then on_phase(name, phase, frame, point) end
-                end
-                if phase == spec.terminal then
-                    step(IDLE)
-                    receipts[name] = frames
-                    break
-                end
-                step(buttons)
-            end
+                return buttons, phase, point
+            end, on_phase)
+            receipts[name] = receipt.iterations
         end
         return receipts
     end

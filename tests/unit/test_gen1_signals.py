@@ -5,7 +5,9 @@ without it), the System Bus is a dict, registers/frame are set per test. No BizH
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import pathlib
 
 import lupa
@@ -21,10 +23,12 @@ SIGNALS_LUA = (REPO / "lua" / "gen1" / "signals.lua").as_posix()
 
 
 def _rom(title: str) -> bytes:
-    path = REPO / "patch" / "build" / DUMPS[title]
+    path = pathlib.Path(os.environ.get("SLINK_GEN1_ROM_DIR", REPO / "patch" / "build")) / DUMPS[title]
     if not path.exists():
         pytest.skip(f"{path.name} not present — copy the clean dump into patch/build/")
-    return path.read_bytes()
+    raw = path.read_bytes()
+    assert hashlib.sha1(raw).hexdigest() == PROFILE[title]["rom_sha1"], "signal tests require the pinned clean ROM"
+    return raw
 
 
 class Harness:
@@ -39,15 +43,18 @@ class Harness:
         self.frame = 1000
         self.hooks: dict[int, tuple] = {}
         self.next_id = 1
-        self.unregistered: list[int] = []
+        self.unregistered: list[int | str] = []
         profile = self.lua.eval("function(j) return j end")(self.lua.table_from(PROFILE[title], recursive=True))
         sites = self.lua.table_from(SITES[title]["sites"], recursive=True)
         io = self.lua.table(
             read_u8=self._read_u8, read_range=self._read_range, on_bus_exec=self._on_bus_exec,
-            unregister=lambda i: self.unregistered.append(int(i)),
+            unregister=lambda handle: self.unregistered.append(handle),
             framecount=lambda: self.frame, register=lambda name: self.regs[str(name)],
         )
-        self.S = self.lua.eval(f'dofile("{SIGNALS_LUA}")')
+        source = self.lua.eval(f'dofile("{SIGNALS_LUA}")')
+        registry = self.lua.eval("dofile")((REPO / "lua/hook_registry.lua").as_posix())
+        binding = self.lua.eval("dofile")((REPO / "lua/gb_hook_binding.lua").as_posix())
+        self.S = source.bind(self.lua.table(registry=registry, gb_binding=binding, owner="SLink-gen1"))
         self._profile, self._sites, self._io = profile, sites, io
 
     def start(self):
@@ -232,9 +239,44 @@ def test_an_all_zero_guid_registration_is_refused_and_registrations_are_counted(
     h._io.on_bus_exec = on_bus_exec
     with pytest.raises(lupa.LuaError, match="engine signal registration failed"):
         h.start()
+    assert h.unregistered == ["hook-1"]  # Partial constructor owns and cleans this handle.
     good = Harness("red")
     good.start()
     assert good.svc.registered == len(SITES["red"]["sites"])
+
+
+def test_constructor_retry_preserves_quarantined_cleanup_without_caller_caching_reference():
+    h = Harness("red")
+    state = {"calls": 0, "can_remove": False, "removed": []}
+
+    def register(_fn, _addr, _name, _domain):
+        state["calls"] += 1
+        return h.S.NULL_GUID if state["calls"] == 2 else f"owned-{state['calls']}"
+
+    def unregister(handle):
+        if not state["can_remove"]:
+            return False
+        state["removed"].append(handle)
+        return True
+
+    h._io.on_bus_exec, h._io.unregister = register, unregister
+    with pytest.raises(lupa.LuaError, match="cleanup failed"):
+        h.start()
+    assert h.S.failed_service.status(h.S.failed_service).registered == 1
+    with pytest.raises(lupa.LuaError, match="cleanup|owner"):
+        h.start()
+    # No copy of the original failed service is retained outside the factory.
+    # It must still expose the sole handle capable of cleaning owned-1.
+    assert h.S.failed_service.status(h.S.failed_service).registered == 1
+    assert len(h.S.failed_service.status(h.S.failed_service).cleanup_errors) == 1
+    assert state["calls"] == 2
+    state["can_remove"] = True
+    assert h.S.failed_service.close(h.S.failed_service) is True
+    assert state["removed"] == ["owned-1"]
+    h.start()
+    assert h.S.failed_service is None
+    assert h.svc.registered == len(SITES["red"]["sites"])
+    h.svc.close(h.svc)
 
 
 def test_the_bag_snapshot_length_is_derived_not_a_literal():
@@ -247,3 +289,57 @@ def test_the_bag_snapshot_length_is_derived_not_a_literal():
     h.arrive("bag_received")
     sig = h.drain()[0]
     assert len(sig["point"]["bag"]) == 2 + 2 * ((ram["wPlayerMoney"] - ram["wBagItems"] - 1) // 2) == 42
+
+
+# Every ROMX bank's code runs at $4000-$7FFF, so most hits are some OTHER bank at a site's PC.
+# N13b: that reject path builds nothing per hit (master 8f6a986 checked the bank first, zero
+# allocation); the per-kind spec and filter closure are made once, at new().
+_ALLOC_PROBE = """function(fns, k)
+    for _, fn in ipairs(fns) do fn() end  -- warm-up: first-hit bookkeeping is not per hit
+    collectgarbage("collect"); collectgarbage("stop")
+    local before = collectgarbage("count")
+    for _ = 1, k do for _, fn in ipairs(fns) do fn() end end
+    local grown = collectgarbage("count") - before
+    collectgarbage("restart")
+    return grown
+end"""
+
+
+def test_wrong_bank_hits_build_no_closure_or_spec_per_hit():
+    h = Harness("red")
+    accepts = h.lua.table(hits=0, changed=0)
+    spy = h.lua.eval("""function(GB, seen) return {new=function(io, c)
+        local b = GB.new(io, c)
+        local context = b.context
+        function b:context(site, accept)  -- allocation-free: first accept per site + counts
+            accept = accept or false
+            if seen[site.id] == nil then seen[site.id] = accept end
+            seen.hits, seen.changed = seen.hits + 1, seen.changed + (rawequal(seen[site.id], accept) and 0 or 1)
+            return context(self, site, accept)
+        end
+        return b
+    end} end""")(h.lua.eval("dofile")((REPO / "lua/gb_hook_binding.lua").as_posix()), accepts)
+    h.S = h.lua.eval(f'dofile("{SIGNALS_LUA}")').bind(h.lua.table(
+        registry=h.lua.eval("dofile")((REPO / "lua/hook_registry.lua").as_posix()), gb_binding=spy, owner="SLink-gen1"))
+    # a kind with no S.KINDS entry takes the generic point
+    generic = h.lua.table_from(dict(SITES["red"]["sites"]["battle_faint"], point=["wCurMap"]), recursive=True)
+    h._sites["zz_generic"] = generic
+    h.start()
+    fns = {name: fn for fn, _addr, name in h.hooks.values()}
+    fire = h.lua.table(fns["SLink-gen1-bag_received"], fns["SLink-gen1-zz_generic"])
+    bank = PROFILE["red"]["ram"]["hLoadedROMBank"]
+    h.bus[bank] = h.site("bag_received")["bank"] + 1
+    assert h.site("battle_faint")["bank"] != h.bus[bank]
+    k, probe = 500, h.lua.eval(_ALLOC_PROBE)
+    grown = probe(fire, 4 * k) - probe(fire, k)  # per-hit growth only; lupa's fixed overhead cancels
+    assert h.drain() == [] and h.status().failed is None
+    assert accepts.hits == 2 * (5 * k + 2) and accepts["bag_received"]  # the filter kind has an accept
+    assert accepts.changed == 0  # one accept per kind, reused on every hit
+    assert grown < 1.0, f"{grown:.1f} KB allocated by {6 * k} extra wrong-bank hits"
+    # the prebuilt generic point still reads its symbols on an accepted hit
+    h.bus[PROFILE["red"]["ram"]["wCurMap"]] = 0x0C
+    h.bus[bank] = h.site("battle_faint")["bank"]
+    h.regs["PC"] = h.site("battle_faint")["address"] + h.site("battle_faint").get("capture_offset", 0)
+    fns["SLink-gen1-zz_generic"]()
+    (sig,) = h.drain()
+    assert sig["kind"] == "zz_generic" and dict(sig["point"].items()) == {"wCurMap": 0x0C}

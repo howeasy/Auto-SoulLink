@@ -3,7 +3,7 @@
 -- Two rules, enforced here rather than trusted to callers:
 --   1. Nothing is written unless the caller has ARMED a write window: either the overworld
 --      write-safe checkpoint (lua/gen1_write_safety.lua) or a battle hook site. `W.arm(reason)`
---      opens the window for the current frame; `write_bytes` refuses outside it (W-7).
+--      opens the window until explicit disarm; `write_bytes` refuses outside it (W-7).
 --   2. Every multi-byte write is validated completely before the first byte lands (W-4).
 --
 -- Facts (pret pokered 405b624 / pokeyellow 0a08515; all addresses come from profile.ram):
@@ -38,6 +38,7 @@ end
 --   party_mon: the decoded party entry the server named (species = internal index)
 function W.active_faint_guard(battle, slot, party_mon)
     if battle.in_battle ~= 1 and battle.in_battle ~= 2 then return false, "not in a battle" end
+    -- not an O-30 exclusion: old man / Safari never load wBattleMon (no active battler exists)
     if battle.type ~= 0 then return false, "special battle type (old man / safari)" end
     if battle.link_state == 4 then return false, "link battle" end
     if battle.player_mon_number ~= slot then return false, "target is not the active battler" end
@@ -51,45 +52,91 @@ end
 -- Helper for callers building a 16-bit big-endian pair.
 function W.u16be(v) return { be16(v) } end
 
-function W.new(profile, io)
+function W.new(profile, io, Permit)
     local ram, d = assert(profile.ram), assert(profile.derived)
-    local self = { armed = nil, log = {} }
+    assert(Permit and type(Permit.new) == "function", "shared write permit factory required")
     local species_count = assert(d.species_count, "profile.derived.species_count required")
+    -- Gen 1's flat CartRAM bound comes from the profile's highest native box bank.
+    -- GB SRAM banks are $2000 bytes; both pinned Gen 1 profiles use banks 0..3.
+    local highest_bank = -1
+    for _, bank in ipairs(assert(d.sram_box_banks, "profile SRAM box banks required")) do
+        assert(type(bank) == "number" and bank % 1 == 0 and bank >= 0, "invalid SRAM bank")
+        highest_bank = math.max(highest_bank, bank)
+    end
+    assert(highest_bank >= 0, "profile SRAM box banks empty")
+    local cart_size = (highest_bank + 1) * 0x2000
+    local self = Permit.new({
+        write_u8 = function(addr, value, domain) return io.write_u8(addr, value, domain) end,
+        domains = {
+            ["System Bus"] = {
+                bounds = function(addr, n) return addr >= 0 and addr + n <= 0x10000 end,
+                mapped = function(addr, n)
+                    if d.wram_bank_gate and addr + n - 1 >= W.WRAM_BANKED_LO and addr <= W.WRAM_BANKED_HI then
+                        -- The native CGB policy remains Gen 1-owned. Never switch rWBK.
+                        local bank = io.register and io.register("WRAM BANK")
+                        assert(W.WRAM_BANKS_OK[bank], string.format(
+                            "write refused: WRAM BANK %s outside {0,1} for $%04X (W-10)", tostring(bank), addr))
+                    end
+                    return true
+                end,
+                -- These builders pass concrete numeric addresses, not pointers which
+                -- the shared mechanism may resolve again after validation.
+                pointer_stable = function() return true end,
+            },
+            CartRAM = {
+                bounds = function(addr, n, reason)
+                    assert(reason ~= "panel", "cart write refused: the panel window writes WRAM only")
+                    return addr >= 0 and addr + n <= cart_size
+                end,
+                mapped = function() return true end, -- flat CartRAM bypasses bus SRAM banking
+                pointer_stable = function() return true end, -- concrete flat byte offsets
+            },
+        },
+        -- Legacy Gen 1 arm persists until disarm. Framecount is receipt metadata,
+        -- never expiry authority; the caller's checkpoint/hook supplies the scope.
+        lifetime = { capture = function() return {} end, valid = function() return true end },
+        provenance = function(domain, addr, n, reason)
+            return { addr = addr, n = n, why = reason, domain = domain,
+                     cart = domain == "CartRAM" and true or nil,
+                     frame = io.framecount and io.framecount() or nil }
+        end,
+    })
+    local permit_arm, permit_write = self.arm, self.write_bytes
 
-    -- Open the write window for this frame. `reason` names the checkpoint that authorised it
+    -- Open the write window until explicit disarm. `reason` names its checkpoint
     -- ("overworld", "battle_loop_head"); it is recorded with every write for the receipts.
     -- `allow(addr, n)` optionally NARROWS the window to a byte range (the panel paints into
     -- wTileMap and must not reach the menu state one byte past it). The predicate answers for
     -- the FULL interval, so a straddling write is refused whole rather than clipped.
     function self:arm(reason, allow)
-        self.armed = assert(reason, "arm needs a reason")
-        self.allow = allow
+        return self:guard(function()
+            assert(allow == nil or type(allow) == "function", "allow must be a predicate")
+            local narrowed = allow and function(domain, addr, n)
+                return domain == "System Bus" and allow(addr, n)
+            end or nil
+            return permit_arm(self, reason, narrowed)
+        end)
     end
-    function self:disarm() self.armed, self.allow = nil, nil end
 
     function self:write_bytes(addr, bytes)
-        assert(self.armed, "write refused: no armed write window (W-7)")
-        assert(not self.allow or self.allow(addr, #bytes),
-               string.format("write refused: %d byte(s) at $%04X outside the %s window (W-7)",
-                             #bytes, addr, tostring(self.armed)))
-        for i = 1, #bytes do assert(is_byte(bytes[i]), "byte out of range") end
-        if d.wram_bank_gate and addr + #bytes - 1 >= W.WRAM_BANKED_LO and addr <= W.WRAM_BANKED_HI then
-            -- W-10: never switch rWBK from Lua; refuse instead, the caller retries next frame
-            local bank = io.register and io.register("WRAM BANK")
-            assert(W.WRAM_BANKS_OK[bank], string.format(
-                "write refused: WRAM BANK %s outside {0,1} for $%04X (W-10)", tostring(bank), addr))
-        end
-        for i = 1, #bytes do io.write_u8(addr + i - 1, bytes[i], "System Bus") end
-        -- the frame is what lines a receipt up against a scenario's signal trace
-        self.log[#self.log + 1] = { addr = addr, n = #bytes, why = self.armed,
-                                    frame = io.framecount and io.framecount() or nil }
+        return permit_write(self, "System Bus", addr, bytes)
+    end
+    function self:write_cart_bytes(addr, bytes)
+        return self:guard(function()
+            assert(self.armed, "cart write refused: no armed write window (W-7)")
+            return permit_write(self, "CartRAM", addr, bytes)
+        end)
     end
 
     local function party_slot_base(slot) return ram.wPartyMons + slot * d.party_struct_size end
+    local function check_slot(slot)
+        assert(type(slot) == "number" and slot % 1 == 0 and slot >= 0 and slot < d.party_capacity,
+               "party slot out of range")
+    end
 
     -- W-1: benched (or out-of-battle) mon: HP 0, status clear. `slot` is 0-based.
     function self:faint_party_slot(slot)
-        assert(slot >= 0 and slot < d.party_capacity, "party slot out of range")
+        check_slot(slot)
         local base = party_slot_base(slot)
         self:write_bytes(base + (ram.wPartyMon1HP - ram.wPartyMon1), { 0, 0 })
         self:write_bytes(base + (ram.wPartyMon1Status - ram.wPartyMon1), { 0 })
@@ -99,6 +146,7 @@ function W.new(profile, io)
     -- mirror it into the party slot, and make the corpse unable to move this turn.
     function self:faint_active_battler(slot)
         assert(self.armed == "battle_loop_head", "active-battler faint only at the battle loop head")
+        check_slot(slot)
         self:write_bytes(ram.wBattleMonHP, { 0, 0 })
         self:write_bytes(ram.wPlayerSelectedMove, { W.CANNOT_MOVE })
         self:faint_party_slot(slot)
@@ -111,7 +159,7 @@ function W.new(profile, io)
     -- byte); it must lie inside the party structs. Armed only inside the apex_commit hook.
     function self:restore_apex_dvs(addr, dvs)
         assert(self.armed == "apex_commit", "APEX DV restore only inside the apex_commit hook")
-        assert(type(dvs) == "table" and #dvs == 2, "two DV bytes required")
+        assert(Permit.sequence_length(dvs, "two DV bytes") == 2, "two DV bytes required")
         assert(addr >= ram.wPartyMons and addr + 1 < ram.wPartyMons + d.party_capacity * d.party_struct_size,
                "APEX DV address outside the party structs")
         self:write_bytes(addr, { dvs[1], dvs[2] })
@@ -133,6 +181,7 @@ function W.new(profile, io)
     -- party mirror), so the engine offers nothing else. Slot-0-only was escapable (RC).
     function self:explode_active_battler(slot)
         assert(self.armed == "battle_loop_head", "explode only at the battle loop head")
+        check_slot(slot)
         -- pureRGB (profile derived.explode_low_hp_fraction): EXPLOSION faints its user only below
         -- max/N HP, so the active battler is put there first (the engine writes the party mirror
         -- back at the faint). ponytail: a max HP under 2N cannot go low enough; no real battler has one.
@@ -160,10 +209,14 @@ function W.new(profile, io)
     -- count, species list (+ $FF), structs, OT names, nicknames — the same shape the engine
     -- fills in engine/battle/read_trainer_party.asm.
     function self:write_enemy_party(mons)
-        assert(type(mons) == "table" and #mons >= 1 and #mons <= d.party_capacity, "enemy party count must be 1..6")
+        local count = Permit.sequence_length(mons, "enemy party")
+        assert(count >= 1 and count <= d.party_capacity, "enemy party count must be 1..6")
         for i, m in ipairs(mons) do
-            assert(#m.blob == d.battle_struct_size, "enemy mon " .. i .. ": blob must be " .. d.battle_struct_size .. " bytes")
-            assert(#m.ot == d.name_length and #m.nick == d.name_length, "enemy mon " .. i .. ": names must be " .. d.name_length .. " bytes")
+            assert(Permit.sequence_length(m.blob, "enemy mon " .. i .. ": blob") == d.battle_struct_size,
+                   "enemy mon " .. i .. ": blob must be " .. d.battle_struct_size .. " bytes")
+            assert(Permit.sequence_length(m.ot, "enemy mon " .. i .. ": OT name") == d.name_length
+                   and Permit.sequence_length(m.nick, "enemy mon " .. i .. ": nickname") == d.name_length,
+                   "enemy mon " .. i .. ": names must be " .. d.name_length .. " bytes")
             assert(m.species >= 1 and m.species <= species_count and m.species == m.blob[1], "enemy mon " .. i .. ": species/blob mismatch")
             -- W-4: write_bytes checks bytes per CALL, so without this the first two mons would
             -- already be in wEnemyMons when the third one's bad byte is found. `tonumber("-1", 16)`
@@ -185,6 +238,12 @@ function W.new(profile, io)
         end
     end
 
+    -- A game-specific preflight error must close the same permit as an IO error.
+    for _, name in ipairs({ "faint_party_slot", "faint_active_battler", "restore_apex_dvs",
+                             "restore_transform_hp_zero", "explode_active_battler", "write_enemy_party" }) do
+        local method = self[name]
+        self[name] = function(obj, ...) return obj:guard(method, obj, ...) end
+    end
     self.active_faint_guard = W.active_faint_guard
     return self
 end

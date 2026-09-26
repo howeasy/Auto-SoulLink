@@ -1,8 +1,14 @@
-attempt 1 of 2
-both receipts: DECLINE_OVERWORLD + SAVE_WITNESS trade_decline_new; absent: RX apply_trade / TRADE_DONE / PARTNER_ACCEPTED
-durable route_1 pair unchanged: a=92A6:4190:24 b=2A11:AFB9:A5
+# lane HEAD=cfbc0c90cfeee979d68a7af756e3ced6cd757ac7 git-status=clean at=2026-09-24T09:47:32-04:00
+# cmd: tools/e2e_duo.py --game gen1_new --scenario trade_decline_new
+attempt 1 of 3
 a main checksum/exp/recomputed stats valid; saved party/current box decode valid
-a saved party ['06C3:4190:99', '92A6:4190:24']; linked half 92A6:4190:24 on a, no swap
+SAVE_WITNESS_SHA256 inst=a site=4e84da36c93a813d59fa2969c2ab0410ddfeb80a655c289b95013562c52be763 file=4e84da36c93a813d59fa2969c2ab0410ddfeb80a655c289b95013562c52be763 match=true saves=2
 b main checksum/exp/recomputed stats valid; saved party/current box decode valid
-b saved party ['4519:AFB9:B0', '2A11:AFB9:A5']; linked half 2A11:AFB9:A5 on b, no swap
+SAVE_WITNESS_SHA256 inst=b site=5c5ae347ecee96675491e6e1e7092afd1c44505730be48d16cfd11f85e918970 file=5c5ae347ecee96675491e6e1e7092afd1c44505730be48d16cfd11f85e918970 match=true saves=2
+both receipts: DECLINE_OVERWORLD + SAVE_WITNESS trade_decline_new; absent: RX apply_trade / TRADE_DONE / PARTNER_ACCEPTED
+durable route_1 pair unchanged: a=07F8:4190:24 b=733E:AFB9:A5
+a main checksum/exp/recomputed stats valid; saved party/current box decode valid
+a saved party ['06C3:4190:99', '07F8:4190:24']; linked half 07F8:4190:24 on a, no swap
+b main checksum/exp/recomputed stats valid; saved party/current box decode valid
+b saved party ['4519:AFB9:B0', '733E:AFB9:A5']; linked half 733E:AFB9:A5 on b, no swap
 PYDEC: PASS asserted scenario facts

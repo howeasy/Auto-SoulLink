@@ -18,6 +18,7 @@ PROFILE = json.loads((REPO / "data" / "games" / "gen1_rby" / "profile.json").rea
 WRITES_LUA = (REPO / "lua" / "gen1" / "writes.lua").as_posix()
 PANEL_LUA = (REPO / "lua" / "gen1" / "panel.lua").as_posix()
 ENTRY_LUA = (REPO / "lua" / "gen1" / "entry.lua").as_posix()
+PERMIT_LUA = (REPO / "lua" / "write_permit.lua").as_posix()
 
 
 class Fake:
@@ -34,7 +35,7 @@ class Fake:
         )
         self.W = self.lua.eval(f'dofile("{WRITES_LUA}")')
         self.prof = self.lua.table_from(PROFILE[title], recursive=True)
-        self.w = self.W.new(self.prof, io)
+        self.w = self.W.new(self.prof, io, self.lua.eval(f'dofile("{PERMIT_LUA}")'))
 
     def panel_allow(self):
         """The REAL predicate lua/gen1/panel.lua arms its window with, not a copy of it."""
@@ -161,6 +162,8 @@ def test_enemy_party_is_validated_completely_before_any_byte_lands():
     with pytest.raises(lupa.LuaError, match="enemy mon 3: blob must be 44 bytes"):
         f.call("write_enemy_party", L(entry(good[0]), entry(good[1]), entry(bad, blob=[1, 2, 3])))
     assert f.writes == [], "a bad third blob must not leave the first two half-written"
+    assert f.w.armed is None
+    f.call("arm", "overworld")
     f.call("write_enemy_party", L(entry(good[0]), entry(good[1])))
     assert f.mem[f.ram["wEnemyPartyCount"]] == 2
     assert list(f.mem[f.ram["wEnemyPartySpecies"]:f.ram["wEnemyPartySpecies"] + 3]) == [20, 21, 0xFF]
@@ -187,6 +190,8 @@ def test_the_panel_window_refuses_a_write_that_straddles_the_end_of_its_allow_se
     with pytest.raises(lupa.LuaError, match="outside the panel window"):
         f.call("write_bytes", TILEMAP + TILES - 1, f.lua.table(0x80, 0x81))
     assert f.writes == [], "a straddling write must not land its first byte"
+    assert f.w.armed is None
+    f.call("arm", "panel", allow)
     f.call("write_bytes", TILEMAP + TILES - 2, f.lua.table(0x80, 0x81))
     assert list(f.mem[TILEMAP + TILES - 2:TILEMAP + TILES]) == [0x80, 0x81]
     # the two mailbox bytes are single-byte holes, not a range
@@ -262,6 +267,8 @@ def test_a_bad_byte_in_a_later_blob_is_caught_before_the_first_one_lands():
     assert f.writes == [], "a bad byte in the third blob must not leave the first two written"
     assert f.mem[f.ram["wEnemyPartyCount"]] == 0
     # known-positive control: the same three mons, unpoisoned, do land
+    assert f.w.armed is None
+    f.call("arm", "overworld")
     f.call("write_enemy_party", L(entry(good[0]), entry(good[1]), entry(third)))
     assert f.mem[f.ram["wEnemyPartyCount"]] == 3
     assert f.mem[f.ram["wEnemyMons"] + 2 * 44 + 19] == list(codec.encode_party_mon(third))[19]
@@ -305,19 +312,21 @@ class PureFake(Fake):
                             register=lambda name: self.bank if str(name) == "WRAM BANK" else 0)
         self.W = self.lua.eval(f'dofile("{WRITES_LUA}")')
         self.prof = self.lua.table_from(PURE_PROFILE[title], recursive=True)
-        self.w = self.W.new(self.prof, io)
+        self.w = self.W.new(self.prof, io, self.lua.eval(f'dofile("{PERMIT_LUA}")'))
 
 
 def test_a_dxxx_write_needs_the_wram_bank_in_0_or_1_on_a_banked_foundation():
     f = PureFake()
     assert f.d["wram_bank_gate"] is True
-    f.call("arm", "overworld")
     for bank in (2, 3, 7):
+        f.call("arm", "overworld")
         f.bank = bank
         with pytest.raises(lupa.LuaError, match=f"WRAM BANK {bank}"):
             f.call("faint_party_slot", 0)
+        assert f.w.armed is None
     assert f.writes == []
     for bank in (0, 1):
+        f.call("arm", "overworld")
         f.bank = bank
         f.call("faint_party_slot", 0)
     assert len(f.writes) == 6
@@ -345,8 +354,12 @@ def test_apex_and_transform_windows_are_bound_to_their_hooks_and_the_party_struc
     f.call("arm", "apex_commit")
     with pytest.raises(lupa.LuaError, match="outside the party structs"):
         f.call("restore_apex_dvs", f.ram["wPartyMons"] - 2, f.lua.table(0x12, 0x34))
+    assert f.w.armed is None
+    f.call("arm", "apex_commit")
     with pytest.raises(lupa.LuaError, match="two DV bytes"):
         f.call("restore_apex_dvs", dv, f.lua.table(0x12))
+    assert f.w.armed is None
+    f.call("arm", "apex_commit")
     f.call("restore_apex_dvs", dv, f.lua.table(0x12, 0x34))
     assert f.writes == [(dv, 0x12), (dv + 1, 0x34)]
     hp = f.ram["wPartyMon1HP"]
@@ -359,3 +372,52 @@ def test_apex_and_transform_windows_are_bound_to_their_hooks_and_the_party_struc
     f.call("disarm")
     with pytest.raises(lupa.LuaError, match="transform hook"):
         f.call("restore_transform_hp_zero", hp)
+
+
+@pytest.mark.parametrize("method", ["faint_active_battler", "explode_active_battler"])
+def test_invalid_active_slot_refuses_before_battle_bytes_and_disarms(method):
+    f = Fake()
+    f.call("arm", "battle_loop_head")
+    with pytest.raises(lupa.LuaError, match="party slot out of range"):
+        f.call(method, f.d["party_capacity"])
+    assert f.writes == []
+    assert f.w.armed is None
+
+
+def test_actual_entry_cart_door_validates_every_byte_and_disarms_on_failure():
+    cart_writes = []
+    lua, parts = _entry_parts(cart_writes)
+    parts.writes.arm(parts.writes, "overworld")
+    with pytest.raises(lupa.LuaError, match="byte out of range"):
+        parts.box_io.write_cart_bytes(0x100, lua.table(1, 300))
+    assert cart_writes == [] and parts.writes.armed is None
+    parts.writes.arm(parts.writes, "overworld")
+    with pytest.raises(lupa.LuaError, match="outside domain bounds"):
+        parts.box_io.write_cart_bytes(0x7FFF, lua.table(1, 2))
+    assert cart_writes == [] and parts.writes.armed is None
+
+
+def test_sparse_byte_and_enemy_arrays_refuse_and_disarm():
+    f = Fake()
+    f.call("arm", "overworld")
+    with pytest.raises(lupa.LuaError, match="hole"):
+        f.call("write_bytes", f.ram["wPartyMons"], f.lua.table_from({1: 1, 3: 2}))
+    assert f.writes == [] and f.w.armed is None
+    f.call("arm", "battle_intro")
+    with pytest.raises(lupa.LuaError, match="hole"):
+        f.call("write_enemy_party", f.lua.table_from({1: f.lua.table(), 3: f.lua.table()}))
+    assert f.writes == [] and f.w.armed is None
+
+
+def test_enemy_payload_shape_is_checked_before_count_or_species_are_written():
+    f = Fake()
+    mon = _mon(random.Random(44), 20)
+    blob = f.lua.table(*list(codec.encode_party_mon(mon)))
+    blob.extra = 7
+    entry = f.lua.table(species=20, blob=blob, ot=f.lua.table(*([0x50] * 11)),
+                        nick=f.lua.table(*([0x50] * 11)))
+    f.call("arm", "battle_intro")
+    with pytest.raises(lupa.LuaError, match="indices"):
+        f.call("write_enemy_party", f.lua.table(entry))
+    assert f.writes == [], "all constituent array shapes must validate before the count byte"
+    assert f.w.armed is None

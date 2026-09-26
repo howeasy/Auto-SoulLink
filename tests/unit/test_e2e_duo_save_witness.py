@@ -11,6 +11,7 @@ import hashlib
 import os
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -205,6 +206,170 @@ def test_run_oracle_skips_the_witness_for_other_generations(tmp_path, monkeypatc
     run.cfg["oracle"] = "assert_stub_oracle"
     run._run_oracle(results)
     assert order == ["oracle"]
+
+
+def test_new_family_cannot_pass_on_client_results_alone(tmp_path, monkeypatch):
+    run, _results, _notes, _build = _stub(tmp_path, monkeypatch)
+    run.game = "unregistered_duo_family"
+    run.cfg = {}
+    with pytest.raises(RuntimeError, match="evidence contract"):
+        run._run_oracle({"a": "RESULT: PASS", "b": "RESULT: PASS"})
+
+
+def test_missing_oracle_is_rejected_before_launch(tmp_path, monkeypatch):
+    run, _results, _notes, _build = _stub(tmp_path, monkeypatch)
+    run.cfg.pop("oracle")
+    launched = []
+    run.start_server = lambda: launched.append("server")
+    run.start_instances = lambda: launched.append("instances")
+    run.orchestrate = lambda: None
+    run.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    run.cleanup = lambda passed: None
+    with pytest.raises(RuntimeError, match="post-result oracle"):
+        run.run()
+    assert launched == []
+
+
+def _required_family(run, monkeypatch):
+    run.game = "model_duo_family"
+    run.args = SimpleNamespace(keep_alive=False)
+    monkeypatch.setitem(duo.FAMILY_EVIDENCE, "model_duo_family",
+                        duo.EvidenceContract("assert_stub_witness", require_oracle=True))
+    run.cfg = {"oracle": "assert_stub_oracle", "oracle_kwargs": {"expected": 7}}
+    run.assert_stub_witness = lambda results: None
+    run.assert_stub_oracle = lambda results, expected: None
+
+
+@pytest.mark.parametrize("missing", ["witness", "oracle", "binding", "kwargs"])
+def test_required_family_validates_all_stages_before_callbacks(tmp_path, monkeypatch, missing):
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    _required_family(run, monkeypatch)
+    calls = []
+    run.assert_stub_witness = lambda res: calls.append("witness")
+    if missing == "witness":
+        run.assert_stub_witness = None
+    elif missing == "oracle":
+        run.cfg.pop("oracle")
+    elif missing == "binding":
+        run.assert_stub_oracle = None
+    else:
+        run.cfg["oracle_kwargs"] = []
+    with pytest.raises(RuntimeError):
+        run._run_oracle(results)
+    assert calls == []
+
+
+def test_required_family_transports_original_receipts_and_kwargs(tmp_path, monkeypatch):
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    _required_family(run, monkeypatch)
+    calls = []
+    run.assert_stub_witness = lambda res: calls.append(("witness", res))
+    run.assert_stub_oracle = lambda res, expected: calls.append((expected, res))
+    run._run_oracle(results)
+    assert [call[0] for call in calls] == ["witness", 7]
+    assert all(call[1] is results for call in calls)
+
+
+@pytest.mark.parametrize("stage", ["witness", "oracle"])
+def test_required_family_explicit_false_fails(tmp_path, monkeypatch, stage):
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    _required_family(run, monkeypatch)
+    calls = []
+    run.assert_stub_witness = lambda res: False if stage == "witness" else None
+    run.assert_stub_oracle = lambda res, expected: calls.append("oracle") or False
+    with pytest.raises(RuntimeError, match="rejected evidence"):
+        run._run_oracle(results)
+    assert calls == ([] if stage == "witness" else ["oracle"])
+
+
+@pytest.mark.parametrize("missing_side", ["a", "b"])
+def test_gen2_stub_missing_save_marker_cannot_skip(tmp_path, monkeypatch, missing_side):
+    run, _results, notes, build = _stub(tmp_path, monkeypatch)
+    _required_family(run, monkeypatch)
+    results = dict.fromkeys(("a", "b"), "MODEL_SAVE_MARKER\nRESULT: PASS")
+    results[missing_side] = "RESULT: PASS"
+    calls = []
+
+    def witness(receipts):
+        # H2 supplies the real marker and save facts; this tests the injection boundary.
+        for side in ("a", "b"):
+            if "MODEL_SAVE_MARKER" not in receipts[side]:
+                raise RuntimeError(f"{side}: missing save marker")
+
+    run.assert_stub_witness = witness
+    run.assert_stub_oracle = lambda res, expected: calls.append("oracle")
+    run.start_server = lambda: None
+    run.start_instances = lambda: None
+    run.orchestrate = lambda: None
+    run.wait_results = lambda: (results["a"], results["b"])
+    run.cleanup = lambda passed: calls.append(passed)
+    run._pydec_path = str(build / "pydec.txt")
+    with pytest.raises(RuntimeError, match=f"{missing_side}: missing save marker"):
+        run.run()
+    assert calls == [False]
+    assert notes == [f"PYDEC: FAIL {missing_side}: missing save marker"]
+
+
+def test_required_binding_is_rechecked_after_launch(tmp_path, monkeypatch):
+    run, _results, _notes, _build = _stub(tmp_path, monkeypatch)
+    _required_family(run, monkeypatch)
+    run.start_server = lambda: None
+    run.start_instances = lambda: None
+    run.orchestrate = lambda: setattr(run, "assert_stub_witness", None)
+    run.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    run.cleanup = lambda passed: None
+    with pytest.raises(RuntimeError, match="witness validator"):
+        run.run()
+
+
+def test_required_family_complete_run_emits_verdict_after_both_stages(tmp_path, monkeypatch):
+    run, _results, notes, build = _stub(tmp_path, monkeypatch)
+    _required_family(run, monkeypatch)
+    calls = []
+    run.args = SimpleNamespace(keep_alive=False)
+    run.assert_stub_witness = lambda res: calls.append("witness")
+    run.assert_stub_oracle = lambda res, expected: calls.append("oracle")
+    run.start_server = lambda: calls.append("server")
+    run.start_instances = lambda: calls.append("instances")
+    run.orchestrate = lambda: None
+    run.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    run.cleanup = lambda passed: calls.append(passed)
+    run._pydec_path = str(build / "pydec.txt")
+    assert run.run() is True
+    assert calls == ["server", "instances", "witness", "oracle", True]
+    assert notes == ["PYDEC: PASS asserted scenario facts"]
+
+
+@pytest.mark.parametrize("contract", [None, duo.EvidenceContract(require_oracle=True),
+                                     duo.EvidenceContract("assert_stub_witness"),
+                                     duo.EvidenceContract("assert_stub_witness", "yes")])
+def test_incomplete_contract_is_not_a_legacy_opt_out(tmp_path, monkeypatch, contract):
+    run, results, _notes, _build = _stub(tmp_path, monkeypatch)
+    _required_family(run, monkeypatch)
+    monkeypatch.setitem(duo.FAMILY_EVIDENCE, "model_duo_family", contract)
+    with pytest.raises(RuntimeError):
+        run._run_oracle(results)
+
+
+@pytest.mark.parametrize("bad", ["missing_kwarg", "extra_kwarg", "witness_args"])
+def test_stage_signature_mismatch_is_rejected_before_launch(tmp_path, monkeypatch, bad):
+    run, _results, _notes, _build = _stub(tmp_path, monkeypatch)
+    _required_family(run, monkeypatch)
+    if bad == "missing_kwarg":
+        run.cfg["oracle_kwargs"] = {}
+    elif bad == "extra_kwarg":
+        run.cfg["oracle_kwargs"]["unexpected"] = True
+    else:
+        run.assert_stub_witness = lambda: None
+    launched = []
+    run.start_server = lambda: launched.append("server")
+    run.start_instances = lambda: launched.append("instances")
+    run.orchestrate = lambda: None
+    run.wait_results = lambda: ("RESULT: PASS", "RESULT: PASS")
+    run.cleanup = lambda passed: None
+    with pytest.raises(RuntimeError, match="arguments"):
+        run.run()
+    assert launched == []
 
 
 def test_a_rejected_dump_gate_fails_with_the_lua_reason(tmp_path, monkeypatch):

@@ -71,7 +71,6 @@ GAMES = [
     ("gen1_ap", "Red · Blue (Archipelago)", ["red_ap", "blue_ap"]),
     ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
     ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
-    ("gen2_ap", "Crystal (Archipelago)", ["crystal_ap"]),
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
     ("gen3_ap", "FireRed · LeafGreen (Archipelago)", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
@@ -264,8 +263,9 @@ def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
         if not gid:
             return None
         try:
+            # rom_type picks the title for the per-title packs (Gen 2 refuses to guess one).
             p = get_adapter(gid, is_rr=rom_type.endswith("_rr"), rom_type=rom_type).calc_profile()
-        except KeyError:  # a mapped family whose adapter failed to register (e.g. Gen 5 import)
+        except (KeyError, ValueError):  # an unregistered family (e.g. Gen 5 import) or a refused title
             return None
         if p is None:
             return None

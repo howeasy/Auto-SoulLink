@@ -114,3 +114,46 @@ def test_key_change_replies_are_one_way_and_the_reason_vocabulary_is_documented(
     for reason in ps.KEY_CHANGE_REASONS:
         assert f"`{reason}`" in doc, f"docs/protocol.md does not document reason {reason!r}"
     assert "artifact_kind" in ps.EVENTS["hello"][1] and "`artifact_kind`" in doc
+
+
+# P3a.2 (C-0 schema half): the hello's pairing fields. The relation rom_type -> foundation is
+# the server's own table (foundation_for_rom_type); which clients must declare is ps data.
+_HELLO = {"event": "hello", "player": "a", "seq": 1, "party": []}
+_GEN2_ROM_TYPES = ("Crystal", "crystal", "Gold", "gold", "Silver", "silver")
+
+
+@pytest.mark.parametrize("rom_type", _GEN2_ROM_TYPES)
+def test_a_gen2_hello_must_declare_foundation_and_artifact_kind(rom_type):
+    ok = dict(_HELLO, rom_type=rom_type, foundation="gen2_gsc", artifact_kind="clean")
+    assert ps.validate_event(ok) == [], ps.validate_event(ok)
+    for field in ("foundation", "artifact_kind"):
+        bare = {k: v for k, v in ok.items() if k != field}
+        assert ps.validate_event(bare), f"{rom_type} hello without {field!r} accepted"
+    # another generation's (or the legacy) foundation claimed on a Gen 2 cartridge
+    for claim in ("gen1_rby", "gen1_purergb", "gen3_frlg", "gen3_rr", "gen2_crystal", None, "", 0, False):
+        assert ps.validate_event(dict(ok, foundation=claim)), (rom_type, claim)
+
+
+def test_the_declaring_foundations_are_the_servers_and_gen3_declares_nothing():
+    from server.adapters import _ROM_TYPE_TO_GAME_ID, foundation_for_rom_type
+    served = {foundation_for_rom_type(rt) for rt in _ROM_TYPE_TO_GAME_ID}
+    assert ps.HELLO_DECLARES.issubset(served)
+    # Gen 3's reference client sends neither field (§2.1): still conformant without them
+    assert ps.validate_event(dict(_HELLO, rom_type="firered")) == []
+    # a Gen 1 hello declares like Gen 2 (lua/gen1/client.lua builds both)
+    assert ps.validate_event(dict(_HELLO, rom_type="red"))
+    assert ps.validate_event(dict(_HELLO, rom_type="red", foundation="gen1_rby", artifact_kind="clean")) == []
+    # crystal_ap is refused outright (O-25): a gen2_gsc claim on it is refused too
+    assert ps.validate_event(dict(_HELLO, rom_type="crystal_ap", foundation="gen2_gsc"))
+    assert ps.validate_event(dict(_HELLO, rom_type="not_a_game"))
+
+
+@pytest.mark.parametrize("kind", [None, "", False, 0, [], {}, "bogus"])
+def test_a_present_artifact_kind_must_be_a_documented_string(kind):
+    """§2.2 step 1': absent is not empty. server.py:1321 (`msg.get("artifact_kind") or "clean"`)
+    admits a falsy value as clean today; the contract refuses it (shared carry, R5)."""
+    for rom_type, extra in (("firered", {}), ("crystal", {"foundation": "gen2_gsc"})):
+        msg = dict(_HELLO, rom_type=rom_type, artifact_kind=kind, **extra)
+        assert ps.validate_event(msg), (rom_type, kind)
+    for kind_ok in ps.ARTIFACT_KINDS:
+        assert ps.validate_event(dict(_HELLO, rom_type="firered", artifact_kind=kind_ok)) == []

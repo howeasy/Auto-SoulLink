@@ -641,7 +641,7 @@ end
 -- Cached variant of monKey: keyed by base_addr, invalidated when the
 -- underlying personality/OTID change. Eliminates per-frame string.format
 -- churn on hot paths (party scan, box snapshot, battle enemy reads).
--- Mirrors memory_gb.lua's monKeyCached pattern.
+-- Mirrors memory_nds.lua's monKeyCached pattern.
 M._mk_cache = {}
 function M.monKeyCached(base_addr)
     local p = mem_r32(base_addr + M.OFF_PERSONALITY)

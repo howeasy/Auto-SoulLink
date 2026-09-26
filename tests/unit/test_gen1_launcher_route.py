@@ -39,8 +39,10 @@ def _run_launcher(script: str, system_id: str | None, rom: bytes,
                   detected_game_id: str = "gen3_frlge", bizhawk: str = "2.11.1") -> list[str]:
     """dofile `lua/<script>` with stub BizHawk globals; return the paths it dofile'd.
 
-    Only `gen1/entry.lua` is executed for real -- every other dofile target is recorded
-    and skipped, so no client ever starts and one run cannot load two clients.
+    Only `gen1/entry.lua` and `gen2/entry.lua` are executed for real -- both are pure
+    cartridge-header detectors with no side effects -- every other dofile target
+    (including `gen2/run.lua`, U5's Crystal route) is recorded and skipped, so no
+    client ever starts and one run cannot load two clients.
     """
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     g = lua.globals()
@@ -55,7 +57,7 @@ def _run_launcher(script: str, system_id: str | None, rom: bytes,
     def fake_dofile(path):
         rel = norm(path)
         loaded.append(rel)
-        if rel.endswith("gen1/entry.lua"):
+        if rel.endswith("gen1/entry.lua") or rel.endswith("gen2/entry.lua"):
             return real_dofile(path)
         return None
 
@@ -120,11 +122,12 @@ def test_a_non_gameboy_core_is_untouched_by_the_gen1_route():
     assert "lua/clients/gen3_frlge_client.lua" in loaded, loaded
 
 
-def test_an_unrecognised_gameboy_title_falls_through_to_game_detect():
-    loaded = _run_launcher("slink.lua", "GBC", _rom("POKEMON CRYSTAL"),
-                           detected_game_id="gen2_crystal")
-    assert _NEW_CLIENT not in loaded, loaded
-    assert "lua/clients/gen2_crystal_client.lua" in loaded, loaded
+def test_an_unrecognised_gameboy_title_is_refused_not_routed():
+    """Past the Gen 1 route, a GB header the Gen 2 route does not know either is refused by
+    the launcher (P3b.8: no legacy Gen 2 client is left to fall through to)."""
+    with pytest.raises(lupa.LuaError, match="Unsupported Game Boy cartridge"):
+        _run_launcher("slink.lua", "GBC", _rom("POKEMON CRYSTAL"),
+                      detected_game_id="gen2_crystal")
 
 
 def test_a_failing_system_probe_does_not_route_to_gen1():

@@ -1,0 +1,1072 @@
+{
+ "runs": [
+  {
+   "absent": [
+    "capture_box"
+   ],
+   "attempt_id": "inspect-crystal_battle",
+   "bank_check": "live",
+   "core_mode": "CGB",
+   "decoy": {
+    "accepted": 0,
+    "addr": 26996,
+    "bank": 127,
+    "bank_rejects": 1505,
+    "raw": 1505
+   },
+   "evidence_level": "PHYSICAL",
+   "faint_alignment": {
+    "armed": 41132,
+    "battle_dvs": 60884,
+    "battle_hp": 0,
+    "battle_species": 161,
+    "callback": 41132,
+    "callback_party_hp": 4,
+    "copyback_frames": 0,
+    "hp_zero_frame": 41132,
+    "party_count": 2,
+    "party_dvs": 60884,
+    "party_species": 161,
+    "passed": true,
+    "post_party_hp": 0,
+    "rule": "battle_faint callback frame == armed; wCurBattleMon is a party slot; the battle mon reads HP 0 and the slot's party record is that mon (species, DVs) with HP > 0 inside the callback (before copy-back); the party record reads HP 0 on the callback frame or the next",
+    "slot": 1
+   },
+   "fixture": "crystal_battle",
+   "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+   "frame_alignment": {
+    "aligned_hits": 99,
+    "armed": 7325,
+    "battle_party": 1,
+    "callback": 7325,
+    "callback_party": 2,
+    "effect_to_callback_frames": 1,
+    "misaligned_hits": 0,
+    "party_changed": 7324,
+    "passed": true,
+    "post_party": 2,
+    "pre_party": 2,
+    "rule": "callback emu.framecount() == the frame being emulated (armed); wPartyCount is battle_party at wild_ready, battle_party+1 inside the capture_party callback and to the main loop at armed+1; it first changed at party_changed <= callback"
+   },
+   "harness_write_scopes": [],
+   "input_mode": "normal_buttons",
+   "negatives": {
+    "script_bytecode_arm": "refused",
+    "wrong_bank_hit": "refused",
+    "wrong_pack_byte": "refused"
+   },
+   "pack_commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+   "pack_specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
+   "pc_alignment": {
+    "capture_party_hits": 2,
+    "model_events": {
+     "box_change": 1,
+     "box_to_party": 1,
+     "party_to_box": 2,
+     "pc_release_box": 1,
+     "pc_release_party": 1,
+     "whiteout": 1
+    },
+    "passed": true,
+    "rule": "after the whiteout: a second catch, then Bill's PC deposit, withdraw, CHANGE BOX, deposit, box release, party release, each closed by its RAM effect; the MODEL decoder emitted exactly the listed operation events"
+   },
+   "poison_alignment": {
+    "armed": 34498,
+    "battle_mode": 0,
+    "callback": 34498,
+    "callback_hp": 0,
+    "callback_status": 8,
+    "clear_frames": 0,
+    "dvs": 63380,
+    "model_event": {
+     "cause": "poison",
+     "dvs": 63380,
+     "kind": "faint",
+     "site_id": "poison_faint",
+     "slot": 0,
+     "species": 158
+    },
+    "party_count": 2,
+    "passed": true,
+    "post_status": 0,
+    "pre_hp": 1,
+    "psn_mask": 8,
+    "rule": "poison_faint callback frame == armed; overworld (wBattleMode 0); wCurPartyMon is a party slot whose record reads HP 0 with PSN still set inside the callback, read HP 1 (0 if the frame boundary split the tick) before the armed frame, and reads status 0 on the callback frame or the next; the production faint decoder (MODEL instance on the same hook) emitted one poison faint naming that slot, species and DVs",
+    "slot": 0,
+    "species": 158,
+    "status_zero_frame": 34498
+   },
+   "proven": [
+    "battle_end",
+    "battle_faint",
+    "capture_party",
+    "capture_party_finalized",
+    "change_box_begin",
+    "change_box_loaded",
+    "pc_deposit_begin",
+    "pc_deposit_complete",
+    "pc_release_box_begin",
+    "pc_release_box_complete",
+    "pc_release_party_begin",
+    "pc_release_party_complete",
+    "pc_withdraw_begin",
+    "pc_withdraw_complete",
+    "poison_faint",
+    "save_completed",
+    "whiteout_before_heal",
+    "wild_ready"
+   ],
+   "qualification_attempt_id": "requal-crystal-battle-n14b",
+   "result": "PASS",
+   "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+   "schema": "gen2-engine-site-receipt-v1",
+   "sites": {
+    "battle_end": {
+     "addr": 30366,
+     "bank": 15,
+     "bank_rejects": 0,
+     "expected_hex": "cda576cdd076",
+     "first_frame": 7443,
+     "hits": 21,
+     "pc": 30366,
+     "raw": 21,
+     "symbol": "ExitBattle"
+    },
+    "battle_faint": {
+     "addr": 20906,
+     "bank": 15,
+     "bank_rejects": 513,
+     "expected_hex": "fad4d04f2164c6",
+     "first_frame": 41132,
+     "hits": 1,
+     "pc": 20906,
+     "raw": 514,
+     "symbol": "UpdateFaintedPlayerMon"
+    },
+    "capture_box": {
+     "addr": 27460,
+     "bank": 3,
+     "expected_hex": "3e1321835bcf",
+     "hits": 0,
+     "raw": 2,
+     "symbol": "PokeBallEffect.SendToPC"
+    },
+    "capture_party": {
+     "addr": 27355,
+     "bank": 3,
+     "bank_rejects": 14,
+     "expected_hex": "3e1321495bcf",
+     "first_frame": 7325,
+     "hits": 2,
+     "pc": 27355,
+     "raw": 16,
+     "symbol": "PokeBallEffect.not_celebi"
+    },
+    "capture_party_finalized": {
+     "addr": 27618,
+     "bank": 3,
+     "bank_rejects": 10,
+     "expected_hex": "fa30d2",
+     "first_frame": 4981,
+     "hits": 4,
+     "pc": 27618,
+     "raw": 14,
+     "symbol": "PokeBallEffect.return_from_capture"
+    },
+    "change_box_begin": {
+     "addr": 19075,
+     "bank": 5,
+     "bank_rejects": 65591,
+     "expected_hex": "d5",
+     "first_frame": 51364,
+     "hits": 1,
+     "pc": 19075,
+     "raw": 65592,
+     "symbol": "ChangeBoxSaveGame"
+    },
+    "change_box_loaded": {
+     "addr": 19112,
+     "bank": 5,
+     "bank_rejects": 13924,
+     "expected_hex": "cde64b",
+     "first_frame": 51877,
+     "hits": 1,
+     "pc": 19112,
+     "raw": 13925,
+     "symbol": "ChangeBoxSaveGame"
+    },
+    "pc_deposit_begin": {
+     "addr": 28820,
+     "bank": 56,
+     "bank_rejects": 1,
+     "expected_hex": "3e08cd832d",
+     "first_frame": 50947,
+     "hits": 2,
+     "pc": 28820,
+     "raw": 3,
+     "symbol": "DepositPokemon"
+    },
+    "pc_deposit_complete": {
+     "addr": 28837,
+     "bank": 56,
+     "bank_rejects": 0,
+     "expected_hex": "fa08d1",
+     "first_frame": 50948,
+     "hits": 2,
+     "pc": 28837,
+     "raw": 2,
+     "symbol": "DepositPokemon"
+    },
+    "pc_release_box_begin": {
+     "addr": 26377,
+     "bank": 56,
+     "bank_rejects": 5340,
+     "expected_hex": "3e03213960cf",
+     "first_frame": 52463,
+     "hits": 1,
+     "pc": 26377,
+     "raw": 5341,
+     "symbol": "BillsPC_Withdraw.release"
+    },
+    "pc_release_box_complete": {
+     "addr": 26383,
+     "bank": 56,
+     "bank_rejects": 6600,
+     "expected_hex": "cd8071",
+     "first_frame": 52464,
+     "hits": 1,
+     "pc": 26383,
+     "raw": 6601,
+     "symbol": "BillsPC_Withdraw.release"
+    },
+    "pc_release_party_begin": {
+     "addr": 25877,
+     "bank": 56,
+     "bank_rejects": 13,
+     "expected_hex": "3e03213960cf",
+     "first_frame": 52799,
+     "hits": 1,
+     "pc": 25877,
+     "raw": 14,
+     "symbol": "BillsPCDepositFuncRelease"
+    },
+    "pc_release_party_complete": {
+     "addr": 25883,
+     "bank": 56,
+     "bank_rejects": 136,
+     "expected_hex": "cd8071",
+     "first_frame": 52800,
+     "hits": 1,
+     "pc": 25883,
+     "raw": 137,
+     "symbol": "BillsPCDepositFuncRelease"
+    },
+    "pc_withdraw_begin": {
+     "addr": 28953,
+     "bank": 56,
+     "bank_rejects": 0,
+     "expected_hex": "3e08cd832d",
+     "first_frame": 51152,
+     "hits": 1,
+     "pc": 28953,
+     "raw": 1,
+     "symbol": "TryWithdrawPokemon"
+    },
+    "pc_withdraw_complete": {
+     "addr": 28971,
+     "bank": 56,
+     "bank_rejects": 0,
+     "expected_hex": "fa08d1",
+     "first_frame": 51156,
+     "hits": 1,
+     "pc": 28971,
+     "raw": 1,
+     "symbol": "TryWithdrawPokemon"
+    },
+    "poison_faint": {
+     "addr": 17993,
+     "bank": 20,
+     "bank_rejects": 22,
+     "expected_hex": "3e20cd17393600",
+     "first_frame": 34498,
+     "hits": 1,
+     "pc": 17993,
+     "raw": 23,
+     "symbol": "DoPoisonStep.DamageMonIfPoisoned"
+    },
+    "save_completed": {
+     "addr": 19562,
+     "bank": 5,
+     "bank_rejects": 0,
+     "expected_hex": "c9",
+     "first_frame": 8165,
+     "hits": 3,
+     "pc": 19562,
+     "raw": 3,
+     "symbol": "_SaveGameData.ok"
+    },
+    "whiteout_before_heal": {
+     "addr": 16411,
+     "bank": 3,
+     "bank_rejects": 15409,
+     "expected_hex": "212940191919",
+     "first_frame": 41336,
+     "hits": 6,
+     "pc": 16411,
+     "raw": 15415,
+     "symbol": "Special"
+    },
+    "wild_ready": {
+     "addr": 30280,
+     "bank": 15,
+     "bank_rejects": 0,
+     "expected_hex": "110090",
+     "first_frame": 3665,
+     "hits": 21,
+     "pc": 30280,
+     "raw": 21,
+     "symbol": "InitEnemyWildmon.skip_unown"
+    }
+   },
+   "title": "crystal",
+   "whiteout_alignment": {
+    "armed": 41424,
+    "callback": 41424,
+    "de": 27,
+    "healed_frame": 41424,
+    "party_count": 2,
+    "party_hp": [
+     0,
+     0
+    ],
+    "passed": true,
+    "rule": "the first `Special` hit whose pack guards hold (DE 27 = HealPartySpecial, wScriptBank/wScriptPos at Script_Whiteout's special, the FarCall/Script_special stack words): callback frame == armed, every party record at HP 0 inside it, the heal observed on a later frame, after the closing battle_faint; the MODEL decoder emitted exactly one whiteout",
+    "seq": 64
+   }
+  },
+  {
+   "arrival_frame": 3333,
+   "attempt_id": "u1g-crystal_synth_grass",
+   "bank_check": "live",
+   "core_mode": "CGB",
+   "decoy": {
+    "accepted": 0,
+    "addr": 26996,
+    "bank": 127,
+    "bank_rejects": 114,
+    "raw": 114
+   },
+   "effects": [
+    {
+     "after_hex": "0a1013a1a3ff",
+     "arming_frame": 3333,
+     "arming_hex": "0afd13a1a3ff",
+     "before_hex": "0afd13a1a3ff",
+     "callback": 3384,
+     "hit_frame": 3384,
+     "site": "hatch_species",
+     "size": 6,
+     "symbol": "wPartySpecies",
+     "wram": 56536
+    },
+    {
+     "after_hex": "0a1013a1a3ff",
+     "arming_frame": 3333,
+     "arming_hex": "0afd13a1a3ff",
+     "before_hex": "0afd13a1a3ff",
+     "callback": 4584,
+     "hit_frame": 4584,
+     "site": "hatch_finalized",
+     "size": 6,
+     "symbol": "wPartySpecies",
+     "wram": 56536
+    },
+    {
+     "after_hex": "0b1013a1a3ff",
+     "arming_frame": 3333,
+     "arming_hex": "0afd13a1a3ff",
+     "before_hex": "0afd13a1a3ff",
+     "callback": 9653,
+     "hit_frame": 9653,
+     "site": "evolution_species_published",
+     "size": 6,
+     "symbol": "wPartySpecies",
+     "wram": 56536
+    },
+    {
+     "after_hex": "01",
+     "arming_frame": 3333,
+     "arming_hex": "00",
+     "before_hex": "00",
+     "callback": 13902,
+     "hit_frame": 13902,
+     "site": "capture_box",
+     "size": 1,
+     "symbol": "sBoxCount",
+     "wram": 44304
+    },
+    {
+     "after_hex": "01",
+     "arming_frame": 3333,
+     "arming_hex": "00",
+     "before_hex": "00",
+     "callback": 14148,
+     "hit_frame": 14148,
+     "site": "capture_box_finalized",
+     "size": 1,
+     "symbol": "sBoxCount",
+     "wram": 44304
+    }
+   ],
+   "evidence_level": "PHYSICAL",
+   "fixture": "crystal_synth_grass",
+   "fixture_sha256": "3a4e2898500dbc2e6cd9f2e63d6b9c15ce28f512385f18577947e228e28d5580",
+   "frame_alignment": {
+    "aligned_hits": 20,
+    "misaligned_hits": 0,
+    "passed": true,
+    "rule": "every accepted hit's callback frame == the frame being emulated (armed)"
+   },
+   "harness_write_scopes": [],
+   "input_mode": "normal_buttons",
+   "model_events": {
+    "capture:egg_hatch:party": 1,
+    "capture:wild:box": 1,
+    "capture:wild:party": 1,
+    "key_change:evolution": 1
+   },
+   "negatives": {
+    "script_bytecode_arm": "refused",
+    "wrong_bank_hit": "refused",
+    "wrong_pack_byte": "refused"
+   },
+   "pack_commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+   "pack_specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
+   "proven": [
+    "hatch_species",
+    "hatch_finalized",
+    "evolution_species_published",
+    "capture_box",
+    "capture_box_finalized"
+   ],
+   "qualification_attempt_id": "requal-crystal-battle-n14b",
+   "result": "PASS",
+   "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+   "schema": "gen2-engine-site-receipt-v1",
+   "sites": {
+    "capture_box": {
+     "addr": 27460,
+     "bank": 3,
+     "bank_rejects": 0,
+     "expected_hex": "3e1321835bcf",
+     "first_frame": 13902,
+     "hits": 1,
+     "pc": 27460,
+     "raw": 1,
+     "symbol": "PokeBallEffect.SendToPC"
+    },
+    "capture_box_finalized": {
+     "addr": 27618,
+     "bank": 3,
+     "bank_rejects": 0,
+     "expected_hex": "fa30d2",
+     "first_frame": 11942,
+     "hits": 2,
+     "pc": 27618,
+     "raw": 2,
+     "symbol": "PokeBallEffect.return_from_capture"
+    },
+    "evolution_species_published": {
+     "addr": 25586,
+     "bank": 16,
+     "bank_rejects": 0,
+     "expected_hex": "e5",
+     "first_frame": 9653,
+     "hits": 1,
+     "pc": 25586,
+     "raw": 1,
+     "symbol": "EvolveAfterBattle_MasterLoop.skip_unown"
+    },
+    "hatch_finalized": {
+     "addr": 28797,
+     "bank": 5,
+     "bank_rejects": 1,
+     "expected_hex": "2109d1",
+     "first_frame": 3383,
+     "hits": 5,
+     "pc": 28797,
+     "raw": 6,
+     "symbol": "HatchEggs.next"
+    },
+    "hatch_species": {
+     "addr": 28613,
+     "bank": 5,
+     "bank_rejects": 0,
+     "expected_hex": "ea65d2",
+     "first_frame": 3384,
+     "hits": 1,
+     "pc": 28613,
+     "raw": 1,
+     "symbol": "HatchEggs.nottogepi"
+    }
+   },
+   "synth": {
+    "base_fixture": "crystal_battle",
+    "base_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
+    "builder": "tools/gen2_synth_fixtures.py",
+    "checksums": "restored (primary + backup)",
+    "edits": {
+     "balls": [
+      [
+       "MASTER_BALL",
+       5
+      ]
+     ],
+     "party": [
+      {
+       "dvs": 39521,
+       "exp": 342,
+       "level": 6,
+       "moves": [
+        "TACKLE",
+        "STRING_SHOT"
+       ],
+       "species": "CATERPIE"
+      },
+      {
+       "dvs": 23410,
+       "egg": true,
+       "happiness": 1,
+       "moves": [
+        "TACKLE"
+       ],
+       "species": "PIDGEY"
+      },
+      {
+       "dvs": 15491,
+       "level": 5,
+       "moves": [
+        "TACKLE",
+        "TAIL_WHIP"
+       ],
+       "species": "RATTATA"
+      },
+      {
+       "dvs": 32148,
+       "level": 5,
+       "moves": [
+        "SCRATCH",
+        "DEFENSE_CURL"
+       ],
+       "species": "SENTRET"
+      },
+      {
+       "dvs": 11941,
+       "level": 5,
+       "moves": [
+        "TACKLE",
+        "GROWL"
+       ],
+       "species": "HOOTHOOT"
+      }
+     ],
+     "step_count": 127
+    },
+    "fields": [
+     {
+      "backup": 6757,
+      "new_hex": "05",
+      "offset": 0,
+      "old_hex": "01",
+      "primary": 10341,
+      "size": 1,
+      "symbol": "wPartyCount",
+      "wram": 56535
+     },
+     {
+      "backup": 6758,
+      "new_hex": "0afd13a1a3ff00",
+      "offset": 0,
+      "old_hex": "9eff0000000000",
+      "primary": 10342,
+      "size": 7,
+      "symbol": "wPartySpecies",
+      "wram": 56536
+     },
+     {
+      "backup": 6765,
+      "new_hex": "0a0021510000b541000156000000000000000000009a612328000046000000060000001600160009000a000b00070007100021000000b541000087000000000000000000005b72230000000100000005000000000014000a000a000b00080008130021270000b54100007d000000000000000000003c83231e00004600000005000000120012000a0009000d00070008a1000a6f0000b54100007d000000000000000000007d94232800004600000005000000130013000a0009000700080009a300212d0000b54100007d000000000000000000002ea523280000460000000500000015001500080009000b0009000b000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "offset": 0,
+      "old_hex": "9ead0a2b0000b54100008700000000000000000000f794231e00004600850105000000150015000d000c000a0009000a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "primary": 10349,
+      "size": 288,
+      "symbol": "wPartyMon1",
+      "wram": 56543
+     },
+     {
+      "backup": 7053,
+      "new_hex": "828791889250505050505082879188925050505050508287918892505050505050828791889250505050505082879188925050505050500000000000000000000000",
+      "offset": 0,
+      "old_hex": "828791889250505050505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "primary": 10637,
+      "size": 66,
+      "symbol": "wPartyMonOTs",
+      "wram": 56831
+     },
+     {
+      "backup": 7119,
+      "new_hex": "82809384918f88845050508486865050505050505050918093938093805050505092848d9391849350505050878e8e93878e8e935050500000000000000000000000",
+      "offset": 0,
+      "old_hex": "938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "primary": 10703,
+      "size": 66,
+      "symbol": "wPartyMonNicknames",
+      "wram": 56897
+     },
+     {
+      "backup": 5734,
+      "new_hex": "0105ff00000000000000000000000000000000000000000000",
+      "offset": 0,
+      "old_hex": "050aff00000000000000000000000000000000000000000000",
+      "primary": 9318,
+      "size": 25,
+      "symbol": "wBalls",
+      "wram": 55512
+     },
+     {
+      "backup": 6657,
+      "new_hex": "7f",
+      "offset": 0,
+      "old_hex": "3a",
+      "primary": 10241,
+      "size": 1,
+      "symbol": "wStepCount",
+      "wram": 56435
+     },
+     {
+      "cart": 11533,
+      "new_hex": "cd0e",
+      "offset": 0,
+      "old_hex": "48da",
+      "size": 2,
+      "symbol": "sChecksum",
+      "wram": null
+     },
+     {
+      "cart": 7949,
+      "new_hex": "cd0e",
+      "offset": 0,
+      "old_hex": "48da",
+      "size": 2,
+      "symbol": "sBackupChecksum",
+      "wram": null
+     }
+    ],
+    "schema": "gen2-synth-disclosure-v1",
+    "sha256": "3a4e2898500dbc2e6cd9f2e63d6b9c15ce28f512385f18577947e228e28d5580",
+    "source_facts": [
+     "constants/charmap.asm names",
+     "data/games/gen2_<title>/items.json ids; engine/items/items.asm pocket layout",
+     "data/games/gen2_<title>/moves.json PP",
+     "data/games/gen2_<title>/species_index.json base stats/growth",
+     "engine/overworld/events.asm CountStep",
+     "macros/ram.asm party_struct"
+    ],
+    "title": "crystal"
+   },
+   "title": "crystal",
+   "u1g_kind": "grass"
+  },
+  {
+   "arrival_frame": 3334,
+   "attempt_id": "u1g-crystal_synth_kyle",
+   "bank_check": "live",
+   "core_mode": "CGB",
+   "decoy": {
+    "accepted": 0,
+    "addr": 26996,
+    "bank": 127,
+    "bank_rejects": 71,
+    "raw": 71
+   },
+   "effects": [
+    {
+     "after_hex": "5fff00000000",
+     "arming_frame": 3334,
+     "arming_hex": "45ff00000000",
+     "before_hex": "45ff00000000",
+     "callback": 4735,
+     "hit_frame": 4735,
+     "site": "npc_trade_finalized",
+     "size": 6,
+     "symbol": "wPartySpecies",
+     "wram": 56536
+    }
+   ],
+   "evidence_level": "PHYSICAL",
+   "fixture": "crystal_synth_kyle",
+   "fixture_sha256": "8b49f7a922a414ce90e7c23bab1d3edf23e83f202e0392638f93b1640196efda",
+   "frame_alignment": {
+    "aligned_hits": 8,
+    "misaligned_hits": 0,
+    "passed": true,
+    "rule": "every accepted hit's callback frame == the frame being emulated (armed)"
+   },
+   "harness_write_scopes": [],
+   "input_mode": "normal_buttons",
+   "model_events": {
+    "key_change:npc_trade": 1
+   },
+   "negatives": {
+    "script_bytecode_arm": "refused",
+    "wrong_bank_hit": "refused",
+    "wrong_pack_byte": "refused"
+   },
+   "pack_commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+   "pack_specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
+   "proven": [
+    "npc_trade_begin",
+    "npc_trade_finalized"
+   ],
+   "qualification_attempt_id": "requal-crystal-town-n14b",
+   "result": "PASS",
+   "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+   "schema": "gen2-engine-site-receipt-v1",
+   "sites": {
+    "npc_trade_begin": {
+     "addr": 19555,
+     "bank": 63,
+     "bank_rejects": 0,
+     "expected_hex": "1e01",
+     "first_frame": 4730,
+     "hits": 1,
+     "pc": 19555,
+     "raw": 1,
+     "symbol": "DoNPCTrade"
+    },
+    "npc_trade_finalized": {
+     "addr": 19905,
+     "bank": 63,
+     "bank_rejects": 0,
+     "expected_hex": "c9",
+     "first_frame": 4735,
+     "hits": 1,
+     "pc": 19905,
+     "raw": 1,
+     "symbol": "DoNPCTrade.incomplete"
+    }
+   },
+   "synth": {
+    "base_fixture": "crystal_town",
+    "base_sha256": "3b2794f82c2839afc39c8523c94ef9940c18ed6b8dc5a5817b09b6d4a4a56edf",
+    "builder": "tools/gen2_synth_fixtures.py",
+    "checksums": "restored (primary + backup)",
+    "edits": {
+     "last_spawn": "VIOLET_CITY",
+     "party": [
+      {
+       "dvs": 27448,
+       "hp": 1,
+       "level": 10,
+       "moves": [
+        "VINE_WHIP",
+        "GROWTH"
+       ],
+       "species": "BELLSPROUT",
+       "status": 8
+      }
+     ],
+     "poison_step": 3
+    },
+    "fields": [
+     {
+      "backup": 6758,
+      "new_hex": "45ff0000000000",
+      "offset": 0,
+      "old_hex": "9eff0000000000",
+      "primary": 10342,
+      "size": 7,
+      "symbol": "wPartySpecies",
+      "wram": 56536
+     },
+     {
+      "backup": 6765,
+      "new_hex": "4500164a0000b541000230000000000000000000006b380a280000460000000a08000001001f0015000e000d0014000c000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "offset": 0,
+      "old_hex": "9ead0a2b0000b54100008700000000000000000000f794231e00004600850105000000150015000d000c000a0009000a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "primary": 10349,
+      "size": 288,
+      "symbol": "wPartyMon1",
+      "wram": 56543
+     },
+     {
+      "backup": 7119,
+      "new_hex": "81848b8b928f918e94935000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "offset": 0,
+      "old_hex": "938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "primary": 10703,
+      "size": 66,
+      "symbol": "wPartyMonNicknames",
+      "wram": 56897
+     },
+     {
+      "backup": 6720,
+      "new_hex": "0a05",
+      "offset": 0,
+      "old_hex": "0000",
+      "primary": 10304,
+      "size": 2,
+      "symbol": "wLastSpawnMapGroup",
+      "wram": 56498
+     },
+     {
+      "backup": 6658,
+      "new_hex": "03",
+      "offset": 0,
+      "old_hex": "00",
+      "primary": 10242,
+      "size": 1,
+      "symbol": "wPoisonStepCount",
+      "wram": 56436
+     },
+     {
+      "cart": 11533,
+      "new_hex": "47cc",
+      "offset": 0,
+      "old_hex": "98ce",
+      "size": 2,
+      "symbol": "sChecksum",
+      "wram": null
+     },
+     {
+      "cart": 7949,
+      "new_hex": "47cc",
+      "offset": 0,
+      "old_hex": "98ce",
+      "size": 2,
+      "symbol": "sBackupChecksum",
+      "wram": null
+     }
+    ],
+    "schema": "gen2-synth-disclosure-v1",
+    "sha256": "8b49f7a922a414ce90e7c23bab1d3edf23e83f202e0392638f93b1640196efda",
+    "source_facts": [
+     "constants/charmap.asm names",
+     "data/games/gen2_<title>/moves.json PP",
+     "data/games/gen2_<title>/species_index.json base stats/growth",
+     "data/maps/spawn_points.asm; engine/events/whiteout.asm GetWhiteoutSpawn",
+     "engine/overworld/events.asm CountStep",
+     "macros/ram.asm party_struct"
+    ],
+    "title": "crystal"
+   },
+   "title": "crystal",
+   "u1g_kind": "kyle"
+  },
+  {
+   "arrival_frame": 3334,
+   "attempt_id": "u1g-crystal_synth_bill",
+   "bank_check": "live",
+   "core_mode": "CGB",
+   "decoy": {
+    "accepted": 0,
+    "addr": 26996,
+    "bank": 127,
+    "bank_rejects": 101,
+    "raw": 101
+   },
+   "effects": [
+    {
+     "after_hex": "02",
+     "arming_frame": 3334,
+     "arming_hex": "01",
+     "before_hex": "01",
+     "callback": 6092,
+     "hit_frame": 6092,
+     "site": "gift_party_finalized",
+     "size": 1,
+     "symbol": "wPartyCount",
+     "wram": 56535
+    }
+   ],
+   "evidence_level": "PHYSICAL",
+   "fixture": "crystal_synth_bill",
+   "fixture_sha256": "e9939e7afb087d620be716e06ea4ec93b0439453ee79e32e8dfac2bb7b039596",
+   "frame_alignment": {
+    "aligned_hits": 8,
+    "misaligned_hits": 0,
+    "passed": true,
+    "rule": "every accepted hit's callback frame == the frame being emulated (armed)"
+   },
+   "harness_write_scopes": [],
+   "input_mode": "normal_buttons",
+   "model_events": {
+    "capture:gift:party": 1
+   },
+   "negatives": {
+    "script_bytecode_arm": "refused",
+    "wrong_bank_hit": "refused",
+    "wrong_pack_byte": "refused"
+   },
+   "pack_commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+   "pack_specs_sha256": "402a6a95054a0ad021fc1e8053119d4beb277885cf254691689c738e5f1825d5",
+   "proven": [
+    "gift_begin",
+    "gift_party_finalized"
+   ],
+   "qualification_attempt_id": "requal-crystal-town-n14b",
+   "result": "PASS",
+   "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+   "schema": "gen2-engine-site-receipt-v1",
+   "sites": {
+    "gift_begin": {
+     "addr": 25207,
+     "bank": 3,
+     "bank_rejects": 0,
+     "expected_hex": "d5",
+     "first_frame": 5918,
+     "hits": 1,
+     "pc": 25207,
+     "raw": 1,
+     "symbol": "GivePoke"
+    },
+    "gift_party_finalized": {
+     "addr": 25526,
+     "bank": 3,
+     "bank_rejects": 0,
+     "expected_hex": "c8",
+     "first_frame": 6092,
+     "hits": 1,
+     "pc": 25526,
+     "raw": 1,
+     "symbol": "GivePoke.skip_nickname"
+    }
+   },
+   "synth": {
+    "base_fixture": "crystal_town",
+    "base_sha256": "3b2794f82c2839afc39c8523c94ef9940c18ed6b8dc5a5817b09b6d4a4a56edf",
+    "builder": "tools/gen2_synth_fixtures.py",
+    "checksums": "restored (primary + backup)",
+    "edits": {
+     "events": {
+      "clear": [
+       "EVENT_MET_BILL",
+       "EVENT_GOT_EEVEE"
+      ]
+     },
+     "last_spawn": "GOLDENROD_CITY",
+     "party": [
+      {
+       "dvs": 19497,
+       "hp": 1,
+       "level": 5,
+       "moves": [
+        "SCRATCH",
+        "DEFENSE_CURL"
+       ],
+       "species": "SENTRET",
+       "status": 8
+      }
+     ],
+     "poison_step": 3
+    },
+    "fields": [
+     {
+      "backup": 6758,
+      "new_hex": "a1ff0000000000",
+      "offset": 0,
+      "old_hex": "9eff0000000000",
+      "primary": 10342,
+      "size": 7,
+      "symbol": "wPartySpecies",
+      "wram": 56536
+     },
+     {
+      "backup": 6765,
+      "new_hex": "a1000a6f0000b54100007d000000000000000000004c29232800004600000005080000010012000a000900070009000a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "offset": 0,
+      "old_hex": "9ead0a2b0000b54100008700000000000000000000f794231e00004600850105000000150015000d000c000a0009000a000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "primary": 10349,
+      "size": 288,
+      "symbol": "wPartyMon1",
+      "wram": 56543
+     },
+     {
+      "backup": 7119,
+      "new_hex": "92848d939184935050505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "offset": 0,
+      "old_hex": "938e938e83888b8450505000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "primary": 10703,
+      "size": 66,
+      "symbol": "wPartyMonNicknames",
+      "wram": 56897
+     },
+     {
+      "backup": 6720,
+      "new_hex": "0b02",
+      "offset": 0,
+      "old_hex": "0000",
+      "primary": 10304,
+      "size": 2,
+      "symbol": "wLastSpawnMapGroup",
+      "wram": 56498
+     },
+     {
+      "backup": 6370,
+      "new_hex": "eb",
+      "offset": 226,
+      "old_hex": "ef",
+      "primary": 9954,
+      "size": 1,
+      "symbol": "wEventFlags",
+      "wram": 56148
+     },
+     {
+      "backup": 6658,
+      "new_hex": "03",
+      "offset": 0,
+      "old_hex": "00",
+      "primary": 10242,
+      "size": 1,
+      "symbol": "wPoisonStepCount",
+      "wram": 56436
+     },
+     {
+      "cart": 11533,
+      "new_hex": "5fcc",
+      "offset": 0,
+      "old_hex": "98ce",
+      "size": 2,
+      "symbol": "sChecksum",
+      "wram": null
+     },
+     {
+      "cart": 7949,
+      "new_hex": "5fcc",
+      "offset": 0,
+      "old_hex": "98ce",
+      "size": 2,
+      "symbol": "sBackupChecksum",
+      "wram": null
+     }
+    ],
+    "schema": "gen2-synth-disclosure-v1",
+    "sha256": "e9939e7afb087d620be716e06ea4ec93b0439453ee79e32e8dfac2bb7b039596",
+    "source_facts": [
+     "constants/charmap.asm names",
+     "constants/event_flags.asm; engine/events/std_scripts.asm InitializeEventsScript",
+     "data/games/gen2_<title>/moves.json PP",
+     "data/games/gen2_<title>/species_index.json base stats/growth",
+     "data/maps/spawn_points.asm; engine/events/whiteout.asm GetWhiteoutSpawn",
+     "engine/overworld/events.asm CountStep",
+     "macros/ram.asm party_struct"
+    ],
+    "title": "crystal"
+   },
+   "title": "crystal",
+   "u1g_kind": "bill"
+  }
+ ],
+ "schema": "gen2-engine-site-receipt-v2",
+ "title": "crystal"
+}

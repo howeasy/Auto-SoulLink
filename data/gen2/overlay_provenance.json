@@ -1,0 +1,192 @@
+{
+  "schema": "gen2-overlay-provenance-v1",
+  "generated": "2026-09-25T12:47:45Z",
+  "sources": {
+    "pokecrystal": {
+      "url": "https://github.com/pret/pokecrystal",
+      "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+      "make_targets": [
+        "pokecrystal.gbc",
+        "pokecrystal11.gbc"
+      ]
+    },
+    "pokegold": {
+      "url": "https://github.com/pret/pokegold",
+      "commit": "656583c939d30f920a316177311a502dd222b57c",
+      "make_targets": [
+        "pokegold.gbc",
+        "pokesilver.gbc"
+      ]
+    }
+  },
+  "overlay": {
+    "src_dir": "patch/gen2/src",
+    "applied": {
+      "pokecrystal": [
+        "slink_mailbox.asm",
+        "slink_abi.inc",
+        "panel_flags.asm",
+        "phone_flags.asm",
+        "slink.asm",
+        "panel.asm",
+        "panel_start.asm",
+        "sfx.asm",
+        "trade_frame.asm",
+        "trade_items.asm",
+        "trade_snapshot.asm",
+        "trade_commit.asm",
+        "trade_service.asm",
+        "trade_receptionist.asm",
+        "trade_dispatch.asm",
+        "phone.asm",
+        "version.asm"
+      ],
+      "pokegold": [
+        "slink_mailbox.asm",
+        "slink_abi.inc",
+        "panel_flags.asm",
+        "phone_flags.asm",
+        "slink.asm",
+        "panel.asm",
+        "panel_start.asm",
+        "sfx.asm",
+        "trade_frame.asm",
+        "trade_items.asm",
+        "trade_snapshot.asm",
+        "trade_commit.asm",
+        "trade_service.asm",
+        "trade_receptionist.asm",
+        "trade_dispatch.asm",
+        "phone.asm",
+        "version.asm"
+      ]
+    },
+    "sources_sha256": {
+      "panel.asm": "05a34133b43a77c21e45dedf527e3447c72dd351cfa1af67e30a5e8ece9d3bf0",
+      "panel_flags.asm": "e7d1ab192465c52efc9f868baa6d6159f3b96bd3002a805280c1c3c6d420cb2c",
+      "panel_start.asm": "cc65284e800c0fd0aac16f4813a0a7edc74d13721b8bbdd1b20e7d13ae633a13",
+      "phone.asm": "a316a26638728a873a9c001b82f0dd4dd8040fb64d2687c790baed2ff6e971c2",
+      "phone_flags.asm": "af0b35bad0c70f305208cfc1826f889ef948efaa415e700e0fc2413175fcccbe",
+      "sfx.asm": "3d6bd2a55fffd73830db507ce2a9900f7db8c8a7bb3f8ceddb9e394a51ff5ff5",
+      "slink.asm": "7cbcbf301afef02be56153be4b0a7b53509d1b3be1a7c9c1322e452e80e8f379",
+      "slink_mailbox_crystal.asm": "5a882542b8c4471b276d20bbc2e76d9846e50bb6d98fa284229d9c09713f6b3e",
+      "slink_mailbox_goldsilver.asm": "bf28873ff54e02d698ffc5d59ee9ec1acfd951e602589ea7e706d24618863517",
+      "trade_commit.asm": "493e9b7d7b20681fed3c181d66a13c091cac6fef6bc4e853a05eb837b843c790",
+      "trade_dispatch.asm": "423608d21d02b7ed595124db1c3adae56548bf68325440bfb41303a665129fdc",
+      "trade_frame.asm": "0e964f60d5356ae6b0c89e9ee8548b73369391bf7ba46423089dd16003f3044b",
+      "trade_items.asm": "db511e2feb3339206177ad70c30f4ea4f644dd87ca3c830ae212e4dfe9701ff1",
+      "trade_receptionist.asm": "ec397e02f026d6a49d537504f4671ca1ef3a0e17ae3dc6e80b436aea233f7567",
+      "trade_service.asm": "720f8a7930f5bbc7eadc0950a3b776cbece34c7fdcc7d3b77f9a173af23ccf39",
+      "trade_snapshot.asm": "deb914bc7a4fce9de9f4b883639172a6c1ba08fdaf1cbbdac142e817e9acd519",
+      "version.asm": "e1809728584c34bccf49b1952de0babe006dff0eefb0ef4f9983f2d631815e49",
+      "patch/gb/slink_abi.inc": "be0ee30a84330c794a1b5f3a2cf4c1435bdfdf3bf63fa4f010deb02a0291181e"
+    },
+    "version": "v0.0.0-dev",
+    "version_sha256": "2c054c8711d404ecf09babccf58e82ec9de16e999031b931b18358d0782c029b"
+  },
+  "toolchain": {
+    "rgbds": {
+      "version": "v1.0.3",
+      "binaries": {
+        "rgbasm": {
+          "version": "rgbasm v1.0.3",
+          "sha256": "d82cd2d23194c8c351b28eaf7a603761a08ddff8a8f6aaf2cc3c49d4bb077697"
+        },
+        "rgblink": {
+          "version": "rgblink v1.0.3",
+          "sha256": "ecbcb4bc2e1e3d7dcb8a7be6955e2ec6e62a331949a9e6856af8f78483326365"
+        },
+        "rgbfix": {
+          "version": "rgbfix v1.0.3",
+          "sha256": "54b7a90b799641cfd95de1f9bb8f0d46cef80e950b06ffdcbd096f7e51ae1bbb"
+        },
+        "rgbgfx": {
+          "version": "rgbgfx v1.0.3",
+          "sha256": "abedc5660b477b881496390502bffd25e40d1b0155ab8de43f623726a036f149"
+        }
+      }
+    },
+    "build_tools": {
+      "binaries": {
+        "make": {
+          "version": "GNU Make 4.4.1",
+          "sha256": "114f047af6b479b17adc5044a40ee0e03c1e39accfd9c3a4d8230c5bfc73f4a9"
+        },
+        "gcc": {
+          "version": "gcc.exe (GCC) 16.2.0",
+          "sha256": "9a52de3e3af8f4896e963c4b68ed159f049954775decb20e421cd75d51aab6ed"
+        },
+        "sh": {
+          "version": "BusyBox v1.38.0.git-6075-g169694ebd (2026-09-14 01:31:54 UTC)",
+          "sha256": "fe9d29a3844065040b6d42f09e85a91b74e4c9019cfe024f32ab596f853dadd7"
+        }
+      }
+    },
+    "w64devkit_requested_version": "2.10.0"
+  },
+  "commands": {
+    "pokecrystal": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\build-tools\\w64devkit-2.10.0\\w64devkit\\bin\\make.exe RGBDS= CC=gcc MAKE=make SHELL=sh -j4 pokecrystal.gbc",
+    "pokegold": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\build-tools\\w64devkit-2.10.0\\w64devkit\\bin\\make.exe RGBDS= CC=gcc MAKE=make SHELL=sh -j4 pokegold.gbc pokesilver.gbc"
+  },
+  "outputs": {
+    "pokecrystal": {
+      "filename": "pokecrystal.gbc",
+      "slink_title": "crystal",
+      "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+      "identical_to_clean": false,
+      "sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057",
+      "md5": "b31474971179ffeb015a6e80fb335b64",
+      "header_crc": "E900",
+      "crc32": "743AFAB1",
+      "title": "PM_CRYSTAL\u0000BYTE",
+      "size": 2097152,
+      "ups": {
+        "file": "patch/dist/SLink-Crystal.ups",
+        "size": 10214,
+        "sha256": "88ca93d1d64879f98fe309f262d2884aa003177636c03344e0c4e1b9300ec7ea"
+      }
+    },
+    "pokegold": {
+      "filename": "pokegold.gbc",
+      "slink_title": "gold",
+      "base_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+      "identical_to_clean": false,
+      "sha1": "69067c4bcd74b2c567a02164896948f3a14e6d4a",
+      "md5": "ad50cc72561e8bbfdabdc847df7ceef9",
+      "header_crc": "23D9",
+      "crc32": "833E84DF",
+      "title": "POKEMON_GLDAAUE",
+      "size": 2097152,
+      "ups": {
+        "file": "patch/dist/SLink-Gold.ups",
+        "size": 9275,
+        "sha256": "a40ba8e2b3881d829aa5ed84791d7d88c263a750b4391a071c28fb4b5565ca1a"
+      }
+    },
+    "pokesilver": {
+      "filename": "pokesilver.gbc",
+      "slink_title": "silver",
+      "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+      "identical_to_clean": false,
+      "sha1": "583d8df4deb1831523521d20065504258cbaba28",
+      "md5": "f184ad59dbde870b2b358d808988fddc",
+      "header_crc": "C992",
+      "crc32": "B298FC51",
+      "title": "POKEMON_SLVAAXE",
+      "size": 2097152,
+      "ups": {
+        "file": "patch/dist/SLink-Silver.ups",
+        "size": 9277,
+        "sha256": "c9ffe317f696b65a04c810809c9642d7a1c1a7ab1729a126c1d8ad1b91eb3809"
+      }
+    }
+  },
+  "symbols": {
+    "crystal_slink.sym": "4fc39cd4dcc6ccddba53122ff33093dbe3717988bc72274e45d650ca456a05ef",
+    "crystal_slink.map": "a93cad028afa063a82c09c88099d6e9a848a8b2892401eaf4068c3bf0a848ce0",
+    "gold_slink.sym": "d7d80bfb45403458f17d9746b499512eecf88178e1f319a19ec531631d682ea1",
+    "gold_slink.map": "e6b34d337c60f23caf06930cd3628ff17461de4c7db6f829cb76e1da55e75f44",
+    "silver_slink.sym": "bc86f081598c85112f66f3d0b82dbac202d9b3736d5913a66a1c228d63b63b9d",
+    "silver_slink.map": "a5cd19185e252df7db685088ed376e8cdd3b2ffbf6867757f7515aa9dcc2d8c3"
+  }
+}

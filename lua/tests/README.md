@@ -2,16 +2,14 @@
 
 BizHawk Lua test scripts. Three families:
 
-- **`duo/`** — the TWO-INSTANCE headless E2E harness. Three wrappers, all of which run the
-  REAL production client (instance B mutates party OTIDs pre-hello so keys don't collide):
-  `duo_main.lua` for Gen 3 (GBA, boots a savestate), `duo_gen1_main.lua` for the rewritten
-  Gen 1 client (Game Boy, boots a committed battery save; Red as player A, Blue as B — no
-  Yellow pairing), and `duo_gb_main.lua` for Gen 2 only (Game Boy, boots a committed battery
-  save; the old Gen 1 pairing was removed from it in the harness deletion sweep, `2395145`/
-  `832d499`, alongside the legacy client's own deletion, `21ff0d7`). Driven by
-  `tools/e2e_duo.py`, which boots a throwaway server + two concurrent EmuHawk instances
-  (per-instance `--config` copies, and per-instance SaveRAM dirs so two Crystals can share
-  one dump) and orchestrates via the debug HTTP API. This automates the old "two-instance
+- **`duo/`** — the TWO-INSTANCE headless E2E harness. Wrappers run the REAL production client
+  (instance B mutates party OTIDs pre-hello so keys don't collide): `duo_main.lua` for Gen 3
+  (GBA, boots a savestate), `duo_gen1_main.lua` for the rewritten Gen 1 client (Game Boy, boots
+  a committed battery save; Red as player A, Blue as B — no Yellow pairing), and
+  `duo_gen2_main.lua` for Gen 2 (Game Boy, boots a committed battery save per title; same-title
+  pairings share one cartridge dump). Driven by `tools/e2e_duo.py`, which boots a throwaway
+  server + two concurrent EmuHawk instances (per-instance `--config` copies, and per-instance
+  SaveRAM dirs) and orchestrates via the debug HTTP API. This automates the old "two-instance
   E2E (USER gate)".
 
   `duo_gen1_main.lua` does **not** use prefix-based scenario lookup: its eighteen
@@ -20,27 +18,28 @@ BizHawk Lua test scripts. Three families:
   `linked_faint_bench_new`, `linked_faint_active_new`, `explode_new`, `soft_reset_new`,
   `pc_ops_new`, `changebox_new`, `whiteout_new`, `poison_new`, `rival_swap_new`,
   `admit_randomized_new`) are `scenarios.<name>()` functions implemented directly in that
-  file. `duo_gb_main.lua` (Gen 2 only now) still resolves a scenario as
-  `scenario_<prefix><name>` first, then falls back to `scenario_gb_<name>`:
+  file. `duo_gen2_main.lua` resolves a scenario as `scenario_gen2_<name>.lua`:
 
   | File(s) | Games |
   |---|---|
   | `scenario_{faint,boxsync,trade,ghost,explode,infopanel}.lua` | Gen 3 only |
-  | `scenario_gb_{faint,boxsync,memorialize}.lua` | Gen 2 (shared-shape files any GB generation could use, but only Gen 2 resolves through them today) |
+  | `scenario_gen2_{link,faint}.lua` | Gen 2 (Crystal/Gold/Silver, same-title and cross-title pairings) |
 
   The old `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua`
   prefix files and the `gen1`/`gen1_yellow` duo titles they drove no longer exist — deleted
-  in the same harness sweep above.
+  in the same harness sweep above. The legacy Gen 2 duo chain (`duo_gb_main.lua`,
+  `scenario_gb_{faint,boxsync,memorialize}.lua`, `gatelib.lua`) is likewise retired, replaced
+  by the files above.
 
   `--game` picks the title: `gen3_rr` (default), `gen1_new` (the rewritten Gen 1 client,
-  Red as A / Blue as B) or `gen2` (Crystal on both sides).
+  Red as A / Blue as B) or `gen2_new` (Crystal/Gold/Silver pairings).
 
   ```bash
   SLINK_E2E=1 pytest tests/e2e/test_duo.py -q               # Gen 3
   SLINK_E2E=1 pytest tests/e2e/test_duo_gen1_new.py -q      # Gen 1 (rewritten client, 18 scenarios)
-  SLINK_E2E=1 pytest tests/e2e/test_duo_gen2.py -q          # Gen 2
-  python tools/e2e_duo.py --game gen2 --scenario faint      # one scenario, directly
-  python tools/e2e_duo.py --game gen2 --list                # what --scenario all would run
+  SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py -q      # Gen 2
+  python tools/e2e_duo.py --game gen2_new --scenario link    # one scenario, directly
+  python tools/e2e_duo.py --game gen2_new --list             # what --scenario all would run
   python tools/e2e_duo.py --game gen1_new --list             # the 18 gen1_new scenarios
   ```
 
@@ -62,13 +61,14 @@ BizHawk Lua test scripts. Three families:
   `patch/build/<name>_result.txt` ending `RESULT: PASS|FAIL`, and exits.
 - **`test_gen*_*` / discovery scripts** — per-generation client/profile validation and
   address-discovery one-shots (interactive; load in the Lua console). The exception is the
-  `*_gate.lua` files, which run HEADLESS off a committed battery save and share `gatelib.lua`:
+  `*_gate.lua` files, which run HEADLESS off a committed battery save:
   Gen 1's `test_gen1_patch_gate.lua` / `test_gen1_menu_row_gate.lua` / a randomized-panel run
   via `tests/live/test_gen1_gates.py` (companion patch only), `test_gen1_inspect_gate.lua` /
   `test_gen1_scripted_gate.lua` via `tests/live/test_gen1_new_gates.py` (the rewritten
   client, all three cartridges), `test_gen1_receptionist_gate.lua` via
   `tests/live/test_gen1_trade_gates.py` (SLINK TRADE), and Gen 2's
-  `test_gen2_memory_gate.lua` / `test_gen2_writes_gate.lua` via `tests/live/test_gen2_gates.py`
+  `gen2_inspect_gate.lua` / `gen2_frame_align.lua` / `gen2_write_windows.lua` via
+  `tests/live/test_gen2_new_gates.py` / `test_gen2_frame_align.py` / `test_gen2_write_windows.py`
   (`SLINK_LIVE=1 pytest tests/live/ -q` runs all of the above).
 
 One-off discovery probes are DELETED once their findings land in

@@ -90,9 +90,9 @@ def test_hello_persists_mon_stats_for_the_party_it_just_cached(tmp_path, monkeyp
     key = party()[0]["key"]
     srv._dispatch("a", legacy_hello(party()))
     saved = json.loads((tmp_path / "links.json").read_text())
-    assert key in saved["mon_stats"]
-    assert saved["mon_stats"][key]["level"] == 10
-    assert saved["mon_stats"][key]["maxHP"] == 30
+    assert key in saved["mon_stats"]["a"]                    # KEY-SCOPE-2: per player
+    assert saved["mon_stats"]["a"][key]["level"] == 10
+    assert saved["mon_stats"]["a"][key]["maxHP"] == 30
 
 
 def test_rejected_hello_never_constructs_or_publishes_a_new_party_snapshot(tmp_path, monkeypatch):

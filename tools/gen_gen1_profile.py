@@ -76,7 +76,7 @@ RAM_SYMBOLS = [
     # battle
     "wIsInBattle", "wBattleType", "wBattleResult", "wCurOpponent", "wTrainerClass", "wTrainerNo",
     "wTrainerName", "wCurEnemyLevel", "wEnemyMonSpecies2", "wCurPartySpecies", "wMonDataLocation",
-    "wEnemyMon", "wEnemyMonSpecies", "wEnemyMonHP", "wEnemyMonLevel",
+    "wEnemyMon", "wEnemyMonSpecies", "wEnemyMonHP", "wEnemyMonMaxHP", "wEnemyMonLevel",
     "wEnemyPartyCount", "wEnemyPartySpecies", "wEnemyMons", "wEnemyMon1", "wEnemyMon2", "wEnemyMonOT",
     "wEnemyMonNicks",
     # $FF between InitBattleCommon (engine/battle/core.asm:6688-6689) and EnemySendOutFirstMon

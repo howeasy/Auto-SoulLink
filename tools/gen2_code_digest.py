@@ -1,0 +1,92 @@
+#!/usr/bin/env python3
+"""Which production code a Gen 2 receipt was earned on (card CODE-DIGEST).
+
+A receipt that binds only fixture bytes and the clean ROM sha1 stays "valid" after the client or
+server changes under it. A runner records `run_stamp()` next to its verdict, and
+tools/verify_gen2_release.py compares that stamp's digest with `head_digest()`: when they differ,
+the receipt is STALE.
+
+The digest is sha256 over the sorted "<path> <git blob id>" lines of every tracked production file
+at HEAD. It is exact, and cheap because git already hashed the content. It only binds the tree the
+runner ran on when that tree is clean for these paths, so run_stamp() also records the dirty
+production paths. The verifier treats any dirty stamp as STALE.
+
+    python tools/gen2_code_digest.py          # print this checkout's stamp as JSON
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+# What a Gen 2 duo or live gate executes: the Gen 2 client, the shared Lua modules at lua/ top level
+# that it dofiles, the extracted shared core, the server, and the Gen 2 data packs, whose shipped
+# receipts and admission rows the client re-validates at load. Drivers (lua/tests) and docs are
+# harness and prose, so they are not included.
+CODE_SCOPE = ("lua/*.lua", "lua/gen2/**", "lua/core/**", "server/**/*.py",
+              "data/games/gen2_crystal/**", "data/games/gen2_gold/**", "data/games/gen2_silver/**")
+
+
+def is_production(path: str) -> bool:
+    if path.startswith(("lua/gen2/", "lua/core/", "data/games/gen2_crystal/", "data/games/gen2_gold/",
+                        "data/games/gen2_silver/")):
+        return True
+    if path.startswith("lua/") and path.count("/") == 1:
+        return path.endswith(".lua")
+    return path.startswith("server/") and path.endswith(".py")
+
+
+def _git(root: Path, *args: str) -> str:
+    return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+                          encoding="utf-8", check=True).stdout
+
+
+def digest_of(rows) -> str:
+    """rows: (path, blob id) pairs. Order-independent."""
+    return hashlib.sha256("\n".join(sorted(f"{path} {blob}" for path, blob in rows)).encode()).hexdigest()
+
+
+def head_digest(root: Path = ROOT, rev: str = "HEAD") -> str:
+    rows = []
+    for line in _git(root, "ls-tree", "-r", rev).splitlines():
+        meta, _, path = line.partition("\t")
+        if is_production(path):
+            rows.append((path, meta.split()[2]))
+    return digest_of(rows)
+
+
+def dirty_paths(root: Path = ROOT) -> list[str]:
+    """Production paths whose working tree differs from HEAD, untracked files included."""
+    out = []
+    for line in _git(root, "status", "--porcelain", "--untracked-files=all").splitlines():
+        path = line[3:].split(" -> ")[-1].strip('"')
+        if is_production(path):
+            out.append(path)
+    return sorted(out)
+
+
+def run_stamp(root: Path = ROOT) -> dict:
+    """The stamp a runner writes beside its verdict (e2e_duo: a `CODE_DIGEST {json}` line in the pydec
+    receipt; JSON gate receipts: a top-level "code_digest" object)."""
+    return {"schema": "gen2-code-digest-v1", "digest": head_digest(root),
+            "commit": _git(root, "rev-parse", "HEAD").strip(), "scope": list(CODE_SCOPE),
+            "dirty": dirty_paths(root)}
+
+
+def stamp_verdict(stamp, head: str) -> str | None:
+    """None when the stamp binds HEAD's production code; otherwise STALE-UNKNOWN or STALE with a reason."""
+    if not isinstance(stamp, dict) or stamp.get("schema") != "gen2-code-digest-v1":
+        return "STALE-UNKNOWN: receipt records no code digest"
+    if stamp.get("dirty") != []:
+        return f"STALE: run on a dirty production tree ({len(stamp.get('dirty') or [1])} path(s))"
+    if stamp.get("digest") != head:
+        return f"STALE: code digest {str(stamp.get('digest'))[:12]} (commit {str(stamp.get('commit'))[:8]}) != HEAD {head[:12]}"
+    return None
+
+
+if __name__ == "__main__":
+    json.dump(run_stamp(), sys.stdout, indent=2)
+    print()

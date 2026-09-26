@@ -1,0 +1,1469 @@
+{
+  "schema": "gen2-gifts-v1",
+  "generator": "gen_gen2_gifts.py",
+  "source": {
+    "evidence_level": "SOURCE",
+    "artifact": "pokecrystal",
+    "repo": "pokecrystal",
+    "commit": "7a7881d0d62e0ddbd82dcf10e7116807487ac651",
+    "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+    "sym_sha256": "cb16279e1c7a72a9e00b266f16d98f2efe9361a830e010a34307cd1d00a20c34",
+    "map_sha256": "64555bbcd59b928869c541478b9d16c8e8e9b81502099a18cf946dd570e1e50b",
+    "lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
+    "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+  },
+  "version_dispatch": {
+    "applicable": false
+  },
+  "gifts": [
+    {
+      "id": "BillsFamilysHouse:BillScript:27",
+      "map_name": "BillsFamilysHouse",
+      "map_group": 11,
+      "map_number": 6,
+      "area_id": "goldenrod_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/BillsFamilysHouse.asm:27",
+      "script": "BillScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "EEVEE",
+        "20"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 133,
+      "species_const": "EEVEE",
+      "level": 20,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "BillScript",
+        "bank": 21,
+        "addr": 19461,
+        "flat": 347141,
+        "expected_hex": "2d85140000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPrizeRoomPokemonVendor.Pikachu:156",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 20,
+      "area_id": "celadon_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/CeladonGameCornerPrizeRoom.asm:156",
+      "script": "CeladonGameCornerPrizeRoomPokemonVendor.Pikachu",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "PIKACHU",
+        "25"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 25,
+      "species_const": "PIKACHU",
+      "level": 25,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CeladonGameCornerPrizeRoomPokemonVendor.Pikachu",
+        "bank": 28,
+        "addr": 26640,
+        "flat": 469008,
+        "expected_hex": "2d19190000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPrizeRoomPokemonVendor.Porygon:174",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 20,
+      "area_id": "celadon_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/CeladonGameCornerPrizeRoom.asm:174",
+      "script": "CeladonGameCornerPrizeRoomPokemonVendor.Porygon",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "PORYGON",
+        "15"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 137,
+      "species_const": "PORYGON",
+      "level": 15,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CeladonGameCornerPrizeRoomPokemonVendor.Porygon",
+        "bank": 28,
+        "addr": 26686,
+        "flat": 469054,
+        "expected_hex": "2d890f0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "CeladonGameCornerPrizeRoom:CeladonGameCornerPrizeRoomPokemonVendor.Larvitar:192",
+      "map_name": "CeladonGameCornerPrizeRoom",
+      "map_group": 21,
+      "map_number": 20,
+      "area_id": "celadon_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/CeladonGameCornerPrizeRoom.asm:192",
+      "script": "CeladonGameCornerPrizeRoomPokemonVendor.Larvitar",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "LARVITAR",
+        "40"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 246,
+      "species_const": "LARVITAR",
+      "level": 40,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CeladonGameCornerPrizeRoomPokemonVendor.Larvitar",
+        "bank": 28,
+        "addr": 26732,
+        "flat": 469100,
+        "expected_hex": "2df6280000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "DragonShrine:DragonShrineElder1Script.GiveDratini:216",
+      "map_name": "DragonShrine",
+      "map_group": 3,
+      "map_number": 82,
+      "area_id": "dragons_den",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/DragonShrine.asm:216",
+      "script": "DragonShrineElder1Script.GiveDratini",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "DRATINI",
+        "15"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 147,
+      "species_const": "DRATINI",
+      "level": 15,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DragonShrineElder1Script.GiveDratini",
+        "bank": 99,
+        "addr": 20950,
+        "flat": 1626582,
+        "expected_hex": "2d930f0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "ElmsLab:CyndaquilPokeBallScript:182",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "area_id": "new_bark_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/ElmsLab.asm:182",
+      "script": "CyndaquilPokeBallScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CYNDAQUIL",
+        "5",
+        "BERRY"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 155,
+      "species_const": "CYNDAQUIL",
+      "level": 5,
+      "item": 173,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CyndaquilPokeBallScript",
+        "bank": 30,
+        "addr": 19618,
+        "flat": 494754,
+        "expected_hex": "2d9b05ad00",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "ElmsLab:TotodilePokeBallScript:212",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "area_id": "new_bark_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/ElmsLab.asm:212",
+      "script": "TotodilePokeBallScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "TOTODILE",
+        "5",
+        "BERRY"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 158,
+      "species_const": "TOTODILE",
+      "level": 5,
+      "item": 173,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "TotodilePokeBallScript",
+        "bank": 30,
+        "addr": 19684,
+        "flat": 494820,
+        "expected_hex": "2d9e05ad00",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "ElmsLab:ChikoritaPokeBallScript:240",
+      "map_name": "ElmsLab",
+      "map_group": 24,
+      "map_number": 5,
+      "area_id": "new_bark_town",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/ElmsLab.asm:240",
+      "script": "ChikoritaPokeBallScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CHIKORITA",
+        "5",
+        "BERRY"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 152,
+      "species_const": "CHIKORITA",
+      "level": 5,
+      "item": 173,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "ChikoritaPokeBallScript",
+        "bank": 30,
+        "addr": 19744,
+        "flat": 494880,
+        "expected_hex": "2d9805ad00",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Abra:192",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/GoldenrodGameCorner.asm:192",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Abra",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "ABRA",
+        "5"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 63,
+      "species_const": "ABRA",
+      "level": 5,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Abra",
+        "bank": 21,
+        "addr": 27977,
+        "flat": 355657,
+        "expected_hex": "2d3f050000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Cubone:210",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/GoldenrodGameCorner.asm:210",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Cubone",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "CUBONE",
+        "15"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 104,
+      "species_const": "CUBONE",
+      "level": 15,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Cubone",
+        "bank": 21,
+        "addr": 28023,
+        "flat": 355703,
+        "expected_hex": "2d680f0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "GoldenrodGameCorner:GoldenrodGameCornerPrizeMonVendorScript.Wobbuffet:228",
+      "map_name": "GoldenrodGameCorner",
+      "map_group": 11,
+      "map_number": 19,
+      "area_id": "goldenrod_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/GoldenrodGameCorner.asm:228",
+      "script": "GoldenrodGameCornerPrizeMonVendorScript.Wobbuffet",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "WOBBUFFET",
+        "15"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 202,
+      "species_const": "WOBBUFFET",
+      "level": 15,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GoldenrodGameCornerPrizeMonVendorScript.Wobbuffet",
+        "bank": 21,
+        "addr": 28069,
+        "flat": 355749,
+        "expected_hex": "2dca0f0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "MountMortarB1F:MountMortarB1FKiyoScript.BeatKiyo:40",
+      "map_name": "MountMortarB1F",
+      "map_group": 3,
+      "map_number": 60,
+      "area_id": "mt_mortar",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/MountMortarB1F.asm:40",
+      "script": "MountMortarB1FKiyoScript.BeatKiyo",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "TYROGUE",
+        "10"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 236,
+      "species_const": "TYROGUE",
+      "level": 10,
+      "item": 0,
+      "named_trainer": false,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "MountMortarB1FKiyoScript.BeatKiyo",
+        "bank": 31,
+        "addr": 25129,
+        "flat": 516649,
+        "expected_hex": "2dec0a0000",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route35GoldenrodGate:RandyScript:31",
+      "map_name": "Route35GoldenrodGate",
+      "map_group": 10,
+      "map_number": 14,
+      "area_id": "route_35",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route35GoldenrodGate.asm:31",
+      "script": "RandyScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "givepoke",
+      "arguments": [
+        "SPEAROW",
+        "10",
+        "NO_ITEM",
+        "GiftSpearowName",
+        "GiftSpearowOTName"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "scripted_grant",
+      "species": 21,
+      "species_const": "SPEAROW",
+      "level": 10,
+      "item": 0,
+      "named_trainer": true,
+      "success_values": [
+        0,
+        1
+      ],
+      "failure_values": [
+        2
+      ],
+      "completion_source": "Script_givepoke return after GivePoke naming/box path",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RandyScript",
+        "bank": 26,
+        "addr": 23908,
+        "flat": 433508,
+        "expected_hex": "2d150a0001b95dbf5d",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "VioletPokecenter1F:VioletPokecenter1F_ElmsAideScript.AskTakeEgg:27",
+      "map_name": "VioletPokecenter1F",
+      "map_group": 10,
+      "map_number": 10,
+      "area_id": "violet_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/VioletPokecenter1F.asm:27",
+      "script": "VioletPokecenter1F_ElmsAideScript.AskTakeEgg",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "giveegg",
+      "arguments": [
+        "TOGEPI",
+        "EGG_LEVEL"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "egg_reception",
+      "species": 175,
+      "species_const": "TOGEPI",
+      "level": 5,
+      "capture_at_reception": false,
+      "hatch_area_id": "gift_daycare",
+      "success_values": [
+        2
+      ],
+      "failure_values": [
+        0
+      ],
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "VioletPokecenter1F_ElmsAideScript.AskTakeEgg",
+        "bank": 26,
+        "addr": 21729,
+        "flat": 431329,
+        "expected_hex": "2eaf05",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    }
+  ],
+  "npc_trades": [
+    {
+      "trade_id": 0,
+      "kind": "npc_exchange",
+      "requested_species": 63,
+      "offered_species": 66,
+      "nickname": "MUSCLE",
+      "dvs": [
+        55,
+        102
+      ],
+      "item": 174,
+      "ot_id": 37460,
+      "ot_name": "MIKE",
+      "requested_gender": 0,
+      "dialog_set": 0,
+      "record_hex": "003f428c9492828b8450505050503766ae54928c888a84505050505050500000",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/npc_trades.asm:14",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 1,
+      "kind": "npc_exchange",
+      "requested_species": 69,
+      "offered_species": 95,
+      "nickname": "ROCKY",
+      "dvs": [
+        150,
+        102
+      ],
+      "item": 83,
+      "ot_id": 48926,
+      "ot_name": "KYLE",
+      "requested_gender": 0,
+      "dialog_set": 0,
+      "record_hex": "00455f918e828a985050505050509666531ebf8a988b84505050505050500000",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/npc_trades.asm:15",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 2,
+      "kind": "npc_exchange",
+      "requested_species": 98,
+      "offered_species": 100,
+      "nickname": "VOLTY",
+      "dvs": [
+        152,
+        136
+      ],
+      "item": 78,
+      "ot_id": 29189,
+      "ot_name": "TIM",
+      "requested_gender": 0,
+      "dialog_set": 1,
+      "record_hex": "016264958e8b939850505050505098884e057293888c50505050505050500000",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/npc_trades.asm:16",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 3,
+      "kind": "npc_exchange",
+      "requested_species": 148,
+      "offered_species": 85,
+      "nickname": "DORIS",
+      "dvs": [
+        119,
+        102
+      ],
+      "item": 106,
+      "ot_id": 283,
+      "ot_name": "EMY",
+      "requested_gender": 2,
+      "dialog_set": 3,
+      "record_hex": "039455838e91889250505050505077666a1b01848c9850505050505050500200",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/npc_trades.asm:17",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 4,
+      "kind": "npc_exchange",
+      "requested_species": 93,
+      "offered_species": 178,
+      "nickname": "PAUL",
+      "dvs": [
+        150,
+        134
+      ],
+      "item": 150,
+      "ot_id": 15616,
+      "ot_name": "CHRIS",
+      "requested_gender": 0,
+      "dialog_set": 2,
+      "record_hex": "025db28f80948b50505050505050968696003d82879188925050505050500000",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/npc_trades.asm:18",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 5,
+      "kind": "npc_exchange",
+      "requested_species": 113,
+      "offered_species": 142,
+      "nickname": "AEROY",
+      "dvs": [
+        150,
+        102
+      ],
+      "item": 174,
+      "ot_id": 26491,
+      "ot_name": "KIM",
+      "requested_gender": 0,
+      "dialog_set": 3,
+      "record_hex": "03718e8084918e985050505050509666ae7b678a888c50505050505050500000",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/npc_trades.asm:19",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    },
+    {
+      "trade_id": 6,
+      "kind": "npc_exchange",
+      "requested_species": 51,
+      "offered_species": 82,
+      "nickname": "MAGGIE",
+      "dvs": [
+        150,
+        102
+      ],
+      "item": 143,
+      "ot_id": 50082,
+      "ot_name": "FOREST",
+      "requested_gender": 0,
+      "dialog_set": 0,
+      "record_hex": "0033528c8086868884505050505096668fa2c3858e9184929350505050500000",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/npc_trades.asm:20",
+      "level_source": "offered_mon_derived_from_player_exchange; runtime OPEN",
+      "success_finalization": "OPEN; trade flag precedes DoNPCTrade"
+    }
+  ],
+  "npc_trades_rom": {
+    "symbol": "NPCTrades",
+    "flat": 1035864,
+    "length": 224
+  },
+  "odd_eggs": {
+    "applicable": true,
+    "record_length": 59,
+    "records": [
+      {
+        "index": 0,
+        "threshold": 5242,
+        "species": 172,
+        "record_hex": "ac0054cc9200000800007d0000000000000000000000001e140a00140000000500000000001100090006000b000800088486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:64"
+      },
+      {
+        "index": 1,
+        "threshold": 5898,
+        "species": 172,
+        "record_hex": "ac0054cc9200000100007d000000000000000000002aaa1e140a00140000000500000000001100090007000c000900098486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:90"
+      },
+      {
+        "index": 2,
+        "threshold": 16383,
+        "species": 173,
+        "record_hex": "ad0001cc9200001000007d00000000000000000000000023140a0014000000050000000000140007000700060009000a8486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:116"
+      },
+      {
+        "index": 3,
+        "threshold": 18349,
+        "species": 173,
+        "record_hex": "ad0001cc9200000300007d000000000000000000002aaa23140a001400000005000000000014000700080007000a000b8486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:142"
+      },
+      {
+        "index": 4,
+        "threshold": 28835,
+        "species": 174,
+        "record_hex": "ae002fcc9200001000007d0000000000000000000000000f140a001400000005000000000018000800060006000900078486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:168"
+      },
+      {
+        "index": 5,
+        "threshold": 30801,
+        "species": 174,
+        "record_hex": "ae002fcc9200000300007d000000000000000000002aaa0f140a001400000005000000000018000800070007000a00088486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:194"
+      },
+      {
+        "index": 6,
+        "threshold": 39976,
+        "species": 238,
+        "record_hex": "ee00017a9200000e00007d000000000000000000000000231e0a00140000000500000000001300080006000b000d000b8486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:220"
+      },
+      {
+        "index": 7,
+        "threshold": 41287,
+        "species": 238,
+        "record_hex": "ee00017a9200000200007d000000000000000000002aaa231e0a00140000000500000000001300080007000c000e000c8486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:246"
+      },
+      {
+        "index": 8,
+        "threshold": 47840,
+        "species": 240,
+        "record_hex": "f00034920000000a00007d000000000000000000000000190a00001400000005000000000013000c0008000d000c000a8486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:272"
+      },
+      {
+        "index": 9,
+        "threshold": 49151,
+        "species": 240,
+        "record_hex": "f00034920000000200007d000000000000000000002aaa190a00001400000005000000000013000c0009000e000d000b8486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:298"
+      },
+      {
+        "index": 10,
+        "threshold": 57015,
+        "species": 239,
+        "record_hex": "ef00622b9200000c00007d0000000000000000000000001e1e0a001400000005000000000013000b0008000e000b000a8486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:324"
+      },
+      {
+        "index": 11,
+        "threshold": 58326,
+        "species": 239,
+        "record_hex": "ef00622b9200000200007d000000000000000000002aaa1e1e0a001400000005000000000013000b0009000f000c000b8486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:350"
+      },
+      {
+        "index": 12,
+        "threshold": 64879,
+        "species": 236,
+        "record_hex": "ec0021920000000a00007d000000000000000000000000230a00001400000005000000000012000800080008000800088486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:376"
+      },
+      {
+        "index": 13,
+        "threshold": 65535,
+        "species": 236,
+        "record_hex": "ec0021920000000100007d000000000000000000002aaa230a00001400000005000000000012000800090009000900098486865050505050505050",
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 data/events/odd_eggs.asm:402"
+      }
+    ]
+  },
+  "caller_inventory": [
+    {
+      "id": "BlackthornEmysHouse:Emy:12",
+      "map_name": "BlackthornEmysHouse",
+      "map_group": 5,
+      "map_number": 4,
+      "area_id": "blackthorn_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/BlackthornEmysHouse.asm:12",
+      "script": "Emy",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_EMY"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 3,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Emy",
+        "bank": 101,
+        "addr": 23084,
+        "flat": 1661484,
+        "expected_hex": "9603",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "DayCare:DayCareManScript_Inside:33",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 24,
+      "area_id": "route_34",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/DayCare.asm:33",
+      "script": "DayCareManScript_Inside",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "GiveOddEgg"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DayCareManScript_Inside",
+        "bank": 24,
+        "addr": 28578,
+        "flat": 405410,
+        "expected_hex": "0f7d00",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "GiveOddEgg",
+      "kind": "dynamic_egg_reception"
+    },
+    {
+      "id": "DayCare:DayCareManScript_Inside.AlreadyHaveOddEgg:52",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 24,
+      "area_id": "route_34",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/DayCare.asm:52",
+      "script": "DayCareManScript_Inside.AlreadyHaveOddEgg",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "DayCareMan"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DayCareManScript_Inside.AlreadyHaveOddEgg",
+        "bank": 24,
+        "addr": 28605,
+        "flat": 405437,
+        "expected_hex": "0f1e00",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "DayCareMan",
+      "kind": "daycare_interaction"
+    },
+    {
+      "id": "DayCare:DayCareLadyScript:62",
+      "map_name": "DayCare",
+      "map_group": 11,
+      "map_number": 24,
+      "area_id": "route_34",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/DayCare.asm:62",
+      "script": "DayCareLadyScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "DayCareLady"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DayCareLadyScript",
+        "bank": 24,
+        "addr": 28619,
+        "flat": 405451,
+        "expected_hex": "0f1f00",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "DayCareLady",
+      "kind": "daycare_interaction"
+    },
+    {
+      "id": "DragonShrine:DragonShrineElder1Script.GiveDratini:218",
+      "map_name": "DragonShrine",
+      "map_group": 3,
+      "map_number": 82,
+      "area_id": "dragons_den",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/DragonShrine.asm:218",
+      "script": "DragonShrineElder1Script.GiveDratini",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "GiveDratini"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DragonShrineElder1Script.GiveDratini",
+        "bank": 99,
+        "addr": 20958,
+        "flat": 1626590,
+        "expected_hex": "0f9400",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "GiveDratini",
+      "kind": "post_grant_customization"
+    },
+    {
+      "id": "GoldenrodDeptStore5F:Mike:127",
+      "map_name": "GoldenrodDeptStore5F",
+      "map_group": 11,
+      "map_number": 15,
+      "area_id": "goldenrod_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/GoldenrodDeptStore5F.asm:127",
+      "script": "Mike",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_MIKE"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 0,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Mike",
+        "bank": 21,
+        "addr": 24885,
+        "flat": 352565,
+        "expected_hex": "9600",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "ManiasHouse:ManiaScript:19",
+      "map_name": "ManiasHouse",
+      "map_group": 22,
+      "map_number": 4,
+      "area_id": "cianwood_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/ManiasHouse.asm:19",
+      "script": "ManiaScript",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "GiveShuckle"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "ManiaScript",
+        "bank": 39,
+        "addr": 21133,
+        "flat": 643725,
+        "expected_hex": "0f4b00",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "GiveShuckle",
+      "kind": "borrowed_gift",
+      "grant": {
+        "kind": "borrowed_gift",
+        "species": 213,
+        "level": 15,
+        "item": 173,
+        "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/events/shuckle.asm:9",
+        "rom": {
+          "kind": "unique_source_label_span",
+          "symbol": "GiveShuckle",
+          "bank": 1,
+          "addr": 29449,
+          "flat": 29449,
+          "expected_hex": "3ed5ea08d13e0fea43d1",
+          "instruction_boundary": "UNQUALIFIED"
+        },
+        "success": "OPEN_runtime_observation",
+        "finalization": "OPEN"
+      }
+    },
+    {
+      "id": "OlivineTimsHouse:Tim:12",
+      "map_name": "OlivineTimsHouse",
+      "map_group": 1,
+      "map_number": 3,
+      "area_id": "olivine_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/OlivineTimsHouse.asm:12",
+      "script": "Tim",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_TIM"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 2,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Tim",
+        "bank": 39,
+        "addr": 17758,
+        "flat": 640350,
+        "expected_hex": "9602",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "PewterPokecenter1F:Chris:33",
+      "map_name": "PewterPokecenter1F",
+      "map_group": 14,
+      "map_number": 6,
+      "area_id": "pewter_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/PewterPokecenter1F.asm:33",
+      "script": "Chris",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_CHRIS"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 4,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Chris",
+        "bank": 104,
+        "addr": 28412,
+        "flat": 1715964,
+        "expected_hex": "9604",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "PowerPlant:Forest:192",
+      "map_name": "PowerPlant",
+      "map_group": 7,
+      "map_number": 10,
+      "area_id": "power_plant",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/PowerPlant.asm:192",
+      "script": "Forest",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_FOREST"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 6,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Forest",
+        "bank": 98,
+        "addr": 20173,
+        "flat": 1609421,
+        "expected_hex": "9606",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route14:Kim:15",
+      "map_name": "Route14",
+      "map_group": 17,
+      "map_number": 2,
+      "area_id": "route_14",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route14.asm:15",
+      "script": "Kim",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_KIM"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 5,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Kim",
+        "bank": 107,
+        "addr": 21633,
+        "flat": 1758337,
+        "expected_hex": "9605",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route34:DayCareManScript_Outside:57",
+      "map_name": "Route34",
+      "map_group": 11,
+      "map_number": 1,
+      "area_id": "route_34",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/Route34.asm:57",
+      "script": "DayCareManScript_Outside",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "special",
+      "arguments": [
+        "DayCareManOutside"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "DayCareManScript_Outside",
+        "bank": 30,
+        "addr": 16447,
+        "flat": 491583,
+        "expected_hex": "0f2000",
+        "instruction_boundary": "UNQUALIFIED"
+      },
+      "target": "DayCareManOutside",
+      "kind": "daycare_interaction"
+    },
+    {
+      "id": "VioletKylesHouse:Kyle:16",
+      "map_name": "VioletKylesHouse",
+      "map_group": 10,
+      "map_number": 11,
+      "area_id": "violet_city",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/VioletKylesHouse.asm:16",
+      "script": "Kyle",
+      "applicability": {
+        "titles": [
+          "crystal"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "operation": "trade",
+      "arguments": [
+        "NPC_TRADE_KYLE"
+      ],
+      "finalization": "OPEN",
+      "success": "OPEN",
+      "kind": "npc_exchange",
+      "trade_id": 1,
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Kyle",
+        "bank": 26,
+        "addr": 22930,
+        "flat": 432530,
+        "expected_hex": "9601",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    }
+  ],
+  "native_callers": [
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/battle/read_trainer_party.asm:105",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/battle/read_trainer_party.asm:125",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/battle/read_trainer_party.asm:200",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/battle/read_trainer_party.asm:230",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "call",
+      "target": "DayCare_GiveEgg",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/events/daycare.asm:397",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/events/npc_trade.asm:187",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "farcall",
+      "target": "AddMobileMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/events/odd_egg.asm:90",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/events/shuckle.asm:14",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "predef",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/items/item_effects.asm:556",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "farcall",
+      "target": "GivePoke",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/overworld/scripting.asm:1942",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "farcall",
+      "target": "GiveEgg",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/overworld/scripting.asm:1957",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "call",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/pokemon/move_mon.asm:1139",
+      "classification": "OPEN_native_caller"
+    },
+    {
+      "operation": "call",
+      "target": "TryAddMonToParty",
+      "source": "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 engine/pokemon/move_mon.asm:1624",
+      "classification": "OPEN_native_caller"
+    }
+  ],
+  "native_caller_inventory_scope": "direct unconditional call/farcall/callfar/predef to the named grant/party append helpers",
+  "exclusions": [
+    {
+      "kind": "key_item",
+      "constant": "MYSTERY_EGG",
+      "source": [
+        "pokecrystal@7a7881d0d62e0ddbd82dcf10e7116807487ac651 maps/MrPokemonsHouse.asm:31"
+      ]
+    }
+  ],
+  "policies": {
+    "egg_reception_is_capture": false,
+    "hatch_area_id": "gift_daycare"
+  },
+  "open_obligations": [
+    "dynamic_native_grant_callers",
+    "conditional_native_calls_and_indirect_dispatch",
+    "source_script_reachability",
+    "success_identity_finalization_and_durability",
+    "CPU_instruction_boundary_qualification"
+  ]
+}

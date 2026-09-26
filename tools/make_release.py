@@ -60,29 +60,41 @@ GENERATORS: list[tuple[str, str]] = [
 _LUA_ROOT = [
     "slink.lua",
     "slink_gen1.lua",
-    "slink_gen2.lua",
     "slink_gen3.lua",
     "slink_gen4.lua",
     "slink_gen5.lua",
     "connector.lua",
     "game_detect.lua",
     "hud.lua",
-    "memory_gb.lua",
     "memory_gba.lua",
     "memory_nds.lua",
     "sfx_arbiter.lua",
     "socket.lua",
     "json_codec.lua",
-    # The Gen 1 client's closure: entry.lua dofiles both of these off the repo root.
+    # The Gen 1 client's closure: entry.lua dofiles these shared modules off the repo root.
     "gen1_write_safety.lua",
+    # The Gen 2 client's own write-safety module (lua/gen2/entry.lua dofiles it off the
+    # repo root, same idiom as gen1_write_safety.lua above).
+    "gen2_write_safety.lua",
+    "write_permit.lua",
+    "gb_checkpoint.lua",
+    # lua/gen1/panel.lua dofiles its sibling ../gb_panel.lua (the shared GB panel, P4.1d).
+    "gb_panel.lua",
+    # lua/gen1/trade_overlay.lua dofiles ../gb_trade_lease.lua (the shared GB trade lease, P4.3c).
+    "gb_trade_lease.lua",
+    "token_scanner.lua",
+    "admission.lua",
+    "hook_registry.lua",
+    "gb_hook_binding.lua",
+    "hello_session.lua",
+    "reply_dispatch.lua",
+    # the GB clients' owed trade reports (lua/gen1/entry.lua, lua/gen2/entry.lua; review MAJOR-1)
+    "owed_reports.lua",
     # Companion-patch modules (RR native features) — pcall-required by the Gen 3 client.
     # Required for the companion patch to work; harmless when the ROM is unpatched
     # (patch_present() stays false, so the client falls back to RAM-poke).
     "mailbox.lua",
     "peer_ghost_npc.lua",
-    # Gen 2 area tables live in lua/ (loaded via _lua_root)
-    "gen2_crystal_areas.lua",
-    "gen2_crystal_locations.lua",
     # Gen 3/4/5 area tables live in data/games/<gen>/ (loaded via _proj_root)
 ]
 
@@ -101,9 +113,25 @@ _LUA_GEN1 = [
     "panel.lua",
 ]
 
+# lua/gen2/ — the Gen 2 client (Crystal, Gold and Silver; U5 cutover). run.lua is what lua/slink.lua
+# dofiles; boxes.lua is NOT part of this graph (no box executor is composed, B-10).
+_LUA_GEN2 = [
+    "run.lua",
+    "entry.lua",
+    "client.lua",
+    "reads.lua",
+    "writes.lua",
+    "rom.lua",
+    "signals.lua",
+    "wire.lua",
+    "boxes.lua",
+    "panel.lua",  # P4.1f: entry.lua composes it (production); it dofiles ../gb_panel.lua
+    "phone.lua",  # P4.5c: entry.lua composes it beside the panel
+    "trade_overlay.lua",  # P4.3b: entry.lua composes it on a trade build; dofiles ../gb_trade_lease.lua
+]
+
 # lua/clients/
 _LUA_CLIENTS = [
-    "gen2_crystal_client.lua",
     "gen3_frlge_client.lua",
     "gen4_hgsspt_client.lua",
     "gen5_bw_client.lua",
@@ -111,13 +139,6 @@ _LUA_CLIENTS = [
 
 # lua/games/
 _LUA_GAMES = [
-    "gen2_crystal.lua",
-    # Unconditionally required at module load by lua/clients/gen2_crystal_client.lua:101
-    # (`local TRAINERS = require("games.gen2_crystal_trainers")`) for trainer-name resolution
-    # in battle/HUD messages. Missing from this list before test_make_release_manifest.py's
-    # launcher-rooted closure caught it -- the require runs at module load, so a Crystal
-    # player's release build failed to start the client at all.
-    "gen2_crystal_trainers.lua",
     "gen3_frlge.lua",
     "gen4_hgsspt.lua",
     "gen5_bw.lua",
@@ -153,6 +174,94 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "profile_overlay.json",
         "write_checkpoint_overlay.json",
     ],
+    "gen2_crystal": [
+        # lua/gen2/entry.lua Entry.PACK_FILES.gen2_crystal (Entry.build reads these at load,
+        # for every title -- the admission catalog walks Crystal/Gold/Silver together).
+        "profile.json",
+        "admission.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "static_encounters.json",
+        "encounter_tables.json",
+        "species_index.json",
+        "evolutions.json",
+        "gifts.json",
+        "moves.json",
+        "trainers.json",
+        "map_names.json",
+        "items.json",
+        "charmap.lua",
+        # Entry.RECEIPT_FILES.gen2_crystal -- the shipped O-22 proofs Entry.build
+        # re-validates before admitting Crystal. Gold/Silver ship none (G1 PENDING).
+        "receipts/crystal.engine_sites.json",
+        "receipts/crystal.write_window.json",
+        "receipts/crystal_battle.qualification.json",
+        "receipts/crystal_town.qualification.json",
+        "receipts/crystal_synth_grass.synth.json",
+        "receipts/crystal_synth_kyle.synth.json",
+        "receipts/crystal_synth_bill.synth.json",
+    ],
+    "gen2_gold": [
+        # Entry.PACK_FILES.gen2_gold -- Entry.build's admission catalog loads these for
+        # every title, whether or not that title is currently ADMITTED.
+        "profile.json",
+        "admission.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "static_encounters.json",
+        "encounter_tables.json",
+        "species_index.json",
+        "evolutions.json",
+        "gifts.json",
+        "moves.json",
+        "trainers.json",
+        "map_names.json",
+        "items.json",
+        "charmap.lua",
+        # Entry.RECEIPT_FILES.gen2_gold (O-22 admission), the shipped proofs Entry.build
+        # re-validates before admitting Gold.
+        "receipts/gold.engine_sites.json",
+        "receipts/gold.write_window.json",
+        "receipts/gold_battle.qualification.json",
+        "receipts/gold_battle_errand.qualification.json",
+        "receipts/gold_town.qualification.json",
+        "receipts/gold_synth_grass.synth.json",
+        "receipts/gold_synth_kyle.synth.json",
+        "receipts/gold_synth_bill.synth.json",
+    ],
+    "gen2_silver": [
+        # Entry.PACK_FILES.gen2_silver -- same as Gold.
+        "profile.json",
+        "admission.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "static_encounters.json",
+        "encounter_tables.json",
+        "species_index.json",
+        "evolutions.json",
+        "gifts.json",
+        "moves.json",
+        "trainers.json",
+        "map_names.json",
+        "items.json",
+        "charmap.lua",
+        # Entry.RECEIPT_FILES.gen2_silver (O-22+O-23 admission) -- Silver's U2 write-window
+        # IS Gold's receipt (its checkpoint rows are identical), so it ships its own
+        # engine-sites + battle qualification plus Gold's write-window and the two Gold
+        # qualification reports it binds to.
+        "receipts/silver.engine_sites.json",
+        "receipts/gold.write_window.json",
+        "receipts/gold_battle.qualification.json",
+        "receipts/gold_town.qualification.json",
+        "receipts/silver_battle.qualification.json",
+        "receipts/silver_town.qualification.json",
+        "receipts/silver_synth_grass.synth.json",
+        "receipts/silver_synth_kyle.synth.json",
+        "receipts/silver_synth_bill.synth.json",
+    ],
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
         "gen3_frlge_locations.lua",
@@ -180,14 +289,15 @@ _COMPANION_UPS = "patch/dist/SLink-RR.ups"
 _COMPANION_README = "patch/README.md"
 # The Game Boy companion UPS files bundled with --with-patch: vanilla Red/Blue (patch/gen1) and
 # the pureRGB overlay per pure title (patch/gen1/purergb, PLAN M3). No Yellow (no free WRAM).
+# Gen 2: the companion overlay per title (tools/build_gen2_companion.py, data/gen2/overlay_provenance.json).
 _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups")
+                     "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
+                     "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")
 _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
 
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched
 _LAUNCHER_SCRIPTS: set[str] = {
     "slink_gen1.lua",
-    "slink_gen2.lua",
     "slink_gen3.lua",
     "slink_gen4.lua",
     "slink_gen5.lua",
@@ -405,6 +515,7 @@ def build_release(
     required: list[Path] = (
         [REPO_ROOT / "lua" / f for f in _LUA_ROOT]
         + [REPO_ROOT / "lua" / "gen1" / f for f in _LUA_GEN1]
+        + [REPO_ROOT / "lua" / "gen2" / f for f in _LUA_GEN2]
         + [REPO_ROOT / "lua" / "clients" / f for f in _LUA_CLIENTS]
         + [REPO_ROOT / "lua" / "games" / f for f in _LUA_GAMES]
         + [
@@ -468,6 +579,10 @@ def build_release(
         for fname in _LUA_GEN1:
             zf.write(REPO_ROOT / "lua" / "gen1" / fname, prefix + f"lua/gen1/{fname}")
             say(f"  [added]   {prefix}lua/gen1/{fname}")
+
+        for fname in _LUA_GEN2:
+            zf.write(REPO_ROOT / "lua" / "gen2" / fname, prefix + f"lua/gen2/{fname}")
+            print(f"  [added]   {prefix}lua/gen2/{fname}")
 
         for fname in _LUA_CLIENTS:
             zf.write(REPO_ROOT / "lua" / "clients" / fname, prefix + f"lua/clients/{fname}")

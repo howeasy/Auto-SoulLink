@@ -27,6 +27,11 @@ One manifest, `patch/gen1/tools/manifest.py` — 15 spans, Red and Blue byte-ide
   from the `DelayFrame` bridge in the reserved RST padding (`trade_service.asm`). Three
   intercept spans: the bridge at `0x0001`, the `DelayFrame` tail redirect at `0x20B7`, and the
   receptionist dispatch at `0x29C3`; five linked routines share bank `$3F`.
+  Like vanilla's Cable Club (`cable_club_npc.asm:56-67`) both players answer "We have to save
+  before trading." and save before the host hears them (the proposer before the party picker,
+  the partner after YES; NO is a refusal), the commit ends in a full `SaveGameData`, and the
+  service picks a request up only on an overworld frame where START could open (review
+  1b33bc31, `tests/unit/test_gen1_trade_save.py`).
 
 **The receptionist has not yet been driven on a running cartridge.** The panel gates pass on
 this trade-carrying build; launching the menu itself is open (requirements row T-1, `P` ◐).
@@ -94,8 +99,8 @@ the bridge (never from an interrupt), and the fade case is held rather than drop
 
 | | Base ROM md5 | Patched md5 (current build) |
 |---|---|---|
-| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `f2f9f2b8920f201276a94c35c859d1d2` |
-| Blue | `50927e843568814f7ed45ec4f944bd8b` | `f4d02daac1d9042884cc0cb3eab1f9c1` |
+| Red  | `3d45c1ee9abd5738df46d2bdda8b57dc` | `cd0af68e5097b8cfa9733225ef055e8a` |
+| Blue | `50927e843568814f7ed45ec4f944bd8b` | `40cc749ee03edfd4a9b31bf088c1a4d2` |
 
 `patch/dist/SLink-RB-Red.ups` and `-Blue.ups`, generated from the built ROMs:
 

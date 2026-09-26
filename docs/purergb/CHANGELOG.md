@@ -26,7 +26,7 @@ Three deliverables sit on top of the rules:
 |---|---|---|
 | Rules on pureRGB | encounter linking, dead zones, faint propagation, party/PC sync, memorials, whiteout, evolution/transform/APEX identity, Explode Mode, rival swap | `lua/gen1/*`, `server/adapters/gen1_purergb.py`, `data/games/gen1_purergb/` |
 | Companion overlay | native Cable Club trade, START-menu SLINK panel, ROM-level APEX collision guard — as **source sections** linked into the pureRGB build | `patch/gen1/purergb/`, `patch/dist/SLink-Pure{Red,Blue,Green}.ups` |
-| Randomized pairs | a lossless fork of Universal Pokémon Randomizer ZX 4.6.1 with pure INI entries, wired into the Manager | `patch/upr/*.patch`, `.cache/slink-upr/PokeRandoZX.jar` (`4.6.1-slink3`, patches 0001–0009 as of `data/upr_jars.json`) |
+| Randomized pairs | a lossless fork of Universal Pokémon Randomizer ZX 4.6.1 with pure INI entries, wired into the Manager | `patch/upr/*.patch`, `.cache/slink-upr/PokeRandoZX.jar` (`4.6.1-slink3`, patches 0001–0010 as of `data/upr_jars.json`) |
 
 ---
 

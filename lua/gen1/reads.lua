@@ -76,11 +76,13 @@ local function dvs_from_raw(raw)
             hp = (atk % 2) * 8 + (def % 2) * 4 + (spd % 2) * 2 + spc % 2}
 end
 
-function R.new(profile, io)
+function R.new(profile, io, Scanner)
     assert(type(profile) == "table" and type(profile.ram) == "table" and
            type(profile.derived) == "table", "Gen 1 title profile required")
     assert(type(io) == "table" and type(io.read_u8) == "function" and
            type(io.read_range) == "function", "injected WRAM byte reader required")
+    assert(type(Scanner) == "table" and type(Scanner.new) == "function",
+        "injected token Scanner required")
     local a, d = profile.ram, profile.derived
     local cm = R.charmap(profile)
     local r = {NULL = R.NULL, charmap = cm}
@@ -88,15 +90,9 @@ function R.new(profile, io)
     local opp_id_offset = assert(d.opp_id_offset, "profile.derived.opp_id_offset required")
     r.bag_capacity, r.opp_id_offset = bag_capacity, opp_id_offset
 
-    function r.decode_name(bytes)
-        if #bytes > d.name_length then return nil, "name exceeds profile length" end
-        local out = {}
-        for i = 1, #bytes do
-            if bytes[i] == cm.terminator then break end
-            out[#out + 1] = cm.glyphs[bytes[i]] or string.format("<$%02X>", bytes[i])
-        end
-        return table.concat(out)
-    end
+    r.decode_name = Scanner.new({glyphs = cm.glyphs, terminator = cm.terminator,
+        max_length = d.name_length,
+        unknown = function(byte) return string.format("<$%02X>", byte) end})
 
     function r.decode_party_mon(b, box)
         local size = box and d.box_struct_size or d.party_struct_size
@@ -137,8 +133,10 @@ function R.new(profile, io)
             mon.slot, mon.species_list_entry = slot, listed
             mon.ot_name_bytes = take(ots, slot * d.name_length + 1, d.name_length)
             mon.nickname_bytes = take(nicks, slot * d.name_length + 1, d.name_length)
-            mon.ot_name = r.decode_name(mon.ot_name_bytes)
-            mon.nickname = r.decode_name(mon.nickname_bytes)
+            mon.ot_name, why = r.decode_name(mon.ot_name_bytes)
+            if mon.ot_name == nil then return nil, "invalid OT name: " .. why end
+            mon.nickname, why = r.decode_name(mon.nickname_bytes)
+            if mon.nickname == nil then return nil, "invalid nickname: " .. why end
             result[#result + 1] = mon
         end
         return result
@@ -281,12 +279,14 @@ function R.new(profile, io)
         -- trainer_class = opponent >= 200 and opponent - 200 or NULL.
         local opponent = io.read_u8(a.wCurOpponent)
         local enemy_hp = io.read_range(a.wEnemyMonHP, 2)
+        local enemy_max_hp = io.read_range(a.wEnemyMonMaxHP, 2) -- battle_struct MaxHP, big-endian
         local player_hp = io.read_range(a.wBattleMonHP, 2)
         return {in_battle = io.read_u8(a.wIsInBattle), type = io.read_u8(a.wBattleType),
                 cur_opponent = opponent, is_trainer = opponent >= opp_id_offset,
                 trainer_class = opponent >= opp_id_offset and opponent - opp_id_offset or R.NULL,
                 enemy_species = io.read_u8(a.wEnemyMonSpecies),
                 enemy_level = io.read_u8(a.wEnemyMonLevel), enemy_hp = word(enemy_hp, 1),
+                enemy_max_hp = word(enemy_max_hp, 1),
                 battle_mon_hp = word(player_hp, 1),
                 player_mon_number = io.read_u8(a.wPlayerMonNumber),
                 result = io.read_u8(a.wBattleResult), link_state = io.read_u8(a.wLinkState),

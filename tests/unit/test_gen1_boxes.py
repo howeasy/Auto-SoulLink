@@ -116,6 +116,7 @@ def _runtime(title, wram, cart, charmap=None):
     if charmap:
         profile.charmap = load((ROOT / charmap).as_posix())
     reads_module = load((ROOT / "lua/gen1/reads.lua").as_posix())
+    scanner_module = load((ROOT / "lua/token_scanner.lua").as_posix())
     writes_module = load((ROOT / "lua/gen1/writes.lua").as_posix())
     boxes_module = load((ROOT / "lua/gen1/boxes.lua").as_posix())
     calls = {"wram": [], "cart": []}
@@ -128,7 +129,8 @@ def _runtime(title, wram, cart, charmap=None):
         assert domain == "System Bus" and 0 <= addr < len(wram)
         wram[addr] = value
 
-    gate = writes_module.new(profile, rt.table_from({"write_u8": write_u8}))
+    permit = load((ROOT / "lua/write_permit.lua").as_posix())
+    gate = writes_module.new(profile, rt.table_from({"write_u8": write_u8}), permit)
 
     def write_cart(offset, blob):
         data = bytes(blob[i] for i in range(1, len(blob) + 1))
@@ -148,7 +150,7 @@ def _runtime(title, wram, cart, charmap=None):
                            "read_u8=function(a) return u(a) end,"
                            "read_range=function(a,n) return range(a,n) end} end")
     read_io = make_read_io(lambda addr: wram[addr], read_range)
-    reader = reads_module.new(profile, read_io)
+    reader = reads_module.new(profile, read_io, scanner_module)
     make_box_io = rt.eval("function(range, cart, w, wc, gate) return {"
                           "read_range=function(a,n) return range(a,n) end,"
                           "read_cart=function(o) return cart(o) end,"
@@ -452,6 +454,145 @@ def test_memorial_last_mon_and_full_box_refuse_without_writes():
     assert (wram, cart) == old and not calls["cart"] and not calls["wram"]
 
 
+@pytest.mark.parametrize("where", ["active", "saved", "memorial_bank"])
+def test_memorial_of_a_boxed_dead_key_moves_it_into_the_memorial_box(where):
+    """BOX-MEMORIAL (O-35, mirror of Gen 2): a box release kills a partner that is usually boxed too, and
+    any partner can die while in the PC. Its memorialize moves the box record into sBox12; the party (one
+    mon here: a boxed memorial never needs a second one) is never touched."""
+    title = "red"
+    dead, lead = _mon(ot_id=55, hp=0), _mon(ot_id=56)
+    source = {"active": None, "saved": 4, "memorial_bank": 8}[where]
+    if source is None:
+        wram, cart = _seed(title, [lead], active=[dead])
+    else:
+        wram, cart = _seed(title, [lead], saved={source: [dead]})
+    _, _, boxes, gate, calls = _runtime(title, wram, cart)
+    gate.arm(gate, "overworld")
+    key = oracle.key(oracle.decode_party_mon(dead["blob"]))
+    party = wram[PROFILE[title]["ram"]["wPartyCount"]:][:oracle.PARTY_LAYOUT["size"]]
+    got = boxes.memorialize(key)
+    assert got is True if source is not None else got[0] is True   # a current-box source waits for a save
+    assert [m["ot_id"] for m in _saved(title, cart, 11)] == [55]
+    assert (_active(title, wram) if source is None else _saved(title, cart, source)) == []
+    assert wram[PROFILE[title]["ram"]["wPartyCount"]:][:oracle.PARTY_LAYOUT["size"]] == party
+    assert all(box["valid"] for box in oracle.verify_boxes(cart)["boxes"].values())
+    assert all(bank["valid"] for bank in oracle.verify_boxes(cart)["banks"].values())
+    prior = (wram[:], cart[:])
+    assert boxes.memorialize(key) is True
+    assert (wram, cart) == prior, "idempotent"
+
+
+def test_memorial_of_a_boxed_key_in_an_uninitialised_pc_initialises_the_saved_boxes_first():
+    title = "red"
+    dead = _mon(ot_id=55, hp=0)
+    wram, cart = _seed(title, [_mon(ot_id=56)], active=[dead], initialized=False)
+    _, _, boxes, gate, calls = _runtime(title, wram, cart)
+    gate.arm(gate, "overworld")
+    got = boxes.memorialize(oracle.key(oracle.decode_party_mon(dead["blob"])))
+    assert got[0] is True and "native save" in got[1]                 # the WRAM source removal waits for a save
+    assert _active(title, wram) == [] and [m["ot_id"] for m in _saved(title, cart, 11)] == [55]
+    assert all(bank["valid"] for bank in oracle.verify_boxes(cart)["banks"].values())
+
+
+def test_memorial_of_a_boxed_key_finishes_after_a_reset_between_its_two_writes():
+    title = "red"
+    dead = _mon(ot_id=55, hp=0)
+    wram, cart = _seed(title, [_mon(ot_id=56)], saved={4: [dead], 11: [dead]})
+    _, _, boxes, gate, calls = _runtime(title, wram, cart)
+    gate.arm(gate, "overworld")
+    assert boxes.memorialize(oracle.key(oracle.decode_party_mon(dead["blob"]))) is True
+    assert _saved(title, cart, 4) == [] and [m["ot_id"] for m in _saved(title, cart, 11)] == [55]
+    assert all(box["valid"] for box in oracle.verify_boxes(cart)["boxes"].values())
+
+
+# ── BOX-MEMORIAL-2 (OMP review of 57e292dc) ────────────────────────────────────────────────────────────
+# The current box is WRAM (wBoxData), durable only when a native save copies it to SRAM; a saved box
+# (a bank slot) is durable at once. A removal must never become durable before its copy.
+class _Durable:
+    """A red World whose current box reverts to its last saved image on a reset (LoadSAV)."""
+
+    def __init__(self, party, active=(), saved=None, current=0):
+        self.title = "red"
+        self.wram, self.cart = _seed(self.title, party, active=active, saved=saved, current=current)
+        _, _, self.boxes, gate, _ = _runtime(self.title, self.wram, self.cart)
+        gate.arm(gate, "overworld")
+        self.current = current
+        self.save()
+
+    def _span(self):
+        start = PROFILE[self.title]["ram"]["wBoxCount"]
+        return start, oracle.BOX_SIZE
+
+    def save(self):
+        a, n = self._span()
+        self.image = bytes(self.wram[a:a + n])
+
+    def reset(self):
+        a, n = self._span()
+        self.wram[a:a + n] = self.image
+
+    def durable(self, ot):
+        out = []
+        for index in range(12):
+            box = oracle.decode_box(self.image) if index == self.current else _saved(self.title, self.cart, index)
+            out += [index for m in box if m["ot_id"] == ot]
+        return out
+
+
+@pytest.mark.parametrize("current,source", [(0, 4), (0, 0), (11, 4)],
+                         ids=["backing_to_backing", "active_to_backing", "backing_to_active"])
+def test_a_boxed_memorial_is_never_lost_and_ends_with_one_durable_copy(current, source):
+    dead = _mon(ot_id=55, hp=0)
+    w = _Durable([_mon(ot_id=56)], active=[dead] if source == current else (),
+                 saved=None if source == current else {source: [dead]}, current=current)
+    key = oracle.key(oracle.decode_party_mon(dead["blob"]))
+    got = w.boxes.memorialize(key)
+    assert got is True or got[0] is True
+    w.reset()                                                 # power off before any native save
+    assert len(w.durable(55)) >= 1, "a reset never loses the mon"
+    for _ in range(4):                                        # the server re-sends; the client settles per save
+        got = w.boxes.memorialize(key)
+        if got is True:
+            break
+        w.save()
+        got = w.boxes.settle_memorial(key)
+        if got is True:
+            break
+    w.save()
+    assert w.durable(55) == [11], "exactly one durable copy, in the memorial box"
+
+
+@pytest.mark.parametrize("current,source", [(0, 0), (11, 4)], ids=["active_source", "active_memorial"])
+def test_a_boxed_memorial_touching_the_current_box_is_not_done_until_a_native_save(current, source):
+    dead = _mon(ot_id=55, hp=0)
+    w = _Durable([_mon(ot_id=56)], active=[dead] if source == current else (),
+                 saved=None if source == current else {source: [dead]}, current=current)
+    got = w.boxes.memorialize(oracle.key(oracle.decode_party_mon(dead["blob"])))
+    assert got[0] is True and "native save" in got[1]
+    if current == 11:
+        assert [m["ot_id"] for m in _saved("red", w.cart, source)] == [55], "the durable source stays"
+
+
+@pytest.mark.parametrize("field", ["nick", "box_level"])
+def test_a_boxed_memorial_never_removes_a_different_record_that_shares_the_key(field):
+    """same_transfer (party->box) skips BoxLevel and the nickname; box->box must compare every byte."""
+    dead = _mon(ot_id=55, hp=0)
+    other = dict(dead)
+    if field == "nick":
+        other["nick"] = oracle.encode_name("OTHER")
+    else:
+        blob = bytearray(dead["blob"])
+        blob[33] = (blob[33] % 99) + 1                        # the party level byte becomes BoxLevel (byte 4)
+        other["blob"] = bytes(blob)
+    wram, cart = _seed("red", [_mon(ot_id=56)], saved={4: [dead], 11: [other]})
+    _, _, boxes, gate, calls = _runtime("red", wram, cart)
+    gate.arm(gate, "overworld")
+    before = (wram[:], cart[:])
+    got, reason = boxes.memorialize(oracle.key(oracle.decode_party_mon(dead["blob"])))
+    assert got is None and "both box and memorial" in reason
+    assert (wram, cart) == before and calls["cart"] == []
+
+
 def test_memorial_current_box_uses_wram_mirror_only():
     title = "yellow"
     dead = _mon(ot_id=42, hp=0)
@@ -582,3 +723,93 @@ def test_pure_nickname_override_writes_only_literal_glyphs():
     nick = bytes(_party(title, wram)[1]["nickname_bytes"])
     body = nick[:nick.index(0x50)]
     assert len(body) == 7 and set(body) <= _LITERAL_GLYPHS, nick.hex()
+
+
+# ── gen1-box-durability (mirror of gen2-box-durability, OMP BOX review F1) ─────────────────────────────
+# A reset before a native SAVE reloads the SAVED party and current box (WRAM, from sGameData/sCurBoxData,
+# pret engine/menus/save.asm LoadSAV); every other saved box keeps whatever SLink wrote into its bank
+# (write_target -> write_cart_bytes). Every intermediate state must be a duplicate, never a loss.
+class _Crash:
+    def __init__(self, title, party, saved):
+        self.title = title
+        self.wram, self.cart = _seed(title, party, saved=saved)
+        self.rt, self.reader, self.boxes, self.gate, _ = _runtime(title, self.wram, self.cart)
+        self.gate.arm(self.gate, "overworld")
+        self.save()
+
+    def _spans(self):
+        ram = PROFILE[self.title]["ram"]
+        return ((ram["wPartyCount"], oracle.PARTY_LAYOUT["size"]), (ram["wBoxCount"], oracle.BOX_SIZE))
+
+    def save(self):
+        self.saved = [bytes(self.wram[a:a + n]) for a, n in self._spans()]
+
+    def reset(self):
+        for (a, n), raw in zip(self._spans(), self.saved):
+            self.wram[a:a + n] = raw
+
+    def copies(self, ot_id):
+        n = sum(1 for m in _party(self.title, self.wram) if m["ot_id"] == ot_id)
+        n += sum(1 for m in _active(self.title, self.wram) if m["ot_id"] == ot_id)
+        for index in range(1, 12):   # box 0 is current (WRAM); the rest live in their banks
+            n += sum(1 for m in _saved(self.title, self.cart, index) if m["ot_id"] == ot_id)
+        return n
+
+    def withdraw(self, key, defer):
+        opts = self.rt.table_from({"defer_backing": defer})
+        result = self.boxes.party_mon(key, self.rt.table_from(BASE), None, None, opts)
+        return result if isinstance(result, tuple) else (result, None)
+
+
+def _crash(ot_id=77):
+    boxed = _mon(ot_id=ot_id)
+    world = _Crash("red", [_mon(ot_id=1)], {5: [boxed]})
+    return world, oracle.key(oracle.decode_party_mon(boxed["blob"]))
+
+
+def test_gen1_backing_withdraw_defers_the_box_removal_until_the_save_witness():
+    world, key = _crash()
+    ok, note = world.withdraw(key, True)
+    assert ok is True and "deferred" in note
+    assert world.copies(77) == 2                         # a duplicate until the save, never a loss
+    world.reset()
+    assert world.copies(77) == 1                         # reset before the save: back in the box only
+    assert world.boxes.party_mon(key, world.rt.table_from(BASE)) is True    # a clean retry
+
+    world, key = _crash()
+    world.withdraw(key, True)
+    world.save()                                         # the native save persisted the party
+    assert world.boxes.party_mon(key, None) is True      # the settle: replay drops the box copy
+    assert world.copies(77) == 1 and _saved("red", world.cart, 5) == []
+    assert all(box["valid"] for box in oracle.verify_boxes(world.cart)["boxes"].values())
+    world.reset()
+    assert world.copies(77) == 1
+
+
+def test_gen1_immediate_backing_withdraw_is_the_loss_the_deferral_prevents():
+    """Known-positive control: the old order removes the durable copy before the party is saved."""
+    world, key = _crash()
+    assert world.withdraw(key, False)[0] is True
+    world.reset()
+    assert world.copies(77) == 0
+
+
+def test_gen1_memorial_of_an_unsettled_withdraw_removes_its_box_source():
+    world, key = _crash()
+    world.withdraw(key, True)
+    assert world.boxes.memorialize(key) is True
+    assert world.copies(77) == 1 and _saved("red", world.cart, 5) == []
+    assert [m["ot_id"] for m in _saved("red", world.cart, 11)] == [77]   # sBox12, the memorial
+    world.reset()
+    assert world.copies(77) >= 1
+
+
+def test_gen1_memorial_source_in_the_memorial_bank_keeps_both_writes():
+    """The source box shares bank 3 with sBox12: its removal must not restore the pre-memorial bank."""
+    boxed = _mon(ot_id=78)
+    world = _Crash("red", [_mon(ot_id=1)], {8: [boxed]})
+    key = oracle.key(oracle.decode_party_mon(boxed["blob"]))
+    world.withdraw(key, True)
+    assert world.boxes.memorialize(key) is True
+    assert _saved("red", world.cart, 8) == [] and [m["ot_id"] for m in _saved("red", world.cart, 11)] == [78]
+    assert all(box["valid"] for box in oracle.verify_boxes(world.cart)["boxes"].values())

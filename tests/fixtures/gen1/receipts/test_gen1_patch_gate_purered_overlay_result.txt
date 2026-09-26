@@ -1,4 +1,6 @@
-[test_gen1_patch_gate] title=purered rom=feb19385
+# lane HEAD=cfbc0c90cfeee979d68a7af756e3ced6cd757ac7 git-status=clean at=2026-09-24T09:50:07-04:00
+# cmd: tools/run_gb_gate.py lua/tests/test_gen1_patch_gate.lua --rom purered_overlay --target town --timeout 300
+[test_gen1_patch_gate] title=purered rom=c7ee0bd9
 [test_gen1_patch_gate] booted at frame 703 (party=1, map=40)
   [ok] 'SLNK' beacon is present at $DEE2  — got "SLNK"
   [ok] frame counter advances  — 664 -> 724 over 60 frames
@@ -6,8 +8,8 @@
   [ok] the displaced TrackPlayTime still runs (play clock advances)  — the hook must chain to what it replaced, not replace it
   [ok] the player can still walk on the patched ROM  — (5,6) -> (4,6)
   [ok] ABI version byte is 3  — got 3
-  [ok] the capability byte advertises SFX  — caps=0x03 — the main-thread sound path is present and must be claimed
-  [ok] the capability byte advertises the panel  — caps=0x03
+  [ok] the capability byte advertises SFX  — caps=0x07 — the main-thread sound path is present and must be claimed
+  [ok] the capability byte advertises the panel  — caps=0x07
   [ok] the panel module sees the cartridge the gate does  — present=true abi=3
   [ok] the panel module sees the SFX capability the gate does  — panel.lua must read SLINK_CAP_SFX from the same caps byte
   [ok] the panel handshake is closed outside the panel  — panel state is 0 in the overworld

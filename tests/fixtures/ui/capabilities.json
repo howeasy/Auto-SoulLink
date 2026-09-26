@@ -65,43 +65,6 @@
       "EVA"
     ]
   },
-  "Crystal (AP)": {
-    "abilities": false,
-    "badges": [
-      "Zephyr Badge",
-      "Hive Badge",
-      "Plain Badge",
-      "Fog Badge",
-      "Storm Badge",
-      "Mineral Badge",
-      "Glacier Badge",
-      "Rising Badge",
-      "Boulder Badge",
-      "Cascade Badge",
-      "Thunder Badge",
-      "Rainbow Badge",
-      "Soul Badge",
-      "Marsh Badge",
-      "Volcano Badge",
-      "Earth Badge"
-    ],
-    "explode_mode": false,
-    "game_id": "gen2_crystal",
-    "info_panel": false,
-    "info_panel_width": 0,
-    "memorial_box_index": 13,
-    "mons_per_box": 30,
-    "party_blob_size": 70,
-    "stat_stage_labels": [
-      "ATK",
-      "DEF",
-      "SPD",
-      "SATK",
-      "SDEF",
-      "ACC",
-      "EVA"
-    ]
-  },
   "Gold": {
     "abilities": false,
     "badges": [
@@ -380,43 +343,6 @@
     ]
   },
   "crystal": {
-    "abilities": false,
-    "badges": [
-      "Zephyr Badge",
-      "Hive Badge",
-      "Plain Badge",
-      "Fog Badge",
-      "Storm Badge",
-      "Mineral Badge",
-      "Glacier Badge",
-      "Rising Badge",
-      "Boulder Badge",
-      "Cascade Badge",
-      "Thunder Badge",
-      "Rainbow Badge",
-      "Soul Badge",
-      "Marsh Badge",
-      "Volcano Badge",
-      "Earth Badge"
-    ],
-    "explode_mode": false,
-    "game_id": "gen2_crystal",
-    "info_panel": false,
-    "info_panel_width": 0,
-    "memorial_box_index": 13,
-    "mons_per_box": 30,
-    "party_blob_size": 70,
-    "stat_stage_labels": [
-      "ATK",
-      "DEF",
-      "SPD",
-      "SATK",
-      "SDEF",
-      "ACC",
-      "EVA"
-    ]
-  },
-  "crystal_ap": {
     "abilities": false,
     "badges": [
       "Zephyr Badge",

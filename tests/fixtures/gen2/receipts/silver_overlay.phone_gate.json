@@ -1,0 +1,180 @@
+{
+ "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+ "cases": {
+  "battle": {
+   "extra": {
+    "battle_from": 3639,
+    "battle_to": 4563,
+    "rings_in_battle": 0
+   },
+   "id": 2,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 4893
+   },
+   "step_at": 4797,
+   "via": "permit"
+  },
+  "named_fallback": {
+   "extra": {
+    "cookie": 166,
+    "species": [
+     0,
+     0
+    ]
+   },
+   "id": 3,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 14161
+   },
+   "step_at": 14065,
+   "via": "binder"
+  },
+  "named_map_change": {
+   "extra": {
+    "crossed": 13018,
+    "restaged": true,
+    "staged_before_crossing": true,
+    "wipes": 1
+   },
+   "id": 1,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 13116
+   },
+   "step_at": 13016,
+   "via": "binder"
+  },
+  "native": {
+   "extra": {
+    "native_ring": {
+     "armed": 1,
+     "caller": 4,
+     "frame": 10917,
+     "id": 2,
+     "stage": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+     ]
+    }
+   },
+   "id": 1,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 12077
+   },
+   "step_at": 11982,
+   "via": "permit"
+  },
+  "save": {
+   "extra": {
+    "armed_at_save": 2,
+    "save_site_frame": 9255,
+    "sram_backup": 0,
+    "sram_changed_bytes": 938,
+    "sram_primary": 0
+   },
+   "id": 2,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 9765
+   },
+   "step_at": 9670,
+   "via": "permit"
+  },
+  "start_menu": {
+   "extra": {
+    "armed_in_menu": 3,
+    "id_in_menu": 0
+   },
+   "id": 3,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 7744
+   },
+   "step_at": 7649,
+   "via": "permit"
+  },
+  "town": {
+   "extra": {
+    "armed_while_standing": 1,
+    "id_while_standing": 9,
+    "req_while_standing": 0
+   },
+   "id": 1,
+   "result": "PASS",
+   "ring": {
+    "caller": 0,
+    "frame": 6272
+   },
+   "step_at": 6177,
+   "via": "binder"
+  }
+ },
+ "client_write_scope": "phone (lua/gen2/panel.lua permit reason phone, mailbox +32, the wUnusedMapBuffer stage)",
+ "code_digest": {
+  "commit": "543cd1dcb1543aa168f8be43414ddc3edf24a34d",
+  "digest": "593616e6e91647e3640a97675f6e114a5e1caa2f7d75d4f2547fae3586bf6dd1",
+  "dirty": [],
+  "schema": "gen2-code-digest-v1",
+  "scope": [
+   "lua/*.lua",
+   "lua/gen2/**",
+   "lua/core/**",
+   "server/**/*.py",
+   "data/games/gen2_crystal/**",
+   "data/games/gen2_gold/**",
+   "data/games/gen2_silver/**"
+  ]
+ },
+ "core_mode": "CGB",
+ "evidence_level": "PHYSICAL",
+ "fixture": "silver_battle",
+ "fixture_sha256": "0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd",
+ "harness_write_scopes": [
+  {
+   "frame": 10618,
+   "value": 2,
+   "what": "wSpecialPhoneCallID = SPECIALCALL_ROBBED"
+  }
+ ],
+ "input_mode": "normal_buttons",
+ "overlay_sha1": "583d8df4deb1831523521d20065504258cbaba28",
+ "qualification_attempt_id": "requal-silver-battle-n14b",
+ "result": "PASS",
+ "schema": "gen2-phone-gate-v2",
+ "sram": {
+  "backup": 4213,
+  "primary": 10211
+ },
+ "title": "silver"
+}

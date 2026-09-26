@@ -330,9 +330,13 @@ def test_entry_admits_each_pure_sha1_as_its_own_title(lua, key):
     pack is the pure one — which is what makes gen1_gate hand the driver the pure facts table."""
     entry = _dofile(lua, "lua/gen1/entry.lua")
     sha = _lock()[g1.PURERGB_KEYS[key]]["sha1"]
+    with open(g1.purergb_dump(key), "rb") as handle:
+        rom = handle.read()
     admitted = entry.admit(lua.table(root=_REPO.replace("\\", "/"),
-                                     json=_dofile(lua, "lua/json_codec.lua"), rom_sha1=sha,
-                                     indatabase=False, header="POKEMON RED"))
+                                      json=_dofile(lua, "lua/json_codec.lua"), rom_sha1=sha,
+                                      indatabase=False, header="POKEMON RED", rom_size=len(rom),
+                                      read_rom_u8=lambda offset: rom[int(offset)]))
+    assert not isinstance(admitted, tuple), admitted
     assert admitted["title"] == key
     assert admitted["pack"] == "gen1_purergb"
     assert admitted["kind"] == "clean"
@@ -342,10 +346,14 @@ def test_entry_still_admits_the_vanilla_sha1s(lua):
     entry = _dofile(lua, "lua/gen1/entry.lua")
     with open(os.path.join(_REPO, "data", "games", "gen1_rby", "profile.json"), encoding="utf-8") as handle:
         titles = json.load(handle)["titles"]
+    with open(os.path.join(_REPO, "patch", "build", "gen1_red.gb"), "rb") as handle:
+        rom = handle.read()
     admitted = entry.admit(lua.table(root=_REPO.replace("\\", "/"),
-                                     json=_dofile(lua, "lua/json_codec.lua"),
-                                     rom_sha1=titles["red"]["rom_sha1"], indatabase=False,
-                                     header="POKEMON RED"))
+                                      json=_dofile(lua, "lua/json_codec.lua"),
+                                      rom_sha1=titles["red"]["rom_sha1"], indatabase=False,
+                                      header="POKEMON RED", rom_size=len(rom),
+                                      read_rom_u8=lambda offset: rom[int(offset)]))
+    assert not isinstance(admitted, tuple), admitted
     assert admitted["title"] == "red" and admitted["pack"] == "gen1_rby"
 
 
