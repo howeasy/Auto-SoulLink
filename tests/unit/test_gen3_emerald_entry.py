@@ -10,9 +10,12 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 
+import lupa
 import pytest
 
+import tests.unit.test_gen3_entry as te
 from tests.unit.test_gen3_entry import PACKS, REPO, World, _admit, lua_to_py
 from tests.unit.test_slink_route import _NEW_GEN3_CLIENT, _rom_gba, _run_launcher
 
@@ -115,6 +118,62 @@ def test_an_admitted_emerald_build_no_longer_needs_the_allow_unadmitted_flag():
     client, parts = world.Entry.build(world.deps())
     assert client is None and parts.mode == "observer"
     assert not any("unadmitted" in line for line in world.logs)
+
+
+# The seam must still refuse an unadmitted title after EG4 (it stays for the next one, e.g. AP):
+# the guards below run on a tmp copy of the Emerald pack that says admitted=false.
+_MSG = "emerald is a known but unadmitted Gen 3 title in gen3_emerald"
+
+
+@pytest.fixture
+def unadmitted_emerald(tmp_path, monkeypatch):
+    shutil.copytree(te.REPO / "lua", tmp_path / "lua")
+    pack_dir = tmp_path / "data" / "games" / "gen3_emerald"
+    shutil.copytree(te.REPO / "data" / "games" / "gen3_emerald", pack_dir)
+    prof = json.loads((pack_dir / "profile.json").read_text("utf-8"))
+    prof["titles"]["emerald"]["admitted"] = False
+    (pack_dir / "profile.json").write_text(json.dumps(prof), "utf-8")
+    monkeypatch.setattr(te, "REPO", tmp_path)
+    monkeypatch.setattr(te, "ENTRY", (tmp_path / "lua" / "gen3" / "entry.lua").as_posix())
+    monkeypatch.setitem(te.PACKS, "gen3_emerald", pack_dir)
+    return tmp_path
+
+
+def test_an_unadmitted_observer_build_needs_the_exact_flag(unadmitted_emerald):
+    world = World(pack="gen3_emerald", title="emerald", build=False)
+    with pytest.raises(lupa.LuaError, match=_MSG):
+        world.Entry.build(world.deps())
+    for wrong in (True, "1", "gen3_frlg/emerald", "gen3_emerald/firered"):   # exact pack/title only
+        with pytest.raises(lupa.LuaError, match=_MSG):
+            world.Entry.build(world.deps(allow_unadmitted=wrong))
+    assert world.registered == []
+    # write-free, over the observer's REAL io (shadow_run.build_io: every sink refuses)
+    shadow = world.lua.eval(f'dofile("{(unadmitted_emerald / "lua/gen3/shadow_run.lua").as_posix()}")')
+    mem = world.lua.table(
+        read_u8=lambda a, d=None: (world.rom if d == "ROM" else world.bus).get(int(a), 0),
+        read_u16_le=lambda a, d=None: world._read(int(a), 2),
+        read_u32_le=lambda a, d=None: world._read(int(a), 4),
+        framecount=lambda: world.frame)
+    world.io = shadow.build_io(mem, lambda name: 0)
+    client, parts = world.Entry.build(world.deps(allow_unadmitted="gen3_emerald/emerald"))
+    assert client is None and parts.mode == "observer"
+    assert parts.writes is None and parts.native is None and parts.signals is not None
+    for sink in ("write_u8", "write_u16", "write_u32", "write_bytes"):
+        with pytest.raises(lupa.LuaError):
+            world.io[sink](0x02000000, 0)
+    assert [line for line in world.logs if "OBSERVER building unadmitted" in line] == [
+        "[SLink-gen3] OBSERVER building unadmitted gen3_emerald/emerald"]
+
+
+def test_production_refuses_an_unadmitted_title_even_with_the_flag(unadmitted_emerald, monkeypatch):
+    from tests.unit.test_gen3_entry import _production
+    monkeypatch.setenv("SLINK_SHADOW_UNADMITTED", "gen3_emerald/emerald")
+    world = World(pack="gen3_emerald", title="emerald", build=False)
+    with pytest.raises(lupa.LuaError, match=_MSG):
+        _production(world, allow_unadmitted="gen3_emerald/emerald")
+    with pytest.raises(lupa.LuaError, match=_MSG):
+        _production(world)
+    assert world.registered == []
 
 
 def test_only_the_observer_reads_the_unadmitted_env_and_slink_never_loads_it():
