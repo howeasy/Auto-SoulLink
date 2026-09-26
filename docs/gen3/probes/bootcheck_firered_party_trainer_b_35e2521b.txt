@@ -1,0 +1,20 @@
+# gen3_fixtures boot-check fixture=firered_party_trainer_b item=F-6 cut=35e2521b
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-migration-planning-5d8e45 (branch claude/gen3-migration-planning-5d8e45)
+# command: python tools/gen3_fixtures.py boot-check --rom "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba" --fixture tests/fixtures/gen3/firered_party_trainer_b.sav --title firered --saveram-name "Pokemon - FireRed Version (USA).SaveRAM" --timeout 600
+# verdict: PASS
+# inputs: rom:firered=41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc
+--- attempt 1 of 1 ---
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\patch\build\gen3_fixture_runs\bootcheck_firered_party_trainer_b\Pokemon - FireRed Version (USA).SaveRAM from tests\fixtures\gen3\firered_party_trainer_b.sav (counter=5)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 5 -> 6  (5s)
+phase start frame=1 title=firered
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=5
+phase field frame=731 map=(1,0)
+phase save-menu frame=731 counter=5
+phase save-dialog frame=960 row=4
+phase saved frame=1487 counter=5->6
+phase slot-complete frame=1729 sectors=14/14
+phase flushed frame=1918
+RESULT: PASS counter 5 -> 6
+BOOT-CHECK PASS tests\fixtures\gen3\firered_party_trainer_b.sav counter=5->6 party=[{'key': '2D356A90:6621F275', 'species': 7, 'level': 13}, {'key': '263620B6:6621F275', 'species': 16, 'level': 4}]
