@@ -5,6 +5,57 @@ Read this first after a pause or compaction. The plan is `docs/gen3_emerald/PLAN
 `E:/Google Drive/SLink/.claude/worktrees/gen3-emerald`. It is local only: not pushed or merged. Its
 base is Gen 3 `5f050857`.
 
+## CHECKPOINT 5 (2026-09-26 ~16:30Z, E4 nearly done; owner pause after 3 h): resume here
+
+- **EG3 SIGNED** by the owner ("Signed. Lets go.", `20f1be76`). Master `e41f1c93` merged in at
+  `3784b376` (docs/protocol.md: master's file + our 8.2 block + path-aware citation remap;
+  OMP cx-fb4554f4 follow-ups `262a91cf`).
+- **E4 (duos) merged `c2f1b902`:** six Emerald<->Emerald scenarios PASS at cut `cd93382b`
+  (faint_cmd, reconnect incl. wrong-save refusal, deadzone, link, boxsync, linked_faint_active =
+  P+H on hardware, also once with an A-side whiteout). Receipts `docs/gen3_emerald/probes/duo_e4_*`.
+  Pre-EG4 the duo driver admits Emerald through a TEST-ONLY seam (lua/tests/duo/duo_gen3_main.lua
+  `test_admission_codec`, logged in every receipt); production refusals unchanged. Hunters: pc
+  fixture -> Oldale -> Route 103 grass (12..13,14..15), battles off on the approach; battle
+  fixture -> Route 102. `hunt_area` is per fixture target.
+- **E4b (final-cut runner) merged `097d9396`:** `tools/gen3_final_cut.py --title emerald` (23
+  rows incl. checkpoint_emerald via the now title-aware `tools/gen3_probe_receipt.py`);
+  `gen_area_map.py --check`; zip_boot_emerald = BLOCKED-EG4 (allowed skip) until the cut carries
+  the flip, ZIP-DEFECT otherwise. FR/LG and RR plans byte-identical (re-diffed).
+- **In flight at pause (check first):** card E4c on `claude/gen3-emerald-legs`
+  (C:/slink-wt/em-legs): an Emerald whiteout_gen3 receipt (outdoor respawn at Oldale 0.10 (6,17),
+  healed in C, rebuild writes in the Emerald write window) + title-aware `sb1_ptr`. If it landed,
+  merge it and add whiteout back to Emerald's final-cut rows; if not, its report holds the design.
+- **EG4 prep branch `claude/gen3-emerald-eg4` (C:/slink-wt/em-eg4, UNMERGED until the owner
+  signs EG4):** `842e1c0c` four barriers removed (slink.lua BPEE refusal, Entry.ROUTED,
+  profile admitted, Manager gen3_e) + `0d9b2376` observer-seam guards on a tmp unadmitted pack +
+  `e7966019` real-pack production coverage (17 tests red if the flag reverts) and current-state
+  docs + `b6c97878` doc tense. Review OMP cx-136573c0. Rebase/merge it onto the lane before the
+  EG4 request; then drop the duo driver's TEST-ONLY seam (a no-op once admitted).
+- **NEXT:** finish E4c -> run the Emerald final cut on a cut that carries the EG4 branch
+  (`python tools/gen3_final_cut.py --cut <sha> --title emerald`) -> write
+  `docs/gen3_emerald/EG4_request.md` (T3 template) -> owner plays a live E<->E duo from the
+  Manager (plan EG4 row) -> owner signs EG4.
+- **EG4 request carry list:**
+  - unknown-hash BPEE with all 21 anchors admits as clean and routes (signed at EG3 section 2;
+    FR/LG/RR policy). OMP cx-136573c0 F3 suggests hash-only for Emerald: owner decision.
+  - Emerald calc (Emerald.js) becomes reachable at EG4; not pret-checked (plan E6).
+  - gen3_frlg/profile.json legacy `emerald` stub still read by test_gen3_entry.py
+    test_build_refuses_an_unadmitted_title (PLAN section 2 schedules its deletion).
+  - lua/gen3/run.lua re-admits without the ROUTED / header re-check slink.lua does (Gen 3 client
+    file, pre-existing): route to the Gen 3 lane or fix at EG4.
+  - tools/gen_gen3_write_checkpoint.py UNADMITTED_PACKS stays a generation grouping (moving
+    Emerald into PACKS pulls it into FR-shaped tests).
+  - README release-candidate row: add Emerald's final-cut counts.
+  - tests/live/test_gen3_shadow_gates.py (named in the E2 plan row) does not exist; the final
+    cut uses tools/gen3_shadow_negatives.py over the committed manifest.
+- **Other findings (not ours to fix here):** `tools/e2e_duo.py` GAMES has a dead duplicate
+  `"gen3_rr"` key (old-client row overridden; ruff F601, on master); the client logs
+  `unhandled command dead_keys` on FR and Emerald; `tests/fixtures/gen3/README.md` says
+  emerald_pc mons are in "box 1" (decode says box 0); UI capabilities fixture drift from the
+  Gen 2 rename (chip task_aaa2356a).
+- **Before master:** batch with the Gen 2 lane (server/** changed -> their receipts go stale) and
+  tell the Gen 3 lane the FR/LG/RR write_checkpoint hashes moved (E3).
+
 ## CHECKPOINT 4 (2026-09-26 ~12:20Z, at the EG3 gate): resume here
 
 - **E3 is done**, and the **EG3 request** (`docs/gen3_emerald/EG3_request.md`, cut `ef99d9b8`,
