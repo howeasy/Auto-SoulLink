@@ -332,9 +332,9 @@ User accepted "your sprite" as a fallback; revisit after movement feels right.
 | engine addresses (validated) | `patch/src/ADDRESSES.md` |
 | build pipeline | `patch/tools/build.py` |
 | apply-patch md5 + feature docs | `patch/README.md` |
-| Lua opcode/GhostState mirror | `lua/mailbox.lua` |
-| receiver (spawn/post target/clear) | `lua/peer_ghost_npc.lua` |
-| sender + parse + dispatch | `lua/clients/gen3_frlge_client.lua` (~1470 send, ~197 parse, ~594 dispatch) |
+| Lua opcode/GhostState mirror | `lua/mailbox.lua` (since deleted, addc9225; ghost sending is now stubbed in `lua/gen3/client.lua`) |
+| receiver (spawn/post target/clear) | `lua/peer_ghost_npc.lua` (since deleted, addc9225) |
+| sender + parse + dispatch | `lua/clients/gen3_frlge_client.lua` (since deleted, addc9225; superseded by `lua/gen3/*.lua`) |
 | server relay | `server/state.py` (`_handle_ghost_pos`, `_handle_peer_interact`) |
 | live tests | `lua/tests/test_live_ghost*.lua`, `test_live_msgboxdismiss.lua`, `test_live_peerinteract.lua` |
 | re-arch plan | `C:\Users\howar\.claude\plans\this-task-is-purely-sequential-twilight.md` |

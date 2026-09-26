@@ -7,6 +7,10 @@ map-object spans). Pinned clones: Crystal `7a7881d0`, Gold/Silver `656583c9` (`.
 `.cache/pret`). Addresses from `data/gen2/{pokecrystal,pokegold,pokesilver}.sym`. `C`/`G` = those clones.
 SOURCE only; implementation card N14b is still to do, then re-qualify all eight fixtures.
 
+> **Edit (docs sweep, 2026-09-26): N14b has since landed.** `tools/gen2_fixtures.py` now has a
+> `RESAVE_RULED_WRAM` table (daily countdown, roamer indices, Gold/Silver `wGameTimerPaused`) that
+> implements the rules this card derived. Treat "still to do" above as historical.
+
 ## Rules
 
 | Rule | Crystal | Gold/Silver | Required transition |

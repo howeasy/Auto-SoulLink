@@ -1,5 +1,7 @@
 # Archived Gen 3 gates (old client driver)
 
+**Removed client -- not live documentation.** Everything here targets the old Gen 3 client that C5-6 deleted (`addc9225`; full tree at tag `archive/gen3-old-client`). Nothing in this folder runs. The live Gen 3 client is `lua/gen3/` (entry `lua/gen3/entry.lua`), and its gates live in `lua/tests/` and `tests/live/`.
+
 These gates exercise the old client's own Lua (`lua/peer_ghost_npc.lua`, or the `msgbox` routing in `lua/clients/gen3_frlge_client.lua` via `memory_gba`/`game_detect`), which P5 card C5-6 deletes. They are never run: `tests/live/test_lua_gates.py` scans only `lua/tests/`, not this folder. They are kept for reference only (card C5-4c).
 
 - `duo_main.lua`: the legacy Radical Red savestate harness is archived because its deleted `mailbox.lua` and `gen3_frlge_client.lua` dependencies were replaced by `duo_gen3_main.lua`.

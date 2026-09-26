@@ -26,9 +26,13 @@ final cut, **OPEN** = not started, **BLOCKED** = cannot run with the current har
 2. **Rewind off.** `C4-6t` (`10e4a702`) forces it off in every generated run config; the machine's
    base `E:/Howard/Bizhawk/config.ini` still has it ON, so any manually launched EmuHawk must not use
    the base config (`docs/gen3_resume.md`, CHECKPOINT 13's closing line).
-3. **Emulator and inputs present**: `E:/Howard/Bizhawk/EmuHawk.exe`; the dumps at the repo root
-   (`Pokemon - FireRed Version (USA).gba`, `Pokemon - LeafGreen Version (USA).gba`); the staged
-   copies under `patch/build/` the gates use; the fixtures under `tests/fixtures/gen3/` (committed,
+3. **Emulator and inputs present**: `E:/Howard/Bizhawk/EmuHawk.exe`; the clean dumps
+   (`Pokemon - FireRed Version (USA).gba`, `Pokemon - LeafGreen Version (USA).gba`) and the RR
+   companion. `copy_inputs` (`tools/gen3_final_cut.py`) looks in the lane tree, then this checkout, then the main
+   checkout (`main_checkout()`), and takes the first file whose sha1 (and md5 for the companion)
+   matches `rom_pins` -- a present-but-unpinned copy is skipped, and no match fails the lane
+   closed. It copies each pinned dump into the lane under both its root name and its `patch/build/`
+   staged name (`PINNED_INPUTS`); the fixtures under `tests/fixtures/gen3/` (committed,
    see §1.3); for Gen 1/6, `patch/gen1/build/slink_{red,blue}.gb` and the Gen 1 fixtures.
 4. **State builds first** (§1). The `.State` files are lane-local artifacts, never committed, so a
    fresh lane must rebuild them before any probe row.

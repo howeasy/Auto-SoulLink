@@ -1,4 +1,35 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 8 late: FIRST PHYSICAL Gen 2 PRODUCTION WRITE (gen2_faint C<->C + G<->S); paused for compaction)
+# Gen 2 implementation resume
+
+## Current state (2026-09-26): read this first
+
+- **Where the code is:** Gen 2 is merged into LOCAL master with Gen 1 and Gen 3 (`1d02702f` at the
+  time of writing). **Not pushed**: `origin/master` is `d13d2b6e`. This worktree's branch,
+  `codex/gen2-foundation`, tracks master; nothing Gen 2 is unmerged except these notes.
+- **Evidence:** 98/98 Gen 2 sweep cells are pinned at CODE_DIGEST `e8ca0067` (`tools/gen2_code_digest.py`),
+  which is master's. The fixtures, duo-pairs, live-gates and live-trade-gates lanes pass on the merged tree;
+  live-new-gates last ran PASS 13/13 at `593616e6` (before the Gen 3 merge) and was not re-run after it.
+  `release-evidence` is red only on the owner items below. The RC milestone tag
+  `gen2-rc-evidence-2026-09-25` records the earlier RC evidence (digest `ccd62421`).
+- **Owner items, all that's left:** the G4 ruling (play the overlay build; the quoted ruling goes in
+  PLAN.md §6.1), then `python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json
+  --overlay-provenance data/gen2/overlay_provenance.json --promote-overlays` turns the three overlay rows
+  (C `b405446e`, G `69067c4b`, S `583d8df4`) from BUILT to ADMITTED; then the push.
+- **Re-sweep trigger:** any change to `lua/*.lua`, `lua/gen2/**`, `lua/core/**`, `server/**/*.py` or
+  `data/games/gen2_*/**` changes the digest and stales every Gen 2 receipt (a ~2 h, 98-cell
+  `tools/gen2_final_sweep.py` run). Two things are parked for the next one: the corrected
+  `data/games/gen2_crystal/README.md` (currently stale; that pack is live and read by `gen2_gsc`), and the
+  digest excluding `*.md`.
+- **Post-RC batch:** complete. See the status table at the top of `POST_RC_CARDS.md`.
+- **Queue:** the release verifier re-runs source verification on every `load_context` call (no
+  `shared_contexts()`); PER-PLAYER-TITLES-PERSISTED; `verify_gen2_release.py --lane coverage-map` errors
+  "coverage input pins are stale or incomplete" (gen2_requirements.md's S/M/P grid is still the skeleton;
+  code/data work, found by the doc sweep); this worktree's `.cache/gen2-build/pokecrystal/pokecrystal*.gbc`
+  (gitignored build outputs) disappeared on 2026-09-26 between ~03:00 and the doc sweep, cause unknown;
+  rebuild from the pinned source before the next Gen 2 sweep here.
+
+Everything below is the chronological coordinator log. Older entries describe states that have since changed.
+
+## Log (first written 2026-09-23, session 8)
 
 ## Who coordinates
 
@@ -622,3 +653,4 @@ Cross-lane contacts (cross-session, by name):
 - Gen1-Collab2 end-to-end on master 88c2c1ac: 11332 passed, 0 failed, 0 errors (their 27 = box provisioning: old UPR jar 7064a77d vs pinned 28292b59; stale slink_RR.gba). SHARED release_lanes.py fixed on master 56449231: (1) passed-count misparsed when failures present (explains "0 passed, 2 failed" pure duo), (2) skip accounting counted lines not [N] aggregates (explains "20 skipped but 15 lines"). Merge 56449231 before landing receipts and RE-RUN verify_gen2_release on it. PROVISIONING NOTE: a box needs the UPR 0001-0010 jar (28292b59), pure builds, overlays, fork source, Gen 2 clones for Gen 2 qualification.
 - 03:xx 96/98 pinned at digest e8ca0067 (05f1b64c 90 + 2232549c 6). Merged master 56449231 (runner fixes) -> 673ed6d0. Gen 2 lanes with fixed runner: fixtures/duo-pairs/live-trade-gates/live-gates PASS; release-evidence RED only = 3 overlays BUILT + G4 unsigned (OWNER) + cc gen2_poison + gs gen2_gender_clause (TRIAGE: poison stalls mid "Enemy WEEDLE used STR[ING SHOT]" text, ready=false -> freeze-vs-driver investigation, production defect = STOP; gender clause unobserved x3 -> rerun, check day pin vs table).
 - 03:2x DONE: LOCAL MASTER 3b41a397 (not pushed) = Gen 1 + Gen 2 + Gen 3 + Gen 2 re-sweep receipts 98/98 at digest e8ca0067 (= master). Main-checkout collect-only 14215/0 err. Provisioned verdict: release-evidence RED only on the 4 OWNER items (G4 signature; crystal/gold/silver overlays BUILT). (Main checkout has no Gen 2 clones, so its Gen 2 release-evidence reads "not cloned" everywhere: correct by design.) OPEN: owner G4 ruling -> PLAN §6.1 -> gen_gen2_admission --promote-overlays; push = owner. QUEUE: verifier loader caching; Gen1-Collab2 6 unexplained skips (theirs).
+- 03:4x master 0aa08927: 50d307bf rewords the two older Gen 2 decomp skips to the shared absent/wrong rule (Gen1-Collab2 found them; asked to drop their 2 ALLOWED_SKIPS fragments). Gen1-Collab2: master 835f7ae6 was the first fully green Gen 1 fast gate with all three generations (unit 11333 passed, 0 unexplained). Still open: owner G4 + --promote-overlays; push.

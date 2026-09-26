@@ -341,6 +341,112 @@ def test_the_field_rule_catches_the_pre_field_sweep_document():
     assert any("server.py:3944" in p and "`species_id`" in p for p in problems), problems
 
 
+# ── C4-CITE6: every citation names a file that exists, within its line count ────────────────
+#
+# Rules 1-4 above only ever look at `server.py`/`state.py` citations (CITATION's own pattern),
+# and only judge the ones a row's own backticked symbols/events/commands/fields let them judge.
+# They have never looked at a `.lua` citation, or asked whether the *file itself* still exists --
+# a citation naming a file that was deleted wholesale (the old Gen 3 client, `html_render.py`)
+# slips through every one of them. This is the blunter, wider check: every `<path>.py:<a>[-<b>]`
+# or `<path>.lua:<a>[-<b>]` citation anywhere in the doc must name a file this tree actually has,
+# and its line range must fit inside that file. It does not ask whether the cited lines say what
+# the row claims -- that is rules 1-4's job where they can reach, and a human's otherwise.
+_ANY_CITATION = re.compile(r"([A-Za-z0-9_./-]+\.(?:py|lua)):(\d+)(?:-(\d+))?")
+_RESOLVE_DIRS = ("server", "lua", "tools", "tests")
+
+
+def _resolve_any(path: str) -> tuple[Path | None, str | None]:
+    """(file, error) for a bare-or-repo-relative `<path>.py|lua` citation; error is None on a
+    clean resolve.
+
+    A path containing "/" is repo-relative (the doc's other convention alongside bare
+    basenames) and is checked directly under the repo root. A bare basename is resolved by
+    searching _RESOLVE_DIRS for it: exactly one hit resolves it, zero hits is "no such file",
+    and more than one is "ambiguous" -- the doc must spell an ambiguous basename out as a
+    repo-relative path instead of trusting a search to pick the right one.
+    """
+    if "/" in path:
+        candidate = _REPO / path
+        return (candidate, None) if candidate.is_file() else (None, "no such file")
+    hits = sorted({p for d in _RESOLVE_DIRS if (_REPO / d).is_dir()
+                   for p in (_REPO / d).rglob(path)})
+    if not hits:
+        return None, "no such file"
+    if len(hits) > 1:
+        return None, f"ambiguous basename ({len(hits)} matches under {_RESOLVE_DIRS}) -- cite a repo-relative path"
+    return hits[0], None
+
+
+
+# A citation with no extension at all -- `gen3:1477` rather than `lua/gen3/client.lua:1477` --
+# is invisible to _ANY_CITATION (which requires `.py`/`.lua`) and was how 85 citations into the
+# deleted old Gen 3 client hid from this whole file for a full pass. `gen3:` was the only such
+# prefix in the doc (checked by hand against every bare `<word>:<digit>` in it, including
+# `gen1`/`gen2`/`server`/`state`/`client`/`connector`/`panel`/`boxes`/`native`/`reads`/`writes`/
+# `entry`/`signals`/`deferred`/`session`/`hud`/`json` and a fully generic bare-word scan -- the
+# only other matches were JSON field names in prose, `panel_abi:0`, `duration`/`choice`/`slot`,
+# never a citation), so the check here is deliberately narrow rather than a generic bare-word
+# scanner that would flag those field names too.
+_BARE_GEN3 = re.compile(r"\bgen3:\d")
+
+
+def check_all_citations_exist(text: str) -> list[str]:
+    """Every `<path>.py|lua:<a>[-<b>]` citation whose file is missing, ambiguous, or whose line
+    range runs past that file's own length, plus any bare `gen3:<digits>` shorthand (never a
+    real path, always the deleted old client). Empty == every citation resolves."""
+    problems: list[str] = []
+    line_counts: dict[str, int] = {}
+    for lineno, line in enumerate(text.splitlines(), 1):
+        if _BARE_GEN3.search(line):
+            problems.append(
+                f"docs/protocol.md:{lineno}: bare `gen3:` shorthand -- cite the real "
+                f"lua/gen3/*.lua or lua/core/*.lua path instead")
+        for m in _ANY_CITATION.finditer(line):
+            path = m.group(1)
+            end = int(m.group(3) or m.group(2))
+            file, err = _resolve_any(path)
+            if err:
+                problems.append(f"docs/protocol.md:{lineno}: {m.group(0)} -- {err}")
+                continue
+            key = str(file)
+            if key not in line_counts:
+                line_counts[key] = len(file.read_text(encoding="utf-8", errors="replace").splitlines())
+            if end > line_counts[key]:
+                problems.append(
+                    f"docs/protocol.md:{lineno}: {m.group(0)} -- {path} has only "
+                    f"{line_counts[key]} lines")
+    return problems
+
+
+def test_every_citation_names_a_real_file_within_its_line_count():
+    problems = check_all_citations_exist(DOC.read_text(encoding="utf-8"))
+    assert not problems, "citation(s) naming a missing/ambiguous file or an out-of-range line:\n" + "\n".join(problems)
+
+
+def test_the_existence_rule_catches_a_deleted_file_citation():
+    """Falsifier for C4-CITE6, built fresh rather than pinned to a revision: the old Gen 3
+    client (`lua/clients/gen3_frlge_client.lua`) was deleted wholesale at `addc9225`, so any
+    citation of it is a real drift no line-range check could ever have caught. Proven on a
+    SCRATCH copy of the doc text -- the real file on disk is never touched for this."""
+    text = DOC.read_text(encoding="utf-8") + "\n\nscratch citation: `gen3_frlge_client.lua:10`\n"
+    problems = check_all_citations_exist(text)
+    assert any("gen3_frlge_client.lua:10" in p for p in problems), \
+        "the deleted-file citation passed; C4-CITE6 has no teeth"
+
+
+def test_the_bare_gen3_shorthand_is_rejected():
+    """Falsifier for the bare-`gen3:` rule: 85 citations of exactly this shape (`gen3:1477`, no
+    extension, no directory) pointed into the deleted old Gen 3 client and were invisible to
+    _ANY_CITATION for a full pass of C4-CITE6, since that regex requires `.py`/`.lua`. Proven on
+    a SCRATCH copy -- the real doc (already swept clean of every `gen3:` occurrence) is untouched."""
+    text = DOC.read_text(encoding="utf-8") + "\n\nscratch citation: `gen3:1477`\n"
+    problems = check_all_citations_exist(text)
+    assert any("bare `gen3:`" in p for p in problems), \
+        "the bare gen3: shorthand passed; the rule has no teeth"
+    assert "gen3:" not in DOC.read_text(encoding="utf-8"), \
+        "the real doc still has a bare gen3: citation -- the sweep was not actually completed"
+
+
 def _sources_at(rev: str, dest: Path) -> bool:
     """Write server/ at `rev` under `dest`, so a pinned doc is judged against its own sources."""
     ls = subprocess.run(["git", "ls-tree", "-r", "--name-only", rev, "server"], cwd=_REPO,

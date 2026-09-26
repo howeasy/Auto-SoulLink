@@ -109,3 +109,19 @@ Entry owns loading and injecting both dependencies and the release manifest owns
 shipping them. Constructor failure preserves `factory.failed_service` for explicit
 cleanup retry. The historical signal receipt tests remain MODEL expectations from
 older physical runs; passing them does not qualify this rebind physically.
+
+## Gen 2 binding
+
+`lua/gen2/signals.lua` is the second real binder, not just a Gen 1 exclusive
+(`S.new`, `:435`, asserts `Registry.new`/`GB.new` are callable, `:487-488`,
+then constructs the GB binding with `bank_address=p.ram.hROMBank`, `:489-490`).
+Unlike Gen 1's fixed `SLink-gen1` namespace, the owner is caller-supplied
+(`options.owner` passed straight to `Registry.new`, `:1044`). `S.qualified_sites`
+(`:252`) filters the registered site set down to `S.PHYSICAL_TITLES[title]`'s
+proven set: `S.new`'s production graph (`lua/gen2/entry.lua:344-350`) registers
+only the receipt-proven sites under PHYSICAL authority, while
+`S.new_model` (`:1139`) registers the full source-candidate set for the MODEL
+graph. Registered handlers tag each event with `evidence_level`,
+`physical_status` and `runtime_authorized` per site (`:1039`), so a captured
+event still carries whether its own site was proven, rather than inheriting a
+single client-wide flag.

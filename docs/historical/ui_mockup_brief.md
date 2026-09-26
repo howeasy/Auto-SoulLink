@@ -1,5 +1,11 @@
 # UI mockup brief
 
+> **HISTORICAL RECORD (marked 2026-09-26).** The bake-off this brief was written for is
+> decided and built: **Track A shipped** — the UI is Jinja + Alpine + htmx with no build step
+> (`server/templates/`, `server/static/vendor/alpine.min.js`), and there is no Svelte SPA.
+> Kept as the record of the design both tracks were judged against; the shipped UI, not this
+> document, is the authority on how the board looks today.
+
 The brief both mockup tracks build against. Track A (Jinja + Alpine + htmx, no build) and
 Track B (Vite + Svelte SPA) implement the *same* design from this document, so that
 comparing them compares the frameworks and not two different designers' taste.

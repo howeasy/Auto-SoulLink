@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE (structure).** the gate ledger table exists at `docs/gen2/PLAN.md` §6.1 (lines 196-209) with rows for G0/G1/G2/G3a/G3/G4/G5/G6. All rows are still unsigned as of 2026-09-26 (`PLAN.md:202-209`) -- filling/signing them is owner+coordinator authority, out of this ticket's own scope and not this worker's file.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P0.3, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

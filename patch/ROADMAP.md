@@ -14,6 +14,13 @@ path, ghost **lead extrapolation** (§1), and the **two-instance headless E2E ha
 (`tools/e2e_duo.py` — faint/boxsync/trade/ghost scenarios; retires the manual two-instance gate
 for everything except the final visual feel check).
 
+**Status update (2026-09-22, owner ruling — `docs/gen3_requirements.md` N-2 / "Not in this
+release"):** the peer-ghost work below (§1 lead extrapolation, §5 tint + bike/surf/fishing
+avatars) is code-complete and gated as described, but the feature itself is **removed from the
+Gen 3 RC and deferred until post-RC** — it is not one of the eight RC-scope RR companion
+scenarios. The "remaining" visual-feel checks noted in §1/§5 are therefore parked, not
+outstanding work items on the RC's critical path.
+
 ---
 
 ## 1. ~~Step-stream ghost motion~~ — DONE differently: LERP **lead extrapolation** (2026-06-11)

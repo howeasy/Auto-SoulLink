@@ -1,5 +1,12 @@
 # gen2-A5 — citation resolver + lease subset check over the rewritten binding plan
 
+**Historical record.** This is a mechanical citation check against `GEN2_BINDING_PLAN.md` frozen at
+commit `874b2b2` — it does not judge or restate current facts. Some cited lines quote the
+now-retired `gen2_crystal` adapter (`server/adapters/__init__.py`); that adapter was removed at the
+P3b.8 cutover (see `_RETIRED_GAME_IDS` in that file). Current Gen 2 is served by `gen2_gsc.py` +
+`gen2_codec.py` + `gen2_rom_scan.py`. Treat every "resolves"/citation verdict below as scoped to the
+`874b2b2` snapshot, not present-day code.
+
 Frozen input: `git show 874b2b2:docs/gen2/GEN2_BINDING_PLAN.md` (635 lines) and
 `git show 874b2b2:docs/gen2/PLAN.md` (293 lines, read for the lease comparison). Neither was
 modified. Nothing here judges the plan's logic; it measures whether its citations land and
@@ -714,7 +721,7 @@ Phase headings anchor to PLAN §6 rows that all start with the phase name (verif
 | P6.1 | `tools/gen_ui_capabilities.py` | YES | verbatim in PLAN §6 row |
 | P6.2 | `README.md` | YES | verbatim in PLAN §6 row |
 | P6.2 | `docs/REFERENCE.md` | YES | verbatim in PLAN §6 row |
-| P6.2 | `docs/release_notes.md` | YES | verbatim in PLAN §6 row |
+| P6.2 | `docs/historical/release_notes.md` | YES | verbatim in PLAN §6 row |
 | P6.2 | `tools/make_release.py` | YES | verbatim in PLAN §6 row |
 
 ```text

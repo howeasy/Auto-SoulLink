@@ -485,7 +485,7 @@ lease can match by construction — **there are no concrete orphans.**
 | | P6 | `README.md` | NO | YES | declared |
 | | P6 | `docs/REFERENCE.md` | NO | YES | declared |
 | | P6 | `tools/make_release.py` | NO | YES | declared |
-| | P6 | `docs/release_notes.md` | NO | YES | declared |
+| | P6 | `docs/historical/release_notes.md` | NO | YES | declared |
 | | P6 | `server/manager.py` | NO | YES | declared |
 | | P6 | `tools/gen_ui_capabilities.py` | NO | YES | declared |
 

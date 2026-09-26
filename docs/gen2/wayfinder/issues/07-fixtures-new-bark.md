@@ -32,6 +32,12 @@ scenarios remain excluded. See [PLAN §5.7/§8](../../PLAN.md),
 Resolved means the fixture strategy is decided, not that the saves exist or qualify.
 The eight fixtures still require P3b build/qualification evidence; all gates remain unsigned.
 
+2026-09-26 update: all eight fixtures (plus many O-33 SYNTH-derived variants) are now built
+under `tests/fixtures/gen2/*.SaveRAM` and PHYSICALLY qualified -- `tests/fixtures/gen2/receipts/live_new_gates.inspect_run.json`
+is a committed PASS across all three titles (R-1/R-2/R-3/R-4/R-5g), pinned at code digest `e8ca0067`
+(tag `gen2-rc-evidence-2026-09-25`). See [ticket 18](../../issues/18-p3b-fixtures.md). Gate signatures
+(G0-G6) remain unsigned in `docs/gen2/PLAN.md` §6.1.
+
 ## Comments
 
 2026-09-21 history: round 2 Q3 adopted "town + battle for all three titles" (six fixtures).

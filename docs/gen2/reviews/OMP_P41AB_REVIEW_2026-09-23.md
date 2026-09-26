@@ -1,5 +1,10 @@
 # OMP P4.1a/P4.1b independent review (card gen2-O-p41ab), 2026-09-23
 
+> **Historical record — F1-F4 were fixed.** Commit `bcb7a184` ("feat(gen2): widen mailbox census
+> to the full WRAM-helper family (OMP P4.1a/b review F1-F4)") extends `_bulk_write_sites` to the
+> full helper family and records `out_of_scope_by_callee` in the report (see
+> `tools/gen2_mailbox_census.py:13-28`). F5-F8 were informational (no action needed).
+
 Peer review for task `cx-a7d45607` (peer omp, orchestrator claude). READ-ONLY: this file is the only
 thing written; not committed.
 
