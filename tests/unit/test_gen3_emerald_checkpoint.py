@@ -229,6 +229,45 @@ def test_map_name_popup_reaches_only_window_code() -> None:
     assert emitted()["tasks"]["allowed_overworld_tasks"]["Task_MapNamePopUpWindow"] == 0x080D487C
 
 
+# OMP review cx-c2e064ee #4: the popup's out-of-file callees are followed too. Each maps to the
+# pret file that defines it; the walk must close over exactly these functions, every leaf is a
+# string/var READ helper, and no body assigns through a save block pointer.
+POPUP_FOREIGN = {"GetMapName": "src/region_map.c",
+                 "CurrentBattlePyramidLocation": "src/battle_pyramid.c",
+                 "GetSecretBaseMapName": "src/secret_base.c",
+                 "GetSecretBaseName": "src/secret_base.c"}
+POPUP_LEAVES = {"StringCopy", "StringFill", "StringCopyN", "StringAppend", "GetNameLength",
+                "ConvertInternationalString", "VarGet"}
+
+
+def _pret_body(rel: str, name: str) -> list[str]:
+    lines = pret_file(rel)
+    start = next(i for i, ln in enumerate(lines)
+                 if re.match(rf"^[A-Za-z].*[ *]{name}\(", ln) and not ln.rstrip().endswith(";"))
+    end = next(i for i in range(start, len(lines)) if lines[i].startswith("}"))
+    return lines[start:end + 1]
+
+
+def test_map_name_popup_foreign_callees_only_read_state() -> None:
+    seen, todo = set(), ["GetMapName", "CurrentBattlePyramidLocation"]
+    leaves = set()
+    while todo:
+        name = todo.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        body = _pret_body(POPUP_FOREIGN[name], name)
+        code = "\n".join(ln.split("//")[0] for ln in body[1:])
+        assert not re.search(r"gSaveBlock\dPtr->[\w.\[\]>-]*\s*[-+|&^]?=(?!=)", code), name
+        for callee in set(re.findall(r"\b([A-Z]\w*)\s*\(", code)) - {name}:
+            if callee in POPUP_FOREIGN:
+                todo.append(callee)
+            else:
+                leaves.add(callee)
+    assert seen == set(POPUP_FOREIGN)
+    assert leaves <= POPUP_LEAVES, leaves - POPUP_LEAVES
+
+
 # ── 5. every resolved symbol is the pokeemerald.sym value ───────────────────────────────────
 
 def test_resolved_addresses() -> None:

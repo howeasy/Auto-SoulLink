@@ -218,7 +218,8 @@ end
 
 local function bind_battle()
     B.main_a, B.main_x = clause("battle_main_func")
-    B.comm_a = clause("battle_comm_0")
+    -- the pack's STATE_WAIT_ACTION_CHOSEN: 1 on FR/LG, 2 on Emerald (E2-FIX-AB F-B)
+    B.comm_a, B.comm_x = clause("battle_comm_0")
     B.flags_a = clause("battle_exec_flags_input")
     B.ctrl_a, B.ctrl_x = clause("battle_input_controller")
     B.out_a = clause("battle_outcome_open")
@@ -230,7 +231,7 @@ local function bind_battle()
             memory.read_u16_le(M.BATTLE_MONS + M.BMON_HP))
     end
     B.menu_up = function()
-        return memory.read_u32_le(B.main_a) == B.main_x and memory.read_u8(B.comm_a) == 1
+        return memory.read_u32_le(B.main_a) == B.main_x and memory.read_u8(B.comm_a) == B.comm_x
             and memory.read_u32_le(B.ctrl_a) == B.ctrl_x
     end
 end
@@ -447,15 +448,6 @@ local function run()
     if not wait_field(3000, 180) then return G.finish(false, "field never settled after CONTINUE") end
     G.phase("settled")
     bind_battle()
-    if em then
-        -- PHYSICAL (E2-CKPT, 2026-09-25): the Emerald pack's battle_comm_0 expects 1, which is
-        -- Emerald's STATE_BEFORE_ACTION_CHOSEN (its enum starts with STATE_TURN_START_RECORD, pret
-        -- pokeemerald src/battle_main.c:4118-4121); a mash through two whole battles never saw
-        -- the pack's menu tuple. Park on main + controller only; the state detail logs comm0.
-        B.menu_up = function()
-            return memory.read_u32_le(B.main_a) == B.main_x and memory.read_u32_le(B.ctrl_a) == B.ctrl_x
-        end
-    end
     local ok, err
     if KIND == "town" then ok, err = pcall(em and em_town or run_town)
     elseif KIND == "battle" then ok, err = pcall(em and em_battle or run_battle)
