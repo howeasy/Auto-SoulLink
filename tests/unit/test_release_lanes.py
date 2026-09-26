@@ -195,3 +195,46 @@ def test_failed_lane_fails_gate_without_suppressing_later_lanes(capsys):
     out = capsys.readouterr().out
     assert "GATE FAILED — fast" in out
     assert "GATE PASSED" not in out
+
+
+def test_passed_count_survives_a_summary_that_leads_with_failures(monkeypatch):
+    """pytest puts failures FIRST: "27 failed, 11297 passed, ...". The passed pattern is
+    anchored to a summary line to reject parameter IDs like "[3 passed]", and that anchor
+    used to reject the real count too -- so the lane claimed "no passing tests executed"
+    exactly when a run had failures, i.e. when the numbers matter most."""
+    summary = "27 failed, 11297 passed, 2880 skipped, 4 errors in 623.79s (0:10:23)\n"
+    ok, detail = _stubbed_lane(monkeypatch, summary)
+    assert not ok, "27 failures must still fail the lane"
+    assert "11297 passed" in detail
+    assert "no passing tests executed" not in detail
+
+
+def test_a_parameter_id_is_still_not_execution_evidence(monkeypatch):
+    """The reason the anchor exists: collection output must not read as a passing run."""
+    ok, detail = _stubbed_lane(monkeypatch, "tests/x.py::t[3 passed]\n14207 tests collected\n")
+    assert not ok
+    assert "no passing tests executed" in detail
+
+
+def test_aggregated_skip_reasons_account_for_every_skip(monkeypatch):
+    """pytest collapses identical (location, reason) pairs into "SKIPPED [N] ...", so the
+    NUMBER OF LINES is not the number of skips. Counting lines held while skips were few and
+    distinct, and failed every lane once one generation contributed hundreds of same-reason
+    skips -- a bookkeeping red that looked like a real one."""
+    reason = "pokecrystal not cloned: /x/.cache/gen2-build/pokecrystal"
+    summary = ("3 passed, 701 skipped in 9.0s\n"
+               f"SKIPPED [700] tests/unit/a.py:1: {reason}\n"
+               f"SKIPPED tests/unit/b.py:2: {reason}\n")
+    ok, detail = _stubbed_lane(monkeypatch, summary, allowed_skips=[(reason, "Gen 2 decomp")])
+    assert ok, detail
+    assert "701 skipped" in detail and "SKIPPED reason lines printed" not in detail
+
+
+def test_an_aggregated_skip_that_leaves_skips_unaccounted_still_fails(monkeypatch):
+    """The guard must keep biting: 701 skips with only 700 accounted for is still a skip
+    whose reason was never printed."""
+    reason = "pokecrystal not cloned: /x"
+    summary = f"3 passed, 701 skipped in 9.0s\nSKIPPED [700] tests/unit/a.py:1: {reason}\n"
+    ok, detail = _stubbed_lane(monkeypatch, summary, allowed_skips=[(reason, "Gen 2 decomp")])
+    assert not ok
+    assert "701 skipped but only 700 SKIPPED reason lines printed" in detail
