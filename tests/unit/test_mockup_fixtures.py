@@ -1,7 +1,7 @@
 """The UI mockup fixtures must keep describing the payload the server actually sends.
 
 The fixtures under tests/fixtures/ui/ were captured from a running server
-(see docs/ui_mockup_brief.md §7) so the mockups design against a real payload rather than
+(see docs/historical/ui_mockup_brief.md §7) so the mockups design against a real payload rather than
 an imagined one. That only holds while the payload does not move underneath them: a
 mockup built on a stale fixture is a mockup of a product that does not exist, and nothing
 else in the suite would notice, because no shipped code reads these files.
@@ -48,7 +48,7 @@ def test_top_level_keys_match_build_status_dict(name, live_status):
     """
     assert set(_load(name)) == set(live_status), (
         f"{name} no longer matches _build_status_dict. Regenerate it: see "
-        "docs/ui_mockup_brief.md §7."
+        "docs/historical/ui_mockup_brief.md §7."
     )
 
 

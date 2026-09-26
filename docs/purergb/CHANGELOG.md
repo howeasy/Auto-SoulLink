@@ -6,7 +6,7 @@ G6 (tag + release) is the owner's. The version number comes from the git tag at 
 never from this file.
 
 Everything below cites the commit that landed it. `PLAN.md` §13.1 holds the gate ledger and
-§11.2 the research facts each change rests on; `docs/release_notes.md` carries the short form.
+§11.2 the research facts each change rests on; `docs/historical/release_notes.md` carries the short form.
 
 ---
 
@@ -348,7 +348,7 @@ the vanilla mailbox address `$DEE2` is inside pureRGB's box data), so the compan
 ### 3.10 Documentation — `3e9e69d`, `0ea9164`, `bbe7105`, `5e48fe5`, `81c7b88`, this sweep
 
 `README.md` (Supported Games row, a pureRGB section, randomizer note), `docs/REFERENCE.md`
-(Gen 1 pureRGB bullet, prerequisites), `docs/release_notes.md` (pureRGB section),
+(Gen 1 pureRGB bullet, prerequisites), `docs/historical/release_notes.md` (pureRGB section),
 `docs/protocol.md` (acknowledged `key_change`), `docs/gen1_requirements.md` (pureRGB section),
 `docs/gen1_engine_sites.md` and `docs/shared_runtime.md` (second-foundation notes),
 `patch/README.md`, `patch/gen1/README.md`, `patch/gen1/purergb/README.md`,

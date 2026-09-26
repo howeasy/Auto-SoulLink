@@ -374,7 +374,7 @@ def test_decode_bag_stops_at_terminator_before_declared_count():
 
 
 def test_decode_bag_real_battle_fixture():
-    """docs/gen1_resume.md: this scripted-play save holds exactly one Poke Ball."""
+    """docs/historical/gen1_resume.md: this scripted-play save holds exactly one Poke Ball."""
     path = Path(__file__).resolve().parents[1] / "fixtures" / "gen1" / "red_battle.SaveRAM"
     if not path.is_file():
         pytest.skip(f"Gen 1 battle save absent: {path}")
