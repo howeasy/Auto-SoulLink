@@ -37,8 +37,10 @@ Three deliverables sit on top of the rules:
   either way the sha1 must be `2e94d09c…` (PureRed), `d419fe24…` (PureBlue), `fe4c63a6…`
   (PureGreen) or the client refuses it. Built ROMs are never committed.
 - **Overlay patches.** `patch/dist/SLink-PureRed.ups`, `SLink-PureBlue.ups`, `SLink-PureGreen.ups`
-  over the corresponding pinned ROM (overlay sha1s `47cb0f81…`, `666d22ea…`, `e403edaa…`, as pinned in
-  `data/games/gen1_purergb/admission_overlay.json` — that file is the authority, not this line); shipped in
+  over the corresponding pinned ROM (overlay sha1s pinned in
+  `data/games/gen1_purergb/admission_overlay.json` — that file is the authority; the pins move
+  whenever a shared fix touches the overlay build, e.g. the Gen 2 trade-save fix in `6a4269d8`,
+  so no sha1 is restated here); shipped in
   the `--with-patch` release bundle (`tools/make_release.py`, `e933380`).
 - **Data pack.** `data/games/gen1_purergb/` — 23 files: `profile.json`, `engine_signals.json`
   (41 sites × 3 titles), `write_checkpoint.json`, `admission.json`, `area_map.json` (248 map ids →

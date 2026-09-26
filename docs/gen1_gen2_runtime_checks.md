@@ -11,13 +11,15 @@ client is `lua/gen1/run.lua` (BizHawk entry: io, transport, HUD, frame loop) ove
 `lua/clients/gen1_rby_client.lua` / `lua/games/gen1_rby.lua` client was retired in Track B
 step 5 (P8-4) and no longer ships in the player ZIP or exists in the tree.
 
-**The Gen 2 sections below are unchanged.**
+**Updated 2026-09-26: the Gen 2 section below is no longer "unchanged" — Gen 2 (and Gen 3,
+and the multi-game damage calc) landed on master the same day as this pass. The Gen 2 section
+has been re-verified against the current tree; see its own header note.**
 
 ## Gen 1 — run these
 
 ```bash
 python tools/verify_gen1_release.py --quick      # the 8 fast lanes; no emulator
-python tools/verify_gen1_release.py              # all 12 lanes, emulator lanes included
+python tools/verify_gen1_release.py              # all 18 lanes, emulator/pureRGB lanes included
 python tools/verify_gen1_release.py --lane live-new-gates    # only the physical lane
 python tools/verify_gen1_release.py --list       # lanes + the requirement ids each serves
 ```
@@ -25,9 +27,17 @@ python tools/verify_gen1_release.py --list       # lanes + the requirement ids e
 A lane that did not run did not pass: a skip is a failure in this runner, which is why a
 missing ROM, jar or emulator fails the gate rather than shrinking it.
 
-Eleven lanes: `unit`, `rom-layout`, `lua-parse`, `profile-generated`,
-`statics-generated`, `fixtures`, `patch-build` (fast) and `live-gates`, `live-new-gates`,
-`live-trade-gates`, `duo-pairs` (slow, emulator). The two that carry the rewrite:
+Eighteen lanes (`tools/verify_gen1_release.py --list`): `unit`, `rom-layout`, `lua-parse`,
+`profile-generated`, `profile-generated-purergb`, `statics-generated`, `fixtures`,
+`patch-build` (8 fast) and `live-gates`, `live-new-gates`, `inspect-purergb`, `apex-purergb`,
+`live-trade-gates`, `inspect-purergb-overlay`, `live-trade-gates-purergb`,
+`apex-refusal-purergb`, `duo-pairs`, `duo-pairs-purergb` (10 slow, emulator). The vanilla lane
+list grew from 11/12 to include the seven pureRGB (second-foundation) lanes once that work
+landed; `unit` runs the full `tests/unit` tree (14215 collected at this pass), not a Gen
+1-scoped subset — `ALLOWED_SKIPS` in `tools/verify_gen1_release.py` was widened 2026-09-26 to
+also excuse Gen 2/Gen 3 input skips (pokecrystal/pokegold not cloned, no staged FR ROM, etc.)
+now that this lane collects their tests too, while every Gen 1 input skip stays unexcused. The
+two lanes that carry the vanilla rewrite:
 
 * **`live-new-gates`** (`SLINK_LIVE=1`) runs `tests/live/test_gen1_new_gates.py`: six inspect
   cases (3 titles × town/battle) that boot a committed battery save in EmuHawk and run
@@ -173,10 +183,30 @@ anything:
 python tools/e2e_duo.py --game gen2_new --list
 ```
 
-**Crystal and Gold have qualified fixtures; Silver shares Gold's engine-sites receipt (O-23),
-and each has its own town/battle fixtures.** Archipelago Crystal has no dump and is refused
-outright (O-25) rather than gated — a live matrix entry that silently skips reads exactly like
+**Crystal, Gold and Silver each have their own real-cartridge dumps and qualified
+town/battle/synth fixtures under `tests/fixtures/gen2/`** — `gen2_gsc` serves all three titles,
+not two. Corrected 2026-09-26: it is the **write-window (U2) receipt** that Silver shares with
+Gold (owner ruling O-23, `docs/gen2/REVIEW_RECORD.md`) while their write-safety checkpoint rows
+stay byte-identical to Gold's — **engine sites (U1) are NOT shared**: each title keeps its own
+U1 receipt because Silver's capture rows differ, and all three titles are U1 PHYSICAL on their
+own dumps. The duo E2E matrix now runs three pairings — Crystal↔Crystal, Crystal↔Gold and
+Gold↔Silver — across link, faint (bench/active/trainer), boxed capture, dead-zone-adjacent
+scenarios other than `deadzone` itself (see below), PC ops, ChangeBox, egg hatch, evolution,
+poison, whiteout(+rebuild), soft reset, reconnect, gender/species/type clause, gift, NPC trade
+and every native-trade sub-scenario, with committed witness SaveRAMs under
+`tests/fixtures/gen2/receipts/`. Archipelago Crystal has no dump and is **REFUSED, not
+experimental or gated**: `data/games/gen2_crystal/admission.json` sets
+`"unknown_hash_policy": "REFUSE"` with `"refused_kinds": ["archipelago", "randomized",
+"unknown"]` (owner ruling O-25) — a live matrix entry that silently skips reads exactly like
 one that passes, and refusing it is stated, not silent.
+
+**The companion overlay (panel, native sound, native trade) is BUILT, not ADMITTED.** Its
+artifact-matrix rows stay `PLANNED`/`BUILT` until gate **G4** (`docs/gen2/PLAN.md` §6, first
+RC-eligible gate) is owner-signed; G4 is still pending (`docs/gen2/PLAN.md:207` shows the §6.1
+ledger row as `G4 | — | — | — | —`, `docs/gen2/P4_4_PROMOTION_GAPS_2026-09-24.md`). Do not read
+"overlay lanes exist in `verify_gen2_release.py`" as "the overlay shipped" — the overlay reopens
+its own build/admission/site/checkpoint/natural-rules receipts on the patched artifact and only
+promotes to ADMITTED once those close and the owner plays the build.
 
 The three live gates run per title against `tests/fixtures/gen2/<title>_{town,battle}.SaveRAM`,
 each bound to a committed qualification receipt
