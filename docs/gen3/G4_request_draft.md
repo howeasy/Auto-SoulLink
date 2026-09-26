@@ -493,6 +493,7 @@ All five owner scope decisions (a)–(e) are settled and recorded above.
     - **(c) Opcode gates:** the 12 deferred gates are a signed limit; the 26 ported live gates cover the opcodes in use.
     - **(d) Per-item evidence:** the P2 anchor/md5/deleted-file/write-guard/native-control items are satisfied by the existing unit/model evidence (the pin tests, test_gen3_write_ownership, the test_gen3_native control tests). No separate live receipts are needed.
     G5. **S**
+26. **Land Gen 3 on master now** (owner, 2026-09-25: "Lets just merge it"). The owner directed the Gen 3 → master merge after the frozen cut a2985d5a (FR/LG 43/43, RR 19/19) and before a formal G4/G5 signature. Master is fast-forwarded to a verified merge of master (with Gen 2) into the Gen 3 line; it is local and not pushed. Nothing is released or tagged (G6 is still the owner's). **S**
 
 ---
 
