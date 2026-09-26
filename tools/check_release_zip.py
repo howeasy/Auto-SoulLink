@@ -121,6 +121,8 @@ def expected_members(m) -> tuple[dict[str, str], set[str], set[str]]:
         add(f"lua/gen3/{f}", f"lua/gen3/{f}")
     for f in m._LUA_CORE:
         add(f"lua/core/{f}", f"lua/core/{f}")
+    for f in m._LUA_GEN2:
+        add(f"lua/gen2/{f}", f"lua/gen2/{f}")
     for f in m._LUA_CLIENTS:
         add(f"lua/clients/{f}", f"lua/clients/{f}")
     for f in m._LUA_GAMES:

@@ -122,3 +122,17 @@ def test_the_cli_exits_zero_on_a_faithful_zip(tmp_path, closure_bytes):
                           capture_output=True, text=True)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "PASS:" in proc.stdout and "closure files present" in proc.stdout
+
+
+def test_every_make_release_lua_list_is_an_expected_member():
+    """Each lua/<dir> list make_release ships must be in the checker's manifest: the Gen 2 merge added
+    _LUA_GEN2 to make_release and the RR zip check failed 'member is not in make_release's manifest:
+    lua/gen2/*' at a9ad03d3. A new _LUA_<dir> list without a checker branch fails here, not live."""
+    import re
+    m = gate.load_manifest(_REPO)
+    exp, _gen, _opt = gate.expected_members(m)
+    lists = [n for n in vars(m) if re.fullmatch(r"_LUA_[A-Z0-9]+", n) and n != "_LUA_X64_OPTIONAL"]
+    assert lists, "no _LUA_* lists found"
+    for name in lists:
+        for f in getattr(m, name):
+            assert any(k.endswith("/" + f) or k == f"lua/{f}" for k in exp), (name, f)
