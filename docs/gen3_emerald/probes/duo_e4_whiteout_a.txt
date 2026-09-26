@@ -1,0 +1,75 @@
+duo instance a scenario=whiteout_gen3 phase=initial title=emerald attempt=1
+SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
+[client] [SLink] TCP connecting to 127.0.0.1:62273 (non-blocking)…
+TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
+TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:62273 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:62273
+[client] [SLink] TCP connected to 127.0.0.1:62273
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_i
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=580 map=(0,10)
+MYKEY 0 4D55444B:20250925
+PARTY slot=0 key=4D55444B:20250925 species=283 level=5 hp=20/20
+MYKEY 1 504F4F4D:20250925
+PARTY slot=1 key=504F4F4D:20250925 species=286 level=3 hp=15/15
+booted frame=580 map=map=10 at=(6,17) balls=5
+JITTER requested=0 applied=0 attempt=1
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"oldale_town_pokemon_center_1f","player":"a","seq":8}
+TX party_to_box 504F4F4D:20250925 {"event":"party_to_box","key":"504F4F4D:20250925","player":"a","seq":36,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+[client] [gen3] phase pc-exit frame=1540 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=1646 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=1752 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=1858 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=1890 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
+BOXED_OBSERVED 504F4F4D:20250925 box=0:2
+DEPOSITED_FOR_REBUILD 504F4F4D:20250925
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"oldale_town","player":"a","seq":58}
+TX area_enter - {"area_id":"route_103","event":"area_enter","loc_name":"route103","player":"a","seq":74}
+LOSE 4D55444B:20250925 status_move_slot=1
+FORCED_HP0 4D55444B:20250925 frame=7830 in_battle=1 battler=1
+ENGINE_FAINT_SITE frame=7835 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+TX faint 4D55444B:20250925 {"area_id":"route_103","event":"faint","key":"4D55444B:20250925","player":"a","seq":250}
+TX no_catch - {"area_id":"route_103","event":"no_catch","level":3,"player":"a","seq":264,"species_id":286}
+TX safe - {"event":"safe","player":"a","seq":265}
+RX play_sound
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 8250
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 8250
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 8250
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 8250
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 8250
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 8250
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 8250
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 8250
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 8250
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 8250
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 8250
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 8250
+RX msgbox text=Route 103 is a dead zone!
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"oldale_town","player":"a","seq":270}
+TX whiteout - {"event":"whiteout","player":"a","seq":272}
+LANDING_STATE map=0.10 at=(6,17) frame=8374 tasks=[080AB161,0809D88D,0809E639,0809D909,080D487D,080AF611] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x080008D0,CPSR=0x6000003F,R14=0x080004BF] ptrs=[gPokemonStoragePtr=0x0202982C,gSaveBlock1Ptr=0x02025A24,gSaveBlock2Ptr=0x02024A78] preds=[callback1=0x8085E05,callback2=0x8085E5D,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x80!,script_context_status=0x2,soft_reset_disabled=0x0] healed=4D55444B:20250925=20/20 overworld_writes_before=0
+RX party_mon key=504F4F4D:20250925
+RX rebuild_start text=REBUILDING: POOCHYENA
+[client] [SLink-gen3] write overworld 0x02024550 +100 frame 8398
+[client] [SLink-gen3] write overworld 0x020298D0 +80 frame 8398
+[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 8398
+TX sync_retrieve_done 504F4F4D:20250925 {"event":"sync_retrieve_done","key":"504F4F4D:20250925","player":"a","seq":273}
+RX rebuild_done
+WHITED_OUT at map=10 at=(6,17)
+WRITE_AT_LANDING map=0.10 at=(6,17) frame=8398 tasks=[080AB1B1,0809D88D,0809E639,0809D909,080D487D] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x080008C8,CPSR=0x6000003F,R14=0x080004BF] ptrs=[gPokemonStoragePtr=0x0202982C,gSaveBlock1Ptr=0x02025A24,gSaveBlock2Ptr=0x02024A78] preds=[callback1=0x8085E05,callback2=0x8085E5D,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] | keyed 504F4F4D:20250925 slot=1 record=0x02024550+100@8398 | ack map=0.10 at=(6,17) frame=8457 tasks=[080AB1B1,0809D88D,0809E639,0809D909,080D487D] storage_state=-1 script_status=2 result=0 menu_cursor=0 cpu=[R15=0x080008CE,CPSR=0x4000003F,R14=0x080004BF] ptrs=[gPokemonStoragePtr=0x0202982C,gSaveBlock1Ptr=0x02025A24,gSaveBlock2Ptr=0x02024A78] preds=[callback1=0x8085E05,callback2=0x8085E5D,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+RETURNED_OBSERVED 504F4F4D:20250925 slot=1
+[client] [gen3] phase save-menu frame=8517 counter=2
+[client] [gen3] phase save-dialog frame=8577 row=3/6
+[client] [gen3] phase saved frame=8977 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_gen3_a_1_witness.bin bytes=131072 saves=1 frame=9203 counter=3
+SAVE_WITNESS whiteout counter=2->3
+CONTROL_LIVE start_menu 504F4F4D:20250925 map=0.10 at=(6,17) frame=9428 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0809FA35] storage_state=-1 script_status=2 result=0 menu_cursor=3 cpu=[R15=0x080008CA,CPSR=0x6000003F,R14=0x080004BF] ptrs=[gPokemonStoragePtr=0x0202982C,gSaveBlock1Ptr=0x02025A24,gSaveBlock2Ptr=0x02024A78] preds=[callback1=0x8085E05,callback2=0x8085E5D,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+RX box_mon key=504F4F4D:20250925
+CONTROL_REFUSED start_menu box_mon 504F4F4D:20250925 clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=0.10 at=(6,17) frame=10052 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0809FA35] storage_state=-1 script_status=2 result=0 menu_cursor=3 cpu=[R15=0x080008D0,CPSR=0x6000003F,R14=0x080004BF] ptrs=[gPokemonStoragePtr=0x0202982C,gSaveBlock1Ptr=0x02025A24,gSaveBlock2Ptr=0x02024A78] preds=[callback1=0x8085E05,callback2=0x8085E5D,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+WRITES 15
+RESULT: PASS (pair 504F4F4D:20250925 rebuilt after the whiteout; the write landed at the healed Oldale landing)

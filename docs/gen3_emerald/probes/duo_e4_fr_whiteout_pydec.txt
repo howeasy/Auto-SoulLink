@@ -1,0 +1,27 @@
+attempt 1 of 1
+IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65 source=cf371bc12e7f970cd45c6c2dd6a0574f0cad31f4
+RESULT_LINE a: RESULT: PASS (pair 263620B6:99DE0D8A rebuilt after the whiteout; the write landed in the Center)
+RESULT_LINE b: RESULT: PASS (pair F6B6A64D:1C600D89 rebuilt after the whiteout)
+SAVE_WITNESS_SHA256 inst=a site=5069a6e4c30268154e1cbf7bf2c07de9876d049d44320eaa8ee8748707bdfc07 file=5069a6e4c30268154e1cbf7bf2c07de9876d049d44320eaa8ee8748707bdfc07 match=true saves=1 counter=7->8 rtc=normalized
+SAVE_WITNESS_SHA256 inst=b site=ba4541a366f463541e53b0250d98cf9b436665caa4b269920989f0fcd45e93d5 file=ba4541a366f463541e53b0250d98cf9b436665caa4b269920989f0fcd45e93d5 match=true saves=1 counter=3->4 rtc=normalized
+whiteout: A whited out, the pair 263620B6:99DE0D8A / F6B6A64D:1C600D89 was rebuilt from both PCs and saved in party, still alive
+MARKER a: BOXED_OBSERVED 263620B6:99DE0D8A box=0:0
+MARKER a: TX whiteout - {"event":"whiteout","player":"a","seq":469}
+MARKER a: RX party_mon key=263620B6:99DE0D8A
+MARKER a: TX sync_retrieve_done 263620B6:99DE0D8A {"event":"sync_retrieve_done","key":"263620B6:99DE0D8A","player":"a","seq":514}
+MARKER a: RX rebuild_done
+MARKER a: RETURNED_OBSERVED 263620B6:99DE0D8A slot=1
+MARKER a: RX rebuild_start text=REBUILDING: AAAAAAAAAA
+MARKER a: WHITED_OUT at map=1284 at=(7,4)
+MARKER a: CENTER_STATE map=5.4 at=(7,4) frame=14161 tasks=[08079DBD,0806E811,0806E83D,081199FD,0807F45D,080F8B35,08119D35] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x080008B2,CPSR=0x4000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] overworld_writes_before=0
+MARKER a: WRITE_IN_CENTER map=5.4 at=(7,4) frame=15419 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x080008B2,CPSR=0x4000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] | keyed 263620B6:99DE0D8A slot=1 record=0x020242E8+100@15419 | ack map=5.4 at=(7,4) frame=15480 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+MARKER a: CONTROL_LIVE nurse 263620B6:99DE0D8A map=5.4 at=(7,4) frame=16640 tasks=[08079E0D,0806E811,0806E83D,081199FD,08069371,080F8B35,08119D35] storage_state=-1 script_status=0 result=0 menu_cursor=0 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+MARKER a: RX box_mon key=263620B6:99DE0D8A
+MARKER a: CONTROL_REFUSED nurse box_mon 263620B6:99DE0D8A clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=5.4 at=(7,4) frame=17282 tasks=[08079E0D,0806E811,0806E83D,081199FD,08069371,080F8B35,08119D35] storage_state=-1 script_status=0 result=0 menu_cursor=0 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+MARKER b: RX box_mon key=F6B6A64D:1C600D89
+MARKER b: TX stats_cache F6B6A64D:1C600D89 {"event":"stats_cache","key":"F6B6A64D:1C600D89","player":"b","seq":152,"stats":{"attack":8,"defense":6,"level":3,"maxHP":15,"pp1":35,"pp2":30,"pp3":0,"pp4":0,"spAtk":6,"spDef":7,"speed":9}}
+MARKER b: BOXED_OBSERVED F6B6A64D:1C600D89 box=0:0
+MARKER b: RX party_mon key=F6B6A64D:1C600D89
+MARKER b: TX sync_retrieve_done F6B6A64D:1C600D89 {"event":"sync_retrieve_done","key":"F6B6A64D:1C600D89","player":"b","seq":490}
+MARKER b: RETURNED_OBSERVED F6B6A64D:1C600D89 slot=1
+PYDEC: PASS asserted scenario facts

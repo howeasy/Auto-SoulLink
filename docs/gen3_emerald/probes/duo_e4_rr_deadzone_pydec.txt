@@ -1,11 +1,11 @@
 attempt 1 of 3
-IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=d60f99e98a34db62eef184ad171eedd40d52f7f7643d81ae9bc99dd023a789a1 profile.json=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c source=cd93382ba7f07e7bd712fccbfca68844467cfb77
+IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=d60f99e98a34db62eef184ad171eedd40d52f7f7643d81ae9bc99dd023a789a1 profile.json=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c source=cf371bc12e7f970cd45c6c2dd6a0574f0cad31f4
 RESULT_LINE a: RESULT: PASS (ran; route locked)
-RESULT_LINE b: RESULT: PASS (dead-zone capture 04C8DA08:D4223740 retired)
-SAVE_WITNESS_SHA256 inst=a site=72ce975e26399a3e2fa51a0f3abd612e52c4b49fe77837757ad35f8ca6631449 file=72ce975e26399a3e2fa51a0f3abd612e52c4b49fe77837757ad35f8ca6631449 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
-SAVE_WITNESS_SHA256 inst=b site=97b3be9f5331cf4e3fb6eab8780ab9de673a3b01dca30b7c54cfe383787e9584 file=97b3be9f5331cf4e3fb6eab8780ab9de673a3b01dca30b7c54cfe383787e9584 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
-deadzone: route_1 locked by A's no_catch (species 672); B's 04C8DA08:D4223740 saved only in the memorial box
-MARKER b: FAINTED 04C8DA08:D4223740 frame=3467 in_battle=0 battler=0
-MARKER b: RX memorialize key=04C8DA08:D4223740
-MARKER b: TX memorialize_done 04C8DA08:D4223740 {"box":24,"event":"memorialize_done","key":"04C8DA08:D4223740","player":"b","seq":99}
+RESULT_LINE b: RESULT: PASS (dead-zone capture FC450F9B:D4223740 retired)
+SAVE_WITNESS_SHA256 inst=a site=0ac90e06546370ad47ab2e43b5e1396372487a796ef1f7200d846ffcda64895f file=0ac90e06546370ad47ab2e43b5e1396372487a796ef1f7200d846ffcda64895f match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+SAVE_WITNESS_SHA256 inst=b site=749dbdf527d3f2616d44d4e634782d11d1793b495a663076c748289be96114ac file=749dbdf527d3f2616d44d4e634782d11d1793b495a663076c748289be96114ac match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+deadzone: route_1 locked by A's no_catch (species 288); B's FC450F9B:D4223740 saved only in the memorial box
+MARKER b: FAINTED FC450F9B:D4223740 frame=3401 in_battle=0 battler=0
+MARKER b: RX memorialize key=FC450F9B:D4223740
+MARKER b: TX memorialize_done FC450F9B:D4223740 {"box":24,"event":"memorialize_done","key":"FC450F9B:D4223740","player":"b","seq":97}
 PYDEC: PASS asserted scenario facts

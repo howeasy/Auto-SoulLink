@@ -1,0 +1,93 @@
+duo instance a scenario=whiteout_gen3 phase=initial title=firered attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:62238 (non-blocking)…
+[client] [SLink-gen3] gen3_frlg/firered (clean by hash) player a -> 127.0.0.1:62238 (rom 41cb23d8)
+client built by lua/gen3/run.lua: title=firered player=a -> 127.0.0.1:62238
+[client] [SLink] TCP connected to 127.0.0.1:62238
+[client] [SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"viridian_city","artifact_kind":"clean","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":false,"loc_name":"viridia
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_mart","player":"a","seq":2}
+TX area_enter - {"area_id":"pallet_town","event":"area_enter","loc_name":"pallet_town","player":"a","seq":4}
+TX area_enter - {"area_id":"route_1","event":"area_enter","loc_name":"route1","player":"a","seq":8}
+[client] [gen3] phase field frame=778 map=(3,19)
+MYKEY 0 2D356A90:99DE0D8A
+PARTY slot=0 key=2D356A90:99DE0D8A species=7 level=9 hp=27/27
+MYKEY 1 263620B6:99DE0D8A
+PARTY slot=1 key=263620B6:99DE0D8A species=16 level=4 hp=17/17
+booted frame=778 map=map=787 at=(12,37) balls=4
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase encounter frame=1568 #1 during step Up at (16,16)
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"a","seq":84,"species_id":19}
+TX safe - {"event":"safe","player":"a","seq":85}
+RX play_sound
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 2929
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 2929
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 2929
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 2929
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 2929
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 2929
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 2929
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 2929
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 2929
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 2929
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 2929
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 2929
+RX msgbox text=Route 1 is a dead zone!
+[client] [gen3] phase encounter-done frame=3026 #1 resolved at (16,16)
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":102}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_pokemon_center_1f","player":"a","seq":117}
+TX party_to_box 263620B6:99DE0D8A {"event":"party_to_box","key":"263620B6:99DE0D8A","player":"a","seq":146,"stats":{"attack":8,"defense":7,"level":4,"maxHP":17,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":9}}
+[client] [gen3] phase pc-exit frame=4679 step=1 tasks=[0808D2BD] storage_state=0 script_status=1 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=4785 step=2 tasks=[0808ECE5] storage_state=2 script_status=1 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=4891 step=3 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,0808C39D] storage_state=-1 script_status=1 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=4997 step=4 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,08069371] storage_state=-1 script_status=0 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=5029 owner list closed cancel_seen=true tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=127 menu_cursor=0
+BOXED_OBSERVED 263620B6:99DE0D8A box=0:0
+DEPOSITED_FOR_REBUILD 263620B6:99DE0D8A
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":168}
+TX area_enter - {"area_id":"route_1","event":"area_enter","loc_name":"route1","player":"a","seq":184}
+[client] [gen3] phase encounter frame=6042 #1 during step Down at (16,7)
+TX safe - {"event":"safe","player":"a","seq":240}
+[client] [gen3] phase encounter-done frame=7484 #1 resolved at (16,7)
+[client] [gen3] phase encounter frame=7996 #2 during step Down at (12,25)
+TX safe - {"event":"safe","player":"a","seq":324}
+[client] [gen3] phase encounter-done frame=9982 #2 resolved at (12,25)
+[client] [gen3] phase encounter frame=10446 #1 during step Up at (12,38)
+TX safe - {"event":"safe","player":"a","seq":402}
+[client] [gen3] phase encounter-done frame=12276 #1 resolved at (12,38)
+[client] [gen3] phase encounter-found frame=12580 whiteout a: cycle 4 mid-step Right at (12,37)
+[client] [gen3] phase battle-state-saved frame=12580 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+LOSE 2D356A90:99DE0D8A status_move_slot=1
+FORCED_HP0 2D356A90:99DE0D8A frame=13506 in_battle=1 battler=1
+ENGINE_FAINT_SITE frame=13511 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+TX faint 2D356A90:99DE0D8A {"area_id":"route_1","event":"faint","key":"2D356A90:99DE0D8A","player":"a","seq":447}
+TX safe - {"event":"safe","player":"a","seq":464}
+TX whiteout - {"event":"whiteout","player":"a","seq":469}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_pokemon_center_1f","player":"a","seq":470}
+RX party_mon key=263620B6:99DE0D8A
+RX rebuild_start text=REBUILDING: AAAAAAAAAA
+CENTER_STATE map=5.4 at=(7,4) frame=14161 tasks=[08079DBD,0806E811,0806E83D,081199FD,0807F45D,080F8B35,08119D35] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x080008B2,CPSR=0x4000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] overworld_writes_before=0
+[client] [SLink-gen3] held: party_mon x1 (C:/slink-wt/em-legs/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-gen3] write overworld 0x020242E8 +100 frame 15419
+[client] [SLink-gen3] write overworld 0x02029364 +80 frame 15419
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 15419
+TX sync_retrieve_done 263620B6:99DE0D8A {"event":"sync_retrieve_done","key":"263620B6:99DE0D8A","player":"a","seq":514}
+RX rebuild_done
+WHITED_OUT at map=1284 at=(7,4)
+WRITE_IN_CENTER map=5.4 at=(7,4) frame=15419 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x080008B2,CPSR=0x4000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] | keyed 263620B6:99DE0D8A slot=1 record=0x020242E8+100@15419 | ack map=5.4 at=(7,4) frame=15480 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+RETURNED_OBSERVED 263620B6:99DE0D8A slot=1
+[client] [gen3] phase save-menu frame=15540 counter=7
+[client] [gen3] phase save-dialog frame=15622 row=4
+[client] [gen3] phase saved frame=16149 counter=7->8
+SAVE_WITNESS_DUMP path=patch/build/e2e_whiteout_gen3_a_1_witness.bin bytes=131072 saves=1 frame=16405 counter=8
+[client] [gen3] phase slot-complete frame=16421 sectors=14/14
+SAVE_WITNESS whiteout counter=7->8
+CONTROL_LIVE nurse 263620B6:99DE0D8A map=5.4 at=(7,4) frame=16640 tasks=[08079E0D,0806E811,0806E83D,081199FD,08069371,080F8B35,08119D35] storage_state=-1 script_status=0 result=0 menu_cursor=0 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+RX box_mon key=263620B6:99DE0D8A
+CONTROL_REFUSED nurse box_mon 263620B6:99DE0D8A clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=5.4 at=(7,4) frame=17282 tasks=[08079E0D,0806E811,0806E83D,081199FD,08069371,080F8B35,08119D35] storage_state=-1 script_status=0 result=0 menu_cursor=0 cpu=[R15=0x080008AC,CPSR=0x6000003F,R14=0x080004AB] ptrs=[gPokemonStoragePtr=0x02029360,gSaveBlock1Ptr=0x02025578,gSaveBlock2Ptr=0x020245D4] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x0!,soft_reset_disabled=0x0]
+WRITES 15
+RESULT: PASS (pair 263620B6:99DE0D8A rebuilt after the whiteout; the write landed in the Center)
