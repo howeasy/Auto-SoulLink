@@ -85,27 +85,26 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     scenario set on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing
     (`tests/e2e/test_duo_gen1_pure.py`, lane `duo-pairs-purergb`), including
     `admit_randomized_new` on the fork jar.
-- **Gen 2** — Crystal (GB/GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
-  *mechanisms* are proven against a running cartridge, a *playthrough* is not.
-  - **Proven live** — faint propagation, party→box sync and memorialize into Box 14
-    (`MEMORIAL_BOX_INDEX` 13, flat CartRAM `0x79E0`, outside Gen 2's save checksum), all three
-    across **two Crystal instances** through a real server. Plus the read gate, whose
-    assertions are deliberately Gen 2-specific — held item, map *group*, the Sp.Atk/Sp.Def
-    split, 14 boxes — because a Gen 1-shaped read of a Gen 2 cartridge still returns
-    plausible-looking bytes; and the writes gate: `force_faint`, deposit, withdraw, memorial
-    burial. Two instances share one dump via per-instance SaveRAM directories, which is why
-    Gen 2 needs no second cartridge the way Gen 1 needed Blue alongside Red.
-  - **NOT proven live** — anything needing tall grass: encounter linking from play, the dead
-    zone, the clauses. Gen 2's fixture parks indoors because New Bark Town's west exit is
-    script-locked until Elm hands over a starter, so there is no grass fixture. Those rules are
-    enforced server-side and are generation-independent, and Gen 1 runs all three — a Gen 2
-    grass fixture would buy a second copy of coverage that already exists.
-  - **Gold, Silver and Archipelago Crystal remain ⚠️ Experimental.** They are supported for
-    correctness — adapter routing, profile keys, per-variant addresses checked against pret via
-    [tools/build_pret_syms.py](../tools/build_pret_syms.py) — but there are no dumps here to run
-    them against, and a live matrix entry that silently skips reads exactly like one that
-    passes. The AP Crystal fork (gerbiljames) is auto-detected but has no public repo, so only
-    five of its addresses are provable and its profile stays flagged unverified.
+- **Gen 2** — Gold, Silver, Crystal (GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
+  *mechanisms* are proven against real cartridges, a *playthrough* is not.
+  - One adapter serves all three titles: `server/adapters/gen2_gsc.py`, with `gen2_codec.py` (save and
+    party structs) and `gen2_rom_scan.py`, over the per-title packs `data/games/gen2_{crystal,gold,silver}/`,
+    all generated from the pinned pret decomps (`data/gen2_sources.lock.json`). The legacy Crystal-only
+    adapter was removed at the P3b.8 cutover.
+  - **Proven live** on real dumps of all three titles, in 98 PHYSICAL duo and gate cells (pairings C↔C,
+    G↔S, C↔G) judged from committed receipts by `tools/verify_gen2_release.py`. Duos: encounter linking,
+    the species/gender/type clauses, the ball gate, faint and active-battler faint (wild and trainer),
+    whiteout and whiteout-rebuild, overworld poison, PC deposit/withdraw/release and box changes, NPC
+    trade, evolution, gift, egg hatch, boxed capture, reconnect, soft reset, wrong-ROM admission, and
+    the native SLINK TRADE (commit, decline, refuse-item, trade-evolve, timeout, reset). Gates: read,
+    engine sites (all three titles) and write windows (Crystal, Gold; Silver shares Gold's, O-23); on
+    the companion overlay the START-menu panel, native sound, phone calls, the W6 write guard and the
+    battle-text stack low-water gate. The memorial box is the last box (`gen2_gsc.memorial_box_index`).
+  - **Not proven:** a full playthrough. The Gen 2 dead zone rides on the generation-independent server
+    rule that Gen 1's `deadzone_new` proves live; there is no Gen 2 dead-zone duo.
+  - **Companion overlay** (`patch/dist/SLink-{Crystal,Gold,Silver}.ups`): BUILT, not yet ADMITTED. It is
+    promoted only after the owner signs G4 (`docs/gen2/PLAN.md` §6.1).
+  - **Archipelago Crystal is refused** at admission (owner ruling O-8/O-25; `data/games/gen2_crystal/admission.json`).
 - **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ **Experimental**
 - **Gen 5** — Black, White, Black 2, White 2 — ⚠️ **Experimental**
 
@@ -135,7 +134,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 | Requirement | Detail |
 |---|---|
 | BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen or Radical Red ROMs. **Gen 4:** Two instances with US HGSS ROMs |
-| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 3:** Vanilla, randomized (UPR), or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
+| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 2:** Crystal (US 1.0 or 1.1), Gold, Silver (US); the overlay is applied from `patch/dist/SLink-*.ups`. **Gen 3:** Vanilla, randomized (UPR), or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `gen3/`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
@@ -1050,9 +1049,9 @@ SLINK_E2E=1  pytest tests/e2e/test_duo_gen2_new.py -q  # two-instance link scena
 
 `tests/live/test_gen1_gates.py` is now the companion-patch half only: `test_gen1_patch_gate.lua` and `test_gen1_menu_row_gate.lua` on the two patched builds, plus the same panel gate on a randomized+injected cartridge. The pre-rewrite cartridge gates and the Archipelago gate were retired with their Lua and the other legacy Gen 1 probes/console diagnostics in commit `9aa7989`; the rewrite's own lanes (`test_gen1_new_gates.py`, `test_gen1_trade_gates.py`) carry those rows and run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong. The `gen1_new` duo harness (`tools/e2e_duo.py`) pairs **Red as player A against Blue as player B only** — there is no Yellow pairing — and boots the companion-patched builds (`patch/build/gen1_red.gb` / `gen1_blue.gb`) by default for every `gen1_new` scenario; `trade_new` and `trade_decline_new` additionally override to the dedicated trade-carrying build (`patch/gen1/build/slink_red.gb` / `slink_blue.gb`) for the SLINK TRADE receptionist.
 
-The Gen 2 gates (`gen2_inspect_gate.lua`, `gen2_frame_align.lua`, `gen2_write_windows.lua`) run per title on Crystal and Gold (Silver shares Gold's engine-sites receipt, O-23) — see the Supported Games caveat above. Its duo link scenarios run **two instances of the same cartridge dump** for the same-title pairings. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
+The Gen 2 gates (`gen2_inspect_gate.lua`, `gen2_frame_align.lua`, `gen2_write_windows.lua`, and on the overlay `gen2_{panel,sfx,phone,w6,sp_lowwater}_gate.lua`) run per title; engine sites on all three, write windows on Crystal and Gold (Silver shares Gold's, O-23) — see the Supported Games caveat above. Its duo link scenarios run **two instances of the same cartridge dump** for the same-title pairings. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
 
-Gen 2's duo scenarios go through their own dedicated driver, `lua/tests/duo/duo_gen2_main.lua`, which resolves each name as `scenario_gen2_<name>.lua` (`link`, `gen2_faint`). It replaces the legacy `duo_gb_main.lua` / `scenario_gb_{faint,boxsync,memorialize}.lua` / `gatelib.lua` chain, retired with the legacy Gen 2 client (P3b.8b). **The rewritten Gen 1 client goes through a separate driver too**, `lua/tests/duo/duo_gen1_main.lua`, whose `scenarios.<name>()` functions (e.g. `scenarios.link_new`, `scenarios.ball_gate_new`) are implemented directly rather than looked up by prefix. The old `scenario_gen1_*.lua` prefix files and the `gen1`/`gen1_yellow` duo titles they drove were removed in the harness deletion sweep (`2395145`/`832d499`), separately from the legacy client's own deletion (`21ff0d7`).
+Gen 2's duo scenarios go through their own dedicated driver, `lua/tests/duo/duo_gen2_main.lua`, which resolves each name as `scenario_gen2_<name>.lua` (`link`, `gen2_faint`, ... 28 scenarios; `python tools/gen2_final_sweep.py --list`). It replaces the legacy `duo_gb_main.lua` / `scenario_gb_{faint,boxsync,memorialize}.lua` / `gatelib.lua` chain, retired with the legacy Gen 2 client (P3b.8b). **The rewritten Gen 1 client goes through a separate driver too**, `lua/tests/duo/duo_gen1_main.lua`, whose `scenarios.<name>()` functions (e.g. `scenarios.link_new`, `scenarios.ball_gate_new`) are implemented directly rather than looked up by prefix. The old `scenario_gen1_*.lua` prefix files and the `gen1`/`gen1_yellow` duo titles they drove were removed in the harness deletion sweep (`2395145`/`832d499`), separately from the legacy client's own deletion (`21ff0d7`).
 
 Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{crystal,gold,silver}_{town,battle}.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Gen 1 fixtures rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates). Gen 2 has an **indoor `town` target only per title** — New Bark Town's west exit is script-locked until Elm hands over a starter, so there is no Gen 2 grass fixture and therefore no `playthrough`, `deadzone` or `dupes` on Gen 2.
 
