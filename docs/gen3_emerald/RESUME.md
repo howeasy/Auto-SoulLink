@@ -23,8 +23,8 @@ base is Gen 3 `5f050857`.
     `probes/duo_e3_final_2026-09-26.txt`);
   - slink-adapter-guard CLEAN on both shared hunks;
   - OMP reviews: every finding verified or queued.
-- **Pending at the pause:** OMP cx-6ecf4fc8 (the final E3 diff review). Verify its findings on
-  resume; the EG3 request names it as pending.
+- **Final review cx-6ecf4fc8:** NO BLOCKER. Its small items landed in `7cf4a3c9`, and the request
+  is updated (`a240ccc1`). The pre-existing protocol.md staleness is routed to Gen 3.
 - **NEXT after EG3:** E4, the Emerald duos. Steps:
   - `tools/e2e_duo.py` gains a gen3_emerald row, with per-pack profile/decode instead of the
     `GEN3_PROFILE` constants.
