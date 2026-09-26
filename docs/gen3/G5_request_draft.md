@@ -31,7 +31,14 @@ P5 row: G5 is the gate at which the **owner plays RR themselves** — the SOULLI
 trade NPC, the ghost walk, Explode, rival swap — and signs the companion build md5
 (`docs/gen3/PLAN.md:207`). **S**
 
-> **Read before playing (docs accuracy sweep, 2026-09-26): native trade and the SOULLINK info panel have no automated duo on the new client.** The old client's `trade` and `infopanel` scenarios (and the `trade_abort` control) were retired at C5-5 and never rebuilt (`tools/e2e_duo.py`, RR-only block comment); `scenarios_for("gen3_rr")` has neither. Their automated coverage is the native opcode gates (`tradescene`, `infoscreen`) and `native_absent_gen3` only, and ruling 25 did not address them. **Your play session is the only end-to-end evidence for a real RR trade and the info panel.** Also leave Overworld Presence OFF: with it on, the Pokémon Center trade NPC is disabled and no ghost exists (`docs/gen3/TODO.md`).
+> **Read before playing (updated 2026-09-26): RR trade and the SOULLINK panel now have automated duos, but trade is not yet at the Gen 1/2 durability bar.**
+> - The new duos found three companion bugs, fixed in `03b19b71` and `2c553181`: the trade-scene EWRAM overrun from an unterminated nickname, the initiator's stuck script context, and the missing START row once the player has the Pokédex. The companion is rebuilt (md5 `c372c428…`).
+> - On it, these pass twice each: `trade_gen3` and `trade_decline_gen3` (`docs/gen3/probes/rr_trade{,_decline}_gen3_gen3_rr_as_a_5418c725{,_r2}.txt`), and `infopanel_gen3` and `infopanel_dex_gen3` (`..._539e0aea{,_r2}.txt`).
+> - **Still open:**
+>   - The RR trade reports DONE on returning to the field, with no native save before DONE and no trade evolution. The duo saves through the harness afterwards.
+>   - Owner ruling 27's shared patched-trade work (Emerald worktree, T2–T5) brings RR to the Gen 1/2 bar: save-before-DONE, evolve on receipt, reset/uncertain semantics.
+>   - The RR frozen cut re-runs once after that lands, on its companion. The a2985d5a 19/19 predates both companion rebuilds.
+> - Overworld Presence is now forced off (570eb621), so the Pokémon Center trade NPC is always the entry point.
 
 The gate-check cell for P5 (`docs/gen3/PLAN.md:306`) lists: nine RR receipts, **RR clean coverage
 rows**, the write-sink guard over `native.lua`/`ghost.lua`, the md5 pins, and the **extracted-zip
