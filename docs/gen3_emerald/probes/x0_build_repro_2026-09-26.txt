@@ -1,0 +1,54 @@
+X0 SOURCE / CONTROL repeatability PASS, 2026-09-26. No game PHYSICAL qualification.
+Source: https://github.com/rh-hideout/pokeemerald-expansion.git tag expansion/1.17.0 commit e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7
+Unmodified upstream source. Two separate fresh shallow clones. Both post-build git status --porcelain outputs empty.
+Host: Linux Mint 22.3, alias hgbox; gcc-arm-none-eabi package 15:13.2.rel1-2. Full versions/package pins: x0_linux_toolchain_2026-09-26.txt and data/gen3_exp_sources.lock.json.
+No apt transaction: all requested packages were already installed.
+
+Build 1 command: python tools/build_expansion.py --host hgbox --output .cache/expansion-output/linux1 --timeout-minutes 40
+VM run directory: /home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/bedf3701743a4053b72b1128e68acd65
+make argv: ['make', '-j12', 'BUILD=emerald', 'DEBUG=0', 'RELEASE=0', 'LTO=0', 'TEST=0', 'all', 'syms']
+ROM SHA1: 28877d733492299599f2b8fff50493109d72653c
+ROM MD5: 83bde8deeaa27453b12545b9cfffe3a6
+ROM bytes: 33554432
+Worker elapsed seconds (preflight + clone + build + local VM receipt): 162.386092533
+Generated UTC: 2026-09-26T18:03:30.758737+00:00
+Local check: python tools/build_expansion.py --check --output .cache/expansion-output/linux1
+PASS: offline lock/receipt/artifact integrity; no rebuild performed
+Builder SHA256: 9ca2c7893a929b6e6c78c28a19aba63f0caef3b85991cef865b5841940cb773f
+
+Build 2 command: python tools/build_expansion.py --host hgbox --output .cache/expansion-output/linux2 --timeout-minutes 40
+VM run directory: /home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/c7b390f98cc946498389f09dd79feb2d
+make argv: ['make', '-j12', 'BUILD=emerald', 'DEBUG=0', 'RELEASE=0', 'LTO=0', 'TEST=0', 'all', 'syms']
+ROM SHA1: 28877d733492299599f2b8fff50493109d72653c
+ROM MD5: 83bde8deeaa27453b12545b9cfffe3a6
+ROM bytes: 33554432
+Worker elapsed seconds (preflight + clone + build + local VM receipt): 148.240127020
+Generated UTC: 2026-09-26T18:06:34.736093+00:00
+Local check: python tools/build_expansion.py --check --output .cache/expansion-output/linux2
+PASS: offline lock/receipt/artifact integrity; no rebuild performed
+Builder SHA256: 17a13cf6520004364d98bdf9231940c9f6090185309c6860c0383c09f5ed3e14
+
+All four artifacts match in SHA256 and size across builds (stronger than the required ROM SHA1 comparison):
+{
+  "pokeemerald.gba": {
+    "sha256": "08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39",
+    "size": 33554432
+  },
+  "pokeemerald.elf": {
+    "sha256": "179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b",
+    "size": 35972280
+  },
+  "pokeemerald.map": {
+    "sha256": "c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08",
+    "size": 4623407
+  },
+  "pokeemerald.sym": {
+    "sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e",
+    "size": 4812449
+  }
+}
+
+The two builder script hashes differ ONLY because ruff moved import uuid into alphabetical order after run 1 was dispatched. Remote diff -u confirmed the only hunk moves that import from before shutil to after time. Source, lock, compiler, configuration and make argv are identical.
+
+Full per-build receipts: x0_linux_build1_2026-09-26.json and x0_linux_build2_2026-09-26.json. ROM/ELF/map/sym remain ignored local outputs; no ROM published.
+Limits: no independent second Linux-host reproduction or Windows-vs-Linux ROM cross-check; no runtime admission or emulator claim.

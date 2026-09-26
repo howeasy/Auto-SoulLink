@@ -1,0 +1,37 @@
+X0 Linux host inventory, 2026-09-26. SSH alias hgbox.
+Owner authorized missing-package install only.
+All upstream packages present: build-essential binutils-arm-none-eabi gcc-arm-none-eabi libnewlib-arm-none-eabi git libpng-dev python3 pkg-config.
+APT LOG: no apt command executed; missing-package set empty.
+Command: dpkg-query -W -f=${Version} for each package, --version and sha256sum for each tool, cat /etc/os-release.
+{
+  "distro": "NAME=\"Linux Mint\"\nVERSION=\"22.3 (Zena)\"\nID=linuxmint\nID_LIKE=\"ubuntu debian\"\nPRETTY_NAME=\"Linux Mint 22.3\"\nVERSION_ID=\"22.3\"\nHOME_URL=\"https://www.linuxmint.com/\"\nSUPPORT_URL=\"https://forums.linuxmint.com/\"\nBUG_REPORT_URL=\"http://linuxmint-troubleshooting-guide.readthedocs.io/en/latest/\"\nPRIVACY_POLICY_URL=\"https://www.linuxmint.com/\"\nVERSION_CODENAME=zena\nUBUNTU_CODENAME=noble\n",
+  "packages": {
+    "build-essential": "12.10ubuntu1",
+    "binutils-arm-none-eabi": "2.42-1ubuntu1+23",
+    "gcc-arm-none-eabi": "15:13.2.rel1-2",
+    "libnewlib-arm-none-eabi": "4.4.0.20231231-2",
+    "git": "1:2.43.0-1ubuntu7.3",
+    "libpng-dev": "1.6.43-5ubuntu0.6",
+    "python3": "3.12.3-0ubuntu2.1",
+    "pkg-config": "1.8.1-2build1",
+    "make": "4.3-4.1build2",
+    "gcc": "4:13.2.0-7ubuntu1"
+  },
+  "tools": {
+    "arm-none-eabi-gcc": {
+      "path": "/usr/bin/arm-none-eabi-gcc",
+      "version": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+      "sha256": "38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59"
+    },
+    "gcc": {
+      "path": "/usr/bin/gcc",
+      "version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+      "sha256": "1b99826121ae6682a634e5efe09bd3e3df58ce58e0b28f849114ab5b89139c26"
+    },
+    "make": {
+      "path": "/usr/bin/make",
+      "version": "GNU Make 4.3\nBuilt for x86_64-pc-linux-gnu\nCopyright (C) 1988-2020 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.",
+      "sha256": "d78b8f1d099fbcfb6f2f49ab87223b9b68fb3956642f92d6ec6de812e8afa965"
+    }
+  }
+}
