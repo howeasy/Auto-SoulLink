@@ -50,7 +50,7 @@ The coordinator re-checked `battle_setup.c:425-434`, `task.c:70-72`, `main.c:120
 ## 5. Candidate checkpoint predicate (all clauses verified or marked)
 
 Write only when **all** of these hold:
-1. The CPU is parked in `OS_WaitIrq` from the main loop (PC range from the xMAP; the G1 row m census confirms), and `gSystem.vblankCounter` advanced since the last check.
+1. **Measured (platform.md, live probe):** the frame-end PC is never in `OS_WaitIrq`. The main thread waits there, but frame end usually lands in the idle thread's `OS_Halt` (PC 0x020D3F64) or IRQ code. So the CPU clause is **not** "PC in `OS_WaitIrq`". Use `gSystem.vblankCounter` (+0x2C, +1 per frame) to detect a new frame, plus the field-state clauses below. If a CPU clause is still wanted, use an exec hook on `OS_WaitIrq` (fires once per frame) to mark "main loop reached its wait"; it costs one hook from the budget.
 2. `fs = [0x021D4158]` is non-NULL, `fs->unk0` is non-NULL, and `[fs+0x0C] == [0x021D2228]`.
 3. `[fs+0x10] == 0` (no field task: no script, menu, warp or battle launch).
 4. No launched app: `fs->unk0->unk4 == NULL`. `unk0->unk0` must be **non-NULL**, meaning the field app is alive.
