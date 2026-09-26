@@ -12,24 +12,26 @@ RX dead_keys
 BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":2,"x":53,"y":12}
 MYKEY 0 9A61:C4A6:0A
 MYKEY 1 3C83:C4A6:13
-  phase walk @3370 xy=53,12
-ENGINE_CAPTURE {"acquisition":"egg_hatch","area_id":"gift_daycare","destination":"party","frame":4477,"key":"9A61:C4A6:0A","level":5,"site_id":"hatch_finalized","slot":0,"species_id":10}
-TX {"area_id":"gift_daycare","event":"capture","gift":true,"held_item_id":0,"hp":20,"in_box":false,"key":"9A61:C4A6:0A","level":5,"maxHP":20,"nickname":"CATERPIE","player":"a","seq":40,"species_id":10,"stats":{"level":5,"ma
-CAPTURE_SENT {"frame":4477,"key":"9A61:C4A6:0A","seq":40}
+  phase walk @3414 xy=53,12
+ENGINE_CAPTURE {"acquisition":"egg_hatch","area_id":"gift_daycare","destination":"party","frame":4521,"key":"9A61:C4A6:0A","level":5,"site_id":"hatch_finalized","slot":0,"species_id":10}
+TX {"area_id":"gift_daycare","event":"capture","gift":true,"held_item_id":0,"hp":20,"in_box":false,"key":"9A61:C4A6:0A","level":5,"maxHP":20,"nickname":"CATERPIE","player":"a","seq":41,"species_id":10,"stats":{"level":5,"ma
+CAPTURE_SENT {"frame":4521,"key":"9A61:C4A6:0A","seq":41}
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":4524,"text":"Partner caught CATERPIE in Egg Hatch"}
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":4532,"text":"CATERPIE and CATERPIE linked!"}
+RX_TEXT {"cmd":"msgbox","frame":4524,"text":"CATERPIE and CATERPIE linked!"}
 RX party_mon key=9A61:C4A6:0A
-TX {"event":"sync_retrieve_done","key":"9A61:C4A6:0A","player":"a","seq":43}
-ENGINE_KEY_CHANGE {"frame":9572,"new_key":"9A61:C4A6:0B","old_key":"9A61:C4A6:0A","reason":"evolution","site_id":"evolution_species_published","species_id":11}
-TX {"event":"key_change","new_key":"9A61:C4A6:0B","new_nickname":"METAPOD","new_species":11,"old_key":"9A61:C4A6:0A","player":"a","reason":"evolution","seq":207}
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":208}
+TX {"event":"sync_retrieve_done","key":"9A61:C4A6:0A","player":"a","seq":44}
+ENGINE_KEY_CHANGE {"frame":9851,"new_key":"9A61:C4A6:0B","old_key":"9A61:C4A6:0A","reason":"evolution","site_id":"evolution_species_published","species_id":11}
+TX {"event":"key_change","new_key":"9A61:C4A6:0B","new_nickname":"METAPOD","new_species":11,"old_key":"9A61:C4A6:0A","player":"a","reason":"evolution","seq":216}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":217}
 RX key_change_ack
-  phase evolved @9639 xy=52,12
-  phase save @9669 xy=52,12
-  phase saved @10364 xy=52,12
+  phase evolved @9918 xy=52,12
+  phase save @9948 xy=52,12
+  phase saved @10643 xy=52,12
 MYKEY 0 9A61:C4A6:0B
 MYKEY 1 3C83:C4A6:13
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"724ec1097bcd8e2b0901678a1bc1869a380fe2322011581bc4fbaec8f773621d","client_saves":1,"flushed_matches":true,"frame":10394,"gate_saves":1,"save_completed_frame":10364,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_evolution_s881_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_evolution_s881_a_witness.SaveRAM"}
-RECEIPT {"attempt":1,"capture":{"acquisition":"egg_hatch","area_id":"gift_daycare","destination":"party","frame":4477,"key":"9A61:C4A6:0A","level":5,"site_id":"hatch_finalized","slot":0,"species_id":10},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"d8594b62243302ae933a5fb8213e55386b78e286d9826db47c33cd43a37d1386","harness_write_scopes":[],"input_mode":"normal_buttons","key":"9A61:C4A6:0B","key_change":{"frame":9572,"new_key":"9A61:C4A6:0B","old_key":"9A61:C4A6:0A","reason":"evolution","site_id":"evolution_species_published","species_id":11},"player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"724ec1097bcd8e2b0901678a1bc1869a380fe2322011581bc4fbaec8f773621d","client_saves":1,"flushed_matches":true,"frame":10394,"gate_saves":1,"save_completed_frame":10364,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_evolution_s881_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_evolution_s881_a_witness.SaveRAM"},"scenario":"gen2_evolution","schema":"gen2-duo-evolution-v1","synth":"gold_synth_evolve","title":"gold"}
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"ebf3d6618f15f35b9d6d517c25bb70ebc8f2d03c2176d75097f9083a259106c2","client_saves":1,"flushed_matches":true,"frame":10673,"gate_saves":1,"save_completed_frame":10643,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_evolution_s881_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_evolution_s881_a_witness.SaveRAM"}
+RECEIPT {"attempt":1,"capture":{"acquisition":"egg_hatch","area_id":"gift_daycare","destination":"party","frame":4521,"key":"9A61:C4A6:0A","level":5,"site_id":"hatch_finalized","slot":0,"species_id":10},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"d8594b62243302ae933a5fb8213e55386b78e286d9826db47c33cd43a37d1386","harness_write_scopes":[],"input_mode":"normal_buttons","key":"9A61:C4A6:0B","key_change":{"frame":9851,"new_key":"9A61:C4A6:0B","old_key":"9A61:C4A6:0A","reason":"evolution","site_id":"evolution_species_published","species_id":11},"player":"a","rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"ebf3d6618f15f35b9d6d517c25bb70ebc8f2d03c2176d75097f9083a259106c2","client_saves":1,"flushed_matches":true,"frame":10673,"gate_saves":1,"save_completed_frame":10643,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_evolution_s881_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_evolution_s881_a_witness.SaveRAM"},"scenario":"gen2_evolution","schema":"gen2-duo-evolution-v1","synth":"gold_synth_evolve","title":"gold"}
 RESULT: PASS (evolve linked 9A61:C4A6:0B)

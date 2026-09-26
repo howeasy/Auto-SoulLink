@@ -598,13 +598,14 @@ def test_overworld_presence_defaults_false():
     assert state.overworld_presence is False
 
 
-def test_overworld_presence_round_trips_through_save_load(tmp_path, monkeypatch):
-    """Setting overworld_presence=True must persist via _save() and be restored by load()."""
+def test_overworld_presence_stays_off_through_save_load(tmp_path, monkeypatch):
+    """Deferred post-RC: overworld_presence=True is ignored at construction and on reload
+    (tests/unit/test_overworld_presence_deferred.py)."""
     monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
     state = SoulLinkState(data_dir=str(tmp_path), overworld_presence=True)
     state._save()
     reloaded = SoulLinkState.load(data_dir=str(tmp_path))
-    assert reloaded.overworld_presence is True
+    assert reloaded.overworld_presence is False
 
 
 def test_explode_mode_on_emits_force_explode(tmp_path, monkeypatch):

@@ -12,44 +12,83 @@ RX dead_keys
 BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 A4FC:C78C:9E
 RX hud_show
-RX_TEXT {"cmd":"hud_show","frame":12122,"text":"Partner caught PIDGEY in Route 29"}
-A_PENDING {"frame":13047,"species_id":16}
-  phase walk @13047 xy=53,12
-  phase battle @13312 xy=52,12
+RX_TEXT {"cmd":"hud_show","frame":5432,"text":"Partner caught SENTRET in Route 29"}
+A_PENDING {"frame":6322,"species_id":161}
+  phase walk @6322 xy=53,12
+  phase battle @6644 xy=52,12
 RX gui_prompt
-RX_TEXT {"cmd":"gui_prompt","frame":13322,"text":"Dupes clause: Pidgey -- reroll!"}
+RX_TEXT {"cmd":"gui_prompt","frame":6662,"text":"Dupes clause: Sentret -- reroll!"}
 RX unresolve_area area_id=route_29
-  phase encounter @13811 xy=52,12
-ENCOUNTER {"dupe":true,"frame":13841,"n":1,"species_id":16}
-  phase battle @13841 xy=52,12
-TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":357,"species_id":16}
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":358}
+  phase encounter @7144 xy=52,12
+ENCOUNTER {"dupe":true,"frame":7174,"n":1,"species_id":161}
+  phase battle @7174 xy=52,12
+TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":135,"species_id":161}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":136}
 RX unresolve_area area_id=route_29
-  phase escaped @14056 xy=52,12
-REROLL {"frame":14086,"n":1,"prompt":"Dupes clause: Pidgey -- reroll!","species_id":16}
-  phase walk @14086 xy=52,12
-  phase battle @14398 xy=51,12
-  phase encounter @14897 xy=51,12
-ENCOUNTER {"dupe":false,"frame":14927,"n":2,"species_id":161}
-  phase battle @14927 xy=51,12
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":20372,"key":"94E0:C78C:A1","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":161}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"94E0:C78C:A1","level":2,"maxHP":13,"nickname":"SENTRET","player":"b","seq":572,"species_id":161,"stats":{"level":2,"maxH
-CAPTURE_SENT {"frame":20372,"key":"94E0:C78C:A1","seq":572}
-CAUGHT 94E0:C78C:A1
+  phase escaped @7389 xy=52,12
+REROLL {"frame":7419,"n":1,"prompt":"Dupes clause: Sentret -- reroll!","species_id":161}
+  phase walk @7419 xy=52,12
+  phase battle @7675 xy=51,12
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":7682,"text":"Dupes clause: Sentret -- reroll!"}
+RX unresolve_area area_id=route_29
+  phase encounter @8175 xy=51,12
+ENCOUNTER {"dupe":true,"frame":8205,"n":2,"species_id":161}
+  phase battle @8205 xy=51,12
+TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":171,"species_id":161}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":173}
+RX unresolve_area area_id=route_29
+  phase escaped @8420 xy=51,12
+REROLL {"frame":8450,"n":2,"prompt":"Dupes clause: Sentret -- reroll!","species_id":161}
+  phase walk @8450 xy=51,12
+  phase battle @8698 xy=51,12
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":8702,"text":"Dupes clause: Sentret -- reroll!"}
+RX unresolve_area area_id=route_29
+  phase encounter @9198 xy=51,12
+ENCOUNTER {"dupe":true,"frame":9228,"n":3,"species_id":161}
+  phase battle @9228 xy=51,12
+TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":208,"species_id":161}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":209}
+RX unresolve_area area_id=route_29
+  phase escaped @9443 xy=51,12
+REROLL {"frame":9473,"n":3,"prompt":"Dupes clause: Sentret -- reroll!","species_id":161}
+  phase walk @9473 xy=51,12
+  phase battle @9757 xy=51,12
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":9782,"text":"Dupes clause: Sentret -- reroll!"}
+RX unresolve_area area_id=route_29
+  phase encounter @10257 xy=51,12
+ENCOUNTER {"dupe":true,"frame":10287,"n":4,"species_id":161}
+  phase battle @10287 xy=51,12
+TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":245,"species_id":161}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":246}
+RX unresolve_area area_id=route_29
+  phase escaped @10502 xy=51,12
+REROLL {"frame":10532,"n":4,"prompt":"Dupes clause: Sentret -- reroll!","species_id":161}
+  phase walk @10532 xy=51,12
+  phase battle @10808 xy=51,13
+  phase encounter @11308 xy=51,13
+ENCOUNTER {"dupe":false,"frame":11338,"n":5,"species_id":16}
+  phase battle @11338 xy=51,13
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":14640,"key":"0289:C78C:10","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":16}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"0289:C78C:10","level":3,"maxHP":15,"nickname":"PIDGEY","player":"b","seq":386,"species_id":16,"stats":{"level":3,"maxHP"
+CAPTURE_SENT {"frame":14640,"key":"0289:C78C:10","seq":386}
+CAUGHT 0289:C78C:10
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":20374,"text":"PIDGEY and SENTRET linked!"}
-RX party_mon key=94E0:C78C:A1
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":573}
-TX {"event":"sync_retrieve_done","key":"94E0:C78C:A1","player":"b","seq":576}
-  phase save @20432 xy=51,12
-  phase saved @21126 xy=51,12
+RX_TEXT {"cmd":"msgbox","frame":14642,"text":"SENTRET and PIDGEY linked!"}
+RX party_mon key=0289:C78C:10
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":388}
+TX {"event":"sync_retrieve_done","key":"0289:C78C:10","player":"b","seq":390}
+  phase save @14700 xy=51,13
+  phase saved @15394 xy=51,13
 MYKEY 0 A4FC:C78C:9E
-MYKEY 1 94E0:C78C:A1
-LINKED {"frame":21156,"text":"PIDGEY and SENTRET linked!"}
-  phase settle @21156 xy=51,12
-  phase save @21337 xy=51,12
-  phase saved @21862 xy=51,12
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"643418f588e60a70dcd635955df1cc12e47cad35b71318f32354c9b588ab8f52","client_saves":2,"flushed_matches":true,"frame":21892,"gate_saves":2,"save_completed_frame":21862,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_species_clause_s671_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_species_clause_s671_b_witness.SaveRAM"}
-RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":20372,"key":"94E0:C78C:A1","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":161},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"dupe_species":16,"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084},"input_mode":"normal_buttons","key":"94E0:C78C:A1","linked":{"frame":21156,"text":"PIDGEY and SENTRET linked!"},"path":"reroll_observed","player":"b","rerolls":1,"role":"reroller","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"643418f588e60a70dcd635955df1cc12e47cad35b71318f32354c9b588ab8f52","client_saves":2,"flushed_matches":true,"frame":21892,"gate_saves":2,"save_completed_frame":21862,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_species_clause_s671_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_species_clause_s671_b_witness.SaveRAM"},"scenario":"gen2_species_clause","schema":"gen2-duo-species-clause-v1","species_id":161,"title":"silver"}
-RESULT: PASS (reroll_observed: B linked 94E0:C78C:A1 after 1 reroll(s))
+MYKEY 1 0289:C78C:10
+LINKED {"frame":15424,"text":"SENTRET and PIDGEY linked!"}
+  phase settle @15424 xy=51,13
+  phase save @15605 xy=51,13
+  phase saved @16130 xy=51,13
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"29a9a37dee53d990e4c02b4869711c14a9ef6678f6103febac1c3770250a2a51","client_saves":2,"flushed_matches":true,"frame":16160,"gate_saves":2,"save_completed_frame":16130,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_species_clause_s671_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_species_clause_s671_b_witness.SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":14640,"key":"0289:C78C:10","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":16},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"dupe_species":161,"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084},"input_mode":"normal_buttons","key":"0289:C78C:10","linked":{"frame":15424,"text":"SENTRET and PIDGEY linked!"},"path":"reroll_observed","player":"b","rerolls":4,"role":"reroller","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"29a9a37dee53d990e4c02b4869711c14a9ef6678f6103febac1c3770250a2a51","client_saves":2,"flushed_matches":true,"frame":16160,"gate_saves":2,"save_completed_frame":16130,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_species_clause_s671_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_species_clause_s671_b_witness.SaveRAM"},"scenario":"gen2_species_clause","schema":"gen2-duo-species-clause-v1","species_id":16,"title":"silver"}
+RESULT: PASS (reroll_observed: B linked 0289:C78C:10 after 4 reroll(s))

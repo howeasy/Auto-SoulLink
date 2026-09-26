@@ -23,8 +23,10 @@ from server.adapters import gen3_codec as codec  # noqa: E402
 
 LUA_PATH = ROOT / "lua/tests/mkstates_gen3_tutorials.lua"
 SOURCE = LUA_PATH.read_text(encoding="utf-8")
-PRET = next((d / ".cache/pret/pokefirered" for d in (ROOT, *ROOT.parents)
-             if (d / ".cache/pret/pokefirered").exists()), ROOT / ".cache/pret/pokefirered")  # walk up, never count levels
+sys.path.insert(0, str(ROOT / "tests" / "unit"))
+import gen3_pret  # noqa: E402
+
+PRET = gen3_pret.find()  # $SLINK_PRET_FIRERED_SRC or the walk-up; require() checks the pin
 TITLES = {"firered": "pokefirered", "leafgreen": "pokeleafgreen"}
 ROMS = {"firered": "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba",
         "leafgreen": "E:/Google Drive/SLink/Pokemon - LeafGreen Version (USA).gba"}
@@ -106,8 +108,7 @@ def test_addresses_match_sym_and_map(env, title):
 
 def test_constants_match_pret(env):
     _, m, _ = env
-    if not PRET.exists():
-        pytest.skip("pret checkout not present")
+    gen3_pret.require(PRET)
     battle = (PRET / "include/constants/battle.h").read_text()
     assert f"BATTLE_TYPE_OLD_MAN_TUTORIAL   (1 << {m.OLD_MAN.bit_length() - 1})" in battle
     assert f"BATTLE_TYPE_POKEDUDE           (1 << {m.POKEDUDE.bit_length() - 1})" in battle
@@ -146,8 +147,7 @@ def test_route_segments_end_where_they_say(env):
 
 def test_route_meets_only_the_right_trigger(env):
     _, m, _ = env
-    if not PRET.exists():
-        pytest.skip("pret checkout not present")
+    gen3_pret.require(PRET)
     d = json.loads((PRET / "data/maps/ViridianCity/map.json").read_text())
     walked, _ = tiles(m)
     trig = {(c["x"], c["y"]): c for c in d["coord_events"]}
@@ -277,8 +277,7 @@ def test_ttv_list_not_ready_mid_setup(env, title):
 
 
 def test_ttv_setup_installs_the_steady_callback_after_the_fade():
-    if not PRET.exists():
-        pytest.skip("pret checkout not present")
+    gen3_pret.require(PRET)
     ttv = (PRET / "src/teachy_tv.c").read_text()
     body = ttv[ttv.index("static void TeachyTvMainCallback(void)\n{"):]
     body = body[:body.index("\n}\n")]

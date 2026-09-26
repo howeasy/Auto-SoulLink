@@ -60,7 +60,7 @@ ROMS = {
         "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     ("gen3_rr", "radical_red", "companion"): (
         ROOT / "patch" / "build" / "slink_RR.gba",
-        "ea5352f8a3b9073f8ae20870ad12857925d442cd"),
+        "7a3867499d66eb3621e0e7dde43bd033fc679f01"),
     ("gen3_emerald", "emerald", "clean"): (
         pathlib.Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"),
         "f3ae088181bf583e55daf962a92bb46f4f1d07b7"),

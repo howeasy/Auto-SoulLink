@@ -202,6 +202,36 @@ def _build_mon_entry(key, detail, adapter):
     }
 
 
+def _foe_detail(em, adapter):
+    """A client enemy_party entry reshaped as the party detail _build_mon_entry reads. The one
+    place both calc paths (/api/calc/mons and the board preview) build an enemy from, so the
+    preview can't model a different foe than the full calc does."""
+    detail = {
+        "species_id":   em.get("species_id", 0),
+        "level":        em.get("level", 0),
+        "nickname":     "",
+        "hp":           em.get("hp", 0),
+        # No default: an enemy the client hasn't decoded a battle struct for
+        # yet (or a generation that doesn't send one) stays maxHP=None, not a
+        # fake maxHP=1 that used to force hp_pct to 100.
+        "maxHP":        em.get("maxHP"),
+        "held_item_id": em.get("held_item_id", 0),
+        "ability_id":   em.get("ability_id", 0),
+        "ability_name": "",
+        "moves":        em.get("moves", []),
+        "status_cond":  em.get("status_cond", 0),
+        "stat_stages":  em.get("stat_stages"),
+        # Gen 1 only (lua/gen1/client.lua enemy_party): dvs_raw from the live
+        # wEnemyMon struct always; blob_hex (trainer battles only) additionally
+        # carries stat exp. adapter.calc_stats() ignores both when absent.
+        "dvs_raw":      em.get("dvs_raw"),
+        "blob_hex":     em.get("blob_hex"),
+        "pp":           em.get("pp"),
+    }
+    detail["calc_stats"] = adapter.calc_stats(detail)
+    return detail
+
+
 def _calc_trainer_label(brief, enemy):
     """The calc setdex trainer key for a roster trainer ("*Rival Blue Set 2" -> "Rival Blue",
     the key the bridge's trainer index uses), or "" when there is no roster calc_label or
@@ -894,12 +924,9 @@ class SLinkServer:
 
     def _calc_profile(self) -> dict | None:
         """The damage-calc profile shared by both players' adapters, or None if either
-        game has no verified calc numbers yet, or the two players' games disagree."""
-        a = self.adapter_for("a").calc_profile()
-        b = self.adapter_for("b").calc_profile()
-        if a is None or b is None or a != b:
-            return None
-        return a
+        game has no verified calc numbers yet, or the two games' calc rules disagree."""
+        from server.adapters import shared_calc_profile
+        return shared_calc_profile(self.adapter_for(pid).calc_profile() for pid in ("a", "b"))
 
     def _trainer_panel_html(self, area_id: str, player_id: str = "",
                             key_prefix: str = "",
@@ -1286,11 +1313,12 @@ class SLinkServer:
                     out[stat] = raw - 6
             return out
 
-        # Same shape /api/calc/mons sends (base.calc_stats contract): None when the adapter
-        # can't decode it. The enemy's raw dvs_raw/blob_hex ride along on dfn already --
-        # _enrich_battle_state's enemy_party is a shallow copy of the client's own dict --
-        # so this is the same call handle_calc_mons makes, no reconstruction needed.
-        enemy_calc_stats = adapter.calc_stats(dfn)
+        # The enemy exactly as /api/calc/mons builds it (_foe_detail): calc spelling, held
+        # item, ability and calc_stats. Nature stays None -- no client sends an enemy's
+        # personality, so neither calc path can know it.
+        foe = _build_mon_entry("foe", _foe_detail(dfn, adapter), adapter)
+        if not foe:
+            return None
         return {
             "gen": profile.get("gen"),
             "dex": profile.get("dex"),
@@ -1307,13 +1335,16 @@ class SLinkServer:
             "player_status": status(atk),
             "player_boosts": boosts(atk["stat_stages"]),
             "player_calc_stats": atk["calc_stats"],
-            "enemy_species": dfn.get("species_name") or "",
-            "enemy_level": dfn.get("level", 0),
+            "enemy_species": foe["species_name"],
+            "enemy_level": foe["level"],
+            "enemy_nature": foe["nature"],
+            "enemy_ability": foe["ability_name"],
+            "enemy_item": foe["item_name"],
             "enemy_hp_pct": (max(0, min(100, int(dfn.get("hp", 0) / dfn["maxHP"] * 100)))
                               if dfn.get("maxHP") else None),
             "enemy_status": status(dfn),
             "enemy_boosts": boosts(dfn.get("stat_stages")),
-            "enemy_calc_stats": enemy_calc_stats,
+            "enemy_calc_stats": foe["calc_stats"],
         }
 
     def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:
@@ -3041,33 +3072,9 @@ class SLinkServer:
                 trainer_label = " ".join(filter(None, [opp_class, opp_name])) if is_trainer else "Wild"
                 tid = bs.get("trainer_id") or 0
                 for ei, em in enumerate(bs.get("enemy_party", [])):
-                    esid  = em.get("species_id", 0)
-                    if not esid:
+                    if not em.get("species_id", 0):
                         continue
-                    detail = {
-                        "species_id":   esid,
-                        "level":        em.get("level", 0),
-                        "nickname":     "",
-                        "hp":           em.get("hp", 0),
-                        # No default: an enemy the client hasn't decoded a battle struct for
-                        # yet (or a generation that doesn't send one) stays maxHP=None, not a
-                        # fake maxHP=1 that used to force hp_pct to 100.
-                        "maxHP":        em.get("maxHP"),
-                        "held_item_id": em.get("held_item_id", 0),
-                        "ability_id":   em.get("ability_id", 0),
-                        "ability_name": "",
-                        "moves":        em.get("moves", []),
-                        "status_cond":  em.get("status_cond", 0),
-                        "stat_stages":  em.get("stat_stages"),
-                        # Gen 1 only (lua/gen1/client.lua enemy_party): dvs_raw from the live
-                        # wEnemyMon struct always; blob_hex (trainer battles only) additionally
-                        # carries stat exp. adapter.calc_stats() ignores both when absent.
-                        "dvs_raw":      em.get("dvs_raw"),
-                        "blob_hex":     em.get("blob_hex"),
-                        "pp":           em.get("pp"),
-                    }
-                    detail["calc_stats"] = adapter.calc_stats(detail)
-                    entry = _build_mon_entry(f"foe-{ei}", detail, adapter)
+                    entry = _build_mon_entry(f"foe-{ei}", _foe_detail(em, adapter), adapter)
                     if entry:
                         entry["loc"]    = "enemy"
                         entry["active"] = em.get("active", False)

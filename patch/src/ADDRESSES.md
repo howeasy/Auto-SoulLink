@@ -114,7 +114,7 @@ with hardcoded offsets — `desc[i] = *(base+8+4i)` (13 entries, ending `0x09148
 over **id 8** instead — a second PLAYER row that only `SetUpStartMenu_Link` appends, and which
 `lua/tests/test_live_startmenu.lua` proves absent from the menu a real player opens.
 
-`build.py` rewrites four words, each verified against its expected current value first:
+`build.py` rewrites five words, each verified against its expected current value first:
 
 | ROM word | was | becomes |
 |---|---|---|
@@ -122,11 +122,17 @@ over **id 8** instead — a second PLAYER row that only `SetUpStartMenu_Link` ap
 | `0x09149030` (`act[8].text`) | `0x0841628E` | `sSoulLinkLabel` |
 | `0x09149034` (`act[8].func`) | `0x0806F56D` | `slink_startmenu_cb\|1` |
 | `0x0806ED58` (`SetUpStartMenu` literal) | `0x090BE179` | `slink_setup_start_menu\|1` |
+| `0x090BDD54` (page-switch rebuild callback) | `0x090BE30D` | `slink_start_menu_redraw\|1` |
 
 Menu globals, both located live: **`sNumStartMenuActions = 0x020370F5`**, **`sStartMenuOrder =
-0x020370F6`**. A normal field menu is exactly `[1 2 3 4 5 6]` with EXIT (id 6) last, so the wrapper
-splices SOULLINK at index 5 and pushes EXIT to 6 — and it splices *only* into that exact shape, so
-the link menu and any future RR revision are left alone rather than guessed at.
+0x020370F6`**. RR's `SetUpStartMenu` (`0x090BE178`) builds the main page as `[(0) (1) (2) (3) (4) 5 EXIT]`
+(POKEDEX appears with FLAG_SYS_POKEDEX_GET, so 6 rows before the Pokedex and 7 after), where EXIT is id 6,
+or id 11 once the DexNav/PC tools page exists (flag 0x91E). The wrapper splices SOULLINK right before
+EXIT on that main page only; link (`[1 2 8 5 6]`), union room, Safari (`[7 ...]`) and the tools page
+(`[.. 12]`) get no row, and at most 8 rows (CFRU sizes the window 2n-1 tiles). RR's L/R page switch
+rebuilds through `0x090BE30C`, a direct `bl` that bypasses the literal above, so its one callback
+literal is repointed to `slink_start_menu_redraw`, which replays its prologue through the wrapper and
+falls into its own tail. `lua/tests/test_live_startmenu_shapes.lua` gates every shape.
 
 ### The info screen (opcode 27)
 
@@ -401,7 +407,7 @@ against `BPRE.ld` and disassembled (capstone):
 | 17 | SHOW_MENU | text (FR-encoded) in `0x0203F900` → `result[0]`=choice (1=YES 0=NO) | native YES/NO field menu (`yesnobox`); **async** — ack ST_BUSY, `drive_menu` publishes `gSpecialVar_Result`@`0x020370D0` when the script ends. Talk-to-partner menuing foundation. |
 | 18 | SET_PARTY_MON | `[0]`=slot `[1]`=bump; one blob staged in `0x0203FA00` | faithful 100-byte blob copy into `gPlayerParty[slot]` (trade — mirror of SET_ENEMY_PARTY) |
 | 19 | PLAY_SE | `[0..1]`=songId | `PlaySE(songId)` @`0x080722CC` — native sound effect (retires the Lua m4a SE1 RAM-poke) |
-| 20 | CHOOSE_PARTY_MON | — → `result[0]`=slot(0-5)/7=cancel | native "Choose a POKéMON" menu via `callnative InitPartyMenu` (FR `special` idx is reordered on RR); ASYNC, `drive_ui` publishes Var8004 |
+| 20 | CHOOSE_PARTY_MON | — → `result[0]`=slot(0-5)/7=cancel | native "Choose a POKéMON" menu via `callnative ChoosePartyMonByMenuType` (FR `special` idx is reordered on RR); ASYNC, `drive_ui` publishes Var8004 |
 | 21 | TRADE_SCENE | `[0]`=slot | native in-game trade animation+evolution via `callnative DoInGameTradeScene` @`0x08054440` (RE'd); trades `gPlayerParty[slot]` ↔ `gEnemyParty[0]`; ASYNC |
 | 22 | SHOW_CHOICES | options FR-encoded in `SLINK_MENU_BUF` (`[u8 count][str 0xFF]...`) → `result[0]`=index/0x7F=cancel | native multichoice list (custom labels); replicates `DrawVerticalMultichoiceMenu` in C (`CreateWindowFromRect 0x809D654`, `SetStandardWindowBorderStyle 0x80F7750`, `AddTextPrinterParameterized 0x8002C48`, `CopyWindowToVram 0x8003F20`, `Menu_InitCursor 0x810F7D8`, `CreateTask 0x807741C` → `Task_MultichoiceMenu_HandleInput 0x809CC98`, `GetStringWidth 0x8005ED4`, `ScheduleBgCopyTilemapToVram 0x80F67A4`); FONT_NORMAL=2, gTasks=0x3005090. ASYNC (lockall-bracketed, drive_ui kind 1) |
 | 24 | DEPOSIT_MON | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→PC box (CFRU `CreateCompressedMonFromBoxMon` + shift-compact party). LIVE (`test_live_boxsync`). See "PC storage / box migration reference" |
@@ -444,8 +450,12 @@ bump the version and ship a range check in `present()`.
 
 **RR `gSpecials` is REORDERED** — the FireRed `special` indices (e.g. ChoosePartyMon 170, DoInGameTradeScene
 265) DO NOT work on RR (live-proven no-ops). The native menus/scene are invoked **by address** via CFRU's
-`callnative` (script-cmd `0x23` + 4-byte fn ptr). `InitPartyMenu = 0x0811EA44`, `Task_HandleChooseMonInput
-= 0x0811FB28`, `CB2_ReturnToField = 0x080567DC` (BPRE.ld). **`DoInGameTradeScene = 0x08054440`** was RE'd
+`callnative` (script-cmd `0x23` + 4-byte fn ptr). The chooser calls RR's `ChoosePartyMonByMenuType =
+0x081283A8` (pret FR byte for byte): it sets `gFieldCallback2 (0x03005024) = CB2_FadeFromPartyMenu
+(0x081283E4)` before `InitPartyMenu(3, 0, 11, 0, 0, Task_HandleChooseMonInput, CB2_ReturnToField)`, and on
+the way back `Task_PartyMenuWaitForFade (0x081283FC)` runs `EnableBothScriptContexts`, so the script's
+`waitstate` resumes and reaches `end` (`sGlobalScriptContextStatus 0x03000EA8` = 2). Calling `InitPartyMenu`
+directly (the old trampoline) left the script waiting forever. **`DoInGameTradeScene = 0x08054440`** was RE'd
 (`patch/tools/find_trade_scene.py`): the tiny fn LockPlayerFieldControls→CreateTask(Task_InGameTrade,10)→
 BeginNormalPaletteFade(-1,0,0,16,0)→HelpSystem_Disable whose task installs CB2 `0x080505CC` (references
 gSelectedTradeMonPositions + Var8005 + gEnemyParty = the in-game NPC trade). `gSpecialVar_0x8004=0x020370C0`,
@@ -455,8 +465,10 @@ gSelectedTradeMonPositions + Var8005 + gEnemyParty = the in-game NPC trade). `gS
 `gSpecialVar_Result = 0x020370D0` (yes/no + multichoice chosen index), `gPlayerPartyCount = 0x02024029`,
 `gEnemyPartyCount = 0x0202402A` (u8 member counts, bumped by SET_PARTY_MON/SET_ENEMY_PARTY). The trade
 scene's "X sent over Y" text is overridden each frame from the staged `gEnemyParty[0]` plaintext
-(NO_ENCRYPT: nickname @+0x08 (11 b), otName @+0x14 (8 b)) into `gStringVar3 = 0x02021D04` (received
-nickname) and `gStringVar1 = 0x02021CD0` (received OT); `gStringVar2`/`gStringVar4 = 0x02021D18`.
+(NO_ENCRYPT: nickname @+0x08, 10 glyphs; otName @+0x14, 7 glyphs) into `gStringVar3 = 0x02021D04` (received
+nickname) and `gStringVar1 = 0x02021CD0` (received OT), always 0xFF-terminated (a full-length name has no
+terminator inside its field; an unterminated `gStringVar3` runs into `gStringVar4 = 0x02021D18`, the
+expansion's own destination, and `StringExpandPlaceholders` then copies forever over EWRAM).
 
 > **Function-pointer convention:** the address tables above list **bare** ROM addresses; `handlers.c`
 > ORs the Thumb bit (`addr | 1`) on every function pointer it calls (e.g. table `0x809D654` →

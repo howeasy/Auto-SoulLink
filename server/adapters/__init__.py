@@ -111,6 +111,19 @@ def game_id_for_rom_type(rom_type: str) -> str | None:
     return _ROM_TYPE_TO_GAME_ID.get(rom_type)
 
 
+def shared_calc_profile(profiles) -> dict | None:
+    """The one calc profile every player's calc_profile() can share, or None.
+
+    The rules (gen + dex) must agree or the calc stays hidden. Anything else -- the vendored
+    trainer "sets" -- survives only when every player has the same one: Crystal paired with
+    Gold/Silver still gets the Gen 2 calc, just without Crystal's trainer sets."""
+    profiles = list(profiles)
+    if not profiles or any(p is None for p in profiles):
+        return None
+    shared = {k: v for k, v in profiles[0].items() if all(p.get(k) == v for p in profiles)}
+    return shared if "gen" in shared and "dex" in shared else None
+
+
 # ROM types an owner ruling REFUSES (never routed), with the reason a refused hello names.
 _ARCHIPELAGO_CRYSTAL = "Archipelago Crystal is not supported (O-25)"
 _REFUSED_ROM_TYPES: dict[str, str] = {

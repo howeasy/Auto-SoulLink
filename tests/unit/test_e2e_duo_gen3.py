@@ -4536,11 +4536,13 @@ FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
     "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
-    "ea5352f8a3b9073f8ae20870ad12857925d442cd": REPO / "patch" / "build" / "slink_RR.gba",
+    "7a3867499d66eb3621e0e7dde43bd033fc679f01": REPO / "patch" / "build" / "slink_RR.gba",
 }
 
 
-COMPANION_EXTRA_REFS = {0x0811FB29: [0x0837A298], 0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x0837992C]}
+# (the companion no longer carries a Task_HandleChooseMonInput 0x0811FB29 literal: its party chooser
+# calls RR's ChoosePartyMonByMenuType, which owns that reference)
+COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x0837992C]}
 
 
 def _pret_battle_berries():
@@ -4637,7 +4639,7 @@ def test_rr_party_menu_words_hold_in_the_rr_rom(sha):
     assert body(rr, 0x08122C5C, 188) == body(fr, 0x08122C5C, 188)
     assert body(rr, 0x0811FB28, 4) == bytes.fromhex("00490847")                       # ldr r1,[pc]; bx r1
     # the companion's own code (0x0837xxxx / 0x0936xxxx) adds these referrers, nothing else
-    extra = COMPANION_EXTRA_REFS if sha.startswith("ea5352f8") else {}
+    extra = COMPANION_EXTRA_REFS if RR_ARTIFACTS[sha].name == "slink_RR.gba" else {}
 
     def exact(value, base):
         got = refs(rr, value)

@@ -105,7 +105,8 @@ SCENARIOS_RR = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "w
                 "link_gen3", "deadzone_gen3", "reconnect_gen3",
                 "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
                 "linked_faint_active_whiteout_gen3", "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3",
-                "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3")
+                "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3",
+                "trade_gen3", "trade_decline_gen3", "infopanel_gen3", "infopanel_dex_gen3")
 
 
 def deadline_for_rr(scenario):

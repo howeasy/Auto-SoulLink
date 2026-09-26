@@ -358,7 +358,7 @@ class SoulLinkState:
         # ROM-patch-required: the Lua side additionally self-gates on
         # patch_present(), so the feature is live only when this flag is ON AND
         # both players are patched.  Per-run rule, never flipped at runtime.
-        self.overworld_presence: bool = overworld_presence
+        self.overworld_presence: bool = False  # ponytail: forced off -- peer ghost deferred post-RC; ON disabled the PC trade NPC (docs/gen3/TODO.md, test_overworld_presence_deferred.py)
         # Native-enhancement toggles (ROM-patch features the Lua client can route either natively
         # or through its Lua fallback).  All four ride the same `config` command the client gets
         # on hello; none are flipped at runtime.  Unlike the opt-in run RULES above, these do not
@@ -1540,7 +1540,7 @@ class SoulLinkState:
                 state.type_lock = bool(saved_rules.get("type_lock", type_lock))
                 state.explode_mode = bool(saved_rules.get("explode_mode", explode_mode))
                 state.rival_team_swap = bool(saved_rules.get("rival_team_swap", rival_team_swap))
-                state.overworld_presence = bool(saved_rules.get("overworld_presence", overworld_presence))
+                state.overworld_presence = False  # deferred post-RC; see __init__
                 state.native_messages = False  # disabled for the RC; see __init__
                 state.native_sounds = bool(saved_rules.get("native_sounds", native_sounds))
                 state.battle_calc = bool(saved_rules.get("battle_calc", battle_calc))

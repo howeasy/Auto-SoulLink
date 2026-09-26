@@ -113,6 +113,8 @@ def expected_members(m) -> tuple[dict[str, str], set[str], set[str]]:
         if opt:
             optional.add(member)
 
+    for f in m._LICENSE_FILES:
+        add(f, f)
     for f in m._LUA_ROOT:
         add(f"lua/{f}", f"lua/{f}")
     for f in m._LUA_GEN1:

@@ -74,17 +74,19 @@ BATTLE_CALC_TRAMPOLINE = 0x08378CA8
 # literal with hardcoded offsets, and the two ranges abut (desc[13] IS act[0].text), so a 14th
 # action id cannot own a description. We take over id 8 instead — a second PLAYER row only
 # SetUpStartMenu_Link ever appends, proven absent from a real field menu by
-# lua/tests/test_live_startmenu.lua. Four word writes, each verified against its expected current value
+# lua/tests/test_live_startmenu.lua. Five word writes, each verified against its expected current value
 # so a different RR build fails the build instead of producing a subtly wrong ROM.
 STARTMENU_TABLE = 0x09148FB4
 STARTMENU_DESC8 = STARTMENU_TABLE + 8 + 4 * 8       # 0x09148FDC — desc[8]
 STARTMENU_ACT8 = STARTMENU_TABLE + 0x3C + 8 * 8     # 0x09149030 — act[8] = {text, func}
 STARTMENU_SETUP_LIT = 0x0806ED58                    # CFRU's SetUpStartMenu redirect literal
+STARTMENU_REDRAW_LIT = 0x090BDD54                   # the page switch's rebuild callback literal
 STARTMENU_EXPECT = {
     STARTMENU_DESC8: 0x0841A049,       # duplicate of desc[3] (PLAYER)
     STARTMENU_ACT8: 0x0841628E,        # duplicate of act[3].text (PLAYER)
     STARTMENU_ACT8 + 4: 0x0806F56D,    # id 8's own action func (NOT act[3].func)
     STARTMENU_SETUP_LIT: 0x090BE179,   # the original SetUpStartMenu
+    STARTMENU_REDRAW_LIT: 0x090BE30D,  # RR's rebuild (direct `bl SetUpStartMenu`, bypasses the above)
 }
 
 RR_MD5 = "8529f3a45d32bce4da637976fcf269d4"
@@ -165,7 +167,8 @@ def main():
     # Every symbol the ROM-side rewrites need to point at. Missing one is fatal: it would mean a
     # detour or table word silently keeping its old target.
     WANTED = ("slink_hook", "slink_battletext_hook", "slink_backup_wrap",
-              "slink_startmenu_cb", "slink_setup_start_menu", "sSoulLinkLabel", "sSoulLinkDesc")
+              "slink_startmenu_cb", "slink_setup_start_menu", "slink_start_menu_redraw",
+               "sSoulLinkLabel", "sSoulLinkDesc")
     sym = {}
     for line in run([NM, elf]).splitlines():
         parts = line.split()
@@ -244,6 +247,7 @@ def main():
     w32(STARTMENU_ACT8, sym["sSoulLinkLabel"])
     w32(STARTMENU_ACT8 + 4, sym["slink_startmenu_cb"] | 1)          # Thumb bit
     w32(STARTMENU_SETUP_LIT, sym["slink_setup_start_menu"] | 1)
+    w32(STARTMENU_REDRAW_LIT, sym["slink_start_menu_redraw"] | 1)
     print(f"      start-menu id 8 -> SOULLINK (label {sym['sSoulLinkLabel']:#x}, "
           f"cb {sym['slink_startmenu_cb'] | 1:#x}, setup wrapper "
           f"{sym['slink_setup_start_menu'] | 1:#x})")

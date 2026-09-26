@@ -8,6 +8,7 @@ non-hosting player needs to run SLink in BizHawk:
   - data/games/<gen>/  (area/location tables and the Gen 1 client's JSON data,
     loaded via _proj_root path)
   - PLAYER_SETUP.md
+  - LICENSE, NOTICE.md
 
 The server (Python), test suite, code-generation tools, and server-only
 JSON data files are intentionally excluded.
@@ -327,6 +328,9 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
 # tracked in git (blob 896b3cba at master, lua/x64/README.md alongside it), so a checkout has it;
 # only a hand-stripped tree would miss it. Absent -> warn, do not fail.
 _LUA_X64_OPTIONAL = ["socket-windows-5-4.dll"]
+# Shipped at the zip root: the MIT licence and the third-party notices (LuaSocket's MIT
+# notice covers the DLL above). NOTICE.md names what those licences require on redistribution.
+_LICENSE_FILES = ["LICENSE", "NOTICE.md"]
 
 # ── Companion patch (Radical Red native code-injection) — optional add-on ──────
 # RR-only. Bundled under companion/ when --with-patch or --rom is given. The UPS
@@ -613,6 +617,9 @@ def build_release(
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr(prefix + "PLAYER_SETUP.md", guide or player_setup_md())
+        for fname in _LICENSE_FILES:
+            zf.write(REPO_ROOT / fname, prefix + fname)
+            say(f"  [added]   {prefix}{fname}")
         if launcher:
             zf.writestr(prefix + launcher[0], launcher[1])
             say(f"  [added]   {prefix}{launcher[0]}")

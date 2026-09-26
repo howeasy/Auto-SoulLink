@@ -1,0 +1,72 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario trade_gen3   (cwd=C:/slink-wt/rrduo)
+# lane=C:/slink-wt/rrduo sha=9bbf0a2a (lane-local WIP commit over 2771d949; scenario file lua/tests/duo/scenario_gen3_trade.lua is UNCOMMITTED on the branch) runner=subagent G5-RR-TRADE-PANEL 2026-09-26
+# verdict: RED -- PRODUCT BUGS, reproduced on 3 live runs (r3/r4 with A presses in B's scene, r6 with NO input in B's scene; identical).
+#  (1) B (acceptor, Route 1 field, clear checkpoint): OP_TRADE_SCENE enters CB2_InitInGameTrade (0x080505CD) then CB2_InGameTrade (0x08050949);
+#      exactly 1332 frames later EWRAM is stomped (gPlayerPartyCount 2 -> 213, companion beacon gone, sScriptContext2Enabled 226), the game
+#      never leaves the scene, the client sees a spurious trainer_battle_start (gTrainerBattleOpponent_A=2) and 'native reset'; TRADE UNRESOLVED.
+#      Traded species on both sides = 1324 (RR/CFRU-expanded id); the single-instance gate test_live_tradescene only ever traded a savestate slot-0 copy.
+#      FR vs RR bytes: CB2_InitInGameTrade/CB2_InGameTrade/TradeMons/UpdatePokedexForReceivedMon/GetSetPokedexFlag are vanilla FR; only
+#      SpeciesToNationalPokedexNum is CFRU-patched (hypothesis, unproven: vanilla dex-flag write for an expanded national number).
+#  (2) A (initiator, in the Viridian Center 1F): after OP_CHOOSE_PARTY_MON (handlers.c slink_open_party_menu -> InitPartyMenu(..., CB2_RETURN_TO_FIELD)
+#      behind a `callnative; waitstate` script) the overworld checkpoint refuses script_context_status for the whole field_wait (1800 frames),
+#      so A never runs the native scene; the client falls back to the silent OP_SET_PARTY_MON swap ('silent swap after the field never cleared').
+#  Everything before that is green: A walks to the NPC, talks with A (pi_count 0->1), picks Trade (choice 0), picks slot 1 (RIGHT from the
+#  left panel), B receives show_menu and answers YES (choice 1), both get apply_trade.
+--- A receipt (r6), from the talk ---
+TALKED npc=(3,2) player=(3,3) facing=Up pi_count=0->1
+TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":223,"token":"t1"}
+CHOSE_TRADE
+RX choose_mon
+PARTY_CURSOR 0,1 party_count=2
+TX mon_chosen - {"event":"mon_chosen","player":"a","seq":228,"slot":1,"token":"t1"}
+CHOSE_MON slot=1 key=F56D8C1D:2BDDC8BF
+TRACE wait frame=7183 cb2=0811EBA1 sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED callback2,field_controls_locked,palette_fade_active,script_context_status
+RX hud_show text=Trade offer sent - waiting for partner...
+TRACE wait frame=7196 cb2=080567DD sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED callback2,field_controls_locked,script_context_status
+TRACE wait frame=7197 cb2=08056809 sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED callback2,field_controls_locked,script_context_status
+TRACE wait frame=7212 cb2=080565B5 sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED field_controls_locked,palette_fade_active,script_context_status
+RX apply_trade
+[client] [SLink-gen3] apply_trade received for F56D8C1D:2BDDC8BF: queued for the native trade
+TRACE wait frame=7232 cb2=080565B5 sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=wait
+TRACE_REFUSED field_controls_locked,palette_fade_active,script_context_status,cpu
+TRACE scene frame=7272 cb2=080565B5 sc2=0 ctx=0 beacon=1 count=2 inbattle=0 phase=wait
+TRACE_REFUSED script_context_status
+TRACE scene frame=9032 cb2=080565B5 sc2=0 ctx=0 beacon=1 count=2 inbattle=0 phase=fallback
+TRACE_REFUSED script_context_status
+[client] [SLink-gen3] trade: silent swap after the field never cleared; trade_done F56D8C1D:2BDDC8BF -> F56D8C1D:D4223740
+TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:D4223740","new_species":1324,"player":"a","seq":291,"slot":1,"token":"t1"}
+TRACE scene frame=9034 cb2=080565B5 sc2=0 ctx=0 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED script_context_status
+TRADED gave=F56D8C1D:2BDDC8BF got=F56D8C1D:D4223740 slot=1 species=1324 level=4
+RX link_panel
+--- B receipt (r6), from the offer ---
+RX show_menu text=Trade your Aaaaaaaaaa for Aaaaaaaaaa?
+TX menu_result - {"choice":1,"event":"menu_result","player":"b","seq":258,"token":"t1"}
+ACCEPTED choice=1
+TRACE wait frame=8302 cb2=080565B5 sc2=0 ctx=0 beacon=1 count=2 inbattle=0 phase=nil
+RX apply_trade
+[client] [SLink-gen3] apply_trade received for F56D8C1D:D4223740: queued for the native trade
+TRACE wait frame=8303 cb2=080565B5 sc2=0 ctx=0 beacon=1 count=2 inbattle=0 phase=stage
+TRACE scene frame=8305 cb2=080565B5 sc2=0 ctx=0 beacon=1 count=2 inbattle=0 phase=scene
+TRACE scene frame=8306 cb2=080565B5 sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=scene
+TRACE scene frame=8328 cb2=080505CD sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=scene
+TRACE scene frame=8339 cb2=08050949 sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=scene
+TRACE scene frame=9671 cb2=08050949 sc2=1 ctx=0 beacon=1 count=213 inbattle=0 phase=scene
+TX trainer_battle_start - {"battle_id":1,"event":"trainer_battle_start","player":"b","seq":305,"session":"0000000B64E3C987","trainer_id":2}
+[client] [SLink-gen3] trainer 2 announced before battle 1
+[client] [SLink-gen3] trade: scene ACK lost (native reset); waiting the backstop, no overwrite
+TRACE scene frame=9686 cb2=08050949 sc2=1 ctx=0 beacon=0 count=213 inbattle=0 phase=scene_lost
+[client] [SLink-gen3] writes PAUSED: party count exceeds capacity
+TRACE scene frame=11842 cb2=08050949 sc2=226 ctx=213 beacon=0 count=213 inbattle=0 phase=scene_lost
+[client] [SLink-gen3] trade: scene ACK lost; no conclusive read-back yet, no trade_done
+TRACE scene frame=14305 cb2=08050949 sc2=226 ctx=213 beacon=0 count=213 inbattle=0 phase=readback
+[client] [SLink-gen3] TRADE UNRESOLVED: no conclusive read-back (scene ACK lost); no trade_done, nothing purged (the server watchdog settles it)
+TRACE scene frame=20305 cb2=08050949 sc2=226 ctx=213 beacon=0 count=213 inbattle=0 phase=nil
+--- related: infopanel on rr_battle2 (post-Pokedex), lane 3a84cd02-era run ---
+[duo] RESULT_LINE a: RESULT: FAIL (no SOULLINK row in the START menu (count 7))
+[duo] RESULT_LINE b: RESULT: PASS (idle)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle

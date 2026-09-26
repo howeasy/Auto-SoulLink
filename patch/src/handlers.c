@@ -451,13 +451,8 @@ typedef void (*PlaySE_t)(u16 songId);
 #define gSpecialVar_0x8004   0x020370C0u
 /* The FireRed `special` INDICES are WRONG on RR — CFRU/RR reordered gSpecials (the live spike proved
  * `special 170` was a no-op: the party menu never opened). So we invoke the native menus by ADDRESS via
- * CFRU's `callnative` (callasm, script-cmd 0x23 + a 4-byte fn ptr). The party-menu internals ARE
- * symbol-mapped in BPRE.ld; a tiny trampoline replicates ChoosePartyMon's InitPartyMenu call. */
-typedef void (*InitPartyMenu_t)(u8 menuType, u8 layout, u8 action, u8 keepCursor, u8 msgId,
-                                void *task, void *callback);
-#define InitPartyMenu          ((InitPartyMenu_t)0x0811EA45u)
-#define TASK_HANDLE_CHOOSE_MON 0x0811FB29u   /* Task_HandleChooseMonInput (sets Var8004) */
-#define CB2_RETURN_TO_FIELD    0x080567DDu   /* CB2_ReturnToField (menu exit -> resume the field script) */
+ * CFRU's `callnative` (callasm, script-cmd 0x23 + a 4-byte fn ptr); the party chooser goes through
+ * RR's ChoosePartyMonByMenuType (see slink_open_party_menu). */
 /* DoInGameTradeScene (RR) — RE'd via patch/tools/find_trade_scene.py (the FR `special` index is
  * reordered on RR, so we call it by ADDRESS via callnative). It's the tiny fn
  *   LockPlayerFieldControls(); CreateTask(Task_InGameTrade,10);
@@ -1031,18 +1026,26 @@ static void run_yesno_msgbox(void)
     ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
 }
 
-/* callnative target: open the native "Choose a POKeMON" menu by replicating ChoosePartyMon's
- * InitPartyMenu call (CHOOSE_SINGLE_MON / CHOOSE_AND_CLOSE). The chosen slot lands in Var8004 (0-5),
- * or SLOT_CANCEL (7) on B; Task_HandleChooseMonInput writes it and exits via CB2_ReturnToField, which
- * resumes our field script's waitstate. */
+/* callnative target: open the native "Choose a POKeMON" menu through RR's own
+ * ChoosePartyMonByMenuType (0x081283A8, byte-for-byte pret FR party_menu.c): it sets
+ * gFieldCallback2 (0x03005024) = CB2_FadeFromPartyMenu (0x081283E4) and calls
+ * InitPartyMenu(type, SINGLE, CHOOSE_AND_CLOSE, FALSE, CHOOSE_MON, Task_HandleChooseMonInput,
+ * CB2_ReturnToField). The chosen slot lands in Var8004 (0-5), or SLOT_CANCEL (7) on B. On the way
+ * back CB2_FadeFromPartyMenu fades in and Task_PartyMenuWaitForFade (0x081283FC) runs
+ * ScriptContext2_Disable + EnableBothScriptContexts, which resumes our waitstate so the script
+ * reaches `end`. (Calling InitPartyMenu directly skipped gFieldCallback2: the script sat in
+ * waitstate forever, sGlobalScriptContextStatus stuck at 1, and the client's overworld checkpoint
+ * refused every later write -- the RR duo's initiator never got its native trade scene.) */
+#define ChoosePartyMonByMenuType ((void (*)(u8))0x081283A9u)
+#define PARTY_MENU_TYPE_CHOOSE_SINGLE_MON 3u
 __attribute__((used))
 static void slink_open_party_menu(void)
 {
-    InitPartyMenu(3, 0, 11, 0, 0, (void *)TASK_HANDLE_CHOOSE_MON, (void *)CB2_RETURN_TO_FIELD);
+    ChoosePartyMonByMenuType(PARTY_MENU_TYPE_CHOOSE_SINGLE_MON);
 }
 
 /* Field script: `callnative slink_open_party_menu ; waitstate ; end` (callasm = 0x23 + fn ptr). The FR
- * `special` index path is dead on RR (see the defines above), so we call InitPartyMenu by address. */
+ * `special` index path is dead on RR (see the defines above), so we call the chooser by address. */
 static void run_party_chooser(void)
 {
     volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
@@ -1076,6 +1079,15 @@ static void ui_done(u16 st, u8 result0)
     MB->result[0] = result0;
     MB->status = st; MB->reason = (st == ST_OK) ? 0 : 12;
     MB->ack_seq = MENU->seq; MB->opcode = 0;
+}
+
+/* Copy a fixed-width game name field (at most n glyphs, 0xFF-terminated only when shorter) into a
+ * string buffer, always terminating it: pret StringCopy10 semantics. */
+static void copy_name(volatile u8 *dst, volatile const u8 *src, u32 n)
+{
+    u32 i = 0;
+    for (; i < n && src[i] != FEOS; i++) dst[i] = src[i];
+    dst[i] = FEOS;
 }
 
 /* Poll whichever async native-UI op OP_SHOW_MENU / OP_CHOOSE_PARTY_MON / OP_TRADE_SCENE set up, and
@@ -1116,11 +1128,15 @@ static void drive_ui(void)
          * chooser slot -> a default like "Rukia"). Override gStringVar3 (received nickname) + gStringVar1
          * (OT) from the mon we actually staged in gEnemyParty[0], each frame, so "X sent over Y" names the
          * real traded mon. (gStringVar2 = the sent mon is already correct.) Party-mon plaintext (NO_ENCRYPT):
-         * nickname @ +0x08 (11 b), otName @ +0x14 (8 b). gStringVar1=0x02021CD0, gStringVar3=0x02021D04. */
-        { volatile u8 *nk = (volatile u8 *)(gEnemyParty + 0x08), *ot = (volatile u8 *)(gEnemyParty + 0x14);
-          volatile u8 *v3 = (volatile u8 *)0x02021D04u, *v1 = (volatile u8 *)0x02021CD0u;
-          for (u32 i = 0; i < 11; i++) v3[i] = nk[i];
-          for (u32 i = 0; i < 8;  i++) v1[i] = ot[i]; }
+         * nickname @ +0x08 (10 b, then language), otName @ +0x14 (7 b, then markings); gStringVar1 =
+         * 0x02021CD0, gStringVar3 = 0x02021D04. A full-length name has NO 0xFF inside its field, so copy
+         * StringCopy10-style and terminate: gStringVar3 is 20 bytes and gStringVar4 (0x02021D18) follows
+         * it, so an unterminated gStringVar3 made StringExpandPlaceholders(gStringVar4, "{STR_VAR_1} sent
+         * over {STR_VAR_3}") read its own output and copy forever -- the RR duo's 10-glyph "Aaaaaaaaaa"
+         * wrote 'a' (0xD5 = 213) over EWRAM up to gPlayerPartyCount and gPlayerParty (writer 0x080090AA
+         * in StringExpandPlaceholders, called from 0x08053594, src 0x0202400A -> dest 0x02024029). */
+        copy_name((volatile u8 *)0x02021D04u, (volatile const u8 *)(gEnemyParty + 0x08), 10);
+        copy_name((volatile u8 *)0x02021CD0u, (volatile const u8 *)(gEnemyParty + 0x14), 7);
         if (cb == MENU->fieldCb) ui_done(ST_OK, 0);               /* back on the field -> done */
         else if (++MENU->frames > 5400) ui_done(ST_FAIL, 0);      /* ~90 s safety */
     }
@@ -1786,7 +1802,7 @@ static void drive_events(void)
  * So take over id 8 instead: a second PLAYER row that only SetUpStartMenu_Link ever appends, and
  * which lua/tests/test_live_startmenu.lua proves absent from the menu a real player opens. build.py
  * repoints three table words at the strings and callback below (each verified before it is
- * written) plus the SetUpStartMenu redirect literal at the wrapper. Four words, no relocation.
+ * written) plus the SetUpStartMenu redirect literal at the wrapper, and the page-switch rebuild literal. Five words, no relocation.
  *
  * The callback deliberately does NOT draw. It bumps a counter and closes the menu, which is what
  * makes this step gateable on its own: the entry can be proven to appear and fire before a single
@@ -1825,16 +1841,53 @@ u8 slink_startmenu_cb(void)
     return StartMenu_Exit();
 }
 
+/* RR's own SetUpStartMenu (0x090BE178, disassembled) builds the order from these, in this order:
+ *   link (0x0805642D != 0)  -> SetUpStartMenu_Link   [1 2 8 5 6]
+ *   InUnionRoom()           -> SetUpStartMenu_UnionRoom [1 2 3 5 6]
+ *   GetSafariZoneFlag()     -> [7 (0) (1) 2 3 5 EXIT]
+ *   page byte == 1          -> the DexNav/PC tools page [(9) (10) .. 12]
+ *   else, the main page     -> [(0 POKEDEX) (1) (2) (3) (4) 5 EXIT]
+ * where EXIT is id 6, or id 11 ("Exit" + the R page hint) once the tools page exists. The row count
+ * therefore varies with FLAG_SYS_POKEDEX_GET & co. (6 before the Pokedex, 7 after), so splice by
+ * SHAPE, not by count: only the main page, SOULLINK right before its EXIT, at most 8 rows (CFRU's
+ * AddStartMenuWindow hook sizes the window 2n-1 tiles: 8 rows = 15, still on screen; 9 bytes of
+ * sStartMenuOrder). Link, union room and Safari get no row; the tools page ends in EXIT id 12, so
+ * the EXIT test below already leaves it alone. */
+#define StartMenu_IsLinkMenu ((u8 (*)(void))0x0805642Du)  /* RR SetUpStartMenu's link test */
+#define InUnionRoom          ((u8 (*)(void))0x0811B0D1u)
+#define GetSafariZoneFlag    ((u8 (*)(void))0x080A0E91u)  /* FlagGet(0x800) */
+#define START_EXIT    6
+#define START_EXIT_R  11
+
 void slink_setup_start_menu(void)
 {
     SetUpStartMenu_Orig();
     if (!SI->enable) return;
-    /* Splice ONLY into the exact menu shape test_live_startmenu.lua validated — 6 rows ending in EXIT.
-     * Any other shape (the link menu, a future RR revision) is left alone rather than guessed at. */
-    if (R8(sNumStartMenuActions) != 6 || R8(sStartMenuOrder + 5) != 6) return;
-    R8(sStartMenuOrder + 5) = 8;   /* SOULLINK takes EXIT's place... */
-    R8(sStartMenuOrder + 6) = 6;   /* ...and EXIT moves down, staying last */
-    R8(sNumStartMenuActions) = 7;
+    u8 n = R8(sNumStartMenuActions);
+    if (n == 0 || n > 7) return;
+    if (StartMenu_IsLinkMenu() || InUnionRoom() || GetSafariZoneFlag()) return;
+    u8 exit = R8(sStartMenuOrder + n - 1);
+    if (exit != START_EXIT && exit != START_EXIT_R) return;   /* not a shape we RE'd: leave it */
+    R8(sStartMenuOrder + n - 1) = 8;   /* SOULLINK takes EXIT's place... */
+    R8(sStartMenuOrder + n) = exit;    /* ...and EXIT moves down, staying last */
+    R8(sNumStartMenuActions) = n + 1;
+}
+
+/* RR's page switch (L/R on the main/tools page) rebuilds through 0x090BE30C, which is
+ * `push {r4,lr}; bl 0x090BE178; <draw the window>; pop {r4,pc}` -- a DIRECT bl that bypasses the
+ * 0x0806ED58 literal, so switching back to the main page would drop SOULLINK. build.py repoints that
+ * function's only reference (the callback literal at 0x090BDD54) here: replay its prologue with our
+ * wrapper, then fall into its own tail at 0x090BE312 (reads nothing we clobber; pops {r4,pc}). */
+__attribute__((naked, used)) void slink_start_menu_redraw(void)
+{
+    __asm__ volatile(
+        ".syntax unified            \n"
+        ".thumb                     \n"
+        "push {r4, lr}              \n"
+        "bl   slink_setup_start_menu\n"
+        "ldr  r0, =0x090BE313       \n"
+        "bx   r0                    \n"
+        ".ltorg                     \n");
 }
 
 /* C5-11a: the shared gEnemyParty staging of OP_SET_ENEMY_PARTY/OP_RIVAL_SWAP. Faithful byte

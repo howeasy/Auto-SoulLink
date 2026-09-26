@@ -56,7 +56,14 @@ function S.run(h)
         return false, "the client never activated after the aide's Balls"
     end
     h.jlog("BALL_FLIP", {frame=h.frame(), has_pokeballs=true, ball_count=h.ball_count()})
-    local played, outcome = h.play({settled=h.link_settled})
+    -- fsw-sweep3/-rr1/-rr2: the aide's five natural Balls are a hard floor (no weakening, full-HP throws only)
+    -- against a fully deterministic committed fixture and script -- neither cross-player jitter nor a
+    -- different pinned RTC minute changes the outcome, so a losing ~13% five-miss streak reproduces on every
+    -- retry. weaken (F.driver's proven U1f-gate fix, gen2_frame_align.lua) lands one damaging hit on the still
+    -- full-HP foe first: PokeBallEffect's catch rate rises as the foe's HP falls (engine/items/item_effects.asm).
+    -- the weaken hit must not itself be a status move (gen2_faint_inputs.lua's proven passive list)
+    local passive = dofile(h.root .. "/lua/tests/duo/gen2_faint_inputs.lua").PASSIVE_MOVES
+    local played, outcome = h.play({settled=h.link_settled, weaken=true, passive=passive})
     if not played then return false, "link catch failed: " .. tostring(outcome) end
     h.party()
     local witnessed, witness_why = h.witness()

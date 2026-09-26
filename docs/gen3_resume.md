@@ -4,6 +4,32 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 
 ## CURRENT STATE (2026-09-26, after checkpoint 20)
 
+- **LANDED 2026-09-26: the RR fix batch is on LOCAL master 7c14386a (not pushed).**
+  - Duos green ×2 on companion c372c428:
+    - trade_gen3 and trade_decline_gen3 at 5418c725 (the earlier _RED at 539e0aea was a stale oracle ordering pair, fixed);
+    - infopanel_gen3 and infopanel_dex_gen3 at 539e0aea.
+  - Pinged Gen 2 (it re-sweeps) and Emerald (it merges master, then starts T2/T3). The Emerald lane now owns every trade file.
+  - Open for G5: RR durable trade (T2–T5), then ONE RR frozen-cut re-run.
+- (History) RR companion fix batch (owner 2026-09-26 "Fix all three now"):
+  - The new RR duos found three companion bugs. `infopanel_gen3` is green ×2 (f78b533a).
+  - Fixes:
+    - 03b19b71: the SOULLINK START row is placed by menu shape (with Pokédex, Exit-R, page-switch trampoline).
+    - 2c553181: the trade-scene names are terminated (the unterminated 10-letter nickname made StringExpandPlaceholders overrun EWRAM); the party chooser goes through RR's ChoosePartyMonByMenuType.
+    - 570eb621 + dec5c45c: Overworld Presence is forced off.
+  - New companion md5 c372c428 / sha1 7a386749, re-pinned. An independent Opus review ACCEPT-WITH-NITS; nit 5 fixed in 51c2079d.
+  - **Next:**
+    1. Wait for Gen 2's re-sweep to finish (they asked for no heavy emulator use and no shared-code landing meanwhile).
+    2. Run trade_gen3 / trade_decline_gen3 / infopanel_gen3 / infopanel_dex_gen3 ×2 in lane C:/slink-wt/rrduo at the branch head, with the new slink_RR.gba in patch/build.
+    3. Land the whole shared-code batch on master in ONE ff and ping Gen 2 Boogaloo (they re-sweep once).
+    4. Ping Emerald ('Emerald support planning'): it merges master, then starts T2/T3.
+    5. The RR frozen cut runs ONCE, after the Emerald lane's RR durable-trade row is green (T2 rebuilds the RR companion again).
+  - **Ruling 27** (FR/LG patched trade IN this RC):
+    - Built in the Emerald worktree. T1 design approved: `docs/gen3/research/patched_trade_design.md` + `_bindings.md` on claude/gen3-emerald-trade 5ecc0516, merged d0599417.
+    - After my landing, the Emerald lane owns ALL trade files, RR included. The Gen 3 lane reviews and owns the G4/G5/requirements docs.
+    - T2 + T4 shared code lands once, with a Gen 2 ping.
+    - The §7 PLAN/requirements diff comes to me for review before master.
+    - G4 and G5 both wait on T5 receipts (FR↔LG, RR↔RR; E↔E is Emerald's own gate).
+
 - Local master is **615ea688** (Gen 1+2+3 + the docs sweep, NOT pushed).
 - Gen 2's evidence is re-pinned 98/98 at CODE_DIGEST e8ca0067. Gen 1 is clean.
 - The Gen 3 frozen cut is a2985d5a: FR/LG 43/43, RR 19/19. Post-merge passes are green at a20cd945.
