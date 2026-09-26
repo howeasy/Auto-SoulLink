@@ -235,8 +235,11 @@ def test_dependency_committed_positive_missing_and_dirty_reverted(monkeypatch, t
         path = tmp_path / name
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
-    monkeypatch.setattr(duo.subprocess, "run", lambda args, **kwargs:
-                        SimpleNamespace(returncode=0, stdout=sources[args[-1].removeprefix("HEAD:")]))
+    def fake_git(args, **kwargs):
+        if "diff" in args:   # `git diff --quiet HEAD -- <path>`: 1 when the file differs from HEAD
+            return SimpleNamespace(returncode=int((tmp_path / args[-1]).read_text(encoding="utf-8") != sources[args[-1]]))
+        return SimpleNamespace(returncode=0, stdout=sources[args[-1].removeprefix("HEAD:")])
+    monkeypatch.setattr(duo.subprocess, "run", fake_git)
     assert duo.gen3_rand_dependencies(tmp_path) == []
     for name, label in (("lua/gen3/entry.lua", "CR-R1"), ("lua/gen3/client.lua", "CR-R2"),
                         ("server/adapters/gen3_frlge.py", "server ingest")):
@@ -369,6 +372,8 @@ def test_real_upr_tables_and_live_server_adapter_probe(title, label, tmp_path):
     if not clean.is_file():
         pytest.skip(f"pinned clean {title} ROM absent")
     assert hashlib.sha1(clean.read_bytes()).hexdigest() == rom_pins(str(ROOT))[title]
+    if duo.GEN3_RAND_SCRATCH is None:
+        pytest.skip("SLINK_GEN3_RAND_ROMS is not set (randomized ROMs are never committed)")
     path = duo.GEN3_RAND_SCRATCH / f"{label}_allowed.gba"
     if not path.is_file():
         pytest.skip(f"UPR scratch {label}_allowed.gba absent")

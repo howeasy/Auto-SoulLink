@@ -75,13 +75,13 @@ SCENARIOS = {
     # refuses these rows before any server/emulator launch until CR-R1/CR-R2 and
     # server ingest are committed. Exactly one attempt; no borrowed vanilla PASS.
     "admit_randomized_frlg": {"flags": [], "timeout": 600, "games": ("gen3_frlg",),
-        "target": "town", "frames": 1200000, "no_save": ("a", "b"), "gen3_rand": True,
+        "target": "town", "frames": 1200000, "no_save": ("a", "b"), "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_admit", "oracle": "assert_admit_randomized_frlg_saved"},
     "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg",),
-        "target": "battle", "frames": 2000000, "gen3_rand": True,
+        "target": "battle", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg",),
-        "target": "trainer", "frames": 1200000, "gen3_rand": True,
+        "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_trainer_panel", "oracle": "assert_trainer_panel_gen3_rand_saved"},
     # A boots {firered,leafgreen}_party_trainer.sav (6e85ddfc): CACHED-NATIVE at (41,45) on map
     # 1.0, one step west of Rick 102's sight line, Lv13 lead -- gen3_routes skips the T2 walk.
@@ -522,8 +522,10 @@ def scenarios_for(game):
 
     The single source of truth for that question — tests/e2e/test_duo.py used to hand-roll
     its own copy with a different default, which is how the two answers drifted apart.
+    `explicit_only` rows (the randomized FR/LG rows) never join `--scenario all`; naming one
+    with `--scenario <name>` still runs it (scenario_applies is unchanged).
     """
-    return [n for n in SCENARIOS if scenario_applies(n, game)]
+    return [n for n in SCENARIOS if scenario_applies(n, game) and not SCENARIOS[n].get("explicit_only")]
 
 
 def free_port():
@@ -2538,10 +2540,9 @@ GAMES = {
 # FRLG-R4 helpers: independent ROM-file and saved-flash oracles. These are
 # exclusive to the three randomized rows; no trade or legacy scenario changes.
 GEN3_RAND_SCENARIOS = {"admit_randomized_frlg", "link_gen3_rand", "trainer_panel_gen3_rand"}
-GEN3_RAND_SCRATCH = Path(
-    "C:/Users/howar/AppData/Local/Temp/claude/"
-    "E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45/"
-    "30c21a7a-9a9b-44db-b573-10e09226bcc8/scratchpad")
+# The randomized ROMs are never committed: point SLINK_GEN3_RAND_ROMS at a directory holding
+# {FireRed,LeafGreen}_allowed.gba. Unset = the rows BLOCK by name (no machine-specific default).
+GEN3_RAND_SCRATCH = Path(os.environ["SLINK_GEN3_RAND_ROMS"]) if os.environ.get("SLINK_GEN3_RAND_ROMS") else None
 
 
 def gen3_rand_dependencies(root=REPO):
@@ -2552,13 +2553,16 @@ def gen3_rand_dependencies(root=REPO):
     sources, problems = {}, []
     for label, path in paths.items():
         result = subprocess.run(["git", "-C", str(root), "show", f"HEAD:{path}"],
-                                capture_output=True, text=True)
+                                capture_output=True, text=True, encoding="utf-8")
         if result.returncode:
             problems.append(f"{label}: {path} is not on the branch")
             sources[label] = ""
             continue
         sources[label] = result.stdout
-        if not (root / path).is_file() or (root / path).read_text(encoding="utf-8") != result.stdout:
+        # filter-aware (core.autocrlf=true lanes check out CRLF): git decides "modified", not a
+        # raw text compare against the LF blob, which reported a clean tree as dirty forever
+        dirty = subprocess.run(["git", "-C", str(root), "diff", "--quiet", "HEAD", "--", path]).returncode
+        if not (root / path).is_file() or dirty:
             problems.append(f"{label}: {path} has uncommitted changes")
     entry = sources.get("CR-R1", "")
     if not re.search(r"['\"]rand['\"]|\brand\s*=", entry) or "randomizable" not in entry:
@@ -7335,7 +7339,9 @@ class DuoRun:
         gen3_codec()  # establish the repository import path for direct script invocation
         from tools.gen3_final_cut import STAGED, rom_pins
 
-        source = Path(os.environ.get("SLINK_GEN3_RAND_ROMS") or GEN3_RAND_SCRATCH)
+        if GEN3_RAND_SCRATCH is None:
+            raise RuntimeError("BLOCKED: SLINK_GEN3_RAND_ROMS is not set (the randomized ROMs are never committed)")
+        source = GEN3_RAND_SCRATCH
         stage = Path(BUILD) / f"rand_{self.lane}"
         stage.mkdir(parents=True, exist_ok=True)
         self._rand_facts, self._rand_inputs, self._rand_evidence = {}, {}, {}

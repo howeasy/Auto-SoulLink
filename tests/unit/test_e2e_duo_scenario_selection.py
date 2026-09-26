@@ -846,8 +846,7 @@ GEN3_RR_SCENARIOS = GEN3_FRLG_SCENARIOS + GEN3_RR_ONLY_SCENARIOS
 # LeafGreen as A, so it selects exactly what gen3_frlg does.
 GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
                           "trainer_bench_gen3", "active_end_gen3",
-                          "linked_faint_active_trainer_gen3", "admit_randomized_frlg",
-                          "link_gen3_rand", "trainer_panel_gen3_rand")
+                          "linked_faint_active_trainer_gen3")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 
 
@@ -865,6 +864,15 @@ def test_randomized_frlg_registration(name, module, target):
     assert callable(getattr(DuoRun, f"orchestrate_{name}"))
     assert scenario_attempt_limit(name, "gen3_frlg") == 1
     assert not scenario_applies(name, "gen3_rr")
+
+
+def test_randomized_rows_never_join_scenario_all_but_run_when_named():
+    """OMP review cx-904adf25 finding 1: the R4 rows leaked into `--scenario all` on both FR/LG
+    lanes. They are explicit_only: absent from scenarios_for, still applicable by name."""
+    for row in GEN3_FRLG_ROWS:
+        assert set(scenarios_for(row)) & duo_module.GEN3_RAND_SCENARIOS == set()
+    for name in duo_module.GEN3_RAND_SCENARIOS:
+        assert scenario_applies(name, "gen3_frlg")
 
 
 def test_gen3_frlg_selection_is_exactly_its_seven():
@@ -890,7 +898,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         if game not in GEN3_FRLG_ROWS + ("gen3_rr",):
             assert not set(scenarios_for(game)) & set(GEN3_RR_SCENARIOS), game
     for name in SCENARIOS:
-        if name not in GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS:
+        if name not in GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + tuple(duo_module.GEN3_RAND_SCENARIOS):
             assert not scenario_applies(name, "gen3_frlg"), name
         if name not in GEN3_RR_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name
@@ -951,10 +959,7 @@ def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():
     sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
     mod = __import__("test_duo_gen3")
     assert mod.GAME == "gen3_frlg"
-    # This legacy pytest wrapper selects *_gen3 names. R4's explicitly named
-    # randomized rows are registered/tested above and run directly via the CLI.
-    expected = set(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS) - duo_module.GEN3_RAND_SCENARIOS
-    assert sorted(mod.SCENARIOS) == sorted(expected)
+    assert sorted(mod.SCENARIOS) == sorted(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS)
     # C4-6m: the LG-as-A row runs the two G4 item 2a A-side receipts
     assert mod.GAME_LGFR == "gen3_lgfr" and all(scenario_applies(n, "gen3_lgfr") for n in mod.SCENARIOS_LGFR)
     assert mod.required_fixtures("whiteout_gen3", "gen3_lgfr") == ["leafgreen_party_battle", "firered_party_town"]
@@ -1102,7 +1107,6 @@ def test_gold_poison_a_plays_the_post_errand_save():
 
 def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     """A 255-char SaveRAM path was never written by BizHawk (silent); the lane refuses at 240 before any launch."""
-    from types import SimpleNamespace
     assert duo_module.bizhawk_path_problem(["C:/x/" + "a" * 200]) is None
     long = "C:/x/" + "a" * 250
     assert duo_module.bizhawk_path_problem(["C:/x/short", long]) == os.path.abspath(long)
