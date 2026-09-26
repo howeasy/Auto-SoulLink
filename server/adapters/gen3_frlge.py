@@ -134,6 +134,20 @@ if os.path.exists(_rr_priority_path):
         _RR_PRIORITY_PRE_CAPS  = {k: int(v) for k, v in (_ms.get("pre")  or {}).items()}
         _RR_PRIORITY_POST_CAPS = {k: int(v) for k, v in (_ms.get("post") or {}).items()}
 
+# Vanilla FireRed/LeafGreen trainer table, generated from pret pokefirered by
+# tools/gen_gen3_trainers.py (owner ruling 28). Keys are gTrainers indexes = the wire trainer_id
+# (no offset, unlike RR's rr_trainers.json). One table serves every title in its "titles" list.
+_FRLG_TRAINER_TABLE: dict = {}
+_frlg_trainers_path = os.path.join(_DATA_DIR, "frlg_trainers.json")
+if os.path.exists(_frlg_trainers_path):
+    with open(_frlg_trainers_path, encoding="utf-8") as _f:
+        _raw_ft = json.load(_f)
+        _FRLG_TRAINER_TABLE = {
+            "titles": frozenset(_raw_ft.get("titles") or ()),
+            "trainers": {int(k): v for k, v in (_raw_ft.get("trainers") or {}).items()},
+            "trainers_by_area": {k: list(v) for k, v in (_raw_ft.get("trainers_by_area") or {}).items()},
+        }
+
 # Rival trainer ID set for Radical Red (used by Rival Team Swap feature).
 # Built at import time by scanning _RR_TRAINERS for entries whose name is
 # "Terry" (RR's default rival name) and whose class is one of the rival
@@ -558,9 +572,29 @@ class Gen3Adapter(GameAdapter):
     def ability_description(self, ability_id: int) -> str:
         return _ability_description(ability_id, self._is_rr)
 
+    def _frlg_trainer_table(self) -> dict | None:
+        """The vanilla FR/LG trainer table for this cartridge, or None. Every FR/LG trainer
+        lookup goes through here, so a table read from a randomized cartridge's own gTrainers
+        can replace the pret one in this method alone.
+
+        ponytail: retail pret table only; a randomized FR/LG ROM still gets it until the
+        ROM-read card lands (its parties would be wrong, names/classes mostly not).
+        """
+        if self._is_rr or self._rom_type not in _FRLG_TRAINER_TABLE.get("titles", ()):
+            return None
+        return _FRLG_TRAINER_TABLE
+
+    def _frlg_trainer(self, trainer_id: int) -> dict | None:
+        table = self._frlg_trainer_table()
+        return table["trainers"].get(trainer_id) if table else None
+
     def trainer_info(self, trainer_id: int) -> tuple[str, str]:
-        """Resolve RR trainer name and class from 1-based trainer_id."""
-        if not self._is_rr or not _RR_TRAINERS:
+        """Resolve RR trainer name and class from 1-based trainer_id; vanilla FR/LG from the
+        raw gTrainers index (rivals and the Champion print the player's rival name: "")."""
+        if not self._is_rr:
+            tr = self._frlg_trainer(trainer_id)
+            return (tr["name"], tr["class"]) if tr else ("", "")
+        if not _RR_TRAINERS:
             return ("", "")
         tr = _RR_TRAINERS.get(trainer_id - 1)
         if not tr:
@@ -575,13 +609,16 @@ class Gen3Adapter(GameAdapter):
     def trainers_for_area(self, area_id: str) -> list[int]:
         """Return runtime trainer IDs that appear in the given area.
 
-        Source: data/games/gen3_frlge/rr_priority_trainers.json. Only populated
-        for RR runs — vanilla FRLG/Emerald variants return []. The returned
-        IDs are 1-based runtime IDs (the same shape used by `trainer_info`
-        and reported by the Lua client's TRAINER_OPPONENT_ADDR read).
+        Source: data/games/gen3_frlge/rr_priority_trainers.json for RR, and
+        frlg_trainers.json's key trainers for vanilla FR/LG; Emerald returns [].
+        The returned IDs are the runtime IDs `trainer_info` takes and the Lua
+        client's TRAINER_OPPONENT_ADDR read reports.
         """
-        if not self._is_rr or not area_id:
+        if not area_id:
             return []
+        if not self._is_rr:
+            table = self._frlg_trainer_table()
+            return list(table["trainers_by_area"].get(area_id, [])) if table else []
         return list(_RR_PRIORITY_BY_AREA.get(area_id, []))
 
     def trainer_party(self, trainer_id: int) -> list[dict]:
@@ -594,7 +631,8 @@ class Gen3Adapter(GameAdapter):
         it via the species table.
         """
         if not self._is_rr:
-            return []
+            tr = self._frlg_trainer(trainer_id)
+            return [dict(m) for m in tr["party"]] if tr else []
         entry = _RR_PRIORITY_PARTIES.get(trainer_id)
         if not entry:
             return []
@@ -640,7 +678,7 @@ class Gen3Adapter(GameAdapter):
         when the trainer is not in the priority roster.
         """
         if not self._is_rr:
-            return None
+            return self._frlg_trainer_brief(trainer_id)
         entry = _RR_PRIORITY_PARTIES.get(trainer_id)
         if not entry:
             return None
@@ -657,6 +695,22 @@ class Gen3Adapter(GameAdapter):
             v = entry.get(k)
             if v:
                 out[k] = v
+        return out
+
+    def _frlg_trainer_brief(self, trainer_id: int) -> dict | None:
+        tr = self._frlg_trainer(trainer_id)
+        if not tr or not tr["party"]:
+            return None
+        out = {
+            # a rival's in-game name is the player's choice; "Rival" groups its starter variants
+            "name": tr["name"] or ("Rival" if tr.get("rival") else ""),
+            "class": tr["class"],
+            "party": [dict(m) for m in tr["party"]],
+            "area": tr.get("area", ""),
+        }
+        for k in ("level_cap", "fight_label", "calc_label"):
+            if tr.get(k):
+                out[k] = tr[k]
         return out
 
     def item_name(self, item_id: int) -> str:
