@@ -93,14 +93,26 @@ def bootstrap(src_root: pathlib.Path) -> None:
     if (src_root / "src").is_dir():
         return
     src_root.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "clone", "-q", UPR_ZX_URL, str(src_root)], check=True)
-    subprocess.run(["git", "-C", str(src_root), "checkout", "-q", UPR_ZX_COMMIT], check=True)
-    subprocess.run(["git", "-C", str(src_root), "checkout", "-q", "-b", "slink/4.6.1-slink1"], check=True)
+    # The patch series is stored LF (.gitattributes patch/upr/*.patch eol=lf) and was cut against an LF
+    # tree, but upstream commits 24 files with CRLF. Clone byte-exact (no autocrlf, whatever the host
+    # git config), normalise CRLF->LF in one local commit, then apply (2026-09-25: a Windows checkout
+    # with core.autocrlf=true could not apply 0001 at Gen1RomHandler.java:34).
+    git = ["git", "-c", "core.autocrlf=false", "-c", "user.name=slink", "-c", "user.email=slink@local"]
+    subprocess.run([*git, "clone", "-q", UPR_ZX_URL, str(src_root)], check=True)
+    subprocess.run([*git, "-C", str(src_root), "checkout", "-q", UPR_ZX_COMMIT], check=True)
+    subprocess.run([*git, "-C", str(src_root), "checkout", "-q", "-b", "slink/4.6.1-slink1"], check=True)
+    listed = subprocess.run([*git, "-C", str(src_root), "ls-files", "-z"], check=True, capture_output=True).stdout
+    for name in filter(None, listed.split(b"\0")):
+        path = src_root / name.decode()
+        data = path.read_bytes()
+        if b"\r\n" in data and b"\0" not in data[:8000]:
+            path.write_bytes(data.replace(b"\r\n", b"\n"))
+    subprocess.run([*git, "-C", str(src_root), "commit", "-qam", "slink-local: upstream CRLF normalised to LF"],
+                   check=True)
     patches = sorted(str(p) for p in PATCHES.glob("*.patch"))
     if not patches:
         raise RuntimeError(f"no fork patches under {PATCHES}")
-    subprocess.run(["git", "-C", str(src_root), "-c", "user.name=slink", "-c", "user.email=slink@local",
-                    "am", "--keep-cr", *patches], check=True)
+    subprocess.run([*git, "-C", str(src_root), "am", *patches], check=True)
 
 
 def main() -> int:

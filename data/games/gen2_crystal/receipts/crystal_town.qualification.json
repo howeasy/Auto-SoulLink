@@ -1,0 +1,153 @@
+{
+ "attempt_id": "requal-crystal-town-n14b",
+ "errors": [],
+ "fixtures": [
+  {
+   "artifacts": {
+    "boot:game_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\boot-f893c622a63b125b\\crystal_town.boot.witness.json",
+     "sha256": "b18bab787fb50559bbcf16b954c648ddfa82928649c4618e3c56f48c2221f6ed",
+     "size": 1939
+    },
+    "fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\tests\\fixtures\\gen2\\crystal_town.SaveRAM",
+     "sha256": "3b2794f82c2839afc39c8523c94ef9940c18ed6b8dc5a5817b09b6d4a4a56edf",
+     "size": 32790
+    },
+    "played_receipt": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n2-crystal-town-a7\\crystal_town\\saveram\\crystal_town.played.json",
+     "sha256": "312c4e37c15b2d663d78f8082fb0b0a0f04b8410dae7651f5d219481c07dc56b",
+     "size": 824
+    },
+    "profile": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\data\\games\\gen2_crystal\\profile.json",
+     "sha256": "9ab1272981db1208a8f5ef9ff206c1470271cae6727d5e6475541e75b900d558",
+     "size": 79972
+    },
+    "resave:fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\resave-8d66555d831fbc8d\\crystal_town.resaved.SaveRAM",
+     "sha256": "061428a7312c55e4835f5a275b83bb0b3272adc2a7b59697210db465de07902a",
+     "size": 32790
+    },
+    "resave:reload_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\reload-8d66555d831fbc8d\\crystal_town.reload.witness.json",
+     "sha256": "5b67bb883d441cec89d55bc68cdd6ae6fc04a7495c425b1feba2db91e9e0ebac",
+     "size": 1941
+    },
+    "resave:save_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\resave-8d66555d831fbc8d\\crystal_town.resave.witness.json",
+     "sha256": "36250ee1c14efae3217ea60792b8ec09458aa9b2dd452401a12e40435932cbbe",
+     "size": 2063
+    },
+    "rom": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokecrystal\\pokecrystal.gbc",
+     "sha256": "d6702e353dcbe2d2c69183046c878ef13a0dae4006e8cdff521cca83dd1582fe",
+     "size": 2097152
+    },
+    "route_facts": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\crystal_route_facts.json",
+     "sha256": "0b27d2f2c98e8bc108919bdab016ed536f0bdf0f77d332c5f7a3cfb544fffcc4",
+     "size": 13930
+    }
+   },
+   "name": "crystal_town",
+   "passed": true,
+   "problems": [],
+   "provenance": {
+    "rom_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+    "route_facts_sha256": "eee720532d0481d51f0a8cb3d8ab0cff8d2dc21a5cb3ac03fb4f6847dcd6b7a5",
+    "scope": "candidate fixture",
+    "title": "crystal"
+   },
+   "stages": [
+    {
+     "evidence": {
+      "ball_origin": "none",
+      "natural_ball_acquisition": "false",
+      "oracle": "independent Gen2 PYDEC",
+      "player_id": "46401"
+     },
+     "fingerprint": "e18702def18a6d7a87f05535e38f9011040c35888b45f3c0b0ecf5fb18f76e2d",
+     "notes": [
+      "Static bytes do not prove played origin, RTC or GAME qualification."
+     ],
+     "problems": [],
+     "stage": "qualify",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "cartram_sha256": "d1bc26b1ee10439c41d41beed53444b2a10cb79e44cf5daa6b562c6f21fc5824",
+      "location": "[24, 5]",
+      "observer": "independent_GAME CONTINUE",
+      "position": "[5, 3]"
+     },
+     "fingerprint": "f893c622a63b125b4d39e43ca862c2f61a4cac5d52ffe78fd040a3f30ca4986a",
+     "notes": [],
+     "outputs": {
+      "boot:game_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\boot-f893c622a63b125b\\crystal_town.boot.witness.json",
+       "sha256": "b18bab787fb50559bbcf16b954c648ddfa82928649c4618e3c56f48c2221f6ed",
+       "size": 1939
+      }
+     },
+     "problems": [],
+     "stage": "boot",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "observer": "independent_GAME re-save + reload",
+      "resave_cartram_sha256": "6fbd456d211a70d02f41a588cedeb75293b7f06afa52d98ee6802062312ca92b"
+     },
+     "fingerprint": "8d66555d831fbc8d54764e903f1c9baf69ae5e2bf274686b230d10b6dc82db36",
+     "notes": [],
+     "outputs": {
+      "resave:fixture": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\resave-8d66555d831fbc8d\\crystal_town.resaved.SaveRAM",
+       "sha256": "061428a7312c55e4835f5a275b83bb0b3272adc2a7b59697210db465de07902a",
+       "size": 32790
+      },
+      "resave:reload_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\reload-8d66555d831fbc8d\\crystal_town.reload.witness.json",
+       "sha256": "5b67bb883d441cec89d55bc68cdd6ae6fc04a7495c425b1feba2db91e9e0ebac",
+       "size": 1941
+      },
+      "resave:save_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-crystal-town-n14b\\crystal_town\\qualify\\resave-8d66555d831fbc8d\\crystal_town.resave.witness.json",
+       "sha256": "36250ee1c14efae3217ea60792b8ec09458aa9b2dd452401a12e40435932cbbe",
+       "size": 2063
+      }
+     },
+     "problems": [],
+     "stage": "resave",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "oracle": "independent re-save PYDEC + GAME raw-party witness"
+     },
+     "fingerprint": "46b066adde331bf4df8edc3d30085e9ac36a5e658d9e963622d887b44e105f7e",
+     "notes": [],
+     "problems": [],
+     "stage": "post_oracle",
+     "status": "PASS"
+    }
+   ]
+  }
+ ],
+ "open_obligations": [
+  "coordinator GAME/RTC/played-origin review",
+  "recorded source/physical gate sign-off"
+ ],
+ "passed": true,
+ "physical_qualification": false,
+ "required_stages": [
+  "qualify",
+  "boot",
+  "resave",
+  "post_oracle"
+ ],
+ "schema": "fixture-qualification-v1",
+ "scope": "full"
+}

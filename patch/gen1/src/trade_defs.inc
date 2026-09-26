@@ -47,8 +47,13 @@ DEF DelayFrames EQU $3739 ; data/pret/pokered.sym:887
 DEF DelayFramesBank EQU $00 ; data/pret/pokered.sym:887
 DEF PlayDefaultMusic EQU $2307 ; data/pret/pokered.sym:546
 DEF PlayDefaultMusicBank EQU $00 ; data/pret/pokered.sym:546
-DEF SavePartyAndDexData EQU $780F ; data/pret/pokered.sym:12645
-DEF SavePartyAndDexDataBank EQU $1C ; data/pret/pokered.sym:12645
+DEF SaveGameData EQU $7848 ; data/pret/pokered.sym:12646
+DEF SaveGameDataBank EQU $1C ; data/pret/pokered.sym:12646
+DEF WaitForSoundToFinish EQU $3748 ; data/pret/pokered.sym:889
+DEF WaitForSoundToFinishBank EQU $00 ; data/pret/pokered.sym:889
+DEF PlaySoundWaitForCurrent EQU $3740 ; data/pret/pokered.sym:888
+DEF PlaySoundWaitForCurrentBank EQU $00 ; data/pret/pokered.sym:888
+DEF SLINK_SFX_SAVE EQU $B6 ; data/pret/pokered.sym:1848,1941,14114,14207 (SFX_Save_1/_3 at header +$222 in banks $02/$1F); pret/constants/music_constants.asm:161
 DEF DelayFrame EQU $20AF ; data/pret/pokered.sym:492
 DEF DelayFrameBank EQU $00 ; data/pret/pokered.sym:492
 DEF CableClubNPC EQU $71C5 ; data/pret/pokered.sym:1704
@@ -247,3 +252,10 @@ DEF wPartyAndBillsPCSavedMenuItem EQU $CC2B ; data/pret/pokered.sym:18336
 DEF wMenuCursorLocation EQU $CC30 ; data/pret/pokered.sym:18341
 DEF wTextBoxID EQU $D125 ; data/pret/pokered.sym:18948
 DEF wTwoOptionMenuID EQU $D12C ; data/pret/pokered.sym:18954
+DEF wWalkCounter EQU $CFC5 ; data/pret/pokered.sym:18719
+DEF wCurOpponent EQU $D059 ; data/pret/pokered.sym:18794
+DEF wSafariZoneGameOver EQU $DA46 ; data/pret/pokered.sym:19592
+DEF wJoyIgnore EQU $CD6B ; data/pret/pokered.sym:18607
+DEF wMovementFlags EQU $D736 ; data/pret/pokered.sym:19396
+DEF wStatusFlags3 EQU $D72D ; data/pret/pokered.sym:19390
+DEF wStatusFlags6 EQU $D732 ; data/pret/pokered.sym:19393

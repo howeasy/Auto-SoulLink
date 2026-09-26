@@ -167,9 +167,24 @@ local ok, err = xpcall(function()
         t.log("MENU CANCEL " .. row(122, 16))
         require_check("native menu defaulted to SLINK TRADE row", at("wCurrentMenuItem") == 0,
                       fmt("index=%d", at("wCurrentMenuItem")))
-        -- trade_receptionist.asm:345-390 prints the picker at +22.
-        wait_for(function() return has_tiles("TRADE WHICH?", 22) end, 180,
-                 "TRADE WHICH? linked-party list", "A")
+        -- trade_receptionist.asm:53-57: SLINK TRADE first asks vanilla's forced save (pret
+        -- engine/link/cable_club_npc.asm:56-67). SlinkTradeUIMustSave (trade_ui.asm) PrintTexts
+        -- the two lines into the message box (+281/+321), then YesNoChoice.
+        local function must_save_drawn()
+            return has_tiles("We have to save", 281) and has_tiles("before trading.", 321) and
+                   has_tiles("YES") and has_tiles("NO")
+        end
+        wait_for(must_save_drawn, 180, "We have to save / before trading. YES/NO", "A")
+        t.log("MUST_SAVE " .. row(281, 18) .. " | " .. row(321, 18))
+        require_check("must-save prompt defaulted to YES", at("wCurrentMenuItem") == 0,
+                      fmt("index=%d", at("wCurrentMenuItem")))
+        -- DisplayYesNoChoice restores Buffer1 on exit, dropping the box: re-pulse A only while
+        -- it is up, so no press leaks into the picker.
+        wait_for(function() return not must_save_drawn() end, 120, "must-save YES taken", "A")
+        -- trade_receptionist.asm:345-390 prints the picker at +22, after SaveGameData and the
+        -- SFX_SAVE jingle; no buttons meanwhile.
+        wait_for(function() return has_tiles("TRADE WHICH?", 22) end, 600,
+                 "TRADE WHICH? linked-party list")
         t.log("MENU PARTY " .. row(22, 16))
         local chosen = t.frame
         -- mask=1 makes the first visible row physical slot 0; re-pulse A on the 16-frame

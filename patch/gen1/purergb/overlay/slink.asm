@@ -92,6 +92,31 @@ SlinkForeground::
 	ld a, [wSerialPartyMonsPatchList + 10]
 	dec a
 	ret nz
+	; Only on a frame where vanilla could open the START menu and SAVE (OverworldLoop):
+	; no step, ledge hop, scripted movement, START ignore, pending battle, Safari end or
+	; warp. The prompt opens text and both roles save, so mid-step pickup would misdraw
+	; the map and save a half step.
+	ld a, [wWalkCounter]
+	ld hl, wCurOpponent
+	or [hl]
+	ld hl, wSafariZoneGameOver
+	or [hl]
+	ret nz
+	ld a, [wJoyIgnore]
+	and PAD_START
+	ret nz
+	ld a, [wMovementFlags]
+	and 1 << BIT_LEDGE_OR_FISHING
+	ret nz
+	ld a, [wStatusFlags5]
+	and 1 << BIT_SCRIPTED_MOVEMENT_STATE
+	ret nz
+	ld a, [wStatusFlags3]
+	and 1 << BIT_WARP_FROM_CUR_SCRIPT
+	ret nz
+	ld a, [wStatusFlags6]
+	and (1 << BIT_FLY_WARP) | (1 << BIT_DUNGEON_WARP)
+	ret nz
 	jp SlinkTradeService
 
 

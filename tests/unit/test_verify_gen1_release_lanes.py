@@ -11,12 +11,14 @@ from __future__ import annotations
 import os
 import sys
 
+import pytest
+
 _REPO = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
 sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import verify_gen1_release as gate  # noqa: E402  (tools/ is not a package; the gate is a script)
 
-LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-addresses", "profile-generated",
+LANE_ORDER = ["unit", "rom-layout", "lua-parse", "profile-generated",
               "profile-generated-purergb", "statics-generated", "fixtures", "patch-build",
               "live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
               "live-trade-gates", "inspect-purergb-overlay", "live-trade-gates-purergb",
@@ -62,6 +64,14 @@ def test_slow_lanes_are_exactly_the_emulator_lanes():
     assert {"live-gates", "live-new-gates", "inspect-purergb", "apex-purergb",
             "live-trade-gates", "duo-pairs", "inspect-purergb-overlay",
             "live-trade-gates-purergb", "apex-refusal-purergb", "duo-pairs-purergb"} == gate._SLOW
+
+
+def test_the_live_gates_lane_clears_the_receipt_capture_flag():
+    """GEN1-GATE-REWRITES-RECEIPTS: an inherited SLINK_GEN1_CAPTURE_RECEIPTS=1 from the caller's shell must
+    never silently turn a verify run into a capture over the committed receipts. run_lane's env.update() can
+    only overlay a key, never delete one, so this lane clears it by overwriting it to ""."""
+    live_gates = next(lane for lane in gate.LANES if lane.name == "live-gates")
+    assert live_gates.env.get("SLINK_GEN1_CAPTURE_RECEIPTS") == ""
 
 
 def test_the_pure_lanes_are_fail_closed():
@@ -140,6 +150,13 @@ def _stubbed_lane(monkeypatch, text: str):
     monkeypatch.setattr(gate.subprocess, "run", lambda *args, **kwargs: Proc())
     lane = gate.Lane("stub", [sys.executable, "-m", "pytest", "tests/unit"])
     return gate.run_lane(lane, quiet=True)
+
+
+@pytest.mark.parametrize("stdout", ["", "3989 tests collected in 4.80s\n"])
+def test_zero_execution_cannot_pass_the_gen1_binding(monkeypatch, stdout):
+    ok, detail = _stubbed_lane(monkeypatch, stdout)
+    assert not ok
+    assert "no passing tests executed" in detail
 
 
 def test_a_lane_only_run_is_not_a_release_verdict(monkeypatch, capsys):

@@ -1528,7 +1528,7 @@ end
 -- Cached variant of monKey: keyed by slotAddr, invalidated when the
 -- underlying PID changes. Eliminates per-frame string.format churn on
 -- hot paths (party scan, box snapshot, battle enemy reads). Mirrors
--- memory_gb.lua's and archive/gen3-old-client:lua/memory_gba.lua's monKeyCached pattern.
+-- archive/gen3-old-client:lua/memory_gba.lua's monKeyCached pattern.
 M._mk_cache = {}
 function M.monKeyCached(slotAddr)
     local pid = r32(slotAddr)

@@ -84,6 +84,9 @@ def test_receptionist_query_offer_and_native_notices(rom_key, fixture_key, legac
     assert "[ok] CABLE CLUB fell through to vanilla and returned to the overworld" in text
     assert "[ok] CANCEL closed the native menu with no offer" in text
     assert "VANILLA Welcome to the" in text
+    # both SLINK TRADE visits answer the must-save YES before the picker (trade_receptionist.asm:53-57)
+    assert text.count("MUST_SAVE We have to save") == 2
+    assert text.count("[ok] must-save prompt defaulted to YES") == 2
     assert text.count("[ok] selected slot zero emitted trade_offer within 180 frames") == 2
     # wait_for logs nothing on success; the gate prints the tilemap row it saw
     assert "NOTICE Trade unavailable." in text

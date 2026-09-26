@@ -21,7 +21,9 @@ containing the "Google Drive" space break BizHawk's CLI parser); absolute paths 
 INSIDE Lua. Per-instance --config copies avoid the shared config.ini write race.
 """
 import argparse
+import contextlib
 import glob
+import hashlib
 import importlib
 import json
 import os
@@ -32,7 +34,17 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.parse
 import urllib.request
+import uuid
+from pathlib import Path
+
+if __package__:
+    from .duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
+    from .gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
+else:
+    from duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
+    from gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
@@ -72,14 +84,66 @@ SCENARIOS = {
         "target": {"a": "battle", "b": "town"}, "frames": 2000000, "no_save": ("b",),
         "scenario_module": "linked_faint_active", "active_faint_case": "command",
         "oracle": "assert_active_end_gen3_saved"},
+    # Driver FOR CODEX 4: reset_commit's proposer outlives the server watchdog (~4000 events) before
+    # party evidence settles it; every other trade leg keeps well over the driver's 150000 default.
+    **{name: {"flags": [], "timeout": 3600 if name == "gen2_trade_reset_commit" else 2400, "games": ("gen2_new",),
+              "no_setup": True, "artifact_kind": "overlay",
+              "frames": {"a": 600000, "b": 432000} if name == "gen2_trade_reset_commit" else 432000,
+              "oracle": "assert_gen2_trade_saved", "oracle_kwargs": {}}
+       for name in sorted(GEN2_TRADE_SCENARIOS)},
+    "link": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
+             "no_setup": True, "frames": 216000, "target": {"a": "battle", "b": "battle_ot2"},
+             "oracle": "assert_gen2_link_saved", "oracle_kwargs": {}},
+    "gen2_faint": {"flags": [], "timeout": 2400, "games": ("gen2_new",),
+                   "no_setup": True, "frames": 432000,
+                   "target": {"a": "battle", "b": "battle_ot2"},
+                   "oracle": "assert_gen2_faint_saved", "oracle_kwargs": {}},
+    # DUO-WAVE-C (drivers fe4feb73, oracles c1adc8e8): the faint body plus its own verdict facts
+    **{name: {"flags": [], "timeout": 7200 if name == "gen2_poison" else 3600, "games": ("gen2_new",),
+              "no_setup": True, "frames": 900000 if name == "gen2_poison" else 432000,
+              "target": {"a": "battle", "b": "battle_ot2"},
+              "oracle": f"assert_{name}_saved", "oracle_kwargs": {}}
+       for name in ("gen2_whiteout", "gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild")},
+    # DUO-WAVE-D (D-2): zero-Ball town fixtures, the errand played in the duo for the aide's natural Balls
+    # (docs/gen2/reviews/DUO_WAVE_D_FACTS_2026-09-24.md section 1); C-C and G-S only (GEN2_BALL_GATE_FIXTURES).
+    # DUO-WAVE-D (O-33): the four duos that start from a synthetic setup (GEN2_SYNTH_SCENARIOS), C-C and G-S only
+    **{name: {"flags": [], "timeout": 1800, "games": ("gen2_new",), "no_setup": True, "frames": 216000,
+              "oracle": "assert_gen2_synth_saved", "oracle_kwargs": {}}
+       for name in ("gen2_boxed_capture", "gen2_gift", "gen2_egg_hatch", "gen2_npc_trade", "gen2_evolution")},
+    "gen2_ball_gate": {"flags": [], "timeout": 7200, "games": ("gen2_new",),
+                       "no_setup": True, "frames": 600000,
+                       "target": {"a": "town", "b": "town_ot2"},
+                       "oracle": "assert_gen2_ball_gate_saved", "oracle_kwargs": {}},
+    "gen2_faint_active": {"flags": [], "timeout": 3000, "games": ("gen2_new",),
+                          "no_setup": True, "frames": 432000,
+                          "target": {"a": "battle", "b": "battle_ot2"},
+                          "oracle": "assert_gen2_faint_active_saved", "oracle_kwargs": {}},
+    # O-30 review MINOR-5: B's linked mon dies as the active battler of a Route 30 TRAINER battle (the trainer
+    # next-mon path); errand seeds (GEN2_TRAINER_FIXTURES), C-C and G-S cover all three titles
+    "gen2_faint_active_trainer": {"flags": [], "timeout": 3600, "games": ("gen2_new",),
+                                  "no_setup": True, "frames": 432000,
+                                  "target": {"a": "battle_errand", "b": "battle_ot2_errand"},
+                                  "oracle": "assert_gen2_faint_active_trainer_saved", "oracle_kwargs": {}},
+    "gen2_admit_wrong_rom": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
+                             "no_setup": True, "frames": 216000,
+                             "oracle": "assert_gen2_admit_wrong_rom", "oracle_kwargs": {}},
+    "gen2_reconnect": {"flags": [], "timeout": 2400, "games": ("gen2_new",),
+                       "no_setup": True, "frames": 432000,
+                       "oracle": "assert_gen2_reconnect_saved", "oracle_kwargs": {}},
+    "gen2_type_clause": {"flags": ["--type-clause"], "timeout": 2400, "games": ("gen2_new",),
+                         "no_setup": True, "frames": 432000, "oracle": "assert_gen2_clause_saved", "oracle_kwargs": {"kind": "type"}},
+    "gen2_gender_clause": {"flags": ["--gender-clause"], "timeout": 2400, "games": ("gen2_new",),
+                           "no_setup": True, "frames": 432000, "oracle": "assert_gen2_clause_saved", "oracle_kwargs": {"kind": "gender"}},
+    "gen2_species_clause": {"flags": ["--species-clause"], "timeout": 2400, "games": ("gen2_new",),
+                            "no_setup": True, "frames": 432000, "oracle": "assert_gen2_clause_saved", "oracle_kwargs": {"kind": "species"}},
+    "gen2_soft_reset": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
+                        "no_setup": True, "frames": 216000,
+                        "oracle": "assert_gen2_soft_reset_saved", "oracle_kwargs": {}},
     "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
     "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
-    # Both halves die, then the pair is buried in the generation's graveyard box — Box 12 on
-    # Gen 1, Box 14 on Gen 2. Gen 3 has its own memorial path and is not covered here.
-    "memorialize": {"flags": [], "timeout": 300, "games": ("gen2",)},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
     # step 3): lua/tests/duo/scenario_gen1_*.lua and gen1_hunt.lua are gone, so every entry that
-    # named `("gen1",)` went with them. The Gen 2 scenarios below are the shared GB ones.
+    # named `("gen1",)` went with them.
     # NEW Gen 1 client (lua/gen1/*, game "gen1_new"): docs/gen1_requirements.md D-1 and D-3
     # from real play through lua/tests/duo/duo_gen1_main.lua. Both battle fixtures carry
     # exactly ONE Poke Ball, so each side gets one throw; the hunt fights one Tackle first
@@ -155,9 +219,8 @@ SCENARIOS = {
                     "patched_saves": {"a": "red_patched", "b": "blue_patched"},
                     "oracle": "assert_explode_saved"},
     # S-6 / W-5 (Bill's PC listing): the link_new body, then A drives DEPOSIT -> WITHDRAW ->
-    # DEPOSIT -> RELEASE through the native PC menus. The release is the documented
-    # shared-protocol gap: the client logs RELEASE_SEEN and sends nothing, so the pair stays
-    # ALIVE with a phantom boxed half.
+    # DEPOSIT -> RELEASE through the native PC menus. The release sends release{key} and the
+    # server kills the pair with cause "release" (owner ruling O-35, client 149b38e2).
     "pc_ops_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                    "target": "battle", "no_setup": True, "frames": 2500000,
                    "oracle": "assert_pc_ops_new_saved"},
@@ -386,7 +449,7 @@ SCENARIOS = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new", "gen3_frlg", "gen3_rr")
+OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr")
 
 
 def is_pure_pairing(game) -> bool:
@@ -410,6 +473,15 @@ def scenario_applies(name, game):
     # A pairing row may exclude scenarios its artifacts cannot run yet (gen1_pure: the native
     # trade/explode scenarios need the M3 overlay, admit_randomized the M5 UPR fork).
     if isinstance(GAMES, dict) and name in GAMES.get(game, {}).get("not_yet", ()):
+        return False
+    # Native trade runs on the pairings with errand trade seeds: C-C, G-S and C-G (O-34 supersedes Q10).
+    if name in GEN2_TRADE_SCENARIOS and game not in GEN2_TRADE_FIXTURES:
+        return False
+    if name == "gen2_ball_gate" and game not in GEN2_BALL_GATE_FIXTURES:
+        return False
+    if name == "gen2_faint_active_trainer" and game not in GEN2_TRAINER_FIXTURES:
+        return False
+    if name in GEN2_SYNTH_SCENARIOS and game not in GEN2_SYNTH_PAIRS:
         return False
     if allowed is None:
         return game not in OPT_IN_GAMES and family not in OPT_IN_GAMES
@@ -513,6 +585,9 @@ GEN1_RNG_REASON_CLASS = {
     # B died before parking (duo_gen1_main.lua:1608-1612). CONSEQUENCE, not FINAL, or B's
     # explode-KO phrase could never earn the pair a retry.
     "B did not park in the required faint window": "CONSEQUENCE",
+    # type_clause_new: the verdict wait saw the partner finish first -- its only ball missed
+    # (duo_gen1_main.lua type-clause body). Only a retry when the partner's miss is CAUSE_RNG.
+    "no type-clause verdict (partner-gone)": "CONSEQUENCE",
     # species_clause_new's own budget phrase: B's battle cap (8) exhausted by duplicates. The
     # reroll observation and the hunt's RNG budget are the same attempts, so this one is
     # retryable on ANY attempt (see retryable_gen1_rng), unlike the ball miss.
@@ -523,6 +598,15 @@ GEN1_RNG_REASON_CLASS = {
     "B could not hold its linked mon active: out-of-balls": "FINAL",  # switch-turn death, not catch RNG
 }
 
+
+
+def _flat_mon_stats(stats):
+    """links.json `mon_stats` as one {key: stats} map. The server keeps it per player
+    ({"a": {...}, "b": {...}}, KEY-SCOPE-2); an older document is already flat."""
+    stats = stats or {}
+    if set(stats) <= {"a", "b"} and all(isinstance(v, dict) for v in stats.values()):
+        return {**(stats.get("a") or {}), **(stats.get("b") or {})}   # ponytail: an equal key merges
+    return stats
 
 class GameRngMiss(Exception):
     """The only early orchestration exit eligible for a whole-run Gen 1 retry."""
@@ -601,6 +685,10 @@ def scenario_attempt_limit(name, game):
     (`retryable_gen1_rng`); three for species_clause_new, whose PASS may still be a
     coin-flip outcome (see `run_scenario_with_rng_retry`).
     """
+    if scenario_family(game) == "gen2_new" and name in GEN2_CLAUSE_SCENARIOS:
+        return 3
+    if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
+        return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     entry = SCENARIOS.get(name, {})
     if entry.get("battle_window_case"):
         return 2 if entry["battle_window_case"] == "trainer_bench" else 1
@@ -691,7 +779,9 @@ def jitter_problems(text, expected_requested):
 # Scenarios whose verdict needs a LIVE leg to have finished, not just two client RESULT lines:
 # the flag is set only inside the live assert (assert_reconnect_new / assert_admit_randomized_new),
 # and the post-result oracle refuses to describe a save that leg never produced.
-LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "reconnect_gen3")
+GEN2_CLAUSE_SCENARIOS = ("gen2_type_clause", "gen2_gender_clause", "gen2_species_clause")
+LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "gen2_reconnect", "gen2_soft_reset",
+                      "reconnect_gen3")
 
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
 
@@ -1958,10 +2048,205 @@ def gen3_returned(key):
 #     emulator upgrade.
 #   * DIFFERENT CARTRIDGES per instance on the new Gen 1 client: A is Red, B is Blue. The two
 #     cannot collide over BizHawk's SaveRAM because it names saves from its own gamedb entry.
-#   * The shared GB duo wrapper (duo_gb_main.lua), since the boot and the HP endianness
-#     differ from Gen 3. Gen 2 uses the same one.
+#   * Generation-specific drivers compose each client's production graph.
 #
+# "legacy" is the family of a DuoRun built without a `game` (unit stubs): no witness, and a client
+# RESULT is the whole verdict unless the scenario names an oracle. (Master kept gen3_rr for this; the
+# merged gen3_rr is the new battery row, whose saved-state oracle is required.)
+FAMILY_EVIDENCE = {
+    "legacy": EvidenceContract(),
+    "gen2_new": EvidenceContract("check_gen2_save_witness", require_oracle=True),
+    "gen1_new": EvidenceContract("check_save_witness", require_oracle=True),
+    # The new Gen 3 battery rows (gen3_lgfr is the gen3_frlg family): the Gen 1 rule, a scenario
+    # with no saved-state oracle FAILS, with check_save_witness_gen3 run first (PLAN §5.5).
+    "gen3_frlg": EvidenceContract("check_save_witness_gen3", require_oracle=True),
+    "gen3_rr": EvidenceContract("check_save_witness_gen3", require_oracle=True),
+}
+
+
+def evidence_contract(game):
+    family = scenario_family(game)
+    if family not in FAMILY_EVIDENCE:
+        raise RuntimeError(f"{family}: no family evidence contract")
+    return FAMILY_EVIDENCE[family]
+
+
+GEN2_TRADE_FIXTURES = {
+    "gen2_new": {"a": "crystal_battle_errand", "b": "crystal_battle_ot2_errand"},
+    "gen2_gold_silver": {"a": "gold_battle_errand", "b": "silver_battle_errand"},
+    "gen2_crystal_gold": {"a": "crystal_battle_errand", "b": "gold_battle_errand"},   # O-34
+}
+# gen2_trade_evolve: A boots an O-33 seed, its errand base with Master Balls (tools/gen2_synth_fixtures.TRADE_RECIPES;
+# post-RC card TRADE-EVOLVE-CATCH: the planted HAUNTER outlasted the Poke Balls in 4 of 6 RC link catches).
+GEN2_TRADE_EVOLVE_FIXTURES = {game: {**fixtures, "a": fixtures["a"].split("_", 1)[0] + "_synth_trade_evolve"}
+                              for game, fixtures in GEN2_TRADE_FIXTURES.items()}
+# gen2_faint_active_trainer: B needs an errand seed (on Crystal the pre-errand Route 30 battle demo blocks the aisle,
+# C maps/Route30.asm:424-430, ElmsLab.asm:344-345); the trade seeds are the qualified errand pairs.
+# B boots an O-33 seed: its errand base with the starter at L10 (tools/gen2_synth_fixtures.TRAINER_RECIPES), so the
+# replacement wins the trainer fight after the forced pick (final sweep: the native L5 starter whited out).
+GEN2_TRAINER_FIXTURES = {"gen2_new": {"a": "crystal_battle_errand", "b": "crystal_synth_trainer_ot2"},
+                         "gen2_gold_silver": {"a": "gold_battle_errand", "b": "silver_synth_trainer"}}
+
+
+# BizHawk writes a save whose path nears Windows MAX_PATH (260) SILENTLY not at all: a 255-char SaveRAM path left
+# the seed file on disk while the run went on (DUO-WAVE-C cc changebox, 2026-09-24; a 249-char one saved). The
+# limit keeps a margin for BizHawk's own temp/backup suffixes.
+BIZHAWK_PATH_LIMIT = 240
+
+
+def bizhawk_path_problem(paths, limit=BIZHAWK_PATH_LIMIT):
+    """The first path (absolute, as Windows sees it) at or over `limit` characters, else None."""
+    for path in paths:
+        full = os.path.abspath(str(path))
+        if len(full) >= limit:
+            return full
+    return None
+
+
+# Gold has no day POISON_STING foe south of the Route 30 battle demo: its poison A plays the
+# post-errand save (U1 ruling, tests/live/test_gen2_frame_align.py U1_FIXTURE); cc/cg keep the pairing.
+GEN2_POISON_FIXTURES = {"gen2_gold_silver": {"a": "gold_battle_errand"}}
+# gen2_ball_gate boots the zero-Ball town fixtures (Elm's lab after the starter) and plays the errand itself.
+GEN2_BALL_GATE_FIXTURES = {"gen2_new": {"a": "crystal_town", "b": "crystal_town_ot2"},
+                           "gen2_gold_silver": {"a": "gold_town", "b": "silver_town"}}
+# F.driver's refusal when the Ball pocket is empty (lua/tests/gen2_frame_align.lua): five natural Balls at ~33% a
+# throw miss about 13% of full-HP catches, so the lane may retry once on exactly this reason.
+GEN2_OUT_OF_BALLS = "no Poke Ball left in the pocket"
+# DUO-WAVE-D O-33 setups (tools/gen2_synth_fixtures.py): scenario -> recipe kind. Each side boots
+# <title>_synth_<kind> (C<->C B: crystal_synth_<kind>_ot2) through its BASE fixture's qualified CONTINUE (case.synth).
+GEN2_SYNTH_SCENARIOS = {"gen2_boxed_capture": "full", "gen2_gift": "bill", "gen2_egg_hatch": "hatch",
+                        "gen2_npc_trade": "trade", "gen2_evolution": "evolve"}
+GEN2_SYNTH_PAIRS = {"gen2_new": {"a": ("crystal", ""), "b": ("crystal", "_ot2")},
+                    "gen2_gold_silver": {"a": ("gold", ""), "b": ("silver", "")}}
+
+
+def gen2_synth_name(scenario, game, inst):
+    title, suffix = GEN2_SYNTH_PAIRS[game][inst]
+    return f"{title}_synth_{GEN2_SYNTH_SCENARIOS[scenario]}{suffix}"
+GEN2_WAVE_C = {"gen2_whiteout": ("whiteout_oracle", "repair"), "gen2_pc_ops": ("pc_ops_oracle", "release"),
+               "gen2_changebox": ("changebox_oracle", "box_change"), "gen2_poison": ("poison_oracle", "death"),
+               "gen2_whiteout_rebuild": ("whiteout_rebuild_oracle", "rebuild")}
+
+
+GEN2_DEFAULT_SPEED = 300
+GEN2_FRAME_CAP = 1_000_000   # lua/scripted_inputs.lua LIMIT: the largest play bound a driver may pass
+
+
+def gen2_frame_scale(speed):
+    """How much faster than the receipted 300% a Gen 2 duo runs (unthrottled counted as 20x)."""
+    return 20 if speed == 0 else max(1, -(-speed // 300))
+
+
+def gen2_preflight(*, repo=None, game="gen2_new", scenario="link"):
+    """Bind each side's fixture to its full qualification report and its title's pinned ROM."""
+    root = Path(repo or REPO).resolve()
+    if REPO not in sys.path:
+        sys.path.insert(0, REPO)
+    from tests.live.test_gen2_new_gates import qualified_identity
+    from tools.gen2_fixtures import BY_NAME
+    from tools.gen2_source_data import load_context
+
+    pairing = GAMES[game]
+    if pairing.get("launch_profile") != "gen2":
+        raise ValueError(f"not a Gen 2 duo pairing: {game}")
+    result = {}
+    for inst in ("a", "b"):
+        refused = scenario == "gen2_admit_wrong_rom" and inst == "b"
+        name = "crystal_battle_ot2" if refused else pairing["fixture"][inst]
+        if scenario in GEN2_TRADE_SCENARIOS:
+            name = GEN2_TRADE_FIXTURES[game][inst]
+        if scenario == "gen2_trade_evolve":
+            name = GEN2_TRADE_EVOLVE_FIXTURES[game][inst]
+        if scenario == "gen2_poison":
+            name = GEN2_POISON_FIXTURES.get(game, {}).get(inst, name)
+        if scenario == "gen2_ball_gate":
+            name = GEN2_BALL_GATE_FIXTURES[game][inst]
+        if scenario == "gen2_faint_active_trainer":
+            name = GEN2_TRAINER_FIXTURES[game][inst]
+        synth = None
+        if scenario in GEN2_SYNTH_SCENARIOS:   # O-33: the base fixture's qualification, the synthetic bytes staged
+            from tools import gen2_synth_fixtures
+
+            synth = gen2_synth_name(scenario, game, inst)
+            title, suffix = GEN2_SYNTH_PAIRS[game][inst]
+            kind = GEN2_SYNTH_SCENARIOS[scenario]
+            target = {**gen2_synth_fixtures.SYNTH_RECIPES, **gen2_synth_fixtures.DUO_RECIPES}[kind][0]
+            name = f"{title}_{target}{suffix}"
+        elif "_synth_" in name:   # an O-33 seed named directly (trainer B, trade_evolve A): boot its PLAYED base
+            from tools import gen2_synth_fixtures
+
+            synth = name
+            name = gen2_synth_fixtures.build_named(synth, root=root)[1]["base_fixture"]
+        if name not in BY_NAME:
+            raise FileNotFoundError(f"Gen 2 lane missing played/qualified fixture declaration: {name}")
+        title = BY_NAME[name].title
+        ctx = load_context(title, root=root)
+        rom = ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]
+        source = ctx.source_record()
+        if hashlib.sha1(rom.read_bytes()).hexdigest() != source["rom_sha1"]:
+            raise RuntimeError(f"{inst}: Gen 2 {title} ROM differs from the pinned source")
+        fixture = root / "tests/fixtures/gen2" / f"{name}.SaveRAM"
+        raw = fixture.read_bytes()
+        ot_id = qualified_identity(name, raw, repo=root)
+        if synth is not None:
+            fixture = root / "tests/fixtures/gen2" / f"{synth}.SaveRAM"
+            built, _disclosure = gen2_synth_fixtures.build_named(synth, root=root)
+            raw = fixture.read_bytes()
+            if built != raw:
+                raise RuntimeError(f"{inst}: {synth} is not the builder's output of {name}")
+        receipt = root / "tests/fixtures/gen2/receipts" / f"{name}.qualification.json"
+        report = json.loads(receipt.read_text(encoding="utf-8"))
+        result[inst] = {"name": name, "fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(),
+                        "ot_id": ot_id, "qualification": receipt,
+                        "qualification_attempt_id": report["attempt_id"],
+                        "rom": rom, "rom_sha1": source["rom_sha1"], "title": title}
+        if synth is not None:
+            result[inst]["synth"] = synth
+        if refused:
+            pin = ctx.lock["outputs"]["pokecrystal11"]
+            wrong_rom = ctx.source_dir / pin["filename"]
+            if hashlib.sha1(wrong_rom.read_bytes()).hexdigest() != pin["sha1"]:
+                raise RuntimeError("b: refused Crystal 1.1 ROM differs from the pinned source")
+            result[inst].update(rom=wrong_rom, rom_sha1=pin["sha1"], expect_admission="refused")
+    if result["a"]["ot_id"] == result["b"]["ot_id"] or result["a"]["sha256"] == result["b"]["sha256"]:
+        raise RuntimeError("Gen 2 duo requires distinct qualified OTs and fixture bytes")
+    if scenario == "gen2_reconnect":
+        name = f"{result['a']['title']}_battle_ot2"
+        wrong = root / "tests/fixtures/gen2" / f"{name}.SaveRAM"
+        if name not in BY_NAME or not wrong.is_file():
+            raise FileNotFoundError(f"Gen 2 reconnect missing qualified wrong-save fixture: {name}")
+        raw = wrong.read_bytes()
+        if BY_NAME[name].title != result["a"]["title"] or qualified_identity(name, raw, repo=root) == result["a"]["ot_id"]:
+            raise RuntimeError("Gen 2 reconnect wrong-save must match title and differ in OT")
+        result["a"].update(wrong_fixture=wrong, wrong_sha256=hashlib.sha256(raw).hexdigest())
+    return result
+
+
 GAMES = {
+    "gen2_new": {
+        "main": "lua/tests/duo/duo_gen2_main.lua", "game": "gen2_new",
+        "launch_profile": "gen2", "uses_savestate": False,
+        "fixture": {"a": "crystal_battle", "b": "crystal_battle_ot2"},
+        "scenario_prefix": "gen2_",
+    },
+    "gen2_gold_silver": {
+        "main": "lua/tests/duo/duo_gen2_main.lua", "game": "gen2_new",
+        "launch_profile": "gen2", "uses_savestate": False,
+        "fixture": {"a": "gold_battle", "b": "silver_battle"},
+        "scenario_prefix": "gen2_",
+    },
+    "gen2_crystal_gold": {
+        "main": "lua/tests/duo/duo_gen2_main.lua", "game": "gen2_new",
+        "launch_profile": "gen2", "uses_savestate": False,
+        "fixture": {"a": "crystal_battle", "b": "gold_battle"},
+        "scenario_prefix": "gen2_",
+    },
+    "gen3_rr": {
+        "main": "lua/tests/duo/duo_main.lua",
+        "rom": {"a": ROM_REL, "b": ROM_REL},
+        "uses_savestate": True,
+        "scenario_prefix": "",
+    },
     # The NEW Gen 1 client (lua/gen1/entry.lua composition root), Red as A and Blue as B, on
     # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). The scenarios it
     # runs are the ones that NAME it: `gen1_new` is opt-in (OPT_IN_GAMES), so the
@@ -2025,23 +2310,6 @@ GAMES = {
         "uses_savestate": False,
         "fixture": {"a": "purered", "b": "puregreen"},
         "scenario_prefix": "gen1_",
-    },
-    # THE SAME CARTRIDGE ON BOTH SIDES. There is one Crystal dump, so this pairing only
-    # works because write_run_config gives each instance its own SaveRAM directory: BizHawk
-    # names a save from its gamedb entry, keyed on ROM hash rather than the path launched,
-    # so two instances would otherwise share one file and stamp on each other.
-    #
-    # duo_gb_main resolves scenarios as scenario_<prefix><name> then scenario_gb_<name>, so
-    # faint/boxsync/memorialize come from the shared files — they are written entirely
-    # against ctx and are identical for both generations.
-    "gen2": {
-        "main": "lua/tests/duo/duo_gb_main.lua",
-        "game": "gen2_crystal",
-        "play": "gen2_playthrough",
-        "rom": {"a": "patch/build/gen2_crystal.gbc", "b": "patch/build/gen2_crystal.gbc"},
-        "uses_savestate": False,
-        "fixture": {"a": "crystal", "b": "crystal"},
-        "scenario_prefix": "gen2_",
     },
     # The NEW Gen 3 client on vanilla FRLG (lua/gen3/run.lua's build, docs/gen3/PLAN.md §5.5).
     # Battery boot like gen1_new, but through tools/gen3_fixtures.py's GBA config and flash
@@ -2116,12 +2384,15 @@ class DuoRun:
         # position are keyed by it (the `lane` property below). --lane names a lane for a wrapper
         # that wants stable names ("pure-a", "lane3"); the port is the default.
         self._lane = getattr(args, "lane", None)
-        self._pydec_path = (os.path.join(BUILD, f"e2e_{scenario}_pydec_result.txt")
-                            if self.is_gen1 or self.gcfg.get("oracle_required") else None)
+        self._pydec_path = (os.path.join(BUILD, f"e2e_{self.artifact_name}_pydec_result.txt")
+                            if evidence_contract(self.game).require_oracle else None)
+        # CODE-DIGEST (5b1274c9): the production code this run exercised, one line per pydec receipt
+        self._code_stamp = (importlib.import_module("gen2_code_digest").run_stamp()
+                            if scenario_family(getattr(self, "game", "")) == "gen2_new" else None)
         self.server = None
         self.emus = []
         self.emu_by_inst = {}
-        self.go_files = {inst: os.path.join(BUILD, f"duo_go_{scenario}_{inst}.txt")
+        self.go_files = {inst: os.path.join(BUILD, f"duo_go_{self.artifact_name}_{inst}.txt")
                          for inst in ("a", "b")}
         # When this attempt started, and when each instance was launched: artifact freshness is
         # measured against these, because a leftover file from an earlier run would otherwise
@@ -2337,7 +2608,7 @@ class DuoRun:
         """
         phase = getattr(self, "_phase", {}).get(inst, "initial")
         if phase == "initial":
-            return read_result(self.scenario, inst) or ""
+            return read_result(self.artifact_name, inst) or ""
         path = self._phase_result_path(inst, phase)
         try:
             with open(path, encoding="utf-8", errors="replace") as handle:
@@ -2401,6 +2672,9 @@ class DuoRun:
 
     def start_server(self):
         cmd = self.server_cmd()
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            cmd = [sys.executable, "-m", "tools.gen2_trade_lane", "--manifest",
+                   str(self._gen2_trade_manifest_path), "--", *cmd[3:]]
         self.server = subprocess.Popen(
             cmd, cwd=REPO,
             # The handle is the server subprocess's stdout and must outlive this call —
@@ -2605,6 +2879,8 @@ class DuoRun:
         """
         if self.is_gen3_battery:
             return self._gen3_rom(inst)
+        if self.gcfg.get("launch_profile") == "gen2":
+            return Path(self._gen2_plans[inst]["rom"]).relative_to(Path(REPO).resolve()).as_posix()
         patch_key = self._patch_key(inst)
         if patch_key and self.gcfg.get("patched_saves_override"):
             import gen1_playthrough as g1
@@ -2627,6 +2903,15 @@ class DuoRun:
             with open(seeded, "wb") as handle:
                 handle.write(codec.split_rtc(self._gen3_fixture_bytes(inst))[0])
             return seeded
+        if self.gcfg.get("launch_profile") == "gen2":
+            fixture, plan = self._gen2_inputs[inst], self._gen2_plans[inst]
+            raw = Path(fixture["fixture"]).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != fixture["sha256"]:
+                raise RuntimeError(f"{inst}: qualified fixture changed after preflight")
+            destination = Path(plan["directory"]) / plan["saveram_name"]
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(raw)
+            return str(destination)
         from run_gb_gate import GENS, seed_saveram
 
         seeded = seed_saveram(self.gcfg["fixture"][inst], self._target_for(inst),
@@ -2640,10 +2925,19 @@ class DuoRun:
             shutil.copyfile(seeded, os.path.join(self._saveram_dir(inst), extra_name))
         return seeded
 
+    @property
+    def artifact_name(self):
+        if scenario_family(getattr(self, "game", "")) == "gen2_new":
+            # Escape the separator/glob characters in custom lanes: cc must not
+            # share cc_more's cleanup prefix. Normal matrix lane names are unchanged.
+            lane = urllib.parse.quote(self.lane, safe="-").replace("_", "%5F")
+            return f"{self.scenario}_{lane}"
+        return self.scenario
+
     def _phase_result_path(self, inst, phase="initial"):
         if phase == "initial":
             return self._result_path(inst)
-        return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_{phase}_result.txt")
+        return os.path.join(BUILD, f"e2e_{self.artifact_name}_{inst}_{phase}_result.txt")
 
     def expected_idle_jitter(self) -> int:
         """The idle-frame count both stubs are told to apply, and the driver must echo back.
@@ -2661,6 +2955,9 @@ class DuoRun:
 
             # The GBA Save RAM path entry, not the Game Boy one gen1's write_run_config edits.
             gen3_fixtures.write_gba_run_config(BIZHAWK_CONFIG, cfg_ini, self._saveram_dir(inst))
+        elif self.gcfg.get("launch_profile") == "gen2":
+            from run_gb_gate import GENS
+            GENS["gen2"]["config"](self._gen2_plans[inst], Path(cfg_ini))
         elif self.battery_boot:
             import gen1_playthrough as g1
 
@@ -2691,11 +2988,32 @@ class DuoRun:
             "mutate_otid": inst == "b", "result": result.replace("\\", "/"),
             "partner_result": self._result_path("b" if inst == "a" else "a").replace("\\", "/"),
             "go_file": self.go_files[inst].replace("\\", "/"),
-            "timeout_frames": self.cfg.get("frames", self.cfg["timeout"] * 60),
+            "timeout_frames": (lambda f: f[inst] if isinstance(f, dict) else f)(
+                self.cfg.get("frames", self.cfg["timeout"] * 60)),
+            # the driver's frame budgets were sized at 300%: above it, the scenario's frame cap grows by
+            # the same factor (duo_gen2_main.lua h.wait also waits out the 300%-equivalent wall time)
             # The scenario's own wall budget, for the bodies that wait on a partner with a
             # bounded loop (poison_new's A half: `D.timeout_secs or 2400`).
             "timeout_secs": self.cfg["timeout"],
         }
+        env = None
+        if self.gcfg.get("launch_profile") == "gen2":
+            duo["mutate_otid"] = False
+            speed = self.gen2_speed()
+            duo["speed_percent"] = speed
+            # lua/scripted_inputs.lua refuses a play bound above 1,000,000 frames (its LIMIT)
+            duo["timeout_frames"] = min(duo["timeout_frames"] * gen2_frame_scale(speed),
+                                        max(duo["timeout_frames"], GEN2_FRAME_CAP))
+            if self.scenario in GEN2_TRADE_SCENARIOS:
+                duo["trade_manifest"] = str(self._gen2_trade_manifest_path).replace("\\", "/")
+                duo["trade_manifest_sha256"] = self._gen2_trade_manifest_sha256
+                duo["trade_case"] = self.scenario
+                duo["trade_evidence_dir"] = str(Path(self.data_dir, "trade_evidence")).replace("\\", "/")
+                duo["variant"] = self._gen2_trade_expected_case()["variant"]
+            if self._gen2_inputs[inst].get("expect_admission") == "refused":
+                duo["expect_admission"] = "refused"
+            env = dict(os.environ, SLINK_ROOT=WT_FWD, **self._gen2_plans[inst]["env"],
+                       **self._gen2_env[inst])
         if self.is_gen3_battery:
             # duo_gen3_main.lua resolves lua/tests/duo/scenario_<prefix><name>.lua and reads the
             # title's pack files and pret symbols by `title`.
@@ -2729,15 +3047,21 @@ class DuoRun:
                     f.write(f"  {k} = {v},\n")
             f.write("}\n")
             f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
+        if self.gcfg.get("launch_profile") == "gen2" and self.scenario in GEN2_TRADE_SCENARIOS:
+            plan = self._gen2_plans[inst]
+            if hashlib.sha1(Path(plan["rom"]).read_bytes()).hexdigest() != plan["launch_sha1"]:
+                raise RuntimeError(f"{inst}: staged trade overlay changed before launch")
         # the emulator's own output (a .NET exception text, a crash) goes to a per-run file: a modal
         # exception dialog blocks the frame-counted Lua waits, so this is the only witness it leaves
         # (the child inherits its own handle, so the parent's copy closes after the launch)
+        os.makedirs(os.path.join(REPO, "patch", "build"), exist_ok=True)
         with open(os.path.join(REPO, "patch", "build", f"duo_{self.lane}_{inst}.out"), "wb") as emu_out:
             p = subprocess.Popen(
                 [EMUHAWK, f"--config=patch/build/duo_cfg_{self.lane}_{inst}.ini",
                  f"--lua=patch/build/duo_{self.lane}_{inst}.lua",
                  self._rom_for(inst)],
-                cwd=REPO, stdout=emu_out, stderr=subprocess.STDOUT)
+                cwd=REPO, stdout=emu_out, stderr=subprocess.STDOUT,
+                **({"env": env} if env is not None else {}))
         self.emus.append(p)
         self.emu_by_inst[inst] = p
         self._launch_times[inst] = time.time()
@@ -2758,24 +3082,582 @@ class DuoRun:
             p.wait(timeout=15)
         print(f"[duo] terminated {inst} pid={p.pid}; server retained")
 
+    def gen2_speed(self):
+        """O-36: duo speed percent (default 300, the receipted speed; 0 = unthrottled). Qualification runs
+        (run_gb_gate) stay at 100% and never read this."""
+        speed = getattr(getattr(self, "args", None), "speed_percent", None)
+        return GEN2_DEFAULT_SPEED if speed is None else speed
+
+    @contextlib.contextmanager
+    def _timed(self, phase):
+        """EMU-SPEED item 1: one wall-clock line per run phase ('[duo] timing <phase> <s>s')."""
+        start = time.perf_counter()
+        try:
+            yield
+        finally:
+            elapsed = time.perf_counter() - start
+            times = self.__dict__.setdefault("_phase_times", {})
+            times[phase] = times.get(phase, 0.0) + elapsed
+            print(f"[duo] timing {phase} {elapsed:.1f}s", flush=True)
+
     def start_instances(self):
         if self.is_gen3_battery:
             for inst in ("a", "b"):
                 self._gen3_rom(inst)  # staged (and found) before either emulator starts
-        elif self.battery_boot:
+        elif self.battery_boot and self.gcfg.get("launch_profile") != "gen2":
             play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
                 play.staged_rom(key)  # space-free relative ROM paths for BizHawk
         self._clear_attempt_artifacts()
-        for inst in ("a", "b"):
-            self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
+        # F-4 tests B's CONTRACT verdict. A's randomized hello commits the run's artifact kind,
+        # after which a pure clean B is refused earlier by the mixed-kinds gate, which records
+        # no admission verdict (server.py _mixed_games_error), so B must hello alone first.
+        b_first = self.scenario == "admit_randomized_new"
+        for inst in (("b", "a") if b_first else ("a", "b")):
+            with self._timed(f"launch_{inst}"):
+                self.launch_instance(inst, seed=not self.cfg.get("cold_boot"))
+            if b_first and inst == "b":
+                self.wait_for("clean B's contract verdict before A launches", lambda: (
+                    ((self._status() or {}).get("players") or {}).get("b", {})
+                    .get("admission") == "rejected"), 120)
         print("[duo] two EmuHawk instances launched")
+
+    def _check_bizhawk_paths(self):
+        """Refuse, before any launch, a lane whose SaveRAM or result/save-copy paths BizHawk would fail to write."""
+        paths = []
+        for inst, plan in self._gen2_plans.items():
+            result = self._result_path(inst)
+            stem = result[:-len("_result.txt")] if result.endswith("_result.txt") else result
+            paths += [result, stem + "_link_save.SaveRAM", stem + "_witness.SaveRAM"]
+            if plan.get("directory") and plan.get("saveram_name"):   # a real run_gb_gate plan (stubs carry neither)
+                paths.append(Path(plan["directory"]) / plan["saveram_name"])
+        long = bizhawk_path_problem(paths)
+        if long:
+            raise RuntimeError(f"path too long for BizHawk ({len(long)} >= {BIZHAWK_PATH_LIMIT} chars; its saves "
+                               f"fail SILENTLY there): {long} -- use a shorter checkout/lane path or lane name")
+
+    def _prepare_gen2_lane(self):
+        if not Path(EMUHAWK).is_file():
+            raise FileNotFoundError(f"EmuHawk missing for Gen 2 duo: {EMUHAWK}")
+        with self._timed("gen2_preflight"):
+            self._gen2_inputs = gen2_preflight(game=self.game, scenario=self.scenario)
+        from run_gb_gate import GENS
+
+        from tests.live.test_gen2_frame_align import u1_facts
+        from tests.live.test_gen2_new_gates import inspect_env
+        from tools import gen2_fixtures, gen2_source_data
+
+        suffix = "_overlay" if self.scenario in GEN2_TRADE_SCENARIOS else ""
+        with self._timed("plans"):
+            self._gen2_plans = {
+                inst: GENS["gen2"]["plan"](row["title"] + suffix, self._saveram_dir(inst), row["fixture"],
+                                           self.gen2_speed())
+                for inst, row in self._gen2_inputs.items()}
+        self._check_bizhawk_paths()
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            with self._timed("trade_manifest"):
+                self._prepare_gen2_trade_manifest()
+        self._gen2_env = {}
+        for inst, row in self._gen2_inputs.items():
+            if row.get("expect_admission") == "refused":
+                plan = self._gen2_plans[inst]
+                database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
+                names = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
+                         if line.split("\t", 1)[0].lower() == row["rom_sha1"]]
+                if len(names) != 1 or len(names[0]) < 4 or names[0][1] != "G" or names[0][3] != "GBC":
+                    raise RuntimeError("refused Crystal 1.1 gamedb binding missing or contradictory")
+                plan.update(rom=row["rom"], rom_sha1=row["rom_sha1"], saveram_name=names[0][2] + ".SaveRAM")
+                plan["env"].update(SLINK_GEN2_ROM_SHA1=row["rom_sha1"], SLINK_GEN2_SAVERAM_NAME=plan["saveram_name"])
+                self._gen2_env[inst] = {}
+                continue
+            timer = self._timed(f"env_{inst}")
+            timer.__enter__()
+            ctx = gen2_source_data.load_context(row["title"], root=Path(REPO))
+            # errand fixtures play on their own spec's facts (the Gold errand maps), not the title's
+            facts = gen2_fixtures.spec_route_facts(gen2_fixtures.BY_NAME[row["name"]], Path(REPO))
+            env = inspect_env(gen2_fixtures.BY_NAME[row["name"]], row["fixture"].read_bytes(),
+                              repo=Path(REPO))
+            if self.scenario == "gen2_ball_gate":
+                # the town fixture plays the errand: errand route facts + ledges, qualify facts over the same
+                # fingerprint, and the case flag the shared gate admits a town case with errand facts on
+                facts = gen2_fixtures.route_facts(row["title"], Path(REPO), errand=True)
+                qualify = json.loads(env["SLINK_GEN2_QUALIFY"])
+                qualify["facts"] = gen2_fixtures.qualify_facts(row["title"], Path(REPO), errand=True)
+                env.update(SLINK_GEN2_ROUTE_FACTS=json.dumps(facts), SLINK_GEN2_QUALIFY=json.dumps(qualify),
+                           SLINK_GEN2_ROUTE_LEDGES=json.dumps(gen2_fixtures.route_ledges(row["title"], facts,
+                                                                                        Path(REPO))))
+            case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
+            case["attempt_id"] = f"duo-{self.scenario}-{inst}-{self.attempt}-{uuid.uuid4().hex}"
+            if self.scenario == "gen2_ball_gate":
+                case["ball_gate"] = True
+            if row.get("synth"):
+                case["synth"] = row["synth"]   # the shared gate names the case by its base fixture
+            env["SLINK_GEN2_FIXTURE_CASE"] = json.dumps(case)
+            env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1_facts(ctx, facts, row["qualification_attempt_id"]))
+            kind = GEN2_SYNTH_SCENARIOS.get(self.scenario)
+            if kind in ("bill", "trade", "evolve"):   # the U1G route driver (lua/tests/gen2_u1g_inputs.lua), its facts
+                from tests.live.test_gen2_u1g import run_facts
+
+                u1g = run_facts(ctx, gen2_fixtures.BY_NAME[row["name"]],
+                                {"trade": "kyle", "evolve": "grass"}.get(kind, kind),
+                                row["synth"], row["qualification_attempt_id"])
+                if kind == "trade":
+                    u1g["u1g"]["give_slot"] = 1   # the hatched Bellsprout is slot 2 (DUO_RECIPES trade)
+                env["SLINK_GEN2_U1_FACTS"] = json.dumps(u1g)
+            if self.scenario in GEN2_TRADE_SCENARIOS:
+                from tools.gen2_trade_facts import trade_facts
+
+                env["SLINK_GEN2_TRADE_MANIFEST"] = str(self._gen2_trade_manifest_path)
+                env["SLINK_GEN2_TRADE_MANIFEST_SHA256"] = self._gen2_trade_manifest_sha256
+                env["SLINK_GEN2_TRADE_FACTS"] = json.dumps(trade_facts(row["title"], root=Path(REPO)))
+            self._gen2_env[inst] = env
+            timer.__exit__(None, None, None)
+        scenario_name = self.scenario.removeprefix("gen2_")
+        driver_files = [self.gcfg["main"], f"lua/tests/duo/scenario_gen2_{scenario_name}.lua",
+                        "lua/tests/duo/gen2_route29_inputs.lua"]
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            driver_files += ["lua/tests/duo/gen2_trade.lua", "tools/gen2_trade_facts.py"]
+        if self.scenario in GEN2_WAVE_C:
+            driver_files.append("lua/tests/duo/scenario_gen2_faint.lua")
+        if self.scenario in ("gen2_faint", "gen2_faint_active", "gen2_whiteout", "gen2_changebox", "gen2_poison",
+                             "gen2_whiteout_rebuild", "gen2_faint_active_trainer"):
+            driver_files.append("lua/tests/duo/gen2_faint_inputs.lua")
+        if self.scenario == "gen2_faint_active_trainer":
+            driver_files += ["lua/tests/duo/scenario_gen2_faint_active.lua", "lua/tests/gen2_poison_inputs.lua",
+                             "lua/tests/gen2_walk.lua"]
+        if self.scenario in ("gen2_pc_ops", "gen2_changebox", "gen2_whiteout_rebuild"):
+            driver_files.append("lua/tests/gen2_pc_inputs.lua")
+        if self.scenario in ("gen2_pc_ops", "gen2_changebox", "gen2_poison", "gen2_whiteout_rebuild"):
+            driver_files += ["lua/tests/gen2_poison_inputs.lua", "lua/tests/gen2_walk.lua"]
+        if self.scenario in GEN2_CLAUSE_SCENARIOS:
+            driver_files.append("lua/tests/duo/gen2_clause.lua")
+        if self.scenario in GEN2_SYNTH_SCENARIOS:
+            driver_files += ["lua/tests/duo/gen2_synth_duo.lua", "lua/tests/gen2_u1g_inputs.lua",
+                             "lua/tests/gen2_poison_inputs.lua", "lua/tests/gen2_walk.lua",
+                             "lua/tests/duo/gen2_faint_inputs.lua"]
+        if self.scenario == "gen2_ball_gate":
+            driver_files += ["lua/tests/duo/gen2_ball_gate_inputs.lua", "lua/tests/gen2_scripted_play.lua",
+                             "lua/tests/gen2_walk.lua"]
+        for path in driver_files:
+            if not (Path(REPO) / path).is_file():
+                raise FileNotFoundError(f"Gen 2 duo driver missing: {path}")
+        oracle = importlib.import_module("gen2_duo_oracles")
+        oracle_name = {"link": "link_oracle", "gen2_faint": "faint_oracle", "gen2_faint_active": "faint_active_oracle",
+                       "gen2_faint_active_trainer": "faint_active_oracle", "gen2_reconnect": "reconnect_oracle",
+                       "gen2_admit_wrong_rom": "admit_wrong_rom_oracle", "gen2_soft_reset": "soft_reset_oracle",
+                       "gen2_ball_gate": "ball_gate_oracle",
+                       **dict.fromkeys(GEN2_SYNTH_SCENARIOS, "synth_duo_oracle"),
+                       **{name: row[0] for name, row in GEN2_WAVE_C.items()},
+                       **dict.fromkeys(GEN2_CLAUSE_SCENARIOS, "clause_oracle"),
+                       **dict.fromkeys(GEN2_TRADE_SCENARIOS, "trade_oracle")}[self.scenario]
+        witness = "check_admit_wrong_rom_witness" if self.scenario == "gen2_admit_wrong_rom" else "check_save_witness"
+        if self.scenario == "gen2_reconnect":
+            witness = "check_reconnect_witness"
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            oracle = importlib.import_module("gen2_trade_oracles")
+            witness = "check_trade_witness"
+        if not all(callable(getattr(oracle, name, None)) for name in (witness, oracle_name)):
+            raise RuntimeError("Gen 2 duo witness/oracle implementation missing")
+
+    def _prepare_gen2_trade_manifest(self):
+        from tools.gen2_trade_lane import validate_manifest
+
+        root = Path(REPO).resolve()
+        raw = (root / "data/gen2/overlay_provenance.json").read_bytes()
+        provenance = json.loads(raw)
+        manifest = {"schema": "gen2-trade-lane-v1", "run_id": "g2trade_" + uuid.uuid4().hex,
+                    "scenario": self.scenario, "evidence_class": "HARNESS_ONLY_OVERLAY",
+                    "provenance_sha256": hashlib.sha256(raw).hexdigest(), "players": {}}
+        for inst, row in self._gen2_inputs.items():
+            title, plan = row["title"], self._gen2_plans[inst]
+            artifact = provenance["outputs"]["poke" + title]
+            stage = plan.get("stage")
+            if (not isinstance(stage, bytes) or hashlib.sha1(stage).hexdigest() != artifact["sha1"]
+                    or plan["launch_sha1"] != artifact["sha1"] or row["rom_sha1"] != artifact["base_sha1"]):
+                raise RuntimeError(f"{inst}: trade overlay stage/base binding differs")
+            manifest["players"][inst] = {"title": title, "rom_type": title, "foundation": "gen2_gsc",
+                "artifact_kind": "overlay", "rom_sha1": artifact["sha1"], "base_sha1": artifact["base_sha1"],
+                "ups_sha256": artifact["ups"]["sha256"], "sym_sha256": provenance["symbols"][title + "_slink.sym"]}
+        validate_manifest(manifest, root=root)
+        for inst, plan in self._gen2_plans.items():
+            target = Path(plan["rom"]).resolve()
+            if not target.is_relative_to(Path(BUILD).resolve()):
+                raise RuntimeError("trade staged ROM escapes the build directory")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            if not target.is_file() or hashlib.sha1(target.read_bytes()).hexdigest() != plan["launch_sha1"]:
+                temporary = None
+                try:
+                    with tempfile.NamedTemporaryFile(dir=target.parent, suffix=".tmp", delete=False) as handle:
+                        temporary = Path(handle.name)
+                        handle.write(plan["stage"])
+                    os.replace(temporary, target)
+                finally:
+                    if temporary is not None and temporary.exists():
+                        temporary.unlink()
+            self._gen2_inputs[inst].update(source_rom_sha1=self._gen2_inputs[inst]["rom_sha1"],
+                                          rom_sha1=plan["launch_sha1"], rom=target)
+        path = Path(self.data_dir) / "gen2_trade_manifest.json"
+        encoded = (json.dumps(manifest, sort_keys=True, indent=2) + "\n").encode()
+        with path.open("xb") as handle:
+            handle.write(encoded)
+        self._gen2_trade_manifest_path = path
+        self._gen2_trade_manifest_sha256 = hashlib.sha256(encoded).hexdigest()
+        self._gen2_trade_manifest = manifest
+        Path(self.data_dir, "trade_evidence").mkdir(exist_ok=False)
+
+    def _gen2_trade_overlay_reference(self):
+        return {"manifest_path": str(self._gen2_trade_manifest_path),
+                "manifest_sha256": self._gen2_trade_manifest_sha256,
+                "players": {side: {"rom_path": str(self._gen2_plans[side]["rom"]),
+                                   "sym_path": str(Path(REPO, "data/gen2", row["title"] + "_slink.sym").resolve())}
+                            for side, row in self._gen2_inputs.items()}}
+
+    def _gen2_trade_expected_case(self):
+        case = {"scenario": self.scenario,
+                "variant": {"gen2_new": "cc", "gen2_gold_silver": "gs", "gen2_crystal_gold": "cg"}[self.game],
+                "fixture_sha256": {side: row["sha256"] for side, row in self._gen2_inputs.items()},
+                "required_phases": ["wait", "trade_animation", "native_save"]
+                    if self.scenario in ("gen2_trade_new", "gen2_trade_evolve") else ["wait"]}
+        synth = {side: {"name": row["synth"], "base": row["name"]}
+                 for side, row in self._gen2_inputs.items() if row.get("synth")}
+        if synth:   # O-33: the oracle binds the seed's disclosure (gen2_trade_oracles.SEEDED)
+            case["synth"] = synth
+        return case
+
+    def _release_gen2_trade(self):
+        oracle = importlib.import_module("gen2_trade_oracles")
+
+        def ready():
+            found = {}
+            for side in ("a", "b"):
+                text = read_result(self.artifact_name, side) or ""
+                if not text.endswith("\n"):
+                    text = text.rsplit("\n", 1)[0] if "\n" in text else ""
+                if not any(line.startswith("TRADE_READY ") for line in text.splitlines()):
+                    return None
+                mark, baseline = oracle._one(text, "TRADE_READY"), oracle._one(text, "TRADE_BASELINE")
+                raw = oracle._image(baseline, side + " runner baseline")
+                if mark.get("snapshot_sha256") != baseline["snapshot_sha256"]:
+                    raise RuntimeError("trade READY does not bind its baseline")
+                found[side] = raw
+            return found
+
+        with self._timed("trade_ready"):   # launch -> both TRADE_READY (catch, walk, baseline)
+            images = self.wait_for("both immutable trade baselines", ready, self.cfg["timeout"])
+        self._gen2_trade_baseline_saves = {}
+        for side, raw in images.items():
+            path = Path(self.data_dir, "trade_evidence", side + "_runner_baseline.SaveRAM")
+            with path.open("xb") as handle:
+                handle.write(raw)
+            self._gen2_trade_baseline_saves[side] = path
+        raw = Path(self.data_dir, "links.json").read_bytes()
+        path = Path(self.data_dir, "trade_evidence", "baseline_links.json")
+        with path.open("xb") as handle:
+            handle.write(raw)
+        self._gen2_trade_baseline_links = {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest()}
+        self.go({side: ["TRADE_GO"] for side in ("a", "b")})
+
+    def assert_gen2_trade_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_trade_oracles")
+        source = Path(self.data_dir, "trade_lane_events.jsonl")
+        raw = source.read_bytes()
+        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
+        tokens = set()
+        for event in events:
+            message, outcome = event.get("message", {}), event.get("outcome", {})
+            for candidate in (message.get("token"), (outcome.get("pending_trade") or {}).get("token")):
+                if isinstance(candidate, str) and re.fullmatch(r"t[0-9]+", candidate):
+                    tokens.add(candidate)
+        if len(tokens) > 1:
+            raise RuntimeError("trade lane observed multiple server transactions")
+        path = Path(self.data_dir, "trade_evidence", "server_events.jsonl")
+        with path.open("xb") as handle:
+            handle.write(raw)
+        transaction = {"schema": "gen2-duo-trade-transaction-v1",
+                       "tokens": {side: oracle._one(results[side], "RECEIPT").get("token") for side in ("a", "b")},
+                       "server_token": next(iter(tokens), None), "baseline_links": self._gen2_trade_baseline_links,
+                       "events": {"path": str(path), "sha256": hashlib.sha256(raw).hexdigest()}}
+        if self.scenario == "gen2_trade_reset_commit":
+            status = self._status()
+            if not isinstance(status, dict):
+                raise RuntimeError("trade reconciliation final status unavailable")
+            evidence = {"status": (json.dumps(status, sort_keys=True) + "\n").encode(),
+                        "events": Path(self.data_dir, "events.json").read_bytes()}
+            transaction["reconciliation"] = {}
+            for label, content in evidence.items():
+                snapshot = Path(self.data_dir, "trade_evidence", label + ".json")
+                with snapshot.open("xb") as handle:
+                    handle.write(content)
+                transaction["reconciliation"][label] = {"path": str(snapshot), "sha256": hashlib.sha256(content).hexdigest()}
+
+        def verified(facts):
+            if facts.get("scenario") != self.scenario or facts.get("admission_scope") != "HARNESS_ONLY_OVERLAY":
+                raise RuntimeError("trade oracle omitted its harness scope")
+            self._record_gen2_facts({"a": facts["players"]["a"]["key"], "b": facts["players"]["b"]["key"],
+                "area": facts["area_id"], "titles": "/".join(facts["players"][side]["title"] for side in ("a", "b")),
+                "status": facts["status"], "scenario": self.scenario, "admission_scope": facts["admission_scope"]})
+
+        return oracle.trade_oracle(results, data_dir=self.data_dir,
+            baseline_saves=self._gen2_trade_baseline_saves, transaction_evidence=transaction,
+            overlay_provenance=self._gen2_trade_overlay_reference(), expected_case=self._gen2_trade_expected_case(),
+            on_verified=verified, **kwargs)
+
+    def check_gen2_save_witness(self, results):
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            return importlib.import_module("gen2_trade_oracles").check_trade_witness(results,
+                expected_case=self._gen2_trade_expected_case(), overlay_provenance=self._gen2_trade_overlay_reference())
+        oracle = importlib.import_module("gen2_duo_oracles")
+        if self.scenario == "gen2_admit_wrong_rom":
+            return oracle.check_admit_wrong_rom_witness(results, **self._gen2_admit_paths())
+        if self.scenario == "gen2_reconnect":
+            return oracle.check_reconnect_witness(results,
+                initial_results={"a": self._gen2_initial_a, "b": results["b"]},
+                relaunch_results=self._gen2_relaunch_results, staged_saves=self._gen2_staged_saves)
+        return oracle.check_save_witness(results)
+
+    def _gen2_admit_paths(self):
+        plan = self._gen2_plans["b"]
+        return {"boot_saveram": {inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
+                "refused_saveram": Path(plan["directory"]) / plan["saveram_name"]}
+
+    def _gen2_admit_snapshot(self):
+        raw = Path(self.data_dir, "links.json").read_bytes()
+        return {"status": self._status(), "raw": self._raw_state(),
+                "links": json.loads(raw), "links_bytes": raw,
+                "events": self._reconnect_events()}
+
+    def assert_gen2_admit_wrong_rom(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.admit_wrong_rom_oracle(results, data_dir=self.data_dir,
+            before=self._gen2_admit_before, after=self._gen2_admit_snapshot(),
+            on_verified=self._record_gen2_facts, **self._gen2_admit_paths(), **kwargs)
+
+    def assert_gen2_reconnect_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.reconnect_oracle(results, data_dir=self.data_dir,
+            initial_results={"a": self._gen2_initial_a, "b": results["b"]},
+            relaunch_results=self._gen2_relaunch_results, staged_saves=self._gen2_staged_saves,
+            relaunch_saves=self._gen2_relaunch_saves, snapshots=self._gen2_reconnect_snapshots,
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
+            on_verified=self._record_gen2_facts, **kwargs)
+
+    def assert_gen2_clause_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.clause_oracle(results, data_dir=self.data_dir,
+            pending_snapshot=getattr(self, "_gen2_clause_pending", None),
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
+            on_verified=self._record_gen2_facts, **kwargs)
+
+    def _release_gen2_species(self):
+        def pending_marker():
+            rows = [json.loads(line.partition(" ")[2]) for line in self._read_receipt("a").splitlines()
+                    if line.startswith("PENDING_CAPTURE ")]
+            if len(rows) > 1:
+                raise RuntimeError("multiple A PENDING_CAPTURE markers")
+            return rows[0] if rows else None
+        marker = self.wait_for("Gen 2 A pending marker", pending_marker, self.cfg["timeout"])
+        if marker.get("area_id") != "route_29" or not marker.get("key") or type(marker.get("species_id")) is not int:
+            raise RuntimeError("invalid Gen 2 pending key/area/species")
+        def server_pending():
+            entry = ((self._status() or {}).get("pending_captures", {}).get("route_29", {}).get("a"))
+            return entry if entry and entry.get("key") == marker["key"] else None
+        entry = self.wait_for("Gen 2 server A pending capture", server_pending, self.cfg["timeout"])
+        if entry.get("species") != marker["species_id"]:
+            raise RuntimeError("Gen 2 server pending species differs from A")
+        self._gen2_clause_pending = self._gen2_admit_snapshot()
+        self._go_one("b", [f"A_PENDING species={marker['species_id']}"])
+
+    def assert_gen2_soft_reset_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.soft_reset_oracle(results, data_dir=self.data_dir,
+            before=self._gen2_soft_reset_before, after=self._gen2_soft_reset_after,
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()},
+            on_verified=self._record_gen2_facts, **kwargs)
+
+    def _orchestrate_gen2_soft_reset(self):
+        self.wait_for("Gen 2 A ready for reset chord", lambda: any(line.startswith("HELLO_AT_CHECKPOINT ")
+                      for line in self._read_receipt("a").splitlines()), 60)
+        self._gen2_soft_reset_before = self._gen2_admit_snapshot()
+        Path(self.go_files["a"] + ".chord").write_text("baseline recorded\n", encoding="utf-8")
+        def rehello():
+            if not any(line.startswith("REHELLO ") for line in self._read_receipt("a").splitlines()):
+                return False
+            return sum(row.get("type") == "hello" and row.get("player") == "a"
+                       and row.get("text", "").startswith("Connected (")
+                       for row in self._reconnect_events()) == 2
+        self.wait_for("Gen 2 same-OT rehello accepted after reset", rehello, 300)
+        self._gen2_soft_reset_after = self._gen2_admit_snapshot()
+        self._live_complete["gen2_soft_reset"] = True
+
+    def _stage_gen2_reconnect(self, phase, source, key):
+        from run_gb_gate import GENS
+
+        if phase not in ("same_save", "wrong_save"):
+            raise RuntimeError("invalid Gen 2 reconnect phase")
+        raw = Path(source).read_bytes()
+        if phase == "wrong_save" and hashlib.sha256(raw).hexdigest() != self._gen2_inputs["a"]["wrong_sha256"]:
+            raise RuntimeError("qualified wrong-save fixture changed after preflight")
+        seed = Path(BUILD, f"e2e_{self.artifact_name}_a_{phase}_seed.SaveRAM")
+        seed.write_bytes(raw)
+        directory = Path(self._saveram_dir("a") + "_" + phase)
+        plan = GENS["gen2"]["plan"](self._gen2_inputs["a"]["title"], directory, seed, self.gen2_speed())
+        directory.mkdir(parents=True, exist_ok=True)
+        target = directory / plan["saveram_name"]
+        target.write_bytes(raw)
+        self._gen2_plans["a"] = plan
+        env = dict(self._gen2_env["a"])
+        case = json.loads(env["SLINK_GEN2_FIXTURE_CASE"])
+        case["attempt_id"] = f"duo-reconnect-a-{phase}-{uuid.uuid4().hex}"
+        qualify = json.loads(env["SLINK_GEN2_QUALIFY"])
+        qualify.update(stage="boot", stage_fingerprint=hashlib.sha256(raw).hexdigest())
+        env.update(SLINK_GEN2_FIXTURE_CASE=json.dumps(case), SLINK_GEN2_QUALIFY=json.dumps(qualify))
+        self._gen2_env["a"] = env
+        self._gen2_staged_saves[phase], self._gen2_relaunch_saves[phase] = seed, target
+        Path(self.go_files["a"]).write_text("", encoding="utf-8")
+        self.launch_instance("a", phase=phase, seed=False, expected_key=key)
+        self._expected_exit.discard("a")
+
+    def _orchestrate_gen2_reconnect(self):
+        def marker(side, tag):
+            text = self._read_receipt(side)
+            rows = [json.loads(line[len(tag) + 1:]) for line in text.splitlines() if line.startswith(tag + " ")]
+            return rows[0] if len(rows) == 1 else None
+
+        ready = {inst: self.wait_for(f"{inst} reconnect link save", lambda i=inst: marker(i, "RECONNECT_READY"), 600)
+                 for inst in ("a", "b")}
+        self.wait_for("Gen 2 persisted live pair before crash", lambda: any(
+            row.get("status") == "alive" and row.get("area_id") == "route_29"
+            and all((row.get(inst) or {}).get("key") == ready[inst]["key"] for inst in ("a", "b"))
+            for row in self._links_json()), 60)
+        self._gen2_initial_a = self._read_receipt("a")
+        Path(BUILD, f"e2e_{self.artifact_name}_a_initial_result.txt").write_text(self._gen2_initial_a, encoding="utf-8")
+        initial_save = Path(self._gen2_plans["a"]["directory"]) / self._gen2_plans["a"]["saveram_name"]
+        self._gen2_reconnect_snapshots = {"initial": self._gen2_admit_snapshot()}
+        self._gen2_staged_saves, self._gen2_relaunch_saves, self._gen2_relaunch_results = {}, {}, {}
+        self.terminate_instance("a")
+        def disconnected():
+            players = (self._status() or {}).get("players", {})
+            return not players.get("a", {}).get("connected") and players.get("b", {}).get("connected")
+        self.wait_for("Gen 2 A disconnected, B online", disconnected, 45)
+        self._gen2_reconnect_snapshots["disconnected"] = self._gen2_admit_snapshot()
+        for phase, source in (("same_save", initial_save), ("wrong_save", self._gen2_inputs["a"]["wrong_fixture"])):
+            if phase == "wrong_save":
+                self._gen2_reconnect_snapshots["before_wrong"] = self._gen2_admit_snapshot()
+            self._stage_gen2_reconnect(phase, source, ready["a"]["key"])
+            self.wait_for(f"Gen 2 {phase} hello", lambda: marker("a", "RECONNECT_HELLO"), 300)
+            def reconciled(phase=phase):
+                players = (self._status() or {}).get("players", {})
+                a = players.get("a", {})
+                if not a.get("connected") or not players.get("b", {}).get("connected"):
+                    return False
+                if phase == "wrong_save":
+                    return a.get("identity_error") and marker("a", "WRONG_SAVE_HUD")
+                return not a.get("identity_error") and ready["a"]["key"] in a.get("party_keys", [])
+            self.wait_for(f"Gen 2 {phase} server reconciliation", reconciled, 60)
+            self._gen2_reconnect_snapshots[phase] = self._gen2_admit_snapshot()
+            self._append_reconnect_marker("a", "A_DONE_SAME" if phase == "same_save" else "A_DONE_WRONG")
+            self.wait_for(f"Gen 2 {phase} PASS", lambda: (terminal_result(self._read_receipt("a")) or "").startswith("RESULT: PASS"), 60)
+            self._gen2_relaunch_results[phase] = self._read_receipt("a")
+            self.emu_by_inst["a"].wait(timeout=30)
+            self.terminate_instance("a")
+            self.wait_for(f"Gen 2 {phase} socket closed", disconnected, 45)
+        Path(self._result_path("a")).write_text(self._gen2_relaunch_results["wrong_save"], encoding="utf-8")
+        self._append_reconnect_marker("b", "B_DONE")
+        self.wait_for("Gen 2 B stayed online", lambda: (terminal_result(self._read_receipt("b")) or "").startswith("RESULT: PASS"), 120)
+        self._live_complete["gen2_reconnect"] = True
+
+    def assert_gen2_link_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.link_oracle(results, data_dir=self.data_dir,
+            on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def assert_gen2_faint_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.faint_oracle(results, data_dir=self.data_dir,
+            on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def assert_gen2_synth_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.synth_duo_oracle(results, scenario=self.scenario, data_dir=self.data_dir,
+            on_verified=self._record_gen2_facts,
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def assert_gen2_ball_gate_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.ball_gate_oracle(results, data_dir=self.data_dir, on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def _assert_gen2_wave_c(self, results, **kwargs):
+        oracle = getattr(importlib.import_module("gen2_duo_oracles"), GEN2_WAVE_C[self.scenario][0])
+        return oracle(results, data_dir=self.data_dir, on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    assert_gen2_whiteout_saved = assert_gen2_pc_ops_saved = _assert_gen2_wave_c
+    assert_gen2_changebox_saved = assert_gen2_poison_saved = assert_gen2_whiteout_rebuild_saved = _assert_gen2_wave_c
+
+    def assert_gen2_faint_active_saved(self, results, **kwargs):
+        oracle = importlib.import_module("gen2_duo_oracles")
+        return oracle.faint_active_oracle(results, data_dir=self.data_dir,
+            on_verified=self._record_gen2_facts,
+            ot_ids={inst: row["ot_id"] for inst, row in self._gen2_inputs.items()},
+            boot_saveram={inst: row["fixture"] for inst, row in self._gen2_inputs.items()}, **kwargs)
+
+    def assert_gen2_faint_active_trainer_saved(self, results, **kwargs):
+        return self.assert_gen2_faint_active_saved(results, trainer=True, **kwargs)
+
+    def _release_gen2_active_faint(self):
+        def active():
+            text = read_result(self.artifact_name, "b") or ""
+            rows = [line[len("LINKED_ACTIVE "):] for line in text.splitlines()
+                    if line.startswith("LINKED_ACTIVE ")]
+            if len(rows) > 1:
+                raise RuntimeError("B emitted more than one LINKED_ACTIVE")
+            if not rows:
+                return None
+            try:
+                row = json.loads(rows[0])
+            except json.JSONDecodeError as exc:
+                if not text.endswith("\n"):
+                    return None
+                raise RuntimeError("B LINKED_ACTIVE is malformed") from exc
+            if (not isinstance(row, dict) or type(row.get("slot")) is not int or not 0 <= row["slot"] < 6
+                    or row.get("cur_battle_mon") != row["slot"]
+                    or row.get("battle_mode") != (2 if self.scenario == "gen2_faint_active_trainer" else 1)
+                    or row.get("link_mode") != 0 or not isinstance(row.get("key"), str) or not row["key"]):
+                raise RuntimeError("B LINKED_ACTIVE does not describe an active linked battler")
+            return row
+        self._gen2_active_release = self.wait_for("B linked catch active in battle", active, self.cfg["timeout"])
+        self._go_one("a", ["B_ACTIVE"])
+
+    def _record_gen2_facts(self, facts):
+        fields = ("a", "b", "area", "titles", "status")
+        if not isinstance(facts, dict) or any(not isinstance(facts.get(key), str)
+                                             or not facts[key] for key in fields):
+            raise RuntimeError("Gen 2 oracle verified facts missing")
+        allowed = ("refused",) if self.scenario == "gen2_admit_wrong_rom" else ("alive", "dead", "memorial")
+        if self.scenario == "gen2_soft_reset":
+            allowed = ("unchanged",)
+        if self.scenario in ("gen2_type_clause", "gen2_gender_clause"):
+            allowed = ("clause_observed",)
+        if self.scenario == "gen2_species_clause":
+            allowed = ("alive",)
+        if self.scenario in GEN2_TRADE_SCENARIOS:
+            allowed = ("committed", "unchanged")
+        if facts["status"] not in allowed:
+            raise RuntimeError("Gen 2 oracle verified status invalid")
+        self._gen2_verified_facts = dict(facts)
 
     def _mon_stats_keys(self):
         """The persisted `mon_stats` keys, or [] when the document is absent/unreadable."""
         try:
             with open(os.path.join(self.data_dir, "links.json"), encoding="utf-8") as handle:
-                return sorted((json.load(handle).get("mon_stats") or {}).keys())
+                return sorted(_flat_mon_stats(json.load(handle).get("mon_stats")).keys())
         except (OSError, ValueError):
             return []
 
@@ -2784,16 +3666,19 @@ class DuoRun:
 
         Freshness is identity here: a rerun (or a crashed attempt re-entered) leaves results,
         phase receipts, attempt archives, witnesses and PYDEC copies from OLDER runs in the same
-        build directory, and the lane's evidence collection has been picking them up. Everything
-        matching `e2e_<scenario>_*` under patch/build goes — this attempt's own PYDEC receipt is
-        opened before the launch and is the one exception — and the removal is printed so the
-        run's log says what it threw away.
+        build directory. Gen 2 attempt 1 clears those; later Gen 2 retries retain numbered archives
+        from this invocation, while clearing all live paths. The current PYDEC file is opened before
+        launch and retained. Removals are printed so the log records what was discarded.
         """
         keep = os.path.basename(getattr(self, "_pydec_path", "") or "")
         removed = []
-        for path in sorted(glob.glob(os.path.join(BUILD, f"e2e_{self.scenario}_*"))):
+        for path in sorted(glob.glob(os.path.join(BUILD, f"e2e_{self.artifact_name}_*"))):
             if keep and os.path.basename(path) == keep:
                 continue
+            archive = re.search(r"_attempt(\d+)_(?:result\.txt|witness\.SaveRAM|exit\.SaveRAM|manifest\.json)$", os.path.basename(path))
+            if (scenario_family(getattr(self, "game", "legacy")) == "gen2_new"
+                    and archive and 0 < int(archive[1]) < getattr(self, "attempt", 1)):
+                continue  # Earlier attempts of THIS invocation remain replayable; attempt 1 clears all.
             os.remove(path)
             removed.append(os.path.basename(path))
         for inst in ("a", "b"):
@@ -3446,8 +4331,8 @@ class DuoRun:
         # hello and the end state holds both: a write that was already owed before the chord, not
         # a change the reset caused. So the node is reconciled rather than diffed — values may not
         # move and no key outside the two boot mons may appear — and then dropped from the compare.
-        base_stats = original.pop("mon_stats", None) or {}
-        now_stats = current.pop("mon_stats", None) or {}
+        base_stats = _flat_mon_stats(original.pop("mon_stats", None))
+        now_stats = _flat_mon_stats(current.pop("mon_stats", None))
         moved = {key: (was, now_stats.get(key, "<missing>"))
                  for key, was in base_stats.items() if now_stats.get(key) != was}
         if moved:
@@ -4099,14 +4984,15 @@ class DuoRun:
                              f"number may widen the window")
 
     def assert_pc_ops_new_saved(self, results):
-        """S-6 (Bill's PC by play) and the documented release gap.
+        """S-6 (Bill's PC by play) and the O-35 release kill.
 
         A deposits its linked half, withdraws it, deposits it again and RELEASES it from the box.
-        The first three operations are on the wire; the release is NOT — the client logs
-        `RELEASE_SEEN key=… box=…` and sends nothing (lua/gen1/client.lua:571-592) — so the
-        server keeps the pair ALIVE with a phantom boxed half. That is the shared-protocol gap
-        this scenario pins, not a defect of the run, and the status/links assertions below say so
-        explicitly rather than treating it as a failure.
+        All four are on the wire: the release logs `RELEASE_SEEN key=… box=…` and sends
+        release{key} (lua/gen1/client.lua, 149b38e2), and the server kills the pair with cause
+        "release" (owner ruling O-35, state.py _handle_release). B saved and exited before the
+        release by design (the third box_mon must not land on a live B), so B's force_faint +
+        memorialize stay queued and B's saved party still holds its partner; the physical
+        memorial is the Gen 2 pc_ops receipt's claim, not this one's.
 
         The saved box claim is the ACTIVE box (sCurBoxData), not the numbered banks: pc_ops_new
         never changes boxes, so the numbered banks were never written by this route and their
@@ -4178,8 +5064,14 @@ class DuoRun:
             raise RuntimeError("B received a third storage command; the second deposit's sync "
                                "was supposed to land before B finished")
         marker(b_text, r"SAVE_WITNESS pc_ops_new_b", "B save witness")
+        tx_release = [m.start() for m in re.finditer(
+            r'^TX .*"event":"release".*' + re.escape(key), a_text, re.M)]
+        if len(tx_release) != 1 or tx_release[0] < release_at:
+            raise RuntimeError(f"A sent {len(tx_release)} release event(s) for {key} after its "
+                               f"RELEASE_SEEN, expected exactly one (O-35)")
         self._pydec_note("S-6 markers: Box 1 empty->deposit->withdraw->deposit->release; "
-                         "2/1 storage sends, one RELEASE_SEEN after the third send, no wire event")
+                         "2/1 storage sends, one RELEASE_SEEN after the third send, then "
+                         "release{key} on the wire")
 
         a_sram, a_party, a_box, codec = self._saved_gen1_party("a")
         a_keys = [codec.key(mon) for mon in a_party]
@@ -4201,20 +5093,17 @@ class DuoRun:
         self._pydec_note(f"{key} released: A's saved party is the starter alone and its active "
                          f"box (sCurBoxData) decodes empty; B still holds {partner_key}")
 
-        # The documented gap, asserted as such: the release never reached the server, so the
-        # pair is still ALIVE with A's key on the status surface and in links.json. This is the
-        # OBSERVED limit, not a defect -- the receipt says so.
-        live = [entry for entry in (self._status() or {}).get("links", [])
-                if entry.get("area_id") == "route_1"]
-        if len(live) != 1 or live[0].get("a_key") != key:
-            raise RuntimeError(f"/api/status no longer lists A's linked key {key} after the "
-                               f"release: {live}")
+        # O-35: A's release{key} killed the pair; A initiated it and nothing killed it in battle.
         durable = [entry for entry in self._links_json() if entry.get("area_id") == "route_1"]
-        if (len(durable) != 1 or durable[0].get("status") != "alive"
-                or durable[0].get("a", {}).get("key") != key):
-            raise RuntimeError(f"the durable pair did not stay ALIVE with {key}: {durable}")
-        self._pydec_note(f"server bookkeeping UNCHANGED by the release (documented limit): "
-                         f"alive route_1 pair still lists a={key}; the release is invisible")
+        pair = durable[0] if len(durable) == 1 else {}
+        if ((pair.get("status"), pair.get("cause"), pair.get("killer"),
+             pair.get("initiating_player")) != ("dead", "release", None, "a")
+                or pair.get("a", {}).get("key") != key
+                or pair.get("b", {}).get("key") != partner_key):
+            raise RuntimeError(f"the durable pair {key} <-> {partner_key} did not die by the "
+                               f"release (O-35): {durable}")
+        self._pydec_note(f"O-35: route_1 pair a={key} b={partner_key} is dead, cause=release, "
+                         f"initiated by a; B's partner death commands stay queued (B exited first)")
 
     def assert_changebox_new_saved(self, results):
         """W-5's box-change half: the deadzone body, then B CHANGEs BOX to 12 and back to 1.
@@ -5169,15 +6058,32 @@ class DuoRun:
 
     def wait_results(self):
         def both():
-            ra = read_result(self.scenario, "a")
-            rb = read_result(self.scenario, "b")
+            ra = read_result(self.artifact_name, "a")
+            rb = read_result(self.artifact_name, "b")
             if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
                 return ra, rb
             return None
         return self.wait_for("both RESULT lines", both, self.cfg["timeout"])
 
+    def _wait_gen2_exit_flush(self):
+        """RESULT precedes asynchronous client.exit; verify saves only after exit flushes."""
+        processes = getattr(self, "emu_by_inst", {})
+        if any(not callable(getattr(processes.get(side), "wait", None)) for side in ("a", "b")):
+            raise RuntimeError("Gen 2 exit validation requires both emulator processes")
+        deadline = time.monotonic() + 30
+        for side in ("a", "b"):
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise RuntimeError("Gen 2 emulator exit flush deadline exceeded")
+            try:
+                code = processes[side].wait(timeout=remaining)
+            except subprocess.TimeoutExpired as exc:
+                raise RuntimeError(f"Gen 2 {side} emulator exit flush timed out") from exc
+            if code != 0:
+                raise RuntimeError(f"Gen 2 {side} emulator exited abnormally: {code}")
+
     def _result_path(self, inst):
-        return os.path.join(BUILD, f"e2e_{self.scenario}_{inst}_result.txt")
+        return os.path.join(BUILD, f"e2e_{self.artifact_name}_{inst}_result.txt")
 
     def cleanup(self, passed):
         for p in self.emus:
@@ -5195,13 +6101,37 @@ class DuoRun:
                 if os.path.exists(path):
                     os.remove(path)
         self.collect_wire_logs()  # the source lives under the data dir; copy before it goes
-        if passed and not self.args.keep_data:
+        if passed and not self.args.keep_data and self.scenario not in GEN2_TRADE_SCENARIOS:
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
             print(f"[duo] data dir kept: {self.data_dir}")
 
     # ── per-scenario orchestration ───────────────────────────────────────────
     def orchestrate(self):
+        if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
+            admitted = ("a",) if self.scenario == "gen2_admit_wrong_rom" else ("a", "b")
+            def both_hellos():
+                players = (self._status() or {}).get("players", {})
+                return all(players.get(inst, {}).get("connected")
+                           and players[inst].get("admission") == "admitted"
+                           and any(line.startswith("HELLO ") for line in
+                                   (read_result(self.artifact_name, inst) or "").splitlines())
+                            for inst in admitted)
+            self.wait_for("both admitted Gen 2 hellos", both_hellos, 300)
+            if self.scenario == "gen2_admit_wrong_rom":
+                self._gen2_admit_before = self._gen2_admit_snapshot()
+            self.go()
+            if self.scenario in GEN2_TRADE_SCENARIOS:
+                self._release_gen2_trade()
+            elif self.scenario in ("gen2_faint_active", "gen2_faint_active_trainer"):
+                self._release_gen2_active_faint()
+            elif self.scenario == "gen2_reconnect":
+                self._orchestrate_gen2_reconnect()
+            elif self.scenario == "gen2_soft_reset":
+                self._orchestrate_gen2_soft_reset()
+            elif self.scenario == "gen2_species_clause":
+                self._release_gen2_species()
+            return
         # A scenario with its own runner half (the gen3_frlg set) says so by name; nothing in the
         # older rows defines one, so their branches below are untouched.
         own = getattr(self, f"orchestrate_{self.scenario}", None)
@@ -5328,7 +6258,7 @@ class DuoRun:
             for i in range(min(3, len(ka), len(kb))):
                 self.inject_link(ka[i], kb[i], area_id=f"duo{i}")
             self.go()
-        elif self.scenario in ("faint", "memorialize", "explode_g1"):
+        elif self.scenario in ("faint", "explode_g1"):
             self.inject_link(ka[0], kb[0])
             self.go()
         elif self.scenario == "whiteout":
@@ -6484,35 +7414,14 @@ class DuoRun:
                                    "the clean cartridge refused it and wrote nothing")
 
     def _run_oracle(self, results):
-        """The scenario's post-result oracle, from the SCENARIOS registry.
+        """Revalidate the family contract and run its injected evidence stages.
 
-        A gen1_new scenario with no `oracle` entry FAILS: the saved-state readback is the
-        independent half of every Gen 1 verdict, and a scenario that silently skipped it would
-        print PYDEC: PASS on the client's own word. Gen 2/Gen 3 entries carry no `oracle` field
-        and keep the legacy path, where a client RESULT is the whole verdict.
+        Gen 3 battery rows (FAMILY_EVIDENCE: check_save_witness_gen3, oracle required) also refuse a
+        +dirty source and note every marker line their oracle consumed.
         """
-        method = self.cfg.get("oracle")
-        game = getattr(self, "game", "")
-        # A row that declares `oracle_required` (gen3_frlg) takes the Gen 1 rule, with its own
-        # witness method; gen1_new keeps the S-7 check exactly as before.
-        row = GAMES.get(game, {})
-        if not method:
-            if scenario_family(game) == "gen1_new":
-                raise RuntimeError(f"{self.scenario} declares no post-result oracle in SCENARIOS; "
-                                   f"a Gen 1 verdict needs a saved-state readback")
-            if row.get("oracle_required"):
-                raise RuntimeError(f"{self.scenario} declares no post-result oracle in SCENARIOS; "
-                                   f"a {game} verdict needs a saved-state readback")
-            return
-        if scenario_family(game) == "gen1_new":
-            # S-7 runs for EVERY gen1_new scenario, before its own oracle: the save witness is
-            # the physical half of the verdict and each scenario's oracle prologue waits on the
-            # same flush boundary this check needs.
-            self.check_save_witness(results)
-        elif row.get("oracle_required"):
-            getattr(self, row["save_witness"])(results)
-        if not self.is_gen3_battery:
-            getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
+        contract = evidence_contract(getattr(self, "game", "legacy"))
+        if not getattr(self, "is_gen3_battery", False):
+            run_pipeline(self, contract, self.cfg, results)
             return
         dirty = getattr(self, "_gen3_source_dirty", None)
         if dirty:
@@ -6522,7 +7431,7 @@ class DuoRun:
         global _CONSUMED_MARKERS
         _CONSUMED_MARKERS = consumed = []
         try:
-            getattr(self, method)(results, **self.cfg.get("oracle_kwargs", {}))
+            run_pipeline(self, contract, self.cfg, results)
         finally:
             _CONSUMED_MARKERS = None
             seen = set()
@@ -6555,27 +7464,44 @@ class DuoRun:
                 handle.write(f"attempt {self.attempt} of "
                              f"{scenario_attempt_limit(self.scenario, getattr(self, 'game', ''))}\n")
         try:
+            # Match __init__'s default for bare runners used by lifecycle unit tests.
+            validate_pipeline(self, evidence_contract(getattr(self, "game", "legacy")),
+                              self.cfg)
+            if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
+                from tools.gen2_source_data import shared_contexts
+                with shared_contexts(), self._timed("preflight"):   # one verified context per title per run
+                    self._prepare_gen2_lane()
+                self._clear_attempt_artifacts()  # startup waits must not see an older RESULT
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
             if self.is_gen3_battery:
                 # every Gen 3 receipt names its own cut (Codex receipt audit 2026-09-23)
                 self._pydec_note(self._gen3_identity())
-            self.start_server()
+            with self._timed("server"):
+                self.start_server()
             self.start_instances()
             try:
-                self.orchestrate()
+                with self._timed("orchestrate"):
+                    self.orchestrate()
             except GameRngMiss:
                 ra, rb = self.wait_results()
                 if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, self.attempt,
                                           scenario_attempt_limit(self.scenario, self.game)):
                     raise  # an unrelated failed half is never a game-RNG retry
             else:
-                ra, rb = self.wait_results()
+                with self._timed("results"):
+                    ra, rb = self.wait_results()
             self._note_result_lines({"a": ra, "b": rb})
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
             if pa and pb:
-                self._run_oracle({"a": ra, "b": rb})
+                if scenario_family(getattr(self, "game", "")) == "gen2_new":
+                    self._wait_gen2_exit_flush()
+                self._gen2_verified_facts = None
+                with self._timed("oracle"):
+                    self._run_oracle({"a": ra, "b": rb})
+                if scenario_family(getattr(self, "game", "")) == "gen2_new" and not self._gen2_verified_facts:
+                    raise RuntimeError("Gen 2 oracle did not report verified facts")
             if pa and pb and rng_retry_family(getattr(self, "game", "")):
                 # Harness finding, not a scenario verdict: the harness wrote the expected count
                 # into the stub, so the driver's echo is checkable without the game. Checked
@@ -6591,6 +7517,28 @@ class DuoRun:
                 reason = ("asserted scenario facts" if passed else
                           "live leg did not complete" if pa and pb and not self._live_ok() else
                           "client RESULT before saved-state oracle")
+                if passed and scenario_family(getattr(self, "game", "")) == "gen2_new":
+                    reason = " ".join(f"{key}={self._gen2_verified_facts[key]}"
+                                      for key in ("a", "b", "area", "titles", "status"))
+                    if self.scenario in ("gen2_reconnect", "gen2_soft_reset"):
+                        reason += f" scenario={self.scenario}"
+                    if self.scenario == "gen2_admit_wrong_rom":
+                        reason += f" scenario={self.scenario} rom_b={self._gen2_verified_facts['rom_b']}"
+                    if self.scenario == "gen2_faint_active":
+                        reason += " scenario=gen2_faint_active death=active"
+                    if self.scenario == "gen2_faint_active_trainer":
+                        reason += " scenario=gen2_faint_active_trainer death=active battle=trainer"
+                    if self.scenario in GEN2_WAVE_C:
+                        key = GEN2_WAVE_C[self.scenario][1]
+                        reason += f" scenario={self.scenario} {key}={self._gen2_verified_facts[key]}"
+                    if self.scenario in GEN2_TRADE_SCENARIOS:
+                        reason += f" scenario={self.scenario} admission_scope=HARNESS_ONLY_OVERLAY"
+                    if self.scenario in GEN2_CLAUSE_SCENARIOS:
+                        extra = ("clause", "rerolls") if self.scenario == "gen2_species_clause" else ("clause", "rejected", "ending")
+                        reason += f" scenario={self.scenario} " + " ".join(
+                            f"{key}={self._gen2_verified_facts[key]}" for key in extra)
+                if getattr(self, "_code_stamp", None) is not None:
+                    self._pydec_note("CODE_DIGEST " + json.dumps(self._code_stamp, sort_keys=True))
                 self._pydec_note(f"PYDEC: {'PASS' if passed else 'FAIL'} {reason}")
             print(f"[duo] {self.scenario}: a={'PASS' if pa else 'FAIL'} "
                   f"b={'PASS' if pb else 'FAIL'}")
@@ -6601,6 +7549,10 @@ class DuoRun:
             if self.args.keep_alive:
                 input("[duo] --keep-alive: press Enter to tear down…")
         except ClientFinishedEarly as exc:
+            if self.scenario == "gen2_species_clause":
+                # Preserve the pre-cleanup process/RESULT observation: cleanup kills A before
+                # its normal waiting-for-link timeout when B exhausts the duplicate hunt.
+                self._gen2_species_early_finish = exc
             # Not an error of the run: the cartridges ended while a wait was still pending, so
             # the receipts on disk are the verdict. Recorded, printed (the lane's evidence
             # collection reads these tails), torn down, and returned as False so
@@ -6633,10 +7585,27 @@ def list_lines(game):
     """
     lines = []
     for name in scenarios_for(game):
-        targets = scenario_target(SCENARIOS[name], game)
+        targets = (GAMES[game]["fixture"] if GAMES[game].get("launch_profile") == "gen2"
+                   else scenario_target(SCENARIOS[name], game))
+        if name == "gen2_admit_wrong_rom":
+            targets = {**targets, "b": "crystal_battle_ot2"}
+        if name in GEN2_TRADE_SCENARIOS:
+            targets = GEN2_TRADE_FIXTURES[game]
+        if name == "gen2_trade_evolve":
+            targets = GEN2_TRADE_EVOLVE_FIXTURES[game]
+        if name == "gen2_poison":
+            targets = {**targets, **GEN2_POISON_FIXTURES.get(game, {})}
+        if name == "gen2_ball_gate":
+            targets = GEN2_BALL_GATE_FIXTURES[game]
+        if name == "gen2_faint_active_trainer":
+            targets = GEN2_TRAINER_FIXTURES[game]
+        if name in GEN2_SYNTH_SCENARIOS:
+            targets = {inst: gen2_synth_name(name, game, inst) for inst in ("a", "b")}
         shown = (", ".join(f"{inst}:{targets[inst]}" for inst in ("a", "b"))
                  if isinstance(targets, dict) else targets)
         lines.append(f"{name}  attempts={scenario_attempt_limit(name, game)}  targets={shown}")
+        if name in GEN2_TRADE_SCENARIOS:
+            lines[-1] += " artifact=overlay admission=HARNESS_ONLY_OVERLAY"
     return lines
 
 
@@ -6700,7 +7669,10 @@ def _archive_attempt(name, attempt, receipts):
     Called on EVERY exit path, and on the give-up path only after the D-4 annotation is written,
     so the archived third attempt carries the line the summary prints.
     """
+    archived = _archive_gen2_witnesses(name, attempt, receipts)
     for inst in ("a", "b"):
+        if inst in archived:
+            continue
         if receipts[inst] is not None:
             with open(os.path.join(BUILD, f"e2e_{name}_{inst}_attempt{attempt}_result.txt"),
                       "w", encoding="utf-8") as handle:
@@ -6709,6 +7681,71 @@ def _archive_attempt(name, attempt, receipts):
     if os.path.exists(pydec):
         shutil.copyfile(pydec,
                         os.path.join(BUILD, f"e2e_{name}_pydec_attempt{attempt}_result.txt"))
+
+
+def _archive_gen2_witnesses(name, attempt, receipts):
+    """Authenticate and preserve immutable witnesses, retaining original marker text.
+
+    Reconnect's final A receipt has no witness; its initial-phase receipt still names the
+    original A snapshot. A manifest links those original paths to byte-identical archives.
+    """
+    if not any(line.startswith("DUO_GEN2 ") for text in receipts.values() for line in (text or "").splitlines()):
+        return set()
+    sources = {side: text for side, text in receipts.items() if text is not None}
+    for phase in ("initial", "same_save", "wrong_save"):
+        path = Path(BUILD, f"e2e_{name}_a_{phase}_result.txt")
+        if path.exists():
+            sources["a_" + phase] = path.read_text(encoding="utf-8")
+    planned, witnesses = {}, []
+    for side, text in sources.items():
+        headers = [json.loads(line.partition(" ")[2]) for line in text.splitlines() if line.startswith("DUO_GEN2 ")]
+        rows = [json.loads(line.partition(" ")[2]) for line in text.splitlines() if line.startswith("SAVE_WITNESS ")]
+        if not rows:
+            continue
+        if (len(headers) != 1 or not isinstance(headers[0], dict)
+                or headers[0].get("player") != side.split("_")[0] or headers[0].get("attempt") != attempt):
+            raise RuntimeError("Gen 2 archived witness has stale or contradictory header")
+        if len(rows) != 1 or not isinstance(rows[0], dict):
+            raise RuntimeError("Gen 2 archive requires one final SAVE_WITNESS")
+        witness = rows[0]
+        if "snapshot_path" not in witness:
+            continue  # Older failed attempts may predate the additive snapshot producer.
+        original_side = "a" if side == "a_initial" else side
+        source = Path(witness["snapshot_path"])
+        expected = Path(BUILD, f"e2e_{name}_{original_side}_witness.SaveRAM")
+        if not source.is_absolute() or source.resolve() != expected.resolve():
+            raise RuntimeError("Gen 2 witness snapshot belongs to another lane or phase")
+        raw = source.read_bytes()
+        if len(raw) != 32790 or hashlib.sha256(raw[:32768]).hexdigest() != witness.get("cartram_sha256"):
+            raise RuntimeError("Gen 2 archived snapshot differs from witness digest/length")
+        target = Path(BUILD, f"e2e_{name}_{side}_attempt{attempt}_witness.SaveRAM")
+        exit_source = Path(witness["saveram_path"])
+        if not exit_source.is_absolute():
+            raise RuntimeError("Gen 2 witness exit save path must be absolute")
+        exit_raw = exit_source.read_bytes()
+        exit_target = Path(BUILD, f"e2e_{name}_{side}_attempt{attempt}_exit.SaveRAM")
+        receipt_path = Path(BUILD, f"e2e_{name}_{side}_attempt{attempt}_result.txt")
+        planned[target] = raw
+        planned[exit_target] = exit_raw  # Preserve failures too: do not replace this with the snapshot.
+        if side not in ("a", "b"):
+            planned[receipt_path] = text.encode("utf-8")
+        witnesses.append({"source": str(source), "archive": str(target), "receipt": str(receipt_path),
+                          "sha256": hashlib.sha256(raw).hexdigest(), "receipt_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest(),
+                          "exit_source": str(exit_source), "exit_archive": str(exit_target),
+                          "exit_sha256": hashlib.sha256(exit_raw).hexdigest(), "exit_bytes": len(exit_raw)})
+    if not planned:
+        return set()
+    # Byte-preserve every phase receipt, including the relaunches without a native save.
+    for side, text in sources.items():
+        planned[Path(BUILD, f"e2e_{name}_{side}_attempt{attempt}_result.txt")] = text.encode("utf-8")
+    manifest = Path(BUILD, f"e2e_{name}_attempt{attempt}_manifest.json")
+    planned[manifest] = json.dumps({"attempt": attempt, "witnesses": witnesses}, sort_keys=True).encode("utf-8")
+    if any(path.exists() for path in planned):
+        raise RuntimeError("Gen 2 witness archive already exists; refusing overwrite")
+    for path, raw in planned.items():
+        with path.open("xb") as handle:
+            handle.write(raw)
+    return set(sources)
 
 
 def run_scenario_with_rng_retry(name, args):
@@ -6724,22 +7761,31 @@ def run_scenario_with_rng_retry(name, args):
     """
     limit = scenario_attempt_limit(name, args.game)
     reroll_retry = name == "species_clause_new" and args.game.startswith("gen1")
+    unobserved_pass = None  # the last attempt that PASSED without the reroll branch
     for attempt in range(1, limit + 1):
         print(f"[duo] {name}: attempt {attempt} of {limit}")
         print(f"[duo] JITTER requested={jitter_for_attempt(args.idle_jitter, attempt)} "
               f"attempt={attempt}")
+        artifact = name
         try:
-            ok = DuoRun(name, args, attempt=attempt).run()
+            run = DuoRun(name, args, attempt=attempt)
+            artifact = getattr(run, "artifact_name", name)
+            ok = run.run()
         except Exception as exc:
             # An oracle failure is not RNG: the scenario is lost, and the lane needs the
             # summary block with the reason rather than a traceback (run() has already written
             # its own PYDEC: FAIL line).
-            receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
-            _archive_attempt(name, attempt, receipts)
+            receipts = {inst: read_result(artifact, inst) for inst in ("a", "b")}
+            _archive_attempt(artifact, attempt, receipts)
             reason = f"{type(exc).__name__}: {exc}"
+            if name in GEN2_CLAUSE_SCENARIOS and scenario_family(args.game) == "gen2_new":
+                oracle = importlib.import_module("gen2_duo_oracles")
+                if isinstance(exc, oracle.ClauseUnobserved) and attempt < limit:
+                    print(f"[duo] {name}: clause unobserved; retrying fresh lane")
+                    continue
             print(f"[duo] {name}: attempt {attempt} aborted — {reason}")
             return False, attempt, reason
-        receipts = {inst: read_result(name, inst) for inst in ("a", "b")}
+        receipts = {inst: read_result(artifact, inst) for inst in ("a", "b")}
         if reroll_retry and ok:
             state = species_reroll_state(receipts)
             if state == "observed":
@@ -6747,6 +7793,7 @@ def run_scenario_with_rng_retry(name, args):
                 print(f"[duo] species_clause_new: reroll branch observed on attempt {attempt}")
                 return ok, attempt
             if attempt < limit:
+                unobserved_pass = attempt
                 _archive_attempt(name, attempt, receipts)
                 print("[duo] species_clause_new: reroll branch not observed on attempt "
                       f"{attempt}; re-running the whole scenario with fresh state")
@@ -6760,7 +7807,18 @@ def run_scenario_with_rng_retry(name, args):
                     handle.write(line + "\n")
             _archive_attempt(name, attempt, receipts)  # AFTER the annotation, so it is archived
             return ok, attempt
-        _archive_attempt(name, attempt, receipts)
+        _archive_attempt(artifact, attempt, receipts)
+        if (not ok and name == "gen2_species_clause" and scenario_family(args.game) == "gen2_new"
+                and attempt < limit and gen2_species_rng_miss(receipts,
+                    early_finish=getattr(run, "_gen2_species_early_finish", None),
+                    pending_snapshot=getattr(run, "_gen2_clause_pending", None))):
+            print(f"[duo] {name}: duplicates-only hunt; retrying fresh lane")
+            continue
+        if (not ok and name == "gen2_ball_gate" and attempt < limit
+                and any(line.startswith("RESULT: FAIL") and GEN2_OUT_OF_BALLS in line
+                        for inst in ("a", "b") for line in (receipts.get(inst) or "").splitlines())):
+            print(f"[duo] {name}: a side ran out of the aide's natural Balls; retrying fresh lane")
+            continue
         if SCENARIOS[name].get("battle_window_case"):
             classification = battle_window_failure(name, receipts, attempt) if not ok else None
             if classification:
@@ -6770,10 +7828,47 @@ def run_scenario_with_rng_retry(name, args):
                 continue
             return ok, attempt
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
+            # A re-run that only went looking for the reroll branch and then lost the game's
+            # RNG (a ball miss past its retries) does not undo the PASS it re-ran; a real
+            # (FINAL) failure still fails. The attempt-1 rule is the "RNG-shaped" test.
+            if (not ok and unobserved_pass
+                    and retryable_gen1_rng(args.game, receipts, 1, limit=2)):
+                line = (f"[duo] species_clause_new: attempt {attempt} ended on the game's RNG; "
+                        f"the unobserved PASS of attempt {unobserved_pass} stands "
+                        f"(D-4 stays partial)")
+                print(line)
+                with open(os.path.join(BUILD, f"e2e_{name}_pydec_result.txt"), "a",
+                          encoding="utf-8") as handle:
+                    handle.write(line + "\n")
+                return True, unobserved_pass
             return ok, attempt
         print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "
               f"{attempt + 1} of {limit} with a fresh server, run directory and SaveRAM seeds")
     return False, limit
+
+
+def gen2_species_rng_miss(receipts, *, early_finish=None, pending_snapshot=None):
+    """Only the driver's bounded duplicate hunt and its waiting partner may retry."""
+    expected = {"a": "RESULT: FAIL (the link never formed)",
+                "b": "RESULT: FAIL (RNG: the species hunt met only duplicates within its battle budget)"}
+    results = {inst: [line for line in (receipts.get(inst) or "").splitlines()
+                      if line.startswith("RESULT:")] for inst in expected}
+    if all(results[inst] == [line] for inst, line in expected.items()):
+        return True
+    if (results != {"a": [], "b": [expected["b"]]}
+            or not isinstance(early_finish, ClientFinishedEarly)
+            or early_finish.awaited != "both RESULT lines" or early_finish.exited
+            or early_finish.finished != {"a": "", "b": expected["b"]}):
+        return False
+    try:
+        markers = [json.loads(line.partition(" ")[2]) for line in receipts["a"].splitlines()
+                   if line.startswith("PENDING_CAPTURE ")]
+        entry = pending_snapshot["links"]["pending_captures"]["route_29"]["a"]
+        return (len(markers) == 1 and markers[0]["area_id"] == "route_29"
+                and bool(markers[0]["key"]) and markers[0]["key"] == entry["key"]
+                and type(markers[0]["species_id"]) is int and markers[0]["species_id"] == entry["species"])
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def main():
@@ -6795,6 +7890,9 @@ def main():
                     help="this run's lane id; keys the generated stub, the BizHawk config copy, "
                          "the SaveRAM directory and the window offset (default: the run's TCP port). "
                          "Two DuoRuns in one process must not share them.")
+    ap.add_argument("--speed-percent", type=int, default=None,
+                    help="Gen 2 duo emulator speed (O-36): 100-6400, or 0 = unthrottled; default 300. "
+                         "Qualification gates are never run through here and stay at 100")
     ap.add_argument("--idle-jitter", type=int, default=0,
                     help="extra idle frames before the first hunt; each RNG retry adds 37 per "
                          "attempt")

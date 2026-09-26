@@ -1,0 +1,50 @@
+From 2270760c9b83a4d353e96cf9a9c724b2d9a75bc4 Mon Sep 17 00:00:00 2001
+From: slink <slink@local>
+Date: Thu, 24 Sep 2026 10:00:00 -0400
+Subject: [PATCH] slink: pure overlay entries regenerated for the Gen 1
+ trade-save overlay build (CRCs 9C82/D644/D462)
+
+---
+ src/com/dabomstew/pkrandom/config/gen1_offsets.ini | 12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+diff --git a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+index 17c1729..b3ff47b 100755
+--- a/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
++++ b/src/com/dabomstew/pkrandom/config/gen1_offsets.ini
+@@ -1429,8 +1429,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x248A
+-CRC32=54FC28AF
++CRCInHeader=0x9C82
++CRC32=F1C3061D
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1512,8 +1512,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x5E4C
+-CRC32=C8E3768A
++CRCInHeader=0xD644
++CRC32=E071E1A5
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+@@ -1595,8 +1595,8 @@ Version=0
+ NonJapanese=1
+ Type=RB
+ ExtraTableFile=rby_english
+-CRCInHeader=0x5C6A
+-CRC32=9EA8F4D5
++CRCInHeader=0xD462
++CRC32=AC615513
+ LosslessMode=1
+ InternalPokemonCount=190
+ PokemonNamesLength=10
+-- 
+2.54.0.windows.1
+

@@ -96,9 +96,26 @@ def _ts_unquote(s: str) -> str:
                   lambda m: chr(int(m.group(1), 16)) if m.group(1) else m.group(2), s)
 
 
-def calc_name_sets() -> dict[str, set[str]]:
-    """Names the calc knows, per kind: top-level object keys (species, moves, mega
-    stones, berries) and string-array / .push() entries (abilities, items)."""
+def calc_name_sets(gen: int = 9) -> dict[str, set[str]]:
+    """Names the calc knows for a given calc generation, per kind: top-level
+    object keys (species, moves) and string-array / .push() entries
+    (abilities, items).
+
+    gen 9 (the default) scans the whole file per kind -- the union of every
+    generation's block plus the SV/RR patches, matching the calc's actual
+    Gen 9 dex (RR data is merged into the Gen 9 tables).
+
+    gen 1/2/3 scope to that generation's own block(s), since e.g. Gen 1's
+    RBY species/moves are a strict subset of Gen 9's SV table and many Gen 1
+    names the ROM emits (e.g. old move spellings) aren't valid in later
+    gens:
+      gen 1 = the RBY block.
+      gen 2 = RBY + GSC_PATCH (species/moves are cumulative deep-merge
+        patches, so the key set is the union).
+      gen 3 = + ADV_PATCH for species/moves; items are GSC minus GSC_ONLY
+        plus the ADV additions (ADV filters GSC then concats new entries);
+        abilities are the ADV array outright (GSC has none).
+    """
     def read(f: str) -> str:
         return (_CALC_TS_DIR / f).read_text(encoding="utf-8")
 
@@ -112,9 +129,44 @@ def calc_name_sets() -> dict[str, set[str]]:
             s |= {_ts_unquote(a) for a in re.findall(_TS_LIT, args)}
         return s
 
-    items = read("items.ts")
-    return {"species": keys(read("species.ts")), "move": keys(read("moves.ts")),
-            "ability": strs(read("abilities.ts")), "item": strs(items) | keys(items)}
+    if gen == 9:
+        items = read("items.ts")
+        return {"species": keys(read("species.ts")), "move": keys(read("moves.ts")),
+                "ability": strs(read("abilities.ts")), "item": strs(items) | keys(items)}
+    if gen not in (1, 2, 3):
+        raise ValueError(f"calc_name_sets: unsupported gen {gen!r}")
+
+    def blocks(text: str) -> dict[str, str]:
+        """Split a data file into {const-name: its own source slice}. Every
+        block's top-level keys/strings are indented exactly 2 spaces, so
+        slicing by `const NAME ... =` declarations (rather than brace
+        matching) is enough to scope keys()/strs() to one block."""
+        marks = [(m.start(), m.group(1)) for m in re.finditer(r"^const (\w+)[^\n]*=", text, re.M)]
+        return {name: text[start:(marks[i + 1][0] if i + 1 < len(marks) else len(text))]
+                for i, (start, name) in enumerate(marks)}
+
+    sp_b, mv_b = blocks(read("species.ts")), blocks(read("moves.ts"))
+    it_b, ab_b = blocks(read("items.ts")), blocks(read("abilities.ts"))
+
+    species = keys(sp_b["RBY"])
+    moves = keys(mv_b["RBY"])
+    if gen >= 2:
+        species |= keys(sp_b["GSC_PATCH"])
+        moves |= keys(mv_b["GSC_PATCH"])
+    if gen >= 3:
+        species |= keys(sp_b["ADV_PATCH"])
+        moves |= keys(mv_b["ADV_PATCH"])
+
+    if gen == 1:
+        items: set[str] = set()
+        abilities: set[str] = set()
+    elif gen == 2:
+        items, abilities = strs(it_b["GSC"]), set()
+    else:
+        items = (strs(it_b["GSC"]) - strs(it_b["GSC_ONLY"])) | strs(it_b["ADV"])
+        abilities = strs(ab_b["ADV"])
+
+    return {"species": species, "move": moves, "item": items, "ability": abilities}
 
 
 # Sheet spellings the calc doesn't know (after _normalize_species' suffix

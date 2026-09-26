@@ -759,3 +759,40 @@ def test_the_explode_ko_phrase_is_cross_checked_against_the_body():
     if f'return false, "{duo.EXPLODE_KO_MISS}"' not in body:
         pytest.skip("the Lua explode-KO phrase has not landed yet (Lua card EX-2)")
     assert duo.GEN1_RNG_REASON_CLASS[duo.EXPLODE_KO_MISS] == "CAUSE_RNG"
+
+
+def test_a_type_clause_partner_gone_is_the_consequence_of_the_ball_miss():
+    """type_clause_new (gen1_pure lane, 2026-09-25): A's only ball missed, so A ended
+    out-of-balls and B's verdict wait saw its partner finish. B's phrase is the EFFECT of A's
+    miss, so the pair earns the ball-miss retry instead of a FINAL fail on attempt 1."""
+    gone = "RESULT: FAIL (no type-clause verdict (partner-gone))"
+    assert duo.classify_gen1_result(gone) == "CONSEQUENCE"
+    limit = duo.scenario_attempt_limit("type_clause_new", "gen1_pure")
+    assert duo.retryable_gen1_rng("gen1_pure", {"a": duo.RNG_OUT_OF_BALLS, "b": gone}, 1,
+                                  limit=limit)
+    # a verdict wait that simply ran out is not the partner's miss
+    assert duo.classify_gen1_result("RESULT: FAIL (no type-clause verdict (false))") == "FINAL"
+
+
+def test_a_late_ball_miss_does_not_undo_an_unobserved_species_pass(capsys, tmp_path, monkeypatch):
+    """gen1_pure_green 2026-09-25: attempts 1, 3, 4 PASSED without the reroll, attempt 2 and 5
+    missed the only ball (PureRGB Route 1 Eevee, catch rate 150). The reroll re-runs were
+    evidence-seeking; a ball miss past the ball-miss retries must not turn their PASS into a
+    FAIL. The last unobserved PASS stands, D-4 partial, and the pydec file says so."""
+    miss = ("FAIL", "hunt ended out-of-balls")
+    built, args = _retry_driver(monkeypatch, tmp_path,
+                                ["reroll_unobserved", miss, "reroll_unobserved",
+                                 "reroll_unobserved", miss])
+    assert duo.run_scenario_with_rng_retry("species_clause_new", args) == (True, 4)
+    assert built == [1, 2, 3, 4, 5]
+    line = "attempt 5 ended on the game's RNG; the unobserved PASS of attempt 4 stands"
+    assert line in capsys.readouterr().out
+    pydec = (tmp_path / "e2e_species_clause_new_pydec_result.txt").read_text(encoding="utf-8")
+    assert line in pydec
+
+
+def test_a_late_real_failure_still_fails_after_an_unobserved_pass(capsys, tmp_path, monkeypatch):
+    built, args = _retry_driver(monkeypatch, tmp_path,
+                                ["reroll_unobserved", ("FAIL", "force_faint never arrived")])
+    assert duo.run_scenario_with_rng_retry("species_clause_new", args) == (False, 2)
+    assert built == [1, 2]

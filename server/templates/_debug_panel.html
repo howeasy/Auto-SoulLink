@@ -685,7 +685,8 @@ async function loadLiveState() {
     h += '</div>';
 
     // Mon stats cache count
-    var msCount = Object.keys(j.mon_stats || {}).length;
+    var ms = j.mon_stats || {};  // per player since KEY-SCOPE-2: {a: {...}, b: {...}}
+    var msCount = Object.keys(ms.a || {}).length + Object.keys(ms.b || {}).length;
     h += '<div><b style="color:var(--text)">Mon Stats Cached:</b> ' + msCount + ' entries</div>';
 
     document.getElementById('live-state-content').innerHTML = h;

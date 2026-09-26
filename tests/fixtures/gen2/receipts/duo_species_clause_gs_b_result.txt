@@ -1,0 +1,94 @@
+DUO_GEN2 {"attempt":2,"case":"silver_battle","fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","player":"b","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","scenario":"gen2_species_clause","title":"silver"}
+CLIENT {"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"}
+JITTER requested=37 applied=37 attempt=2
+  phase title @38
+  phase continue @3218
+TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":51084,"panel":false,"
+HELLO {"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084}
+  phase loaded @3338
+RX resolved_areas
+RX config
+RX dead_keys
+BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+MYKEY 0 A4FC:C78C:9E
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":5672,"text":"Partner caught HOOTHOOT in Route 29"}
+A_PENDING {"frame":6572,"species_id":163}
+  phase walk @6572 xy=53,12
+  phase battle @6903 xy=52,12
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":6932,"text":"Dupes clause: Hoothoot -- reroll!"}
+RX unresolve_area area_id=route_29
+  phase encounter @7432 xy=52,12
+ENCOUNTER {"dupe":true,"frame":7462,"n":1,"species_id":163}
+  phase battle @7462 xy=52,12
+TX {"area_id":"route_29","event":"no_catch","level":2,"player":"b","seq":145,"species_id":163}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":146}
+RX unresolve_area area_id=route_29
+  phase escaped @7677 xy=52,12
+REROLL {"frame":7707,"n":1,"prompt":"Dupes clause: Hoothoot -- reroll!","species_id":163}
+  phase walk @7707 xy=52,12
+  phase battle @8084 xy=51,12
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":8102,"text":"Dupes clause: Hoothoot -- reroll!"}
+RX unresolve_area area_id=route_29
+  phase encounter @8613 xy=51,12
+ENCOUNTER {"dupe":true,"frame":8643,"n":2,"species_id":163}
+  phase battle @8643 xy=51,12
+TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":186,"species_id":163}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":187}
+RX unresolve_area area_id=route_29
+  phase escaped @8858 xy=51,12
+REROLL {"frame":8888,"n":2,"prompt":"Dupes clause: Hoothoot -- reroll!","species_id":163}
+  phase walk @8888 xy=51,12
+  phase battle @9163 xy=51,13
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":9182,"text":"Dupes clause: Hoothoot -- reroll!"}
+RX unresolve_area area_id=route_29
+  phase encounter @9692 xy=51,13
+ENCOUNTER {"dupe":true,"frame":9722,"n":3,"species_id":163}
+  phase battle @9722 xy=51,13
+TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":224,"species_id":163}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":225}
+RX unresolve_area area_id=route_29
+  phase escaped @9937 xy=51,13
+REROLL {"frame":9967,"n":3,"prompt":"Dupes clause: Hoothoot -- reroll!","species_id":163}
+  phase walk @9967 xy=51,13
+  phase battle @10390 xy=51,12
+RX gui_prompt
+RX_TEXT {"cmd":"gui_prompt","frame":10412,"text":"Dupes clause: Hoothoot -- reroll!"}
+RX unresolve_area area_id=route_29
+  phase encounter @10919 xy=51,12
+ENCOUNTER {"dupe":true,"frame":10949,"n":4,"species_id":163}
+  phase battle @10949 xy=51,12
+TX {"area_id":"route_29","event":"no_catch","level":3,"player":"b","seq":267,"species_id":163}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":268}
+RX unresolve_area area_id=route_29
+  phase escaped @11164 xy=51,12
+REROLL {"frame":11194,"n":4,"prompt":"Dupes clause: Hoothoot -- reroll!","species_id":163}
+  phase walk @11194 xy=51,12
+  phase battle @11487 xy=51,12
+  phase encounter @11997 xy=51,12
+ENCOUNTER {"dupe":false,"frame":12027,"n":5,"species_id":19}
+  phase battle @12027 xy=51,12
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":13088,"key":"E1D5:C78C:13","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":19}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"E1D5:C78C:13","level":2,"maxHP":13,"nickname":"RATTATA","player":"b","seq":335,"species_id":19,"stats":{"level":2,"maxHP
+CAPTURE_SENT {"frame":13088,"key":"E1D5:C78C:13","seq":335}
+CAUGHT E1D5:C78C:13
+RX play_sound sound=25
+RX msgbox
+RX_TEXT {"cmd":"msgbox","frame":13090,"text":"HOOTHOOT and RATTATA linked!"}
+RX party_mon key=E1D5:C78C:13
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"b","seq":336}
+TX {"event":"sync_retrieve_done","key":"E1D5:C78C:13","player":"b","seq":339}
+  phase save @13148 xy=51,12
+  phase saved @13842 xy=51,12
+MYKEY 0 A4FC:C78C:9E
+MYKEY 1 E1D5:C78C:13
+LINKED {"frame":13872,"text":"HOOTHOOT and RATTATA linked!"}
+  phase settle @13872 xy=51,12
+  phase save @14053 xy=51,12
+  phase saved @14578 xy=51,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"4ec31e8dcb3ba29166479a61faa30d5ea7df040f21cfdb1114623fce50f2753d","client_saves":2,"flushed_matches":true,"frame":14608,"gate_saves":2,"save_completed_frame":14578,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/saveram_gen2_species_clause_s671_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_species_clause_s671_b_witness.SaveRAM"}
+RECEIPT {"attempt":2,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":13088,"key":"E1D5:C78C:13","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":19},"case":"silver_battle","client":{"pack":"gen2_silver","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","title":"silver"},"dupe_species":163,"fixture_sha256":"0c39b8e40418ba3f50ba7cb8b175793240cdc28bfd4bf1ebcb54ae4ed55c39dd","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":51084},"input_mode":"normal_buttons","key":"E1D5:C78C:13","linked":{"frame":13872,"text":"HOOTHOOT and RATTATA linked!"},"path":"reroll_observed","player":"b","rerolls":4,"role":"reroller","rom_sha1":"49b163f7e57702bc939d642a18f591de55d92dae","save":{"cartram_bytes":32768,"cartram_sha256":"4ec31e8dcb3ba29166479a61faa30d5ea7df040f21cfdb1114623fce50f2753d","client_saves":2,"flushed_matches":true,"frame":14608,"gate_saves":2,"save_completed_frame":14578,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/saveram_gen2_species_clause_s671_b/Pokemon - Silver Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_species_clause_s671_b_witness.SaveRAM"},"scenario":"gen2_species_clause","schema":"gen2-duo-species-clause-v1","species_id":19,"title":"silver"}
+RESULT: PASS (reroll_observed: B linked E1D5:C78C:13 after 4 reroll(s))

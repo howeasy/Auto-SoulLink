@@ -437,7 +437,7 @@ def _oracle_run(scenario, game="gen3_frlg", cfg=None):
 
 def test_a_gen3_frlg_scenario_without_an_oracle_fails():
     run = _oracle_run("faint_cmd_gen3", cfg={"flags": [], "timeout": 1})
-    with pytest.raises(RuntimeError, match="declares no post-result oracle.*gen3_frlg"):
+    with pytest.raises(RuntimeError, match="faint_cmd_gen3 declares no post-result oracle"):
         run._run_oracle({"a": "", "b": ""})
 
 
@@ -452,12 +452,13 @@ def test_the_gen3_witness_runs_before_the_oracle(monkeypatch):
 
 
 def test_rows_without_the_flag_keep_their_verdict_paths():
-    """gen2 scenarios carry no oracle and still return quietly; the (renamed, new-client) gen3_rr row
-    and gen1_new refuse a verdict without a saved-state readback."""
-    assert _oracle_run("memorialize", game="gen2")._run_oracle({}) is None
-    with pytest.raises(RuntimeError, match="a gen3_rr verdict needs a saved-state readback"):
+    """A game-less (`legacy`) stub row with no oracle still returns quietly; the (renamed,
+    new-client) gen3_rr row and gen1_new refuse a verdict without a saved-state readback
+    (FAMILY_EVIDENCE require_oracle, merged from master's evidence pipeline)."""
+    assert _oracle_run("faint", game="legacy")._run_oracle({}) is None
+    with pytest.raises(RuntimeError, match="faint declares no post-result oracle"):
         _oracle_run("faint", game="gen3_rr")._run_oracle({})
-    with pytest.raises(RuntimeError, match="a Gen 1 verdict"):
+    with pytest.raises(RuntimeError, match="link_new declares no post-result oracle"):
         _oracle_run("link_new", game="gen1_new", cfg={"flags": []})._run_oracle({})
 
 

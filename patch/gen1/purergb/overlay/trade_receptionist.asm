@@ -64,6 +64,11 @@ SlinkReceptionist::
 	jr z, .selectedCable
 	and a
 	jr nz, .selectedCancel
+	; Vanilla's forced save before any link (CableClubNPC); the APPLY's own full
+	; save comes later. NO/B cancels before any offer exists.
+	call SlinkTradeUIMustSave
+	jr c, .selectedCancel
+	call SlinkTradeUISave
 	; The retained mask/query pair is below 20 bytes of saved menu state.
 	ld hl, sp + 20
 	ld a, [hli]

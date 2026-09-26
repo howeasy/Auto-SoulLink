@@ -19,7 +19,7 @@
 {% from "_macros.html" import status_pill, stat_stages_row %}
 {# ── macros ────────────────────────────────────────────────────────────── #}
 
-{# No max HP (the Gen 1 client reads none for a foe): the number alone, no bar to fake. #}
+{# No max HP (a client that sends none, or the Gen 1 client on a transition frame): the number alone, no bar to fake. #}
 {% macro hp(mon) -%}
   {% if mon.maxHP and mon.maxHP > 0 -%}
   <span class="mk-hp"><span class="mk-hp-bar"><span class="mk-hp-fill {{ hp_class(mon) }}" style="width:{{ hp_pct(mon) }}%"></span></span><span class="mk-hp-num"><span class="sr-only">HP </span>{{ mon.hp }}/{{ mon.maxHP }}</span></span>
@@ -71,6 +71,17 @@
   </div>
 {%- endmacro %}
 
+{# ── Live announcements: siblings of #content, so idiomorph's poll swap never
+   touches them. dashboard.js diffs .mk-pair section classes and the phase banner
+   between polls to speak a new link, a pair death or the run ending -- one sentence
+   each, never HP or every poll (docs/public_ui/mobile-a11y.md #4). No server change:
+   the diff reads what the board already renders. #}
+<div class="mk-a11y-bar">
+  <button type="button" id="mk-announce-toggle" class="mk-btn mk-announce-toggle" aria-pressed="false">Pause announcements</button>
+</div>
+<div id="mk-announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+<div id="mk-toast-host" class="mk-toast-host" aria-hidden="true"></div>
+
 <div id="content" hx-ext="morph" hx-get="{{ poll_url }}" hx-trigger="every 2s" hx-swap="morph:outerHTML" hx-target="this" hx-select="#content">
   {# The run's phase lives inside the polled fragment so it moves with the run. #}
   <div class="phase-banner phase-{{ phase_slug }}">
@@ -93,11 +104,28 @@
   {% if status.run_over %}
     <div class="game-over"><svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg> GAME OVER — SOUL LINK <svg class="inline-ico" aria-hidden="true"><use href="#i-skull"/></svg></div>
   {% endif %}
-  {# The Manager says these on each player's card instead (conn: manager.connection_state). #}
-  {% for pid in ('a', 'b') if not conn %}{% set p = status.players[pid] %}
-    {% if p.identity_error %}<div class="identity-warn">&#9888; {{ p.identity_error }}</div>{% endif %}
-    {% if p.admission != 'admitted' %}<div class="identity-warn">&#9888; Player {{ pid | upper }} not admitted: {{ p.admission_reason }}</div>{% endif %}
-  {% endfor %}
+  {# A native trade the server can't resolve on its own: one side's post-trade party read
+     didn't confirm what was expected. "uncertain" is still gathering evidence; "conflict"
+     means it never will and a human has to sort out the two parties by hand. #}
+  {% set tp = status.trade_problem %}
+  {% if tp %}
+    {% set a_mon = status.players.a.party_details.get(tp.a_key) %}
+    {% set b_mon = status.players.b.party_details.get(tp.b_key) %}
+    {% set a_label = (a_mon.nickname or a_mon.species_name) if a_mon else "Player A's mon" %}
+    {% set b_label = (b_mon.nickname or b_mon.species_name) if b_mon else "Player B's mon" %}
+    <div class="trade-problem trade-problem-{{ tp.phase }}">
+      <b>&#9888; {% if tp.phase == 'conflict' %}Trade conflict — needs admin{% else %}Trade uncertain{% endif %}</b>
+      <span class="trade-problem-mons">{{ a_label }} &harr; {{ b_label }}</span>
+      <span class="trade-problem-verdict">A: {{ tp.verdict.get('a') or 'awaiting' }} &middot; B: {{ tp.verdict.get('b') or 'awaiting' }}</span>
+      {% if tp.problem %}<span class="trade-problem-text">{{ tp.problem }}</span>{% endif %}
+      {% if status.trade_held %}<span class="trade-problem-text trade-problem-held">Waiting on this trade: {% for h in status.trade_held %}{{ h.player | upper }} {{ h.event }} {{ h.key }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+      <span class="trade-problem-hint">Resolve after checking both parties: POST /api/debug/resolve_trade {"token": "{{ tp.token }}", "action": "adopt", "commit" or "rollback"} (a side's known traded/none stands; name a contradicted side with "sides": {"a": "traded"|"none"})</span>
+    </div>
+  {% elif status.trade_last %}
+    {# Quiet by design: a settled trade is not a banner-worthy event once trade_problem
+       has cleared, just a small note for "did that actually go through". #}
+    <div class="trade-last-note">Last trade ({{ status.trade_last.outcome }}): {{ status.trade_last.a_key[:8] }}&hellip; &harr; {{ status.trade_last.b_key[:8] }}&hellip;</div>
+  {% endif %}
 
   {% if rules %}
     <div class="lock-rules">Rules:
@@ -114,7 +142,7 @@
         <div class="mk-now">
           {% for pid in ('a', 'b') %}{% set p = status.players[pid] %}
             {# Green only once the player is admitted and heard from, not on a bare socket. #}
-            <div class="mk-card mk-nowcard {{ 'online' if (conn[pid].slug == 'ready' if conn else p.connected) else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}">
+            <div class="mk-card mk-nowcard {{ 'online' if conn and conn[pid].slug == 'ready' else 'offline' }}" style="grid-column:{{ 3 if pid == 'b' else 1 }}">
               <div class="mk-now-head">
                 <span class="mk-side">{{ pid | upper }}</span>
                 <span class="mk-now-name">
@@ -134,14 +162,16 @@
                   <span class="mk-sub">{{ c.line }}</span>
                 </div>
               {% endif %}
+              {# Branch-only operator warnings (BOX-MEMORIAL-2, FAINT-REPAIR, KEY-SCOPE ambiguity) on the shared .mk-warn surface. #}
+              {% if p.awaiting_save %}<div class="mk-now-body mk-warn" role="status">&#9888; Player {{ pid | upper }}: a burial is awaiting an in-game SAVE.</div>{% endif %}
+              {% set stalled = (status.faint_repair_stalled or {}).get(pid) %}{% if stalled %}<div class="mk-now-body mk-warn" role="status">&#9888; Player {{ pid | upper }}: {{ stalled | length }} linked faint(s) never landed in game and the server stopped retrying &mdash; check that game.</div>{% endif %}
+              {% set ambiguous = (status.ambiguous_keys or {}).get(pid, {}) %}{% for key, latch in ambiguous.items() %}<div class="mk-now-body mk-warn" role="status">&#9888; Player {{ pid | upper }}: key {{ key }} is ambiguous; events naming it are paused (refused: {{ latch.refused or 0 }}). Check the cartridge, then POST /api/debug/resolve_ambiguous_key {"player": "{{ pid }}", "key": "{{ key }}"}.</div>{% endfor %}
               {% if board.has_data[pid] %}
                 <div class="mk-now-body">
                   <div class="mk-now-line">
                     <b>{{ p.current_area_display or 'unknown' }}</b>
                     <span><span class="num">{{ p.ball_count }}</span> balls</span>
                     <span class="mk-sub">last: {{ p.last_event }} <span class="num">{{ p.last_seen_label }}</span></span>
-                    {% if not p.connected and live and not conn %}<span class="mk-tag off">disconnected</span>{% endif %}
-                    {% if p.stale and not conn %}<span class="mk-tag off stale-warn" title="connected, but nothing heard since">No data · last {{ p.last_seen_label }}</span>{% endif %}
                   </div>
                   {% set bs = p.battle_state %}
                   {% set mine = p.party_details[board.active[pid]] if board.active[pid] else none %}
@@ -177,8 +207,6 @@
                          data-calc="{{ c | tojson | forceescape }}" style="display:none"></div>
                   {% endif %}
                 </div>
-              {% elif not conn %}
-                <div class="mk-now-body"><span class="mk-sub">{{ 'waiting for hello' if live else 'run not running' }}</span></div>
               {% endif %}
             </div>
           {% endfor %}

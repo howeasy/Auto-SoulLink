@@ -67,12 +67,22 @@ local function take(b, start, length)
     for i = 1, length do out[i] = b[start + i - 1] end
     return out
 end
+-- home/move_mon.asm:109-153: A/D/S/S nibbles, HP DV from their low bits. Shared by
+-- decode_party_mon (party/box records) and read_enemy_battle_mon (the live struct).
+local function dvs_from_raw(raw)
+    local atk, def = math.floor(raw / 4096) % 16, math.floor(raw / 256) % 16
+    local spd, spc = math.floor(raw / 16) % 16, raw % 16
+    return {raw = raw, atk = atk, def = def, spd = spd, spc = spc,
+            hp = (atk % 2) * 8 + (def % 2) * 4 + (spd % 2) * 2 + spc % 2}
+end
 
-function R.new(profile, io)
+function R.new(profile, io, Scanner)
     assert(type(profile) == "table" and type(profile.ram) == "table" and
            type(profile.derived) == "table", "Gen 1 title profile required")
     assert(type(io) == "table" and type(io.read_u8) == "function" and
            type(io.read_range) == "function", "injected WRAM byte reader required")
+    assert(type(Scanner) == "table" and type(Scanner.new) == "function",
+        "injected token Scanner required")
     local a, d = profile.ram, profile.derived
     local cm = R.charmap(profile)
     local r = {NULL = R.NULL, charmap = cm}
@@ -80,27 +90,16 @@ function R.new(profile, io)
     local opp_id_offset = assert(d.opp_id_offset, "profile.derived.opp_id_offset required")
     r.bag_capacity, r.opp_id_offset = bag_capacity, opp_id_offset
 
-    function r.decode_name(bytes)
-        if #bytes > d.name_length then return nil, "name exceeds profile length" end
-        local out = {}
-        for i = 1, #bytes do
-            if bytes[i] == cm.terminator then break end
-            out[#out + 1] = cm.glyphs[bytes[i]] or string.format("<$%02X>", bytes[i])
-        end
-        return table.concat(out)
-    end
+    r.decode_name = Scanner.new({glyphs = cm.glyphs, terminator = cm.terminator,
+        max_length = d.name_length,
+        unknown = function(byte) return string.format("<$%02X>", byte) end})
 
     function r.decode_party_mon(b, box)
         local size = box and d.box_struct_size or d.party_struct_size
         if #b ~= size then return nil, "record length disagrees with profile" end
         -- All word/three-byte fields are most-significant-byte first:
         -- home/move_mon.asm:39-43; engine/pokemon/experience.asm:11-24.
-        local raw = word(b, 28) -- pokemon_data_constants.asm:45
-        local atk, def = math.floor(raw / 4096) % 16, math.floor(raw / 256) % 16
-        local spd, spc = math.floor(raw / 16) % 16, raw % 16
-        local dvs = {raw = raw, atk = atk, def = def, spd = spd, spc = spc,
-                     hp = (atk % 2) * 8 + (def % 2) * 4 + (spd % 2) * 2 + spc % 2}
-        -- HP DV bit selection: home/move_mon.asm:109-153.
+        local dvs = dvs_from_raw(word(b, 28)) -- pokemon_data_constants.asm:45
         local mon = {
             box = not not box, species = b[1], hp = word(b, 2), box_level = b[4],
             level = box and b[4] or b[34], status = b[5], types = take(b, 6, 2),
@@ -134,8 +133,10 @@ function R.new(profile, io)
             mon.slot, mon.species_list_entry = slot, listed
             mon.ot_name_bytes = take(ots, slot * d.name_length + 1, d.name_length)
             mon.nickname_bytes = take(nicks, slot * d.name_length + 1, d.name_length)
-            mon.ot_name = r.decode_name(mon.ot_name_bytes)
-            mon.nickname = r.decode_name(mon.nickname_bytes)
+            mon.ot_name, why = r.decode_name(mon.ot_name_bytes)
+            if mon.ot_name == nil then return nil, "invalid OT name: " .. why end
+            mon.nickname, why = r.decode_name(mon.nickname_bytes)
+            if mon.nickname == nil then return nil, "invalid nickname: " .. why end
             result[#result + 1] = mon
         end
         return result
@@ -278,12 +279,14 @@ function R.new(profile, io)
         -- trainer_class = opponent >= 200 and opponent - 200 or NULL.
         local opponent = io.read_u8(a.wCurOpponent)
         local enemy_hp = io.read_range(a.wEnemyMonHP, 2)
+        local enemy_max_hp = io.read_range(a.wEnemyMonMaxHP, 2) -- battle_struct MaxHP, big-endian
         local player_hp = io.read_range(a.wBattleMonHP, 2)
         return {in_battle = io.read_u8(a.wIsInBattle), type = io.read_u8(a.wBattleType),
                 cur_opponent = opponent, is_trainer = opponent >= opp_id_offset,
                 trainer_class = opponent >= opp_id_offset and opponent - opp_id_offset or R.NULL,
                 enemy_species = io.read_u8(a.wEnemyMonSpecies),
                 enemy_level = io.read_u8(a.wEnemyMonLevel), enemy_hp = word(enemy_hp, 1),
+                enemy_max_hp = word(enemy_max_hp, 1),
                 battle_mon_hp = word(player_hp, 1),
                 player_mon_number = io.read_u8(a.wPlayerMonNumber),
                 result = io.read_u8(a.wBattleResult), link_state = io.read_u8(a.wLinkState),
@@ -291,6 +294,20 @@ function R.new(profile, io)
                 -- from the vanilla profile, so absent from the vanilla table too
                 safari_type = a.wSafariType and io.read_u8(a.wSafariType) or nil,
                 functional_flags = a.wBattleFunctionalFlags and io.read_u8(a.wBattleFunctionalFlags) or nil}
+    end
+    -- The active wEnemyMon battle struct: 29 bytes, big-endian words, identical geometry in
+    -- pureRGB (macros/ram.asm:39-59; profile.ram.wEnemyMon == wEnemyMonSpecies, its first
+    -- byte). No profile aliases exist for DVs/MaxHP/PP -- only fixed offsets from wEnemyMon,
+    -- unlike decode_party_mon's named struct. party_pos is wEnemyMonPartyPos (offset +3):
+    -- valid only once EnemySendOutFirstMon has settled it (see client.lua's RIVAL_* comment);
+    -- callers must range-check it before indexing wEnemyMons with it.
+    function r.read_enemy_battle_mon()
+        local b = io.read_range(a.wEnemyMon, 29)
+        local pp = {}
+        for i = 1, 4 do pp[i] = b[25 + i] % 64 end -- pokemon_data_constants.asm:100-102
+        return {species = b[1], party_pos = b[4], status = b[5],
+                moves = take(b, 9, 4), dvs = dvs_from_raw(word(b, 13)), level = b[15],
+                max_hp = word(b, 16), pp = pp}
     end
     -- Daycare: one full party-mon record at wDayCareMon (PLAN §4 row 24 / A7); nil when the
     -- profile has no symbol. The struct is the party shape, so decode_party_mon is the decoder.

@@ -26,11 +26,13 @@ import make_release  # noqa: E402
 
 # The scripts a player actually loads in BizHawk's Lua Console. Rooting the closure at
 # `lua/gen1/run.lua` alone (as this test used to) misses anything only the launchers reach:
-# slink.lua's own game_detect dispatch and its lua/games/gen{2,4,5}_*.lua registry, the
-# Gen 1 route's dofile of gen1/entry.lua for Entry.detect_title, and (P4) the Gen 3 route's
-# dofile of gen3/entry.lua for Entry.admit/header_code plus lua/slink_gen3.lua itself, which
-# is now a thin dofile("slink.lua") wrapper (docs/gen3/research/p4_gen1_contract_map.md §3.6)
-# and so reaches the same closure as slink.lua, plus gen3/run.lua once admitted.
+# slink.lua's own game_detect dispatch and its lua/games/gen{4,5}_*.lua registry, the
+# Gen 1 route's dofile of gen1/entry.lua for Entry.detect_title, the Gen 2 route's dofile of
+# gen2/entry.lua and gen2/run.lua (U5; the closure follows entry.lua's literal
+# PACK_FILES/RECEIPT_FILES data paths too), and (P4) the Gen 3 route's dofile of
+# gen3/entry.lua for Entry.admit/header_code plus lua/slink_gen3.lua itself, which is now a
+# thin dofile("slink.lua") wrapper (docs/gen3/research/p4_gen1_contract_map.md §3.6) and so
+# reaches the same closure as slink.lua, plus gen3/run.lua once admitted.
 _ENTRYPOINTS = ["lua/slink.lua", "lua/slink_gen1.lua", "lua/slink_gen3.lua"]
 
 # Paths a Lua source names literally: "lua/gen1/reads.lua", '/data/games/.../x.json', or a
@@ -123,14 +125,16 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         # The Gen 1 client, reached via slink_gen1.lua -> gen1/run.lua -> gen1/entry.lua,
         # and via slink.lua's own Gen 1 route (dofile("gen1/entry.lua") for detect_title).
         "lua/gen1/entry.lua", "lua/gen1/client.lua", "lua/json_codec.lua",
-        "lua/gen1_write_safety.lua", "lua/connector.lua", "lua/hud.lua",
+        "lua/gen1_write_safety.lua", "lua/write_permit.lua", "lua/connector.lua", "lua/hud.lua",
+        "lua/gb_checkpoint.lua", "lua/token_scanner.lua",
+        "lua/admission.lua",
+        "lua/hook_registry.lua", "lua/gb_hook_binding.lua",
+        "lua/hello_session.lua", "lua/reply_dispatch.lua",
         "data/games/gen1_rby/profile.json",
         # Only reachable once the closure is rooted at the launchers, not run.lua alone.
         "lua/game_detect.lua",
-        "lua/clients/gen2_crystal_client.lua",
         "lua/clients/gen4_hgsspt_client.lua",
         "lua/clients/gen5_bw_client.lua",
-        "lua/games/gen2_crystal.lua",
         "lua/games/gen4_hgsspt.lua",
         "lua/games/gen5_bw.lua",
         "data/games/gen4_hgsspt/gen4_hgsspt_areas.lua",
@@ -142,6 +146,12 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/client.lua",
         "lua/core/session.lua", "lua/core/identity.lua", "lua/core/deferred.lua",
         "data/games/gen3_frlg/profile.json", "data/games/gen3_rr/engine_signals.json",
+        # The Gen 2 (Crystal) production graph, cut over at U5.
+        "lua/gen2/entry.lua", "lua/gen2/run.lua", "lua/gen2/client.lua",
+        "lua/gen2_write_safety.lua",
+        "data/games/gen2_crystal/admission.json",
+        "data/games/gen2_crystal/receipts/crystal.engine_sites.json",
+        "data/games/gen2_gold/admission.json",
     ):
         assert expected in closure, f"{expected} was not derived from {_ENTRYPOINTS}: {closure}"
 
@@ -161,6 +171,7 @@ def test_every_manifest_entry_names_a_file_that_exists():
         + [f"lua/gen1/{f}" for f in make_release._LUA_GEN1]
         + [f"lua/gen3/{f}" for f in make_release._LUA_GEN3]
         + [f"lua/core/{f}" for f in make_release._LUA_CORE]
+        + [f"lua/gen2/{f}" for f in make_release._LUA_GEN2]
         + [f"lua/clients/{f}" for f in make_release._LUA_CLIENTS]
         + [f"lua/games/{f}" for f in make_release._LUA_GAMES]
         + [f"data/games/{gen}/{f}"
@@ -193,12 +204,25 @@ def test_the_old_gen1_client_is_not_shipped(archive):
     assert "lua/games/gen1_rby.lua" not in archive
 
 
+def test_the_legacy_gen2_runtime_is_neither_derived_nor_shipped(archive):
+    """P3b.8 removed the legacy Gen 2 client (Archipelago Crystal, its last route, is refused:
+    O-25). Nothing a launcher reaches may name it, and the ZIP must not carry it."""
+    legacy = {
+        "lua/slink_gen2.lua", "lua/clients/gen2_crystal_client.lua", "lua/memory_gb.lua",
+        "lua/games/gen2_crystal.lua", "lua/games/gen2_crystal_trainers.lua",
+        "lua/gen2_crystal_areas.lua", "lua/gen2_crystal_locations.lua",
+    }
+    assert not legacy & _closure(_ENTRYPOINTS)
+    assert not legacy & archive
+
+
 def test_gb_companion_bundle_names_every_pure_overlay_ups():
     """--with-patch ships one UPS per Game Boy companion build: vanilla Red/Blue and the three
     pureRGB overlays (PLAN M3). A missing name here is a title whose players get no native trade."""
     assert set(make_release._GB_COMPANION_UPS) == {
         "SLink-RB-Red.ups", "SLink-RB-Blue.ups",
-        "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups"}
+        "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
+        "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups"}
     for name in make_release._GB_COMPANION_UPS:
         assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)
 
@@ -209,3 +233,23 @@ def test_the_retired_gen3_modules_are_not_shipped(archive):
     assert "lua/clients/gen3_frlge_client.lua" not in archive
     assert "lua/games/gen3_frlge.lua" not in archive
     assert "gen3_frlge.lua" not in make_release._LUA_GAMES
+
+
+def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_changes(tmp_path):
+    """RELEASE-EVIDENCE-TOOLING: each UPS named by data/gen2/overlay_provenance.json lands under
+    companion/ with its published bytes; the Gen 1 / pureRGB / RR companion set is unchanged."""
+    import hashlib
+    import json
+    from pathlib import Path
+
+    outputs = json.loads((Path(_REPO) / "data/gen2/overlay_provenance.json").read_text(encoding="utf-8"))["outputs"]
+    zip_path = make_release.build_release(version="t", out_dir=tmp_path, skip_generators=True, with_patch=True)
+    with zipfile.ZipFile(zip_path) as zf:
+        companion = {n.split("/", 1)[1]: zf.read(n) for n in zf.namelist() if "/companion/" in n}
+    for row in outputs.values():
+        name = Path(row["ups"]["file"]).name
+        assert hashlib.sha256(companion[f"companion/{name}"]).hexdigest() == row["ups"]["sha256"]
+    assert set(companion) - {f"companion/{Path(r['ups']['file']).name}" for r in outputs.values()} == {
+        "companion/SLink-RR.ups", "companion/COMPANION_PATCH.md", "companion/SLink-RB-Red.ups",
+        "companion/SLink-RB-Blue.ups", "companion/SLink-PureRed.ups", "companion/SLink-PureBlue.ups",
+        "companion/SLink-PureGreen.ups"}

@@ -57,14 +57,15 @@ def test_real_hello_and_tick_share_snapshot_fields_and_keep_state_dispatch_order
 def test_snapshot_uses_recipient_adapter_and_preserves_existing_defaults_and_alias_precedence(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     gender = Mock(return_value="recipient-gender")
-    srv._player_adapters["b"] = SimpleNamespace(gender_from_key=gender)
+    srv._player_adapters["b"] = SimpleNamespace(gender_from_key=gender, calc_stats=Mock(return_value=None))
     incoming = [{"key": ""}, {"key": "K", "held_item": 99, "held_item_id": 0, "ability": 88, "ability_id": 0}]
     before, rules, cache = copy.deepcopy(incoming), copy.deepcopy((srv.state.links, srv.state.area_states)), copy.deepcopy(srv._mon_cache)
     result = srv._party_snapshot("b", incoming)
     assert set(result) == {"K"}
     assert result["K"] == {"level": 0, "hp": 1, "maxHP": 1, "nickname": "", "species_id": 0,
                            "held_item_id": 0, "ability_id": 0, "gender": "recipient-gender",
-                           "moves": [], "pp": [], "slot": 1, "active": False, "status_cond": 0, "stat_stages": None}
+                           "moves": [], "pp": [], "slot": 1, "active": False, "status_cond": 0,
+                           "stat_stages": None, "calc_stats": None}
     gender.assert_called_once_with("K", 0)
     assert incoming == before and (srv.state.links, srv.state.area_states) == rules and srv._mon_cache == cache
 
@@ -89,9 +90,9 @@ def test_hello_persists_mon_stats_for_the_party_it_just_cached(tmp_path, monkeyp
     key = party()[0]["key"]
     srv._dispatch("a", legacy_hello(party()))
     saved = json.loads((tmp_path / "links.json").read_text())
-    assert key in saved["mon_stats"]
-    assert saved["mon_stats"][key]["level"] == 10
-    assert saved["mon_stats"][key]["maxHP"] == 30
+    assert key in saved["mon_stats"]["a"]                    # KEY-SCOPE-2: per player
+    assert saved["mon_stats"]["a"][key]["level"] == 10
+    assert saved["mon_stats"]["a"][key]["maxHP"] == 30
 
 
 def test_rejected_hello_never_constructs_or_publishes_a_new_party_snapshot(tmp_path, monkeypatch):

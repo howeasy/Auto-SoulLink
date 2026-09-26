@@ -1,0 +1,364 @@
+{
+  "schema": 1,
+  "scope": "P3b.4/P3b.5 committed receipts (U1 engine-site, U2 write-window, fixture-qualification) that tools/verify_gen2_release.py's live-new-gates lane binds without touching the emulator. This file does NOT cover R-1/R-2/R-3/R-4/R-5g: that evidence has no committed receipt and comes only from a fresh SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py run, which the lane runs directly once every row here is clean.",
+  "coverage_policy": "A row passes only on a registered proof whose committed receipt matches its pinned sha256 and validates through the production Lua validator (engine_sites, write_window) or its own passed/physical_qualification fields (qualification). Empty proofs are explicit release blockers.",
+  "proof_hash_policy": "Receipt SHA256 normalizes CRLF to LF (Windows checkouts use core.autocrlf).",
+  "stages": [
+    {
+      "id": "physical-live",
+      "description": "Real cartridge evidence bound to committed receipts, checked without re-running the emulator"
+    }
+  ],
+  "requirements": [
+    {
+      "id": "new-gates.engine-sites.crystal",
+      "stage": "physical-live",
+      "description": "U1 Crystal engine-hook proof (wild_ready, capture_party, capture_party_finalized, battle_end, save_completed); U1G v2 runs on the O-33 synthetic fixtures: hatch, evolution, capture_box, npc_trade, gift",
+      "axes": {"kind": "engine_sites", "title": "crystal", "requirement_ids": ["F-2", "F-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal.engine_sites.json",
+        "sha256": "5d6f1990d550122ab04108ea89d7264eb8ec7b1eb2e39bca8b91c56d656a419d"
+      }}}]
+    },
+    {
+      "id": "new-gates.engine-sites.gold",
+      "stage": "physical-live",
+      "description": "U1-GS Gold engine-hook proof (its own capture sites, 2 bytes above Silver's); U1G v2 runs: hatch, evolution, capture_box, npc_trade, gift",
+      "axes": {"kind": "engine_sites", "title": "gold", "requirement_ids": ["F-2", "F-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold.engine_sites.json",
+        "sha256": "2e875442939193f7ffb9b9075de573ec203482696d533c1d3f6fdb2468e77605"
+      }}}]
+    },
+    {
+      "id": "new-gates.engine-sites.silver",
+      "stage": "physical-live",
+      "description": "U1-GS Silver engine-hook proof (its own capture sites; not shared with Gold, see O-23); U1G v2 runs: hatch, evolution, capture_box, npc_trade, gift",
+      "axes": {"kind": "engine_sites", "title": "silver", "requirement_ids": ["F-2", "F-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver.engine_sites.json",
+        "sha256": "cfc472e2d127c3177a027487081dfbffa7d0da2d26ea2d4e2d8cd5c2984da99e"
+      }}}]
+    },
+    {
+      "id": "new-gates.write-window.crystal",
+      "stage": "physical-live",
+      "description": "U2 Crystal write-window proof (idle reacquisition, warp/Continue; party_hp, box_deposit writes; card BOX box runs with the reset-before-save control: party_collection, box_withdraw, backing_box); O-30 battle_faint run; O-32 battle_bench run (a bench death on receipt, at a battle frame end)",
+      "axes": {"kind": "write_window", "title": "crystal", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal.write_window.json",
+        "sha256": "b75d8b5119868ffb651a71fbe9a3d64fa1e00d06b18dbfbac04cbc08bdf3cac5"
+      }}}]
+    },
+    {
+      "id": "new-gates.write-window.gold",
+      "stage": "physical-live",
+      "description": "U2 Gold write-window proof (idle reacquisition, warp/Continue; party_hp, box_deposit writes; card BOX box runs with the reset-before-save control: party_collection, box_withdraw, backing_box); O-30 battle_faint run; O-32 battle_bench run (a bench death on receipt, at a battle frame end)",
+      "axes": {"kind": "write_window", "title": "gold", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
+        "sha256": "a0ee23b7884f34f58fc570a4c4eb502fdaa13e824a30a5b7a36b339e1fba808a"
+      }}}]
+    },
+    {
+      "id": "new-gates.write-window.silver",
+      "stage": "physical-live",
+      "description": "Owner ruling O-23: Silver's U2 requirement is satisfied by Gold's receipt while their checkpoint rows stay byte-identical (docs/gen2/REVIEW_RECORD.md O-23); lua/gen2_write_safety.lua M.qualified refuses this row the moment the two packs diverge.; Silver's own battle_bench run is recorded in Gold's receipt as confirmations.silver (evidence, not authority)",
+      "axes": {"kind": "write_window", "title": "silver", "owner_ruling": "O-23", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
+        "sha256": "a0ee23b7884f34f58fc570a4c4eb502fdaa13e824a30a5b7a36b339e1fba808a"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_town",
+      "stage": "physical-live",
+      "description": "Crystal town fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "crystal_town", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_town.qualification.json",
+        "sha256": "66699f30808ce0d891af0787eb8894d7218eefeb44ffef8f4d7fb2c8e06ff678"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_battle",
+      "stage": "physical-live",
+      "description": "Crystal battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "crystal_battle", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_battle.qualification.json",
+        "sha256": "4a6bfa980fb5b7977538ca2149412a829102d5f64937543eb5798d0827cb9370"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_town_ot2",
+      "stage": "physical-live",
+      "description": "Crystal town fixture played under a second OT (C<->C pairing, wrong-save control)",
+      "axes": {"kind": "qualification", "fixture": "crystal_town_ot2", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_town_ot2.qualification.json",
+        "sha256": "171a00e32e547d2e650540c8f9e010acaf39a93b1131d7d1b7cb39691d293d8a"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_battle_ot2",
+      "stage": "physical-live",
+      "description": "Crystal battle fixture played under a second OT (C<->C pairing, wrong-save control)",
+      "axes": {"kind": "qualification", "fixture": "crystal_battle_ot2", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_battle_ot2.qualification.json",
+        "sha256": "5a66b33f558619ee741ea5c81bfb06f87a3d82341830a8170fdf6c9a186c7c82"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.gold_town",
+      "stage": "physical-live",
+      "description": "Gold town fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "gold_town", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_town.qualification.json",
+        "sha256": "62973233d0333d543571b5dde6760416c4b587056182e22c09373c86cbfd4e8a"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.gold_battle",
+      "stage": "physical-live",
+      "description": "Gold battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "gold_battle", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_battle.qualification.json",
+        "sha256": "929ecff95239ecb2007b5bb50d97d98e24f3289d6af8027f16bc9c61f581753d"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.gold_battle_ot2",
+      "stage": "physical-live",
+      "description": "Gold battle fixture played under a second OT (G<->S reconnect wrong-save control)",
+      "axes": {"kind": "qualification", "fixture": "gold_battle_ot2", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_battle_ot2.qualification.json",
+        "sha256": "1b9e4cf5a67438b80d6b0688a51f4d8525655947a8cfa069b4dd1c4b20600aa0"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.gold_battle_errand",
+      "stage": "physical-live",
+      "description": "Gold battle fixture after the Mr. Pokemon errand (the Gold U1 fixture: Route 31 Wade, U1e poison_faint)",
+      "axes": {"kind": "qualification", "fixture": "gold_battle_errand", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_battle_errand.qualification.json",
+        "sha256": "4fc69c96507419096c12565041878c90719aa4ed7327bf52cac993d379d24732"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.silver_battle_errand",
+      "stage": "physical-live",
+      "description": "Silver battle fixture after the Mr. Pokemon errand (G<->S trade seed partner)",
+      "axes": {"kind": "qualification", "fixture": "silver_battle_errand", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_battle_errand.qualification.json",
+        "sha256": "ea39ec1b1ee970caaf4839dea307fec227aead2670f42a7f283dea56c8ebe8ba"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_battle_ot2_errand",
+      "stage": "physical-live",
+      "description": "Crystal OT2 battle fixture after the Mr. Pokemon errand (C<->C trade seed partner)",
+      "axes": {"kind": "qualification", "fixture": "crystal_battle_ot2_errand", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_battle_ot2_errand.qualification.json",
+        "sha256": "3561544b07a64237b86e1d0cd2204c20ab8f7aab8894d89602162e6c33d29b42"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.crystal_battle_errand",
+      "stage": "physical-live",
+      "description": "Crystal battle fixture after the Mr. Pokemon errand (Cable Club open: the P4.3e trade seed)",
+      "axes": {"kind": "qualification", "fixture": "crystal_battle_errand", "requirement_ids": ["F-6"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_battle_errand.qualification.json",
+        "sha256": "5ee63338907b79e44b84f1d0d0d081163057550cf728294e340e90e56b9f4967"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.silver_town",
+      "stage": "physical-live",
+      "description": "Silver town fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "silver_town", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_town.qualification.json",
+        "sha256": "67cb235053aa96020263048851648d91d04ee0d0d4ed4ac6ef5af629b29609ea"
+      }}}]
+    },
+    {
+      "id": "new-gates.qualification.silver_battle",
+      "stage": "physical-live",
+      "description": "Silver battle fixture: cold boot, resave, reload PYDEC/GAME agreement",
+      "axes": {"kind": "qualification", "fixture": "silver_battle", "requirement_ids": ["F-6", "S-1", "S-2", "S-3", "S-4", "S-5", "S-6", "S-7", "S-8", "S-9g", "S-10g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_battle.qualification.json",
+        "sha256": "e8025867a0df6efe17c9acd0285e398a4c33727e39d61d83532939087a8a628a"
+      }}}]
+    },
+    {
+      "id": "new-gates.panel.crystal",
+      "stage": "physical-live",
+      "description": "P4.1g Crystal overlay panel gate: O-28 START row, client panel + no-client fallback, CGB fade stress restore, minimum-SP margin (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_panel_gate.py -k crystal)",
+      "axes": {"kind": "panel_gate", "title": "crystal", "requirement_ids": ["N-1", "C-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.panel_gate.json",
+        "sha256": "2a709a8d0c34e11169adbb78374d6812382cc131b8c24cab6f4e6bb25a010553"
+      }}}]
+    },
+    {
+      "id": "new-gates.panel.gold",
+      "stage": "physical-live",
+      "description": "P4.1g Gold overlay panel gate: O-28 START row, client panel + no-client fallback, CGB fade stress restore, minimum-SP margin (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_panel_gate.py -k gold)",
+      "axes": {"kind": "panel_gate", "title": "gold", "requirement_ids": ["N-1", "C-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.panel_gate.json",
+        "sha256": "86e5e7d53c4dfaea37499de77013671aeecf4ab47017b1136605e7beda0ea0dc"
+      }}}]
+    },
+    {
+      "id": "new-gates.panel.silver",
+      "stage": "physical-live",
+      "description": "P4.1g Silver overlay panel gate: O-28 START row, client panel + no-client fallback, CGB fade stress restore, minimum-SP margin (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_panel_gate.py -k silver)",
+      "axes": {"kind": "panel_gate", "title": "silver", "requirement_ids": ["N-1", "C-3"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.panel_gate.json",
+        "sha256": "c7eeb28ec9ad1c25eefccde16a67978090494a52fb4397541fa750a37d7d7096"
+      }}}]
+    },
+    {
+      "id": "new-gates.sfx.crystal",
+      "stage": "physical-live",
+      "description": "P4.2c Crystal overlay native-sound gate: the exact SFX id on ch5-8 within 300 frames in idle, movement, transition (held through the music fade), START menu, text, battle animation and battle menu; the battle's worst no-service stretch in bound; a reset drops a pending request (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sfx_gate.py -k crystal)",
+      "axes": {"kind": "sfx_gate", "title": "crystal", "requirement_ids": ["N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.sfx_gate.json",
+        "sha256": "71f34150ac60a346b3c0c73e05e39b283404341d8468c08556e139508b613aa9"
+      }}}]
+    },
+    {
+      "id": "new-gates.sfx.gold",
+      "stage": "physical-live",
+      "description": "P4.2c Gold overlay native-sound gate: the exact SFX id on ch5-8 within 300 frames in idle, movement, transition (held through the music fade), START menu, text, battle animation and battle menu; the battle's worst no-service stretch in bound; a reset drops a pending request (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sfx_gate.py -k gold)",
+      "axes": {"kind": "sfx_gate", "title": "gold", "requirement_ids": ["N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.sfx_gate.json",
+        "sha256": "7c33ed6a367a2a6b877ed8f8c1104e79f9c92e46b6996953d1a209c0eb596744"
+      }}}]
+    },
+    {
+      "id": "new-gates.sfx.silver",
+      "stage": "physical-live",
+      "description": "P4.2c Silver overlay native-sound gate: the exact SFX id on ch5-8 within 300 frames in idle, movement, transition (held through the music fade), START menu, text, battle animation and battle menu; the battle's worst no-service stretch in bound; a reset drops a pending request (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sfx_gate.py -k silver)",
+      "axes": {"kind": "sfx_gate", "title": "silver", "requirement_ids": ["N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.sfx_gate.json",
+        "sha256": "66c4bff77a8a5f328cadd869c3f5b2f5f99678d8535019c882e3c74b3423d770"
+      }}}]
+    },
+    {
+      "id": "new-gates.w6.crystal",
+      "stage": "physical-live",
+      "description": "P4 W6 Crystal overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and U1f (a882a763: re-heal + Bill's PC leg) corpus, every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k crystal)",
+      "axes": {"kind": "w6_gate", "title": "crystal", "requirement_ids": ["O-27"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.w6_gate.json",
+        "sha256": "63b0fb80a39e04a47a2417fe8a779be4a4395c7f526db691355263564de6a7c6"
+      }}}]
+    },
+    {
+      "id": "new-gates.w6.silver",
+      "stage": "physical-live",
+      "description": "P4 W6 Silver overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and frozen U1e (a7bf1773) corpus (its U1 leg on the O-33 clock setup: game 11:00, Silver's Route 30 Weedle is day-only), every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k silver)",
+      "axes": {"kind": "w6_gate", "title": "silver", "requirement_ids": ["O-27"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.w6_gate.json",
+        "sha256": "f4ea036f6970a4da560881bd93dcbbd38085f2ca504d3d5791254a9b406189e1"
+      }}}]
+    },
+    {
+      "id": "new-gates.w6.gold",
+      "stage": "physical-live",
+      "description": "P4 W6 Gold overlay mailbox write-watch tripwire (O-27 D1): the panel, sfx and U1f (a882a763: re-heal + Bill's PC leg) corpus, every mailbox write from SLink code, Init's boot clear or the shipped Lua client, the wSpecialPhoneCallID word from the service bank only, both known-positive controls caught (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_w6_gate.py -k gold)",
+      "axes": {"kind": "w6_gate", "title": "gold", "requirement_ids": ["O-27"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.w6_gate.json",
+        "sha256": "51c2de4a721f5168827b56c49b580989cd0c143923a0721b523e9be1e851a02d"
+      }}}]
+    },
+    {
+      "id": "new-gates.phone.crystal",
+      "stage": "physical-live",
+      "description": "P4.5d Crystal overlay phone gate (O-29): a request posted in battle, standing in town (the shipped binder), with START open, before a native save and behind a pending native ROBBED call rings SLink only on the next counted step with the ---------- call screen and its text, clears ARMED and the id, never overwrites the native id, and leaves the SRAM phone byte 0 (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_phone_gate.py -k crystal)",
+      "axes": {"kind": "phone_gate", "title": "crystal", "requirement_ids": ["O-29"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.phone_gate.json",
+        "sha256": "25498807764136a3f093041819b511d946284a5f1a2e1ccffbb75689ec46b104"
+      }}}]
+    },
+    {
+      "id": "new-gates.phone.gold",
+      "stage": "physical-live",
+      "description": "P4.5d Gold overlay phone gate (O-29): a request posted in battle, standing in town (the shipped binder), with START open, before a native save and behind a pending native ROBBED call rings SLink only on the next counted step with the ---------- call screen and its text, clears ARMED and the id, never overwrites the native id, and leaves the SRAM phone byte 0 (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_phone_gate.py -k gold)",
+      "axes": {"kind": "phone_gate", "title": "gold", "requirement_ids": ["O-29"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.phone_gate.json",
+        "sha256": "56e323388977f6edb2a207cbcd77584a9a6cffe814133346cc1c0be8d025b5f2"
+      }}}]
+    },
+    {
+      "id": "new-gates.phone.silver",
+      "stage": "physical-live",
+      "description": "P4.5d Silver overlay phone gate (O-29): a request posted in battle, standing in town (the shipped binder), with START open, before a native save and behind a pending native ROBBED call rings SLink only on the next counted step with the ---------- call screen and its text, clears ARMED and the id, never overwrites the native id, and leaves the SRAM phone byte 0 (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_phone_gate.py -k silver)",
+      "axes": {"kind": "phone_gate", "title": "silver", "requirement_ids": ["O-29"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.phone_gate.json",
+        "sha256": "a0bf350514f3cdc66a9d9d1d88bf9e29bc1697569f929c470478b6ce6493df90"
+      }}}]
+    },
+    {
+      "id": "new-gates.sp-lowwater.crystal",
+      "stage": "physical-live",
+      "description": "SP-LOWWATER Crystal overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and the deepest service-chain SP less the deepest measured VBlank-handler depth stays >= 32 bytes above wStackBottom (a nested VBlank is bounded by that composition, not required to be observed; an unmeasured component = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k crystal)",
+      "axes": {"kind": "sp_lowwater_gate", "title": "crystal", "requirement_ids": ["N-1", "N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/crystal_overlay.sp_lowwater_gate.json",
+        "sha256": "8cb4ac2c5c6489191b3f9bed1cccce8b5004c02663765954e9d96736f074ad03"
+      }}}]
+    },
+    {
+      "id": "new-gates.sp-lowwater.gold",
+      "stage": "physical-live",
+      "description": "SP-LOWWATER Gold overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and the deepest service-chain SP less the deepest measured VBlank-handler depth stays >= 32 bytes above wStackBottom (a nested VBlank is bounded by that composition, not required to be observed; an unmeasured component = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k gold)",
+      "axes": {"kind": "sp_lowwater_gate", "title": "gold", "requirement_ids": ["N-1", "N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/gold_overlay.sp_lowwater_gate.json",
+        "sha256": "9e54b901bce51e312ec0e95d04e7c61fafe332b1e763801c16993c854b8d250e"
+      }}}]
+    },
+    {
+      "id": "new-gates.sp-lowwater.silver",
+      "stage": "physical-live",
+      "description": "SP-LOWWATER Silver overlay stack low-water gate (docs/gen2/POST_RC_CARDS.md): three fresh boots (A_held, B_held, released) post SFX and phone through the shipped binders at PrintLetterDelay.checkjoypad in wild-battle text; the trade stack witness v2 plus SP guards at the service/audio hooks keep >= 32 bytes above wStackBottom, the text resumes within 300 frames, the SFX plays, the phone is ARMED without ringing in battle, hVBlank normal and rIE VBlank on, and the deepest service-chain SP less the deepest measured VBlank-handler depth stays >= 32 bytes above wStackBottom (a nested VBlank is bounded by that composition, not required to be observed; an unmeasured component = INCONCLUSIVE). (re-run: SLINK_LIVE=1 pytest tests/live/test_gen2_sp_lowwater_gate.py -k silver)",
+      "axes": {"kind": "sp_lowwater_gate", "title": "silver", "requirement_ids": ["N-1", "N-2"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/silver_overlay.sp_lowwater_gate.json",
+        "sha256": "46bfea6aa978ed00b02a0da87d1f2ebbcbfe662d4d64a67a9e3cb4000d9321f7"
+      }}}]
+    },
+    {
+      "id": "new-gates.inspect-run",
+      "stage": "physical-live",
+      "description": "R-1/R-2/R-3/R-4/R-5g live-new-gates run attestation (gen2-live-new-gates-attestation-v1): SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py over every fixture, every title PASS, passes only (re-run: tools/gen2_final_sweep.py cell gate/inspect_run)",
+      "axes": {"kind": "inspect_run", "requirement_ids": ["R-1", "R-2", "R-3", "R-4", "R-5g"]},
+      "proofs": [{"receipts": {"receipt": {
+        "path": "tests/fixtures/gen2/receipts/live_new_gates.inspect_run.json",
+        "sha256": "0dfbcb82f996c2b8325ff5c326fa9cc268652aa97a4fff43dbc9ea1f29dd15eb"
+      }}}]
+    }
+  ]
+}

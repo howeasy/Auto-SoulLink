@@ -216,6 +216,10 @@ const RBY: {[name: string]: MoveData} = {
   Withdraw: {bp: 0, category: 'Status', type: 'Water'},
 };
 
+// See species.ts's VANILLA_GEN1_SPECIES for why this is captured under a unique name instead of
+// letting setGen1Moves fall back to the bare (compiled-to-global, cross-module-colliding) `RBY`.
+const VANILLA_GEN1_MOVES = RBY;
+
 const GSC_PATCH: {[name: string]: DeepPartial<MoveData>} = {
   Bide: {type: 'Normal'},
   Counter: {bp: 0},
@@ -5211,6 +5215,14 @@ class Move implements I.Move {
   }
 }
 
+// Captured immediately, same reason as VANILLA_GEN1_MOVES below: this file's own `Move` class
+// (the MOVES_BY_ID cache entry type) compiles to a top-level `var Move`, and calc/move.js AND
+// calc/index.js each declare their OWN top-level `var Move` (the public damage-calc Move class)
+// in that same shared page scope, loaded after this file - so setGen1Moves's lazy `new Move(...)`
+// call (at useDex() call time, long after every script has loaded) would otherwise construct
+// whichever `Move` class loaded last instead of this one.
+const GEN1_MOVE_CLASS = Move;
+
 const MOVES_BY_ID: Array<{[id: string]: Move}> = [];
 
 let gen = 0;
@@ -5223,4 +5235,17 @@ for (const moves of MOVES) {
   }
   MOVES_BY_ID.push(map);
   gen++;
+}
+
+// Gen 1's slot only - the moves.ts half of species.ts's setGen1Species (see its comment); used by
+// calc/calc/src/data/purergb.ts's useDex() to swap in pureRGB's own move table at runtime.
+export function setGen1Moves(data: {[name: string]: MoveData} | null): void {
+  const next = data ?? VANILLA_GEN1_MOVES;
+  MOVES[1] = next;
+  const map: {[id: string]: Move} = {};
+  for (const move in next) {
+    const m = new GEN1_MOVE_CLASS(move, next[move], 1);
+    map[m.id] = m;
+  }
+  MOVES_BY_ID[1] = map;
 }

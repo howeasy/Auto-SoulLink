@@ -1,0 +1,677 @@
+{
+  "schema": "gen2-static-encounters-v1",
+  "generator": "gen_gen2_statics.py",
+  "source": {
+    "evidence_level": "SOURCE",
+    "artifact": "pokesilver",
+    "repo": "pokegold",
+    "commit": "656583c939d30f920a316177311a502dd222b57c",
+    "rom_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+    "sym_sha256": "208a2b0c20bde8a2997ab4f097d5173eb5554bfae6e553e48fe411d28089c461",
+    "map_sha256": "7aacbebc1564cdc4c09491034591b25cf2998f1df78f0e5aa30eb11747f6ab60",
+    "lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
+    "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+  },
+  "version_dispatch": {
+    "applicable": true,
+    "script_var": 1,
+    "symbol": "Script_checkver.gs_version",
+    "flat": 619807,
+    "source": "pokegold@656583c939d30f920a316177311a502dd222b57c constants/misc_constants.asm:23"
+  },
+  "encounters": [
+    {
+      "id": "BurnedTowerB1F:UnusedEnteiScript:74",
+      "map_name": "BurnedTowerB1F",
+      "map_group": 3,
+      "map_number": 14,
+      "area_id": "burned_tower",
+      "static_area_id": "static_burned_tower_b1f_244",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/BurnedTowerB1F.asm:74",
+      "script": "UnusedEnteiScript",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 244,
+      "species_const": "ENTEI",
+      "level": 40,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": 0,
+      "source_unused": true,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "UnusedEnteiScript",
+        "bank": 66,
+        "addr": 21553,
+        "flat": 1086513,
+        "expected_hex": "5cf428",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "LakeOfRage:RedGyarados:87",
+      "map_name": "LakeOfRage",
+      "map_group": 9,
+      "map_number": 6,
+      "area_id": "lake_of_rage",
+      "static_area_id": "static_lake_of_rage_130",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/LakeOfRage.asm:87",
+      "script": "RedGyarados",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 130,
+      "species_const": "GYARADOS",
+      "level": 30,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCESHINY"
+      ],
+      "runtime_battle_type": 7,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RedGyarados",
+        "bank": 73,
+        "addr": 20345,
+        "flat": 1199993,
+        "expected_hex": "5c821e",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route29:Route29Tutorial1:53",
+      "map_name": "Route29",
+      "map_group": 24,
+      "map_number": 3,
+      "area_id": "route_29",
+      "static_area_id": "static_route_29_19",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/Route29.asm:53",
+      "script": "Route29Tutorial1",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 19,
+      "species_const": "RATTATA",
+      "level": 5,
+      "kind": "tutorial",
+      "battle_type": [],
+      "runtime_battle_type": 3,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Route29Tutorial1",
+        "bank": 74,
+        "addr": 19898,
+        "flat": 1215930,
+        "expected_hex": "5c1305",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route29:Route29Tutorial2:78",
+      "map_name": "Route29",
+      "map_group": 24,
+      "map_number": 3,
+      "area_id": "route_29",
+      "static_area_id": "static_route_29_19",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/Route29.asm:78",
+      "script": "Route29Tutorial2",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 19,
+      "species_const": "RATTATA",
+      "level": 5,
+      "kind": "tutorial",
+      "battle_type": [],
+      "runtime_battle_type": 3,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Route29Tutorial2",
+        "bank": 74,
+        "addr": 19952,
+        "flat": 1215984,
+        "expected_hex": "5c1305",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route29:CatchingTutorialDudeScript:118",
+      "map_name": "Route29",
+      "map_group": 24,
+      "map_number": 3,
+      "area_id": "route_29",
+      "static_area_id": "static_route_29_19",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/Route29.asm:118",
+      "script": "CatchingTutorialDudeScript",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 19,
+      "species_const": "RATTATA",
+      "level": 5,
+      "kind": "tutorial",
+      "battle_type": [],
+      "runtime_battle_type": 3,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "CatchingTutorialDudeScript",
+        "bank": 74,
+        "addr": 20024,
+        "flat": 1216056,
+        "expected_hex": "5c1305",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "Route36:WateredWeirdTreeScript:53",
+      "map_name": "Route36",
+      "map_group": 10,
+      "map_number": 3,
+      "area_id": "route_36",
+      "static_area_id": "static_route_36_185",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/Route36.asm:53",
+      "script": "WateredWeirdTreeScript",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 185,
+      "species_const": "SUDOWOODO",
+      "level": 20,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": 0,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "WateredWeirdTreeScript",
+        "bank": 75,
+        "addr": 25045,
+        "flat": 1237461,
+        "expected_hex": "5cb914",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB1F:VoltorbExplodingTrap:454",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 41,
+      "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b1f_100",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/TeamRocketBaseB1F.asm:454",
+      "script": "VoltorbExplodingTrap",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 100,
+      "species_const": "VOLTORB",
+      "level": 23,
+      "kind": "scripted_trap_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
+      ],
+      "runtime_battle_type": 9,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "VoltorbExplodingTrap",
+        "bank": 69,
+        "addr": 18173,
+        "flat": 1132285,
+        "expected_hex": "5c6417",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB1F:GeodudeExplodingTrap:464",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 41,
+      "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b1f_74",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/TeamRocketBaseB1F.asm:464",
+      "script": "GeodudeExplodingTrap",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 74,
+      "species_const": "GEODUDE",
+      "level": 21,
+      "kind": "scripted_trap_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
+      ],
+      "runtime_battle_type": 9,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "GeodudeExplodingTrap",
+        "bank": 69,
+        "addr": 18192,
+        "flat": 1132304,
+        "expected_hex": "5c4a15",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB1F:KoffingExplodingTrap:474",
+      "map_name": "TeamRocketBaseB1F",
+      "map_group": 3,
+      "map_number": 41,
+      "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b1f_109",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/TeamRocketBaseB1F.asm:474",
+      "script": "KoffingExplodingTrap",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 109,
+      "species_const": "KOFFING",
+      "level": 21,
+      "kind": "scripted_trap_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_TRAP"
+      ],
+      "runtime_battle_type": 9,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "KoffingExplodingTrap",
+        "bank": 69,
+        "addr": 18211,
+        "flat": 1132323,
+        "expected_hex": "5c6d15",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode1:223",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 42,
+      "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b2f_101",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/TeamRocketBaseB2F.asm:223",
+      "script": "RocketElectrode1",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "level": 23,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": 0,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RocketElectrode1",
+        "bank": 69,
+        "addr": 19900,
+        "flat": 1134012,
+        "expected_hex": "5c6517",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode2:241",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 42,
+      "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b2f_101",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/TeamRocketBaseB2F.asm:241",
+      "script": "RocketElectrode2",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "level": 23,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": 0,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RocketElectrode2",
+        "bank": 69,
+        "addr": 19943,
+        "flat": 1134055,
+        "expected_hex": "5c6517",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TeamRocketBaseB2F:RocketElectrode3:259",
+      "map_name": "TeamRocketBaseB2F",
+      "map_group": 3,
+      "map_number": 42,
+      "area_id": "mahogany_town",
+      "static_area_id": "static_team_rocket_base_b2f_101",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/TeamRocketBaseB2F.asm:259",
+      "script": "RocketElectrode3",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 101,
+      "species_const": "ELECTRODE",
+      "level": 23,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": 0,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "RocketElectrode3",
+        "bank": 69,
+        "addr": 19986,
+        "flat": 1134098,
+        "expected_hex": "5c6517",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TinTowerRoof:TinTowerHoOh:36",
+      "map_name": "TinTowerRoof",
+      "map_group": 15,
+      "map_number": 12,
+      "area_id": "tin_tower",
+      "static_area_id": "static_tin_tower_roof_250",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/TinTowerRoof.asm:36",
+      "script": "TinTowerHoOh",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": false,
+        "basis": "checkver false fallthrough"
+      },
+      "species": 250,
+      "species_const": "HO_OH",
+      "level": 40,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
+      ],
+      "runtime_battle_type": 10,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "TinTowerHoOh",
+        "bank": 91,
+        "addr": 26920,
+        "flat": 1501480,
+        "expected_hex": "5cfa28",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "TinTowerRoof:TinTowerHoOh.Silver:44",
+      "map_name": "TinTowerRoof",
+      "map_group": 15,
+      "map_number": 12,
+      "area_id": "tin_tower",
+      "static_area_id": "static_tin_tower_roof_250",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/TinTowerRoof.asm:44",
+      "script": "TinTowerHoOh.Silver",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "checkver Silver branch"
+      },
+      "species": 250,
+      "species_const": "HO_OH",
+      "level": 70,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
+      ],
+      "runtime_battle_type": 10,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "TinTowerHoOh.Silver",
+        "bank": 91,
+        "addr": 26931,
+        "flat": 1501491,
+        "expected_hex": "5cfa46",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "UnionCaveB2F:UnionCaveLapras:31",
+      "map_name": "UnionCaveB2F",
+      "map_group": 3,
+      "map_number": 31,
+      "area_id": "union_cave",
+      "static_area_id": "static_union_cave_b2f_131",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/UnionCaveB2F.asm:31",
+      "script": "UnionCaveLapras",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 131,
+      "species_const": "LAPRAS",
+      "level": 20,
+      "kind": "scripted_wild_battle",
+      "battle_type": [],
+      "runtime_battle_type": 0,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "UnionCaveLapras",
+        "bank": 68,
+        "addr": 22388,
+        "flat": 1120116,
+        "expected_hex": "5c8314",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "VermilionCity:VermilionSnorlax.Awake:56",
+      "map_name": "VermilionCity",
+      "map_group": 12,
+      "map_number": 3,
+      "area_id": "vermilion_city",
+      "static_area_id": "static_vermilion_city_143",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/VermilionCity.asm:56",
+      "script": "VermilionSnorlax.Awake",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "source occurrence; runtime reachability OPEN"
+      },
+      "species": 143,
+      "species_const": "SNORLAX",
+      "level": 50,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
+      ],
+      "runtime_battle_type": 10,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "VermilionSnorlax.Awake",
+        "bank": 79,
+        "addr": 21162,
+        "flat": 1299114,
+        "expected_hex": "5c8f32",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "WhirlIslandLugiaChamber:Lugia:36",
+      "map_name": "WhirlIslandLugiaChamber",
+      "map_group": 3,
+      "map_number": 65,
+      "area_id": "whirl_islands",
+      "static_area_id": "static_whirl_island_lugia_chamber_249",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/WhirlIslandLugiaChamber.asm:36",
+      "script": "Lugia",
+      "applicability": {
+        "titles": [
+          "gold"
+        ],
+        "selected": false,
+        "basis": "checkver false fallthrough"
+      },
+      "species": 249,
+      "species_const": "LUGIA",
+      "level": 70,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
+      ],
+      "runtime_battle_type": 10,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Lugia",
+        "bank": 71,
+        "addr": 16821,
+        "flat": 1163701,
+        "expected_hex": "5cf946",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    },
+    {
+      "id": "WhirlIslandLugiaChamber:Lugia.Silver:44",
+      "map_name": "WhirlIslandLugiaChamber",
+      "map_group": 3,
+      "map_number": 65,
+      "area_id": "whirl_islands",
+      "static_area_id": "static_whirl_island_lugia_chamber_249",
+      "source": "pokegold@656583c939d30f920a316177311a502dd222b57c maps/WhirlIslandLugiaChamber.asm:44",
+      "script": "Lugia.Silver",
+      "applicability": {
+        "titles": [
+          "silver"
+        ],
+        "selected": true,
+        "basis": "checkver Silver branch"
+      },
+      "species": 249,
+      "species_const": "LUGIA",
+      "level": 40,
+      "kind": "scripted_wild_battle",
+      "battle_type": [
+        "loadvar VAR_BATTLETYPE, BATTLETYPE_FORCEITEM"
+      ],
+      "runtime_battle_type": 10,
+      "source_unused": false,
+      "capture_success": "OPEN",
+      "finalization": "OPEN",
+      "rom": {
+        "kind": "unique_source_label_span",
+        "symbol": "Lugia.Silver",
+        "bank": 71,
+        "addr": 16832,
+        "flat": 1163712,
+        "expected_hex": "5cf928",
+        "instruction_boundary": "UNQUALIFIED"
+      }
+    }
+  ],
+  "open_obligations": [
+    "runtime_script_reachability",
+    "capture_success_and_finalization",
+    "byte_witnesses_are_not_CPU_signal_sites"
+  ]
+}

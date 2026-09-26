@@ -10,7 +10,6 @@ mon data reading, and area resolution.
 lua/
 ├── slink.lua              ← Universal entry point (auto-detects game)
 ├── slink_gen1.lua         ← Manual launcher for Gen 1
-├── slink_gen2.lua         ← Manual launcher for Gen 2
 ├── slink_gen3.lua         ← Manual launcher for Gen 3
 ├── slink_gen4.lua         ← Manual launcher for Gen 4
 ├── slink_gen5.lua         ← Manual launcher for Gen 5
@@ -18,20 +17,18 @@ lua/
 ├── hud.lua                ← Shared HUD overlay module
 ├── connector.lua          ← Shared TCP connector
 ├── socket.lua             ← LuaSocket loader
-├── memory_gb.lua          ← GB/GBC memory helpers (Gen 2 only — the rewritten Gen 1 client
-│                             uses lua/gen1/{reads,writes,boxes}.lua instead)
 ├── memory_nds.lua         ← NDS memory helpers (Gen 4 & Gen 5)
 ├── games/                 ← Game modules (this directory)
-│   ├── gen2_crystal.lua       — Gen 2 (Crystal)
 │   ├── gen3_frlge.lua         — Gen 3 reference profiles (no longer loaded at runtime)
 │   ├── gen4_hgsspt.lua        — Gen 4 (HGSS / Platinum)
 │   └── gen5_bw.lua            — Gen 5 (Black / White / BW2)
 ├── gen1/                  ← Gen 1 (Red / Blue / Yellow) — composition root, not a
 │                             games/ module; see lua/gen1/entry.lua
+├── gen2/                  ← Gen 2 (Crystal / Gold / Silver) — composition root, not a
+│                             games/ module; see lua/gen2/entry.lua
 ├── gen3/                  ← Gen 3 (FireRed / LeafGreen / Radical Red) — composition root;
 │                             see lua/gen3/entry.lua (Entry.admit / Entry.ROUTED)
 ├── clients/               ← Game-specific client scripts
-│   ├── gen2_crystal_client.lua — Gen 2 client (Crystal)
 │   ├── gen4_hgsspt_client.lua — Gen 4 client (HGSS / Platinum)
 │   └── gen5_bw_client.lua     — Gen 5 client (Black / White / BW2)
 ├── tests/                 ← BizHawk test scripts

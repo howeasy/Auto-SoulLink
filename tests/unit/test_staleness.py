@@ -67,7 +67,8 @@ async def test_a_silent_client_is_called_out_even_though_it_still_reads_connecte
     p = srv._build_status_dict()["players"]["a"]
     assert p["connected"] is True and p["stale"] is True
     html = await page()
-    assert "stale-warn" in html
+    # the run server's own board carries the same per-player state line as the Manager's
+    assert "mk-conn disconnected" in html
     assert "No data" in html
 
 
@@ -76,7 +77,7 @@ async def test_a_live_client_gets_no_warning(srv, page):
     srv.connected_players["a"] = {"connected": True, "rom_type": "firered_rr", "last_event": "tick",
                                   "last_seen": "12:00:00", "last_seen_ts": time.time()}
     assert srv._build_status_dict()["players"]["a"]["stale"] is False
-    assert "stale-warn" not in await page()
+    assert "mk-conn disconnected" not in await page()
 
 
 @pytest.mark.asyncio
@@ -93,3 +94,12 @@ def test_save_failure_clears_once_a_write_succeeds(srv, tmp_path):
     srv.state.save_failed = "boom"
     srv.state._save()
     assert srv.state.save_failed == ""
+
+
+@pytest.mark.asyncio
+async def test_a_stalled_faint_repair_is_surfaced(srv, page):
+    """The server gave up re-issuing a lost faint; the partner mon may still be standing in game."""
+    assert "never landed in game" not in await page()
+    srv.state.faint_repair_stalled["b"] = {"mon1": 3}
+    html = await page()
+    assert "Player B: 1 linked faint(s) never landed in game" in html

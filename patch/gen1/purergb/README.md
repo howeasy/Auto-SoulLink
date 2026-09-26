@@ -49,7 +49,8 @@ own sha1s, `.sym`/`.map`, profile block, sites, checkpoint and admission rows.
   `MON_OTID`, `NAME_LENGTH` from pureRGB's constants; `TryEvolvingMon` is exported (`::`) and
   lives in bank $2C, resolved by the linker. The 191-entry admission table is generated from
   `species_index.json` (`obtainable`); the name-glyph table is a FOR-loop rule over pureRGB's
-  charmap.
+  charmap. The save consent, full commit save and idle-frame pickup match the vanilla patch
+  (`patch/gen1/README.md`; parity in `tests/unit/test_gen1_trade_save.py`).
 * **APEX refusal** (`SlinkApexGuard`): at `ItemUseMedicine.setDVs` the DV pointer is copied to
   `de` (a farcall takes `hl`), the guard scans the party, the WRAM box and, once
   `BIT_HAS_CHANGED_BOXES` is set, the other eleven SRAM boxes for a same-OT/same-species mon

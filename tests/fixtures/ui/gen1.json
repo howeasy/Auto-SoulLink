@@ -5,9 +5,9 @@
       "connected": true,
       "rom_type": "red",
       "last_event": "tick",
-      "last_seen": "22:57:34",
-      "last_seen_age": 5,
-      "last_seen_label": "5s ago",
+      "last_seen": "07:59:27",
+      "last_seen_age": 6,
+      "last_seen_label": "6s ago",
       "stale": false,
       "nuzlocke_active": true,
       "current_area": "route_3",
@@ -99,7 +99,7 @@
           "stat_stages": null,
           "key": "4A5B:30B8:54",
           "species_name": "Pikachu",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"25\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/25.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"25\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/25.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -172,7 +172,7 @@
           "stat_stages": null,
           "key": "5B6C:30B8:24",
           "species_name": "Pidgey",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"16\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/16.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"16\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/16.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -243,7 +243,7 @@
           "stat_stages": null,
           "key": "6C7D:30B8:70",
           "species_name": "Weedle",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -296,7 +296,7 @@
           "stat_stages": null,
           "key": "7D8E:30B8:05",
           "species_name": "Spearow",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"21\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/21.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"21\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/21.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -368,7 +368,7 @@
           "stat_stages": null,
           "key": "8E9F:30B8:6B",
           "species_name": "Zubat",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"41\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/41.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"41\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/41.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -430,7 +430,7 @@
           "stat_stages": null,
           "key": "9F0A:30B8:60",
           "species_name": "Sandshrew",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"27\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/27.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"27\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/27.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -479,6 +479,7 @@
         "calc_preview": null
       },
       "identity_error": "",
+      "awaiting_save": false,
       "admission": "admitted",
       "admission_reason": "no randomized-ROM contract for this run",
       "capabilities": {
@@ -545,9 +546,9 @@
       "connected": true,
       "rom_type": "blue",
       "last_event": "tick",
-      "last_seen": "22:57:34",
-      "last_seen_age": 5,
-      "last_seen_label": "5s ago",
+      "last_seen": "07:59:27",
+      "last_seen_age": 6,
+      "last_seen_label": "6s ago",
       "stale": false,
       "nuzlocke_active": true,
       "current_area": "route_24",
@@ -617,7 +618,7 @@
           "stat_stages": null,
           "key": "3C2D:7B0B:B0",
           "species_name": "Charmander",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"4\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/4.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"4\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/4.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -690,7 +691,7 @@
           "stat_stages": null,
           "key": "2D3E:7B0B:A5",
           "species_name": "Rattata",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"19\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/19.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"19\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/19.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -761,7 +762,7 @@
           "stat_stages": null,
           "key": "1E2F:7B0B:7B",
           "species_name": "Caterpie",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -814,7 +815,7 @@
           "stat_stages": null,
           "key": "0F1A:7B0B:A9",
           "species_name": "Geodude",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"74\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/74.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"74\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/74.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -886,7 +887,7 @@
           "stat_stages": null,
           "key": "9A0B:7B0B:6D",
           "species_name": "Paras",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"46\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/46.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"46\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/46.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -948,7 +949,7 @@
           "stat_stages": null,
           "key": "8B1C:7B0B:6C",
           "species_name": "Ekans",
-          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"23\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/23.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+          "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"23\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/23.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
           "ability_name": "",
           "item_name": "",
           "move_details": [
@@ -1007,7 +1008,7 @@
               35,
               40
             ],
-            "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+            "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
             "species_name": "Caterpie",
             "move_details": [
               {
@@ -1040,6 +1041,7 @@
         "calc_preview": null
       },
       "identity_error": "",
+      "awaiting_save": false,
       "admission": "admitted",
       "admission_reason": "no randomized-ROM contract for this run",
       "capabilities": {
@@ -1125,21 +1127,22 @@
       "a_nickname": "Sparky",
       "a_species": 84,
       "a_species_name": "Pikachu",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"25\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/25.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"25\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/25.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "a_level": 6,
       "a_shiny": false,
       "b_key": "3C2D:7B0B:B0",
       "b_nickname": "Embo",
       "b_species": 176,
       "b_species_name": "Charmander",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"4\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/4.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"4\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/4.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "b_level": 6,
       "b_shiny": false,
       "a_enc_species": 0,
       "a_enc_level": 0,
       "b_enc_species": 0,
       "b_enc_level": 0,
-      "status": "alive"
+      "status": "alive",
+      "killed_at": null
     },
     {
       "area_id": "route_2",
@@ -1148,21 +1151,22 @@
       "a_nickname": "Pidge",
       "a_species": 36,
       "a_species_name": "Pidgey",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"16\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/16.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"16\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/16.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "a_level": 8,
       "a_shiny": false,
       "b_key": "2D3E:7B0B:A5",
       "b_nickname": "Rattie",
       "b_species": 165,
       "b_species_name": "Rattata",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"19\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/19.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"19\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/19.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "b_level": 8,
       "b_shiny": false,
       "a_enc_species": 0,
       "a_enc_level": 0,
       "b_enc_species": 0,
       "b_enc_level": 0,
-      "status": "alive"
+      "status": "alive",
+      "killed_at": null
     },
     {
       "area_id": "viridian_forest",
@@ -1171,21 +1175,22 @@
       "a_nickname": "Sting",
       "a_species": 112,
       "a_species_name": "Weedle",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "a_level": 9,
       "a_shiny": false,
       "b_key": "1E2F:7B0B:7B",
       "b_nickname": "Wiggle",
       "b_species": 123,
       "b_species_name": "Caterpie",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "b_level": 9,
       "b_shiny": false,
       "a_enc_species": 0,
       "a_enc_level": 0,
       "b_enc_species": 0,
       "b_enc_level": 0,
-      "status": "dead"
+      "status": "dead",
+      "killed_at": "2026-09-25T11:59:27.815133+00:00"
     },
     {
       "area_id": "route_3",
@@ -1194,21 +1199,22 @@
       "a_nickname": "Sparrow",
       "a_species": 5,
       "a_species_name": "Spearow",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"21\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/21.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"21\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/21.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "a_level": 11,
       "a_shiny": false,
       "b_key": "0F1A:7B0B:A9",
       "b_nickname": "Rocky",
       "b_species": 169,
       "b_species_name": "Geodude",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"74\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/74.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"74\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/74.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "b_level": 11,
       "b_shiny": false,
       "a_enc_species": 0,
       "a_enc_level": 0,
       "b_enc_species": 0,
       "b_enc_level": 0,
-      "status": "alive"
+      "status": "alive",
+      "killed_at": null
     },
     {
       "area_id": "mt_moon_1f",
@@ -1217,21 +1223,22 @@
       "a_nickname": "Vampy",
       "a_species": 107,
       "a_species_name": "Zubat",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"41\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/41.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"41\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/41.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "a_level": 12,
       "a_shiny": false,
       "b_key": "9A0B:7B0B:6D",
       "b_nickname": "Shroom",
       "b_species": 109,
       "b_species_name": "Paras",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"46\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/46.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"46\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/46.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "b_level": 12,
       "b_shiny": false,
       "a_enc_species": 0,
       "a_enc_level": 0,
       "b_enc_species": 0,
       "b_enc_level": 0,
-      "status": "alive"
+      "status": "alive",
+      "killed_at": null
     },
     {
       "area_id": "route_4",
@@ -1240,21 +1247,22 @@
       "a_nickname": "Shrewd",
       "a_species": 96,
       "a_species_name": "Sandshrew",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"27\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/27.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"27\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/27.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "a_level": 13,
       "a_shiny": false,
       "b_key": "8B1C:7B0B:6C",
       "b_nickname": "Slither",
       "b_species": 108,
       "b_species_name": "Ekans",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"23\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/23.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"23\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/23.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "b_level": 13,
       "b_shiny": false,
       "a_enc_species": 0,
       "a_enc_level": 0,
       "b_enc_species": 0,
       "b_enc_level": 0,
-      "status": "alive"
+      "status": "alive",
+      "killed_at": null
     },
     {
       "area_id": "route_22",
@@ -1277,7 +1285,8 @@
       "a_enc_level": 0,
       "b_enc_species": 0,
       "b_enc_level": 0,
-      "status": "dead"
+      "status": "dead",
+      "killed_at": "2026-09-25T11:59:27.794108+00:00"
     },
     {
       "area_id": "route_5",
@@ -1286,21 +1295,22 @@
       "a_nickname": "Bubbles",
       "a_species": 71,
       "a_species_name": "Poliwag",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"60\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/60.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"60\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/60.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "a_level": 10,
       "a_shiny": false,
       "b_key": "5E6F:7B0B:2F",
       "b_nickname": "Quack",
       "b_species": 47,
       "b_species_name": "Psyduck",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"54\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/54.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"54\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/54.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "b_level": 10,
       "b_shiny": false,
       "a_enc_species": 0,
       "a_enc_level": 0,
       "b_enc_species": 0,
       "b_enc_level": 0,
-      "status": "alive"
+      "status": "alive",
+      "killed_at": null
     }
   ],
   "area_states": {
@@ -1323,7 +1333,7 @@
         "species": 33,
         "level": 14,
         "species_name": "Growlithe",
-        "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"58\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/58.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>"
+        "sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"58\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/58.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>"
       }
     }
   },
@@ -1341,7 +1351,7 @@
   },
   "recent_events": [
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 24",
@@ -1349,7 +1359,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 3",
@@ -1357,15 +1367,15 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "force_faint",
-      "text": "⚡ Wiggle force fainted!",
+      "text": "\u26a1 Wiggle force fainted!",
       "area_id": "viridian_forest",
       "key": "1E2F:7B0B:7B"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "faint",
       "text": "Sting fainted!",
@@ -1373,7 +1383,7 @@
       "key": "6C7D:30B8:70"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "capture",
       "text": "Caught Growlithe Lv14",
@@ -1381,7 +1391,7 @@
       "key": "AB12:30B8:21"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 9",
@@ -1389,23 +1399,23 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Bubbles × Quack on Route 5",
+      "text": "\u2713 Linked Bubbles \u00d7 Quack on Route 5",
       "area_id": "route_5",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Quack × Bubbles on Route 5",
+      "text": "\u2713 Linked Quack \u00d7 Bubbles on Route 5",
       "area_id": "route_5",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "capture",
       "text": "Caught Psyduck Lv10",
@@ -1413,7 +1423,7 @@
       "key": "5E6F:7B0B:2F"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "capture",
       "text": "Caught Poliwag Lv10",
@@ -1421,7 +1431,7 @@
       "key": "6D7E:30B8:47"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 5",
@@ -1429,7 +1439,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 5",
@@ -1437,7 +1447,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 22",
@@ -1445,23 +1455,23 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "dead_zone",
-      "text": "☠ Dead zone: Route 22",
+      "text": "\u2620 Dead zone: Route 22",
       "area_id": "route_22",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "dead_zone",
-      "text": "☠ Dead zone: Route 22",
+      "text": "\u2620 Dead zone: Route 22",
       "area_id": "route_22",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "no_catch",
       "text": "Missed catch at Route 22",
@@ -1469,7 +1479,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 22",
@@ -1477,23 +1487,23 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Shrewd × Slither on Route 4",
+      "text": "\u2713 Linked Shrewd \u00d7 Slither on Route 4",
       "area_id": "route_4",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Slither × Shrewd on Route 4",
+      "text": "\u2713 Linked Slither \u00d7 Shrewd on Route 4",
       "area_id": "route_4",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "capture",
       "text": "Caught Ekans Lv13",
@@ -1501,7 +1511,7 @@
       "key": "8B1C:7B0B:6C"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "capture",
       "text": "Caught Sandshrew Lv13",
@@ -1509,7 +1519,7 @@
       "key": "9F0A:30B8:60"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 4",
@@ -1517,7 +1527,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 4",
@@ -1525,23 +1535,23 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Vampy × Shroom on Mt Moon 1F",
+      "text": "\u2713 Linked Vampy \u00d7 Shroom on Mt Moon 1F",
       "area_id": "mt_moon_1f",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Shroom × Vampy on Mt Moon 1F",
+      "text": "\u2713 Linked Shroom \u00d7 Vampy on Mt Moon 1F",
       "area_id": "mt_moon_1f",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "capture",
       "text": "Caught Paras Lv12",
@@ -1549,7 +1559,7 @@
       "key": "9A0B:7B0B:6D"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "capture",
       "text": "Caught Zubat Lv12",
@@ -1557,7 +1567,7 @@
       "key": "8E9F:30B8:6B"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Mt Moon 1F",
@@ -1565,7 +1575,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Mt Moon 1F",
@@ -1573,23 +1583,23 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Sparrow × Rocky on Route 3",
+      "text": "\u2713 Linked Sparrow \u00d7 Rocky on Route 3",
       "area_id": "route_3",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Rocky × Sparrow on Route 3",
+      "text": "\u2713 Linked Rocky \u00d7 Sparrow on Route 3",
       "area_id": "route_3",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "capture",
       "text": "Caught Geodude Lv11",
@@ -1597,7 +1607,7 @@
       "key": "0F1A:7B0B:A9"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "capture",
       "text": "Caught Spearow Lv11",
@@ -1605,7 +1615,7 @@
       "key": "7D8E:30B8:05"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 3",
@@ -1613,7 +1623,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 3",
@@ -1621,23 +1631,23 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Sting × Wiggle on Viridian Forest",
+      "text": "\u2713 Linked Sting \u00d7 Wiggle on Viridian Forest",
       "area_id": "viridian_forest",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Wiggle × Sting on Viridian Forest",
+      "text": "\u2713 Linked Wiggle \u00d7 Sting on Viridian Forest",
       "area_id": "viridian_forest",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "capture",
       "text": "Caught Caterpie Lv9",
@@ -1645,7 +1655,7 @@
       "key": "1E2F:7B0B:7B"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "capture",
       "text": "Caught Weedle Lv9",
@@ -1653,7 +1663,7 @@
       "key": "6C7D:30B8:70"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Viridian Forest",
@@ -1661,7 +1671,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Viridian Forest",
@@ -1669,23 +1679,23 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Pidge × Rattie on Route 2",
+      "text": "\u2713 Linked Pidge \u00d7 Rattie on Route 2",
       "area_id": "route_2",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Rattie × Pidge on Route 2",
+      "text": "\u2713 Linked Rattie \u00d7 Pidge on Route 2",
       "area_id": "route_2",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "capture",
       "text": "Caught Rattata Lv8",
@@ -1693,7 +1703,7 @@
       "key": "2D3E:7B0B:A5"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "capture",
       "text": "Caught Pidgey Lv8",
@@ -1701,7 +1711,7 @@
       "key": "5B6C:30B8:24"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 2",
@@ -1709,7 +1719,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 2",
@@ -1717,23 +1727,23 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "linked",
-      "text": "✓ Linked Sparky × Embo on Route 1",
+      "text": "\u2713 Linked Sparky \u00d7 Embo on Route 1",
       "area_id": "route_1",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "linked",
-      "text": "✓ Linked Embo × Sparky on Route 1",
+      "text": "\u2713 Linked Embo \u00d7 Sparky on Route 1",
       "area_id": "route_1",
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "capture",
       "text": "Caught Charmander Lv6",
@@ -1741,7 +1751,7 @@
       "key": "3C2D:7B0B:B0"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "capture",
       "text": "Caught Pikachu Lv6",
@@ -1749,7 +1759,7 @@
       "key": "4A5B:30B8:54"
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "area_enter",
       "text": "Entered Route 1",
@@ -1757,7 +1767,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "area_enter",
       "text": "Entered Route 1",
@@ -1765,7 +1775,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "b",
       "type": "hello",
       "text": "Connected (blue, 0 mons)",
@@ -1773,7 +1783,7 @@
       "key": ""
     },
     {
-      "ts": "2026-09-20T22:57:34",
+      "ts": "2026-09-25T07:59:27",
       "player": "a",
       "type": "hello",
       "text": "Connected (red, 0 mons)",
@@ -1783,7 +1793,7 @@
   ],
   "killfeed": [
     {
-      "killed_at": "2026-09-21T02:57:34.894942+00:00",
+      "killed_at": "2026-09-25T11:59:27.815133+00:00",
       "area_id": "viridian_forest",
       "area_display": "Viridian Forest",
       "cause": "battle",
@@ -1793,18 +1803,22 @@
       "a_nickname": "Sting",
       "a_species": 112,
       "a_species_name": "Weedle",
-      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "a_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"13\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/13.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "a_level": 9,
       "b_key": "1E2F:7B0B:7B",
       "b_nickname": "Wiggle",
       "b_species": 123,
       "b_species_name": "Caterpie",
-      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"52\" height=\"52\" loading=\"lazy\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;margin:-6px\"></span>",
+      "b_sprite_html": "<span style=\"display:inline-block;width:40px;height:40px;overflow:hidden;vertical-align:middle\"><img class=\"mon-sprite\" data-species=\"10\" src=\"https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-i/red-blue/transparent/10.png\" width=\"69\" height=\"69\" loading=\"lazy\" alt=\"\" onerror=\"this.style.visibility=&#39;hidden&#39;\" style=\"image-rendering:pixelated;width:69px;height:69px;max-width:none;margin:-14px\"></span>",
       "b_level": 9,
+      "a_enc_species_name": "",
+      "a_enc_level": 0,
+      "b_enc_species_name": "",
+      "b_enc_level": 0,
       "status": "dead"
     },
     {
-      "killed_at": "2026-09-21T02:57:34.875433+00:00",
+      "killed_at": "2026-09-25T11:59:27.794108+00:00",
       "area_id": "route_22",
       "area_display": "Route 22",
       "cause": "dead_zone",
@@ -1822,6 +1836,10 @@
       "b_species_name": "",
       "b_sprite_html": "",
       "b_level": 0,
+      "a_enc_species_name": "",
+      "a_enc_level": 0,
+      "b_enc_species_name": "",
+      "b_enc_level": 0,
       "status": "dead"
     }
   ],
@@ -1835,6 +1853,17 @@
     "a": [],
     "b": []
   },
+  "faint_repair_stalled": {
+    "a": [],
+    "b": []
+  },
+  "ambiguous_keys": {
+    "a": {},
+    "b": {}
+  },
+  "trade_problem": null,
+  "trade_held": [],
+  "trade_last": null,
   "badge_slugs": [
     [
       1,

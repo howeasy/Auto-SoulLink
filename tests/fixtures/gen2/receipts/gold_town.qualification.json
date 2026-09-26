@@ -1,0 +1,153 @@
+{
+ "attempt_id": "requal-gold-town-n14b",
+ "errors": [],
+ "fixtures": [
+  {
+   "artifacts": {
+    "boot:game_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\boot-de00789f784ecdb9\\gold_town.boot.witness.json",
+     "sha256": "b04f4e9ec342db52a7f2c0a5bf129cb4fb1b0bb555c9ab73e8ae48d4073aa766",
+     "size": 1930
+    },
+    "fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\tests\\fixtures\\gen2\\gold_town.SaveRAM",
+     "sha256": "21454a58766b40ff0580d2c7016124b41b0991bac542b5ad68bcefc922fe18ed",
+     "size": 32790
+    },
+    "played_receipt": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-gold-town-a2\\gold_town\\saveram\\gold_town.played.json",
+     "sha256": "21feb19d3b5db3f209662d38a9ed232336a974fb3da2a312f67ba4b0c8d42f09",
+     "size": 816
+    },
+    "profile": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\data\\games\\gen2_gold\\profile.json",
+     "sha256": "a538aed877c7e917e2fed1251d1e73ba383a08620131ad28d5f45b53f64b9751",
+     "size": 73316
+    },
+    "resave:fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\resave-f8cd1a27ac6cfdd4\\gold_town.resaved.SaveRAM",
+     "sha256": "4081a84608b8be9e8d9e5abc1d1a9e707ce77406a0e2669af8d25fe06b230409",
+     "size": 32790
+    },
+    "resave:reload_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\reload-f8cd1a27ac6cfdd4\\gold_town.reload.witness.json",
+     "sha256": "b691e75e98c1d8e06082ae119c818e741105069af540b4c1b17020bbe0b737f3",
+     "size": 1932
+    },
+    "resave:save_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\resave-f8cd1a27ac6cfdd4\\gold_town.resave.witness.json",
+     "sha256": "a4bd2046ce1be26ae8304134062090a5b0fb128c9e61fc015d1f5fa40c5ef6d4",
+     "size": 2054
+    },
+    "rom": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokegold\\pokegold.gbc",
+     "sha256": "fb0016d27b1e5374e1ec9fcad60e6628d8646103b5313ca683417f52b97e7e4e",
+     "size": 2097152
+    },
+    "route_facts": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\gold_route_facts.json",
+     "sha256": "9f6b14c3f30fe2bf9cff2343d769d9aade4fc8cae6e577a15ad2fbeebce21ac9",
+     "size": 13572
+    }
+   },
+   "name": "gold_town",
+   "passed": true,
+   "problems": [],
+   "provenance": {
+    "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+    "route_facts_sha256": "ae3a93f62269bb199872794429ccbb114c61c2af92062c6b252f2d31b7a61114",
+    "scope": "candidate fixture",
+    "title": "gold"
+   },
+   "stages": [
+    {
+     "evidence": {
+      "ball_origin": "none",
+      "natural_ball_acquisition": "false",
+      "oracle": "independent Gen2 PYDEC",
+      "player_id": "50342"
+     },
+     "fingerprint": "af2cb3562cd1c49c9a284726c8a17fab444840fa5d6640f5477a142c5c3b41a1",
+     "notes": [
+      "Static bytes do not prove played origin, RTC or GAME qualification."
+     ],
+     "problems": [],
+     "stage": "qualify",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "cartram_sha256": "f282eba300fc5ee653bd9f10e96776e08912c18475029ee7bb821b7ae7f5a2d2",
+      "location": "[24, 5]",
+      "observer": "independent_GAME CONTINUE",
+      "position": "[5, 3]"
+     },
+     "fingerprint": "de00789f784ecdb9ec465682839e1015030dc0066826f15ff4bb665b895b19c2",
+     "notes": [],
+     "outputs": {
+      "boot:game_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\boot-de00789f784ecdb9\\gold_town.boot.witness.json",
+       "sha256": "b04f4e9ec342db52a7f2c0a5bf129cb4fb1b0bb555c9ab73e8ae48d4073aa766",
+       "size": 1930
+      }
+     },
+     "problems": [],
+     "stage": "boot",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "observer": "independent_GAME re-save + reload",
+      "resave_cartram_sha256": "5f6c6e0696f2de7e3fe5c81d32df3dcc817fd4ae8b01895f98b0fabdbeb6f849"
+     },
+     "fingerprint": "f8cd1a27ac6cfdd4f841676521ba580081ac6cb91443cead5830745bf9c919b2",
+     "notes": [],
+     "outputs": {
+      "resave:fixture": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\resave-f8cd1a27ac6cfdd4\\gold_town.resaved.SaveRAM",
+       "sha256": "4081a84608b8be9e8d9e5abc1d1a9e707ce77406a0e2669af8d25fe06b230409",
+       "size": 32790
+      },
+      "resave:reload_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\reload-f8cd1a27ac6cfdd4\\gold_town.reload.witness.json",
+       "sha256": "b691e75e98c1d8e06082ae119c818e741105069af540b4c1b17020bbe0b737f3",
+       "size": 1932
+      },
+      "resave:save_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-town-n14b\\gold_town\\qualify\\resave-f8cd1a27ac6cfdd4\\gold_town.resave.witness.json",
+       "sha256": "a4bd2046ce1be26ae8304134062090a5b0fb128c9e61fc015d1f5fa40c5ef6d4",
+       "size": 2054
+      }
+     },
+     "problems": [],
+     "stage": "resave",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "oracle": "independent re-save PYDEC + GAME raw-party witness"
+     },
+     "fingerprint": "4cc17a11175d906bf02200a61fcd92b76b03727e562dd2da414a9c0022c45d2f",
+     "notes": [],
+     "problems": [],
+     "stage": "post_oracle",
+     "status": "PASS"
+    }
+   ]
+  }
+ ],
+ "open_obligations": [
+  "coordinator GAME/RTC/played-origin review",
+  "recorded source/physical gate sign-off"
+ ],
+ "passed": true,
+ "physical_qualification": false,
+ "required_stages": [
+  "qualify",
+  "boot",
+  "resave",
+  "post_oracle"
+ ],
+ "schema": "fixture-qualification-v1",
+ "scope": "full"
+}

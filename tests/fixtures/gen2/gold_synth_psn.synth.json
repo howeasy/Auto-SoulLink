@@ -1,0 +1,66 @@
+{
+ "base_fixture": "gold_battle_errand",
+ "base_sha256": "9ddbf7d9b3261805860a8116bfa3d7a3165f60c0d1fa47a5ab25e5ac822a7c70",
+ "builder": "tools/gen2_synth_fixtures.py",
+ "checksums": "restored (primary + backup)",
+ "edits": {
+  "balls": [
+   [
+    "MASTER_BALL",
+    5
+   ]
+  ],
+  "party_status": {
+   "hp": 8,
+   "slot": 0,
+   "status": 8
+  }
+ },
+ "fields": [
+  {
+   "backup": 3319,
+   "new_hex": "0105ff00000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "050fff00000000000000000000000000000000000000000000",
+   "primary": 9317,
+   "size": 25,
+   "symbol": "wBalls",
+   "wram": 54781
+  },
+  {
+   "backup": 4336,
+   "new_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005080000080014000c000c00090009000a",
+   "offset": 0,
+   "old_hex": "9e000a2b0000c4a600008700000000000000000000ec63231e00004500000005000000140014000c000c00090009000a",
+   "primary": 10386,
+   "size": 48,
+   "symbol": "wPartyMon1",
+   "wram": 55850
+  },
+  {
+   "cart": 11625,
+   "new_hex": "efe8",
+   "offset": 0,
+   "old_hex": "01e9",
+   "size": 2,
+   "symbol": "sChecksum",
+   "wram": null
+  },
+  {
+   "cart": 32365,
+   "new_hex": "efe8",
+   "offset": 0,
+   "old_hex": "01e9",
+   "size": 2,
+   "symbol": "sBackupChecksum",
+   "wram": null
+  }
+ ],
+ "schema": "gen2-synth-disclosure-v1",
+ "sha256": "84ecf8e7d885bbd1231678efb79a6dfbcb17603d5788603efa38ce758f4ba26b",
+ "source_facts": [
+  "constants/pokemon_data_constants.asm MON_STATUS/MON_HP; macros/ram.asm party_struct",
+  "data/games/gen2_<title>/items.json ids; engine/items/items.asm pocket layout"
+ ],
+ "title": "gold"
+}

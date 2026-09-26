@@ -1,0 +1,31 @@
+{
+  "_note": "Gen 1 (RBY, and pureRGB which inherits this table) display name -> damage-calc Gen 1 (RBY) name (calc/calc/src/data/*.ts). Applied by Gen1Adapter.calc_name(). Keys are names the server emits (server/data/items/gen1.py, data/games/gen1_rby/moves.json, data/games/gen1_purergb/moves.json, pret species names via server/pokemon_data.py). Gen 1 has no held items or abilities in the calc (RBY item/ability tables are empty), so those kinds have no entries here -- every name the adapter could emit for them has no normalised match in the calc and is left unmapped. Guarded by tests/unit/test_calc_names_multigen.py.",
+  "species": {
+    "Farfetch'd": "Farfetch’d",
+    "Nidoran♀": "Nidoran-F",
+    "Nidoran♂": "Nidoran-M"
+  },
+  "move": {
+    "BubbleBeam": "Bubble Beam",
+    "DoubleSlap": "Double Slap",
+    "Hi Jump Kick": "High Jump Kick",
+    "PoisonPowder": "Poison Powder",
+    "Sand-Attack": "Sand Attack",
+    "Selfdestruct": "Self-Destruct",
+    "SmokeScreen": "Smokescreen",
+    "Softboiled": "Soft-Boiled",
+    "SolarBeam": "Solar Beam",
+    "SonicBoom": "Sonic Boom",
+    "ThunderPunch": "Thunder Punch",
+    "ThunderShock": "Thunder Shock",
+    "ViceGrip": "Vise Grip",
+    "Bubblebeam": "Bubble Beam",
+    "Doubleslap": "Double Slap",
+    "Poisonpowder": "Poison Powder",
+    "Solarbeam": "Solar Beam",
+    "Sonicboom": "Sonic Boom",
+    "Thunderpunch": "Thunder Punch",
+    "Thundershock": "Thunder Shock",
+    "Vicegrip": "Vise Grip"
+  }
+}

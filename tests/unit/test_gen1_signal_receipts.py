@@ -1,5 +1,8 @@
 """S-1/S-2: the scripted gate's PHYSICAL receipt, pinned as a MODEL expectation.
 
+The shared hook-registry rebind reruns these historical MODEL expectations only;
+it does not refresh the original physical observations or qualify the new cut.
+
 A cartridge printed the SIGNALS line below — it is not something this repo computed — and it is
 pinned here so a future regression in lua/gen1/signals.lua or in the per-title site table
 (data/games/gen1_rby/engine_signals.json) is caught by a unit run instead of a 4-minute

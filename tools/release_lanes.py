@@ -39,7 +39,11 @@ def _count_outcomes(text: str) -> dict:
     out = {"passed": 0, "failed": 0, "skipped": 0, "xfailed": 0, "xpassed": 0,
            "error": 0, "deselected": 0}
     for key in out:
-        m = re.search(rf"(\d+) {key}", text)
+        # Collection output may contain parameter IDs such as "[3 passed]".
+        # Only a summary line supplies positive execution evidence.
+        pattern = (r"(?m)^[ \t=]*(\d+) passed(?=,|[ \t]+in[ \t]|\s*$)"
+                   if key == "passed" else rf"(\d+) {key}")
+        m = re.search(pattern, text)
         if m:
             out[key] = int(m.group(1))
     return out
@@ -81,6 +85,9 @@ def run_lane(lane: Lane, quiet: bool, allowed_skips) -> tuple[bool, str]:
                   f"({len(unexplained)} unexplained), {counts['failed']} failed, "
                   f"{counts['xfailed']} xfailed, {counts['deselected']} deselected  "
                   f"({took:.0f}s)")
+        if counts["passed"] == 0:
+            ok = False
+            detail += "  no passing tests executed; collection or empty output is not a pass"
         if counts["skipped"] > reason_lines:
             ok = False
             detail += (f"  {counts['skipped']} skipped but only {reason_lines} SKIPPED reason "

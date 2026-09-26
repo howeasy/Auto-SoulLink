@@ -199,16 +199,6 @@ def test_a_nil_systemid_is_refused_and_never_reaches_game_detect():
         _run_launcher(None, _rom_gba(), rom_hash=_FR_CLEAN_SHA1)
 
 
-def test_a_gbc_cartridge_still_falls_through_to_game_detect():
-    """gb_title is deliberately not a Gen 1 title, so the Gen 1 route's own detector declines
-    and this ROM keeps falling through to game_detect, same as before this card."""
-    loaded = _run_launcher("GBC", _rom_gba(), rom_hash="f" * 40,
-                           detected_game_id="gen2_crystal", gb_title="POKEMON CRYSTAL")
-    assert _NEW_GEN1_CLIENT not in loaded
-    assert _NEW_GEN3_CLIENT not in loaded
-    assert "lua/clients/gen2_crystal_client.lua" in loaded
-
-
 def test_an_nds_cartridge_still_falls_through_to_game_detect():
     loaded = _run_launcher("NDS", _rom_gba(), rom_hash="f" * 40,
                            detected_game_id="gen4_hgsspt", gb_title="POKEMON CRYSTAL")

@@ -14,7 +14,6 @@
 local game_detect = {}
 
 -- Clear stale cached modules from previous script loads (BizHawk reuses Lua state).
-package.loaded["games.gen2_crystal"]  = nil
 package.loaded["games.gen4_hgsspt"]   = nil
 package.loaded["games.gen5_bw"]       = nil
 
@@ -22,9 +21,9 @@ package.loaded["games.gen5_bw"]       = nil
 -- pcall protects against load-time errors (e.g., missing dependencies on wrong platform).
 local game_modules = {}
 local _module_names = {
-    -- Gen 1 and Gen 3 are routed by lua/slink.lua (their new clients' entries) before
-    -- game_detect runs, so neither old module is a candidate here.
-    "games.gen2_crystal",
+    -- Gen 1, Gen 2 and Gen 3 are routed (or refused) by lua/slink.lua before game_detect runs,
+    -- so no Game Boy or GBA module is a candidate here (the legacy gen2_crystal one went with
+    -- P3b.8, the old Gen 3 one with C5-6).
     "games.gen4_hgsspt",
     "games.gen5_bw",
 }
@@ -71,7 +70,7 @@ function game_detect.detect()
         end
     end
     error("[game_detect] No game module matched the loaded ROM. " ..
-          "Ensure the ROM is a supported game (Gen 1: Red / Blue / Yellow, Gen 2: Crystal, Gen 3: FireRed / LeafGreen / Radical Red, Gen 4: HGSS / Platinum, Gen 5: BW / BW2).")
+          "Ensure the ROM is a supported game (Gen 1: Red / Blue / Yellow, Gen 2: Gold / Silver / Crystal, Gen 3: FireRed / LeafGreen / Radical Red, Gen 4: HGSS / Platinum, Gen 5: BW / BW2).")
 end
 
 return game_detect

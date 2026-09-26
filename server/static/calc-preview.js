@@ -10,7 +10,7 @@ window.SLinkCalc = (function () {
   var ENGINE = [
     'calc/util.js', 'calc/stats.js', 'calc/data/species.js',
     'calc/data/types.js', 'calc/data/natures.js', 'calc/data/abilities.js',
-    'calc/data/moves.js', 'calc/data/items.js', 'calc/data/index.js',
+    'calc/data/moves.js', 'calc/data/items.js', 'calc/data/index.js', 'calc/data/purergb.js',
     'calc/move.js', 'calc/pokemon.js', 'calc/field.js', 'calc/items.js',
     'calc/mechanics/util.js', 'calc/mechanics/gen789.js', 'calc/mechanics/gen56.js',
     'calc/mechanics/gen4.js', 'calc/mechanics/gen3.js', 'calc/mechanics/gen12.js',
@@ -81,6 +81,25 @@ window.SLinkCalc = (function () {
     return null;
   }
 
+  // Gen 1/2 IVs come from DVs (0-15); dv*2 is the engine's own Stats.DVToIV, used directly
+  // when the loaded engine exposes it (it always does once ready) so this never drifts from
+  // calc/src/stats.ts. evs are raw stat exp (0-65535) -- pass straight through.
+  function _dvIvs(dvs) {
+    var toIV = (window.calc.Stats && window.calc.Stats.DVToIV) || function (dv) { return dv * 2; };
+    return { atk: toIV(dvs.atk), def: toIV(dvs.def), spe: toIV(dvs.spe), spc: toIV(dvs.spc) };
+  }
+
+  // {ivs, evs} for _buildPokemon from a base.calc_stats-shaped dict (server/adapters/base.py),
+  // or {} (engine defaults) when there is none to decode.
+  function _calcStatOpts(gen, calcStats) {
+    if (!calcStats) return {};
+    if (gen.num >= 3) return { ivs: calcStats.ivs, evs: calcStats.evs };
+    if (!calcStats.dvs) return {};
+    var opts = { ivs: _dvIvs(calcStats.dvs) };
+    if (calcStats.stat_exp) opts.evs = calcStats.stat_exp;
+    return opts;
+  }
+
   function _sum(a) { return a.reduce(function (x, y) { return x + y; }, 0); }
 
   function _calcMove(gen, atk, def, moveName, field) {
@@ -113,25 +132,35 @@ window.SLinkCalc = (function () {
       var c = JSON.parse(div.getAttribute('data-calc') || '{}');
       var moves = (c.player_moves || []).filter(Boolean);
       if (!c.player_species || !c.enemy_species || !moves.length) return;
-      var gen = window.calc.Generations.get(9);
+      var gen = window.calc.Generations.get(c.gen || 9);
 
       // Trainer battles: pick the difficulty whose set matches the active enemy's level.
+      // The normal/hardcore setdex + trainer_key match is RR-only -- untouched below when
+      // dex is 'rr'; every other dex builds ivs/evs from the real enemy_calc_stats instead.
+      var isRR = !c.dex || c.dex === 'rr';
       var difficulty = 'normal', set = null;
-      if (c.is_trainer && c.trainer_key) {
+      if (c.is_trainer && c.trainer_key && isRR) {
         var n = (window.SETDEX_NORMAL[c.enemy_species] || {})[c.trainer_key];
         var h = (window.SETDEX_HC[c.enemy_species] || {})[c.trainer_key];
         if (h && h.level == c.enemy_level && !(n && n.level == c.enemy_level)) difficulty = 'hardcore';
         set = difficulty === 'hardcore' ? h : n;
       }
       set = set || {};
+      var enemyStats = isRR
+        ? { ivs: _stats(set.ivs), evs: _stats(set.evs) }
+        : _calcStatOpts(gen, c.enemy_calc_stats);
+      // enemy_hp_pct is null when the client hasn't decoded a max HP yet; _buildPokemon
+      // already treats a non-0-100 value as "full HP" (its default), so null needs no guard.
       var defender = _buildPokemon(gen, c.enemy_species, {
         level: c.enemy_level, nature: set.nature, ability: set.ability, item: set.item,
-        ivs: _stats(set.ivs), evs: _stats(set.evs),
+        ivs: enemyStats.ivs, evs: enemyStats.evs,
         status: c.enemy_status || '', boosts: c.enemy_boosts || {},
       }, c.enemy_hp_pct);
+      var playerStats = _calcStatOpts(gen, c.player_calc_stats);
       var attacker = _buildPokemon(gen, c.player_species, {
-        level: c.player_level, nature: c.player_nature || 'Hardy',
+        level: c.player_level, nature: c.player_nature || undefined,
         ability: c.player_ability || undefined, item: c.player_item || undefined, moves: moves,
+        ivs: playerStats.ivs, evs: playerStats.evs,
         status: c.player_status || '', boosts: c.player_boosts || {},
       }, c.player_hp_pct);
       if (!defender || !attacker) return;

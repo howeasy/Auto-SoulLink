@@ -1,0 +1,126 @@
+# P1 source-build reproduction only. A successful run is not G1 acceptance or
+# physical/runtime qualification. The lock must already contain reviewed build
+# hashes: CI never bootstraps or rewrites those pins.
+name: gen2-syms
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - data/gen2_sources.lock.json
+      - data/gen2/**
+      - tools/build_gen2_syms.py
+      - tools/_build_tools_bootstrap.py
+      - tools/rgbds_map.py
+      - .github/workflows/gen2-syms.yml
+  pull_request:
+    paths:
+      - data/gen2_sources.lock.json
+      - data/gen2/**
+      - tools/build_gen2_syms.py
+      - tools/_build_tools_bootstrap.py
+      - tools/rgbds_map.py
+      - .github/workflows/gen2-syms.yml
+
+permissions:
+  contents: read
+
+jobs:
+  reproduce:
+    # Use the same pinned Windows RGBDS + w64devkit archives as the local CLI.
+    # No shared cache: each run starts with fresh sources and verified downloads.
+    runs-on: windows-2022
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      PYTHONUNBUFFERED: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      # Preserve committed artifact bytes and upstream sources on Windows.
+      # This applies to checkout and the CLI's clones without editing Git config.
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: core.autocrlf
+      GIT_CONFIG_VALUE_0: "false"
+
+    steps:
+      - name: Checkout SLink
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The shared CLI verifies exact source HEADs and clean tracked trees, all
+      # four RGBDS executable versions, build tools, all four ROM SHA1s, and
+      # exact sym/map SHA256s. Missing inputs and UNBUILT hashes are fatal.
+      # Check mode also requires the committed snapshots and never writes them.
+      - name: Rebuild and check the committed four-ROM symbol snapshot
+        run: >-
+          python tools/build_gen2_syms.py
+          --lock data/gen2_sources.lock.json
+          --out-dir data/gen2
+          --check
+
+      # Publishing mode uses the same validation and may only reproduce existing
+      # lock hashes. Its output is temporary; ROMs remain in the source cache.
+      - name: Produce verified artifacts in runner temporary storage
+        run: >-
+          python tools/build_gen2_syms.py
+          --lock data/gen2_sources.lock.json
+          --out-dir "$env:RUNNER_TEMP/gen2-reproduction"
+
+      - name: Require the complete non-ROM artifact set
+        shell: python {0}
+        run: |
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["RUNNER_TEMP"]) / "gen2-reproduction"
+          names = ("pokecrystal", "pokecrystal11", "pokegold", "pokesilver")
+          expected = {f"{name}.{ext}" for name in names for ext in ("sym", "map")}
+          expected.update(("build_provenance.json", "linker_slack.json"))
+          actual = {path.name for path in root.iterdir()}
+          if actual != expected:
+              raise SystemExit(f"Incomplete or unexpected artifact set: {actual ^ expected}")
+          for name in sorted(expected):
+              path = root / name
+              if path.is_symlink() or not path.is_file() or path.stat().st_size == 0:
+                  raise SystemExit(f"Missing, empty, or non-regular artifact: {name}")
+          lock = json.loads(Path("data/gen2_sources.lock.json").read_text(encoding="utf-8"))
+          for name in names:
+              for ext in ("sym", "map"):
+                  path = root / f"{name}.{ext}"
+                  observed = hashlib.sha256(path.read_bytes()).hexdigest()
+                  if observed != lock["outputs"][name][f"{ext}_sha256"]:
+                      raise SystemExit(f"Artifact does not match locked SHA256: {path.name}")
+          for name in ("build_provenance.json", "linker_slack.json"):
+              report = json.loads((root / name).read_text(encoding="utf-8"))
+              if not isinstance(report, dict) or not report:
+                  raise SystemExit(f"Missing report content: {name}")
+          print("Verified all eight symbol/map hashes and both nonempty JSON reports.")
+
+      # Exact allowlist; never upload a source/cache directory or ROM bytes.
+      # Run only after every reproduction and completeness check succeeds.
+      - name: Upload verified symbols, maps, provenance, and linker slack
+        uses: actions/upload-artifact@v4
+        with:
+          name: gen2-source-reproduction
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ runner.temp }}/gen2-reproduction/pokecrystal.sym
+            ${{ runner.temp }}/gen2-reproduction/pokecrystal.map
+            ${{ runner.temp }}/gen2-reproduction/pokecrystal11.sym
+            ${{ runner.temp }}/gen2-reproduction/pokecrystal11.map
+            ${{ runner.temp }}/gen2-reproduction/pokegold.sym
+            ${{ runner.temp }}/gen2-reproduction/pokegold.map
+            ${{ runner.temp }}/gen2-reproduction/pokesilver.sym
+            ${{ runner.temp }}/gen2-reproduction/pokesilver.map
+            ${{ runner.temp }}/gen2-reproduction/build_provenance.json
+            ${{ runner.temp }}/gen2-reproduction/linker_slack.json

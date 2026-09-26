@@ -1,0 +1,153 @@
+{
+ "attempt_id": "requal-gold-battle-n14b",
+ "errors": [],
+ "fixtures": [
+  {
+   "artifacts": {
+    "boot:game_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\boot-3b09820d8f25973c\\gold_battle.boot.witness.json",
+     "sha256": "3762499014556bb364a1e944fb615ffa484b1b57fa1e6581abe8cdd0d3c2c800",
+     "size": 1936
+    },
+    "fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\tests\\fixtures\\gen2\\gold_battle.SaveRAM",
+     "sha256": "6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6",
+     "size": 32790
+    },
+    "played_receipt": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\n3-gold-battle-a2\\gold_battle\\saveram\\gold_battle.played.json",
+     "sha256": "a394c98d5e3b2bba6bdd556c46bca3cff3f52827d9ff557a0461cdef8d9fcd15",
+     "size": 988
+    },
+    "profile": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\data\\games\\gen2_gold\\profile.json",
+     "sha256": "a538aed877c7e917e2fed1251d1e73ba383a08620131ad28d5f45b53f64b9751",
+     "size": 73316
+    },
+    "resave:fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\resave-f1b74868e2a51171\\gold_battle.resaved.SaveRAM",
+     "sha256": "a8b64ac7918d5135d1f3e35ef6e921c99117dde5c8e8625dd930f4915dd266d6",
+     "size": 32790
+    },
+    "resave:reload_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\reload-f1b74868e2a51171\\gold_battle.reload.witness.json",
+     "sha256": "ceb3296775378ca9926f075b8a5ec888037d3b75fac0d1853f7c4206809c4a22",
+     "size": 1938
+    },
+    "resave:save_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\resave-f1b74868e2a51171\\gold_battle.resave.witness.json",
+     "sha256": "d6cd1a28de5011c601921fdcf03bb9711157c294c1453f794552f6d5a7743481",
+     "size": 2060
+    },
+    "rom": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-build\\pokegold\\pokegold.gbc",
+     "sha256": "fb0016d27b1e5374e1ec9fcad60e6628d8646103b5313ca683417f52b97e7e4e",
+     "size": 2097152
+    },
+    "route_facts": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\gold_route_facts.json",
+     "sha256": "9f6b14c3f30fe2bf9cff2343d769d9aade4fc8cae6e577a15ad2fbeebce21ac9",
+     "size": 13572
+    }
+   },
+   "name": "gold_battle",
+   "passed": true,
+   "problems": [],
+   "provenance": {
+    "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+    "route_facts_sha256": "ae3a93f62269bb199872794429ccbb114c61c2af92062c6b252f2d31b7a61114",
+    "scope": "candidate fixture",
+    "title": "gold"
+   },
+   "stages": [
+    {
+     "evidence": {
+      "ball_origin": "O-10 harness injection",
+      "natural_ball_acquisition": "false",
+      "oracle": "independent Gen2 PYDEC",
+      "player_id": "50342"
+     },
+     "fingerprint": "108601bdbc4ce1ca27c4121373a84113009458363d868a642e07e4c6e4478602",
+     "notes": [
+      "Static bytes do not prove played origin, RTC or GAME qualification."
+     ],
+     "problems": [],
+     "stage": "qualify",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "cartram_sha256": "93c2cb847455c7ffa6097c9c1bf399db0f15ca56deb13599317ee9458cf0ad48",
+      "location": "[24, 3]",
+      "observer": "independent_GAME CONTINUE",
+      "position": "[53, 12]"
+     },
+     "fingerprint": "3b09820d8f25973c5d0e3e4449d52990e870bf8f2825d4545481c68ef95633cc",
+     "notes": [],
+     "outputs": {
+      "boot:game_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\boot-3b09820d8f25973c\\gold_battle.boot.witness.json",
+       "sha256": "3762499014556bb364a1e944fb615ffa484b1b57fa1e6581abe8cdd0d3c2c800",
+       "size": 1936
+      }
+     },
+     "problems": [],
+     "stage": "boot",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "observer": "independent_GAME re-save + reload",
+      "resave_cartram_sha256": "921dacf06b57477f183ec21a1db445b31750e240b2349f6a09ca244f48810d7c"
+     },
+     "fingerprint": "f1b74868e2a51171862087c6f30d179f19dbe8700ca99d62498a37e8f043d5a6",
+     "notes": [],
+     "outputs": {
+      "resave:fixture": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\resave-f1b74868e2a51171\\gold_battle.resaved.SaveRAM",
+       "sha256": "a8b64ac7918d5135d1f3e35ef6e921c99117dde5c8e8625dd930f4915dd266d6",
+       "size": 32790
+      },
+      "resave:reload_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\reload-f1b74868e2a51171\\gold_battle.reload.witness.json",
+       "sha256": "ceb3296775378ca9926f075b8a5ec888037d3b75fac0d1853f7c4206809c4a22",
+       "size": 1938
+      },
+      "resave:save_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-foundation\\.cache\\gen2-fixtures\\requal-gold-battle-n14b\\gold_battle\\qualify\\resave-f1b74868e2a51171\\gold_battle.resave.witness.json",
+       "sha256": "d6cd1a28de5011c601921fdcf03bb9711157c294c1453f794552f6d5a7743481",
+       "size": 2060
+      }
+     },
+     "problems": [],
+     "stage": "resave",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "oracle": "independent re-save PYDEC + GAME raw-party witness"
+     },
+     "fingerprint": "42e019a6658299bd37cb8bc56208bac39adfce89d71181911c3aa0878aea553c",
+     "notes": [],
+     "problems": [],
+     "stage": "post_oracle",
+     "status": "PASS"
+    }
+   ]
+  }
+ ],
+ "open_obligations": [
+  "coordinator GAME/RTC/played-origin review",
+  "recorded source/physical gate sign-off"
+ ],
+ "passed": true,
+ "physical_qualification": false,
+ "required_stages": [
+  "qualify",
+  "boot",
+  "resave",
+  "post_oracle"
+ ],
+ "schema": "fixture-qualification-v1",
+ "scope": "full"
+}

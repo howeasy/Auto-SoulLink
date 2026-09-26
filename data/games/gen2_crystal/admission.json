@@ -1,0 +1,106 @@
+{
+  "schema_version": 1,
+  "purpose": "P1_ARTIFACT_MATRIX_ONLY",
+  "foundation": "gen2_gsc",
+  "title": "crystal",
+  "pack": "gen2_crystal",
+  "selected_revision": "1.0",
+  "source_lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
+  "gate": {
+    "id": "G1",
+    "state": "ADMITTED",
+    "authority": "O-22"
+  },
+  "unknown_hash_policy": "REFUSE",
+  "refused_kinds": [
+    "archipelago",
+    "randomized",
+    "unknown"
+  ],
+  "authorized_title_pairings": [
+    [
+      "crystal",
+      "crystal"
+    ],
+    [
+      "crystal",
+      "gold"
+    ],
+    [
+      "crystal",
+      "silver"
+    ],
+    [
+      "gold",
+      "gold"
+    ],
+    [
+      "gold",
+      "silver"
+    ],
+    [
+      "silver",
+      "silver"
+    ]
+  ],
+  "artifact_kind_compatibility": {
+    "clean": {
+      "clean": "REQUIRES_G1",
+      "overlay": "REFUSED",
+      "ghost": "REFUSED"
+    },
+    "overlay": {
+      "clean": "REFUSED",
+      "overlay": "REQUIRES_G4",
+      "ghost": "REFUSED"
+    },
+    "ghost": {
+      "clean": "REFUSED",
+      "overlay": "REFUSED",
+      "ghost": "REFUSED"
+    }
+  },
+  "artifacts": [
+    {
+      "id": "pokecrystal",
+      "kind": "clean",
+      "revision": "1.0",
+      "selection": "SELECTED",
+      "lock_output": "pokecrystal",
+      "status": "BUILT",
+      "sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+      "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+    },
+    {
+      "id": "pokecrystal11",
+      "kind": "clean",
+      "revision": "1.1",
+      "selection": "BUILD_ONLY",
+      "lock_output": "pokecrystal11",
+      "status": "BUILT",
+      "sha1": "f2f52230b536214ef7c9924f483392993e226cfb",
+      "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+    },
+    {
+      "id": "crystal_overlay",
+      "kind": "overlay",
+      "revision": "1.0",
+      "selection": "FUTURE",
+      "status": "BUILT",
+      "sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057",
+      "md5": "b31474971179ffeb015a6e80fb335b64",
+      "base_sha1": "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133",
+      "ups": {
+        "file": "patch/dist/SLink-Crystal.ups",
+        "sha256": "88ca93d1d64879f98fe309f262d2884aa003177636c03344e0c4e1b9300ec7ea"
+      }
+    },
+    {
+      "id": "crystal_ghost",
+      "kind": "ghost",
+      "revision": "1.0",
+      "selection": "FUTURE",
+      "status": "PLANNED"
+    }
+  ]
+}
