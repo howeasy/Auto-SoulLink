@@ -108,6 +108,7 @@ if os.path.exists(_frlg_trainers_path):
             "titles": frozenset(_raw_ft.get("titles") or ()),
             "trainers": {int(k): v for k, v in (_raw_ft.get("trainers") or {}).items()},
             "trainers_by_area": {k: list(v) for k, v in (_raw_ft.get("trainers_by_area") or {}).items()},
+            "learnsets": {int(k): [tuple(e) for e in v] for k, v in (_raw_ft.get("learnsets") or {}).items()},
         }
 
 # Rival trainer ID set for Radical Red (used by Rival Team Swap feature).
@@ -868,12 +869,12 @@ class Gen3Adapter(GameAdapter):
         """frlg_trainers.json's shape, from the cartridge: party species, levels, held items and
         custom moves (ruling 31), trainer and class names (UPR can randomize both). Area, key,
         rival and fight_label stay pret's: they come from map scripts, which UPR does not move.
-        No calc_label: the FRLG.js setdex describes retail parties (design risk 4).
-
-        ponytail: default-move mons carry no moves (the server has no learnsets); pret's
-        level-up learnsets hold (movesets are forbidden), add them if the Prep tab needs moves.
+        No calc_label: the FRLG.js setdex describes retail parties (design risk 4). A default-move
+        mon gets GiveBoxMonInitialMoveset's moves from pret's learnsets, which hold because
+        movesets may not be randomized (ruling 31).
         """
         pret = _FRLG_TRAINER_TABLE.get("trainers", {})
+        learnsets = _FRLG_TRAINER_TABLE.get("learnsets", {})
         classes = tables["class_names"]
         trainers = {}
         for tid, tr in tables["trainers"].items():
@@ -883,8 +884,9 @@ class Gen3Adapter(GameAdapter):
                 entry = {"species": self.calc_species(mon["species"]), "level": mon["level"]}
                 if mon.get("held_item"):
                     entry["item"] = self.calc_name("item", self.item_name(mon["held_item"]))
-                if "moves" in mon:
-                    entry["moves"] = [self.calc_name("move", self.move_name(m)) for m in mon["moves"] if m]
+                moves = mon["moves"] if "moves" in mon else default_moves(
+                    learnsets.get(mon["species"], ()), mon["level"])
+                entry["moves"] = [self.calc_name("move", self.move_name(m)) for m in moves if m]
                 party.append(entry)
             t = {"name": "" if base.get("rival") else _pretty(tr["name"]),
                  "class": classes[tr["class"]] if tr["class"] < len(classes) else "",
@@ -898,6 +900,22 @@ class Gen3Adapter(GameAdapter):
 
 
 # ── Randomized FR/LG: ROM content (docs/gen3/research/randomized_gen3_design.md §3, R2) ──
+
+def default_moves(learnset, level: int) -> list:
+    """GiveBoxMonInitialMoveset (pret src/pokemon.c): walk the (level, move) learnset up to
+    `level`, skip a known move, push out the first when all four are full. Shared with
+    tools/gen_gen3_trainers.py, which builds frlg_trainers.json with it."""
+    moves: list = []
+    for lv, mv in learnset:
+        if lv > level:
+            break
+        if mv in moves:
+            continue
+        if len(moves) == 4:
+            moves.pop(0)
+        moves.append(mv)
+    return moves
+
 
 class ForbiddenRomTables(ValueError):
     """A cartridge whose rule tables differ from pret: Gen 1's forbidden set (owner ruling 31:

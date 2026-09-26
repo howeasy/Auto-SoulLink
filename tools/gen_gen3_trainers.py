@@ -16,7 +16,8 @@ Facts and where they come from (all pret, never Radical Red):
   class     gTrainerClassNames (src/data/text/trainer_class_names.h), title-cased.
   party     src/data/trainer_parties.h. Explicit .moves when the struct has them, otherwise the
             level-up moves GiveBoxMonInitialMoveset (src/pokemon.c) gives: walk the learnset up to
-            the level, skip a known move, push out the first move when all four are full.
+            the level, skip a known move, push out the first move when all four are full
+            (gen3_frlge.default_moves; `learnsets` ships the tables it walks).
             Species/move/item ids are named through the server's own vanilla Gen 3 tables in
             calc spelling, the same names the live battle feed uses.
   area      the map whose script runs the trainerbattle (data/maps/*/scripts.inc directly, or a
@@ -52,6 +53,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+# GiveBoxMonInitialMoveset lives with the adapter: a randomized cartridge's default-move parties
+# (read from the ROM) get their moves from the same rule and the learnsets emitted below.
+from server.adapters.gen3_frlge import default_moves  # noqa: E402
 
 OUT = ROOT / "data/games/gen3_frlge/frlg_trainers.json"
 AREA_MAP = ROOT / "data/games/gen3_frlge/area_map.json"
@@ -101,20 +105,6 @@ def learnsets(root: Path) -> dict[str, list[tuple[int, str]]]:
                                            read(root / "src/data/pokemon/level_up_learnsets.h"), re.S)}
     return {sp: arrays[arr] for sp, arr in re.findall(r"\[(SPECIES_\w+)\]\s*=\s*(s\w+LevelUpLearnset)",
                                                       read(root / "src/data/pokemon/level_up_learnset_pointers.h"))}
-
-
-def default_moves(learnset: list[tuple[int, str]], level: int) -> list[str]:
-    """GiveBoxMonInitialMoveset (src/pokemon.c)."""
-    moves: list[str] = []
-    for lv, mv in learnset:
-        if lv > level:
-            break
-        if mv in moves:
-            continue
-        if len(moves) == 4:
-            moves.pop(0)
-        moves.append(mv)
-    return moves
 
 
 def parse_parties(root: Path) -> dict[str, list[dict]]:
@@ -334,6 +324,10 @@ def build(root: Path, area_map_path: Path = AREA_MAP, setdex_path: Path = SETDEX
         "shared": True,
         "trainers": {str(k): v for k, v in sorted(trainers.items())},
         "trainers_by_area": dict(sorted(by_area.items())),
+        # species id -> [[level, move id], ...]: pret's level-up learnsets (movesets may not be
+        # randomized, owner ruling 31), for the default moves of a randomized cartridge's parties.
+        "learnsets": {str(species[sp]): [[lv, moves[m]] for lv, m in learnset]
+                      for sp, learnset in sorted(ls.items(), key=lambda kv: species[kv[0]])},
     }
 
 
@@ -342,7 +336,7 @@ def dump(data: dict) -> str:
     items = list(data.items())
     for i, (k, v) in enumerate(items):
         comma = "," if i < len(items) - 1 else ""
-        if isinstance(v, dict) and k in ("trainers", "trainers_by_area"):
+        if isinstance(v, dict) and k in ("trainers", "trainers_by_area", "learnsets"):
             lines.append(f"  {json.dumps(k)}: {{")
             sub = list(v.items())
             for j, (sk, sv) in enumerate(sub):
