@@ -415,6 +415,12 @@ class Gen3Adapter(GameAdapter):
                 return tok
         return ""
 
+    def reports_box_census(self) -> bool:
+        """KEY-SCOPE-5: FR/LG and RR stamp each complete box scan with `pc_boxes_generation`.
+        Pairs with the client stamp in lua/gen3/client.lua (Emerald T3 f4ec8c85); the two must
+        land on master together. ponytail: Emerald shares this adapter and binds later."""
+        return True
+
     def supports_info_panel(self) -> bool:
         """The native SOULLINK info screen ships in the Radical Red companion patch only."""
         return self._is_rr

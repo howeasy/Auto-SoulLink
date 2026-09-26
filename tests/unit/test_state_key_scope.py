@@ -60,6 +60,7 @@ def test_the_presentation_cache_of_the_other_player_is_no_collision(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     srv.state, (l1, l2) = _two_links(tmp_path)
     srv.state.presentation_key_in_use = srv._presentation_key_in_use
+    srv._ingest_box_census("a", {"event": "tick", "pc_boxes": [], "pc_boxes_generation": 1})  # Gen 3 stamps
     srv.party_details["b"][ONIX] = {"species_id": 0x5F, "level": 20}        # B already holds an Onix
     assert not _named(_npc_trade(srv.state, "a", A2), "key_change_rejected")
     srv.party_details["a"]["ABCD:1234:77"] = {"species_id": 1, "level": 5}   # A holds an unlinked twin
@@ -371,11 +372,12 @@ def test_box_twin_with_omitted_census_is_rejected(tmp_path):
 
 
 def test_a_client_without_a_census_generation_keeps_presence_semantics(tmp_path):
-    """Gen 3 today: its foundation implements no `pc_boxes_generation`, so an omitted census is
-    not a rejection."""
+    """A foundation that implements no `pc_boxes_generation` (base default; Gen 3 stamps since
+    KEY-SCOPE-5): an omitted census is not a rejection."""
     from server.adapters.gen3_frlge import Gen3Adapter
     srv, (l1, l2) = _srv_two_links(tmp_path)
-    srv.state.adapter = srv.adapter = Gen3Adapter()
+    legacy = type("Legacy", (Gen3Adapter,), {"reports_box_census": lambda self: False})
+    srv.state.adapter = srv.adapter = legacy()
     srv._dispatch("b", {"event": "tick", "party": _snap5(ONIX, B2)})
     assert _named(_change5(srv, "b", B1), "key_change_ack")
 
