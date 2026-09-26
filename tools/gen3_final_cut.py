@@ -335,16 +335,15 @@ def build_plan_rr(cut, lane, master):
 # default plan is untouched. docs/gen3/G4_final_cut_runbook.md §13 is this plan's own source.
 # ---------------------------------------------------------------------------
 
-# The six scenarios E4-DUO actually wired for gen3_emerald (E<->E). Named here, not derived from
+# The seven scenarios E4-DUO/E4c wired for gen3_emerald (E<->E). Named here, not derived from
 # tools/e2e_duo.py (unlike rr_scenarios()): that file's gen3_emerald wiring is owned by the
 # parallel worktree em-legs (card E4-DUO), and this list must stay stable regardless of when that
 # lands. duo_budget() still reads e2e_duo lazily per row and falls back to FALLBACK_DUO_BUDGET if
-# the game isn't registered there yet. whiteout_gen3 is DELIBERATELY excluded (E4-DUO interface
-# note, branch claude/gen3-emerald-legs @ fba2f186): Emerald's whiteout lands outdoors at
-# lastHealLocation Oldale (6,17), so FR's Center-receipt check has nothing to verify there -- a
-# documented gap, not an oversight.
+# the game isn't registered there yet. whiteout_gen3 joined at E4c with Emerald's own receipt:
+# DoWhiteOut lands outdoors at lastHealLocation Oldale (6,17), healed (LANDING_STATE /
+# WRITE_AT_LANDING / the START-menu control), not FR's Center landing.
 EMERALD_DUO_SCENARIOS = ("faint_cmd_gen3", "reconnect_gen3", "deadzone_gen3", "link_gen3",
-                         "boxsync_gen3", "linked_faint_active_gen3")
+                         "boxsync_gen3", "linked_faint_active_gen3", "whiteout_gen3")
 
 
 def build_plan_emerald(cut, lane, master):

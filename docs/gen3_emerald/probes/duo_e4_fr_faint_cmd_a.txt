@@ -1,8 +1,8 @@
 duo instance a scenario=faint_cmd_gen3 phase=initial title=firered attempt=1
-[client] [SLink] TCP connecting to 127.0.0.1:53469 (non-blocking)…
-[client] [SLink-gen3] gen3_frlg/firered (clean by hash) player a -> 127.0.0.1:53469 (rom 41cb23d8)
-client built by lua/gen3/run.lua: title=firered player=a -> 127.0.0.1:53469
-[client] [SLink] TCP connected to 127.0.0.1:53469
+[client] [SLink] TCP connecting to 127.0.0.1:62501 (non-blocking)…
+[client] [SLink-gen3] gen3_frlg/firered (clean by hash) player a -> 127.0.0.1:62501 (rom 41cb23d8)
+client built by lua/gen3/run.lua: title=firered player=a -> 127.0.0.1:62501
+[client] [SLink] TCP connected to 127.0.0.1:62501
 [client] [SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
 [client] [SLink-gen3] writes ENABLED
 TX hello - {"area_id":"viridian_city","artifact_kind":"clean","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":false,"loc_name":"viridia

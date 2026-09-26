@@ -1,11 +1,11 @@
 duo instance b scenario=reconnect_gen3 phase=initial title=emerald attempt=1
 SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
-[client] [SLink] TCP connecting to 127.0.0.1:51732 (non-blocking)…
+[client] [SLink] TCP connecting to 127.0.0.1:62301 (non-blocking)…
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
-[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:51732 (rom f3ae0881)
-client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:51732
-[client] [SLink] TCP connected to 127.0.0.1:51732
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:62301 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:62301
+[client] [SLink] TCP connected to 127.0.0.1:62301
 [client] [SLink-gen3] writes ENABLED
 TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_i
 RX resolved_areas
@@ -20,10 +20,10 @@ PARTY slot=1 key=504F4F4D:DFDAF6DA species=286 level=3 hp=15/15
 booted frame=580 map=map=10 at=(6,17) balls=5
 JITTER requested=0 applied=0 attempt=1
 RECONNECT_READY b
-[client] [gen3] phase save-menu frame=3874 counter=2
-[client] [gen3] phase save-dialog frame=3934 row=3/6
-[client] [gen3] phase saved frame=4334 counter=2->3
-SAVE_WITNESS_DUMP path=patch/build/e2e_reconnect_gen3_b_1_witness.bin bytes=131072 saves=1 frame=4566 counter=3
+[client] [gen3] phase save-menu frame=4082 counter=2
+[client] [gen3] phase save-dialog frame=4142 row=3/6
+[client] [gen3] phase saved frame=4542 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_reconnect_gen3_b_1_witness.bin bytes=131072 saves=1 frame=4769 counter=3
 SAVE_WITNESS reconnect counter=2->3
 WRITES 0
 RESULT: PASS (B online through both relaunches)

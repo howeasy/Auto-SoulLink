@@ -238,6 +238,7 @@ EMERALD_EXPECTED_ROWS = [
     "checkpoint_emerald",
     "faint_cmd_gen3_em_as_a", "reconnect_gen3_em_as_a", "deadzone_gen3_em_as_a",
     "link_gen3_em_as_a", "boxsync_gen3_em_as_a", "linked_faint_active_gen3_em_as_a",
+    "whiteout_gen3_em_as_a",   # E4c: Emerald's own outdoor-landing receipt
     "bootcheck_emerald_town", "bootcheck_emerald_town_b",
     "bootcheck_emerald_battle", "bootcheck_emerald_battle_b",
     "probe_gates_emerald", "shadow_negatives_emerald",

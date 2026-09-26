@@ -5081,9 +5081,8 @@ def test_emerald_row_resolves_pack_fixtures_and_layout():
     assert duo.gen3_profile_path("firered").endswith(os.path.join("gen3_frlg", "profile.json"))
     assert duo.gen3_profile_path("radical_red") == duo.GEN3_RR_PROFILE
     assert duo.gen3_codec_title("radical_red") == "frlg" and duo.gen3_codec_title("emerald") == "emerald"
-    assert not duo.scenario_applies("whiteout_gen3", "gen3_emerald")   # E4 known gap (outdoor landing)
     for name in ("faint_cmd_gen3", "reconnect_gen3", "deadzone_gen3", "link_gen3", "boxsync_gen3",
-                 "linked_faint_active_gen3"):
+                 "linked_faint_active_gen3", "whiteout_gen3"):
         assert duo.scenario_applies(name, "gen3_emerald"), name
         run = duo.DuoRun.__new__(duo.DuoRun)
         run.gcfg, run.cfg, run.game = dict(row), dict(duo.SCENARIOS[name]), "gen3_emerald"
@@ -5125,6 +5124,24 @@ def _scripted_machine(title):
     lua.globals().SLINK_GEN3_TITLE = title
     lua.execute(HARNESS)
     return lua, lua.execute(f'return dofile("{SCRIPTED.as_posix()}")')
+
+
+def test_sb1_pointer_bound_follows_the_title_saveblock1_size():
+    """sb1_ptr's upper bound is 0x02040000 - sizeof(SaveBlock1): FR/LG 0x3D68, Emerald 0x3D88
+    (gen3_codec SAVEBLOCK1_SIZE_EMERALD). 0x0203C290 fits FR's block but not Emerald's."""
+    from lupa import LuaError
+
+    assert codec.SAVEBLOCK1_SIZE_EMERALD == 0x3D88
+    at = 0x0203C290
+    assert 0x02040000 - 0x3D88 < at <= 0x02040000 - 0x3D68
+    lua, mod = _scripted_machine("emerald")
+    lua.globals().F.w32(0x03005008, at)
+    with pytest.raises(LuaError, match="whiteout_heal_pointer"):
+        mod.whiteout_destination(lua.globals().F.cp)
+    lua, mod = _scripted_machine("firered")
+    lua.globals().F.w32(0x03005008, at)
+    with pytest.raises(LuaError, match="whiteout_heal_unsupported"):   # the pointer passed
+        mod.whiteout_destination(lua.globals().F.cp)
 
 
 def test_emerald_whiteout_lands_on_the_raw_heal_tile_and_fr_still_projects():
