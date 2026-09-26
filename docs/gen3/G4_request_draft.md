@@ -493,6 +493,16 @@ All five owner scope decisions (a)–(e) are settled and recorded above.
     - **(c) Opcode gates:** the 12 deferred gates are a signed limit; the 26 ported live gates cover the opcodes in use.
     - **(d) Per-item evidence:** the P2 anchor/md5/deleted-file/write-guard/native-control items are satisfied by the existing unit/model evidence (the pin tests, test_gen3_write_ownership, the test_gen3_native control tests). No separate live receipts are needed.
     G5. **S**
+31. **Randomized Gen 3 envelope** (owner, 2026-09-26, answering the design's seven questions: "Accept, but open Gen 3-only options"; `docs/gen3/research/randomized_gen3_design.md` §7):
+    - Gen 1's forbidden set stays forbidden: types, evolutions, movesets, base stats, abilities, the type-chart tweak. So the species, dupes and type clauses read the pret rule tables, and a ROM whose rule tables differ is refused by name.
+    - The Gen 3-only UPR options are OPEN: wild and trainer held items, move tutors, in-game trades, shops, pickup.
+    - The verified-safe FR/LG misc tweaks are allowed.
+    - A randomized ROM made outside the Manager is admitted as `rand`, like Gen 1, with its tables read from the cartridge and verified.
+    - A randomized FR↔LG pair is allowed.
+    - Calc Prep for randomized trainers uses the cartridge's own parties with the species/level fallback.
+    - Emerald binds the same design later.
+    Today a UPR FR/LG is silently admitted as `clean` (the design measured it): write-safe, but the rules and panels use vanilla data. R1 closes that. **S**
+
 30. **FR/LG companion parity** (owner, 2026-09-26, asked directly in the Gen 3 session): on the FR/LG companion from ruling 27, vanilla FR/LG also gets the SOULLINK info panel, native sounds, Explode Mode and Rival Team Swap. The in-battle calc display was not selected and stays RR-only. These ride the companion and native.lua, which the Emerald lane owns for trade (T2/T3), so its scope grows by these four. **S**
 
 29. **Randomized Gen 3 ROMs are IN the RC** (owner, 2026-09-26: "IT SHOULD NOT BE OUT OF SCOPE. I DIDNT DECIDE ANY OF THIS."; relayed by the Emerald lane and confirmed directly, with "Gen 3 lane builds it"). PLAN §10's "out of scope" line was an agent's, never a ruling. This covers admission of UPR-randomized FR/LG, the Manager's randomizer for Gen 3, and per-ROM data (trainers, encounters, evolutions) read from the cartridge, with pret as the clean-ROM control. G4 needs it. **S**
