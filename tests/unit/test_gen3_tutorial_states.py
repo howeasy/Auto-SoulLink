@@ -23,7 +23,8 @@ from server.adapters import gen3_codec as codec  # noqa: E402
 
 LUA_PATH = ROOT / "lua/tests/mkstates_gen3_tutorials.lua"
 SOURCE = LUA_PATH.read_text(encoding="utf-8")
-PRET = ROOT.parents[2] / ".cache/pret/pokefirered"   # worktree -> repo root/.cache
+PRET = next((d / ".cache/pret/pokefirered" for d in (ROOT, *ROOT.parents)
+             if (d / ".cache/pret/pokefirered").exists()), ROOT / ".cache/pret/pokefirered")  # walk up, never count levels
 TITLES = {"firered": "pokefirered", "leafgreen": "pokeleafgreen"}
 ROMS = {"firered": "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba",
         "leafgreen": "E:/Google Drive/SLink/Pokemon - LeafGreen Version (USA).gba"}

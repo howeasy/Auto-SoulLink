@@ -10,10 +10,34 @@ from tools import gba_map
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE = ROOT / "lua/tests/gen3_routes.lua"
-PRET = ROOT.parents[2] / ".cache/pret/pokefirered"
 ROMS = {"firered": "Pokemon - FireRed Version (USA).gba", "leafgreen": "Pokemon - LeafGreen Version (USA).gba"}
 MAPS = {(3, 1): "ViridianCity", (3, 20): "Route2", (15, 0): "Route2_ViridianForest_SouthEntrance",
         (1, 0): "ViridianForest"}
+
+def _up(rel):
+    """`rel` under the checkout root or the nearest ancestor holding it: a worktree has no .cache or
+    ROMs of its own, the main checkout does. Never counts levels (parents[2] raised IndexError on the
+    main checkout and silently pointed elsewhere at any other worktree depth)."""
+    for d in (ROOT, *ROOT.parents):
+        if (d / rel).exists():
+            return d / rel
+    return ROOT / rel
+
+
+PRET = _up(".cache/pret/pokefirered")
+
+
+def _need_pret():
+    if not PRET.exists():
+        pytest.skip(f"pret pokefirered not cloned ({PRET})")
+
+
+def _rom(title):
+    p = _up(ROMS[title])
+    if not p.exists():
+        pytest.skip(f"{ROMS[title]} not present (ROMs are gitignored)")
+    return p
+
 
 
 @pytest.fixture
@@ -24,8 +48,9 @@ def env():
 
 @pytest.mark.parametrize("title", ROMS)
 def test_every_route_tile_against_rom_and_all_event_objects(env, title):
+    _need_pret()
     _, routes = env
-    rom = gba_map.load(ROOT.parents[2] / ROMS[title], sym_path=ROOT / f"data/gen3/pret/poke{title}.sym")
+    rom = gba_map.load(_rom(title), sym_path=ROOT / f"data/gen3/pret/poke{title}.sym")
     for name, p in routes.paths.items():
         g, n, x, y, ex, ey, moves = [p[i] for i in range(1, 8)]
         grid = rom.map(g, n)
@@ -128,6 +153,7 @@ def test_nested_helper_stops_on_first_fainted_lead_frame(env):
 
 
 def test_prep_budget_covers_pret_experience_gap_and_nurse_trips(env):
+    _need_pret()
     lua, routes = env
     species = (PRET / "src/data/pokemon/species_info.h").read_text()
     squirtle = species.split("[SPECIES_SQUIRTLE] =")[1].split("\n    },")[0]
@@ -250,7 +276,7 @@ def test_learning_prompt_command_pins_match_both_roms(title):
         parts = line.split()
         if len(parts) == 4:
             syms.setdefault(parts[3], int(parts[0], 16))
-    rom = (ROOT.parents[2] / ROMS[title]).read_bytes()
+    rom = _rom(title).read_bytes()
     start = syms["BattleScript_AskToLearnMove"] - 0x08000000
     assert rom[start + 17] == 0x5A
     assert rom[start + 32] == 0x5B
@@ -404,8 +430,9 @@ def route_motion(lua):
 
 @pytest.mark.parametrize("title", ROMS)
 def test_gate_nonanimated_door_then_forest_arrow_landing_waits_for_unlock(env, title):
+    _need_pret()
     lua, _ = env
-    rom = gba_map.load(ROOT.parents[2] / ROMS[title], sym_path=ROOT / f"data/gen3/pret/poke{title}.sym")
+    rom = gba_map.load(_rom(title), sym_path=ROOT / f"data/gen3/pret/poke{title}.sym")
     gate, forest = rom.map(15, 0), rom.map(1, 0)
     assert (gate.collision[1][7], gate.behaviour[1][7]) == (0, 0x60)
     assert (gate.collision[2][7], gate.behaviour[2][7]) == (0, 0)
@@ -513,7 +540,7 @@ def test_walk_waits_for_delayed_encounter_and_does_not_repeat_completed_step(env
 
 @pytest.mark.parametrize("title", ROMS)
 def test_route2_blocked_tiles_are_tall_grass_on_both_roms(title):
-    rom = gba_map.load(ROOT.parents[2] / ROMS[title], sym_path=ROOT / f"data/gen3/pret/poke{title}.sym")
+    rom = gba_map.load(_rom(title), sym_path=ROOT / f"data/gen3/pret/poke{title}.sym")
     m = rom.map(3, 20)
     assert [(m.collision[56][x], m.behaviour[56][x]) for x in (10, 11)] == [(0, 2), (0, 2)]
 
