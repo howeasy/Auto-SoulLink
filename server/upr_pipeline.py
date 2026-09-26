@@ -343,7 +343,7 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
                 if optional:
                     continue
                 raise UprPipelineError(f"engine_signals.json: {kind} site for {title} is missing")
-            if "expected_hex" not in rec:
+            if not rec.get("expected_hex"):   # absent OR empty: "" would compare b"" == b"" (fail-open)
                 raise UprPipelineError(
                     f"engine_signals.json: {kind} {label} for {title} has no expected_hex")
             if "rom_offset" not in rec:

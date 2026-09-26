@@ -224,6 +224,22 @@ def test_a_site_missing_expected_hex_refuses_by_name(monkeypatch):
         upr_pipeline.gen3_site_mismatches(bytes(64), "firered")
 
 
+def test_a_site_with_an_empty_expected_hex_refuses_by_name(monkeypatch):
+    """OMP cx-6cb07509 F3: `expected_hex: ""` decoded to b"" and compared equal to an empty
+    slice, so the site counted as verified -- fail-open inside the strict loop."""
+    real = upr_pipeline._gen3_pack
+
+    def fake(name):
+        data = _deep_copy(real(name))
+        if name == "engine_signals.json":
+            site = next(iter(data["titles"]["firered"]["artifacts"]["clean"]["sites"].values()))
+            site["expected_hex"] = ""
+        return data
+    monkeypatch.setattr(upr_pipeline, "_gen3_pack", fake)
+    with pytest.raises(UprPipelineError, match="expected_hex"):
+        upr_pipeline.gen3_site_mismatches(bytes(64), "firered")
+
+
 def test_a_context_missing_expected_hex_refuses_by_name(monkeypatch):
     real = upr_pipeline._gen3_pack
 
