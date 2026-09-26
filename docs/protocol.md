@@ -10,7 +10,7 @@
 | Adapter hooks | `server/adapters/base.py`, `server/adapters/__init__.py` | per-generation knobs the protocol relies on |
 | Reference client | `lua/gen3/client.lua` (+ `lua/gen3/*.lua`, shared `lua/core/session.lua`/`lua/core/deferred.lua`) | the only client this document treats as correct |
 
-**Authority.** Where the Gen 3 client and the server disagree, the server wins. Every such disagreement is marked **⚠ DISAGREEMENT** inline and collected in [Appendix A](#appendix-a--disagreements-and-ambiguities). `lua/gen1/client.lua` and `lua/clients/gen2_crystal_client.lua` were deliberately not consulted.
+**Authority.** Where the Gen 3 client and the server disagree, the server wins. Every such disagreement is marked **⚠ DISAGREEMENT** inline and collected in [Appendix A](#appendix-a--disagreements-and-ambiguities). `lua/gen1/client.lua` and `lua/gen2/client.lua` were deliberately not consulted.
 
 **Conventions.** `file:line` cites the line where the behaviour is implemented. Field types: `str`, `int`, `bool`, `list[T]`, `hex` (lowercase hex string), `key` (mon key string, format per §3.1). "MUST/SHOULD/MAY" are RFC-2119. All indices are **0-based** unless stated. The two players are `"a"` and `"b"`; the "partner" is the other one (`state.py:116-117`).
 
@@ -113,7 +113,7 @@ Sent on every TCP (re)connect edge — `hello_sent` is cleared on disconnect and
 | 4 | Later hello with a different OT: `identity_error[pid]` set, `msg["_rejected"]=True`, the reply is **only** `hud_show{text:"[x] WRONG SAVE: slot A", color:[255,0,0], duration:600}`, and `_handle_hello` returns before touching party state | rejected | `state.py:1653-1958` |
 | 5 | Matching OT clears `identity_error` and may refresh `trainer_name` | ok | `state.py:1544-1552` |
 
-⚠ DISAGREEMENT, CLOSED by `ca0888ba`: step 1' says a non-string `artifact_kind` is refused, and it now is — both call sites pass the key's presence through, so only a MISSING key defaults to `clean` (`msg.get("artifact_kind", "clean")` at `server/server.py:1476` and at the run-commit path `:1763-1764`): a present `null`/`""`/`false`/`0`/`[]`/`{}` reaches the type check (`server/server.py:689-691`) and is refused instead of being admitted and committed as `clean`. REMAINING LIMIT: a non-empty but undocumented *string* (e.g. `"banana"`) still passes that type check and is committed as declared — the run is protected only in the pairing sense, because two different kinds cannot mix (`server/server.py:705-709`). The documented set is test-side (`tests/unit/protocol_schema.py` `ARTIFACT_KINDS`); a server-side set check is a carry. Gen 2 kind normalization today comes from the routed legacy adapter class (`adapter_class_for_rom_type` → `gen2_crystal`, `server/adapters/__init__.py:64-72`); `Gen2GSCAdapter.pairing_kind` keeps `named` distinct (`server/adapters/gen2_gsc.py:442-444`) once the G3 cutover routes it.
+⚠ DISAGREEMENT, CLOSED by `ca0888ba`: step 1' says a non-string `artifact_kind` is refused, and it now is — both call sites pass the key's presence through, so only a MISSING key defaults to `clean` (`msg.get("artifact_kind", "clean")` at `server/server.py:1476` and at the run-commit path `:1763-1764`): a present `null`/`""`/`false`/`0`/`[]`/`{}` reaches the type check (`server/server.py:689-691`) and is refused instead of being admitted and committed as `clean`. REMAINING LIMIT: a non-empty but undocumented *string* (e.g. `"banana"`) still passes that type check and is committed as declared — the run is protected only in the pairing sense, because two different kinds cannot mix (`server/server.py:705-709`). The documented set is test-side (`tests/unit/protocol_schema.py` `ARTIFACT_KINDS`); a server-side set check is a carry. Gen 2 kind normalization today comes from the routed legacy adapter class (`adapter_class_for_rom_type` → `gen2_crystal`, `server/adapters/__init__.py:64-72`); `Gen2GSCAdapter.pairing_kind` keeps `named` distinct (`server/adapters/gen2_gsc.py:591-592`) once the G3 cutover routes it.
 
 ⚠ DISAGREEMENT, RESOLVED for the current Gen 3 client: the WRONG SAVE `hud_show` uses `color`/`duration`, not the `r,g,b,frames` every other `hud_show` uses. The old (reference) client's parser only read `r,g,b,frames` (archived tag `archive/gen3-old-client`, file `lua/clients/gen3_frlge_client.lua` around line 300), so that toast rendered white for 300 frames. The shared `hud_show`/`msgbox`/`gui_prompt` handler now accepts either spelling via one `hud_color()` helper (`lua/core/session.lua:59-62`, used at `:278-282`). A client not built on `lua/core/session.lua` SHOULD still accept both spellings.
 
@@ -265,7 +265,7 @@ Gen 3 does **not** send `ot`, `nature`, `gender` or `pp_ups` in the party entry;
 | `is_trainer_battle` | bool | wild vs trainer; suppresses dupes check | `server.py:2333-2334`, `2130-2131` |
 | `trainer_id` | int | `adapter.trainer_info(tid)` → opponent name/class; if the adapter returns no class, `opponent_name`/`opponent_class` from the tick are accepted instead | `server.py:2335-2349` |
 | `opponent_name`, `opponent_class` | str | non-RR fallback for trainer display and killfeed | `server.py:3356-3364` |
-| `enemy_party` | list[FoeEntry] (§4.3); `[]` when not in battle | battle panel, killer enrichment, dupes check (`[0].species_id`) | `server.py:2351-2352`, `2485-2496`, `2133-2134` |
+| `enemy_party` | list[FoeEntry] (§4.3); `[]` when not in battle | sanitised on EVERY inbound message before dispatch (non-list ⇒ `[]`, non-dict entries dropped); then battle panel, killer enrichment, dupes check (`[0].species_id`) | `server.py:1995-1998`, `server.py:2351-2352`, `2485-2496`, `2133-2134` |
 | `is_doubles` | bool | doubles chip; if absent, inferred from >1 `active` foe | `server.py:2353-2359`, `2936` |
 | `pc_boxes` | list[BoxEntry] (§4.4), full cache every tick | box table, memorial contamination scan, `_mon_cache` | `server.py:2315-2320` |
 | `badges` | int bitmask | 8 gym circles, badges overlay, compact panel popcount | `server.py:2309-2310`, `3270-3289` |
@@ -505,6 +505,11 @@ Accepts only in phase `applying`; ignores a mismatching non-empty `token`; buffe
 | `mons_per_box` | property → int | `30` | memorial overflow box count `server.py:4949` | `base.py:592-600` |
 | `memorial_box_index` | property → int (0-based; `-1` = none) | `-1` | contamination scan, memorial contents | `base.py:603-610` |
 | `gym_badge_slugs` | `(rom_type) -> [(pokeapi_id, name)]` | Kanto 1-8 | badges overlay | `base.py:612-630` |
+| `calc_name` | `(kind, name) -> str`; kind is species/ability/item/move | identity | calc payload names (`_build_mon_entry`) `server.py:156`, `160`, `166` | `base.py:502-508` |
+| `calc_species` | `(species_id) -> str` | `calc_name("species", species_name(id))` | calc species key; lets calc naming diverge from HUD naming (pureRGB's alternate forms share a base `species_name`) `server.py:151` | `base.py:510-523` |
+| `calc_profile` | `() -> {"gen": int, "dex": str}\|None` | `None` | `None` hides the Calc tab and dashboard calc preview for that game `server.py:898-899`, `1257`; `manager.py:264` | `base.py:525-532` |
+| `calc_nature` | `(key) -> str\|None` | `None` (no natures, Gen 1/2) | calc nature `server.py:154` | `base.py:534-539` |
+| `calc_stats` | `(detail) -> {ivs, evs, stats}\|{dvs, stat_exp, stats}\|None` | `None` | decoded IV/EV/stats (Gen 3+) or DV/stat-exp (Gen 1/2) for the calc `server.py:1293`, `1988`, `3069` | `base.py:541-551` |
 
 ### 7.3 Routing (`server/adapters/__init__.py`)
 
@@ -547,7 +552,7 @@ Things a non-Gen-3 client/adapter must neutralise on the wire, or that should be
 
 ### 8.1 Gen 2 answers
 
-One per row above, plus the held item. Client = `lua/gen2/client.lua`, wire = `lua/gen2/wire.lua`, reads = `lua/gen2/reads.lua`, adapter = `server/adapters/gen2_gsc.py`. Adapter answers are `Gen2GSCAdapter`'s; until the G3 cutover the server still routes Gen 2 `rom_type`s to the legacy `gen2_crystal` adapter (`server/adapters/__init__.py:64-72`).
+One per row above, plus the held item. Client = `lua/gen2/client.lua`, wire = `lua/gen2/wire.lua`, reads = `lua/gen2/reads.lua`, adapter = `server/adapters/gen2_gsc.py`. Adapter answers are `Gen2GSCAdapter`'s: Crystal/Gold/Silver route straight to `gen2_gsc` (`server/adapters/__init__.py:75-77`); the legacy `gen2_crystal` adapter was removed at the P3b.8 cutover (`_RETIRED_GAME_IDS`, `server/adapters/__init__.py:137-139`).
 
 | # | Gen 2 answer | Cite |
 |---|---|---|
