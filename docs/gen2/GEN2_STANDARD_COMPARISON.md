@@ -1,5 +1,15 @@
 # Gen 1 as the standard: row-by-row comparison with the current Gen 2 code
 
+> HISTORICAL. This is a 2026-09-21 snapshot of the pre-rewrite Gen 2 client (`lua/clients/gen2_crystal_client.lua`,
+> `lua/games/gen2_crystal.lua`, `lua/memory_gb.lua`, `server/adapters/gen2_crystal.py`) that motivated
+> the Gen 2 rewrite. Every one of those files has since been deleted (P3b.8 cutover): the client is
+> now `lua/gen2/*` and the adapter is `server/adapters/gen2_gsc.py` + `gen2_codec.py` + `gen2_rom_scan.py`
+> (verified 2026-09-26 — none of the old paths exist in the tree). Row-by-row claims below describe
+> code that no longer exists; do not read them as current Gen 2 behavior. Kept as the record of what
+> changed and why (`docs/gen2/PLAN.md` §4's REMOVE list, `docs/gen2/REVIEW_RECORD.md`). Current Gen 2
+> status lives in `docs/gen2/gen2_requirements.md`, `docs/gen2/gen2_coverage_map.md` and the receipts
+> under `tests/fixtures/gen2/receipts/`.
+>
 > Corrected 2026-09-21 after Codex fact-check cx-10a9cf49 (17 wrong cells, 3 overstatements,
 > stale items); see docs/gen2/REVIEW_RECORD.md.
 

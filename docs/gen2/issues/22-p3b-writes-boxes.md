@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE.** `lua/gen2/writes.lua`, `lua/gen2/boxes.lua`, `lua/gen2_write_safety.lua`, `tests/unit/test_gen2_{writes,boxes,write_safety,bench_write}.py`, `tests/unit/test_gen2_w6_gate.py` present; W-6 writer-exclusion is proven by `live-gates`'s `w6_gate` rows (PASS, all three titles).
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P3b.5, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

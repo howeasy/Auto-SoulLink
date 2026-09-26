@@ -2,6 +2,13 @@
 
 # Native sound sites and peer-ghost feasibility for Gen 2
 
+> **Status since this research:** Part A (native sound) shipped — `patch/gen2/src/sfx.asm`
+> (commit `8b4dae07`, "feat(gen2): add bounded native sound service and reset cancellation").
+> Part B (peer ghost) was ruled **post-RC** (owner ruling O-13, `docs/gen2/OPEN_QUESTIONS.md` /
+> `docs/gen2/PLAN.md`); a follow-on research pass lives at
+> `docs/gen2/research/peer_ghost_design.md`. Treat the verdicts below as the feasibility case
+> that motivated those two outcomes, not as a description of the shipped sound design.
+
 Resolves wayfinder tickets 16 (`docs/gen2/wayfinder/issues/16-native-sound-sites.md`) and 17
 (`docs/gen2/wayfinder/issues/17-peer-ghost-feasibility.md`). Both are read-only; not edited.
 Ticket 14 (the mailbox address itself) is out of scope — this assumes a mailbox exists

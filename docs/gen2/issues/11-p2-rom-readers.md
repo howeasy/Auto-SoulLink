@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE.** `server/adapters/gen2_rom_scan.py`, `lua/gen2/rom.lua`, `tools/verify_gen2_rom_layout.py` and `tests/unit/test_gen2_rom_tables.py` all present (independent Lua/Python two-path reader comparison).
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P2.4, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

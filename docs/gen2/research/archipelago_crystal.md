@@ -1,5 +1,16 @@
 # Archipelago "Pokémon Crystal" — repo, RAM contract, layout divergence
 
+> **Status as of the current RC (post-2026-09-21 rewrite):** AP Crystal support is out of scope
+> for this RC — profile/admission generation only, full rules support deferred post-RC (ruling
+> O-8; see `docs/gen2/wayfinder/issues/08-archipelago-scope.md`, which cites this file as its
+> investigation). `data/games/gen2_crystal/admission.json` (`refused_kinds`) explicitly refuses
+> `"archipelago"` ROMs today. The implementation file this note audits its assumptions against,
+> `lua/games/gen2_crystal.lua` (with its `crystal_ap` profile), was removed in the Gen 2 P3b.8
+> cutover; there is no current `crystal_ap`/AP-profile code path to reconcile against. Treat the
+> repo/RAM-contract research below as still-valid investigation of the upstream AP fork, and the
+> "Local assumptions audit" / delta sections as historical — they describe a pre-rewrite file
+> that no longer exists.
+
 Retrieved 2026-09-21 unless noted otherwise. Primary evidence is the installed apworld at
 `C:\ProgramData\Archipelago\custom_worlds\pokemon_crystal.apworld` (a zip; extracted read-only
 to the scratchpad for this research, nothing under that path was modified) cross-checked

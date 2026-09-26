@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): OPEN -- blocked on G4 (ticket 29).** current top-level docs are stale against the Gen 2 rewrite: `README.md:17` still reads 'Gen 2 is partially verified... Gen 2 coverage is Crystal only -- Gold, Silver and Archipelago Crystal have no ROM dump to gate against', and `docs/REFERENCE.md:103` still reads 'Gold, Silver and Archipelago Crystal remain ⚠️ Experimental' -- both describe the pre-rewrite legacy adapter, not the current G1-admitted `gen2_gsc` foundation (AP is REFUSED per O-25, not experimental). `README.md`/`docs/REFERENCE.md` are outside this worker's file grant; flagged separately for the owning worker.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P6.2, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.
