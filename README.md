@@ -4,7 +4,7 @@
 
 # Auto-SoulLink
 
-**A Pokémon Soul Link Nuzlocke that referees itself — across five generations, on real cartridges.**
+**A Pokémon Soul Link Nuzlocke that referees itself — proven on real cartridges for Gens 1–3, with Gens 4–5 experimental.**
 
 <a href="https://github.com/howeasy/Auto-SoulLink/actions/workflows/test.yml"><img alt="tests" src="https://github.com/howeasy/Auto-SoulLink/actions/workflows/test.yml/badge.svg"></a>
 <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue">

@@ -7,7 +7,8 @@ is not, because the boundaries matter if you redistribute.
 
 `patch/upr/*.patch` are patches against **[Universal Pokémon Randomizer ZX](https://github.com/Ajarmar/universal-pokemon-randomizer-zx)**,
 which is licensed **GPL-3.0**. Those patches are a derivative work of it and are offered under
-**GPL-3.0**, not MIT. Applying them produces a modified UPR ZX, which is also GPL-3.0.
+**GPL-3.0**, not MIT; the licence text is at [`patch/upr/LICENSE`](patch/upr/LICENSE). Applying
+them produces a modified UPR ZX, which is also GPL-3.0.
 
 This does not make the rest of SLink GPL. The patches live in their own directory and are
 distributed alongside SLink rather than combined with it (GPL-3.0 §5, aggregation); SLink itself
@@ -32,12 +33,16 @@ unpredictably. Versions are tracked in [`server/static/vendor/VERSIONS.md`](serv
 
 | File | Project | Licence |
 |---|---|---|
-| `htmx.min.js` | [htmx](https://htmx.org/) 2.0.3 | BSD-2-Clause (Zero-Clause upstream) |
-| `idiomorph-ext.min.js` | [idiomorph](https://github.com/bigskysoftware/idiomorph) 0.7.3 | BSD-2-Clause |
-| `alpine.min.js` | [Alpine.js](https://alpinejs.dev/) 3.14.1 | MIT |
+| `htmx.min.js` | [htmx](https://htmx.org/) 2.0.3 | Zero-Clause BSD (no notice required) |
+| `idiomorph-ext.min.js` | [idiomorph](https://github.com/bigskysoftware/idiomorph) 0.7.3 | Zero-Clause BSD (no notice required) |
+| `alpine.min.js` | [Alpine.js](https://alpinejs.dev/) 3.14.1 | MIT, Copyright © 2019-2021 Caleb Porzio and contributors |
 | `overlay-helpers.js` | First-party | MIT (this repository) |
 
-`lua/x64/socket-windows-5-4.dll` is a build of **[LuaSocket](https://github.com/lunarmodules/luasocket)**, MIT.
+`lua/x64/socket-windows-5-4.dll` is a build of **[LuaSocket](https://github.com/lunarmodules/luasocket)**, MIT,
+Copyright (C) 2004-2022 Diego Nehab.
+
+For Alpine.js and LuaSocket, the MIT permission notice is the same text as SLink's own
+[LICENSE](LICENSE), which ships beside this file in every release zip (`tools/make_release.py`).
 
 ## Reference material, not redistributed code
 
