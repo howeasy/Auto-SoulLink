@@ -344,7 +344,7 @@ def build_plan_rr(cut, lane, master):
 # lastHealLocation Oldale (6,17), so FR's Center-receipt check has nothing to verify there -- a
 # documented gap, not an oversight.
 EMERALD_DUO_SCENARIOS = ("faint_cmd_gen3", "reconnect_gen3", "deadzone_gen3", "link_gen3",
-                         "boxsync_gen3", "linked_faint_active_gen3")
+                         "boxsync_gen3", "linked_faint_active_gen3", "whiteout_gen3")
 
 
 def build_plan_emerald(cut, lane, master):

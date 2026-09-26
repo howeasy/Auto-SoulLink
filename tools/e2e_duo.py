@@ -334,13 +334,13 @@ SCENARIOS = {
     "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
-    # E4 known gap: NOT on gen3_emerald. Its G4 receipt is FR's Center landing (CENTER_STATE with
-    # the Union Room set live, WRITE_IN_CENTER, the nurse/START control there), but Emerald's
-    # DoWhiteOut warps straight to gSaveBlock1Ptr->lastHealLocation, OUTDOORS (pret pokeemerald
-    # src/overworld.c:358-365,665-668; heal_locations.json:82-85 Oldale Town (6,17)) -- no Center
-    # landing to receipt. An Emerald whiteout receipt needs its own design (coordinator/owner).
-    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr"),
-                      "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+    # E4c: on gen3_emerald the receipt is Emerald's own landing, not FR's Center: DoWhiteOut heals
+    # in C and warps straight to gSaveBlock1Ptr->lastHealLocation, OUTDOORS (pret pokeemerald
+    # src/overworld.c:357-366,665-668; heal_locations.json:82-85 Oldale Town 0.10 (6,17)).
+    # Both sides boot the two-mon pc fixture (slot 1 is the linked mon; A deposits it at the Oldale
+    # PC and walks out to Route 103 with its lone starter).
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
     # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
@@ -6845,7 +6845,7 @@ class DuoRun:
         # G5-RR-NURSE-2: RR's nurse never refuses, so the control there is the START menu instead,
         # named start_menu (assert_whiteout_gen3_saved's control_name, same rule).
         ka = self._link_keys["a"]
-        control_name = "start_menu" if self._gen3_rr else "nurse"
+        control_name = self._gen3_whiteout_control()
         self._gen3_mark("a", rf"^CONTROL_LIVE {control_name} {re.escape(ka)} ",
                         f"A parked in the {control_name} negative control")
         self.queue_command("a", {"cmd": "box_mon", "key": ka})
@@ -7328,10 +7328,17 @@ class DuoRun:
         # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
         # that box_mon (TX stats_cache would be the held write landing).
         center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
-        # G5-RR-NURSE-2: RR's nurse cutscene never refuses (no message/waitmessage anywhere in
-        # her script -- scenario_gen3_whiteout.lua's own comment), so the RR control is the START
-        # menu instead, named start_menu; FR/LG keep nurse. Same clause vocabulary either way.
-        control_name = "start_menu" if self._gen3_rr else "nurse"
+        if self._gen3_title("a") == "emerald":
+            # E4c replacements, each for a stated Emerald fact (pret pokeemerald c65e93f2):
+            #  CENTER_STATE (Union Room set live at the Center landing) -> LANDING_STATE at
+            #    lastHealLocation 0.10 (6,17) with every party mon at max HP: DoWhiteOut heals in C
+            #    and warps outdoors (overworld.c:357-366,665-668), so there is no Center landing and
+            #    no Union Room set; the heal is what the landing can prove.
+            #  WRITE_IN_CENTER -> WRITE_AT_LANDING: same checks (landing tile, checkpoint clean,
+            #    pointers unchanged, keyed 100-byte record in the write frame), minus the Union
+            #    Room set, which an outdoor tile never has.
+            center, landed = r"(?m)^LANDING_STATE .* healed=\S+ ", r"(?m)^WRITE_AT_LANDING "
+        control_name = self._gen3_whiteout_control()
         control = [gen3_returned(ka), rf"(?m)^CONTROL_LIVE {control_name} {re.escape(ka)} ",
                    gen3_rx("box_mon", ka),
                    rf"(?m)^CONTROL_REFUSED {control_name} box_mon {re.escape(ka)} clause=\S+ "]
@@ -7350,6 +7357,13 @@ class DuoRun:
             forbidden=[gen3_rx("memorialize", kb), r"(?m)^RX force_faint "])
         self._gen3_raise(problems, f"whiteout: A whited out, the pair {ka} / {kb} was rebuilt "
                                    f"from both PCs and saved in party, still alive")
+
+    def _gen3_whiteout_control(self) -> str:
+        """whiteout_gen3's post-save negative control. FR/LG: the Center nurse's live script.
+        G5-RR-NURSE-2: RR's nurse cutscene never refuses (no message/waitmessage in her script),
+        so RR holds the probe in the START menu (start_menu). E4c: Emerald lands OUTDOORS (no
+        nurse), so it takes the START-menu control too, with its own menu witness."""
+        return "start_menu" if self._gen3_rr or self._gen3_title("a") == "emerald" else "nurse"
 
     def _gen3_sent_event(self, text, event, key):
         """The decoded JSON of the first `TX <event> <key> {...}` line, or None."""

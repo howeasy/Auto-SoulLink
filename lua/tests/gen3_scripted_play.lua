@@ -171,7 +171,10 @@ local LAB_SCENE_VAR_OFFSET = SB1_VARS_OFFSET + (VAR_MAP_SCENE_PALLET_TOWN_PROFES
 local function sb1_ptr(cp)
     local ptr = assert(cp.pointers and cp.pointers.gSaveBlock1Ptr, "no gSaveBlock1Ptr")
     local sb1 = memory.read_u32_le(int(ptr.address))
-    if sb1 < 0x02000000 or sb1 > 0x02040000 - 0x3D68 or sb1 % 4 ~= 0 then return nil end
+    -- sizeof(struct SaveBlock1): FR/LG 0x3D68, Emerald 0x3D88 (pret include/global.h; the ROM
+    -- header's saveBlock1Size, gen3_codec SAVEBLOCK1_SIZE_EMERALD)
+    if sb1 < 0x02000000 or sb1 > 0x02040000 - (TITLE == "emerald" and 0x3D88 or 0x3D68)
+       or sb1 % 4 ~= 0 then return nil end
     return sb1
 end
 
@@ -3108,6 +3111,7 @@ local function em_menu_ready()
     return task_active(em_thumb(ES.Task_ShowStartMenu))
        and em_menu_cb() == em_thumb(ES.HandleStartMenuInput)
 end
+EMH.menu_ready = em_menu_ready   -- E4c: whiteout_gen3's Emerald START-menu control witness
 local function em_save_dialog()
     local c = em_menu_cb()
     return c == em_thumb(ES.StartMenuSaveCallback) or c == em_thumb(ES.SaveStartCallback)

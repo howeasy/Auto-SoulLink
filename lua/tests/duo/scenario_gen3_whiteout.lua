@@ -47,10 +47,24 @@ local function a_side(ctx, linked)
         return n
     end
     local ow0 = overworld_writes()
-    local land                                          -- { line, missing, snap, ow }
+    -- E4c: Emerald's DoWhiteOut (pret pokeemerald overworld.c:357-366) heals in C and warps
+    -- straight to lastHealLocation, OUTDOORS (Oldale 0.10 (6,17)): no Center, so no Union Room
+    -- background set to require; the landing instead proves the heal (every party mon at max HP).
+    local em = ctx.title == "emerald"
+    local land                                          -- { line, missing, snap, ow, healed }
     ctx.watch(function()
         if ctx.sent("whiteout") == 0 or not at(ctx, dest) then return false end
         local line, missing, snap = ctx.center_state()
+        if em then
+            local party = ctx.party()
+            if not party or #party == 0 then return false end
+            local healed = {}
+            for _, m in ipairs(party) do healed[#healed + 1] = fmt("%s=%d/%d", m.key, m.hp, m.max_hp) end
+            for _, m in ipairs(party) do if m.hp ~= m.max_hp then return false end end
+            land = { line = line, missing = {}, snap = snap, ow = overworld_writes(),
+                     healed = table.concat(healed, ",") }
+            return true
+        end
         if #missing > 0 then return false end
         land = { line = line, missing = missing, snap = snap, ow = overworld_writes() }
         return true
@@ -71,7 +85,12 @@ local function a_side(ctx, linked)
     if not ctx.mash_until(function() return ctx.sent("whiteout") > 0 end, 180, "A") then
         return false, "the client never sent whiteout"
     end
-    ctx.wait_until(function() return land end, 30, "the Center landing with the Union Room background set")
+    ctx.wait_until(function() return land end, 30, em and "the healed Oldale landing"
+                   or "the Center landing with the Union Room background set")
+    if not land and em then
+        return false, fmt("never saw the healed party at lastHealLocation %d.%d (%d,%d) after the "
+                          .. "whiteout", dest.group, dest.num, dest.x, dest.y)
+    end
     if not land then
         local _, missing = ctx.center_state()
         return false, fmt("the Union Room background set is absent at the Center landing %d.%d (%d,%d) "
@@ -79,9 +98,13 @@ local function a_side(ctx, linked)
                           .. "widened allow-list", dest.group, dest.num, dest.x, dest.y,
                           table.concat(missing, ","))
     end
-    ctx.log(fmt("CENTER_STATE %s overworld_writes_before=%d", land.line, land.ow - ow0))
+    if em then
+        ctx.log(fmt("LANDING_STATE %s healed=%s overworld_writes_before=%d", land.line, land.healed, land.ow - ow0))
+    else
+        ctx.log(fmt("CENTER_STATE %s overworld_writes_before=%d", land.line, land.ow - ow0))
+    end
     for _, b in ipairs(land.snap.bad) do
-        if b:find("^pointer:") then return false, "CENTER_STATE: insane " .. b end
+        if b:find("^pointer:") then return false, "the landing state: insane " .. b end
     end
     if land.ow ~= ow0 then return false, "a write landed before CENTER_STATE was taken" end
     ctx.play.wait_scene_settled(ctx.cp, 6000)          -- the heal-location landing and its text
@@ -99,15 +122,16 @@ local function a_side(ctx, linked)
             keyed = w
         end
     end
-    ctx.log(fmt("WRITE_IN_CENTER %s | keyed %s slot=%s record=%s | ack %s", tostring(wline), linked,
+    ctx.log(fmt("%s %s | keyed %s slot=%s record=%s | ack %s", em and "WRITE_AT_LANDING" or "WRITE_IN_CENTER",
+                tostring(wline), linked,
                 mon and tostring(mon.slot) or "absent",
                 keyed and fmt("0x%08X+%d@%d", keyed.address, keyed.len, keyed.frame) or "none", ack_line))
     if #ctx.write_hook_errors() > 0 then return false, "the write-frame read failed: " .. ctx.write_hook_errors()[1] end
     if not wline then return false, "sync_retrieve_done sent, but no overworld write line was seen" end
     if not (wat.group == dest.group and wat.num == dest.num and wat.x == dest.x and wat.y == dest.y) then
-        return false, "the rebuild write landed outside the Center landing tile"
+        return false, "the rebuild write landed outside the " .. (em and "heal-location" or "Center landing") .. " tile"
     end
-    if #wmissing > 0 then return false, "the Union Room set was gone when the write landed" end
+    if not em and #wmissing > 0 then return false, "the Union Room set was gone when the write landed" end
     if #wat.bad > 0 then return false, "the write landed off the checkpoint: " .. table.concat(wat.bad, ",") end
     for name, v in pairs(land.snap.ptrs) do
         if wat.ptrs[name] ~= v then return false, "pointer moved between the landing and the write: " .. name end
@@ -165,10 +189,15 @@ local function start_menu_open(ctx) return ctx.peek_u8(START_MENU_WINDOW_ID_ADDR
 
 local function nurse_control(ctx, linked, dest)
     if not at(ctx, dest) then return false, "control: not at the Center landing" end
-    if ctx.rr then
+    -- E4c: Emerald lands outdoors (no nurse to talk to), so it takes RR's START-menu control;
+    -- its positive menu witness is Emerald's own (EMH.menu_ready: Task_ShowStartMenu live and
+    -- gMenuCallback == HandleStartMenuInput, pret pokeemerald start_menu.c:561-575), not FR's
+    -- sStartMenuWindowId address.
+    if ctx.rr or ctx.title == "emerald" then
         local G, cp = ctx.G, ctx.cp
         local function locked() return not G.pred_ok(cp, "field_controls_locked") end
-        local function menu_open() return locked() and start_menu_open(ctx) end
+        local witness = ctx.title == "emerald" and ctx.SP.EMH.menu_ready or function() return start_menu_open(ctx) end
+        local function menu_open() return locked() and witness() end
         if not ctx.wait_until(function() return not locked() end, 10, "the field free before START") then
             return false, "control: the field was never free to open START"
         end
