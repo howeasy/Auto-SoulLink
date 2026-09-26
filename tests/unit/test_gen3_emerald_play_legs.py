@@ -682,13 +682,124 @@ def test_gift_npc_and_tile_are_where_the_leg_expects():
     assert (4, 7) in {(o.x, o.y) for o in lav.objects}
 
 
-def test_the_play_reader_io_carries_every_width_reads_lua_uses():
-    """PHYSICAL (catch group, 2026-09-26): reads.read_balls calls io.read_u16; the driver's reader
-    io lacked it, the catch guard raised and the script died silently until the 1500 s timeout."""
-    with open(os.path.join(_REPO, "lua", "gen3", "reads.lua"), encoding="utf-8") as f:
-        used = set(re.findall(r"\bio\.(read_u\d+|read_bytes)\(", f.read()))
-    with open(_SCRIPT, encoding="utf-8") as f:
-        src = f.read()
-    start = src.index("local reader = Reads.new(profile, {")
-    io_block = src[start:src.index("})", start)]
-    assert used and used <= set(re.findall(r"(read_u\d+|read_bytes) =", io_block)), used
+# -- 10. card E2-TEST-BEHAV: behavioural falsifiers for the round-3 guard closures ----------------
+#
+# OMP cx-39602c02 #3-#5 and cx-fe784f21 F6: most of this file's guards were only checked by
+# regexing gen3_scripted_play.lua's source text (including comments), which would still pass for
+# a commented-out or gutted implementation. These four run the real EMH.* closures against a
+# fake GBA RAM, in a LuaRuntime made fresh per test (never the shared module-scope `lua`/`module`
+# fixtures above -- OMP cx-39602c02 #5: fake `memory`/`joypad`/`emu` globals leaked into that
+# shared runtime once any test executed _FAKE_RAM/_FAKE_MENU_HOST against it).
+_PARTY_MON_SIZE = 100
+_SB2_PTR, _SB2 = 0x03005D90, 0x02030000          # gSaveBlock2Ptr / a fake SaveBlock2, unused by
+                                                  # any other test's fake RAM -- no address clash
+_BALL_POCKET_OFF = 0x650                         # data/games/gen3_emerald/profile.json derived
+_SB2_ENC_KEY_OFF = 0xAC                          # .SB1_BALL_POCKET_OFFSET / .SB2_ENC_KEY_OFFSET
+
+
+def _fresh_module():
+    """A brand-new LuaRuntime + a brand-new dofile of the script, with its own _FAKE_RAM (never
+    the module-scope `lua` fixture other tests in this file share)."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.execute(_FAKE_RAM)
+    os.environ.setdefault("SLINK_ROOT", _REPO.replace("\\", "/"))
+    os.environ["SLINK_GEN3_TITLE"] = "emerald"
+    try:
+        mod = lua.execute(f'return dofile("{_SCRIPT.replace(chr(92), "/")}")')
+    finally:
+        del os.environ["SLINK_GEN3_TITLE"]
+    return lua, mod
+
+
+def test_poison_party_guard_accepts_the_fixture_and_refuses_each_break():
+    """field_poison.c:27-38: a faint whites out unless another party mon is standing, so the
+    guard must refuse a second mon that is ALSO poisoned (status2 at PARTY_BASE+100+OFF_STATUS)
+    -- the exact fix the claude/gen3-emerald merge added to this closure."""
+    lua, mod = _fresh_module()
+    poke = lua.globals().poke
+    check = mod.EMH.poison_party()
+
+    def setup(count, hp, maxhp, status, status2):
+        poke(_PARTY_COUNT, count, 1)
+        poke(_PARTY + 0x56, hp, 2)
+        poke(_PARTY + 0x58, maxhp, 2)
+        poke(_PARTY + 0x50, status, 4)
+        poke(_PARTY + _PARTY_MON_SIZE + 0x50, status2, 4)
+
+    setup(2, 1, 20, 0x08, 0)               # emerald_poison.sav's own shape: accepted
+    assert check() is None
+
+    setup(2, 2, 20, 0x08, 0)               # lead HP is not 1
+    assert check() is not None
+
+    setup(2, 1, 20, 0x00, 0)               # lead carries no poison status bit
+    assert check() is not None
+
+    setup(2, 1, 20, 0x08, 0x08)            # second mon is ALSO poisoned -> a faint would white out
+    assert check() is not None
+
+    setup(1, 1, 20, 0x08, 0)               # wrong party count
+    assert check() is not None
+
+
+def _poke_lead(poke, species, level, moves):
+    poke(_PARTY_COUNT, 1, 1)
+    poke(_PARTY + 0x20, species, 2)                  # secure block, growth.species (personality
+                                                      # and otId both default to 0 in fake RAM, so
+                                                      # key=0 and the substruct order is natural)
+    for i, mv in enumerate(moves):
+        poke(_PARTY + 0x2C + i * 2, mv, 2)           # secure block, attack.moves[i]
+    poke(_PARTY + 0x54, level, 1)                    # party tail, plaintext level
+
+
+def test_lead_is_evolve_guard_accepts_the_fixture_and_refuses_each_break():
+    """The evolve leg's guard reads the real (encrypted) party record through reader.read_party()
+    -- this exercises that decode path, not just the literal call site."""
+    lua, mod = _fresh_module()
+    poke = lua.globals().poke
+    mudkip, marshtomp = mod.EMH.SPECIES_MUDKIP, mod.EMH.SPECIES_MARSHTOMP
+    check = mod.EMH.lead_is(1, mudkip, 15)
+
+    _poke_lead(poke, mudkip, 15, [1, 2, 0, 0])         # 2 moves: a free slot -- accepted
+    assert check() is None
+
+    _poke_lead(poke, marshtomp, 15, [1, 2, 0, 0])      # wrong species
+    assert check() is not None
+
+    _poke_lead(poke, mudkip, 16, [1, 2, 0, 0])         # wrong level
+    assert check() is not None
+
+    _poke_lead(poke, mudkip, 15, [1, 2, 3, 4])         # no free move slot
+    assert check() is not None
+
+
+def test_balls_are_reads_the_pocket_through_the_modules_own_reader():
+    """Exercises the module's real `reader` (Reads.new wired to memory.read_u16_le etc, not a
+    separately-built one) -- read_balls calls io.read_u16 for both the item id and the quantity,
+    the exact width a prior regression (2026-09-26 catch-group PHYSICAL note) left unwired."""
+    lua, mod = _fresh_module()
+    poke = lua.globals().poke
+    poke(_SB1_PTR, _SB1, 4)
+    poke(_SB2_PTR, _SB2, 4)
+    poke(_SB2 + _SB2_ENC_KEY_OFF, 0, 4)                # encryption key 0 -> raw qty == actual
+    poke(_SB1 + _BALL_POCKET_OFF, 1, 2)                # pocket slot 0 itemId (nonzero = occupied)
+    poke(_SB1 + _BALL_POCKET_OFF + 2, 20, 2)           # pocket slot 0 quantity
+
+    check20 = mod.EMH.balls_are(20)
+    assert check20() is None
+
+    poke(_SB1 + _BALL_POCKET_OFF + 2, 5, 2)
+    why = check20()
+    assert why is not None and "20" in why
+
+
+def test_gift_party_guard_accepts_one_mon_and_refuses_two():
+    lua, mod = _fresh_module()
+    poke = lua.globals().poke
+    check = mod.EMH.gift_party()
+
+    poke(_PARTY_COUNT, 1, 1)
+    assert check() is None
+
+    poke(_PARTY_COUNT, 2, 1)
+    assert check() is not None
