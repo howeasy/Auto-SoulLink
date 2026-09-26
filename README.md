@@ -10,6 +10,7 @@
   <img alt="BizHawk 2.11+" src="https://img.shields.io/badge/BizHawk-2.11%2B-orange">
   <img alt="unit tests" src="https://img.shields.io/badge/unit%20tests-14%2C215-brightgreen">
   <img alt="generations" src="https://img.shields.io/badge/generations-1--5-informational">
+  <a href="LICENSE"><img alt="MIT licence" src="https://img.shields.io/badge/license-MIT-green"></a>
 </p>
 
 Two people play two Pokémon games at once under Soul Link rules: your partners are paired by where
@@ -413,6 +414,21 @@ tools/                   # Code generators (area maps, data tables)
 | **[docs/gen2/](docs/gen2/)**, **[docs/gen3/](docs/gen3/)** | Per-generation plans, tickets and review records |
 | **[docs/historical/](docs/historical/)** | Finished, superseded or abandoned efforts — kept for the reasoning, never read as instructions |
 | **[.github/copilot-instructions.md](.github/copilot-instructions.md)** | Exhaustive developer notes: RAM addresses, struct layouts, and why the adapter isolation rules exist |
+
+## Licence
+
+SLink is **MIT** — see [LICENSE](LICENSE).
+
+Two boundaries matter if you redistribute, and [NOTICE.md](NOTICE.md) has the detail:
+
+- `patch/upr/` is **GPL-3.0**: those are patches against Universal Pokémon Randomizer ZX. SLink
+  never links against it — it runs the built jar as a separate process — so the rest of the
+  repository stays MIT.
+- `calc/` is a fork of the MIT-licensed Smogon damage calculator, upstream licence retained.
+
+**No ROMs and no savestates are distributed here.** Bring your own dumps of games you own. The
+committed `.SaveRAM`/`.sav` files are battery saves containing no game code
+([tests/fixtures/README.md](tests/fixtures/README.md)).
 
 ## References
 
