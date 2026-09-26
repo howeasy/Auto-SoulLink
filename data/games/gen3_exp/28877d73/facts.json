@@ -1,0 +1,2006 @@
+{
+  "constants": {
+    "ABILITIES_COUNT": 319,
+    "ABILITY_NAME_LENGTH": 16,
+    "BAG_BERRIES_COUNT": 46,
+    "BAG_ITEMS_COUNT": 30,
+    "BAG_KEYITEMS_COUNT": 30,
+    "BAG_POKEBALLS_COUNT": 16,
+    "BAG_TMHM_COUNT": 64,
+    "BATTLE_TYPE_DOUBLE": 1,
+    "BATTLE_TYPE_LINK": 2,
+    "BATTLE_TYPE_TRAINER": 8,
+    "B_ACTION_NOTHING_FAINTED": 13,
+    "B_OUTCOME_CAUGHT": 7,
+    "B_OUTCOME_DREW": 3,
+    "B_OUTCOME_LOST": 2,
+    "B_OUTCOME_RAN": 4,
+    "B_OUTCOME_WON": 1,
+    "B_TRAINER_OPPONENT_A": 1,
+    "B_TRAINER_PLAYER": 0,
+    "CONTEXT_SHUTDOWN": 2,
+    "EVOLUTIONS_END": 65535,
+    "EVO_NONE": 0,
+    "FLAG_BADGE01_GET": 2151,
+    "ID_NUMBER": 1752395091,
+    "IN_BOX_COUNT": 30,
+    "ITEMS_COUNT": 874,
+    "ITEM_NAME_LENGTH": 20,
+    "IWRAM_END": 50364416,
+    "IWRAM_START": 50331648,
+    "MAX_BATTLERS_COUNT": 4,
+    "MAX_BATTLE_TRAINERS": 4,
+    "MAX_FUSION_STORAGE": 4,
+    "MAX_LEVEL": 100,
+    "MON_DATA_SPECIES": 18,
+    "MOVES_COUNT": 848,
+    "MOVES_COUNT_ALL": 935,
+    "MOVE_NAME_LENGTH": 16,
+    "NUM_SPECIES": 1573,
+    "NUM_SUBSTRUCT_BYTES": 12,
+    "NUM_TASKS": 16,
+    "PARTY_SIZE": 6,
+    "PC_ITEMS_COUNT": 50,
+    "POKEMON_NAME_LENGTH": 12,
+    "SAVEBLOCK_MOVE_RANGE": 128,
+    "SAVE_NORMAL": 0,
+    "SAVE_STATUS_OK": 1,
+    "SE_BOO": 22,
+    "SE_FAILURE": 32,
+    "SE_FAINT": 16,
+    "SE_FLEE": 17,
+    "SE_SHINY": 102,
+    "SE_SUCCESS": 31,
+    "SIZEOF_ENUM_Ability": 2,
+    "SIZEOF_ENUM_BattleMoveEffects": 4,
+    "SIZEOF_ENUM_BattleTrainer": 1,
+    "SIZEOF_ENUM_BattlerId": 1,
+    "SIZEOF_ENUM_DamageCategory": 1,
+    "SIZEOF_ENUM_EggGroup": 1,
+    "SIZEOF_ENUM_Item": 2,
+    "SIZEOF_ENUM_ItemSortType": 1,
+    "SIZEOF_ENUM_Move": 2,
+    "SIZEOF_ENUM_NationalDexOrder": 4,
+    "SIZEOF_ENUM_Pocket": 4,
+    "SIZEOF_ENUM_Species": 2,
+    "SIZEOF_ENUM_Type": 1,
+    "SPECIES_EGG": 1573,
+    "SPECIES_SHEDINJA": 292,
+    "STATE_WAIT_ACTION_CHOSEN": 2,
+    "STATE_WAIT_ACTION_CONFIRMED_STANDBY": 4,
+    "STAT_ATK": 1,
+    "TOTAL_BOXES_COUNT": 14
+  },
+  "derived_addresses": {
+    "enemy_party_a": 33758652,
+    "enemy_party_a_count": 33758037,
+    "player_party": 33758052,
+    "player_party_count": 33758036
+  },
+  "enum_width_policy": "Compiler sizeof(enum ...) respects the source enum typing/attributes and captured ABI; -fshort-enums is not added.",
+  "evidence": "SOURCE/COMPILER/ROM only; no runtime qualification",
+  "extraction": {
+    "counts": {
+      "abilities": 319,
+      "items": 874,
+      "moves": 848,
+      "species": 1573
+    },
+    "data_sha256": "34b7f90455c37ce0e8288f9628f65836cff915c801eceaf02729ee4d08419452",
+    "evolution_edges": 695,
+    "reserved_zero_records": {
+      "abilities": [],
+      "items": [],
+      "moves": [],
+      "species": [
+        1435
+      ]
+    }
+  },
+  "headers": {
+    "gf": {
+      "abilities": 0,
+      "game_name": "pokemon emerald version",
+      "items": 141117596,
+      "language": 2,
+      "move_names": 0,
+      "moves": 141307464,
+      "species": 141418812,
+      "species_names": 0,
+      "version": 3
+    },
+    "rhh": {
+      "abilities": 319,
+      "abilities_pointer": 147303812,
+      "flags": 1,
+      "item_name_length": 20,
+      "items": 874,
+      "moves": 848,
+      "offset": 516,
+      "species": 1573,
+      "version": [
+        1,
+        17,
+        0
+      ]
+    }
+  },
+  "provenance": {
+    "artifacts": {
+      "pokeemerald.elf": {
+        "sha256": "179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b",
+        "size": 35972280
+      },
+      "pokeemerald.gba": {
+        "sha256": "08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39",
+        "size": 33554432
+      },
+      "pokeemerald.map": {
+        "sha256": "c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08",
+        "size": 4623407
+      },
+      "pokeemerald.sym": {
+        "sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e",
+        "size": 4812449
+      }
+    },
+    "compile": {
+      "build_receipt_sha256": "b21156de38449ad4267b0a68568a502195a5b31795d121dbf6cbadb5b76e329c",
+      "commands": [
+        [
+          "arm-none-eabi-cpp",
+          "-iquote",
+          "include",
+          "-Wno-trigraphs",
+          "-DMODERN=1",
+          "-DTESTING=0",
+          "-DEMERALD",
+          "-std=gnu17",
+          "/home/howard/slink-exp/x1-probe-20260926/work/expansion_offsets.c"
+        ],
+        [
+          "tools/preproc/preproc",
+          "-i",
+          "-g",
+          "build/assets",
+          "/home/howard/slink-exp/x1-probe-20260926/work/expansion_offsets.c",
+          "charmap.txt"
+        ],
+        [
+          "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1",
+          "-quiet",
+          "-mthumb",
+          "-mthumb-interwork",
+          "-O2",
+          "-mabi=apcs-gnu",
+          "-mtune=arm7tdmi",
+          "-march=armv4t",
+          "-Wno-pointer-to-int-cast",
+          "-std=gnu17",
+          "-Werror",
+          "-Wall",
+          "-Wno-strict-aliasing",
+          "-Wno-attribute-alias",
+          "-Woverride-init",
+          "-Wnonnull",
+          "-Wenum-conversion",
+          "-Wno-error=unused-variable",
+          "-Wno-error=unused-const-variable",
+          "-Wno-error=unused-parameter",
+          "-Wno-error=unused-function",
+          "-Wno-error=unused-but-set-parameter",
+          "-Wno-error=unused-but-set-variable",
+          "-Wno-error=unused-value",
+          "-Wno-error=unused-local-typedefs",
+          "-Wno-error=deprecated-declarations",
+          "-o",
+          "/home/howard/slink-exp/x1-probe-20260926/work/probe.s",
+          "-"
+        ],
+        [
+          "arm-none-eabi-as",
+          "-mcpu=arm7tdmi",
+          "-march=armv4t",
+          "-meabi=5",
+          "--defsym",
+          "MODERN=1",
+          "--defsym",
+          "EMERALD=1",
+          "-o",
+          "/home/howard/slink-exp/x1-probe-20260926/work/probe.o",
+          "/home/howard/slink-exp/x1-probe-20260926/work/probe.s"
+        ]
+      ],
+      "executables": {
+        "/home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/bedf3701743a4053b72b1128e68acd65/.cache/expansion/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/tools/preproc/preproc": "c41243f34b4a0e491bac8b25548f39eb0305f32045085c43898dbceca418f016",
+        "/usr/bin/arm-none-eabi-as": "ec839647452c629c6b26b35c8e29b56cd5be8d9bbf5221d01947451395bb7689",
+        "/usr/bin/arm-none-eabi-cpp": "38db291d05ab00f837b3e99a0d89e20a628327c715a039e22c1e0c4dcab062a5",
+        "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1": "1d284dd98e80e416ad199f5a2e24df5e704b43c0afd15ee3a34357dc46d8c5c0"
+      },
+      "flags": {
+        "AS": "arm-none-eabi-as",
+        "ASFLAGS": "-mcpu=arm7tdmi -march=armv4t -meabi=5 --defsym MODERN=1 --defsym EMERALD=1",
+        "ASSETS_DIR_NAME": "build/assets",
+        "CC1": "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1 -quiet",
+        "CFLAGS": "-mthumb -mthumb-interwork -O2 -mabi=apcs-gnu -mtune=arm7tdmi -march=armv4t -Wno-pointer-to-int-cast -std=gnu17 -Werror -Wall -Wno-strict-aliasing -Wno-attribute-alias -Woverride-init -Wnonnull -Wenum-conversion -Wno-error=unused-variable -Wno-error=unused-const-variable -Wno-error=unused-parameter -Wno-error=unused-function -Wno-error=unused-but-set-parameter -Wno-error=unused-but-set-variable -Wno-error=unused-value -Wno-error=unused-local-typedefs -Wno-error=deprecated-declarations",
+        "CPP": "arm-none-eabi-cpp",
+        "CPPFLAGS": "-iquote include -Wno-trigraphs -DMODERN=1 -DTESTING=0 -DEMERALD -std=gnu17",
+        "PREPROC": "tools/preproc/preproc"
+      },
+      "make_variables": {
+        "BUILD": "emerald",
+        "DEBUG": "0",
+        "LTO": "0",
+        "RELEASE": "0",
+        "TEST": "0"
+      },
+      "object_sha256": "a84e019195ce1f1ca16aa2d4d2ead2a097999121d5001361d1bf7e4610b62be1",
+      "preprocessed_sha256": "882f31bacb57ecdb6f57594713a9946707159341ebde1c72c48876f1292a9d66",
+      "probe_sha256": "46f385f1e6059726e521c529f49696cd7140b38bce13d56194ba42f53187473d",
+      "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+      "source_enums": {
+        "CONTEXT_SHUTDOWN": {
+          "line": 26,
+          "sha256": "d43e34d44e881206380b8efdedf5469d61871f38c58d29c1d81c6d14bb9f9ac9",
+          "source": "src/script.c",
+          "text": "enum {\n    CONTEXT_RUNNING,\n    CONTEXT_WAITING,\n    CONTEXT_SHUTDOWN,\n};"
+        },
+        "STATE_WAIT_ACTION_CHOSEN": {
+          "line": 3785,
+          "sha256": "03513f795a6653a1c1a8d336020cfcde479a6547739e7ddaa77b2af35da0c828",
+          "source": "src/battle_main.c",
+          "text": "enum\n{\n    STATE_TURN_START_RECORD,\n    STATE_BEFORE_ACTION_CHOSEN,\n    STATE_WAIT_ACTION_CHOSEN,\n    STATE_WAIT_ACTION_CASE_CHOSEN,\n    STATE_WAIT_ACTION_CONFIRMED_STANDBY,\n    STATE_WAIT_ACTION_CONFIRMED,\n    STATE_SELECTION_SCRIPT,\n    STATE_WAIT_SET_BEFORE_ACTION,\n    STATE_SELECTION_SCRIPT_MAY_RUN\n};"
+        }
+      },
+      "source_hash_normalization": "UTF-8/LF"
+    },
+    "compiler": {
+      "host": "Linux",
+      "package": "gcc-arm-none-eabi",
+      "package_version": "15:13.2.rel1-2",
+      "path": "/usr/bin/arm-none-eabi-gcc",
+      "sha256": "38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59",
+      "ssh_alias": "hgbox",
+      "status": "provisional",
+      "version": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "config_sha256": {
+      "include/config/ai.h": "e02715eb465d29944cfdf8a65ab270fcea9ffed84a9963a27bcc017dbbbdcea2",
+      "include/config/battle.h": "56d3eb68994173519b3910781e29de112d8dc6cf040928b9151917cc1026f94c",
+      "include/config/caps.h": "9736cf6ac82da0743b40cab86750a0f496430bb82829724cf013a39f151f6d48",
+      "include/config/contest.h": "23097e4537a9046f9084181dc00eb8f5e1ac998fd79a07466b81a509de94ab6e",
+      "include/config/debug.h": "866e0841ddf91176dc8f2144a039de70997908168acef539c556590d9c837d47",
+      "include/config/dexnav.h": "606e82fc4efa155d0d8b90b704497a062ffecf18e404f0a334956d5ad0c6e543",
+      "include/config/fishing.h": "a19ef43b62d92da6c0ec674fd798c93bfa100fc339b755aa675f5c7d56919c7a",
+      "include/config/follower_npc.h": "7473fad59ffe7db1a530dbfab3924cb97144dc3e7d1735af82918c03ecef6958",
+      "include/config/general.h": "270073678c6849e9d16816bc6dcaecdd1124988353a1e7d0dc2552e13e187fd5",
+      "include/config/item.h": "ce169ff6908456b6d337dc207328b5a3bfb41a3e7b46e79cbffd70fdcf6c747f",
+      "include/config/map_preview_screen.h": "bd0b33b507fac833f364fa61f796ca5a2047f672feba76c798d9e63e170c0560",
+      "include/config/name_box.h": "e5fb790a23cd2b5c01e4c5139c44f2cff6dc34dd7f8161cff2bf5f1ca2a61ba6",
+      "include/config/overworld.h": "85d30914688cbc1c24226568977333fc3656befc558f3840d8b1c2c3671cb2fd",
+      "include/config/pokedex_plus_hgss.h": "9b2663061b2c199e25a40fc51d8727ba01d972ab76b49aadc2f6ebcf7862d747",
+      "include/config/pokemon.h": "e476277d082276ac078452c44482cf9b3b6fb076159fe4745f0774bc276b85ba",
+      "include/config/pokerus.h": "6e0e78b779b45ecce4aa3f1ce840e4cef41d10c30926417c67a1b26b4ca4a4da",
+      "include/config/quickstart.h": "2f36941f8dc75b7a60540a0b12bc24ab09d6082314a1c97ee023d09a7fabf5d3",
+      "include/config/save.h": "cdad2f5dcd783f59b6b53e0ab9649659e683ef61cb07efe79727dd9fdac9dd45",
+      "include/config/species_enabled.h": "86a829d83a344bf23440a586706bf3c91ccef9a02c145afa0d1844c8824374eb",
+      "include/config/summary_screen.h": "ddaef0f2a089d9e09b053d7df3d123c524bdd862c866a9c3eb0cf38a7e4f6849",
+      "include/config/test.h": "63cbf70c00fee57daf812c5b18809030f6205afe4263d9c7ace7e258abc67fd1",
+      "include/config/text.h": "2c4f70e37f708c2d718a88331d3423e5c510805c0093213264a4788e88f91ee6",
+      "include/config/wild_encounter.h": "026ea3f8608fc61c847df71d4042cd841a5523929a9eb3bc3e0c894fd7f6eaab"
+    },
+    "extractor_sha256": "a41dff77dd62c71419f8caf0db0b122ff94c0b7082993e2593d217c5a224f453",
+    "generator_sha256": "bca6e97a3761fb0e352f9fe78756e29d6a560be62dd1e049b34674dac1efe8bd",
+    "layout_headers_sha256": {
+      "include/battle.h": "1d62757d9a475c6d4ea9ae97ad2450c3b49d61198644f63d183c309d068acddc",
+      "include/gba/m4a_internal.h": "365f76af9bc7a85bd97697c55d69dba95f1dfbc6a085f2070043bd3c270b5ed7",
+      "include/global.h": "265c63399ca88a7fc9421948e27bc03086a129ac4a731a14a367ff6759e0bcba",
+      "include/item.h": "1dada1cbf267e85654f76fa5a090fd9417a9ad3b9bce9da3b73c0cb9db62bbed",
+      "include/load_save.h": "4ce05e9afa8a4a703737ad776cf6b4c09d0774d9787b4410ec47931febef902d",
+      "include/main.h": "55c3bd5d7b653979764e3027ffe451853874ba67964e346077e1acdf93f1e686",
+      "include/move.h": "fadbf99995e02f6fcdb74f4c71523482c95f5888fc13fa2cc521c9ef6ca2aaca",
+      "include/palette.h": "9ff698eef8527eb71964665cebf4ed8ec1136ad35b6937308ca9d052c7c305aa",
+      "include/pokemon.h": "dc80cd74eae35b74036de600061fc5694ec6890d8992055bf544fc0134bb70c9",
+      "include/pokemon_storage_system.h": "4a849005435b2c87ed6c761656e79ac4ab3c0c6d255501ea1f2a2b95df7f4ae0",
+      "include/script.h": "3d16411675100556cf9c1315a6bebd4d0d01ad367a700e4a9f413f640ec38fd9",
+      "include/task.h": "d3660507b010b0b8275de304959a6d98ec2044f9c1b6b947ab0cb8fc07f47feb"
+    },
+    "makefile_sha256": "49cdf5f9c7a981eb20b286247684b563344b7712917f860af15e62130075a914",
+    "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+    "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
+  },
+  "schema": 1,
+  "structs": {
+    "AbilityInfo": {
+      "bitfields": {},
+      "fields": {
+        "name": {
+          "count": 17,
+          "element_size": 1,
+          "offset": 0,
+          "size": 17
+        }
+      },
+      "size": 28
+    },
+    "Bag": {
+      "bitfields": {},
+      "fields": {
+        "TMsHMs": {
+          "count": 64,
+          "element_size": 4,
+          "offset": 304,
+          "size": 256
+        },
+        "berries": {
+          "count": 46,
+          "element_size": 4,
+          "offset": 560,
+          "size": 184
+        },
+        "items": {
+          "count": 30,
+          "element_size": 4,
+          "offset": 0,
+          "size": 120
+        },
+        "keyItems": {
+          "count": 30,
+          "element_size": 4,
+          "offset": 120,
+          "size": 120
+        },
+        "pokeBalls": {
+          "count": 16,
+          "element_size": 4,
+          "offset": 240,
+          "size": 64
+        }
+      },
+      "size": 744
+    },
+    "BattlePokemon": {
+      "bitfields": {
+        "abilityNum": {
+          "bits": 2,
+          "initializer_sha256": "8dd7f3e6c4899ff74a64c1936aab9feb9847cf4758d337bcd0351d68b2e26e8c",
+          "mask": "0xc0",
+          "offset": 23,
+          "shift": 6,
+          "width": 1
+        },
+        "attackIV": {
+          "bits": 5,
+          "initializer_sha256": "fdc10c2a6ba9ef1404d12b83ff01c5370a004c0c6e2fac1e40c1f458ee73b721",
+          "mask": "0x3e0",
+          "offset": 20,
+          "shift": 5,
+          "width": 2
+        },
+        "defenseIV": {
+          "bits": 5,
+          "initializer_sha256": "d8fc9b50347c45c07aaf22c83a532ee4af37f74b6daa1f900a9e386930be508c",
+          "mask": "0x7c",
+          "offset": 21,
+          "shift": 2,
+          "width": 1
+        },
+        "hpIV": {
+          "bits": 5,
+          "initializer_sha256": "b909732c2d625d425db853f98a61caf0bc54bfd759f9b8a3fb7bc716e6a4277b",
+          "mask": "0x1f",
+          "offset": 20,
+          "shift": 0,
+          "width": 1
+        },
+        "isShiny": {
+          "bits": 1,
+          "initializer_sha256": "2c08ded4322229dc166a447eadef3d5eb26b56ae78d26339a4d9f85507325a49",
+          "mask": "0x80",
+          "offset": 136,
+          "shift": 7,
+          "width": 1
+        },
+        "metLevel": {
+          "bits": 7,
+          "initializer_sha256": "7126a7fbea10bb2f2d66ee89b7bba2dcd29915df2f1b3230ca13703c8b85b944",
+          "mask": "0x7f",
+          "offset": 136,
+          "shift": 0,
+          "width": 1
+        },
+        "spAttackIV": {
+          "bits": 5,
+          "initializer_sha256": "fab5d27af9629a37c0feb584909d6801b537c326a51b4771a5a24b14e5f34895",
+          "mask": "0x1f0",
+          "offset": 22,
+          "shift": 4,
+          "width": 2
+        },
+        "spDefenseIV": {
+          "bits": 5,
+          "initializer_sha256": "ad8a20ca22ff5e347430040d81a91688d2182dcbad1b5ba86d3b165cfd0e287c",
+          "mask": "0x3e",
+          "offset": 23,
+          "shift": 1,
+          "width": 1
+        },
+        "speedIV": {
+          "bits": 5,
+          "initializer_sha256": "597fe72ce12842c2c3031d47f02fa1241909546899acb972b9032ea797fa93eb",
+          "mask": "0xf80",
+          "offset": 21,
+          "shift": 7,
+          "width": 2
+        }
+      },
+      "fields": {
+        "ability": {
+          "offset": 32,
+          "size": 2
+        },
+        "affectionHearts": {
+          "offset": 137,
+          "size": 1
+        },
+        "attack": {
+          "offset": 2,
+          "size": 2
+        },
+        "defense": {
+          "offset": 4,
+          "size": 2
+        },
+        "experience": {
+          "offset": 72,
+          "size": 4
+        },
+        "friendship": {
+          "offset": 45,
+          "size": 1
+        },
+        "hp": {
+          "offset": 42,
+          "size": 2
+        },
+        "item": {
+          "offset": 48,
+          "size": 2
+        },
+        "level": {
+          "offset": 44,
+          "size": 1
+        },
+        "maxHP": {
+          "offset": 46,
+          "size": 2
+        },
+        "moves": {
+          "count": 4,
+          "element_size": 2,
+          "offset": 12,
+          "size": 8
+        },
+        "nickname": {
+          "count": 13,
+          "element_size": 1,
+          "offset": 50,
+          "size": 13
+        },
+        "otId": {
+          "offset": 132,
+          "size": 4
+        },
+        "otName": {
+          "count": 8,
+          "element_size": 1,
+          "offset": 64,
+          "size": 8
+        },
+        "personality": {
+          "offset": 76,
+          "size": 4
+        },
+        "pp": {
+          "count": 4,
+          "element_size": 1,
+          "offset": 37,
+          "size": 4
+        },
+        "ppBonuses": {
+          "offset": 63,
+          "size": 1
+        },
+        "spAttack": {
+          "offset": 8,
+          "size": 2
+        },
+        "spDefense": {
+          "offset": 10,
+          "size": 2
+        },
+        "species": {
+          "offset": 0,
+          "size": 2
+        },
+        "speed": {
+          "offset": 6,
+          "size": 2
+        },
+        "statStages": {
+          "count": 8,
+          "element_size": 1,
+          "offset": 24,
+          "size": 8
+        },
+        "status1": {
+          "offset": 80,
+          "size": 4
+        },
+        "types": {
+          "count": 3,
+          "element_size": 1,
+          "offset": 34,
+          "size": 3
+        },
+        "volatiles": {
+          "offset": 84,
+          "size": 48
+        }
+      },
+      "size": 140
+    },
+    "BattleResults": {
+      "bitfields": {},
+      "fields": {
+        "opponentFaintCounter": {
+          "offset": 1,
+          "size": 1
+        },
+        "playerFaintCounter": {
+          "offset": 0,
+          "size": 1
+        }
+      },
+      "size": 88
+    },
+    "BoxPokemon": {
+      "bitfields": {
+        "compressedStatus": {
+          "bits": 4,
+          "initializer_sha256": "08a636d8ceb5ff882a28be13d6f1b18a9f2f88202b091d5b2ee795d1694dd78a",
+          "mask": "0xf0",
+          "offset": 27,
+          "shift": 4,
+          "width": 1
+        },
+        "hasSpecies": {
+          "bits": 1,
+          "initializer_sha256": "a01f79515d8d546002e4ff69944e4198f449daef412a347bb92a2ec581a3b925",
+          "mask": "0x2",
+          "offset": 19,
+          "shift": 1,
+          "width": 1
+        },
+        "hiddenNatureModifier": {
+          "bits": 5,
+          "initializer_sha256": "d08d08884126e9813d4cd64a9c65e2cc934723cb23c64db53170342da60593b2",
+          "mask": "0xf8",
+          "offset": 18,
+          "shift": 3,
+          "width": 1
+        },
+        "hpLost": {
+          "bits": 14,
+          "initializer_sha256": "a4f66563857bdc60f81f7e989cf08e8d261351ceefaa6ee3ba16855464260f39",
+          "mask": "0x3fff",
+          "offset": 30,
+          "shift": 0,
+          "width": 2
+        },
+        "isBadEgg": {
+          "bits": 1,
+          "initializer_sha256": "798c5c2b395ab2222b5bc250cff732cb7c3f507ccfce1bc936976a4e8b66191d",
+          "mask": "0x1",
+          "offset": 19,
+          "shift": 0,
+          "width": 1
+        },
+        "isEgg": {
+          "bits": 1,
+          "initializer_sha256": "0f4b78866892f3f9572126dbaff2e11a57a4d3fa90398dcf07c032bab5f5d48f",
+          "mask": "0x4",
+          "offset": 19,
+          "shift": 2,
+          "width": 1
+        },
+        "language": {
+          "bits": 3,
+          "initializer_sha256": "73e059e3244bf7c9392fdbe0221fd079209160ff5d9881b51f1eabea0d26909f",
+          "mask": "0x7",
+          "offset": 18,
+          "shift": 0,
+          "width": 1
+        },
+        "markings": {
+          "bits": 4,
+          "initializer_sha256": "02e7cb225565e21d6b14392794120ea9dea4e34fb7a8320c1367354d184f9724",
+          "mask": "0xf",
+          "offset": 27,
+          "shift": 0,
+          "width": 1
+        },
+        "shinyModifier": {
+          "bits": 1,
+          "initializer_sha256": "735028933bf2b7724a5969fa1779cc21ee8abfa939249426a3fbdea0d2466d3f",
+          "mask": "0x40",
+          "offset": 31,
+          "shift": 6,
+          "width": 1
+        }
+      },
+      "fields": {
+        "checksum": {
+          "offset": 28,
+          "size": 2
+        },
+        "nickname": {
+          "count": 10,
+          "element_size": 1,
+          "offset": 8,
+          "size": 10
+        },
+        "otId": {
+          "offset": 4,
+          "size": 4
+        },
+        "otName": {
+          "count": 7,
+          "element_size": 1,
+          "offset": 20,
+          "size": 7
+        },
+        "personality": {
+          "offset": 0,
+          "size": 4
+        },
+        "secure": {
+          "offset": 32,
+          "size": 48
+        }
+      },
+      "size": 80
+    },
+    "Evolution": {
+      "bitfields": {},
+      "fields": {
+        "method": {
+          "offset": 0,
+          "size": 2
+        },
+        "param": {
+          "offset": 2,
+          "size": 2
+        },
+        "params": {
+          "offset": 8,
+          "size": 4
+        },
+        "targetSpecies": {
+          "offset": 4,
+          "size": 2
+        }
+      },
+      "size": 12
+    },
+    "ItemInfo": {
+      "bitfields": {
+        "pocket": {
+          "bits": 5,
+          "initializer_sha256": "173e8a98fddecee907ac8b45bc760f294f75373321a14f2497cadb2d7ee128f6",
+          "mask": "0xf8",
+          "offset": 30,
+          "shift": 3,
+          "width": 1
+        }
+      },
+      "fields": {
+        "battleUsage": {
+          "offset": 33,
+          "size": 1
+        },
+        "effect": {
+          "offset": 16,
+          "size": 4
+        },
+        "holdEffect": {
+          "offset": 28,
+          "size": 1
+        },
+        "holdEffectParam": {
+          "offset": 29,
+          "size": 1
+        },
+        "name": {
+          "offset": 20,
+          "size": 4
+        },
+        "price": {
+          "offset": 0,
+          "size": 4
+        },
+        "secondaryId": {
+          "offset": 4,
+          "size": 2
+        }
+      },
+      "size": 48
+    },
+    "ItemSlot": {
+      "bitfields": {},
+      "fields": {
+        "itemId": {
+          "offset": 0,
+          "size": 2
+        },
+        "quantity": {
+          "offset": 2,
+          "size": 2
+        }
+      },
+      "size": 4
+    },
+    "Main": {
+      "bitfields": {
+        "inBattle": {
+          "bits": 1,
+          "initializer_sha256": "7a6a37d91e8a26a29b851439d0c6df5882103c9c797384e73281ef8b4ccf2355",
+          "mask": "0x2",
+          "offset": 1081,
+          "shift": 1,
+          "width": 1
+        }
+      },
+      "fields": {
+        "callback1": {
+          "offset": 0,
+          "size": 4
+        },
+        "callback2": {
+          "offset": 4,
+          "size": 4
+        },
+        "state": {
+          "offset": 1080,
+          "size": 1
+        }
+      },
+      "size": 1084
+    },
+    "MoveInfo": {
+      "bitfields": {
+        "accuracy": {
+          "bits": 7,
+          "initializer_sha256": "81b15fd1973ed9d06583c4508bccf76414f2c9fb718f51f5a94149ba12af8c9b",
+          "mask": "0x7f",
+          "offset": 12,
+          "shift": 0,
+          "width": 1
+        },
+        "category": {
+          "bits": 2,
+          "initializer_sha256": "9b596fa7cc8c60d09f72f772da282b7d4fa28f642d0937f2a4781c2f60a35c73",
+          "mask": "0x60",
+          "offset": 10,
+          "shift": 5,
+          "width": 1
+        },
+        "effect": {
+          "bits": 16,
+          "initializer_sha256": "63612f86f759349ab21242e469266b274b8872d1e652f049215d433d7d4b6a3d",
+          "mask": "0xffff",
+          "offset": 8,
+          "shift": 0,
+          "width": 2
+        },
+        "power": {
+          "bits": 9,
+          "initializer_sha256": "7dbc9a29597e91805b8846a355c8dfaed63267a0bf72f25d6dc04acd2113f50d",
+          "mask": "0xff80",
+          "offset": 10,
+          "shift": 7,
+          "width": 2
+        },
+        "priority": {
+          "bits": 4,
+          "initializer_sha256": "d71d2a553d06caa1582fe038ce5f8024da847cd3916471153e53ae23699287a6",
+          "mask": "0xf",
+          "offset": 20,
+          "shift": 0,
+          "width": 1
+        },
+        "target": {
+          "bits": 9,
+          "initializer_sha256": "8b246da9de5b84713744dc3a5b040d19b4dc3a3d8cc38782da48715549a6837f",
+          "mask": "0xff80",
+          "offset": 12,
+          "shift": 7,
+          "width": 2
+        },
+        "type": {
+          "bits": 5,
+          "initializer_sha256": "e4642b6db7b69337c08aff7149048f2385100f9953ca78418ae3a89a70a09335",
+          "mask": "0x1f",
+          "offset": 10,
+          "shift": 0,
+          "width": 1
+        }
+      },
+      "fields": {
+        "argument": {
+          "offset": 32,
+          "size": 4
+        },
+        "name": {
+          "offset": 0,
+          "size": 4
+        },
+        "pp": {
+          "offset": 14,
+          "size": 1
+        }
+      },
+      "size": 64
+    },
+    "MusicPlayerInfo": {
+      "bitfields": {},
+      "fields": {
+        "clock": {
+          "offset": 12,
+          "size": 4
+        },
+        "ident": {
+          "offset": 52,
+          "size": 4
+        },
+        "musicPlayerNext": {
+          "offset": 60,
+          "size": 4
+        },
+        "priority": {
+          "offset": 9,
+          "size": 1
+        },
+        "songHeader": {
+          "offset": 0,
+          "size": 4
+        },
+        "status": {
+          "offset": 4,
+          "size": 4
+        },
+        "trackCount": {
+          "offset": 8,
+          "size": 1
+        },
+        "tracks": {
+          "offset": 44,
+          "size": 4
+        }
+      },
+      "size": 64
+    },
+    "MusicPlayerTrack": {
+      "bitfields": {},
+      "fields": {
+        "bendRange": {
+          "offset": 15,
+          "size": 1
+        },
+        "chan": {
+          "offset": 32,
+          "size": 4
+        },
+        "cmdPtr": {
+          "offset": 64,
+          "size": 4
+        },
+        "flags": {
+          "offset": 0,
+          "size": 1
+        },
+        "gateTime": {
+          "offset": 4,
+          "size": 1
+        },
+        "lfoSpeed": {
+          "offset": 25,
+          "size": 1
+        },
+        "patternLevel": {
+          "offset": 2,
+          "size": 1
+        },
+        "repN": {
+          "offset": 3,
+          "size": 1
+        },
+        "volX": {
+          "offset": 19,
+          "size": 1
+        },
+        "wait": {
+          "offset": 1,
+          "size": 1
+        }
+      },
+      "size": 80
+    },
+    "PaletteFadeControl": {
+      "bitfields": {
+        "active": {
+          "bits": 1,
+          "initializer_sha256": "a6a9623a6c6857122c921e87d62eedb7e880f0d9862f8fb6b0304bf5be1e9d8a",
+          "mask": "0x80",
+          "offset": 15,
+          "shift": 7,
+          "width": 1
+        }
+      },
+      "fields": {},
+      "size": 24
+    },
+    "Pokemon": {
+      "bitfields": {},
+      "fields": {
+        "attack": {
+          "offset": 90,
+          "size": 2
+        },
+        "box": {
+          "offset": 0,
+          "size": 80
+        },
+        "defense": {
+          "offset": 92,
+          "size": 2
+        },
+        "hp": {
+          "offset": 86,
+          "size": 2
+        },
+        "level": {
+          "offset": 84,
+          "size": 1
+        },
+        "mail": {
+          "offset": 85,
+          "size": 1
+        },
+        "maxHP": {
+          "offset": 88,
+          "size": 2
+        },
+        "spAttack": {
+          "offset": 96,
+          "size": 2
+        },
+        "spDefense": {
+          "offset": 98,
+          "size": 2
+        },
+        "speed": {
+          "offset": 94,
+          "size": 2
+        },
+        "status": {
+          "offset": 80,
+          "size": 4
+        }
+      },
+      "size": 100
+    },
+    "PokemonStorage": {
+      "bitfields": {},
+      "fields": {
+        "boxNames": {
+          "count": 14,
+          "element_size": 9,
+          "offset": 33604,
+          "size": 126
+        },
+        "boxWallpapers": {
+          "count": 14,
+          "element_size": 1,
+          "offset": 33730,
+          "size": 14
+        },
+        "boxes": {
+          "count": 14,
+          "element_size": 2400,
+          "offset": 4,
+          "size": 33600
+        },
+        "currentBox": {
+          "offset": 0,
+          "size": 1
+        },
+        "fusions": {
+          "count": 4,
+          "element_size": 100,
+          "offset": 33744,
+          "size": 400
+        }
+      },
+      "size": 34144
+    },
+    "PokemonStorageASLR": {
+      "bitfields": {},
+      "fields": {
+        "aslr": {
+          "count": 128,
+          "element_size": 1,
+          "offset": 34144,
+          "size": 128
+        },
+        "block": {
+          "offset": 0,
+          "size": 34144
+        }
+      },
+      "size": 34272
+    },
+    "PokemonSubstruct0": {
+      "bitfields": {
+        "experience": {
+          "bits": 21,
+          "initializer_sha256": "028a100c71e9ccbb561ba210baa4c504a9eb5cfd3bca910b91fe8f75b3b64b7e",
+          "mask": "0x1fffff",
+          "offset": 4,
+          "shift": 0,
+          "width": 4
+        },
+        "heldItem": {
+          "bits": 10,
+          "initializer_sha256": "a02d029b553e174ee37af17ea5e41aed4b9fdb6e9754f10ee5751dc7ce984eab",
+          "mask": "0x3ff",
+          "offset": 2,
+          "shift": 0,
+          "width": 2
+        },
+        "nickname11": {
+          "bits": 8,
+          "initializer_sha256": "47f12f6f32e004365dcf529f126cd3e7f70f4d759fe6c485f7d6a19a7211e574",
+          "mask": "0x1fe0",
+          "offset": 6,
+          "shift": 5,
+          "width": 2
+        },
+        "nickname12": {
+          "bits": 8,
+          "initializer_sha256": "1f94247adef7214caed83f8f57f72f6f7492fd053287a6c2220f0ad0f2452a4b",
+          "mask": "0x3fc0",
+          "offset": 10,
+          "shift": 6,
+          "width": 2
+        },
+        "pokeball": {
+          "bits": 6,
+          "initializer_sha256": "815830ff9395d443a14263b39ab231f30d33aa2bb60f141dbccbb03b2eb33a04",
+          "mask": "0x3f",
+          "offset": 10,
+          "shift": 0,
+          "width": 1
+        },
+        "species": {
+          "bits": 11,
+          "initializer_sha256": "3f9ad95314e08c99638c28d8dd990d8ef4d3b90c74a352eb981949b13862c833",
+          "mask": "0x7ff",
+          "offset": 0,
+          "shift": 0,
+          "width": 2
+        },
+        "teraType": {
+          "bits": 5,
+          "initializer_sha256": "caf1b3c87447a789d054365dd57a8da51093d1e5b8828f5a35cd9b9ef6aebe48",
+          "mask": "0xf8",
+          "offset": 1,
+          "shift": 3,
+          "width": 1
+        },
+        "unused_02": {
+          "bits": 6,
+          "initializer_sha256": "b1d34013745b9eaed4517648e733dd2c46acf71914e00f3caf2f95c5c3cc6ed5",
+          "mask": "0xfc",
+          "offset": 3,
+          "shift": 2,
+          "width": 1
+        },
+        "unused_04": {
+          "bits": 3,
+          "initializer_sha256": "e272491dc643c0968642890bfeca9c563fdf101a0b94631b6253532667e9dec7",
+          "mask": "0xe0",
+          "offset": 7,
+          "shift": 5,
+          "width": 1
+        },
+        "unused_0A": {
+          "bits": 2,
+          "initializer_sha256": "474f81fbdc00df7394aa189f3fb9309532dd9a16fb3cf39cc18f8598de6ebf90",
+          "mask": "0xc0",
+          "offset": 11,
+          "shift": 6,
+          "width": 1
+        }
+      },
+      "fields": {
+        "friendship": {
+          "offset": 9,
+          "size": 1
+        },
+        "ppBonuses": {
+          "offset": 8,
+          "size": 1
+        }
+      },
+      "size": 12
+    },
+    "PokemonSubstruct1": {
+      "bitfields": {
+        "evolutionTracker1": {
+          "bits": 5,
+          "initializer_sha256": "caf1b3c87447a789d054365dd57a8da51093d1e5b8828f5a35cd9b9ef6aebe48",
+          "mask": "0xf8",
+          "offset": 1,
+          "shift": 3,
+          "width": 1
+        },
+        "evolutionTracker2": {
+          "bits": 5,
+          "initializer_sha256": "21cd0ecfb4981e696d6316b3ba8282f5015314fee831e382a9128d432b4c1056",
+          "mask": "0xf8",
+          "offset": 3,
+          "shift": 3,
+          "width": 1
+        },
+        "hyperTrainedAttack": {
+          "bits": 1,
+          "initializer_sha256": "f52db31332534833414abd5e870f78c810b8ebbe5b134bbf599506beecfd1b93",
+          "mask": "0x80",
+          "offset": 7,
+          "shift": 7,
+          "width": 1
+        },
+        "hyperTrainedDefense": {
+          "bits": 1,
+          "initializer_sha256": "0e344df0a3787f0cc63f3c6ee8159948e5aed92f6df2bda737a94a72d2914426",
+          "mask": "0x80",
+          "offset": 8,
+          "shift": 7,
+          "width": 1
+        },
+        "hyperTrainedHP": {
+          "bits": 1,
+          "initializer_sha256": "0972776a418eb1a4d68561c9dde5696960002939360bd436039edbf02b335c02",
+          "mask": "0x40",
+          "offset": 7,
+          "shift": 6,
+          "width": 1
+        },
+        "hyperTrainedSpAttack": {
+          "bits": 1,
+          "initializer_sha256": "31007615969a5c6ae23a3012c28acc7e23bf28d12e1644e69430d570e3720a2e",
+          "mask": "0x80",
+          "offset": 10,
+          "shift": 7,
+          "width": 1
+        },
+        "hyperTrainedSpDefense": {
+          "bits": 1,
+          "initializer_sha256": "e7757379b5249eccee11e55246a58ac28bfa212ec5a194e94879dca61baed49f",
+          "mask": "0x80",
+          "offset": 11,
+          "shift": 7,
+          "width": 1
+        },
+        "hyperTrainedSpeed": {
+          "bits": 1,
+          "initializer_sha256": "48384ec44c71ee1d8f364d4376ee56bb3db41ba909d6b09ddebc236fa03f01a4",
+          "mask": "0x80",
+          "offset": 9,
+          "shift": 7,
+          "width": 1
+        },
+        "move1": {
+          "bits": 11,
+          "initializer_sha256": "3f9ad95314e08c99638c28d8dd990d8ef4d3b90c74a352eb981949b13862c833",
+          "mask": "0x7ff",
+          "offset": 0,
+          "shift": 0,
+          "width": 2
+        },
+        "move2": {
+          "bits": 11,
+          "initializer_sha256": "92efe7de55454be35360db3dc749ee51ec60c80084dd600b4d207c7fef63c8d3",
+          "mask": "0x7ff",
+          "offset": 2,
+          "shift": 0,
+          "width": 2
+        },
+        "move3": {
+          "bits": 11,
+          "initializer_sha256": "b911bccd17a03ff1e481db9eed5b3b32add8751a4b66fa80c3ff5b96525fdc1b",
+          "mask": "0x7ff",
+          "offset": 4,
+          "shift": 0,
+          "width": 2
+        },
+        "move4": {
+          "bits": 11,
+          "initializer_sha256": "d94f0e4d692825d4dbf16163f33dff415b5fdf2c265823e24254ebc36a977a09",
+          "mask": "0x7ff",
+          "offset": 6,
+          "shift": 0,
+          "width": 2
+        },
+        "pp1": {
+          "bits": 7,
+          "initializer_sha256": "97148209aa042b70f989bf94660ff46f0724e77a1aca1ea744e4abdf062c12b9",
+          "mask": "0x7f",
+          "offset": 8,
+          "shift": 0,
+          "width": 1
+        },
+        "pp2": {
+          "bits": 7,
+          "initializer_sha256": "c7aac639f78ae96959fead41d8c420f53223bd603974a7c92d5fa67274cec6d9",
+          "mask": "0x7f",
+          "offset": 9,
+          "shift": 0,
+          "width": 1
+        },
+        "pp3": {
+          "bits": 7,
+          "initializer_sha256": "f220071017559d3e88b9774188566f55c0bd9fce75a016b8af9478d9576bb88a",
+          "mask": "0x7f",
+          "offset": 10,
+          "shift": 0,
+          "width": 1
+        },
+        "pp4": {
+          "bits": 7,
+          "initializer_sha256": "83a9894e0f7c7656990579ef6fe44e026a5ecd35436db3b5046c15b3fb46bfbe",
+          "mask": "0x7f",
+          "offset": 11,
+          "shift": 0,
+          "width": 1
+        },
+        "unused_04": {
+          "bits": 5,
+          "initializer_sha256": "27b1a90a6c315f2cc66717dfc142bd81066e38c2021d9c442c7160dc2de76be5",
+          "mask": "0xf8",
+          "offset": 5,
+          "shift": 3,
+          "width": 1
+        },
+        "unused_06": {
+          "bits": 3,
+          "initializer_sha256": "461aaa4d5b75db399b1d5c4459003d79646d75f1e3827810d9a47703a706ae29",
+          "mask": "0x38",
+          "offset": 7,
+          "shift": 3,
+          "width": 1
+        }
+      },
+      "fields": {},
+      "size": 12
+    },
+    "PokemonSubstruct2": {
+      "bitfields": {},
+      "fields": {},
+      "size": 12
+    },
+    "PokemonSubstruct3": {
+      "bitfields": {
+        "abilityNum": {
+          "bits": 2,
+          "initializer_sha256": "efcd892552f2cf1dc8c5da101a5b65fa5a8eb90d83181e4fa31f0228721adfff",
+          "mask": "0x60",
+          "offset": 11,
+          "shift": 5,
+          "width": 1
+        },
+        "artistRibbon": {
+          "bits": 1,
+          "initializer_sha256": "ff502c13924a86777bdde79dfcf029a38480c5c4d8a994687eccfb599ff347e8",
+          "mask": "0x4",
+          "offset": 10,
+          "shift": 2,
+          "width": 1
+        },
+        "attackIV": {
+          "bits": 5,
+          "initializer_sha256": "365d719b01a54b769fcc35ead4b4890113cef5339483a78340b27d3e34b8630d",
+          "mask": "0x3e0",
+          "offset": 4,
+          "shift": 5,
+          "width": 2
+        },
+        "beautyRibbon": {
+          "bits": 3,
+          "initializer_sha256": "6add247b682657ee430558423933f9d948eba82fa81714b9031ac1d0ccc3f243",
+          "mask": "0x38",
+          "offset": 8,
+          "shift": 3,
+          "width": 1
+        },
+        "championRibbon": {
+          "bits": 1,
+          "initializer_sha256": "48384ec44c71ee1d8f364d4376ee56bb3db41ba909d6b09ddebc236fa03f01a4",
+          "mask": "0x80",
+          "offset": 9,
+          "shift": 7,
+          "width": 1
+        },
+        "coolRibbon": {
+          "bits": 3,
+          "initializer_sha256": "a195c8170073ca7f2015a8a3ab168adb611440deb87365c8500bdd70cca6a11e",
+          "mask": "0x7",
+          "offset": 8,
+          "shift": 0,
+          "width": 1
+        },
+        "countryRibbon": {
+          "bits": 1,
+          "initializer_sha256": "31007615969a5c6ae23a3012c28acc7e23bf28d12e1644e69430d570e3720a2e",
+          "mask": "0x80",
+          "offset": 10,
+          "shift": 7,
+          "width": 1
+        },
+        "cuteRibbon": {
+          "bits": 3,
+          "initializer_sha256": "a035c8ceeb99e024b68edefc66c4cf56119c7d03612ac031d0cafe17c6e84b6e",
+          "mask": "0x1c0",
+          "offset": 8,
+          "shift": 6,
+          "width": 2
+        },
+        "defenseIV": {
+          "bits": 5,
+          "initializer_sha256": "245833309de6897d79e146ecafbbeee7c3d9fd56fdf2595c230b5d6fd6432b4c",
+          "mask": "0x7c",
+          "offset": 5,
+          "shift": 2,
+          "width": 1
+        },
+        "dynamaxLevel": {
+          "bits": 4,
+          "initializer_sha256": "c11ede72cd189e9418c030540e3b4531c71408096e81fe78db062d54f898c770",
+          "mask": "0x78",
+          "offset": 3,
+          "shift": 3,
+          "width": 1
+        },
+        "earthRibbon": {
+          "bits": 1,
+          "initializer_sha256": "bafec505d21053585fed7c82fde61abf6e38fa90589839fec28dc5cb74f0f1b7",
+          "mask": "0x2",
+          "offset": 11,
+          "shift": 1,
+          "width": 1
+        },
+        "effortRibbon": {
+          "bits": 1,
+          "initializer_sha256": "3afdcb49e2a33578c338ac8ebf14e30b1b01f6c0a9bb82894470381af0bd1a55",
+          "mask": "0x8",
+          "offset": 10,
+          "shift": 3,
+          "width": 1
+        },
+        "gigantamaxFactor": {
+          "bits": 1,
+          "initializer_sha256": "f52db31332534833414abd5e870f78c810b8ebbe5b134bbf599506beecfd1b93",
+          "mask": "0x80",
+          "offset": 7,
+          "shift": 7,
+          "width": 1
+        },
+        "hpIV": {
+          "bits": 5,
+          "initializer_sha256": "eb101d252d3c249da6d1707f4d2ece794fde6675c50b700806464830123ef6c6",
+          "mask": "0x1f",
+          "offset": 4,
+          "shift": 0,
+          "width": 1
+        },
+        "isEgg": {
+          "bits": 1,
+          "initializer_sha256": "0972776a418eb1a4d68561c9dde5696960002939360bd436039edbf02b335c02",
+          "mask": "0x40",
+          "offset": 7,
+          "shift": 6,
+          "width": 1
+        },
+        "isShadow": {
+          "bits": 1,
+          "initializer_sha256": "0d5217721b15ac5490e1bded4126835bd56b5a4ffebf276ed934e93415bc57d2",
+          "mask": "0x8",
+          "offset": 11,
+          "shift": 3,
+          "width": 1
+        },
+        "landRibbon": {
+          "bits": 1,
+          "initializer_sha256": "5fa0de5415820ef79b5aa0cbbcbd68f5e5486cffcbae46bdc04aa2d4a3ca2c32",
+          "mask": "0x20",
+          "offset": 10,
+          "shift": 5,
+          "width": 1
+        },
+        "marineRibbon": {
+          "bits": 1,
+          "initializer_sha256": "b7ef388fde387673cec0949520ca4ac836bcb8b2ac7e204fa8f0a4bd268259e9",
+          "mask": "0x10",
+          "offset": 10,
+          "shift": 4,
+          "width": 1
+        },
+        "metGame": {
+          "bits": 4,
+          "initializer_sha256": "a11e9d16e10484faa113dac8f9c312babfd31eeb97033b6a970ec98edeb3f4c3",
+          "mask": "0x780",
+          "offset": 2,
+          "shift": 7,
+          "width": 2
+        },
+        "metLevel": {
+          "bits": 7,
+          "initializer_sha256": "12990cf8fc4288a7e8e4586bcecdf5b456dee0c8838725a84c780dbe424381b5",
+          "mask": "0x7f",
+          "offset": 2,
+          "shift": 0,
+          "width": 1
+        },
+        "modernFatefulEncounter": {
+          "bits": 1,
+          "initializer_sha256": "e7757379b5249eccee11e55246a58ac28bfa212ec5a194e94879dca61baed49f",
+          "mask": "0x80",
+          "offset": 11,
+          "shift": 7,
+          "width": 1
+        },
+        "nationalRibbon": {
+          "bits": 1,
+          "initializer_sha256": "3423cfe2ed780f5d09ddaf78a84acaa6d9597f593e102ec1566e7d723cb1ef9b",
+          "mask": "0x1",
+          "offset": 11,
+          "shift": 0,
+          "width": 1
+        },
+        "otGender": {
+          "bits": 1,
+          "initializer_sha256": "6f71d03b0fcc7380737734da04c201d9917854f9b2e852cc511927801f4e3b52",
+          "mask": "0x80",
+          "offset": 3,
+          "shift": 7,
+          "width": 1
+        },
+        "skyRibbon": {
+          "bits": 1,
+          "initializer_sha256": "ff21f934316a4784c368ede30ad893b96e81652da81ecd2f538646373bbebc33",
+          "mask": "0x40",
+          "offset": 10,
+          "shift": 6,
+          "width": 1
+        },
+        "smartRibbon": {
+          "bits": 3,
+          "initializer_sha256": "7037050e907cedf0af3cedb76eed4a51d5cebc32680709426a5381b5282c6de2",
+          "mask": "0xe",
+          "offset": 9,
+          "shift": 1,
+          "width": 1
+        },
+        "spAttackIV": {
+          "bits": 5,
+          "initializer_sha256": "1c215547f826448bb2e7518b572526e50d2b5dbe12954f56caf27b50bdec4025",
+          "mask": "0x1f0",
+          "offset": 6,
+          "shift": 4,
+          "width": 2
+        },
+        "spDefenseIV": {
+          "bits": 5,
+          "initializer_sha256": "2408e4e928a61745815294cb0153dc2aee33ef82ceb8f1e6a99f80a5eeaa1cdb",
+          "mask": "0x3e",
+          "offset": 7,
+          "shift": 1,
+          "width": 1
+        },
+        "speedIV": {
+          "bits": 5,
+          "initializer_sha256": "8520cb76ff934dcc8fce2a778a6c6db0c73a08885178ea8f90cc71df919f7b36",
+          "mask": "0xf80",
+          "offset": 5,
+          "shift": 7,
+          "width": 2
+        },
+        "toughRibbon": {
+          "bits": 3,
+          "initializer_sha256": "33d8cb69eb1e808850baf365da88983087a20e94b6553142d844719650ad4ebb",
+          "mask": "0x70",
+          "offset": 9,
+          "shift": 4,
+          "width": 1
+        },
+        "unused_0B": {
+          "bits": 1,
+          "initializer_sha256": "c992ed7ca9eb2f6c42125f6638620e85cd27d23155a513c5f07157e7c12361e2",
+          "mask": "0x10",
+          "offset": 11,
+          "shift": 4,
+          "width": 1
+        },
+        "victoryRibbon": {
+          "bits": 1,
+          "initializer_sha256": "ca4d81e5840ccee9d4515e43f367efab96fa2b8d5c01d6ca0ccae2776e131628",
+          "mask": "0x2",
+          "offset": 10,
+          "shift": 1,
+          "width": 1
+        },
+        "winningRibbon": {
+          "bits": 1,
+          "initializer_sha256": "6b265437c568775766e5c1d62535152f18b3f5d41570e98f377cc0a1684e5aee",
+          "mask": "0x1",
+          "offset": 10,
+          "shift": 0,
+          "width": 1
+        },
+        "worldRibbon": {
+          "bits": 1,
+          "initializer_sha256": "948a87e7b58c89bb7352aa136d13b110f99e182d7d63c010b60b6fe778572132",
+          "mask": "0x4",
+          "offset": 11,
+          "shift": 2,
+          "width": 1
+        }
+      },
+      "fields": {
+        "metLocation": {
+          "offset": 1,
+          "size": 1
+        },
+        "pokerus": {
+          "offset": 0,
+          "size": 1
+        }
+      },
+      "size": 12
+    },
+    "SaveBlock1": {
+      "bitfields": {},
+      "fields": {
+        "bag": {
+          "offset": 1376,
+          "size": 744
+        },
+        "flags": {
+          "offset": 4720,
+          "size": 300
+        },
+        "location": {
+          "offset": 4,
+          "size": 8
+        },
+        "location_mapGroup": {
+          "offset": 4,
+          "size": 1
+        },
+        "location_mapNum": {
+          "offset": 5,
+          "size": 1
+        },
+        "playerParty": {
+          "count": 6,
+          "element_size": 100,
+          "offset": 568,
+          "size": 600
+        },
+        "playerPartyCount": {
+          "offset": 564,
+          "size": 1
+        },
+        "pokeblocks": {
+          "offset": 2120,
+          "size": 320
+        },
+        "vars": {
+          "offset": 5020,
+          "size": 512
+        }
+      },
+      "size": 15568
+    },
+    "SaveBlock1ASLR": {
+      "bitfields": {},
+      "fields": {
+        "aslr": {
+          "count": 128,
+          "element_size": 1,
+          "offset": 15568,
+          "size": 128
+        },
+        "block": {
+          "offset": 0,
+          "size": 15568
+        }
+      },
+      "size": 15696
+    },
+    "SaveBlock2": {
+      "bitfields": {},
+      "fields": {
+        "encryptionKey": {
+          "offset": 172,
+          "size": 4
+        },
+        "playerName": {
+          "count": 8,
+          "element_size": 1,
+          "offset": 0,
+          "size": 8
+        },
+        "playerTrainerId": {
+          "count": 4,
+          "element_size": 1,
+          "offset": 10,
+          "size": 4
+        }
+      },
+      "size": 3884
+    },
+    "SaveBlock2ASLR": {
+      "bitfields": {},
+      "fields": {
+        "aslr": {
+          "count": 128,
+          "element_size": 1,
+          "offset": 3884,
+          "size": 128
+        },
+        "block": {
+          "offset": 0,
+          "size": 3884
+        }
+      },
+      "size": 4012
+    },
+    "ScriptContext": {
+      "bitfields": {},
+      "fields": {
+        "mode": {
+          "offset": 1,
+          "size": 1
+        },
+        "nativePtr": {
+          "offset": 4,
+          "size": 4
+        },
+        "scriptPtr": {
+          "offset": 8,
+          "size": 4
+        },
+        "stack": {
+          "count": 20,
+          "element_size": 4,
+          "offset": 12,
+          "size": 80
+        }
+      },
+      "size": 116
+    },
+    "SoundInfo": {
+      "bitfields": {},
+      "fields": {
+        "ident": {
+          "offset": 0,
+          "size": 4
+        },
+        "musicPlayerHead": {
+          "offset": 36,
+          "size": 4
+        }
+      },
+      "size": 4016
+    },
+    "SpeciesInfo": {
+      "bitfields": {
+        "natDexNum": {
+          "bits": 16,
+          "initializer_sha256": "a193ee4013de586ee1be7e4c7650e9b1fa0087f3d055601099504458cf4c938f",
+          "mask": "0xffff",
+          "offset": 60,
+          "shift": 0,
+          "width": 2
+        }
+      },
+      "fields": {
+        "abilities": {
+          "count": 3,
+          "element_size": 2,
+          "offset": 24,
+          "size": 6
+        },
+        "baseAttack": {
+          "offset": 1,
+          "size": 1
+        },
+        "baseDefense": {
+          "offset": 2,
+          "size": 1
+        },
+        "baseHP": {
+          "offset": 0,
+          "size": 1
+        },
+        "baseSpAttack": {
+          "offset": 4,
+          "size": 1
+        },
+        "baseSpDefense": {
+          "offset": 5,
+          "size": 1
+        },
+        "baseSpeed": {
+          "offset": 3,
+          "size": 1
+        },
+        "evolutions": {
+          "offset": 160,
+          "size": 4
+        },
+        "expYield": {
+          "offset": 10,
+          "size": 2
+        },
+        "genderRatio": {
+          "offset": 18,
+          "size": 1
+        },
+        "growthRate": {
+          "offset": 21,
+          "size": 1
+        },
+        "itemCommon": {
+          "offset": 14,
+          "size": 2
+        },
+        "itemRare": {
+          "offset": 16,
+          "size": 2
+        },
+        "speciesName": {
+          "count": 13,
+          "element_size": 1,
+          "offset": 44,
+          "size": 13
+        },
+        "types": {
+          "count": 2,
+          "element_size": 1,
+          "offset": 6,
+          "size": 2
+        }
+      },
+      "size": 264
+    },
+    "Task": {
+      "bitfields": {},
+      "fields": {
+        "data": {
+          "count": 16,
+          "element_size": 2,
+          "offset": 8,
+          "size": 32
+        },
+        "func": {
+          "offset": 0,
+          "size": 4
+        },
+        "isActive": {
+          "offset": 4,
+          "size": 1
+        }
+      },
+      "size": 40
+    },
+    "Volatiles": {
+      "bitfields": {
+        "perishSongTimer": {
+          "bits": 2,
+          "initializer_sha256": "af725fdb49bf59bbc9355c3eb93ef44f3a9c4eec30dd6af4a49d0bbb759250d4",
+          "mask": "0xc",
+          "offset": 30,
+          "shift": 2,
+          "width": 1
+        }
+      },
+      "fields": {},
+      "size": 48
+    }
+  },
+  "symbol_checks": {
+    "Bag.size": {
+      "compiler": 744,
+      "independent": 744
+    },
+    "Pokemon.size": {
+      "compiler": 100,
+      "independent": 100
+    },
+    "PokemonStorageASLR.padding": {
+      "compiler": 128,
+      "independent": 128
+    },
+    "SaveBlock1.flags": {
+      "compiler": 4720,
+      "independent": 4720
+    },
+    "SaveBlock1.flags.header": {
+      "compiler": 4720,
+      "independent": 4720
+    },
+    "SaveBlock1.playerParty.header": {
+      "compiler": 568,
+      "independent": 568
+    },
+    "SaveBlock1.playerPartyCount.header": {
+      "compiler": 564,
+      "independent": 564
+    },
+    "SaveBlock1.size.header": {
+      "compiler": 15568,
+      "independent": 15568
+    },
+    "SaveBlock1.vars.header": {
+      "compiler": 5020,
+      "independent": 5020
+    },
+    "SaveBlock1ASLR.padding": {
+      "compiler": 128,
+      "independent": 128
+    },
+    "SaveBlock2.size.header": {
+      "compiler": 3884,
+      "independent": 3884
+    },
+    "SaveBlock2ASLR.padding": {
+      "compiler": 128,
+      "independent": 128
+    },
+    "abilities.count": {
+      "compiler": 319,
+      "independent": 319
+    },
+    "gAbilitiesInfo.pointer": {
+      "compiler": 147303812,
+      "independent": 147303812
+    },
+    "gAbilitiesInfo.size": {
+      "compiler": 8932,
+      "independent": 8932
+    },
+    "gBattleMons.size": {
+      "compiler": 560,
+      "independent": 560
+    },
+    "gBattleResults.size": {
+      "compiler": 88,
+      "independent": 88
+    },
+    "gItemsInfo.pointer": {
+      "compiler": 141117596,
+      "independent": 141117596
+    },
+    "gItemsInfo.size": {
+      "compiler": 41952,
+      "independent": 41952
+    },
+    "gMPlayInfo_SE1.size": {
+      "compiler": 64,
+      "independent": 64
+    },
+    "gMain.size": {
+      "compiler": 1084,
+      "independent": 1084
+    },
+    "gMovesInfo.pointer": {
+      "compiler": 141307464,
+      "independent": 141307464
+    },
+    "gMovesInfo.size": {
+      "compiler": 59840,
+      "independent": 59840
+    },
+    "gPaletteFade.size": {
+      "compiler": 24,
+      "independent": 24
+    },
+    "gParties.size": {
+      "compiler": 2400,
+      "independent": 2400
+    },
+    "gPartiesCount.size": {
+      "compiler": 4,
+      "independent": 4
+    },
+    "gPokemonStorage.size": {
+      "compiler": 34272,
+      "independent": 34272
+    },
+    "gSaveblock1.size": {
+      "compiler": 15696,
+      "independent": 15696
+    },
+    "gSaveblock2.size": {
+      "compiler": 4012,
+      "independent": 4012
+    },
+    "gSoundInfo.size": {
+      "compiler": 4016,
+      "independent": 4016
+    },
+    "gSpeciesInfo.pointer": {
+      "compiler": 141418812,
+      "independent": 141418812
+    },
+    "gSpeciesInfo.size": {
+      "compiler": 415536,
+      "independent": 415536
+    },
+    "gTasks.size": {
+      "compiler": 640,
+      "independent": 640
+    },
+    "item_name_length": {
+      "compiler": 20,
+      "independent": 20
+    },
+    "items.count": {
+      "compiler": 874,
+      "independent": 874
+    },
+    "moves.count": {
+      "compiler": 848,
+      "independent": 848
+    },
+    "sGlobalScriptContext.size": {
+      "compiler": 116,
+      "independent": 116
+    },
+    "species.count": {
+      "compiler": 1573,
+      "independent": 1573
+    },
+    "species.egg_excluded": {
+      "compiler": 1573,
+      "independent": 1573
+    }
+  },
+  "unavailable": {
+    "ItemInfo.battleEffect": "No such member; effect pointer and battleUsage emitted instead (include/item.h:69-90).",
+    "legacy_symbols": [
+      "gStatuses3",
+      "gDisableStructs",
+      "gTrainerBattleOpponent_A",
+      "BattleIntroGetMonsData",
+      "GiveMonToPlayer"
+    ],
+    "unresolved_engine_sites": [
+      "TryStorePartyMonInBox",
+      "ReleaseMon"
+    ]
+  }
+}

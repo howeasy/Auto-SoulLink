@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -1268,11 +1269,168 @@ def render(profile: dict) -> str:
     return json.dumps(profile, indent=2, sort_keys=True) + "\n"
 
 
+# X1-PACK is opt-in: default generation/checks of existing packs are unchanged.
+EXPANSION_BUILD = "28877d73"
+EXPANSION_TITLE = "emerald_expansion_28877d73"
+EXPANSION_SHA1 = "28877d733492299599f2b8fff50493109d72653c"
+
+
+def expansion_inputs(build=EXPANSION_BUILD, artifacts=None):
+    if build != EXPANSION_BUILD:
+        raise ValueError(f"unregistered expansion build: {build}")
+    directory = REPO / "data/games/gen3_exp" / build
+    facts = json.loads((directory / "facts.json").read_text(encoding="utf-8"))
+    artifacts = pathlib.Path(artifacts or os.environ.get("SLINK_EXPANSION_ARTIFACTS", REPO / ".cache/expansion-output/reference"))
+    files = {}
+    for name in ("pokeemerald.gba", "pokeemerald.sym", "pokeemerald.map"):
+        raw = (artifacts / name).read_bytes()
+        expected = facts["provenance"]["artifacts"][name]
+        if len(raw) != expected["size"] or hashlib.sha256(raw).hexdigest() != expected["sha256"]:
+            raise ValueError(f"expansion artifact identity mismatch: {name}")
+        files[name] = raw
+    if hashlib.sha1(files["pokeemerald.gba"]).hexdigest() != EXPANSION_SHA1:
+        raise ValueError("expansion ROM identity mismatch")
+    if facts["provenance"]["rom_sha1"] != EXPANSION_SHA1:
+        raise ValueError("expansion facts are bound to another ROM")
+    rows = {}
+    for line, raw in enumerate(files["pokeemerald.sym"].decode().splitlines(), 1):
+        m = re.fullmatch(r"([0-9a-f]{8}) [lg] ([0-9a-f]{8}) (\S+)", raw)
+        if m:
+            rows.setdefault(m[3], []).append({"address": int(m[1], 16), "size": int(m[2], 16), "line": line})
+    return {"build": build, "directory": directory, "facts": facts, "symbols": rows,
+            "map": files["pokeemerald.map"].decode(), "rom": files["pokeemerald.gba"],
+            "source": {"rom_sha1": EXPANSION_SHA1, "source_commit": facts["provenance"]["source_commit"],
+                       "symbols_sha256": hashlib.sha256(files["pokeemerald.sym"]).hexdigest(),
+                       "facts_sha256": hashlib.sha256(render(facts).encode()).hexdigest()}}
+
+
+def expansion_symbol(context, name, obj=None):
+    hits = context["symbols"].get(name, [])
+    if obj:
+        spans = re.findall(r"^ \.text\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+" + re.escape(obj) + r"$", context["map"], re.M)
+        if len(spans) != 1:
+            raise ValueError(f"expansion .map has no unique .text span for {obj}")
+        lo, size = (int(v, 16) for v in spans[0])
+        hits = [r for r in hits if lo <= r["address"] < lo + size]
+    if len(hits) != 1:
+        raise ValueError(f"expansion .sym has {len(hits)} occurrences of {name} ({obj or 'unscoped'})")
+    return hits[0]
+
+
+def expansion_write(context, filename, value, check=False):
+    path = context["directory"] / filename
+    text = render(value)
+    if check:
+        if not path.exists() or path.read_text(encoding="utf-8") != text:
+            raise ValueError(f"stale expansion output: {path}")
+        print(f"{path.relative_to(REPO)} is current")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {path.relative_to(REPO)}")
+
+
+def build_expansion(context):
+    facts = context["facts"]
+    types, const = facts["structs"], facts["constants"]
+    sections = {"ram": {}, "rom": {}, "derived": {}}
+    src, dropped = {}, {}
+    removed = {"gDisableStructs", "gStatuses3", "gTrainerBattleOpponent_A", "BattleIntroGetMonsData"}
+    party = {"PARTY_BASE": ("gParties", "B_TRAINER_PLAYER", const["PARTY_SIZE"] * types["Pokemon"]["size"]),
+             "ENEMY_BASE": ("gParties", "B_TRAINER_OPPONENT_A", const["PARTY_SIZE"] * types["Pokemon"]["size"]),
+             "PARTY_COUNT_ADDR": ("gPartiesCount", "B_TRAINER_PLAYER", 1),
+             "ENEMY_COUNT_ADDR": ("gPartiesCount", "B_TRAINER_OPPONENT_A", 1)}
+    for (section, key), (symbol, thumb) in EMERALD_SYM_ADDR.items():
+        if symbol in removed:
+            dropped[key] = f"{symbol} has no expansion equivalent in this build"
+            continue
+        symbol = "gMovesInfo" if symbol == "gBattleMoves" else symbol
+        offset = 0
+        if key in party:
+            symbol, index, stride = party[key]
+            offset = const[index] * stride
+        row = expansion_symbol(context, symbol)
+        sections[section][key] = (row["address"] + offset) | int(thumb)
+        src[f"{section}.{key}"] = f"build:pokemon.sym:{row['line']} {symbol}+{offset}; Thumb={thumb}"
+    for name in ("gBattleControllerExecFlags", "gBattlerControllerFuncs"):
+        row = expansion_symbol(context, name)
+        key = {"gBattleControllerExecFlags": "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR", "gBattlerControllerFuncs": "BATTLER_CONTROLLER_FUNCS_ADDR"}[name]
+        sections["ram"][key] = row["address"]
+        src[f"ram.{key}"] = f"build:pokemon.sym:{row['line']} {name}"
+    row = expansion_symbol(context, "Task_LaunchLvlUpAnim", "src/battle_controller_player.o")
+    sections["rom"]["POST_BATTLE_WRITER_TASKS"] = [row["address"] | 1]
+    src["rom.POST_BATTLE_WRITER_TASKS"] = f"build:pokemon.sym:{row['line']} Task_LaunchLvlUpAnim in .map player-controller span, Thumb"
+    headers = {}
+    for _, (symbol, _, constant) in EMERALD_SE_SONGS.items():
+        row = expansion_symbol(context, symbol)
+        headers[str(const[constant])] = row["address"]
+        src[f"rom.SE_SONG_HEADERS.{const[constant]}"] = f"build:pokemon.sym:{row['line']} {symbol}; facts.constants.{constant}"
+    sections["rom"]["SE_SONG_HEADERS"] = headers
+    derived = sections["derived"]
+
+    def put(key, value, where):
+        derived[key] = value
+        src["derived." + key] = "facts.json:" + where
+
+    for key, constant in {
+        "BADGE_FIRST_FLAG": "FLAG_BADGE01_GET", "BATTLE_TYPE_DOUBLE_MASK": "BATTLE_TYPE_DOUBLE",
+        "BATTLE_TYPE_LINK_MASK": "BATTLE_TYPE_LINK", "BATTLE_TYPE_TRAINER_MASK": "BATTLE_TYPE_TRAINER",
+        "BOXES_PER_STORE": "TOTAL_BOXES_COUNT", "MONS_PER_BOX": "IN_BOX_COUNT", "PARTY_CAPACITY": "PARTY_SIZE",
+        "MAX_LEVEL": "MAX_LEVEL", "B_ACTION_NOTHING_FAINTED": "B_ACTION_NOTHING_FAINTED", "SHEDINJA_SPECIES_ID": "SPECIES_SHEDINJA",
+        "SB1_BALL_POCKET_COUNT": "BAG_POKEBALLS_COUNT", "NICKNAME_LEN": "POKEMON_NAME_LENGTH",
+        **{f"OUTCOME_{k}": f"B_OUTCOME_{k}" for k in ("WON", "LOST", "DREW", "RAN", "CAUGHT")},
+    }.items():
+        put(key, const[constant], "constants." + constant)
+    for key, type_name in {"BASESTATS_ENTRY_SIZE": "SpeciesInfo", "BATTLE_MOVE_ENTRY_SIZE": "MoveInfo",
+                           "TASK_STRUCT_SIZE": "Task", "BATTLE_MON_SIZE": "BattlePokemon",
+                           "PARTY_MON_SIZE": "Pokemon", "BOX_MON_SIZE": "BoxPokemon"}.items():
+        put(key, types[type_name]["size"], f"structs.{type_name}.size")
+    for key, type_name, member in (
+        ("BASESTATS_GROWTH_RATE_OFFSET", "SpeciesInfo", "growthRate"), ("BATTLE_MOVE_PP_OFFSET", "MoveInfo", "pp"),
+        ("BATTLE_MON_OT_ID_OFF", "BattlePokemon", "otId"), ("BATTLE_MON_PERSONALITY_OFF", "BattlePokemon", "personality"),
+        ("BATTLE_RESULTS_PLAYER_FAINTS_OFF", "BattleResults", "playerFaintCounter"),
+        ("BATTLE_RESULTS_FOE_FAINTS_OFF", "BattleResults", "opponentFaintCounter"),
+        ("BOX_DATA_OFFSET", "PokemonStorage", "boxes"), ("GMAIN_CB2_OFFSET", "Main", "callback2"),
+        ("SB1_FLAGS_OFFSET", "SaveBlock1", "flags"), ("SB1_VARS_OFFSET", "SaveBlock1", "vars"),
+        ("SB1_LOCATION_MAP_GROUP_OFFSET", "SaveBlock1", "location_mapGroup"),
+        ("SB1_LOCATION_MAP_NUM_OFFSET", "SaveBlock1", "location_mapNum"),
+        ("SB2_ENC_KEY_OFFSET", "SaveBlock2", "encryptionKey"), ("SB2_NAME_OFFSET", "SaveBlock2", "playerName"),
+        ("SB2_OT_ID_OFFSET", "SaveBlock2", "playerTrainerId"),
+    ):
+        put(key, types[type_name]["fields"][member]["offset"], f"structs.{type_name}.fields.{member}.offset")
+    put("SB1_BALL_POCKET_OFFSET", types["SaveBlock1"]["fields"]["bag"]["offset"] + types["Bag"]["fields"]["pokeBalls"]["offset"], "SaveBlock1.bag + Bag.pokeBalls")
+    put("BATTLE_MON_STAT_STAGES_OFF", types["BattlePokemon"]["fields"]["statStages"]["offset"] + const["STAT_ATK"], "BattlePokemon.statStages + constants.STAT_ATK")
+    put("EXPERIENCE_TABLE_ENTRY_COUNT", const["MAX_LEVEL"] + 1, "constants.MAX_LEVEL + 1")
+    flag = types["Main"]["bitfields"]["inBattle"]
+    put("GMAIN_INBATTLE_OFFSET", flag["offset"], "structs.Main.bitfields.inBattle.offset")
+    put("GMAIN_INBATTLE_MASK", int(flag["mask"], 16), "structs.Main.bitfields.inBattle.mask")
+    put("OVERWORLD_MODE", "gmain_flags", "Main.inBattle interpretation; client mode name")
+    for key, type_name, member in (("MON_SPECIES_MASK", "PokemonSubstruct0", "species"),
+                                   ("MON_ITEM_MASK", "PokemonSubstruct0", "heldItem"),
+                                   ("MON_MOVE_MASK", "PokemonSubstruct1", "move1")):
+        value = types[type_name]["bitfields"][member]
+        put(key, int(value["mask"], 16), f"structs.{type_name}.bitfields.{member}.mask")
+    for member in ("nickname11", "nickname12"):
+        put(member.upper() + "_FIELD", types["PokemonSubstruct0"]["bitfields"][member], "structs.PokemonSubstruct0.bitfields." + member)
+    put("BASESTATS_ADDR_BY_GAME_CODE", {"BPEE": sections["rom"]["BASESTATS_ADDR"]}, "rom.BASESTATS_ADDR, exact ROM only")
+    return {"schema": SCHEMA, "generator": "tools/gen_gen3_profile.py", "pack": "gen3_exp", "build": context["build"],
+            "source": context["source"], "titles": {EXPANSION_TITLE: {"admitted": False, "variant": EXPANSION_TITLE,
+            "rom_sha1": EXPANSION_SHA1, "rom_thumb": _thumb_keys(sections["rom"]), "_src": src, **sections,
+            "unavailable": dropped, "open": ["Runtime admission/CPU census and write safety qualification pending",
+            "Nickname extension uses two shifted fields, not a contiguous NICKNAME_EXTRA_OFFS; consumer support required"]}}}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if a committed profile differs from a fresh generation")
+    ap.add_argument("--expansion", choices=[EXPANSION_BUILD], help="generate only this unadmitted expansion build")
+    ap.add_argument("--artifacts", type=pathlib.Path)
     args = ap.parse_args()
+    if args.expansion:
+        context = expansion_inputs(args.expansion, args.artifacts)
+        expansion_write(context, "profile.json", build_expansion(context), args.check)
+        return 0
 
     rr_witness = REPO / "patch/build/slink_RR.gba"
     if rr_witness.exists():

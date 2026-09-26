@@ -1,0 +1,681 @@
+{
+  "build": "28877d73",
+  "evidence": "SOURCE_BYTE_PIN",
+  "inventory": {
+    "battle_begin": {
+      "capture_contract": "Entry before battle initialization/save relocation. Dedupe and battle-type filtering required.",
+      "source": "src/battle_main.c:472-504",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "battle_end": {
+      "capture_contract": "BL SetMainCallback2 after inBattle clear/callback1 restore on completion path. R0 saved callback; link-wait return bypasses this point. Not evolution-settled.",
+      "source": "src/battle_main.c:5422-5457",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "capture_wild": {
+      "capture_contract": "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success, and dedupe against mon_given. ScriptGiveMon also calls this routine.",
+      "source": "src/battle_script_commands.c:8371; src/pokemon.c:2941-2961",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "evolve_species_store": {
+      "capture_contract": "After SetMonData(MON_DATA_SPECIES=18), before evolution-tracker reset and stat/dex updates. R4 mon; cancellation bypasses this state.",
+      "source": "src/evolution_scene.c:786-792",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "faint": {
+      "capture_contract": "After SetValuesOnFaint returns; R4 is battler, player/opponent counters updated. REQUIRE player-side ownership and identity dedupe; not every opcode invocation is a faint.",
+      "source": "src/battle_script_commands.c:1906; src/battle_util.c:11125-11153",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "frame_control": {
+      "capture_contract": "Start of the main-loop iteration at input polling, before callbacks; back edges from both VBlank wait paths return here. Not the inlined CallCallbacks function or FR's help gate.",
+      "source": "src/main.c:134-172",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "map_load": {
+      "capture_contract": "BL SetMainCallback2(CB2_Overworld) after DoMapLoadLoop and callback1 restoration. Other map loaders remain outside this signal's coverage.",
+      "source": "src/overworld.c:1992-1998",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "mon_given": {
+      "capture_contract": "Common return after party copy or CopyMonToPC. R0 outcome, R6 source mon. Captures and scripted gifts share this renamed routine; classify by caller and dedupe capture_wild.",
+      "source": "src/pokemon.c:2941-2961; src/script_pokemon_util.c:76",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "pc_box_place": {
+      "capture_contract": "Box branch after SetMonFormPSS: R5==5*box ID, R6 slot. Require box<14/slot<30 and correlate origin; do not duplicate deposit.",
+      "source": "src/pokemon_storage_system.c:6464-6468",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "pc_deposit": {
+      "reason": "TryStorePartyMonInBox is absent from .sym (src/pokemon_storage_system.c:6491); compiler-inlined caller-site proof remains OPEN.",
+      "status": "OPEN"
+    },
+    "pc_move": {
+      "capture_contract": "Common epilogue: R0 allocation result, R8 source mon, R7 box/R5 slot only on success. Acquisition-to-storage, not every PC menu operation.",
+      "source": "src/pokemon.c:2963",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "pc_release": {
+      "reason": "ReleaseMon is absent from .sym; post-PurgeMonOrBoxMon caller-site proof remains OPEN.",
+      "status": "OPEN"
+    },
+    "pc_release_begin": {
+      "reason": "ReleaseMon is absent from .sym; pre-removal identity capture at a caller remains OPEN (src/pokemon_storage_system.c ReleaseMon).",
+      "status": "OPEN"
+    },
+    "pc_withdraw": {
+      "capture_contract": "Party branch after SetMonFormPSS: R5==14, R6 slot, R4 party mon. Correlate moving-mon origin; placement can also be a party rearrangement.",
+      "source": "src/pokemon_storage_system.c:6450-6463",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "poison_faint": {
+      "capture_contract": "Both SetMonData branches join before advancing R4. New HP=[R13]. REQUIRE paired old HP>0 and new HP==0. Reference build has Gen4+ poison minimum1, so this is not a demonstrated faint path.",
+      "source": "src/field_poison.c:135-149",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "poison_hp_before": {
+      "capture_contract": "After GetMonData(MON_DATA_HP=10). R0 old HP, R4 mon. Pair by mon/iteration with post-store point.",
+      "source": "src/field_poison.c:125-149",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "save": {
+      "capture_contract": "Common epilogue before R4 restore. REQUIRE R0==SAVE_STATUS_OK(1) and R4==SAVE_NORMAL(0); every failure also reaches here.",
+      "source": "src/save.c:773-792",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "trade_begin": {
+      "capture_contract": "Entry: R0 player slot, R1 partner slot, pre-swap identities.",
+      "source": "src/trade.c:3083",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "trade_done": {
+      "capture_contract": "Common epilogue after record/mail/dex branches; record-swap completion, not scene/evolution completion.",
+      "source": "src/trade.c:3083-3205",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "trade_evolve_species_store": {
+      "capture_contract": "After SetMonData(MON_DATA_SPECIES=18), before tracker/stat/dex updates. R7 mon; correlate native trade lease.",
+      "source": "src/evolution_scene.c:1214-1220",
+      "status": "PINNED_SOURCE_ONLY"
+    },
+    "whiteout": {
+      "capture_contract": "BL SetMainCallback2(CB2_Overworld) after whiteout healing/load completion; early state<120 return bypasses it. Not an HP-at-faint witness.",
+      "source": "src/overworld.c:1956-1981",
+      "status": "PINNED_SOURCE_ONLY"
+    }
+  },
+  "live_verified": false,
+  "pack": "gen3_exp",
+  "schema": "gen3-engine-signals-v1",
+  "sha256": "54a478b37aeef3d77914c0c80e01cab69002f2579ce3dd8a5c85a52349bd116a",
+  "source": {
+    "facts_sha256": "2dd2a6a0d7735ec003f8406d953512b364a39908f02836be229bd5419a1bd1b2",
+    "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+    "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+    "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+  },
+  "titles": {
+    "emerald_expansion_28877d73": {
+      "artifacts": {
+        "clean": {
+          "rom_md5": "83bde8deeaa27453b12545b9cfffe3a6",
+          "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+          "sites": {
+            "battle_begin": {
+              "address": 134764424,
+              "capture_contract": "Entry before battle initialization/save relocation. Dedupe and battle-type filtering required.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "174B1B7810B5002B1DD03FF023FEF3F7",
+                "rom_offset": 546696
+              },
+              "expected_hex": "174B1B7810B5002B1DD03FF023FE",
+              "function": {
+                "address": 134764424,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "line": 3948,
+                "size": 112,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "CB2_InitBattle",
+                "symbol_source": "build:pokemon.sym:3948",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 546696,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:472-504",
+              "symbol": "CB2_InitBattle"
+            },
+            "battle_end": {
+              "address": 134753426,
+              "capture_contract": "BL SetMainCallback2 after inBattle clear/callback1 restore on completion path. R0 saved callback; link-wait return bypasses this point. Not evolution-settled.",
+              "capture_offset": 2,
+              "context": {
+                "expected_hex": "30B502241C4D2B681C421AD01B4A1278",
+                "rom_offset": 535644
+              },
+              "expected_hex": "A068F7F016FE30BC01BC004739F121F8",
+              "function": {
+                "address": 134753372,
+                "anchor_offset": 54,
+                "capture_offset": 56,
+                "line": 3915,
+                "size": 152,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "ReturnFromBattleToOverworld",
+                "symbol_source": "build:pokemon.sym:3915",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 535698,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:5422-5457",
+              "symbol": "ReturnFromBattleToOverworld"
+            },
+            "capture_wild": {
+              "address": 136044046,
+              "capture_contract": "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success, and dedupe against mon_given. ScriptGiveMon also calls this routine.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "194BF0B51C68072122000600FCF762FE",
+                "rom_offset": 1826224
+              },
+              "expected_hex": "01341C76F0BC02BC0847C0510003641B",
+              "function": {
+                "address": 136043952,
+                "anchor_offset": 94,
+                "capture_offset": 98,
+                "line": 12388,
+                "size": 116,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "GiveCapturedMonToPlayer",
+                "symbol_source": "build:pokemon.sym:12388",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R6",
+                "R13",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1826318,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_script_commands.c:8371; src/pokemon.c:2941-2961",
+              "symbol": "GiveCapturedMonToPlayer"
+            },
+            "evolve_species_store": {
+              "address": 135470186,
+              "capture_contract": "After SetMonData(MON_DATA_SPECIES=18), before evolution-tracker reset and stat/dex updates. R4 mon; cancellation bypasses this state.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54E4645465746DE4664240006E0B5",
+                "rom_offset": 1251736
+              },
+              "expected_hex": "89F08BFE05AA6421200089F086FE2000",
+              "function": {
+                "address": 135469464,
+                "anchor_offset": 722,
+                "capture_offset": 726,
+                "line": 7942,
+                "size": 3020,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "Task_EvolutionScene",
+                "symbol_source": "build:pokemon.sym:7942",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1252458,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/evolution_scene.c:786-792",
+              "symbol": "Task_EvolutionScene"
+            },
+            "faint": {
+              "address": 134896602,
+              "capture_contract": "After SetValuesOnFaint returns; R4 is battler, player/opponent counters updated. REQUIRE player-side ownership and identity dedupe; not every opcode invocation is a faint.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "70B52E4E3568687821F062F8AB780400",
+                "rom_offset": 678740
+              },
+              "expected_hex": "39F063FCE81D21F0BCFA104BC7E7EB1D",
+              "function": {
+                "address": 134896468,
+                "anchor_offset": 134,
+                "capture_offset": 138,
+                "line": 4492,
+                "size": 220,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "Cmd_tryfaintmon",
+                "symbol_source": "build:pokemon.sym:4492",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 678874,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_script_commands.c:1906; src/battle_util.c:11125-11153",
+              "symbol": "Cmd_tryfaintmon"
+            },
+            "frame_control": {
+              "address": 135768764,
+              "capture_contract": "Start of the main-loop iteration at input polling, before callbacks; back edges from both VBlank wait paths return here. Not the inlined CallCallbacks function or FR's help gate.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B557464E464546DE464B4B9A464B4B",
+                "rom_offset": 1551008
+              },
+              "expected_hex": "4A4E4B4F434619883B004B401800228D",
+              "function": {
+                "address": 135768736,
+                "anchor_offset": 28,
+                "capture_offset": 32,
+                "line": 10366,
+                "size": 336,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "AgbMainLoop",
+                "symbol_source": "build:pokemon.sym:10366",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1551036,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/main.c:134-172",
+              "symbol": "AgbMainLoop"
+            },
+            "map_load": {
+              "address": 135875774,
+              "capture_contract": "BL SetMainCallback2(CB2_Overworld) after DoMapLoadLoop and callback1 restoration. Other map loaders remain outside this signal's coverage.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "10B50A4C00212000FFF70EFE0028F9D0",
+                "rom_offset": 1658016
+              },
+              "expected_hex": "07482360E5F7FFFD10BC01BC0047F86A",
+              "function": {
+                "address": 135875744,
+                "anchor_offset": 30,
+                "capture_offset": 34,
+                "line": 11293,
+                "size": 64,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "CB2_LoadMap2",
+                "symbol_source": "build:pokemon.sym:11293",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1658046,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/overworld.c:1992-1998",
+              "symbol": "CB2_LoadMap2"
+            },
+            "mon_given": {
+              "address": 136044046,
+              "capture_contract": "Common return after party copy or CopyMonToPC. R0 outcome, R6 source mon. Captures and scripted gifts share this renamed routine; classify by caller and dedupe capture_wild.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "194BF0B51C68072122000600FCF762FE",
+                "rom_offset": 1826224
+              },
+              "expected_hex": "01341C76F0BC02BC0847C0510003641B",
+              "function": {
+                "address": 136043952,
+                "anchor_offset": 94,
+                "capture_offset": 98,
+                "line": 12388,
+                "size": 116,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "GiveCapturedMonToPlayer",
+                "symbol_source": "build:pokemon.sym:12388",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R6",
+                "R13",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1826318,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon.c:2941-2961; src/script_pokemon_util.c:76",
+              "symbol": "GiveCapturedMonToPlayer"
+            },
+            "pc_box_place": {
+              "address": 136103994,
+              "capture_contract": "Box branch after SetMonFormPSS: R5==5*box ID, R6 slot. Require box<14/slot<30 and correlate origin; do not duplicate deposit.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5C646284B0E00050000B519680E28",
+                "rom_offset": 1886180
+              },
+              "expected_hex": "F3F7CDF9002802D00122144B1A7280BC",
+              "function": {
+                "address": 136103908,
+                "anchor_offset": 86,
+                "capture_offset": 90,
+                "line": 12694,
+                "size": 192,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "build:pokemon.sym:12694",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5",
+                "R6",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1886266,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:6464-6468",
+              "symbol": "SetPlacedMonData"
+            },
+            "pc_move": {
+              "address": 136043888,
+              "capture_contract": "Common epilogue: R0 allocation result, R8 source mon, R7 box/R5 slot only on success. Acquisition-to-storage, not every PC menu operation.",
+              "capture_offset": 2,
+              "context": {
+                "expected_hex": "F0B5CE464746804680B525485FF76EF8",
+                "rom_offset": 1826048
+              },
+              "expected_hex": "0120C0BCB946B046F0BC02BC08470137",
+              "function": {
+                "address": 136043776,
+                "anchor_offset": 112,
+                "capture_offset": 114,
+                "line": 12387,
+                "size": 176,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "CopyMonToPC",
+                "symbol_source": "build:pokemon.sym:12387",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R5",
+                "R7",
+                "R8",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1826160,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon.c:2963",
+              "symbol": "CopyMonToPC"
+            },
+            "pc_withdraw": {
+              "address": 136104058,
+              "capture_contract": "Party branch after SetMonFormPSS: R5==14, R6 slot, R4 party mon. Correlate moving-mon origin; placement can also be a party rearrangement.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5C646284B0E00050000B519680E28",
+                "rom_offset": 1886180
+              },
+              "expected_hex": "F3F7ADF90028E2D0DEE70022064B1A80",
+              "function": {
+                "address": 136103908,
+                "anchor_offset": 150,
+                "capture_offset": 154,
+                "line": 12694,
+                "size": 192,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "SetPlacedMonData",
+                "symbol_source": "build:pokemon.sym:12694",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R5",
+                "R6",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1886330,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:6450-6463",
+              "symbol": "SetPlacedMonData"
+            },
+            "poison_faint": {
+              "address": 135542246,
+              "capture_contract": "Both SetMonData branches join before advancing R4. New HP=[R13]. REQUIRE paired old HP>0 and new HP==0. Reference build has Gen4+ poison minimum1, so this is not a demonstrated faint path.",
+              "capture_offset": 2,
+              "context": {
+                "expected_hex": "9623F0B5224C9B000027002681B0E518",
+                "rom_offset": 1324436
+              },
+              "expected_hex": "01366434AC42DED1330000203B430CD1",
+              "function": {
+                "address": 135542164,
+                "anchor_offset": 82,
+                "capture_offset": 84,
+                "line": 8536,
+                "size": 148,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "build:pokemon.sym:8536",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R13",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1324518,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/field_poison.c:135-149",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "poison_hp_before": {
+              "address": 135542220,
+              "capture_contract": "After GetMonData(MON_DATA_HP=10). R0 old HP, R4 mon. Pair by mon/iteration with post-store point.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "9623F0B5224C9B000027002681B0E518",
+                "rom_offset": 1324436
+              },
+              "expected_hex": "77F028FA012814D001380090012811D0",
+              "function": {
+                "address": 135542164,
+                "anchor_offset": 56,
+                "capture_offset": 60,
+                "line": 8536,
+                "size": 148,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "DoPoisonFieldEffect",
+                "symbol_source": "build:pokemon.sym:8536",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1324492,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/field_poison.c:125-149",
+              "symbol": "DoPoisonFieldEffect"
+            },
+            "save": {
+              "address": 136271838,
+              "capture_contract": "Common epilogue before R4 restore. REQUIRE R0==SAVE_STATUS_OK(1) and R4==SAVE_NORMAL(0); every failure also reaches here.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "0D4B1B68000610B5040E012B06D0FF22",
+                "rom_offset": 2054092
+              },
+              "expected_hex": "0A4B1A8110BC02BC08472000FFF743FF",
+              "function": {
+                "address": 136271820,
+                "anchor_offset": 18,
+                "capture_offset": 22,
+                "line": 13646,
+                "size": 68,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "TrySavingData",
+                "symbol_source": "build:pokemon.sym:13646",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R4",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 2054110,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/save.c:773-792",
+              "symbol": "TrySavingData"
+            },
+            "trade_begin": {
+              "address": 136405512,
+              "capture_contract": "Entry: R0 player slot, R1 partner slot, pre-swap identities.",
+              "capture_offset": 0,
+              "context": {
+                "expected_hex": "F0B5D64646464F46C0B580468A4681B0",
+                "rom_offset": 2187784
+              },
+              "expected_hex": "F0B5D64646464F46C0B580468A4681B0",
+              "function": {
+                "address": 136405512,
+                "anchor_offset": 0,
+                "capture_offset": 0,
+                "line": 14847,
+                "size": 452,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "build:pokemon.sym:14847",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R1",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 2187784,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/trade.c:3083",
+              "symbol": "TradeMons"
+            },
+            "trade_done": {
+              "address": 136405734,
+              "capture_contract": "Common epilogue after record/mail/dex branches; record-swap completion, not scene/evolution completion.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5D64646464F46C0B580468A4681B0",
+                "rom_offset": 2187784
+              },
+              "expected_hex": "1AD101B0E0BCBA46B146A846F0BC01BC",
+              "function": {
+                "address": 136405512,
+                "anchor_offset": 222,
+                "capture_offset": 226,
+                "line": 14847,
+                "size": 452,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "TradeMons",
+                "symbol_source": "build:pokemon.sym:14847",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 2188006,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/trade.c:3083-3205",
+              "symbol": "TradeMons"
+            },
+            "trade_evolve_species_store": {
+              "address": 135473074,
+              "capture_contract": "After SetMonData(MON_DATA_SPECIES=18), before tracker/stat/dex updates. R7 mon; correlate native trade lease.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B54646D6464F460406250EA40DC0B5",
+                "rom_offset": 1254756
+              },
+              "expected_hex": "89F0E7F801AA6421380089F0E2F83800",
+              "function": {
+                "address": 135472484,
+                "anchor_offset": 590,
+                "capture_offset": 594,
+                "line": 7943,
+                "size": 2180,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "Task_TradeEvolutionScene",
+                "symbol_source": "build:pokemon.sym:7943",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R7",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1255346,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/evolution_scene.c:1214-1220",
+              "symbol": "Task_TradeEvolutionScene"
+            },
+            "whiteout": {
+              "address": 135880452,
+              "capture_contract": "BL SetMainCallback2(CB2_Overworld) after whiteout healing/load completion; early state<120 return bypasses it. Not an HP-at-faint witness.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "872230B5214DD200AB5C01331B061B0E",
+                "rom_offset": 1662600
+              },
+              "expected_hex": "0A482B60E4F7DCFCC8E7094AE4E7C046",
+              "function": {
+                "address": 135880328,
+                "anchor_offset": 124,
+                "capture_offset": 128,
+                "line": 11339,
+                "size": 176,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "CB2_WhiteOut",
+                "symbol_source": "build:pokemon.sym:11339",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R0",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1662724,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/overworld.c:1956-1981",
+              "symbol": "CB2_WhiteOut"
+            }
+          }
+        }
+      }
+    }
+  }
+}
