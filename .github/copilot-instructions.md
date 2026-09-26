@@ -70,6 +70,12 @@ python tools/gen_gen5_area_map.py    # Gen 5 BW
 # Regenerate the RR priority/key-trainer roster (Upcoming Key Trainers panel + calc setdex)
 python tools/gen_rr_priority_trainers.py
 
+# Regenerate the pinned pokeemerald-expansion battle-mechanics config VALUES
+# (data/games/gen3_exp/28877d73/config.json; resolves B_*/P_*/I_*/GEN_* macros via
+# the pinned build's own arm-none-eabi-cpp on the hgbox VM -- see tools/build_expansion.py
+# and tools/gen_expansion_facts.py for the sibling ROM-build/compiler-fact generators)
+python tools/extract_expansion_config.py --host hgbox
+
 # Lint (dev only: pip install -r requirements-dev.txt; config ruff.toml)
 ruff check .
 ruff check . --fix

@@ -1,0 +1,2632 @@
+{
+  "macros": {
+    "B_ABILITY_TRIGGER_CHANCE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ABILITY_WEATHER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ABSORB_MESSAGE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_AFFECTION_MECHANICS": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_AFTER_YOU_TURN_ORDER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ALLY_SWITCH_FAIL_CHANCE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ANIMATE_MON_AFTER_FAILED_POKEBALL": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_ANIMATE_MON_AFTER_KO": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_ATE_MULTIPLIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BADGE_BOOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BATON_PASS_TRAPPING": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BATTLE_BOND": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BEAT_UP": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BELCH_SELECTABLE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BINDING_DAMAGE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BINDING_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BLIZZARD_HAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BRICK_BREAK": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BURN_DAMAGE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_BURN_FACADE_DMG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CAMOUFLAGE_TYPES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CAN_SPITE_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CATCHING_CHARM_BOOST": {
+      "expanded": "100",
+      "header": "include/config/battle.h",
+      "raw": "100",
+      "value": 100
+    },
+    "B_CATCH_SWAP_CHECK_HMS": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_CATCH_SWAP_INTO_PARTY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CHARGE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CHARGE_SPDEF_RAISE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CHECK_USER_FAILURE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CONFUSE_BERRIES_HEAL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CONFUSION_SELF_DMG_CHANCE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CONFUSION_TURNS": {
+      "expanded": "5",
+      "header": "include/config/battle.h",
+      "raw": "5",
+      "value": 5
+    },
+    "B_COUNTER_MIRROR_COAT_ALLY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_COUNTER_TRY_HIT_PARTNER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CRASH_IF_TARGET_IMMUNE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CRITICAL_CAPTURE": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_CRITICAL_CAPTURE_IF_OWNED": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CRITICAL_CAPTURE_LOCAL_DEX": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_CRIT_CHANCE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_CRIT_MULTIPLIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DANCER_ORDER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DARK_VOID_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DAUNTLESS_SHIELD": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DEFIANT_STICKY_WEB": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DEFOG_EFFECT_CLEARING": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DESTINY_BOND_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DISABLE_TIMER": {
+      "expanded": "4",
+      "header": "include/config/battle.h",
+      "raw": "4",
+      "value": 4
+    },
+    "B_DISABLE_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DISGUISE_HP_LOSS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DIVE_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DREAM_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DREAM_EATER_LIQUID_OOZE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DREAM_EATER_SUBSTITUTE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_DUSK_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_EMBARGO_TIMER": {
+      "expanded": "5",
+      "header": "include/config/battle.h",
+      "raw": "5",
+      "value": 5
+    },
+    "B_ENCORE_PRIORITY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ENCORE_TARGET": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ENCORE_TIMER": {
+      "expanded": "4",
+      "header": "include/config/battle.h",
+      "raw": "4",
+      "value": 4
+    },
+    "B_ENCORE_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ENEMY_MON_SHADOW_STYLE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ENEMY_THROW_BALLS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ENEMY_THROW_BALLS_SOUND": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_EVOLUTION_AFTER_WHITEOUT": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_EXPLOSION_DEFENSE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_EXP_CATCH": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_EXTRAPOLATED_MOVE_FLAGS": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_FAINT_MOVE_EFFECT_TIMING": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FAINT_SWITCH_IN": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FAST_EXP_GROW": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_FAST_HP_DRAIN": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_FAST_INTRO_NO_SLIDE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_FAST_INTRO_PKMN_TEXT": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_FELL_STINGER_STAT_RAISE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FIRST_TURN_MOVE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FLAG_AI_VS_AI_BATTLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_BADGE_BOOST_ATTACK": {
+      "expanded": "(((0x500 + 864 - 1) + 1) + 0x7)",
+      "header": "include/config/battle.h",
+      "raw": "FLAG_BADGE01_GET",
+      "value": 2151
+    },
+    "B_FLAG_BADGE_BOOST_DEFENSE": {
+      "expanded": "(((0x500 + 864 - 1) + 1) + 0xB)",
+      "header": "include/config/battle.h",
+      "raw": "FLAG_BADGE05_GET",
+      "value": 2155
+    },
+    "B_FLAG_BADGE_BOOST_SPATK": {
+      "expanded": "(((0x500 + 864 - 1) + 1) + 0xD)",
+      "header": "include/config/battle.h",
+      "raw": "FLAG_BADGE07_GET",
+      "value": 2157
+    },
+    "B_FLAG_BADGE_BOOST_SPDEF": {
+      "expanded": "(((0x500 + 864 - 1) + 1) + 0xD)",
+      "header": "include/config/battle.h",
+      "raw": "FLAG_BADGE07_GET",
+      "value": 2157
+    },
+    "B_FLAG_BADGE_BOOST_SPEED": {
+      "expanded": "(((0x500 + 864 - 1) + 1) + 0x9)",
+      "header": "include/config/battle.h",
+      "raw": "FLAG_BADGE03_GET",
+      "value": 2153
+    },
+    "B_FLAG_DYNAMAX_BATTLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_INVERSE_BATTLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_NO_WHITEOUT": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_SKY_BATTLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_SLEEP_CLAUSE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_TERA_ORB_CHARGED": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_TERA_ORB_NO_COST": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_VICTORY_CATCH_GUARANTEED": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLAG_VICTORY_CATCH_RANDOM": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_FLASH_FIRE_FROZEN": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FOCUS_ENERGY_CRIT_RATIO": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FOCUS_PUNCH_FAILURE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FORESIGHT_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FREEZE_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_FRIENDSHIP_BOOST": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_FRIEND_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_GALE_WINGS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_GHOSTS_ESCAPE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_GLARE_GHOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_GROWTH_STAT_RAISE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HEALING_WISH_SWITCH": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HEAL_BELL_SOUNDPROOF": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HEAL_BLOCKING": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HEAL_BLOCK_TIMER": {
+      "expanded": "5",
+      "header": "include/config/battle.h",
+      "raw": "5",
+      "value": 5
+    },
+    "B_HEAVY_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HIDDEN_POWER_COUNTER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HIDDEN_POWER_DMG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HIDE_HEALTHBOX_IN_ANIMS": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_HIT_THAW": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HPBAR_COLOR_THRESHOLD": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_HP_PERCENTAGE_DISPLAY": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_ICE_WEATHER_BOTH": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_ICE_WEATHER_HAIL": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "1",
+      "value": 1
+    },
+    "B_ICE_WEATHER_SNOW": {
+      "expanded": "2",
+      "header": "include/config/battle.h",
+      "raw": "2",
+      "value": 2
+    },
+    "B_ILLUMINATE_EFFECT": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_IMPRISON": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_INCAPACITATED_CATCH_BONUS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_INCINERATE_GEMS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_INFILTRATOR_SUBSTITUTE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_INTREPID_SWORD": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_IRON_BALL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_KINGS_SHIELD_LOWER_ATK": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_KLUTZ_FLING_INTERACTION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_KNOCK_OFF_DMG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_KNOCK_OFF_REMOVAL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_LASER_FOCUS_TIMER": {
+      "expanded": "2",
+      "header": "include/config/battle.h",
+      "raw": "2",
+      "value": 2
+    },
+    "B_LAST_RESORT_SELECTABLE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_LAST_USED_BALL": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_LAST_USED_BALL_BUTTON": {
+      "expanded": "0x0100",
+      "header": "include/config/battle.h",
+      "raw": "R_BUTTON",
+      "value": 256
+    },
+    "B_LAST_USED_BALL_CYCLE": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_LEAF_GUARD_PREVENTS_REST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_LEVEL_UP_NOTIFICATION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_LIGHT_BALL_ATTACK_BOOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_LOW_LEVEL_CATCH_BONUS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_LURE_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MAGIC_GUARD": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MAGNET_RISE_TIMER": {
+      "expanded": "5",
+      "header": "include/config/battle.h",
+      "raw": "5",
+      "value": 5
+    },
+    "B_MAX_LEVEL_EV_GAINS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MEGA_EVO_SPEED_SWAP": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MEGA_EVO_TURN_ORDER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MEMENTO_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MENTAL_HERB": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_METRONOME_MOVES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MINIMIZE_DMG_ACC": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MINIMIZE_EVASION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MIRACLE_EYE_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MIRROR_ARMOR_STICKY_WEB": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MISSING_BADGE_CATCH_MALUS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MODERN_TRICK_CHOICE_LOCK": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MOODY_ACC_EVASION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MOVES_THAT_REMOVE_TYPE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MOVE_DESCRIPTION_BUTTON": {
+      "expanded": "0x0200",
+      "header": "include/config/battle.h",
+      "raw": "L_BUTTON",
+      "value": 512
+    },
+    "B_MOVE_EFFECTS_BEFORE_MOVES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MOVE_REARRANGEMENT_IN_BATTLE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MULTIPLE_TARGETS_DMG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MULTI_BATTLE_WHITEOUT": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_MULTI_HALF_TEAMS": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_MULTI_HIT_CHANCE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_NATURE_POWER_MOVES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_NEST_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_NET_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_NEW_BATON_PASS_BALL_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_CURSE_NAIL_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_EMBER_PARTICLES": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_FLY_BUBBLE_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_HANDS_FEET_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_HORN_ATTACK_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_IMPACT_PALETTE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_LEAF_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_LEECH_SEED_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_MEAN_LOOK_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_MORNING_SUN_STAR_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_ROCKS_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_SPIKES_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_SURF_PARTICLE_PALETTE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_SWORD_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_TEETH_PARTICLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NEW_TERRAIN_BACKGROUNDS": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_NUM_LOW_HEALTH_BEEPS": {
+      "expanded": "4",
+      "header": "include/config/battle.h",
+      "raw": "NUM_BEEPS_GEN_LATEST",
+      "value": 4
+    },
+    "B_OBEDIENCE_MECHANICS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_OBLIVIOUS_TAUNT": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_OVERWORLD_FOG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_OVERWORLD_SNOW": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_OVERWORLD_WEATHER_OVERRIDE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PARALYSIS_CHANCE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PARALYSIS_SPEED": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PARALYZE_ELECTRIC": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PARENTAL_BOND_DMG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PARTING_SHOT_SWITCH": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PARTNER_MONS_MARKED_SEEN": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_PAYBACK_SWITCH_BOOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PERISH_SONG_TIMER": {
+      "expanded": "3",
+      "header": "include/config/battle.h",
+      "raw": "3",
+      "value": 3
+    },
+    "B_PHYSICAL_SPECIAL_SPLIT": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PICKUP_WILD": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PLAYER_THROW_BALLS_SOUND": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PLUS_MINUS_INTERACTION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_POOL_RULES_USE_ITEM_EXCLUSIONS": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_POOL_RULE_EXCLUDE_FORMS": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_POOL_RULE_ITEM_CLAUSE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_POOL_RULE_MEGA_STONE_CLAUSE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_POOL_RULE_SPECIES_CLAUSE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_POOL_RULE_Z_CRYSTAL_CLAUSE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_POOL_SETTING_CONSISTENT_RNG": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_POOL_SETTING_FIXED_SEED": {
+      "expanded": "0x1D4127",
+      "header": "include/config/battle.h",
+      "raw": "0x1D4127",
+      "value": 1917223
+    },
+    "B_POOL_SETTING_USE_FIXED_SEED": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_POWDER_GRASS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_POWDER_OVERCOAT": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_POWDER_STATUS_HEAVY_RAIN": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PP_REDUCED_BY_SPITE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PRANKSTER_DARK_TYPES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PREFERRED_ICE_WEATHER": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "B_ICE_WEATHER_BOTH",
+      "value": 0
+    },
+    "B_PROTEAN_LIBERO": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PROTECT_FAILURE_RATE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PSYCH_UP_CRIT_RATIO": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PSYWAVE_DMG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_PURSUIT_TARGET": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_QUASH_TURN_ORDER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_QUICK_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_QUICK_GUARD": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_QUICK_MOVE_CURSOR_TO_RUN": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_RAGE_BUILDS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_RAGE_FIST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_RAMPAGE_CONFUSION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_RAMPAGE_TURNS": {
+      "expanded": "3",
+      "header": "include/config/battle.h",
+      "raw": "3",
+      "value": 3
+    },
+    "B_RECALCULATE_STATS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_RECALC_TURN_AFTER_ACTIONS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_RECOIL_IF_MISS_DMG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_REDIRECT_ABILITY_ALLIES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_REDIRECT_ABILITY_IMMUNITY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_REPEAT_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_RESET_FLAGS_VARS_AFTER_WHITEOUT": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_RESTORE_HELD_BATTLE_ITEMS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_RETURN_STOLEN_NPC_ITEMS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ROOST_PURE_FLYING": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ROOTED_GROUNDING": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_ROUGH_SKIN_DMG": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_RUN_TRAINER_BATTLE": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_SAFARI_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SALT_CURE_DAMAGE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SANDSTORM_SOLAR_BEAM": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SANDSTORM_SPDEF_BOOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SCALED_EXP": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SECRET_POWER_ANIMATION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SECRET_POWER_EFFECT": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SEMI_INVULNERABLE_CATCH": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SERENE_GRACE_BOOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SHADOW_TAG_ESCAPE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SHEER_COLD_ACC": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SHEER_COLD_IMMUNITY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SHEER_FORCE_AGAINST_ABILITIES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SHOW_CATEGORY_ICON": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_SHOW_DYNAMAX_MESSAGE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_SHOW_EFFECTIVENESS": {
+      "expanded": "3",
+      "header": "include/config/battle.h",
+      "raw": "SHOW_EFFECTIVENESS_SEEN",
+      "value": 3
+    },
+    "B_SHOW_MOVE_DESCRIPTION": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_SHOW_PARTNER_TARGET": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_SHOW_TARGETS": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_SHOW_TYPES": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "SHOW_TYPES_NEVER",
+      "value": 0
+    },
+    "B_SHOW_USELESS_Z_MOVE_INFO": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_SKETCH_BANS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SKILL_SWAP": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SKIP_RECHARGE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SKY_BATTLE_STRICT_ELIGIBILITY": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_SLEEP_CLAUSE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_SLEEP_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SLOW_START_TIMER": {
+      "expanded": "5",
+      "header": "include/config/battle.h",
+      "raw": "5",
+      "value": 5
+    },
+    "B_SNATCH": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SNOW_WARNING": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SOUL_DEW_BOOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SPEED_BUFFING_RAPID_SPIN": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SPIT_UP_SELECTABLE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SPLIT_EXP": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SPORT_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SPORT_DMG_REDUCTION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SPORT_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_STANCE_CHANGE_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_STATUS_TYPE_IMMUNITY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_STEAL_WILD_ITEMS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_STOCKPILE_RAISES_DEFS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_STUFF_CHEEKS_SELECTABLE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_STURDY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SYMBIOSIS_GEMS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SYNCHRONIZE_TOXIC": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_SYRUP_BOMB_TIMER": {
+      "expanded": "3",
+      "header": "include/config/battle.h",
+      "raw": "3",
+      "value": 3
+    },
+    "B_TAILWIND_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TAUNT_ME_FIRST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TAUNT_TIMER": {
+      "expanded": "5",
+      "header": "include/config/battle.h",
+      "raw": "5",
+      "value": 5
+    },
+    "B_TAUNT_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TELEKINESIS_TIMER": {
+      "expanded": "3",
+      "header": "include/config/battle.h",
+      "raw": "3",
+      "value": 3
+    },
+    "B_TELEPORT_BEHAVIOR": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TERA_ORB_ALWAYS_CHARGED": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_TERRAIN_BG_CHANGE": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_TERRAIN_TYPE_BOOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_THROAT_CHOP_TIMER": {
+      "expanded": "2",
+      "header": "include/config/battle.h",
+      "raw": "2",
+      "value": 2
+    },
+    "B_THUNDERSTORM_TERRAIN": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_TIMER_BALL_MODIFIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TIME_OF_DAY_HEALING_MOVES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TORMENT_TIMER": {
+      "expanded": "3",
+      "header": "include/config/battle.h",
+      "raw": "3",
+      "value": 3
+    },
+    "B_TOXIC_NEVER_MISS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TOXIC_REVERSAL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRAINERS_KNOCK_OFF_ITEMS": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "B_TRAINER_CLASS_POKE_BALLS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRAINER_EXP_MULTIPLIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRAINER_MON_RANDOM_ABILITY": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_TRANSFORM_BATTLE_REWARDS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRANSFORM_CATCH_RATE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRANSFORM_FORM_CHANGES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRANSFORM_SEMI_INV_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRANSFORM_SHINY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRANSFORM_SUBSTITUTE_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRANSFORM_TARGET_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRANSFORM_USER_FAIL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRANSISTOR_BOOST": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_TRY_CATCH_TRAINER_BALL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UNEVOLVED_EXP_MULTIPLIER": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UNSEEN_FIST_PIERCING_DRILL": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPDATED_ABILITY_DATA": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPDATED_CONVERSION": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPDATED_CONVERSION_2": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPDATED_INTIMIDATE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPDATED_MOVE_DATA": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPDATED_MOVE_FLAGS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPDATED_MOVE_TYPES": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPDATED_TYPE_MATCHUPS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPROAR": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPROAR_IGNORE_SOUNDPROOF": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPROAR_TURNS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_UPROAR_TURN_COUNT": {
+      "expanded": "5",
+      "header": "include/config/battle.h",
+      "raw": "5",
+      "value": 5
+    },
+    "B_USE_FROSTBITE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "B_VAR_DIFFICULTY": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_VAR_NO_BAG_USE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_VAR_SKY_BATTLE": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_VAR_WILD_AI_FLAGS": {
+      "expanded": "0",
+      "header": "include/config/battle.h",
+      "raw": "0",
+      "value": 0
+    },
+    "B_WAIT_TIME_MULTIPLIER": {
+      "expanded": "16",
+      "header": "include/config/battle.h",
+      "raw": "16",
+      "value": 16
+    },
+    "B_WEAK_ARMOR_SPEED": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_WEATHER_FORMS": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_WHITEOUT_MONEY": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_WIDE_GUARD": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_WISH_HP_SOURCE": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_WRAP_TURNS": {
+      "expanded": "7",
+      "header": "include/config/battle.h",
+      "raw": "7",
+      "value": 7
+    },
+    "B_X_ITEMS_BUFF": {
+      "expanded": "8",
+      "header": "include/config/battle.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "B_X_ITEMS_CROSSUSE": {
+      "expanded": "1",
+      "header": "include/config/battle.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "GEN_1": {
+      "expanded": "0",
+      "header": "include/config/general.h",
+      "raw": "0",
+      "value": 0
+    },
+    "GEN_2": {
+      "expanded": "1",
+      "header": "include/config/general.h",
+      "raw": "1",
+      "value": 1
+    },
+    "GEN_3": {
+      "expanded": "2",
+      "header": "include/config/general.h",
+      "raw": "2",
+      "value": 2
+    },
+    "GEN_4": {
+      "expanded": "3",
+      "header": "include/config/general.h",
+      "raw": "3",
+      "value": 3
+    },
+    "GEN_5": {
+      "expanded": "4",
+      "header": "include/config/general.h",
+      "raw": "4",
+      "value": 4
+    },
+    "GEN_6": {
+      "expanded": "5",
+      "header": "include/config/general.h",
+      "raw": "5",
+      "value": 5
+    },
+    "GEN_7": {
+      "expanded": "6",
+      "header": "include/config/general.h",
+      "raw": "6",
+      "value": 6
+    },
+    "GEN_8": {
+      "expanded": "7",
+      "header": "include/config/general.h",
+      "raw": "7",
+      "value": 7
+    },
+    "GEN_9": {
+      "expanded": "8",
+      "header": "include/config/general.h",
+      "raw": "8",
+      "value": 8
+    },
+    "GEN_CHAMPIONS": {
+      "expanded": "8 + 1",
+      "header": "include/config/general.h",
+      "raw": "GEN_9 + 1",
+      "value": 9
+    },
+    "GEN_COUNT": {
+      "expanded": "8 + 1 + 1",
+      "header": "include/config/general.h",
+      "raw": "GEN_CHAMPIONS + 1",
+      "value": 10
+    },
+    "GEN_LATEST": {
+      "expanded": "8",
+      "header": "include/config/general.h",
+      "raw": "GEN_9",
+      "value": 8
+    },
+    "I_BERRY_EV_JUMP": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_BERRY_PRICE": {
+      "expanded": "6",
+      "header": "include/config/item.h",
+      "raw": "GEN_7",
+      "value": 6
+    },
+    "I_EXP_SHARE_FLAG": {
+      "expanded": "0",
+      "header": "include/config/item.h",
+      "raw": "0",
+      "value": 0
+    },
+    "I_EXP_SHARE_ITEM": {
+      "expanded": "4",
+      "header": "include/config/item.h",
+      "raw": "GEN_5",
+      "value": 4
+    },
+    "I_GEM_BOOST_POWER": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_GRISEOUS_ORB_FORM_CHANGE": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_HEALTH_RECOVERY": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_KEY_ESCAPE_ROPE": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_KEY_FOSSILS": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_LAX_INCENSE_BOOST": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_ORAS_DOWSING_COLOR_FAST": {
+      "expanded": "(((255 >> 3) & 31) | (((255 >> 3) & 31) << 5) | (((40 >> 3) & 31) << 10))",
+      "header": "include/config/item.h",
+      "raw": "RGB2GBA(255, 255, 40)",
+      "value": 6143
+    },
+    "I_ORAS_DOWSING_COLOR_FASTER": {
+      "expanded": "((31) | ((0) << 5) | ((0) << 10))",
+      "header": "include/config/item.h",
+      "raw": "RGB_RED",
+      "value": 31
+    },
+    "I_ORAS_DOWSING_COLOR_NONE": {
+      "expanded": "((15) | ((15) << 5) | ((15) << 10))",
+      "header": "include/config/item.h",
+      "raw": "RGB_GRAY",
+      "value": 15855
+    },
+    "I_ORAS_DOWSING_COLOR_NORMAL": {
+      "expanded": "(((24 >> 3) & 31) | (((216 >> 3) & 31) << 5) | (((24 >> 3) & 31) << 10))",
+      "header": "include/config/item.h",
+      "raw": "RGB2GBA(24, 216, 24)",
+      "value": 3939
+    },
+    "I_ORAS_DOWSING_COLOR_PAL": {
+      "expanded": "15",
+      "header": "include/config/item.h",
+      "raw": "15",
+      "value": 15
+    },
+    "I_ORAS_DOWSING_COLOR_SLOW": {
+      "expanded": "(((56 >> 3) & 31) | (((120 >> 3) & 31) << 5) | (((255 >> 3) & 31) << 10))",
+      "header": "include/config/item.h",
+      "raw": "RGB2GBA(56, 120, 255)",
+      "value": 32231
+    },
+    "I_ORAS_DOWSING_FLAG": {
+      "expanded": "0",
+      "header": "include/config/item.h",
+      "raw": "0",
+      "value": 0
+    },
+    "I_ORAS_DOWSING_SOUNDS": {
+      "expanded": "1",
+      "header": "include/config/item.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "I_POWER_ITEM_BOOST": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_PREMIER_BALL_BONUS": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_PRICE": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_REPEL_INCLUDE_FAINTED": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_REPEL_LURE_MENU": {
+      "expanded": "1",
+      "header": "include/config/item.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "I_REUSABLE_TMS": {
+      "expanded": "0",
+      "header": "include/config/item.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "I_ROTOM_CATALOG_THUNDER_SHOCK": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_SELL_VALUE_FRACTION": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_SHINY_CHARM_ADDITIONAL_ROLLS": {
+      "expanded": "2",
+      "header": "include/config/item.h",
+      "raw": "2",
+      "value": 2
+    },
+    "I_SHOW_NO_ID_TRAINER": {
+      "expanded": "1",
+      "header": "include/config/item.h",
+      "raw": "DISABLED_ON_RELEASE",
+      "value": 1
+    },
+    "I_SITRUS_BERRY_HEAL": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_TYPE_BOOST_POWER": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_USE_EVO_HELD_ITEMS_FROM_BAG": {
+      "expanded": "0",
+      "header": "include/config/item.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "I_VITAMIN_EV_CAP": {
+      "expanded": "8",
+      "header": "include/config/item.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "I_VS_SEEKER_CHARGING": {
+      "expanded": "0",
+      "header": "include/config/item.h",
+      "raw": "0",
+      "value": 0
+    },
+    "P_ABILITY_INHERITANCE": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_ARCEUS_UNIQUE_FORM_ICONS": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_ASK_MOVE_CONFIRMATION": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_BALL_INHERITANCE": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_BASE_HP_1_SHEDINJA_HANDLING": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_CAN_FORGET_HIDDEN_MOVE": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_CRIES_ENABLED": {
+      "expanded": "1",
+      "header": "include/config/pokemon.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "P_CUSTOM_GENDER_DIFF_ICONS": {
+      "expanded": "1",
+      "header": "include/config/pokemon.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "P_EGG_CYCLE_LENGTH": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_EGG_HATCH_LEVEL": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_EGG_MOVE_TRANSFER": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_EVOLUTION_LEVEL_1_LEARN": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_EV_CAP": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_FLAG_FORCE_NO_SHINY": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "0",
+      "value": 0
+    },
+    "P_FLAG_FORCE_SHINY": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "0",
+      "value": 0
+    },
+    "P_FOOTPRINTS": {
+      "expanded": "1",
+      "header": "include/config/pokemon.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "P_FRIENDSHIP_EVO_THRESHOLD": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_GBA_STYLE_SPECIES_FOOTPRINTS": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_GBA_STYLE_SPECIES_GFX": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_GBA_STYLE_SPECIES_ICONS": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_GENDER_DIFFERENCES": {
+      "expanded": "1",
+      "header": "include/config/pokemon.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "P_INCENSE_BREEDING": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_KADABRA_EVERSTONE": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_LEARNSET_HELPER_TEACHABLE": {
+      "expanded": "1",
+      "header": "include/config/pokemon.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "P_LEGENDARY_PERFECT_IVS": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_LVL_UP_LEARNSETS": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_MODIFIED_MEGA_CRIES": {
+      "expanded": "1",
+      "header": "include/config/pokemon.h",
+      "raw": "P_MEGA_EVOLUTIONS",
+      "value": 1
+    },
+    "P_MODIFIED_MEGA_CRY_MODE": {
+      "expanded": "3",
+      "header": "include/config/pokemon.h",
+      "raw": "CRY_MODE_HIGH_PITCH",
+      "value": 3
+    },
+    "P_MOVE_INHERITANCE": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_NATURE_INHERITANCE": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_NIDORAN_M_DITTO_BREED": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_NO_SHINIES_WITHOUT_POKEBALLS": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_ONLY_OBTAINABLE_SHINIES": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_SHEDINJA_BALL": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_SHOW_DYNAMIC_TYPES": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "FALSE",
+      "value": 0
+    },
+    "P_SHOW_TERA_TYPE": {
+      "expanded": "7",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_8",
+      "value": 7
+    },
+    "P_SHUCKLE_BERRY_JUICE": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_SKIP_POKEDEX_GAPS": {
+      "expanded": "0",
+      "header": "include/config/pokemon.h",
+      "raw": "DONT_SKIP_GAPS",
+      "value": 0
+    },
+    "P_TM_LITERACY": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_TWO_FRAME_FRONT_SPRITES": {
+      "expanded": "1",
+      "header": "include/config/pokemon.h",
+      "raw": "TRUE",
+      "value": 1
+    },
+    "P_UPDATED_ABILITIES": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_UPDATED_EGG_GROUPS": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_UPDATED_EVS": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_UPDATED_EXP_YIELDS": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_UPDATED_FRIENDSHIP": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_UPDATED_STATS": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    },
+    "P_UPDATED_TYPES": {
+      "expanded": "8",
+      "header": "include/config/pokemon.h",
+      "raw": "GEN_LATEST",
+      "value": 8
+    }
+  },
+  "provenance": {
+    "compiler": {
+      "path": "/usr/bin/arm-none-eabi-cpp",
+      "sha256": "38db291d05ab00f837b3e99a0d89e20a628327c715a039e22c1e0c4dcab062a5"
+    },
+    "config_sha256": {
+      "include/config/battle.h": "56d3eb68994173519b3910781e29de112d8dc6cf040928b9151917cc1026f94c",
+      "include/config/general.h": "270073678c6849e9d16816bc6dcaecdd1124988353a1e7d0dc2552e13e187fd5",
+      "include/config/item.h": "ce169ff6908456b6d337dc207328b5a3bfb41a3e7b46e79cbffd70fdcf6c747f",
+      "include/config/pokemon.h": "e476277d082276ac078452c44482cf9b3b6fb076159fe4745f0774bc276b85ba",
+      "include/config/species_enabled.h": "86a829d83a344bf23440a586706bf3c91ccef9a02c145afa0d1844c8824374eb"
+    },
+    "cpp_command": [
+      "arm-none-eabi-cpp",
+      "-iquote",
+      "include",
+      "-Wno-trigraphs",
+      "-DMODERN=1",
+      "-DTESTING=0",
+      "-DEMERALD",
+      "-std=gnu17",
+      "work/config_probe.c"
+    ],
+    "excluded": {
+      "enum_valued": {
+        "P_SCATTERBUG_LINE_FORM_BREED": "value is the enum member SPECIES_SCATTERBUG_FANCY, not a macro"
+      },
+      "non_battle_headers": [
+        "include/config/species_enabled.h"
+      ]
+    },
+    "generator_sha256": "0740aeab7939cf8578b8eb90eb5953f7c4c2b0584cc91977845716326c018b92",
+    "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+    "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
+  },
+  "schema": 1
+}
