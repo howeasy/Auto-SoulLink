@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE.** `tests/unit/protocol_schema.py` carries `"gen2_gsc"` in `HELLO_DECLARES`/foundation checks and validates `foundation`/`artifact_kind` against `foundation_for_rom_type()` (`protocol_schema.py:94-248`); `tests/unit/test_protocol_schema.py` present.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P3a.2, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

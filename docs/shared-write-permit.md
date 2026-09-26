@@ -95,15 +95,35 @@ readback nor a rollback claim. Batch preflight prevents already-known refusal
 from causing a partial operation; it does not make platform I/O atomic or undo
 earlier writes if policy or I/O fails after emission has begun.
 
+## Other Gen 2 binders
+
+`lua/gen2/panel.lua:64-79` and `lua/gen2/trade_overlay.lua:68` each construct
+their own independent `Permit.new(...)` instance — the panel's over WRAM0 only,
+armed by `gb_panel`'s `allow()` predicate under `reason == "panel"` (and one
+`phone` byte, `:71-73`) — and never share a permit with the party/box writers
+described below.
+
 ## Gen 2 discontiguous party-faint binding
 
 `lua/gen2/writes.lua` retains game-owned slot, record geometry, battle-context and
-ownership checks. Its party-faint payload is one shared batch: status byte, then
-the two HP bytes. The unused intervening byte is not targeted. The binder no
-longer duplicates an allow-only approximation of shared preflight; a bad HP
-mapping, unstable pointer or failed HP provenance is found before status emits.
-Active-battler action suppression and conditional explode remain unqualified
-and disabled. This change supplies no checkpoint or physical write authority.
+ownership checks. Its bench party-faint payload (`faint_party_slot`, wired only
+outside the active battler) is one shared batch: status byte, then the two HP bytes. The
+unused intervening byte is not targeted. The binder no longer duplicates an
+allow-only approximation of shared preflight; a bad HP mapping, unstable pointer
+or failed HP provenance is found before status emits.
+
+**Active-battler action suppression now ships** (`faint_active_battler`,
+`:182-197`; called from `lua/gen2/client.lua:1487`): behind `gate.armed ==
+"battle_hold"` (itself gated by the checkpoint's proven `battle_faint` receipt
+coverage, see `docs/shared-gb-checkpoint.md`), it writes a four-span batch —
+battle-struct HP, party-mirror status, party-mirror HP, then
+`wBattlePlayerAction = skip_action` last, so `DetermineMoveOrder`/`DoPlayerTurn`
+still let the native `HasPlayerFainted` handler run before the foe moves
+(`:176-181`). Conditional explode remains unqualified and disabled:
+`explode_active_battler` (`:198-199`) unconditionally errors
+"conditional explode action-selection path is not qualified". This change
+supplies no checkpoint or physical write authority beyond what the battle_hold
+receipt already proved.
 
 ## Gen 1 binder and compatibility
 

@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE.** `tools/gen_gen2_write_checkpoint.py`, `data/games/gen2_{crystal,gold,silver}/write_checkpoint.json` and `tests/unit/test_gen2_write_checkpoint.py` all present.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P2.3, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

@@ -1,5 +1,10 @@
 # P3 Gen 2 client + signal binder fixes: independent review (gen2-N3, 2026-09-22)
 
+> **Historical record — all four findings below were fixed.** Commit `acde60fe` ("fix(gen2): N3
+> review findings: registers composed from BizHawk singles, failed PC attempts superseded,
+> refused captures never no_catch, no event before the hello") lands N3-1 through N3-4. Read this
+> file as the defect report that motivated that fix, not as a description of current behaviour.
+
 Reviewer: gen2-N3 (non-author). Read-only on `codex/gen2-foundation` at source cut `463bc71`;
 this file is the only write. Scope: `cc04bb7` (Gen 2 client on the candidate graph) and
 `dfb25f6` (signal binder: boundaries, refusals as values, faint identity, evolution).

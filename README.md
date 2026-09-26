@@ -10,7 +10,7 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 | 3 | Emerald, Archipelago FireRed/LeafGreen | — | ❌ Not supported — they ran only on the old Gen 3 client, archived at tag `archive/gen3-old-client`; the launcher refuses them by name until they are ported to `lua/gen3/` |
 | 1 | Red, Blue, Yellow | US English | ⚠️ Partially verified — mechanisms proven on real cartridges, no full playthrough |
 | 1 | PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6) | The pinned build only (admitted by ROM sha1); optional SLink companion overlay; randomized pairs via the SLink fork of UPR ZX | ⚠️ Same evidence bar as Red/Blue — the same duo harness runs on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing (`docs/purergb/PLAN.md` §13.1) |
-| 2 | Gold, Silver, Crystal | GBC; clean cartridges + SLink companion overlay | ⚠️ Partially verified — 98 PHYSICAL duo/gate cells on real dumps of all three titles (C↔C, G↔S, C↔G); overlays BUILT, not ADMITTED (owner G4 pending); no full playthrough |
+| 2 | Gold, Silver, Crystal (1.0/1.1) | GBC; clean cartridges + SLink companion overlay | ⚠️ Partially verified — mechanisms proven on real dumps of all three titles (98 live duo/gate cells: C↔C, G↔S, C↔G); overlay not yet admitted (owner G4 pending); no full playthrough |
 | 4 | HeartGold, SoulSilver, Platinum | Vanilla, Renegade Platinum | ⚠️ Experimental — never run against a real game |
 | 5 | Black, White, Black 2, White 2 | US | ⚠️ Experimental — never run against a real game |
 
@@ -290,14 +290,12 @@ pytest tests/unit/ -v                          # ~14,200 tests, no emulator need
 pytest tests/ -q                               # + integration, live and e2e collection (~14,500 total)
 
 # Headless BizHawk gates — drive a real emulator
-SLINK_LIVE=1 pytest tests/live/ -q             # headless gates across Gen 1, Gen 2 and Gen 3
+SLINK_LIVE=1 pytest tests/live/ -q             # headless gates for every generation
 
 # Two-instance end-to-end: two emulators + a real server
-SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/ -q  # duo runs across Gen 3, Gen 1 and Gen 2
-
-# What each generation's release gate runs (lanes, rows, requirements) -- counts drift, these don't
-python tools/verify_gen2_release.py --list
-python tools/gen3_final_cut.py --cut <sha> --list
+SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/ -q  # duo scenarios for Gen 1, Gen 2 and Gen 3
+python tools/verify_gen2_release.py --list    # Gen 2's release lanes and what each judges
+python tools/gen3_final_cut.py --cut <sha> --list  # Gen 3's final-cut rows
 ```
 
 The live gates and duo scenarios need BizHawk and the ROMs. Gen 3 also needs

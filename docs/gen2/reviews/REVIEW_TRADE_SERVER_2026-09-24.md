@@ -1,5 +1,16 @@
 # Independent review: the server's native-trade state machine and uncertain-trade reconciliation
 
+**Historical record with a since-verified update:** as of this doc sweep (2026-09-26), current
+`server/state.py` shows BLOCKER-1 fixed (`pending_trade` is persisted: `_trade_to_json()` in
+`_save`, restored via `_restore_trade`/`data.get("pending_trade")` at load), MAJOR-1 fixed (a
+`preparing`/`apply_prepare`/`apply_ready` handshake exists before `apply_trade`, `state.py:388,447,1015-1021`),
+MAJOR-2 fixed (`held_events` buffering exists, `state.py:748,800,807`), MAJOR-4 addressed (a
+`withdraw_trade` command exists, `state.py:719`), and MAJOR-3 fixed (an admin resolve endpoint
+exists: `server/server.py:4650` `handle_debug_resolve_trade`, `POST /api/debug/resolve_trade
+{token, action: commit|rollback|adopt, sides}` -> `SoulLinkState.resolve_trade`, `state.py:1290`).
+The findings below are kept verbatim as the dated review; verify current line numbers before
+acting on them.
+
 Date: 2026-09-24. Branch `codex/gen2-foundation` at `6840bd9a`. The reviewer did not write this code.
 The review is read-only and used no emulator. Line numbers refer to `HEAD` unless marked otherwise.
 

@@ -60,3 +60,16 @@ unprotected for the same reason. `client:send_hello()` with no argument (the liv
 gates' direct call) routes through `send_now`, so it hellos once and the session does
 not repeat it.
 `lua/gen1/entry.lua` loads this module and injects it as `hello_session`.
+
+## Gen 2 binding
+
+`lua/gen2/client.lua` is a second real consumer, not a Gen 1 exclusive. It
+supplies a save identity keyed on ROM SHA-1/OT/party (`hello_identity`), a
+`ready` gate that waits for the Gen 2 write checkpoint or a running battle
+(`:1292-1301`), and `send = self:send_hello` (`:1303`). It chooses the same
+`clock_rewind = "keep", callback_error = "raise"` pair as Gen 1, marked
+"Gen 1 parity" in the source (`:1305`), and a one-frame `retry_delay` (`:1304`).
+`on_invalidate` additionally drops the held key-alias/dead-key state on an
+`identity_changed` reason (`:1306-1313`). `client:send_hello()` with no argument
+routes through `send_now` exactly as Gen 1's does (`:1250-1254`).
+`lua/gen2/entry.lua:420` loads this module and injects it as `hello_session`.

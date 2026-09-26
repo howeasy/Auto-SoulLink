@@ -1,5 +1,12 @@
 # Independent review: Soul Link invariants end to end (asm, Lua clients, server)
 
+> **Historical record — the three MAJOR findings were fixed.** MAJOR-1 in `15f1e786` ("post-DONE
+> trade reports are owed until the server answers them") and `7e9e5543` (release-ZIP follow-up),
+> MAJOR-2 in `3b5b5a5a` ("a hello's hp==0 faint of a trade key waits for the trade"), MAJOR-3 in
+> `779c73c2` ("resolve_trade keeps each side's known outcome; adopt + split"). The MINOR/NIT items
+> were not individually re-verified in this sweep — check `git log` for the relevant `state.py`/
+> `client.lua` regions before treating any of them as still open.
+
 Reviewer: Claude (Fable 5.1), not an author of any of the reviewed code. Read-only. No emulator was run
 and no vision was used. Branch `codex/gen2-foundation`, HEAD `5fbb3c77` plus the O-32 working tree
 (`lua/gen2/client.lua` `land_bench_deaths`, `lua/gen2_write_safety.lua` `evaluate_frame`). Game facts

@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE.** all required PLAYED fixtures present under `tests/fixtures/gen2/`: `crystal_town`/`crystal_battle` (+ `_ot2` A/B pair), `gold_town`/`gold_battle`, `silver_town`/`silver_battle`, plus numerous O-33 SYNTH-disclosed fixtures built from them; `tools/gen2_fixtures.py`, `tools/gen2_synth_fixtures.py`, `tests/unit/test_gen2_fixtures.py` present.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P3b.2, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.
