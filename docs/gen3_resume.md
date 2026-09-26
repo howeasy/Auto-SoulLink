@@ -61,6 +61,11 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   1. DONE 5f050857 (owner 2026-09-25: "Just fix it. No re run."): the vanilla FR/LG item table now names exactly the Gen 3 ids from pret. This display-only fix sits on top of the frozen cut a2985d5a without a re-run. Emerald lane told.
   2. The runner's lane provisioning should rewrite eol-pinned files whose working copy is w/crlf.
 - **Emerald lane** (session "Emerald support planning", branch claude/gen3-emerald off a2985d5a): approved to make additive title rows in the gen3 generators/codec/fixtures/title_syms, keeping FRLG/RR --check byte-identical. Ruling 24 stands until the port is signed.
+- **Gen 2 is merged into LOCAL master** (062977a9, not pushed). `git merge-tree` of this branch against it shows about 20 conflicted files (server.py, adapters/__init__.py, slink.lua, game_detect.lua, memory_gba/nds.lua, e2e_duo.py, protocol.md, .gitattributes, gen1 sfx receipts, several tests). Sequence (agreed with Gen 2):
+  1. The owner plays and signs G4/G5 on a2985d5a (+5f050857).
+  2. Merge master into this branch in a scratch worktree (Opus, by intent), then 2 independent reviews.
+  3. Re-run the FR/LG and RR passes plus the Gen 1 gate on the merged tree.
+  4. Merge Gen 3 → master with the owner's say-so.
 - **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
   - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
   - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.
