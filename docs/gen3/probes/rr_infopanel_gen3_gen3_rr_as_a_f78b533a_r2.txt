@@ -1,0 +1,150 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario infopanel_gen3   (cwd=C:/slink-wt/rrduo)
+# lane=C:/slink-wt/rrduo sha=f78b533a803112c534bcfab50b894a4595053928 tracked_clean=True runner=subagent G5-RR-TRADE-PANEL 2026-09-26 run=2/2
+# verdict: PASS -- A (rr_town, pre-Pokedex) opened the SOULLINK panel via START (count=7 order=1,2,3,4,5,8,6) with normal inputs; drawn SlinkInfo lines == the server's last link_panel rows before the open (Python charmap decode), header PAGE 1/1, opened+1/drawn caught up/field locked/VRAM changed; closed by A then by B, field released each time. B idle.
+--- runner output ---
+
+========== scenario: infopanel_gen3 ==========
+[duo] infopanel_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=b4b991f623c969eeb5c3d06ef54ef2da73cda62b4759a2c730aece7c18def9a3 b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=13da0f15400894b78077a236514a54c01e4085d53a02821f411e428c9f51f1d3 write_checkpoint.json=78d947a4ffd1174ed1b86ad7911613f54a63018ed3a74914e9d4ab9e7008b8f8 profile.json=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c source=f78b533a803112c534bcfab50b894a4595053928
+[duo] server up: tcp=59942 http=59943 data=C:\Users\howar\AppData\Local\Temp\slink_duo_infopanel_gen3_6a0j_05e
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for infopanel_gen3: e2e_infopanel_gen3_a_attempt1_result.txt, e2e_infopanel_gen3_a_result.txt, e2e_infopanel_gen3_b_attempt1_result.txt, e2e_infopanel_gen3_b_result.txt, e2e_infopanel_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 4.7s
+[duo] timing results 2.4s
+[duo] RESULT_LINE a: RESULT: PASS (panel drawn from 5 server rows, closed by A and by B)
+[duo] RESULT_LINE b: RESULT: PASS (idle)
+[duo] SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] infopanel_gen3: START -> SOULLINK drew the server's link_panel rows (1 pair(s)), A and B each close it
+[duo] MARKER b: WRITES 21
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] infopanel_gen3: a=PASS b=PASS
+
+========== summary ==========
+  infopanel_gen3: PASS (attempt 1 of 1)
+--- full A receipt ---
+duo instance a scenario=infopanel_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:59942 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:59942 (rom ea5352f8)
+client built by lua/gen3/run.lua: title=radical_red player=a -> 127.0.0.1:59942
+[client] [SLink] TCP connected to 127.0.0.1:59942
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277 level=6 hp=22/22
+booted frame=545 map=map=787 at=(7,33) balls=0
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":false,"in_battle":false,"loc_name":"route1","pa
+PANEL_TEE
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 617
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 617
+JITTER requested=0 applied=0 attempt=1
+PANEL_ROWS ["DUO0|Treecko|6|22/22|38||","|Treecko|6|22/22|38||","Pairs alive|1/1","Dead zones|0","Badges|0/8"]
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+START_MENU 1 count=7 order=1,2,3,4,5,8,6 cursor=0
+PANEL_OPEN 1 opened=0->1 drawn=1 sc2=1 lines=5 page=0 pages=1 vram=21368CFE->6A0A0664
+PANEL_LINE 1 0 BECFC9A1FECEE6D9D9D7DFE3FEA7FEA3A3BAA3A3FEA4A9FEFEFF000000000000
+PANEL_LINE 1 1 FECEE6D9D9D7DFE3FEA7FEA3A3BAA3A3FEA4A9FEFEFF00000000000000000000
+PANEL_LINE 1 2 CAD5DDE6E700D5E0DDEAD9FEA2BAA2FF00000000000000000000000000000000
+PANEL_LINE 1 3 BED9D5D800EEE3E2D9E7FEA1FF00000000000000000000000000000000000000
+PANEL_LINE 1 4 BCD5D8DBD9E7FEA1BAA9FF000000000000000000000000000000000000000000
+PANEL_SLOT7 1 CABBC1BF00A2BAA2FF0000000000000000000000000000000000000000000000
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 1035
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 1035
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 1035
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 1035
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 1035
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 1035
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 1035
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 1035
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 1035
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 1035
+PANEL_CLOSED 1 button=A sc2=0
+START_MENU 2 count=7 order=1,2,3,4,5,8,6 cursor=5
+PANEL_OPEN 2 opened=1->2 drawn=2 sc2=1 lines=5 page=0 pages=1 vram=4AE32CFA->1D425808
+PANEL_LINE 2 0 BECFC9A1FECEE6D9D9D7DFE3FEA7FEA3A3BAA3A3FEA4A9FEFEFF000000000000
+PANEL_LINE 2 1 FECEE6D9D9D7DFE3FEA7FEA3A3BAA3A3FEA4A9FEFEFF00000000000000000000
+PANEL_LINE 2 2 CAD5DDE6E700D5E0DDEAD9FEA2BAA2FF00000000000000000000000000000000
+PANEL_LINE 2 3 BED9D5D800EEE3E2D9E7FEA1FF00000000000000000000000000000000000000
+PANEL_LINE 2 4 BCD5D8DBD9E7FEA1BAA9FF000000000000000000000000000000000000000000
+PANEL_SLOT7 2 CABBC1BF00A2BAA2FF0000000000000000000000000000000000000000000000
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 1398
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 1398
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 1398
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 1398
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 1398
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 1398
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 1398
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 1398
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 1398
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 1398
+PANEL_CLOSED 2 button=B sc2=0
+WRITES 32
+RESULT: PASS (panel drawn from 5 server rows, closed by A and by B)
+--- full B receipt ---
+duo instance b scenario=infopanel_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:59942 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player b -> 127.0.0.1:59942 (rom ea5352f8)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:59942
+[client] [SLink] TCP connected to 127.0.0.1:59942
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+booted frame=545 map=map=787 at=(7,33) balls=0
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":false,"in_battle":false,"loc_name":"route1","pa
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 617
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 617
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=0 applied=0 attempt=1
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 663
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 663
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 663
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 663
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 663
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 663
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 663
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 663
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 663
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 663
+WRITES 21
+RESULT: PASS (idle)
