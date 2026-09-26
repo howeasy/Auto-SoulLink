@@ -54,15 +54,33 @@ end
 -- opts.captures() -> engine capture events the production client received (capture_party_finalized);
 -- opts.reported() -> true once CAUGHT was printed; opts.settled() (optional) -> true once the save may start
 -- (h.link_settled: linked and no box op left, so no CartRAM edit lands after the witness, C<->G reconnect
--- RED run 1). Returns driver, observe, host spec.
+-- RED run 1). opts.weaken (gen2_ball_gate regression, fsw-sweep3/-rr1/-rr2: a deterministic committed fixture
+-- plus a fully scripted route means every attempt throws the aide's five natural Balls at the SAME foe with
+-- the SAME RNG stream -- neither cross-player jitter nor a different pinned RTC minute changes it, so a losing
+-- ~13% five-miss streak reproduces on every retry) asks F.driver to land one damaging hit on a still-full-HP
+-- foe first (the U1f gate's own proven fix for exactly this failure mode, gen2_frame_align.lua's cdriver):
+-- PokeBallEffect's rate rises as the foe's HP falls (engine/items/item_effects.asm), so throwing at a weakened
+-- foe instead of a full-HP one is the root-cause fix, not another roll of an unchanging dice. Returns driver,
+-- observe, host spec.
 function R.new(ctx, SG, F, opts)
-    local driver = F.driver(ctx.facts.maps.Route29)
+    local driver = F.driver(ctx.facts.maps.Route29, opts.weaken and {weaken=true, passive=opts.passive} or nil)
     local base = SG.qualify_observer(ctx)
+    local move_list = opts.weaken and dofile(ctx.root .. "/lua/tests/duo/gen2_faint_inputs.lua").move_list or nil
     local function observe()
         local point = base()
         point.probe_hits = {capture_party=opts.captures()}
         if point.ui and point.ui.kind == "pack_balls" then
             point.ball_cursor, point.ball_toward = F.ball_cursor(SG.screen(ctx))   -- a Master Ball first
+        end
+        if opts.weaken then
+            local battle = ctx.reads.read_battle()
+            local foe = battle and battle.mode ~= 0 and ctx.reads.read_battle_mon("enemy") or nil
+            point.foe_full = foe ~= nil and foe.hp == foe.max_hp
+            if point.ui and point.ui.kind == "move_menu" then
+                local list = move_list(SG.screen(ctx))
+                if list then point.ui.items, point.ui.cursor, point.ui.columns = list.items, list.cursor, list.columns
+                else point.input_ready = false end
+            end
         end
         -- The report gate: a finished catch stays in phase "battle" (F.driver idles while the overworld
         -- is not ready) until the capture went out on the wire.

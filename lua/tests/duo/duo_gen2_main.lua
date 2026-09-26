@@ -594,9 +594,11 @@ function h.link_settled()
     return false
 end
 -- opts.settled(): hold the save back (still the report gate) until it is true, e.g. h.link_settled.
+-- opts.weaken (gen2_ball_gate): land one damaging hit on a still-full-HP foe before throwing any Ball.
 function h.play(opts)
     local driver, observe, spec = R.new(ctx, SG, F, {captures=function() return rec.captures end,
         reported=function() return rec.caught ~= nil end, settled=opts and opts.settled,
+        weaken=opts and opts.weaken, passive=opts and opts.passive,
         max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=D.max_phase_frames})
     return F.play(host, spec, driver, observe, {log=log, frame=api.framecount,
         screen=function() return SG.screen(ctx) end, where=function() local ok, pc, bank, sp = pcall(function() return api.register("PC"), api.read_u8(ctx.profile.hram.hROMBank, "System Bus"), api.register("SP") end) return ok and string.format("%02X:%04X SP=%04X", bank, pc, sp) or "-" end,
