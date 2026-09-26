@@ -1169,7 +1169,8 @@ def test_the_scripted_play_exports_and_paths_the_driver_uses_exist():
     for name in set(re.findall(r"\bSP\.(\w+)", text)):
         assert re.search(rf"\b{name}\s*=", exports), f"gen3_scripted_play does not export {name}"
     paths = scripted[scripted.index("local PATHS = {"):scripted.index("local H = {")]
-    used = set(re.findall(r'(?:follow\(cp, |reversed\()"(\w+)"', text)) - {"pc_to_pokecenter_entrance"}
+    used = set(re.findall(r'(?:follow\(cp, |reversed\()"(\w+)"', text)) - set(
+        re.findall(r'reversed\("\w+", "(\w+)"\)', text))   # built by the driver's reversed()
     for name in used:
         # E4: the Emerald paths are assigned in the Emerald block (PATHS.em_... = {)
         assert (re.search(rf"^\s+{name} = \{{", paths, re.M)

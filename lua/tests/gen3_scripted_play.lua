@@ -3528,12 +3528,13 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
 --- class of bug FR's grass_step comment documents.
 local EM_GRASS_ORIGIN = { 21, 16 }
 local EM_GRASS_NEXT = { ["21,16"] = "Right", ["22,16"] = "Down", ["22,17"] = "Left", ["21,17"] = "Up" }
-local function emerald_hunt_grass(cp, max_cycles)
+local function emerald_hunt_grass(cp, max_cycles, loop)
     local start_map = play.map(cp)
+    loop = loop or EM_GRASS_NEXT
     for _ = 1, max_cycles * 4 do
         if play.in_battle(cp) then return true end
         local px, py = G.pos(cp)
-        local d = EM_GRASS_NEXT[px .. "," .. py]
+        local d = loop[px .. "," .. py]
         if not d then
             G.shot("stuck")
             G.finish(false, string.format("emerald_hunt_grass: (%d,%d) is not on the grass loop "
@@ -3545,30 +3546,38 @@ local function emerald_hunt_grass(cp, max_cycles)
     end
     return play.in_battle(cp)
 end
-EMH.hunt_grass = emerald_hunt_grass   -- E4: duo_gen3_main.lua ctx.hunt on Emerald
 
--- E4: Oldale Town (the two-mon emerald_pc.sav tile (6,17)) -> Route 102's grass origin, for the
--- duo rows whose hunters need a bench mon. tools/gba_map.py "<Emerald ROM>" --sym
--- data/gen3/pret/pokeemerald.sym --game emerald: --map 0.10 --connections -> "left: offset=0 ->
--- 0.17 (50x20)"; --map 0.10 --bfs 6,17 0,11 -> the first 12 dirs below (the 13th Left crosses the
--- connection onto Route 102 (49,11), offset 0); --map 0.17 --bfs 49,11 21,16 -> the second path.
--- Route 102's grass on the way is fought through by playlib's encounter budget (battles on).
-PATHS.em_oldale_to_route102 = {
-    map = "OldaleTown", from = { 6, 17 }, to = { 0, 11 },
-    dirs = { "Left","Left","Up","Up","Up","Up","Up","Up","Left","Left","Left","Left","Left" },
+-- E4: Oldale Town (the two-mon emerald_pc.sav tile (6,17)) -> Route 103's grass, for the duo
+-- rows whose hunters need a bench mon. West to Route 102 is no good: its only corridor past
+-- x=33 is Youngster Calvin's sight line (33,15..17) (pret data/maps/Route102/map.json: (33,14)
+-- FACE_DOWN, sight 3; tools/gba_map.py --map 0.17 --bfs 49,11 32,y is None for every y outside
+-- 14..17), so a walk west starts his battle (live E4 linked_faint_active r1 stalled at (33,16)).
+-- Route 103's grass (12..17,13..15) lies by the south edge, every trainer at x >= 36 (pret
+-- data/maps/Route103/map.json), no coord events. tools/gba_map.py "<Emerald ROM>" --sym
+-- data/gen3/pret/pokeemerald.sym --game emerald: --map 0.10 --connections -> "up: offset=0 ->
+-- 0.18"; --map 0.10 --bfs 6,17 9,0 -> the first 20 dirs (the 21st Up crosses to (9,21));
+-- --map 0.18 --bfs 9,21 14,15 -> the second path; --find-behaviour 0x02 -> the 2x2 loop below
+-- is all MB_TALL_GRASS. Oldale's coord events (0,10) and (8..10,19) are off this path.
+PATHS.em_oldale_to_route103 = {
+    map = "OldaleTown", from = { 6, 17 }, to = { 9, 0 },
+    dirs = { "Right","Right","Right","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up",
+             "Up","Up","Up","Up","Up","Up","Up" },
 }
-PATHS.em_route102_edge_to_grass = {
-    map = "Route102", from = { 49, 11 }, to = { 21, 16 },
-    dirs = { "Left","Left","Down","Down","Left","Left","Left","Left","Down","Down","Left","Left",
-             "Left","Left","Down","Left","Left","Left","Left","Left","Left","Left","Left","Left",
-             "Left","Left","Left","Left","Left","Left","Left","Left","Left" },
+PATHS.em_route103_edge_to_grass = {
+    map = "Route103", from = { 9, 21 }, to = { 14, 15 },
+    dirs = { "Up","Up","Up","Up","Up","Up","Right","Right","Right","Right","Right" },
 }
---- Walk from Oldale (6,17) to the grass origin unless already on Route 102 (0.17).
-function EMH.to_grass(cp, label)
+EMH.GRASS103_NEXT = { ["14,15"] = "Right", ["15,15"] = "Up", ["15,14"] = "Left", ["14,14"] = "Down" }
+--- Hunt from wherever an Emerald duo fixture stands: Route 102's loop (the battle fixtures) or,
+--- from Oldale Town (the two-mon pc fixture), Route 103's loop after the walk above.
+function EMH.hunt(cp, label, max_cycles)
     local g, n = G.map(cp)
-    if g == 0 and n == 17 then return end
-    play.follow(cp, "em_oldale_to_route102", label)
-    play.follow(cp, "em_route102_edge_to_grass", label)
+    if g == 0 and n == 17 then return emerald_hunt_grass(cp, max_cycles) end
+    if g == 0 and n == 10 then
+        play.follow(cp, "em_oldale_to_route103", label)
+        play.follow(cp, "em_route103_edge_to_grass", label)
+    end
+    return emerald_hunt_grass(cp, max_cycles, EMH.GRASS103_NEXT)
 end
 
 --- Fight an already-triggered battle to its end, same pinned shape as this file's own
