@@ -7,6 +7,7 @@ evidence. Real expansion offsets remain the build probe's responsibility.
 import copy
 import hashlib
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -264,3 +265,109 @@ def test_family_ignores_configured_non_evolution_method():
 def test_decode_multibyte_glyph_and_apostrophe():
     assert ex.decode_name(b"\x55\x56\x57\x58\x59\xB4\xFF", {
         b"\x55\x56\x57\x58\x59": "{POKEBLOCK}", b"\xB4": "'"}) == "{POKEBLOCK}'"
+
+
+def test_synthetic_vanilla_without_rhh():
+    data, layout, chars = synthetic_expansion()
+    data[0x2A0:0x2B8] = bytes(24)
+    data[0x1C0:0x1C4] = (ex.ROM_BASE + 0xB00).to_bytes(4, "little")
+    data[0xC00:0xC30] = bytes(48)
+    data[0xC0C:0xC12] = bytes([4, 0, 30, 0, 2, 0])
+    data[0xE00:0xE04] = bytes([251, 0, 252, 0])
+    layout.update(kind="vanilla", rom_sha1=hashlib.sha1(data).hexdigest(),
+                  counts={"species": 3, "moves": 2, "items": 2, "abilities": 2},
+                  national_dex={"address": ex.ROM_BASE + 0xE00})
+    layout["evolutions"].update(address=ex.ROM_BASE + 0xC00, slots=1, end_method=0)
+    pack = ex.extract(data, layout, chars)
+    assert pack["rhh_header"] is None
+    assert pack["kind"] == "vanilla"
+    assert pack["counts"]["species"] == 3
+    assert pack["species"][2]["national_dex"] == 252
+    assert pack["species"][1]["evolutions"] == [{"method": 4, "param": 30, "target": 2}]
+    assert pack["species"][2]["family"] == 1
+
+
+def test_rhh_outside_preferred_window_and_duplicate_outside_window():
+    data, layout, chars = synthetic_expansion()
+    data[0xF00:0xF18] = data[0x2A0:0x2B8]
+    data[0x2A0:0x2B8] = bytes(24)
+    layout["rom_sha1"] = hashlib.sha1(data).hexdigest()
+    assert ex.extract(data, layout, chars)["rhh_header"]["offset"] == 0xF00
+    data[0xFA0:0xFA6] = b"RHHEXP"
+    with pytest.raises(ex.ExtractionError, match="ambiguous RHH"):
+        ex.parse_headers(ex.Rom(data))
+
+
+def test_expansion_missing_rhh_is_named():
+    data, layout, chars = synthetic_expansion()
+    data[0x2A0:0x2A6] = bytes(6)
+    layout["rom_sha1"] = hashlib.sha1(data).hexdigest()
+    with pytest.raises(ex.ExtractionError, match="RHH header not found"):
+        ex.extract(data, layout, chars)
+
+
+def test_header_non_ascii_becomes_extraction_error():
+    data, _, _ = synthetic_expansion()
+    data[0x108] = 255
+    with pytest.raises(ex.ExtractionError, match="UnicodeDecodeError"):
+        ex.parse_headers(ex.Rom(data))
+
+
+@pytest.mark.parametrize("bad_symbol", ["gSpeciesNames", "gMoveNames", "missing"])
+def test_bad_symbol_geometry_is_extraction_error(tmp_path, monkeypatch, bad_symbol):
+    monkeypatch.setattr(ex, "clean_source", lambda _: None)
+    monkeypatch.setattr(ex, "Constants", lambda _: type("TinyConstants", (), {"value": lambda self, key: 1})())
+    symbols = {"gSpeciesInfo": 28, "gBattleMoves": 12, "gItems": 44, "gAbilityNames": 2,
+               "gSpeciesNames": 2, "gMoveNames": 2, "gEvolutionTable": 8, "sSpeciesToNationalPokedexNum": 0}
+    if bad_symbol == "missing":
+        del symbols["gSpeciesInfo"]
+    else:
+        symbols[bad_symbol] += 1
+    path = tmp_path / "bad.sym"
+    path.write_text("\n".join(f"08000500 g {size:08x} {name}" for name, size in symbols.items()))
+    with pytest.raises(ex.ExtractionError, match="KeyError" if bad_symbol == "missing" else bad_symbol):
+        ex.vanilla_layout(tmp_path, path)
+
+
+def test_source_evolution_bad_index_is_extraction_error(tmp_path, monkeypatch):
+    values = {"SPECIES_NONE": 0, "SPECIES_BAD": 3, "EVO_LEVEL": 4, "1": 1}
+    monkeypatch.setattr(ex, "Constants", lambda _: type("TinyConstants", (), {"value": lambda self, key: values[key]})())
+    files = {
+        "src/data/text/species_names.h": '[SPECIES_NONE] = _("NONE"),',
+        "src/data/pokemon/species_info.h": "#define OLD_UNOWN_SPECIES_INFO {0}\nconst struct X table[] = {[SPECIES_NONE] = {0}};",
+        "src/pokemon.c": "static const u16 sSpeciesToNationalPokedexNum[] = {};",
+        "src/data/pokemon/evolution.h": "[SPECIES_BAD] = {{EVO_LEVEL, 1, SPECIES_NONE}},",
+    }
+    for name, text in files.items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+    pack = {"counts": {"species": 1}, "species": [{"id": 0, "name": "NONE", "types": [0, 0],
+            "abilities": [0, 0], "national_dex": 0, **dict.fromkeys(ex.STAT_FIELDS, 0)}]}
+    with pytest.raises(ex.ExtractionError, match="IndexError"):
+        ex.source_control(pack, tmp_path)
+
+
+@pytest.mark.parametrize("flags,reason", [([], "--layout is required"), (["--check"], "--check only supports vanilla")])
+def test_expansion_cli_refuses_before_source_or_extraction(tmp_path, monkeypatch, flags, reason):
+    data, _, _ = synthetic_expansion()
+    rom = tmp_path / "exp.gba"
+    rom.write_bytes(data)
+    monkeypatch.setattr(sys, "argv", ["extract", "--rom", str(rom), *flags])
+    monkeypatch.setattr(ex, "extract", lambda *args: pytest.fail("extraction must not start"))
+    monkeypatch.setattr(ex, "vanilla_layout", lambda *args: pytest.fail("vanilla source must not be read"))
+    with pytest.raises(ex.ExtractionError, match=reason):
+        ex.main()
+
+
+def test_explicit_reserved_zero_record_cannot_hide_nonzero_data():
+    data, layout, chars = synthetic_expansion()
+    layout["tables"]["species"]["zero_records"] = [2]
+    with pytest.raises(ex.ExtractionError, match="declared zero record has data"):
+        ex.extract(data, layout, chars)
+    data[0x550:0x578] = bytes(40)
+    layout["rom_sha1"] = hashlib.sha1(data).hexdigest()
+    pack = ex.extract(data, layout, chars)
+    assert pack["species"][2]["name"] is None
+    assert pack["species"][2]["reserved_zero_record"] is True
+    assert pack["species"][2]["national_dex"] == 0

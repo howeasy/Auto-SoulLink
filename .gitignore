@@ -32,8 +32,6 @@ data/obs_config.json
 # intermediate .o files). data/pret_syms.json IS committed (50KB artifact
 # so contributors without RGBDS can still run pytest).
 /.cache/
-# X1 upstream expansion source/build cache (kept explicit for the card lease).
-/.cache/expansion-src/
 
 # Lua console tee (per-run debug log written by lua/slink.lua, truncated
 # each boot — not useful in version control)

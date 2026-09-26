@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import functools
 import hashlib
 import json
 import operator
@@ -45,6 +46,17 @@ STAT_FIELDS = ("baseHP", "baseAttack", "baseDefense", "baseSpeed", "baseSpAttack
 
 class ExtractionError(ValueError):
     """A present input is unsupported, malformed, or does not match its pin."""
+
+
+def input_errors(function):
+    """Convert malformed input internals into the extractor's public failure type."""
+    @functools.wraps(function)
+    def checked(*args, **kwargs):
+        try:
+            return function(*args, **kwargs)
+        except (UnicodeDecodeError, KeyError, IndexError) as error:
+            raise ExtractionError(f"{function.__name__}: malformed input ({type(error).__name__}: {error})") from error
+    return checked
 
 
 def require(condition, reason):
@@ -71,6 +83,7 @@ class Rom:
         return int.from_bytes(self.read(offset, width), "little")
 
 
+@input_errors
 def parse_headers(rom):
     rom.read(0x100, 0x104)
     gf = {"version": rom.uint(0x100, 4), "language": rom.uint(0x104, 4),
@@ -80,14 +93,16 @@ def parse_headers(rom):
     require(gf["version"] == 3 and gf["language"] == 2, "unsupported GF version/language (English Emerald required)")
     for key in ("species", "moves", "items"):
         rom.address(gf[key])
-    matches = [i for i in range(0x100, min(0x400, len(rom.data)) - 5)
-               if rom.read(i, 6) == b"RHHEXP"]
-    require(len(matches) <= 1, "ambiguous RHH magic in header window")
+    # Prefer the documented header window, but prove uniqueness across the ROM.
+    preferred = rom.data.find(b"RHHEXP", 0x100, 0x400)
+    first = rom.data.find(b"RHHEXP")
+    matches = [] if first < 0 else [first]
+    require(first < 0 or rom.data.find(b"RHHEXP", first + 1) < 0, "ambiguous RHH magic in ROM")
     if not matches:
         return gf, None
-    offset = matches[0]
+    offset = preferred if preferred >= 0 else matches[0]
     # expansion e8bd1cd7 src/rom_header_rhh.c:14-28, explicitly annotated offsets.
-    require(offset + 24 <= 0x400, "truncated RHH header window")
+    rom.read(offset, 24)
     rhh = {"offset": offset, "version": list(rom.read(offset + 6, 3)),
            "flags": rom.uint(offset + 9, 1), "moves": rom.uint(offset + 10, 2),
            "species": rom.uint(offset + 12, 2), "abilities": rom.uint(offset + 14, 2),
@@ -190,6 +205,7 @@ def families(species, ignored_methods=()):
             species[i]["family"] = canonical
 
 
+@input_errors
 def extract(data, layout, chars):
     rom = Rom(data)
     require(layout["schema"] == 1, "unsupported layout schema")
@@ -198,6 +214,7 @@ def extract(data, layout, chars):
     require(bool(layout["provenance"]), "layout provenance is required")
     gf, rhh = parse_headers(rom)
     kind = "expansion" if rhh else "vanilla"
+    require(layout["kind"] != "expansion" or rhh is not None, "RHH header not found")
     require(layout["kind"] == kind, "layout/header kind mismatch")
     counts = {k: rhh[k] if rhh else layout["counts"][k] for k in ("species", "moves", "items", "abilities")}
     result = {"schema": 1, "kind": kind, "rom_sha1": digest, "gf_header": gf, "rhh_header": rhh,
@@ -219,7 +236,15 @@ def extract(data, layout, chars):
         rows = []
         for i in range(count):
             pos = base + i * stride
-            row = {"id": i, "name": read_name(rom, pos, spec["name"], stride, chars, gf, i)}
+            if i in spec.get("zero_records", []):
+                require(not any(rom.read(pos, stride)), f"{table}[{i}]: declared zero record has data")
+                row = {"id": i, "name": None, "reserved_zero_record": True}
+            else:
+                try:
+                    name = read_name(rom, pos, spec["name"], stride, chars, gf, i)
+                except ExtractionError as error:
+                    raise ExtractionError(f"{table}[{i}]: {error}") from error
+                row = {"id": i, "name": name}
             row.update({key: number(rom, pos, value, stride) for key, value in spec["fields"].items()})
             rows.append(row)
         result[table] = rows
@@ -316,6 +341,7 @@ def field(offset, width=1, **kwargs):
     return {"offset": offset, "width": width, **kwargs}
 
 
+@input_errors
 def vanilla_layout(source, symbols):
     clean_source(source)
     c = Constants(source)
@@ -342,6 +368,8 @@ def vanilla_layout(source, symbols):
     }
     for table, symbol in {"species": "gSpeciesInfo", "moves": "gBattleMoves", "items": "gItems", "abilities": "gAbilityNames"}.items():
         require(syms[symbol][1] == counts[table] * tables[table]["stride"], f"symbol size mismatch: {symbol}")
+    for table, symbol in (("species", "gSpeciesNames"), ("moves", "gMoveNames")):
+        require(syms[symbol][1] == counts[table] * tables[table]["name"]["stride"], f"symbol size mismatch: {symbol}")
     slots = c.value("EVOS_PER_MON")
     require(syms["gEvolutionTable"][1] == counts["species"] * slots * 8, "evolution symbol size mismatch")
     require(syms["sSpeciesToNationalPokedexNum"][1] == (counts["species"] - 1) * 2, "dex symbol size mismatch")
@@ -369,6 +397,7 @@ def source_name(text):
     return match[1].replace('\\"', '"').replace("\\'", "'")
 
 
+@input_errors
 def source_control(pack, source):
     """Compare every extracted row/field with C initializers, independent of ROM offsets.
 
@@ -523,11 +552,16 @@ def main():
     parser.add_argument("--source", type=Path, default=ROOT / ".cache/pret/pokeemerald", help="matching source tree (also supplies charmap)")
     parser.add_argument("--symbols", type=Path, default=ROOT / "data/gen3/pret/pokeemerald.sym")
     parser.add_argument("--layout", type=Path, help="ROM-bound layout JSON, required for expansion")
-    parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--check", action="store_true", help="vanilla source CONTROL + server cross-check; fails any source difference")
     args = parser.parse_args()
+    data = args.rom.read_bytes()
+    _, rhh = parse_headers(Rom(data))
+    require(not args.check or rhh is None, "--check only supports vanilla CONTROL; expansion requires a build-specific oracle")
+    require(rhh is None or args.layout is not None, "--layout is required for an expansion ROM")
+    require(args.output is not None, "--output is required")
     layout = json.loads(args.layout.read_text()) if args.layout else vanilla_layout(args.source, args.symbols)
-    pack = extract(args.rom.read_bytes(), layout, charmap(args.source))
+    pack = extract(data, layout, charmap(args.source))
     if args.check:
         require(pack["kind"] == "vanilla", "--check is the vanilla CONTROL; expansion needs a build-specific oracle")
         clean_source(args.source)
