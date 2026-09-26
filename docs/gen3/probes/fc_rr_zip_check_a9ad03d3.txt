@@ -1,0 +1,25 @@
+# gen3_final_cut row=rr_zip_check item=§9_item5_RR cut=a9ad03d3acc705420ffeaa58ab690068169132fa
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/check_release_zip.py 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/dist/SLink-player-g4-a9ad03d3.zip' --rev a9ad03d3acc705420ffeaa58ab690068169132fa   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T00:26:03 cpu=54% emuhawk=1 python=6
+start_utc=2026-09-26T04:26:02Z tracked_clean_before=True
+check_release_zip: SLink-player-g4-a9ad03d3.zip  rev=a9ad03d3acc705420ffeaa58ab690068169132fa  members=166  mode=manifest
+  note: prefix 'SLink-player-g4-a9ad03d3/' stripped from every member
+  FAIL: member is not in make_release's manifest: lua/gen2/boxes.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/client.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/entry.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/panel.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/phone.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/reads.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/rom.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/run.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/signals.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/trade_overlay.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/wire.lua
+  FAIL: member is not in make_release's manifest: lua/gen2/writes.lua
+FAIL: 12 problem(s)
+exit=1 end_utc=2026-09-26T04:26:07Z tracked_clean_after=True classification=real

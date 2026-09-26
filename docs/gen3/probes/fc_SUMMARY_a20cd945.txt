@@ -1,0 +1,10 @@
+# G4 final cut a20cd94538b0b5b207731a216f132b84dc71cd65 -- tools/gen3_final_cut.py summary (written 2026-09-26T04:34:30Z)
+# RUN 3 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | zip_build | §9 item5 | PASS | 1 | fc_zip_build_a20cd945.txt |
+| 2 | zip_check | §9 item5 | PASS | 1 | fc_zip_check_a20cd945.txt |
+| 3 | zip_boot_firered | §9 item5 | PASS | 1 | fc_zip_boot_firered_a20cd945.txt |
+
+OVERALL: PASS (3/3 rows)

@@ -1,0 +1,24 @@
+# gen3_final_cut row=bootcheck_leafgreen_party_town_b item=§8_item4 cut=a9ad03d3acc705420ffeaa58ab690068169132fa
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/gen3_fixtures.py boot-check --rom 'Pokemon - LeafGreen Version (USA).gba' --fixture tests/fixtures/gen3/leafgreen_party_town_b.sav --title leafgreen --saveram-name 'Pokemon - LeafGreen Version (USA).SaveRAM'   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T00:16:48 cpu=77% emuhawk=2 python=5
+start_utc=2026-09-26T04:16:47Z tracked_clean_before=True
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_leafgreen_party_town_b\Pokemon - LeafGreen Version (USA).SaveRAM from tests\fixtures\gen3\leafgreen_party_town_b.sav (counter=3)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 3 -> 4  (6s)
+phase start frame=1 title=leafgreen
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=3
+phase field frame=778 map=(3,1)
+phase save-menu frame=778 counter=3
+phase save-dialog frame=990 row=4
+phase saved frame=1517 counter=3->4
+phase slot-complete frame=1777 sectors=14/14
+phase flushed frame=1950
+RESULT: PASS counter 3 -> 4
+BOOT-CHECK PASS tests\fixtures\gen3\leafgreen_party_town_b.sav counter=3->4 party=[{'key': 'BC73F9B0:E39FF276', 'species': 7, 'level': 6}, {'key': 'F6B6A64D:E39FF276', 'species': 19, 'level': 3}]
+exit=0 end_utc=2026-09-26T04:16:55Z tracked_clean_after=True classification=pass
