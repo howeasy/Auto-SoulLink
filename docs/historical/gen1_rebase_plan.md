@@ -1,5 +1,16 @@
 # Gen 1 v0.3.0 — rebase plan
 
+> **HISTORICAL — superseded 2026-09-26.** This plan targeted rebasing the
+> `gen1-master-release-plan-6b4279` branch (worktree since removed) onto master `cb9cf5c`. That
+> rebase happened: the branch was rebased and fast-forwarded into local master as `24fdb06`
+> (2026-09-18), then the final-review fix branch merged as `5c97aa4` (2026-09-20), then the
+> pureRGB integration merged as `0937f3d` (2026-09-20) — see `docs/gen1_resume.md`'s "MERGED …"
+> sections for the exact commits. Master has moved substantially further since (Gen 2 and Gen 3
+> landed 2026-09-26) and none of it was pushed/tagged as of this pass. The git-inventory numbers
+> below (commit counts, the three-file overlap, `d2c30fb`/`cb9cf5c` as endpoints) describe a
+> base and a branch that no longer exist as such; read this for the recipe and rationale, not as
+> a plan still awaiting execution.
+
 ## Scope and evidence status
 
 **Planning only. No rebase, commit, stash or tag was executed by this card; only read-only `git log`/`git diff`/`merge-base` inventory queries were run.** `git merge-base master HEAD` confirms the base is exactly `d2c30fbbe263041d34038e2ad781a4a2cb78d86a`. `git rev-list --count d2c30fb..HEAD` at the release worktree (`E:/Google Drive/SLink/.claude/worktrees/gen1-master-release-plan-6b4279`, HEAD `d9f95e7`) is **152**, not the task's approximate 137 or the fallback resume's approximate 135 (`docs/gen1_resume.md:10-14`) — both were under-counts taken at an earlier point in the branch's life; commits kept landing after they were written. `master` is at `cb9cf5cfb93c05bda9d62a4f2a1e4e4333b1d12b`, three commits ahead of `d2c30fb`, matching the task's reported count. `BASE_HEAD:1` recording `c2605ae` is a separate, older marker inside the prep snapshot; it is superseded by this session's direct query, not used to override it.

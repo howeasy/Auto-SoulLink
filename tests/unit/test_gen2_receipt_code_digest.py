@@ -45,9 +45,25 @@ def commit(repo, rel, text):
     ("lua/gen2/client.lua", True), ("lua/hud.lua", True), ("lua/core/x.lua", True),
     ("server/adapters/gen2_codec.py", True), ("data/games/gen2_silver/receipts/r.json", True),
     ("lua/tests/duo/scenario_gen2_link.lua", False), ("lua/gen1/client.lua", False),
-    ("docs/protocol.md", False), ("tools/e2e_duo.py", False), ("server/README.md", False)])
+    ("docs/protocol.md", False), ("tools/e2e_duo.py", False), ("server/README.md", False),
+    # DIGEST-DOCS: prose under a data pack is not what the game executes
+    ("data/games/gen2_crystal/README.md", False), ("data/games/gen2_gold/NOTES.txt", False),
+    ("data/games/gen2_crystal/charmap.lua", True)])
 def test_production_scope(path, production):
     assert code.is_production(path) is production
+
+
+def test_every_non_doc_file_in_the_gen2_packs_is_json_or_lua():
+    """DIGEST-DOCS guard: the digest drops only the documentation suffixes. A new pack file type
+    must be a deliberate decision (behavioural -> keep it; prose -> add its suffix), never a silent
+    change to what the digest covers."""
+    import subprocess
+    listed = subprocess.run(["git", "-C", str(code.ROOT), "ls-files", "data/games/gen2_crystal",
+                             "data/games/gen2_gold", "data/games/gen2_silver"],
+                            capture_output=True, text=True, check=True).stdout.split()
+    assert listed, "no Gen 2 pack files found"
+    odd = [p for p in listed if not p.endswith(code.DOC_SUFFIXES) and not p.endswith((".json", ".lua"))]
+    assert odd == [], f"new Gen 2 pack file types need a digest decision: {odd}"
 
 
 def test_a_clean_stamp_binds_head_and_only_production_changes_stale_it(repo):

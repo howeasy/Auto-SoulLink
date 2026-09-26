@@ -14,7 +14,7 @@ Status: ready-for-agent
 
 **Blocked by:** 30; owner-signed G4.
 
-**Prospective file set:** README.md and docs/REFERENCE.md Gen 2 blocks; docs/release_notes.md; tools/make_release.py later release changes only. These are planning bounds, not an active lease; expand patterns and identify blocks before dispatch. Workers report ledger changes to the coordinator.
+**Prospective file set:** README.md and docs/REFERENCE.md Gen 2 blocks; docs/historical/release_notes.md; tools/make_release.py later release changes only. These are planning bounds, not an active lease; expand patterns and identify blocks before dispatch. Workers report ledger changes to the coordinator.
 
 **Shared-module decision:** Reuse existing release/package structure; game-specific facts stay in the Gen 2 sections.
 

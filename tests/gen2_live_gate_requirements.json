@@ -17,7 +17,7 @@
       "axes": {"kind": "engine_sites", "title": "crystal", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal.engine_sites.json",
-        "sha256": "8e4b34ed3474763560cb4afe83e59cb98f60e924250669d2e3c9a111be0c816b"
+        "sha256": "0bf726fe1d079535c4f2f1c5412a82ac2c23c68170142fdbfea05ba506102e1b"
       }}}]
     },
     {
@@ -27,7 +27,7 @@
       "axes": {"kind": "engine_sites", "title": "gold", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.engine_sites.json",
-        "sha256": "0e1e5199e4cbc1d96e7526ea6c60cc2c59afd2de5fe7614271c0c1fd4274b408"
+        "sha256": "0ffc838c2eda48493cf5982dc013c022b31acb643321195ee1543ee38df23b08"
       }}}]
     },
     {
@@ -37,7 +37,7 @@
       "axes": {"kind": "engine_sites", "title": "silver", "requirement_ids": ["F-2", "F-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver.engine_sites.json",
-        "sha256": "c6510d06d1b1ed23d5e8c34c27b2a733b6c767918e2fd8af0c3dfd698bdf51aa"
+        "sha256": "495341543c366995f31b68369cb7c4fc714becfdaef0f2fc558452f925871cdc"
       }}}]
     },
     {
@@ -47,7 +47,7 @@
       "axes": {"kind": "write_window", "title": "crystal", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal.write_window.json",
-        "sha256": "c58bf15656a66342e972738f19a7828879f48020f8a0b0de8e6045f294d9e22e"
+        "sha256": "42a3bc9e8c16f3088290f038aabb93bd29013d3c80d6996770dfcc3d70c6749b"
       }}}]
     },
     {
@@ -57,7 +57,7 @@
       "axes": {"kind": "write_window", "title": "gold", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
-        "sha256": "0af172c780724801bff71e1759bb6a71f072b013cbd9bd4c59467571dcfe747b"
+        "sha256": "b2bd849e65ed76f09cf7e1e0523cc1009661b50f5c25dbec73a1f4f5202cf721"
       }}}]
     },
     {
@@ -67,7 +67,7 @@
       "axes": {"kind": "write_window", "title": "silver", "owner_ruling": "O-23", "requirement_ids": ["W-1", "W-2", "W-5", "W-6", "W-7"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold.write_window.json",
-        "sha256": "0af172c780724801bff71e1759bb6a71f072b013cbd9bd4c59467571dcfe747b"
+        "sha256": "b2bd849e65ed76f09cf7e1e0523cc1009661b50f5c25dbec73a1f4f5202cf721"
       }}}]
     },
     {
@@ -207,7 +207,7 @@
       "axes": {"kind": "panel_gate", "title": "crystal", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.panel_gate.json",
-        "sha256": "a70fda09286e39837e2cb294d2b96dcce81e41ad8471dc7587cb68a3be7e38c3"
+        "sha256": "99d8c3efa5e35400ba24c0b03bb7d5f931e4a2cecacb676318f8811d986aae9d"
       }}}]
     },
     {
@@ -217,7 +217,7 @@
       "axes": {"kind": "panel_gate", "title": "gold", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.panel_gate.json",
-        "sha256": "07521883477fa4c9be6358ff728cb8711100b53e9270397c811205814b08ecf9"
+        "sha256": "904e756995abb26e0ebebdfd38acdc0c7649c919cda73c42246cbe89ce956f41"
       }}}]
     },
     {
@@ -227,7 +227,7 @@
       "axes": {"kind": "panel_gate", "title": "silver", "requirement_ids": ["N-1", "C-3"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.panel_gate.json",
-        "sha256": "70b9ec4aa1ac79fc53b4668528d5e9880c58e86ab11c60cc4f1e3020e29913a1"
+        "sha256": "07f538d0b71977b845adc00c68b08be14ccb610158b0a6dd2630cb85562e1ac7"
       }}}]
     },
     {
@@ -237,7 +237,7 @@
       "axes": {"kind": "sfx_gate", "title": "crystal", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.sfx_gate.json",
-        "sha256": "6bea49dd29e88da449aa6916a110e4ff43ad91cf3b6772924371ac15299c479e"
+        "sha256": "254d80155000877841fb82480643915d7a00ea947c996ddccd476c9e48288c19"
       }}}]
     },
     {
@@ -247,7 +247,7 @@
       "axes": {"kind": "sfx_gate", "title": "gold", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.sfx_gate.json",
-        "sha256": "a7894b7bb6b8dcca04bb4eca21121919efaaf82fc74f02d463855ddf4e6ced47"
+        "sha256": "e86951ad2189327bc392fa7d944a1a5bac26f95425425d5ec1e3bbb0a54a2c83"
       }}}]
     },
     {
@@ -257,7 +257,7 @@
       "axes": {"kind": "sfx_gate", "title": "silver", "requirement_ids": ["N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.sfx_gate.json",
-        "sha256": "5acd0f10b25a3770635205106c4cdd8438b9d4c8f391258252f979062d3f17df"
+        "sha256": "88d4d8de2dd3b093dedb692b7ab0e0d2e46d6993d95717e54f189e1ac015f8b7"
       }}}]
     },
     {
@@ -267,7 +267,7 @@
       "axes": {"kind": "w6_gate", "title": "crystal", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.w6_gate.json",
-        "sha256": "ae1e8089f51c819238fe3a04e1dd4ae738729a1921eb91797928d9ebdeda5796"
+        "sha256": "bf826b3ae557f571e7e57e6abdc24b0fa434dd688b3540de8b0aa07981f8c660"
       }}}]
     },
     {
@@ -277,7 +277,7 @@
       "axes": {"kind": "w6_gate", "title": "silver", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.w6_gate.json",
-        "sha256": "1ed2639764ade24f41f534fb9b3d254976256b9adfcf2bb15ce088dcdad19119"
+        "sha256": "44bf25ba0525660cde00989d1d627c5d0d8c5d426bcd4f5800813204b29657d5"
       }}}]
     },
     {
@@ -287,7 +287,7 @@
       "axes": {"kind": "w6_gate", "title": "gold", "requirement_ids": ["O-27"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.w6_gate.json",
-        "sha256": "043426ef3a570a2b92883c5ff8587ab04c6963b7fb7fedc5e44bd72bf6815057"
+        "sha256": "0cbca41592162f92f64eebef9d7e70af17bd9ec35d0eddf51596b65f3a8a7b7a"
       }}}]
     },
     {
@@ -297,7 +297,7 @@
       "axes": {"kind": "phone_gate", "title": "crystal", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.phone_gate.json",
-        "sha256": "40152b200a4aa976b83049ace657b38e6b6e67be6c17defa93719f58134f92d2"
+        "sha256": "1552e7a6248ac3a79c4954646fdb58e1669c5d728cbc6b1defddbe07d31cf26e"
       }}}]
     },
     {
@@ -307,7 +307,7 @@
       "axes": {"kind": "phone_gate", "title": "gold", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.phone_gate.json",
-        "sha256": "e4b5f14a2327cd70cb4d695d6b0617ddcb96fcb2e1e9031c483ecfe200c552c3"
+        "sha256": "aa5cebb3fb43289c4fffb69b01a756634783a69f93b473a77598add6b4b9c0c5"
       }}}]
     },
     {
@@ -317,7 +317,7 @@
       "axes": {"kind": "phone_gate", "title": "silver", "requirement_ids": ["O-29"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.phone_gate.json",
-        "sha256": "9e9f9aed29645a2d9386eb21466f2a66ac97b0ae08899fbc44fecbd61c009ccc"
+        "sha256": "3d692687071577b46de9693606a5b36cd93e5fc9efc86644368a7443edf2a238"
       }}}]
     },
     {
@@ -327,7 +327,7 @@
       "axes": {"kind": "sp_lowwater_gate", "title": "crystal", "requirement_ids": ["N-1", "N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/crystal_overlay.sp_lowwater_gate.json",
-        "sha256": "f80175a2f39731b954a5abbb6bc298cef4ef52a66f092bcef8ade47ad99564d3"
+        "sha256": "8cb9f8ed7ac233ed01c99a84579f337a9c4d373cf920616c911decb7716367f3"
       }}}]
     },
     {
@@ -337,7 +337,7 @@
       "axes": {"kind": "sp_lowwater_gate", "title": "gold", "requirement_ids": ["N-1", "N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/gold_overlay.sp_lowwater_gate.json",
-        "sha256": "ded97f46d0a714177ee137025226e724be36cf2b73ee1139aec97f632d6aabd5"
+        "sha256": "b496d42b00f3f8236b053c0b891906cad0bf56c13d6eeb24c70ed68240765b5d"
       }}}]
     },
     {
@@ -347,7 +347,7 @@
       "axes": {"kind": "sp_lowwater_gate", "title": "silver", "requirement_ids": ["N-1", "N-2"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/silver_overlay.sp_lowwater_gate.json",
-        "sha256": "dc34de30e54fa9b06ec2a371b49296655566f922d7927e5c9cc6653d31f532e3"
+        "sha256": "68eca8860ce7e62acec5df158d34ebc58d932513ef5dcf2cae7697036a8af35c"
       }}}]
     },
     {
@@ -357,7 +357,7 @@
       "axes": {"kind": "inspect_run", "requirement_ids": ["R-1", "R-2", "R-3", "R-4", "R-5g"]},
       "proofs": [{"receipts": {"receipt": {
         "path": "tests/fixtures/gen2/receipts/live_new_gates.inspect_run.json",
-        "sha256": "67653e83420a9b99647f9c4936f8a27dd3ca164e3eeb1d745b1a5685f6b699ac"
+        "sha256": "ad78577451a659237bfddb2c2147c3eb8300a9774a363a6d39227182438ad2ba"
       }}}]
     }
   ]

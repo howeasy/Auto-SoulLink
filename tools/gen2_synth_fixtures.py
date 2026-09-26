@@ -421,24 +421,33 @@ def start_time(raw, title):
     return hour, minute, second
 
 
-def day_clock(raw, *, hour, now, title):
+def day_clock(raw, *, hour, now, title, minute=0, second=0):
     """O-33 clock setup: (bytes, disclosure) with only the 22-byte BizHawk gambatte RTC trailer rewritten so the
-    game reads `hour`:00:00 at host time `now`. The trailer is emulator state, never save data (docs/gen2/reviews/
-    OMP_RTC_SOURCE_2026-09-22.md): an 8-byte big-endian base time, then dh, dl, h, m, s, the cycle counter and
-    the latched copies (libgambatte cartridge.cpp :504-580). The RTC runs on from base to host time, so the game
-    clock of a played fixture drifts with the wall clock (EVO-U1: silver_battle read 19:xx at 08:23 local).
-    Game time = the save's wStart time + RTC (FixTime). The RTC only moves forward (to the next matching
-    instant), and CartRAM is untouched. The disclosure (gen2-clock-setup-v1) re-derives from the base bytes:
-    verify_gen2_release re-runs this function on the committed fixture and compares every field."""
+    game reads `hour`:`minute`:`second` at host time `now`. The trailer is emulator state, never save data
+    (docs/gen2/reviews/OMP_RTC_SOURCE_2026-09-22.md): an 8-byte big-endian base time, then dh, dl, h, m, s, the
+    cycle counter and the latched copies (libgambatte cartridge.cpp :504-580). The RTC runs on from base to host
+    time, so the game clock of a played fixture drifts with the wall clock (EVO-U1: silver_battle read 19:xx at
+    08:23 local). Game time = the save's wStart time + RTC (FixTime). The RTC only moves forward (to the next
+    matching instant), and CartRAM is untouched. The disclosure (gen2-clock-setup-v1) re-derives from the base
+    bytes: verify_gen2_release re-runs this function on the committed fixture and compares every field (always
+    with the minute=0, second=0 default: no committed fixture's disclosure carries a non-zero one).
+    minute/second (default 0): still a deterministic, disclosed target -- never host-clock-dependent -- but lets
+    a caller land on a different FixTime catch-up length (and so a different frame-based RNG seed) than
+    hour:00:00, e.g. e2e_duo.py's retry-on-out-of-Balls attempt: pinning every boot to the same hour:00:00
+    (fsw-sweep3/-rr1 regression) made a retry reproduce the first attempt's outcome bit-for-bit, since the whole
+    point of a retry used to be the host-clock variance this pin deliberately removed."""
     if not isinstance(raw, (bytes, bytearray)) or len(raw) != SAVERAM:
         raise ValueError(f"base save must be exactly {SAVERAM} bytes (CartRAM + RTC trailer)")
+    if not (0 <= minute < 60 and 0 <= second < 60):
+        raise ValueError("minute and second must each be 0-59")
     start_h, start_m, start_s = start_time(raw, title)
     tail = bytearray(raw[CART:])
     base, dh, dl, h, m, s = int.from_bytes(tail[:8], "big"), *tail[8:13]
     if dh & 0x40:
         raise ValueError("the RTC is halted")
     total = (((dh & 1) << 8) | dl) * 86400 + h * 3600 + m * 60 + s + max(0, now - base)
-    total += (hour * 3600 - (start_h * 3600 + start_m * 60 + start_s) - total) % 86400
+    target = hour * 3600 + minute * 60 + second
+    total += (target - (start_h * 3600 + start_m * 60 + start_s) - total) % 86400
     days = total // 86400
     if days > 511:
         raise ValueError("the RTC day counter would overflow")
@@ -447,8 +456,12 @@ def day_clock(raw, *, hour, now, title):
     tail[8:13] = bytes(regs)
     tail[17:22] = bytes(regs)   # the latched copies
     out = bytes(raw[:CART]) + bytes(tail)
+    # game_minute/game_second appear only when set, so a default (hour:00:00) disclosure is byte-for-byte the
+    # pre-option one and every committed clock_setup still equals its re-derivation
+    exact = {"game_minute": minute, "game_second": second} if (minute or second) else {}
     return out, {"schema": CLOCK_SCHEMA, "builder": BUILDER, "title": title, "field": "BizHawk gambatte RTC trailer",
-                 "game_hour": hour, "host_time": int(now), "start_time": [start_h, start_m, start_s],
+                 "game_hour": hour, **exact, "host_time": int(now),
+                 "start_time": [start_h, start_m, start_s],
                  "base_sha256": hashlib.sha256(bytes(raw)).hexdigest(),
                  "old_hex": bytes(raw[CART:]).hex(), "new_hex": bytes(tail).hex(),
                  "cartram_sha256": hashlib.sha256(out[:CART]).hexdigest(), "sha256": hashlib.sha256(out).hexdigest(),

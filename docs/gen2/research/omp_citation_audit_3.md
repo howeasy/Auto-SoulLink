@@ -721,7 +721,7 @@ Phase headings anchor to PLAN §6 rows that all start with the phase name (verif
 | P6.1 | `tools/gen_ui_capabilities.py` | YES | verbatim in PLAN §6 row |
 | P6.2 | `README.md` | YES | verbatim in PLAN §6 row |
 | P6.2 | `docs/REFERENCE.md` | YES | verbatim in PLAN §6 row |
-| P6.2 | `docs/release_notes.md` | YES | verbatim in PLAN §6 row |
+| P6.2 | `docs/historical/release_notes.md` | YES | verbatim in PLAN §6 row |
 | P6.2 | `tools/make_release.py` | YES | verbatim in PLAN §6 row |
 
 ```text

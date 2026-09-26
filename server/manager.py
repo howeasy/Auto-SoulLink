@@ -241,9 +241,9 @@ def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
     player who has not said hello yet falls back to the run's declared game family
     (`GAMES`/`GAME_MEMBERS` above) — a soul link only ever pairs cartridges from the same
     family, so one representative rom_type stands for both. None when nothing is known
-    yet, either side's game is unverified, or the two disagree.
+    yet, either side's game is unverified, or their rules (gen + dex) disagree.
     """
-    from server.adapters import game_id_for_rom_type, get_adapter
+    from server.adapters import game_id_for_rom_type, get_adapter, shared_calc_profile
     # A live server can answer anything; a bad status must hide the calc, not 500 the board.
     players = (status.get("players") if isinstance(status, dict) else None) or {}
     # Unrecognized rom_types ("" or a persisted "?") count as not-yet-known.
@@ -254,23 +254,17 @@ def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
         if not members:
             return None
         rom_types = [members[0]]
-    profile = None
+    profiles = []
     for rom_type in rom_types:
         gid = game_id_for_rom_type(rom_type)
         if not gid:
             return None
         try:
             # rom_type picks the title for the per-title packs (Gen 2 refuses to guess one).
-            p = get_adapter(gid, is_rr=rom_type.endswith("_rr"), rom_type=rom_type).calc_profile()
+            profiles.append(get_adapter(gid, is_rr=rom_type.endswith("_rr"), rom_type=rom_type).calc_profile())
         except (KeyError, ValueError):  # an unregistered family (e.g. Gen 5 import) or a refused title
             return None
-        if p is None:
-            return None
-        if profile is None:
-            profile = p
-        elif p != profile:
-            return None
-    return profile
+    return shared_calc_profile(profiles)
 
 
 def new_run_form() -> dict:

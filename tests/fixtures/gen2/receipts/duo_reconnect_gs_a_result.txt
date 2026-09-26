@@ -11,23 +11,23 @@ RX config
 RX dead_keys
 BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 EC63:C4A6:9E
-  phase walk @3368 xy=53,12
-  phase battle @3662 xy=53,12
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":7178,"key":"A2B0:C4A6:A1","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":161}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"A2B0:C4A6:A1","level":2,"maxHP":13,"nickname":"SENTRET","player":"a","seq":130,"species_id":161,"stats":{"level":2,"maxH
-CAPTURE_SENT {"frame":7178,"key":"A2B0:C4A6:A1","seq":130}
-CAUGHT A2B0:C4A6:A1
-RX box_mon key=A2B0:C4A6:A1
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"a","seq":131}
-TX {"event":"stats_cache","key":"A2B0:C4A6:A1","player":"a","seq":134,"stats":{"level":2,"maxHP":13}}
+  phase walk @3369 xy=53,12
+  phase battle @3871 xy=52,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":5402,"text":"Partner caught SENTRET in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5427,"key":"4A65:C4A6:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"4A65:C4A6:A1","level":3,"maxHP":15,"nickname":"SENTRET","player":"a","seq":71,"species_id":161,"stats":{"level":3,"maxHP
+CAPTURE_SENT {"frame":5427,"key":"4A65:C4A6:A1","seq":71}
+CAUGHT 4A65:C4A6:A1
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":17072,"text":"SENTRET and PIDGEY linked!"}
-RX party_mon key=A2B0:C4A6:A1
-TX {"event":"sync_retrieve_done","key":"A2B0:C4A6:A1","player":"a","seq":463}
-  phase save @17074 xy=53,12
-  phase saved @17768 xy=53,12
+RX_TEXT {"cmd":"msgbox","frame":5429,"text":"SENTRET and SENTRET linked!"}
+RX party_mon key=4A65:C4A6:A1
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"a","seq":73}
+TX {"event":"sync_retrieve_done","key":"4A65:C4A6:A1","player":"a","seq":75}
+  phase save @5487 xy=52,12
+  phase saved @6181 xy=52,12
 MYKEY 0 EC63:C4A6:9E
-MYKEY 1 A2B0:C4A6:A1
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"efe1e6531c43896b256baeceddfe1c3a058fc25473db7e1e0b0c20c4eff23928","client_saves":1,"flushed_matches":true,"frame":17798,"gate_saves":1,"save_completed_frame":17768,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/saveram_gen2_reconnect_s641_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_reconnect_s641_a_witness.SaveRAM"}
-RECONNECT_READY {"frame":17798,"key":"A2B0:C4A6:A1","phase":"initial","player":"a"}
+MYKEY 1 4A65:C4A6:A1
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"5b91a520ee6ed796c7c5cb09613f353c1e11b818f2db5f89058f3e2c45d7e69d","client_saves":1,"flushed_matches":true,"frame":6211,"gate_saves":1,"save_completed_frame":6181,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/saveram_gen2_reconnect_s641_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_reconnect_s641_a_witness.SaveRAM"}
+RECONNECT_READY {"frame":6211,"key":"4A65:C4A6:A1","phase":"initial","player":"a"}

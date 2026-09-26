@@ -17,7 +17,7 @@ require it.
 
 ## What it carries
 
-One manifest, `patch/gen1/tools/manifest.py` — 15 spans, Red and Blue byte-identical:
+One manifest, `patch/gen1/tools/manifest.py` — 17 spans, Red and Blue byte-identical:
 
 * **The START-menu row and the panel.** A `SLINK` row appended after EXIT (so every existing
   index keeps its position), a ROM0 stub that draws it, and a bank-`$3F` entry that opens the
@@ -123,8 +123,9 @@ python patch/gen1/tools/build.py --verify-only        # check the base ROMs; no 
 pytest tests/unit/test_gen1_trade_patch.py -q         # clean-byte admission, spans, trade bank
 ```
 
-`--verify-only` reports the hook site, the target bank and all 15 spans as expected on both
-dumps. The pytest suite is what admits the trade sources: the five asm files are compared
+`--verify-only` reports the hook site, the target bank and all 17 menu spans as expected on
+both dumps (it also assembles the bank-`$3F` payload — 6582 bytes at last build). The pytest
+suite is what admits the trade sources: the five asm files are compared
 against the sources they were ported from, the clean dumps are checked for the three exact
 before-patterns, the linked symbol sizes and the bridge/dispatch bytes are pinned, only the
 declared spans may have changed, and the panel payload must be bit-identical to the
