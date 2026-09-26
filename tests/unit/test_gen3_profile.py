@@ -327,7 +327,7 @@ def test_rr_rom_anchor_mutation_refuses_the_facts(anchor):
 
 
 @pytest.mark.parametrize("path,digest", [
-    (REPO / "patch/build/slink_RR.gba", "97f28ec1a36c8526760da6fa7606cf78e1ceb016"),
+    (REPO / "patch/build/slink_RR.gba", "7a3867499d66eb3621e0e7dde43bd033fc679f01"),
     (pathlib.Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba"),
      "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
 ])

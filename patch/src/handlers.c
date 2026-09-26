@@ -451,13 +451,8 @@ typedef void (*PlaySE_t)(u16 songId);
 #define gSpecialVar_0x8004   0x020370C0u
 /* The FireRed `special` INDICES are WRONG on RR — CFRU/RR reordered gSpecials (the live spike proved
  * `special 170` was a no-op: the party menu never opened). So we invoke the native menus by ADDRESS via
- * CFRU's `callnative` (callasm, script-cmd 0x23 + a 4-byte fn ptr). The party-menu internals ARE
- * symbol-mapped in BPRE.ld; a tiny trampoline replicates ChoosePartyMon's InitPartyMenu call. */
-typedef void (*InitPartyMenu_t)(u8 menuType, u8 layout, u8 action, u8 keepCursor, u8 msgId,
-                                void *task, void *callback);
-#define InitPartyMenu          ((InitPartyMenu_t)0x0811EA45u)
-#define TASK_HANDLE_CHOOSE_MON 0x0811FB29u   /* Task_HandleChooseMonInput (sets Var8004) */
-#define CB2_RETURN_TO_FIELD    0x080567DDu   /* CB2_ReturnToField (menu exit -> resume the field script) */
+ * CFRU's `callnative` (callasm, script-cmd 0x23 + a 4-byte fn ptr); the party chooser goes through
+ * RR's ChoosePartyMonByMenuType (see slink_open_party_menu). */
 /* DoInGameTradeScene (RR) — RE'd via patch/tools/find_trade_scene.py (the FR `special` index is
  * reordered on RR, so we call it by ADDRESS via callnative). It's the tiny fn
  *   LockPlayerFieldControls(); CreateTask(Task_InGameTrade,10);
@@ -1031,18 +1026,26 @@ static void run_yesno_msgbox(void)
     ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
 }
 
-/* callnative target: open the native "Choose a POKeMON" menu by replicating ChoosePartyMon's
- * InitPartyMenu call (CHOOSE_SINGLE_MON / CHOOSE_AND_CLOSE). The chosen slot lands in Var8004 (0-5),
- * or SLOT_CANCEL (7) on B; Task_HandleChooseMonInput writes it and exits via CB2_ReturnToField, which
- * resumes our field script's waitstate. */
+/* callnative target: open the native "Choose a POKeMON" menu through RR's own
+ * ChoosePartyMonByMenuType (0x081283A8, byte-for-byte pret FR party_menu.c): it sets
+ * gFieldCallback2 (0x03005024) = CB2_FadeFromPartyMenu (0x081283E4) and calls
+ * InitPartyMenu(type, SINGLE, CHOOSE_AND_CLOSE, FALSE, CHOOSE_MON, Task_HandleChooseMonInput,
+ * CB2_ReturnToField). The chosen slot lands in Var8004 (0-5), or SLOT_CANCEL (7) on B. On the way
+ * back CB2_FadeFromPartyMenu fades in and Task_PartyMenuWaitForFade (0x081283FC) runs
+ * ScriptContext2_Disable + EnableBothScriptContexts, which resumes our waitstate so the script
+ * reaches `end`. (Calling InitPartyMenu directly skipped gFieldCallback2: the script sat in
+ * waitstate forever, sGlobalScriptContextStatus stuck at 1, and the client's overworld checkpoint
+ * refused every later write -- the RR duo's initiator never got its native trade scene.) */
+#define ChoosePartyMonByMenuType ((void (*)(u8))0x081283A9u)
+#define PARTY_MENU_TYPE_CHOOSE_SINGLE_MON 3u
 __attribute__((used))
 static void slink_open_party_menu(void)
 {
-    InitPartyMenu(3, 0, 11, 0, 0, (void *)TASK_HANDLE_CHOOSE_MON, (void *)CB2_RETURN_TO_FIELD);
+    ChoosePartyMonByMenuType(PARTY_MENU_TYPE_CHOOSE_SINGLE_MON);
 }
 
 /* Field script: `callnative slink_open_party_menu ; waitstate ; end` (callasm = 0x23 + fn ptr). The FR
- * `special` index path is dead on RR (see the defines above), so we call InitPartyMenu by address. */
+ * `special` index path is dead on RR (see the defines above), so we call the chooser by address. */
 static void run_party_chooser(void)
 {
     volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
@@ -1076,6 +1079,15 @@ static void ui_done(u16 st, u8 result0)
     MB->result[0] = result0;
     MB->status = st; MB->reason = (st == ST_OK) ? 0 : 12;
     MB->ack_seq = MENU->seq; MB->opcode = 0;
+}
+
+/* Copy a fixed-width game name field (at most n glyphs, 0xFF-terminated only when shorter) into a
+ * string buffer, always terminating it: pret StringCopy10 semantics. */
+static void copy_name(volatile u8 *dst, volatile const u8 *src, u32 n)
+{
+    u32 i = 0;
+    for (; i < n && src[i] != FEOS; i++) dst[i] = src[i];
+    dst[i] = FEOS;
 }
 
 /* Poll whichever async native-UI op OP_SHOW_MENU / OP_CHOOSE_PARTY_MON / OP_TRADE_SCENE set up, and
@@ -1116,11 +1128,15 @@ static void drive_ui(void)
          * chooser slot -> a default like "Rukia"). Override gStringVar3 (received nickname) + gStringVar1
          * (OT) from the mon we actually staged in gEnemyParty[0], each frame, so "X sent over Y" names the
          * real traded mon. (gStringVar2 = the sent mon is already correct.) Party-mon plaintext (NO_ENCRYPT):
-         * nickname @ +0x08 (11 b), otName @ +0x14 (8 b). gStringVar1=0x02021CD0, gStringVar3=0x02021D04. */
-        { volatile u8 *nk = (volatile u8 *)(gEnemyParty + 0x08), *ot = (volatile u8 *)(gEnemyParty + 0x14);
-          volatile u8 *v3 = (volatile u8 *)0x02021D04u, *v1 = (volatile u8 *)0x02021CD0u;
-          for (u32 i = 0; i < 11; i++) v3[i] = nk[i];
-          for (u32 i = 0; i < 8;  i++) v1[i] = ot[i]; }
+         * nickname @ +0x08 (10 b, then language), otName @ +0x14 (7 b, then markings); gStringVar1 =
+         * 0x02021CD0, gStringVar3 = 0x02021D04. A full-length name has NO 0xFF inside its field, so copy
+         * StringCopy10-style and terminate: gStringVar3 is 20 bytes and gStringVar4 (0x02021D18) follows
+         * it, so an unterminated gStringVar3 made StringExpandPlaceholders(gStringVar4, "{STR_VAR_1} sent
+         * over {STR_VAR_3}") read its own output and copy forever -- the RR duo's 10-glyph "Aaaaaaaaaa"
+         * wrote 'a' (0xD5 = 213) over EWRAM up to gPlayerPartyCount and gPlayerParty (writer 0x080090AA
+         * in StringExpandPlaceholders, called from 0x08053594, src 0x0202400A -> dest 0x02024029). */
+        copy_name((volatile u8 *)0x02021D04u, (volatile const u8 *)(gEnemyParty + 0x08), 10);
+        copy_name((volatile u8 *)0x02021CD0u, (volatile const u8 *)(gEnemyParty + 0x14), 7);
         if (cb == MENU->fieldCb) ui_done(ST_OK, 0);               /* back on the field -> done */
         else if (++MENU->frames > 5400) ui_done(ST_FAIL, 0);      /* ~90 s safety */
     }

@@ -21,7 +21,7 @@ ROM_SPECS = {
            "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     "rr_companion": ("gen3_rr", "radical_red", "companion",
                      ROOT / "patch/build/slink_RR.gba",
-                     "97f28ec1a36c8526760da6fa7606cf78e1ceb016"),
+                     "7a3867499d66eb3621e0e7dde43bd033fc679f01"),
 }
 
 

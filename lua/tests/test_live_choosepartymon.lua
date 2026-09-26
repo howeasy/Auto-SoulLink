@@ -6,6 +6,7 @@
 local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
 local SC2 = 0x03000F9C
 local V8004 = 0x020370C0
+local CTX_STATUS = 0x03000EA8   -- sGlobalScriptContextStatus (write_checkpoint script_context_status; 2 = shutdown)
 local t = G.open("choosepartymon")
 t.boot({ state = "slink_overworld.State" })
 
@@ -38,5 +39,20 @@ t.check("selected a party mon (slot 0-5, not the 0xFF sentinel)", slot ~= nil an
 local sent = t.sent_of("mon_chosen")
 t.check("native sent mon_chosen{token=9, slot}", #sent == 1 and sent[1].token == 9 and sent[1].slot == slot,
         #sent == 1 and ("slot=" .. tostring(sent[1].slot)) or (#sent .. " mon_chosen events"))
+
+-- After the pick the field must be released: the script's waitstate resumes and hits `end`
+-- (context status 2), and field controls unlock. The client's overworld checkpoint refuses every
+-- write until then (RR duo trade_gen3: A never got the native scene, 1800 frames of
+-- "script_context_status"). FR's own ChoosePartyMon returns through gFieldCallback2 =
+-- CB2_FadeFromPartyMenu -> Task_PartyMenuWaitForFade -> EnableBothScriptContexts.
+local released
+for i = 1, 600 do
+    if memory.read_u8(CTX_STATUS) == 2 and memory.read_u8(SC2) == 0 then released = i; break end
+    t.step(nil)
+end
+t.log(string.format("after the pick: ctx_status=%d sc2=%d cb2=%08X released_after=%s",
+    memory.read_u8(CTX_STATUS), memory.read_u8(SC2), memory.read_u32_le(CB2), tostring(released)))
+t.check("the field script ended after the pick (context status 2 within 600 frames)",
+        memory.read_u8(CTX_STATUS) == 2, "status=" .. memory.read_u8(CTX_STATUS))
 t.check("beacon still present (no crash)", t.present())
 t.finish()
