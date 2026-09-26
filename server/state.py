@@ -358,11 +358,7 @@ class SoulLinkState:
         # ROM-patch-required: the Lua side additionally self-gates on
         # patch_present(), so the feature is live only when this flag is ON AND
         # both players are patched.  Per-run rule, never flipped at runtime.
-        # ponytail: the peer ghost is DEFERRED post-RC (owner 2026-09-22, docs/gen3/TODO.md). The new
-        # Gen 3 client never drives it, and presence ON disables the Pokemon Center trade NPC
-        # (lua/gen3/native.lua config), so the flag, CLI option and saved rule are accepted and
-        # ignored, like native_messages. Re-enable by deleting this override (here and in load()).
-        self.overworld_presence: bool = False
+        self.overworld_presence: bool = False  # ponytail: forced off -- peer ghost deferred post-RC; ON disabled the PC trade NPC (docs/gen3/TODO.md, test_overworld_presence_deferred.py)
         # Native-enhancement toggles (ROM-patch features the Lua client can route either natively
         # or through its Lua fallback).  All four ride the same `config` command the client gets
         # on hello; none are flipped at runtime.  Unlike the opt-in run RULES above, these do not
