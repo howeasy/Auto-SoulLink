@@ -260,12 +260,19 @@ function M.start(opts)
     local deps = {
         root = proj_root, pack = pack, title = title, kind = kind, player = player,
         mode = "observer",
+        -- probe-only seam (Emerald EG2 observer runs before EG4 admission): entry.lua honours
+        -- it in observer mode only; nothing in production sets it
+        allow_unadmitted = os.getenv("SLINK_SHADOW_UNADMITTED") == "1",
         io = io_ro,
         ev = { on_bus_exec = ev_wrap.on_bus_exec, unregister = ev_wrap.unregister },
         net = nil, hud = nil,
         log = function(s) if console_g and console_g.log then console_g.log("[shadow] " .. tostring(s)) end end,
     }
     local _client_obs, parts = Entry.build(deps)
+    if deps.allow_unadmitted and parts and parts.profile and parts.profile.admitted == false and logf then
+        -- a receipt of this run can never be mistaken for an admitted one
+        logf:write("NOTE observer building unadmitted " .. pack .. "/" .. title .. "\n"); logf:flush()
+    end
     local read_fires = M.make_signal_reader(assert(parts and parts.signals,
         "gen3 shadow observer: Entry.build(observer) returned no parts.signals"))
 

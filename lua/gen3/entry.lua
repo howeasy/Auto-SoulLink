@@ -390,8 +390,16 @@ function Entry.build(deps)
 
     local profile = assert(load_json(json, root .. "/" .. files.profile).titles[title],
                            "unknown title " .. title .. " in " .. pack)
-    assert(profile.admitted ~= false,
+    -- The one exception (Gen 3 grant 2026-09-26, Emerald EG2): an OBSERVER build of an
+    -- unadmitted title when the caller asks for it explicitly. Observer parts carry no writer,
+    -- native or net; production never honours the flag, whatever the environment says.
+    local observe_unadmitted = profile.admitted == false and mode == "observer"
+        and deps.allow_unadmitted == true
+    assert(profile.admitted ~= false or observe_unadmitted,
            title .. " is a known but unadmitted Gen 3 title in " .. pack)
+    if observe_unadmitted then
+        (deps.log or function() end)("[SLink-gen3] OBSERVER building unadmitted " .. pack .. "/" .. title)
+    end
     local title_sites = assert(load_json(json, root .. "/" .. files.sites).titles[title],
                                "pack " .. pack .. " ships no engine sites for " .. title)
     local artifact = assert(title_sites.artifacts[artifact_kind],

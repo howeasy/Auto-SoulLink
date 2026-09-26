@@ -9,6 +9,7 @@ imported rather than restated (`docs/agents/worker_card.md` reuse-before-writing
 from __future__ import annotations
 
 import json
+import re
 
 import lupa
 import pytest
@@ -100,3 +101,62 @@ def test_admission_table_builds_with_gen3_emerald_registered_no_hash_collisions(
                 assert table[digest]["pack"] == pack
                 assert table[digest]["title"] == title
                 assert table[digest]["kind"] == kind
+
+
+# ── (d) the observer-only seam for the EG2 run (Gen 3 grant 2026-09-26, four guards) ──────
+_MSG = "emerald is a known but unadmitted Gen 3 title in gen3_emerald"
+
+
+def test_an_unadmitted_emerald_observer_build_needs_the_explicit_flag():
+    world = World(pack="gen3_emerald", title="emerald", build=False)
+    with pytest.raises(lupa.LuaError, match=_MSG):
+        world.Entry.build(world.deps())
+    client, parts = world.Entry.build(world.deps(allow_unadmitted=True))
+    # guard 1: write-free -- no client, no writer, no native, no net; the io has no write sink
+    assert client is None and parts.mode == "observer"
+    assert parts.writes is None and parts.native is None and parts.signals is not None
+    assert world.io.write_u8 is None and world.io.write_u32 is None
+    # guard 4: one log line names the unadmitted build
+    assert [line for line in world.logs if "OBSERVER building unadmitted" in line] == [
+        "[SLink-gen3] OBSERVER building unadmitted gen3_emerald/emerald"]
+
+
+def test_production_refuses_an_unadmitted_title_even_with_the_flag(monkeypatch):
+    """Guard 2: the same message in production, flag or not, env or not."""
+    from tests.unit.test_gen3_entry import _production
+    monkeypatch.setenv("SLINK_SHADOW_UNADMITTED", "1")
+    world = World(pack="gen3_emerald", title="emerald", build=False)
+    with pytest.raises(lupa.LuaError, match=_MSG):
+        _production(world, allow_unadmitted=True)
+    with pytest.raises(lupa.LuaError, match=_MSG):
+        _production(world)
+
+
+def test_only_the_observer_reads_the_unadmitted_env_and_slink_never_loads_it():
+    """Guard 2: entry.lua takes the flag from deps only; lua/slink.lua never dofiles the
+    observer; shadow_run.lua is the one reader of SLINK_SHADOW_UNADMITTED."""
+    src = {p: (REPO / p).read_text(encoding="utf-8") for p in (
+        "lua/gen3/entry.lua", "lua/gen3/shadow_run.lua", "lua/slink.lua", "lua/gen3/run.lua")}
+    assert "SLINK_SHADOW_UNADMITTED" not in src["lua/gen3/entry.lua"]
+    assert 'os.getenv("SLINK_SHADOW_UNADMITTED") == "1"' in src["lua/gen3/shadow_run.lua"]
+    for launcher in ("lua/slink.lua", "lua/gen3/run.lua"):
+        code = re.sub(r"--[^\n]*", "", src[launcher])  # comments may name it
+        assert not re.search(r"(dofile|require|loadfile)[^\n]*shadow_run", code), launcher
+        assert "allow_unadmitted" not in src[launcher] and "SLINK_SHADOW_UNADMITTED" not in src[launcher]
+    assert 'mode == "observer"' in src["lua/gen3/entry.lua"].split("observe_unadmitted =", 1)[1][:200]
+
+
+@pytest.mark.parametrize("pack,title,kind", [
+    ("gen3_frlg", "firered", "clean"), ("gen3_frlg", "leafgreen", "clean"),
+    ("gen3_rr", "radical_red", "clean"), ("gen3_rr", "radical_red", "companion"),
+])
+def test_the_flag_changes_nothing_for_admitted_titles(pack, title, kind):
+    """Guard 3: an admitted title builds identically with or without the flag, and logs no
+    unadmitted line."""
+    a = World(pack=pack, title=title, kind=kind, build=False)
+    b = World(pack=pack, title=title, kind=kind, build=False)
+    _, pa = a.Entry.build(a.deps())
+    _, pb = b.Entry.build(b.deps(allow_unadmitted=True))
+    assert (pa.pack, pa.title, pa.artifact_kind, pa.rom_hash) == (pb.pack, pb.title, pb.artifact_kind, pb.rom_hash)
+    assert a.registered == b.registered and a.logs == b.logs
+    assert not any("unadmitted" in line for line in b.logs)
