@@ -67,3 +67,48 @@ Owner rules this block:
 - This worktree holds a gitignored copy of the pinned RR companion ROM (`patch/build/slink_RR.gba`, sha1 `ea5352f8`).
 - The main checkout's copy differs from it.
 - A Gen 1/Gen 2 EmuHawk may be running on this machine and is not ours.
+
+## Working in this lane (read after compaction)
+
+**Who and where:**
+- Coordinator: session "Emerald support planning". Its own planning worktree `emerald-support-planning-225c0a` holds no code.
+- All code lives in `.claude/worktrees/gen3-emerald`. The Write/Edit tools refuse that path from this session, so edit with Bash + python (or scratchpad + cp).
+- Shell tools reset cwd each call: `cd` explicitly.
+
+**Progress** (sessions: estimate / status):
+- E0 ¼ done; E1 1½ done; E2 1, ~65%.
+- Then BLOCKED until the Gen 3 branch merges to master (after its G4/G5; merge order Gen 1, Gen 2, Gen 3).
+- Then E3 ½ + E4/E4b 1½ + E7 ½ = the Emerald RC; E5 trade 2; expansion X0-X4 8-10.
+
+**Grants from the Gen 3 coordinator** (session "Gen3 migration planning"):
+- Additive rows in the gen3 generators, codec, fixtures and title_syms.
+- `entry.lua` PACKS/PACK_FILES only; NEVER ROUTED before EG4 (a test enforces this).
+- `reads.lua` + `tools/gen3_reads_pydec.py` badge read.
+- Always: FRLG + RR outputs byte-identical, and no commits on their branch.
+- The calc lane freezes `decode_party_mon(raw, rr=False)` and its ivs/evs/party-tail keys.
+
+**Commands:**
+- `python -m pytest tests/unit -q -k "emerald or gen3"`. Known env-only failures: the RR harness sha and the gen1_trade_patch errors (no pokered cache).
+- `python tools/gen_gen3_profile.py --check`, `python tools/gen_gen3_write_checkpoint.py --check`, `git diff --quiet data/games/gen3_frlg data/games/gen3_rr`.
+- Live: `SLINK_LIVE=1 SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-e2/runs python -m pytest tests/live/test_gen3_probe_gates.py -k emerald`.
+- Fixtures: `python tools/gen3_fixtures.py qualify --title emerald tests/fixtures/gen3/emerald_*.sav` and `boot-check --title emerald --fixture <sav> --rom "<abs ROM path>"`.
+
+**Quirks:**
+- Running a generator for real can flip FRLG files' line endings (content unchanged).
+  - The guard_git hook blocks path-reverting checkouts, and even matches that phrase inside heredoc text.
+  - Restore by writing `git show HEAD:<path>` back: for `.lua`/`.md`, convert LF to CRLF via python; for `.json`, a plain redirect.
+- `&&` chains that end in `| tail` do NOT stop on a pytest failure. Check the output before committing (one bad commit happened: 50c0eb51 fixed 20aba5a5).
+
+**Emulator:**
+- One lane. Run dirs go in `C:/slink-wt/emerald-e2`.
+- Kill only our own PIDs; Gen 1/Gen 2 duos share the machine. Before assuming an EmuHawk is ours, check its command line with `Get-CimInstance Win32_Process`.
+
+**Workers:**
+- Haiku/Sonnet/Opus, at most 3, `model` explicit, every brief points at `docs/agents/worker_card.md`, with an exact lease and a hard stop time.
+- OMP headless cannot execute code here: use it for read-only reviews and run every OMP-written change yourself.
+- OMP has been wrong on game facts and Thumb decoding (rejected: cx-8f7dfa4f stub value, cx-84f064cb "not faithful Emerald", cx-b9d33a79 map_load/badge arithmetic). Record every review with `kind=outcome`.
+
+**Lesson (keep):** MODEL/review agreement is not proof. The live runs caught three defects that tests and reviews passed:
+- battle_comm_0 meaning;
+- the json null sentinel;
+- the missing release-manifest row.
