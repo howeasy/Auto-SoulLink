@@ -2549,6 +2549,30 @@ def _trainer_cell(tmp_path, pair="duo.crystal.crystal", trainer_id=1):
     return proof, axes, lock, text
 
 
+def test_an_unprovisioned_source_skips_through_the_verifier_instead_of_failing(tmp_path, monkeypatch):
+    """tests/conftest.py turns SourceUnavailable into pytest.skip, a BaseException. Nothing between the
+    loader and pytest may catch it -- a defensive `except BaseException`/bare `except:` in a verifier would
+    turn an absent clone into a bogus "proof invalid" string (Gen1-Collab2, 2026-09-26). Driven through
+    the real active-faint verifier cell, which calls codec.for_foundation -> load_context."""
+    import tools.gen2_source_data as source_data
+    from _pytest.outcomes import Skipped
+
+    proof, axes, lock, text = _trainer_cell(tmp_path, "duo.crystal.crystal")
+
+    calls = []
+
+    def absent(*_args, **_kwargs):
+        calls.append(1)
+        if len(calls) > 1:   # the verifier went on after the first skip: some handler swallowed it
+            pytest.fail("the loader was reached again: an earlier SourceUnavailable skip was swallowed")
+        raise source_data.SourceUnavailable("pokecrystal not cloned: <test>")
+
+    monkeypatch.setattr(source_data._load_context, "__wrapped__", absent)
+    with pytest.raises(Skipped, match="pokecrystal not cloned"):
+        _check_admission_cell(tmp_path, proof, axes, lock, text, "gen2_faint_active_trainer")
+    assert calls == [1]
+
+
 @pytest.mark.parametrize("pair", ["duo.crystal.crystal", "duo.gold.silver"])
 def test_trainer_active_faint_accepts_the_route30_youngster_cell(tmp_path, pair):
     proof, axes, lock, text = _trainer_cell(tmp_path, pair)

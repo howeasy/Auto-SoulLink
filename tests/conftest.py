@@ -132,8 +132,8 @@ def _skip_unprovisioned_gen2_sources():
     real = source_data._load_context
 
     def _load_context(*args, **kwargs):
-        try:
-            return real(*args, **kwargs)
+        try:   # looked up per call so a test can stand in a raw loader (test_verify_gen2_release_lanes)
+            return _load_context.__wrapped__(*args, **kwargs)
         except source_data.SourceUnavailable as exc:
             pytest.skip(str(exc), allow_module_level=True)
 
