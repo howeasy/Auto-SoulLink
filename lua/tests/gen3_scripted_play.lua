@@ -3567,23 +3567,28 @@ end
 -- data/maps/Route103/map.json), no coord events. tools/gba_map.py "<Emerald ROM>" --sym
 -- data/gen3/pret/pokeemerald.sym --game emerald: --map 0.10 --connections -> "up: offset=0 ->
 -- 0.18"; --map 0.10 --bfs 6,17 9,0 -> the first 20 dirs (the 21st Up crosses to (9,21));
--- --map 0.18 --bfs 9,21 14,15 -> the second path; --find-behaviour 0x02 -> the 2x2 loop below
+-- --map 0.18 --bfs 9,21 12,15 -> the second path; --find-behaviour 0x02 -> the 2x2 loop below
 -- is all MB_TALL_GRASS. Oldale's coord events (0,10) and (8..10,19) are off this path.
 -- `to` is Oldale's top row: the 21st Up crosses the map connection, and playlib's follow returns
 -- on that map change (playlib.lua P.follow), so the Route 103 landing (9,21) is the next path's
--- pinned `from`, which follow checks. Both paths leave `battles` on (unlike the indoor
--- em_oldale_center_to_pc): the second crosses grass (12..14,15), and with battles=false an
--- encounter there ends the walk as a stall; with it on, playlib fights it through.
+-- pinned `from`, which follow checks. Both paths are battles=false and touch NO grass before
+-- their last tile: a fought approach encounter levels the linked mon (live E4-DUO-2 run: B's
+-- memorial differed from the fixture in exp 135->158 and one Attack EV). The walk stops on the
+-- loop's first grass tile (12,15) -- the only tile of the walk in grass (--find-behaviour 0x02:
+-- row 15 grass is x 12..17; x=9 rows 15..20 and (10,15),(11,15) are not) -- and an encounter
+-- rolled on that last step is the hunt's own (playlib P.step returns the landed step as moved
+-- before its enc=false in_battle check; EMH.hunt returns at once while in battle).
 PATHS.em_oldale_to_route103 = {
-    map = "OldaleTown", from = { 6, 17 }, to = { 9, 0 },
+    map = "OldaleTown", from = { 6, 17 }, to = { 9, 0 }, battles = false,
     dirs = { "Right","Right","Right","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up",
              "Up","Up","Up","Up","Up","Up","Up" },
 }
 PATHS.em_route103_edge_to_grass = {
-    map = "Route103", from = { 9, 21 }, to = { 14, 15 },
-    dirs = { "Up","Up","Up","Up","Up","Up","Right","Right","Right","Right","Right" },
+    map = "Route103", from = { 9, 21 }, to = { 12, 15 }, battles = false,
+    dirs = { "Up","Up","Up","Up","Up","Up","Right","Right","Right" },   -- --bfs 9,21 12,15
 }
-EMH.GRASS103_NEXT = { ["14,15"] = "Right", ["15,15"] = "Up", ["15,14"] = "Left", ["14,14"] = "Down" }
+-- the 2x2 loop (12..13,14..15), all MB_TALL_GRASS; each edge --bfs-verified (one step apiece)
+EMH.GRASS103_NEXT = { ["12,15"] = "Right", ["13,15"] = "Up", ["13,14"] = "Left", ["12,14"] = "Down" }
 --- Hunt from wherever an Emerald duo fixture stands: Route 102's loop (the battle fixtures) or,
 --- from Oldale Town (the two-mon pc fixture), Route 103's loop after the walk above.
 function EMH.hunt(cp, label, max_cycles)

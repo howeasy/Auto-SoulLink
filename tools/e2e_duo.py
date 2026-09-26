@@ -2400,7 +2400,7 @@ GAMES = {
         "sides": {"a": ("emerald", "emerald_{target}"), "b": ("emerald", "emerald_{target}_b")},
         # the grass the drivers hunt, by fixture target (gen3_scripted_play.lua EMH.hunt): the
         # battle fixtures stand in Route 102's loop (21..22,16..17); the two-mon pc fixture starts
-        # in Oldale and walks to Route 103's loop (14..15,14..15). The server area id every
+        # in Oldale and walks to Route 103's loop (12..13,14..15). The server area id every
         # route_1-bound oracle reads through DuoRun._hunt_area.
         "hunt_area": {"battle": "route_102", "pc": "route_103"},
         "uses_savestate": False,
