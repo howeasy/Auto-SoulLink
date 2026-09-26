@@ -110,6 +110,7 @@ def mask_field(raw, zero):
     bits = (mask >> first).bit_length()
     ex.require(mask >> first == (1 << bits) - 1, "noncontiguous bitfield mask")
     offset, shift = divmod(first, 8)
+    ex.require(bits + shift <= 32, "bitfield exceeds reader lane (bits + shift > 32)")
     width = next((w for w in (1, 2, 4) if w * 8 >= shift + bits), None)
     ex.require(width is not None and offset + width <= len(raw), "bitfield exceeds reader lane")
     return {"offset": offset, "width": width, "shift": shift, "bits": bits,
@@ -160,6 +161,10 @@ def parse_probe(symbols):
 def compile_probe(source, probe, work, receipt, env):
     compiler = Path(receipt["compiler"]["path"])
     ex.require(sha(compiler.read_bytes()) == receipt["compiler"]["sha256"], "compiler differs from ROM receipt")
+    enums = source_enums(source)
+    (work / "x1_source_enums.h").write_text("\n".join(e["text"] for e in enums.values()) + "\n", encoding="utf-8")
+    compiled_probe = work / "expansion_offsets.c"
+    compiled_probe.write_bytes(probe.read_bytes())
     overlay = work / "probe-flags.mk"
     overlay.write_text("\n".join(f"$(info X1_{name}=$({name}))" for name in FLAG_NAMES)
                        + "\n.PHONY: x1-probe-flags\nx1-probe-flags:\n\t@:\n", encoding="utf-8")
@@ -170,8 +175,8 @@ def compile_probe(source, probe, work, receipt, env):
     ex.require(set(flags) == set(FLAG_NAMES), "Makefile did not emit all pipeline flags")
     ex.require("-fshort-enums" not in shlex.split(flags["CFLAGS"]), "unexpected -fshort-enums")
     commands = [
-        shlex.split(flags["CPP"]) + shlex.split(flags["CPPFLAGS"]) + [str(probe)],
-        shlex.split(flags["PREPROC"]) + ["-i", "-g", flags["ASSETS_DIR_NAME"], str(probe), "charmap.txt"],
+        shlex.split(flags["CPP"]) + shlex.split(flags["CPPFLAGS"]) + [str(compiled_probe)],
+        shlex.split(flags["PREPROC"]) + ["-i", "-g", flags["ASSETS_DIR_NAME"], str(compiled_probe), "charmap.txt"],
         shlex.split(flags["CC1"]) + shlex.split(flags["CFLAGS"]) + ["-o", str(work / "probe.s"), "-"],
         shlex.split(flags["AS"]) + shlex.split(flags["ASFLAGS"]) + ["-o", str(work / "probe.o"), str(work / "probe.s")],
     ]
@@ -186,13 +191,27 @@ def compile_probe(source, probe, work, receipt, env):
     for command in commands:
         executable = Path(shutil.which(command[0], path=env["PATH"]) or source / command[0]).resolve()
         executables[str(executable)] = sha(executable.read_bytes())
-    manifest = {"flags": flags, "commands": commands, "executables": executables,
+    manifest = {"flags": flags, "commands": commands, "executables": executables, "source_enums": enums,
                 "source_hash_normalization": "UTF-8/LF", "probe_sha256": source_sha(probe),
                 "object_sha256": sha((work / "probe.o").read_bytes()),
                 "preprocessed_sha256": sha(translated), "source_commit": PIN,
                 "make_variables": receipt["make_variables"], "build_receipt_sha256": sha(json.dumps(receipt, sort_keys=True).encode())}
     (work / "compile.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return work / "probe.o", manifest
+
+
+def source_enums(source):
+    """Compile private source enum definitions verbatim, rather than retyping values."""
+    result = {}
+    for path, member in (("src/script.c", "CONTEXT_SHUTDOWN"),
+                         ("src/battle_main.c", "STATE_WAIT_ACTION_CHOSEN")):
+        text = (source / path).read_text(encoding="utf-8")
+        matches = [m for m in re.finditer(r"enum\s*\{[^{}]*\}\s*;", text) if re.search(r"\b" + member + r"\b", m[0])]
+        ex.require(len(matches) == 1, f"private enum absent/ambiguous: {member}")
+        m = matches[0]
+        result[member] = {"source": path, "line": text[:m.start()].count("\n") + 1,
+                          "text": m[0], "sha256": sha(m[0].encode())}
+    return result
 
 
 def read_artifacts(artifacts):
@@ -238,6 +257,13 @@ def crosscheck(facts, rom, symbols, elf):
         check(symbol_name + ".size", types[type_name]["size"], symbol(symbol_name)["size"])
         check(type_name + ".padding", types[type_name]["fields"]["aslr"]["size"], const["SAVEBLOCK_MOVE_RANGE"])
     check("gMain.size", types["Main"]["size"], symbol("gMain")["size"])
+    for type_name, name, count in (("Task", "gTasks", const["NUM_TASKS"]),
+                                    ("ScriptContext", "sGlobalScriptContext", 1),
+                                    ("PaletteFadeControl", "gPaletteFade", 1),
+                                    ("BattleResults", "gBattleResults", 1),
+                                    ("SoundInfo", "gSoundInfo", 1),
+                                    ("MusicPlayerInfo", "gMPlayInfo_SE1", 1)):
+        check(name + ".size", types[type_name]["size"] * count, symbol(name)["size"])
     for table, type_name, name, count in (
         ("species", "SpeciesInfo", "gSpeciesInfo", "NUM_SPECIES"),
         ("moves", "MoveInfo", "gMovesInfo", "MOVES_COUNT_ALL"),
@@ -304,7 +330,7 @@ def make_layout(facts, rom_sha1, provenance):
     moves = {key: field("MoveInfo", key, signed=key == "priority") for key in
              ("power", "type", "accuracy", "pp", "effect", "category", "target", "priority", "argument")}
     items = {key: field("ItemInfo", key) for key in ("price", "secondaryId", "holdEffect", "holdEffectParam", "battleUsage", "pocket")}
-    return {"schema": 1, "kind": "expansion", "rom_sha1": rom_sha1, "provenance": provenance,
+    result = {"schema": 1, "kind": "expansion", "rom_sha1": rom_sha1, "provenance": provenance,
             "tables": {
                 "species": table("SpeciesInfo", "speciesName", species_fields),
                 "moves": table("MoveInfo", "name", moves, True, const["MOVE_NAME_LENGTH"] + 1),
@@ -315,6 +341,10 @@ def make_layout(facts, rom_sha1, provenance):
                            "end_method": const["EVOLUTIONS_END"], "ignored_methods": [const["EVO_NONE"]],
                            "fields": {"method": field("Evolution", "method"), "param": field("Evolution", "param"),
                                       "target": field("Evolution", "targetSpecies")}}}
+    for table, records in facts.get("extraction", {}).get("reserved_zero_records", {}).items():
+        if records:
+            result["tables"][table]["zero_records"] = records
+    return result
 
 
 def main():
@@ -341,6 +371,7 @@ def main():
         manifest = json.loads(obj.with_name("compile.json").read_text())
         ex.require(manifest["probe_sha256"] == source_sha(probe) and manifest["object_sha256"] == sha(obj.read_bytes()), "offline object/probe hash mismatch")
         ex.require(manifest["build_receipt_sha256"] == sha(json.dumps(receipt, sort_keys=True).encode()), "offline build receipt mismatch")
+        ex.require(manifest["source_enums"] == source_enums(source), "offline private enum source mismatch")
     else:
         obj, manifest = compile_probe(source, probe, work, receipt, env)
     facts = parse_probe(elf_symbols(obj.read_bytes(), "x1_"))
@@ -350,6 +381,9 @@ def main():
                   "artifacts": receipt["files"], "generator_sha256": source_sha(Path(__file__)),
                   "extractor_sha256": source_sha(Path(ex.__file__)),
                   "makefile_sha256": source_sha(source / "Makefile"),
+                  "layout_headers_sha256": {"include/" + name: source_sha(source / "include" / name) for name in
+                      ("pokemon.h", "move.h", "item.h", "global.h", "load_save.h", "main.h", "pokemon_storage_system.h",
+                       "task.h", "script.h", "palette.h", "battle.h", "gba/m4a_internal.h")},
                   "config_sha256": {p.relative_to(source).as_posix(): source_sha(p) for p in sorted((source / "include/config").glob("*.h"))}}
     layout = make_layout(facts, receipt["rom"]["sha1"], provenance)
     # A reserved ID may be completely uninitialized, including no text EOS.
@@ -365,6 +399,7 @@ def main():
             spec["zero_records"] = zeros
     pack = ex.extract(rom, layout, ex.charmap(source))
     facts.update(schema=1, evidence="SOURCE/COMPILER/ROM only; no runtime qualification", provenance=provenance,
+                 enum_width_policy="Compiler sizeof(enum ...) respects the source enum typing/attributes and captured ABI; -fshort-enums is not added.",
                  extraction={"counts": pack["counts"], "reserved_zero_records": {k: v.get("zero_records", []) for k, v in layout["tables"].items()},
                              "evolution_edges": sum(len(row["evolutions"]) for row in pack["species"]),
                              "data_sha256": sha(json.dumps(pack, sort_keys=True, ensure_ascii=False).encode())},

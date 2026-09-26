@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,6 +126,16 @@ def make_site(rom: bytes, offset: int, pattern: bytes, *, capture_offset: int = 
 
 
 def load_rom(name: str, path: Path | None = None) -> bytes:
+    if name == "exp":
+        sys.path.insert(0, str(ROOT))
+        from tools.gen_gen3_profile import EXPANSION_SHA1, expansion_inputs
+
+        if path is not None:
+            rom = path.read_bytes()
+            if hashlib.sha1(rom).hexdigest() != EXPANSION_SHA1:
+                raise ValueError("expansion ROM identity mismatch")
+            return rom
+        return expansion_inputs()["rom"]
     spec = ROM_SPECS.get(name) or EMERALD_SPECS[name]
     rom = (path or spec[3]).read_bytes()
     if hashlib.sha1(rom).hexdigest() != spec[4]:
@@ -132,10 +143,44 @@ def load_rom(name: str, path: Path | None = None) -> bytes:
     return rom
 
 
+def pin_expansion_site(context, symbol, capture, point):
+    """Pin a reviewed instruction offset in the SHA1-bound expansion build only."""
+    sys.path.insert(0, str(ROOT))
+    from tools.gen_gen3_profile import EXPANSION_SHA1, expansion_symbol
+
+    rom = context["rom"]
+    if hashlib.sha1(rom).hexdigest() != EXPANSION_SHA1:
+        raise ValueError("expansion ROM identity mismatch")
+    fn = expansion_symbol(context, symbol)
+    base = fn["address"] - ROM_BASE
+    if capture < 0 or capture + 2 > fn["size"]:
+        raise ValueError("expansion capture outside function")
+    boundaries = instruction_offsets(rom[base:base + capture], "thumb") | {capture}
+    anchor = max(0, capture - 4)
+    while anchor not in boundaries:
+        anchor += 2
+    length = min(16, fn["size"] - anchor)
+    pattern = rom[base + anchor:base + anchor + length]
+    # A suffix may end in the first half of a BL; shorten it to a whole instruction.
+    try:
+        instruction_offsets(pattern, "thumb")
+    except ValueError:
+        pattern = pattern[:-2]
+    pattern_bytes(pattern.hex())
+    if find_offsets(rom, pattern) != [base + anchor]:
+        raise ValueError(f"nonunique expansion anchor: {symbol}+{capture:#x}")
+    site = make_site(rom, base + anchor, pattern, capture_offset=capture - anchor, symbol=symbol, point=point)
+    site.update(context={"rom_offset": base, "expected_hex": rom[base:base + 16].hex().upper()},
+                function={**fn, "symbol": symbol, "anchor_offset": anchor, "capture_offset": capture,
+                          "symbol_source": f"build:pokemon.sym:{fn['line']}",
+                          "symbols_sha256": context["source"]["symbols_sha256"], "size_evidence": "verified_build_symbol"})
+    return site
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("pattern", help="8..16 bytes of exact hex")
-    parser.add_argument("--rom", action="append", help="fr/lg/rr/rr_companion/e or a ROM path; default the first four")
+    parser.add_argument("--rom", action="append", help="fr/lg/rr/rr_companion/e/exp or a ROM path; default the first four")
     parser.add_argument("--capture-offset", type=lambda x: int(x, 0), default=0)
     parser.add_argument("--mode", choices=("thumb", "arm"), default="thumb")
     parser.add_argument("--symbol", default="candidate")
@@ -145,7 +190,7 @@ def main() -> int:
         pattern = pattern_bytes(args.pattern)
         rows = {}
         for item in args.rom or list(ROM_SPECS):
-            known = item in ROM_SPECS or item in EMERALD_SPECS
+            known = item in ROM_SPECS or item in EMERALD_SPECS or item == "exp"
             rom = load_rom(item) if known else Path(item).read_bytes()
             offsets = find_offsets(rom, pattern)
             row = {"offsets": offsets, "offsets_hex": [hex(x) for x in offsets],

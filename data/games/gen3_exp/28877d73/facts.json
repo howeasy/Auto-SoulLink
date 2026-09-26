@@ -7,26 +7,68 @@
     "BAG_KEYITEMS_COUNT": 30,
     "BAG_POKEBALLS_COUNT": 16,
     "BAG_TMHM_COUNT": 64,
+    "BATTLE_TYPE_DOUBLE": 1,
+    "BATTLE_TYPE_LINK": 2,
+    "BATTLE_TYPE_TRAINER": 8,
+    "B_ACTION_NOTHING_FAINTED": 13,
+    "B_OUTCOME_CAUGHT": 7,
+    "B_OUTCOME_DREW": 3,
+    "B_OUTCOME_LOST": 2,
+    "B_OUTCOME_RAN": 4,
+    "B_OUTCOME_WON": 1,
     "B_TRAINER_OPPONENT_A": 1,
     "B_TRAINER_PLAYER": 0,
+    "CONTEXT_SHUTDOWN": 2,
     "EVOLUTIONS_END": 65535,
     "EVO_NONE": 0,
+    "FLAG_BADGE01_GET": 2151,
+    "ID_NUMBER": 1752395091,
     "IN_BOX_COUNT": 30,
     "ITEMS_COUNT": 874,
     "ITEM_NAME_LENGTH": 20,
+    "IWRAM_END": 50364416,
+    "IWRAM_START": 50331648,
     "MAX_BATTLERS_COUNT": 4,
     "MAX_BATTLE_TRAINERS": 4,
     "MAX_FUSION_STORAGE": 4,
+    "MAX_LEVEL": 100,
+    "MON_DATA_SPECIES": 18,
     "MOVES_COUNT": 848,
     "MOVES_COUNT_ALL": 935,
     "MOVE_NAME_LENGTH": 16,
     "NUM_SPECIES": 1573,
     "NUM_SUBSTRUCT_BYTES": 12,
+    "NUM_TASKS": 16,
     "PARTY_SIZE": 6,
     "PC_ITEMS_COUNT": 50,
     "POKEMON_NAME_LENGTH": 12,
     "SAVEBLOCK_MOVE_RANGE": 128,
+    "SAVE_NORMAL": 0,
+    "SAVE_STATUS_OK": 1,
+    "SE_BOO": 22,
+    "SE_FAILURE": 32,
+    "SE_FAINT": 16,
+    "SE_FLEE": 17,
+    "SE_SHINY": 102,
+    "SE_SUCCESS": 31,
+    "SIZEOF_ENUM_Ability": 2,
+    "SIZEOF_ENUM_BattleMoveEffects": 4,
+    "SIZEOF_ENUM_BattleTrainer": 1,
+    "SIZEOF_ENUM_BattlerId": 1,
+    "SIZEOF_ENUM_DamageCategory": 1,
+    "SIZEOF_ENUM_EggGroup": 1,
+    "SIZEOF_ENUM_Item": 2,
+    "SIZEOF_ENUM_ItemSortType": 1,
+    "SIZEOF_ENUM_Move": 2,
+    "SIZEOF_ENUM_NationalDexOrder": 4,
+    "SIZEOF_ENUM_Pocket": 4,
+    "SIZEOF_ENUM_Species": 2,
+    "SIZEOF_ENUM_Type": 1,
     "SPECIES_EGG": 1573,
+    "SPECIES_SHEDINJA": 292,
+    "STATE_WAIT_ACTION_CHOSEN": 2,
+    "STATE_WAIT_ACTION_CONFIRMED_STANDBY": 4,
+    "STAT_ATK": 1,
     "TOTAL_BOXES_COUNT": 14
   },
   "derived_addresses": {
@@ -35,6 +77,7 @@
     "player_party": 33758052,
     "player_party_count": 33758036
   },
+  "enum_width_policy": "Compiler sizeof(enum ...) respects the source enum typing/attributes and captured ABI; -fshort-enums is not added.",
   "evidence": "SOURCE/COMPILER/ROM only; no runtime qualification",
   "extraction": {
     "counts": {
@@ -43,7 +86,7 @@
       "moves": 848,
       "species": 1573
     },
-    "data_sha256": "8183f46962804117f19ca407c0bfbdbee595f3475653530d0991da78a3006401",
+    "data_sha256": "34b7f90455c37ce0e8288f9628f65836cff915c801eceaf02729ee4d08419452",
     "evolution_edges": 695,
     "reserved_zero_records": {
       "abilities": [],
@@ -113,14 +156,14 @@
           "-DTESTING=0",
           "-DEMERALD",
           "-std=gnu17",
-          "/home/howard/slink-exp/x1-probe-20260926/tools/expansion_offsets.c"
+          "/home/howard/slink-exp/x1-probe-20260926/work/expansion_offsets.c"
         ],
         [
           "tools/preproc/preproc",
           "-i",
           "-g",
           "build/assets",
-          "/home/howard/slink-exp/x1-probe-20260926/tools/expansion_offsets.c",
+          "/home/howard/slink-exp/x1-probe-20260926/work/expansion_offsets.c",
           "charmap.txt"
         ],
         [
@@ -191,10 +234,24 @@
         "RELEASE": "0",
         "TEST": "0"
       },
-      "object_sha256": "de9db63c71119e8a20b06f744f35a7c43b695687c6f2367341d6ad82df9e4a53",
-      "preprocessed_sha256": "046d63840a4e3e3c33d2effda9ce937482a16c1881e0a0db486f2eafb8711cea",
-      "probe_sha256": "5e490746b30e832dbaf45c123af760a2e527106113db07d3961670c30f34cd24",
+      "object_sha256": "a84e019195ce1f1ca16aa2d4d2ead2a097999121d5001361d1bf7e4610b62be1",
+      "preprocessed_sha256": "882f31bacb57ecdb6f57594713a9946707159341ebde1c72c48876f1292a9d66",
+      "probe_sha256": "46f385f1e6059726e521c529f49696cd7140b38bce13d56194ba42f53187473d",
       "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+      "source_enums": {
+        "CONTEXT_SHUTDOWN": {
+          "line": 26,
+          "sha256": "d43e34d44e881206380b8efdedf5469d61871f38c58d29c1d81c6d14bb9f9ac9",
+          "source": "src/script.c",
+          "text": "enum {\n    CONTEXT_RUNNING,\n    CONTEXT_WAITING,\n    CONTEXT_SHUTDOWN,\n};"
+        },
+        "STATE_WAIT_ACTION_CHOSEN": {
+          "line": 3785,
+          "sha256": "03513f795a6653a1c1a8d336020cfcde479a6547739e7ddaa77b2af35da0c828",
+          "source": "src/battle_main.c",
+          "text": "enum\n{\n    STATE_TURN_START_RECORD,\n    STATE_BEFORE_ACTION_CHOSEN,\n    STATE_WAIT_ACTION_CHOSEN,\n    STATE_WAIT_ACTION_CASE_CHOSEN,\n    STATE_WAIT_ACTION_CONFIRMED_STANDBY,\n    STATE_WAIT_ACTION_CONFIRMED,\n    STATE_SELECTION_SCRIPT,\n    STATE_WAIT_SET_BEFORE_ACTION,\n    STATE_SELECTION_SCRIPT_MAY_RUN\n};"
+        }
+      },
       "source_hash_normalization": "UTF-8/LF"
     },
     "compiler": {
@@ -233,7 +290,21 @@
       "include/config/wild_encounter.h": "026ea3f8608fc61c847df71d4042cd841a5523929a9eb3bc3e0c894fd7f6eaab"
     },
     "extractor_sha256": "a41dff77dd62c71419f8caf0db0b122ff94c0b7082993e2593d217c5a224f453",
-    "generator_sha256": "b326cd5565e76cb8ad0c83e6987ca1bc1801de8540d5322ba0fb521003764b79",
+    "generator_sha256": "bca6e97a3761fb0e352f9fe78756e29d6a560be62dd1e049b34674dac1efe8bd",
+    "layout_headers_sha256": {
+      "include/battle.h": "1d62757d9a475c6d4ea9ae97ad2450c3b49d61198644f63d183c309d068acddc",
+      "include/gba/m4a_internal.h": "365f76af9bc7a85bd97697c55d69dba95f1dfbc6a085f2070043bd3c270b5ed7",
+      "include/global.h": "265c63399ca88a7fc9421948e27bc03086a129ac4a731a14a367ff6759e0bcba",
+      "include/item.h": "1dada1cbf267e85654f76fa5a090fd9417a9ad3b9bce9da3b73c0cb9db62bbed",
+      "include/load_save.h": "4ce05e9afa8a4a703737ad776cf6b4c09d0774d9787b4410ec47931febef902d",
+      "include/main.h": "55c3bd5d7b653979764e3027ffe451853874ba67964e346077e1acdf93f1e686",
+      "include/move.h": "fadbf99995e02f6fcdb74f4c71523482c95f5888fc13fa2cc521c9ef6ca2aaca",
+      "include/palette.h": "9ff698eef8527eb71964665cebf4ed8ec1136ad35b6937308ca9d052c7c305aa",
+      "include/pokemon.h": "dc80cd74eae35b74036de600061fc5694ec6890d8992055bf544fc0134bb70c9",
+      "include/pokemon_storage_system.h": "4a849005435b2c87ed6c761656e79ac4ab3c0c6d255501ea1f2a2b95df7f4ae0",
+      "include/script.h": "3d16411675100556cf9c1315a6bebd4d0d01ad367a700e4a9f413f640ec38fd9",
+      "include/task.h": "d3660507b010b0b8275de304959a6d98ec2044f9c1b6b947ab0cb8fc07f47feb"
+    },
     "makefile_sha256": "49cdf5f9c7a981eb20b286247684b563344b7712917f860af15e62130075a914",
     "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
     "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
@@ -479,6 +550,20 @@
       },
       "size": 140
     },
+    "BattleResults": {
+      "bitfields": {},
+      "fields": {
+        "opponentFaintCounter": {
+          "offset": 1,
+          "size": 1
+        },
+        "playerFaintCounter": {
+          "offset": 0,
+          "size": 1
+        }
+      },
+      "size": 88
+    },
     "BoxPokemon": {
       "bitfields": {
         "compressedStatus": {
@@ -677,6 +762,10 @@
         }
       },
       "fields": {
+        "callback1": {
+          "offset": 0,
+          "size": 4
+        },
         "callback2": {
           "offset": 4,
           "size": 4
@@ -762,6 +851,104 @@
         }
       },
       "size": 64
+    },
+    "MusicPlayerInfo": {
+      "bitfields": {},
+      "fields": {
+        "clock": {
+          "offset": 12,
+          "size": 4
+        },
+        "ident": {
+          "offset": 52,
+          "size": 4
+        },
+        "musicPlayerNext": {
+          "offset": 60,
+          "size": 4
+        },
+        "priority": {
+          "offset": 9,
+          "size": 1
+        },
+        "songHeader": {
+          "offset": 0,
+          "size": 4
+        },
+        "status": {
+          "offset": 4,
+          "size": 4
+        },
+        "trackCount": {
+          "offset": 8,
+          "size": 1
+        },
+        "tracks": {
+          "offset": 44,
+          "size": 4
+        }
+      },
+      "size": 64
+    },
+    "MusicPlayerTrack": {
+      "bitfields": {},
+      "fields": {
+        "bendRange": {
+          "offset": 15,
+          "size": 1
+        },
+        "chan": {
+          "offset": 32,
+          "size": 4
+        },
+        "cmdPtr": {
+          "offset": 64,
+          "size": 4
+        },
+        "flags": {
+          "offset": 0,
+          "size": 1
+        },
+        "gateTime": {
+          "offset": 4,
+          "size": 1
+        },
+        "lfoSpeed": {
+          "offset": 25,
+          "size": 1
+        },
+        "patternLevel": {
+          "offset": 2,
+          "size": 1
+        },
+        "repN": {
+          "offset": 3,
+          "size": 1
+        },
+        "volX": {
+          "offset": 19,
+          "size": 1
+        },
+        "wait": {
+          "offset": 1,
+          "size": 1
+        }
+      },
+      "size": 80
+    },
+    "PaletteFadeControl": {
+      "bitfields": {
+        "active": {
+          "bits": 1,
+          "initializer_sha256": "a6a9623a6c6857122c921e87d62eedb7e880f0d9862f8fb6b0304bf5be1e9d8a",
+          "mask": "0x80",
+          "offset": 15,
+          "shift": 7,
+          "width": 1
+        }
+      },
+      "fields": {},
+      "size": 24
     },
     "Pokemon": {
       "bitfields": {},
@@ -1490,6 +1677,44 @@
       },
       "size": 4012
     },
+    "ScriptContext": {
+      "bitfields": {},
+      "fields": {
+        "mode": {
+          "offset": 1,
+          "size": 1
+        },
+        "nativePtr": {
+          "offset": 4,
+          "size": 4
+        },
+        "scriptPtr": {
+          "offset": 8,
+          "size": 4
+        },
+        "stack": {
+          "count": 20,
+          "element_size": 4,
+          "offset": 12,
+          "size": 80
+        }
+      },
+      "size": 116
+    },
+    "SoundInfo": {
+      "bitfields": {},
+      "fields": {
+        "ident": {
+          "offset": 0,
+          "size": 4
+        },
+        "musicPlayerHead": {
+          "offset": 36,
+          "size": 4
+        }
+      },
+      "size": 4016
+    },
     "SpeciesInfo": {
       "bitfields": {
         "natDexNum": {
@@ -1571,6 +1796,26 @@
       },
       "size": 264
     },
+    "Task": {
+      "bitfields": {},
+      "fields": {
+        "data": {
+          "count": 16,
+          "element_size": 2,
+          "offset": 8,
+          "size": 32
+        },
+        "func": {
+          "offset": 0,
+          "size": 4
+        },
+        "isActive": {
+          "offset": 4,
+          "size": 1
+        }
+      },
+      "size": 40
+    },
     "Volatiles": {
       "bitfields": {
         "perishSongTimer": {
@@ -1651,6 +1896,10 @@
       "compiler": 560,
       "independent": 560
     },
+    "gBattleResults.size": {
+      "compiler": 88,
+      "independent": 88
+    },
     "gItemsInfo.pointer": {
       "compiler": 141117596,
       "independent": 141117596
@@ -1658,6 +1907,10 @@
     "gItemsInfo.size": {
       "compiler": 41952,
       "independent": 41952
+    },
+    "gMPlayInfo_SE1.size": {
+      "compiler": 64,
+      "independent": 64
     },
     "gMain.size": {
       "compiler": 1084,
@@ -1670,6 +1923,10 @@
     "gMovesInfo.size": {
       "compiler": 59840,
       "independent": 59840
+    },
+    "gPaletteFade.size": {
+      "compiler": 24,
+      "independent": 24
     },
     "gParties.size": {
       "compiler": 2400,
@@ -1691,6 +1948,10 @@
       "compiler": 4012,
       "independent": 4012
     },
+    "gSoundInfo.size": {
+      "compiler": 4016,
+      "independent": 4016
+    },
     "gSpeciesInfo.pointer": {
       "compiler": 141418812,
       "independent": 141418812
@@ -1698,6 +1959,10 @@
     "gSpeciesInfo.size": {
       "compiler": 415536,
       "independent": 415536
+    },
+    "gTasks.size": {
+      "compiler": 640,
+      "independent": 640
     },
     "item_name_length": {
       "compiler": 20,
@@ -1710,6 +1975,10 @@
     "moves.count": {
       "compiler": 848,
       "independent": 848
+    },
+    "sGlobalScriptContext.size": {
+      "compiler": 116,
+      "independent": 116
     },
     "species.count": {
       "compiler": 1573,

@@ -50,7 +50,7 @@ def to_snake(name):
     return s
 
 
-def generate_frlg():
+def generate_frlg(check=False):
     """Generate the FRLG pack (area_map.json + gen3_frlge_areas.lua/gen3_frlge_locations.lua).
 
     Verbatim body of the original top-level script -- output must stay byte-identical.
@@ -169,8 +169,8 @@ def generate_frlg():
     # Canonical set of gift area_ids (used by server/state.py to gate Pokéball check)
     GIFT_AREA_IDS = sorted(gift_areas.values())  # noqa: F841 -- verbatim FRLG body, kept as-is
 
-    with open(os.path.join("data", "games", "gen3_frlge", "area_map.json"), "w") as f:
-        json.dump(area_map, f, indent=2, sort_keys=True)
+    ok = _write_or_check(os.path.join("data", "games", "gen3_frlge", "area_map.json"),
+                         json.dumps(area_map, indent=2, sort_keys=True), check)
 
     # Generate data/games/gen3_frlge/gen3_frlge_areas.lua — static Lua table avoids JSON parsing in BizHawk scripts.
     sorted_keys = sorted(area_map.keys(), key=lambda x: tuple(int(n) for n in x.split(":")))
@@ -193,8 +193,7 @@ def generate_frlg():
         lua_lines.append(f'  ["{key}"] = "{area_map[key]}",')
     lua_lines.append("}")
 
-    with open("data/games/gen3_frlge/gen3_frlge_areas.lua", "w", newline="\n", encoding="utf-8") as f:
-        f.write("\n".join(lua_lines) + "\n")
+    ok = _write_or_check("data/games/gen3_frlge/gen3_frlge_areas.lua", "\n".join(lua_lines) + "\n", check, newline="\n") and ok
 
     # ── Location map — ALL FRLG maps → physical snake_case name ──────────────────
     # Complete map group data (pret/pokefirered data/maps/map_groups.json).
@@ -506,8 +505,7 @@ def generate_frlg():
         loc_lua_lines.append(f'  ["{key}"] = "{location_map[key]}",')
     loc_lua_lines.append("}")
 
-    with open("data/games/gen3_frlge/gen3_frlge_locations.lua", "w", newline="\n", encoding="utf-8") as f:
-        f.write("\n".join(loc_lua_lines) + "\n")
+    ok = _write_or_check("data/games/gen3_frlge/gen3_frlge_locations.lua", "\n".join(loc_lua_lines) + "\n", check, newline="\n") and ok
 
     print(f"Generated {len(area_map)} area entries")
     print("  → data/games/gen3_frlge/area_map.json")
@@ -520,6 +518,7 @@ def generate_frlg():
     print("Spot-checks (towns/buildings):")
     for key in ["3:0", "3:1", "3:4", "3:9", "5:1", "5:4", "7:5", "10:16"]:
         print(f"  {key}: loc={location_map.get(key)}")
+    return ok
 
 
 # ---- Emerald mode ----------------------------------------------------------
@@ -593,7 +592,7 @@ def _write_or_check(path, content, check, newline=None):
     return ok
 
 
-def generate_emerald(check=False):
+def generate_emerald(check=False, *, source=None, output_dir=None, expansion=False):
     """Generate the Emerald pack from pret/pokeemerald source JSON (no hand tables).
 
     Outputs data/games/gen3_emerald/area_map.json, gen3_emerald_areas.lua,
@@ -602,7 +601,7 @@ def generate_emerald(check=False):
     check=True (card E4b-CKPT review F5/F8): generates the same three texts in memory and
     compares them to the committed files instead of writing anything; returns False (never
     raises) on the first byte difference or missing file, after reporting every file checked."""
-    pret = _find_pret_checkout("pokeemerald")
+    pret = source or _find_pret_checkout("pokeemerald")
     maps_dir = os.path.join(pret, "data", "maps")
 
     with open(os.path.join(maps_dir, "map_groups.json"), encoding="utf-8") as f:
@@ -645,6 +644,12 @@ def generate_emerald(check=False):
         display_name = mapsec_display_name.get(mapsec)
         if not display_name:
             raise ValueError(f"{map_id} ({folder}): MAPSEC {mapsec} has no display name")
+        if expansion and mapsec.endswith("_FRLG"):
+            # Expansion ships Kanto maps alongside Hoenn. The source MAPSEC
+            # identity distinguishes e.g. its second Altering Cave; never merge it.
+            return _mapsec_to_snake(display_name) + "_frlg"
+        if expansion and mapsec.startswith("MAPSEC_KANTO_"):
+            return "kanto_" + _mapsec_to_snake(display_name)
         return _mapsec_to_snake(display_name)
 
     # Guard: pret's region_map_sections.json reuses the same display name for several
@@ -684,8 +689,10 @@ def generate_emerald(check=False):
     #   the Route 117 egg); the server links those itself.
     statics_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                                 "data", "games", "gen3_emerald", "statics.json")
-    with open(statics_path, encoding="utf-8") as f:
-        statics = json.load(f)["entries"]
+    statics = []
+    if not expansion:
+        with open(statics_path, encoding="utf-8") as f:
+            statics = json.load(f)["entries"]
     for row in statics:
         key = row["map"]
         if not key or key in area_map:
@@ -703,7 +710,8 @@ def generate_emerald(check=False):
                              f"collides with {prior!r}")
         area_map[key] = area_id
 
-    area_map_path = os.path.join("data", "games", "gen3_emerald", "area_map.json")
+    output_dir = output_dir or os.path.join("data", "games", "gen3_emerald")
+    area_map_path = os.path.join(output_dir, "area_map.json")
     area_map_text = json.dumps(area_map, indent=2, sort_keys=True)
     ok = _write_or_check(area_map_path, area_map_text, check)
 
@@ -726,7 +734,14 @@ def generate_emerald(check=False):
     for key in sorted_keys:
         lua_lines.append(f'  ["{key}"] = "{area_map[key]}",')
     lua_lines.append("}")
-    areas_lua_path = os.path.join("data", "games", "gen3_emerald", "gen3_emerald_areas.lua")
+    if expansion:
+        lua_lines[:lua_lines.index("return {") + 1] = [
+            "-- AUTO-GENERATED by gen_area_map.py --game emerald --expansion 28877d73",
+            "-- Source: this build's expansion data/maps/map_groups.json and wild_encounters.json.",
+            "-- Emerald MAPSEC/dive/Safari rules; wild zones only. Gift/static script census OPEN.",
+            "", "return {",
+        ]
+    areas_lua_path = os.path.join(output_dir, "gen3_exp_areas.lua" if expansion else "gen3_emerald_areas.lua")
     ok = _write_or_check(areas_lua_path, "\n".join(lua_lines) + "\n", check, newline="\n") and ok
 
     # Locations - every map in map_groups.json (display/debug only), same to_snake()
@@ -747,7 +762,13 @@ def generate_emerald(check=False):
     for key in loc_sorted_keys:
         loc_lua_lines.append(f'  ["{key}"] = "{location_map[key]}",')
     loc_lua_lines.append("}")
-    locations_lua_path = os.path.join("data", "games", "gen3_emerald", "gen3_emerald_locations.lua")
+    if expansion:
+        loc_lua_lines[:loc_lua_lines.index("return {") + 1] = [
+            "-- AUTO-GENERATED by gen_area_map.py --game emerald --expansion 28877d73",
+            "-- This expansion build's complete map group/folder location table; display only.",
+            "", "return {",
+        ]
+    locations_lua_path = os.path.join(output_dir, "gen3_exp_locations.lua" if expansion else "gen3_emerald_locations.lua")
     ok = _write_or_check(locations_lua_path, "\n".join(loc_lua_lines) + "\n", check,
                          newline="\n") and ok
 
@@ -765,7 +786,6 @@ def generate_emerald(check=False):
 
 def main():
     import argparse
-    import sys
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--game", choices=("frlg", "emerald"), default="frlg")
     # card E4b-CKPT review (OMP cx-6b619663 F5/F8): a real --check, not the "rewrite in place, let
@@ -773,15 +793,28 @@ def main():
     # before. FRLG's own default (write) behaviour is unchanged either way.
     parser.add_argument("--check", action="store_true",
                         help="compare the generated files to what is committed; write nothing; "
-                             "exit 1 on any difference (emerald only for now)")
+                             "exit 1 on any difference")
+    parser.add_argument("--expansion", choices=["28877d73"])
+    parser.add_argument("--source", help="pinned expansion source checkout")
     args = parser.parse_args()
+    if args.expansion:
+        import subprocess
+        from pathlib import Path
+
+        if args.game != "emerald":
+            parser.error("expansion reuses --game emerald")
+        root = Path(__file__).resolve().parents[1]
+        source = Path(args.source) if args.source else root / ".cache/expansion-src"
+        pin = "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
+        if subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip() != pin:
+            raise ValueError("expansion area source pin mismatch")
+        if subprocess.check_output(["git", "-C", str(source), "status", "--porcelain", "--untracked-files=no"], text=True):
+            raise ValueError("expansion area source is dirty")
+        return 0 if generate_emerald(args.check, source=source,
+            output_dir=root / "data/games/gen3_exp" / args.expansion, expansion=True) else 1
     if args.game == "emerald":
         return 0 if generate_emerald(check=args.check) else 1
-    if args.check:
-        print("--check --game frlg: not implemented (frlg still always writes)", file=sys.stderr)
-        return 1
-    generate_frlg()
-    return 0
+    return 0 if generate_frlg(check=args.check) else 1
 
 
 if __name__ == "__main__":

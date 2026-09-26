@@ -10,6 +10,14 @@
 #include "move.h"
 #include "item.h"
 #include "load_save.h"
+#include "task.h"
+#include "script.h"
+#include "palette.h"
+#include "battle.h"
+#include "gba/m4a_internal.h"
+#include "constants/flags.h"
+#include "constants/songs.h"
+#include "x1_source_enums.h" /* generated verbatim from the pinned .c enums */
 
 #define SZ(t) static const u32 x1_size__##t USED = sizeof(struct t); \
     static const struct t x1_zero__##t USED = {0}
@@ -19,6 +27,7 @@
 #define A(t, f) static const u32 x1_array__##t##__##f[] USED = \
     {offsetof(struct t, f), sizeof(((struct t *)0)->f), sizeof(((struct t *)0)->f[0])}
 #define K(k) static const u32 x1_const__##k USED = (k)
+#define E(t) static const u32 x1_const__SIZEOF_ENUM_##t USED = sizeof(enum t)
 /* Deliberate all-ones assignment is truncated by the compiler to the actual
  * bitfield width. Suppress only its overflow diagnostic, not any ABI option.
  * The emitted zero baseline must contain no bits, and each mask must be one
@@ -136,6 +145,20 @@ SZ(PokemonStorageASLR); F(PokemonStorageASLR, block); A(PokemonStorageASLR, aslr
 SZ(SaveBlock1ASLR); F(SaveBlock1ASLR, block); A(SaveBlock1ASLR, aslr);
 SZ(SaveBlock2ASLR); F(SaveBlock2ASLR, block); A(SaveBlock2ASLR, aslr);
 SZ(Main); F(Main, callback2); F(Main, state); B(Main, inBattle);
+F(Main, callback1);
+SZ(Task); F(Task, func); F(Task, isActive); A(Task, data);
+SZ(ScriptContext); F(ScriptContext, mode); F(ScriptContext, nativePtr);
+F(ScriptContext, scriptPtr); A(ScriptContext, stack);
+SZ(PaletteFadeControl); B(PaletteFadeControl, active);
+SZ(BattleResults); F(BattleResults, playerFaintCounter); F(BattleResults, opponentFaintCounter);
+SZ(SoundInfo); F(SoundInfo, ident); F(SoundInfo, musicPlayerHead);
+SZ(MusicPlayerInfo); F(MusicPlayerInfo, songHeader); F(MusicPlayerInfo, status);
+F(MusicPlayerInfo, trackCount); F(MusicPlayerInfo, priority); F(MusicPlayerInfo, clock);
+F(MusicPlayerInfo, tracks); F(MusicPlayerInfo, ident); F(MusicPlayerInfo, musicPlayerNext);
+SZ(MusicPlayerTrack); F(MusicPlayerTrack, flags); F(MusicPlayerTrack, wait);
+F(MusicPlayerTrack, patternLevel); F(MusicPlayerTrack, repN); F(MusicPlayerTrack, gateTime);
+F(MusicPlayerTrack, bendRange); F(MusicPlayerTrack, volX); F(MusicPlayerTrack, lfoSpeed);
+F(MusicPlayerTrack, chan); F(MusicPlayerTrack, cmdPtr);
 #pragma GCC diagnostic pop
 
 K(NUM_SUBSTRUCT_BYTES); K(NUM_SPECIES); K(MOVES_COUNT); K(MOVES_COUNT_ALL);
@@ -149,3 +172,13 @@ K(TOTAL_BOXES_COUNT); K(IN_BOX_COUNT); K(MAX_FUSION_STORAGE);
 K(EVOLUTIONS_END); K(EVO_NONE);
 K(SAVEBLOCK_MOVE_RANGE);
 K(SPECIES_EGG);
+K(NUM_TASKS); K(CONTEXT_SHUTDOWN); K(STATE_WAIT_ACTION_CHOSEN);
+K(STATE_WAIT_ACTION_CONFIRMED_STANDBY); K(B_ACTION_NOTHING_FAINTED);
+K(BATTLE_TYPE_LINK); K(BATTLE_TYPE_TRAINER); K(BATTLE_TYPE_DOUBLE);
+K(B_OUTCOME_WON); K(B_OUTCOME_LOST); K(B_OUTCOME_DREW); K(B_OUTCOME_RAN); K(B_OUTCOME_CAUGHT);
+K(STAT_ATK); K(FLAG_BADGE01_GET); K(SPECIES_SHEDINJA); K(MAX_LEVEL);
+K(ID_NUMBER); K(IWRAM_START); K(IWRAM_END);
+K(SE_FAINT); K(SE_FLEE); K(SE_BOO); K(SE_SUCCESS); K(SE_FAILURE); K(SE_SHINY);
+E(Item); E(ItemSortType); E(Species); E(Move); E(Ability); E(Type); E(EggGroup);
+E(NationalDexOrder); E(BattleMoveEffects); E(DamageCategory); E(Pocket); E(BattlerId); E(BattleTrainer);
+K(MON_DATA_SPECIES); K(SAVE_NORMAL); K(SAVE_STATUS_OK);

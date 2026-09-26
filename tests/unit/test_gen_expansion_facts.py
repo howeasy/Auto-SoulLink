@@ -109,6 +109,33 @@ def test_committed_facts_are_bound_to_current_probe_and_generator():
     assert layout["tables"]["species"]["zero_records"] == [1435]
 
 
+def test_committed_layout_regenerates_without_artifacts():
+    facts = json.loads((PACK / "facts.json").read_text())
+    layout = json.loads((PACK / "layout.json").read_text())
+    assert gen.make_layout(facts, layout["rom_sha1"], facts["provenance"]) == layout
+    changed_layout = copy.deepcopy(layout)
+    changed_layout["tables"]["species"]["fields"]["baseHP"]["offset"] += 1
+    assert gen.make_layout(facts, layout["rom_sha1"], facts["provenance"]) != changed_layout
+    changed_facts = copy.deepcopy(facts)
+    changed_facts["structs"]["MoveInfo"]["bitfields"]["power"]["shift"] += 1
+    assert gen.make_layout(changed_facts, layout["rom_sha1"], facts["provenance"]) != layout
+
+
+@pytest.mark.parametrize("target", ["layout", "facts"])
+def test_layout_guard_rejects_mutated_committed_copy(tmp_path, monkeypatch, target):
+    facts = json.loads((PACK / "facts.json").read_text())
+    layout = json.loads((PACK / "layout.json").read_text())
+    if target == "layout":
+        layout["tables"]["species"]["fields"]["baseHP"]["offset"] += 1
+    else:
+        facts["structs"]["MoveInfo"]["bitfields"]["power"]["shift"] += 1
+    (tmp_path / "facts.json").write_text(json.dumps(facts))
+    (tmp_path / "layout.json").write_text(json.dumps(layout))
+    monkeypatch.setattr(__import__(__name__, fromlist=["PACK"]), "PACK", tmp_path)
+    with pytest.raises(AssertionError):
+        test_committed_layout_regenerates_without_artifacts()
+
+
 @pytest.fixture(scope="module")
 def reference():
     artifacts = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS", ex.ROOT / ".cache/expansion-output/reference"))
