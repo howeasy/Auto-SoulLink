@@ -370,6 +370,10 @@ M.entries = {
 }
 
 local TITLES = { firered = true, leafgreen = true, radical_red = true, emerald = true }
+-- Generated per-build harness facts; keep every hand-authored column above unchanged.
+local EXP_TITLE = "emerald_expansion_28877d73"
+local module_dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
+TITLES[EXP_TITLE] = true
 
 M.TITLES = TITLES
 
@@ -380,6 +384,15 @@ M.TITLES = TITLES
 --- never with a wrong number silently standing in (card C4-LG2: radical_red has several entries
 --- nobody has proven yet; see the ABSENT notes above each one).
 function M.for_title(title)
+    if title == EXP_TITLE then
+        local generated = dofile(module_dir .. "gen3_title_syms_exp_28877d73.lua")
+        assert(generated.title == title, "expansion harness title mismatch")
+        local out = {}
+        for name, entry in pairs(generated.entries) do
+            if entry.address then out[name] = entry.address end
+        end
+        return out
+    end
     if not TITLES[title] then
         error("gen3_title_syms: unknown title " .. tostring(title)
               .. " (want firered, leafgreen, radical_red or emerald)", 0)
