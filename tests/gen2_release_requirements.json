@@ -477,15 +477,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cc_a_result.txt",
-              "sha256": "b64cdf4d3301a54af60781b06f50a5bd3e3e7225d32a2732bf8344677fb771fb"
+              "sha256": "9d189d45a8d5bae9d271707435542838151f3c81e16bcaaed30487b33e9afb1e"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cc_b_result.txt",
-              "sha256": "1d4e76ee810b88917bc47d91ffbb118080bbf1c59976c36e21ef8e0436544f80"
+              "sha256": "2ae93a08ec08119479cd2c2a3cf8fe7efeafa5ddacde922f4c7adf1e58d8d27f"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_cc_pydec_result.txt",
-              "sha256": "d33f7af03cf244d87508cb16f74db2e86c5fcd0cc9cc421d12618a0eb02ee43b"
+              "sha256": "78b058e108ab6d8b96813936983e3ba179a8a24dbcc0d486afe9ad624feeb7f1"
             }
           }
         },
