@@ -23,4 +23,10 @@ def test_clone_at_another_commit_fails(tmp_path):
 
 
 def test_env_override_wins_over_the_walk_up(tmp_path):
-    assert gen3_pret.find(env={"SLINK_PRET_SRC": str(tmp_path)}) == tmp_path
+    assert gen3_pret.find(env={"SLINK_PRET_FIRERED_SRC": str(tmp_path)}) == tmp_path
+
+
+def test_gen1s_pokered_variable_is_not_read(tmp_path):
+    """SLINK_PRET_SRC is Gen 1's pret/pokered path (tools/gen1_foundation.py:11); setting it the
+    documented way must not steer the FireRed lookup (Gen1-Collab2 reproduced 8 failures)."""
+    assert gen3_pret.find(root=tmp_path, env={"SLINK_PRET_SRC": "E:/elsewhere/pokered"}) == tmp_path / gen3_pret.REL

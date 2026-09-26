@@ -1,8 +1,9 @@
 """The pinned pret/pokefirered clone for Gen 3 unit tests (tests/TESTING.md, "Absent input skips;
 present-but-wrong input fails").
 
-`.cache/` is gitignored, so a worktree usually has none of its own: look at $SLINK_PRET_SRC first
-(the variable tools/gen1_foundation.py reads), else the checkout and its ancestors. Walking up is
+`.cache/` is gitignored, so a worktree usually has none of its own: look at $SLINK_PRET_FIRERED_SRC
+first (not SLINK_PRET_SRC, which is Gen 1's pret/pokered path, tools/gen1_foundation.py:11), else
+the checkout and its ancestors. Walking up is
 safe only because the clone found is then checked against the pin in data/gen3_sources.lock.json:
 absent skips by name, a clone at another commit fails.
 """
@@ -19,8 +20,8 @@ REL = ".cache/pret/pokefirered"
 
 
 def find(root=ROOT, env=os.environ):
-    if env.get("SLINK_PRET_SRC"):
-        return Path(env["SLINK_PRET_SRC"])
+    if env.get("SLINK_PRET_FIRERED_SRC"):
+        return Path(env["SLINK_PRET_FIRERED_SRC"])
     return next((d / REL for d in (root, *root.parents) if (d / REL).exists()), root / REL)
 
 
@@ -32,7 +33,7 @@ def head(path):
 def require(path, rev=head):
     """`path` if it is a pret/pokefirered clone at the pin; skip when absent, fail when wrong."""
     if not path.exists():
-        pytest.skip(f"pret pokefirered not cloned ({path}); set SLINK_PRET_SRC or clone it at {PIN[:8]}")
+        pytest.skip(f"pret pokefirered not cloned ({path}); set SLINK_PRET_FIRERED_SRC or clone it at {PIN[:8]}")
     got = rev(path)
     if got != PIN:
         pytest.fail(f"{path} is at {got}, not the pinned pret/pokefirered {PIN} (data/gen3_sources.lock.json)")

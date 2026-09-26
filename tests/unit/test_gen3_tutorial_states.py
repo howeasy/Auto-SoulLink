@@ -26,7 +26,7 @@ SOURCE = LUA_PATH.read_text(encoding="utf-8")
 sys.path.insert(0, str(ROOT / "tests" / "unit"))
 import gen3_pret  # noqa: E402
 
-PRET = gen3_pret.find()  # $SLINK_PRET_SRC or the walk-up; require() checks the pin
+PRET = gen3_pret.find()  # $SLINK_PRET_FIRERED_SRC or the walk-up; require() checks the pin
 TITLES = {"firered": "pokefirered", "leafgreen": "pokeleafgreen"}
 ROMS = {"firered": "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba",
         "leafgreen": "E:/Google Drive/SLink/Pokemon - LeafGreen Version (USA).gba"}
