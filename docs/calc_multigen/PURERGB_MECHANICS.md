@@ -12,6 +12,17 @@ claim below is cited `file:line` in both trees:
 pureRGB is a straight pret/pokered fork: the engine functions below are named and shaped the same
 in both trees, so most of this is a line-level diff rather than a rewrite-from-scratch comparison.
 
+## Status
+
+This file started as a prototype report (checkpoint commit `e6af312a`); the work it scoped has
+since shipped. pureRGB's calc support is **on local master, not pushed, not released**:
+`b56df47f` (flip pureRGB on for Gen 1), `5705d557` (engine: alternate STAB, Ghost dynamic category,
+the setter-based dex swap), `bb5ab261` (species-by-id forms, generated trainer sets). It has been
+**browser-verified** for one hand-worked case (Porygon Tri Attack vs Chansey, both L50: 57-67 -
+`docs/calc_multigen/HANDOFF.md`'s per-game table) but **not live-verified** in a real pureRGB
+emulator run. The rest of this file records the mechanics diff (§1, still current) and the engine
+implementation as shipped (§2-§4), with remaining gaps in §3 and §5.
+
 ## 1. What changed
 
 ### 1.1 Six new types
@@ -96,10 +107,10 @@ This picks physical-vs-special **per attacking Pokemon, at battle time**, from *
 `move.category` model has no notion of "depends on the user." pureRGB reassigned 8 existing moves
 to Ghost type (Sonicboom, Night Shade, Screech, Confuse Ray, Barrier, Lick, Dream Eater, Barrage -
 `data/games/gen1_purergb/moves.json`), all carrying a static `split` (7 Physical, 2 Status) that
-reflects the common case, not the dynamic rule. **Gap**: any Ghost-type damaging move used by a
-Pokemon whose base Special exceeds its base Attack will be mis-classified by this prototype (and
-by the generated `purergb.ts`, which just takes moves.json's `split` as given). Fixing it needs a
-`mechanics/gen12.ts` change - see §3.
+reflects the common case, not the dynamic rule - the generated `purergb.ts` just takes moves.json's
+`split` as given, unchanged. **Implemented in `mechanics/gen12.ts`** instead: a Ghost-type
+damaging move's category is recomputed per-attacker from `baseStats.spa` vs `.atk`, overriding the
+static `split` for that one case - see §3 item 2.
 
 ### 1.4 STAB (same-type attack bonus)
 
@@ -126,9 +137,8 @@ cp TRI
   ld a, NORMAL             ; TRI-type moves get STAB on NORMAL-type attackers (Porygon)
 ```
 
-**Not implemented in this prototype.** It's a per-move-type special case inside the STAB branch of
-`calculateRBYGSC`, which lives in `mechanics/gen12.ts` (one of this branch's read-only files -
-"stop and report" rather than edit). See §3 for the estimated engine change.
+**Implemented** as a per-move-type special case inside the STAB branch of `calculateRBYGSC`
+(`mechanics/gen12.ts`'s `PURERGB_ALT_STAB` table) - see §3 item 1.
 
 ### 1.5 Type effectiveness lookup, and four optional "remap" toggles
 
@@ -153,11 +163,11 @@ that a fresh save's WRAM/SRAM is zeroed, so all four bits default **off** (base 
 apply) - not independently re-verified beyond "nothing sets it," flagged here rather than stated
 as fully confirmed.
 
-**Not modeled by this prototype.** `tools/gen_purergb_calc_patch.py` bakes in the *base* chart
-values only (the defaults) - there's no per-battle options state in the calc to hang a toggle off
-of, and the calc has no settings UI for it. If the full build-out wants the toggle, it's a UI
-option -> `Field`-or-similar flag -> `mechanics/gen12.ts` remap, small (S) once the data path
-exists.
+**Not modeled** (known limit, unchanged - §3 item 4). `tools/gen_purergb_calc_patch.py` bakes in
+the *base* chart values only (the defaults) - there's no per-battle options state in the calc to
+hang a toggle off of, and the calc has no settings UI for it. If a future change wants the toggle,
+it's a UI option -> `Field`-or-similar flag -> `mechanics/gen12.ts` remap, small (S) once the data
+path exists.
 
 **Also added, not modeled**: a Haze/Mist immunity check before the type loop
 (`CheckHazeMistImmunityGetArgs`/`ForceTypeImmunity`, `engine/battle/core.asm:5257-5259`) - the calc
@@ -168,8 +178,8 @@ one.
 hit against its user down to neutral (`CheckIfDefenseCurlModifier`, `engine/battle/core.asm:
 5316-5344`, called from the type-loop's end-of-table branch at `:5311-5315`). Vanilla Defense Curl
 is a pure no-op stat-stage move with no defensive effect. This needs a `Pokemon`/`Field`-level
-"is defense-curled" flag plus a `mechanics/gen12.ts` change (§3); not otherwise reachable from
-static species/move data, so this prototype can't carry it at all.
+"is defense-curled" flag plus a `mechanics/gen12.ts` change; not otherwise reachable from static
+species/move data, so the calc can't carry it (known limit, unchanged - §3 item 3).
 
 ### 1.6 Critical hits
 
@@ -224,11 +234,11 @@ Rage doesn't do a set 40 damage anymore" - it's presumably now a normal power-ba
 independently confirmed since it isn't one of the 5 named custom moves) and Psywave's
 random-damage-from-level code was deleted (comment: "Psywave is a basic low power psychic move
 now"). Both already match `calc/calc/src/mechanics/util.ts`'s `handleFixedDamageMoves` in that
-neither Dragon Rage nor Psywave should be treated as fixed-damage for pureRGB - **not yet reflected
-in the prototype's move data** (Dragon Rage/Psywave aren't among the 165 moves.json entries I
-special-cased; their `split`/`power` from moves.json is used as-is, which is correct as long as
-`handleFixedDamageMoves` keys off move *name*, not a data flag - worth a one-line grep-check before
-the full build-out, not done here for time).
+neither Dragon Rage nor Psywave should be treated as fixed-damage for pureRGB. Psywave isn't one of
+`handleFixedDamageMoves`'s three name checks at all, so it was never at risk. Dragon Rage is - and
+this is exactly the bug §2's "Naming policy: moves" section traces and fixes: `handleFixedDamageMoves`
+now gates its Night Shade/Dragon Rage/Sonic Boom branches on `isPureRGB(move.gen)`, so pureRGB's
+power-based Dragon Rage no longer gets treated as fixed-40-damage. See §2 for the full trace.
 
 The 217-255 random-roll loop and its rounding are unchanged (only a `TWO_OR_THREE_ATTACKS_EFFECT`
 constant rename and a dead double `and a` removed - purely cosmetic, `core.asm:4291-4293` and
@@ -252,8 +262,14 @@ formula - relevant to HANDOFF's task 4/6 (Gen 1/2 real stats, Gen 1 enemy data),
 `data/games/gen1_purergb/species_index.json` has 190 internal-index slots, classified `ordinary`
 (151, real dex 1-151), `form` (7 alternate forms), `spirit` (5 battle-only bosses, not catchable),
 `unused` (23 dead slots), `missingno` (1, `$B5`, a real catchable glitchmon) and `picture_only` (3,
-never battled). The prototype includes `ordinary` + `form` + `spirit` (163 species) and drops the
+never battled). The calc includes `ordinary` + `form` + `spirit` (163 species) and drops the
 27 `unused`/`missingno`/`picture_only` slots as not worth modelling in a damage calc.
+
+**Known limit**: dropping the `missingno` slot has one visible consequence - trainers.json's
+`GYM_GUIDE` trainer class (id 250) fields a party-slot MISSINGNO (internal id 181). With no species
+data for it, `tools/gen_purergb_setdex.py` skips that one party slot (logged to stderr) rather than
+emitting a set the calc can't render; every other species referenced by trainers.json resolves
+against `purergb.ts`'s species data (verified by `tests/unit/test_calc_purergb.py`).
 
 **Naming policy** (`tools/gen_purergb_calc_patch.py:build_ordinary_names`/`build_form_names`),
 three tiers, all sourced from the pinned checkout rather than hand-typed:
@@ -357,15 +373,15 @@ as "ignored by a special effect") shows only `SEISMIC_TOSS` still has that effec
 Rage already share vanilla's exact spelling (no rename involved) and would have hit
 `handleFixedDamageMoves`'s vanilla branches regardless of the naming fix above; Sonic Boom would
 only start colliding once renamed from "Sonicboom" to "Sonic Boom". `handleFixedDamageMoves` is now
-gated on `move.gen.num === 1 && isPureRGBActive()` for these three (Seismic Toss's branch stays
+gated on `isPureRGB(move.gen)` for these three (Seismic Toss's branch stays
 unconditional - see `mechanics/util.ts` and the jest cases in `purergb.test.ts` for both the
 now-power-based Sonic Boom and the still-fixed Seismic Toss).
 
-## 3. Engine changes in `mechanics/gen12.ts`, gated on `isPureRGBActive()` (from `data/purergb.ts`)
+## 3. Engine changes in `mechanics/gen12.ts`, gated on `isPureRGB(gen)` (`mechanics/util.ts`)
 
 | # | Change | Status |
 |---|---|---|
-| 1 | Alternate STAB: Tri->Normal, Magma->Ground, Crystal->Rock, Bonemerang->Ground attackers also get STAB (§1.4) | **Implemented.** `gen12.ts`'s `PURERGB_ALT_STAB` table + an `||` alongside the existing `move.hasType(...attacker.types)` STAB check, gated `gen.num === 1 && isPureRGBActive()`. Jest case: `purergb.test.ts` "Porygon Tri Attack vs Chansey" (and a companion case confirming vanilla Tri Attack stays plain Normal-type with no alt STAB). |
+| 1 | Alternate STAB: Tri->Normal, Magma->Ground, Crystal->Rock, Bonemerang->Ground attackers also get STAB (§1.4) | **Implemented.** `gen12.ts`'s `PURERGB_ALT_STAB` table + an `||` alongside the existing `move.hasType(...attacker.types)` STAB check, gated on `isPureRGB(gen)`. Jest case: `purergb.test.ts` "Porygon Tri Attack vs Chansey" (and a companion case confirming vanilla Tri Attack stays plain Normal-type with no alt STAB). |
 | 2 | Ghost dynamic category: physical if attacker's base Attack >= base Special, else special (§1.3) | **Implemented.** `gen12.ts` computes a local `category` (overriding `move.category` only for `move.type === 'Ghost'` under the same gate) from `attacker.species.baseStats.spa`/`.atk` right before the `isPhysical`/`attackStat`/`defenseStat` computation, since `move.category` is fixed at `Move` construction and has no access to the attacker. Jest case: "Gengar Lick vs Machamp resolves Special" (Gengar's base Special exceeds its base Attack, overriding Lick's static "Physical" split from moves.json). |
 | 3 | Defense Curl forces super-effective -> neutral for its user (§1.5) | **Skipped, documented gap** (unchanged from the prototype). Needs a new `Pokemon`/`Field` boosted-state flag the calc has no UI surface for ("used Defense Curl this turn" isn't a field the calc's single-shot `calculate()` call can express) - not trivially modelable per this task's scope. |
 | 4 | The four optional type-chart remaps (§1.5) | **Skipped, documented gap** (unchanged). The generated chart still bakes in pureRGB's own defaults (all 4 toggles off); no settings UI exists to hang a per-battle override off of. |
@@ -379,7 +395,7 @@ remain accuracy gaps for specific move/species combinations, not a blanket "the 
 problem - `useDex('purergb')` computes correct numbers for every move/species combination this task
 covers. A related bug this work also uncovered and fixed (not one of the 8 items above, but
 directly caused by the move-naming fix in §2's "Naming policy: moves"): `mechanics/util.ts`'s
-`handleFixedDamageMoves()` needed the same `isPureRGBActive()` gate to stop misclassifying pureRGB's
+`handleFixedDamageMoves()` needed the same `isPureRGB(gen)` gate to stop misclassifying pureRGB's
 now-power-based Night Shade/Dragon Rage/Sonic Boom as vanilla's fixed-damage versions.
 
 ## 4. Engine implementation status
@@ -407,8 +423,10 @@ now-power-based Night Shade/Dragon Rage/Sonic Boom as vanilla's fixed-damage ver
   - `purergb.ts` itself is now just plain `SpeciesData`/`MoveData`/`TypeChart`-shaped tables (the
     same shapes `species.ts`/`moves.ts`/`types.ts`'s own RBY/GSC/... tables use, keyed by display
     name) plus `useDex()`, which calls the two new setters and the pre-existing
-    `setGen1TypeChart()`. It also exports `isPureRGBActive()`, the gate `mechanics/gen12.ts` and
-    `mechanics/util.ts` use for the §3/naming-policy fixes.
+    `setGen1TypeChart()`. The §3/naming-policy gate is `isPureRGB(gen)`, defined in
+    `mechanics/util.ts` itself (`gen.num === 1 && !!gen.types.get('crystal' as ID)`) - it reads the
+    live-swapped type chart rather than importing anything from `data/purergb.ts`, since
+    `mechanics/` and `data/` compile to separate bundles that don't share module scope.
   - **Gotcha found and fixed**: `species.ts`'s `Specie` class constructor reads a module-level
     `let gen` *loop variable* (not a constructor parameter!) to decide `bs.sl` (Gen 1's single
     Special stat) vs `bs.sa`/`bs.sd` (Gen 2+). By the time any code outside the module's own
@@ -416,15 +434,15 @@ now-power-based Night Shade/Dragon Rage/Sonic Boom as vanilla's fixed-damage ver
     `setGen1Species` has to save/restore it around `gen = 1` while constructing, or every pureRGB
     species would silently get `undefined` `spa`/`spd`. `moves.ts`'s `Move` constructor takes
     `gen` as a real parameter, so `setGen1Moves` has no equivalent trap.
-- 9 jest tests (`calc/calc/src/test/purergb.test.ts`): the original 3 (new-type effectiveness,
-  custom move Dust Claw, `useDex('vanilla')` round-trip) plus 6 new ones covering §3 items 1/2/5
-  and the Night-Shade/Sonic-Boom fixed-damage fix (alternate STAB fires/doesn't, Ghost dynamic
-  category, Siphon Snag's drain field, Sonic Boom's real power-based damage, Seismic Toss staying
-  fixed-damage). All pass, hand math in the test comments, cross-checked against the pureRGB source
-  (`data/moves/moves.asm`'s effect ids) where relevant. `npx jest src/test`: 119 failed / 127
-  passed (same 119 pre-existing failures as the checkpoint-commit baseline of 119 failed / 121
-  passed - unrelated to this branch, e.g. other gens' `data.test.ts` snapshot mismatches; the +6
-  passed are this task's new tests). `npx tsc -p . --noEmit`: clean.
+- `calc/calc/src/test/purergb.test.ts` covers the original prototype cases (new-type effectiveness,
+  custom move Dust Claw, `useDex('vanilla')` round-trip) plus the §3 items 1/2/5 and
+  Night-Shade/Sonic-Boom fixed-damage cases (alternate STAB fires/doesn't, Ghost dynamic category,
+  Siphon Snag's drain field, Sonic Boom's real power-based damage, Seismic Toss staying
+  fixed-damage). All pass as of this writing, hand math in the test comments, cross-checked against
+  the pureRGB source (`data/moves/moves.asm`'s effect ids) where relevant. The wider `src/test`
+  suite has pre-existing failures unrelated to pureRGB (other gens' `data.test.ts` snapshot
+  mismatches) - see the suite's own run output rather than a count here, which would go stale.
+  `npx tsc -p . --noEmit`: clean (re-verified 2026-09-26).
 - `tools/gen_purergb_calc_patch.py --check` now works from a git worktree (verified from
   `.claude/worktrees/damage-calc-multi-game-744f5c`): it resolves the main checkout's `.git` via
   `git rev-parse --git-common-dir` and points `SLINK_PURERGB_SRC` at `<main>/.cache/purergb`
@@ -436,17 +454,23 @@ now-power-based Night Shade/Dragon Rage/Sonic Boom as vanilla's fixed-damage ver
   damage-reduction effect, the four optional type-chart toggles, Firewall/Heat Rush's non-damage
   side effects, per-move multihit counts (Bonemerang etc.).
 
-## 5. Frontend needs (beyond this prototype's scope, noted for the coordinator)
+## 5. Frontend needs - resolved
 
-- A pureRGB gen-1-variant selector (or a "pureRGB" checkbox next to the Gen 1 radio) that calls
-  `useDex('purergb')`/`useDex('vanilla')` before the calc runs - this prototype only exposes the
-  function, nothing calls it yet.
-- Type color CSS for the 6 new types (`calc/src/css` or wherever the gen 1-8 type badges are
-  themed) - Crystal/Bonemerang/Tri/Floating/Magma/Typeless have no existing swatch.
-  `species.types`/`move.type` will render as their literal string otherwise (unstyled).
-  `slink_bridge.js`'s "(No Move)" fallback warning (HANDOFF task 3) should already catch a
-  pureRGB move name that doesn't resolve, once the bridge sends `gen: 1` + a pureRGB flag and the
-  calc-preview path calls `useDex`.
-- Species/move dropdowns are presumably already generation-scoped (task 2 of HANDOFF); once
-  `useDex('purergb')` runs before populating them, the 163 species / 165 moves above should just
-  appear - not verified against the live UI since this task was scoped to the engine only.
+This section originally listed three items the prototype left for the frontend. All three shipped
+alongside the engine work (`5705d557`) and are done as of this writing:
+
+- **Dex selection is automatic, no manual selector needed.** `slink_bridge.js`'s `_applyCalcGen()`
+  reads the server's `calc_profile()["dex"]` field on every `/api/calc/mons` payload and calls
+  `calc.useDex('purergb')` or `calc.useDex('vanilla')` before the gen-1 radio switch runs, so the
+  right dex is always loaded before anything reads it. There is no "pureRGB checkbox" in the UI,
+  and none is needed - the server already knows which dex a given run is on.
+- **No type-colour CSS gap - none exists for any type.** `calc/src/css` has no per-type styling for
+  *any* of the vanilla types either; `.type1`/`.type2` are plain `<select>` dropdowns
+  (`shared_controls.js:614-615` etc.), not colour-swatched badges. The 6 new types just add 6 more
+  `<option>` values with no styling work required. (The fork's only colour-coded badges are
+  difficulty/status badges in `slink_bridge.js`, unrelated to Pokemon types.)
+- **Species/move dropdowns are generation-scoped and verified.** `shared_controls.js` populates
+  them from `calc.SPECIES[gen]`/`calc.MOVES[gen]` (`shared_controls.js:1308`/`:1312`), which is
+  exactly what `setGen1Species`/`setGen1Moves` mutate. `docs/calc_multigen/HANDOFF.md`'s per-game
+  table records this browser-verified for the Porygon Tri Attack vs Chansey case (see Status,
+  above) - through the real page, not just the jest harness.
