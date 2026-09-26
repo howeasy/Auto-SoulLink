@@ -154,10 +154,11 @@ def test_the_12_target_kinds_are_covered_somewhere_in_the_union(legs):
 
 def test_open_legs_carry_a_reason(legs):
     """Round 3 closed the last OPEN leg (emerald_mon_given); any future open leg needs a reason."""
+    opened = [legs[i]["name"] for i in range(1, len(legs) + 1) if legs[i]["open"]]
     for i in range(1, len(legs) + 1):
-        leg = legs[i]
-        if leg["open"]:
-            assert leg["open_reason"], f"leg {leg['name']!r} is open with no reason"
+        if legs[i]["open"]:
+            assert legs[i]["open_reason"], f"leg {legs[i]['name']!r} is open with no reason"
+    assert opened == [], f"legs reopened: {opened}"
 
 
 def test_pinned_legs_are_not_open(legs):
@@ -679,3 +680,15 @@ def test_gift_npc_and_tile_are_where_the_leg_expects():
     lav = rom.map(0, 12)
     assert lav.collision[8][4] == 0
     assert (4, 7) in {(o.x, o.y) for o in lav.objects}
+
+
+def test_the_play_reader_io_carries_every_width_reads_lua_uses():
+    """PHYSICAL (catch group, 2026-09-26): reads.read_balls calls io.read_u16; the driver's reader
+    io lacked it, the catch guard raised and the script died silently until the 1500 s timeout."""
+    with open(os.path.join(_REPO, "lua", "gen3", "reads.lua"), encoding="utf-8") as f:
+        used = set(re.findall(r"\bio\.(read_u\d+|read_bytes)\(", f.read()))
+    with open(_SCRIPT, encoding="utf-8") as f:
+        src = f.read()
+    start = src.index("local reader = Reads.new(profile, {")
+    io_block = src[start:src.index("})", start)]
+    assert used and used <= set(re.findall(r"(read_u\d+|read_bytes) =", io_block)), used

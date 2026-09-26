@@ -100,6 +100,7 @@ end
 -- Defer host reads so loading the leg table needs no emulator globals.
 local reader = Reads.new(profile, {
     read_u8 = function(a) return memory.read_u8(a) end,
+    read_u16 = function(a) return memory.read_u16_le(a) end,
     read_u32 = function(a) return memory.read_u32_le(a) end,
     read_bytes = read_bytes,
 })
@@ -4156,7 +4157,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         .. "evolve_species_store site, docs/gen3_emerald/engine_sites.md)",
         "src/evolution_scene.c:930-946 (the learn-move yes/no; B == NO) -- unreachable here: the guard "
         .. "requires a free move slot",
-        "src/data/pokemon/evolution.h:129 (SPECIES_MUDKIP: EVO_LEVEL 16 -> SPECIES_MARSHTOMP)",
+        "src/data/pokemon/evolution.h:132 (SPECIES_MUDKIP: EVO_LEVEL 16 -> SPECIES_MARSHTOMP)",
         "src/battle_controller_player.c (gActionSelectionCursor resets to FIGHT(0) each battle: A,A = move 0)",
     },
     run = function(cp)
@@ -4206,7 +4207,10 @@ function EMH.poison_party()
         local count = memory.read_u8(PARTY_COUNT_ADDR)
         local hp, maxhp = slot0_hp()
         local status = memory.read_u32_le(PARTY_BASE + EMH.OFF_STATUS)
-        if count ~= 2 or hp ~= 1 or maxhp <= 1 or status & EMH.STATUS1_PSN_ANY == 0 then
+        -- the second mon must be healthy, or a faint would white out (field_poison.c:27-38)
+        local status2 = memory.read_u32_le(PARTY_BASE + 100 + EMH.OFF_STATUS)
+        if count ~= 2 or hp ~= 1 or maxhp <= 1 or status & EMH.STATUS1_PSN_ANY == 0
+            or status2 ~= 0 then
             return string.format("expected [poisoned lead at 1 HP, second mon], read party=%d HP "
                                  .. "%d/%d status=0x%X -- wrong fixture loaded for this leg",
                                  count, hp, maxhp, status)
@@ -4232,7 +4236,14 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         for _ = 1, 12 do
             if slot0_hp() == 0 then break end
             local px = G.pos(cp)
-            play.step(cp, px == EMH.POISON_TILES[1][1] and "Right" or "Left", map0, true, false)
+            local ok, why = play.step(cp, px == EMH.POISON_TILES[1][1] and "Right" or "Left", map0,
+                                      true, false)
+            if not ok and slot0_hp() ~= 0 then
+                G.shot("stuck")
+                G.finish(false, string.format("%s: poison walk step failed (%s) at %s", L,
+                         tostring(why), play.at(cp)))
+                return
+            end
         end
         if slot0_hp() ~= 0 then
             G.shot("stuck")
@@ -4310,6 +4321,11 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         for _ = 1, 80 do
             if memory.read_u8(PARTY_COUNT_ADDR) == want then break end
             G.tap("A", 3, 13)
+        end
+        -- giveegg follows `waitfanfare` (LavaridgeTown/scripts.inc:243-245): wait it out, no press
+        for _ = 1, 40 do
+            if memory.read_u8(PARTY_COUNT_ADDR) == want then break end
+            G.idle(15)
         end
         if memory.read_u8(PARTY_COUNT_ADDR) ~= want then
             G.shot("stuck")
