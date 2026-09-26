@@ -201,7 +201,7 @@ def derive_b(a_body: bytes, *, rr: bool = False,
     if not ok:
         raise ValueError(f"source fixture does not qualify: {msg}")
     parsed = codec.parse_flash(a_body, title=title)
-    party_count_off, party_off = codec._TITLE_PARTY_OFFSETS[title]
+    party_count_off, party_off = codec._TITLE_PARTY_OFFSETS[codec._title(title)]
     sb2 = bytearray(parsed["sb2"])
     sb1 = bytearray(parsed["sb1"])
     storage = bytearray(parsed["storage"])

@@ -2832,3 +2832,20 @@ def test_gift_areas_has_no_default_for_an_unknown_pack():
     assert G.gift_areas("gen3_rr", "radical_red")["ids"] == G.GIFT_AREAS_FRLG
     with pytest.raises(SystemExit, match="no gift_areas rule"):
         G.gift_areas("gen3_sapphire", "sapphire")
+
+
+def test_every_pack_maps_every_sound_id_the_server_and_session_send():
+    """OMP cx-6ecf4fc8 #8: the wire ids are a protocol constant (docs/protocol.md 8.2); a cue a
+    title's se_ids lacks is refused on that title only. The server sends 22/25/26/95
+    (server/state.py play_sound), lua/core/session.lua sends 26."""
+    import re
+    wire = {int(n) for n in re.findall(r'"play_sound",\s*"sound":\s*(\d+)', (REPO / "server/state.py").read_text(encoding="utf-8"))}
+    wire |= {int(n) for n in re.findall(r"play_sound\((\d+)", (REPO / "lua/core/session.lua").read_text(encoding="utf-8"))}
+    assert wire >= {22, 25, 26, 95}, wire
+    for pack in ("gen3_frlg", "gen3_rr", "gen3_emerald"):
+        wc = json.loads((REPO / "data/games" / pack / "write_checkpoint.json").read_text(encoding="utf-8"))
+        for title, block in wc.items():
+            if isinstance(block, dict) and "sound" in block:
+                mapped = {int(k) for k in block["sound"]["se_ids"]}
+                assert wire <= mapped, (pack, title, sorted(wire - mapped))
+

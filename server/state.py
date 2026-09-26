@@ -1585,8 +1585,11 @@ class SoulLinkState:
                     from server.adapters import get_adapter
                     state.adapter = get_adapter(state.adapter.game_id, is_rr=effective_rr,
                                                 rom_type=state.rom_type)
-                except (KeyError, ImportError):
-                    pass
+                except (KeyError, ImportError, ValueError):
+                    # ValueError: a fail-closed adapter refusing the saved rom_type; keep the
+                    # current adapter rather than half-load the run (OMP cx-6ecf4fc8 #2)
+                    log.warning(f"Could not rebuild the adapter for rom_type={state.rom_type!r}; "
+                                "keeping the current adapter")
             saved_names = data.get("trainer_names", {})
             if saved_names:
                 state.trainer_names["a"] = saved_names.get("a", "")
