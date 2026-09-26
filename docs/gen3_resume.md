@@ -60,6 +60,7 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
 - **PRE-RELEASE FIX QUEUE** (after G4/G5 are signed, before G6; not done now, so the frozen cut doesn't move):
   1. DONE 5f050857 (owner 2026-09-25: "Just fix it. No re run."): the vanilla FR/LG item table now names exactly the Gen 3 ids from pret. This display-only fix sits on top of the frozen cut a2985d5a without a re-run. Emerald lane told.
   2. The runner's lane provisioning should rewrite eol-pinned files whose working copy is w/crlf.
+- **Emerald E3 (approved direction, the grant comes with the diff):** STATE_ACTION_CONFIRMED_STANDBY comes from the pack (Emerald = 4); SE wire ids stay FR numbering and the client maps them per pack (Emerald's songs.h renumbers 25/26/95 to 31/32/102); GIFT_AREAS becomes a pack field. FR/LG/RR stay byte-identical, and a missing field fails closed.
 - **Emerald lane** (session "Emerald support planning", branch claude/gen3-emerald off a2985d5a): approved to make additive title rows in the gen3 generators/codec/fixtures/title_syms, keeping FRLG/RR --check byte-identical. Ruling 24 stands until the port is signed.
 - **Gen 2 is merged into LOCAL master** (062977a9, not pushed). `git merge-tree` of this branch against it shows about 20 conflicted files (server.py, adapters/__init__.py, slink.lua, game_detect.lua, memory_gba/nds.lua, e2e_duo.py, protocol.md, .gitattributes, gen1 sfx receipts, several tests). Sequence (agreed with Gen 2):
   1. The owner plays and signs G4/G5 on a2985d5a (+5f050857).
