@@ -53,12 +53,11 @@ The calc result line (e.g., `"Lvl 50 Charizard Flamethrower vs. Lvl 50 Blastoise
 ## Build
 
 ```bash
-# Install dependencies (run once)
-npm install
+# Install dependencies (run once) -- there is no repo-root package.json, everything lives under calc/
 cd calc && npm install && cd ..
 
 # Full build: TypeScript compile → bundle → copy assets → hash HTML
-node build
+cd calc && node build
 
 # Fast rebuild: only copy assets and rehash HTML (use after editing src/ files, not .ts)
 node build view

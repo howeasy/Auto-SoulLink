@@ -21,7 +21,7 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 | You need | Notes |
 |---|---|
 | **Python 3.11+** | `pip install -r requirements.txt` |
-| **BizHawk 2.11+ (Gen 1), 2.9+ (Gen 2/3)** | Two instances, one per player. Savestates are version-locked — a state written by a different BizHawk stops the emulator on a modal dialog. |
+| **BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2)** | Two instances, one per player. Savestates are version-locked — a state written by a different BizHawk stops the emulator on a modal dialog. |
 | **Two ROMs** | One per player. Both players must run the same **game family** — Red and Blue link, FireRed and LeafGreen link; a Radical Red run needs Radical Red on both sides. |
 | **A full checkout, on both machines** | The launcher scripts are small stubs that `dofile` the real client out of this repo, so a remote friend needs the repo too — sending them just the `.lua` will not work. |
 
@@ -107,7 +107,7 @@ Opt-in per-run rules — passed as CLI flags (or toggled in the Run Manager's ne
 |------|--------|
 | `--explode-mode` | On a linked partner's death, the surviving mon is coerced into using **Explosion** mid-battle (server emits a `force_explode` command) instead of a silent force-faint |
 | `--rival-team-swap` | On a rival battle, the rival's team is replaced live with the **partner run's current party** (server emits `replace_rival_team`; requires the companion patch) |
-| `--overworld-presence` | **Peer ghost** — your partner walks your overworld as a live NPC with their own avatar and 1:1 movement (requires the companion patch) |
+| `--overworld-presence` | **Peer ghost** — not in this release (planned after the RC). Leave it off: while it is on, the Pokémon Center trade NPC is disabled too, so there is no trade entry point |
 
 Per-run **native UI & audio toggles** (also in the Run Manager's new-run form; all require the companion patch, none change Soul Link rules): `--native-messages` (notifications as native in-game text boxes instead of the Lua HUD), `--native-sounds` (notification sounds via the game's own audio engine), `--no-battle-calc` (hide the bundled in-battle damage calculator, shown by default), `--no-pc-trade-npc` (disable Radical Red's Pokémon-Center trade NPC, on by default and only active while Overworld Presence is off; Gen 1 trades at the Cable Club receptionist — the cartridge's own counter on the companion patch / pureRGB overlay, the Lua HUD otherwise — which has no switch).
 
@@ -151,7 +151,7 @@ Everything lives on the **Manager** (`python -m server.manager`, port 8090): the
 
 ## Companion Patch (Radical Red)
 
-An optional UPS patch (`patch/`) injects native SLink support into the Radical Red ROM. It enables the **peer ghost** (Overworld Presence), **native trade** (talk-to-partner / PC trade NPC), **in-battle notifications**, **native message boxes and sounds**, the bundled **Battle Calc** damage display, the native Rival Team Swap path, and a **Soul Link entry in the game's own START menu** that opens a native run summary — linked pairs with both halves' HP, status and level, dead zones and badges — so you can check the run without leaving the game. Build it with `patch/tools/build.py`; apply it in the browser at `/patcher` (or download the `.ups` from `/companion/SLink-RR.ups`). See [patch/README.md](patch/README.md) for the full feature list and opcode reference.
+An optional UPS patch (`patch/`) injects native SLink support into the Radical Red ROM. It enables **native trade** (talk-to-partner / PC trade NPC), **in-battle notifications**, **native message boxes and sounds**, the bundled **Battle Calc** damage display, the native Rival Team Swap path, and a **Soul Link entry in the game's own START menu** that opens a native run summary (the peer ghost/Overworld Presence NPC opcodes are built into the patch but not yet driven by the rewritten Gen 3 client — deferred post-RC) — linked pairs with both halves' HP, status and level, dead zones and badges — so you can check the run without leaving the game. Build it with `patch/tools/build.py`; apply it in the browser at `/patcher` (or download the `.ups` from `/companion/SLink-RR.ups`). See [patch/README.md](patch/README.md) for the full feature list and opcode reference.
 
 ## OBS Scene Triggers
 
@@ -286,14 +286,14 @@ Downloads: `slink_<run>_a` / `_b` from the empty board, *Launchers ▾* or the C
 ## Tests
 
 ```bash
-pytest tests/unit/ -v                          # ~1600 tests, no emulator needed
-pytest tests/ -q                               # + integration (~1700)
+pytest tests/unit/ -v                          # ~14,200 tests, no emulator needed
+pytest tests/ -q                               # + integration, live and e2e collection (~14,500 total)
 
 # Headless BizHawk gates — drive a real emulator
-SLINK_LIVE=1 pytest tests/live/ -q             # 65 gates: Gen 3 (39), Gen 1 (24), Gen 2 (2)
+SLINK_LIVE=1 pytest tests/live/ -q             # ~135 gates across Gen 1, Gen 2 and Gen 3
 
 # Two-instance end-to-end: two emulators + a real server
-SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/ -q  # 27 runs across Gen 3, Gen 1 and Gen 2
+SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/ -q  # ~194 runs across Gen 3, Gen 1 and Gen 2
 ```
 
 The live gates and duo scenarios need BizHawk and the ROMs. Gen 3 also needs
@@ -307,9 +307,11 @@ upgrade. Everything skips cleanly when a ROM or fixture is missing. See
 ```
 lua/
   slink.lua              # Universal entry point (auto-detects game)
-  clients/               # Per-game Lua clients
-  games/                 # Per-game config (addresses, detection)
-  memory_*.lua           # Platform memory helpers (GB, GBA, NDS)
+  gen1/, gen2/, gen3/     # Composition roots — Gen 1-3 rewritten clients (each owns its own entry.lua)
+  core/                   # Shared runtime (session, identity, deferred) used by gen1-3
+  clients/               # Gen 4/5 Lua clients
+  games/                 # Gen 4/5 game config (addresses, detection)
+  memory_nds.lua          # NDS memory helpers (Gen 4/5)
   connector.lua          # Non-blocking TCP wrapper
 server/
   server.py              # TCP + HTTP server (aiohttp)
