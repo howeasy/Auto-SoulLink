@@ -130,6 +130,15 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 | EC-4 | Conformance World rows + capabilities fixture regenerated | MODEL | ✓ | ✓ | — |
 | XC-1 | `gen3_expansion.py` adapter contract (full `base.py` surface; empty trainer/encounter = recorded limit); `pokemon_data.py` untouched | SERVER | · | · | · |
 
+### EG4 candidate final cut (2026-09-26; `claude/gen3-emerald-rc2`)
+
+- **ED-2 ✓:** `docs/gen3/probes/fc_SUMMARY_94c980f3_emerald.txt` **24/24 PASS**, every row on attempt 1
+  (receipts `d096ce46` on rc2): the seven E↔E duos on production admission (the TEST-ONLY seam is
+  gone), checkpoint, probe states, four boot-checks, probe gates, shadow negatives (75/75),
+  unit_emerald (336 passed, 0 skips), and the release zip built, checked and booted on Emerald
+  ("gen3_emerald/emerald (clean by hash)", server "admission: admitted"). Request:
+  `docs/gen3_emerald/EG4_request.md` (rc2 `a18a2aef`), awaiting the owner.
+
 ### E4 / E4b evidence (2026-09-26; receipts `docs/gen3_emerald/probes/duo_e4_*`)
 
 - **ED-1 ✓ (pre-EG4 admission seam):** all seven scenarios PASS E↔E at cut `cf371bc1` with save
@@ -160,7 +169,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
 | ED-1 | faint_cmd, linked_faint_active, boxsync, whiteout, link, deadzone, reconnect on E↔E with witness + oracle | GAME + SERVER | — | ✓ | ✓ |
-| ED-2 | Wrong-save refusal; zip boot `emerald`; `fc_SUMMARY_<cut>_emerald.txt` all PASS | GAME | — | ✓ | ◐ |
+| ED-2 | Wrong-save refusal; zip boot `emerald`; `fc_SUMMARY_<cut>_emerald.txt` all PASS | GAME | — | ✓ | ✓ |
 | ED-3 | Patched in-game trade duos FR↔LG and E↔E (+ RR durable trade): native scene, evolution on receipt, native save before DONE, reset cases (E5, shared Gen 3, patched ROMs only) | GAME | · | · | · |
 | XD-1 | Seven duos on the expansion reference build | GAME + SERVER | — | · | · |
 

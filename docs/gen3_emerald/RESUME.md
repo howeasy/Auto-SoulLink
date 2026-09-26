@@ -5,6 +5,38 @@ Read this first after a pause or compaction. The plan is `docs/gen3_emerald/PLAN
 `E:/Google Drive/SLink/.claude/worktrees/gen3-emerald`. It is local only: not pushed or merged. Its
 base is Gen 3 `5f050857`.
 
+## CHECKPOINT 6 (2026-09-26 ~19:45Z, owner wrap-up at the EG4 request): resume here
+
+- **XG0 SIGNED** by the owner ("Signed"): expansion reference build pinned (expansion/1.17.0 =
+  e8bd1cd7, Linux VM `hgbox`, gcc-arm-none-eabi 13.2.1, two clean builds ROM sha1 28877d73;
+  native Windows unsupported). Builder/lock fixes after review `ab270159`; merged `aedca376`.
+- **EG4 candidate `claude/gen3-emerald-rc2`** (C:/slink-wt/em-rc2) = rc 49a96946 (EG4 flip +
+  TEST-ONLY seam removed + 20-ball catch fixture + `Entry.admit_routed` for slink.lua and run.lua)
+  + docs sweep 4b6eddc2 (incl. `statics.json` in the release manifest) + skip wording eb203ab6
+  (unit_emerald uses an explicit file list; dead old-client `gen3_rr` row deleted) + lane
+  (E6 calc 178 fixes, trade contract docs). Final cut: fc_SUMMARY_94c980f3_emerald.txt 24/24 PASS (every row attempt 1; unit_emerald 336 passed 0 skips; zip boot real), receipts d096ce46, request a18a2aef.
+  First cut 9c96e745 was 23/24 (all duos PASS attempt 1; only unit_emerald on unexcused skips).
+- **EG4 request:** `docs/gen3_emerald/EG4_request.md` on rc2. Owner: decide anchors vs hash-only
+  admission for unknown-hash BPEE, play a live E<->E duo from the Manager, sign EG4.
+- **Trade (owner rulings 2026-09-26):** patched ROMs only, mimic the accepted Gen 1/2/RR
+  frameworks, evolve on receipt, reset-without-save as patched Gen 1/2. The HUD design is
+  WITHDRAWN. Gen 3 ruling 27: FR/LG patched trade is in the Gen 3 RC and is BUILT IN THIS
+  WORKTREE; this lane owns every trade file incl. RR after Gen 3's RR batch (local master
+  7c14386a). Contract `docs/gen3/research/patched_trade_{design,bindings}.md` (Gen 3-approved).
+  **NEXT SESSION FIRST:** merge master 7c14386a into claude/gen3-emerald, then T2 (companion
+  FR/LG/E + RR durable trade) / T3 client / T4 adapter / T5 duos; one Gen 2 ping for T2+T4.
+- **Expansion prep branches (unmerged, reviews queued):** x1 2e159fb4 (compiler facts + gen3_exp
+  pack, unadmitted; OPEN: pc_deposit/pc_release sites inlined, CPU parking, commit handoff),
+  xr 58baa957 (field masks, 3 review rounds), xa c4b01f26 (expansion adapter + data pack; review
+  cx-7d33cf12 fixes queued: 32-bit OT contract, category .get, debug area fallback), x3 8c1d0966
+  (harness title syms; regenerate provenance after x1 facts). XG1 request after those merge.
+  Owner decision at XG2: expansion shinyModifier needs a shared state.py change.
+- **Queue:** X2-ADAPTER-FIX, DUO-SAVESTATE-CLEANUP (old-client savestate path), legacy `emerald`
+  stub deletion (multi-file), PREMASTER-GEN1-GATE (full Gen 1 unit lane; 300 s timeout in a
+  sandbox run), Gen 1/Gen 3 owners review the allow-list commits, E6 open (class assertion,
+  identical-team misfile). Guide checkpoint (RC_MASTER_GUIDE.md) lists every worker.
+- **Before master:** batch with Gen 2 (server/** changed), tell Gen 3 the pack hashes moved.
+
 ## CHECKPOINT 5 (2026-09-26 ~16:45Z, E4 done; owner pause after 3 h): resume here
 
 - **EG3 SIGNED** by the owner ("Signed. Lets go.", `20f1be76`). Master `e41f1c93` merged in at
