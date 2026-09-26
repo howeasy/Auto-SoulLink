@@ -121,9 +121,15 @@ def test_masked_party_record_feeds_only_expansion_facts():
     # No encoder receives a masked record: this adapter is read-only.
 
 
-def test_calc_stats_decodes_a_synthetic_masked_party_blob():
+def test_calc_stats_decodes_iv_masks_and_party_tail_offsets_self_consistently():
     """XC3 (SYNTH, O-33): no ROM/save/emulator -- one hand-built 100-byte expansion
-    party record with known IVs/EVs and computed stats, run through calc_stats()."""
+    party record with known IVs/EVs and computed stats, run through calc_stats().
+
+    This is self-consistent, not an independent check of EXPANSION_PARTY_LAYOUT:
+    the byte offsets used to pack IVs/EVs/party-tail stats here are the same ones
+    calc_stats()/decode_party_mon_masked() assume, so a wrong offset on both sides
+    would still agree. See test_expansion_party_layout_matches_facts_json_bitfields
+    (review cx-7cb40977 MAJOR 3) for the independent derivation from facts.json."""
     import struct
 
     a = get_adapter("gen3_exp")
@@ -155,6 +161,62 @@ def test_calc_stats_returns_none_without_a_blob():
     a = get_adapter("gen3_exp")
     assert a.calc_stats({}) is None
     assert a.calc_stats({"blob_hex": "not hex"}) is None
+
+
+def test_expansion_party_layout_matches_facts_json_bitfields():
+    """review cx-7cb40977 MAJOR 3: EXPANSION_PARTY_LAYOUT (gen3_expansion.py) is a
+    hand-kept copy of include/pokemon.h. Derive the same masks/shifts/offsets
+    independently from this build's own compiler facts
+    (data/games/gen3_exp/28877d73/facts.json's PokemonSubstruct0/1/3 bitfields)
+    and assert the adapter's constant equals them, so a wrong offset there would
+    actually fail a test -- unlike test_calc_stats_decodes_iv_masks_and_party_tail_
+    offsets_self_consistently above, which decodes with the very assumptions it
+    encoded with.
+    """
+    import json
+    from pathlib import Path
+
+    from server.adapters.gen3_expansion import EXPANSION_PARTY_LAYOUT
+
+    facts_path = (Path(__file__).resolve().parents[2]
+                  / "data/games/gen3_exp/28877d73/facts.json")
+    structs = json.loads(facts_path.read_text(encoding="utf-8"))["structs"]
+
+    def bitfield(struct_name, field_name):
+        return structs[struct_name]["bitfields"][field_name]
+
+    def global_bit(struct_name, field_name):
+        f = bitfield(struct_name, field_name)
+        return f["offset"] * 8 + f["shift"]
+
+    # Plain (unrelocated) masks: the field lives in one substruct with no bit
+    # moved elsewhere, so the mask alone is the whole story.
+    assert EXPANSION_PARTY_LAYOUT["MON_SPECIES_MASK"] == int(bitfield("PokemonSubstruct0", "species")["mask"], 16)
+    assert EXPANSION_PARTY_LAYOUT["MON_ITEM_MASK"] == int(bitfield("PokemonSubstruct0", "heldItem")["mask"], 16)
+    assert EXPANSION_PARTY_LAYOUT["EXPERIENCE_MASK"] == int(bitfield("PokemonSubstruct0", "experience")["mask"], 16)
+    for move_field in ("move1", "move2", "move3", "move4"):
+        assert EXPANSION_PARTY_LAYOUT["MON_MOVE_MASK"] == int(bitfield("PokemonSubstruct1", move_field)["mask"], 16)
+    for pp_field in ("pp1", "pp2", "pp3", "pp4"):
+        assert EXPANSION_PARTY_LAYOUT["PP_MASK"] == int(bitfield("PokemonSubstruct1", pp_field)["mask"], 16)
+
+    # Relocated fields: compare the struct-relative bit position (byte_offset*8 +
+    # shift) -- representation-independent of which byte/word width the adapter's
+    # layout happens to read -- plus the field's own bit width.
+    def assert_relocated(layout_entry, struct_name, field_name):
+        f = bitfield(struct_name, field_name)
+        assert layout_entry["word_off"] * 8 + layout_entry["shift"] == global_bit(struct_name, field_name)
+        assert layout_entry["width"] == f["bits"]
+
+    nickname_extra = EXPANSION_PARTY_LAYOUT["NICKNAME_EXTRA"]["chars"]
+    assert_relocated(nickname_extra[0], "PokemonSubstruct0", "nickname11")
+    assert_relocated(nickname_extra[1], "PokemonSubstruct0", "nickname12")
+    assert_relocated(EXPANSION_PARTY_LAYOUT["POKEBALL_FIELD"], "PokemonSubstruct0", "pokeball")
+    assert_relocated(EXPANSION_PARTY_LAYOUT["ABILITY_NUM_FIELD"], "PokemonSubstruct3", "abilityNum")
+
+    # PokemonSubstruct2 (EVs) is opaque in facts.json -- no bitfields, no fields --
+    # so EVs at bytes 0-5 stay an unfalsified vanilla carry-over, not checked here.
+    assert structs["PokemonSubstruct2"]["bitfields"] == {}
+    assert structs["PokemonSubstruct2"]["fields"] == {}
 
 
 @pytest.mark.asyncio
