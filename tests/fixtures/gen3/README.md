@@ -9,8 +9,10 @@ Python codec described in `docs/gen3/PLAN.md` §5.5 and derived per
 ## Naming
 
 `<pack>_<scene>[_b].sav`, e.g. `rr_town.sav`. `<pack>` is `rr` (Radical Red
-companion) or `fr`/`lg` (vanilla FireRed/LeafGreen; `make-fr`
-builds `firered_town.sav`, see below). `_b` marks a distinct-OT
+companion), `fr`/`lg` (vanilla FireRed/LeafGreen; `make-fr`
+builds `firered_town.sav`, see below), or `emerald` (the `gen3_emerald`
+pack, its own foundation — pairs only with `emerald`; e.g. `emerald_town.sav`,
+`emerald_battle.sav`). `_b` marks a distinct-OT
 derivation of the `a`-side fixture (`derive-b`), used for the harness's B
 player. Every committed file is exactly 131072 bytes (0x20000, the flash
 body with any optional 16-byte mGBA RTC suffix already stripped by

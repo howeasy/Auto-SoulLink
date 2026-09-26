@@ -45,7 +45,7 @@ has to remember anything, and nobody has to trust anybody.
 | Gen | Games | ROM Variants | Status |
 |-----|-------|-------------|--------|
 | 3 | FireRed, LeafGreen | The pinned US 1.0 dumps and Radical Red 4.1 (CFRU, clean or with the SLink companion patch), admitted by ROM hash; randomized carts and other unpinned builds are refused by name | ✅ **Verified** — the frozen-cut gate passes FR/LG 43/43 and Radical Red 19/19 on real cartridges |
-| 3 | Emerald | The pinned US Emerald dump, admitted by ROM hash; randomized carts and other unpinned builds are refused by name | 🟡 **Release candidate** — all seven Emerald↔Emerald duo scenarios pass on real cartridges; owner sign-off (G4/G5) pending |
+| 3 | Emerald | The pinned US Emerald dump, admitted by ROM hash; randomized carts and other unpinned builds are refused by name | 🟡 **Release candidate** — all seven Emerald↔Emerald duo scenarios pass on real cartridges; owner sign-off (EG4) pending |
 | 3 | Archipelago FireRed/LeafGreen | — | ❌ Not supported — it ran only on the old Gen 3 client, archived at tag `archive/gen3-old-client`; the launcher refuses it by name until it is ported to `lua/gen3/` |
 | 1 | Red, Blue, Yellow | US English | ✅ **Verified** — rules proven end to end on real cartridges by the 20-scenario duo harness |
 | 1 | PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6) | The pinned build only (admitted by ROM sha1); optional SLink companion overlay; randomized pairs via the SLink fork of UPR ZX | ✅ **Verified** — the same duo harness on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing (`docs/purergb/PLAN.md` §13.1) |
@@ -74,7 +74,7 @@ Each generation's evidence is a different shape, so the word is worth unpacking.
   by name.
 - **Gen 3 (Emerald)** — release candidate: all seven Emerald↔Emerald duo scenarios (faint, deadzone,
   link, box sync, reconnect, linked faint, whiteout) pass on real cartridges at the frozen cut; the
-  owner's live-play sign-off (G4/G5) is still pending.
+  owner's live-play sign-off (EG4) is still pending.
 - **Gens 4 and 5** — feature parity with Gen 3 on paper (moves/PP, stat stages, doubles, forms,
   egg detection, stream overlays) and their unit suites pass, but they have **never run against a
   real game**. Treat them as experimental. Their battle-struct addresses are scannable with

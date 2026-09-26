@@ -106,8 +106,9 @@ story.
 ### Gen 3 — `gen3_frlge.lua` (reference only)
 
 The old Gen 3 client's game module (FireRed, LeafGreen, Emerald). Since C5-6 nothing loads it at
-runtime: `lua/slink.lua` admits FireRed/LeafGreen/Radical Red into the rewritten client under
-`lua/gen3/` and refuses every other GBA cartridge (Emerald, Archipelago builds) by name. The file
+runtime: `lua/slink.lua` admits FireRed, LeafGreen, Radical Red and Emerald (pack `gen3_emerald`,
+see `docs/gen3_emerald/`) into the rewritten client under `lua/gen3/`, and refuses every other GBA
+cartridge (Archipelago builds, header-only carts) by name. The file
 stays as the cited source of the profile facts in `data/games/gen3_frlg/profile.json`; the old
 client, its `memory_gba.lua` and the helpers described below are at tag `archive/gen3-old-client`.
 The description below is of that archived client.
