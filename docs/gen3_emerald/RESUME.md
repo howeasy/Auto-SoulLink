@@ -40,6 +40,8 @@ base is Gen 3 `5f050857`.
      that the bw-hash receipts move.
 3. Then E4 (duos; the P+H re-pin on Emerald) and E4b (final-cut runner). Admission and ROUTED
    flip at EG4 (ruling 24).
+4. Before this branch reaches master: `bc2b6967` touches `server/**`, which makes every Gen 2
+   receipt stale (~2 h re-sweep). Batch the server changes and ping the Gen 2 lane ("Gen 2 Boogaloo").
 
 ## CHECKPOINT 2 (2026-09-26 ~06:25Z, owner pause after 3 h): resume here
 
