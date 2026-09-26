@@ -496,25 +496,6 @@ function read16(a) return memory.read_u16_le(a) end
 _TASKS, _PC_MAIN_MENU, _SMENU = 0x03005E00, 0x080C7269, 0x0203CD90
 
 
-def test_box_place_steers_the_storage_top_menu_to_move_mons_one_witnessed_down_at_a_time(lua, module):
-    """Live run 1: PC.mode(L, 2) died pc_storage_top_cursor_stalled on Task_PCMainMenu
-    (080C7268 in pokeemerald.sym) with menu_cursor=1 -- PC.mode waits for row == target after
-    EACH Down, which only holds for rows 0/1. EMH.pc_top_row walks to row 2 first."""
-    lua.execute(_FAKE_RAM)
-    lua.execute(_FAKE_MENU_HOST)
-    g = lua.globals()
-    g.TASK, g.MENU = _TASKS, _SMENU
-    g.poke(_TASKS, _PC_MAIN_MENU, 4)
-    g.poke(_TASKS + 4, 1, 1)
-    g.poke(_TASKS + 8, 2, 2)
-    g.poke(_TASKS + 10, 0, 2)
-    assert module.EMH.pc_top_row("t", 2) is True
-    assert g.read16(_TASKS + 10) == 2
-    assert g.DOWNS == 2
-    chunk = next(c for c in _leg_chunks(_SCRIPT_SRC) if 'name = "emerald_pc_box_place"' in c)
-    assert chunk.index("EMH.pc_top_row(L, 2)") < chunk.index("PC.mode(L, 2)")
-
-
 def _emh_body(name):
     start = re.search(rf'function EMH\.{re.escape(name)}\(', _SCRIPT_SRC)
     assert start, f"EMH.{name} not found"
@@ -647,22 +628,6 @@ def _fake_top_menu(lua, row, lags=False):
     g.poke(_TASKS + 10, row, 2)
     g.poke(_SMENU + 2, row, 1)
     return g
-
-
-def test_pc_top_row_wraps_from_row_3_through_4_to_0(lua, module):
-    g = _fake_top_menu(lua, 3)
-    assert module.EMH.pc_top_row("t", 0) is True
-    assert g.read16(_TASKS + 10) == 0 and g.DOWNS == 2
-
-
-def test_pc_top_row_refuses_a_menu_whose_cursor_does_not_follow(lua, module):
-    """OMP cx-39602c02 #3: tSelectedOption advancing alone is not progress; sMenu.cursorPos must
-    follow, else storage_top_cursor_stalled."""
-    g = _fake_top_menu(lua, 0, lags=True)
-    with pytest.raises(Exception, match="EXIT"):
-        module.EMH.pc_top_row("t", 2)
-    log = [g.LOG[i] for i in range(1, len(g.LOG) + 1)]
-    assert any("pc_storage_top_cursor_stalled" in line for line in log), log
 
 
 def test_gift_leg_is_real_and_accepts_with_a_then_only_b():
@@ -810,3 +775,11 @@ def test_gift_party_guard_accepts_one_mon_and_refuses_two():
 
     poke(_PARTY_COUNT, 2, 1)
     assert check() is not None
+
+
+def test_box_place_uses_the_shared_pc_mode_for_row_2():
+    """Master b6bd8f2b fixed the shared PC.mode (it waits for the cursor to leave its row), so the
+    Emerald-only EMH.pc_top_row workaround is gone (test_pc_mode_reaches_a_row_two_downs_away
+    covers PC.mode itself)."""
+    chunk = next(c for c in _leg_chunks(_SCRIPT_SRC) if 'name = "emerald_pc_box_place"' in c)
+    assert "PC.mode(L, 2)" in chunk and "pc_top_row" not in _SCRIPT_SRC

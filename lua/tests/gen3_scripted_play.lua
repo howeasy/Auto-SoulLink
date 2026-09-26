@@ -3313,29 +3313,6 @@ local function em_fail(label, msg)
     return false
 end
 
---- Steer the storage top menu (Task_PCMainMenu) to `row` one witnessed Down at a time, THEN hand
---- over to PC.mode. PC.mode's own Down loop waits for tSelectedOption == row after EACH press,
---- which only holds for rows 0/1 (FR never needed more). Live E2-LEGS run 1: PC.mode(L, 2)
---- failed pc_storage_top_cursor_stalled with Task_PCMainMenu (080C7268 = pokeemerald.sym
---- Task_PCMainMenu) live and menu_cursor=1 -- the first Down HAD landed, on row 1, and the
---- wait for row 2 timed out. storage_state=-1 there is expected: sStorage is only allocated
---- once storage opens (EnterPokeStorage), not on the top menu. With the row already selected,
---- PC.mode's loop breaks before pressing anything (tSelectedOption @task+10, :1558-1575).
-function EMH.pc_top_row(label, row)
-    local main = pc_task(PC_MAIN_MENU)
-    if not main or memory.read_u16_le(main + 8) ~= 2 then return pc_fail(label, "storage_top_not_ready") end
-    for _ = 1, 5 do
-        local current = memory.read_u16_le(main + 10)
-        if current == row then return true end
-        G.tap("Down", 3, 20)
-        if not pc_wait(label, "storage_top_cursor_stalled", function()
-            return memory.read_u16_le(main + 10) == (current + 1) % 5
-               and memory.read_u8(PC_MENU_CURSOR) == (current + 1) % 5
-        end, 90) then return false end
-    end
-    return pc_fail(label, "storage_top_wrong_row")
-end
-
 EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     name = "emerald_pc_deposit",
     exercises = { "pc_deposit" },
@@ -3442,8 +3419,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         -- MOVE POKeMON (row 2): the box cursor opens on slot 0; Right to slot 1, A, A = MOVE (grab);
         -- Left to slot 0, A, A = PLACE. The carried flag must rise and fall between the two.
         PC.open(cp, L)
-        EMH.pc_top_row(L, 2)
-        PC.mode(L, 2)
+        PC.mode(L, 2)   -- rows >= 2 work since master b6bd8f2b (PC.mode waits for progress)
         em_box_cursor(L, 1)
         em_move_popup_row0(L, em_thumb(ES.Task_MoveMon))
         em_wait_carry(L, "grab_not_done", 1)
