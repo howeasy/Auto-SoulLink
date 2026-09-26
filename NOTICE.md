@@ -49,8 +49,12 @@ For Alpine.js and LuaSocket, the MIT permission notice is the same text as SLink
 Addresses, symbol tables and generated data packs under `data/` are derived from the
 **[pret](https://github.com/pret)** disassembly projects (`pokered`, `pokeyellow`, `pokecrystal`,
 `pokegold`, `pokefirered`) and from **[Complete-Fire-Red-Upgrade](https://github.com/Skeli789/Complete-Fire-Red-Upgrade)**.
-Their sources are pinned by commit in `data/pret_sources.lock.json` and fetched into gitignored
-caches; no pret source is vendored here.
+Those sources are fetched into gitignored caches under `.cache/`; **no pret source is vendored
+here.** What is committed is the derived output — `.sym` files, symbol JSON and the per-game data
+packs. The Gen 2, Gen 3 and pureRGB sources are pinned by commit in `data/gen2_sources.lock.json`,
+`data/gen3_sources.lock.json` and `data/purergb_sources.lock.json`; `pokered` and `pokeyellow` are
+shallow-cloned at their default branch HEAD by `tools/build_pret_syms.py`, with no lock file on
+this branch.
 
 **[pureRGB](https://github.com/Vortyne/pureRGB)** support is generated from that project's pinned
 source in the same way. `patch/dist/SLink-Pure*.ups` are patches authored here; they apply to a
