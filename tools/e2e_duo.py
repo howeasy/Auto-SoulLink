@@ -7330,14 +7330,17 @@ class DuoRun:
         center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
         if self._gen3_title("a") == "emerald":
             # E4c replacements, each for a stated Emerald fact (pret pokeemerald c65e93f2):
-            #  CENTER_STATE (Union Room set live at the Center landing) -> LANDING_STATE at
-            #    lastHealLocation 0.10 (6,17) with every party mon at max HP: DoWhiteOut heals in C
-            #    and warps outdoors (overworld.c:357-366,665-668), so there is no Center landing and
-            #    no Union Room set; the heal is what the landing can prove.
-            #  WRITE_IN_CENTER -> WRITE_AT_LANDING: same checks (landing tile, checkpoint clean,
-            #    pointers unchanged, keyed 100-byte record in the write frame), minus the Union
-            #    Room set, which an outdoor tile never has.
-            center, landed = r"(?m)^LANDING_STATE .* healed=\S+ ", r"(?m)^WRITE_AT_LANDING "
+            #  CENTER_STATE (Union Room set live at the Center landing) -> LANDING_STATE at A's
+            #    fixture's own lastHealLocation (SaveBlock1 +0x1C WarpData, include/global.h:581-588,
+            #    990; the pc fixture's is 0.10 (6,17), HEAL_LOCATION_OLDALE_TOWN) with every party
+            #    mon at max HP: DoWhiteOut heals in C and warps there, outdoors
+            #    (overworld.c:357-366,665-668), so there is no Center landing and no Union Room set.
+            #  WRITE_IN_CENTER -> WRITE_AT_LANDING at that same tile: same checks (checkpoint
+            #    clean, pointers unchanged, keyed 100-byte record in the write frame), minus the
+            #    Union Room set, which an outdoor tile never has.
+            tile = self._gen3_fixture_heal_tile("a")
+            center = rf"(?m)^LANDING_STATE {tile} .* healed=\S+ "
+            landed = rf"(?m)^WRITE_AT_LANDING {tile} "
         control_name = self._gen3_whiteout_control()
         control = [gen3_returned(ka), rf"(?m)^CONTROL_LIVE {control_name} {re.escape(ka)} ",
                    gen3_rx("box_mon", ka),
@@ -7357,6 +7360,18 @@ class DuoRun:
             forbidden=[gen3_rx("memorialize", kb), r"(?m)^RX force_faint "])
         self._gen3_raise(problems, f"whiteout: A whited out, the pair {ka} / {kb} was rebuilt "
                                    f"from both PCs and saved in party, still alive")
+
+    def _gen3_fixture_heal_tile(self, inst) -> str:
+        """The regex matching `map=G.N at=(X,Y)` for the instance's fixture lastHealLocation: SaveBlock1
+        +0x1C struct WarpData {s8 mapGroup, mapNum, warpId; pad; s16 x, y} (pret pokeemerald
+        include/global.h:581-588,990). Where an Emerald whiteout lands (overworld.c:665-668)."""
+        codec = gen3_codec()
+        body = codec.split_rtc(self._gen3_fixture_bytes(inst))[0]
+        sb1 = codec.parse_flash(body, title=gen3_codec_title(self._gen3_title(inst)))["sb1"]
+        group, num = int.from_bytes(sb1[0x1C:0x1D], "little", signed=True), int.from_bytes(
+            sb1[0x1D:0x1E], "little", signed=True)
+        x, y = (int.from_bytes(sb1[at:at + 2], "little", signed=True) for at in (0x20, 0x22))
+        return rf"map={group}\.{num} at=\({x},{y}\)"
 
     def _gen3_whiteout_control(self) -> str:
         """whiteout_gen3's post-save negative control. FR/LG: the Center nurse's live script.

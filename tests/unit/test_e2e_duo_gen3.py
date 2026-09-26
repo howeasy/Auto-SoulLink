@@ -1191,7 +1191,14 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 1, key = "K1", hp = 5, max_hp = 17, species = 16, level = 4 },
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
-                  D = {}, hp0_tag = "FORCED_HP0", title = "firered", rr = spec.rr and true or false }
+                  D = {}, hp0_tag = "FORCED_HP0", title = spec.emerald and "emerald" or "firered",
+                  rr = spec.rr and true or false }
+    -- E4c-2: an Emerald whiteout heals in C before the landing (overworld.c:357-366), so the
+    -- Emerald party reads full; spec.unhealed leaves the lead short (the landing must refuse it)
+    if spec.emerald then
+        for _, m in ipairs(party) do m.hp = m.max_hp end
+        if spec.unhealed then party[1].hp = party[1].max_hp - 1 end
+    end
     -- C4-SAVE-ROWS: the pret statics a scenario reads through ctx.peek (SYMS addresses; the
     -- callbacks compare with the Thumb bit, as the real S table does)
     ctx.sym = { SaveDialogCB_AskSaveHandleInput = 0x0806F7F8, SaveDialogCB_ReturnSuccess = 0x0806F9E0,
@@ -1359,7 +1366,9 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.writes = function() return writes end
     ctx.wrong_save_hud = function() return true end
-    local CENTER = { group = 5, num = 4, x = 7, y = 4 }
+    -- E4c-2: Emerald lands on lastHealLocation Oldale 0.10 (6,17), outdoors (the model's name
+    -- stays CENTER: it is the whiteout destination every branch below compares against)
+    local CENTER = spec.emerald and { group = 0, num = 10, x = 6, y = 17 } or { group = 5, num = 4, x = 7, y = 4 }
     local function snap(at, bad)
         return { group = at.group, num = at.num, x = at.x, y = at.y, frame = 7, bad = bad or {},
                  ptrs = { gSaveBlock1Ptr = 0x02025000 } }
@@ -1367,7 +1376,9 @@ function FAKE(scenario, player, phase, spec)
     local here = snap(CENTER)
     function here_at(g, n, x, y) here = snap({ group = g, num = n, x = x, y = y }) end
     ctx.SP = { verify_fight_cursor = function() return "fight" end,
-               whiteout_destination = function() return CENTER end, warp_to = function() end }
+               whiteout_destination = function() return CENTER end, warp_to = function() end,
+               -- Emerald's START-menu witness (EMH.menu_ready), the same open flag as RR's
+               EMH = { menu_ready = function() return rr_menu_open end } }
     -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
     ctx.peek_u8 = function(addr)
         if addr == 0x0203ABE0 then return rr_menu_open and 1 or 0xFF end
@@ -1375,7 +1386,7 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
               pred_ok = function(_, name)
-                  if ctx.rr and name == "field_controls_locked" then
+                  if (ctx.rr or ctx.title == "emerald") and name == "field_controls_locked" then
                       return not (rr_menu_open or (spec.other_lock and start_taps > 0))
                   end
                   if name == "field_controls_locked" and (menu.open or menu.stuck) then return false end
@@ -1393,7 +1404,7 @@ function FAKE(scenario, player, phase, spec)
               end,
               tap = function(btn)
                   if scenario == "save_then_write" then return menu_tap(btn) end
-                  if btn == "Start" and ctx.rr then
+                  if btn == "Start" and (ctx.rr or ctx.title == "emerald") then
                       if rr_menu_open then error("test: Start tapped again after the START menu already opened", 0) end
                       start_taps = start_taps + 1
                       if start_taps > (spec.swallow_start or 0) then rr_menu_open = true end
@@ -1599,6 +1610,12 @@ def _run_module(lua, scenario, player, phase, spec):
     # START menu, named start_menu; the menu opens on the first tap by default (swallow_start=0)
     ("whiteout", "a", "initial", {"rr": "lua:true"},
      ["CONTROL_LIVE start_menu K1 map=5.4",
+      "CONTROL_REFUSED start_menu box_mon K1 clause=field_controls_locked"]),
+    # E4c-2: Emerald lands healed outdoors at Oldale 0.10 (6,17): LANDING_STATE / WRITE_AT_LANDING
+    # and the START-menu control with Emerald's own menu witness
+    ("whiteout", "a", "initial", {"emerald": "lua:true"},
+     ["CONTROL_LIVE start_menu K1 map=0.10", "LANDING_STATE map=0.10 at=(6,17)",
+      "healed=K0=20/20,K1=17/17,K9=9/9", "WRITE_AT_LANDING map=0.10 at=(6,17)",
       "CONTROL_REFUSED start_menu box_mon K1 clause=field_controls_locked"]),
     # the first two Start taps swallowed (the field only just freed), the menu opens on the third
     ("whiteout", "a", "initial", {"rr": "lua:true", "swallow_start": 2},
@@ -2801,6 +2818,11 @@ def test_the_attempt_jitter_lands_after_go(tmp_path):
     ({"bytes_change": "lua:true"}, "the party bytes changed while held"),
     ({"unkeyed": "lua:true"}, "no write of K1's party record in the write frame"),
     ({"off_checkpoint": "lua:true"}, "the write landed off the checkpoint: cpu"),
+    # E4c-2: the Emerald landing refuses an unhealed party and a write off the heal tile
+    ({"emerald": "lua:true", "unhealed": "lua:true"},
+     "never saw the healed party at lastHealLocation 0.10 (6,17)"),
+    ({"emerald": "lua:true", "write_at": "outside"}, "landed outside the heal-location tile"),
+    ({"emerald": "lua:true", "off_checkpoint": "lua:true"}, "the write landed off the checkpoint: cpu"),
 ])
 def test_whiteout_a_proves_the_center_write_or_fails_by_name(lua, spec, why):
     ok, passed, msg, _ = _run_module(lua, "whiteout", "a", "initial", spec)
@@ -2911,6 +2933,53 @@ def test_whiteout_oracle_requires_the_center_receipt(monkeypatch, tmp_path):
         with pytest.raises(RuntimeError, match=marker):
             run.assert_whiteout_gen3_saved(dict(receipts, a=cut))
     # the held box_mon landing (an ACK) is a failed control, not a pass
+    landed = dict(receipts, a=receipts["a"] + f"TX stats_cache {k} {{}}\n")
+    with pytest.raises(RuntimeError, match="stats_cache"):
+        run.assert_whiteout_gen3_saved(landed)
+
+
+def _emerald_whiteout_receipts(k, tile="map=0.10 at=(6,17)"):
+    a = (f"BOXED_OBSERVED {k} box=0:2\nTX whiteout - {{}}\n"
+         f"LANDING_STATE {tile} frame=9440 tasks=[] preds=[] healed=A=20/20 overworld_writes_before=0\n"
+         "WHITED_OUT at here\nRX rebuild_start text=REBUILDING\n"
+         f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nWRITE_AT_LANDING {tile} frame=9464 | keyed\n"
+         f"RX rebuild_done\nRETURNED_OBSERVED {k} slot=1\nCONTROL_LIVE start_menu {k} map=0.10\n"
+         f"RX box_mon key={k}\nCONTROL_REFUSED start_menu box_mon {k} clause=field_controls_locked held\n")
+    b = (f"RX box_mon key={k}\nTX stats_cache {k} {{}}\nBOXED_OBSERVED {k} box=0:2\n"
+         f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nRETURNED_OBSERVED {k} slot=1\n")
+    return {"a": a, "b": b}
+
+
+def test_emerald_whiteout_oracle_requires_the_landing_receipt(monkeypatch, tmp_path):
+    """E4c-2: assert_whiteout_gen3_saved on the gen3_emerald row, over the real Emerald pc fixture
+    (saved == fixture: the round trip put everything back). LANDING_STATE / WRITE_AT_LANDING must
+    name A's fixture lastHealLocation (0.10 (6,17)); each Emerald marker is required by name, the
+    FR Center markers are not accepted in their place, and the held probe landing still fails."""
+    image = (REPO / "tests/fixtures/gen3/emerald_pc.sav").read_bytes()
+    k = duo.gen3_key(duo.gen3_decode(image, title="emerald")[0][1])
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "whiteout_gen3", {"a": image, "b": image},
+                              image, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run.gcfg = dict(duo.GAMES["gen3_emerald"])
+    run._link_keys = {"a": k, "b": k}
+    assert run._gen3_fixture_heal_tile("a") == r"map=0\.10 at=\(6,17\)"
+    receipts = _emerald_whiteout_receipts(k)
+    run.assert_whiteout_gen3_saved(receipts)
+    assert notes and "whiteout" in notes[-1]
+    for marker in ("LANDING_STATE", "WRITE_AT_LANDING", "CONTROL_REFUSED"):
+        cut = "\n".join(line for line in receipts["a"].splitlines() if not line.startswith(marker))
+        with pytest.raises(RuntimeError, match=marker):
+            run.assert_whiteout_gen3_saved(dict(receipts, a=cut))
+    # a write anywhere but the fixture's heal tile is not the Emerald receipt
+    elsewhere = dict(receipts, a=receipts["a"].replace("WRITE_AT_LANDING map=0.10 at=(6,17)",
+                                                       "WRITE_AT_LANDING map=0.10 at=(6,16)"))
+    with pytest.raises(RuntimeError, match="WRITE_AT_LANDING"):
+        run.assert_whiteout_gen3_saved(elsewhere)
+    unhealed = dict(receipts, a=receipts["a"].replace(" healed=A=20/20", ""))
+    with pytest.raises(RuntimeError, match="LANDING_STATE"):
+        run.assert_whiteout_gen3_saved(unhealed)
+    # FR's Center receipt is not accepted on the Emerald row
+    with pytest.raises(RuntimeError, match="LANDING_STATE"):
+        run.assert_whiteout_gen3_saved(_whiteout_receipts(k))
     landed = dict(receipts, a=receipts["a"] + f"TX stats_cache {k} {{}}\n")
     with pytest.raises(RuntimeError, match="stats_cache"):
         run.assert_whiteout_gen3_saved(landed)

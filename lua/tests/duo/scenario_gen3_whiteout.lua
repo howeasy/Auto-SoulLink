@@ -60,7 +60,7 @@ local function a_side(ctx, linked)
             if not party or #party == 0 then return false end
             local healed = {}
             for _, m in ipairs(party) do healed[#healed + 1] = fmt("%s=%d/%d", m.key, m.hp, m.max_hp) end
-            for _, m in ipairs(party) do if m.hp ~= m.max_hp then return false end end
+            for _, m in ipairs(party) do if m.max_hp <= 0 or m.hp ~= m.max_hp then return false end end
             land = { line = line, missing = {}, snap = snap, ow = overworld_writes(),
                      healed = table.concat(healed, ",") }
             return true
@@ -106,7 +106,9 @@ local function a_side(ctx, linked)
     for _, b in ipairs(land.snap.bad) do
         if b:find("^pointer:") then return false, "the landing state: insane " .. b end
     end
-    if land.ow ~= ow0 then return false, "a write landed before CENTER_STATE was taken" end
+    if land.ow ~= ow0 then
+        return false, "a write landed before " .. (em and "LANDING_STATE" or "CENTER_STATE") .. " was taken"
+    end
     ctx.play.wait_scene_settled(ctx.cp, 6000)          -- the heal-location landing and its text
     ctx.log("WHITED_OUT at " .. ctx.play.where(ctx.cp))
     if not ctx.wait_received("party_mon", linked, 900) then return false, "no rebuild party_mon" end
@@ -260,6 +262,10 @@ return function(ctx)
         ok, why = nurse_control(ctx, linked, dest)
         if not ok then return false, why end
     end
-    return true, "pair " .. linked .. " rebuilt after the whiteout" .. (dest and (ctx.title == "emerald" and "; the write landed at the healed Oldale landing"
-                                                or "; the write landed in the Center") or "")
+    local where = "; the write landed in the Center"
+    if dest and ctx.title == "emerald" then
+        where = (dest.group == 0 and dest.num == 10) and "; the write landed at the healed Oldale landing"
+            or fmt("; the write landed at the healed landing %d.%d (%d,%d)", dest.group, dest.num, dest.x, dest.y)
+    end
+    return true, "pair " .. linked .. " rebuilt after the whiteout" .. (dest and where or "")
 end
