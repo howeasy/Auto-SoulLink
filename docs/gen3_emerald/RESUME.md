@@ -5,6 +5,69 @@ Read this first after a pause or compaction. The plan is `docs/gen3_emerald/PLAN
 `E:/Google Drive/SLink/.claude/worktrees/gen3-emerald`. It is local only: not pushed or merged. Its
 base is Gen 3 `5f050857`.
 
+## CHECKPOINT 7 (2026-09-26 ~22:00Z, end of the owner's 2-hour block): resume here
+
+**Owner rules this block:** all work stays on worktree branches; NOTHING lands on master (local or
+remote) without the owner's explicit approval. Scope = "match or beat Gen 1/2" (PLAN §0).
+
+- **Lane `claude/gen3-emerald`** (this worktree) at the head this checkpoint is committed on:
+  - master 5313d94e merged (8ac5334a);
+  - EG4 rc2 merged LANE-ONLY (4ccac5b4; owner-signed; no RC label until trainers, trade and
+    randomized support land);
+  - owner rulings in PLAN §0 (ee4f7b04, 02cbebe7);
+  - expansion x1/xr/xa/x3 reviewed and merged (cf7945f8, xint 88cdd20c);
+  - XC0 battle-config values (4fc79695);
+  - capabilities fixture regenerated (055279a5).
+- **Owner rulings 2026-09-26:**
+  - EG4 lane-only; anchors admission; the owner plays the live E<->E duo on the lane.
+  - Companion parity: Emerald gets trade + SOULLINK panel + sounds + Explode + Rival Swap
+    (Gen 3 ruling 30) + **PokéNav Match Call**.
+  - Randomized Gen 3 IN (Gen 3 rulings 29/31). Rule-changing randomizations (evolutions, types,
+    abilities, base stats) are REFUSED for the RC. An unknown-hash rand whose tables equal pret
+    pairs as clean.
+  - Expansion calc IN the expansion RC.
+  - US/EU English only.
+  - Peer ghost and AP Emerald post-RC.
+- **In flight** (worktrees; each merges into the lane only after independent review):
+  - `C:/slink-wt/em-t2`, T2 companion builder (Codex "Emerald"). ABI v2 abi.h 0eabd996 →
+    118c6f18 → c75e4bbc (Match Call) → 55d63a67 (panel/control fields; RR v1 citations
+    preserved, UPS md5 c372c428 reproduced). FR arena: heap clamp 0x1C000→0x1B000 with a PHYSICAL
+    peak census (evolution 0x147BC, PC 0x10018; 26 KB margin). Battle-party census and the trade
+    producers are OPEN; every target READY=0; no UPS published.
+    INCIDENT: a reused scripted-play helper overwrote the shared
+    E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State (17:27 local). Gen 3 was told to
+    regenerate it; T2 must set SLINK_STATE_DIR to a private dir.
+  - `C:/slink-wt/em-t3`, T3 client (Codex "Emerald-2"):
+    - e8f51695 durable lifecycle;
+    - f4ec8c85 KEY-SCOPE-5 box census (Gen 3 pairs its reports_box_census override);
+    - a5469ea3 R0 rom_tables;
+    - 637bcd17 CR-R1 `rand` kind;
+    - d63609af (Gen 3 rom_content 5a8033de merged);
+    - e5f8da76 CR-R2 hook.
+    The review of e8f51695 (OMP cx-d7cb155f, coordinator-verified) found BLOCKERS: an
+    unconditional after_reset deadlocks with state.py hello_only, and a silent RR refusal holds
+    the trade slot ~33 min. T3-R1 fixes 8 findings; after that come A (native_block → v2 abi.h,
+    merge T2 55d63a67) and C (Match Call).
+    Packaging: add lua/gen3/trade.lua + rom_content.lua to tools/make_release.py _LUA_GEN3 at
+    integration.
+  - `C:/slink-wt/em-xc1`, XC1-XC3 expansion calc (a16388ae: calc_profile gen 9/"expansion",
+    calc_names.json, calc_stats through the masked codec; data.json provenance regenerated),
+    under OMP review cx-7cb40977. XC4 (trainer sets / Prep tab) is next.
+- **Gen 3 lane coordination** (Claude "Gen3 migration planning", Codex "FRLG"): they own the FR/LG
+  trainers (tools/gen_gen3_trainers.py), randomized server side (gen3_rom_tables.py,
+  rom_content.lua, rand pairing), KEY-SCOPE-5 server override and the key_change retry. We own
+  every lua/gen3/{native,entry,client,safety,trade}.lua and patch/** writer. Their change
+  requests arrive through this coordinator. Emerald binds trainers and randomized after their
+  landing on their branch (never via master without the owner).
+- **Owner to do:** play the live E<->E duo on the lane: run `python -m server.manager --host
+  0.0.0.0` from this worktree, create a run, load `Pokemon - Emerald Version (USA, Europe).gba`
+  in two EmuHawks, then load lua/slink.lua.
+- **Queue:** XC4 trainer sets; Emerald trainer binding after Gen 3; E-bind randomized
+  (pokeemerald rom_tables, strides verified); T4 adapter (after Gen 3 gen3_frlge.py); T5 duos;
+  DUO-SAVESTATE-CLEANUP; legacy emerald stub deletion; the Gen 2 ping before any master batch
+  (server.py debug-area change 401974cc).
+- **Combined next:** the owner decided (2026-09-26) that the remaining Gen 3 work runs under ONE orchestrator. Start from docs/gen3_emerald/HANDOFF_combined_gen3_2026-09-26.md + the Gen 3 half (docs/gen3/HANDOFF_combined_gen3_2026-09-26.md @ 17988de4); the paste-ready prompt is docs/gen3_emerald/HANDOFF_PROMPT_combined_gen3_2026-09-26.md. Lane head b5eca942 (XC1-XC3 merged); T2 c00fda11; T3 R1 fixes uncommitted.
+
 ## CHECKPOINT 6 (2026-09-26 ~19:45Z, owner wrap-up at the EG4 request): resume here
 
 - **XG0 SIGNED** by the owner ("Signed"): expansion reference build pinned (expansion/1.17.0 =
