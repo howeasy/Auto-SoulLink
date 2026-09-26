@@ -44,7 +44,7 @@ def _load_rom() -> bytes:
     exists to catch.
     """
     if not ROM_PATH.exists():
-        pytest.skip(f"local Emerald ROM absent: {ROM_PATH}")
+        pytest.skip(f"local copyrighted ROMs absent: {ROM_PATH}")
     data = ROM_PATH.read_bytes()
     actual = hashlib.sha1(data).hexdigest()
     if actual != ROM_SHA1:

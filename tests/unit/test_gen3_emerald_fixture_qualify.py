@@ -42,8 +42,8 @@ UNCHANGED_SEED_SHA256 = {
 def _pret():
     try:
         return fx.pret_emerald()
-    except FileNotFoundError:
-        pytest.skip("pret pokeemerald checkout absent")
+    except FileNotFoundError as e:
+        pytest.skip(f"pokeemerald not cloned: {e}")
 
 
 def _seed(kind):

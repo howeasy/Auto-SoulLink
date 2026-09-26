@@ -46,7 +46,7 @@ def _pret_available() -> bool:
 # Applied per-test below (not module-wide): the FRLG byte-identity guard needs no
 # pret checkout and must still run when pret isn't present locally.
 needs_pret = pytest.mark.skipif(
-    not _pret_available(), reason="pret/pokeemerald checkout not present locally"
+    not _pret_available(), reason="pokeemerald not cloned: .cache/pret/pokeemerald"
 )
 
 
