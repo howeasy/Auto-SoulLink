@@ -1088,15 +1088,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_gs_a_result.txt",
-              "sha256": "8477c2437c348bd427055284e96156692eae78fb64b8ce4ce4473e8c2102eb20"
+              "sha256": "d5507980c1b1a7644dd33f8cfe03ee91d925b0755fcd10a789269159b88cf88f"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_gs_b_result.txt",
-              "sha256": "9695c541a4ca5400ea103ff41921b709bf24bdf4c72fb3739392682eb8b0be1c"
+              "sha256": "7f4228b73edd8cba5a9bc3db1939e6a235ec4e49067584780d05d06ec36bb4d6"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_poison_gs_pydec_result.txt",
-              "sha256": "44a8e7a51b7623efe98a18db2619b54a71ac974bebfbdf9d81a4d4724c44ce5f"
+              "sha256": "b1676f1703ff8bbd74efc65fdb94192849b682b3bd70839c2c2212b42d47fd89"
             }
           }
         },
