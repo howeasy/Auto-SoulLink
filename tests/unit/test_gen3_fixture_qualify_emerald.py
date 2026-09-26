@@ -57,6 +57,7 @@ FIXTURE_SHA256 = {
     "emerald_poison.sav": "c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0",
     "emerald_gift.sav": "7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552",
     "emerald_catch.sav": "592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0",
+    "emerald_catch_b.sav": "cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b",
 }
 
 

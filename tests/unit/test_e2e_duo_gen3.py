@@ -5116,6 +5116,24 @@ def test_emerald_admission_is_production_only():
     assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
 
 
+def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():
+    """RC risk: deadzone_gen3 on Emerald burned all three RNG retries because B ran out of the
+    plain "battle" fixture's 5 Poke Balls twice. Every ball_hunt scenario that lists gen3_emerald
+    must hunt on a fixture carrying >= 20 balls (the "catch" kind), and GAMES["gen3_emerald"]
+    ["hunt_area"] must name that target."""
+    row = duo.GAMES["gen3_emerald"]
+    ball_hunts = [(name, entry) for name, entry in duo.SCENARIOS.items()
+                  if entry.get("ball_hunt") and "gen3_emerald" in entry.get("games", ())]
+    assert ball_hunts, "no ball_hunt scenario lists gen3_emerald -- test is vacuous"
+    for name, entry in ball_hunts:
+        target = duo.scenario_target(entry, "gen3_emerald")
+        assert target in row["hunt_area"], f"{name}: hunt_area names no {target!r} target"
+        body = (REPO / f"tests/fixtures/gen3/emerald_{target}.sav").read_bytes()
+        balls = sum(qty for item, qty in gen3_fixtures.emerald_ball_pocket(body)
+                    if item == gen3_fixtures.ITEM_POKE_BALL)
+        assert balls >= 20, f"{name}: emerald_{target}.sav only carries {balls} balls"
+
+
 def test_emerald_row_resolves_pack_fixtures_and_layout():
     row = duo.GAMES["gen3_emerald"]
     assert row["game"] == "gen3_emerald" and duo.scenario_family("gen3_emerald") == "gen3_emerald"
@@ -5129,7 +5147,8 @@ def test_emerald_row_resolves_pack_fixtures_and_layout():
         assert duo.scenario_applies(name, "gen3_emerald"), name
         run = duo.DuoRun.__new__(duo.DuoRun)
         run.gcfg, run.cfg, run.game = dict(row), dict(duo.SCENARIOS[name]), "gen3_emerald"
-        assert run._hunt_area == {"battle": "route_102", "pc": "route_103"}[run._target_for("a")], name
+        assert run._hunt_area == \
+            {"battle": "route_102", "pc": "route_103", "catch": "route_102"}[run._target_for("a")], name
         for inst in ("a", "b"):
             assert run._gen3_title(inst) == "emerald"
             assert os.path.isfile(run._gen3_fixture_path(inst)), run._gen3_fixture_path(inst)
