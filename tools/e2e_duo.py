@@ -404,12 +404,23 @@ SCENARIOS = {
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
                            "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
                            "oracle": "assert_native_absent_gen3_saved"},
-    # G5 two-player evidence for the retired old-client infopanel row, rebuilt on the new client:
-    # the SOULLINK START-row panel on rr_town{,_b} (pre-Pokedex: the patch splices the row only
-    # into the 6-row menu); the oracle decodes the drawn bytes with the Python charmap.
+    # G5 two-player evidence for the retired old-client rows, rebuilt on the new client.
+    # trade / trade_decline: the companion's Pokemon-Center trade NPC; both boot rr_battle2{,_b}
+    # (slot 1 is the linked/traded mon); the oracle reads both flashes (PYDEC) + links.json.
+    # infopanel: the SOULLINK START-row panel; the oracle decodes the drawn bytes with the Python
+    # charmap. Both RR menu shapes: rr_town{,_b} (pre-Pokedex, 6 stock rows) and, as infopanel_dex,
+    # rr_battle2{,_b} (Pokedex owned, 7 stock rows; the shape the old count==6 splice skipped).
+    "trade_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",), "target": "battle2",
+                   "frames": 2500000, "oracle": "assert_trade_gen3_saved"},
+    "trade_decline_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",), "target": "battle2",
+                           "frames": 2500000, "scenario_module": "trade",
+                           "oracle": "assert_trade_decline_gen3_saved"},
     "infopanel_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr",), "target": "town",
                        "frames": 900000, "no_save": ("a", "b"),
                        "oracle": "assert_infopanel_gen3_saved"},
+    "infopanel_dex_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr",), "target": "battle2",
+                           "frames": 900000, "no_save": ("a", "b"), "scenario_module": "infopanel",
+                           "oracle": "assert_infopanel_dex_gen3_saved"},
     # RR rows R2/R3/R5 of rr_active_faint_parity_scope §5.5 (R1 = linked_faint_active_gen3 and
     # R4 = linked_faint_active_whiteout_gen3 on gen3_rr). R1/R2/R3 boot rr_battle2{,_b}.sav
     # (a second mon for the send-out, balls for R3's L-throw) and SKIP by name until it is built
@@ -2043,6 +2054,83 @@ def gen3_boxed(key):
 def gen3_returned(key):
     """The driver's cartridge read-back: `key` back in the party AND in no box."""
     return rf"(?m)^RETURNED_OBSERVED {re.escape(key)} slot=\d+"
+
+
+# What a trade must never change about the mon itself (pret struct BoxPokemon: identity, OT,
+# genome, name); level/experience/friendship may move on A's walk, so they are not compared.
+GEN3_TRADE_INVARIANT = ("personality", "ot_id", "ot_name", "species", "ivs", "nickname", "moves")
+
+
+def gen3_trade_problems(ka, kb, link_rows, saved, fixture, traded):
+    """trade_gen3 / trade_decline_gen3's saved state, from the flash images alone (PYDEC) and the
+    server's persisted links.json: `saved`/`fixture` map "a"/"b" -> (party, boxes) as gen3_decode
+    returns them. traded: each side's party is its fixture's with its linked key replaced, in
+    place, by the partner's -- the received record's invariant fields are the partner fixture's
+    -- and the one link row is re-keyed (a holds kb, b holds ka). Not traded: every party is its
+    fixture's and the row is unchanged. Either way each linked key exists exactly once across
+    both cartridges (parties and boxes), so nothing was duplicated or lost."""
+    problems = []
+    want = {ka, kb}
+    rows = [e for e in link_rows
+            if {(e.get("a") or {}).get("key"), (e.get("b") or {}).get("key")} == want]
+    if len(rows) != 1:
+        problems.append(f"links.json: expected one row over {sorted(want)}, got {len(rows)}")
+    else:
+        row = rows[0]
+        held = ((row.get("a") or {}).get("key"), (row.get("b") or {}).get("key"))
+        expect = (kb, ka) if traded else (ka, kb)
+        if held != expect or row.get("status") != "alive":
+            problems.append(f"links.json: row a/b = {held} {row.get('status')}, expected "
+                            f"{expect} alive")
+    counts = {ka: [], kb: []}
+    for inst, gives, gets, peer in (("a", ka, kb, "b"), ("b", kb, ka, "a")):
+        party, boxes = saved[inst]
+        keys = [gen3_key(m) for m in party]
+        f_keys = [gen3_key(m) for m in fixture[inst][0]]
+        expect = [gets if k == gives else k for k in f_keys] if traded else f_keys
+        if keys != expect:
+            problems.append(f"{inst}: saved party {keys}, expected {expect}")
+        for key in (ka, kb):
+            counts[key] += [f"{inst}:party"] * keys.count(key)
+            counts[key] += [f"{inst}:box{b}" for b, m in boxes.items() if gen3_key(m) == key]
+        if traded and gets in keys:
+            got = party[keys.index(gets)]
+            src = next((m for m in fixture[peer][0] if gen3_key(m) == gets), None)
+            if src is None:
+                problems.append(f"{inst}: {gets} is not in {peer}'s fixture party")
+            else:
+                diff = [f for f in GEN3_TRADE_INVARIANT if got.get(f) != src.get(f)]
+                if diff:
+                    problems.append(f"{inst}: received {gets} differs from {peer}'s record in {diff}")
+    for key, where in counts.items():
+        if len(where) != 1:
+            problems.append(f"{key} exists {len(where)}x across both saves: {where}")
+    return problems
+
+
+def gen3_trade_chain(inst, ka, kb, decline):
+    """(required, ordered, forbidden) receipt regexes for one side of the NPC trade. A trade must
+    run the native scene on BOTH sides (no silent swap)."""
+    tx = lambda ev, body="": rf"(?m)^TX {ev} - .*{body}"          # noqa: E731
+    rx = lambda cmd: rf"(?m)^RX {cmd}(?=\s|$)"                    # noqa: E731
+    if inst == "a":
+        chain = [r"(?m)^TALKED ", tx("trade_request"), rx("show_choices"), tx("menu_result", '"choice":0'),
+                 rx("choose_mon"), tx("mon_chosen", '"slot":1')]
+        if decline:
+            chain.append(r"(?m)^RX msgbox text=Your partner declined")
+    else:
+        chain = [rx("show_menu"), tx("menu_result", f'"choice":{0 if decline else 1}')]
+    if decline:
+        return chain, list(zip(chain, chain[1:], strict=False)), [rx("apply_trade"), tx("trade_done"),
+                                                     r"(?m)^TRADED "]
+    gets = kb if inst == "a" else ka
+    gives = ka if inst == "a" else kb
+    chain += [rx("apply_trade"), tx("trade_done", f'"new_key":"{re.escape(gets)}"'),
+              rf"(?m)^TRADED gave={re.escape(gives)} got={re.escape(gets)} "]
+    # each side ran the NATIVE scene (lua/gen3/client.lua trade_readback), never the silent-swap
+    # fallback the initiator used while the party chooser left its script waiting
+    native = rf"trade: native scene complete; trade_done {re.escape(gives)} -> {re.escape(gets)}"
+    return chain + [native], list(zip(chain, chain[1:], strict=False)), [r"silent swap"]
 
 
 def gen3_panel_text(raw: bytes) -> str:
@@ -6757,6 +6845,34 @@ class DuoRun:
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
 
+    def orchestrate_trade_gen3(self):
+        """The RR PC trade NPC, driven only by the two cartridges: link the slot-1 mons (server
+        staging), name each side's partner key, GO. A talks to the NPC and answers the server's
+        native menus, B answers the offer; nothing is injected after GO. Both save only once the
+        server has settled (re-keyed links.json, or a declined offer on both receipts)."""
+        self._gen3_prelude(link_slot=self.cfg.get("trade_slot", 1))
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        lines = self._gen3_linked_lines()
+        lines["a"].append(f"PARTNER {kb}")
+        lines["b"].append(f"PARTNER {ka}")
+        self.go(lines)
+        if self.scenario == "trade_decline_gen3":
+            self._gen3_mark("b", r"^DECLINED ", "B declined the offer")
+            for inst, key in (("a", ka), ("b", kb)):
+                self._gen3_mark(inst, rf"^KEPT {re.escape(key)} ", "kept its linked mon")
+        else:
+            self._gen3_mark("a", rf"^TRADED gave={re.escape(ka)} got={re.escape(kb)} ", "A traded")
+            self._gen3_mark("b", rf"^TRADED gave={re.escape(kb)} got={re.escape(ka)} ", "B traded")
+
+            def rekeyed():
+                return any((e.get("a") or {}).get("key") == kb and (e.get("b") or {}).get("key") == ka
+                           for e in self._links_json())
+            self.wait_for("links.json re-keyed by the server's commit", rekeyed, 120)
+        for inst in ("a", "b"):
+            self._append_reconnect_marker(inst, "SAVE")
+
+    orchestrate_trade_decline_gen3 = orchestrate_trade_gen3
+
     def orchestrate_infopanel_gen3(self):
         """Every slot pair both fixtures hold (up to two), linked only after A's receipt shows the
         RX tee is in place, so the link_panel the server sends next is the one A records and draws."""
@@ -6768,12 +6884,50 @@ class DuoRun:
         self._link_keys = {"a": ka[pairs - 1], "b": kb[pairs - 1]}
         self.go()
 
+    orchestrate_infopanel_dex_gen3 = orchestrate_infopanel_gen3
+
+    def _gen3_trade_facts(self, results, traded):
+        self._gen3_flush_boundary()
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        problems = gen3_trade_problems(
+            ka, kb, self._links_json(), {i: self._gen3_saved(i) for i in "ab"},
+            {i: self._gen3_fixture_saved(i) for i in "ab"}, traded)
+        decline = not traded
+        for inst in ("a", "b"):
+            required, ordered, forbidden = gen3_trade_chain(inst, ka, kb, decline)
+            problems += gen3_receipt_problems(inst, results[inst], required=required,
+                                              ordered=ordered, forbidden=forbidden)
+            if inst == "a" and len(re.findall(r"(?m)^TX trade_request ", results[inst])) != 1:
+                problems.append("a: expected exactly one trade_request")
+        if re.search(r"(?m)^TX trade_request ", results["b"]):
+            problems.append("b: sent a trade_request (it never talked to the NPC)")
+        if traded:
+            for inst, gets in (("a", kb), ("b", ka)):
+                got = next((m for m in self._gen3_saved(inst)[0] if gen3_key(m) == gets), None)
+                if got is not None:
+                    problems += gen3_record_problems(f"{inst}: the received {gets}", got,
+                                                     self._gen3_rr, self._gen3_limits(inst))
+        return ka, kb, problems
+
+    def assert_trade_gen3_saved(self, results):
+        ka, kb, problems = self._gen3_trade_facts(results, traded=True)
+        self._gen3_raise(problems, f"trade_gen3: NPC talk -> Trade -> slot 1 -> partner YES -> "
+                                   f"native scene both sides; saved a holds {kb}, b holds {ka} "
+                                   f"(partner records intact), links.json re-keyed, each key once")
+
+    def assert_trade_decline_gen3_saved(self, results):
+        ka, kb, problems = self._gen3_trade_facts(results, traded=False)
+        self._gen3_raise(problems, f"trade_decline_gen3: offer {ka} for {kb} declined with B; no "
+                                   f"apply_trade, both saves hold their fixture party, link unchanged")
+
     def assert_infopanel_gen3_saved(self, results):
         alive = sum(1 for e in self._links_json() if e.get("status") == "alive")
         problems = [f"a: {p}" for p in gen3_panel_problems(results["a"], alive)]
         problems += gen3_receipt_problems("b", results["b"], required=[r"(?m)^WRITES "])
         self._gen3_raise(problems, f"infopanel_gen3: START -> SOULLINK drew the server's "
                                    f"link_panel rows ({alive} pair(s)), A and B each close it")
+
+    assert_infopanel_dex_gen3_saved = assert_infopanel_gen3_saved
 
     def _gen3_identity(self) -> str:
         """G4 item 2a (1) + Codex REV-center-receipt-2: what this receipt ran on -- each side's ROM

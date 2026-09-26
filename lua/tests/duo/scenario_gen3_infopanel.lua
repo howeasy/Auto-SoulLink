@@ -10,10 +10,10 @@
 -- B. The oracle decodes the bytes with the Python charmap and compares them to the last
 -- PANEL_ROWS before the open (tools/e2e_duo.py gen3_panel_problems). B idles.
 --
--- Fixture: rr_town (one mon, NO Pokedex yet). handlers.c slink_setup_start_menu splices the
--- SOULLINK row only into the 6-row menu; once the Pokedex is owned the stock menu has 7 rows and
--- the row is never added (live on rr_battle2: count=7 order=0,1,2,3,4,5,6 -- a product finding,
--- reported, not worked around). Paging is not exercised: the START-row path always re-stages
+-- Fixtures: infopanel_gen3 boots rr_town (one mon, NO Pokedex: 6 stock rows), infopanel_dex_gen3
+-- rr_battle2 (Pokedex owned: 7 stock rows, which the old count==6 splice skipped -- fixed in
+-- handlers.c slink_setup_start_menu, gated by test_live_startmenu_shapes.lua). The row is found by
+-- its action id either way. Paging is not exercised: the START-row path always re-stages
 -- page 1 (lua/gen3/entry.lua panel_closed reports "closed" only, TODO C4-7).
 --
 -- Addresses: SlinkInfo is the pack's native.INFO (handlers.c:262, +0 enable +1 opened +2 drawn
