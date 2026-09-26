@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE (PHYSICAL), see ticket 29.** `patch/gen2/src` panel ASM, `tools/build_gen2_companion.py`, three `patch/dist/SLink-{Crystal,Gold,Silver}.ups`, `lua/gen2/panel.lua` all present. `tools/verify_gen2_release.py --lane live-gates` PASSES, including `panel_gate` rows for all three titles. The overlay artifacts themselves remain matrix `status: "BUILT"` / `selection: "FUTURE"`, not yet `ADMITTED` -- see ticket 29 (pending the owner's G4 signature).
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P4.1, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

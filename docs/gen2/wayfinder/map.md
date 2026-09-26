@@ -8,6 +8,16 @@ Reconciled 2026-09-22 from planning cut `9c7e7ac` against the latest owner rulin
 [PLAN §0](../PLAN.md#0-owner-decisions-already-taken-2026-09-21) and
 [REVIEW_RECORD](../REVIEW_RECORD.md#owner-rulings-chat-2026-09-21), which supersede older ticket text.
 
+**2026-09-26 status note:** this map is a HISTORICAL record of the 2026-09-21/22 planning and
+research phase. Every dependency this map once left open or unclaimed (P1 build/linker-map
+evidence, ticket 11; the mailbox allocation, ticket 14; P2 site pins, ticket 12) has since closed
+in implementation, current through P4: Gold/Silver/Crystal are all built, G1-ADMITTED, and carry
+committed PHYSICAL receipts (98/98 duo sweep cells at code digest `e8ca0067`, tag
+`gen2-rc-evidence-2026-09-25`). The one open item is the owner's G4 signature promoting the three
+overlay artifacts from `BUILT` to `ADMITTED` -- see [`docs/gen2/issues/29-p4-overlay-evidence.md`](../issues/29-p4-overlay-evidence.md)
+for the current, code-verified gap list. Read the individual answers below for the research they
+still hold; read `docs/gen2/issues/*.md` for current implementation status.
+
 ## Destination
 
 An owner-approved Gen 2 plan set under `docs/gen2/` (PLAN.md with gates requiring signatures, the
@@ -61,9 +71,10 @@ all gates remain unsigned. Planning/research resolution is not implementation or
 
 ## Not yet specified
 
-The prior coordinator closed all research lanes. Remaining work belongs to the signed-gate
-plan: P1 build/linker-map evidence, the unclaimed persistent-allocation dependency, P2 site
-pins, and later fixture/runtime qualification. These are not renewed research claims.
+The prior coordinator closed all research lanes. As of 2026-09-26, the P1 build/linker-map
+evidence, the persistent-allocation dependency and P2 site pins have all closed in
+implementation (see the 2026-09-26 status note above and `docs/gen2/issues/{04,09,11,12,14,26}*.md`).
+The remaining gap before G4 is the owner's overlay-admission signature (`docs/gen2/issues/29-p4-overlay-evidence.md`).
 UPR randomizer scope remains the recorded P6 owner question in PLAN §10; no new ruling is made here.
 
 ## Out of scope

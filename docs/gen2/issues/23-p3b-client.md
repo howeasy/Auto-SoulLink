@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE.** `lua/gen2/client.lua`, `lua/gen2/run.lua`, `server/adapters/gen2_gsc.py`, `tests/unit/test_gen2_{client,adapter}.py` present; `server/manager.py:73` already carries the `("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"])` family row.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P3b.6, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

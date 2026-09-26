@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE.** `tools/verify_gen2_release.py` is a full fail-closed runner bound to the shared `tools/release_lanes.py` core, with `unit`/`source-build`/`rom-layout`/`lua-parse`/per-title `*-generated`/`coverage-map`/`fixtures`/`patch-build`/`live-gates`/`live-trade-gates`/`duo-link`/`duo-pairs`/`release-evidence` lanes all registered (`--list`, run 2026-09-26). Current lane verdicts are recorded on ticket 29.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P2.7, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.
