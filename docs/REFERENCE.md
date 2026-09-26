@@ -6,8 +6,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 - **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, clean or companion-patched)
   and Emerald (pinned US dump) — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the
   frozen-cut gate passes FR/LG 43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`,
-  `G5_request_draft.md`); the owner's G4/G5 sign-off is pending, and Emerald's admission is prepared on an
-  unmerged branch pending owner sign-off (EG4, ruling 24). Only pinned cartridges are admitted, by ROM
+  `G5_request_draft.md`); the owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM
   hash (`lua/slink.lua`); randomized and other unpinned builds are refused by name.
 - **Gen 3** — the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
   the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`

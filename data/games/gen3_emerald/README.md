@@ -1,8 +1,7 @@
 # `gen3_emerald` pack
 
 Vanilla Pokémon Emerald (`BPEE` rev 0, sha1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7`).
-The JSON files are generated; do not hand-edit them. `admitted` is `true`: the EG4 flip
-(ruling 24) is prepared on branch `claude/gen3-emerald-eg4`, pending owner sign-off.
+The JSON files are generated; do not hand-edit them. `admitted` is `true` since EG4 (ruling 24).
 
 | File | Generator | Check |
 |---|---|---|

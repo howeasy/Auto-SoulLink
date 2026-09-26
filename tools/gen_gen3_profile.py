@@ -1243,7 +1243,7 @@ def build_emerald() -> dict:
                    "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
         "titles": {"emerald": {
             "_src": src,
-            "admitted": True,  # ruling 24: EG4 flip prepared on claude/gen3-emerald-eg4
+            "admitted": True,  # ruling 24: admitted at EG4
             "variant": "emerald",
             "rom_sha1": EMERALD_ROM_SHA1,
             "rom_thumb": _thumb_keys(sections["rom"]),

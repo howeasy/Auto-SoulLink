@@ -25,8 +25,7 @@ guessed one.
 Vanilla Emerald (E1-CHECKPOINT, docs/gen3_emerald/write_checkpoint.md) is generated from
 data/gen3/pret/pokeemerald.sym (pret/pokeemerald c65e93f2) the FR/LG way, as SOURCE facts only:
 it is generated outside PACKS (UNADMITTED_PACKS) because it is not FR-shaped, not because
-Entry.ROUTED still refuses it -- that flipped at EG4 (prepared on branch
-claude/gen3-emerald-eg4, pending owner sign-off), on lua/gen3/entry.lua's own Entry.PACKS, a
+Entry.ROUTED still refuses it -- that flipped at EG4, on lua/gen3/entry.lua's own Entry.PACKS, a
 different registry from this file's. pret publishes no pokeemerald.map, so the player
 controller's .text span comes from the .sym (sym_text_span).
 

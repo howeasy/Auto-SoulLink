@@ -293,7 +293,7 @@ SLink-RR/
 - **Never** place game-specific files in the root or in another game's directory
 
 *Gen 3 Lua (GBA — FireRed / LeafGreen / Radical Red):*
-- **`lua/slink.lua`** — Routes an admitted GBA cartridge through `Entry.admit` before the legacy game detector; FireRed, LeafGreen, Radical Red, and Emerald are admitted, while Archipelago-FRLG and unknown/header-only GBA builds are refused by name. (Emerald's admission is prepared on an unmerged branch, `claude/gen3-emerald-eg4`, pending owner sign-off at EG4.)
+- **`lua/slink.lua`** — Routes an admitted GBA cartridge through `Entry.admit` before the legacy game detector; FireRed, LeafGreen, Radical Red, and Emerald are admitted, while Archipelago-FRLG and unknown/header-only GBA builds are refused by name.
 - **`lua/slink_gen3.lua`** — Thin launcher wrapper that configures `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER`, then loads `slink.lua`; the admission and build graph stay in `lua/gen3/`.
 - **`lua/gen3/entry.lua`** — Composition root. It defines the `gen3_frlg` and `gen3_rr` packs, literal pack-file paths, hash/anchor/header admission, and `Entry.build(deps)`; injected `io`/`ev` tables keep the production graph independent of BizHawk globals.
 - **`lua/gen3/run.lua`** — BizHawk bootstrap. It supplies GBA memory/event adapters, the connector and HUD, calls `Entry.admit`, builds the production session, and drives guarded frame/exit callbacks.
@@ -336,7 +336,7 @@ SLink-RR/
 - **`server/obs_controller.py`** — `OBSController`: per-player `simpleobsws` WebSocket connections (obs-websocket v5, port 4455), per-player coalescing `asyncio.Queue` + worker tasks, reconnect loop with exponential backoff (5 s → 60 s cap). `submit_fired(fired_list)` priority-resolves a list of `(event_name, src_player, metadata)` tuples in one pass — iterates rules in list order, first match per target player wins. Config persisted at `data/obs_config.json` (global, not per-run). Passwords never returned in GET responses.
 - **`server/pokemon_data.py`** — Shared Pokémon data module: `SPECIES_NAMES`, `GENDER_RATIO`, `gender_from_key_species()`, `EVO_FAMILY` (Gen I–IX evolution families including CFRU/RR extended IDs), `base_form()`.
 - **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter + GamePresentationAdapter. All game-specific server logic flows through adapter interfaces. 0.2.6 added `gift_link_area`, `rival_trainer_ids` (rules) and `trainers_for_area` / `trainer_party` / `trainer_brief` (presentation) as inert-default stubs.
-- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. Legacy Emerald gift-area entries remain server-side compatibility data; the launcher admits FireRed, LeafGreen, Radical Red, and (pending owner sign-off at EG4, unmerged branch `claude/gen3-emerald-eg4`) Emerald. RR overrides `rival_trainer_ids()` (27 "Terry" IDs), the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief` / `milestone_cap_for_fight_label`) from `rr_priority_trainers.json`, and `gift_link_area`.
+- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. Legacy Emerald gift-area entries remain server-side compatibility data; the launcher admits FireRed, LeafGreen, Radical Red, and Emerald. RR overrides `rival_trainer_ids()` (27 "Terry" IDs), the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief` / `milestone_cap_for_fight_label`) from `rr_priority_trainers.json`, and `gift_link_area`.
 - **`server/adapters/gen2_gsc.py`** — `Gen2GSCAdapter`, Gen 2 adapter: DV-based gender/shiny, 251 sequential species (NatDex 1-251), 17 types (Dark+Steel added), per-title item names, PokeAPI sprites. Data from `data/games/gen2_<title>/` (Crystal, Gold, Silver).
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 adapter: PID:OTID key format, HGSS gift areas, Gen 1-4 species (NatDex 1-493).
 - **`server/adapters/gen5_bw.py`** — Gen 5 adapter: PID:OTID key format, BW/BW2 gift areas, Gen 1-5 species (NatDex 1-649).
@@ -388,7 +388,7 @@ Each game family has its own adapter module:
 - **`server/adapters/gen1_rby.py`** — Gen 1 (Red, Blue, Yellow, + Archipelago Red/Blue)
 - **`server/adapters/gen1_purergb.py`** — Gen 1 pureRGB (PureRed, PureBlue, PureGreen — a second Gen 1 foundation, not a vanilla variant)
 - **`server/adapters/gen2_gsc.py`** — Gen 2 (Crystal, Gold, Silver)
-- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. The Lua launcher admits FireRed, LeafGreen, Radical Red, and Emerald (Emerald pending owner sign-off at EG4, unmerged branch `claude/gen3-emerald-eg4`); Archipelago-FRLG is refused before the adapter is used.
+- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. The Lua launcher admits FireRed, LeafGreen, Radical Red, and Emerald; Archipelago-FRLG is refused before the adapter is used.
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 (HeartGold, SoulSilver, Platinum)
 - **`server/adapters/gen5_bw.py`** — Gen 5 (Black, White, Black 2, White 2)
 
@@ -825,7 +825,7 @@ All multi-byte values are little-endian. FRLG record geometry is verified agains
 
 ### Admission and ROM identification
 
-`lua/gen3/entry.lua` is hash-first: `gameinfo.getromhash()` is matched against the packs' admission data, then the engine-site anchors, then a header-named fallback. The launcher accepts `gen3_frlg` (FireRed/LeafGreen), `gen3_rr` (Radical Red), and `gen3_emerald` (Emerald; pending owner sign-off at EG4, unmerged branch `claude/gen3-emerald-eg4`). Archipelago-FRLG, unknown hacks, and a header-only BPRE/BPGE/BPEE match are refused by name. There is no pure-Lua ROM rehash; the anchor pass is the byte-level proof. Missing or mismatched pack data fails before hooks or writes are armed.
+`lua/gen3/entry.lua` is hash-first: `gameinfo.getromhash()` is matched against the packs' admission data, then the engine-site anchors, then a header-named fallback. The launcher accepts `gen3_frlg` (FireRed/LeafGreen), `gen3_rr` (Radical Red), and `gen3_emerald` (Emerald). Archipelago-FRLG, unknown hacks, and a header-only BPRE/BPGE/BPEE match are refused by name. There is no pure-Lua ROM rehash; the anchor pass is the byte-level proof. Missing or mismatched pack data fails before hooks or writes are armed.
 
 ### Stable EWRAM globals (FireRed US 1.0)
 
@@ -1050,7 +1050,7 @@ Gen 3 does not use a single `not in_battle` test for writes. `lua/gen3/safety.lu
 - **`native`**: companion signature/ABI and mailbox-idle checks; clean FRLG/RR artifacts have no native block and cannot arm native writes.
 - **`sound`** (when enabled): the pack's sound block and initialized m4a state.
 
-An unknown reason, missing anchor, failed predicate, or unreadable input returns a refusal. The client holds the deferred command; it never falls back to a direct RAM poke. Archipelago FRLG is refused during admission, so its former AP-specific battle branches are not part of the active client. Emerald is admitted (pending owner sign-off at EG4, unmerged branch `claude/gen3-emerald-eg4`) and reads its title facts from the `gen3_emerald` pack, not FR literals.
+An unknown reason, missing anchor, failed predicate, or unreadable input returns a refusal. The client holds the deferred command; it never falls back to a direct RAM poke. Archipelago FRLG is refused during admission, so its former AP-specific battle branches are not part of the active client. Emerald is admitted and reads its title facts from the `gen3_emerald` pack, not FR literals.
 
 ---
 
@@ -1179,7 +1179,7 @@ The numbered `lua/tests/test_1_memory.lua` … `test_5_soullink.lua` scripts are
 - **Party compaction**: Deposit/withdraw/memorial plans update the profile-derived party count and records atomically through `boxes.lua`; do not hardcode `0x02024029` in a new client path.
 - **SaveBlock ASLR**: The pointer addresses and relocation bounds come from the active pack/checkpoint. `reads.lua` dereferences them on each call; never cache or hardcode the live target.
 - **Nuzlocke gate is in Lua**: The server trusts that the client will not send `no_catch` before its decoded ball count is positive. The server's own faint-related gate remains `pokeballs_obtained`.
-- **Admission is fail-closed**: `Entry.admit` admits only pinned FireRed, LeafGreen, Radical Red, and Emerald artifacts (Emerald pending owner sign-off at EG4, unmerged branch `claude/gen3-emerald-eg4`); Archipelago-FRLG is refused before the client graph is built.
+- **Admission is fail-closed**: `Entry.admit` admits only pinned FireRed, LeafGreen, Radical Red, and Emerald artifacts; Archipelago-FRLG is refused before the client graph is built.
 - **Profile-driven reads**: FRLG and Radical Red share the composition root but differ in pack data and record rules. Do not add a title branch or a client-side address database.
 - **Borrowed-party battles (Radical Red)**: At `battle_begin`, the client snapshots the known party keys. If the live party has no overlap with that baseline, the reducer freezes party learning and omits party data from ticks until the own party returns; queued battle writes remain held.
 - **Persistent run metadata**: `rom_type` and `trainer_names` in `SoulLinkState` are set-once — committed on first hello, never overwritten. Read by `_page_title()`, `_is_rr`, and `trainer_name` dict seeding.

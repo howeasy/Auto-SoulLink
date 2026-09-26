@@ -6,7 +6,7 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 
 | Gen | Games | ROM Variants | Status |
 |-----|-------|-------------|--------|
-| 3 | FireRed, LeafGreen, Emerald | The pinned US 1.0 dumps, Radical Red 4.1 (CFRU, clean or with the SLink companion patch) and the pinned Emerald US dump, admitted by ROM hash; randomized carts and other unpinned builds are refused by name | 🟡 **Release candidate** — the frozen-cut gate passes FR/LG 43/43 and Radical Red 19/19 on real cartridges; owner sign-off (G4/G5) pending; Emerald admission is prepared on an unmerged branch pending owner sign-off (EG4) |
+| 3 | FireRed, LeafGreen, Emerald | The pinned US 1.0 dumps, Radical Red 4.1 (CFRU, clean or with the SLink companion patch) and the pinned Emerald US dump, admitted by ROM hash; randomized carts and other unpinned builds are refused by name | 🟡 **Release candidate** — the frozen-cut gate passes FR/LG 43/43 and Radical Red 19/19 on real cartridges; owner sign-off (G4/G5) pending |
 | 3 | Archipelago FireRed/LeafGreen | — | ❌ Not supported — it ran only on the old Gen 3 client, archived at tag `archive/gen3-old-client`; the launcher refuses it by name until it is ported to `lua/gen3/` |
 | 1 | Red, Blue, Yellow | US English | ⚠️ Partially verified — mechanisms proven on real cartridges, no full playthrough |
 | 1 | PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6) | The pinned build only (admitted by ROM sha1); optional SLink companion overlay; randomized pairs via the SLink fork of UPR ZX | ⚠️ Same evidence bar as Red/Blue — the same duo harness runs on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing (`docs/purergb/PLAN.md` §13.1) |
