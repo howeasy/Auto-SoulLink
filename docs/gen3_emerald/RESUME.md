@@ -5,6 +5,41 @@ Read this first after a pause or compaction. The plan is `docs/gen3_emerald/PLAN
 `E:/Google Drive/SLink/.claude/worktrees/gen3-emerald`. It is local only: not pushed or merged. Its
 base is Gen 3 `5f050857`.
 
+## CHECKPOINT 4 (2026-09-26 ~12:20Z, at the EG3 gate): resume here
+
+- **E3 is done**, and the **EG3 request** (`docs/gen3_emerald/EG3_request.md`, cut `ef99d9b8`,
+  commit `b3a29b98`) is waiting for the owner. Do NOT record EG3 as signed without an explicit
+  owner yes (see memory feedback_gate_signatures_explicit).
+- **E3 commits:**
+  - `752cf2e5`: pack-driven client constants.
+  - `bc2b6967`: Emerald foundation + title data.
+  - `3b3ac9b5`: gifts and statics link via named areas, restart/rollback keep the title adapter,
+    import guard, conformance World rows on Emerald.
+  - `939dae5c`: protocol.md citation remap.
+  - `ef99d9b8`: codec title refusals (the EG1 carry cx-73b96095 M5-M8/M11).
+- **Evidence:**
+  - unit suite without Gen 2: 7732 passed (environment-only Gen 1/Gen 2 failures);
+  - FR/LG/RR regression duos PASS (`probes/duo_e3_regression_2026-09-26.txt`,
+    `probes/duo_e3_final_2026-09-26.txt`);
+  - slink-adapter-guard CLEAN on both shared hunks;
+  - OMP reviews: every finding verified or queued.
+- **Pending at the pause:** OMP cx-6ecf4fc8 (the final E3 diff review). Verify its findings on
+  resume; the EG3 request names it as pending.
+- **NEXT after EG3:** E4, the Emerald duos. Steps:
+  - `tools/e2e_duo.py` gains a gen3_emerald row, with per-pack profile/decode instead of the
+    `GEN3_PROFILE` constants.
+  - Re-pin P+H on Emerald hardware (the commit value 4 is now pack-driven).
+  - Emerald fixtures for the seven duo scenarios.
+  - Then E4b (the final-cut runner) and EG4 (admission, ROUTED, the Manager flag).
+  - The duos need a test-only admission path, or EG4 first. Decide at E4 start, following
+    E3's tmp-admitted-copy precedent.
+- **Before master:**
+  - batch with the Gen 2 lane (server/** makes their receipts stale);
+  - tell Gen 3 that the FR/LG/RR write_checkpoint hashes moved.
+- **pret in scratch worktrees:** pret tests skip silently under `C:/slink-wt/*`. Workers there
+  need the junction `.cache/pret -> E:/Google Drive/SLink/.cache/pret` (em-legs and em-fx have
+  it).
+
 ## CHECKPOINT 3 (2026-09-26 ~11:20Z, after 2 more hours; E3 in progress): resume here
 
 - **EG2 SIGNED** by the owner (confirmed in chat). E3 started. Master `1d02702f` is merged in
