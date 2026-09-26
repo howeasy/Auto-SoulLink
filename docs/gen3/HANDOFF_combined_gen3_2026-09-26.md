@@ -22,6 +22,25 @@ RR half. The Emerald half is `docs/gen3_emerald/HANDOFF_combined_gen3_2026-09-26
   landing and ping "Gen 2 Boogaloo" before it. On 2026-09-26 the owner said "skip testing" to
   Gen 2, whose receipts read stale until he asks for a sweep.
 
+## 0a. BLOCKERS before any landing: Codex FRLG adversarial review cx-42eabc05, VERDICT REJECT (arrived at wrap-up, 17:48)
+
+The coordinator verified findings 1 and 2 in code. Fix each red-first before the combined landing. They were NOT fixed this block (wrap-up rule).
+1. **BLOCKER, refusal bypass.** `server/adapters/gen3_frlge.py` `refused_rom_content` swallows every non-`ForbiddenRomTables` exception as `""`, and `server/server.py` `_decide_admission` (no-contract branch) skips the hook when `rom_content` is missing or empty.
+   - Reproduced: `FireRed_widest.gba` with a zeroed transport fingerprint, or an empty or missing report, is ADMITTED.
+   - Fix: for a declared `rand` Gen 3 hello, missing, unparseable or undecodable rule data must REFUSE. Other foundations keep the no-op default.
+2. **BLOCKER, ability normalisation erases a real change.** `_species_rules_digest` applies `row[23] or row[22]` on BOTH sides, so a clean `[26,26]` → `[26,0]` (Vibrava losing Levitate) digests as equal and is even paired clean.
+   - Per pret `src/pokemon.c:3791-3798` there's no fallback at abilityNum 1.
+   - Fix: normalise 0 → first ONLY where the PINNED clean slot is 0.
+   - The same class may apply to the R3 pipeline's `_gen3_species_rules`. Check it too.
+3. SHOULD-FIX: transport sha1 validation. Regions must be strictly ascending, unique and non-overlapping BEFORE the dict. Today reversed or duplicate regions are accepted. Also decide a policy on extra unreferenced regions.
+4. SHOULD-FIX: learnsets are per title. `tools/gen_gen3_trainers.py` parses raw C without the FR/LG `#if` branches: Deoxys is LG's, and Dugtrio merges both.
+   - Measured against the ROMs: 86 FR and 20 LG mismatches.
+   - Generate per-title learnsets and project them with the PAYLOAD's title, not the run adapter's.
+5. SHOULD-FIX: default moves assume unrandomized learnsets, but `gLevelUpLearnsets` isn't shipped or verified. An edited learnset gives a byte-identical payload with wrong displayed moves. Ship and verify it, or don't display default moves for rand.
+6. SHOULD-FIX: a rand reconnect with `rom_content={}` or omitted keeps the previous cartridge's tables. Refuse it, or clear them.
+7. LANDING NOTE: the `a53f942a` census without the T3 `f4ec8c85` stamp gives `key_change_rejected reason 'box census unavailable'` on FR/LG and RR. It is intended fail-closed behaviour; land them atomically.
+The review also verified the `default_moves` algorithm (82,400 cases, zero mismatches with title-correct learnsets), found no partner-table leak, and confirmed the Gen 1/2 refusal hooks are unchanged.
+
 ## 1. Branch and worktree
 
 - Worktree `E:/Google Drive/SLink/.claude/worktrees/gen3-migration-planning-5d8e45`, branch
