@@ -172,7 +172,7 @@ function Client.new(p)
         commanded = {},    -- keys WE zeroed: their faint is not reported (old client force_fainted_keys)
         party_prev = {},   -- key -> { slot, level, max_hp } at the last settle (PC diff baseline)
         carried = {},      -- keys that left the party into the PC cursor, not yet placed
-        box_cache = {}, boxes_ok = false,
+        box_cache = {}, boxes_ok = false, box_generation = 0,
         battle = nil,      -- battle_begin .. battle_end lifecycle
         frozen = false,    -- a borrowed party is in RAM
         flags = {},        -- what the signals of this frame said changed
@@ -299,9 +299,12 @@ function Client.new(p)
             end
         end
         st.box_cache, st.boxes_ok = cache, ok
+        if ok then st.box_generation = st.box_generation + 1 end
         return cache
     end
+    local function box_generation() return st.boxes_ok and st.box_generation or nil end
     local function pc_boxes_wire()
+        if not st.boxes_ok then return nil end
         local out = arr({})
         for _, e in ipairs(st.box_cache) do
             out[#out + 1] = { box = e.box, slot = e.slot, key = e.key, species_id = e.species_id,
@@ -971,6 +974,7 @@ function Client.new(p)
         st.last_area = area_id .. "|" .. loc
         local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind,
                     rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
+                    pc_boxes_generation = box_generation(),
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
                     in_battle = in_battle(), badges = badges(), ball_count = ball_count() }
         if session_nonce then
@@ -984,7 +988,7 @@ function Client.new(p)
         if native and native.hello_fields then
             for k, v in pairs(native:hello_fields() or {}) do f[k] = v end
         end
-        if trade and trade:hide_party() then f.pc_boxes = nil end
+        if trade and trade:hide_party() then f.pc_boxes, f.pc_boxes_generation = nil, nil end
         f.trade_prepare = trade ~= nil and trade:capable() == true
         return f
     end
@@ -1003,7 +1007,9 @@ function Client.new(p)
                     trainer_id = b and b.is_trainer and num(b.trainer_id) or nil,
                     enemy_party = enemy_wire(b), ball_count = n, badges = badges() }
         if not st.frozen and not (trade and trade:hide_party()) then f.party = party_wire(party) end
-        if st.boxes_ok and not (trade and trade:hide_party()) then f.pc_boxes = pc_boxes_wire() end
+        if st.boxes_ok and not (trade and trade:hide_party()) then
+            f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), st.box_generation
+        end
         local t = trainer()
         if t then f.trainer_name = t.name end
         return f
