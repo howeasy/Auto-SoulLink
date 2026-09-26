@@ -1,0 +1,20 @@
+# gen3_final_cut row=states_firered_town item=§1.1_build cut=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/mkstates_gen3.py --title firered --kind town --out-dir 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/firered' --rom 'patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba'   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T10:09:18 cpu=60% emuhawk=2 python=6
+start_utc=2026-09-25T14:09:17Z tracked_clean_before=True
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_fixture_runs\mkstates_firered_town\Pokemon - FireRed Version (USA).SaveRAM from E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\tests\fixtures\gen3\firered_party_town.sav; states -> E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_probe_states_c4p2\firered
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3.ini --lua=lua/tests/mkstates_gen3.lua patch/build/gen3_gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] mkstates_gen3: RESULT: PASS town states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/firered  (6s)
+phase start frame=1 title=firered kind=town dir=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/firered
+phase field frame=778 map=(3,1)
+phase settled frame=1087
+phase state-saved frame=1117 slink_overworld.State at 3.1 (24,39), want 3.1 (24,39)
+phase state-saved frame=1611 slink_door.State at 3.1 (26,27), want 3.1 (26,27)
+phase state-saved frame=2171 slink_script.State at 3.1 (20,13), want 3.1 (20,13)
+RESULT: PASS town states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/firered
+exit=0 end_utc=2026-09-25T14:09:25Z tracked_clean_after=True classification=pass

@@ -1,0 +1,585 @@
+{
+  "radical_red": {
+    "anchors": {
+      "cb1_overworld": {
+        "address": 134571316,
+        "expected_hex": {
+          "clean": "10B5094C61680948814217D1BCF0B4FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047",
+          "companion": "10B5094C61680948814217D1BCF0B4FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
+        },
+        "length": 66,
+        "rom_offset": 353588,
+        "symbol": "CB1_Overworld"
+      },
+      "cb2_overworld": {
+        "address": 134571444,
+        "expected_hex": {
+          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302",
+          "companion": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
+        },
+        "length": 44,
+        "rom_offset": 353716,
+        "symbol": "CB2_Overworld"
+      },
+      "frame_control": {
+        "address": 134219024,
+        "expected_hex": {
+          "clean": "C046C046C046C046",
+          "companion": "78F329FDC046C046"
+        },
+        "length": 8,
+        "rom_offset": 1306,
+        "symbol": "CallCallbacks"
+      },
+      "run_tasks": {
+        "address": 134706552,
+        "expected_hex": {
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF10BFBA079FF28F5D130BC01BC0047000090500003",
+          "companion": "30B500F015F80006000E10280AD0074D84002418E400641921686CF10BFBA079FF28F5D130BC01BC0047000090500003"
+        },
+        "length": 48,
+        "rom_offset": 488824,
+        "symbol": "RunTasks"
+      },
+      "saveblocks_setter": {
+        "address": 134529112,
+        "expected_hex": {
+          "clean": "30B50C4C2568F8F733FF002100210A4A0A48081810600A4808182060094A0A48091811604DF0E2FE281CC4F0DDFB30BC01BC0047085000030C500003884502022C5502021050000314930202",
+          "companion": "30B50C4C2568F8F733FF002100210A4A0A48081810600A4808182060094A0A48091811604DF0E2FE281CC4F0DDFB30BC01BC0047085000030C500003884502022C5502021050000314930202"
+        },
+        "length": 76,
+        "rom_offset": 311384,
+        "symbol": "SetSaveBlocksPointers"
+      },
+      "try_saving_data": {
+        "address": 135111524,
+        "expected_hex": {
+          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BDFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003",
+          "companion": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BDFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
+        },
+        "length": 72,
+        "rom_offset": 893796,
+        "symbol": "TrySavingData"
+      }
+    },
+    "battle": {
+      "clauses": [
+        {
+          "address": 50352004,
+          "compare": "eq_rom",
+          "expect": 134299713,
+          "expect_symbol": "HANDLE_TURN_ACTION_SELECTION_ADDR",
+          "name": "battle_main_func",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_MAIN_FUNC_ADDR + profile.rom.HANDLE_TURN_ACTION_SELECTION_ADDR (CFRU code pin)",
+          "symbol": "BATTLE_MAIN_FUNC_ADDR",
+          "width": 4
+        },
+        {
+          "address": 33701506,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_comm_0",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_COMM_ADDR (old client production path)",
+          "symbol": "BATTLE_COMM_ADDR",
+          "width": 1
+        },
+        {
+          "address": 33700808,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_exec_flags_input",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_CONTROLLER_EXEC_FLAGS_ADDR; rom:patch/build/slink_RR.gba sha1=ea5352f8a3b9073f8ae20870ad12857925d442cd controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; OR/STR@0x17266..0x1726A,0x17284..0x1728A; controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204",
+          "symbol": "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR",
+          "width": 4
+        },
+        {
+          "address": 50352096,
+          "compare": "eq",
+          "expect": 134407225,
+          "name": "battle_input_controller",
+          "offset": 0,
+          "source": "rom:HandleChooseActionAfterDma3 @ 0x08032B94 (FR-identical in every RR ROM): address LDR@0x08032BAC, value LDR@0x08032BB6",
+          "symbol": "gBattlerControllerFuncs",
+          "width": 4
+        },
+        {
+          "address": 33696588,
+          "compare": "eq",
+          "expect": 0,
+          "mask": 2,
+          "name": "battle_not_link",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_TYPE_ADDR (old client production path)",
+          "symbol": "BATTLE_TYPE_ADDR",
+          "width": 4
+        },
+        {
+          "address": 33700836,
+          "compare": "nonzero",
+          "name": "battle_engine_loaded",
+          "offset": 44,
+          "source": "profile.ram.BATTLE_MONS_ADDR (old client production path)",
+          "symbol": "BATTLE_MONS_ADDR",
+          "width": 2
+        },
+        {
+          "address": 33701514,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_outcome_open",
+          "offset": 0,
+          "source": "profile.ram.BATTLE_OUTCOME_ADDR (old client production path)",
+          "symbol": "BATTLE_OUTCOME_ADDR",
+          "width": 1
+        }
+      ],
+      "commit_guard": {
+        "address": 33701506,
+        "compare": "lt",
+        "indexed_by": "battler",
+        "offset": 0,
+        "source": "profile.ram.BATTLE_COMM_ADDR (old client production path)",
+        "symbol": "BATTLE_COMM_ADDR",
+        "value": 3,
+        "width": 1
+      },
+      "commit_hold": "battle_commit held on RR: CFRU's parked controller stays live after the commit (L-throw RemoveBagItem 0x090AA114) unless the plan ends in the battle.handoff tail",
+      "handoff": {
+        "address": 50352096,
+        "explode": {
+          "head": [
+            {
+              "address": 33700848,
+              "group": "moves",
+              "name": "move_0",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700872,
+              "group": "moves",
+              "name": "pp_0",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700850,
+              "group": "moves",
+              "name": "move_1",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700873,
+              "group": "moves",
+              "name": "pp_1",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700852,
+              "group": "moves",
+              "name": "move_2",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700874,
+              "group": "moves",
+              "name": "pp_2",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700854,
+              "group": "moves",
+              "name": "move_3",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700875,
+              "group": "moves",
+              "name": "pp_3",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33701244,
+              "name": "chosen_action",
+              "value": 0,
+              "width": 1
+            },
+            {
+              "address": 33701316,
+              "name": "chosen_move",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "name": "chosen_move_position",
+              "offset": 128,
+              "ptr": 33701864,
+              "value": 0,
+              "width": 1
+            },
+            {
+              "name": "move_target",
+              "offset": 12,
+              "ptr": 33701864,
+              "value": 1,
+              "width": 1
+            }
+          ],
+          "source": "client.lua commit_plan rows, battler 0; profile.ram BATTLE_MONS/CHOSEN_ACTION/CHOSEN_MOVE/BATTLE_STRUCT_PTR + derived BATTLE_STRUCT_*_OFF; Explosion effect EFFECT_EXPLOSION and PP 5 read from rom.BATTLE_MOVES_ADDR in every RR ROM; constants archive/gen3-old-client:lua/memory_gba.lua:1318-1345"
+        },
+        "head": [
+          {
+            "address": 33701372,
+            "name": "perish_status",
+            "set": 32,
+            "width": 4
+          },
+          {
+            "address": 33701403,
+            "keep": 240,
+            "name": "perish_timer",
+            "width": 1
+          },
+          {
+            "address": 33701244,
+            "name": "no_op_action",
+            "value": 13,
+            "width": 1
+          }
+        ],
+        "source": "rom: slot = the battle_input_controller pin (LDR@0x08032BAC, HandleChooseActionAfterDma3, FR-identical); value LDR@0x090A9EFE (the PlayerBufferExecCompleted call every CFRU action-menu commit makes) == pokefirered.sym PlayerBufferExecCompleted|1; PlayerBufferExecCompleted prefix +0..+0xF and pool +0x40..+0x47 FR-identical",
+        "stride": 4,
+        "symbol": "gBattlerControllerFuncs",
+        "value": 134406973,
+        "value_symbol": "PlayerBufferExecCompleted",
+        "width": 4
+      },
+      "version": "gen3-battle-v1"
+    },
+    "cpu": {
+      "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
+      "irq_entry": {
+        "bios_sha1": "d0418465f8783dc6cbb180a16808fc9d3a7bae1d",
+        "evidence": "docs/gen3/probes/rr_cpu_irq_bios_2026-09-24.txt",
+        "lr_max": 452,
+        "lr_min": 440,
+        "mode": 18,
+        "pc": [
+          28
+        ],
+        "thumb": 0
+      },
+      "mode": 31,
+      "observed_pc": 452,
+      "pc_max": 16383,
+      "pc_min": 0,
+      "thumb": 0
+    },
+    "native": {
+      "abi": 1,
+      "abi_off": 4,
+      "base": 33814528,
+      "busy": 1,
+      "info": 33815876,
+      "info_ack_off": 2,
+      "info_drawn_off": 1,
+      "opcode_off": 6,
+      "sig": 1263422547,
+      "source": "profile.native + patch/src/ADDRESSES.md:59-77",
+      "spans": [
+        {
+          "key": "BASE",
+          "size": 64,
+          "start": 33814528,
+          "what": "mailbox ABI v1"
+        },
+        {
+          "key": "SW",
+          "size": 8,
+          "start": 33814592,
+          "what": "SwapState"
+        },
+        {
+          "key": "GH",
+          "size": 44,
+          "start": 33814608,
+          "what": "GhostState"
+        },
+        {
+          "key": "CALC_OFF",
+          "size": 1,
+          "start": 33814744,
+          "what": "SLINK_CALC_OFF"
+        },
+        {
+          "key": "TEXT_BUF",
+          "size": 256,
+          "start": 33814784,
+          "what": "SLINK_TEXT_BUF"
+        },
+        {
+          "key": "BLOB_BUF",
+          "size": 600,
+          "start": 33815040,
+          "what": "SLINK_BLOB_BUF"
+        },
+        {
+          "key": "MENU_BUF",
+          "size": 112,
+          "start": 33815696,
+          "what": "SLINK_MENU_BUF"
+        },
+        {
+          "key": "BATTLE_NOTIF",
+          "size": 8,
+          "start": 33815808,
+          "what": "BattleNotif"
+        },
+        {
+          "key": "GHOST_PAL_BUF",
+          "size": 32,
+          "start": 33815648,
+          "what": "GHOST_PAL_BUF"
+        },
+        {
+          "key": "EVR",
+          "size": 52,
+          "start": 33815824,
+          "what": "EvRing"
+        },
+        {
+          "key": "INFO",
+          "size": 264,
+          "start": 33815876,
+          "what": "SlinkInfo"
+        }
+      ],
+      "status_off": 10,
+      "version": "gen3-native-v1"
+    },
+    "pointers": {
+      "gPokemonStoragePtr": {
+        "address": 50352144,
+        "source": "rom:SetSaveBlocksPointers pool"
+      },
+      "gSaveBlock1Ptr": {
+        "address": 50352136,
+        "source": "rom:SetSaveBlocksPointers pool"
+      },
+      "gSaveBlock2Ptr": {
+        "address": 50352140,
+        "source": "rom:SetSaveBlocksPointers pool"
+      },
+      "pokemon_storage_base": {
+        "address": 33723156,
+        "source": "profile.ram.POKEMON_STORAGE_BASE"
+      }
+    },
+    "predicates": {
+      "callback1": {
+        "address": 50344176,
+        "expect": 134571317,
+        "expect_symbol": "CB1_Overworld",
+        "offset": 0,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "callback2": {
+        "address": 50344176,
+        "expect": 134571445,
+        "expect_symbol": "CB2_Overworld",
+        "offset": 4,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "field_controls_locked": {
+        "address": 50335644,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLockFieldControls",
+        "width": 1
+      },
+      "in_battle": {
+        "address": 50344176,
+        "expect": 0,
+        "mask": 2,
+        "offset": 1081,
+        "symbol": "gMain",
+        "width": 1
+      },
+      "link_callback": {
+        "address": 33695512,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLinkOpen",
+        "width": 1
+      },
+      "link_players_received": {
+        "address": 50347876,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gReceivedRemoteLinkPlayers",
+        "width": 1
+      },
+      "link_transferring": {
+        "address": 50344164,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gLinkTransferringData",
+        "width": 1
+      },
+      "palette_fade_active": {
+        "address": 33782456,
+        "expect": 0,
+        "mask": 128,
+        "offset": 7,
+        "symbol": "gPaletteFade",
+        "width": 1
+      },
+      "script_context_status": {
+        "address": 50335400,
+        "expect": 2,
+        "offset": 0,
+        "symbol": "sGlobalScriptContextStatus",
+        "width": 1
+      },
+      "soft_reset_disabled": {
+        "address": 50345264,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gSoftResetDisabled",
+        "width": 1
+      }
+    },
+    "sound": {
+      "fields": [
+        {
+          "name": "songHeader",
+          "offset": 0,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "status",
+          "offset": 4,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "trackCount",
+          "offset": 8,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "priority",
+          "offset": 9,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "clock",
+          "offset": 12,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "tracks",
+          "offset": 44,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "ident",
+          "offset": 52,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "flags",
+          "offset": 0,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "bendRange",
+          "offset": 15,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "volX",
+          "offset": 19,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "lfoSpeed",
+          "offset": 25,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "chan",
+          "offset": 32,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "cmdPtr",
+          "offset": 64,
+          "on": "track",
+          "size": 4
+        }
+      ],
+      "ident_magic": 1752395091,
+      "ident_off": 52,
+      "iwram_max": 50364416,
+      "iwram_min": 50331648,
+      "player_head_off": 36,
+      "player_next_off": 60,
+      "source": "old client archive/gen3-old-client:lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)",
+      "track0_off": 0,
+      "tracks_off": 44,
+      "version": "gen3-sound-v1"
+    },
+    "sym": "pokefirered.sym",
+    "tasks": {
+      "address": 50352272,
+      "allowed_overworld_tasks": {
+        "Task_InitUnionRoom": 135371260,
+        "Task_RunPerStepCallback": 134670352,
+        "Task_RunTimeBasedEvents": 134670396,
+        "Task_SearchForChildOrParent": 135372084,
+        "Task_UnionRoomListen": 135236404,
+        "Task_WeatherMain": 134716940
+      },
+      "count": 16,
+      "func_offset": 0,
+      "is_active_offset": 4,
+      "source": "pret c75f3523: src/field_tasks.c:84-94, src/field_weather.c:146-170; Center 1F Union Room background (C4-UR): data/scripts/cable_club.inc:1120-1122, src/union_room.c:3515-3604,3714-3745, src/link_rfu_2.c:505-564,2727-2742; league room lighting (FR/LG only): src/field_specials.c:2133-2185,2205-2209; RR: FR body byte-identical at the same address in every RR ROM",
+      "struct_size": 40,
+      "symbol": "gTasks"
+    },
+    "title": "radical_red",
+    "version": "gen3-overworld-v1",
+    "witnesses": {
+      "save_dialog_cb": {
+        "address": 50335652,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sSaveDialogCB",
+        "width": 4
+      }
+    }
+  }
+}

@@ -1,0 +1,810 @@
+{
+  "firered": {
+    "anchors": {
+      "cb1_overworld": {
+        "address": 134571316,
+        "expected_hex": {
+          "clean": "10B5094C61680948814217D1BCF0B4FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
+        },
+        "length": 66,
+        "rom_offset": 353588,
+        "symbol": "CB1_Overworld"
+      },
+      "cb2_overworld": {
+        "address": 134571444,
+        "expected_hex": {
+          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
+        },
+        "length": 44,
+        "rom_offset": 353716,
+        "symbol": "CB2_Overworld"
+      },
+      "frame_control": {
+        "address": 134219024,
+        "expected_hex": {
+          "clean": "3BF1A9F900060028"
+        },
+        "length": 8,
+        "rom_offset": 1306,
+        "symbol": "CallCallbacks"
+      },
+      "run_tasks": {
+        "address": 134706552,
+        "expected_hex": {
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF10BFBA079FF28F5D130BC01BC0047000090500003"
+        },
+        "length": 48,
+        "rom_offset": 488824,
+        "symbol": "RunTasks"
+      },
+      "try_saving_data": {
+        "address": 135111524,
+        "expected_hex": {
+          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BDFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
+        },
+        "length": 72,
+        "rom_offset": 893796,
+        "symbol": "TrySavingData"
+      }
+    },
+    "battle": {
+      "clauses": [
+        {
+          "address": 50352004,
+          "compare": "eq_symbol",
+          "expect": 134299713,
+          "expect_symbol": "HandleTurnActionSelectionState",
+          "name": "battle_main_func",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleMainFunc",
+          "width": 4
+        },
+        {
+          "address": 33701506,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_comm_0",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleCommunication",
+          "width": 1
+        },
+        {
+          "address": 33700808,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_exec_flags_input",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleControllerExecFlags",
+          "width": 4
+        },
+        {
+          "address": 50352096,
+          "compare": "eq_symbol",
+          "expect": 134407225,
+          "expect_symbol": "HandleInputChooseAction",
+          "name": "battle_input_controller",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattlerControllerFuncs",
+          "width": 4
+        },
+        {
+          "address": 33696588,
+          "compare": "eq",
+          "expect": 0,
+          "mask": 2,
+          "name": "battle_not_link",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleTypeFlags",
+          "width": 4
+        },
+        {
+          "address": 33700836,
+          "compare": "nonzero",
+          "name": "battle_engine_loaded",
+          "offset": 44,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleMons",
+          "width": 2
+        },
+        {
+          "address": 33701514,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_outcome_open",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleOutcome",
+          "width": 1
+        }
+      ],
+      "commit_guard": {
+        "address": 33701506,
+        "compare": "lt",
+        "indexed_by": "battler",
+        "offset": 0,
+        "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+        "symbol": "gBattleCommunication",
+        "value": 3,
+        "width": 1
+      },
+      "handoff": {
+        "address": 50352096,
+        "head": [
+          {
+            "address": 33701372,
+            "name": "perish_status",
+            "set": 32,
+            "width": 4
+          },
+          {
+            "address": 33701403,
+            "keep": 240,
+            "name": "perish_timer",
+            "width": 1
+          },
+          {
+            "address": 33701244,
+            "name": "no_op_action",
+            "value": 13,
+            "width": 1
+          }
+        ],
+        "source": "PlayerBufferExecCompleted|1 (.sym, src/battle_controller_player.o); ROM body prefix +0..+0xF == the pret build, pools gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret src/battle_controller_player.c:186-200,244",
+        "stride": 4,
+        "symbol": "gBattlerControllerFuncs",
+        "value": 134406973,
+        "value_symbol": "PlayerBufferExecCompleted",
+        "width": 4
+      },
+      "version": "gen3-battle-v1"
+    },
+    "cpu": {
+      "census": "docs/gen3/probes/census_fr_overworld_2026-09-21.txt",
+      "mode": 31,
+      "observed_pc": 134219948,
+      "pc_max": 134219967,
+      "pc_min": 134219920,
+      "symbol": "WaitForVBlank",
+      "thumb": 1
+    },
+    "pointers": {
+      "gPokemonStoragePtr": {
+        "address": 50352144,
+        "source": "pokefirered.sym",
+        "symbol": "gPokemonStoragePtr"
+      },
+      "gSaveBlock1Ptr": {
+        "address": 50352136,
+        "source": "pokefirered.sym",
+        "symbol": "gSaveBlock1Ptr"
+      },
+      "gSaveBlock2Ptr": {
+        "address": 50352140,
+        "source": "pokefirered.sym",
+        "symbol": "gSaveBlock2Ptr"
+      }
+    },
+    "predicates": {
+      "callback1": {
+        "address": 50344176,
+        "expect": 134571317,
+        "expect_symbol": "CB1_Overworld",
+        "offset": 0,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "callback2": {
+        "address": 50344176,
+        "expect": 134571445,
+        "expect_symbol": "CB2_Overworld",
+        "offset": 4,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "field_controls_locked": {
+        "address": 50335644,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLockFieldControls",
+        "width": 1
+      },
+      "in_battle": {
+        "address": 50344176,
+        "expect": 0,
+        "mask": 2,
+        "offset": 1081,
+        "symbol": "gMain",
+        "width": 1
+      },
+      "link_callback": {
+        "address": 33695512,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLinkOpen",
+        "width": 1
+      },
+      "link_players_received": {
+        "address": 50347876,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gReceivedRemoteLinkPlayers",
+        "width": 1
+      },
+      "link_transferring": {
+        "address": 50344164,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gLinkTransferringData",
+        "width": 1
+      },
+      "palette_fade_active": {
+        "address": 33782456,
+        "expect": 0,
+        "mask": 128,
+        "offset": 7,
+        "symbol": "gPaletteFade",
+        "width": 1
+      },
+      "script_context_status": {
+        "address": 50335400,
+        "expect": 2,
+        "offset": 0,
+        "symbol": "sGlobalScriptContextStatus",
+        "width": 1
+      },
+      "soft_reset_disabled": {
+        "address": 50345264,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gSoftResetDisabled",
+        "width": 1
+      }
+    },
+    "sound": {
+      "fields": [
+        {
+          "name": "songHeader",
+          "offset": 0,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "status",
+          "offset": 4,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "trackCount",
+          "offset": 8,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "priority",
+          "offset": 9,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "clock",
+          "offset": 12,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "tracks",
+          "offset": 44,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "ident",
+          "offset": 52,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "flags",
+          "offset": 0,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "bendRange",
+          "offset": 15,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "volX",
+          "offset": 19,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "lfoSpeed",
+          "offset": 25,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "chan",
+          "offset": 32,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "cmdPtr",
+          "offset": 64,
+          "on": "track",
+          "size": 4
+        }
+      ],
+      "ident_magic": 1752395091,
+      "ident_off": 52,
+      "iwram_max": 50364416,
+      "iwram_min": 50331648,
+      "player_head_off": 36,
+      "player_next_off": 60,
+      "player_se1": {
+        "address": 50361152,
+        "source": "sym",
+        "symbol": "gMPlayInfo_SE1"
+      },
+      "sound_info": {
+        "address": 50356048,
+        "source": "sym",
+        "symbol": "gSoundInfo"
+      },
+      "sound_info_ptr": {
+        "address": 50364400,
+        "source": "sym",
+        "symbol": "SOUND_INFO_PTR"
+      },
+      "source": "pokefirered.sym/pokeleafgreen.sym; pret include/gba/m4a_internal.h",
+      "track0_off": 0,
+      "tracks_off": 44,
+      "version": "gen3-sound-v1"
+    },
+    "sym": "pokefirered.sym",
+    "tasks": {
+      "address": 50352272,
+      "allowed_overworld_tasks": {
+        "Task_InitUnionRoom": 135371260,
+        "Task_RunPerStepCallback": 134670352,
+        "Task_RunPokemonLeagueLightingEffect": 135055896,
+        "Task_RunTimeBasedEvents": 134670396,
+        "Task_SearchForChildOrParent": 135372084,
+        "Task_UnionRoomListen": 135236404,
+        "Task_WeatherMain": 134716940
+      },
+      "count": 16,
+      "func_offset": 0,
+      "is_active_offset": 4,
+      "source": "pret c75f3523: src/field_tasks.c:84-94, src/field_weather.c:146-170; Center 1F Union Room background (C4-UR): data/scripts/cable_club.inc:1120-1122, src/union_room.c:3515-3604,3714-3745, src/link_rfu_2.c:505-564,2727-2742; league room lighting (FR/LG only): src/field_specials.c:2133-2185,2205-2209; RR: FR body byte-identical at the same address in every RR ROM",
+      "struct_size": 40,
+      "symbol": "gTasks"
+    },
+    "title": "firered",
+    "version": "gen3-overworld-v1",
+    "witnesses": {
+      "save_dialog_cb": {
+        "address": 50335652,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sSaveDialogCB",
+        "width": 4
+      }
+    }
+  },
+  "leafgreen": {
+    "anchors": {
+      "cb1_overworld": {
+        "address": 134571316,
+        "expected_hex": {
+          "clean": "10B5094C61680948814217D1BCF0A0FB0006000E012803D005480078022809D1FFF7B8FF0AE00000F0300003B5650508FAAD0302E08DA18DFFF76EFF10BC01BC0047"
+        },
+        "length": 66,
+        "rom_offset": 353588,
+        "symbol": "CB1_Overworld"
+      },
+      "cb2_overworld": {
+        "address": 134571444,
+        "expected_hex": {
+          "clean": "10B50948C079C009041C002C02D00020AAF796F8FFF7D6FF002C01D000F018FA10BC01BC00470000B87A0302"
+        },
+        "length": 44,
+        "rom_offset": 353716,
+        "symbol": "CB2_Overworld"
+      },
+      "frame_control": {
+        "address": 134219024,
+        "expected_hex": {
+          "clean": "3BF195F900060028"
+        },
+        "length": 8,
+        "rom_offset": 1306,
+        "symbol": "CallCallbacks"
+      },
+      "run_tasks": {
+        "address": 134706552,
+        "expected_hex": {
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921686CF1F9FAA079FF28F5D130BC01BC0047000090500003"
+        },
+        "length": 48,
+        "rom_offset": 488824,
+        "symbol": "RunTasks"
+      },
+      "try_saving_data": {
+        "address": 135111480,
+        "expected_hex": {
+          "clean": "30B50006050E09480468012C09D1281CFFF768FF0648006800280DD0281C1AF0BFFE0449FF200880FF2008E0045000038C5300032054000302480480012030BC02BC084720540003"
+        },
+        "length": 72,
+        "rom_offset": 893752,
+        "symbol": "TrySavingData"
+      }
+    },
+    "battle": {
+      "clauses": [
+        {
+          "address": 50352004,
+          "compare": "eq_symbol",
+          "expect": 134299713,
+          "expect_symbol": "HandleTurnActionSelectionState",
+          "name": "battle_main_func",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleMainFunc",
+          "width": 4
+        },
+        {
+          "address": 33701506,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_comm_0",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleCommunication",
+          "width": 1
+        },
+        {
+          "address": 33700808,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_exec_flags_input",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleControllerExecFlags",
+          "width": 4
+        },
+        {
+          "address": 50352096,
+          "compare": "eq_symbol",
+          "expect": 134407225,
+          "expect_symbol": "HandleInputChooseAction",
+          "name": "battle_input_controller",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattlerControllerFuncs",
+          "width": 4
+        },
+        {
+          "address": 33696588,
+          "compare": "eq",
+          "expect": 0,
+          "mask": 2,
+          "name": "battle_not_link",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleTypeFlags",
+          "width": 4
+        },
+        {
+          "address": 33700836,
+          "compare": "nonzero",
+          "name": "battle_engine_loaded",
+          "offset": 44,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleMons",
+          "width": 2
+        },
+        {
+          "address": 33701514,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_outcome_open",
+          "offset": 0,
+          "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+          "symbol": "gBattleOutcome",
+          "width": 1
+        }
+      ],
+      "commit_guard": {
+        "address": 33701506,
+        "compare": "lt",
+        "indexed_by": "battler",
+        "offset": 0,
+        "source": "pokefirered.sym/pokeleafgreen.sym (data address); pret src/battle_main.c",
+        "symbol": "gBattleCommunication",
+        "value": 3,
+        "width": 1
+      },
+      "handoff": {
+        "address": 50352096,
+        "head": [
+          {
+            "address": 33701372,
+            "name": "perish_status",
+            "set": 32,
+            "width": 4
+          },
+          {
+            "address": 33701403,
+            "keep": 240,
+            "name": "perish_timer",
+            "width": 1
+          },
+          {
+            "address": 33701244,
+            "name": "no_op_action",
+            "value": 13,
+            "width": 1
+          }
+        ],
+        "source": "PlayerBufferExecCompleted|1 (.sym, src/battle_controller_player.o); ROM body prefix +0..+0xF == the pret build, pools gBattlerControllerFuncs + PlayerBufferRunCommand|1; pret src/battle_controller_player.c:186-200,244",
+        "stride": 4,
+        "symbol": "gBattlerControllerFuncs",
+        "value": 134406973,
+        "value_symbol": "PlayerBufferExecCompleted",
+        "width": 4
+      },
+      "version": "gen3-battle-v1"
+    },
+    "cpu": {
+      "census": "docs/gen3/probes/census_lg_overworld_2026-09-23.txt",
+      "mode": 31,
+      "observed_pc": 134219948,
+      "pc_max": 134219967,
+      "pc_min": 134219920,
+      "symbol": "WaitForVBlank",
+      "thumb": 1
+    },
+    "pointers": {
+      "gPokemonStoragePtr": {
+        "address": 50352144,
+        "source": "pokeleafgreen.sym",
+        "symbol": "gPokemonStoragePtr"
+      },
+      "gSaveBlock1Ptr": {
+        "address": 50352136,
+        "source": "pokeleafgreen.sym",
+        "symbol": "gSaveBlock1Ptr"
+      },
+      "gSaveBlock2Ptr": {
+        "address": 50352140,
+        "source": "pokeleafgreen.sym",
+        "symbol": "gSaveBlock2Ptr"
+      }
+    },
+    "predicates": {
+      "callback1": {
+        "address": 50344176,
+        "expect": 134571317,
+        "expect_symbol": "CB1_Overworld",
+        "offset": 0,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "callback2": {
+        "address": 50344176,
+        "expect": 134571445,
+        "expect_symbol": "CB2_Overworld",
+        "offset": 4,
+        "symbol": "gMain",
+        "width": 4
+      },
+      "field_controls_locked": {
+        "address": 50335644,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLockFieldControls",
+        "width": 1
+      },
+      "in_battle": {
+        "address": 50344176,
+        "expect": 0,
+        "mask": 2,
+        "offset": 1081,
+        "symbol": "gMain",
+        "width": 1
+      },
+      "link_callback": {
+        "address": 33695512,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sLinkOpen",
+        "width": 1
+      },
+      "link_players_received": {
+        "address": 50347876,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gReceivedRemoteLinkPlayers",
+        "width": 1
+      },
+      "link_transferring": {
+        "address": 50344164,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gLinkTransferringData",
+        "width": 1
+      },
+      "palette_fade_active": {
+        "address": 33782456,
+        "expect": 0,
+        "mask": 128,
+        "offset": 7,
+        "symbol": "gPaletteFade",
+        "width": 1
+      },
+      "script_context_status": {
+        "address": 50335400,
+        "expect": 2,
+        "offset": 0,
+        "symbol": "sGlobalScriptContextStatus",
+        "width": 1
+      },
+      "soft_reset_disabled": {
+        "address": 50345264,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "gSoftResetDisabled",
+        "width": 1
+      }
+    },
+    "sound": {
+      "fields": [
+        {
+          "name": "songHeader",
+          "offset": 0,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "status",
+          "offset": 4,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "trackCount",
+          "offset": 8,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "priority",
+          "offset": 9,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "clock",
+          "offset": 12,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "tracks",
+          "offset": 44,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "ident",
+          "offset": 52,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "flags",
+          "offset": 0,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "bendRange",
+          "offset": 15,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "volX",
+          "offset": 19,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "lfoSpeed",
+          "offset": 25,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "chan",
+          "offset": 32,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "cmdPtr",
+          "offset": 64,
+          "on": "track",
+          "size": 4
+        }
+      ],
+      "ident_magic": 1752395091,
+      "ident_off": 52,
+      "iwram_max": 50364416,
+      "iwram_min": 50331648,
+      "player_head_off": 36,
+      "player_next_off": 60,
+      "player_se1": {
+        "address": 50361152,
+        "source": "sym",
+        "symbol": "gMPlayInfo_SE1"
+      },
+      "sound_info": {
+        "address": 50356048,
+        "source": "sym",
+        "symbol": "gSoundInfo"
+      },
+      "sound_info_ptr": {
+        "address": 50364400,
+        "source": "sym",
+        "symbol": "SOUND_INFO_PTR"
+      },
+      "source": "pokefirered.sym/pokeleafgreen.sym; pret include/gba/m4a_internal.h",
+      "track0_off": 0,
+      "tracks_off": 44,
+      "version": "gen3-sound-v1"
+    },
+    "sym": "pokeleafgreen.sym",
+    "tasks": {
+      "address": 50352272,
+      "allowed_overworld_tasks": {
+        "Task_InitUnionRoom": 135371220,
+        "Task_RunPerStepCallback": 134670352,
+        "Task_RunPokemonLeagueLightingEffect": 135055852,
+        "Task_RunTimeBasedEvents": 134670396,
+        "Task_SearchForChildOrParent": 135372044,
+        "Task_UnionRoomListen": 135236364,
+        "Task_WeatherMain": 134716896
+      },
+      "count": 16,
+      "func_offset": 0,
+      "is_active_offset": 4,
+      "source": "pret c75f3523: src/field_tasks.c:84-94, src/field_weather.c:146-170; Center 1F Union Room background (C4-UR): data/scripts/cable_club.inc:1120-1122, src/union_room.c:3515-3604,3714-3745, src/link_rfu_2.c:505-564,2727-2742; league room lighting (FR/LG only): src/field_specials.c:2133-2185,2205-2209; RR: FR body byte-identical at the same address in every RR ROM",
+      "struct_size": 40,
+      "symbol": "gTasks"
+    },
+    "title": "leafgreen",
+    "version": "gen3-overworld-v1",
+    "witnesses": {
+      "save_dialog_cb": {
+        "address": 50335652,
+        "expect": 0,
+        "offset": 0,
+        "symbol": "sSaveDialogCB",
+        "width": 4
+      }
+    }
+  }
+}

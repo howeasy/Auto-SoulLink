@@ -21,13 +21,12 @@ def test_rr_rival_set_has_expected_size():
 
 def test_rr_rival_set_contains_known_anchors():
     """Spot-check IDs from early/mid/late Terry encounters (verified via grep)."""
-    # Early Terry (class 81): Oak's Lab → Cerulean → SS Anne area.
-    assert 325 in _RR_RIVAL_TRAINER_IDS
-    assert 326 in _RR_RIVAL_TRAINER_IDS
-    # Mid/late Terry (class 89/90): Silph → Indigo Plateau.
-    assert 437 in _RR_RIVAL_TRAINER_IDS
-    # Post-game Terry (class 90): 738/739/740 cluster.
-    assert 740 in _RR_RIVAL_TRAINER_IDS
+    # WIRE ids = raw gTrainers indices, read from the RR ROM (gTrainers 0x0823EAC8, 40-byte
+    # entries): [326] Terry class 81 (Oak's Lab), [325] Daisuke, [739-741] post-game Terry.
+    assert 326 in _RR_RIVAL_TRAINER_IDS and 328 in _RR_RIVAL_TRAINER_IDS
+    assert 325 not in _RR_RIVAL_TRAINER_IDS          # Daisuke: the old off-by-one hit him
+    assert 438 in _RR_RIVAL_TRAINER_IDS
+    assert 741 in _RR_RIVAL_TRAINER_IDS and 738 not in _RR_RIVAL_TRAINER_IDS   # 738 is Lance
 
 
 def test_rr_rival_set_excludes_obvious_non_rivals():
@@ -43,7 +42,7 @@ def test_rr_mode_returns_populated_set():
     ids = adapter.rival_trainer_ids()
     assert isinstance(ids, set)
     assert len(ids) == 27
-    assert 325 in ids
+    assert 326 in ids
 
 
 def test_vanilla_mode_returns_empty_set():

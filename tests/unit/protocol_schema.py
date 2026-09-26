@@ -6,7 +6,10 @@ test_protocol_schema.py pins this table to the server's own dispatch and command
 so the schema tracks server/state.py (the authority), not any one client.
 
 Field types: "str", "int", "bool", "list", "dict", "key" (DDDD:OOOO:SS or PPPPPPPP:OOOOOOOO),
-"hex" (even-length uppercase/lowercase hex), "num" (int or float).
+"hex" (even-length uppercase/lowercase hex), "num" (int or float), "battle_id" (a battle request
+counter: int, never bool, never fractional, 1..2**32-1), "session" (a client-session nonce: hex
+string, 1..16 chars). The last two are validated strictly and never coerced (card C5-10): a
+boolean, fractional or out-of-range counter, or a malformed nonce, is a protocol violation.
 """
 from __future__ import annotations
 
@@ -16,6 +19,11 @@ from server.adapters import foundation_for_rom_type
 
 KEY_RE = re.compile(r"^[0-9A-F]{4}:[0-9A-F]{4}:[0-9A-F]{2}$|^[0-9A-F]{8}:[0-9A-F]{8}$", re.I)
 HEX_RE = re.compile(r"^(?:[0-9A-Fa-f]{2})*$")
+# Fields that are meaningless alone (card C5-10): both present or both absent, never one. A
+# half-identity is a protocol violation, not a legacy client.
+PAIRED_FIELDS: tuple[tuple[str, str], ...] = (("session", "battle_id"),)
+# A client-session nonce: hex, no separators, 1..16 chars (case-insensitive).
+SESSION_RE = re.compile(r"^[0-9A-Fa-f]{1,16}$")
 
 # event -> (required fields, optional fields); docs/protocol.md §3.2
 EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
@@ -26,7 +34,9 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
                "trainer_name": "str", "pc_boxes": "list", "pc_boxes_generation": "int",
                "area_id": "str", "loc_name": "str",
                "rom_sha1": "str", "caps": "dict", "rom_content": "dict",
-               "artifact_kind": "str", "foundation": "str", "trade_prepare": "bool"}),
+               "artifact_kind": "str", "foundation": "str", "trade_prepare": "bool",
+               # card C5-10b capability declaration
+               "battle_identity": "bool"}),
     "tick": ({}, {"has_pokeballs": "bool", "party": "list", "area_id": "str", "loc_name": "str",
                   "trade_blocked": "bool", "awaiting_save": "bool",
                   "in_battle": "bool", "is_trainer_battle": "bool", "trainer_id": "int",
@@ -48,7 +58,9 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     # reason vocabulary (free text on the wire): KEY_CHANGE_REASONS
     "key_change": ({"old_key": "key", "new_key": "key"},
                    {"reason": "str", "new_species": "int", "new_nickname": "str"}),
-    "trainer_battle_start": ({"trainer_id": "int"}, {}),
+    # battle_id is OPTIONAL on the wire (card C5-10): Gen 1/Gen 2/old Gen 3 clients never send
+    # it; the new Gen 3 client always does and requires it back on replace_rival_team.
+    "trainer_battle_start": ({"trainer_id": "int"}, {"battle_id": "battle_id", "session": "session"}),
     "rival_team_replaced": ({"trainer_id": "int", "species_ids": "list"}, {"error": "str"}),
     "stats_cache": ({"key": "key", "stats": "dict"}, {}),
     "sync_retrieve_done": ({"key": "key"}, {}),
@@ -115,7 +127,8 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
                     "battle_calc": "bool", "pc_trade_npc": "bool"}),
     "rebuild_start": ({"text": "str", "keys": "list"}, {}),
     "rebuild_done": ({}, {}),
-    "replace_rival_team": ({"trainer_id": "int", "n": "int", "blobs_hex": "list"}, {"source": "str"}),
+    "replace_rival_team": ({"trainer_id": "int", "n": "int", "blobs_hex": "list"},
+                           {"source": "str", "battle_id": "battle_id", "session": "session"}),
     "show_choices": ({"token": "str", "options": "list", "text": "str"}, {}),
     "show_menu": ({"token": "str", "text": "str"}, {"slot": "int", "blob_hex": "hex"}),
     "trade_mask": ({"mask": "int"}, {}),
@@ -164,9 +177,13 @@ def _check_type(value, kind: str) -> bool:
     if kind == "dict":
         return isinstance(value, dict)
     if kind == "key":
-        return isinstance(value, str) and bool(KEY_RE.match(value))
+        return isinstance(value, str) and bool(KEY_RE.fullmatch(value))
     if kind == "hex":
-        return isinstance(value, str) and bool(HEX_RE.match(value)) and len(value) > 0
+        return isinstance(value, str) and bool(HEX_RE.fullmatch(value)) and len(value) > 0
+    if kind == "battle_id":
+        return isinstance(value, int) and not isinstance(value, bool) and 0 < value < 2 ** 32
+    if kind == "session":
+        return isinstance(value, str) and 0 < len(value) <= 16 and bool(SESSION_RE.fullmatch(value))
     raise ValueError(kind)
 
 
@@ -183,6 +200,13 @@ def _validate(kind_word: str, name: str, table: dict, msg: dict, *, extra_ok: bo
     for field, ftype in optional.items():
         if field in msg and msg[field] is not None and not _check_type(msg[field], ftype):
             problems.append(f"{name}: {field!r} should be {ftype}, got {msg[field]!r}")
+    for left, right in PAIRED_FIELDS:
+        if (left in msg) != (right in msg):
+            problems.append(f"{name}: {left!r} and {right!r} must both be present or both absent")
+        elif left in msg and (msg[left] is None or msg[right] is None):
+            # present-but-null is a violation, not "absent": None is a value the contract does
+            # not allow (C5-11c minor)
+            problems.append(f"{name}: {left!r}/{right!r} present but null")
     if not extra_ok:
         known = set(required) | set(optional) | set(ENVELOPE) | {"cmd"}
         for field in msg:

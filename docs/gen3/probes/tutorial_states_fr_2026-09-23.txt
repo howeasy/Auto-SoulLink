@@ -1,0 +1,16 @@
+# mkstates_gen3_tutorials title=firered lane=e4c30fff (gen3-lane-clean, tracked_clean) command: python tools/mkstates_gen3_tutorials.py --title firered
+# slink_oldman.State sha256=4fb04bf836566d6e38bf44e821e9c7ba716566c92deca6f44d2bf51da3f38a63
+# slink_pokedude.State sha256=fb321f90c5c9f64ea502aec1b445e81233ae59c6b4a00c739a360abf67e696d5
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\mkstates_tutorials_firered\Pokemon - FireRed Version (USA).SaveRAM from E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\firered_party_town.sav; states -> E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_probe_states\firered
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3_tutorials.ini --lua=lua/tests/mkstates_gen3_tutorials.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] mkstates_gen3_tutorials: RESULT: PASS tutorial states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/patch/build/gen3_probe_states/firered  (16s)
+phase start frame=1 title=firered dir=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/patch/build/gen3_probe_states/firered
+phase field frame=778 map=(3,1)
+phase segment frame=1068 at 3.1 (24,31), want 3.1 (24,31)
+phase segment frame=1103 at 3.1 (22,31), want 3.1 (22,31)
+phase segment frame=1458 at 3.1 (22,9), want 3.1 (22,9)
+phase state-saved frame=2990 slink_oldman.State in_battle=true flags=00000204 ctrl0=080E78E1
+phase teachy-tv frame=6212 var 0x4051=2 key slot 0
+phase ttv-battle frame=6435 row 0 chosen
+phase state-saved frame=9218 slink_pokedude.State in_battle=true flags=00010004 ctrl0=0815614D
+RESULT: PASS tutorial states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/patch/build/gen3_probe_states/firered

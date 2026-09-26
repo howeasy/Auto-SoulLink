@@ -1,78 +1,50 @@
--- test_mailbox_ping.lua — autonomous BizHawk validation of the Phase-0 companion patch.
---
--- Load in EmuHawk with the PATCHED Radical Red ROM (patch/build/slink_RR.gba):
---   1. waits for the 'SLNK' beacon (proves the CallCallbacks frame hook runs)
---   2. sends a PING opcode and polls for the ack (proves the dispatcher works)
---   3. watches the mailbox for stray writes (proves 0x0203F800 is free at runtime)
--- then writes PASS/FAIL to ping_result.txt and exits. No GUI interaction needed.
+-- test_mailbox_ping.lua — the companion patch's basic liveness, on the PATCHED Radical Red ROM:
+--   1. the 'SLNK' beacon appears (proves the CallCallbacks frame hook runs);
+--   2. a PING posted through the mailbox is acked ST_OK (proves the dispatcher works);
+--   3. the beacon stays stable over ~120 frames of idle (proves 0x0203F800 is free at runtime).
+-- PING is a patch-only op the client never sends, so it goes through lua/tests/gen3_gatelib.lua's
+-- test-only raw poster (native.lua's ABI and write window, card C5-4b). Cold boot.
+local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
+local t = G.open("ping")
 
-local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
-assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
-local OUT = WT .. "/patch/build/ping_result.txt"
-local MB = dofile(WT .. "/lua/mailbox.lua")
-
-local lines = {}
-local function log(s) lines[#lines + 1] = s; console.log(s) end
-local function finish(ok)
-    log(ok and "RESULT: PASS" or "RESULT: FAIL")
-    local f = io.open(OUT, "w")
-    if f then f:write(table.concat(lines, "\n") .. "\n"); f:close() end
-    client.exit()
+-- 1. wait for the beacon (t.boot fails the gate if it never comes)
+t.boot({ native = false, beacon = 2000, speed = 800 })
+-- COLD BOOT (G5-GATES-LIVE 2026-09-24): the beacon is up by frame ~12, before the game has set its save
+-- pointers, and writes:arm refuses until they are live ("safety.lua: invalid pointer: gPokemonStoragePtr").
+-- The client never arms that early (it waits for the server hello), so step until an arm would succeed.
+-- Idle alone never gets there (3000 frames, run 2); RR sets them when the main menu loads the save
+-- (lua/tests/mkstate.lua:38-46), so pulse Start through the intro/title (probe: armable ~8 frames
+-- after the first Start at the title). The field is never entered: no A, no CONTINUE.
+do
+    local never = function() return false end
+    local ready = false
+    for _ = 1, 3000 do
+        ready = pcall(function() t.writes:arm("native", never) end)
+        t.writes:disarm()
+        if ready then break end
+        t.step((_ % 32 == 0) and { Start = true } or nil)
+    end
+    if not ready then t.fail("save pointers live (native arm possible)", "frame " .. t.frame) end
+    t.log(string.format("native arm possible at frame %d", t.frame))
+    -- The pointers go live during the title -> main-menu transition, and the companion hook then
+    -- lags past a 20-frame ack wait (mailbox_battle, live 731cf9b3: FORCE_FAINT posted, no ack in
+    -- 20 frames; with this settle it acks). Let the menu come up before the first post.
+    for _ = 1, 120 do t.step(nil) end
 end
+t.log(string.format("beacon 'SLNK' seen at frame %d  (sig=0x%08X abi=%d)", t.frame,
+                    memory.read_u32_le(t.P.BASE), memory.read_u16_le(t.P.BASE + 4)))
 
--- Use the unified System Bus domain (maps 0x02xxxxxx EWRAM and 0x08xxxxxx ROM).
-local okd = pcall(memory.usememorydomain, "System Bus")
-log("domain System Bus set=" .. tostring(okd))
-pcall(function() client.speedmode(800) end)   -- run fast; this is a headless check
+-- 2. PING, poll for the ack (allow several frames)
+local r = t.raw_wait("OP_PING", {}, nil, 30)
+t.check("PING acked within 30 frames", r ~= nil, t.receipt_str(r))
+t.check("PING status OK", t.acked_ok(r), t.receipt_str(r))
+t.check("opcode cleared by the dispatcher", memory.read_u16_le(t.P.BASE + 6) == 0)
 
-local MAX_WAIT = 2000      -- frames to wait for the beacon (~33s)
-local beacon_frame = nil
-local frame = 0
-
--- 1. wait for beacon
-while frame < MAX_WAIT do
-    emu.frameadvance(); frame = frame + 1
-    if MB.present() then beacon_frame = frame; break end
-end
-if not beacon_frame then
-    log("FAIL: no 'SLNK' beacon after " .. MAX_WAIT .. " frames (hook never ran?)")
-    finish(false); return
-end
-log("beacon 'SLNK' seen at frame " .. beacon_frame ..
-    string.format("  (sig=0x%08X abi=%d)", memory.read_u32_le(MB.BASE),
-                  memory.read_u16_le(MB.BASE + 4)))
-
--- 2. send PING, poll for ack (allow several frames)
-local s = MB.send(MB.OP_PING)
-log("sent PING seq=" .. s)
-local st, reason
-for _ = 1, 30 do
-    emu.frameadvance(); frame = frame + 1
-    st, reason = MB.poll(s)
-    if st then break end
-end
-if st == nil then
-    log("FAIL: PING not acked within 30 frames")
-    finish(false); return
-end
-log("PING ack: status=" .. st .. " (2=ok) reason=" .. reason ..
-    "  opcode-cleared=" .. tostring(memory.read_u16_le(MB.BASE + 6) == 0))
-if st ~= MB.ST_OK then
-    log("FAIL: PING status not OK")
-    finish(false); return
-end
-
--- 3. corruption watch: beacon must stay stable over ~120 frames of gameplay idle
+-- 3. corruption watch: the beacon must stay stable over ~120 frames of idle
 local stable = true
 for _ = 1, 120 do
-    emu.frameadvance(); frame = frame + 1
-    if not MB.present() then stable = false; break end
+    t.step(nil)
+    if not t.present() then stable = false; break end
 end
-log("beacon stable over 120 frames: " .. tostring(stable))
-if not stable then
-    log("FAIL: mailbox region clobbered (0x0203F800 not free)")
-    finish(false); return
-end
-
-log("PING round-trip + free-region check all good at frame " .. frame)
-finish(true)
+t.check("beacon stable over 120 frames (0x0203F800 free at runtime)", stable)
+t.finish()

@@ -10,8 +10,9 @@ via the server's debug HTTP API and waits for both instances' result files.
     python tools/e2e_duo.py --scenario all --keep-alive
 
 Per instance: a generated stub (patch/build/duo_{a,b}.lua) bakes SLINK_HOST/PORT/PLAYER
-plus the SLINK_DUO table and dofiles lua/tests/duo/duo_main.lua, which runs the REAL
-production client and the scenario coroutine (lua/tests/duo/scenario_<name>.lua).
+plus the SLINK_DUO table and dofiles the row's Lua driver (for example,
+lua/tests/duo/duo_gen3_main.lua for Gen 3), which runs the REAL production client and the
+scenario coroutine (lua/tests/duo/scenario_<name>.lua).
 Result protocol: patch/build/e2e_<scenario>_{a,b}_result.txt — incremental log lines,
 "MYKEY <slot> <key>" markers, final "RESULT: PASS|FAIL".
 
@@ -51,6 +52,8 @@ BIZHAWK_CONFIG = "E:/Howard/Bizhawk/config.ini"
 SAVESTATE_DIR = "E:/Howard/Bizhawk/GBA/State"
 ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
+# Where --wire-log parks a run's golden transcripts (tests/fixtures/gen3/wire/README.md).
+WIRE_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3", "wire")
 WT_FWD = REPO.replace("\\", "/")
 
 # Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
@@ -68,6 +71,19 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
+    # A boots {firered,leafgreen}_party_trainer.sav (6e85ddfc): CACHED-NATIVE at (41,45) on map
+    # 1.0, one step west of Rick 102's sight line, Lv13 lead -- gen3_routes skips the T2 walk.
+    "trainer_bench_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
+        "target": {"a": "trainer", "b": "town"}, "frames": 2500000, "no_save": ("b",),
+        "scenario_module": "battle_window", "battle_window_case": "trainer_bench", "battle_window_slot": 1,
+        "oracle": "assert_trainer_bench_gen3_saved"},
+    # A2 under mechanism P+H (owner rulings 15-18): the command-only single-subject row. A parks
+    # with its lead active, gets ONE keyed force_faint, and the engine's own Perish KO faints it in
+    # battle with no input; A sends out slot 1, RUNs and saves the engine-written HP 0. B idles.
+    "active_end_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",),
+        "target": {"a": "battle", "b": "town"}, "frames": 2000000, "no_save": ("b",),
+        "scenario_module": "linked_faint_active", "active_faint_case": "command",
+        "oracle": "assert_active_end_gen3_saved"},
     # Driver FOR CODEX 4: reset_commit's proposer outlives the server watchdog (~4000 events) before
     # party evidence settles it; every other trade leg keeps well over the driver's 150000 default.
     **{name: {"flags": [], "timeout": 3600 if name == "gen2_trade_reset_commit" else 2400, "games": ("gen2_new",),
@@ -258,19 +274,173 @@ SCENARIOS = {
     "admit_randomized_new": {"flags": [], "timeout": 1800, "games": ("gen1_new",),
                              "target": "town", "no_setup": True, "frames": 100000,
                              "oracle": "assert_admit_randomized_saved"},
-    # The four below are Gen 3-only and say so explicitly. They load Radical Red savestates
-    # and two of them need the RR companion patch, so there is nothing for a Game Boy to run.
-    "trade":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
-                "games": ("gen3_rr",)},
-    "ghost":   {"flags": ["--overworld-presence"], "savestate": "slink_overworld.State",
-                "timeout": 420, "games": ("gen3_rr",)},
-    # The native panel needs the RR patch present and a formed pair; no extra server flags.
-    "infopanel": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420,
-                  "games": ("gen3_rr",)},
-    "explode": {"flags": ["--explode-mode"],
-                "savestate": {"a": "slink_overworld.State", "b": "slink_prebattle.State"},
-                "fillers": {"a": True, "b": False}, "timeout": 600,
-                "games": ("gen3_rr",)},
+    # ── NEW Gen 3 client on vanilla FRLG (lua/gen3/*, game "gen3_frlg"; docs/gen3/PLAN.md §5.5,
+    # §6 P4). Keys are `<name>_gen3` so the new Gen 3 rows stay distinct from the shared
+    # `faint`/`boxsync` entries. Every entry names its saved-state oracle, and the row's
+    # check_save_witness_gen3 runs before it (_run_oracle).
+    # The drivers are lua/tests/duo/scenario_gen3_<name>.lua under duo_gen3_main.lua; the
+    # runner half of each is DuoRun.orchestrate_<key>. `no_save` names a half whose final
+    # receipt legitimately saves nothing (reconnect's A ends on the wrong-save relaunch).
+    #   faint_cmd           server-command/persistence only: an injected faint propagates, B's
+    #                       force_faint lands at the overworld checkpoint, both memorials save.
+    #   linked_faint_active natural engine faint of A's ACTIVE linked mon; B's partner sits
+    #                       active mid-battle and takes mechanism P+H (owner rulings 15-18): the
+    #                       Perish commit + controller hand-off, then the engine's own KO in
+    #                       battle with no input (active_faint_chain).
+    # P5 (card C5-5): every `games` tuple below now names "gen3_rr" too -- these seven apply
+    # to RR unchanged (PLAN §14 P5, owner ruling: RR under the standard). The five whose `target`
+    # includes "battle" are blocked on the missing rr_battle{,_b}.sav fixture (see GAMES
+    # ["gen3_rr"]'s comment); faint_cmd (server-command only) and reconnect (target "town")
+    # have no such dependency. All seven also inherit an UNVERIFIED risk in common: their walking
+    # (Route 1 grass) and PC-menu navigation come from lua/tests/gen3_scripted_play.lua's
+    # FR-pret-derived PATHS/symbols, reused for RR (duo_gen3_main.lua); the retired savestate
+    # driver is archived, and there is no pinned RR walking flow in this repo to port instead.
+    # Only the specific functions docs/gen3/research/rr_pc_menu.md and rr_save_layout.md
+    # actually cross-checked against the RR binary (Task_DepositMenu/Task_WithdrawMon, a few
+    # battle-flag addresses) are confirmed identical to FR's; the rest (battle action/move
+    # cursors, map names/tile coordinates) are assumed, not verified.
+    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr"),
+                       "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 2000000,
+                       "oracle": "assert_faint_cmd_gen3_saved"},
+    # G5-RR-BATTERY: on gen3_rr every row that links or trades the slot-1 mon, or throws a Poke
+    # Ball, boots rr_battle2{,_b}.sav (two mons, nine balls; 80913bdf) via target_by_game --
+    # rr_town / rr_battle hold ONE mon and no balls (live 3fa789da: KeyError 1 on the slot-1 key,
+    # "the fixture starts with no Poke Balls", no no_catch without balls).
+    # A1 and R1 (RR companion): mechanism P+H on the wild battle (active_faint_case "wild").
+    # `target_by_game` (scenario_target): RR's rr_battle.sav holds ONE mon and no balls, so R1's
+    # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
+    "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
+                                 "games": ("gen3_frlg", "gen3_rr"),
+                                 "target": "battle", "target_by_game": {"gen3_rr": "battle2"},
+                                 "frames": 2500000,
+                                 "oracle": "assert_linked_faint_active_gen3_saved"},
+    # A1 (i) and R4: B's linked mon is its only mon -- a hand deposit of the slot-1 mon on FR/LG,
+    # already so on RR's one-mon rr_battle.sav -- so the Perish KO whites out (ruling 18: P is not
+    # held on the last mon; ruling 21: the game_over that follows is intended).
+    "linked_faint_active_whiteout_gen3": {"flags": [], "timeout": 2400,
+                                          "games": ("gen3_frlg", "gen3_rr"),
+                                          "target": "battle", "frames": 3000000,
+                                          "scenario_module": "linked_faint_active",
+                                          "active_faint_case": "whiteout",
+                                          "oracle": "assert_linked_faint_active_whiteout_gen3_saved"},
+    # A1 (ii): B takes T2's route to Bug Catcher Rick 102 (cffe0a25); the forced party screen
+    # follows the KO. B boots the town fixture (the route starts there), A the battle one.
+    "linked_faint_active_trainer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg",),
+                                         "target": {"a": "battle", "b": "trainer"}, "frames": 2500000,
+                                         "scenario_module": "linked_faint_active",
+                                         "active_faint_case": "trainer",
+                                         "oracle": "assert_linked_faint_active_trainer_gen3_saved"},
+    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
+                     "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
+                     "oracle": "assert_boxsync_gen3_saved"},
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr"),
+                      "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+                      "oracle": "assert_whiteout_gen3_saved"},
+    # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
+    # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
+    # (EventScript_AskSaveGame), so B -- which only idles -- never saves.
+    "center_controls_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg",),
+                             "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+                             "no_save": ("b",), "oracle": "assert_center_controls_gen3_saved"},
+    # C4-6r's PRODUCT FINDING as a live regression: after an in-game save the stale sSaveDialogCB
+    # must not hold SLink writes (fix: C4-SAVE). FAILS on a pack that still has save_dialog_cb.
+    "save_then_write_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",),
+                             "target": "town", "frames": 2000000, "no_save": ("b",),
+                             "oracle": "assert_save_then_write_gen3_saved"},
+    # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
+    # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
+    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
+                  "ball_hunt": True,
+                  "target_by_game": {"gen3_rr": "battle2"}, "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
+    "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
+                      "ball_hunt": True,
+                      "target_by_game": {"gen3_rr": "battle2"}, "target": "battle", "frames": 2500000,
+                      "oracle": "assert_deadzone_gen3_saved"},
+    "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr"),
+                       "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 2000000, "no_save": ("a",),
+                       "oracle": "assert_reconnect_gen3_saved"},
+    # ── RR-only (P5, card C5-5): docs/gen3/PLAN.md §14 P5's nine minus the retired old-client
+    # trade/ghost/infopanel rows and trade_abort (a later card; not built here, see the card's
+    # final report). All three below are BLOCKED the same way as the five "battle"-target
+    # scenarios above (missing rr_battle{,_b}.sav); see each entry.
+    #   explode      NON-QUALIFYING CONTROL (`control`): A loses its linked lead naturally,
+    #                B must receive the KEYED force_explode, and B's receipt shows the engine
+    #                STARTING the Explosion action (lastUsedMovePlayer). That is upstream of
+    #                attackcanceler/tryexplosion, so it cannot prove execution (Codex C4-6c
+    #                finding 4); blocked until an RR-verified downstream witness exists.
+    #   rival_swap   BLOCKED NEGATIVE CONTROL (`control`): a dummy, identity-less team is
+    #                refused with stale_battle_id -- the C5-10 battle-identity gate (2dc1b750;
+    #                docs/gen3/research/rival_swap_refresh_window.md §3.3: missing session /
+    #                battle_id -> refuse, nothing written) answers before any refresh window.
+    #   native_absent B boots the CLEAN RR dump (rom_kind clean/companion split; runs on
+    #                rr_town.sav). Both sides get the same VALID apply_trade (the partner
+    #                fixture's slot-1 record): the companion must stage it natively, the clean
+    #                cartridge must refuse it and write nothing (trade port 78908fe8).
+    # Owner ruling 19: RR force_explode's commit ends in the P+H hand-off, so it runs on the P+H
+    # carrier (active_faint_case "explode"): no press after the commit, the same engine oracles,
+    # and the attacker's own faint site after the 153 stamp. A QUALIFICATION row (G5-RR-ORACLES):
+    # the old control label asked for a witness downstream of attackcanceler/tryexplosion, and the
+    # attacker's own faint site (counter +1, HP 0, no SLink HP write) after the stamp is one -- a
+    # Damp/sleep/flinch cancel produces no self-KO.
+    "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr",),
+                     "target": "battle", "frames": 1500000,
+                     "scenario_module": "linked_faint_active", "active_faint_case": "explode",
+                     "oracle": "assert_explode_gen3_saved"},
+    # `control`: a NEGATIVE/BLOCKED characterization, never a qualification PASS (Codex
+    # C4-6b finding 6); summary_lines and the oracle's PYDEC line both say so.
+    "rival_swap_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr",),
+                        "control": "BLOCKED negative control: a dummy, identity-less team is "
+                                   "refused with stale_battle_id by the C5-10 battle-identity "
+                                   "gate; no valid swap is proven here",
+                        "target": "battle", "frames": 900000, "no_save": ("a", "b"),
+                        "oracle": "assert_rival_swap_gen3_saved"},
+    # G5-RR-RIVAL (owner ruling 25): the QUALIFYING rival row. A boots rr_rival.sav (CACHED-NATIVE,
+    # the fixture driver's `rival` leg: Route 22 (34,6), early rival armed) and steps onto the
+    # coord event; the server's auto swap (--rival-team-swap) stages B's rr_battle2_b party.
+    "rival_swap_real_gen3": {"flags": ["--rival-team-swap"], "timeout": 900, "games": ("gen3_rr",),
+                             "target": {"a": "rival", "b": "battle2"}, "frames": 900000,
+                             "no_save": ("a", "b"), "oracle": "assert_rival_swap_real_gen3_saved"},
+    "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
+                           "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
+                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
+                           "oracle": "assert_native_absent_gen3_saved"},
+    # RR rows R2/R3/R5 of rr_active_faint_parity_scope §5.5 (R1 = linked_faint_active_gen3 and
+    # R4 = linked_faint_active_whiteout_gen3 on gen3_rr). R1/R2/R3 boot rr_battle2{,_b}.sav
+    # (a second mon for the send-out, balls for R3's L-throw) and SKIP by name until it is built
+    # (skip_reason); R4 runs on the one-mon rr_battle{,_b}.sav.
+    #   R2 clean   B boots the CLEAN RR dump: the P+H path is Lua-only, no companion needed.
+    #   R3 lhammer B pulses L every frame from the commit to the KO; no ball may be lost.
+    #   R5 mega    SIGNED G5 LIMIT (owner ruling 20): an allowed SKIP, never launched.
+    "linked_faint_active_clean_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
+                                       "target": "battle2", "frames": 2500000,
+                                       "rom_kind": {"a": "companion", "b": "clean"},
+                                       "scenario_module": "linked_faint_active",
+                                       "oracle": "assert_linked_faint_active_clean_gen3_saved"},
+    # G5-RR-CLEAN, owner ruling 25(a) (docs/gen3/G4_request_draft.md §6): the second and last
+    # clean-side row ("a decent amount", not full S-1..S-11 coverage) -- a basic link+faint on
+    # the clean ROM. Reuses faint_cmd_gen3's own module/oracle: link the slot-1 mons, then the
+    # server injects A's faint through the debug API. Nothing here pokes either cartridge but
+    # the clients (faint_cmd_gen3's own orchestrate docstring), so it needs no companion-only
+    # mechanism and runs on the clean dump exactly as native_absent_gen3's B half already does.
+    "faint_cmd_clean_gen3": {"flags": [], "timeout": 900, "games": ("gen3_rr",),
+                             "target": "battle2", "frames": 2000000,
+                             "rom_kind": {"a": "companion", "b": "clean"},
+                             "scenario_module": "faint_cmd",
+                             "oracle": "assert_faint_cmd_clean_gen3_saved"},
+    "linked_faint_active_lhammer_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
+                                         "target": "battle2", "frames": 2500000,
+                                         "scenario_module": "linked_faint_active",
+                                         "active_faint_case": "lhammer",
+                                         "oracle": "assert_linked_faint_active_lhammer_gen3_saved"},
+    "linked_faint_active_mega_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
+                                      "target": "battle", "frames": 2500000,
+                                      "scenario_module": "linked_faint_active",
+                                      "active_faint_case": "mega",
+                                      "signed_limit": "owner ruling 20 (docs/gen3/G4_request_draft.md "
+                                                      "§6 item 20): no Mega Ring or stone holder is "
+                                                      "reachable by normal inputs early in RR, and the "
+                                                      "Perish path reads no mega state",
+                                      "oracle": "assert_linked_faint_active_mega_gen3_saved"},
 }
 
 
@@ -279,7 +449,7 @@ SCENARIOS = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new", "gen2_new")
+OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr")
 
 
 def is_pure_pairing(game) -> bool:
@@ -362,10 +532,26 @@ def read_result(scenario, inst):
     if not os.path.exists(path):
         return None
     with open(path, encoding="utf-8", errors="replace") as f:
-        return f.read()
+        text = f.read()
+    # complete lines only: the Lua receipt writers end every line with a newline, so a line
+    # without one is mid-write (a torn MYKEY/BALL_* JSON/RESULT line at the 0.2 s poll)
+    return text[:text.rfind("\n") + 1]
 
 
 RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
+# The scenario families the ball-RNG retry covers: the Gen 1 standard (gen1_new) and the Gen 3
+# rows built on it (card C4-6g). ONE mechanism for all of them -- the cause table, the pair rule
+# (retryable_gen1_rng), the per-attempt idle jitter the driver echoes (jitter_problems) and the
+# attempt budget (scenario_attempt_limit). A Gen 3 scenario opts in with `ball_hunt`: only a
+# half that throws Poke Balls can end on the out-of-balls cause.
+RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr")
+# A partner half's own "I only failed because the other half did" line (the gen3 drivers phrase
+# it "CONSEQUENCE: <what>"). It never retries by itself: the pair still needs a CAUSE_RNG.
+CONSEQUENCE_PREFIX = "CONSEQUENCE: "
+
+
+def rng_retry_family(game) -> bool:
+    return scenario_family(game) in RNG_RETRY_FAMILIES
 # Classification table for RESULT reasons in duo_gen1_main.lua:286-758:
 #   CAUSE_RNG   bare/nested `hunt ended out-of-balls` (the game's only missed ball)
 #   CONSEQUENCE exact linked-capture-not-returned phrases when the other side has CAUSE_RNG
@@ -436,7 +622,10 @@ def classify_gen1_result(text):
         return "PASS"
     if not line.startswith("RESULT: FAIL (") or not line.endswith(")"):
         return "FINAL"
-    return GEN1_RNG_REASON_CLASS.get(line[len("RESULT: FAIL ("):-1], "FINAL")
+    reason = line[len("RESULT: FAIL ("):-1]
+    if reason.startswith(CONSEQUENCE_PREFIX):
+        return "CONSEQUENCE"
+    return GEN1_RNG_REASON_CLASS.get(reason, "FINAL")
 
 
 def _has_exact_rng_miss(text):
@@ -471,7 +660,7 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
     the seam BOTH paths share: `run()`'s GameRngMiss branch calls it after `wait_results`, where
     both halves are present by construction, so only the early-finish path changes.
     """
-    if scenario_family(game) != "gen1_new" or attempt >= limit:
+    if not rng_retry_family(game) or attempt >= limit:
         return False
     classes = [classify_gen1_result(text) for text in results.values()]
     if "CAUSE_RNG" not in classes:
@@ -500,8 +689,16 @@ def scenario_attempt_limit(name, game):
         return 3
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
-    if scenario_family(game) != "gen1_new" or name == "ball_gate_new":
+    entry = SCENARIOS.get(name, {})
+    if entry.get("battle_window_case"):
+        return 2 if entry["battle_window_case"] == "trainer_bench" else 1
+    # a cold boot replays one fixed NEW GAME: nothing to retry (ball_gate_new)
+    if not rng_retry_family(game) or entry.get("cold_boot"):
         return 1
+    if scenario_family(game) != "gen1_new":
+        # Gen 3: two retries (the Gen 1 default) for a half that throws Poke Balls, else one
+        # attempt -- every other cause is FINAL, so there is nothing a retry could change.
+        return 3 if entry.get("ball_hunt") else 1
     if name == "species_clause_new":
         return 8
     if name == "explode_new":
@@ -516,6 +713,21 @@ def scenario_attempt_limit(name, game):
         # runner lost both attempts to 'a wild foe knocked the starter out' (owner: raise it).
         return 4
     return 3
+
+
+def battle_window_failure(name, receipts, attempt):
+    """Early client FAIL classification; never borrowed from the generic ball-RNG policy."""
+    case = SCENARIOS.get(name, {}).get("battle_window_case")
+    if not case:
+        return None
+    from gen3_battle_window_oracle import classify_failure
+    texts = {side: receipts.get(side) or "" for side in ("a", "b")}
+    ready = re.search(r"(?m)^READY_BATTLE_WINDOW " + re.escape(case) + r" ([0-9A-F]{8}:[0-9A-F]{8})\b",
+                      texts["a"])
+    if not ready:
+        return None
+    return classify_failure(case=case, key=ready.group(1), receipts=texts, attempt=attempt,
+                            helpers=sys.modules[__name__])
 
 
 def species_reroll_state(receipts):
@@ -568,7 +780,8 @@ def jitter_problems(text, expected_requested):
 # the flag is set only inside the live assert (assert_reconnect_new / assert_admit_randomized_new),
 # and the post-result oracle refuses to describe a save that leg never produced.
 GEN2_CLAUSE_SCENARIOS = ("gen2_type_clause", "gen2_gender_clause", "gen2_species_clause")
-LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "gen2_reconnect", "gen2_soft_reset")
+LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "gen2_reconnect", "gen2_soft_reset",
+                      "reconnect_gen3")
 
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
 
@@ -911,7 +1124,7 @@ def terminal_result(text):
     return lines[-1] if lines else ""
 
 
-def wait_for(desc, pred, timeout, interval=2.0):
+def wait_for(desc, pred, timeout, interval=0.2):
     deadline = time.time() + timeout
     while time.time() < deadline:
         v = pred()
@@ -982,6 +1195,850 @@ def saved_money(sram):
     return value
 
 
+# ── Gen 3 (FRLG) new client: titles, the save witness and saved-state readers ─────────────
+# `rom` is the dump's file name, looked up at the repo root and then each parent (a worktree's
+# dumps live in the main checkout, docs/gen3_requirements.md Pins); `saveram` is the name
+# BizHawk's gamedb files a clean dump's battery under (tests/fixtures/gen3/README.md
+# "boot-check") -- never the ROM-derived gen3_fixtures.saveram_name().
+# P5 (card C5-5): Radical Red. `staged` names the already-built ROM directly (ROM_REL, the
+# companion patch, ships from patch/build/) -- unlike firered/leafgreen it is not a raw dump the
+# repo-root/parents search in _gen3_rom applies to, so `staged` short-circuits that search.
+# `saveram` is pinned from tools/mkstates.py:117 / the RR boot-check note in
+# tools/gen3_fixtures.py:saveram_name (BizHawk has no gamedb hash for this ROM, so it derives
+# the battery name from the launched filename, underscores->spaces -- "slink_RR.gba" is what
+# actually gets launched here, unstaged, so this is that rule applied to that exact name).
+GEN3_TITLES = {
+    "firered": {"rom": "Pokemon - FireRed Version (USA).gba",
+                "saveram": "Pokemon - FireRed Version (USA).SaveRAM"},
+    "leafgreen": {"rom": "Pokemon - LeafGreen Version (USA).gba",
+                  "saveram": "Pokemon - LeafGreen Version (USA).SaveRAM"},
+    "radical_red": {"staged": ROM_REL, "saveram": "slink RR.SaveRAM"},
+}
+# The raw, UNPATCHED Radical Red dump (patch/tools/build.py:91 DEFAULT_RR, patch/README.md:18),
+# for native_absent_gen3's clean-boot side only (`rom_kind`: "clean"). It resolves through the
+# ORDINARY repo-root/parents dump search (no `staged` entry), same as firered/leafgreen, because
+# unlike the companion build it genuinely is a raw dump to stage; its battery name is computed
+# from the staged path at resolve time (_gen3_battery_path), not pinned here, since stage_rom's
+# naming is derived from the ORIGINAL filename and hand-transcribing it risks a typo.
+GEN3_CLEAN_RR_ROM = "Pokemon - Radical Red.gba"
+GEN3_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3")
+GEN3_PROFILE = os.path.join(REPO, "data", "games", "gen3_frlg", "profile.json")
+GEN3_RR_PROFILE = os.path.join(REPO, "data", "games", "gen3_rr", "profile.json")
+# Receipt lines the Gen 3 driver writes (lua/tests/duo/duo_gen3_main.lua): one per non-tick
+# event it SENDS and one per command it RECEIVES.
+GEN3_TX_RE = r"(?m)^TX {event} {key}(?=\s|$)"   # key "-" for an event that carries none
+GEN3_RX_RE = r"(?m)^RX {cmd} key={key}(?=\s|$)"
+# duo_gen3_main.lua dump_witness: one per extension RAM copy, right after its save's DUMP line.
+GEN3_EXT_RE = re.compile(r"SAVE_WITNESS_EXT path=(\S+) bytes=(\d+) saves=(\d+)\s*$")
+
+
+def gen3_codec():
+    if REPO not in sys.path:
+        sys.path.insert(0, REPO)  # python tools/e2e_duo.py otherwise has tools/ at sys.path[0]
+    from server.adapters import gen3_codec as codec
+    return codec
+
+
+def gen3_key(mon) -> str:
+    """The wire key (lua/gen3/reads.lua r.key): PERSONALITY:OTID, eight upper-case hex digits."""
+    return f"{mon['personality']:08X}:{mon['ot_id']:08X}"
+
+
+def gen3_decode(image, rr=False):
+    """(party, boxes) of a flash image; `boxes` maps (box, slot) -> mon, occupied only.
+
+    `rr` selects RR's 25-scattered-box/fixed-order-party layout (gen3_codec party_from_save/
+    boxes_from_save(rr=True), pinned commit 62887460) instead of vanilla FRLG's 14 boxes.
+    """
+    codec = gen3_codec()
+    body = codec.split_rtc(image)[0]
+    boxes = {}
+    for box, row in enumerate(codec.boxes_from_save(body, rr=rr)):
+        for slot, mon in enumerate(row):
+            if mon["has_species"] and mon["species"]:
+                boxes[(box, slot)] = mon
+    return codec.party_from_save(body, rr=rr), boxes
+
+
+def gen3_profile_path(title) -> str:
+    """The pack profile.json this title's derived offsets live in (radical_red -> gen3_rr)."""
+    return GEN3_RR_PROFILE if title == "radical_red" else GEN3_PROFILE
+
+
+def gen3_ball_count(image, title="firered") -> int:
+    """The saved POKe BALLS pocket total, the same sum lua/gen3/reads.lua read_balls() makes.
+
+    Both layouts come from the title's pack profile, exactly as read_balls branches on them:
+      * vanilla FRLG: SaveBlock1 + derived SB1_BALL_POCKET_OFFSET, SB1_BALL_POCKET_COUNT slots,
+        the quantity XORed with the low u16 of SaveBlock2's encryption key (pret src/item.c:20-29);
+      * Radical Red (derived BAG_IN_EWRAM, BALL_POCKET_ENC false): the pocket lives in EWRAM at
+        ram.BALL_POCKET_ADDR, plaintext, and reaches the flash through RR's saved regions
+        (gen3_codec._rr_regions: the three save objects plus the sectors 30-31 extension).
+    """
+    codec = gen3_codec()
+    with open(gen3_profile_path(title), encoding="utf-8") as handle:
+        profile = json.load(handle)["titles"][title]
+    derived, ram = profile["derived"], profile["ram"]
+    body = codec.split_rtc(image)[0]
+    count = derived["SB1_BALL_POCKET_COUNT"]
+    if derived.get("BAG_IN_EWRAM"):
+        pocket = codec._rr_read(codec._rr_regions(body), ram["BALL_POCKET_ADDR"], count * 4)
+        key = 0
+    else:
+        parsed = codec.parse_flash(body)
+        at = derived["SB1_BALL_POCKET_OFFSET"]
+        pocket = parsed["sb1"][at:at + count * 4]
+        key_at = derived["SB2_ENC_KEY_OFFSET"]
+        key = int.from_bytes(parsed["sb2"][key_at:key_at + 2], "little")
+    if derived.get("BALL_POCKET_ENC") is False:
+        key = 0
+    total = 0
+    for i in range(count):
+        if int.from_bytes(pocket[i * 4:i * 4 + 2], "little"):
+            total += int.from_bytes(pocket[i * 4 + 2:i * 4 + 4], "little") ^ key
+    return total
+
+
+def _gen3_sectors(body, indexes):
+    codec = gen3_codec()
+    return b"".join(body[i * codec.SECTOR_SIZE:(i + 1) * codec.SECTOR_SIZE] for i in indexes)
+
+
+def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=None):
+    """PLAN §5.5's check_save_witness_gen3, on bytes: returns the facts or raises, naming the rule.
+
+    `witness` is the SRAM (flash) domain dumped inside the successful TrySavingData return,
+    `flushed` the battery file BizHawk wrote, `fixture` the save the instance was seeded from,
+    `saves` how many validated save dumps the receipt carries. Hash equality alone would pass an
+    unchanged old save, so every rule below is required:
+      * the witness is a whole, strictly qualifying image (the complete sector set);
+      * the save counter advanced over the fixture's, by exactly `saves` (one per in-game save;
+        a missed dump or an unwitnessed extra save both break it);
+      * untouched regions are byte-equal to the fixture: sectors 28-31 (Hall of Fame / Trainer
+        Tower, never written by SAVE_NORMAL, pret src/save.c HandleSavingData), and after a
+        single save also the slot that save did not write;
+      * the decoded party and boxes equal the flushed battery's;
+      * the flushed body, its optional 16-byte RTC suffix normalized by gen3_codec.split_rtc,
+        is byte-identical to the hook-time image.
+
+    `rr=True` (P5, card C5-5) qualifies/decodes through the RR layout instead (`cfru=True`,
+    `gen3_decode(..., rr=True)`) and narrows the blind "untouched" range to sectors 28-29:
+    RR's own physical sectors 30-31 are a single-copy, unrotated EXTENSION that carries boxes
+    20-22 and the bag (gen3_codec.RR_EXT_SECTORS/RR_EXT_ADDR) with no checksum or generation
+    counter (docs/gen3/research/flash_save.md:136) -- a normal RR save CAN rewrite them, so
+    byte-equality against the fixture there would be wrong, and inequality proves nothing either.
+    The hook dump and the flushed file read the SAME flash, so their agreement says nothing
+    about the extension's freshness (Codex C4-6b finding 4). Freshness is therefore proven, or
+    left OPEN, by `ext_ram`: the live EWRAM range [RR_EXT_ADDR, +RR_EXT_SIZE) the driver copies
+    inside the same save hook. The extension writer copies exactly that range verbatim, 0xFF0
+    bytes per sector (gen3_codec.verify_rr_save_layout_rom anchors 0x10B8DFC), so each mapped
+    payload must equal its RAM half. Without `ext_ram` the facts say extension=OPEN; they
+    never claim it.
+    """
+    import hashlib
+
+    codec = gen3_codec()
+    if len(witness) != codec.FLASH_SIZE:
+        raise RuntimeError(f"the save witness is {len(witness)} bytes, expected "
+                           f"{codec.FLASH_SIZE} (0x{codec.FLASH_SIZE:X})")
+    ok, why = codec.qualify_flash(witness, cfru=rr)
+    if not ok:
+        raise RuntimeError(f"the save witness is not a complete save (sector set): {why}")
+    try:
+        body, rtc = codec.split_rtc(flushed)
+        fixture_body = codec.split_rtc(fixture)[0]
+    except ValueError as exc:
+        raise RuntimeError(f"a battery image has an unsupported length: {exc}") from exc
+    before = codec.parse_flash(fixture_body, cfru=rr)["counter"]
+    after = codec.parse_flash(witness, cfru=rr)["counter"]
+    if after <= before:
+        raise RuntimeError(f"the save counter did not advance over the fixture's "
+                           f"({before} -> {after}): the witness is not a save this run made")
+    if after - before != saves:
+        raise RuntimeError(f"the save counter moved {before} -> {after} but the receipt "
+                           f"witnessed {saves} save(s); a save went unwitnessed or a dump is "
+                           f"missing")
+    per_slot = codec.NUM_SECTORS_PER_SLOT
+    special_end = (2 * per_slot + 2) if rr else codec.SECTORS_COUNT
+    untouched = {f"sectors 28-{special_end - 1}": range(2 * per_slot, special_end)}
+    if saves == 1:
+        other = 1 - after % codec.NUM_SAVE_SLOTS
+        untouched[f"the unwritten slot {other}"] = range(other * per_slot, (other + 1) * per_slot)
+    for name, indexes in untouched.items():
+        if _gen3_sectors(witness, indexes) != _gen3_sectors(fixture_body, indexes):
+            raise RuntimeError(f"{name} differ from the fixture; a normal save never writes them")
+    w_party, w_boxes = gen3_decode(witness, rr=rr)
+    f_party, f_boxes = gen3_decode(body, rr=rr)
+    if [gen3_key(m) for m in w_party] != [gen3_key(m) for m in f_party] or w_party != f_party:
+        raise RuntimeError(f"the decoded party differs: witness {[gen3_key(m) for m in w_party]} "
+                           f"vs flushed {[gen3_key(m) for m in f_party]}")
+    if w_boxes != f_boxes:
+        raise RuntimeError(f"the decoded boxes differ: witness {sorted(w_boxes)} vs flushed "
+                           f"{sorted(f_boxes)}")
+    site, file = hashlib.sha256(witness).hexdigest(), hashlib.sha256(body).hexdigest()
+    if site != file:
+        first = next(i for i, (a, b) in enumerate(zip(witness, body, strict=True)) if a != b)
+        raise RuntimeError(f"the save witness does not match the flushed battery: site {site} "
+                           f"vs file {file}; first differing flash offset 0x{first:05X}")
+    facts = {"site": site, "file": file, "counter": (before, after), "rtc": bool(rtc),
+             "extension": None}
+    if rr:
+        facts["extension"] = "OPEN"
+        if ext_ram is not None:
+            chunk = codec.CHUNK_SIZE_CFRU
+            if len(ext_ram) != codec.RR_EXT_SIZE:
+                raise RuntimeError(f"the live extension RAM copy is {len(ext_ram)} bytes, "
+                                   f"expected {codec.RR_EXT_SIZE}")
+            for n, sector in enumerate(codec.RR_EXT_SECTORS):
+                saved = witness[sector * codec.SECTOR_SIZE:sector * codec.SECTOR_SIZE + chunk]
+                if saved != ext_ram[n * chunk:(n + 1) * chunk]:
+                    raise RuntimeError(f"extension sector {sector} is not the live EWRAM "
+                                       f"0x{codec.RR_EXT_ADDR + n * chunk:08X}+0x{chunk:X} at "
+                                       f"the save boundary: the save did not write this "
+                                       f"state (stale or torn extension)")
+            facts["extension"] = "LIVE_RAM_MATCH"
+    return facts
+
+
+# The title's record bounds (Codex C4-6c findings 1 and 5). Vanilla FRLG: species 1..411 --
+# pret include/constants/species.h:421-423 (SPECIES_EGG 412 == NUM_SPECIES, eggs keep their real
+# species in the record). Radical Red: the species ids CFRU actually defines,
+# data/games/gen3_frlge/rr_species.json (the table tools/gen_gen3_profile.py already cites for
+# RR's SHEDINJA_SPECIES_ID). MAX_LEVEL is each pack's derived.MAX_LEVEL (RR 250, ROM-pinned in
+# data/games/gen3_rr/profile.json _src). A move's max PP is pret's CalculatePPWithBonus
+# (src/pokemon.c:3898-3902) over the title's own ROM move table (rom.BATTLE_MOVES_ADDR,
+# derived.BATTLE_MOVE_ENTRY_SIZE/BATTLE_MOVE_PP_OFFSET), the same read lua/gen3/boxes.lua makes.
+GEN3_VANILLA_NUM_SPECIES = 412
+GEN3_RR_SPECIES = os.path.join(REPO, "data", "games", "gen3_frlge", "rr_species.json")
+MAIL_NONE = 0xFF                                  # pret include/constants/items.h:451
+GEN3_MAIL_ITEMS = range(121, 133)                 # ITEM_ORANGE_MAIL..ITEM_RETRO_MAIL, items.h:125-136
+GEN3_MAIL_COUNT = 16                              # MAIL_COUNT = PARTY_SIZE + 10, global.h:43
+
+
+def gen3_limits(title, rom=None):
+    """The record bounds for `title`: {"max_level", "species" (a predicate), "max_pp"
+    (move, pp_bonuses, index) -> int, or None without a ROM}. Nothing here is a literal the
+    title's pack or pret does not already pin."""
+    with open(gen3_profile_path(title), encoding="utf-8") as handle:
+        profile = json.load(handle)["titles"][title]
+    derived = profile["derived"]
+    if title == "radical_red":
+        with open(GEN3_RR_SPECIES, encoding="utf-8") as handle:
+            known = {int(k) for k in json.load(handle)}
+
+        def species(value):
+            return value in known
+    else:
+        def species(value):
+            return 1 <= value < GEN3_VANILLA_NUM_SPECIES
+    max_pp = None
+    if rom is not None:
+        base = profile["rom"]["BATTLE_MOVES_ADDR"] - 0x08000000
+        stride, off = derived["BATTLE_MOVE_ENTRY_SIZE"], derived["BATTLE_MOVE_PP_OFFSET"]
+
+        def max_pp(move, pp_bonuses, index):
+            base_pp = rom[base + move * stride + off]
+            ups = (pp_bonuses >> (2 * index)) & 3          # gPPUpGetMask[index] = 3 << 2*index
+            return base_pp + (base_pp * 20 * ups) // 100
+    return {"max_level": derived["MAX_LEVEL"], "species": species, "max_pp": max_pp}
+
+
+def gen3_status_ok(status) -> bool:
+    """A valid status1 encoding (pret include/constants/battle.h:90-101): none, sleep turns 1-7,
+    exactly one of poison/burn/freeze/paralysis, or toxic with its turn counter (bits 8-11)."""
+    return (status == 0 or 1 <= status <= 7 or status in (0x08, 0x10, 0x20, 0x40)
+            or (status & ~0xF00) == 0x80)
+
+
+def gen3_record_problems(label, mon, rr=False, limits=None):
+    """The cartridge's own record validity, every mutable field bounded.
+
+    Checksum: vanilla must hold (pret GetBoxMonData's bad-egg rule); CFRU never stores one
+    (gen3_codec leaves checksum_ok None). Header: has_species, not a bad egg, a species the
+    title defines. Party tail: level 1..MAX_LEVEL, 0 < max_hp, hp <= max_hp, a valid status,
+    mail MAIL_NONE unless a mail item is held. PP: none on an empty move slot (vanilla; CFRU's
+    expansion computes all four from the table, so an empty slot must stay within move 0's), and
+    never above CalculatePPWithBonus for the move in that slot. Without `limits` (no ROM) the
+    PP bound cannot be checked and that is a problem, not a pass."""
+    problems = []
+    if rr:
+        if mon.get("checksum_ok") is not None:
+            problems.append(f"{label}: an RR record decoded with a vanilla checksum verdict")
+    elif mon.get("checksum_ok") is not True:
+        problems.append(f"{label}: the secure checksum fails")
+    species_ok = limits["species"] if limits else (lambda v: bool(v))
+    if mon.get("has_species") != 1 or mon.get("is_bad_egg") or not species_ok(mon.get("species", 0)):
+        problems.append(f"{label}: not a valid record (has_species={mon.get('has_species')}, "
+                        f"bad_egg={mon.get('is_bad_egg')}, species={mon.get('species')})")
+    max_level = limits["max_level"] if limits else 100
+    if "level" in mon and not 1 <= mon["level"] <= max_level:
+        problems.append(f"{label}: level {mon['level']} is outside 1..{max_level}")
+    if "hp" in mon:
+        if mon["max_hp"] <= 0 or mon["hp"] > mon["max_hp"]:
+            problems.append(f"{label}: hp {mon['hp']}/{mon['max_hp']} is not a valid HP")
+        if not gen3_status_ok(mon["status"]):
+            problems.append(f"{label}: status 0x{mon['status']:08X} is not a valid status1")
+        mail_ok = (mon["mail"] == MAIL_NONE
+                   or (mon.get("held_item") in GEN3_MAIL_ITEMS and mon["mail"] < GEN3_MAIL_COUNT))
+        if not mail_ok:
+            problems.append(f"{label}: mail 0x{mon['mail']:02X} without a held mail item")
+    max_pp = limits and limits.get("max_pp")
+    if not max_pp:
+        problems.append(f"{label}: no move table to bound PP against")
+    else:
+        for i, (move, pp) in enumerate(zip(mon["moves"], mon["pp"], strict=True)):
+            cap = 0 if move == 0 and not rr else max_pp(move, mon["pp_bonuses"], i)
+            if pp > cap:
+                problems.append(f"{label}: move slot {i} (move {move}) holds {pp} PP, max {cap}")
+    return problems
+
+
+# What moving one record may change, and NOTHING else: party-only state the game resets or
+# recomputes (hp/status/mail: BoxMonToMon + CalculateMonStats; pp: BoxMonRestorePP on deposit,
+# battle use) and the checksum covering those secure fields. Friendship is added ONLY when the
+# scenario walked the mon in the party or fought with it (the walking/faint friendship events).
+# Everything else -- PID, OT id/name, nickname, language, species, item, exp, moves, PP-ups, EVs,
+# IVs, ability bit, met data, pokerus, ribbons, markings, egg flags, level and stats -- is
+# invariant. The mutable fields are not free: gen3_record_problems bounds each of them, and a
+# round trip additionally pins them to the withdrawal's own postcondition.
+GEN3_RECORD_MUTABLE = frozenset({"hp", "status", "mail", "pp", "checksum"})
+GEN3_ACTIVITY_MUTABLE = frozenset({"friendship"})
+# CFRU's 58-byte CompressedPokemon drops these on every trip through a box (gen3_codec
+# expand_compressed_box_mon): no contest bytes, a zero `unknown`, and the expansion sets ribbons
+# bit 31 (RR ROM 0x090B696A). Ribbons are compared with that bit masked, not skipped.
+GEN3_RR_BOX_LOSSY = frozenset({"contest", "unknown"})
+RR_RIBBON_EXPANDED = 0x80000000
+
+
+# The berries a holder EATS in battle: pret include/constants/items.h ITEM_CHERI_BERRY (133) ..
+# ITEM_IAPAPA_BERRY (147) and ITEM_LIECHI_BERRY (168) .. ITEM_STARF_BERRY (174) -- exactly the
+# berries whose src/data/items.json holdEffect is not HOLD_EFFECT_NONE (status cures, Leppa,
+# Oran/Sitrus, the confusion berries, the pinch berries). RR's rr_battle starter holds 139 (Oran).
+GEN3_BATTLE_BERRIES = frozenset(range(133, 148)) | frozenset(range(168, 175))
+
+
+def gen3_consumed_ok(changed, battled):
+    """Drop ONLY a battle berry eaten in battle: held_item from a GEN3_BATTLE_BERRIES id to NONE,
+    and only when the mon `battled` (G5-RR-ORACLES-2, OMP review of 410d9578). Any other
+    held-item change -- another item cleared, a berry swapped, a berry gone without a battle --
+    stays a diff, so an SLink write that clears an item still fails."""
+    return [c for c in changed
+            if not (battled and c[0] == "held_item" and c[1] in GEN3_BATTLE_BERRIES and c[2] == 0)]
+
+
+def gen3_record_diff(was, now, rr=False, mutable=GEN3_RECORD_MUTABLE):
+    """(field, before, after) for every invariant field the two records share that differs.
+    Fields only one side carries (a box record has no party tail) are not compared."""
+    skip = set(mutable) | (GEN3_RR_BOX_LOSSY if rr else set())
+    out = []
+    for field in sorted(set(was) & set(now)):
+        if field in skip:
+            continue
+        a, b = was[field], now[field]
+        if rr and field == "ribbons":
+            a, b = a & ~RR_RIBBON_EXPANDED, b & ~RR_RIBBON_EXPANDED
+        if a != b:
+            out.append((field, was[field], now[field]))
+    return out
+
+
+def gen3_withdrawn_problems(label, mon, limits, rr=False):
+    """The postcondition of a mon that just came OUT of a box, on either cartridge: healthy
+    (hp == max_hp, BoxMonToMon + CalculateMonStats), cured (status 0), mail cleared, and every
+    move slot at its full PP. Vanilla restores PP on deposit (BoxMonRestorePP), where an empty
+    slot has none; CFRU's expansion calls CalculatePPWithBonus for ALL four slots, move 0
+    included (lua/gen3/boxes.lua RR withdraw; RR ROM 0x090B69C6..0x090B69E2), so on RR an empty
+    slot carries the table's move-0 PP -- the same split gen3_record_problems makes."""
+    problems = []
+    if mon["hp"] != mon["max_hp"]:
+        problems.append(f"{label}: withdrawn at {mon['hp']}/{mon['max_hp']} HP, not healed")
+    if mon["status"] != 0:
+        problems.append(f"{label}: withdrawn with status 0x{mon['status']:08X}, not cured")
+    if mon["mail"] != MAIL_NONE and mon.get("held_item") not in GEN3_MAIL_ITEMS:
+        problems.append(f"{label}: withdrawn with mail 0x{mon['mail']:02X}")
+    max_pp = limits and limits.get("max_pp")
+    if max_pp:
+        full = [max_pp(m, mon["pp_bonuses"], i) if (m or rr) else 0
+                for i, m in enumerate(mon["moves"])]
+        if list(mon["pp"]) != full:
+            problems.append(f"{label}: withdrawn with PP {list(mon['pp'])}, not restored {full}")
+    return problems
+
+
+# A mon trained up the T2 route (linked_faint_active_trainer_gen3): the growth fields move.
+GEN3_TRAINED_MUTABLE = frozenset({"level", "experience", "evs", "max_hp", "attack", "defense",
+                                  "speed", "sp_attack", "sp_defense", "moves"})
+
+
+def active_faint_chain(key, case):
+    """(required, ordered, forbidden) receipt markers of the P+H subject (scenario_gen3_linked_
+    faint_active.lua), in chain order: READY_ACTIVE, the keyed RX, the client's own hand-off
+    commit line, ACTIVE_COMMIT (5 writes), HANDOFF (successor within 2 frames, exec bit 0 clear),
+    the driver's FORCED_HP0 IN battle, ACTIVE_KO with measured inputs=0 keys=0x0 hp_writes=0 (R3
+    lhammer presses L on purpose: any count), ACTIVE_FAINT_SITE (counter +1), then the case's aftermath: SENT_OUT (wild,
+    trainer, command, lhammer) or TX whiteout (whiteout), ACTIVE_OUTCOME and a save. Forbidden:
+    the old hold's markers and a `faint` echo for the key."""
+    k = re.escape(key)
+    # the carrier prints its MEASURED press count and OR-ed heldKeysRaw (R1 L3); R3 presses L
+    # on purpose, so there only the HP-write count is pinned
+    inputs = r"\d+ keys=0x[0-9A-F]+" if case == "lhammer" else "0 keys=0x0"
+    explode = case == "explode"
+    tag = rf" case={re.escape(case)}$"      # the carrier closes both lines with its case
+    if explode:   # owner ruling 19: the Explosion menu skip ends in the same hand-off
+        commit = [gen3_rx("force_explode", key),
+                  r"(?m)^\[client\] \[SLink-gen3\] force_explode: menu skip committed slot=0 battler=0 handoff=1$",
+                  rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=\d+ attempted=\d+ handoff=1 .*{tag}"]
+    else:
+        commit = [gen3_rx("force_faint", key),
+                  rf"(?m)^\[client\] \[SLink-gen3\] force_faint: Perish commit battler=0 handoff=1 {k}\b",
+                  rf"(?m)^ACTIVE_COMMIT {k} frame=\d+ writes=5 attempted=\d+ handoff=1 .*{tag}"]
+    chain = [rf"(?m)^READY_ACTIVE {k} case={re.escape(case)}$", *commit,
+             rf"(?m)^HANDOFF {k} from=0x[0-9A-F]{{8}} to=0x[0-9A-F]{{8}} frames=[12] exec_bit0=0$",
+             rf"(?m)^ACTIVE_KO {k} frame=\d+ in_battle=1 battle_hp=0 .*"
+             rf"{' last_move=153' if explode else ''} inputs={inputs} hp_writes=0 attempted=\d+{tag}",
+             rf"(?m)^ACTIVE_FAINT_SITE {k} frame=\d+ active=0 battler0_slot=0 battle_hp=0 party_hp=0 "
+             rf"counter=(\d+)->(?!\1\b)\d+$"]
+    if case == "lhammer":
+        chain.append(rf"(?m)^LHAMMER_BALLS {k} balls=\d+ ball_id=\d+ unchanged$")
+    if case == "whiteout":
+        chain += [gen3_tx("whiteout", "-"), rf"(?m)^ACTIVE_OUTCOME {k} outcome=2 "]
+    elif explode:   # the foe usually falls too: a win, a send-out, a whiteout or a draw follows
+        chain.append(rf"(?m)^ACTIVE_OUTCOME {k} outcome=\d+ ")
+    else:
+        outcome = "4" if case == "command" else r"\d+"
+        chain += [r"(?m)^SENT_OUT slot=1 battler_slot=1$", rf"(?m)^ACTIVE_OUTCOME {k} outcome={outcome} sent_out=1 "]
+    chain.append(r"(?m)^SAVE_WITNESS_DUMP ")
+    # the driver's own HP-0 watcher (party HP, in battle, battler 0): after the commit and before
+    # the aftermath, but not ordered against ACTIVE_KO/the site -- the party word follows
+    # gBattleMons by the controller's SetMonData, and all three can land in one frame
+    hp0 = rf"(?m)^FORCED_HP0 {k} frame=\d+ in_battle=1 battler=1$"
+    ordered = list(zip(chain, chain[1:], strict=False)) + [(chain[3], hp0), (hp0, chain[8 if case == "lhammer" else 7])]
+    forbidden = [rf"(?m)^ACTIVE_HOLD {k}\b", rf"(?m)^SWITCHED_OUT {k}\b", rf"(?m)^BENCH_HP0_IN_BATTLE {k}\b",
+                 gen3_tx("faint", key), rf"(?m)^FORCED_HP0 {k} .*in_battle=0",
+                 r"(?m)^\[client\] .*active faint committed \(press A\)"]
+    return chain + [hp0], ordered, forbidden
+
+
+def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, rr=False, limits=None,
+                           battled=False):
+    """linked_faint_active_whiteout_gen3's B: after the Perish KO whited it out, `key` is the
+    saved party's ONLY mon (the Center heal restored it; its memorialize was dropped after
+    game_over), boxed nowhere, valid, with the fixture record's invariants; each hand-`deposited`
+    key sits once in a non-memorial box, and no other box changed."""
+    party, boxes = saved
+    f_party, f_boxes = fixture
+    keys = [gen3_key(m) for m in party]
+    problems = [] if keys == [key] else [f"{label}: saved party {keys}, expected [{key}] alone"]
+    if not deposited and len(f_party) != 1:
+        problems.append(f"{label}: no hand deposit built the one-mon party")
+    if any(gen3_key(m) == key for m in boxes.values()):
+        problems.append(f"{label}: {key} also has a boxed copy")
+    now = next((m for m in party if gen3_key(m) == key), None)
+    was = next((m for m in f_party if gen3_key(m) == key), None)
+    if now and was:
+        problems += gen3_record_problems(f"{label}: the kept {key}", now, rr, limits)
+        # the walk to the PC and back crosses Route 1 grass, where playlib FIGHTS incidental
+        # battles: the lone lead may level on the way
+        changed = gen3_consumed_ok(gen3_record_diff(was, now, rr, GEN3_RECORD_MUTABLE | GEN3_ACTIVITY_MUTABLE
+                                                    | GEN3_TRAINED_MUTABLE), battled)
+        if changed:
+            problems.append(f"{label}: the kept {key} differs from the fixture in {changed}")
+    moved = set(deposited)
+    others = {pos: gen3_key(m) for pos, m in boxes.items() if gen3_key(m) not in moved}
+    if others != {pos: gen3_key(m) for pos, m in f_boxes.items()}:
+        problems.append(f"{label}: boxes other than the hand deposit changed")
+    for mon in sorted(moved):
+        at = [pos for pos, m in boxes.items() if gen3_key(m) == mon]
+        if len(at) != 1 or at[0][0] == memorial_box or not any(gen3_key(m) == mon for m in f_party):
+            problems.append(f"{label}: the hand-deposited {mon} is saved at {at}, not once in a "
+                            f"non-memorial box")
+    return problems
+
+
+def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, limits=None,
+                           battled=False, trained=False, captured=None):
+    """`key` left the party for exactly one slot of the memorial box; nothing else moved. The
+    memorial record must be valid for the cartridge and, when the fixture carried the mon, keep
+    every invariant field of the record it was cut from (friendship only if it `battled`, the
+    growth fields only if it was `trained`)."""
+    party, boxes = saved
+    f_party, f_boxes = fixture
+    keys = [gen3_key(m) for m in party]
+    problems = []
+    if key in keys:
+        problems.append(f"{label}: {key} is still in the saved party {keys}")
+    where = sorted(pos for pos, m in boxes.items() if gen3_key(m) == key)
+    if len(where) != 1 or where[0][0] != memorial_box:
+        problems.append(f"{label}: {key} is saved at {where}, not exactly once in the memorial "
+                        f"box {memorial_box}")
+    else:
+        problems += gen3_record_problems(f"{label}: the memorial record for {key}",
+                                         boxes[where[0]], rr, limits)
+        was = next((m for m in f_party if gen3_key(m) == key), None)
+        mutable = (GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
+                   | (GEN3_TRAINED_MUTABLE if trained else set()))
+        now = boxes[where[0]]
+        changed = gen3_consumed_ok(gen3_record_diff(was, now, rr, mutable), battled) if was else []
+        if was is None:
+            # a key the fixture never carried (a catch): compare against its own capture event,
+            # never skip (G5-RR-ORACLES-3 F3) -- species and held item as the client reported them
+            if captured is None:
+                problems.append(f"{label}: {key} is not in the fixture and no capture event was "
+                                f"given to compare its memorial record against")
+            else:
+                for field, sent in (("species", "species_id"), ("held_item", "held_item_id")):
+                    if now.get(field) != captured.get(sent):
+                        changed.append((field, captured.get(sent), now.get(field)))
+        if changed:
+            problems.append(f"{label}: the memorial {key} differs from the fixture record in "
+                            f"{changed}")
+    expected = [gen3_key(m) for m in f_party if gen3_key(m) != key]
+    if keys != expected:
+        problems.append(f"{label}: saved party {keys}, expected the fixture's minus {key}: "
+                        f"{expected}")
+    others = {pos: gen3_key(m) for pos, m in boxes.items() if gen3_key(m) != key}
+    if others != {pos: gen3_key(m) for pos, m in f_boxes.items()}:
+        problems.append(f"{label}: boxes other than the memorial slot changed")
+    return problems
+
+
+def gen3_round_trip_problems(label, saved, fixture, key, rr=False, limits=None, walked=False):
+    """`key` is back in the party exactly once, boxed nowhere, valid for the cartridge, in the
+    withdrawal's postcondition (healed, cured, PP restored), and every invariant field equals
+    the fixture's record -- friendship may move only when the scenario `walked` it."""
+    party, boxes = saved
+    f_party, f_boxes = fixture
+    keys = [gen3_key(m) for m in party]
+    problems = []
+    if keys.count(key) != 1:
+        problems.append(f"{label}: {key} appears {keys.count(key)}x in the saved party {keys}")
+    if any(gen3_key(m) == key for m in boxes.values()):
+        problems.append(f"{label}: {key} is still (or also) in a saved box")
+    if sorted(keys) != sorted(gen3_key(m) for m in f_party):
+        problems.append(f"{label}: saved party {keys} is not the fixture's membership")
+    if {pos: gen3_key(m) for pos, m in boxes.items()} != {
+            pos: gen3_key(m) for pos, m in f_boxes.items()}:
+        problems.append(f"{label}: the saved boxes are not the fixture's")
+    now = next((m for m in party if gen3_key(m) == key), None)
+    was = next((m for m in f_party if gen3_key(m) == key), None)
+    if now and was:
+        problems += gen3_record_problems(f"{label}: the returned {key}", now, rr, limits)
+        problems += gen3_withdrawn_problems(f"{label}: the returned {key}", now, limits, rr)
+        mutable = GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if walked else set())
+        changed = gen3_record_diff(was, now, rr, mutable)
+        if changed:
+            problems.append(f"{label}: the returned {key} differs from the fixture in {changed}")
+    return problems
+
+
+def gen3_capture_problems(label, saved, fixture, key, sent=None, rr=False, limits=None):
+    """A caught `key` joined the party once (appended), is boxed nowhere, nothing else moved, the
+    record is valid for the cartridge, and it carries what the client's capture event said
+    (species, level, held item, nickname) -- `sent` is that event's decoded fields."""
+    party, boxes = saved
+    f_party, f_boxes = fixture
+    keys = [gen3_key(m) for m in party]
+    expected = [gen3_key(m) for m in f_party] + [key]
+    problems = []
+    if keys != expected:
+        problems.append(f"{label}: saved party {keys}, expected {expected}")
+    if any(gen3_key(m) == key for m in boxes.values()):
+        problems.append(f"{label}: the capture {key} is also saved in a box (duplicate)")
+    if {pos: gen3_key(m) for pos, m in boxes.items()} != {
+            pos: gen3_key(m) for pos, m in f_boxes.items()}:
+        problems.append(f"{label}: the saved boxes are not the fixture's")
+    mon = next((m for m in party if gen3_key(m) == key), None)
+    if mon:
+        problems += gen3_record_problems(f"{label}: the capture {key}", mon, rr, limits)
+        for wire, field in (("species_id", "species"), ("level", "level"),
+                            ("held_item_id", "held_item"), ("nickname", "nickname")):
+            if sent and sent.get(wire) is not None and mon[field] != sent[wire]:
+                problems.append(f"{label}: {key} saved {field}={mon[field]!r}, the capture event "
+                                f"said {sent[wire]!r}")
+    return problems
+
+
+# Paths a run itself rewrites (the wire goldens `--wire-log` refreshes): never "dirty source".
+GEN3_IDENTITY_EXCLUDE = ("tests/fixtures/gen3/wire/",)
+
+def gen3_dirty_paths(porcelain_z):
+    """The dirty paths of `git status --porcelain=v1 -z` output, NUL-separated and unquoted. A
+    rename/copy record ("R" or "C" in XY) is `XY new\0old\0`: BOTH paths are reported, and the
+    record is excluded only when BOTH lie under GEN3_IDENTITY_EXCLUDE (Codex, 86245d1e: a
+    wire-fixture -> server/ rename used to read as one excluded path)."""
+    out, fields, i = [], porcelain_z.split("\0"), 0
+    while i < len(fields):
+        record = fields[i]
+        i += 1
+        if len(record) < 4:
+            continue
+        status, paths = record[:2], [record[3:]]
+        if "R" in status or "C" in status:
+            paths.append(fields[i])
+            i += 1
+        if not all(path.startswith(GEN3_IDENTITY_EXCLUDE) for path in paths):
+            out.extend(paths)
+    return out
+
+
+# While a Gen 3 oracle runs, DuoRun._run_oracle points this at a list: gen3_receipt_problems
+# appends (label, line) for every receipt line a required/ordered pattern matched, and the runner
+# copies them into the PYDEC receipt (Codex receipt audit 2026-09-23: the receipt must carry
+# the raw markers the verdict consumed, not only its summary line).
+_CONSUMED_MARKERS = None
+
+
+def _receipt_line(text, match):
+    start = text.rfind("\n", 0, match.start()) + 1
+    end = text.find("\n", match.end())
+    return text[start:end if end >= 0 else len(text)]
+
+
+# rows 1/9 (C4-SAVE-ROWS): the START menu refusals name the menu's own clauses, never a
+# save-dialog pointer (sSaveDialogCB is a witness, not a clause, since C4-SAVE)
+_MENU_CLAUSE = r"clause=(?:task|field_controls_locked) "
+
+
+def save_then_write_chain(ka):
+    """save_then_write_gen3's A receipt, in order (scenario_gen3_save_then_write.lua emits it):
+    the C4-6s regression, each save's SAVE_DISMISSAL (A press vs the 60-call timeout, read from
+    sSaveDialogDelay), then the menu leg -- row 9's witness false off SAVE with a refused probe,
+    row 1's overwrite prompt and redrawn menu each refusing the same probe, and its landing after
+    the release, with its write-frame witness (field free, no START task, read inside the write).
+    SAVE_CANCEL_FIELD_FREE is NOT in this line: see save_then_write_order."""
+    k = re.escape(ka)
+    dismissal = r"by=(?:a_press delay=(?:[1-9]|[1-5]\d)|timeout delay=0)$"
+    return [r"(?m)^SAVE_WITNESS_DUMP .*saves=1 ", rf"(?m)^SAVE_DISMISSAL save_then_write_1 {dismissal}",
+            r"(?m)^STALE_SAVE_DIALOG save_dialog_cb=0x[0-9A-F]{8}:SaveDialogCB_ReturnSuccess",
+            rf"(?m)^WRITE_PROBE_READY {k} ", gen3_rx("box_mon", ka), gen3_tx("stats_cache", ka),
+            gen3_boxed(ka), rf"(?m)^WRITE_LANDED box_mon {k} ", r"(?m)^SAVE_WITNESS_DUMP .*saves=2 ",
+            rf"(?m)^SAVE_DISMISSAL save_then_write_2 {dismissal}",
+            r"(?m)^DIALOG_WITNESS_FALSE cursor=\d+ action=\d+ save_row=\d+ menu=open stale=0x(?!00000000)[0-9A-F]{8}$",
+            rf"(?m)^CONTROL_LIVE dialog_witness {k} ", gen3_rx("party_mon", ka),
+            rf"(?m)^CONTROL_REFUSED dialog_witness party_mon {k} {_MENU_CLAUSE}",
+            rf"(?m)^SAVE_CANCEL_PROMPT {k} row=save prompt=(?:overwrite|different_file)$",
+            rf"(?m)^CONTROL_LIVE save_prompt {k} ",
+            rf"(?m)^CONTROL_REFUSED save_prompt party_mon {k} {_MENU_CLAUSE}",
+            rf"(?m)^SAVE_CANCEL_MENU_REDRAWN {k} ", rf"(?m)^CONTROL_LIVE save_cancel_menu {k} ",
+            rf"(?m)^CONTROL_REFUSED save_cancel_menu party_mon {k} {_MENU_CLAUSE}",
+            rf"(?m)^CONTROL_RELEASED save_cancel party_mon {k}$",
+            gen3_tx("sync_retrieve_done", ka), gen3_returned(ka),
+            rf"(?m)^SAVE_CANCEL_WRITE_FRAME {k} frame=\d+ field_free=true start_menu_task=false$",
+            rf"(?m)^CONTROL_SETTLED save_cancel party_mon {k}$",
+            r"(?m)^SAVE_COUNTER_UNCHANGED before=(\d+) after=\1$"]
+
+
+def save_then_write_order(ka):
+    """(required, ordered) for the A receipt: the chain in order, plus SAVE_CANCEL_FIELD_FREE
+    between the release and CONTROL_SETTLED only. Live 03ab26e7 (FR and LG): the client admits
+    and writes in the FIRST free frame, inside that frame's onframeend pump, so its write and TX
+    log before the scenario's per-frame check can log FIELD_FREE -- product-correct, and not
+    evidence of anything. What proves the landing waited for the field is the write-frame
+    witness in the chain, read in the write itself; the held refusals before the release prove
+    nothing landed while the field was locked."""
+    chain = save_then_write_chain(ka)
+    released = rf"(?m)^CONTROL_RELEASED save_cancel party_mon {re.escape(ka)}$"
+    free = rf"(?m)^SAVE_CANCEL_FIELD_FREE {re.escape(ka)}$"
+    settled = rf"(?m)^CONTROL_SETTLED save_cancel party_mon {re.escape(ka)}$"
+    return [*chain, free], [*zip(chain, chain[1:], strict=False), (released, free), (free, settled)]
+
+
+def save_then_write_forbidden(ka):
+    """No failed write, no third save (the cancelled dialog wrote nothing), and no save-dialog
+    pointer named in row 9's refusal (the old pack's clause, G4 draft row 9)."""
+    return [gen3_tx("box_mon_failed", ka), gen3_tx("sync_retrieve_failed", ka),
+            r"(?m)^SAVE_WITNESS_DUMP .*saves=3 ", r"(?m)^CONTROL_REFUSED dialog_witness .*save_dialog_cb"]
+
+
+# ctx.hold_probe's 600 held frames plus its frame-0 sample: every held frame calls live() once
+CABLE_HOLD_SAMPLES = 601
+_CABLE_NULL_RE = re.compile(
+    r"(?m)^CABLE_CALLBACK_NULL (?:(?P<witnessed>sLinkOpen=1 gLinkCallback=0)|limit=no-cable-partner) "
+    r"held_frames=(?P<held>\d+) open_frames=(?P<open>\d+) null_frames=(?P<null>\d+)"
+    r"(?: callback=0x(?P<cb>[0-9A-F]{8}):(?P<name>\w+))?$")
+
+
+def gen3_sym(title, name):
+    """`name`'s address in pret's .sym for `title` (radical_red reads FR's, as the driver does)."""
+    sym = "firered" if title == "radical_red" else title
+    with open(os.path.join(REPO, "data", "gen3", "pret", f"poke{sym}.sym"), encoding="utf-8") as handle:
+        for line in handle:
+            parts = line.split()
+            if len(parts) == 4 and parts[3] == name:
+                return int(parts[0], 16)
+    raise RuntimeError(f"no {name} in poke{sym}.sym")
+
+
+def cable_callback_problems(label, text, link_cb):
+    """Row 6 (G4 draft §3.2): the CABLE_CALLBACK_NULL line's fields. Witnessed: 1 <= null <= open
+    <= held. The no-cable-partner limit: the link open on EVERY held frame (held >= the hold's
+    CABLE_HOLD_SAMPLES), never null, and the callback LinkCB_RequestPlayerDataExchange at its
+    .sym address (`link_cb`, Thumb bit set)."""
+    m = _CABLE_NULL_RE.search(text or "")
+    if not m:
+        return [f"{label}: CABLE_CALLBACK_NULL missing or malformed"]
+    held, opened, null = int(m["held"]), int(m["open"]), int(m["null"])
+    problems = []
+    if held < CABLE_HOLD_SAMPLES:
+        problems.append(f"{label}: CABLE_CALLBACK_NULL held_frames={held} < {CABLE_HOLD_SAMPLES}")
+    if m["witnessed"]:
+        if m["cb"] is not None or not 1 <= null <= opened <= held:
+            problems.append(f"{label}: CABLE_CALLBACK_NULL witnessed form needs 1 <= null <= open <= held "
+                            f"and no callback ({m.group(0)})")
+    elif null != 0 or opened != held or m["cb"] is None or m["name"] != "LinkCB_RequestPlayerDataExchange" \
+            or int(m["cb"], 16) != (link_cb | 1):
+        problems.append(f"{label}: CABLE_CALLBACK_NULL limit needs open_frames == held_frames, null_frames=0 "
+                        f"and callback=0x{link_cb | 1:08X}:LinkCB_RequestPlayerDataExchange ({m.group(0)})")
+    return problems
+
+
+def center_controls_chain(ka):
+    """center_controls_gen3's A receipt, in order (scenario_gen3_center_controls.lua emits it):
+    each control's source-pinned WITNESS before its CONTROL_LIVE, the keyed probe after it, the
+    refusal, then CONTROL_RELEASED at the release input BEFORE the probe's ACK and read-back,
+    and CONTROL_SETTLED after them (Codex REV-center-receipt-2). C4-SAVE-ROWS: cable_save (row 3)
+    refuses the same probe before the save's DUMP, and CABLE_CALLBACK_NULL (row 6) follows the
+    link wait's refusal."""
+    k = re.escape(ka)
+    return [r"(?m)^WITNESS cable_welcome_message script=CableClub_EventScript_WelcomeToCableClub at=\S+ "
+            r"var_result=0 adapter_connected=false",
+            rf"(?m)^CONTROL_LIVE cable_welcome_message {k} ", gen3_rx("box_mon", ka),
+            rf"(?m)^CONTROL_REFUSED cable_welcome_message box_mon {k} clause=\S+ ",
+            # row 3: the Cable Club save's own refusal, BEFORE the save lands
+            rf"(?m)^CONTROL_LIVE cable_save {k} ", rf"(?m)^CONTROL_REFUSED cable_save box_mon {k} clause=\S+ ",
+            r"(?m)^SAVE_WITNESS_DUMP ", rf"(?m)^CONTROL_LIVE cable_link {k} ",
+            rf"(?m)^CONTROL_REFUSED cable_link box_mon {k} clause=\S+ ",
+            # row 6: located here, judged field by field by cable_callback_problems
+            r"(?m)^CABLE_CALLBACK_NULL ",
+            rf"(?m)^CONTROL_RELEASED cable_link box_mon {k}$", gen3_tx("stats_cache", ka),
+            gen3_boxed(ka), rf"(?m)^CONTROL_SETTLED cable_link box_mon {k}$",
+            r"(?m)^WITNESS union_room_attendant script=CableClub_EventScript_UnionRoomAdapterNotConnected "
+            r"at=\S+ var_result=0 adapter_connected=false",
+            rf"(?m)^CONTROL_LIVE union_room_attendant {k} ", gen3_rx("party_mon", ka),
+            rf"(?m)^CONTROL_REFUSED union_room_attendant party_mon {k} clause=\S+ ",
+            rf"(?m)^CONTROL_RELEASED union_room_attendant party_mon {k}$",
+            gen3_tx("sync_retrieve_done", ka), gen3_returned(ka),
+            rf"(?m)^CONTROL_SETTLED union_room_attendant party_mon {k}$"]
+
+
+def gen3_receipt_problems(label, text, required=(), forbidden=(), ordered=()):
+    """Receipt markers: every `required` regex present, no `forbidden` one, each `ordered`
+    (before, after) pair found in that order."""
+    if _CONSUMED_MARKERS is not None:
+        for pattern in [*required, *(p for pair in ordered for p in pair)]:
+            match = re.search(pattern, text or "")
+            if match:
+                _CONSUMED_MARKERS.append((label, _receipt_line(text, match)))
+    problems = [f"{label}: missing /{p}/" for p in required if not re.search(p, text or "")]
+    problems += [f"{label}: forbidden /{p}/ present" for p in forbidden
+                 if re.search(p, text or "")]
+    for first, second in ordered:
+        a, b = re.search(first, text or ""), re.search(second, text or "")
+        if not a or not b or b.start() <= a.start():
+            problems.append(f"{label}: /{first}/ must precede /{second}/")
+    return problems
+
+
+def rival_swap_real_problems(text, source_party, rival_ids, native_lo, native_hi):
+    """rival_swap_real_gen3's receipt oracle (card G5-RR-RIVAL) over A's receipt
+    (lua/tests/duo/scenario_gen3_rival_swap_real.lua). `source_party` is B's decoded party (the
+    swap source), `rival_ids` the RR adapter's rival set, [native_lo, native_hi) the companion
+    mailbox arena. Returns (problems, fact)."""
+    codec = gen3_codec()
+    text = text or ""
+    problems = []
+
+    def one(pattern, label):
+        found = re.findall(pattern, text, re.M)
+        if len(found) != 1:
+            problems.append(f"a: {len(found)} {label} line(s), expected exactly one")
+            return None
+        return found[0]
+
+    def mon(hexed):
+        try:
+            return codec.decode_party_mon(bytes.fromhex(hexed), rr=True)
+        except ValueError:
+            return None
+
+    def ident(m):
+        return (m["species"], m["level"], gen3_key(m)) if m else None
+
+    if not re.search(r"(?m)^RIVAL_PRE map=3\.41 at=\(34,6\) var4054=1$", text):
+        problems.append("a: RIVAL_PRE is not Route 22 (34,6) with VAR_MAP_SCENE_ROUTE22 == 1")
+    tbs = one(r"^TX trainer_battle_start - (\{.*\})$", "TX trainer_battle_start")
+    tbs = json.loads(tbs) if tbs else {}
+    trainer = tbs.get("trainer_id")
+    if trainer not in rival_ids:
+        problems.append(f"a: trainer_battle_start named {trainer!r}, not an RR rival id")
+    cmd = one(r"^RIVAL_CMD trainer_id=(\S+) n=(\S+) session=(\S+) battle_id=(\S+) source=(\S+)",
+              "RIVAL_CMD")
+    if cmd:
+        if cmd[0] != str(trainer) or cmd[4] != "auto":
+            problems.append(f"a: the command is trainer {cmd[0]} source {cmd[4]}, expected the "
+                            f"server's auto swap for trainer {trainer}")
+        if (cmd[2], cmd[3]) != (str(tbs.get("session")), str(tbs.get("battle_id"))):
+            problems.append("a: the command's session/battle_id is not the announcement's")
+    # the server hex-encodes lower case (state.py blobs_hex), the driver dumps upper case
+    blobs = dict(re.findall(r"(?m)^RIVAL_BLOB (\d+) ([0-9A-Fa-f]{200})$", text))
+    staged = [ident(mon(blobs[str(i)])) for i in range(len(blobs)) if str(i) in blobs]
+    if not staged or staged != [ident(m) for m in source_party]:
+        problems.append(f"a: the staged blobs {staged} are not B's party "
+                        f"{[ident(m) for m in source_party]}")
+    if cmd and cmd[1] != str(len(blobs)):
+        problems.append(f"a: RIVAL_CMD n={cmd[1]} but {len(blobs)} RIVAL_BLOB line(s)")
+    if not re.search(r"(?m)^RX replace_rival_team\b", text):
+        problems.append("a: missing RX replace_rival_team")
+    reply = one(r"^TX rival_team_replaced - (\{.*\})$", "TX rival_team_replaced")
+    reply = json.loads(reply) if reply else {}
+    if reply.get("error"):
+        problems.append(f"a: rival_team_replaced error={reply.get('error')} "
+                        f"reason={reply.get('reason')}")
+    if reply.get("trainer_id") != trainer or reply.get("species_ids") != [s[0] for s in staged if s]:
+        problems.append(f"a: the ack {reply} is not trainer {trainer} with the staged species")
+    count = one(r"^ENEMY_COUNT (\d+)$", "ENEMY_COUNT")
+    if count != str(len(staged)):
+        problems.append(f"a: ENEMY_COUNT {count}, the staged team has {len(staged)}")
+    enemy = dict(re.findall(r"(?m)^ENEMY_SLOT (\d+) ([0-9A-Fa-f]{200})$", text))
+    for i, want in enumerate(staged):
+        got = ident(mon(enemy.get(str(i), "")))
+        if got != want:
+            problems.append(f"a: ENEMY_SLOT {i} reads {got}, staged {want}")
+    lead = mon(enemy.get("0", ""))
+    mon1 = re.search(r"(?m)^BATTLE_MON1 species=(\d+) pid=([0-9A-F]{8})$", text)
+    if not (lead and mon1 and int(mon1.group(1)) == lead["species"]
+            and int(mon1.group(2), 16) == lead["personality"]):
+        problems.append(f"a: BATTLE_MON1 {mon1.group(0) if mon1 else None} is not the swapped lead")
+    if one(r"^TRAINER_OPPONENT_A (\d+)$", "TRAINER_OPPONENT_A") != str(trainer):
+        problems.append(f"a: gTrainerBattleOpponent_A is not {trainer}")
+    writes = re.findall(r"(?m)^\[client\] \[SLink-gen3\] write (\S+) 0x([0-9A-Fa-f]+) \+(\d+)", text)
+    for reason, addr, size in writes:
+        lo = int(addr, 16)
+        if reason != "native" or lo < native_lo or lo + int(size) > native_hi:
+            problems.append(f"a: client write {reason} 0x{lo:08X} +{size} outside the native mailbox")
+    fact = (f"rival_swap_real: rival {trainer} fought B's {len(staged)} mon(s) {staged}; "
+            f"{len(writes)} client write(s), all native mailbox")
+    return problems, fact
+
+
+def gen3_tx(event, key):
+    return GEN3_TX_RE.format(event=re.escape(event), key=re.escape(key))
+
+
+def gen3_rx(cmd, key):
+    return GEN3_RX_RE.format(cmd=re.escape(cmd), key=re.escape(key))
+
+
+def gen3_boxed(key):
+    """The driver's cartridge read-back: `key` absent from the party AND present in a box."""
+    return rf"(?m)^BOXED_OBSERVED {re.escape(key)} box=\d+:\d+"
+
+
+def gen3_returned(key):
+    """The driver's cartridge read-back: `key` back in the party AND in no box."""
+    return rf"(?m)^RETURNED_OBSERVED {re.escape(key)} slot=\d+"
+
+
 # ── Games ────────────────────────────────────────────────────────────────────
 # The duo harness was written for Radical Red and hardcoded to it. Gen 1 differs in three
 # ways that matter, so the per-game bits live here rather than being threaded through:
@@ -993,11 +2050,17 @@ def saved_money(sram):
 #     cannot collide over BizHawk's SaveRAM because it names saves from its own gamedb entry.
 #   * Generation-specific drivers compose each client's production graph.
 #
-# gen3_rr keeps exactly the previous behaviour and stays the default.
+# "legacy" is the family of a DuoRun built without a `game` (unit stubs): no witness, and a client
+# RESULT is the whole verdict unless the scenario names an oracle. (Master kept gen3_rr for this; the
+# merged gen3_rr is the new battery row, whose saved-state oracle is required.)
 FAMILY_EVIDENCE = {
+    "legacy": EvidenceContract(),
     "gen2_new": EvidenceContract("check_gen2_save_witness", require_oracle=True),
     "gen1_new": EvidenceContract("check_save_witness", require_oracle=True),
-    "gen3_rr": EvidenceContract(),
+    # The new Gen 3 battery rows (gen3_lgfr is the gen3_frlg family): the Gen 1 rule, a scenario
+    # with no saved-state oracle FAILS, with check_save_witness_gen3 run first (PLAN §5.5).
+    "gen3_frlg": EvidenceContract("check_save_witness_gen3", require_oracle=True),
+    "gen3_rr": EvidenceContract("check_save_witness_gen3", require_oracle=True),
 }
 
 
@@ -1248,6 +2311,56 @@ GAMES = {
         "fixture": {"a": "purered", "b": "puregreen"},
         "scenario_prefix": "gen1_",
     },
+    # The NEW Gen 3 client on vanilla FRLG (lua/gen3/run.lua's build, docs/gen3/PLAN.md §5.5).
+    # Battery boot like gen1_new, but through tools/gen3_fixtures.py's GBA config and flash
+    # fixtures, dispatched by `play` (see DuoRun.is_gen3_battery). `sides` is (title, fixture
+    # stem) per instance, the stem formatted with the scenario's per-instance target; the fixture
+    # worker's saves are firered_party_{town,battle}{,_b}.sav. B is LeafGreen (the G4 FR<->LG pairing). `oracle_required`: a
+    # scenario with no saved-state oracle FAILS here, the Gen 1 rule; `save_witness` is the
+    # method _run_oracle runs first.
+    "gen3_frlg": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_frlg",
+        "play": "gen3_fixtures",
+        "sides": {"a": ("firered", "firered_party_{target}"),
+                  "b": ("leafgreen", "leafgreen_party_{target}")},   # FR<->LG, the G4 pairing (fixtures 0978a5be)
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
+    },
+    # LeafGreen as A (Codex review of d199da32, G4 item 2a): the gen3_frlg family with the sides
+    # swapped, so every A-side receipt (the whiteout's Center write, the 2F controls) runs on LG.
+    # `game` is the family: duo_gen3_main.lua, the scenario set and the retry rule are gen3_frlg's.
+    "gen3_lgfr": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_frlg",
+        "play": "gen3_fixtures",
+        "sides": {"a": ("leafgreen", "leafgreen_party_{target}"),
+                  "b": ("firered", "firered_party_{target}")},
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
+    },
+    # P5 (card C5-5): the NEW Gen 3 client on Radical Red, battery-boot like gen3_frlg (the same
+    # `play`/duo_gen3_main.lua/witness method). `sides` stems "rr_{target}" match
+    # tests/fixtures/gen3/README.md's naming (only "town" exists today: rr_town.sav / rr_town_b.sav,
+    # rr_battle{,_b}.sav do not exist, so every scenario below whose `target` is "battle" FAILS
+    # at fixture lookup until the fixture worker builds them; this is a real, named blocker, not
+    # a silent gap). `game` is its own family (not aliased to "gen3_frlg") so duo_gen3_main.lua
+    # and the SYS/pack selection can tell RR apart; `rr=True` is read by check_save_witness_gen3.
+    "gen3_rr": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_rr",
+        "play": "gen3_fixtures",
+        "sides": {"a": ("radical_red", "rr_{target}"), "b": ("radical_red", "rr_{target}_b")},
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
+        "rr": True,
+    },
 }
 
 
@@ -1327,8 +2440,114 @@ class DuoRun:
     def lane_index(self) -> int:
         return lane_ordinal(self.lane)
 
+    @property
+    def is_gen3_battery(self) -> bool:
+        """A row that boots GBA flash fixtures through tools/gen3_fixtures.py (gen3_frlg; P5's
+        battery-boot gen3_rr row joins by naming the same `play`). A property for the same
+        reason as `lane`: the unit tests build DuoRuns with `__new__`."""
+        return (getattr(self, "gcfg", None) or {}).get("play") == "gen3_fixtures"
+
+    # ── Gen 3 per-instance facts (title, fixture, ROM, battery file) ────────────────────
+    def _gen3_title(self, inst) -> str:
+        return self.gcfg["sides"][inst][0]
+
+    def _gen3_fixture_path(self, inst) -> str:
+        stem = self.gcfg["sides"][inst][1].format(target=self._target_for(inst))
+        return os.path.join(GEN3_FIXTURES, stem + ".sav")
+
+    def _gen3_rom_kind(self, inst) -> str:
+        """native_absent_gen3's per-instance ROM selection (a scenario field, like `target`):
+        "companion" (default, the ROM every other RR scenario boots) or "clean" (the raw,
+        unpatched dump, GEN3_CLEAN_RR_ROM). Titles other than radical_red ignore this."""
+        kind = self.cfg.get("rom_kind", "companion")
+        return kind[inst] if isinstance(kind, dict) else kind
+
+    def _gen3_rom(self, inst) -> str:
+        """The instance's ROM, staged to a space-free repo-relative path (gen3_fixtures.stage_rom,
+        the launch rule shared with run_gate). An already-staged copy is used when the dump
+        itself is not reachable from this checkout.
+
+        radical_red's entry carries `staged` (ROM_REL, the already-built companion patch) for
+        the ordinary "companion" kind, bypassing the dump search below entirely; native_absent_
+        gen3's "clean" kind instead searches for the raw dump (GEN3_CLEAN_RR_ROM), same as
+        firered/leafgreen.
+        """
+        from pathlib import Path
+
+        import gen3_fixtures
+
+        title = self._gen3_title(inst)
+        row = GEN3_TITLES[title]
+        staged = row.get("staged")
+        if staged and self._gen3_rom_kind(inst) == "companion":
+            if not os.path.isfile(os.path.join(REPO, staged)):
+                raise FileNotFoundError(f"{staged} not found (build the companion patch first)")
+            return staged
+        name = GEN3_CLEAN_RR_ROM if title == "radical_red" else row["rom"]
+        for base in (Path(REPO), *Path(REPO).parents):
+            if (base / name).is_file():
+                return gen3_fixtures.stage_rom(str(base / name))
+        staged = f"patch/build/gen3_{Path(name).stem.replace(' ', '_')}{Path(name).suffix}"
+        if os.path.isfile(os.path.join(REPO, staged)):
+            return staged
+        raise FileNotFoundError(f"{name} not found at the repo root or any parent, and no "
+                                f"staged {staged}")
+
+    def _gen3_battery_path(self, inst) -> str:
+        title = self._gen3_title(inst)
+        row = GEN3_TITLES[title]
+        if title == "radical_red" and self._gen3_rom_kind(inst) == "clean":
+            # No gamedb hash for this dump either: the battery name follows whatever filename
+            # _gen3_rom actually staged it under (gen3_fixtures.saveram_name), computed here
+            # rather than hand-transcribed to avoid a transposition error going unnoticed.
+            import gen3_fixtures
+
+            saveram = gen3_fixtures.saveram_name(self._gen3_rom(inst))
+        else:
+            saveram = row["saveram"]
+        return os.path.join(self._saveram_dir(inst), saveram)
+
+    def _gen3_flushed(self, inst) -> bytes:
+        """The battery the instance's EmuHawk left, by the gamedb name it was seeded under (or the
+        one other *.SaveRAM in its directory, which gen3_fixtures names the same way)."""
+        from pathlib import Path
+
+        import gen3_fixtures
+
+        seeded = Path(self._gen3_battery_path(inst))
+        found = gen3_fixtures._flushed_saveram(seeded.parent, seeded.name)
+        if found is None:
+            raise RuntimeError(f"{inst}: EmuHawk left no *.SaveRAM in {rel_to_repo(seeded.parent)}")
+        return found.read_bytes()
+
+    def _gen3_fixture_bytes(self, inst) -> bytes:
+        with open(self._gen3_fixture_path(inst), "rb") as handle:
+            return handle.read()
+
+    @property
+    def _gen3_rr(self) -> bool:
+        """The row decodes Radical Red's layout (GAMES[...]["rr"]); every saved-state read,
+        record-validity rule and bag read below threads it (Codex C4-6b finding 1)."""
+        return bool((getattr(self, "gcfg", None) or {}).get("rr"))
+
+    def _gen3_limits(self, inst):
+        """gen3_limits for this instance's title over the ROM it booted (cached per ROM path):
+        the species/level bounds and the move table every record's PP is checked against."""
+        cache = self.__dict__.setdefault("_gen3_limits_cache", {})
+        rom = self._gen3_rom(inst)
+        if rom not in cache:
+            with open(os.path.join(REPO, rom), "rb") as handle:
+                cache[rom] = gen3_limits(self._gen3_title(inst), handle.read())
+        return cache[rom]
+
+    def _gen3_saved(self, inst):
+        return gen3_decode(self._gen3_flushed(inst), rr=self._gen3_rr)
+
+    def _gen3_fixture_saved(self, inst):
+        return gen3_decode(self._gen3_fixture_bytes(inst), rr=self._gen3_rr)
+
     # ── lifecycle ────────────────────────────────────────────────────────────
-    def wait_for(self, desc, pred, timeout, interval=0.25):
+    def wait_for(self, desc, pred, timeout, interval=0.2):  # ponytail: 0.2 s cut ~2 s/row (W23); raise if polling ever costs CPU
         """`wait_for`, with the cartridges' terminal RESULT lines as a second exit.
 
         Every orchestrate-time wait goes through this (the module-level `wait_for` stays for
@@ -1393,21 +2612,66 @@ class DuoRun:
         path = self._phase_result_path(inst, phase)
         try:
             with open(path, encoding="utf-8", errors="replace") as handle:
-                return handle.read()
+                text = handle.read()
         except OSError:
             return ""
+        return text[:text.rfind("\n") + 1]  # complete lines only, as read_result
 
     def _process_exited(self, inst) -> bool:
         """True when this instance's emulator is gone — a dead client that never wrote a RESULT."""
         process = getattr(self, "emu_by_inst", {}).get(inst)
         return bool(process) and process.poll() is not None
 
-    def start_server(self):
+    def _wire_dir(self):
+        """This run's server-side wire-log directory, or None when --wire-log is absent."""
+        if not getattr(self.args, "wire_log", False):
+            return None
+        return os.path.join(self.data_dir, "wire")
+
+    def server_cmd(self):
+        """The server subprocess's argv. Byte-identical to the old literal without --wire-log."""
         cmd = [sys.executable, "-m", "server.server",
                "--host", "127.0.0.1",
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
+        wire = self._wire_dir()
+        if wire:
+            cmd += ["--wire-log", wire]
+        return cmd
+
+    def collect_wire_logs(self):
+        """Promote this run's wire log to the golden-transcript path, and name what landed.
+
+        `tests/fixtures/gen3/wire/<scenario>_<player>_gen3_new.jsonl`, per that directory's
+        README. Only a --wire-log run has anything to promote; the source is the server's own
+        capture under the data dir, so this must run before the data dir is removed.
+
+        `wire_rejected.jsonl` (the tap's bounded sink for lines it could not attribute to a
+        real player) is server-side debug evidence, not a per-player transcript -- it is never
+        promoted here.
+        """
+        wire = self._wire_dir()
+        if not wire or not os.path.isdir(wire):
+            return []
+        os.makedirs(WIRE_FIXTURES, exist_ok=True)
+        landed = []
+        for name in sorted(os.listdir(wire)):
+            if not (name.startswith("wire_") and name.endswith(".jsonl")):
+                continue
+            player = name[len("wire_"):-len(".jsonl")]
+            if player == "rejected":
+                continue
+            # All active Gen 3 rows use the new battery client; non-Gen3 rows keep their game key.
+            label = "gen3_new" if self.is_gen3_battery else self.game
+            dest = os.path.join(WIRE_FIXTURES, f"{self.scenario}_{player}_{label}.jsonl")
+            shutil.copyfile(os.path.join(wire, name), dest)
+            print(f"[duo] wire log: {dest}")
+            landed.append(dest)
+        return landed
+
+    def start_server(self):
+        cmd = self.server_cmd()
         if self.scenario in GEN2_TRADE_SCENARIOS:
             cmd = [sys.executable, "-m", "tools.gen2_trade_lane", "--manifest",
                    str(self._gen2_trade_manifest_path), "--", *cmd[3:]]
@@ -1546,9 +2810,10 @@ class DuoRun:
         A scenario declares `target` as a string (both halves) or per instance as
         {"a": ..., "b": ...}. poison_new is the reason for the second form: B has to boot the
         battle fixture (post parcel, standing on Route 1) while A idles on the town one, or the
-        idle half would meet wild mons of its own and muddle the receipt.
+        idle half would meet wild mons of its own and muddle the receipt. `target_by_game`
+        overrides it for one row (scenario_target).
         """
-        target = self.cfg.get("target", "town")
+        target = scenario_target(self.cfg, getattr(self, "game", ""))
         if isinstance(target, dict):
             return target[inst]
         return target
@@ -1612,6 +2877,8 @@ class DuoRun:
         it: that returns the same path the GAMES table spells out for the vanilla rows and lets a
         pureRGB fixture key stage from the pinned source lock.
         """
+        if self.is_gen3_battery:
+            return self._gen3_rom(inst)
         if self.gcfg.get("launch_profile") == "gen2":
             return Path(self._gen2_plans[inst]["rom"]).relative_to(Path(REPO).resolve()).as_posix()
         patch_key = self._patch_key(inst)
@@ -1627,6 +2894,15 @@ class DuoRun:
         return self.gcfg["rom"][inst]
 
     def _seed_instance_save(self, inst):
+        if self.is_gen3_battery:
+            # The fixture's flash body (any RTC suffix dropped: BizHawk writes its own), under the
+            # gamedb battery name, in this instance's own directory -- overwritten every launch.
+            codec = gen3_codec()
+            seeded = self._gen3_battery_path(inst)
+            os.makedirs(os.path.dirname(seeded), exist_ok=True)
+            with open(seeded, "wb") as handle:
+                handle.write(codec.split_rtc(self._gen3_fixture_bytes(inst))[0])
+            return seeded
         if self.gcfg.get("launch_profile") == "gen2":
             fixture, plan = self._gen2_inputs[inst], self._gen2_plans[inst]
             raw = Path(fixture["fixture"]).read_bytes()
@@ -1674,7 +2950,12 @@ class DuoRun:
     def launch_instance(self, inst, *, phase="initial", seed=True, expected_key=""):
         """Launch one cartridge; reconnect phases keep the existing per-instance SaveRAM."""
         cfg_ini = self.cfg_path(inst)
-        if self.gcfg.get("launch_profile") == "gen2":
+        if self.is_gen3_battery:
+            import gen3_fixtures
+
+            # The GBA Save RAM path entry, not the Game Boy one gen1's write_run_config edits.
+            gen3_fixtures.write_gba_run_config(BIZHAWK_CONFIG, cfg_ini, self._saveram_dir(inst))
+        elif self.gcfg.get("launch_profile") == "gen2":
             from run_gb_gate import GENS
             GENS["gen2"]["config"](self._gen2_plans[inst], Path(cfg_ini))
         elif self.battery_boot:
@@ -1685,7 +2966,9 @@ class DuoRun:
             g1.write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst),
                                 purergb=g1.is_purergb(self.gcfg["fixture"][inst]))
         else:
-            shutil.copyfile(BIZHAWK_CONFIG, cfg_ini)
+            from run_gate import write_gate_config
+
+            write_gate_config(BIZHAWK_CONFIG, cfg_ini)   # rewind off (duo run 61569's crash)
         self._apply_lane_window(cfg_ini)
         self._phase = getattr(self, "_phase", {})
         self._phase[inst] = phase
@@ -1731,6 +3014,18 @@ class DuoRun:
                 duo["expect_admission"] = "refused"
             env = dict(os.environ, SLINK_ROOT=WT_FWD, **self._gen2_plans[inst]["env"],
                        **self._gen2_env[inst])
+        if self.is_gen3_battery:
+            # duo_gen3_main.lua resolves lua/tests/duo/scenario_<prefix><name>.lua and reads the
+            # title's pack files and pret symbols by `title`.
+            duo.update({"title": self._gen3_title(inst),
+                        "scenario_prefix": self.gcfg["scenario_prefix"]})
+            for field in ("scenario_module", "battle_window_case", "active_faint_case"):
+                if field in self.cfg:
+                    duo[field] = self.cfg[field]
+            if self._gen3_rr:
+                # the live EWRAM range RR's extension writer copies to sectors 30-31
+                codec = gen3_codec()
+                duo.update({"ext_addr": codec.RR_EXT_ADDR, "ext_size": codec.RR_EXT_SIZE})
         if self.gcfg["uses_savestate"]:
             ss = self.cfg["savestate"]
             duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
@@ -1756,11 +3051,17 @@ class DuoRun:
             plan = self._gen2_plans[inst]
             if hashlib.sha1(Path(plan["rom"]).read_bytes()).hexdigest() != plan["launch_sha1"]:
                 raise RuntimeError(f"{inst}: staged trade overlay changed before launch")
-        p = subprocess.Popen(
-            [EMUHAWK, f"--config=patch/build/duo_cfg_{self.lane}_{inst}.ini",
-             f"--lua=patch/build/duo_{self.lane}_{inst}.lua",
-             self._rom_for(inst)],
-            cwd=REPO, **({"env": env} if env is not None else {}))
+        # the emulator's own output (a .NET exception text, a crash) goes to a per-run file: a modal
+        # exception dialog blocks the frame-counted Lua waits, so this is the only witness it leaves
+        # (the child inherits its own handle, so the parent's copy closes after the launch)
+        os.makedirs(os.path.join(REPO, "patch", "build"), exist_ok=True)
+        with open(os.path.join(REPO, "patch", "build", f"duo_{self.lane}_{inst}.out"), "wb") as emu_out:
+            p = subprocess.Popen(
+                [EMUHAWK, f"--config=patch/build/duo_cfg_{self.lane}_{inst}.ini",
+                 f"--lua=patch/build/duo_{self.lane}_{inst}.lua",
+                 self._rom_for(inst)],
+                cwd=REPO, stdout=emu_out, stderr=subprocess.STDOUT,
+                **({"env": env} if env is not None else {}))
         self.emus.append(p)
         self.emu_by_inst[inst] = p
         self._launch_times[inst] = time.time()
@@ -1800,7 +3101,10 @@ class DuoRun:
             print(f"[duo] timing {phase} {elapsed:.1f}s", flush=True)
 
     def start_instances(self):
-        if self.battery_boot and self.gcfg.get("launch_profile") != "gen2":
+        if self.is_gen3_battery:
+            for inst in ("a", "b"):
+                self._gen3_rom(inst)  # staged (and found) before either emulator starts
+        elif self.battery_boot and self.gcfg.get("launch_profile") != "gen2":
             play = importlib.import_module(self.gcfg["play"])
             for key in self.gcfg["fixture"].values():
                 play.staged_rom(key)  # space-free relative ROM paths for BizHawk
@@ -2372,7 +3676,7 @@ class DuoRun:
             if keep and os.path.basename(path) == keep:
                 continue
             archive = re.search(r"_attempt(\d+)_(?:result\.txt|witness\.SaveRAM|exit\.SaveRAM|manifest\.json)$", os.path.basename(path))
-            if (scenario_family(getattr(self, "game", "gen3_rr")) == "gen2_new"
+            if (scenario_family(getattr(self, "game", "legacy")) == "gen2_new"
                     and archive and 0 < int(archive[1]) < getattr(self, "attempt", 1)):
                 continue  # Earlier attempts of THIS invocation remain replayable; attempt 1 clears all.
             os.remove(path)
@@ -2655,6 +3959,14 @@ class DuoRun:
         path = os.path.join(self.data_dir, "events.json")
         if not os.path.exists(path):
             return []
+        # the server rewrites events.json in place (truncate + dump), so a read can land
+        # mid-write; retry briefly, then let the last attempt raise
+        for _ in range(20):
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    return json.load(handle)
+            except (ValueError, OSError):
+                time.sleep(0.05)
         with open(path, encoding="utf-8") as handle:
             return json.load(handle)
 
@@ -4788,6 +6100,7 @@ class DuoRun:
             for path in (gf, gf + ".chord"):
                 if os.path.exists(path):
                     os.remove(path)
+        self.collect_wire_logs()  # the source lives under the data dir; copy before it goes
         if passed and not self.args.keep_data and self.scenario not in GEN2_TRADE_SCENARIOS:
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
@@ -4819,6 +6132,11 @@ class DuoRun:
             elif self.scenario == "gen2_species_clause":
                 self._release_gen2_species()
             return
+        # A scenario with its own runner half (the gen3_frlg set) says so by name; nothing in the
+        # older rows defines one, so their branches below are untouched.
+        own = getattr(self, f"orchestrate_{self.scenario}", None)
+        if own:
+            return own()
         if self.scenario == "admit_randomized_new":
             self.assert_admit_randomized_new()
             self.go()  # passive clients hold for ~600 frames before RESULT: PASS
@@ -5117,10 +6435,1020 @@ class DuoRun:
                     f"{site_hash} vs file {file_hash}; first differing SRAM address(es) "
                     f"{[hex(a) for a in diff]}")
 
+    # ── Gen 3 (gen3_frlg): the save witness ────────────────────────────────────────────────
+    def check_save_witness_gen3(self, results):
+        """PLAN §5.5's witness for every gen3_frlg scenario, run by _run_oracle before its oracle.
+
+        The driver dumps the whole SRAM (flash) domain inside the pinned `save` site -- the
+        successful TrySavingData(SAVE_NORMAL) return, gated on R0 == 1 and R5 == 0 and on the
+        signal having validated (lua/tests/duo/duo_gen3_main.lua) -- into this attempt's
+        witness file, overwritten per save, and logs one SAVE_WITNESS_DUMP line per dump. Here:
+        the dump outcomes are read in order (the last attempt must be a successful dump, the
+        ordinals 1..n unbroken), the file must be this attempt's (named as logged, newer than
+        the attempt start), and check_gen3_witness applies the byte rules. One PYDEC line per
+        instance:
+
+            SAVE_WITNESS_SHA256 inst=<a|b> site=<hex> file=<hex> match=true saves=<n> counter=<a>-><b>
+
+        A half named in the scenario's `no_save` must carry no dump at all and is recorded as
+        skipped; every other half that did not save FAILS.
+        """
+        game = getattr(self, "game", "")
+        for process in getattr(self, "emus", []):
+            process.wait(timeout=30)  # the flush boundary: client.exit writes the battery
+        started = getattr(self, "_started", 0)
+        for inst in ("a", "b"):
+            receipt = (results or {}).get(inst) or ""
+            dumps = SAVE_WITNESS_DUMP_RE.findall(receipt)
+            if inst in self.cfg.get("no_save", ()):
+                if dumps:
+                    raise RuntimeError(f"{inst}: declared no_save, but its final receipt dumped "
+                                       f"{len(dumps)} save(s)")
+                self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site=- file=- match=- "
+                                 f"saves=0 skipped (no_save)")
+                continue
+            skipped = re.findall(r"SAVE_WITNESS_DUMP_SKIPPED why=(\S+)", receipt)
+            if not dumps:
+                gate = f" (the dump gate said why={skipped[-1]})" if skipped else ""
+                raise RuntimeError(f"{inst}: the receipt carries no SAVE_WITNESS_DUMP{gate}; every "
+                                   f"{game} scenario half saves unless it is declared no_save")
+            lines = receipt.splitlines()
+            dump_at = [i for i, line in enumerate(lines) if line.startswith("SAVE_WITNESS_DUMP ")]
+            trouble_at = [i for i, line in enumerate(lines) if line.startswith(
+                ("SAVE_WITNESS_DUMP_FAIL", "SAVE_WITNESS_DUMP_SKIPPED"))]
+            if trouble_at and trouble_at[-1] > dump_at[-1]:
+                raise RuntimeError(f"{inst}: the last dump attempt was {lines[trouble_at[-1]]!r}, "
+                                   f"after the last successful dump — the file on disk is an "
+                                   f"earlier save, not this attempt's final one")
+            ordinals = [int(row[2]) for row in dumps]
+            if ordinals != list(range(1, len(ordinals) + 1)):
+                raise RuntimeError(f"{inst}: the dump ordinals are {ordinals}, not 1.."
+                                   f"{len(ordinals)}; a dump line is missing or reordered")
+            path = self._witness_path(inst)
+            logged = os.path.normpath(os.path.join(REPO, dumps[-1][0]))
+            if logged != os.path.normpath(path):
+                raise RuntimeError(f"{inst}: the save witness landed at {dumps[-1][0]!r}, not "
+                                   f"{rel_to_repo(path)!r}")
+            if not os.path.exists(path):
+                raise RuntimeError(f"{inst}: the save witness is missing at {rel_to_repo(path)}")
+            if os.path.getmtime(path) < started:
+                raise RuntimeError(f"{inst}: the save witness {rel_to_repo(path)} predates this "
+                                   f"attempt's start — a leftover, not this run's save")
+            with open(path, "rb") as handle:
+                witness = handle.read()
+            ext_ram, ext_note = (self._gen3_final_ext(inst, receipt, len(dumps), started)
+                                 if self._gen3_rr else (None, ""))
+            facts = check_gen3_witness(witness, self._gen3_flushed(inst),
+                                       self._gen3_fixture_bytes(inst), saves=len(dumps),
+                                       rr=self._gen3_rr, ext_ram=ext_ram)
+            # RR sectors 30-31: LIVE_RAM_MATCH only when the save-boundary RAM copy matched;
+            # otherwise OPEN, stated, never claimed (Codex C4-6b finding 4).
+            self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site={facts['site']} "
+                             f"file={facts['file']} match=true saves={len(dumps)} "
+                             f"counter={facts['counter'][0]}->{facts['counter'][1]}"
+                             + (" rtc=normalized" if facts["rtc"] else "")
+                             + (f" extension_30_31={facts['extension']}" if facts["extension"] else "")
+                             + (f" ({ext_note})" if ext_note else ""))
+
+    def _gen3_final_ext(self, inst, receipt, saves, started):
+        """The live extension RAM copy bound to the FINAL save by its own receipt, or (None, why)
+        -> the witness reports extension=OPEN (Codex C4-6c finding 3). The file name and mtime
+        prove nothing about WHICH save wrote it: the driver logs one SAVE_WITNESS_EXT line per
+        copy, right after that save's SAVE_WITNESS_DUMP, carrying its ordinal. Only a copy whose
+        receipt is the last EXT line, carries the final dump's ordinal, follows the final dump,
+        and names this attempt's path at the documented length is compared. A receipt that names
+        the wrong path or length is a FAIL, not an OPEN."""
+        codec = gen3_codec()
+        lines = receipt.splitlines()
+        exts = [(i, m) for i, line in enumerate(lines)
+                if (m := GEN3_EXT_RE.match(line))]
+        last_dump = max(i for i, line in enumerate(lines) if line.startswith("SAVE_WITNESS_DUMP "))
+        if not exts:
+            return None, "no SAVE_WITNESS_EXT receipt"
+        at, match = exts[-1]
+        rel, size, ordinal = match.group(1), int(match.group(2)), int(match.group(3))
+        if ordinal != saves or at < last_dump:
+            return None, (f"the last extension copy is save {ordinal}'s, not the final save "
+                          f"{saves}'s")
+        path = self._witness_path(inst)[:-len(".bin")] + "_ext.bin"
+        if os.path.normpath(os.path.join(REPO, rel)) != os.path.normpath(path):
+            raise RuntimeError(f"{inst}: the extension copy landed at {rel!r}, not "
+                               f"{rel_to_repo(path)!r}")
+        if size != codec.RR_EXT_SIZE:
+            raise RuntimeError(f"{inst}: the extension receipt says {size} bytes, the extension "
+                               f"is {codec.RR_EXT_SIZE}")
+        if not os.path.exists(path) or os.path.getmtime(path) < started:
+            raise RuntimeError(f"{inst}: the extension copy {rel_to_repo(path)} is missing or "
+                               f"predates this attempt")
+        with open(path, "rb") as handle:
+            blob = handle.read()
+        if len(blob) != size:
+            raise RuntimeError(f"{inst}: the extension copy is {len(blob)} bytes, its receipt "
+                               f"says {size}")
+        return blob, ""
+
+    # ── Gen 3 (gen3_frlg): runner halves ───────────────────────────────────────────────────
+    def _gen3_prelude(self, link_slot=None):
+        """MYKEY from both, both hellos accepted, and -- for the scenarios whose stimulus is not
+        link FORMATION -- one server pair over the boot keys at `link_slot`. The pair is server
+        staging (the debug API), never a cartridge poke; set_pokeballs is the server's nuzlocke
+        gate, which the link scenarios leave to the clients' own bag reads."""
+        ka, kb = self.wait_keys()
+        self._boot_keys = {"a": ka, "b": kb}
+        self.wait_connected()
+        if link_slot is not None:
+            self.set_pokeballs()
+            self.inject_link(ka[link_slot], kb[link_slot])
+            self._link_keys = {"a": ka[link_slot], "b": kb[link_slot]}
+        return ka, kb
+
+    def _gen3_linked_lines(self):
+        return {inst: [f"LINKED {self._link_keys[inst]}"] for inst in ("a", "b")}
+
+    def _gen3_mark(self, inst, pattern, what, timeout=None):
+        """Wait for a driver marker (a regex over the receipt, multiline)."""
+        return self.wait_for(f"{inst}: {what}", lambda: re.search(
+            pattern, read_result(self.scenario, inst) or "", re.M), timeout or self.cfg["timeout"])
+
+    def _gen3_area_control(self):
+        """Write-window controls, NOT encounter-rule qualification. A normal RUN or training KO
+        otherwise dead-zones its area and queues play_sound to BOTH clients
+        (state._handle_no_catch), violating an isolated write and an idle peer's contract.
+        Resolve only SERVER test state before GO; no RAM/save edit."""
+        for area in ("viridian_city", "route_1", "route_2", "viridian_forest"):
+            reply = api(self.http_port, "POST", "/api/debug/set_area_state", {"area_id": area, "state": "linked"})
+            if not reply.get("ok"):
+                raise RuntimeError(f"battle-window area control refused: {area}: {reply}")
+        self._pydec_note("BATTLE_WINDOW_AREA_CONTROL server_only=linked "
+                         "areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified")
+
+    def orchestrate_trainer_bench_gen3(self):
+        ka, kb = self._gen3_prelude()  # command-only carrier: no death/memorialize event or injected link
+        self._gen3_area_control()
+        slot = self.cfg["battle_window_slot"]
+        self._link_keys = {"a": ka[slot], "b": kb[slot]}
+        self.go(self._gen3_linked_lines())
+        case, key = self.cfg["battle_window_case"], self._link_keys["a"]
+        self._gen3_mark("a", rf"^READY_BATTLE_WINDOW {case} {re.escape(key)} slot={slot}\b",
+                        "battle-window READY")
+        self.queue_command("a", {"cmd": "force_faint", "key": key})
+
+    def orchestrate_active_end_gen3(self):
+        """A2 under P+H: no pair and no death -- one keyed force_faint to A, queued only once A
+        parks with its lead as battler 0 (READY_ACTIVE). B idles and never saves."""
+        ka, kb = self._gen3_prelude()
+        self._gen3_area_control()
+        self._link_keys = {"a": ka[0], "b": kb[0]}
+        self.go(self._gen3_linked_lines())
+        key = self._link_keys["a"]
+        self._gen3_mark("a", rf"^READY_ACTIVE {re.escape(key)} case=command\b", "A parked, lead active")
+        self.queue_command("a", {"cmd": "force_faint", "key": key})
+
+    def assert_battle_window_gen3_saved(self, results):
+        # _run_oracle already called check_save_witness_gen3: path/mtime/ordinal/flush are bound.
+        from pathlib import Path
+
+        from gen3_battle_window_oracle import verify
+
+        facts = verify(case=self.cfg["battle_window_case"], key=self._link_keys["a"], receipts=results,
+                       fixture=self._gen3_fixture_bytes("a"), witness=Path(self._witness_path("a")).read_bytes(),
+                       flushed=self._gen3_flushed("a"), peer_fixture=self._gen3_fixture_bytes("b"),
+                       peer_flushed=self._gen3_flushed("b"), helpers=sys.modules[__name__], attempt=self.attempt)
+        self._pydec_note(f"BATTLE_WINDOW_PYDEC case={facts['case']} key={facts['key']} "
+                         f"slot={facts['slot']} hp=0 samples={facts['observed_samples']}")
+
+    assert_trainer_bench_gen3_saved = assert_battle_window_gen3_saved
+
+    def orchestrate_faint_cmd_gen3(self):
+        """Server-command/persistence-only (PLAN §5.5): link the two slot-1 mons, then inject A's
+        faint through the debug API. The server marks the pair DEAD, queues force_faint to B and
+        memorialize to both; nothing touches either cartridge but the clients."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        for inst in ("a", "b"):
+            self._gen3_mark(inst, r"^READY\b", "READY after the go-file", 300)
+        reply = api(self.http_port, "POST", "/api/debug/inject_event",
+                    {"player": "a", "event": "faint", "key": self._link_keys["a"],
+                     "area_id": "duo"})
+        if not reply.get("ok"):
+            raise RuntimeError(f"inject_event faint was refused: {reply}")
+        # handle_event drains A's queue into the HTTP reply (server/state.py:423-424), so A's own
+        # memorialize/game_over would never reach A's socket: hand them back to A's queue.
+        for cmd in reply.get("commands_returned") or []:
+            self.queue_command("a", cmd)
+        print(f"[duo] injected A faint {self._link_keys['a']} -> force_faint B "
+              f"{self._link_keys['b']}; re-queued to A: "
+              f"{[c.get('cmd') for c in reply.get('commands_returned') or []]}")
+
+    orchestrate_faint_cmd_clean_gen3 = orchestrate_faint_cmd_gen3
+
+    def orchestrate_linked_faint_active_gen3(self):
+        """The in-battle path, mechanism P+H (owner rulings 15-18). Link the two ACTIVE leads; B
+        parks on its action menu with the linked mon out (READY_ACTIVE: a wild battle, or Rick
+        after the T2 route); only then is A released to lose its own active linked mon. B's
+        force_faint becomes the Perish commit + hand-off and the engine faints the mon in battle
+        with no press -- the receipts and the oracle read the engine."""
+        self._gen3_prelude(link_slot=0)
+        if self.cfg.get("active_faint_case") == "trainer":
+            self._gen3_area_control()
+        lines = self._gen3_linked_lines()
+        self._go_one("b", lines["b"])
+        self._gen3_mark("b", r"^READY_ACTIVE ", "READY_ACTIVE (linked mon active at the action menu)")
+        self._go_one("a", lines["a"])
+
+    orchestrate_linked_faint_active_whiteout_gen3 = orchestrate_linked_faint_active_gen3
+    orchestrate_linked_faint_active_trainer_gen3 = orchestrate_linked_faint_active_gen3
+    orchestrate_linked_faint_active_clean_gen3 = orchestrate_linked_faint_active_gen3
+    orchestrate_linked_faint_active_lhammer_gen3 = orchestrate_linked_faint_active_gen3
+    orchestrate_linked_faint_active_mega_gen3 = orchestrate_linked_faint_active_gen3
+
+    def orchestrate_boxsync_gen3(self):
+        """A deposits its linked half at the Viridian PC by hand; the server mirrors box_mon to
+        B, whose client deposits at its checkpoint. Only then may A withdraw it, which mirrors
+        party_mon. Both save after the round trip."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        self._gen3_mark("a", rf"^DEPOSITED {re.escape(ka)}\b", "hand deposit at the PC")
+        self._gen3_mark("b", rf"^MIRROR_DEPOSITED {re.escape(kb)}\b", "mirrored box_mon deposit")
+        self._append_reconnect_marker("a", "ALLOW_WITHDRAW")
+        self._gen3_mark("a", rf"^WITHDRAWN {re.escape(ka)}\b", "hand withdraw at the PC")
+        self._gen3_mark("b", rf"^MIRROR_WITHDRAWN {re.escape(kb)}\b", "mirrored party_mon withdraw")
+        for inst in ("a", "b"):
+            self._append_reconnect_marker(inst, "SAVE")
+
+    def _gen3_identity(self) -> str:
+        """G4 item 2a (1) + Codex REV-center-receipt-2: what this receipt ran on -- each side's ROM
+        and fixture bytes, the pack files (full SHA-256), and the source cut: HEAD, +dirty when
+        ANY tracked or untracked path differs from it (the whole executed closure: server/, lua/,
+        tools/, data/, ...), minus GEN3_IDENTITY_EXCLUDE's run outputs. A git error fails the
+        run closed; `_gen3_source_dirty` lets _run_oracle REJECT a dirty receipt."""
+        import hashlib
+
+        def sha(path):
+            with open(path if os.path.isabs(path) else os.path.join(REPO, path), "rb") as handle:
+                return hashlib.sha256(handle.read()).hexdigest()
+
+        def git(*args):
+            proc = subprocess.run(["git", "-C", REPO, *args], capture_output=True, text=True)
+            if proc.returncode != 0:
+                raise RuntimeError(f"IDENTITY: git {' '.join(args)} failed ({proc.returncode}): "
+                                   f"{proc.stderr.strip()}")
+            return proc.stdout
+
+        pack = os.path.join(REPO, "data", "games", "gen3_rr" if self._gen3_rr else "gen3_frlg")
+        sides = " ".join(f"{inst}={self._gen3_title(inst)}:rom={sha(self._gen3_rom(inst))}"
+                         f":fixture={sha(self._gen3_fixture_path(inst))}" for inst in ("a", "b"))
+        packs = " ".join(f"{name}={sha(os.path.join(pack, name))}"
+                         for name in ("write_checkpoint.json", "profile.json"))
+        head = git("rev-parse", "HEAD").strip()
+        dirty = gen3_dirty_paths(git("status", "--porcelain=v1", "-z", "--untracked-files=all",
+                                     "--ignore-submodules=none"))
+        self._gen3_source_dirty = dirty
+        shown = f" dirty=[{','.join(dirty[:20])}{',...' if len(dirty) > 20 else ''}]" if dirty else ""
+        return f"IDENTITY {sides} {packs} source={head}{'+dirty' if dirty else ''}{shown}"
+
+    def orchestrate_center_controls_gen3(self):
+        """G4 item 2a (4) on the Center 2F: each time A parks in a refusing state it logs
+        CONTROL_LIVE <name>, and only then is its keyed probe queued -- box_mon for the Cable Club
+        menu (still held through the link wait), party_mon (with the stats A's own stats_cache
+        reported when the box_mon landed) for the Union Room attendant."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        ka = self._link_keys["a"]
+        self._gen3_mark("a", rf"^CONTROL_LIVE cable_welcome_message {re.escape(ka)} ", "A parked at the Cable Club welcome message")
+        self.queue_command("a", {"cmd": "box_mon", "key": ka})
+        self._gen3_mark("a", rf"^CONTROL_LIVE union_room_attendant {re.escape(ka)} ",
+                        "A parked at the Union Room attendant")
+        cached = self._gen3_sent_event(read_result(self.scenario, "a"), "stats_cache", ka) or {}
+        if not cached.get("stats"):
+            raise RuntimeError(f"A never reported stats_cache for {ka}; no party_mon probe to send")
+        self.queue_command("a", {"cmd": "party_mon", "key": ka, "stats": cached["stats"]})
+
+    def orchestrate_save_then_write_gen3(self):
+        """A saves, reports the stale sSaveDialogCB on an idle field, and only then is its keyed
+        box_mon queued: the write must land there (C4-6r finding, C4-SAVE fix)."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        ka = self._link_keys["a"]
+        self._gen3_mark("a", rf"^WRITE_PROBE_READY {re.escape(ka)} ", "A idle after its save, sSaveDialogCB stale")
+        self.queue_command("a", {"cmd": "box_mon", "key": ka})
+        # rows 9/1 (C4-SAVE-ROWS): one party_mon, queued once A rests the START cursor off SAVE; A
+        # holds it there, at the overwrite prompt and the redrawn menu, and it lands after B
+        self._gen3_mark("a", rf"^CONTROL_LIVE dialog_witness {re.escape(ka)} ",
+                        "A in the START menu, cursor off SAVE")
+        cached = self._gen3_sent_event(read_result(self.scenario, "a"), "stats_cache", ka) or {}
+        if not cached.get("stats"):
+            raise RuntimeError(f"A never reported stats_cache for {ka}; no party_mon probe to send")
+        self.queue_command("a", {"cmd": "party_mon", "key": ka, "stats": cached["stats"]})
+
+    def orchestrate_whiteout_gen3(self):
+        """Both halves of the slot-1 pair boxed (A by hand, B by the mirrored box_mon), the
+        server's own party_keys agreeing (assert_whiteout_both_boxed, shared with Gen 1), then A
+        whites out with its lone starter and the server rebuilds the pair out of both PCs."""
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        self.assert_whiteout_both_boxed()
+        # G4 item 2a's negative control: after its save A parks in the Center nurse's script, and
+        # a queued SLink write must stay HELD there (scenario_gen3_whiteout.lua nurse_control).
+        # G5-RR-NURSE-2: RR's nurse never refuses, so the control there is the START menu instead,
+        # named start_menu (assert_whiteout_gen3_saved's control_name, same rule).
+        ka = self._link_keys["a"]
+        control_name = "start_menu" if self._gen3_rr else "nurse"
+        self._gen3_mark("a", rf"^CONTROL_LIVE {control_name} {re.escape(ka)} ",
+                        f"A parked in the {control_name} negative control")
+        self.queue_command("a", {"cmd": "box_mon", "key": ka})
+
+    def orchestrate_link_gen3(self):
+        """D-1 on FRLG: both catch on Route 1 and the SERVER pairs them by area (shared check)."""
+        self._gen3_prelude()
+        self.go()
+        self.assert_link_new()
+
+    def orchestrate_deadzone_gen3(self):
+        """D-3 on FRLG: A runs, route_1 dead-zones, B's later catch there is retired (shared)."""
+        self._gen3_prelude()
+        self.assert_dead_zone_new()
+
+    # ── RR-only runner halves (P5, card C5-5) ───────────────────────────────────────────────
+    def orchestrate_explode_gen3(self):
+        """explode_gen3 (RR, --explode-mode): link the two party LEADS, release B first so it
+        parks in a wild battle with its linked mon active (READY_ACTIVE), then A, which loses its
+        own linked lead naturally. Nothing pokes either cartridge; the server's force_explode is
+        the only command, and B's receipt must show the engine executing it."""
+        self._gen3_prelude(link_slot=0)
+        lines = self._gen3_linked_lines()
+        self._go_one("b", lines["b"])
+        self._gen3_mark("b", r"^READY_ACTIVE ", "READY_ACTIVE (linked mon active at the action menu)")
+        self._go_one("a", lines["a"])
+
+    def orchestrate_rival_swap_gen3(self):
+        """PLAN P5's native rival-swap NEGATIVE control (RR only): B fights, A idles. Once B logs
+        READY_IN_BATTLE the runner queues replace_rival_team with a dummy blob and NO session /
+        battle_id; the client's C5-10 identity gate refuses it stale_battle_id before anything is
+        staged (lua/gen3/client.lua C.replace_rival_team). The real swap is
+        rival_swap_real_gen3."""
+        self._gen3_prelude()
+        self.go()
+        self._gen3_mark("b", r"^READY_IN_BATTLE\b", "B at the battle action menu")
+        self.queue_command("b", {"cmd": "replace_rival_team", "trainer_id": 0,
+                                 "blobs_hex": ["00" * 100]})
+
+    def orchestrate_rival_swap_real_gen3(self):
+        """G5-RR-RIVAL: nothing staged by the runner -- the server's own trainer_battle_start
+        handler queues the swap (--rival-team-swap)."""
+        self._gen3_prelude()
+        self.go()
+
+    def assert_rival_swap_real_gen3_saved(self, results):
+        """G5-RR-RIVAL, a QUALIFICATION row: a real RR rival battle fought B's party.
+        rival_swap_real_problems holds the checks; B's party is its fixture's (B only idles)."""
+        from server.adapters.gen3_frlge import _RR_RIVAL_TRAINER_IDS
+
+        codec = gen3_codec()
+        with open(GEN3_RR_PROFILE, encoding="utf-8") as handle:
+            base = json.load(handle)["native"]["BASE"]
+        source = codec.rr_party_from_save(codec.split_rtc(self._gen3_fixture_bytes("b"))[0])
+        problems, fact = rival_swap_real_problems(results["a"], source, _RR_RIVAL_TRAINER_IDS,
+                                                  base, base + 0x800)
+        self._gen3_raise(problems, fact)
+
+    def _gen3_party_record_hex(self, inst, slot):
+        """The raw 100-byte party record at `slot` of this instance's fixture, as hex -- a real,
+        well-formed trade blob (the protocol's apply_trade blob_hex, docs/protocol.md §6.2)."""
+        codec = gen3_codec()
+        body = codec.split_rtc(self._gen3_fixture_bytes(inst))[0]
+        sb1 = codec.parse_flash(body, cfru=self._gen3_rr)["sb1"]
+        at = codec.SB1_PARTY_OFFSET + slot * codec.PARTY_MON_SIZE
+        return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
+
+    def orchestrate_native_absent_gen3(self):
+        """PLAN P5's clean-vs-companion RR control, with a VALID operation (Codex C4-6b finding 6;
+        the trade port landed at 78908fe8): B boots rom_kind=clean, A the companion build. Each
+        side is sent a well-formed apply_trade -- its slot-1 key as old_key, the PARTNER
+        fixture's slot-1 party record as blob_hex. The companion must stage it natively (the
+        stage op ACKed, the trade FSM past "stage"); the clean cartridge must refuse it and write
+        nothing."""
+        ka, kb = self._gen3_prelude()
+        self.go()
+        for inst, own, partner in (("a", ka, "b"), ("b", kb, "a")):
+            self.queue_command(inst, {"cmd": "apply_trade", "slot": 1, "old_key": own[1],
+                                      "blob_hex": self._gen3_party_record_hex(partner, 1),
+                                      "token": f"native_absent_{inst}"})
+        self._native_absent_keys = {"a": ka[1], "b": kb[1]}
+
+    def _gen3_wrong_save(self, path):
+        """A real save, qualifying under the row's own layout (vanilla or CFRU), whose trainer id
+        differs from A's fixture. The trainer-id offset is the title's pack profile's."""
+        codec = gen3_codec()
+        title, rr = self._gen3_title("a"), self._gen3_rr
+        with open(gen3_profile_path(title), encoding="utf-8") as handle:
+            at = json.load(handle)["titles"][title]["derived"]["SB2_OT_ID_OFFSET"]
+
+        def trainer(image):
+            return int.from_bytes(codec.parse_flash(image, cfru=rr)["sb2"][at:at + 4], "little")
+
+        with open(path, "rb") as handle:
+            body = codec.split_rtc(handle.read())[0]
+        ok, why = codec.qualify_flash(body, cfru=rr)
+        if not ok:
+            raise RuntimeError(f"--wrong-save {path} is not a qualifying save: {why}")
+        own = trainer(codec.split_rtc(self._gen3_fixture_bytes("a"))[0])
+        if trainer(body) == own:
+            raise RuntimeError(f"--wrong-save {path} carries A's own trainer id {own}")
+        return body, trainer(body)
+
+    def orchestrate_reconnect_gen3(self):
+        """C-2 then C-1 on FRLG, with B online throughout: A's EmuHawk is killed and relaunched on
+        the SAME save (accepted, nothing duplicated or re-sent), then on a save with another OT
+        (refused; links.json byte-identical; the cartridge writes nothing and its battery is the
+        seeded bytes afterwards). The wrong save defaults to B's own fixture for A's target."""
+        from pathlib import Path
+
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+        for inst in ("a", "b"):
+            self._gen3_mark(inst, rf"^RECONNECT_READY {inst}\b", "hello and link hold", 300)
+        battery = Path(self._gen3_battery_path("a"))
+        self._gen3_before_kill = self._gen3_flushed("a")
+        baseline = {"links": self._reconnect_document(), "events": self._reconnect_events()}
+        shutil.copyfile(self._result_path("a"), os.path.join(self.data_dir, "a_initial_result.txt"))
+
+        def text(path):
+            return Path(path).read_text(encoding="utf-8") if os.path.exists(path) else ""
+
+        self.terminate_instance("a")
+        self.wait_for("A disconnected while B stays online", lambda: (
+            (s := self._status()) and not s["players"]["a"]["connected"]
+            and s["players"]["b"]["connected"]), 45)
+        if self._reconnect_document().get("links") != baseline["links"].get("links"):
+            raise RuntimeError("the live link changed when A's EmuHawk was killed")
+        self.launch_instance("a", phase="same_save", seed=False)
+        same_path = self._phase_result_path("a", "same_save")
+        self.wait_for("same-save A hello",
+                      lambda: "RECONNECT_HELLO same_save count=1" in text(same_path), 300)
+        self.wait_for("server accepts A's same-save party", lambda: (
+            (s := self._status()) and (a := s["players"]["a"]).get("connected")
+            and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])),
+            60)
+        old_hellos = sum(row.get("type") == "hello" and row.get("player") == "a"
+                         for row in baseline["events"])
+        self.wait_for("durable accepted reconnect hello", lambda: sum(
+            row.get("type") == "hello" and row.get("player") == "a"
+            for row in self._reconnect_events()) == old_hellos + 1, 30)
+        same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
+                      "status": self._status() or {}}
+        problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
+                                           same_after["events"], self._link_keys["a"],
+                                           baseline["links"]["player_identity"]["a"]["ot_id"])
+        problems += gen3_receipt_problems("a same_save", text(same_path), forbidden=(
+            r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
+        if problems:
+            raise RuntimeError("C-2 same-save reconnect failed: " + "; ".join(problems))
+        self._pydec_note(f"C-2 same OT accepted; alive link {self._link_keys['a']} / "
+                         f"{self._link_keys['b']}; zero duplicate gameplay events")
+        self._append_reconnect_marker("a", "A_DONE_SAME")
+        self.wait_for("same-save A phase PASS", lambda: "RESULT: PASS" in text(same_path), 60)
+        self.emu_by_inst["a"].wait(timeout=30)
+        self._same_save_artifact = os.path.join(BUILD, f"e2e_{self.scenario}_a_same.SaveRAM")
+        with open(self._same_save_artifact, "wb") as handle:
+            handle.write(self._gen3_flushed("a"))
+        self.terminate_instance("a")
+        self.wait_for("same-save A socket closed before the wrong-save relaunch", lambda: (
+            (s := self._status()) and not s["players"]["a"]["connected"]), 45)
+
+        wrong = getattr(self.args, "wrong_save", None) or self._gen3_fixture_path("b")
+        body, other_ot = self._gen3_wrong_save(wrong)
+        before_wrong_bytes = Path(self.data_dir, "links.json").read_bytes()
+        before_wrong_events = self._reconnect_events()
+        battery.write_bytes(body)
+        self._gen3_wrong_body = body
+        self.launch_instance("a", phase="wrong_save", seed=False)
+        wrong_path = self._phase_result_path("a", "wrong_save")
+        self.wait_for("A wrong-save HUD", lambda: "WRONG_SAVE_HUD " in text(wrong_path), 300)
+        problems = reconnect_wrong_problems(before_wrong_bytes,
+                                            Path(self.data_dir, "links.json").read_bytes(),
+                                            self._status() or {}, before_wrong_events,
+                                            self._reconnect_events())
+        if problems:
+            raise RuntimeError("C-1 wrong-save refusal failed: " + "; ".join(problems))
+        self._pydec_note(f"C-1 wrong OT {other_ot} rejected; links.json byte-identical, no "
+                         f"gameplay events")
+        self._append_reconnect_marker("a", "A_DONE_WRONG")
+        self.wait_for("wrong-save A phase PASS", lambda: "RESULT: PASS" in text(wrong_path), 60)
+        self.emu_by_inst["a"].wait(timeout=30)
+        self._live_complete[self.scenario] = True
+        shutil.copyfile(wrong_path, self._result_path("a"))
+        self._append_reconnect_marker("b", "B_DONE")
+        self.wait_for("B stayed online through reconnect legs", lambda: "RESULT: PASS" in (
+            read_result(self.scenario, "b") or ""), 300)
+
+    # ── Gen 3 (gen3_frlg): saved-state oracles ─────────────────────────────────────────────
+    def _gen3_memorial_box(self) -> int:
+        """MEMORIAL = the last box (lua/gen3/boxes.lua memorial_box = BOXES_PER_STORE - 1).
+
+        RR (25 boxes) reads its own pack profile, not gen3_frlg's (14 boxes) -- `title` is
+        constant across both instances of a row, so "a" stands in for the pair.
+        """
+        title = self._gen3_title("a")
+        with open(gen3_profile_path(title), encoding="utf-8") as handle:
+            derived = json.load(handle)["titles"][title]["derived"]
+        return derived["BOXES_PER_STORE"] - 1
+
+    def _gen3_one_link(self, status, cause=None):
+        """The single persisted links.json row whose halves are this run's linked keys."""
+        want = {self._link_keys["a"], self._link_keys["b"]}
+        rows = [e for e in self._links_json()
+                if {(e.get("a") or {}).get("key"), (e.get("b") or {}).get("key")} == want]
+        if len(rows) != 1:
+            raise RuntimeError(f"expected one persisted link {sorted(want)}, got {rows}")
+        row = rows[0]
+        if row.get("status") != status or (cause and row.get("cause") != cause):
+            raise RuntimeError(f"link {sorted(want)} is {row.get('status')}/{row.get('cause')}, "
+                               f"expected {status}" + (f"/{cause}" if cause else ""))
+        return row
+
+    def _gen3_raise(self, problems, fact):
+        if problems:
+            raise RuntimeError("; ".join(problems))
+        self._pydec_note(fact)
+
+    def _gen3_flush_boundary(self):
+        for process in getattr(self, "emus", []):
+            process.wait(timeout=30)
+
+    def _gen3_rom_provenance_problems(self, want_kind, results) -> list:
+        """Each side's own admission line -- lua/gen3/run.lua "[SLink-gen3] pack/title (kind by
+        admitted_by) player X -> host:port (rom HASH)" -- is what the CLIENT independently found
+        on its own cartridge, checked against the rom_sha1/rom_md5 pins in engine_signals.json
+        (Entry.admit, lua/gen3/entry.lua): admitted_by=="hash" is a pin hit, "anchors"/"header"
+        are the weaker fallbacks. A scenario's rom_kind config (self._gen3_rom_kind) is only what
+        the harness INTENDED to stage; this is the independent proof it actually happened
+        (G5-RR-CLEAN-2, OMP review cx-39175521) -- also catches a same-dump mislabel, where both
+        sides admit the identical hash under two different kind claims."""
+        problems, hashes = [], {}
+        for inst, kind in want_kind.items():
+            text = results.get(inst) or ""
+            problems += gen3_receipt_problems(
+                inst, text,
+                required=[rf"(?m)^\[client\] \[SLink-gen3\] \S+/\S+ \({re.escape(kind)} by hash\) "
+                          rf"player {inst} "])
+            m = re.search(rf"(?m)^\[client\] \[SLink-gen3\] .*player {inst} .* \(rom ([0-9A-Fa-f]+)\)$", text)
+            if m:
+                hashes[inst] = m.group(1)
+        if len(hashes) > 1 and len(set(hashes.values())) < len(hashes):
+            problems.append(f"the sides admitted the same ROM hash {hashes}: the companion/clean "
+                            f"split did not actually run two different dumps")
+        return problems
+
+    def assert_faint_cmd_gen3_saved(self, results):
+        """Both memorials saved: the linked key left each party for the memorial box and nothing
+        else moved; B's key went to HP 0 through an armed OVERWORLD write (the checkpoint), after
+        the force_faint and before its memorialize_done; A got no force_faint."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("memorial")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        box = self._gen3_memorial_box()
+        problems = []
+        for inst, key in (("a", ka), ("b", kb)):
+            problems += gen3_memorial_problems(inst, self._gen3_saved(inst),
+                                               self._gen3_fixture_saved(inst), key, box, rr=self._gen3_rr,
+                                               limits=self._gen3_limits(inst))
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=[gen3_rx("memorialize", ka), gen3_tx("memorialize_done", ka)],
+            forbidden=[r"(?m)^RX force_faint "])
+        forced = rf"(?m)^FORCED_HP0 {re.escape(kb)} .*in_battle=0"
+        problems += gen3_receipt_problems(
+            "b", results["b"],
+            required=[gen3_rx("force_faint", kb), forced, gen3_rx("memorialize", kb),
+                      gen3_tx("memorialize_done", kb)],
+            ordered=[(gen3_rx("force_faint", kb), r"(?m)^\[client\] \[SLink-gen3\] write overworld "),
+                     (r"(?m)^\[client\] \[SLink-gen3\] write overworld ", forced),
+                     (forced, gen3_tx("memorialize_done", kb))])
+        self._gen3_raise(problems, f"faint_cmd: {ka} and {kb} saved once each in box {box + 1}; "
+                                   f"B's HP 0 came from an overworld-armed write")
+
+    def assert_faint_cmd_clean_gen3_saved(self, results):
+        """faint_cmd_gen3's own oracle wholesale (the link+faint mechanics are identical) -- plus
+        proof the clean-side split actually ran: A admitted as the companion build and B as the
+        raw CLEAN dump, both by HASH against the pins, on two different cartridges."""
+        self._gen3_raise(self._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, results),
+                         "faint_cmd_clean_gen3: ROM provenance confirmed (a=companion, b=clean, both by hash)")
+        self.assert_faint_cmd_gen3_saved(results)
+
+    def assert_linked_faint_active_gen3_saved(self, results):
+        """W-2 on FRLG/RR, the in-battle path under mechanism P+H. A: the engine's faint site
+        fired, THEN the client sent faint for the linked key. Server: DEAD by battle, force_faint
+        to B, then MEMORIAL. B: active_faint_chain (the commit, the hand-off, the KO with no
+        input, the faint site, the case's aftermath) and no `faint` echo. Both memorials saved."""
+        self._gen3_flush_boundary()
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        case = self.cfg.get("active_faint_case", "wild")
+        cmd = "force_explode" if case == "explode" else "force_faint"
+        # a linked mon that is its party's LAST mon (a one-mon fixture, or the whiteout case) keeps
+        # its slot: the only pair died, game_over is latched, and lua/core/deferred.lua drops the
+        # last-mon memorialize (ruling 21) -- LAST_MON_KEPT in that side's receipt. The link then
+        # stays DEAD unless both halves were memorialized.
+        lone = {inst: re.search(rf"(?m)^LAST_MON_KEPT {re.escape(key)}$", results[inst] or "") is not None
+                for inst, key in (("a", ka), ("b", kb))}
+        self._gen3_one_link("dead" if any(lone.values()) else "memorial", cause="battle")
+        with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
+            log_text = handle.read()
+        dead = log_text.find(f"[a] faint → {cmd} b:{kb}")
+        memorial = log_text.find("fully memorialized")
+        problems = []
+        if dead < 0 or (not any(lone.values()) and memorial <= dead):
+            problems.append(f"server log lacks DEAD propagation ({cmd} b) before MEMORIAL")
+        box = self._gen3_memorial_box()
+        marks = {}   # inst -> (required, ordered, forbidden) for its memorial ending
+        for inst, key in (("a", ka), ("b", kb)):
+            saved, fixture = self._gen3_saved(inst), self._gen3_fixture_saved(inst)
+            if lone[inst]:
+                deposited = re.findall(rf"(?m)^ONE_MON_PARTY {re.escape(key)} deposited=(\S+)$", results[inst] or "")
+                # both sides' linked mon fought: A's lost its lead, B's took the engine KO
+                problems += gen3_last_mon_problems(inst, saved, fixture, key, [d for d in deposited if d != "-"],
+                                                   box, rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                                   battled=True)
+                kept = rf"(?m)^LAST_MON_KEPT {re.escape(key)}$"
+                dropped = rf"(?m)^\[client\] .*memorialize dropped: last mon after game over {re.escape(key)}\b"
+                marks[inst] = ([gen3_rx("memorialize", key), r"(?m)^RX game_over\b", dropped, kept],
+                              [(r"(?m)^RX game_over\b", dropped), (dropped, kept),
+                               (kept, r"(?m)^SAVE_WITNESS_DUMP ")],
+                              [gen3_tx("memorialize_done", key)])
+            else:
+                problems += gen3_memorial_problems(inst, saved, fixture, key, box, rr=self._gen3_rr,
+                                                   limits=self._gen3_limits(inst), battled=True,
+                                                   trained=inst == "b" and case == "trainer")
+                done = gen3_tx("memorialize_done", key)
+                marks[inst] = ([done], [(done, r"(?m)^SAVE_WITNESS_DUMP ")], [])
+        site = r"(?m)^ENGINE_FAINT_SITE "
+        req_a, ord_a, forb_a = marks["a"]
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=[site, gen3_tx("faint", ka), *req_a],
+            ordered=[(site, gen3_tx("faint", ka)), *ord_a], forbidden=[r"(?m)^RX force_", *forb_a])
+        required, ordered, forbidden = active_faint_chain(kb, case)
+        req_b, ord_b, forb_b = marks["b"]
+        problems += gen3_receipt_problems("b", results["b"], required=required + req_b,
+                                          ordered=ordered + ord_b, forbidden=forbidden + forb_b)
+        self._gen3_raise(problems, f"linked_faint_active[{case}]: engine faint {ka} -> {cmd} -> the "
+                                   f"hand-off commit on active {kb} -> engine KO in battle with no "
+                                   f"input; memorials saved (last mon kept: "
+                                   f"{','.join(i for i in 'ab' if lone[i]) or 'none'})")
+
+    assert_linked_faint_active_whiteout_gen3_saved = assert_linked_faint_active_gen3_saved
+    assert_linked_faint_active_trainer_gen3_saved = assert_linked_faint_active_gen3_saved
+    assert_linked_faint_active_clean_gen3_saved = assert_linked_faint_active_gen3_saved
+    assert_linked_faint_active_lhammer_gen3_saved = assert_linked_faint_active_gen3_saved
+    assert_linked_faint_active_mega_gen3_saved = assert_linked_faint_active_gen3_saved
+
+    def assert_active_end_gen3_saved(self, results):
+        """A2 under P+H: A's chain (active_faint_chain "command"), its saved party the fixture's
+        with the key's HP 0 in slot 0 (the ENGINE wrote it: no SLink HP write, ACTIVE_KO) and no
+        boxed copy; B idle -- no write, no save, battery unchanged."""
+        self._gen3_flush_boundary()
+        key = self._link_keys["a"]
+        required, ordered, forbidden = active_faint_chain(key, "command")
+        forbidden += [gen3_rx("memorialize", key), r"(?m)^TX whiteout "]
+        problems = gen3_receipt_problems("a", results["a"], required=required, ordered=ordered,
+                                         forbidden=forbidden)
+        problems += gen3_receipt_problems("b", results["b"], required=[r"(?m)^WRITES 0$"],
+                                          forbidden=[r"(?m)^SAVE_WITNESS_DUMP ", r"(?m)^RX force_faint "])
+        party, boxes = self._gen3_saved("a")
+        f_party, _ = self._gen3_fixture_saved("a")
+        keys = [gen3_key(m) for m in party]
+        if keys != [gen3_key(m) for m in f_party] or not keys or keys[0] != key:
+            problems.append(f"a: saved party {keys} is not the fixture's with {key} in slot 0")
+        elif party[0]["hp"] != 0:
+            problems.append(f"a: the saved {key} has HP {party[0]['hp']}, not 0")
+        else:
+            problems += gen3_record_problems(f"a: the saved {key}", party[0], self._gen3_rr,
+                                             self._gen3_limits("a"))
+        if any(gen3_key(m) == key for m in boxes.values()):
+            problems.append(f"a: {key} also has a boxed copy")
+        codec = gen3_codec()
+        if codec.split_rtc(self._gen3_flushed("b"))[0] != codec.split_rtc(self._gen3_fixture_bytes("b"))[0]:
+            problems.append("b: the idle peer's battery changed")
+        self._gen3_raise(problems, f"active_end: force_faint {key} -> P+H commit -> hand-off -> Perish "
+                                   f"KO in battle with no input -> send-out -> RUN; saved HP 0")
+
+    def assert_boxsync_gen3_saved(self, results):
+        """The linked pair made a full round trip on both cartridges: deposit and withdraw by hand
+        on A, mirrored by the server and executed by B's client, keyed ACKs in order, and the
+        saved party holds each half once with the fixture's record (level/stats/exp) and no copy
+        left in any box."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("alive")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        problems = []
+        for inst, key in (("a", ka), ("b", kb)):
+            # only A walks with its linked mon in the party (grass -> PC); B's is idle
+            problems += gen3_round_trip_problems(inst, self._gen3_saved(inst),
+                                                 self._gen3_fixture_saved(inst), key,
+                                                 rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                                 walked=inst == "a")
+        chain_a = [gen3_tx("party_to_box", ka), gen3_boxed(ka), gen3_tx("box_to_party", ka),
+                   gen3_returned(ka)]
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=chain_a, ordered=list(zip(chain_a, chain_a[1:], strict=False)))
+        chain = [gen3_rx("box_mon", kb), gen3_tx("stats_cache", kb), gen3_boxed(kb),
+                 gen3_rx("party_mon", kb), gen3_tx("sync_retrieve_done", kb), gen3_returned(kb)]
+        problems += gen3_receipt_problems(
+            "b", results["b"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
+            forbidden=[gen3_tx("box_mon_failed", kb), gen3_tx("sync_retrieve_failed", kb)])
+        self._gen3_raise(problems, f"boxsync: {ka} / {kb} deposited and withdrawn, saved once in "
+                                   f"party with the fixture record")
+
+    def assert_center_controls_gen3_saved(self, results):
+        """G4 item 2a (4): A's one save (the Cable Club's) holds the linked mon in its party with
+        the fixture record -- it is taken BEFORE any probe moves a byte, so it is no persistence
+        proof of the later deposit/withdraw; each keyed probe arrived only after its CONTROL_LIVE,
+        was REFUSED in its witnessed state by a named clause, and landed only after the release
+        (ACK + read-back). The cable probe stays the same box_mon from the menu through the link
+        wait."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("alive")
+        ka = self._link_keys["a"]
+        problems = gen3_round_trip_problems("a", self._gen3_saved("a"), self._gen3_fixture_saved("a"),
+                                            ka, rr=self._gen3_rr, limits=self._gen3_limits("a"),
+                                            walked=True)
+        chain = center_controls_chain(ka)
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=chain, ordered=list(zip(chain, chain[1:], strict=False)),
+            forbidden=[gen3_tx("box_mon_failed", ka), gen3_tx("sync_retrieve_failed", ka)])
+        problems += cable_callback_problems(
+            "a", results["a"], gen3_sym(self._gen3_title("a"), "LinkCB_RequestPlayerDataExchange"))
+        self._gen3_raise(problems, f"center_controls: {ka} held at the Cable Club menu, the cable "
+                                   f"link wait and the Union Room attendant; landed once released")
+
+    def assert_save_then_write_gen3_saved(self, results):
+        """The regression's persisted half: two saves (the witness already checked the second is
+        the flushed battery), the stale sSaveDialogCB observed between them, the keyed box_mon
+        received only after WRITE_PROBE_READY, ACKed with no failure, read back boxed, and the
+        final save holding A's linked mon in a box and not in the party. The pair stays alive."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("alive")
+        ka = self._link_keys["a"]
+        party, boxes = self._gen3_saved("a")
+        problems = []
+        if ka in [gen3_key(m) for m in party]:
+            problems.append(f"a: the final save still holds {ka} in the party")
+        if ka not in [gen3_key(m) for m in boxes.values()]:
+            problems.append(f"a: the final save holds {ka} in no box")
+        required, ordered = save_then_write_order(ka)
+        problems += gen3_receipt_problems("a", results["a"], required=required, ordered=ordered,
+                                          forbidden=save_then_write_forbidden(ka))
+        self._gen3_raise(problems, f"save_then_write: {ka} boxed by a keyed write on an idle field after "
+                                   f"an in-game save (stale sSaveDialogCB observed); saved twice")
+
+    def assert_whiteout_gen3_saved(self, results):
+        """One whiteout, one rebuild, no deaths: A whited out with the pair boxed on both sides,
+        the server rebuilt the pair (rebuild_start, party_mon, rebuild_done on A; party_mon on B),
+        each half is back in its saved party with the fixture's record, the pair is still alive
+        and nobody memorialized it."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("alive")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        problems = []
+        for inst, key in (("a", ka), ("b", kb)):
+            # only A walks with its linked mon in the party (grass -> PC); B's is idle
+            problems += gen3_round_trip_problems(inst, self._gen3_saved(inst),
+                                                 self._gen3_fixture_saved(inst), key,
+                                                 rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                                 walked=inst == "a")
+        # TX whiteout, not the driver's WHITED_OUT marker, opens the chain: the rebuild commands
+        # answer the event and can land while the whiteout scene is still playing.
+        # BOXED_OBSERVED / RETURNED_OBSERVED are the cartridge read back (absent from the party
+        # AND in a box; back in the party AND in no box): an ACK alone is the client's word, and a
+        # no-op deposit that still ACKed would otherwise pass (Codex C4-6b finding 2).
+        # rebuild_start is NOT ordered against party_mon: the server queues the party_mons first
+        # and rebuild_start after them, in one reply (server/state.py _queue_rebuild_commands;
+        # live whiteout_gen3 r3 on 123c6c45: `RX party_mon` then `RX rebuild_start`). It must
+        # answer the whiteout and precede rebuild_done -- the Gen 1 oracle's own rule.
+        chain_a = [gen3_boxed(ka), gen3_tx("whiteout", "-"),
+                   gen3_rx("party_mon", ka), gen3_tx("sync_retrieve_done", ka),
+                   r"(?m)^RX rebuild_done\b", gen3_returned(ka)]
+        start = r"(?m)^RX rebuild_start\b"
+        # G4 item 2a (docs/gen3/G4_request_draft.md): the Center state with the Union Room set
+        # live, the rebuild write landing at the Center landing tile, and -- after the save -- a
+        # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
+        # that box_mon (TX stats_cache would be the held write landing).
+        center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
+        # G5-RR-NURSE-2: RR's nurse cutscene never refuses (no message/waitmessage anywhere in
+        # her script -- scenario_gen3_whiteout.lua's own comment), so the RR control is the START
+        # menu instead, named start_menu; FR/LG keep nurse. Same clause vocabulary either way.
+        control_name = "start_menu" if self._gen3_rr else "nurse"
+        control = [gen3_returned(ka), rf"(?m)^CONTROL_LIVE {control_name} {re.escape(ka)} ",
+                   gen3_rx("box_mon", ka),
+                   rf"(?m)^CONTROL_REFUSED {control_name} box_mon {re.escape(ka)} clause=\S+ "]
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=chain_a + [start,r"(?m)^WHITED_OUT\b", center, landed] + control,
+            ordered=list(zip(chain_a, chain_a[1:], strict=False))
+            + [(gen3_tx("whiteout", "-"), start), (start, r"(?m)^RX rebuild_done\b")]
+            + [(gen3_tx("whiteout", "-"), center), (center, landed),
+               (gen3_tx("sync_retrieve_done", ka), landed)]
+            + list(zip(control, control[1:], strict=False)),
+            forbidden=[gen3_rx("memorialize", ka), r"(?m)^RX force_faint ", gen3_tx("stats_cache", ka)])
+        chain_b = [gen3_rx("box_mon", kb), gen3_tx("stats_cache", kb), gen3_boxed(kb),
+                   gen3_rx("party_mon", kb), gen3_tx("sync_retrieve_done", kb), gen3_returned(kb)]
+        problems += gen3_receipt_problems(
+            "b", results["b"], required=chain_b, ordered=list(zip(chain_b, chain_b[1:], strict=False)),
+            forbidden=[gen3_rx("memorialize", kb), r"(?m)^RX force_faint "])
+        self._gen3_raise(problems, f"whiteout: A whited out, the pair {ka} / {kb} was rebuilt "
+                                   f"from both PCs and saved in party, still alive")
+
+    def _gen3_sent_event(self, text, event, key):
+        """The decoded JSON of the first `TX <event> <key> {...}` line, or None."""
+        match = re.search(gen3_tx(event, key) + r" (\{.*\})\s*$", text or "", re.M)
+        return json.loads(match.group(1)) if match else None
+
+    def _gen3_sent_field(self, text, event, key, field):
+        match = re.search(gen3_tx(event, key) + r".*\"" + field + r"\":(\"[^\"]*\"|-?\d+)", text or "")
+        return json.loads(match.group(1)) if match else None
+
+    def assert_link_gen3_saved(self, results):
+        """D-1 persisted on FRLG: one ALIVE route_1 pair of the two real captures; each capture is
+        in its saved party exactly once (appended, boxed nowhere, species as sent), and each
+        saved POKe BALLS pocket is the fixture's minus the throws that half logged."""
+        self._gen3_flush_boundary()
+        row = self._gen3_one_link("alive")
+        problems = [] if row.get("area_id") == "route_1" else [f"link area {row.get('area_id')!r}"]
+        for inst in ("a", "b"):
+            key, text = self._link_keys[inst], results[inst]
+            sent = self._gen3_sent_event(text, "capture", key) or {}
+            if sent.get("area_id") != "route_1":
+                problems.append(f"{inst}: no capture of {key} sent for route_1")
+            problems += gen3_capture_problems(inst, self._gen3_saved(inst),
+                                              self._gen3_fixture_saved(inst), key, sent,
+                                              rr=self._gen3_rr, limits=self._gen3_limits(inst))
+            throws = len(re.findall(r"(?m)^THREW \d+", text or ""))
+            title = self._gen3_title(inst)
+            before = gen3_ball_count(self._gen3_fixture_bytes(inst), title)
+            after = gen3_ball_count(self._gen3_flushed(inst), title)
+            self._pydec_note(f"BAG_BALLS baseline={before} final={after} throws={throws} inst={inst}")
+            if throws < 1 or after != before - throws:
+                problems.append(f"{inst}: saved {after} Poke Balls; the fixture had {before} and "
+                                f"the driver logged {throws} throw(s)")
+        self._gen3_raise(problems, f"link: {self._link_keys['a']} <-> {self._link_keys['b']} "
+                                   f"alive on route_1 and saved once in each party")
+
+    def assert_deadzone_gen3_saved(self, results):
+        """D-3 persisted on FRLG: route_1 is a dead zone with exactly one dead_zone event and no
+        alive link; A's saved state is the fixture's (it only ran, and its no_catch named the
+        foe's species); B's catch there was force-fainted and memorialized, saved in the memorial
+        box and nowhere else."""
+        self._gen3_flush_boundary()
+        b_key = self._deadzone_b_key
+        problems = []
+        if ((self._status() or {}).get("area_states") or {}).get("route_1") != "dead_zone":
+            problems.append("route_1 is not a dead zone after the run")
+        # the server logs dead_zone for the player AND the partner (server/server.py:2217-2220):
+        # exactly one row each, never one in total (live deadzone_gen3 attempt 2 on 684bbb7a)
+        rows = {}
+        for row in self._reconnect_events():
+            if row.get("type") == "dead_zone":
+                rows[row.get("player")] = rows.get(row.get("player"), 0) + 1
+        if rows != {"a": 1, "b": 1}:
+            problems.append(f"events.json dead_zone rows per player are {rows}, not one each")
+        for entry in self._links_json():
+            keys = {(entry.get("a") or {}).get("key"), (entry.get("b") or {}).get("key")}
+            if b_key in keys and entry.get("status") == "alive":
+                problems.append(f"B's dead-zone catch {b_key} is in an alive link")
+        species = self._gen3_sent_field(results["a"], "no_catch", "-", "species_id")
+        if not species or self._gen3_sent_field(results["a"], "no_catch", "-", "area_id") != "route_1":
+            problems.append("A sent no species-bearing no_catch for route_1")
+        a_party, a_boxes = self._gen3_saved("a")
+        f_party, f_boxes = self._gen3_fixture_saved("a")
+        if [gen3_key(m) for m in a_party] != [gen3_key(m) for m in f_party] or {
+                p: gen3_key(m) for p, m in a_boxes.items()} != {
+                p: gen3_key(m) for p, m in f_boxes.items()}:
+            problems.append("A's saved party/boxes are not the fixture's")
+        problems += gen3_memorial_problems("b", self._gen3_saved("b"), self._gen3_fixture_saved("b"),
+                                           b_key, self._gen3_memorial_box(), rr=self._gen3_rr,
+                                           limits=self._gen3_limits("b"), battled=True,
+                                           captured=self._gen3_sent_event(results["b"], "capture", b_key))
+        problems += gen3_receipt_problems(
+            "b", results["b"], required=[rf"(?m)^FAINTED {re.escape(b_key)}\b",
+                                         gen3_rx("memorialize", b_key),
+                                         gen3_tx("memorialize_done", b_key)])
+        self._gen3_raise(problems, f"deadzone: route_1 locked by A's no_catch (species {species}); "
+                                   f"B's {b_key} saved only in the memorial box")
+
+    def assert_reconnect_gen3_saved(self, results):
+        """C-2/C-1 persisted: A never saved and never mutated its battery -- the same-save flush is
+        the pre-kill bytes and the wrong-save flush is exactly the seeded wrong save -- while B's
+        saved party still holds its half of the alive pair."""
+        if not self._live_complete.get(self.scenario):
+            raise RuntimeError("reconnect_gen3's live legs did not complete")
+        self._gen3_flush_boundary()
+        codec = gen3_codec()
+        self._gen3_one_link("alive")
+        problems = []
+        same = self._artifact(self._same_save_artifact, "C-2 same-save battery")
+        if codec.split_rtc(same.read_bytes())[0] != codec.split_rtc(self._gen3_before_kill)[0]:
+            problems.append("A's same-save battery differs from its pre-kill bytes")
+        if codec.split_rtc(self._gen3_flushed("a"))[0] != self._gen3_wrong_body:
+            problems.append("the rejected wrong-save cartridge's battery changed")
+        problems += gen3_receipt_problems("a", results["a"], required=[
+            r"(?m)^WRITES 0$",
+            r"(?m)^WRONG_SAVE_ZERO attempted=0 writes=0 party=unchanged box=unchanged$"])
+        b_keys = [gen3_key(m) for m in self._gen3_saved("b")[0]]
+        if self._link_keys["b"] not in b_keys:
+            problems.append(f"B's saved party {b_keys} lacks its linked {self._link_keys['b']}")
+        self._gen3_raise(problems, "reconnect: A's batteries untouched across both relaunches "
+                                   "(zero client writes on the wrong save); B saved its half")
+
+    # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────
+    def assert_explode_gen3_saved(self, results):
+        """explode_gen3 under owner ruling 19, a qualification row: the P+H carrier's explode
+        chain -- keyed force_explode, the Explosion menu skip ending in the hand-off, no input,
+        lastUsedMovePlayer 153 at the KO, the attacker's own faint site -- plus the linked
+        oracle's saved-state half."""
+        self.assert_linked_faint_active_gen3_saved(results)
+
+    def assert_rival_swap_gen3_saved(self, results):
+        """rival_swap_gen3 is a BLOCKED NEGATIVE CONTROL, not a qualification (SCENARIOS
+        `control`; Codex C4-6b finding 6): the runner queues a dummy team (100 zero bytes) with no
+        session/battle_id, and the only thing characterized is the refusal -- B reached a real
+        battle, the command arrived and was answered stale_battle_id: the new client declares
+        battle_identity, and the C5-10 gate refuses a missing identity before anything is staged
+        (2dc1b750; rival_swap_refresh_window.md §3.3). A untouched. A PASS says nothing about a
+        working swap."""
+        problems = gen3_receipt_problems(
+            "b", results["b"], required=[r"(?m)^READY_IN_BATTLE\b",
+                                         r"(?m)^RX replace_rival_team\b",
+                                         gen3_tx("rival_team_replaced", "-")])
+        err = self._gen3_sent_field(results["b"], "rival_team_replaced", "-", "error")
+        if err != "stale_battle_id":
+            problems.append(f"b: rival_team_replaced error={err!r}, expected 'stale_battle_id' "
+                            f"(the identity gate's refusal of an identity-less command)")
+        a_party, _ = self._gen3_saved("a")
+        f_party, _ = self._gen3_fixture_saved("a")
+        if [gen3_key(m) for m in a_party] != [gen3_key(m) for m in f_party]:
+            problems.append("a's saved party is not the fixture's (rival_swap only drives b)")
+        self._gen3_raise(problems, "rival_swap NEGATIVE CONTROL (not qualification): the dummy, "
+                                   "identity-less team was refused with stale_battle_id")
+
+    def assert_native_absent_gen3_saved(self, results):
+        """native_absent_gen3: the same valid apply_trade, two outcomes. A (companion): the client
+        queued it, wrote through the armed native window, and the stage op completed (NATIVE_
+        STAGED: the FSM left "stage"). B (clean): the client's refusal line, no native write, zero
+        writes. Neither side saves."""
+        ka, kb = self._native_absent_keys["a"], self._native_absent_keys["b"]
+        native_write = r"(?m)^\[client\] \[SLink-gen3\] write native "
+        queued = rf"(?m)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued"
+        staged = r"(?m)^NATIVE_STAGED phase=\S+ writes=[1-9]"
+        # the trade's own native write FOLLOWS the queued line: the companion's link panel
+        # (RX link_panel) legitimately writes native before any trade arrives (live 156a521f),
+        # so the first `write native` line proves nothing about the trade
+        trade_write = (rf"(?ms)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued.*?"
+                       r"^\[client\] \[SLink-gen3\] write native .*?^NATIVE_STAGED phase=\S+ writes=[1-9]")
+        problems = gen3_receipt_problems(
+            "a", results["a"], required=[r"(?m)^RX apply_trade\b", queued, native_write, staged, trade_write])
+        refused = (rf"(?m)^\[client\] \[SLink-gen3\] apply_trade refused: no trade path on this "
+                   rf"cartridge \(nothing written\) {re.escape(kb)}")
+        problems += gen3_receipt_problems(
+            "b", results["b"], required=[r"(?m)^RX apply_trade\b", refused, r"(?m)^WRITES 0$",
+                                         r"(?m)^PROBE_SETTLED writes=0$"],
+            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write "])
+        self._gen3_raise(problems, "native_absent: the companion staged the valid trade natively; "
+                                   "the clean cartridge refused it and wrote nothing")
+
     def _run_oracle(self, results):
-        """Revalidate the family contract and run its injected evidence stages."""
-        run_pipeline(self, evidence_contract(getattr(self, "game", "gen3_rr")),
-                     self.cfg, results)
+        """Revalidate the family contract and run its injected evidence stages.
+
+        Gen 3 battery rows (FAMILY_EVIDENCE: check_save_witness_gen3, oracle required) also refuse a
+        +dirty source and note every marker line their oracle consumed.
+        """
+        contract = evidence_contract(getattr(self, "game", "legacy"))
+        if not getattr(self, "is_gen3_battery", False):
+            run_pipeline(self, contract, self.cfg, results)
+            return
+        dirty = getattr(self, "_gen3_source_dirty", None)
+        if dirty:
+            raise RuntimeError(f"the receipt's source is +dirty ({', '.join(dirty[:5])}"
+                               f"{', ...' if len(dirty) > 5 else ''}): a G4 receipt must come "
+                               f"from a clean cut")
+        global _CONSUMED_MARKERS
+        _CONSUMED_MARKERS = consumed = []
+        try:
+            run_pipeline(self, contract, self.cfg, results)
+        finally:
+            _CONSUMED_MARKERS = None
+            seen = set()
+            for label, line in consumed:
+                if (label, line) not in seen:
+                    seen.add((label, line))
+                    # the WHOLE line: CENTER_STATE / WRITE_IN_CENTER / CONTROL_REFUSED carry their
+                    # tail predicates and keyed-write/ACK suffix past 400 chars (Codex, 86245d1e)
+                    self._pydec_note(f"MARKER {label}: {line}")
+
+    def _note_result_lines(self, texts):
+        """Each side's own RESULT line, verbatim, beside the runner's verdict (Gen 3 rows)."""
+        if not self.is_gen3_battery:
+            return
+        for inst in ("a", "b"):
+            lines = [ln for ln in (texts.get(inst) or "").splitlines() if ln.startswith("RESULT:")]
+            self._pydec_note(f"RESULT_LINE {inst}: {lines[-1] if lines else '(none)'}")
 
     def _live_ok(self) -> bool:
         """True when every live leg this scenario needs ran to completion."""
@@ -5137,7 +7465,7 @@ class DuoRun:
                              f"{scenario_attempt_limit(self.scenario, getattr(self, 'game', ''))}\n")
         try:
             # Match __init__'s default for bare runners used by lifecycle unit tests.
-            validate_pipeline(self, evidence_contract(getattr(self, "game", "gen3_rr")),
+            validate_pipeline(self, evidence_contract(getattr(self, "game", "legacy")),
                               self.cfg)
             if getattr(self, "gcfg", {}).get("launch_profile") == "gen2":
                 from tools.gen2_source_data import shared_contexts
@@ -5146,6 +7474,9 @@ class DuoRun:
                 self._clear_attempt_artifacts()  # startup waits must not see an older RESULT
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
+            if self.is_gen3_battery:
+                # every Gen 3 receipt names its own cut (Codex receipt audit 2026-09-23)
+                self._pydec_note(self._gen3_identity())
             with self._timed("server"):
                 self.start_server()
             self.start_instances()
@@ -5160,6 +7491,7 @@ class DuoRun:
             else:
                 with self._timed("results"):
                     ra, rb = self.wait_results()
+            self._note_result_lines({"a": ra, "b": rb})
             pa = "RESULT: PASS" in ra
             pb = "RESULT: PASS" in rb
             if pa and pb:
@@ -5170,7 +7502,7 @@ class DuoRun:
                     self._run_oracle({"a": ra, "b": rb})
                 if scenario_family(getattr(self, "game", "")) == "gen2_new" and not self._gen2_verified_facts:
                     raise RuntimeError("Gen 2 oracle did not report verified facts")
-            if pa and pb and scenario_family(getattr(self, "game", "")) == "gen1_new":
+            if pa and pb and rng_retry_family(getattr(self, "game", "")):
                 # Harness finding, not a scenario verdict: the harness wrote the expected count
                 # into the stub, so the driver's echo is checkable without the game. Checked
                 # only on a double PASS so a real failure keeps its own error, not this one.
@@ -5227,6 +7559,7 @@ class DuoRun:
             # run_scenario_with_rng_retry still classifies them (a mid-wait ball miss keeps its
             # retry; anything else fails as the receipts say).
             if getattr(self, "_pydec_path", None):
+                self._note_result_lines({inst: self._read_receipt(inst) or "" for inst in ("a", "b")})
                 self._pydec_note(f"PYDEC: FAIL client RESULT before {exc.awaited}")
             print(f"[duo] {self.scenario}: {exc}")
             for inst in ("a", "b"):
@@ -5253,7 +7586,7 @@ def list_lines(game):
     lines = []
     for name in scenarios_for(game):
         targets = (GAMES[game]["fixture"] if GAMES[game].get("launch_profile") == "gen2"
-                   else SCENARIOS[name].get("target", "town"))
+                   else scenario_target(SCENARIOS[name], game))
         if name == "gen2_admit_wrong_rom":
             targets = {**targets, "b": "crystal_battle_ot2"}
         if name in GEN2_TRADE_SCENARIOS:
@@ -5277,18 +7610,57 @@ def list_lines(game):
 
 
 def summary_lines(results, game):
-    """One line per scenario, with a failure's reason attached when it has one."""
+    """One line per scenario, with a failure's reason attached when it has one. A scenario that
+    declares `control` is labelled as such: its PASS is a characterization, not qualification."""
     lines = []
     for name, outcome in results.items():
         ok, attempt = outcome[0], outcome[1]
         reason = f" — {outcome[2]}" if len(outcome) > 2 else ""
+        if ok is None:
+            allowed = len(outcome) > 3 and outcome[3]
+            lines.append(f"  {name}: SKIP{' (allowed: signed limit)' if allowed else ''}{reason}")
+            continue
+        control = SCENARIOS.get(name, {}).get("control")
+        if control:
+            reason += f" [CONTROL, not a qualification pass: {control}]"
         lines.append(f"  {name}: {'PASS' if ok else 'FAIL'} "
                      f"(attempt {attempt} of {scenario_attempt_limit(name, game)}){reason}")
     return lines
 
 
+def scenario_target(entry, game):
+    """A scenario's fixture `target` (a string, or {"a", "b"}) on `game`: `target_by_game[game]`
+    when the row needs a different fixture there (RR R1 boots rr_battle2)."""
+    return (entry.get("target_by_game") or {}).get(game, entry.get("target", "town"))
+
+
+def skip_reason(name, game):
+    """(why, allowed) when `name` cannot launch on `game`, else None. `signed_limit` is an owner-
+    signed limit: an ALLOWED skip (exit_code 0). A missing fixture on an RR row (GAMES[...]["rr"])
+    is not: rr_battle2 is still being built, and a FAIL at fixture lookup would read as a product
+    failure, so it SKIPs by name and exit_code says 3. A SKIP is never a PASS."""
+    entry, row = SCENARIOS.get(name, {}), GAMES.get(game, {})
+    if entry.get("signed_limit"):
+        return f"SIGNED LIMIT: {entry['signed_limit']}", True
+    if row.get("rr") and row.get("sides"):
+        target = scenario_target(entry, game)
+        missing = []
+        for inst in ("a", "b"):
+            stem = row["sides"][inst][1].format(target=target[inst] if isinstance(target, dict) else target)
+            if not os.path.isfile(os.path.join(GEN3_FIXTURES, stem + ".sav")):
+                missing.append(f"tests/fixtures/gen3/{stem}.sav")
+        if missing:
+            return f"fixture(s) {', '.join(missing)} not built yet (RR battle fixtures)", False
+    return None
+
+
 def exit_code(results) -> int:
-    return 0 if all(outcome[0] for outcome in results.values()) else 1
+    """0 when every scenario PASSed or took an ALLOWED skip (a signed limit, outcome
+    (None, 0, why, True)); a FAIL is 1; any other SKIP with no FAIL is 3."""
+    if any(outcome[0] is False for outcome in results.values()):
+        return 1
+    blocking = [o for o in results.values() if o[0] is None and not (len(o) > 3 and o[3])]
+    return 3 if blocking else 0
 
 
 def _archive_attempt(name, attempt, receipts):
@@ -5447,6 +7819,14 @@ def run_scenario_with_rng_retry(name, args):
                         for inst in ("a", "b") for line in (receipts.get(inst) or "").splitlines())):
             print(f"[duo] {name}: a side ran out of the aide's natural Balls; retrying fresh lane")
             continue
+        if SCENARIOS[name].get("battle_window_case"):
+            classification = battle_window_failure(name, receipts, attempt) if not ok else None
+            if classification:
+                print(f"[duo] {name}: NOT_SUBJECT retry={classification['retry']} {classification['reason']}")
+            if not ok and attempt < limit and classification and classification["retry"]:
+                print(f"[duo] {name}: restarting the whole T2 attempt with fresh server and seeds")
+                continue
+            return ok, attempt
         if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
             # A re-run that only went looking for the reroll branch and then lost the game's
             # RNG (a ball miss past its retries) does not undo the PASS it re-ran; a real
@@ -5496,8 +7876,10 @@ def main():
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--game", default="gen3_rr", choices=sorted(GAMES),
-                    help="gen3_rr (Radical Red, default), gen1 (Red as A, Blue as B), "
-                         "or gen2 (Crystal both sides)")
+                    help="the GAMES pairing row: gen3_rr (new client on Radical Red, default), "
+                         "gen3_frlg (new client, FireRed A / LeafGreen B), gen3_lgfr "
+                         "(LeafGreen A / FireRed B), gen1_new and the gen1_pure* rows "
+                         "(new Gen 1 client), gen2 (Crystal both sides); --list shows a row's scenarios")
     ap.add_argument("--scenario", default="faint",
                     choices=list(SCENARIOS) + ["all"])
     ap.add_argument("--keep-alive", action="store_true",
@@ -5515,9 +7897,13 @@ def main():
                     help="extra idle frames before the first hunt; each RNG retry adds 37 per "
                          "attempt")
     ap.add_argument("--wrong-save", default=None,
-                    help="second-OT Red SaveRAM for reconnect_new's fail-closed C-1 leg")
+                    help="second-OT Red SaveRAM for reconnect_new's fail-closed C-1 leg; for "
+                         "reconnect_gen3 a second-OT FR flash save (default: B's own fixture)")
     ap.add_argument("--server-flags", nargs="*", default=[],
                     help="extra flags for server.server")
+    ap.add_argument("--wire-log", action="store_true",
+                    help="capture every c2s/s2c line to "
+                         "tests/fixtures/gen3/wire/<scenario>_<player>_gen3_new.jsonl")
     ap.add_argument("--list", action="store_true",
                     help="print the scenarios --scenario all would run for --game, then exit")
     args = ap.parse_args()
@@ -5550,6 +7936,12 @@ def main():
     results = {}
     for name in names:
         print(f"\n========== scenario: {name} ==========")
+        skip = skip_reason(name, args.game)
+        if skip:
+            why, allowed = skip
+            print(f"[duo] {name}: SKIP ({args.game}{', allowed' if allowed else ''}) — {why}")
+            results[name] = (None, 0, why, allowed)
+            continue
         results[name] = run_scenario_with_rng_retry(name, args)
     print("\n========== summary ==========")
     for line in summary_lines(results, args.game):

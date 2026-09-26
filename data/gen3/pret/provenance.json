@@ -1,0 +1,186 @@
+{
+  "schema": "gen3-pret-build-provenance-v1",
+  "generated": "2026-09-21T13:06:24.836822+00:00",
+  "host": {
+    "system": "Linux-6.17.0-1022-azure-x86_64-with-glibc2.39",
+    "machine": "x86_64",
+    "node": "runnervmlun5p",
+    "python": "3.12.3"
+  },
+  "source": {
+    "url": "https://github.com/pret/pokefirered",
+    "commit": "c75f352304d529f6ba92d4f74b9cf8b5c3810788"
+  },
+  "agbcc": {
+    "url": "https://github.com/pret/agbcc",
+    "commit": "da598c1d918402c42c0c0d7128ba14567f3175e9"
+  },
+  "toolchain": {
+    "bash": {
+      "path": "/usr/bin/bash",
+      "sha256": "bc5945feb8bd26203ebfafea5ce1878bb2e32cb8fb50ab7ae395cfb1e1aaaef1",
+      "version": "GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)\nCopyright (C) 2022 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\nThis is free software; you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law."
+    },
+    "make": {
+      "path": "/usr/bin/make",
+      "sha256": "d78b8f1d099fbcfb6f2f49ab87223b9b68fb3956642f92d6ec6de812e8afa965",
+      "version": "GNU Make 4.3\nBuilt for x86_64-pc-linux-gnu\nCopyright (C) 1988-2020 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law."
+    },
+    "gcc": {
+      "path": "/usr/bin/gcc",
+      "sha256": "1b99826121ae6682a634e5efe09bd3e3df58ce58e0b28f849114ab5b89139c26",
+      "version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "g++": {
+      "path": "/usr/bin/g++",
+      "sha256": "1353e9bdd29a7295c7226bf6c63abccce056d8cac31f112e5cdbecc3f28c2769",
+      "version": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "perl": {
+      "path": "/usr/bin/perl",
+      "sha256": "47bdc8a342556c1d140084417ef6cacd79a3362e4b6cc1e4754df55bdf1e3683",
+      "version": "This is perl 5, version 38, subversion 2 (v5.38.2) built for x86_64-linux-gnu-thread-multi\n(with 67 registered patches, see perl -V for more detail)\n\nCopyright 1987-2023, Larry Wall\n\nPerl may be copied only under the terms of either the Artistic License or the\nGNU General Public License, which may be found in the Perl 5 source kit.\n\nComplete documentation for Perl, including FAQ lists, should be found on\nthis system using \"man perl\" or \"perldoc perl\".  If you have access to the\nInternet, point your browser at https://www.perl.org/, the Perl Home Page."
+    },
+    "arm-none-eabi-as": {
+      "path": "/usr/bin/arm-none-eabi-as",
+      "sha256": "ec839647452c629c6b26b35c8e29b56cd5be8d9bbf5221d01947451395bb7689",
+      "version": "GNU assembler (2.42-1ubuntu1+23) 2.42\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or later.\nThis program has absolutely no warranty.\nThis assembler was configured for a target of `arm-none-eabi'."
+    },
+    "arm-none-eabi-ar": {
+      "path": "/usr/bin/arm-none-eabi-ar",
+      "sha256": "37b1263e422443fa6c5a53442982296fa091e6f61712a2410d19cf3d5c0e9e7d",
+      "version": "GNU ar (2.42-1ubuntu1+23) 2.42\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty."
+    },
+    "arm-none-eabi-ld": {
+      "path": "/usr/bin/arm-none-eabi-ld",
+      "sha256": "3a45f0f6cd20f341f56efcbc408774ca7894721547a1e79712a268d8aa36b490",
+      "version": "GNU ld (2.42-1ubuntu1+23) 2.42\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) a later version.\nThis program has absolutely no warranty."
+    },
+    "arm-none-eabi-objcopy": {
+      "path": "/usr/bin/arm-none-eabi-objcopy",
+      "sha256": "782d8a0a03424f5b54ea10d269b253b4506f85cb48cd40b2de1b9635ce16a821",
+      "version": "GNU objcopy (2.42-1ubuntu1+23) 2.42\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty."
+    },
+    "arm-none-eabi-objdump": {
+      "path": "/usr/bin/arm-none-eabi-objdump",
+      "sha256": "d8e94d502fd80248334d739b3e4705369897381a69b12dc7c8cf01eadecb7d32",
+      "version": "GNU objdump (2.42-1ubuntu1+23) 2.42\nCopyright (C) 2024 Free Software Foundation, Inc.\nThis program is free software; you may redistribute it under the terms of\nthe GNU General Public License version 3 or (at your option) any later version.\nThis program has absolutely no warranty."
+    },
+    "agbcc_installed": {
+      "bin/agbcc": "1d3364650935141e6215e36016a158b1e754cb2aface9ecf42f94544beb45dd5",
+      "bin/agbcc_arm": "169cdfacc55bd6b1277d970bce7eb82b29cbab17175f2c0633f78f7acbb34b87",
+      "bin/old_agbcc": "82867cb085dd187db727de6c95e00d2e062b99b43923347456cf9c1a5ecfa657",
+      "include/_ansi.h": "98221b391010195de4e2824879860b7fe98a8f6bc8ab2c5eaa2a3b029b4f1ad4",
+      "include/_syslist.h": "546b13e022a2e53bfad0138e9294d92210773c9a7a61ee2d4ffb152ed4a6396a",
+      "include/ar.h": "d7aad21a7db658f45925014ea2ffd6cb7ba3d40fad05c9a00e77bfe912577ae3",
+      "include/assert.h": "ee9626082870fce9ddbfb31810843f9bf229087a574c5b2177b958192720bb06",
+      "include/ctype.h": "25f27f2cb35014bfeef07a3ba84187caa2aec9eab0779868c9c694b3570f2a5a",
+      "include/dirent.h": "d980a17d1911c7879c0c1f0c451b926c921d99bde980bf0f792a347f8bb92476",
+      "include/errno.h": "9e59a1690bc10eb1ecef743bc1ee5aa99e428a53a19700f9737655c00e9b73c9",
+      "include/fastmath.h": "7fb7ff119150be066f9e06ea4afa62c4fd13def8a15d3dde3968d57d7f82ba66",
+      "include/fcntl.h": "637889253928e98bc028dbdcd58560492aed8e981eff349c43a8e7e6a45f75f5",
+      "include/float.h": "a9d2d0512ced9503e24afe80e5c9e9ce5b7e44df703d4fb51e9eb32efc6001be",
+      "include/grp.h": "067acecd7ade44d6f7bda8a8b3a9ab95dba7296105bf9f383add992d0ef5c3bf",
+      "include/ieeefp.h": "01b35fc8fa1c8305a4960f41ed33f2210a7e635c42e0ad6bbb47d271aa4aafd8",
+      "include/iso646.h": "abe86bd3a8dcc640fce9d8c18f555343dded93ab7c0522ac156601385714cc6a",
+      "include/limits.h": "b1ca5da9af53e461e21a61c0f063335843dca090deaca819fbc03b9445d25336",
+      "include/locale.h": "5b05aca51e4c85b02f0d5143dd525c6c0518c77d86c6e2f10538bab5a87f3ce9",
+      "include/machine/fastmath.h": "faf24b70656d64e9e54806ec8b13dd110ec04eaa5cef95225a324979a2eceb29",
+      "include/machine/ieeefp.h": "882a2513ec522efde3e532b7dc6a8e0831b559807df3fdb670d8ad380167d5b1",
+      "include/machine/setjmp-dj.h": "a5a977acaa8dbfb4e8912bb5d25618fd8b73b316f87f02e62cad839dc8686428",
+      "include/machine/setjmp.h": "7ad2f75fb23e3e8dd8939bfebd9d31f13ca3bf7049ea934021cbcca38405e5d2",
+      "include/machine/time.h": "9da292a66d5b30e812464b0c184782d4de7971f1b29d201926bee6d75ea3f596",
+      "include/machine/types.h": "e715a9de8ae996150b49523ae83666ef736a9eceef53726435da58fc9227c741",
+      "include/malloc.h": "0441a47a8969a985aa1411b929732bb7cc9b3cc0bde9182082b7b64fae2f17ea",
+      "include/math.h": "55f32acee2fc08b8544db1794d9af0564de388cf45f62636c38ec1522f2ceb3c",
+      "include/paths.h": "48edeaa8848b5fddfb7d708d4253e7cc19acdede16b1284e7080a969606dd004",
+      "include/process.h": "0e7225ae487452da138e2d375375f3041f7c47de93f5f8d56ebfb22a979dbe03",
+      "include/pwd.h": "17a14798331affb9e694b300e20559facbc324acefb846977c3c4e15626abda5",
+      "include/reent.h": "dfde5846b345c7979e66eaf1070cca469a9ecb5600dfa6aa752d7a03d9c18ac0",
+      "include/regdef.h": "e889cdb89b2b0c335eeaff98d11bd5cb455118c798d66d6239130860558197d9",
+      "include/setjmp.h": "805481ad4f38fc4d044a3162706d30644a99c1380f444eb15eb26515011f0980",
+      "include/signal.h": "7c3bd9ef99084429a5e4f146202a92201d8504fe7e5e2eb5607fba9f2d21d2c3",
+      "include/stdarg.h": "2e96936e5acc6167fdced2032734710495afdc5b03b6c8128949cd3e798de9ec",
+      "include/stdbool.h": "c28f46d8b39bd77f3fa8401b20bf617ff5b6d38a3ad7c5ce64fd6e5fc43dba6e",
+      "include/stddef.h": "0bd065aeddd8467b20b91c35ef7e969ad178b63cc2825471ab4a65f7722db0c0",
+      "include/stdint.h": "a985259efca1ea8d477ff5e99f7e12e6a3797c1cd0d60611b38f451f85fa9da4",
+      "include/stdio.h": "eff98c6e395b4597320b7c34a45be5aa5594f54a9b303be402503a4fc9d355ac",
+      "include/stdlib.h": "e24848daec4267c98b2783924040911050bcae4801938181f9a69503d95a38cd",
+      "include/string.h": "c681435b7d34caf736616669fe42ad40c1756f98850145da53c8ff54aeb19572",
+      "include/sys/_types.h": "71a2a78b9af882aee475b25bc5761f1680d40342097922dd55414513ad8074ca",
+      "include/sys/config.h": "daeed98c0fda9675cce19327d2bd4180bb47335bcae63845cee8ef7d39a4404e",
+      "include/sys/dirent.h": "c09892eee56fab9b2f22f3fb6f0417452fa775417a7051abc5805a43a0cfd858",
+      "include/sys/errno.h": "b865d58ecd04b1b877b94865621e5cc948eb986b6951ba64fde1447d563f00de",
+      "include/sys/fcntl.h": "02f20171515fc2bf954f801a51dda17af3bf965004398893e090b96be28550f5",
+      "include/sys/file.h": "c4e08fdb66f877ddc18fc704b7127aea39766f08593fa833d7f385beea0b5a35",
+      "include/sys/param.h": "cf5bb54e6685a9ce75aead52acb03804e7629bf2d62ecfe68e92b4521231f985",
+      "include/sys/reent.h": "2f29999d7f38ef2c601ed48643d4c06abd733c8e8d3a59b7a4f84adb0e722595",
+      "include/sys/resource.h": "da3d65d5d2fc0d03827d6c6563d10b4353f46584c279bac2c9a9fec81ece9d14",
+      "include/sys/signal.h": "1ba1107166060597278e343b65882cad3d9cb0e25e339335d5ee167affc97316",
+      "include/sys/stat-dj.h": "6dbd0b12990b0b84c2dd09e501fad88d77e65f623c1f6a7252187e790bb699d3",
+      "include/sys/stat.h": "dc81e6d1603e2a8251941f10900f900e364f5724f6b0804c0c0713b2d2e6042e",
+      "include/sys/time.h": "72cb41b2ad281245ceb85e8f69975d42a6864ad023252ebd379fc686247d0aae",
+      "include/sys/timeb.h": "6677d664e8b729a484fed4c07e7a07d89e965cc3eda1cf1803ba4b7c4148d30e",
+      "include/sys/times.h": "10b23ccf57206fb6ba71f0727b017ae00ee7615d555c7dfb9291628fcaafd14e",
+      "include/sys/types.h": "921f6f0b27239c44b100c3ac4b02e385b7c85eaf2b95e346e28e6dd71d68adfb",
+      "include/sys/unistd.h": "d4d7a5686edb80282bb0eeb1c84d98f95553b06e070b17a8e7b3ea42a25e35c8",
+      "include/sys/utime.h": "2bcd7d80d018eb7ef8912394fa6c84da8a2212fba9561db9e0b03d9ee8e40d34",
+      "include/sys/wait.h": "bb67126e824edcd4900052735e20eb63eb4eb9b6155330fd9e57d07ab518ea17",
+      "include/termios.h": "fc13c1c649a2530491bed09e072743a931822b0faa826efb34e98bafd7373fa8",
+      "include/time.h": "3dba057c07887703abb77ec94ed1d28ab95c144a8ee683ae18773dc6ab9aa5d0",
+      "include/unctrl.h": "4b08e53b0e2e4b5d9dacbbd9135362bbd983b28863b416fabedb6c0837f6224c",
+      "include/unistd.h": "19f31553182c4d649dd0d6301ffdbb5b4d7903b28373dd070a553798b41f524f",
+      "include/utime.h": "74d05be2590a8621cc64aefbb15510d8e628c40e77715dba084e3ffb78505ba5",
+      "include/utmp.h": "0cf902b1dcfa51852a3127a012ef4e77182510b0c5c89dab89d522656366e237",
+      "lib/libc.a": "ee49c3dcfc218ff2a9932fbefc421a25eee4c7668c47ea58ee0597cce906aa6e",
+      "lib/libgcc.a": "2d1bcc5b3ef3126daf1ebec81ca5b080029cc535503b9b5be04337799233fecf"
+    },
+    "dpkg_status": "Package: make\nStatus: install ok installed\nPriority: optional\nSection: devel\nInstalled-Size: 404\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nMulti-Arch: allowed\nSource: make-dfsg\nVersion: 4.3-4.1build2\nReplaces: make-guile\nDepends: libc6 (>= 2.38)\nSuggests: make-doc\nConflicts: make-guile\nDescription: utility for directing compilation\n GNU Make is a utility which controls the generation of executables\n and other target files of a program from the program's source\n files. It determines automatically which pieces of a large program\n need to be (re)created, and issues the commands to (re)create\n them. Make can be used to organize any task in which targets (files)\n are to be automatically updated based on input files whenever the\n corresponding input is newer --- it is not limited to building\n computer programs. Indeed, Make is a general purpose dependency\n solver.\nHomepage: https://www.gnu.org/software/make/\nOriginal-Maintainer: Manoj Srivastava <srivasta@debian.org>\n\nPackage: gcc\nStatus: install ok installed\nPriority: optional\nSection: devel\nInstalled-Size: 37\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nSource: gcc-defaults (1.214ubuntu1)\nVersion: 4:13.2.0-7ubuntu1\nProvides: c-compiler\nDepends: cpp (= 4:13.2.0-7ubuntu1), cpp-x86-64-linux-gnu (= 4:13.2.0-7ubuntu1), gcc-13 (>= 13.2.0-11~), gcc-x86-64-linux-gnu (= 4:13.2.0-7ubuntu1)\nRecommends: libc6-dev | libc-dev\nSuggests: gcc-multilib, make, manpages-dev, autoconf, automake, libtool, flex, bison, gdb, gcc-doc\nConflicts: gcc-doc (<< 1:2.95.3)\nDescription: GNU C compiler\n This is the GNU C compiler, a fairly portable optimizing compiler for C.\n .\n This is a dependency package providing the default GNU C compiler.\nOriginal-Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>\n\nPackage: g++\nStatus: install ok installed\nPriority: optional\nSection: devel\nInstalled-Size: 13\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nSource: gcc-defaults (1.214ubuntu1)\nVersion: 4:13.2.0-7ubuntu1\nProvides: c++-compiler\nDepends: cpp (= 4:13.2.0-7ubuntu1), cpp-x86-64-linux-gnu (= 4:13.2.0-7ubuntu1), gcc (= 4:13.2.0-7ubuntu1), g++-13 (>= 13.2.0-11~), g++-x86-64-linux-gnu (= 4:13.2.0-7ubuntu1), gcc-13 (>= 13.2.0-11~)\nSuggests: g++-multilib\nDescription: GNU C++ compiler\n This is the GNU C++ compiler, a fairly portable optimizing compiler for C++.\n .\n This is a dependency package providing the default GNU C++ compiler.\nOriginal-Maintainer: Debian GCC Maintainers <debian-gcc@lists.debian.org>\n\nPackage: binutils-arm-none-eabi\nStatus: install ok installed\nPriority: optional\nSection: devel\nInstalled-Size: 18717\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nMulti-Arch: foreign\nSource: binutils-arm-none-eabi (23)\nVersion: 2.42-1ubuntu1+23\nDepends: libc6 (>= 2.38), libzstd1 (>= 1.5.5), zlib1g (>= 1:1.2.0)\nDescription: GNU assembler, linker and binary utilities for ARM Cortex-R/M processors\n Bare metal binutils for embedded ARM chips using Cortex-M0/M0+/M3/M4 and\n Cortex-R4/R5/R7 processors. The programs in this package are used to\n manipulate binary and object files that may have been created for Cortex\n architecture.\nOriginal-Maintainer: Joaquin de Andres <me@xcancerberox.com.ar>\nBuilt-Using: binutils (= 2.42-1ubuntu1)\nHomepage: https://sourceware.org/binutils/\n\nPackage: libpng-dev\nStatus: install ok installed\nPriority: optional\nSection: libdevel\nInstalled-Size: 759\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nMulti-Arch: same\nSource: libpng1.6\nVersion: 1.6.43-5ubuntu0.6\nReplaces: libpng16-dev (<< 1.6.20-3), libpng16-devtools (<< 1.6.21-1)\nDepends: libpng16-16t64 (= 1.6.43-5ubuntu0.6), zlib1g-dev\nRecommends: libpng-tools\nBreaks: libpng16-dev (<< 1.6.20-3), libpng16-devtools (<< 1.6.21-1)\nConflicts: libpng12-0-dev, libpng12-dev, libpng2-dev, libpng3-dev\nDescription: PNG library - development (version 1.6)\n libpng is a library implementing an interface for reading and writing\n PNG (Portable Network Graphics) format files.\n .\n This package contains the header and development files needed to build\n programs and packages using libpng.\nHomepage: http://libpng.org/pub/png/libpng.html\nOriginal-Maintainer: Maintainers of libpng1.6 packages <libpng1.6@packages.debian.org>\n\nPackage: zlib1g-dev\nStatus: install ok installed\nPriority: optional\nSection: libdevel\nInstalled-Size: 1322\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nMulti-Arch: same\nSource: zlib\nVersion: 1:1.3.dfsg-3.1ubuntu2.2\nProvides: libz-dev\nDepends: zlib1g (= 1:1.3.dfsg-3.1ubuntu2.2), libc6-dev | libc-dev\nConflicts: zlib1-dev\nDescription: compression library - development\n zlib is a library implementing the deflate compression method found\n in gzip and PKZIP.  This package includes the development support\n files.\nHomepage: http://zlib.net/\nOriginal-Maintainer: Mark Brown <broonie@debian.org>\n\nPackage: bash\nEssential: yes\nStatus: install ok installed\nPriority: required\nSection: shells\nInstalled-Size: 1900\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nMulti-Arch: foreign\nVersion: 5.2.21-2ubuntu4\nDepends: base-files (>= 2.1.12), debianutils (>= 5.6-0.1)\nPre-Depends: libc6 (>= 2.38), libtinfo6 (>= 6)\nRecommends: bash-completion\nSuggests: bash-doc\nConffiles:\n /etc/bash.bashrc 3aa8b92d1dd6ddf4daaedc019662f1dc\n /etc/skel/.bash_logout 22bfb8c1dd94b5f3813a2b25da67463f\n /etc/skel/.bashrc 1f98b8f3f3c8f8927eca945d59dcc1c6\n /etc/skel/.profile f4e81ade7d6f9fb342541152d08e7a97\nDescription: GNU Bourne Again SHell\n Bash is an sh-compatible command language interpreter that executes\n commands read from the standard input or from a file.  Bash also\n incorporates useful features from the Korn and C shells (ksh and csh).\n .\n Bash is ultimately intended to be a conformant implementation of the\n IEEE POSIX Shell and Tools specification (IEEE Working Group 1003.2).\n .\n The Programmable Completion Code, by Ian Macdonald, is now found in\n the bash-completion package.\nHomepage: http://tiswww.case.edu/php/chet/bash/bashtop.html\nOriginal-Maintainer: Matthias Klose <doko@debian.org>\n\nPackage: perl\nStatus: install ok installed\nPriority: standard\nSection: perl\nInstalled-Size: 674\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nMulti-Arch: allowed\nVersion: 5.38.2-3.2ubuntu0.6\nReplaces: perl-base (<< 5.36.0-2), perl-modules (<< 5.22.0~)\nProvides: libansicolor-perl (= 5.01), libarchive-tar-perl (= 2.40), libattribute-handlers-perl (= 1.03), libautodie-perl (= 2.36), libcompress-raw-bzip2-perl (= 2.204.001), libcompress-raw-zlib-perl (= 2.204.001), libcompress-zlib-perl (= 2.204), libcpan-meta-perl (= 2.150010), libcpan-meta-requirements-perl (= 2.140), libcpan-meta-yaml-perl (= 0.018), libdigest-md5-perl (= 2.58.01), libdigest-perl (= 1.20), libdigest-sha-perl (= 6.04), libencode-perl (= 3.19), libexperimental-perl (= 0.031), libextutils-cbuilder-perl (= 0.280238), libextutils-command-perl (= 7.70), libextutils-install-perl (= 2.22), libextutils-parsexs-perl (= 3.510000), libfile-spec-perl (= 3.8800), libhttp-tiny-perl (= 0.086), libi18n-langtags-perl (= 0.45), libio-compress-base-perl (= 2.204), libio-compress-bzip2-perl (= 2.204), libio-compress-perl (= 2.204), libio-compress-zlib-perl (= 2.204), libio-zlib-perl (= 1.14), libjson-pp-perl (= 4.16000), liblocale-maketext-perl (= 1.33), liblocale-maketext-simple-perl (= 0.21.01), libmath-bigint-perl (= 1.999837), libmath-complex-perl (= 1.6200), libmime-base64-perl (= 3.16.01), libmodule-corelist-perl (= 5.20231129), libmodule-load-conditional-perl (= 0.74), libmodule-load-perl (= 0.36), libmodule-metadata-perl (= 1.000037), libnet-perl (= 1:3.15), libnet-ping-perl (= 2.76), libparams-check-perl (= 0.38), libparent-perl (= 0.241), libparse-cpan-meta-perl (= 2.150010), libperl-ostype-perl (= 1.010), libpod-escapes-perl (= 1.07), libpod-simple-perl (= 3.43), libstorable-perl (= 3.32), libsys-syslog-perl (= 0.36), libtest-harness-perl (= 3.44), libtest-simple-perl (= 1.302194), libtest-tester-perl (= 1.302194), libtest-use-ok-perl (= 1.302194), libtext-balanced-perl (= 2.06), libthread-queue-perl (= 3.14), libthreads-perl (= 2.36), libthreads-shared-perl (= 1.68), libtime-hires-perl (= 1.9775), libtime-local-perl (= 1.3000), libtime-piece-perl (= 1.3401.01), libunicode-collate-perl (= 1.31), libversion-perl (= 1:0.9929), libversion-requirements-perl, podlators-perl (= 5.01)\nDepends: perl-base (= 5.38.2-3.2ubuntu0.6), perl-modules-5.38 (>= 5.38.2-3.2ubuntu0.6), libperl5.38t64 (= 5.38.2-3.2ubuntu0.6)\nPre-Depends: dpkg (>= 1.17.17)\nRecommends: netbase\nSuggests: perl-doc, libterm-readline-gnu-perl | libterm-readline-perl-perl, make, libtap-harness-archive-perl\nBreaks: apt-show-versions (<< 0.22.10), libdist-inkt-perl (<< 0.024-5), libmarc-charset-perl (<< 1.35-3), libperl-dev (<< 5.24.0~), perl-doc (<< 5.38.2-1), perl-modules-5.22, perl-modules-5.24, perl-modules-5.26 (<< 5.26.2-5)\nConflicts: libjson-pp-perl (<< 2.27200-2)\nConffiles:\n /etc/perl/Net/libnet.cfg fb2946cae573b8ed3d654a180d458733\nDescription: Larry Wall's Practical Extraction and Report Language\n Perl is a highly capable, feature-rich programming language with over\n 20 years of development. Perl 5 runs on over 100 platforms from\n portables to mainframes. Perl is suitable for both rapid prototyping\n and large scale development projects.\n .\n Perl 5 supports many programming styles, including procedural,\n functional, and object-oriented. In addition to this, it is supported\n by an ever-growing collection of reusable modules which accelerate\n development. Some of these modules include Web frameworks, database\n integration, networking protocols, and encryption. Perl provides\n interfaces to C and C++ for custom extension development.\nHomepage: http://dev.perl.org/perl5/\nOriginal-Maintainer: Niko Tyni <ntyni@debian.org>\n\nPackage: git\nStatus: install ok installed\nPriority: optional\nSection: vcs\nInstalled-Size: 36388\nMaintainer: Jonathan Nieder <jrnieder@gmail.com>\nArchitecture: amd64\nMulti-Arch: foreign\nVersion: 1:2.55.0-0ppa1~ubuntu24.04.2\nProvides: git-completion, git-core\nDepends: libc6 (>= 2.38), libcurl3t64-gnutls (>= 8.3.0), libexpat1 (>= 2.0.1), libpcre2-8-0 (>= 10.34), zlib1g (>= 1:1.2.2), perl, liberror-perl, git-man (>> 1:2.55.0), git-man (<< 1:2.55.0-.)\nRecommends: ca-certificates, patch, less, ssh-client\nSuggests: gettext-base, git-doc, git-email, git-gui, gitk, gitweb, git-cvs, git-svn\nBreaks: bash-completion (<< 1:1.90-1), cogito (<= 0.18.2+), dgit (<< 5.1~), git-buildpackage (<< 0.6.5), git-el (<< 1:2.32.0~rc2-1~), gitosis (<< 0.2+20090917-7), gitpkg (<< 0.15), guilt (<< 0.33), openssh-client (<< 1:6.8), stgit (<< 0.15), stgit-contrib (<< 0.15)\nConffiles:\n /etc/bash_completion.d/git-prompt 7baac5c3ced94ebf2c0e1dde65c3b1a6\nDescription: fast, scalable, distributed revision control system\n Git is popular version control system designed to handle very large\n projects with speed and efficiency; it is used for many high profile\n open source projects, most notably the Linux kernel.\n .\n Git falls in the category of distributed source code management tools.\n Every Git working directory is a full-fledged repository with full\n revision tracking capabilities, not dependent on network access or a\n central server.\n .\n This package provides the git main components with minimal dependencies.\n Additional functionality, e.g. a graphical user interface and revision\n tree visualizer, tools for interoperating with other VCS's, or a web\n interface, is provided as separate git* packages.\nHomepage: https://git-scm.com/\n\nPackage: python3\nStatus: install ok installed\nPriority: important\nSection: python\nInstalled-Size: 81\nMaintainer: Ubuntu Developers <ubuntu-devel-discuss@lists.ubuntu.com>\nArchitecture: amd64\nMulti-Arch: allowed\nSource: python3-defaults\nVersion: 3.12.3-0ubuntu2.1\nReplaces: python3-minimal (<< 3.1.2-2)\nProvides: python3-profiler, python3-supported-max (= 3.12), python3-supported-min (= 3.12)\nDepends: python3.12 (>= 3.12.3-0~), libpython3-stdlib (= 3.12.3-0ubuntu2.1)\nPre-Depends: python3-minimal (= 3.12.3-0ubuntu2.1)\nSuggests: python3-doc (>= 3.12.3-0ubuntu2.1), python3-tk (>= 3.12.3-0~), python3-venv (>= 3.12.3-0ubuntu2.1)\nConflicts: python3-distutils\nDescription: interactive high-level object-oriented language (default python3 version)\n Python, the high-level, interactive object oriented language,\n includes an extensive class library with lots of goodies for\n network programming, system administration, sounds and graphics.\n .\n This package is a dependency package, which depends on Debian's default\n Python 3 version (currently v3.12).\nHomepage: https://www.python.org/\nOriginal-Maintainer: Matthias Klose <doko@debian.org>\n"
+  },
+  "commands": [
+    [
+      "/usr/bin/make",
+      "-j4",
+      "GAME_VERSION=FIRERED",
+      "GAME_REVISION=0",
+      "GAME_LANGUAGE=ENGLISH",
+      "MODERN=0",
+      "COMPARE=0",
+      "DINFO=0",
+      "NODEP=0",
+      "pokefirered.gba",
+      "pokefirered.sym"
+    ],
+    [
+      "/usr/bin/make",
+      "-j4",
+      "GAME_VERSION=LEAFGREEN",
+      "GAME_REVISION=0",
+      "GAME_LANGUAGE=ENGLISH",
+      "MODERN=0",
+      "COMPARE=0",
+      "DINFO=0",
+      "NODEP=0",
+      "pokeleafgreen.gba",
+      "pokeleafgreen.sym"
+    ]
+  ],
+  "roms": {
+    "pokefirered.gba": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
+    "pokeleafgreen.gba": "574fa542ffebb14be69902d1d36f1ec0a4afd71e"
+  },
+  "files": {
+    "pokefirered.sym": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0",
+    "pokefirered.map": "b66f4b0d777f150c1248d1007e42388aaa2bad83a256985e3f652dd774f24504",
+    "pokeleafgreen.sym": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae",
+    "pokeleafgreen.map": "31e3ef30c3d21363d3935a7a147f559a3d0e39c860d7b364d8d9bb51c988469b"
+  },
+  "runner": {
+    "label": "ubuntu-latest",
+    "image_os": "ubuntu24",
+    "image_version": "20260907.300.1",
+    "workflow_sha": "1847c7c5c56931f0cb3dc5eab0569e4f9e072b93",
+    "run_id": "35603224233",
+    "run_attempt": "1"
+  }
+}

@@ -36,3 +36,10 @@ data/obs_config.json
 # Lua console tee (per-run debug log written by lua/slink.lua, truncated
 # each boot — not useful in version control)
 slink_lua.log
+
+# Gen 3 battery-save fixtures are committed on purpose (docs/gen3/PLAN.md §5.5); the blanket *.sav rule above must not hide them
+!tests/fixtures/gen3/*.sav
+
+# C5-11b: the Gen 3 client's per-install session counter (lua/gen3/run.lua writes it at
+# the install root, which is the repo root during dev runs).
+slink_gen3_session.*

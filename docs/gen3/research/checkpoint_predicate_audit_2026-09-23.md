@@ -1,0 +1,112 @@
+# Gen 3 write-checkpoint predicate audit, 2026-09-23
+
+Independent, read-only audit by headless Codex (magi cx-7e8b52f4). Pret pin c75f3523; SLink HEAD 328e5ab8.
+ROMs: FR 41cb23d8, RR clean 964f951a, RR companion b7d1e075.
+
+Trigger: two predicates test engine pointers the game never clears. They are being fixed as C4-SAVE:
+- sSaveDialogCB stays on SaveDialogCB_ReturnSuccess after any save;
+- gLinkCallback survives CloseLink after a no-partner cable link.
+
+Findings:
+1. **Task_RunPokemonLeagueLightingEffect** (field_specials.c:2133-2185) persists in the Elite Four rooms after the
+   entrance script ends (LoreleisRoom/scripts.inc:43-48). It is not on the task allow-list, so every overworld write
+   is held in those rooms before the battle. This is PROVEN for FR/LG. For RR the functions are byte-identical, but
+   RunOnResumeMapScript differs, so it is strongly inferred only. It is routed to C4-SAVE.
+2. RR's battle lifecycle cannot be qualified from pret. HandleTurnActionSelectionState, ReturnFromBattleToOverworld
+   and SetUpBattleVars differ in the RR artifacts, so RR's parked battle tuple needs its own proof. This is a G5 item.
+3. Retained battle state (gBattleOutcome, main func, controllers, battle mons) is scoped to the battle reasons and
+   is not an overworld latch.
+4. The native timeout poison (native.lua:395-403) is a deliberate uncertainty latch that is recovered by reset or
+   beacon loss. Keep it.
+
+Verified with a clear path (no latch found): callback1, callback2, script_context_status, field_controls_locked,
+palette_fade_active, in_battle, gReceivedRemoteLinkPlayers, link_transferring, soft_reset_disabled, the six allowed
+background tasks, the native opcode/status/panel handshake, the save/storage pointers, battle_outcome_open,
+battle_main_func, battle_comm_0/commit_guard, FR/LG battle_exec_flags_input and battle_input_controller,
+battle_not_link, battle_engine_loaded, and the sound clauses. The CPU parked clause is a current-state check.
+
+Not exhaustively proven: other map-specific persistent tasks. The allow-list is a whitelist, so any persistent task
+started by a map script that leaves the player in control would hold writes the same way. A census of such tasks is
+a follow-up.
+
+## Persistent-task census (headless Codex cx-45b6df45, pret c75f3523)
+
+Nine task functions persist during ordinary field control:
+- the three field tasks (per-step callback, time-based events, weather main);
+- the three Center 1F Union Room background tasks (rev 0);
+- Task_RunPokemonLeagueLightingEffect (5923c4dd);
+- inside the actual Union Room room only, Task_RunUnionRoom and Task_AnimateUnionRoomPlayers. These stay DENIED
+  deliberately: they initiate link activities and write visibility flags.
+
+League lighting is the only additional benign single-player hold, and it is now allowed on FR/LG.
+
+Finite holds, not latches:
+- the map-name popup, about 121 frames plus scrolling (~2.5 s);
+- fanfares, doors, escalators, fishing, surf transitions, item-use chains (Itemfinder, Repel, VS Seeker) and cutscene
+  tasks. Each destroys itself or runs under a lock.
+
+Corrections to earlier claims:
+- The existing per-step task CAN write save-block flags and variables (Icefall Cave STEP_CB_ICE, field_tasks.c:146,243).
+  It is benign for bounded party/PC writes, but it is not save-read-only.
+- ScriptMovement_MoveObjects is destroyed by release/releaseall, not by finishing its movement.
+
+Not proven:
+- absolute completeness (387 CreateTask sites reviewed; this is not a formal reachability proof);
+- RFU exceptional states;
+- RR.
+
+Natural-play task snapshots would settle it: League rooms, Icefall Cave, Center 1F, the Union Room room, map-name
+popups, and returning from item and field-move interactions.
+
+## Adversarial review of the C4-SAVE fix (headless Codex cx-3e10776a, SLink 0e7f89e7, pret c75f3523)
+
+Runtime fixes RETAINED. No unsafe write frame was found in any vanilla save or link path. Paths covered:
+- START save, including the overwrite/replace prompts, cancel, success/error text, and the unlock-to-destroy interval,
+  where there is no intervening frame loop;
+- Cable Club/script save (task50_save_game + CONTEXT_WAITING);
+- flash-failure recovery (the task persists);
+- Hall of Fame;
+- Task_LinkFullSave and its minigame callers;
+- post-link-battle and trade incremental saves;
+- Mystery Gift, chat, e-reader and erase-save.
+
+SaveBattleTowerProgress is registered, but no invoking script was found.
+
+On link: cable callbacks run only behind sLinkOpen. Wireless relies on the other exclusions (linked overworld
+callbacks, Task_RunUnionRoom, the player-exchange tasks). gReceivedRemoteLinkPlayers can clear before RFU teardown
+completes, so it is not a universal teardown witness.
+
+REJECT on the probe only: the dialog row treats the stale sSaveDialogCB as proof of an active dialog, so after an
+earlier save it can pass on a different START submenu. This is routed to C4-6t, together with the save helper's
+second-save detection.
+
+RR: the four gated link bodies and the START/save-dialog wrappers are byte-identical, but HandleSavingData and
+RunSaveFailedScreen differ from FR, so RR is not qualified here.
+
+PHYSICAL rows owed are listed in the review; they are carried into the G4 draft's 2a/2b.
+
+## RR save path after the C4-SAVE change (headless Codex cx-8de92003; RR clean 964f951a, companion b7d1e075; SLink 160c2508)
+
+- The START-menu save stays refused on both RR artifacts. PROVEN from the bytes:
+  - Task_StartMenuHandleInput (0x0806F1F0) and the field lock persist through the save;
+  - StartCB_Save2 unlocks only after the completed dialog (0x0806F610);
+  - TrySavingData is synchronous (0x0806F952/962).
+- RR's extension writes (parasite bytes, sectors 30/31) run INSIDE each synchronous sector write
+  (HandleWriteSector -> 0x090B8CB4). This differs from upstream CFRU's post-loop ordering.
+- RunSaveFailedScreen recovery runs from CallCallbacks with the START task still active and the field still locked.
+  PROVEN; its only differences from FR are two NOPed map-tile calls.
+- RR adds a full save inside task50_after_link_battle_save (0x0806FC84 -> 0x09042E28 -> TrySavingData). That task is
+  not allowed.
+- NOT PROVEN: that no other RR save caller runs with only allowed tasks active. The whole-ROM BL/literal census found
+  no autosave or PC-save, but it cannot exclude computed calls.
+- The change is not live for RR players: entry.lua ROUTED = gen3_frlg only, and RR still routes to the old client.
+
+G5 rows on both RR artifacts:
+- first, repeat, overwrite and cancel saves;
+- flash-operation boundaries including sectors 30/31;
+- save failure through RunSaveFailedScreen states 0-8;
+- the post-link-battle save and other script/link/HOF saves;
+- any suspected autosave.
+
+Record the old and new predicate results each frame. The counterexample to look for is an in-progress save that the
+new predicate admits while the old predicate's only failure is save_dialog_cb.

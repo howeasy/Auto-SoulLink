@@ -1,0 +1,38 @@
+
+========== scenario: trainer_bench_gen3 ==========
+[duo] trainer_bench_gen3: attempt 1 of 2
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ebe30adf56a59e75e92c617d8e9ceecf90e91a3de8cdbc6e718e5a1861813ffd profile.json=da819ece2088bb35a2ae8f4942d2e987fc528ceb1595419a3b1efca3dda39668 source=2bee46f2b070a6ebdefb9c9d0cf37d8b45efbbdd
+[duo] server up: tcp=55758 http=55759 data=C:\Users\howar\AppData\Local\Temp\slink_duo_trainer_bench_gen3_6euon8wp
+[duo] cleared 6 stale artifact(s) for trainer_bench_gen3: e2e_trainer_bench_gen3_a_1_witness.bin, e2e_trainer_bench_gen3_a_attempt1_result.txt, e2e_trainer_bench_gen3_a_result.txt, e2e_trainer_bench_gen3_b_attempt1_result.txt, e2e_trainer_bench_gen3_b_result.txt, e2e_trainer_bench_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'force_faint', 'key': '263620B6:99DE0D8A'}
+[duo] RESULT_LINE a: RESULT: PASS (trainer_bench keyed faint and normal save (PYDEC required))
+[duo] RESULT_LINE b: RESULT: PASS (idle (no save); battle-window A passed)
+[duo] SAVE_WITNESS_SHA256 inst=a site=298d3df1914a52e1c151b39b1eb3154a8605799443e439c527c404cfdcabc2b7 file=298d3df1914a52e1c151b39b1eb3154a8605799443e439c527c404cfdcabc2b7 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] BATTLE_WINDOW_PYDEC case=trainer_bench key=263620B6:99DE0D8A slot=1 hp=0 samples=221
+[duo] MARKER a: PREP_LEVEL before=9 after=13 floor=13 hp=full status=none
+[duo] MARKER a: READY_BATTLE_WINDOW trainer_bench 263620B6:99DE0D8A slot=1 frame=189591 trainer=102 samples=809 active_hex=0700120019001400100019002100270091006E006BB93A3A0606060606060606430B0B04231E1E2823000D7423000000CDCBCFC3CCCEC6BFFF3D0000C4C9C8C8FFFFFFFFED040000906A352D00000000000000008A0DDE99 in_battle=1 target_hp=17 trainer_id=102 type=0xC R15=0x1C CPSR=0x60000092 permits=true/false battle_main_func=0x8014041 battle_comm_0=0x1 battle_exec_flags_input=0x1 battle_input_controller=0x802E439 battle_not_link=0xC battle_engine_loaded=0x23 battle_outcome_open=0x0
+[duo] MARKER a: RX force_faint key=263620B6:99DE0D8A
+[duo] MARKER a: BATTLE_WINDOW_LANDED trainer_bench 263620B6:99DE0D8A slot=1 frame=189812 reason=battle_faint address=0x0202433E len=2 hp=0 samples=1030 active_hex=0700120019001400100019002100270091006E006BB93A3A0606060606060606430B0B04231E1E2823000D7423000000CDCBCFC3CCCEC6BFFF3D0000C4C9C8C8FFFFFFFFED040000906A352D00000000000000008A0DDE99 in_battle=1 target_hp=0 trainer_id=102 type=0xC R15=0x80008AC CPSR=0x6000003F permits=true/false battle_main_func=0x8014041 battle_comm_0=0x1 battle_exec_flags_input=0x1 battle_input_controller=0x802E439 battle_not_link=0xC battle_engine_loaded=0x23 battle_outcome_open=0x0
+[duo] MARKER a: BATTLE_WINDOW_EXIT trainer_bench 263620B6:99DE0D8A frame=193008 outcome=1 samples=4226 active_hex=0700120019001400100019002100270091006E006BB93A3A0606060606060606430B0B041E1E1E281B000D7423000000CDCBCFC3CCCEC6BFFF3D0000C4C9C8C8FFFFFFFFED040000906A352D00000000000000008A0DDE99 in_battle=0 target_hp=0 trainer_id=102 type=0xC R15=0x80008AE CPSR=0x6000003F permits=false/false battle_main_func=0x8015B59 battle_comm_0=0x4 battle_exec_flags_input=0x0 battle_input_controller=0x802E3B5 battle_not_link=0xC battle_engine_loaded=0x23 battle_outcome_open=0x1
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_trainer_bench_gen3_a_1_witness.bin bytes=131072 saves=1 frame=194014 counter=5
+[duo] MARKER a: BATTLE_WINDOW_SAVED trainer_bench 263620B6:99DE0D8A slot=1 hp=0
+[duo] MARKER a: RESULT: PASS (trainer_bench keyed faint and normal save (PYDEC required))
+[duo] MARKER b: WRITES 0
+[duo] MARKER b: RESULT: PASS (idle (no save); battle-window A passed)
+[duo] PYDEC: PASS asserted scenario facts
+[duo] trainer_bench_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\trainer_bench_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\trainer_bench_gen3_b_gen3_new.jsonl
+
+========== summary ==========
+  trainer_bench_gen3: PASS (attempt 1 of 2)

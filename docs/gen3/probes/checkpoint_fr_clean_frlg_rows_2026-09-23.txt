@@ -1,0 +1,47 @@
+# probe_gen3_checkpoint.lua title=firered kind=clean lane=eaa96787aef8fe890bd10231225ab92af9169b78 tracked_clean=True
+# script=patch/build/probe_gen3_checkpoint.lua sha256=8df6ec29c547675ff9d4682631746574d2e45c38e0e4c3f887e5eb0b3fb6d07a (lane file + the C4-PROBE witness-factory fix)
+# rom=patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba sha1=41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc
+# SLINK_STATE_DIR=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/patch/build/gen3_probe_states/firered
+# SLINK_CHECKPOINT_ROWS=script_running,battle_input_wild,battle_move_menu,battle_animation,battle_intro,battle_over,battle_commit_state3,native_absent,sound_driver
+# states: tools/mkstates_gen3.py (C4-PROBE) from tests/fixtures/gen3/firered_party_{town,battle}.sav
+# SLINK_CHECKPOINT_SCRIPT_STATE=E:/Howard/Bizhawk/GBA/State/slink_fr_parcel_deliver.State
+phase probe-state frame=1118 idle terminal=field_idle_300
+phase probe-state frame=1118 walking terminal=position_changed_120
+phase probe-state frame=1151 start_menu terminal=field_controls_locked
+phase probe-state frame=2524 dialog terminal=save_dialog_cb_nonzero
+phase probe-state frame=2644 save terminal=new_counter_partial_slot_then_14_sectors
+phase probe-state frame=1830 battle terminal=in_battle_mask_nonzero
+phase probe-state frame=1612 fade terminal=palette_fade_active_then_map_changed
+phase probe-state frame=1830 battle_input_wild terminal=battle_main_func==HandleTurnActionSelectionState and gBattleCommunication[0]==1
+phase probe-state frame=1830 battle_move_menu terminal=gBattleCommunication[0]==2
+phase probe-state frame=1830 battle_animation terminal=gBattleControllerExecFlags~=0 and gBattlerControllerFuncs[0]~=HandleInputChooseAction
+phase probe-state frame=1328 battle_intro terminal=gBattleMainFunc ~= HandleTurnActionSelectionState
+phase probe-state frame=1884 battle_over terminal=gBattleOutcome~=0
+phase probe-state frame=1830 battle_commit_state3 terminal=gBattleCommunication[0]>=3
+phase probe-state frame=1118 native_absent terminal=no native block in this pack
+phase probe-state frame=1118 sound_driver terminal=m4a SE1 ident == ID_NUMBER
+phase probe-state frame=39501 script_running terminal=script_context_not_shutdown_60
+PROBE idle PASS sampled=300 true=285 false=15 irq=15 non_irq_sampled=285 non_irq_true=285 floor=30 terminal=field_idle_300 reached=true R15=134219956 CPSR=1610612799 frame=1418 clauses=cpu:15 verdict=positive rate reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:81: CPU outside parked checkpoint
+PROBE walking PASS sampled=120 true=111 false=9 irq=9 non_irq_sampled=111 non_irq_true=111 terminal=position_changed_120 reached=true R15=134219950 CPSR=1610612799 frame=1238 clauses=cpu:9 verdict=- reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:81: CPU outside parked checkpoint
+PROBE start_menu PASS sampled=120 true=0 false=120 irq=5 non_irq_sampled=115 non_irq_true=0 terminal=field_controls_locked reached=true R15=134219954 CPSR=1073741887 frame=1271 clauses=cpu:5,field_controls_locked:120,task:120 verdict=- reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:73: forbidden state: field_controls_locked
+PROBE dialog PASS sampled=120 true=0 false=120 irq=8 non_irq_sampled=112 non_irq_true=0 terminal=save_dialog_cb_nonzero reached=true R15=134219954 CPSR=1073741887 frame=2644 clauses=cpu:8,field_controls_locked:120,save_dialog_cb:120,task:120 verdict=- reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:73: forbidden state: save_dialog_cb
+PROBE save PASS sampled=254 true=0 false=254 irq=27 non_irq_sampled=227 non_irq_true=0 terminal=new_counter_partial_slot_then_14_sectors reached=true R15=136178182 CPSR=536870975 frame=3288 clauses=cpu:254,field_controls_locked:254,save_dialog_cb:254,task:254 verdict=- reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:73: forbidden state: save_dialog_cb
+PROBE battle PASS sampled=120 true=0 false=120 irq=7 non_irq_sampled=113 non_irq_true=0 terminal=in_battle_mask_nonzero reached=true R15=134219950 CPSR=1610612799 frame=1950 clauses=callback1:120,callback2:120,cpu:7,field_controls_locked:120,in_battle:120 verdict=- reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:73: forbidden state: callback1
+PROBE fade PASS sampled=75 true=0 false=75 irq=4 non_irq_sampled=71 non_irq_true=0 terminal=palette_fade_active_then_map_changed reached=true R15=134219948 CPSR=1610612799 frame=1768 clauses=cpu:34,field_controls_locked:75,palette_fade_active:75,task:75 verdict=- reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:73: forbidden state: palette_fade_active
+PROBE pc_menu SKIP not selected for firered/clean
+PROBE script_running PASS sampled=123 true=0 false=123 irq=8 non_irq_sampled=115 non_irq_true=0 terminal=script_context_not_shutdown_60 reached=true R15=134219948 CPSR=1610612799 frame=39647 clauses=cpu:8,field_controls_locked:123,script_context_status:123,task:121 verdict=- note=witness=same_byte_as_script_context_status,independent_read_path,not_independent_evidence reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:73: forbidden state: script_context_status
+PROBE battle_input_wild PASS sampled=180 true=180 false=0 irq=13 non_irq_sampled=167 non_irq_true=167 floor=60 terminal=battle_main_func==HandleTurnActionSelectionState and gBattleCommunication[0]==1 reached=true R15=134219948 CPSR=1610612799 frame=2010 clauses=- verdict=positive rate note=wild encounter parked at the action menu; no input reason=-
+PROBE battle_input_trainer SKIP not selected for firered/clean
+PROBE battle_move_menu PASS sampled=315 true=0 false=315 irq=15 non_irq_sampled=300 non_irq_true=0 terminal=gBattleCommunication[0]==2 reached=true R15=134219950 CPSR=1610612799 frame=2146 clauses=battle_comm_0:315,battle_input_controller:315 verdict=- note=A on FIGHT opens the move submenu (STATE_WAIT_ACTION_CASE_CHOSEN) reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:165: forbidden state: battle_comm_0
+PROBE battle_animation PASS sampled=204 true=0 false=204 irq=13 non_irq_sampled=191 non_irq_true=0 terminal=gBattleControllerExecFlags~=0 and gBattlerControllerFuncs[0]~=HandleInputChooseAction reached=true R15=134219948 CPSR=1610612799 frame=2056 clauses=battle_comm_0:204,battle_exec_flags_input:64,battle_input_controller:204,battle_main_func:189 verdict=- note=two A presses commit a move; the animation holds the exec flags. FR/LG only: the RR pack has no gBattleControllerExecFlags address (reported UNVERIFIED) reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:165: forbidden state: battle_main_func
+PROBE battle_faint_prompt SKIP not selected for firered/clean
+PROBE battle_intro PASS sampled=180 true=0 false=180 irq=0 non_irq_sampled=180 non_irq_true=0 terminal=gBattleMainFunc ~= HandleTurnActionSelectionState reached=true R15=134219948 CPSR=1610612799 frame=1508 clauses=battle_comm_0:175,battle_engine_loaded:28,battle_exec_flags_input:179,battle_input_controller:180,battle_main_func:180 verdict=- note=battle intro parked before the first action menu reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:165: forbidden state: battle_main_func
+PROBE battle_link SKIP not selected for firered/clean
+PROBE battle_over PASS sampled=180 true=0 false=180 irq=14 non_irq_sampled=166 non_irq_true=0 terminal=gBattleOutcome~=0 reached=true R15=134219948 CPSR=1610612799 frame=2064 clauses=battle_comm_0:180,battle_input_controller:180,battle_main_func:180,battle_outcome_open:180 verdict=- note=the state saved after a resolved battle reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:165: forbidden state: battle_main_func
+PROBE battle_commit_state3 PASS sampled=431 true=0 false=431 irq=28 non_irq_sampled=403 non_irq_true=0 terminal=gBattleCommunication[0]>=3 reached=true R15=134219956 CPSR=1610612799 frame=2278 clauses=battle_comm_0:431,battle_commit_guard:431,battle_exec_flags_input:270,battle_input_controller:431,battle_main_func:429 verdict=- note=the commit guard: a committed battler (3/4) must refuse the Variant-3 pre-fill reason=...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:165: forbidden state: battle_main_func
+PROBE native_idle_field SKIP not selected for firered/clean
+PROBE native_idle_battle SKIP not selected for firered/clean
+PROBE native_absent PASS sampled=180 true=0 false=180 irq=9 non_irq_sampled=171 non_irq_true=0 terminal=no native block in this pack reached=true R15=134219948 CPSR=1610612799 frame=1298 clauses=native_present:180 verdict=- note=the reason must refuse on a build with no companion reason=no native block in this pack (native bytes belong to the companion)
+PROBE sound_driver PASS sampled=180 true=180 false=0 irq=9 non_irq_sampled=171 non_irq_true=171 floor=60 terminal=m4a SE1 ident == ID_NUMBER reached=true R15=134219948 CPSR=1610612799 frame=1298 clauses=- verdict=positive rate note=the sound reason on a live driver; native_busy is model-only (the probe posts no op) reason=-
+WRITE_SURFACE none (predicate-only probe) native_idle=opcode_queue_only
+RESULT: PASS all checkpoint controls

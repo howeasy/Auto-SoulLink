@@ -1,0 +1,364 @@
+# gen3_final_cut row=item6_route_diff item=§10_item6 cut=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/gen3_final_cut.py item6 --branch 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2' --master 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-master'   (cwd=E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45)
+# env: (none)
+# verdict: PASS
+# inputs: input:patch/build/gen1_blue.gb=2a951313c2640e8c2cb21f25d1db019ae6245d9c7121f754fa61afd7bee6452d input:patch/build/gen1_red.gb=5ca7ba01642a3b27b0cc0b5349b52792795b62d3ed977e98a09390659af96b7b input:patch/build/gen1_yellow.gbc=8cbaa499397e4f1a679c992ea9382a2dd7942ab398b48c19829c2d9529de47bf input:patch/build/gen2_crystal.gbc=d6702e353dcbe2d2c69183046c878ef13a0dae4006e8cdff521cca83dd1582fe input:patch/gen1/build/slink.sym=d70468f4f630a1fe901c1d0ab3bde7f346986f661d8b8d2d72b41f593c285106 input:patch/gen1/build/slink_blue.gb=a98b922033aa00afdab4f35835f5e6d470c321fc1cb17a1ede745c8a7c829c66 input:patch/gen1/build/slink_red.gb=879f61e2b94e7eb2da0fa14af431b4d38c430d0b319f09de7487dc287879475d
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T10:28:41 cpu=54% emuhawk=0 python=3
+start_utc=2026-09-25T14:28:39Z tracked_clean_before=True
+
+[item6] gen1_ordering on master (1b26082f)  $ python -m pytest tests/unit/test_zz_item6_gen1_ordering_scratch.py -q -p no:randomly
+se] _
+
+world = <tests.unit.test_gen1_client.World object at 0x000001EAA0A07440>
+special = False
+
+    @pytest.mark.parametrize("special", [False, True])
+    def test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize(world, special):
+        """The server queues force_faint then memorialize for one key (state.py _propagate_faint).
+        In battle the faint is held in pending_battle_writes; the hand-over (battle_end flush, or the
+        special-battle loop-head fallback) used to APPEND it behind the memorialize, which buried the
+        live mon first and then dropped the faint ("key not in party"). Gen 3 684bbb7a, same shape."""
+        world.connect()
+        world.step(60)
+        world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+        world.fire("wild_begin")
+        world.step()
+        key = codec.key(world.party()[0])
+        world.reply({"cmd": "force_faint", "key": key}, {"cmd": "memorialize", "key": key})
+        world.step()
+        if special:
+            world.bus[world.ram["wBattleType"]] = 2
+            world.fire("battle_loop_head")
+        world.bus[world.ram["wIsInBattle"]] = 0
+        world.fire("battle_end")
+        world.step()                                # the battle_end signal is handled on the frame
+        queued = [str(world.client.deferred[i]["cmd"]) for i in range(1, len(world.client.deferred) + 1)]
+>       assert queued == ["force_faint", "memorialize"], queued
+E       AssertionError: ['memorialize', 'force_faint']
+E       assert ['memorialize', 'force_faint'] == ['force_faint', 'memorialize']
+E         
+E         At index 0 diff: 'memorialize' != 'force_faint'
+E         Use -v to get more diff
+
+tests\unit\test_zz_item6_gen1_ordering_scratch.py:28: AssertionError
+_ test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize[True] _
+
+world = <tests.unit.test_gen1_client.World object at 0x000001EAA0A80770>
+special = True
+
+    @pytest.mark.parametrize("special", [False, True])
+    def test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize(world, special):
+        """The server queues force_faint then memorialize for one key (state.py _propagate_faint).
+        In battle the faint is held in pending_battle_writes; the hand-over (battle_end flush, or the
+        special-battle loop-head fallback) used to APPEND it behind the memorialize, which buried the
+        live mon first and then dropped the faint ("key not in party"). Gen 3 684bbb7a, same shape."""
+        world.connect()
+        world.step(60)
+        world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+        world.fire("wild_begin")
+        world.step()
+        key = codec.key(world.party()[0])
+        world.reply({"cmd": "force_faint", "key": key}, {"cmd": "memorialize", "key": key})
+        world.step()
+        if special:
+            world.bus[world.ram["wBattleType"]] = 2
+            world.fire("battle_loop_head")
+        world.bus[world.ram["wIsInBattle"]] = 0
+        world.fire("battle_end")
+        world.step()                                # the battle_end signal is handled on the frame
+        queued = [str(world.client.deferred[i]["cmd"]) for i in range(1, len(world.client.deferred) + 1)]
+>       assert queued == ["force_faint", "memorialize"], queued
+E       AssertionError: ['memorialize', 'force_faint']
+E       assert ['memorialize', 'force_faint'] == ['force_faint', 'memorialize']
+E         
+E         At index 0 diff: 'memorialize' != 'force_faint'
+E         Use -v to get more diff
+
+tests\unit\test_zz_item6_gen1_ordering_scratch.py:28: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/unit/test_zz_item6_gen1_ordering_scratch.py::test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize[False]
+FAILED tests/unit/test_zz_item6_gen1_ordering_scratch.py::test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize[True]
+2 failed in 0.43s
+
+
+[item6] gen1_ordering on branch (a2985d5a)  $ python -m pytest tests/unit/test_zz_item6_gen1_ordering_scratch.py -q -p no:randomly
+se] _
+
+world = <tests.unit.test_gen1_client.World object at 0x000001A90ADD2660>
+special = False
+
+    @pytest.mark.parametrize("special", [False, True])
+    def test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize(world, special):
+        """The server queues force_faint then memorialize for one key (state.py _propagate_faint).
+        In battle the faint is held in pending_battle_writes; the hand-over (battle_end flush, or the
+        special-battle loop-head fallback) used to APPEND it behind the memorialize, which buried the
+        live mon first and then dropped the faint ("key not in party"). Gen 3 684bbb7a, same shape."""
+        world.connect()
+        world.step(60)
+        world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+        world.fire("wild_begin")
+        world.step()
+        key = codec.key(world.party()[0])
+        world.reply({"cmd": "force_faint", "key": key}, {"cmd": "memorialize", "key": key})
+        world.step()
+        if special:
+            world.bus[world.ram["wBattleType"]] = 2
+            world.fire("battle_loop_head")
+        world.bus[world.ram["wIsInBattle"]] = 0
+        world.fire("battle_end")
+        world.step()                                # the battle_end signal is handled on the frame
+        queued = [str(world.client.deferred[i]["cmd"]) for i in range(1, len(world.client.deferred) + 1)]
+>       assert queued == ["force_faint", "memorialize"], queued
+E       AssertionError: ['memorialize', 'force_faint']
+E       assert ['memorialize', 'force_faint'] == ['force_faint', 'memorialize']
+E         
+E         At index 0 diff: 'memorialize' != 'force_faint'
+E         Use -v to get more diff
+
+tests\unit\test_zz_item6_gen1_ordering_scratch.py:28: AssertionError
+_ test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize[True] _
+
+world = <tests.unit.test_gen1_client.World object at 0x000001A90A6F0950>
+special = True
+
+    @pytest.mark.parametrize("special", [False, True])
+    def test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize(world, special):
+        """The server queues force_faint then memorialize for one key (state.py _propagate_faint).
+        In battle the faint is held in pending_battle_writes; the hand-over (battle_end flush, or the
+        special-battle loop-head fallback) used to APPEND it behind the memorialize, which buried the
+        live mon first and then dropped the faint ("key not in party"). Gen 3 684bbb7a, same shape."""
+        world.connect()
+        world.step(60)
+        world.in_battle(opponent=0xA5, species=0xA5, level=3, active_slot=0)
+        world.fire("wild_begin")
+        world.step()
+        key = codec.key(world.party()[0])
+        world.reply({"cmd": "force_faint", "key": key}, {"cmd": "memorialize", "key": key})
+        world.step()
+        if special:
+            world.bus[world.ram["wBattleType"]] = 2
+            world.fire("battle_loop_head")
+        world.bus[world.ram["wIsInBattle"]] = 0
+        world.fire("battle_end")
+        world.step()                                # the battle_end signal is handled on the frame
+        queued = [str(world.client.deferred[i]["cmd"]) for i in range(1, len(world.client.deferred) + 1)]
+>       assert queued == ["force_faint", "memorialize"], queued
+E       AssertionError: ['memorialize', 'force_faint']
+E       assert ['memorialize', 'force_faint'] == ['force_faint', 'memorialize']
+E         
+E         At index 0 diff: 'memorialize' != 'force_faint'
+E         Use -v to get more diff
+
+tests\unit\test_zz_item6_gen1_ordering_scratch.py:28: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/unit/test_zz_item6_gen1_ordering_scratch.py::test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize[False]
+FAILED tests/unit/test_zz_item6_gen1_ordering_scratch.py::test_a_battle_held_force_faint_keeps_its_place_ahead_of_the_later_memorialize[True]
+2 failed in 0.44s
+
+
+[item6] gen1_sfx_town on master (1b26082f)  $ python -m pytest tests/live/test_gen1_gates.py::test_gen1_sfx_matrix -k town -q -p no:randomly -rs
+..                                                                       [100%]
+2 passed, 2 deselected in 10.20s
+
+
+[item6] gen1_sfx_town on branch (a2985d5a)  $ python -m pytest tests/live/test_gen1_gates.py::test_gen1_sfx_matrix -k town -q -p no:randomly -rs
+..                                                                       [100%]
+2 passed, 2 deselected in 10.19s
+
+
+[item6] gen2_legacy_faint on master (1b26082f)  $ python tools/e2e_duo.py --game gen2 --scenario faint
+
+========== scenario: faint ==========
+[duo] faint: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=55513 http=55514 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_7yo9jqpn
+[duo] cleared 4 stale artifact(s) for faint: e2e_faint_a_attempt1_result.txt, e2e_faint_a_result.txt, e2e_faint_b_attempt1_result.txt, e2e_faint_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] faint: a client finished before 'MYKEY lines from both instances' (a: RESULT: FAIL (never booted into the overworld from the battery save); b: RESULT: FAIL (never booted into the overworld from the battery save))
+--- faint a result (last 25 lines) ---
+[client] [duoA] duo instance a scenario=faint
+duo instance a scenario=faint
+[client] [duoA] variant=crystal
+variant=crystal
+[client] [duoA] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+--- faint b result (last 25 lines) ---
+[client] [duoB] duo instance b scenario=faint
+duo instance b scenario=faint
+[client] [duoB] variant=crystal
+variant=crystal
+[client] [duoB] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_faint_7yo9jqpn
+
+========== summary ==========
+  faint: FAIL (attempt 1 of 1)
+
+
+[item6] gen2_legacy_faint on branch (a2985d5a)  $ python tools/e2e_duo.py --game gen2 --scenario faint
+
+========== scenario: faint ==========
+[duo] faint: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=55520 http=55521 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint__c_iomev
+[duo] cleared 14 stale artifact(s) for faint: e2e_faint_a_attempt1_result.txt, e2e_faint_a_result.txt, e2e_faint_b_attempt1_result.txt, e2e_faint_b_result.txt, e2e_faint_cmd_clean_gen3_a_1_witness.bin, e2e_faint_cmd_clean_gen3_a_1_witness_ext.bin, e2e_faint_cmd_clean_gen3_a_attempt1_result.txt, e2e_faint_cmd_clean_gen3_a_result.txt, e2e_faint_cmd_clean_gen3_b_1_witness.bin, e2e_faint_cmd_clean_gen3_b_1_witness_ext.bin, e2e_faint_cmd_clean_gen3_b_attempt1_result.txt, e2e_faint_cmd_clean_gen3_b_result.txt, e2e_faint_cmd_clean_gen3_pydec_attempt1_result.txt, e2e_faint_cmd_clean_gen3_pydec_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] faint: a client finished before 'MYKEY lines from both instances' (a: RESULT: FAIL (never booted into the overworld from the battery save); b: RESULT: FAIL (never booted into the overworld from the battery save))
+--- faint a result (last 25 lines) ---
+[client] [duoA] duo instance a scenario=faint
+duo instance a scenario=faint
+[client] [duoA] variant=crystal
+variant=crystal
+[client] [duoA] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+--- faint b result (last 25 lines) ---
+[client] [duoB] duo instance b scenario=faint
+duo instance b scenario=faint
+[client] [duoB] variant=crystal
+variant=crystal
+[client] [duoB] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_faint__c_iomev
+
+========== summary ==========
+  faint: FAIL (attempt 1 of 1)
+
+
+[item6] gen2_legacy_boxsync on master (1b26082f)  $ python tools/e2e_duo.py --game gen2 --scenario boxsync
+
+========== scenario: boxsync ==========
+[duo] boxsync: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=55527 http=55528 data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_qxp5lxbc
+[duo] cleared 4 stale artifact(s) for boxsync: e2e_boxsync_a_attempt1_result.txt, e2e_boxsync_a_result.txt, e2e_boxsync_b_attempt1_result.txt, e2e_boxsync_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] boxsync: a client finished before 'MYKEY lines from both instances' (a: RESULT: FAIL (never booted into the overworld from the battery save); b: RESULT: FAIL (never booted into the overworld from the battery save))
+--- boxsync a result (last 25 lines) ---
+[client] [duoA] duo instance a scenario=boxsync
+duo instance a scenario=boxsync
+[client] [duoA] variant=crystal
+variant=crystal
+[client] [duoA] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+--- boxsync b result (last 25 lines) ---
+[client] [duoB] duo instance b scenario=boxsync
+duo instance b scenario=boxsync
+[client] [duoB] variant=crystal
+variant=crystal
+[client] [duoB] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_qxp5lxbc
+
+========== summary ==========
+  boxsync: FAIL (attempt 1 of 1)
+
+
+[item6] gen2_legacy_boxsync on branch (a2985d5a)  $ python tools/e2e_duo.py --game gen2 --scenario boxsync
+
+========== scenario: boxsync ==========
+[duo] boxsync: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=62617 http=62618 data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_2m6ravvr
+[duo] cleared 4 stale artifact(s) for boxsync: e2e_boxsync_a_attempt1_result.txt, e2e_boxsync_a_result.txt, e2e_boxsync_b_attempt1_result.txt, e2e_boxsync_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] boxsync: a client finished before 'MYKEY lines from both instances' (a: RESULT: FAIL (never booted into the overworld from the battery save); b: RESULT: FAIL (never booted into the overworld from the battery save))
+--- boxsync a result (last 25 lines) ---
+[client] [duoA] duo instance a scenario=boxsync
+duo instance a scenario=boxsync
+[client] [duoA] variant=crystal
+variant=crystal
+[client] [duoA] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+--- boxsync b result (last 25 lines) ---
+[client] [duoB] duo instance b scenario=boxsync
+duo instance b scenario=boxsync
+[client] [duoB] variant=crystal
+variant=crystal
+[client] [duoB] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_2m6ravvr
+
+========== summary ==========
+  boxsync: FAIL (attempt 1 of 1)
+
+
+[item6] gen2_legacy_memorialize on master (1b26082f)  $ python tools/e2e_duo.py --game gen2 --scenario memorialize
+
+========== scenario: memorialize ==========
+[duo] memorialize: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=62859 http=62860 data=C:\Users\howar\AppData\Local\Temp\slink_duo_memorialize_j62rxz56
+[duo] cleared 4 stale artifact(s) for memorialize: e2e_memorialize_a_attempt1_result.txt, e2e_memorialize_a_result.txt, e2e_memorialize_b_attempt1_result.txt, e2e_memorialize_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] memorialize: a client finished before 'MYKEY lines from both instances' (a: RESULT: FAIL (never booted into the overworld from the battery save); b: RESULT: FAIL (never booted into the overworld from the battery save))
+--- memorialize a result (last 25 lines) ---
+[client] [duoA] duo instance a scenario=memorialize
+duo instance a scenario=memorialize
+[client] [duoA] variant=crystal
+variant=crystal
+[client] [duoA] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+--- memorialize b result (last 25 lines) ---
+[client] [duoB] duo instance b scenario=memorialize
+duo instance b scenario=memorialize
+[client] [duoB] variant=crystal
+variant=crystal
+[client] [duoB] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_memorialize_j62rxz56
+
+========== summary ==========
+  memorialize: FAIL (attempt 1 of 1)
+
+
+[item6] gen2_legacy_memorialize on branch (a2985d5a)  $ python tools/e2e_duo.py --game gen2 --scenario memorialize
+
+========== scenario: memorialize ==========
+[duo] memorialize: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=62896 http=62897 data=C:\Users\howar\AppData\Local\Temp\slink_duo_memorialize_g6yfrgxb
+[duo] cleared 4 stale artifact(s) for memorialize: e2e_memorialize_a_attempt1_result.txt, e2e_memorialize_a_result.txt, e2e_memorialize_b_attempt1_result.txt, e2e_memorialize_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] memorialize: a client finished before 'MYKEY lines from both instances' (a: RESULT: FAIL (never booted into the overworld from the battery save); b: RESULT: FAIL (never booted into the overworld from the battery save))
+--- memorialize a result (last 25 lines) ---
+[client] [duoA] duo instance a scenario=memorialize
+duo instance a scenario=memorialize
+[client] [duoA] variant=crystal
+variant=crystal
+[client] [duoA] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+--- memorialize b result (last 25 lines) ---
+[client] [duoB] duo instance b scenario=memorialize
+duo instance b scenario=memorialize
+[client] [duoB] variant=crystal
+variant=crystal
+[client] [duoB] RESULT: FAIL (never booted into the overworld from the battery save)
+RESULT: FAIL (never booted into the overworld from the battery save)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_memorialize_g6yfrgxb
+
+========== summary ==========
+  memorialize: FAIL (attempt 1 of 1)
+
+
+[item6] case                  master  branch
+[item6] gen1_ordering         FAIL    FAIL
+[item6] gen1_sfx_town         PASS    PASS
+[item6] gen2_legacy_faint     FAIL    FAIL
+[item6] gen2_legacy_boxsync   FAIL    FAIL
+[item6] gen2_legacy_memorializeFAIL    FAIL
+RESULT: PASS no case regressed vs master
+exit=0 end_utc=2026-09-25T14:29:33Z tracked_clean_after=True classification=pass

@@ -1,0 +1,28 @@
+# gen3_final_cut row=checkpoint_firered item=§6_item3 cut=c0f6101bc5e34ebdef33b633741bc796e769f6fe
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/gen3_probe_receipt.py --title firered --lane 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2' --out checkpoint_fr_clean_c0f6101b.txt   (cwd=E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac state:gen3_probe_states/slink_oldman.State=f00d8c122ac5b4add3573602234b7ef780764f8521fcfa4f03aa3939de84ec40 state:gen3_probe_states/slink_pokedude.State=2b748cc5943c0cb9c1e11c96fe3b9ce3ea6a5b425138d9f1c705bd6419fe18ac state:gen3_probe_states_c4p2/slink_door.State=79179dd7950692e8e2d24a01ffadffb236a7d9f791f03cfc65475ba7d3163412 state:gen3_probe_states_c4p2/slink_overworld.State=8dc790b1921c2c1843a7f40015b0b2647abeb9c548a4314ffd7a065324d637ae state:gen3_probe_states_c4p2/slink_postbattle.State=c31f9fd206dd3bc42c9907a1c517bda242268e0839be60b89a34aa92f1c8962d state:gen3_probe_states_c4p2/slink_prebattle.State=99745791402fa01d3f871395c4a3baadde78a23e8bd987ad44ba071f9986f864 state:gen3_probe_states_c4p2/slink_preintro.State=9410918b6cd9f975e6986a383312244be234b9d3de07551a9872a1c6239b4edf state:gen3_probe_states_c4p2/slink_script.State=e354b0d2bdeccdd86fd7e3bcf4b8c28ea175a8edb0c93645ff09c459c5f8fb39
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T08:14:22 cpu=90% emuhawk=0 python=7
+start_utc=2026-09-25T12:14:21Z tracked_clean_before=True
+E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/bw_hashes_firered.json
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_probe_gen3_checkpoint.ini --lua=lua/tests/probe_gen3_checkpoint.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] probe_gen3_checkpoint: RESULT: FAIL all checkpoint controls  (214s)
+--- result ---
+4p2/firered/slink_prebattle.State prep=tools/mkstates_gen3.py kind=battle (C4-PROBE2 states, gen3_probe_states_c4p2) map=3.19 pos=13,37 frame=2181 R15=0x080008AC CPSR=0x6000003F M=0x08014041:T C=0x02:F F=0x00000000:F P=0x0802E3B5:F L=0x00000000:T H=0x001B:T O=0x00:T permit=false failed=battle_comm_0,battle_exec_flags_input,battle_input_controller type=0x00000004 trainer=0 ctrl=0x0802E3B5[player:PlayerBufferRunCommand],0x08035A99[opponent],0x0802E311[player],0x0802E311[player] comm=2,4,0,0 party=0,0,0,0 outcome=0 chosen0=1 bufB0=23,04,00,00 cb2=0x08011101 in_battle=true slot_key=2D356A90:99DE0D8A balls_before=4 balls_now=3 ball_delta=-1 at=first frame=2181 ctrl0=0802E3B5 chosen0=1 bufB0=35,4 outcome=0 cb2=08011101 pm_type=0 pm_slot=0 pm_action=0 bag_location=5 fade=false party_count=2 slot1_hp=17 slot1_usable=true keys=0000
+BWSAMPLE N8 title=firered reason=battle_faint rom=41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e pack=c6d5ff869daa0babd8d5e7a62b98c4250bab3ecad59549f691954b0fdc48448d source=c0f6101bc5e34ebdef33b633741bc796e769f6fe state=99745791402fa01d3f871395c4a3baadde78a23e8bd987ad44ba071f9986f864 state_path=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states_c4p2/firered/slink_prebattle.State prep=tools/mkstates_gen3.py kind=battle (C4-PROBE2 states, gen3_probe_states_c4p2) map=3.19 pos=13,37 frame=3454 R15=0x080008AC CPSR=0x6000003F M=0x080155C9:F C=0x04:F F=0x00000000:F P=0x0802E3B5:F L=0x00000000:T H=0x001B:T O=0x07:F permit=false failed=battle_comm_0,battle_exec_flags_input,battle_input_controller,battle_main_func,battle_outcome_open type=0x00000004 trainer=0 ctrl=0x0802E3B5[player:PlayerBufferRunCommand],0x08035A99[opponent],0x0802E311[player],0x0802E311[player] comm=4,0,0,0 party=0,0,0,0 outcome=7 chosen0=1 bufB0=23,04,00,00 cb2=0x08011101 in_battle=true slot_key=2D356A90:99DE0D8A balls_before=4 balls_now=3 ball_delta=-1 at=terminal frame=3454 ctrl0=0802E3B5 chosen0=1 bufB0=35,4 outcome=7 cb2=08011101 pm_type=0 pm_slot=0 pm_action=0 bag_location=5 fade=false party_count=3 slot1_hp=17 slot1_usable=true keys=0000
+PROBE bw_n8_item PASS sampled=1273 true=0 false=1273 irq=0 non_irq_sampled=0 non_irq_true=0 terminal=ONERETURNVALUE item 4, then gBattleOutcome~=0 or the menu reopens reached=false R15=nil CPSR=nil frame=nil frames=1537 clauses=- verdict=PASS - note=an owned POKE BALL; B clears the dex page and declines the nickname, so a catch reaches gBattleOutcome 7 and is classified ended=outcome=7, not failed reason=PASS
+PROBE pc_menu SKIP not selected for firered/clean
+PROBE battle_link SKIP not selected for firered/clean
+PROBE native_idle_field SKIP not selected for firered/clean
+PROBE native_idle_battle SKIP not selected for firered/clean
+PROBE battle_commit_held_rr SKIP not selected for firered/clean
+WRITE_SURFACE none (predicate-only probe) native_idle=opcode_queue_only
+FRAMES spent=12293 budget=90000
+RESULT: FAIL all checkpoint controls
+
+run_gate.py exited 1: treating as failure regardless of result content
+E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\docs\gen3\probes\checkpoint_fr_clean_c0f6101b.txt
+exit=1 end_utc=2026-09-25T12:17:57Z tracked_clean_after=True classification=real

@@ -3,12 +3,11 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (vanilla, randomized, Archipelago, Radical Red/CFRU) — **✅ Stable**
-- **Gen 3** — Emerald — ⚠️ **Experimental**. The RAM profile (`GEN3.profiles.emerald`) is complete, but
-  `gen3_emerald_areas` / `gen3_emerald_locations` have never been generated, so `resolve_area` falls back
-  to the FireRed tables — Emerald map IDs do not match FireRed's, so area names and the area IDs that drive
-  encounter linking are WRONG. The client logs a warning once per session. Generate the tables before
-  running Emerald for real.
+- **Gen 3** — FireRed, LeafGreen (vanilla, randomized, Radical Red/CFRU) — **✅ Stable**, on the rewritten
+  client under `lua/gen3/`.
+- **Gen 3** — Emerald and the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
+  the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`
+  refuses them by name until they are ported to `lua/gen3/`.
 - **Gen 1** — Red, Blue, Yellow (US English) — 🟡 **Partially verified.** The Soul Link
   *mechanisms* are proven against running cartridges; a *playthrough* is not. Be precise about
   which you are relying on:
@@ -135,10 +134,10 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.11+ (Gen 1), 2.9+ (Gen 2/3) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FRLG/Emerald ROMs. **Gen 4:** Two instances with US HGSS ROMs |
-| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 3:** Vanilla, randomized (UPR), Archipelago, or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
+| BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen or Radical Red ROMs. **Gen 4:** Two instances with US HGSS ROMs |
+| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 3:** Vanilla, randomized (UPR), or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
-| Scripts in `lua/` | `slink.lua` (universal entry point), `memory_gba.lua`, `connector.lua`, `socket.lua` |
+| Scripts in `lua/` | `slink.lua` (universal entry point), `gen3/`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
 | Network | Both BizHawk instances must reach the Python server (localhost or LAN) |
 
@@ -186,7 +185,7 @@ Alternatively, load `lua/slink.lua` directly — it auto-detects the game but us
 
 **Option B — Direct client load:**
 1. Open the BizHawk Lua Console.
-2. Load `lua/clients/gen3_frlge_client.lua` (Gen 3) or `lua/clients/gen4_hgsspt_client.lua` (Gen 4).
+2. Load `lua/slink_gen3.lua` (Gen 3; it routes through `lua/slink.lua`) or `lua/clients/gen4_hgsspt_client.lua` (Gen 4).
 3. At the top of the script, set:
    ```lua
    local SERVER_HOST = "127.0.0.1"   -- IP of the machine running server.py
@@ -210,8 +209,8 @@ Alternatively, load `lua/slink.lua` directly — it auto-detects the game but us
   lua/gen1/{client,reads,writes,...}  lua/gen1/{client,reads,writes,...}
 
 [BizHawk – Gen 3 (GBA)]            [BizHawk – Gen 3 (GBA)]
-  lua/clients/gen3_frlge_client.lua    lua/clients/gen3_frlge_client.lua
-  lua/memory_gba.lua                   lua/memory_gba.lua
+  lua/gen3/run.lua                     lua/gen3/run.lua
+  lua/gen3/entry.lua                   lua/gen3/entry.lua
   data/games/gen3_frlge/gen3_frlge_areas.lua
 
 [BizHawk – Gen 4 (NDS)]            [BizHawk – Gen 4 (NDS)]
@@ -940,7 +939,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Native explode/faint controller swap (`FORCE_FAINT` / `FORCE_MOVE_SLOT`) | ❌ Not used — softlocked in real play; the Lua Variant-3 RAM path is the single production mechanism (ROADMAP §2). Opcodes remain in the ROM, headless-gated. |
 
 Gen 1's HUD/sound is not purely a server-pushed overlay: `lua/gen1/client.lua` also raises its own
-local moments, mirroring the Gen 3 client's client-only cues (`gen3_frlge_client.lua`) rather than
+local moments, mirroring the old Gen 3 client's client-only cues (`archive/gen3-old-client:lua/clients/gen3_frlge_client.lua`) rather than
 waiting on a command. A Nuzlocke-start banner fires once, on the first Poke Ball landing in the bag
 *during play* (the `bag_received` hook or a `send_tick` ball-count edge) — never at a hello that
 already finds one there, which only logs; the latch (`self.nuzlocke_announced`) is a client-session
@@ -1070,10 +1069,9 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{cryst
 | `lua/gen1/run.lua` | **Gen 1 production client entry point** — both launchers (`lua/slink.lua`'s GB/GBC route, `lua/slink_gen1.lua`) `dofile` this. BizHawk bootstrap: title detection via `entry.lua`'s `Entry.detect_title`, connector/HUD setup, guarded frame callback and shutdown (commit `ca17a26`). |
 | `lua/gen1/entry.lua` | Composition root over injected io/net/HUD — wires reads/writes/signals/boxes/rom/trade_overlay/panel; the same construction path serves production and the model test harness. |
 | `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` | The rewritten Gen 1 modules `entry.lua` composes: engine-signal dispatch, guarded write windows, party/box/PC decoding, cartridge dex/base-stat tables, the native trade overlay and the native info panel — Red, Blue and Yellow via profile, not per-title branches. |
-| `lua/clients/gen3_frlge_client.lua` | Gen 3 production client — FRLG/Emerald/Radical Red. Localized BizHawk memory functions, display data cache, battle/overworld state cached once per frame. |
+| `lua/gen3/run.lua`, `lua/gen3/entry.lua` | **Gen 3 production client** (FireRed/LeafGreen/Radical Red) — `lua/slink.lua`'s GBA route admits the cartridge (`Entry.admit`, hash then anchors) and dofiles `run.lua`; `entry.lua` wires `lua/gen3/{client,reads,signals,writes,safety,boxes,native}.lua` over `lua/core/` |
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
 | `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |
-| `lua/memory_gba.lua` | Gen 3 GBA RAM helpers — auto-detecting profiles (vanilla, AP, CFRU/RR), read/write, force-faint, box/party transfer, memorial write, SE playback via m4a engine |
 | `lua/memory_nds.lua` | Gen 4/5 NDS RAM helpers — LCRNG encryption/decryption, 2-level pointer chain, HP debounce, party/box/battle reads |
 | `data/games/gen3_frlge/gen3_frlge_areas.lua` | Gen 3 area lookup — `mapGroup*256+mapNum → area_id` (184 entries; `python tools/gen_area_map.py` to regenerate) |
 | `data/games/gen4_hgsspt/gen4_hgsspt_areas.lua` | Gen 4 area lookup — `zoneId → area_id` (195 entries, auto-generated) |
@@ -1149,6 +1147,8 @@ SLink prevents accidental wrong-save connections from corrupting a run. On the f
 
 ## Pokémon Ability Display
 
+> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
+
 The status page displays ability names for party mons, PC box mons, and enemy/wild mons during battle. Abilities are resolved from `gBaseStats` in the ROM using the mon's species ID and ability bit (from the encrypted substruct data).
 
 **How abilities are read:**
@@ -1173,6 +1173,8 @@ Override keys are `(ability_id, natdex_base_form)`. Form collisions (e.g. Kyurem
 ---
 
 ## Archipelago (AP) Support
+
+> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite. Archipelago FireRed/LeafGreen is not supported until then.
 
 SLink auto-detects AP-patched ROMs and adjusts all memory addresses automatically. No manual configuration needed.
 
@@ -1212,6 +1214,8 @@ SLink auto-detects AP-patched ROMs and adjusts all memory addresses automaticall
 ---
 
 ## Radical Red (CFRU) Support
+
+> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
 
 SLink fully supports **Pokémon Radical Red 4.1** and other [CFRU-based](https://github.com/Skeli789/Complete-Fire-Red-Upgrade) ROM hacks via the `radical_red` profile in `memory_gba.lua`. All core features — encounter linking, faint propagation, party/box sync, memorial box, species/gender/type clause — work identically to vanilla and AP.
 
@@ -1288,6 +1292,8 @@ Without this multiplier, RR trainer mons with PP-Ups would show e.g. `56/35` ins
 ---
 
 ## ROM Profiles
+
+> **Archived (C5-6, owner ruling 24):** this section describes the old Gen 3 client (`lua/clients/gen3_frlge_client.lua` + `lua/memory_gba.lua`), deleted from the tree and kept at tag `archive/gen3-old-client`. The rewritten client under `lua/gen3/` reads through `data/games/gen3_{frlg,rr}/profile.json`; this section awaits that rewrite.
 
 SLink supports three ROM profiles, auto-detected at startup by `memory_gba.lua`. All profile-dependent addresses are stored in the `PROFILES` table and applied via `M.initProfile()`.
 

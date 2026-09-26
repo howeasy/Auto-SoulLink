@@ -1,0 +1,45 @@
+# gen3_final_cut row=native_absent_gen3_rr_as_a item=§14_P5_RR_duo cut=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_rr --scenario native_absent_gen3   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T10:21:16 cpu=49% emuhawk=1 python=6
+start_utc=2026-09-25T14:21:15Z tracked_clean_before=True
+
+========== scenario: native_absent_gen3 ==========
+[duo] native_absent_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=78d947a4ffd1174ed1b86ad7911613f54a63018ed3a74914e9d4ab9e7008b8f8 profile.json=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c source=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+[duo] server up: tcp=50962 http=50963 data=C:\Users\howar\AppData\Local\Temp\slink_duo_native_absent_gen3_7o30vi_s
+[duo] cleared 5 stale artifact(s) for native_absent_gen3: e2e_native_absent_gen3_a_attempt1_result.txt, e2e_native_absent_gen3_a_result.txt, e2e_native_absent_gen3_b_attempt1_result.txt, e2e_native_absent_gen3_b_result.txt, e2e_native_absent_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'apply_trade', 'slot': 1, 'old_key': 'F56D8C1D:2BDDC8BF', 'blob_hex': '1D8C6DF5403722D4BBD5D5D5D5D5D5D5D5D50202BCBCFFFFFFFFFF00000000002C05000060000000003203002100E600000000002314000000000000000000000000000000650402FFFFFF3F000000000000000004FF1200120009000900080009000A00', 'token': 'native_absent_a'}
+[duo] queued for b: {'cmd': 'apply_trade', 'slot': 1, 'old_key': 'F56D8C1D:D4223740', 'blob_hex': '1D8C6DF5BFC8DD2BBBD5D5D5D5D5D5D5D5D50202BCFFFFFFFFFFFF00000000002C05000060000000003203002100E600000000002314000000000000000000000000000000650402FFFFFF3F000000000000000004FF1200120009000900080009000A00', 'token': 'native_absent_b'}
+[duo] RESULT_LINE a: RESULT: PASS (companion: valid apply_trade staged natively)
+[duo] RESULT_LINE b: RESULT: PASS (clean: valid apply_trade refused, nothing written)
+[duo] SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] native_absent: the companion staged the valid trade natively; the clean cartridge refused it and wrote nothing
+[duo] MARKER a: RX apply_trade
+[duo] MARKER a: [client] [SLink-gen3] apply_trade received for F56D8C1D:2BDDC8BF: queued for the native trade
+[duo] MARKER a: [client] [SLink-gen3] write native 0x0203F8D4 +1 frame 617
+[duo] MARKER a: NATIVE_STAGED phase=scene writes=9
+[duo] MARKER a: [client] [SLink-gen3] apply_trade received for F56D8C1D:2BDDC8BF: queued for the native trade TRADE_PHASE stage [client] [SLink-gen3] write native 0x0203FA00 +100 frame 663 [client] [SLink-gen3] write native 0x0203F810 +1 frame 663 [client] [SLink-gen3] write native 0x0203F80C +2 frame 663 [client] [SLink-gen3] write native 0x0203F808 +2 frame 663 [client] [SLink-gen3] write native 0x0203F806 +2 frame 663 [client] [SLink-gen3] write native 0x0203F810 +1 frame 664 [client] [SLink-gen3] write native 0x0203F80C +2 frame 664 [client] [SLink-gen3] write native 0x0203F808 +2 frame 664 [client] [SLink-gen3] write native 0x0203F806 +2 frame 664 TRADE_PHASE scene NATIVE_STAGED phase=scene writes=9
+[duo] MARKER b: RX apply_trade
+[duo] MARKER b: [client] [SLink-gen3] apply_trade refused: no trade path on this cartridge (nothing written) F56D8C1D:D4223740
+[duo] MARKER b: WRITES 0
+[duo] MARKER b: PROBE_SETTLED writes=0
+[duo] PYDEC: PASS asserted scenario facts
+[duo] native_absent_gen3: a=PASS b=PASS
+
+========== summary ==========
+  native_absent_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-25T14:21:23Z tracked_clean_after=True classification=pass

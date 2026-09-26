@@ -1,0 +1,32 @@
+# FR scripted play run 15 (33e65b2), 2026-09-21, vanilla FR US 1.0, observer beside
+phase leg-start frame=635 starter
+phase leg-done frame=5571 starter
+phase leg-start frame=5571 rival_battle
+phase leg-done frame=12134 rival_battle
+phase leg-start frame=12134 leave_lab_for_parcel
+phase leg-done frame=12355 leave_lab_for_parcel
+phase leg-start frame=12355 parcel_fetch
+phase encounter frame=13043 #1 during step Left at (9,32)
+phase encounter-done frame=14674 #1 resolved at (9,32)
+phase encounter frame=15234 #2 during step Up at (16,16)
+phase encounter-done frame=17633 #2 resolved at (16,16)
+phase parcel-scene-done frame=19588 at=(4,3)
+phase leg-done frame=19588 parcel_fetch
+phase leg-start frame=19588 parcel_deliver
+phase heal-start frame=20423 parcel_deliver: slot0 14/23
+phase healed frame=21580 parcel_deliver: slot0 23/23
+phase encounter frame=22728 #1 during step Down at (16,15)
+phase encounter-done frame=25515 #1 resolved at (16,15)
+phase encounter frame=26075 #2 during step Down at (8,32)
+phase encounter-done frame=28090 #2 resolved at (8,32)
+phase encounter frame=28346 #3 during step Down at (12,38)
+phase encounter-done frame=30249 #3 resolved at (12,38)
+phase leg-done frame=30979 parcel_deliver
+phase leg-start frame=30979 route1_catch
+RESULT: FAIL route1_catch: no wild encounter after 1 grass cycles
+## shadow
+STATUS frame=36035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=34882
+      6 kind=battle_begin
+      6 kind=battle_end
+      8 kind=map_load
+      1 kind=mon_given

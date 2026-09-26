@@ -1,0 +1,146 @@
+{
+  "passed": false,
+  "coverage": {
+    "battle_begin": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "battle_end": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "faint": {
+      "wire": 1,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "capture_wild": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "mon_given": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "pc_move": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "whiteout": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "map_load": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "evolve_species_store": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "trade_done": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "save": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "poison_faint": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "borrowed_party": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    },
+    "nature_change": {
+      "wire": 0,
+      "shadow": 0,
+      "status": "UNCOVERED",
+      "count_bound": 0,
+      "order_bound": 0,
+      "frame_bound": 0
+    }
+  },
+  "deltas": [
+    {
+      "kind": "faint",
+      "key": "EBEF11DA:2BDDC8BF",
+      "sink": "a",
+      "t": 262,
+      "frame": null,
+      "action": "",
+      "delta": "missing_shadow",
+      "explanation": {
+        "kind": "faint",
+        "key": "EBEF11DA:2BDDC8BF",
+        "reason": "A capture t=262 (patch/build/shadow_wire/faint_a_old_client.shadowrun.jsonl:262) reports the direct scenario HP poke at lua/tests/duo/scenario_faint.lua:18-21. It does not execute Cmd_tryfaintmon's player-counter capture point (docs/gen3_engine_sites.md:118-136). This capture is not the exact hash-whitelisted fixture in tools/gen3_shadow_diff.py:40-45, so the reducer retains this faint as a delta rather than commanded_write. B's force_faint is separately classified by tools/gen3_shadow_diff.py:112-116,133-138.",
+        "owner": "P3 explained (commanded/native path)"
+      }
+    }
+  ],
+  "unused_ledger": [],
+  "timing_unavailable": 0,
+  "commanded_writes": [
+    {
+      "kind": "commanded_write",
+      "key": "EBEF11DA:2BD6C8BF",
+      "sink": "b",
+      "t": 239,
+      "frame": null,
+      "action": ""
+    }
+  ]
+}

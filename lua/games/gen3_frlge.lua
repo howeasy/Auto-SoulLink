@@ -115,7 +115,15 @@ GEN3.profiles = {
             [26] = 0x086B5BE0,  -- SE_FAILURE (SE_HAZURE)
             [95] = 0x086B6E70,  -- SE_SHINY   (SE_REAPOKE)
         },
-        -- gBaseStats ROM table (pret/pokefirered: data/pokemon/base_stats.h)
+        -- gSpeciesInfo (the per-species table the client calls gBaseStats; pret renamed the
+        -- symbol).  Its address differs per title, and each dump's own pointer for it sits at
+        -- ROM 0x080001BC:
+        --   FireRed   0x08254784   pokefirered.sym:26981   `gSpeciesInfo` size 0x2D10
+        --   LeafGreen 0x08254760   pokeleafgreen.sym:26983 `gSpeciesInfo` size 0x2D10
+        -- 0x2D10 = 412 x 28, the entry size below.  One vanilla table serves both titles, so
+        -- `BASESTATS_ADDR` carries the FireRed literal and the LeafGreen cartridge resolves
+        -- its own value from that game code at load (see the _game_code block at the end).
+        BASESTATS_ADDR_BY_GAME_CODE = { BPRE = 0x08254784, BPGE = 0x08254760 },
         BASESTATS_ADDR       = 0x08254784,
         BASESTATS_ENTRY_SIZE = 28,  -- sizeof(struct BaseStats) including padding
         -- Post-battle settle gate (isPostBattleSettled). All ROM addresses
@@ -394,13 +402,26 @@ GEN3.profiles = {
 
 -- ── Variant detection ─────────────────────────────────────────────────────────
 -- Determines which profile (vanilla, ap, radical_red) matches the running ROM.
--- Detection strategy (same priority as original M.initProfile):
---   1. Read ROM offset 0x108 for "pokemon red/green version" (present in BOTH AP and RR)
---   2. If found, disambiguate by checking IWRAM SaveBlock1 pointers:
---      - AP:  SB1_PTR at 0x03004F58
---      - RR:  SB1_PTR at 0x03003840
---   3. If 0x108 has ARM code (not ASCII), also try RR detection.
---   4. Fallback: vanilla.
+-- Detection strategy:
+--   1. Read ROM offset 0x108 for "pokemon red/green version".  The string is in the
+--      GBA header of vanilla FRLG, AP and RR alike — it is NOT an AP/RR marker.
+--   2. Disambiguate by IWRAM SaveBlock1 pointer plausibility, in this order:
+--        AP pointer (0x03004F58) -> "ap"
+--        ROM-only CFRU signature -> "radical_red"
+--        vanilla pointer (0x03005008) -> "vanilla"
+--        else "ap" (IWRAM not yet initialised)
+--   3. radical_red is NEVER returned on RAM plausibility alone.  The ROM-only
+--      signature is the word at 0x080001BC (the profile's gBaseStats pointer)
+--      landing in the expanded half of the image: each admitted dump's own value
+--      is FR clean 0x08254784, LG clean 0x08254760, RR clean/companion 0x097B98EC.
+--      The previous probe accepted the whole 0x08000000..0x08FFFFFF range, which
+--      vanilla FireRed satisfies, so vanilla FR was reported as radical_red
+--      (docs/gen3/probes/census_fr_overworld_2026-09-21.txt:1 `variant=radical_red`).
+--   4. The RAM-plausibility RR test (_detectRR: SB1 pointer + party shape) is no longer
+--      part of the decision: it cannot separate vanilla from RR, and requiring it would
+--      misclassify RR before a save is loaded, when those pointers are not initialised.
+--      The function stays as the source tools/gen_gen3_profile.py reads PARTY_CAPACITY
+--      from; it is not called here.
 
 -- Validate that a candidate SB1_PTR_ADDR points to plausible SaveBlock1 data.
 local function _validateSB1Ptr(ptr_addr)
@@ -412,7 +433,12 @@ local function _validateSB1Ptr(ptr_addr)
     return mapGroup <= 42 and mapNum <= 199
 end
 
--- Stronger RR detection: validates SB1 pointer AND party structure.
+-- RAM-plausibility probe for Radical Red: validates the SB1 pointer AND party shape.
+-- NOT part of the variant decision any more (see the header note above): RAM cannot
+-- separate vanilla from RR, and gating on it would misclassify RR before a save is
+-- loaded.  Kept because tools/gen_gen3_profile.py:346-357 derives the RR profile's
+-- PARTY_CAPACITY from the `partyCount` limit in this body, and that derivation is
+-- checked by tests/unit/test_gen3_profile.py.
 local function _detectRR()
     local rr = GEN3.profiles.radical_red
     if not rr then return false end
@@ -432,6 +458,20 @@ local function _detectRR()
     return true
 end
 
+-- ROM-only "expanded build" signature.  The word at the RR profile's CFRU_BASESTATS_PTR is
+-- that build's own pointer to its per-species table (see the vanilla table's note), so the
+-- gate really means "this build's base stats live beyond the 16 MB image" - CFRU-scale
+-- expansions, not strictly CFRU.  Fail closed: an unreadable or non-integer word is never a
+-- match, so a missing signal cannot promote a ROM to radical_red.
+local CFRU_PTR_MIN, CFRU_PTR_MAX = 0x09000000, 0x0A000000
+local function _romIsCFRU()
+    local rr = GEN3.profiles.radical_red
+    if not rr then return false end
+    local ok, word = pcall(memory.read_u32_le, rr.CFRU_BASESTATS_PTR, "System Bus")
+    if not ok or type(word) ~= "number" or word % 1 ~= 0 then return false end
+    return word >= CFRU_PTR_MIN and word < CFRU_PTR_MAX
+end
+
 --- Returns the detected variant: "vanilla", "ap", "radical_red", or "emerald".
 --- Must only be called after GEN3.detect() returns true.
 function GEN3.detect_variant()
@@ -446,7 +486,11 @@ function GEN3.detect_variant()
     end
 
     -- FRLG family: detect sub-variant
-    -- Step 1: Read 32 bytes from ROM offset 0x108
+    -- Step 1: Read 32 bytes from ROM offset 0x108.  This name is the family marker AND the
+    -- ROM-side AP marker: the Archipelago world renames its cartridges
+    -- "pokemon red version AP" / "pokemon green version AP" (pokemon_frlg.apworld,
+    -- data/extracted_data.json `rom_names`), while vanilla FRLG and RR both carry the bare
+    -- name — RR is told apart by the expanded-build signature in step 2.
     local rom_name_bytes = {}
     for i = 0, 31 do
         local rb = memory.read_u8(0x08000108 + i, "System Bus")
@@ -456,34 +500,28 @@ function GEN3.detect_variant()
     local rom_name = table.concat(rom_name_bytes):lower()
     local has_version_str = rom_name:find("pokemon red version")
                          or rom_name:find("pokemon green version")
+    local ap_name = rom_name:match("%sap$") ~= nil
 
-    -- Step 2: Detect profile by validating IWRAM pointers
+    -- Step 2: ROM-only signals first (immune to save state), RAM plausibility last.
     if has_version_str then
-        -- Both AP and RR have this string; check AP first (original priority)
+        if ap_name then
+            -- Holds at the title screen and while a save loads: the header is immutable.
+            return "ap"
+        end
+        if _romIsCFRU() then
+            return "radical_red"
+        end
         if _validateSB1Ptr(GEN3.profiles.ap.SB1_PTR_ADDR) then
-            return "ap"
-        elseif _detectRR() then
-            return "radical_red"
-        else
-            -- IWRAM not yet initialised (game resetting / loading save).
-            -- Vanilla FRLG NEVER has the version string at ROM 0x108, so this
-            -- is definitely AP or RR — returning "vanilla" here is always wrong.
-            -- Use a ROM-stable probe to distinguish them:
-            --   CFRU/RR places a gBaseStats ROM pointer at ROM address 0x080001BC.
-            --   AP (recompiled vanilla) has ARM code there, not a ROM pointer.
-            -- ROM is immutable; this read is always valid regardless of save state.
-            local ok, cfru_ptr = pcall(memory.read_u32_le, 0x080001BC, "System Bus")
-            if ok and cfru_ptr >= 0x08000000 and cfru_ptr < 0x09000000 then
-                return "radical_red"
-            end
-            -- No CFRU ROM pointer → assume AP.
+            -- An AP build whose header name predates the " AP" rename, once IWRAM is live.
             return "ap"
         end
-    else
-        -- No version string — could be vanilla or RR (future builds)
-        if _detectRR() then
-            return "radical_red"
-        end
+        -- Plain FRLG name and no expanded table: vanilla.  ROM-only, so a resetting game or
+        -- a title screen is identified too (this used to fall through to "ap").
+        return "vanilla"
+    end
+    -- No version string — an unusual build.  The ROM signature is the only signal.
+    if _romIsCFRU() then
+        return "radical_red"
     end
     return "vanilla"
 end
@@ -565,6 +603,16 @@ do
         GEN3._game_code = (ok and code) or nil
     else
         GEN3._game_code = nil
+    end
+
+    -- Per-title gSpeciesInfo address: the shared vanilla table carries FireRed's value as a
+    -- literal, and a LeafGreen cartridge would otherwise read FireRed's table (card C-OC2).
+    -- The module is required before any M.applyProfile(), so this lands before the client
+    -- copies BASESTATS_ADDR into memory_gba (archive/gen3-old-client:lua/memory_gba.lua).
+    local by_code = GEN3.profiles.vanilla.BASESTATS_ADDR_BY_GAME_CODE
+    if GEN3._game_code then
+        local addr = by_code[GEN3._game_code]
+        if addr then GEN3.profiles.vanilla.BASESTATS_ADDR = addr end
     end
 end
 

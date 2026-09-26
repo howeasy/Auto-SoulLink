@@ -1,0 +1,15 @@
+# gen3_final_cut row=checkpoint_firered item=§6_item3 cut=157e1ef7d270fcd93a43cc73103c7cc509595e0e
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/gen3_probe_receipt.py --title firered --lane 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean' --out checkpoint_fr_clean_157e1ef7.txt   (cwd=E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac state:gen3_probe_states/slink_oldman.State=c77e0366025274f71b6a9aae2e53e0a4d5ddfb92854376c1babf0c001fe69d4c state:gen3_probe_states/slink_pokedude.State=3378a119b297be0b7ea5581793b3718146e8959b2036bf202f925f6f49413837 state:gen3_probe_states_c4p2/slink_door.State=e1b3c3bb07e8265ca41fce099a1d229c3dc5094d6a1cf0e31fdecd1b0e6e45b4 state:gen3_probe_states_c4p2/slink_overworld.State=b9c9e73fd68338f9ef5fd7b6a8641bf6a8e4f9538c329b0a9589489b702c92cf state:gen3_probe_states_c4p2/slink_postbattle.State=52ec553e3f335b8188ac420049114d8610833e9c30d201416ee04d7465697d77 state:gen3_probe_states_c4p2/slink_prebattle.State=44aeee9da11bceb49e4b2680f137677d22e8b1878c2471b26d1ed523ebff6060 state:gen3_probe_states_c4p2/slink_preintro.State=ff8ef3277b21fba19c154284898bcdfc135efe35d26f12093f7a417604286e1b state:gen3_probe_states_c4p2/slink_script.State=83f9b7ee2d92ac79f135d38c9854ab8139df3e6656d483d82b5dbdac82361cd8
+--- attempt 1 of 1 ---
+LOAD 2026-09-24T20:00:06 cpu=86% emuhawk=9 python=11
+start_utc=2026-09-25T00:00:05Z tracked_clean_before=True
+E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/patch/build/bw_hashes_firered.json
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_probe_gen3_checkpoint.ini --lua=lua/tests/probe_gen3_checkpoint.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] probe_gen3_checkpoint: RESULT: PASS all checkpoint controls  (223s)
+--- patch\build\probe_gen3_checkpoint_result.txt ---
+E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\docs\gen3\probes\checkpoint_fr_clean_157e1ef7.txt
+exit=0 end_utc=2026-09-25T00:03:50Z tracked_clean_after=True classification=pass

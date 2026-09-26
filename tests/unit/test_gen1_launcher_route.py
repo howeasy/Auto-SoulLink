@@ -36,7 +36,7 @@ def _rom(title: str) -> bytes:
 
 
 def _run_launcher(script: str, system_id: str | None, rom: bytes,
-                  detected_game_id: str = "gen3_frlge", bizhawk: str = "2.11.1") -> list[str]:
+                  detected_game_id: str = "gen2_crystal", bizhawk: str = "2.11.1") -> list[str]:
     """dofile `lua/<script>` with stub BizHawk globals; return the paths it dofile'd.
 
     Only `gen1/entry.lua` and `gen2/entry.lua` are executed for real -- both are pure
@@ -116,10 +116,11 @@ def test_an_old_bizhawk_is_refused_before_the_gen1_client_starts():
 
 
 def test_a_non_gameboy_core_is_untouched_by_the_gen1_route():
-    """Gen 2-5 keep going through game_detect; the GBA header even says RED."""
-    loaded = _run_launcher("slink.lua", "GBA", _rom("POKEMON RED"))
-    assert _NEW_CLIENT not in loaded, f"a GBA ROM was routed to Gen 1: {loaded}"
-    assert "lua/clients/gen3_frlge_client.lua" in loaded, loaded
+    """A GBA core goes to the Gen 3 route (the GBA header even says RED): gen3/entry.lua is
+    stubbed away here, so that route refuses it by name -- which it could only reach if the
+    Gen 1 route had not returned."""
+    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge: admission failed"):
+        _run_launcher("slink.lua", "GBA", _rom("POKEMON RED"))
 
 
 def test_an_unrecognised_gameboy_title_is_refused_not_routed():
@@ -131,8 +132,11 @@ def test_an_unrecognised_gameboy_title_is_refused_not_routed():
 
 
 def test_a_failing_system_probe_does_not_route_to_gen1():
-    loaded = _run_launcher("slink.lua", None, _rom("POKEMON RED"))
-    assert _NEW_CLIENT not in loaded, loaded
+    """G5-ADMIT-HARDEN: a system BizHawk cannot identify at all is refused by name (the Gen 3
+    gate's fail-closed check runs for every route, not only GBA) rather than silently falling
+    through to game_detect -- see test_slink_route.py for the full fail-closed matrix."""
+    with pytest.raises(lupa.LuaError, match="could not determine the loaded system"):
+        _run_launcher("slink.lua", None, _rom("POKEMON RED"))
 
 
 def test_the_manual_gen1_launcher_loads_the_new_client():

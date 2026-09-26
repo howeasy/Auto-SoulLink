@@ -1,0 +1,30 @@
+
+========== scenario: reconnect_gen3 ==========
+[duo] reconnect_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=53563 http=53564 data=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3_wqdlhqpm
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] terminated a pid=25760; server retained
+[duo] launched a phase=same_save seed=False
+[duo] C-2 same OT accepted; alive link 263620B6:99DE0D8A / F6B6A64D:1C600D89; zero duplicate gameplay events
+[duo] terminated a pid=44748; server retained
+[duo] launched a phase=wrong_save seed=False
+[duo] C-1 wrong OT 476056969 rejected; links.json byte-identical, no gameplay events
+[duo] SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
+[duo] SAVE_WITNESS_SHA256 inst=b site=8cc7c849361761323454017884c7955b5817c786f3f74c6c7176d1af37a7e81b file=8cc7c849361761323454017884c7955b5817c786f3f74c6c7176d1af37a7e81b match=true saves=1 counter=3->4 rtc=normalized
+[duo] reconnect: A's batteries untouched across both relaunches (zero client writes on the wrong save); B saved its half
+[duo] PYDEC: PASS asserted scenario facts
+[duo] reconnect_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\reconnect_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\reconnect_gen3_b_gen3_new.jsonl
+
+========== summary ==========
+  reconnect_gen3: PASS (attempt 1 of 1)

@@ -1,0 +1,10 @@
+phase sb1 frame=34050 0x02025558
+phase items frame=34050 0,0,0,0,0,0
+phase key frame=34050 349,0,0,0,0,0
+phase balls frame=34050 0,0,0,0,0,0
+phase gBagPockets frame=34050 0 ptr=0x02025868 cap=42 off=0x310
+phase gBagPockets frame=34050 1 ptr=0x02025910 cap=30 off=0x3B8
+phase gBagPockets frame=34050 2 ptr=0x02025988 cap=13 off=0x430
+phase gBagPockets frame=34050 3 ptr=0x020259BC cap=58 off=0x464
+phase gBagPockets frame=34050 4 ptr=0x02025AA4 cap=43 off=0x54C
+RESULT: PASS dumped

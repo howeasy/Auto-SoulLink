@@ -1,0 +1,46 @@
+G4 item 6 route-differential, BRANCH side (card G4-LANE-1, owner ruling 10 / G4_request_draft.md §6 item 10)
+tree: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean (clean lane), detached at the branch head
+sha: f6d503f4d9956849baa55fb1969e20fadcc57778, tracked_clean=True before and after every run
+  (`git checkout --detach f6d503f4` updated index+worktree then died on the broken shared ref
+   refs/heads/codex/gen2-foundation (1) -- "fatal: bad object"; HEAD was moved with
+   `git update-ref --no-deref HEAD <sha>`, after which `git diff f6d503f4` was empty and status clean)
+gitignored inputs: the lane's own; added patch/build/gen1_{red,blue}.gb / gen1_yellow.gbc (clean dumps from the root
+  checkout, same bytes as the master side) so tests/unit/test_gen1_client.py runs instead of skipping.
+Machine: shared with a live Gen 2 session; load snapshot before each run. Paired back to back with the master run.
+
+CASE 1  Gen 1 command-ordering (3941198c's named case, verbatim, untracked scratch copy removed after)
+  $ python -m pytest tests/unit/test_zz_item6_gen1_ordering_scratch.py -q -p no:randomly
+  run 1  LOAD 07:58:38 cpu=90% emuhawk=0 python=13
+    FAILED ...[False]  assert ['memorialize', 'force_faint'] == ['force_faint', 'memorialize']
+    FAILED ...[True]   same
+    2 failed
+  run 2  LOAD 07:59:11 cpu=96% emuhawk=1 python=12   2 failed (same two, same assertion)
+  context: python -m pytest tests/unit/test_gen1_client.py -q -p no:randomly -> 159 passed
+    (the branch's copy of that file has 5 fewer tests than master's: 9 insertions, 107 deletions vs a20d4886)
+
+CASE 2  Gen 1 SFX town gate (48709f39 = 44bf25d6's patch is on this branch)
+  $ SLINK_LIVE=1 python -m pytest "tests/live/test_gen1_gates.py::test_gen1_sfx_matrix" -k town -q -p no:randomly -rs
+  run 1  LOAD 07:59:45 cpu=93% emuhawk=1 (Gen 2 gen2_evo_dev) python=12
+    red_patched/town  RESULT: PASS title=red map=0 (0 checks failed)
+    blue_patched/town RESULT: PASS title=blue map=0 (0 checks failed)
+    case A: [ok] the client turned play_sound 25 into request code 4 and the ROM played $8F on CHAN8 -- wrote_at=1 CHAN8=$8F
+    2 passed
+  run 2 (because master failed)  LOAD 08:00:32 cpu=94% emuhawk=1 python=12   red PASS, blue PASS, 2 passed
+  the gate rewrites tracked tests/fixtures/gen1/receipts/*; restored with `git checkout --` after each run
+
+CASE 3  legacy Gen 2 duo (tests/e2e/test_duo_gen2.py: faint, boxsync, memorialize)
+  run 1  $ SLINK_E2E=1 python -m pytest tests/e2e/test_duo_gen2.py -q -p no:randomly -rs
+         LOAD 08:01:35 cpu=82% emuhawk=2 (Gen 2) python=11
+         3 failed in 19.67s; every half: RESULT: FAIL (never booted into the overworld from the battery save)
+  run 2  $ python tools/e2e_duo.py --game gen2 --scenario {faint,boxsync,memorialize}
+         LOAD 08:02:37 cpu=90% / 08:02:44 cpu=85% / 08:02:51 cpu=94%, emuhawk=1 (Gen 2)
+         faint: FAIL (attempt 1 of 1)   boxsync: FAIL (attempt 1 of 1)   memorialize: FAIL (attempt 1 of 1)
+         a and b both: RESULT: FAIL (never booted into the overworld from the battery save), ~7 s per scenario
+
+VERDICT (claim = no regression vs master, not full correctness)
+  case                         master (a20d4886)       branch (f6d503f4)      delta
+  Gen 1 ordering [False,True]  FAIL x2 runs            FAIL x2 runs           none (identical assertion)
+  Gen 1 SFX town red/blue      FAIL x2 runs (case A)   PASS x2 runs           branch better (48709f39)
+  legacy Gen 2 duo x3          FAIL x2 runs (boot)     FAIL x2 runs (boot)    none (identical message)
+  Limit: the Gen 2 legacy duo dies at boot on both sides (~7 s), so it shows identical behaviour only up to that point;
+  it says nothing about faint/boxsync/memorialize semantics. The Gen 2 session's live duos use gen2_new.

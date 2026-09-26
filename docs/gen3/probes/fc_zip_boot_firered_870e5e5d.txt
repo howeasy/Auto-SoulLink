@@ -1,0 +1,37 @@
+# gen3_final_cut row=zip_boot_firered item=§9_item5 cut=870e5e5dd59bcfb26a17e50ea77103b0a7118cd1
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/gen3_final_cut.py zip-boot --zip 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/dist/SLink-player-g4-870e5e5d.zip' --lane 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2'   (cwd=E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T08:50:54 cpu=100% emuhawk=0 python=9
+start_utc=2026-09-25T12:50:53Z tracked_clean_before=True
+zip=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/dist/SLink-player-g4-870e5e5d.zip
+extract=C:\Users\howar\AppData\Local\Temp\slink_zipboot_b60f2urp\extract entry=C:\Users\howar\AppData\Local\Temp\slink_zipboot_b60f2urp\extract\SLink-player-g4-870e5e5d\lua\slink.lua
+fixture=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2\tests\fixtures\gen3\firered_party_town.sav
+server: python -m server.server --port 64847 --http-port 64848 (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2)
+[zip-boot] E:/Howard/Bizhawk/EmuHawk.exe --config=config.ini --lua=boot.lua fr.gba  (cwd=C:\Users\howar\AppData\Local\Temp\slink_zipboot_b60f2urp)
+--- C:\Users\howar\AppData\Local\Temp\slink_zipboot_b60f2urp\extract\SLink-player-g4-870e5e5d\slink_lua.log ---
+=== SLink Lua boot Fri Sep 25 08:51:27 2026 ===
+[SLink] Console tee -> C:/Users/howar/AppData/Local/Temp/slink_zipboot_b60f2urp/extract/SLink-player-g4-870e5e5d/lua/../slink_lua.log
+[SLink] TCP connecting to 127.0.0.1:64847 (non-blocking)…
+[SLink-gen3] gen3_frlg/firered (clean by hash) player a -> 127.0.0.1:64847 (rom 41cb23d8)
+[SLink] TCP connected to 127.0.0.1:64847
+[SLink-gen3] writes ENABLED
+
+--- server log ---
+2026-09-25 08:50:56,230 [INFO] Logging to C:\Users\howar\AppData\Local\Temp\slink_zipboot_b60f2urp\data\slink.log
+2026-09-25 08:50:56,231 [INFO] SLink TCP server listening on ('127.0.0.1', 64847)
+2026-09-25 08:50:56,241 [WARNING] Twitch bot: TWITCH_ACCESS_TOKEN not set — bot disabled
+2026-09-25 08:50:56,242 [INFO] SLink status page at http://127.0.0.1:64848/
+2026-09-25 08:51:27,198 [INFO] Client connected: ('127.0.0.1', 65387)
+2026-09-25 08:51:27,313 [INFO] [a] admission: admitted — no randomized-ROM contract for this run
+2026-09-25 08:51:27,313 [INFO] [a] hello rom=firered area='viridian_city' party=2
+2026-09-25 08:51:27,313 [INFO] [a] Identity locked: JONN (OT 25814665)
+2026-09-25 08:51:27,315 [INFO] Committed ROM type 'firered' for this run
+2026-09-25 08:51:27,315 [INFO] Committed trainer name 'JONN' for player a
+2026-09-25 08:51:28,621 [INFO] Client disconnected: ('127.0.0.1', 65387)
+
+RESULT: PASS the extracted zip booted firered on the new client
+exit=0 end_utc=2026-09-25T12:51:28Z tracked_clean_after=True classification=pass

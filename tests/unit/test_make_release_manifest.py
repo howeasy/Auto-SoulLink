@@ -24,13 +24,16 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import make_release  # noqa: E402
 
-# The two scripts a player actually loads in BizHawk's Lua Console. Rooting the closure at
+# The scripts a player actually loads in BizHawk's Lua Console. Rooting the closure at
 # `lua/gen1/run.lua` alone (as this test used to) misses anything only the launchers reach:
-# slink.lua's own game_detect dispatch and its lua/games/gen{2,4,5}_*.lua registry, and the
-# Gen 1 route's dofile of gen1/entry.lua for Entry.detect_title. Since U5, slink.lua's own
-# Gen 2 route dofiles gen2/entry.lua and gen2/run.lua the same way, so the closure follows
-# entry.lua's literal PACK_FILES/RECEIPT_FILES data paths too -- no separate root needed.
-_ENTRYPOINTS = ["lua/slink.lua", "lua/slink_gen1.lua"]
+# slink.lua's own game_detect dispatch and its lua/games/gen{4,5}_*.lua registry, the
+# Gen 1 route's dofile of gen1/entry.lua for Entry.detect_title, the Gen 2 route's dofile of
+# gen2/entry.lua and gen2/run.lua (U5; the closure follows entry.lua's literal
+# PACK_FILES/RECEIPT_FILES data paths too), and (P4) the Gen 3 route's dofile of
+# gen3/entry.lua for Entry.admit/header_code plus lua/slink_gen3.lua itself, which is now a
+# thin dofile("slink.lua") wrapper (docs/gen3/research/p4_gen1_contract_map.md §3.6) and so
+# reaches the same closure as slink.lua, plus gen3/run.lua once admitted.
+_ENTRYPOINTS = ["lua/slink.lua", "lua/slink_gen1.lua", "lua/slink_gen3.lua"]
 
 # Paths a Lua source names literally: "lua/gen1/reads.lua", '/data/games/.../x.json', or a
 # bare dir-relative literal like "gen1/entry.lua" (the `_dir .. "x"` idiom the launchers use,
@@ -136,6 +139,13 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         "lua/games/gen5_bw.lua",
         "data/games/gen4_hgsspt/gen4_hgsspt_areas.lua",
         "data/games/gen5_bw/gen5_bw_areas.lua",
+        # The Gen 3 route (slink.lua -> gen3/run.lua -> gen3/entry.lua) and its shared core
+        # (P4 C4-1/C4-4). gen3_rr ships even though a gen3_frlg cartridge never loads it at
+        # runtime, because Entry.admit/admission_table reads every pack's sites to admit any
+        # cartridge (entry.lua Entry.PACK_FILES names both packs literally).
+        "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/client.lua",
+        "lua/core/session.lua", "lua/core/identity.lua", "lua/core/deferred.lua",
+        "data/games/gen3_frlg/profile.json", "data/games/gen3_rr/engine_signals.json",
         # The Gen 2 (Crystal) production graph, cut over at U5.
         "lua/gen2/entry.lua", "lua/gen2/run.lua", "lua/gen2/client.lua",
         "lua/gen2_write_safety.lua",
@@ -159,6 +169,8 @@ def test_every_manifest_entry_names_a_file_that_exists():
     listed = (
         [f"lua/{f}" for f in make_release._LUA_ROOT]
         + [f"lua/gen1/{f}" for f in make_release._LUA_GEN1]
+        + [f"lua/gen3/{f}" for f in make_release._LUA_GEN3]
+        + [f"lua/core/{f}" for f in make_release._LUA_CORE]
         + [f"lua/gen2/{f}" for f in make_release._LUA_GEN2]
         + [f"lua/clients/{f}" for f in make_release._LUA_CLIENTS]
         + [f"lua/games/{f}" for f in make_release._LUA_GAMES]
@@ -213,6 +225,14 @@ def test_gb_companion_bundle_names_every_pure_overlay_ups():
         "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups"}
     for name in make_release._GB_COMPANION_UPS:
         assert "Yellow" not in name  # no Yellow build exists (no free WRAM for the mailbox)
+
+
+def test_the_retired_gen3_modules_are_not_shipped(archive):
+    """C5-6 (owner ruling 24): the old Gen 3 client is deleted and lua/games/gen3_frlge.lua stays
+    only as cited source material; neither may ship in the player ZIP."""
+    assert "lua/clients/gen3_frlge_client.lua" not in archive
+    assert "lua/games/gen3_frlge.lua" not in archive
+    assert "gen3_frlge.lua" not in make_release._LUA_GAMES
 
 
 def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_changes(tmp_path):

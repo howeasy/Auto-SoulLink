@@ -1,0 +1,163 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario rival_swap_real_gen3   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean sha=4202b5d84c59c04fed45a33bc390c40f590af661 tracked_clean=True runner=subagent G5-RR-RIVAL 2026-09-25
+# verdict: FAIL -- PRODUCT DEFECT, not a harness failure. The RR patch's W1 rival-swap window (gBattleMainFunc == BeginBattleIntroDummy 0x080123BD) was open frames 1012-1016 (1017 = BeginBattleIntro). The client announced trainer_battle_start at frame 1043 (its RR in_battle gate is gBattleMons[0].maxHP > 0, filled by the intro's GetMonsData at 1037-1042); the server's auto replace_rival_team (n=2, B's party) reached the client at 1052, OP_RIVAL_SWAP posted at 1053 and the patch refused it REASON_WINDOW_CLOSED -> rival_team_replaced{error=refresh_failed, reason=window_closed}. The rival kept its own team (gBattleMons[1].species 449). Every client write was native mailbox (16). Offline oracle over this receipt (after the RIVAL_BLOB hex-case fix): 6 problems -- ack error, ack species, ENEMY_COUNT 0 vs 2, slots 0/1, BATTLE_MON1.
+# fixture: A=tests/fixtures/gen3/rr_rival.sav (CACHED-NATIVE, sha256 4ba7200839f4...), B=tests/fixtures/gen3/rr_battle2_b.sav
+--- runner output ---
+
+========== scenario: rival_swap_real_gen3 ==========
+[duo] rival_swap_real_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4ba7200839f4eee4f21022e0df11f3ea959752e9ab8cc932469f1dd48c8cff6a b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=78d947a4ffd1174ed1b86ad7911613f54a63018ed3a74914e9d4ab9e7008b8f8 profile.json=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c source=4202b5d84c59c04fed45a33bc390c40f590af661
+[duo] server up: tcp=51676 http=51677 data=C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_real_gen3_2gozl4cx
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] RESULT_LINE a: RESULT: FAIL (rival_team_replaced error=refresh_failed reason=window_closed)
+[duo] RESULT_LINE b: RESULT: PASS (idle (B's party is the swap source))
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] rival_swap_real_gen3: a=FAIL b=PASS
+--- rival_swap_real_gen3 a result ---
+RIVAL_T 1052 cmd=1
+[client] [SLink-gen3] write native 0x0203FA00 +200 frame 1053
+[client] [SLink-gen3] write native 0x0203F810 +3 frame 1053
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 1053
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 1053
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 1053
+TX rival_team_replaced - {"error":"refresh_failed","event":"rival_team_replaced","player":"a","reason":"window_closed","seq":18,"species_ids":[],"trainer_id":331}
+RIVAL_T 1054 reply=1
+RX hud_show text=Rival Swap failed: refresh_failed
+RIVAL_T 1159 main=0x080134DD
+RIVAL_T 1163 main=0x08013569
+RIVAL_T 1181 main=0x0801359D
+RIVAL_T 1246 main=0x0801362D
+RIVAL_T 1367 main=0x080136E5
+RIVAL_T 1368 main=0x08013729
+RIVAL_T 1371 main=0x0801385D
+RIVAL_T 1501 main=0x08015C75
+RIVAL_T 1677 main=0x0801385D
+RIVAL_T 1683 main=0x08014041
+RIVAL_T 1684 comm0=1
+ENEMY_COUNT 0
+BATTLE_MON1 species=449 pid=00099D7D
+TRAINER_OPPONENT_A 331
+WRITES 16
+RESULT: FAIL (rival_team_replaced error=refresh_failed reason=window_closed)
+--- rival_swap_real_gen3 b result ---
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","par
+RX resolved_areas
+RX config
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 617
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 617
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=0 applied=0 attempt=1
+WRITES 11
+RESULT: PASS (idle (B's party is the swap source))
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_rival_swap_real_gen3_2gozl4cx
+
+========== summary ==========
+  rival_swap_real_gen3: FAIL (attempt 1 of 1)
+
+--- full A receipt (patch/build/e2e_rival_swap_real_gen3_a_result.txt) ---
+duo instance a scenario=rival_swap_real_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:51676 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:51676 (rom ea5352f8)
+client built by lua/gen3/run.lua: title=radical_red player=a -> 127.0.0.1:51676
+[client] [SLink] TCP connected to 127.0.0.1:51676
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,41)
+MYKEY 0 EBEF11DA:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:2BDDC8BF
+PARTY slot=1 key=F56D8C1D:2BDDC8BF species=1324 level=4 hp=18/18
+booted frame=545 map=map=809 at=(34,6) balls=9
+TX hello - {"area_id":"route_22","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route22","p
+RX resolved_areas
+RX config
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 618
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 618
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=0 applied=0 attempt=1
+RIVAL_PRE map=3.41 at=(34,6) var4054=1
+RIVAL_T 666 main=0x00000000
+RIVAL_T 666 comm0=0
+RIVAL_T 666 opp=0
+RIVAL_T 666 in_battle=false
+RIVAL_T 666 tbs=0
+RIVAL_T 666 cmd=0
+RIVAL_T 666 reply=0
+RIVAL_T 891 opp=331
+RIVAL_T 1012 main=0x080123BD
+RIVAL_T 1014 in_battle=true
+RIVAL_T 1015 comm0=1
+RIVAL_T 1016 comm0=15
+RIVAL_T 1017 main=0x080123C1
+RIVAL_T 1017 comm0=16
+RIVAL_T 1037 main=0x08012FAD
+RIVAL_T 1037 comm0=0
+RIVAL_T 1038 comm0=1
+RIVAL_T 1039 comm0=0
+RIVAL_T 1040 comm0=1
+RIVAL_T 1041 main=0x08013021
+RIVAL_T 1042 main=0x08013071
+RIVAL_T 1042 comm0=0
+RIVAL_T 1043 main=0x0801333D
+TX trainer_battle_start - {"battle_id":1,"event":"trainer_battle_start","player":"a","seq":16,"session":"00000139B08875E9","trainer_id":331}
+RIVAL_T 1050 tbs=1
+RIVAL_CMD trainer_id=331 n=2 session=00000139B08875E9 battle_id=1 source=auto frame=1052
+RIVAL_BLOB 0 da11efeb403722d4cee6d9d9d7dfe3ff6d000202bcbcffffffffff000000000015018b00e40000000039030001002b0047000000231e1923000000000000000000000000009d0502ffffff3f000000000000000006ff160016000c000c000f000e000b00
+RIVAL_BLOB 1 1d8c6df5403722d4bbd5d5d5d5d5d5d5d5d50202bcbcffffffffff00000000002c05000060000000003203002100e600000000002314000000000000000000000000000000650402ffffff3f000000000000000004ff1200120009000900080009000a00
+RX replace_rival_team
+RIVAL_T 1052 cmd=1
+[client] [SLink-gen3] write native 0x0203FA00 +200 frame 1053
+[client] [SLink-gen3] write native 0x0203F810 +3 frame 1053
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 1053
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 1053
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 1053
+TX rival_team_replaced - {"error":"refresh_failed","event":"rival_team_replaced","player":"a","reason":"window_closed","seq":18,"species_ids":[],"trainer_id":331}
+RIVAL_T 1054 reply=1
+RX hud_show text=Rival Swap failed: refresh_failed
+RIVAL_T 1159 main=0x080134DD
+RIVAL_T 1163 main=0x08013569
+RIVAL_T 1181 main=0x0801359D
+RIVAL_T 1246 main=0x0801362D
+RIVAL_T 1367 main=0x080136E5
+RIVAL_T 1368 main=0x08013729
+RIVAL_T 1371 main=0x0801385D
+RIVAL_T 1501 main=0x08015C75
+RIVAL_T 1677 main=0x0801385D
+RIVAL_T 1683 main=0x08014041
+RIVAL_T 1684 comm0=1
+ENEMY_COUNT 0
+BATTLE_MON1 species=449 pid=00099D7D
+TRAINER_OPPONENT_A 331
+WRITES 16
+RESULT: FAIL (rival_team_replaced error=refresh_failed reason=window_closed)

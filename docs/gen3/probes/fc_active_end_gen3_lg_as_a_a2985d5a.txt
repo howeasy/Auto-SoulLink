@@ -1,0 +1,48 @@
+# gen3_final_cut row=active_end_gen3_lg_as_a item=§5_item2b cut=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_lgfr --scenario active_end_gen3   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T10:11:34 cpu=82% emuhawk=2 python=5
+start_utc=2026-09-25T14:11:33Z tracked_clean_before=True
+
+========== scenario: active_end_gen3 ==========
+[duo] active_end_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae b=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 write_checkpoint.json=d36fe6badf2bf3864811741c6bb41011f0f3dbf81063d10e4e7ef08e473c9bf3 profile.json=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65 source=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+[duo] server up: tcp=61664 http=61665 data=C:\Users\howar\AppData\Local\Temp\slink_duo_active_end_gen3_fal_hoqm
+[duo] cleared 6 stale artifact(s) for active_end_gen3: e2e_active_end_gen3_a_1_witness.bin, e2e_active_end_gen3_a_attempt1_result.txt, e2e_active_end_gen3_a_result.txt, e2e_active_end_gen3_b_attempt1_result.txt, e2e_active_end_gen3_b_result.txt, e2e_active_end_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=BC73F9B0:1C600D89 b=2D356A90:99DE0D8A
+[duo] both players connected
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'force_faint', 'key': 'BC73F9B0:1C600D89'}
+[duo] RESULT_LINE a: RESULT: PASS (P+H: engine Perish KO in battle with no input (command))
+[duo] RESULT_LINE b: RESULT: PASS (idle (no save); the subject passed)
+[duo] SAVE_WITNESS_SHA256 inst=a site=98a43d5b1bc133d3178405df51b015c8ecd6781cd681b4351282f57480c023ea file=98a43d5b1bc133d3178405df51b015c8ecd6781cd681b4351282f57480c023ea match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] active_end: force_faint BC73F9B0:1C600D89 -> P+H commit -> hand-off -> Perish KO in battle with no input -> send-out -> RUN; saved HP 0
+[duo] MARKER a: READY_ACTIVE BC73F9B0:1C600D89 case=command
+[duo] MARKER a: RX force_faint key=BC73F9B0:1C600D89
+[duo] MARKER a: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 BC73F9B0:1C600D89
+[duo] MARKER a: ACTIVE_COMMIT BC73F9B0:1C600D89 frame=1532 writes=5 attempted=11 handoff=1 status3=0x20 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/0/0 why="active faint committed" case=command
+[duo] MARKER a: HANDOFF BC73F9B0:1C600D89 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER a: ACTIVE_KO BC73F9B0:1C600D89 frame=1996 in_battle=1 battle_hp=0 status3=0x0 pp=35/30/0/0 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=11 case=command
+[duo] MARKER a: ACTIVE_FAINT_SITE BC73F9B0:1C600D89 frame=1996 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER a: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER a: ACTIVE_OUTCOME BC73F9B0:1C600D89 outcome=4 sent_out=1 whiteout_tx=0
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_active_end_gen3_a_1_witness.bin bytes=131072 saves=1 frame=3756 counter=5
+[duo] MARKER a: FORCED_HP0 BC73F9B0:1C600D89 frame=1996 in_battle=1 battler=1
+[duo] MARKER b: WRITES 0
+[duo] PYDEC: PASS asserted scenario facts
+[duo] active_end_gen3: a=PASS b=PASS
+
+========== summary ==========
+  active_end_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-25T14:11:51Z tracked_clean_after=True classification=pass

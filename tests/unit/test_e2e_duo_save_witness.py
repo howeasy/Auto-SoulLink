@@ -199,7 +199,7 @@ def test_run_oracle_checks_the_witness_before_the_scenario_oracle(tmp_path, monk
 
 def test_run_oracle_skips_the_witness_for_other_generations(tmp_path, monkeypatch):
     run, results, _notes, _build = _stub(tmp_path, monkeypatch)
-    run.game = "gen3_rr"
+    run.game = "legacy"             # gen3_rr is the new battery row since ac448144
     order = []
     monkeypatch.setattr(run, "check_save_witness", lambda res: order.append("witness"))
     run.assert_stub_oracle = lambda res, **kw: order.append("oracle")

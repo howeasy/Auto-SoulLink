@@ -1,0 +1,25 @@
+run_dir E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_fixture_runs\rr_battle2_fixture
+PASSED True
+phase start frame=1 title=radical_red
+phase seeded frame=1 counter=3
+phase field frame=545 map=(3,19)
+phase party frame=545 [1] species=277 level=6 hp=22/22
+phase encounter frame=1409 #1 during step Up at (16,10)
+phase flee frame=1642 run attempt 1
+phase fled frame=1819 outcome=4 runs=1
+phase encounter-done frame=1914 #1 resolved at (16,10)
+phase mart-entered frame=2851 map=1283 at=(4,7)
+phase parcel-received frame=3234 VAR_MART=1
+phase lab-entered frame=5736 map=1027 at=(6,12)
+phase parcel-delivered frame=7337 VAR_MART=2 dex=1 balls=10
+phase back-at-grass-origin frame=8027 map=787 at=(12,37)
+phase throw-caught frame=9938 route2: throw 1 caught it
+phase caught frame=10002 [1] species=277 level=6 hp=22/22 [2] species=1324 level=4 hp=18/18
+phase save-menu frame=10005 counter=3
+phase save-dialog frame=10160 row=4
+phase saved frame=10223 counter=3->4
+phase slot-complete frame=11073 sectors=14/14
+RESULT: PASS counter 3 -> 4 at map=787 at=(12,37) party=[1] species=277 level=6 hp=22/22 [2] species=1324 level=4 hp=18/18 balls_after_catch=9
+
+flushed E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_fixture_runs\rr_battle2_fixture\gen3 slink RR.SaveRAM
+wrote rr_battle2.sav 4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac

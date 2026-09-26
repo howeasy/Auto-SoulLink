@@ -612,7 +612,7 @@ def key(mon: dict) -> str:
     """Gen 1 SLink identity: DDDD:OOOO:SS (raw DVs:OT ID:internal species).
 
     Matches docs/protocol.md:143-150 (published during CODEC-1) and the
-    task's explicit format. Other-gen context: gen3_frlge_client.lua:1086
+    task's explicit format. Other-gen context: archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:1086
     uses PID:OTID; that two-component representation is not Gen 1's contract.
     """
     return (f"{_uint(mon['dvs']['raw'], 16, 'dvs.raw'):04X}:"

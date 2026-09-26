@@ -1,0 +1,65 @@
+phase start frame=1 title=radical_red
+phase state frame=1623 loaded E:/Howard/Bizhawk/GBA/State/slink_pokecenter_full.State
+phase field frame=1653 map=5,4
+phase registered frame=1653 10 functions
+phase script frame=1683 wait30 frame=1683 party=3 pos=(7,8) map=5,4 facing=2
+phase script frame=1704 Up frame=1704 party=3 pos=(7,7) map=5,4 facing=2
+phase script frame=1725 Up frame=1725 party=3 pos=(7,6) map=5,4 facing=2
+phase script frame=1746 Up frame=1746 party=3 pos=(7,5) map=5,4 facing=2
+phase script frame=1767 Up frame=1767 party=3 pos=(7,4) map=5,4 facing=2
+phase script frame=1796 Right frame=1796 party=3 pos=(8,4) map=5,4 facing=4
+phase script frame=1817 Right frame=1817 party=3 pos=(9,4) map=5,4 facing=4
+phase script frame=1838 Right frame=1838 party=3 pos=(10,4) map=5,4 facing=4
+phase script frame=1859 Right frame=1859 party=3 pos=(11,4) map=5,4 facing=4
+phase script frame=1888 Up frame=1888 party=3 pos=(11,3) map=5,4 facing=2
+phase script frame=1909 Up frame=1909 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=1977 Up frame=1977 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=1997 wait20 frame=1997 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2013 A frame=2013 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2133 wait120 frame=2133 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2149 A frame=2149 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2269 wait120 frame=2269 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2285 A frame=2285 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2405 wait120 frame=2405 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2421 A frame=2421 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2541 wait120 frame=2541 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2557 A frame=2557 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2737 wait180 frame=2737 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2737 shot frame=2737 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2805 Down frame=2805 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2825 wait20 frame=2825 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2841 A frame=2841 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3021 wait180 frame=3021 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3021 shot frame=3021 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3089 Down frame=3089 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3109 wait20 frame=3109 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3109 shot frame=3109 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3125 A frame=3125 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3245 wait120 frame=3245 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3245 shot frame=3245 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3261 A frame=3261 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3381 wait120 frame=3381 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3381 shot frame=3381 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3397 A frame=3397 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3637 wait240 frame=3637 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3637 shot frame=3637 party=3 pos=(11,2) map=5,4 facing=2
+phase walked frame=5253 map=5,4 in_battle=0
+phase count frame=5253 CreatePCMenu addr=0x0809D040 hits=1 first_cb=0x0809D040 first_frame=2140
+phase count frame=5253 ShowPokemonStorageSystemPC addr=0x0808C6A8 hits=1 first_cb=0x0808C6A8 first_frame=2542
+phase count frame=5253 Task_PCMainMenu addr=0x0808C39C hits=294 first_cb=0x0808C39C first_frame=2542
+phase count frame=5253 EnterPokeStorage addr=0x0808CDE4 hits=1 first_cb=0x0808CDE4 first_frame=2847
+phase count frame=5253 Task_InitPokeStorage addr=0x0808D020 hits=15 first_cb=0x0808D020 first_frame=2848
+phase count frame=5253 CB2_PokeStorage addr=0x0808CDC4 hits=2386 first_cb=0x0808CDC4 first_frame=2848
+phase count frame=5253 Task_DepositMenu addr=0x0808DD88 hits=135 first_cb=0x0808DD88 first_frame=3246
+phase count frame=5253 TryStorePartyMonInBox addr=0x080930E4 hits=1 first_cb=0x080930E4 first_frame=3381
+phase silent frame=5253 CB2_ReturnToPokeStorage,Task_WithdrawMon
+RESULT: PASS 8 of 10 hooked functions fired over 3600 frames
+
+# Coordinator note (2026-09-21): RR companion, slink_pokecenter_full.State (3 mons), walk (7,8)->(11,2) via
+# gba_map PATHS with position-fed direction holds, then the PC flow observed by exec hooks:
+#   A (interact) -> "B booted up the PC." A -> "Someone's PC / B's PC / Log Off" A (row 0)
+#   -> "Accessed Someone's PC." A -> "Pokemon Storage System opened." A -> storage menu
+#   (Task_PCMainMenu) -> Down, A = DEPOSIT (Task_DepositMenu) -> Down (slot), A -> "Store" A
+#   -> TryStorePartyMonInBox (1 hit). The party COUNT byte (0x02024029) still read 3 while
+#   the storage screen was up; the count is recomputed on storage exit, so a driver must
+#   leave the PC (B/See Ya) before asserting party=2. Census list: census_addrs_pc.txt.

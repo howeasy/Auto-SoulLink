@@ -1,0 +1,38 @@
+
+========== scenario: active_end_gen3 ==========
+[duo] active_end_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ebe30adf56a59e75e92c617d8e9ceecf90e91a3de8cdbc6e718e5a1861813ffd profile.json=19c9056d3011a45322564708b5e69bb26038d8a67d809d22d964cb76eaceefcc source=b21a34315cda55517ae48e2005f845ed19005bf4
+[duo] server up: tcp=59201 http=59202 data=C:\Users\howar\AppData\Local\Temp\slink_duo_active_end_gen3_cjpll8z3
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'force_faint', 'key': '2D356A90:99DE0D8A'}
+[duo] RESULT_LINE a: RESULT: PASS (active_end keyed faint and normal save (PYDEC required))
+[duo] RESULT_LINE b: RESULT: PASS (idle (no save); battle-window A passed)
+[duo] SAVE_WITNESS_SHA256 inst=a site=39ba25f0068a8f21f8e43a117dada60f7afb0764652765bfe2093bdb426afa2d file=39ba25f0068a8f21f8e43a117dada60f7afb0764652765bfe2093bdb426afa2d match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] BATTLE_WINDOW_PYDEC case=active_end key=2D356A90:99DE0D8A slot=0 hp=0 samples=719
+[duo] MARKER a: READY_BATTLE_WINDOW active_end 2D356A90:99DE0D8A slot=0 frame=1923 trainer=0 samples=1 active_hex=07000E0012000E000C00130021002700910000006BB93A3A0606060606060606430B0B04231E1E001B00095D1B000000CDCBCFC3CCCEC6BFFF000000C4C9C8C8FFFFFFFFAC010000906A352D00000000000000008A0DDE99 in_battle=1 target_hp=27 trainer_id=0 type=0x4 R15=0x1C CPSR=0x60000092 permits=true/false battle_main_func=0x8014041 battle_comm_0=0x1 battle_exec_flags_input=0x1 battle_input_controller=0x802E439 battle_not_link=0x4 battle_engine_loaded=0x1B battle_outcome_open=0x0
+[duo] MARKER a: RX force_faint key=2D356A90:99DE0D8A
+[duo] MARKER a: BATTLE_WINDOW_HELD active_end 2D356A90:99DE0D8A frames=120 attempted=0
+[duo] MARKER a: BATTLE_WINDOW_EXIT_INPUT active_end 2D356A90:99DE0D8A
+[duo] MARKER a: BATTLE_WINDOW_EXIT active_end 2D356A90:99DE0D8A frame=2607 outcome=4 samples=685 active_hex=07000E0012000E000C00130021002700910000006BB93A3A0606060606060606430B0B04231E1E001B00095D1B000000CDCBCFC3CCCEC6BFFF000000C4C9C8C8FFFFFFFFAC010000906A352D00000000000000008A0DDE99 in_battle=0 target_hp=27 trainer_id=0 type=0x4 R15=0x80008AC CPSR=0x6000003F permits=false/false battle_main_func=0x8015B59 battle_comm_0=0x4 battle_exec_flags_input=0x0 battle_input_controller=0x802E3B5 battle_not_link=0x4 battle_engine_loaded=0x1B battle_outcome_open=0x4
+[duo] MARKER a: BATTLE_WINDOW_LANDED active_end 2D356A90:99DE0D8A slot=0 frame=2642 reason=overworld address=0x020242DA len=2 hp=0 samples=720 active_hex=07000E0012000E000C00130021002700910000006BB93A3A0606060606060606430B0B04231E1E001B00095D1B000000CDCBCFC3CCCEC6BFFF000000C4C9C8C8FFFFFFFFAC010000906A352D00000000000000008A0DDE99 in_battle=0 target_hp=0 trainer_id=0 type=0x4 R15=0x80008AE CPSR=0x6000003F permits=false/true battle_main_func=0x8015B59 battle_comm_0=0x4 battle_exec_flags_input=0x0 battle_input_controller=0x802E3B5 battle_not_link=0x4 battle_engine_loaded=0x1B battle_outcome_open=0x4
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_active_end_gen3_a_1_witness.bin bytes=131072 saves=1 frame=3624 counter=8
+[duo] MARKER a: BATTLE_WINDOW_SAVED active_end 2D356A90:99DE0D8A slot=0 hp=0
+[duo] MARKER a: RESULT: PASS (active_end keyed faint and normal save (PYDEC required))
+[duo] MARKER b: WRITES 0
+[duo] MARKER b: RESULT: PASS (idle (no save); battle-window A passed)
+[duo] PYDEC: PASS asserted scenario facts
+[duo] active_end_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\active_end_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\active_end_gen3_b_gen3_new.jsonl
+
+========== summary ==========
+  active_end_gen3: PASS (attempt 1 of 1)

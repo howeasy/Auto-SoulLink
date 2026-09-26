@@ -1,0 +1,91 @@
+G4-LANE-2 P+H live row: linked_faint_active_whiteout_gen3, FR as A (gen3_frlg), cut b0483efe
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean (detached; HEAD moved with update-ref because the shared
+  broken ref refs/heads/codex/gen2-foundation (1) makes checkout die after updating the tree); tracked_clean before/after below
+ROMs: FR US 1.0 sha1 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc, LG US 1.0 sha1 574fa542ffebb14be69902d1d36f1ec0a4afd71e (staged in patch/build)
+machine: shared with a live Gen 2 session; LOAD line = snapshot taken just before launch (local time; start/end are UTC)
+note: FAIL (INSTRUMENT, carrier; not re-run unchanged). Side B (LG, lone linked mon after the ruling-18 PC deposit) had an incidental wild battle at Route 1 (12,38) while walking back to the grass (ctx.walk_pc_to_grass -> play.follow route1_south_to_grass_spot). The SP binding FOUGHT it, lost, and whited out to map 1284 (7,4). playlib raised error({whiteout=true}), nothing in scenario enter() caught it, and duo_gen3_main.lua:1302 printed it as 'scenario error: table: ...'. The product behaved correctly: B's faint propagated, A got force_faint + memorialize + game_over, and B dropped its last-mon memorialize. The failure depends on RNG (LG-as-A passed). Sent to W2; fixed in 28e48c9c (the one-mon walks flee incidental battles). The re-run is at that cut; see ph_linked_faint_active_whiteout_gen3_fr_as_a_28e48c9c.txt
+
+--- run (verbatim) ---
+=== linked_faint_active_whiteout_gen3 --game gen3_frlg  lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean sha=b0483efe38de8b9d0afa61088c4eac9229dfb4ab tracked_dirty_before=0
+LOAD 2026-09-24T08:09:12 cpu=90% emuhawk=2 python=11
+  emuhawk pid=28440 E:/Howard/Bizhawk\EmuHawk.exe --lua=patch/build/gen2_evo_dev.lua --config=patch/build/gate_cfg_gen2_evo_dev_crystal.ini .cache/gen2-build/pokecrystal/pokecrystal.gbc
+  emuhawk pid=28232 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_phone_gate.lua --config=patch/build/gate_cfg_gen2_phone_gate_gold_overlay.ini patch/build/gen2_gold_overlay.gbc
+start_utc=2026-09-24T12:09:12Z
+$ python tools/e2e_duo.py --game gen3_frlg --scenario linked_faint_active_whiteout_gen3
+
+========== scenario: linked_faint_active_whiteout_gen3 ==========
+[duo] linked_faint_active_whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae write_checkpoint.json=e96a7ba14f6f3a061d1de7302f7f6b9d3a5db6641c9d418811849f882fae0329 profile.json=da819ece2088bb35a2ae8f4942d2e987fc528ceb1595419a3b1efca3dda39668 source=b0483efe38de8b9d0afa61088c4eac9229dfb4ab
+[duo] server up: tcp=55539 http=55540 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_ajxwnk7i
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 2D356A90:99DE0D8A <-> BC73F9B0:1C600D89
+[duo] go-file written for b
+[duo] RESULT_LINE a: (none)
+[duo] RESULT_LINE b: RESULT: FAIL (scenario error: table: 000001E2CE449200)
+[duo] PYDEC: FAIL client RESULT before b: READY_ACTIVE (linked mon active at the action menu)
+[duo] linked_faint_active_whiteout_gen3: a client finished before 'b: READY_ACTIVE (linked mon active at the action menu)' (a: no RESULT; b: RESULT: FAIL (scenario error: table: 000001E2CE449200))
+--- linked_faint_active_whiteout_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 3182
+RX msgbox text=Route 1 is a dead zone!
+RX force_faint key=2D356A90:99DE0D8A
+RX play_sound
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 11402
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 11402
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 11402
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 11402
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 11402
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 11402
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 11402
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 11402
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 11402
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 11402
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 11402
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 11402
+RX memorialize key=2D356A90:99DE0D8A
+RX game_over
+[client] [SLink-gen3] write overworld 0x020242DA +2 frame 11402
+FORCED_HP0 2D356A90:99DE0D8A frame=11402 in_battle=0 battler=0
+[client] [SLink-gen3] write overworld 0x02030D4C +80 frame 11403
+[client] [SLink-gen3] write overworld 0x02024284 +100 frame 11403
+[client] [SLink-gen3] write overworld 0x020242E8 +100 frame 11403
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 11403
+TX memorialize_done 2D356A90:99DE0D8A {"box":13,"event":"memorialize_done","key":"2D356A90:99DE0D8A","player":"a","seq":367}
+--- linked_faint_active_whiteout_gen3 b result (last 25 lines) ---
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 21s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 22s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 22s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 23s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 23s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 24s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 24s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 25s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 25s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 26s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 26s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 27s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 27s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 28s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 28s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 29s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 29s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 30s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 30s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 31s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 31s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-HUD] message exceeds 3x39, ellipsized: SLink held: memorialize x1 32s (...nk/.claude/worktrees/gen3-lane-clean/lua/gen3/safety.lua:105: forbidden state: field_controls_locked)
+[client] [SLink-gen3] memorialize dropped: last mon after game over BC73F9B0:1C600D89
+[client] [gen3] phase whiteout frame=15192 battle displaced the player from map 787 (12,38) to the heal map 1284 at (7,4)
+RESULT: FAIL (scenario error: table: 000001E2CE449200)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_ajxwnk7i
+
+========== summary ==========
+  linked_faint_active_whiteout_gen3: FAIL (attempt 1 of 1)
+exit=1
+end_utc=2026-09-24T12:10:30Z
+tracked_dirty_after=0

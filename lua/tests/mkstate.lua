@@ -19,13 +19,20 @@
 --   battle   STANDING IN TALL GRASS
 --            -> slink_prebattle, slink_battle, slink_actionmenu, slink_movemenu
 -- Writes patch/build/mkstate_result.txt ending in `RESULT: PASS|FAIL`, then exits.
+--
+-- Companion access goes through the NEW Gen 3 layer (card C5-6-MKSTATE): lua/tests/gen3_gatelib.lua
+-- builds lua/gen3/native.lua over the real writes/safety window, and the PC trade-NPC flag is set by
+-- native:config({pc_trade_npc}) exactly as test_live_pcnpc.lua and the client do. No archive/gen3-old-client:lua/mailbox.lua.
 
 local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — run via: python tools/mkstates.py")
 local OUT_STATE = assert(os.getenv("SLINK_STATE_OUT"), "SLINK_STATE_OUT unset")
 local KIND = os.getenv("SLINK_STATE_KIND") or "overworld"
 local OUT = WT .. "/patch/build/mkstate_result.txt"
-local MB  = dofile(WT .. "/lua/mailbox.lua")
+-- Opened eagerly for its profile.native addresses and raw beacon; t.boot (native.lua) only runs
+-- inside the Pokémon Center step. Its log/verdict are routed into this file's own.
+local GL = dofile(WT .. "/lua/tests/gen3_gatelib.lua").open("mkstate")
+local P = GL.P
 
 -- RR / CFRU fixed addresses (NO_ENCRYPT; the same set the duo scenarios use).
 local PARTY_COUNT   = 0x02024029
@@ -36,7 +43,7 @@ local BM_MAXHP      = 0x2C
 local CTRL          = 0x03004FE0   -- gBattlerControllerFuncs[0]
 local ACTION_MENU   = 0x0802E439   -- action-select controller (same constant the duo uses)
 -- The authoritative "player is standing in the walkable field" signal, the same one
--- peer_ghost_npc.lua gates on. A party-count check is NOT enough: RR loads the save into RAM
+-- archive/gen3-old-client:lua/peer_ghost_npc.lua gates on. A party-count check is NOT enough: RR loads the save into RAM
 -- during the intro so the main menu can show CONTINUE stats, so gPlayerParty is already
 -- populated while the GAME FREAK splash is still on screen — an earlier version of this script
 -- snapshotted the splash because of exactly that. callback2 only becomes CB2_Overworld once
@@ -52,18 +59,26 @@ local function finish(ok, msg)
     if f then f:close() end
     if client.exitCode then pcall(client.exitCode, ok and 0 or 1) end
     client.exit()          -- no argument: client.exit(n) does NOT exit in 2.11.1
+    error("mkstate-finished", 0)   -- client.exit() is async; stop here for real (gen3_gatelib)
 end
+GL.log = log
+GL.finish = function(extra) finish(GL.failures == 0, extra) end
 
 local function party_count() return memory.read_u8(PARTY_COUNT) end
 local function slot0_pid()   return memory.read_u32_le(PARTY_BASE) end
 local function in_battle()   return memory.read_u32_le(BATTLE_TYPE) ~= 0 end
 local function fighting()    return memory.read_u16_le(gBattleMons + BM_MAXHP) > 0 end
 local function at_menu()     return memory.read_u32_le(CTRL) == ACTION_MENU end
-local function poe()         return MB.player_oe() end
--- The CURRENT map, from the SaveBlock1 pointer chain — the same source memory_gba.getCurrentMap
--- uses. The object-event's own map fields (+0x0A/+0x09) LAG a warp: mid-door they still report
+-- The player is not always object-event slot 0: its slot is gPlayerAvatar.objectEventId (+0x05).
+local function poe()
+    local id = memory.read_u8(P.GPLAYER_AVATAR + 0x05)
+    if id >= 16 then id = 0 end
+    return P.OBJECT_EVENTS_BASE + id * 0x24
+end
+-- The CURRENT map, from the SaveBlock1 pointer chain — the same source the old client's
+-- getCurrentMap used (archive/gen3-old-client:lua/memory_gba.lua). The object-event's own map fields (+0x0A/+0x09) LAG a warp: mid-door they still report
 -- the map you came from, so a door-transition capture keyed off them lands inside the building.
-local SB1_PTR = 0x03003840          -- radical_red profile (lua/games/gen3_frlge.lua)
+local SB1_PTR = GL.ram.SB1_PTR_ADDR  -- 0x03003840, data/games/gen3_rr/profile.json
 local function _sb1()
     local p = memory.read_u32_le(SB1_PTR)
     if p < 0x02000000 or p >= 0x02040000 then return nil end
@@ -151,6 +166,7 @@ local function hold(btn, n, stop)
 end
 
 client.speedmode(6399)   -- max; the intro alone is ~500 frames of logos and menus
+pcall(function() client.invisibleemulation(os.getenv("SLINK_EMU_VISIBLE") ~= "1") end)   -- W23 EMU-SPEED
 log("kind=" .. KIND .. " out=" .. OUT_STATE)
 
 -- ── kind = "battle" ─────────────────────────────────────────────────────────────────────────
@@ -342,13 +358,22 @@ if KIND == "town" then
         mapg(), mapn(), tx(), ty()))
     shot("pokecenter")
 
-    if MB.present() then
-        MB.set_pc_npc(true)
+    if GL.present() then
+        GL.boot({ beacon = false })        -- admit + build native.lua; no state load, beacon is up
+        local function pc_npc(on)
+            local r = GL.wait(GL.watch(GL.native:config({ pc_trade_npc = on })), 120)
+            if not r or r.why then
+                finish(false, string.format("native:config pc_trade_npc=%s not applied: %s (%s)",
+                    tostring(on), GL.receipt_str(r), tostring(GL.last_service)))
+            end
+        end
+        local OE = P.OBJECT_EVENTS_BASE
+        pc_npc(true)
         frames(120)
         local npc = 16
         for i = 0, 15 do
-            if (memory.read_u8(0x02036E38 + i*0x24) & 1) == 1
-               and memory.read_u8(0x02036E38 + i*0x24 + 0x08) == 0xF1 then npc = i; break end
+            if (memory.read_u8(OE + i*0x24) & 1) == 1
+               and memory.read_u8(OE + i*0x24 + 0x08) == 0xF1 then npc = i; break end
         end
         if npc >= 16 then
             shot("stuck")
@@ -359,9 +384,9 @@ if KIND == "town" then
         end
         log(string.format("patch spawned the trade NPC at oe=%d tile=(%d,%d) — map (%d,%d) is a "
             .. "recognised Pokémon Center", npc,
-            memory.read_s16_le(0x02036E38 + npc*0x24 + 0x10),
-            memory.read_s16_le(0x02036E38 + npc*0x24 + 0x12), mapg(), mapn()))
-        MB.set_pc_npc(false)
+            memory.read_s16_le(OE + npc*0x24 + 0x10),
+            memory.read_s16_le(OE + npc*0x24 + 0x12), mapg(), mapn()))
+        pc_npc(false)
         frames(60)
     end
 

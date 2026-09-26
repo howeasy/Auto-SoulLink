@@ -271,7 +271,7 @@ function M.disconnect()
     _drop_until_newline = false
     -- An event queued the frame the socket died must not outlive the connection: every
     -- client re-sends hello first thing on (re)connect (e.g. lua/gen1/client.lua frame_end,
-    -- lua/clients/gen3_frlge_client.lua), and server.py refuses any event that arrives
+    -- archive/gen3-old-client:lua/clients/gen3_frlge_client.lua), and server.py refuses any event that arrives
     -- before hello on a connection (dropped with a `noop` + WARNING) -- so a queued event
     -- that survived here would just get thrown away one hop later, out of order and with
     -- log noise. A fresh connection starts clean instead.

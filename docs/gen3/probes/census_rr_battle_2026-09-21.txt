@@ -1,0 +1,7 @@
+# RR battle-start exec census, 2026-09-21 (lua/tests/probe_gen3_battle_census.lua, slink_prebattle.State, explode entry inputs, 1800 frames)
+## run A: 16 battle-path function ENTRIES from pokefirered.sym (patch/build/census_addrs_small.txt)
+BattleMainCB1 0x080123E4 hits=1348 from frame 1010; BattleMainCB2 0x08011100 hits=1347; ReturnFromBattleToOverworld 0x08015B58 hits=1 at frame 2484; CB2_Overworld 0x080565B4 hits=313 from frame 2497; silent: CB2_InitBattle, CB2_InitBattleInternal, CB2_HandleStartBattle, BattleStartClearSetData, Task_BattleStart, CreateBattleStartTask, DoTrainerBattle, StartTrainerBattle, ScrCmd_trainerbattle, BattleSetup_ConfigureTrainerBattle, BattleTransition_Start, CB2_EndTrainerBattle (the state is captured AFTER battle init; the battle ends by A-mash and returns to the field)
+## run B: the 19 PINNED RR companion hook addresses (address+capture_offset, patch/build/census_addrs_pins.txt)
+frame_control 0x0800051A hits=1667; battle_end 0x08015BD0 hits=1 at frame 2484 (== the ReturnFromBattleToOverworld entry frame of run A); all other 17 silent (no faint, no capture, no PC/save/trade/map activity in this run)
+## earlier: slink_overworld.State + the same inputs never entered a battle (CB2_Overworld 1800/1800, in_battle 0); probe_gen3_exec_addr: 900/900 at 0x08006B5C and 0x08077578
+## conclusion: RR pins reachable AND delivering; the six RR duos never reach the semantic sites (explode exits at the outcome byte before 0x08015BD0; faint/boxsync/trade are commanded or native paths) -> RR needs natural-play sources, not re-pins

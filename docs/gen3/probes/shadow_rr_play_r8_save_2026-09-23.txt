@@ -1,0 +1,13 @@
+# RR save leg re-run (SLINK_GEN3_PLAY_FROM=save), save helper 30d13c63, slink_RR.gba, coordinator lane
+phase start frame=1 title=radical_red
+phase resume frame=1 from=save
+phase shadow frame=1 observer started admitted_by=hash
+phase leg-state frame=970 save <- E:/Howard/Bizhawk/GBA/State/slink_overworld.State
+phase leg-start frame=970 save
+phase save-menu frame=970 counter=4
+phase save-dialog frame=1925 attempt=6
+phase saved frame=1972 counter=4->5
+phase slot-complete frame=2764 sectors=14/14
+phase save-complete frame=2861 fixture counter 4 -> 5
+phase leg-done frame=2861 save
+RESULT: PASS reached: save | open (skipped): 

@@ -1,0 +1,18 @@
+[probe] variant=radical_red game_id=gen3_frlge
+[probe] †UNVERIFIED-source: RR gMain.callback2 @ 0x030030F4 per lua/peer_ghost_npc.lua:62 (no profile field)
+[probe] †UNVERIFIED-source: gMain.callback1 offset assumed +0x00 (CB1_ADDR = CB2_ADDR-4); not pinned locally
+[probe] armed — sampling frame-end CPU/state census for 1800 frames
+[probe] emu.getregisters() keys: CPSR,R0,R1,R10,R11,R12,R13,R14,R15,R2,R3,R4,R5,R6,R7,R8,R9,SPSR
+---- [probe] interim at frame 600 (bios_seen=true) ----
+  overworld-idle: 600 frames
+    R15=0x000001C4 x600
+    CPSR mode/T=31/0 x600
+    tasks={0806E811,0806E83D,08079E0D} x600
+    (1 distinct task-function sets total)
+---- [probe] final at frame 1800 (bios_seen=true) ----
+  overworld-idle: 1800 frames
+    R15=0x000001C4 x1800
+    CPSR mode/T=31/0 x1800
+    tasks={0806E811,0806E83D,08079E0D} x1800
+    (1 distinct task-function sets total)
+RESULT: PASS

@@ -1,0 +1,4 @@
+# Old-client wire logs with vs without the observer, RR explode duo, 2026-09-21 (both duos PASS)
+instance a: 264 vs 263 records; differing kinds: tick 26 vs 25, ghost_pos 260 vs 259 (both periodic samples); every non-periodic event identical in count and order
+instance b: tick 44 vs 42 (periodic); all other events identical (same sequence)
+reading: 0 semantic wire deltas; the observer changes only periodic sample counts by 1-2 over a ~60 s run (timing chatter). Captures: patch/build/shadow_wire/wire_{off,on}_explode_{a,b}.jsonl

@@ -1,0 +1,8 @@
+[
+  {
+    "kind": "faint",
+    "key": "EBEF11DA:2BDDC8BF",
+    "reason": "A capture t=262 (patch/build/shadow_wire/faint_a_old_client.shadowrun.jsonl:262) reports the direct scenario HP poke at lua/tests/duo/scenario_faint.lua:18-21. It does not execute Cmd_tryfaintmon's player-counter capture point (docs/gen3_engine_sites.md:118-136). This capture is not the exact hash-whitelisted fixture in tools/gen3_shadow_diff.py:40-45, so the reducer retains this faint as a delta rather than commanded_write. B's force_faint is separately classified by tools/gen3_shadow_diff.py:112-116,133-138.",
+    "owner": "P3 explained (commanded/native path)"
+  }
+]

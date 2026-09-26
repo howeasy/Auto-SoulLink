@@ -1,0 +1,5 @@
+STATUS frame=1 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=1540 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=493
+STATUS frame=2140 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil frame_control=824
+STATUS frame=2740 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil frame_control=824
+SHADOW t=1 frame=2805 kind=save key= address=135111586 callback_address=135111586 cpsr=536870975 mode=thumb raw_r15=135111588 sp=50363868 thumb=1

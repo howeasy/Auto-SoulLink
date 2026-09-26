@@ -1,15 +1,14 @@
-"""server/data/items/gen3_vanilla.py — Vanilla Gen 3 (FRLG/Emerald) item name table."""
+"""server/data/items/gen3_vanilla.py — Vanilla Gen 3 (FRLG) item name table.
+
+Ids 0-374 per pret pokefirered c75f3523 (include/constants/items.h, src/data/items.json;
+data/gen3_sources.lock.json). 52-62 are unused placeholders in Gen 3 and nothing >= 377 exists;
+Emerald-only 375/376 belong to a title overlay (tests/unit/test_gen3_vanilla_items.py)."""
 
 
 ITEM_NAMES: dict[int, str] = {
     1:"Master Ball",   2:"Ultra Ball",    3:"Great Ball",    4:"Poké Ball",
     5:"Safari Ball",   6:"Net Ball",      7:"Dive Ball",     8:"Nest Ball",
     9:"Repeat Ball",   10:"Timer Ball",   11:"Luxury Ball",  12:"Premier Ball",
-    52:"Park Ball",    53:"Cherish Ball",
-    60:"Dusk Ball",    61:"Heal Ball",    62:"Quick Ball",
-    622:"Fast Ball",   623:"Level Ball",  624:"Lure Ball",   625:"Heavy Ball",
-    626:"Love Ball",   627:"Friend Ball", 628:"Moon Ball",   629:"Sport Ball",
-    630:"Beast Ball",  631:"Dream Ball",
     13:"Potion",        14:"Antidote",     15:"Burn Heal",    16:"Ice Heal",
     17:"Awakening",     18:"Parlyz Heal",  19:"Full Restore", 20:"Max Potion",
     21:"Hyper Potion",  22:"Super Potion", 23:"Full Heal",    24:"Revive",
@@ -71,4 +70,19 @@ ITEM_NAMES: dict[int, str] = {
     334:"TM46", 335:"TM47", 336:"TM48", 337:"TM49", 338:"TM50",
     339:"HM01", 340:"HM02", 341:"HM03", 342:"HM04",
     343:"HM05", 344:"HM06", 345:"HM07", 346:"HM08",
+    # key items (pret items.json english names, display-cased)
+    259:"Mach Bike", 260:"Coin Case", 261:"Itemfinder", 262:"Old Rod",
+    263:"Good Rod", 264:"Super Rod", 265:"S.S. Ticket", 266:"Contest Pass",
+    268:"Wailmer Pail", 269:"Devon Goods", 270:"Soot Sack", 271:"Basement Key",
+    272:"Acro Bike", 273:"Pokéblock Case", 274:"Letter", 275:"Eon Ticket",
+    276:"Red Orb", 277:"Blue Orb", 278:"Scanner", 279:"Go-Goggles",
+    280:"Meteorite", 281:"Rm. 1 Key", 282:"Rm. 2 Key", 283:"Rm. 4 Key",
+    284:"Rm. 6 Key", 285:"Storage Key", 286:"Root Fossil", 287:"Claw Fossil",
+    288:"Devon Scope", 349:"Oak's Parcel", 350:"Poké Flute", 351:"Secret Key",
+    352:"Bike Voucher", 353:"Gold Teeth", 354:"Old Amber", 355:"Card Key",
+    356:"Lift Key", 357:"Helix Fossil", 358:"Dome Fossil", 359:"Silph Scope",
+    360:"Bicycle", 361:"Town Map", 362:"VS Seeker", 363:"Fame Checker",
+    364:"TM Case", 365:"Berry Pouch", 366:"Teachy TV", 367:"Tri-Pass",
+    368:"Rainbow Pass", 369:"Tea", 370:"MysticTicket", 371:"AuroraTicket",
+    372:"Powder Jar", 373:"Ruby", 374:"Sapphire",
 }

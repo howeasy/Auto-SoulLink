@@ -1,0 +1,15 @@
+# First shadow observation, RR companion, explode duo, 2026-09-21 (shadow_run at this commit)
+## instance a: 393 SHADOW lines
+STATUS frame=1003 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=1004 kind=frame_control key= address=134219034 callback_address=134219034 cpsr=1610612799 mode=thumb raw_r15=134219036 sp=50363932 thumb=1
+SHADOW t=2 frame=1005 kind=frame_control key= address=134219034 callback_address=134219034 cpsr=1610612799 mode=thumb raw_r15=134219036 sp=50363932 thumb=1
+SHADOW t=3 frame=1006 kind=frame_control key= address=134219034 callback_address=134219034 cpsr=1610612799 mode=thumb raw_r15=134219036 sp=50363932 thumb=1
+    393 kind=frame_control
+## instance b: 903 SHADOW lines
+STATUS frame=1041 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=1641 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil
+SHADOW t=1 frame=1042 kind=frame_control key= address=134219034 callback_address=134219034 cpsr=1610612799 mode=thumb raw_r15=134219036 sp=50363932 thumb=1
+SHADOW t=2 frame=1043 kind=frame_control key= address=134219034 callback_address=134219034 cpsr=1610612799 mode=thumb raw_r15=134219036 sp=50363932 thumb=1
+SHADOW t=3 frame=1044 kind=frame_control key= address=134219034 callback_address=134219034 cpsr=1610612799 mode=thumb raw_r15=134219036 sp=50363932 thumb=1
+    903 kind=frame_control
+## faint duo (earlier run, before the framecount fix): observer admitted by hash, 0 lines, no STATUS lines yet

@@ -1,0 +1,20 @@
+# G4 final cut 6e85ddfcb0ce7c5032f3118820d32d04a20d20af -- tools/gen3_final_cut.py summary (written 2026-09-24T17:01:49Z)
+# RUN 4 / CARRIED 0 / FAIL 9
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | bootcheck_firered_party_town | §8 item4 | FAIL exit=1 | 1 | fc_bootcheck_firered_party_town_6e85ddfc.txt |
+| 2 | bootcheck_firered_party_town_b | §8 item4 | FAIL exit=1 | 1 | fc_bootcheck_firered_party_town_b_6e85ddfc.txt |
+| 3 | bootcheck_firered_party_battle | §8 item4 | FAIL exit=1 | 1 | fc_bootcheck_firered_party_battle_6e85ddfc.txt |
+| 4 | bootcheck_firered_party_battle_b | §8 item4 | FAIL exit=1 | 1 | fc_bootcheck_firered_party_battle_b_6e85ddfc.txt |
+| 5 | bootcheck_leafgreen_party_town | §8 item4 | FAIL exit=1 | 1 | fc_bootcheck_leafgreen_party_town_6e85ddfc.txt |
+| 6 | bootcheck_leafgreen_party_town_b | §8 item4 | FAIL exit=1 | 1 | fc_bootcheck_leafgreen_party_town_b_6e85ddfc.txt |
+| 7 | bootcheck_leafgreen_party_battle | §8 item4 | FAIL exit=1 | 1 | fc_bootcheck_leafgreen_party_battle_6e85ddfc.txt |
+| 8 | bootcheck_leafgreen_party_battle_b | §8 item4 | FAIL exit=1 | 1 | fc_bootcheck_leafgreen_party_battle_b_6e85ddfc.txt |
+| 9 | zip_build | §9 item5 | PASS | 1 | fc_zip_build_6e85ddfc.txt |
+| 10 | zip_check | §9 item5 | PASS | 1 | fc_zip_check_6e85ddfc.txt |
+| 11 | zip_boot_firered | §9 item5 | PASS | 1 | fc_zip_boot_firered_6e85ddfc.txt |
+| 12 | release_gate_quick | §11 gate | FAIL exit=1 | 1 | fc_release_gate_quick_6e85ddfc.txt |
+| 13 | probe_gates | §11 gate | PASS | 1 | fc_probe_gates_6e85ddfc.txt |
+
+OVERALL: FAIL (4/13 rows)

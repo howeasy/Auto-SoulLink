@@ -1,0 +1,65 @@
+G5-LANE-2 P+H live row: linked_faint_active_gen3, RR as A (gen3_rr_new), cut 6d6227c6
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 (detached at 6d6227c636b3c067b8d795ceb1df2618db933801)
+ROM: patch/build/slink_RR.gba md5 6cf77ba4a63634a0fd452be6f206bfc3; fixtures rr_battle2.sav sha256 4145232b..., rr_battle2_b.sav 7fd07ae3...
+machine: shared (Gen 2 session + lane 1); LOAD line = snapshot taken just before launch
+
+--- run (verbatim) ---
+=== linked_faint_active_gen3 --game gen3_rr_new  lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=6d6227c636b3c067b8d795ceb1df2618db933801 tracked_dirty_before=0
+LOAD 2026-09-24T09:31:30 cpu=100% emuhawk=6 python=16
+  emuhawk pid=13828 E:/Howard/Bizhawk\EmuHawk.exe --lua=lua/tests/gen2_frame_align.lua --config=patch/build/gate_cfg_gen2_frame_align_crystal.ini .cache/gen2-build/pokecrystal/pokecrystal.gbc
+  emuhawk pid=39068 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w9_linked_faint_active_whiteout_gen3_a.ini --lua=patch/build/duo_w9_linked_faint_active_whiteout_gen3_a.lua patch/build/slink_RR.gba
+  emuhawk pid=23888 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w9_linked_faint_active_whiteout_gen3_b.ini --lua=patch/build/duo_w9_linked_faint_active_whiteout_gen3_b.lua patch/build/slink_RR.gba
+  emuhawk pid=17776 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w9_explode_gen3_a.ini --lua=patch/build/duo_w9_explode_gen3_a.lua patch/build/slink_RR.gba
+  emuhawk pid=8744 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/duo_cfg_w9_explode_gen3_b.ini --lua=patch/build/duo_w9_explode_gen3_b.lua patch/build/slink_RR.gba
+  emuhawk pid=28748 E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_test_live_explode_route.ini --lua=lua/tests/test_live_explode_route.lua patch/build/slink_RR.gba
+start_utc=2026-09-24T13:31:30Z
+$ python tools/e2e_duo.py --game gen3_rr_new --scenario linked_faint_active_gen3 --lane w9_linked_faint_active_gen3
+
+========== scenario: linked_faint_active_gen3 ==========
+[duo] linked_faint_active_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=5fac25094d0eb369613e7860a3e470f2c73a80c6f46d236aa7e92601d2708781 profile.json=476d16beffc9372ffb36bce0fb728e75664fc1c0534cd5616f1a692f0b60f68d source=6d6227c636b3c067b8d795ceb1df2618db933801
+[duo] server up: tcp=54146 http=54147 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_llu7ktu7
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] RESULT_LINE a: RESULT: FAIL (the client never sent hello from the field)
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before both players hello'd
+[duo] linked_faint_active_gen3: a client finished before "both players hello'd" (a: RESULT: FAIL (the client never sent hello from the field); b: no RESULT)
+--- linked_faint_active_gen3 a result (last 25 lines) ---
+duo instance a scenario=linked_faint_active_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:54146 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:54146 (rom ea5352f8)
+client built by lua/gen3/run.lua: title=radical_red player=a -> 127.0.0.1:54146
+[client] [SLink] TCP connected to 127.0.0.1:54146
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:2BDDC8BF
+PARTY slot=1 key=F56D8C1D:2BDDC8BF species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TIMEOUT waiting for the client's hello [dump failed: NLua.Exceptions.LuaScriptException: ...e/worktrees/gen3-lane-2/lua/tests/gen3_scripted_play.lua:1522: Argument number 1 is invalid: 43072099]
+RESULT: FAIL (the client never sent hello from the field)
+--- linked_faint_active_gen3 b result (last 25 lines) ---
+duo instance b scenario=linked_faint_active_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:54146 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player b -> 127.0.0.1:54146 (rom ea5352f8)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:54146
+[client] [SLink] TCP connected to 127.0.0.1:54146
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_gen3_llu7ktu7
+
+========== summary ==========
+  linked_faint_active_gen3: FAIL (attempt 1 of 1)
+exit=1
+end_utc=2026-09-24T13:33:40Z
+tracked_dirty_after=0

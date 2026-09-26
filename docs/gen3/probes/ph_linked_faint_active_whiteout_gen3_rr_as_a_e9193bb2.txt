@@ -1,0 +1,86 @@
+G5-RR-CPU-IRQ (W1) live row R4: linked_faint_active_whiteout_gen3, RR as A (gen3_rr_new), cut e9193bb2
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 (detached at e9193bb2), clean before launch
+ROM: patch/build/slink_RR.gba sha1 ea5352f8a3b9..., md5 6cf77ba4...; fixtures per the IDENTITY line
+start_utc=2026-09-24T14:04:32Z
+VERDICT: FAIL (instrument): the FIRST live RR hello on the new client (both sides, server log below) -- the ruling-23 cpu clause admits; then the scripted driver died on radical_red's absent ACTION_CURSOR_ADDR (gen3_scripted_play.lua:126), fixed by proof in 64ad170a
+server hello lines:
+  2026-09-24 10:04:41,408 [INFO] [b] hello rom=firered_rr area='route_1' party=1
+  2026-09-24 10:04:41,878 [INFO] [a] hello rom=firered_rr area='route_1' party=1
+
+--- run (verbatim) ---
+$ python tools/e2e_duo.py --game gen3_rr_new --scenario linked_faint_active_whiteout_gen3 --lane w1_linked_faint_active_whiteout_gen3
+
+========== scenario: linked_faint_active_whiteout_gen3 ==========
+[duo] linked_faint_active_whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=140ad05c6325180bdc7fae0bb590157310f250fa65c5b8b43b1fb24d6a3ffe2b write_checkpoint.json=476a1010520f02f9cf3e8a5c35a6faadc636f516de8b809414c440f191334a85 profile.json=476d16beffc9372ffb36bce0fb728e75664fc1c0534cd5616f1a692f0b60f68d source=e9193bb2e3e29dbf9212f13fb1d1b84375832197
+[duo] server up: tcp=57564 http=57565 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_gisomhif
+[duo] cleared 5 stale artifact(s) for linked_faint_active_whiteout_gen3: e2e_linked_faint_active_whiteout_gen3_a_attempt1_result.txt, e2e_linked_faint_active_whiteout_gen3_a_result.txt, e2e_linked_faint_active_whiteout_gen3_b_attempt1_result.txt, e2e_linked_faint_active_whiteout_gen3_b_result.txt, e2e_linked_faint_active_whiteout_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for b
+[duo] RESULT_LINE a: (none)
+[duo] RESULT_LINE b: RESULT: FAIL (scenario error: NLua.Exceptions.LuaScriptException: ...e/worktrees/gen3-lane-2/lua/tests/gen3_scripted_play.lua:126: Invalid arguments to method call: 66288034)
+[duo] PYDEC: FAIL client RESULT before b: READY_ACTIVE (linked mon active at the action menu)
+[duo] linked_faint_active_whiteout_gen3: a client finished before 'b: READY_ACTIVE (linked mon active at the action menu)' (a: no RESULT; b: RESULT: FAIL (scenario error: NLua.Exceptions.LuaScriptException: ...e/worktrees/gen3-lane-2/lua/tests/gen3_scripted_play.lua:126: Invalid arguments to method call: 66288034))
+--- linked_faint_active_whiteout_gen3 a result (last 25 lines) ---
+RX resolved_areas
+RX config
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 617
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 617
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 813
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 813
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 813
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 813
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 813
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 813
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 813
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 813
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 813
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 813
+--- linked_faint_active_whiteout_gen3 b result (last 25 lines) ---
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=0 applied=0 attempt=1
+ONE_MON_PARTY EBEF11DA:D4223740 deposited=-
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 993
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 993
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 993
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 993
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 993
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 993
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 993
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 993
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 993
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 993
+[client] [gen3] phase encounter-found frame=1225 linked_faint_active whiteout: cycle 3 mid-step Left at (13,38)
+[client] [gen3] phase battle-state-saved frame=1225 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+RESULT: FAIL (scenario error: NLua.Exceptions.LuaScriptException: ...e/worktrees/gen3-lane-2/lua/tests/gen3_scripted_play.lua:126: Invalid arguments to method call: 66288034)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_gisomhif
+
+========== summary ==========
+  linked_faint_active_whiteout_gen3: FAIL (attempt 1 of 1)

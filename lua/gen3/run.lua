@@ -1,0 +1,229 @@
+-- lua/gen3/run.lua — BizHawk entry for the Gen 3 (FRLG) production client.
+--
+-- Loaded by lua/slink.lua's Gen 3 route (mirrors lua/gen1/run.lua 1:1, per
+-- docs/gen3/research/p4_gen1_contract_map.md §3.5). Everything game-related is built by
+-- lua/gen3/entry.lua; this file only supplies the BizHawk-shaped io/ev, the LuaSocket
+-- transport, the HUD and the frame loop.
+--
+-- The foundation (gen3_frlg vs gen3_rr, clean/named) is decided by Entry.admit from the
+-- cartridge's hash/anchors/header, never guessed here.
+local _dir = (debug.getinfo(1, "S").source:match("@(.+[/\\])") or "./")
+local ROOT = _dir:gsub("[/\\]lua[/\\]gen3[/\\]?$", "")
+if ROOT == _dir then ROOT = _dir .. "../.." end
+package.path = ROOT .. "/lua/?.lua;" .. package.path
+
+local Entry = dofile(ROOT .. "/lua/gen3/entry.lua")
+local C = require("connector")
+local H = require("hud")
+
+local host = SLINK_HOST or os.getenv("SLINK_HOST") or "127.0.0.1"
+local port = tonumber(SLINK_PORT or os.getenv("SLINK_PORT") or 54321)
+local player = SLINK_PLAYER or os.getenv("SLINK_PLAYER") or "a"
+
+-- The io/ev adapters (copied from lua/gen3/shadow_run.lua build_io:58-85 / build_ev:92-119,
+-- not dofile'd from it: shadow_run.lua is P3's read-only observer bootstrap and is
+-- deliberately not shipped in the player release -- tools/make_release.py _LUA_GEN3). This is
+-- the same shape, plus the one real write sink and saveram P3 deliberately refused.
+local io_ = {
+    read_u8    = function(addr) return memory.read_u8(addr, "System Bus") end,
+    read_u16   = function(addr) return memory.read_u16_le(addr, "System Bus") end,
+    read_u32   = function(addr) return memory.read_u32_le(addr, "System Bus") end,
+    read_bytes = function(addr, len)
+        local out = {}
+        for i = 1, len do out[i] = memory.read_u8(addr + i - 1, "System Bus") end
+        return out
+    end,
+    rom_read = function(off, len)
+        local out = {}
+        for i = 1, len do out[i] = memory.read_u8(off + i - 1, "ROM") end
+        return out
+    end,
+    framecount = function() return emu.framecount() end,
+    register   = function(name) return emu.getregister(name) end,
+    write_u8   = function(addr, v) return memory.write_u8(addr, v, "System Bus") end,
+    saveram    = function() if client and client.saveram then return client.saveram() end end,
+}
+
+-- Hook names prefixed "SLink-gen3-" (never "-shadow-": this instance mutates game state).
+local ev = {
+    on_bus_exec = function(fn, addr, name)
+        return event.on_bus_exec(fn, addr, "SLink-gen3-" .. tostring(name))
+    end,
+    unregister = function(id) return event.unregisterbyid(id) end,
+}
+
+local ok_hc, header_code = pcall(Entry.header_code, io_.rom_read)
+local admitted, why = Entry.admit({
+    root = ROOT, json = dofile(ROOT .. "/lua/json_codec.lua"),
+    rom_hash = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "",
+    rom_read = io_.rom_read, header_code = ok_hc and header_code or "",
+})
+if not admitted then
+    local msg = "[SLink-gen3] refused: " .. tostring(why)
+    console.log(msg)
+    H.init({ screen_w = 240, screen_h = 160 })
+    H.show(msg, 255, 80, 80, 600)
+    H.render()
+    return
+end
+
+H.init({ screen_w = 240, screen_h = 160 })
+C.init(host, port)
+
+-- Battle request nonce seed (card C5-10b). This file is the BizHawk-facing bootstrap, so it is
+-- where process-unique entropy is gathered: wall clock, the process CPU clock (sub-second), a
+-- random draw seeded from both, and the admitted ROM's hash. Client.new itself never touches an
+-- emulator global -- it just consumes the string this produces -- and a harness can override the
+-- whole thing with $SLINK_GEN3_BATTLE_NONCE (see entry.lua) for determinism.
+-- >>> session counter (C5-11b..C5-11d; keep this block self-contained -- tests/unit/
+-- test_gen3_patch_sources.py extracts it by these markers, drives it through a fake filesystem) >>>
+-- WHAT IT IS FOR. The session nonce must never repeat for one player across client processes: the
+-- server keeps a queued replace_rival_team for a player slot across that slot's restart, and the
+-- client accepts it only when cmd.session equals ITS nonce (docs/gen3/research/
+-- rival_swap_refresh_window.md §3.3). os.time() repeats inside a second and stock BizHawk Lua has
+-- no process id, so the unique part is a per-install counter, allocated here. It lives at the
+-- INSTALL ROOT (ROOT, next to slink_lua.log), because a player's release has no patch/build/.
+--
+-- WHY IT IS UNIQUE (C5-11d BLOCKER 1). The counter file is a BATON: to allocate, a caller RENAMES
+-- it to a name of its own, reads n, and publishes n+1 as a fresh file renamed into the baton's
+-- place (the taken file stays intact until then, so a failed write never truncates the counter).
+-- os.rename is C rename(), and on Windows and POSIX alike only ONE rename can consume a given
+-- source name: the loser gets ENOENT. So at most one caller holds the baton at a time -- by
+-- construction, not by a re-read that another writer can race (the old lock file was opened "w",
+-- so two owners could each read their own token back; Codex's interleaving gave both callers 10).
+-- This part needs no non-replacing rename, so it holds on Linux too.
+--
+-- FIRST CREATION is the one step where the OSes differ, because a missing baton is ambiguous
+-- (never created, or held by someone right now). A baton is created only when the baton AND the
+-- birth record are BOTH positively absent (errno ENOENT, never a guess from a failed open) and
+-- this caller wins the birth record, which is decided exactly once per install:
+--   * Windows: rename(tmp, born) -- C rename refuses an existing destination, so one caller wins,
+--     ever.
+--   * POSIX (Linux): rename would REPLACE, so the record is an append-only log instead: each
+--     claimant appends its token with "a" (O_APPEND: every append lands at the then-current end,
+--     atomically on a local filesystem) and the winner is the token on the FIRST line, which no
+--     later append can change. The one non-structural step: two first-ever claimants in the same
+--     instant must draw distinct tokens (wall second + CPU clock + a 31-bit draw).
+-- The birth record is never removed, so after the first run a missing baton only ever means "held"
+-- (or a holder crashed mid-hold): wait, then fail closed. Nothing ever recreates it.
+--
+-- FAIL CLOSED (C5-11d MAJOR 2). nil means the client mints no identity, declares no capability and
+-- refuses every rival command. nil is returned for: a baton still missing after the bounded wait;
+-- an unreadable, empty, non-integral or out-of-range baton, or a write, flush, close or rename that
+-- does not report success (in every case the baton is put back as found). There is no
+-- restart-at-1 path: the only initialisation is the won birth above.
+--
+-- RECOVERY (owner action, never automatic; Codex REV4): inspect EVERY generation artifact before
+-- touching anything. Cleanup of a published holder's file can fail silently, so several
+-- slink_gen3_session.baton.<token> files may exist and a filename's existence does not mean its
+-- holder still owns it. Restore only the file holding the HIGHEST generation, and only when that
+-- choice is unambiguous; never pick an arbitrary .baton.* file, never restore an older generation
+-- (that reissues a value), and never remove slink_gen3_session.born. Every temporary name assumes
+-- distinct tokens: a same-token collision on POSIX can replace another caller's held file.
+local function next_session_counter(root, open_file, remove_file, spin, rename_file, windows)
+    open_file, remove_file, rename_file = open_file or io.open, remove_file or os.remove,
+                                          rename_file or os.rename
+    if windows == nil then windows = package.config:sub(1, 1) == "\\" end
+    spin = spin or function() local t = os.clock() + 0.005 while os.clock() < t do end end
+    local ENOENT = 2                                -- the same errno in MSVC's CRT and on POSIX
+    local base = root .. "/slink_gen3_session"
+    local baton, born = base .. ".baton", base .. ".born"
+    local token = string.format("%d-%d-%d", os.time(), math.floor(os.clock() * 1e6) % 1000000000,
+                                math.random(0, 2147483647))
+    local mine = baton .. "." .. token             -- the baton's name while this call holds it
+
+    local function put(path, text, mode)           -- true only if write, flush and close succeed
+        local f = open_file(path, mode or "w")
+        if not f then return false end
+        local ok = f:write(text) ~= nil
+        ok = f:flush() ~= nil and ok
+        return f:close() ~= nil and ok
+    end
+    local function get(path)                       -- content, or nil + errno
+        local f, _, errno = open_file(path, "r")
+        if not f then return nil, errno end
+        local s = f:read("a")
+        if f:close() == nil then return nil end
+        return s
+    end
+    local function won_birth()
+        if windows then
+            local tmp = base .. ".born." .. token
+            if put(tmp, token) and rename_file(tmp, born) then return true end
+            remove_file(tmp)
+            return false
+        end
+        if not put(born, token .. "\n", "a") then return false end
+        local s = get(born)
+        return s ~= nil and s:match("^[^\n]*") == token
+    end
+
+    local birth_checked = false
+    for _ = 1, 100 do
+        local took, _, errno = rename_file(baton, mine)
+        if took then
+            local s = get(mine)
+            local n = s and s:match("^%d+$") and tonumber(s)
+            local nxt = mine .. ".next"
+            if n and n < 4294967295 and put(nxt, tostring(n + 1)) and rename_file(nxt, baton) then
+                remove_file(mine)
+                return n + 1
+            end
+            remove_file(nxt)
+            rename_file(mine, baton)               -- put it back as found: fail closed, no reset
+            return nil
+        end
+        if errno == ENOENT and not birth_checked then
+            birth_checked = true
+            local _, born_errno = get(born)
+            if born_errno == ENOENT and won_birth() then
+                local tmp = base .. ".new." .. token
+                if not (put(tmp, "0") and rename_file(tmp, baton)) then
+                    remove_file(tmp)
+                    return nil
+                end
+            end
+        end
+        spin()
+    end
+    return nil
+end
+-- <<< session counter <<<
+
+local session_counter = next_session_counter(ROOT)
+local battle_nonce_seed = nil
+if session_counter then
+    math.randomseed(os.time() + math.floor(os.clock() * 1000))
+    local rom_bits = tonumber((admitted.rom_hash or ""):sub(1, 8), 16) or 0
+    battle_nonce_seed = string.format("%08X%08X", session_counter % 4294967296,
+                                      (math.floor(os.clock() * 1e6)
+                                       + math.random(0, 4294967295) + rom_bits) % 4294967296)
+end
+
+local client = Entry.build({
+    root = ROOT, mode = "production", io = io_, ev = ev, net = C, hud = H,
+    pack = admitted.pack, title = admitted.title, kind = admitted.kind, player = player,
+    rom_sha1 = admitted.rom_hash, log = function(t) console.log(t) end,
+    battle_nonce_seed = battle_nonce_seed,
+})
+local ok, err = pcall(function() client:start() end)
+if not ok then
+    local msg = "[SLink-gen3] refused to start: " .. tostring(err)
+    console.log(msg)
+    H.show(msg, 255, 80, 80, 600)
+    H.render()
+    return
+end
+console.log(string.format("[SLink-gen3] %s/%s (%s by %s) player %s -> %s:%d (rom %s)",
+                          admitted.pack, admitted.title, admitted.kind, admitted.admitted_by,
+                          player, host, port, tostring(admitted.rom_hash):sub(1, 8)))
+
+-- Exposed for live gates and the console.
+SLINK_GEN3_CLIENT = client
+
+event.onframeend(function()
+    local fok, ferr = pcall(function() client:frame_end() end)
+    if not fok then console.log("[SLink-gen3] frame error: " .. tostring(ferr)) end
+    H.render()
+end)
+event.onexit(function() pcall(function() client:stop() end) end)

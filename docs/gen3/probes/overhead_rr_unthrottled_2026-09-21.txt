@@ -1,0 +1,36 @@
+OVERHEAD A median_ms_per_600=716.000 fps=837.99 wall_total_ms=4000 clock_total_ms=3810.000 clock_crosscheck=true registered=0 rejected=0 liveness=0 standin_reads=0 checksum=0
+WINDOWS A clock_ms=887.0,835.0,716.0,676.0,696.0 wall_ms=1000,1000,0,1000,1000
+OVERHEAD E median_ms_per_600=797.000 fps=752.82 wall_total_ms=4000 clock_total_ms=4010.000 clock_crosscheck=true registered=0 rejected=0 liveness=0 standin_reads=3000 checksum=134578447
+WINDOWS E clock_ms=777.0,795.0,830.0,797.0,811.0 wall_ms=1000,1000,0,1000,1000
+OVERHEAD B median_ms_per_600=1418.000 fps=423.13 wall_total_ms=7000 clock_total_ms=7200.000 clock_crosscheck=true registered=19 rejected=0 liveness=3000 standin_reads=0 checksum=0
+WINDOWS B clock_ms=1413.0,1405.0,1501.0,1418.0,1463.0 wall_ms=2000,1000,2000,1000,1000
+[shadow] admitted_by=hash pack=gen3_rr title=radical_red kind=companion
+[shadow] STATUS frame=970 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1570 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2170 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2770 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3370 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3970 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+OVERHEAD C median_ms_per_600=1472.000 fps=407.61 wall_total_ms=7000 clock_total_ms=7440.000 clock_crosscheck=true registered=19 rejected=0 liveness=3000 standin_reads=3000 checksum=134578447
+WINDOWS C clock_ms=1449.0,1465.0,1472.0,1529.0,1525.0 wall_ms=1000,2000,1000,2000,1000
+[shadow] admitted_by=hash pack=gen3_rr title=radical_red kind=companion
+[shadow] STATUS frame=970 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1570 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2170 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2770 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3370 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3970 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+OVERHEAD D median_ms_per_600=1503.000 fps=399.20 wall_total_ms=8000 clock_total_ms=7479.000 clock_crosscheck=true registered=19 rejected=0 liveness=3000 standin_reads=3000 checksum=134578447
+WINDOWS D clock_ms=1484.0,1441.0,1544.0,1503.0,1507.0 wall_ms=2000,1000,2000,1000,2000
+[shadow] admitted_by=hash pack=gen3_rr title=radical_red kind=companion
+[shadow] STATUS frame=970 registered=19 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+[shadow] STATUS frame=1570 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+[shadow] STATUS frame=2170 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+[shadow] STATUS frame=2770 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1799
+[shadow] STATUS frame=3370 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2399
+[shadow] STATUS frame=3970 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2999
+BUDGET B/A delta_percent=98.045 limit=5 verdict=FAIL
+BUDGET C/E delta_percent=84.693 limit=5 verdict=FAIL
+BUDGET D/E delta_percent=88.582 limit=5 verdict=FAIL
+SCOPE standin_cpu_overhead_only console_status_deferred=true wire_timings=UNVERIFIED wire_deltas=UNVERIFIED
+RESULT: FAIL stand-in observer overhead budget

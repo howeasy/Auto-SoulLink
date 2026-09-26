@@ -51,6 +51,11 @@ def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
             assert contract.require_oracle is True
             assert contract.witness_validator
             assert callable(getattr(DuoRun, contract.witness_validator, None))
+        elif GAMES[game].get("game", game) in ("gen3_frlg", "gen3_rr"):
+            # the new Gen 3 battery rows take the Gen 1 rule with their own witness
+            assert contract.require_oracle is True
+            assert contract.witness_validator == GAMES[game]["save_witness"]
+            assert callable(getattr(DuoRun, contract.witness_validator, None))
         else:
             assert contract == duo_module.EvidenceContract()
 
@@ -635,11 +640,15 @@ def test_savestate_games_are_never_given_a_batteryless_scenario(game):
         f"{offenders}")
 
 
-def test_gen3_selection_is_exactly_the_radical_red_set():
+def test_gen3_rr_selection_is_exactly_the_radical_red_set():
     """Pinned rather than derived, so that widening a `games` tuple by accident has to be an
-    explicit edit here too. tests/e2e/test_duo.py parametrizes straight off this selection."""
-    assert sorted(scenarios_for("gen3_rr")) == sorted(
-        ["faint", "boxsync", "trade", "ghost", "infopanel", "explode"])
+    explicit edit here too. tests/e2e/test_duo_gen3.py parametrizes straight off this selection."""
+    assert sorted(scenarios_for("gen3_rr")) == sorted([
+        "faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
+        "link_gen3", "deadzone_gen3", "reconnect_gen3", "linked_faint_active_whiteout_gen3",
+        "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
+        "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3", "linked_faint_active_lhammer_gen3",
+        "linked_faint_active_mega_gen3"])
 
 
 def test_legacy_gen2_chain_is_not_selectable():
@@ -660,7 +669,7 @@ def test_the_old_gen1_titles_are_gone():
 def test_selection_does_not_leak_across_generations():
     """Exact matching: nothing from another title's set may appear."""
     for game in ("gen2_new", "gen2_gold_silver", "gen2_crystal_gold"):
-        assert not scenario_applies("trade", game)
+        assert not scenario_applies("faint", game)
         assert not scenario_applies("link_new", game)
 
 
@@ -687,18 +696,12 @@ def test_every_gen1_new_scenario_declares_an_oracle_that_exists():
         assert isinstance(SCENARIOS[name].get("oracle_kwargs", {}), dict)
 
 
-def test_gen3_keeps_the_legacy_verdict_path():
-    """Gen 3 entries retain their existing verdict path."""
-    for name in scenarios_for("gen3_rr"):
-        assert "oracle" not in SCENARIOS[name], f"{name} declares an oracle"
-
-
 def test_gen1_new_does_not_inherit_the_old_gen1_family():
     """The family rule exists for gen1_yellow. `gen1_new` is a different client whose driver
     refuses every old scenario name, so `--scenario all --game gen1_new` must select only its
     own eight rather than six scenarios it cannot run."""
     assert sorted(scenarios_for("gen1_new")) == sorted(GEN1_NEW_SCENARIOS)
-    assert not scenario_applies("trade", "gen1_new")
+    assert not scenario_applies("faint", "gen1_new")
 
 
 def test_the_wrapper_lists_exactly_the_gen1_new_scenarios():
@@ -822,6 +825,122 @@ def test_list_lines_carry_the_attempt_limit_and_the_targets():
     assert lines["ball_gate_new"] == "ball_gate_new  attempts=1  targets=town"
     for name in scenarios_for("gen1_new"):
         assert name in lines, name
+
+
+# ── gen3_frlg: the new Gen 3 client on vanilla FRLG (card C4-6a) ────────────────────────────────
+GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3",
+                       "whiteout_gen3", "link_gen3", "deadzone_gen3", "reconnect_gen3",
+                       # G4-PH: the P+H whiteout variant (A1 (i) on FR/LG, R4 on RR)
+                       "linked_faint_active_whiteout_gen3")
+# P5 (card C5-5): gen3_rr runs the shared Gen 3 scenarios (their `games` tuples EXTENDED,
+# never renamed) plus the RR-only scenarios (docs/gen3/PLAN.md §14 P5, minus the retired old
+# client's trade/ghost/infopanel rows and trade_abort, a later card).
+GEN3_RR_ONLY_SCENARIOS = ("explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
+                          # G4-PH: RR rows R2/R3/R5 (rr_active_faint_parity_scope §5.5)
+                          "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3",
+                          "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3")
+GEN3_RR_SCENARIOS = GEN3_FRLG_SCENARIOS + GEN3_RR_ONLY_SCENARIOS
+# C4-6m: G4 item 2a's Center 2F controls run on FR/LG only; gen3_lgfr is the same family with
+# LeafGreen as A, so it selects exactly what gen3_frlg does.
+GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
+                          "trainer_bench_gen3", "active_end_gen3",
+                          "linked_faint_active_trainer_gen3")
+GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
+
+
+def test_gen3_frlg_selection_is_exactly_its_seven():
+    """PLAN §5.5's FRLG matrix, pinned: `--scenario all --game gen3_frlg` runs these and only these."""
+    for row in GEN3_FRLG_ROWS:
+        assert sorted(scenarios_for(row)) == sorted(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS), row
+
+
+def test_gen3_rr_selection_is_the_shared_set_plus_its_own_rows():
+    """P5, card C5-5: `--scenario all --game gen3_rr` runs the shared Gen 3 scenarios plus
+    the RR-only explode/rival/native rows -- and nothing else (not the retired old-client
+    trade/ghost/infopanel rows, not any gen1/gen2 name)."""
+    assert sorted(scenarios_for("gen3_rr")) == sorted(GEN3_RR_SCENARIOS)
+    assert "gen3_rr" in duo_module.OPT_IN_GAMES
+
+
+def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
+    """Opt-in both ways: the `_gen3` keys name only gen3_frlg and gen3_rr (P5 adds gen3_rr
+    by EXTENDING the shared scenarios' `games` tuples, never by renaming), and the savestate-less
+    shared rows stay out of it."""
+    assert "gen3_frlg" in duo_module.OPT_IN_GAMES
+    for game in GAMES:
+        if game not in GEN3_FRLG_ROWS + ("gen3_rr",):
+            assert not set(scenarios_for(game)) & set(GEN3_RR_SCENARIOS), game
+    for name in SCENARIOS:
+        if name not in GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS:
+            assert not scenario_applies(name, "gen3_frlg"), name
+        if name not in GEN3_RR_SCENARIOS:
+            assert not scenario_applies(name, "gen3_rr"), name
+    for name in GEN3_FRLG_SCENARIOS:
+        assert SCENARIOS[name]["games"] == ("gen3_frlg", "gen3_rr"), name
+        # the ball-RNG retry (card C4-6g): only the halves that throw Poke Balls retry
+        expected = 3 if SCENARIOS[name].get("ball_hunt") else 1
+        assert scenario_attempt_limit(name, "gen3_frlg") == expected, name
+        assert scenario_attempt_limit(name, "gen3_rr") == expected, name
+    assert {n for n in GEN3_FRLG_SCENARIOS if SCENARIOS[n].get("ball_hunt")} == {
+        "link_gen3", "deadzone_gen3"}
+    for name in GEN3_RR_ONLY_SCENARIOS:
+        assert SCENARIOS[name]["games"] == ("gen3_rr",), name
+    for name in GEN3_FRLG_ONLY_SCENARIOS:
+        assert SCENARIOS[name]["games"] == ("gen3_frlg",), name
+        assert scenario_attempt_limit(name, "gen3_frlg") == (2 if name == "trainer_bench_gen3" else 1), name
+
+
+def test_every_gen3_frlg_scenario_declares_an_oracle_that_exists():
+    """The row requires an oracle (a missing one FAILS in _run_oracle), and its witness method
+    exists beside them."""
+    row = GAMES["gen3_frlg"]
+    assert row["oracle_required"] is True
+    assert callable(getattr(DuoRun, row["save_witness"], None))
+    for name in scenarios_for("gen3_frlg"):
+        method = SCENARIOS[name].get("oracle")
+        assert method and callable(getattr(DuoRun, method, None)), name
+        assert method == f"assert_{name}_saved", name
+
+
+def test_every_gen3_rr_scenario_declares_an_oracle_that_exists():
+    """P5 (card C5-5): gen3_rr's row (its own `save_witness`, `rr=True`) and all fourteen scenarios."""
+    row = GAMES["gen3_rr"]
+    assert row["oracle_required"] is True and row["rr"] is True
+    assert callable(getattr(DuoRun, row["save_witness"], None))
+    for name in scenarios_for("gen3_rr"):
+        method = SCENARIOS[name].get("oracle")
+        assert method and callable(getattr(DuoRun, method, None)), name
+        assert method == f"assert_{name}_saved", name
+
+
+def test_the_gen3_rr_wrapper_lists_the_shared_set_plus_its_own_rows():
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    mod = __import__("test_duo_gen3")
+    assert mod.GAME_RR == "gen3_rr"
+    assert sorted(mod.SCENARIOS_RR) == sorted(GEN3_RR_SCENARIOS)
+    for name in mod.SCENARIOS_RR:
+        assert scenario_applies(name, "gen3_rr")
+        assert mod.deadline_for_rr(name) == (SCENARIOS[name]["timeout"]
+                                             * scenario_attempt_limit(name, "gen3_rr") + 300)
+    # G5-RR-BATTERY: rows that link slot 1 or throw balls boot rr_battle2 on RR
+    assert mod.required_fixtures_rr("boxsync_gen3") == ["rr_battle2", "rr_battle2_b"]
+    assert mod.required_fixtures_rr("faint_cmd_gen3") == ["rr_battle2", "rr_battle2_b"]
+    assert mod.required_fixtures_rr("explode_gen3") == ["rr_battle", "rr_battle_b"]
+
+
+def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():
+    sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
+    mod = __import__("test_duo_gen3")
+    assert mod.GAME == "gen3_frlg"
+    assert sorted(mod.SCENARIOS) == sorted(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS)
+    # C4-6m: the LG-as-A row runs the two G4 item 2a A-side receipts
+    assert mod.GAME_LGFR == "gen3_lgfr" and all(scenario_applies(n, "gen3_lgfr") for n in mod.SCENARIOS_LGFR)
+    assert mod.required_fixtures("whiteout_gen3", "gen3_lgfr") == ["leafgreen_party_battle", "firered_party_town"]
+    for name in mod.SCENARIOS:
+        assert scenario_applies(name, "gen3_frlg")
+        assert mod.deadline_for(name) == (SCENARIOS[name]["timeout"]
+                                          * scenario_attempt_limit(name, "gen3_frlg") + 300)
+    assert mod.required_fixtures("boxsync_gen3") == ["firered_party_battle", "leafgreen_party_town"]
 
 
 @pytest.mark.parametrize("kind", ("type", "gender", "species"))

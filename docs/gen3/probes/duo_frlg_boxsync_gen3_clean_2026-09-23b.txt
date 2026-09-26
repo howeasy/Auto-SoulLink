@@ -1,0 +1,25 @@
+
+========== scenario: boxsync_gen3 ==========
+[duo] boxsync_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] server up: tcp=63528 http=63529 data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_u93zxqvu
+[duo] cleared 7 stale artifact(s) for boxsync_gen3: e2e_boxsync_gen3_a_1_witness.bin, e2e_boxsync_gen3_a_attempt1_result.txt, e2e_boxsync_gen3_a_result.txt, e2e_boxsync_gen3_b_1_witness.bin, e2e_boxsync_gen3_b_attempt1_result.txt, e2e_boxsync_gen3_b_result.txt, e2e_boxsync_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] SAVE_WITNESS_SHA256 inst=a site=cb83a22cc5e044b487db63f03d52febc0694aaf837c2029aff13dfa1713a97cd file=cb83a22cc5e044b487db63f03d52febc0694aaf837c2029aff13dfa1713a97cd match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=da3ab931184ea524e283560b5d6d7093656499d44183e94c4789a9ed7b140670 file=da3ab931184ea524e283560b5d6d7093656499d44183e94c4789a9ed7b140670 match=true saves=1 counter=3->4 rtc=normalized
+[duo] boxsync: 263620B6:99DE0D8A / F6B6A64D:1C600D89 deposited and withdrawn, saved once in party with the fixture record
+[duo] PYDEC: PASS asserted scenario facts
+[duo] boxsync_gen3: a=PASS b=PASS
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\boxsync_gen3_a_gen3_new.jsonl
+[duo] wire log: E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\tests\fixtures\gen3\wire\boxsync_gen3_b_gen3_new.jsonl
+
+========== summary ==========
+  boxsync_gen3: PASS (attempt 1 of 1)

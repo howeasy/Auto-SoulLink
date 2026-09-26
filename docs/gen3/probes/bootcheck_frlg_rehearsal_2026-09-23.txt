@@ -1,0 +1,130 @@
+G4 item 4 REHEARSAL (lane cut 324aea87; the final receipt is re-taken on the final cut)
+
+== firered_party_battle
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_firered_party_battle\Pokemon - FireRed Version (USA).SaveRAM from tests\fixtures\gen3\firered_party_battle.sav (counter=7)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 7 -> 8  (6s)
+phase start frame=1 title=firered
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=7
+phase field frame=778 map=(3,19)
+phase save-menu frame=778 counter=7
+phase save-dialog frame=1054 row=4
+phase saved frame=1533 counter=7->8
+phase slot-complete frame=1793 sectors=14/14
+phase flushed frame=1982
+RESULT: PASS counter 7 -> 8
+BOOT-CHECK PASS tests\fixtures\gen3\firered_party_battle.sav counter=7->8 party=[{'species': 7, 'level': 9}, {'species': 16, 'level': 4}]
+exit=0
+== firered_party_battle_b
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_firered_party_battle_b\Pokemon - FireRed Version (USA).SaveRAM from tests\fixtures\gen3\firered_party_battle_b.sav (counter=7)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 7 -> 8  (6s)
+phase start frame=1 title=firered
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=7
+phase field frame=778 map=(3,19)
+phase save-menu frame=778 counter=7
+phase save-dialog frame=1054 row=4
+phase saved frame=1533 counter=7->8
+phase slot-complete frame=1793 sectors=14/14
+phase flushed frame=1982
+RESULT: PASS counter 7 -> 8
+BOOT-CHECK PASS tests\fixtures\gen3\firered_party_battle_b.sav counter=7->8 party=[{'species': 7, 'level': 9}, {'species': 16, 'level': 4}]
+exit=0
+== firered_party_town
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_firered_party_town\Pokemon - FireRed Version (USA).SaveRAM from tests\fixtures\gen3\firered_party_town.sav (counter=4)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 4 -> 5  (6s)
+phase start frame=1 title=firered
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=4
+phase field frame=778 map=(3,1)
+phase save-menu frame=778 counter=4
+phase save-dialog frame=1054 row=4
+phase saved frame=1533 counter=4->5
+phase slot-complete frame=1793 sectors=14/14
+phase flushed frame=1966
+RESULT: PASS counter 4 -> 5
+BOOT-CHECK PASS tests\fixtures\gen3\firered_party_town.sav counter=4->5 party=[{'species': 7, 'level': 9}, {'species': 16, 'level': 4}]
+exit=0
+== firered_party_town_b
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_firered_party_town_b\Pokemon - FireRed Version (USA).SaveRAM from tests\fixtures\gen3\firered_party_town_b.sav (counter=4)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 4 -> 5  (6s)
+phase start frame=1 title=firered
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=4
+phase field frame=778 map=(3,1)
+phase save-menu frame=778 counter=4
+phase save-dialog frame=1054 row=4
+phase saved frame=1533 counter=4->5
+phase slot-complete frame=1793 sectors=14/14
+phase flushed frame=1982
+RESULT: PASS counter 4 -> 5
+BOOT-CHECK PASS tests\fixtures\gen3\firered_party_town_b.sav counter=4->5 party=[{'species': 7, 'level': 9}, {'species': 16, 'level': 4}]
+exit=0
+== leafgreen_party_battle
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_leafgreen_party_battle\Pokemon - LeafGreen Version (USA).SaveRAM from tests\fixtures\gen3\leafgreen_party_battle.sav (counter=4)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 4 -> 5  (7s)
+phase start frame=1 title=leafgreen
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=4
+phase field frame=778 map=(3,19)
+phase save-menu frame=778 counter=4
+phase save-dialog frame=1054 row=4
+phase saved frame=1533 counter=4->5
+phase slot-complete frame=1793 sectors=14/14
+phase flushed frame=1982
+RESULT: PASS counter 4 -> 5
+BOOT-CHECK PASS tests\fixtures\gen3\leafgreen_party_battle.sav counter=4->5 party=[{'species': 7, 'level': 6}, {'species': 19, 'level': 3}]
+exit=0
+== leafgreen_party_battle_b
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_leafgreen_party_battle_b\Pokemon - LeafGreen Version (USA).SaveRAM from tests\fixtures\gen3\leafgreen_party_battle_b.sav (counter=4)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 4 -> 5  (6s)
+phase start frame=1 title=leafgreen
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=4
+phase field frame=778 map=(3,19)
+phase save-menu frame=778 counter=4
+phase save-dialog frame=1054 row=4
+phase saved frame=1533 counter=4->5
+phase slot-complete frame=1793 sectors=14/14
+phase flushed frame=1982
+RESULT: PASS counter 4 -> 5
+BOOT-CHECK PASS tests\fixtures\gen3\leafgreen_party_battle_b.sav counter=4->5 party=[{'species': 7, 'level': 6}, {'species': 19, 'level': 3}]
+exit=0
+== leafgreen_party_town
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_leafgreen_party_town\Pokemon - LeafGreen Version (USA).SaveRAM from tests\fixtures\gen3\leafgreen_party_town.sav (counter=3)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 3 -> 4  (7s)
+phase start frame=1 title=leafgreen
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=3
+phase field frame=778 map=(3,1)
+phase save-menu frame=778 counter=3
+phase save-dialog frame=1054 row=4
+phase saved frame=1533 counter=3->4
+phase slot-complete frame=1793 sectors=14/14
+phase flushed frame=1966
+RESULT: PASS counter 3 -> 4
+BOOT-CHECK PASS tests\fixtures\gen3\leafgreen_party_town.sav counter=3->4 party=[{'species': 7, 'level': 6}, {'species': 19, 'level': 3}]
+exit=0
+== leafgreen_party_town_b
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_leafgreen_party_town_b\Pokemon - LeafGreen Version (USA).SaveRAM from tests\fixtures\gen3\leafgreen_party_town_b.sav (counter=3)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: PASS counter 3 -> 4  (7s)
+phase start frame=1 title=leafgreen
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=3
+phase field frame=778 map=(3,1)
+phase save-menu frame=778 counter=3
+phase save-dialog frame=1054 row=4
+phase saved frame=1533 counter=3->4
+phase slot-complete frame=1793 sectors=14/14
+phase flushed frame=1966
+RESULT: PASS counter 3 -> 4
+BOOT-CHECK PASS tests\fixtures\gen3\leafgreen_party_town_b.sav counter=3->4 party=[{'species': 7, 'level': 6}, {'species': 19, 'level': 3}]
+exit=0

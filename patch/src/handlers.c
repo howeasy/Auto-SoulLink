@@ -50,9 +50,36 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
                                      Deposit conversion, but removal is zero + SWAP-WITH-LAST (not
                                      shift) so survivors keep their slot indices (CFRU deferred
                                      battle writes target slots; mirrors Lua M.memorializeMon). */
-       OP_SHOW_INFO = 27 };       /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
+       OP_SHOW_INFO = 27,         /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
                                      async, result[0] = 0 (A) / 0x7F (B) — the pagination signal */
+       OP_RIVAL_SWAP = 28 };      /* C5-11a: the RIVAL SWAP's own opcode. Same BLOB_BUF staging and
+                                     byte-copy basis as OP_SET_ENEMY_PARTY (16), but with the
+                                     consumption-time window check + trainer context that must NOT
+                                     apply to 16: the field trade stages with 16 and then runs
+                                     OP_TRADE_SCENE (see that case's comment), so a window check on
+                                     16 would reject every trade. See docs/gen3/research/
+                                     rival_swap_refresh_window.md §5.3. */
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
+
+/* Mailbox `reason` values for a ST_FAIL ack. 1..3 are used inline by the older cases in the
+ * order listed below; 8 is the first NAMED one (this file owns the numbering — `lua/gen3/
+ * native.lua` mirrors it in its FAIL-reason table, and patch/src/ADDRESSES.md lists both). */
+#define REASON_SCRIPT_CONTEXT  1u   /* sScriptContext2Enabled */
+#define REASON_BAD_ARGS       2u
+#define REASON_NOT_ON_FIELD   3u
+#define REASON_WINDOW_CLOSED  8u   /* OP_RIVAL_SWAP consumed outside the rival-swap window */
+
+/* Rival-swap window (C5-11a, doc §5.3). Radical Red addresses, from the profile's `ram` block and
+ * the C5-9 pins; ADDRESSES.md carries the table and the rebuild re-verifies them. */
+#define RV_BATTLE_COMM      0x02023E82u  /* gBattleCommunication[MULTIUSE_STATE] = byte 0 */
+#define RV_BATTLE_MAIN_FUNC 0x03004F84u  /* gBattleMainFunc */
+#define RV_GMAIN_CB2        0x030030F4u  /* gMain + 4 (callback2) */
+#define RV_BATTLE_TYPE      0x02022B4Cu  /* gBattleTypeFlags */
+#define RV_TRAINER_OPPONENT 0x020386AEu  /* gTrainerBattleOpponent_A (u16) */
+#define RV_BATTLE_TYPE_LINK 0x02u        /* BATTLE_TYPE_LINK */
+#define RV_MULTIUSE_SETUP_DONE 15u       /* CB2_HandleStartBattle case 15 == InitBattleControllers */
+#define RV_BEGIN_DUMMY      0x080123BDu  /* BeginBattleIntroDummy|1 (C5-9 pin, RR-BIN 0x123BD) */
+#define RV_CB2_START_BATTLE 0x08010509u  /* CB2_HandleStartBattle|1 (SYM / write_checkpoint pack) */
 
 /* Armed forced-move state (controller-swap driver), EWRAM scratch past the mailbox. */
 typedef struct {
@@ -286,12 +313,22 @@ typedef struct {
 
 /* ---- battle-controller plumbing (RR build-specific, runtime-discovered) ---- */
 #define gBattlerControllerFuncs 0x03004FE0u   /* u32[4] */
-/* action-select controller cycles HandleChooseActionAfterDma3 -> HandleInputChooseAction;
- * MOVE thunk = HandleInputChooseMove slot. Discovered by reading gBattlerControllerFuncs
- * at the live menus (see patch/src/ADDRESSES.md). */
-#define ACTION_CTRL_A           0x0802E439u
-#define ACTION_CTRL_B           0x0802E3B5u
-#define MOVE_CTRL_THUNK         0x0802EA11u
+/* Parked-menu controllers, read from gBattlerControllerFuncs at the live menus (ADDRESSES.md) and
+ * named by the FR .sym (bodies byte-identical at these entries; RR detours the menu bodies to CFRU).
+ * ACTION_CTRL_B is NOT a menu: it is PlayerBufferRunCommand, the idle dispatcher every controller
+ * returns to. Kept for reference only; gating on it matched the post-commit frame (C5-FMS-FIX). */
+#define ACTION_CTRL_A           0x0802E439u   /* HandleInputChooseAction */
+#define ACTION_CTRL_CFRU        0x090A9EA1u   /* same parked action menu, second spelling: detour target
+                                               * of 0x0802E438, stored directly (LDR@0x090A9E76) when the
+                                               * CFRU L-button window closes; CFRU compares both itself */
+#define ACTION_CTRL_B           0x0802E3B5u   /* PlayerBufferRunCommand (not a menu) */
+#define MOVE_CTRL_THUNK         0x0802EA11u   /* HandleInputChooseMove (thunk -> CFRU 0x090AB8B8) */
+#define PlayerBufferExecCompleted ((void (*)(void))0x0802E33Du)  /* slot = RunCommand, clear exec bit */
+/* gBattleCommunication[b] during HandleTurnActionSelectionState: pret battle_main.c's 0-based enum;
+ * the jump table at 0x0801409C and its case bodies [3]/[4] are byte-identical in FR and RR. */
+#define COMM_WAIT_ACTION_CHOSEN            1u   /* action menu parked (exec bit set)          */
+#define COMM_WAIT_ACTION_CASE_CHOSEN       2u   /* move menu parked                           */
+#define COMM_WAIT_ACTION_CONFIRMED_STANDBY 3u   /* engine emits stop-bounce standby, then ++  */
 
 /* ---- engine globals (validated: SLink RR profile <-> BPRE.ld <-> binary) ---- */
 #define gBattleMons          0x02023BE4u
@@ -564,13 +601,17 @@ static void ack(u16 st, u16 reason)
     MB->opcode  = 0;        /* consumed */
 }
 
-/* Runs in place of the menu controller (we swapped gBattlerControllerFuncs[b] to here),
- * so it's the authoritative writer at the right point in the frame. It sets the
- * chosen-move state the action+move menus would have produced and jumps straight to
- * STATE_WAIT_ACTION_CONFIRMED_STANDBY (4) — the engine then executes the forced move.
- * The two-stage menu emit was abandoned: the buffer-transfer round-trip never completed
- * under repeated calls, and CFRU's move buffer carries a Z-move byte (a stale value made
- * Scratch fire as "Breakneck Blitz"). Jumping to CONFIRMED sidesteps both. */
+/* Runs in place of the menu controller (we swapped gBattlerControllerFuncs[b] to here; BattleMainCB1
+ * calls slot b with gActiveBattler == b), so it's the authoritative writer at the right point in the
+ * frame. It sets the chosen-move state the action+move menus would have produced and jumps straight
+ * to STATE_WAIT_ACTION_CONFIRMED_STANDBY (3): the engine then sends the stop-bounce standby message
+ * and moves to CONFIRMED (4) itself, exactly as after a real menu pick. The two-stage menu emit was
+ * abandoned: the buffer-transfer round-trip never completed under repeated calls, and CFRU's move
+ * buffer carries a Z-move byte (a stale value made Scratch fire as "Breakneck Blitz"). Jumping past
+ * the menus sidesteps both. PlayerBufferExecCompleted hands the slot back to PlayerBufferRunCommand,
+ * as the real menus do on commit: the engine never reassigns a controller slot, so without it the
+ * player's controller stayed this no-op and the first message/animation for battler b hung
+ * (C5-FMS-FIX; the headless gate masked it by clearing the exec flags every frame). */
 static void slink_force_controller(void)
 {
     if (!AM->armed) return;       /* fire once; later calls (same turn) are no-ops */
@@ -580,23 +621,36 @@ static void slink_force_controller(void)
     R16(gChosenMovesByBanks  + b * 2) = move;
     u32 bs = R32(gBattleStruct);
     if (bs) { R8(bs + 0x80 + b) = AM->move_pos; R8(bs + 0x0C + b) = AM->target; }
-    R8(gBattleCommunication + b) = 4;                /* CONFIRMED_STANDBY */
+    R8(gBattleCommunication + b) = COMM_WAIT_ACTION_CONFIRMED_STANDBY;
     u32 mask = (1u << b) | (1u << (b + 4)) | (1u << (b + 8)) | (1u << (b + 12)) | 0xF0000000u;
     R32(gBattleExecBuffer) &= ~mask;
     AM->armed = 0;
+    PlayerBufferExecCompleted();
     MB->status = ST_OK; MB->reason = 0; MB->ack_seq = AM->seq; MB->opcode = 0;
 }
 
 /* Every frame while armed: when the player's action/move menu is up, swap its
- * controller pointer to ours so the engine drives our forced choice natively. */
+ * controller pointer to ours so the engine drives our forced choice natively.
+ * Never in a link battle: PlayerBufferExecCompleted's link branch would send a transfer.
+ * The forced slot bypasses the menu's own checks (Disable, Encore, Taunt, Choice lock,
+ * AreAllMovesUnusable); only a slot with no PP (or no move) is refused, since the engine would
+ * otherwise run a 0-PP move. */
 static void drive_force_move(void)
 {
     if (!AM->armed) return;
     u32 b = AM->battler;
     volatile u32 *cf = (volatile u32 *)(gBattlerControllerFuncs + b * 4);
     u8 comm = R8(gBattleCommunication + b);
-    if ((comm == 2 && (*cf == ACTION_CTRL_A || *cf == ACTION_CTRL_B)) ||
-        (comm == 3 && *cf == MOVE_CTRL_THUNK)) {
+    u32 c = *cf;
+    u8 parked = !(R32(RV_BATTLE_TYPE) & RV_BATTLE_TYPE_LINK) &&
+        ((comm == COMM_WAIT_ACTION_CHOSEN      && (c == ACTION_CTRL_A || c == ACTION_CTRL_CFRU)) ||
+         (comm == COMM_WAIT_ACTION_CASE_CHOSEN && c == MOVE_CTRL_THUNK));
+    if (parked) {
+        if (R8(gBattleMons + b * BATTLE_MON_SIZE + 0x24 + AM->move_pos) == 0) {   /* pp[move_pos] */
+            AM->armed = 0;
+            MB->status = ST_FAIL; MB->reason = 11; MB->ack_seq = AM->seq; MB->opcode = 0;
+            return;
+        }
         *cf = ((u32)&slink_force_controller) | 1u;   /* Thumb */
     }
     if (++AM->frames > 600) {
@@ -1783,6 +1837,21 @@ void slink_setup_start_menu(void)
     R8(sNumStartMenuActions) = 7;
 }
 
+/* C5-11a: the shared gEnemyParty staging of OP_SET_ENEMY_PARTY/OP_RIVAL_SWAP. Faithful byte
+ * copy from SLINK_BLOB_BUF (caller staged count*100 raw party-mon bytes), zeroing maxHP (+0x58)
+ * on the unused trailing slots so CFRU's scan-until-maxHP==0 terminates, then the count. */
+static void stage_enemy_party(u8 count)
+{
+    for (u8 i = 0; i < count; i++) {
+        volatile u8 *src = (volatile u8 *)(SLINK_BLOB_BUF + (u32)i * MON_SIZE);
+        volatile u8 *dst = (volatile u8 *)(gEnemyParty   + (u32)i * MON_SIZE);
+        for (u32 j = 0; j < MON_SIZE; j++) dst[j] = src[j];
+    }
+    for (u8 s = count; s < 6; s++)
+        R16(gEnemyParty + (u32)s * MON_SIZE + 0x58) = 0;
+    R8(gEnemyPartyCount) = count;
+}
+
 __attribute__((section(".text.entry"), used))
 void slink_hook(void)
 {
@@ -1864,6 +1933,28 @@ void slink_hook(void)
         break;
     }
 
+    case OP_RIVAL_SWAP: {        /* C5-11a. args: [0]=count (1..6), [1..2]=trainer_id (u16 LE).
+                                    The RIVAL SWAP's own opcode: OP_SET_ENEMY_PARTY (16) is shared
+                                    with field-trade staging and stays unchanged. The five-part
+                                    check below is the AUTHORITY for the window (doc §5.3): it
+                                    proves the copy lands after CreateNPCTrainerParty and BEFORE
+                                    SetBattlePartyIds and the opponent snapshot. Failing ANY part
+                                    means NO copy at all — the rival keeps its own team. */
+        u8 count = MB->args[0];
+        u16 trainer = (u16)(MB->args[1] | (MB->args[2] << 8));
+        if (count == 0 || count > 6) { ack(ST_FAIL, REASON_BAD_ARGS); return; }
+        if (R8(RV_BATTLE_COMM) >= RV_MULTIUSE_SETUP_DONE
+            || R32(RV_BATTLE_MAIN_FUNC) != RV_BEGIN_DUMMY
+            || R32(RV_GMAIN_CB2) != RV_CB2_START_BATTLE
+            || (R32(RV_BATTLE_TYPE) & RV_BATTLE_TYPE_LINK)
+            || R16(RV_TRAINER_OPPONENT) != trainer) {
+            ack(ST_FAIL, REASON_WINDOW_CLOSED);
+            return;
+        }
+        stage_enemy_party(count);
+        break;
+    }
+
     case OP_SET_ENEMY_PARTY: {   /* args: [0]=count. Lua staged count*100 raw party-mon bytes in
                                     SLINK_BLOB_BUF. Faithful byte-copy into gEnemyParty (preserves the
                                     partner's EXACT mons: moves/IVs/EVs/PID/item) — NOT CreateMon, which
@@ -1872,16 +1963,8 @@ void slink_hook(void)
                                     engine fn. RR/CFRU party-mon layout == enemy-mon layout (NO_ENCRYPT),
                                     so a raw memcpy is sufficient — same basis as M.writeEnemyParty. */
         u8 count = MB->args[0];
-        if (count == 0 || count > 6) { ack(ST_FAIL, 2); return; }
-        for (u8 i = 0; i < count; i++) {
-            volatile u8 *src = (volatile u8 *)(SLINK_BLOB_BUF + (u32)i * MON_SIZE);
-            volatile u8 *dst = (volatile u8 *)(gEnemyParty   + (u32)i * MON_SIZE);
-            for (u32 j = 0; j < MON_SIZE; j++) dst[j] = src[j];
-        }
-        /* Zero maxHP (+0x58) on unused slots so CFRU's scan-until-maxHP==0 terminates. */
-        for (u8 s = count; s < 6; s++)
-            R16(gEnemyParty + (u32)s * MON_SIZE + 0x58) = 0;
-        R8(gEnemyPartyCount) = count;
+        if (count == 0 || count > 6) { ack(ST_FAIL, REASON_BAD_ARGS); return; }
+        stage_enemy_party(count);
         break;
     }
 
@@ -2050,7 +2133,7 @@ void slink_hook(void)
         break;
 
     case OP_FORCE_MOVE_SLOT:      /* args: [0]=battler [1]=target [2]=move_pos */
-        if (MB->args[0] > 3 || MB->args[2] > 3) { ack(ST_FAIL, 2); return; }  /* bound: slink_force_controller reads gBattleMons[battler].moves[move_pos] */
+        if (MB->args[0] > 3 || MB->args[1] > 3 || MB->args[2] > 3) { ack(ST_FAIL, 2); return; }  /* bound: gBattleMons[battler].moves[move_pos], moveTarget = a battler */
         AM->battler  = MB->args[0];
         AM->target   = MB->args[1];
         AM->move_pos = MB->args[2];

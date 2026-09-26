@@ -77,7 +77,7 @@ python tools/lua_syntax_check.py
 
 ## Project Overview
 
-SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Emerald, Radical Red/CFRU), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a game-specific Lua client (`lua/gen1/client.lua`, `lua/gen2/client.lua`, `lua/clients/gen3_frlge_client.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game RAM each frame and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
+SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Radical Red), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a generation-specific Lua client (`lua/gen1/client.lua`, `lua/gen2/client.lua`, `lua/gen3/entry.lua` + `lua/gen3/run.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game state through its generation's read layer and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
 
 ### Game Maturity
 
@@ -120,14 +120,14 @@ DEAD_ZONE (no capture allowed for either player on this area)
 - A enters unseen area → `PENDING_B` (waiting for B to enter or capture)
 - B captures in `PENDING_B` area → checks A's pending capture; if present → `LINKED`
 
-A "failed catch" is: left the area without capturing AND the battle/encounter ended. The `no_catch` gate lives in Lua (`nuzlocke_active` / `M.hasPokeballs()`) — the server processes `no_catch` events as-received and always transitions to `DEAD_ZONE`.
+A "failed catch" is: left the area without capturing AND the battle/encounter ended. The `no_catch` gate lives in the client (the Gen 3 reducer sets its ball state from `reads:read_balls()`) — the server processes `no_catch` events as-received and always transitions to `DEAD_ZONE`.
 
 ### 4. Faint Linking (Two-Phase)
-**Phase 1 — Battle-safe (immediate):** When HP drops to 0 for a linked mon, the server issues a `force_faint` command to the partner's game. The Lua client writes HP=0 to the partner mon's party slot. This happens in the same frame window.
+**Phase 1 — Battle-safe (immediate):** When HP drops to 0 for a linked mon, the server queues a `force_faint` command for the partner's game. The Gen 3 client builds the write plan from its profile-driven reads and submits it through the armed write sink; the server's own faint gate still ignores pre-Nuzlocke deaths.
 
 **Nuzlocke gate**: Faints before `nuzlocke_active` is set (i.e., before the player has Pokéballs in their bag) are **ignored** by the server — the Soul Link death rule does not apply before the run begins. This protects starters that faint in the opening rival battle.
 
-**Phase 2 — Memorialization (deferred):** Only once both games are in a **safe state** (overworld, not in a battle/menu/animation), move both mons to the memorial box (Box 13, internal index 13 / UI "Box 14"). Zero the source slot's BoxPokemon data after copying. The Lua client signals `safe_state` each frame; the server queues the memorial write until it is acknowledged.
+**Phase 2 — Memorialization (deferred):** Only once both games pass the client's pack-backed safe checkpoint (overworld, parked CPU/tasks, idle scripts/native work, and stable save pointers), move both mons to the memorial box (Box 13, internal index 13 / UI "Box 14"). Zero the source slot's BoxPokemon data after copying. Deferred commands remain queued until that checkpoint is acknowledged.
 
 Never zero or copy party/box data while `gBattleOutcome` is unresolved or a script is running.
 
@@ -157,9 +157,9 @@ If a player whiteouts (entire party faints), all remaining party mons are treate
   lua/gen2/reads.lua, writes.lua       lua/gen2/reads.lua, writes.lua
 
 [BizHawk Instance A (Gen 3 GBA)]     [BizHawk Instance B (Gen 3 GBA)]
-  lua/clients/gen3_frlge_client.lua    lua/clients/gen3_frlge_client.lua
-  lua/memory_gba.lua                   lua/memory_gba.lua
-  data/games/gen3_frlge/gen3_frlge_areas.lua
+  lua/gen3/entry.lua + run.lua         lua/gen3/entry.lua + run.lua
+  lua/gen3/{reads,signals,writes,safety,client,boxes,native}.lua
+  data/games/{gen3_frlg,gen3_rr}/ + data/games/gen3_frlge/area_map.json
 
 [BizHawk Instance A (Gen 4 NDS)]     [BizHawk Instance B (Gen 4 NDS)]
   lua/clients/gen4_hgsspt_client.lua   lua/clients/gen4_hgsspt_client.lua
@@ -184,7 +184,7 @@ If a player whiteouts (entire party faints), all remaining party mons are treate
 - **Lua = TCP client** — The client script connects via LuaSocket (persistent connection) and sends newline-delimited JSON events whenever something changes (area, capture, faint). No polling.
 - **Python = TCP server** — `server/server.py` uses `asyncio.start_server` on port 54321. One connection per BizHawk instance. Game-specific logic is delegated to adapters (`server/adapters/`).
 - Commands flow back in the TCP response as a newline-delimited JSON object: `{"commands": [{"cmd": "force_faint", "key": "..."}]}`.
-- Lua parses the response and executes commands directly (e.g., writes HP=0 to RAM).
+- Lua parses the response and dispatches each command through its client seam. Gen 3 routes mutations through `lua/gen3/writes.lua` and its pack-backed safety policy; legacy clients keep their generation-specific command paths.
 - A **separate aiohttp HTTP server** on port 8080 serves the live status page — it is never touched by Lua.
 
 ```lua
@@ -192,7 +192,7 @@ If a player whiteouts (entire party faints), all remaining party mons are treate
 send_event({event="faint", player="a", seq=42, key="AABBCCDD:11223344", area_id="route_1"})
 -- server returns on the same TCP connection:
 -- {"commands":[{"cmd":"force_faint","key":"EEFF0011:22334455"}]}
--- client immediately writes HP=0 to that party slot
+-- client dispatches the command through its generation-specific write path
 ```
 
 **Key files:**
@@ -203,22 +203,29 @@ send_event({event="faint", player="a", seq=42, key="AABBCCDD:11223344", area_id=
 SLink-RR/
 ├── lua/                         # BizHawk Lua scripts (loaded by emulator)
 │   ├── slink.lua                # Universal entry point (auto-detects game)
-│   ├── slink_gen3.lua           # Gen 3 loader (loads gen3_frlge_client)
+│   ├── slink_gen3.lua           # Gen 3 launcher wrapper (dofiles slink.lua)
 │   ├── slink_gen4.lua           # Gen 4 loader (loads gen4_hgsspt_client)
 │   ├── slink_gen5.lua           # Gen 5 loader (loads gen5_bw_client)
-│   ├── clients/                 # Per-game production clients (one per supported game)
-│   │   ├── gen3_frlge_client.lua
+│   ├── clients/                 # Legacy single-file production clients
 │   │   ├── gen4_hgsspt_client.lua
 │   │   └── gen5_bw_client.lua
-│   ├── games/                   # Per-game adapter configs (address tables, constants)
-│   │   ├── gen3_frlge.lua
-│   │   ├── gen4_hgsspt.lua
-│   │   └── gen5_bw.lua          # Gen 5 game module
+│   ├── gen3/                    # Gen 3 composition root and production client
+│   │   ├── entry.lua
+│   │   ├── run.lua
+│   │   ├── client.lua
+│   │   ├── reads.lua
+│   │   ├── signals.lua
+│   │   ├── writes.lua
+│   │   ├── safety.lua
+│   │   ├── boxes.lua
+│   │   └── native.lua           # Optional RR companion ABI
 │   ├── gen1/                    # Gen 1 client (R/B/Y, + AP variants): entry.lua, client.lua,
 │   │   └── ...                  # reads.lua, writes.lua, signals.lua, boxes.lua, rom.lua, panel.lua
 │   ├── gen2/                    # Gen 2 client (Crystal/Gold/Silver): entry.lua, client.lua,
 │   │   └── ...                  # reads.lua, writes.lua, boxes.lua, signals.lua, rom.lua, run.lua
-│   ├── memory_gba.lua           # GBA memory read/write helpers (Gen 3)
+│   ├── games/                   # Legacy Lua game modules
+│   │   ├── gen4_hgsspt.lua
+│   │   └── gen5_bw.lua          # Gen 5 game module
 │   ├── memory_nds.lua           # NDS memory read/write helpers (Gen 4 & Gen 5)
 │   ├── hud.lua                  # Shared HUD overlay module
 │   ├── connector.lua            # LuaSocket TCP wrapper (non-blocking)
@@ -245,7 +252,9 @@ SLink-RR/
 │   ├── memorial.json            # Death log (auto-generated)
 │   ├── runs/                    # Run Manager named runs (each has own links.json)
 │   └── games/                   # Per-game static data
-│       ├── gen3_frlge/          # FRLG/RR items, types, sprites, area maps + gen3_frlge_areas.lua
+│       ├── gen3_frlge/          # Shared Gen 3 area map/locations and server-side inputs
+│       ├── gen3_frlg/           # FireRed/LeafGreen profile, sites and checkpoint
+│       ├── gen3_rr/             # Radical Red profile, sites and checkpoint
 │       ├── gen4_hgsspt/         # HGSS/Pt area maps + gen4_hgsspt_areas.lua
 │       ├── gen2_crystal/        # Crystal species, types, items, area maps
 │       ├── gen1_rby/            # Placeholder
@@ -270,7 +279,7 @@ SLink-RR/
 ```
 
 **File placement rules:**
-- **New game client** → `lua/clients/<gen>_<game>_client.lua`
+- **New rewritten client** → a generation-owned directory such as `lua/gen3/`; legacy single-file clients remain under `lua/clients/`
 - **New game adapter (Lua)** → `lua/games/<gen>_<game>.lua`
 - **New game adapter (Python)** → `server/adapters/<gen>_<game>.py`
 - **New game static data** → `data/games/<gen>_<game>/`
@@ -280,12 +289,18 @@ SLink-RR/
 - **Shared Lua modules** → `lua/` root (e.g., `hud.lua`, `connector.lua`)
 - **Never** place game-specific files in the root or in another game's directory
 
-*Gen 3 Lua (GBA — FRLG / Emerald / Radical Red):*
-- **`lua/slink.lua`** — Universal entry point: auto-detects game via game_detect.lua and loads the correct client.
-- **`lua/slink_gen3.lua`** — Gen 3 launcher script (configure host/port/player, loads gen3_frlge_client.lua).
-- **`lua/clients/gen3_frlge_client.lua`** — **Gen 3 production script**: ROM validation, event detection, TCP transport, command dispatch, party-sync writes, battle HP cache with frame-ordered writeback (CFRU), double-buffer `index_party()` with per-buffer entry pools, F-key manual overrides, nature change detection (personality-changed key migration via otId+species+level+nickname signature matching), borrowed battle rolling gift capture buffer (3+ gifts in 45 frames triggers freeze), encounter GUI prompts. Party compaction after memorialize uses **swap-to-end** (last slot moves into vacated slot, no sequential shift) to preserve surviving mons' slot indices.
-- **`lua/memory_gba.lua`** — FRLG address constants and read/write helpers (including `M.hasPokeballs()`, `M.countPokeballs()`). Contains `PROFILES` table with vanilla, AP, and Radical Red/CFRU address profiles. `M.initProfile()` auto-detects ROM type and applies the correct profile. Extended `_CHARSET` with `/` (0xBA), `,` (0xB9), `$` (0xB8), `♂` (0xB5), `♀` (0xB6), `'` (0xB3), `'` (0xB4), `·` (0xAF), `…` (0xB0), `«` (0xB1), `»` (0xB2).
-- **`data/games/gen3_frlge/gen3_frlge_areas.lua`** — Generated lookup: `mapGroup*256+mapNum → area_id` (184 entries). Regenerate with `python tools/gen_area_map.py`.
+*Gen 3 Lua (GBA — FireRed / LeafGreen / Radical Red):*
+- **`lua/slink.lua`** — Routes an admitted GBA cartridge through `Entry.admit` before the legacy game detector; FireRed, LeafGreen, and Radical Red are admitted, while Emerald, Archipelago-FRLG, and unknown/header-only GBA builds are refused by name.
+- **`lua/slink_gen3.lua`** — Thin launcher wrapper that configures `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER`, then loads `slink.lua`; the admission and build graph stay in `lua/gen3/`.
+- **`lua/gen3/entry.lua`** — Composition root. It defines the `gen3_frlg` and `gen3_rr` packs, literal pack-file paths, hash/anchor/header admission, and `Entry.build(deps)`; injected `io`/`ev` tables keep the production graph independent of BizHawk globals.
+- **`lua/gen3/run.lua`** — BizHawk bootstrap. It supplies GBA memory/event adapters, the connector and HUD, calls `Entry.admit`, builds the production session, and drives guarded frame/exit callbacks.
+- **`lua/gen3/reads.lua`** — Profile-driven record decoder for party, boxes, trainer, bag, map, and battle state. It dereferences the live SaveBlock pointers and uses injected read-only I/O; FRLG and Radical Red differ by pack data and record rules, not a title branch.
+- **`lua/gen3/signals.lua`** — Converts pack `engine_signals.json` sites into `on_bus_exec` hooks, checks expected ROM bytes at load and fire, verifies callback identity, and bounds the signal queue.
+- **`lua/gen3/writes.lua` + `lua/gen3/safety.lua`** — The sole write sink and fail-closed checkpoint policy. A reason-specific arm validates its range and pack predicates before bytes are written; `boxes.lua` uses the same sink.
+- **`lua/gen3/boxes.lua`** — Profile-aware party/PC/memorial moves, including FRLG's relocated storage and Radical Red's compressed-box format, with optional native executor seams.
+- **`lua/gen3/client.lua`** — Pack-neutral state machine over `lua/core`: hello gating, signal-to-event reduction, keyed/deferred commands, PC sync, battle writes, and HUD prompts. It receives `native` only for an admitted Radical Red companion artifact.
+- **`lua/gen3/native.lua`** — Optional single-owner Radical Red companion mailbox part. It owns staging, publishes opcodes through the armed write sink, polls acknowledgements, and reads back native results; its addresses and opcodes come from `profile.native`.
+- **`data/games/gen3_frlg/`, `data/games/gen3_rr/`, and `data/games/gen3_frlge/`** — Per-pack profiles, engine signals, checkpoints, and the shared FRLG/RR area map and locations.
 
 *Gen 2 Lua (GBC — Crystal):*
 - **`lua/gen2/entry.lua`** — Gen 2 composition root (Crystal/Gold/Silver): builds the candidate and
@@ -310,7 +325,7 @@ SLink-RR/
 *Shared Lua:*
 - **`lua/connector.lua`** — LuaSocket wrapper with fully non-blocking connect (zero stutter), exponential backoff (2s → 30s cap), pending-connect probe via zero-byte send: `C.init()`, `C.send()`, `C.receive()`.
 - **`lua/socket.lua`** — LuaSocket shim; requires `lua/x64/socket-windows-5-4.dll` (from Archipelago install).
-- **`lua/game_detect.lua`** — Shared game detection framework: scans ROM header to identify the game family (Gen 2 GBC, Gen 3 GBA, Gen 4 NDS, or Gen 5 NDS), returns the matching game module.
+- **`lua/game_detect.lua`** — Shared ROM-header detection for the legacy Gen 2/4/5 clients; the Gen 3 route is admitted before this registry and does not delegate GBA admission to it.
 
 *Server:*
 - **`server/state.py`** — `SoulLinkState` FSM: processes event dicts, queues commands for each player, persists state. Includes `_check_link_violation()` for species/gender/type clause rules.
@@ -318,7 +333,7 @@ SLink-RR/
 - **`server/obs_controller.py`** — `OBSController`: per-player `simpleobsws` WebSocket connections (obs-websocket v5, port 4455), per-player coalescing `asyncio.Queue` + worker tasks, reconnect loop with exponential backoff (5 s → 60 s cap). `submit_fired(fired_list)` priority-resolves a list of `(event_name, src_player, metadata)` tuples in one pass — iterates rules in list order, first match per target player wins. Config persisted at `data/obs_config.json` (global, not per-run). Passwords never returned in GET responses.
 - **`server/pokemon_data.py`** — Shared Pokémon data module: `SPECIES_NAMES`, `GENDER_RATIO`, `gender_from_key_species()`, `EVO_FAMILY` (Gen I–IX evolution families including CFRU/RR extended IDs), `base_form()`.
 - **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter + GamePresentationAdapter. All game-specific server logic flows through adapter interfaces. 0.2.6 added `gift_link_area`, `rival_trainer_ids` (rules) and `trainers_for_area` / `trainer_party` / `trainer_brief` (presentation) as inert-default stubs.
-- **`server/adapters/gen3_frlge.py`** — Gen 3 adapter: GBA PID:OTID key format, FRLG+Emerald gift areas, Gen 1-3 species data, RR variant support. RR overrides `rival_trainer_ids()` (27 "Terry" IDs), the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief` / `milestone_cap_for_fight_label`) from `rr_priority_trainers.json`, and `gift_link_area`.
+- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. Legacy Emerald gift-area entries remain server-side compatibility data, but the current launcher admits only FireRed, LeafGreen, and Radical Red. RR overrides `rival_trainer_ids()` (27 "Terry" IDs), the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief` / `milestone_cap_for_fight_label`) from `rr_priority_trainers.json`, and `gift_link_area`.
 - **`server/adapters/gen2_gsc.py`** — `Gen2GSCAdapter`, Gen 2 adapter: DV-based gender/shiny, 251 sequential species (NatDex 1-251), 17 types (Dark+Steel added), per-title item names, PokeAPI sprites. Data from `data/games/gen2_<title>/` (Crystal, Gold, Silver).
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 adapter: PID:OTID key format, HGSS gift areas, Gen 1-4 species (NatDex 1-493).
 - **`server/adapters/gen5_bw.py`** — Gen 5 adapter: PID:OTID key format, BW/BW2 gift areas, Gen 1-5 species (NatDex 1-649).
@@ -369,13 +384,13 @@ The server uses a pluggable adapter pattern for game-specific behavior. All game
 Each game family has its own adapter module:
 - **`server/adapters/gen1_rby.py`** — Gen 1 (Red, Blue, Yellow)
 - **`server/adapters/gen2_gsc.py`** — Gen 2 (Crystal, Gold, Silver)
-- **`server/adapters/gen3_frlge.py`** — Gen 3 (FRLG, Emerald, Radical Red/CFRU)
+- **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. The Lua launcher admits FireRed, LeafGreen, and Radical Red only; Emerald and Archipelago-FRLG are refused before the adapter is used.
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 (HeartGold, SoulSilver, Platinum)
 - **`server/adapters/gen5_bw.py`** — Gen 5 (Black, White, Black 2, White 2)
 
 The state machine (`state.py`) calls adapter methods instead of hardcoded game logic. The adapter is selected based on the `game_id` field in the first `hello` event and persisted in `links.json`.
 
-**Adding a new game:** Create an adapter in `server/adapters/`, a Lua game module in `lua/games/`, a Lua client in `lua/clients/`, and game data files in `data/games/`.
+**Adding a new game:** Create a server adapter in `server/adapters/` and its static data under `data/games/`. A rewritten client uses a generation-owned composition root (as Gen 3 does under `lua/gen3/`); legacy single-file clients use `lua/clients/` and their existing `lua/games/` module.
 
 ---
 
@@ -458,7 +473,7 @@ Remaining back-compat shims (leave them, don't extend them): the `"frlg"` rom_ty
 
 **No CLI flags required.** Load the appropriate launcher script in each BizHawk Lua Console:
 - **Universal:** Load `lua/slink.lua` — auto-detects the ROM and loads the correct client. Uses default connection settings.
-- **Gen 3 (GBA):** Load `lua/slink_gen3.lua` (or `lua/clients/gen3_frlge_client.lua` directly). Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
+- **Gen 3 (GBA):** Load `lua/slink_gen3.lua` (or `lua/slink.lua`); the launcher admits FireRed, LeafGreen, or Radical Red and then loads `lua/gen3/run.lua`. Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
 - **Gen 4 (NDS):** Load `lua/slink_gen4.lua` (or `lua/clients/gen4_hgsspt_client.lua` directly). Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
 - **Gen 5 (NDS):** Load `lua/slink_gen5.lua` (or `lua/clients/gen5_bw_client.lua` directly). Edit `SLINK_HOST`, `SLINK_PORT`, and `SLINK_PLAYER` at the top.
 - **Downloaded launcher:** Launcher files from the status page/manager prompt for the project root folder, cache it in `slink_path.cfg`, and auto-detect the game.
@@ -502,7 +517,7 @@ A `noop` command means no action needed. The Lua client executes each command im
 
 **Duplicate-event guard:** each client sends a monotonic `seq`. The server drops `seq ≤ last_seen_seq` **on the same TCP connection** — `last_seq` is a local of `handle_client` (`server/server.py:1095-1101`, guard at `:1243-1254`), so it is born and dies with the socket and a reconnecting client counting from 1 again is never read as a duplicate. A connection is also ignored until it says `hello`: any other event on a connection with no accepted hello is answered `noop` (`:1230-1241`). The old "except when seq resets to 0/1 after a restart" rule was a `seq <= 1 and last > 10` heuristic; it was **retired 2026-09-17 (`0629736`)** after it dropped a real reconnect's hello, and the harness constraint it implied (never reuse a server across client restarts) no longer exists.
 
-**Nuzlocke gate (Lua-side):** `nuzlocke_active` is only set to `true` once `M.hasPokeballs()` returns true (reads the actual bag pocket from RAM). Until then, `no_catch` events and `resolved_areas` bookkeeping are suppressed in Lua. The server has no corresponding gate — it trusts Lua not to send `no_catch` prematurely.
+**Nuzlocke gate (Lua-side):** The Gen 3 client latches its ball state when `reads:read_balls()` reports a positive count; until then, `no_catch` events and `resolved_areas` bookkeeping are suppressed. The server has no corresponding gate — it trusts the client not to send `no_catch` prematurely.
 
 **Frame budget:** 60fps (GBA). Target Python round-trip < 50ms on localhost; < 100ms over LAN.
 
@@ -800,36 +815,17 @@ These are what is *actually* open. The addresses and the memorial box are no lon
 
 ---
 
-## FRLG Memory Map
+## Gen 3 (FRLG + Radical Red) Memory Map
 
-All values are little-endian. Verified against [pret/pokefirered](https://github.com/pret/pokefirered) (`include/pokemon.h`, `src/load_save.c`, `include/pokemon_storage_system.h`).
+All multi-byte values are little-endian. FRLG record geometry is verified against [pret/pokefirered](https://github.com/pret/pokefirered) (`include/pokemon.h`, `src/load_save.c`, `include/pokemon_storage_system.h`); Radical Red changes are carried by its pack rather than by a client-side address table.
 
-### ROM identification (check at Lua startup)
+### Admission and ROM identification
 
-Read the 4-byte ASCII game code from the GBA ROM header via the system bus — this is preserved by all major Pokémon randomizers (Universal Pokemon Randomizer, etc.) because randomizers only modify ROM data sections (encounter tables, trainer Pokémon, species stats), never the cartridge header.
-
-```lua
--- GBA ROM header: game code at offset 0xAC from ROM start (0x08000000 on system bus)
-local function readGameCode()
-    local bytes = {}
-    for i = 0, 3 do
-        bytes[i+1] = string.char(memory.read_u8(0x080000AC + i, "System Bus"))
-    end
-    return table.concat(bytes)
-end
--- Returns "BPRE" (FireRed) or "BPGE" (LeafGreen) for any vanilla or randomized US 1.0 ROM.
-```
-
-| Game                              | Game Code |
-|-----------------------------------|-----------|
-| FireRed US 1.0 and 1.1 (any randomization) | `BPRE` |
-| LeafGreen US 1.0 and 1.1 (any randomization) | `BPGE` |
-
-**Randomizer compatibility:** All RAM addresses in this document are determined by the game's compiled code (not ROM data) and are identical for vanilla and data-randomized FireRed/LeafGreen US 1.0 ROMs. Only engine-level hacks that recompile the game binary could move these addresses. After detecting the game code, `memory.lua` runs runtime sanity checks (`validateROM()`) — party count in 0–6 range, both IWRAM pointers in EWRAM range, mapGroup/mapNum within known bounds — before enabling any memory writes.
+`lua/gen3/entry.lua` is hash-first: `gameinfo.getromhash()` is matched against the packs' admission data, then the engine-site anchors, then a header-named fallback. The launcher accepts only `gen3_frlg` (FireRed/LeafGreen) and `gen3_rr` (Radical Red). Emerald, Archipelago-FRLG, unknown hacks, and a header-only BPRE/BPGE match are refused by name. There is no pure-Lua ROM rehash; the anchor pass is the byte-level proof. Missing or mismatched pack data fails before hooks or writes are armed.
 
 ### Stable EWRAM globals (FireRed US 1.0)
 
-**Vanilla addresses** (data-only randomizers use identical addresses):
+**FRLG profile addresses** (pinned US 1.0 artifacts; randomized FRLG is not admitted):
 
 | Symbol              | Address      | Type          | Notes |
 |---------------------|--------------|---------------|-------|
@@ -838,88 +834,28 @@ end
 | `gEnemyPartyCount`  | `0x0202402A` | u8            | Wild/trainer enemy |
 | `gEnemyParty`       | `0x0202402C` | Pokemon[6]    | Immediately follows gEnemyPartyCount |
 
-**AP addresses** (EWRAM globals shifted +0x14):
+The FRLG addresses above are data in `data/games/gen3_frlg/profile.json`; `reads.lua` receives them through the injected I/O and never hardcodes them. Radical Red uses its own pack fields. Archipelago FRLG is unadmitted, so its former address shifts are not active client profiles.
 
-| Symbol              | Address      | Type          | Notes |
-|---------------------|--------------|---------------|-------|
-| `gPlayerPartyCount` | `0x0202403D` | u8            | Live count (0–6) |
-| `gPlayerParty`      | `0x02024298` | Pokemon[6]    | 600 bytes (6 × 100) |
-| `gEnemyPartyCount`  | `0x0202403E` | u8            | Wild/trainer enemy |
-| `gEnemyParty`       | `0x02024040` | Pokemon[6]    | Immediately follows gEnemyPartyCount |
+### SaveBlock ASLR — map, PC storage, and bag pockets
 
-These are **not** behind the SaveBlock ASLR — they are direct EWRAM globals.
-
-### SaveBlock ASLR — map location, PC storage, and bag pockets
-
-`gSaveBlock1Ptr` and `gPokemonStoragePtr` are re-randomized on each call to `SetSaveBlocksPointers()` (boot, load, and certain save events). Their targets shift 0–124 bytes (4-byte aligned) from the base EWRAM address of their respective structs. **Never hardcode the target address — always dereference the pointer.**
+FRLG relocates `gSaveBlock1Ptr`, `gSaveBlock2Ptr`, and `gPokemonStoragePtr` whenever `SetSaveBlocksPointers()` runs. `reads.lua` dereferences the live pointer addresses supplied by `write_checkpoint.json` on each read and bounds the relocation window; no target address is cached. `client.lua` uses the read facade rather than calling `memory.*` directly.
 
 ```lua
--- Read current mapGroup and mapNum via the pointer chain
--- Vanilla: SB1_PTR_ADDR = 0x03005008; AP: SB1_PTR_ADDR = 0x03004F58
-local function getCurrentArea()
-    local sb1 = memory.read_u32_le(M.SB1_PTR_ADDR)
-    -- SaveBlock1.location is at struct offset +0x0004
-    -- WarpData: mapGroup (u8 +0), mapNum (u8 +1)
-    local mapGroup = memory.read_u8(sb1 + 0x0004)
-    local mapNum   = memory.read_u8(sb1 + 0x0005)
-    return mapGroup, mapNum
-end
+local location = reads:read_location()  -- map group and number
+local storage  = reads:read_storage()   -- live PokemonStorage pointer
+local balls    = reads:read_balls()     -- profile-derived ball pocket
 ```
 
-Likewise for PC storage writes:
-```lua
--- Vanilla: PSP_PTR_ADDR = 0x03005010; AP: PSP_PTR_ADDR = 0x03004F60
-local function getBoxMonAddr(boxIdx, slotIdx)  -- both 0-indexed
-    local psp = memory.read_u32_le(PSP_PTR_ADDR)
-    -- struct PokemonStorage: u8 currentBox (+0x0000), then boxes[14][30] of BoxPokemon (80 bytes each)
-    return psp + 0x0001 + (boxIdx * 30 + slotIdx) * 80
-end
-```
+For the admitted FRLG pack, the SaveBlock1 bag fields are the pret-verified offsets below. The active decoder obtains the offsets, slot count, and quantity rules from the pack; there is no active AP-FRLG branch.
 
-**SaveBlock1 bag pocket offsets (pret/pokefirered `include/global.h`):**
+| Offset | Field | Size | Notes |
+|--------|-------|------|-------|
+| `+0x0310` | `bagPocket_Items[42]` | 168 B | Normal items |
+| `+0x03B8` | `bagPocket_KeyItems[30]` | 120 B | Key items |
+| `+0x0430` | `bagPocket_PokeBalls[16]` | 64 B | Pokéball pocket |
+| `+0x0464` | `bagPocket_TMHM[58]` | 232 B | TMs/HMs |
 
-Vanilla offsets shown; AP shifts all bag pockets by +0x0250 (592 bytes) due to expanded item tables (ITEMS_COUNT = 450 vs vanilla 375).
-
-| Offset (vanilla) | Offset (AP) | Field | Size | Notes |
-|--------|--------|-------|------|-------|
-| `+0x0310` | `+0x0560` | `bagPocket_Items[42]` | 168 B | Normal items |
-| `+0x03B8` | `+0x0608` | `bagPocket_KeyItems[30]` | 120 B | Key items |
-| `+0x0430` | `+0x0680` | `bagPocket_PokeBalls[16]` | 64 B | **Pokéball pocket** |
-| `+0x0464` | `+0x06B4` | `bagPocket_TMHM[58]` | 232 B | TMs/HMs |
-
-Each `ItemSlot` is `{u16 itemId, u16 quantity}` (4 bytes). `itemId == 0` means empty.
-
-```lua
--- Check if player has any Pokéballs (used for nuzlocke gate in client.lua)
--- M.SB1_BALL_POCKET_OFFSET and M.SB1_BALL_POCKET_COUNT are set by initProfile()
--- Vanilla: offset=0x0430, AP: offset=0x0680
-
-function M.hasPokeballs()
-    local sb1  = memory.read_u32_le(M.SB1_PTR_ADDR)
-    local base = sb1 + M.SB1_BALL_POCKET_OFFSET
-    for i = 0, M.SB1_BALL_POCKET_COUNT - 1 do
-        local itemId = memory.read_u16_le(base + i * 4)
-        local qty    = memory.read_u16_le(base + i * 4 + 2)
-        if itemId ~= 0 and qty > 0 then return true end
-    end
-    return false
-end
-
-function M.countPokeballs()  -- returns total count across all 16 slots
-    local sb1  = memory.read_u32_le(M.SB1_PTR_ADDR)
-    local base = sb1 + M.SB1_BALL_POCKET_OFFSET
-    -- AP encrypts quantities: actual = stored XOR (encryptionKey & 0xFFFF)
-    -- encryptionKey read from SB2+0x0F2C (AP) or SB2+0x0F20 (vanilla)
-    local total = 0
-    for i = 0, M.SB1_BALL_POCKET_COUNT - 1 do
-        local itemId = memory.read_u16_le(base + i * 4)
-        if itemId ~= 0 then
-            total = total + memory.read_u16_le(base + i * 4 + 2)
-        end
-    end
-    return total
-end
-```
+`reads:read_balls()` returns the decoded count and `has_pokeballs`; `client.lua` uses that fact to latch the Nuzlocke gate and publish the ball count.
 
 ### `struct Pokemon` layout (100 bytes per slot)
 
@@ -939,151 +875,87 @@ From `include/pokemon.h`:
 | `+0x56` | 2 B  | `hp` (current)    | No |
 | `+0x58` | 2 B  | `maxHP`           | No |
 
-**HP, status, and level are outside the encrypted region.** Read/write them directly. Never write inside `+0x20`–`+0x4F` without re-encrypting and recomputing the checksum — doing so creates Bad Eggs.
+**HP, status, and level are outside the encrypted region.** Read them through the profile-driven read facade; any write still goes through the armed `writes.lua` sink. Never write inside `+0x20`–`+0x4F` without re-encrypting and recomputing the checksum — doing so creates Bad Eggs.
 
-### Pokémon identity key
+### Pokémon identity and party reads
 
-Use `personality .. ":" .. otId` as the stable identity string for a mon. This survives slot moves, box deposits, evolutions, and server reconnects. **Never use party slot index as identity.** Note: RR's Nature Changer NPC modifies personality (nature = personality % 25), which changes monKey — see Nature Change Detection below.
-
-```lua
-local function monKey(base)
-    return memory.read_u32_le(base) .. ":" .. memory.read_u32_le(base + 4)
-end
-```
-
-### Reading a party slot
+Use `personality .. ":" .. otId` as the stable identity string for a mon. `reads.key(mon)` returns the uppercase `PERSONALITY:OTID` form used on the wire; it survives slot moves, box deposits, evolutions, and reconnects. The client reads party records through `reads:read_party()` (or its occupied-slot form) and takes HP, level, and status from the decoded profile record, rather than reading a fixed party base itself.
 
 ```lua
-local PARTY_BASE = 0x02024284
-local MON_SIZE   = 0x64  -- 100 bytes
-
-local function readPartySlot(slot)
-    local base = PARTY_BASE + slot * MON_SIZE
-    return {
-        key     = monKey(base),             -- stable identity
-        hp      = memory.read_u16_le(base + 0x56),
-        maxHP   = memory.read_u16_le(base + 0x58),
-        level   = memory.read_u8(base + 0x54),
-        personality = memory.read_u32_le(base),
-        otId        = memory.read_u32_le(base + 4),
-    }
+local party = reads:read_party(true)
+for _, mon in ipairs(party) do
+    local key = reads.key(mon)
+    -- use mon.hp, mon.max_hp, mon.level, ...
 end
 ```
 
 ### Detecting a new capture
 
-Captures go to the PC if the party is full — check both party and current box.
-
-```lua
--- Poll every frame; diff against prev_known_keys (set of monKey strings)
-local function detectNewMons(prev_known_keys)
-    local found = {}
-    local count = memory.read_u8(0x02024029)
-    for slot = 0, count - 1 do
-        local s = readPartySlot(slot)
-        if s.maxHP > 0 and not prev_known_keys[s.key] then
-            table.insert(found, s)
-        end
-    end
-    -- For full-party captures: scan the active PC box for new keys
-    return found
-end
-```
-
-For full-party captures, `client.lua` snapshots the active box at battle start and diffs at battle end, disambiguating via `gBattleOutcome == CAUGHT` as a fallback.
+`signals.lua` observes the pack's engine sites; `client.lua` drains those signals and settles the party/box snapshot once on a signaled frame. Acquisition signals such as `capture_wild`, `mon_given`, and `pc_move` mark a diff against the learned-key baseline, while a full-party capture is found in the box cache. The reducer emits the capture and its stats/blob from the decoded records; there is no legacy every-frame polling helper.
 
 ### Decrypting species from substruct data
 
-The 48-byte data section is split into four 12-byte substructs. Order is `personality % 24` (see [permutation table](https://bulbapedia.bulbagarden.net/wiki/Pok%C3%A9mon_data_substructures_(Generation_III))). Substruct 0 contains `species` at offset `+0x00` (u16).
-
-Decryption key = `personality XOR otId`. XOR each u32 of the 48-byte section.
+For FRLG, the 48-byte data section is split into four 12-byte substructs in the `personality % 24` order; the secure block is XORed with `personality XOR otId`. `reads.lua` applies this rule. Radical Red's pack sets its fixed-order/no-encryption mode instead.
 
 ### PC Storage layout
 
 From `include/pokemon_storage_system.h`:
-- 14 boxes × 30 slots per box = 420 slots total
-- Each slot is a `BoxPokemon` (80 bytes)
-- `struct PokemonStorage`: `u8 currentBox` at `+0x0000`, then `boxes[14][30]` at `+0x0001`
-- **Memorial box**: internal index **13** (UI shows as "Box 14"). Reserve this box permanently. Auto-renamed to "THE DEAD" at startup by `client.lua`.
+- FRLG keeps 14 boxes × 30 slots of 80-byte `BoxPokemon` records behind the relocated `gPokemonStoragePtr`; Radical Red's pack describes its own compressed box layout.
+- The memorial target is the last box in the active profile's `BOXES_PER_STORE`; `boxes.lua` addresses that index for deposit, withdraw, and memorialization.
+- Storage operations arm the same `writes.lua` sink used by the rest of the Gen 3 client.
 
 ### Force-faint (battle-safe write)
 
-```lua
-local function forceFaint(partySlot)
-    local base = PARTY_BASE + partySlot * MON_SIZE
-    memory.write_u16_le(base + 0x56, 0)  -- set hp = 0
-end
-```
+The client builds a profile-derived plan containing the party HP address (and the battle-mon HP address when applicable), then arms the `battle_faint` reason through `writes.lua`. `safety.lua` checks the pack's battle clauses before the first byte; a refusal holds the command. Bench faints use the immediate HP plan, while an active battler follows the pack-proven engine path (Perish where the pack proves it). No Gen 3 production module calls a raw `memory.write_*` sink.
 
-Do not zero the entire slot during battle. Deferred memorialization happens post-battle.
+### Explode Mode (Radical Red — optional per-run rule)
 
-### Explode Mode (RR/CFRU only — optional per-run rule)
+When `--explode-mode` is active, `client.lua` handles `force_explode`. A pack must supply the required battle fields before the client builds Explosion move/PP/action/commit rows; those rows go through `writes:arm("battle_commit", ...)` and `safety.lua` checks the battle clause set and any proven controller hand-off. The engine's move/action state is the witness for commit, execution, and failure. A surviving active battler is held until it leaves the battle or the battle ends, then the force-faint path applies. The client contains no Radical Red address literals.
 
-When `--explode-mode` is active, a linked partner's death sends `force_explode` instead of `force_faint`. For the **active battler**, the Lua client coerces an Explosion by pre-filling the engine's committed-action state at canonical CFRU addresses (from CFRU `include/new/ram_locs_battle.h`), bypassing `HandleTurnActionSelectionState` — so the dead mon never queues a phantom turn-2 (the softlock failure mode of earlier MULTIPLETURNS/RECHARGE attempts). Bench (non-active) mons fall back to an immediate `M.forceFaint(slot)`.
+> **Native battle path:** the companion patch's old battle-control opcodes remain reserved; the production `force_explode` path is the Lua Variant-3 write plan described above, not a mailbox command.
 
-| Symbol | Address | Write | Meaning |
-|---|---|---|---|
-| `gActionForBanks[battler]` | `0x02023D7C` (+battler) | `B_ACTION_USE_MOVE` (=0x02) | action = use a move |
-| `gChosenMovesByBanks[battler]` | `0x02023DC4` (+battler*2) | `MOVE_EXPLOSION` | chosen move |
-| `gBattleCommunication[battler]` | `0x02023E82` (+battler) | `3` (STANDBY) | action confirmed |
-| `gBattleStruct->chosenMovePositions[battler]` | `*(0x02023FE8)+0x80` (+battler) | `0` | move slot 0 |
-| `gBattleStruct->moveTarget[battler]` | `*(0x02023FE8)+0x0C` (+battler) | `1` | foe primary position |
+### Rival Team Swap (Radical Red — optional per-run rule)
 
-`gBattleStruct` is heap-allocated — dereference the pointer at `0x02023FE8` first, then write the per-battler sub-fields. These addresses live only in the RR profile (`lua/games/gen3_frlge.lua`); `M.forceExplodeBattler()` returns false on vanilla/AP, where `force_explode` degrades to a deferred `force_faint`. **Per-frame reinforcement** (`gen3_frlge_client.lua`): the engine resets `gBattleCommunication[battler]` at turn start, so the client re-writes the committed-action state every frame **only while `gBattleCommunication[battler] < 3`** (writing 3 unconditionally would lock the engine in state 3 and softlock the game). Files: `lua/memory_gba.lua` (`M.forceExplodeBattler`), `lua/games/gen3_frlge.lua` (addresses), `lua/clients/gen3_frlge_client.lua` (dispatch + reinforcement), `server/state.py` (`force_explode` vs `force_faint` in `_propagate_faint`), `server/server.py` (`--explode-mode`).
+When `--rival-team-swap` is active, the server sends `replace_rival_team` with the partner's validated party blobs and battle identity. `client.lua` checks the session nonce, battle epoch, trainer, and selectable-team prefilter before calling `native:replace_rival_team`. `lua/gen3/native.lua` owns blob staging, the armed `native` mailbox post, acknowledgement, and enemy-party readback; it uses the pack's native opcode data rather than old memory helpers. A missing companion is reported as `patch_required`; a missing qualified refresh window is reported by name rather than bypassed. The rival path uses its own companion opcode, while the trade transport remains separate.
 
-> **Native battle path:** the companion patch still implements `FORCE_FAINT` / `FORCE_MOVE_SLOT`, but the client **never sends them** — the controller swap softlocked in real play, so the Lua Variant-3 memory-write path above is the single production mechanism. The opcodes stay in the ROM (headless-gated by `lua/tests/test_live_forcemove.lua`) and reserved in the ABI; `--native-battle-control` was removed. See `patch/ROADMAP.md` §2.
+**Blob transport (server):** `hello`, `tick`, and safe snapshots carry validated per-slot `blob_hex`; the server caches them in `partner_blobs[player_id]` and drops malformed entries before a command is queued.
 
-### Rival Team Swap (RR/CFRU only — optional per-run rule)
+**Trigger pipeline (`server/state.py`):** `_handle_trainer_battle_start` queues the swap only when the trainer is in `adapter.rival_trainer_ids()`, the toggle is on, and the partner has valid cached blobs. The client acknowledges with `rival_team_replaced` and the native readback result.
 
-When `--rival-team-swap` is active, walking into a rival battle makes the server replace the rival's team with the *partner's current party*, mirrored across the link. EWRAM-only; never touches the SaveBlock. **The RR companion patch is a hard requirement** — the client dispatches the native `OP_SET_ENEMY_PARTY` opcode via the companion-patch mailbox (`lua/mailbox.lua` ↔ `patch/src/handlers.c`); the old `M.writeEnemyParty` RAM-poke fallback was removed. Unpatched clients ack `rival_team_replaced` with `error="patch_required"` and skip the swap (see `gen3_frlge_client.lua`).
+### Companion Patch (Radical Red only — code-injection ROM patch)
 
-**`memory_gba.lua` primitives:**
-- `M.readPartyBlob(slot)` — raw 100-byte party-mon struct as a u8 array.
-- `M.bytesToHex(bytes)` / `M.hexToBytes(s)` — blob ↔ hex transport (200 hex chars per mon).
-- `M.refreshEnemyPartyNative(count)` — post-step after the patch has natively byte-copied the blobs into `gEnemyParty`: refreshes the active foe's stale `gBattleMons` cache (via `M.refreshActiveEnemyBattlers`, which re-populates `gBattleMons[1]` and `[3]` in doubles — without it the engine keeps cached ability/type/HP from the original rival mon), then reads back the species list for the ack.
+The `patch/` directory holds a UPS companion for Radical Red. The current Gen 3 release uses it for native trade, the info panel, sounds, and the rival-swap opcode. `boxes.lua` has an optional native-executor seam for deposit/withdraw/memorialize (`io.native_executor`), but production never wires it, so PC and memorial moves go through the armed Lua write sink (`writes.lua`, reason `overworld`) on every title, including Radical Red; the patch's `OP_MEMORIALIZE` opcode is reserved in the ABI but unused by this client. Native message text and the peer-ghost feature are not part of the current Gen 3 client release; do not infer them from the archived client.
 
-**Native path (patch):** `OP_SET_ENEMY_PARTY` byte-copies each staged 100-byte blob into `gEnemyParty[i]`, zeroes `maxHP` on the first unused trailing slot (CFRU scans until `maxHP == 0` as the team terminator), and sets `gEnemyPartyCount` — preserving the partner's exact moves/IVs/EVs/PID/item.
-
-**Blob transport (server):** every `hello` / `tick` / safe snapshot carries a per-slot `blob_hex` field (200 chars), folded into `build_party_snapshot`. The server caches them in `partner_blobs[player_id]` via `_ingest_party_blobs`, which validates length (==200) and hex-decodability and drops malformed entries.
-
-**Trigger pipeline (`server/state.py`):** `_handle_trainer_battle_start` fires `queue_rival_team_swap(target, trainer_id)` when **all** hold — trainer ID ∈ `adapter.rival_trainer_ids()`, the `rival_team_swap` toggle is on, and the partner has cached blobs. The server emits a `replace_rival_team` command (blobs in hex); Lua decodes the blobs, stages them in the patch's blob buffer, dispatches `OP_SET_ENEMY_PARTY`, runs `M.refreshEnemyPartyNative`, and replies with a `rival_team_replaced` event carrying the species readback, which `_handle_rival_team_replaced` logs.
-
-**Rival ID detection:** base `rival_trainer_ids()` returns `set()`. Gen 3 RR builds `_RR_RIVAL_TRAINER_IDS` at import by scanning `rr_trainers.json` for trainers named **"Terry"** (RR's default rival name) in classes `{81, 89, 90}` (Rival Early/Mid/Late) — 27 IDs. Filtering by name avoids false positives from the generic "Rival" class. New events: `trainer_battle_start`, `rival_team_replaced`. New command: `replace_rival_team`.
-
-### Companion Patch (RR only — code-injection ROM patch)
-
-The `patch/` directory holds a UPS companion patch for Radical Red that adds native SLink support — peer ghost (Overworld Presence), native trade (talk-to-partner + PC trade NPC), native message boxes / in-battle notifications, native sounds, the bundled Battle Calc, native box/party sync + memorialize, and the native Rival Team Swap path.
-
-- **Mailbox protocol:** the Lua client talks to the injected code through an EWRAM mailbox — `lua/mailbox.lua` (client side) ↔ `patch/src/handlers.c` (in-ROM dispatch). The client stages args/blobs, writes an opcode, and polls for the ack status.
-- **Opcode table:** the authoritative enum lives in `patch/src/handlers.c` (~lines 31–49) — `OP_PING`=1 through `OP_MEMORIALIZE`=26. Opcodes **10–12** (`APPLY_DAMAGE`, `CURE_STATUS`, `SET_RULES`) are **removed** but their numbers stay reserved so 13+ keep their ABI slots (dispatch has no case for them → default `ST_FAIL` ack). Address reference: `patch/src/ADDRESSES.md`.
+- **Mailbox protocol:** `lua/gen3/native.lua` is the client-side owner and `patch/src/handlers.c` is the in-ROM dispatcher. It stages args/blobs under an armed `native` write, publishes the opcode last, and polls the acknowledgement through injected I/O.
+- **ABI data:** the authoritative opcode/status definitions live in `patch/src/handlers.c` and `patch/src/ADDRESSES.md`; `native.lua` consumes the matching values from `profile.native` and does not duplicate a legacy opcode table.
 - **Build & distribution:** `patch/tools/build.py` (gcc → ld → objcopy → inject → UPS/IPS, round-trip self-checked). `server/patcher.py` serves the in-browser patcher page at `GET /patcher` (`?game=` selects a target) and each built patch at `GET /companion/{name}`, mounted on both the per-run server (8080) and the Manager (8090). Gen 1 has its own toolchain: `patch/gen1/tools/build.py` builds from the two pinned CLEAN dumps, `patch/gen1/tools/inject.py` applies the SAME manifest structurally to a ROM whose hash cannot be known in advance (a randomized cartridge), and `patch/gen1/tools/manifest.py` is the single description both read so they cannot drift.
-- **Per-run toggles** (Manager new-run form / CLI flags; sent to the client in the `hello` reply's `config` command): `--overworld-presence`, `--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`. None change Soul Link rules; unpatched ROMs fall back to the Lua paths where one exists.
+- **Per-run toggles:** Manager/CLI flags are delivered through the hello configuration; they do not change Soul Link rules. Unpatched or clean artifacts use the Lua storage/write paths where the pack supports them.
 
 ### Area Normalization
 
-Raw `mapGroup:mapNum` maps to a canonical `area_id` via a lookup table in `data/games/gen3_frlge/gen3_frlge_areas.lua`. **184 entries** generated from `data/games/gen3_frlge/area_map.json` by `python tools/gen_area_map.py`. Key decisions:
+Raw `mapGroup:mapNum` maps to a canonical `area_id` through `data/games/gen3_frlge/area_map.json`, which both admitted Gen 3 packs load; `gen3_frlge_locations.lua` supplies display names. The generated `gen3_frlge_areas.lua` remains a server-side compatibility table, not a dependency of the rewritten client. The 184-entry map is generated from `area_map.json` by `python tools/gen_area_map.py`. Key decisions:
 
 - Multi-floor dungeons share one area_id (e.g., all Mt. Moon floors → `"mt_moon"`)
 - Building interiors with wild encounters (Safari Zone areas) each get their own area_id
 - Routes and towns with no wild encounters are not in the map (produce `area_id = ""`)
 - Naval Rock (Lugia/Ho-Oh), Birth Island (Deoxys), and Sevault Canyon are included
-- Legendary/static battles use `isWildBattle()` — non-trainer-flag battles are wild — so they use the area_id of their map like any other encounter
+- Legendary/static battles use the pack's wild/trainer facts and use the area_id of their map like any other encounter
 
 **Gift/static encounter area_ids** (Pokémon obtained here before Pokéballs are possible):
 
 | area_id | Encounter |
 |---------|-----------|
 | `oaks_lab` | Starter Pokémon (vanilla) |
-| `intro` | AP intro sequence area (mapGroup=0, mapNum=0) |
-| `gift` | Fallback for gift Pokémon in unmapped areas (AP randomized start locations) |
+| `intro` | Generic intro/unmapped-area fallback |
+| `gift` | Fallback for gift Pokémon in unmapped areas |
 | `cinnabar_lab` | Fossil revives |
 | `celadon_hotel` | Eevee |
 | `silph_co_7f` | Lapras |
 | `saffron_dojo` | Hitmonlee / Hitmonchan |
 
-Captures in these areas do NOT activate `pokeballs_obtained` on the server. Faints here (before the nuzlocke is active) are also ignored. The `gift` fallback is used when `area_id` is empty (unmapped location) and a new mon appears outside battle — this ensures AP starters link correctly regardless of randomized starting location.
+Captures in these areas do not activate `pokeballs_obtained` on the server. Faints before the ball gate are also ignored. The `gift` fallback keeps a static acquisition out of a wild encounter slot when the map has no area_id.
 
-**Gift/egg `gift_<area>` namespace remap (`gift_link_area`).** A gift or egg received in a *real* (non-gift) encounter area must not consume or lock that area's single wild-encounter slot. The adapter remaps such captures into the **`gift_<area>`** namespace (`gift_link_area` in `adapters/base.py`): gifts already in a gift area, and daycare-bred eggs, keep their `area_id`; everything else becomes `gift_<area_id>`. The `gift_` prefix is recognized by `is_gift_area` downstream, so a remapped capture forms a **standalone gift pair** that bypasses the dead-zone / linked-wild quarantine guards, skips quarantine, and **never satisfies the Pokéball gate**. The Lua client tags these captures with `gift=true`. (The Gen 3 client also re-reads each party **and box** mon's ability every tick — RR's Ability Patch can flip the hidden-ability bit without a `key_change`, so re-reading keeps the displayed ability correct.)
+**Gift/egg `gift_<area>` namespace remap (`gift_link_area`).** A gift or egg received in a real (non-gift) encounter area must not consume or lock that area's single wild-encounter slot. The adapter remaps such captures into the **`gift_<area>`** namespace (`gift_link_area` in `adapters/base.py`): gifts already in a gift area, and daycare-bred eggs, keep their `area_id`; everything else becomes `gift_<area_id>`. The `gift_` prefix is recognized by `is_gift_area` downstream, so a remapped capture forms a standalone gift pair that bypasses dead-zone/linked-wild quarantine, skips quarantine, and never satisfies the Pokéball gate. The Gen 3 reducer tags these captures with `gift=true`.
 
 ---
 
@@ -1119,38 +991,36 @@ The server (`server/state.py`) tracks per-area and per-mon state.
 
 `pending_a` = waiting for A; `pending_b` = waiting for B.
 
-### How events are detected (Lua-side, frame diff)
+### How events are detected (Gen 3 signals + reducer)
 
-`client.lua` diffs consecutive RAM reads every frame and sends events only on changes:
+`lua/gen3/signals.lua` turns the admitted pack's `engine_signals.json` sites into bounded, fail-closed hooks. `lua/gen3/client.lua` drains those signals and settles the decoded party/box snapshot once on a signaled frame; the wire event is the result, not a raw per-frame RAM diff.
 
 | Event | Detection condition |
 |---|---|
-| `area_enter` | `area_id` changes between frames (only when `nuzlocke_active` OR gift area) |
-| `capture` | New monKey appears in party OR in current box after a `CAUGHT` battle outcome. Carries `gift=true` for gift/egg catches (routes the pair into the `gift_<area>` namespace) |
-| `faint` | Known monKey HP drops from > 0 to 0 (detected via double-buffer party diff with per-buffer entry pools) |
-| `no_catch` | Wild battle ends (15-frame grace), no new capture detected; suppressed if `!nuzlocke_active` |
-| `whiteout` | All living party mons reach HP=0 simultaneously |
-| `party_to_box` | Known monKey disappears from party outside of battle |
-| `box_to_party` | Known monKey reappears in party from box |
-| `tick` | Every 30 frames (~0.5 s) — flushes queued commands; includes `ball_count` |
-| `key_change` | Nature Changer NPC modified personality — old_key → new_key migration (see Nature Change Detection) |
-| `trainer_battle_start` | Trainer battle began (carries the trainer opponent ID). Gates the Rival Team Swap match (`rival_trainer_ids()`); also an OBS trigger event |
-| `rival_team_replaced` | Ack of a `replace_rival_team` command, with a species readback of the team written into `gEnemyParty` |
+| `area_enter` | A map/location signal or decoded `map_group:map_num` change; new-encounter prompts are suppressed in gift areas and before the ball gate |
+| `capture` | An acquisition signal (`capture_wild`, `mon_given`, or `pc_move`) followed by a new key in the party/box baseline; carries `gift=true` for a gift/egg |
+| `faint` | A faint/battle-end signal followed by a known key's HP transition to zero |
+| `no_catch` | A known wild battle ends without a caught acquisition, outside the exempted battle types, and after the ball gate |
+| `whiteout` | The whiteout engine signal is reduced after the party snapshot |
+| `party_to_box` | A known key leaves the party and is subsequently observed in the box cache |
+| `box_to_party` | A known box key reappears in the occupied party snapshot |
+| `tick` | Periodic client tick carrying the current ball count, area, battle facts, and party/box snapshot |
+| `key_change` | An NPC trade changes the PID:OTID key; the client sends `old_key`, `new_key`, and `reason` for server migration |
+| `trainer_battle_start` | A trainer battle signal carries the trainer ID and, when available, the session/battle identity used by Rival Team Swap |
+| `rival_team_replaced` | Native command acknowledgement with the readback species list or a named refusal |
 
-**`nuzlocke_active` gate (Lua-side only):** set to `true` when `M.hasPokeballs()` returns true (reads `SaveBlock1.bagPocket_PokeBalls` at profile-dependent offset: `+0x0430` vanilla, `+0x0680` AP). Until then, `no_catch` events and `resolved_areas` tracking are suppressed in Lua. The server does **not** duplicate this gate.
-
-For **static/gift encounters** (Starter, Lapras, Eevee, fossils), a new monKey appears while `in_battle == false`. The Lua client labels these `capture(gift)` events; the server processes them identically to battle captures.
+The ball gate is client-owned: `reads:read_balls()` reports the profile-derived count, and the reducer suppresses `no_catch`/encounter bookkeeping until that count is positive. The server has no corresponding gate — it trusts the client not to send `no_catch` prematurely.
 
 ### Commands (Python → Lua via TCP response)
 
-| Command | Lua action |
+| Command | Gen 3 client action |
 |---|---|
-| `force_faint` | Find party slot with matching monKey; write HP=0 via `M.forceFaint(slot)` |
-| `force_explode` | **RR, `--explode-mode`.** Active battler → coerce Explosion via the Variant-3 memory writes (`M.forceExplodeBattler`); bench mon or non-RR → falls back to `M.forceFaint(slot)` |
-| `box_mon` | Deposit the named mon from party to the first available PC box slot |
-| `party_mon` | Retrieve the named mon from a PC box to the first available party slot; writes stats from server cache |
-| `memorialize` | Move dead mon from party/box to Box 13 ("THE DEAD"); deferred to safe state |
-| `replace_rival_team` | **RR, `--rival-team-swap`, companion patch required.** Stage the partner's party blobs in the patch mailbox and dispatch native `OP_SET_ENEMY_PARTY`, then `M.refreshEnemyPartyNative()`; ack with `rival_team_replaced` (unpatched → `error="patch_required"`, swap skipped) |
+| `force_faint` | Locate the key in the decoded party and submit the pack-backed HP plan through `writes.lua`; an active battler uses the proven battle path |
+| `force_explode` | When the pack proves the battle fields, submit the Explosion move/PP/commit plan through `battle_commit`; otherwise hold or use the force-faint path |
+| `box_mon` | `boxes.lua` deposits the named mon through the armed storage plan |
+| `party_mon` | `boxes.lua` withdraws the named box mon and writes the server-supplied stats through the same sink |
+| `memorialize` | Move the dead mon to the profile's memorial box through `boxes.lua`, deferred to a safe checkpoint |
+| `replace_rival_team` | Validate session/battle identity, then let `native:replace_rival_team` stage and post the Radical Red companion operation; missing native support is a named refusal |
 | `hud_show` | Display a text message on the BizHawk HUD overlay with custom RGB color and duration |
 | `noop` | No action; returned when there is nothing to do |
 
@@ -1162,34 +1032,21 @@ The server tracks `pokeballs_obtained` per player for:
 3. **Persistence**: Saved in `data/links.json`.
 
 Activation sources (in order of preference):
-1. `hello` event with `has_pokeballs: true` — set directly from Lua's `M.hasPokeballs()`.
-2. `hello` event with no `has_pokeballs` field and non-empty `party` — old-client heuristic.
+1. `hello` event with `has_pokeballs: true` — set directly from the client's decoded ball state.
+2. `hello` event with no `has_pokeballs` field and non-empty `party` — compatibility heuristic for older clients.
 3. `capture` event in a non-gift area — belt-and-suspenders.
 4. Explicit `has_pokeballs: false` in `hello` — overrides the heuristic even with a non-empty party.
 
 ### Safe-state definition
 
-**Vanilla:** `safe_state = True` when Python observes:
-- `in_battle == False` (`gMain.inBattle` bit = 0, i.e. `(mem[0x03003529] & 0x02) == 0`)
-- `in_overworld == True` (`gMain.state` at `0x03003528` is in a known overworld state)
+Gen 3 does not use a single `not in_battle` test for writes. `lua/gen3/safety.lua` evaluates the active pack's `write_checkpoint.json` and `lua/gen3/writes.lua` revalidates the selected reason before the first byte:
 
-`gMain` base address for vanilla FireRed US 1.0: `0x030030F0` (confirmed from pret/pokefirered symbols branch). `gMain.state = 0x030030F0 + 0x438 = 0x03003528`; `gMain.inBattle` flag byte `= 0x03003529` (bit 1, mask `0x02`).
+- **`overworld`**: ROM anchors, callback/script context, palette/save/link state, the active-task allow-list, parked CPU mode/PC, an idle native mailbox, and stable SaveBlock/storage pointers.
+- **`battle_faint` / `battle_commit`**: the pack's complete battle clause set, commit guard, and any proven controller hand-off; an unreadable or incomplete pack is refused.
+- **`native`**: companion signature/ABI and mailbox-idle checks; clean FRLG/RR artifacts have no native block and cannot arm native writes.
+- **`sound`** (when enabled): the pack's sound block and initialized m4a state.
 
-**AP:** Uses a different detection model. `gMain` base is `0x03003040`.
-- `isInOverworld()`: `gMain+0x038 == 1`
-- `isInBattle()`: `gMain+0x038 != 1` AND `gBattleTypeFlags != 0` AND `gBattleOutcome == 0`
-
-The three-condition battle check is required because in AP:
-1. `gMain+0x038` alone cannot distinguish battle from menu/transitions (all are "not overworld")
-2. `gBattleTypeFlags` remains stale (non-zero) after battle ends — it is NOT zeroed by AP's `FreeRestoreBattleData`
-3. `gBattleOutcome` reliably distinguishes active battle (== 0, `B_OUTCOME_NONE`) from post-battle state (!= 0)
-
-This correctly handles: active battles (true), party menus during battle (true — outcome still 0), party menus from start menu after battle (false — outcome set), and pre-battle states (false — type flags 0).
-
-**CFRU / Radical Red:** Uses `gBattleOutcome`-based detection ("battle_outcome" mode). `gMain` is unreliable in CFRU.
-- `isInBattle()`: `gBattleOutcome == 0` AND battle context active (gBattleMons[0].maxHP > 0)
-- `isInOverworld()`: NOT `isInBattle()`
-- Safe state additionally requires `post_battle_frames == 0` (30-frame cooldown + 90-frame grace period after battle end)
+An unknown reason, missing anchor, failed predicate, or unreadable input returns a refusal. The client holds the deferred command; it never falls back to a direct RAM poke. Archipelago FRLG and Emerald are refused during admission, so their former AP/CFRU-specific battle branches are not part of the active client.
 
 ---
 
@@ -1313,21 +1170,17 @@ Run `lua/tests/test_1_memory.lua` through `lua/tests/test_5_soullink.lua` in ord
 - **Mon identity**: Always use `personality .. ":" .. otId` (`monKey`) as the stable identifier. Never use party slot index — it changes when mons are rearranged.
 - **Commands are queued, not pushed**: When player A's event triggers a command for player B, it is queued in `SoulLinkState.queued_commands["b"]` and delivered on B's next TCP message. This is why `tick` events are sent periodically.
 - **State is fully serialized on every change**: `SoulLinkState._save()` writes `data/links.json` after every event that mutates state. No in-memory-only state should be load-bearing.
-- **No writes during battle**: Never zero or copy party/box data while `gBattleOutcome` is unresolved. `force_faint` (HP=0 write) is battle-safe; full slot memorialization is deferred to `safe_state`.
-- **Encrypted substruct writes**: Never write to `BoxPokemon +0x20`–`+0x4F` without re-encrypting (key = personality XOR otId) and recomputing the checksum. Bad Eggs result from invalid checksums.
-- **Party compaction**: When zeroing a party slot, write 100 zero bytes, shift higher slots down, then decrement `gPlayerPartyCount` at `0x02024029`. The game does not compact automatically.
-- **SaveBlock ASLR**: `gSaveBlock1Ptr` (0x03005008) and `gPokemonStoragePtr` (0x03005010) are re-randomized on each `SetSaveBlocksPointers()` call. Always dereference the pointer; never hardcode the target.
-- **Nuzlocke gate is in Lua**: The server trusts that Lua will not send `no_catch` before `nuzlocke_active`. The server's only faint-related gate is `pokeballs_obtained` — faints arriving before that flag is true are silently ignored.
-- **Randomizer compatibility**: All linking uses `personality+otId` and `area_id`, never species ID. RAM addresses are in compiled code, not ROM data — they are the same for vanilla and randomized US 1.0 ROMs.
-- **AP struct shifts**: AP recompiles the binary, shifting EWRAM globals (+0x14), IWRAM pointers (−0xB0), bag pockets (+0x250), and the SB2 encryption key (+0x0C). All profile-dependent values are stored in the `PROFILES` table in `memory.lua` and applied at startup. Never hardcode vanilla addresses for use with AP ROMs.
-- **AP battle detection**: In AP, `gBattleTypeFlags` and `gBattleMainFunc` both stay stale (non-zero) after battles end. Only `gBattleOutcome == 0` reliably indicates an active battle. The `isInBattle()` function uses a three-condition check for AP: `gMain+0x038 != 1 AND gBattleTypeFlags != 0 AND gBattleOutcome == 0`.
-- **AP item quantity encryption**: Item IDs in bag pockets are NOT encrypted. Quantities are XOR'd with `encryptionKey & 0xFFFF` from `SB2+0x0F2C` (AP) or `SB2+0x0F20` (vanilla). The AP client.py reads `SB2+0x0F2A` as a "save loaded" check (non-zero test) — this is NOT the encryption key itself.
-- **PSP_PTR_ADDR correction**: The confirmed IWRAM address for `gPokemonStoragePtr` is `0x03005010` (not `0x0300500C` as in some older references).
-- **Borrowed-party battles (CFRU)**: Detected via two methods: (1) `M.isBorrowedBattle()` checks `gBattleTypeFlags & BATTLE_TYPE_BORROWED_MASK` (`0x1010000` = Poké Dude | Mock Battle); (2) rolling gift capture buffer freezes if 3+ gift captures within 45 frames (~0.75s). When triggered, client.lua freezes party tracking and restores the real party after battle. Tag battles (`INGAME_PARTNER = 0x400000`) are NOT borrowed — NPC mons use separate battler slots. `isBorrowedBattle()` returns false when `BATTLE_TYPE_ADDR` is unavailable (vanilla/AP safe).
+- **No writes during battle**: Never zero or copy party/box data outside a qualified Gen 3 write plan. `force_faint` uses the `battle_faint` checkpoint; full-slot memorialization is deferred to the pack-backed `overworld` checkpoint.
+- **Encrypted substruct writes**: Never write to `BoxPokemon +0x20`–`+0x4F` without re-encrypting (key = personality XOR otId) and recomputing the checksum. Bad Eggs result from invalid checksums; `boxes.lua` owns the FRLG encode path.
+- **Party compaction**: Deposit/withdraw/memorial plans update the profile-derived party count and records atomically through `boxes.lua`; do not hardcode `0x02024029` in a new client path.
+- **SaveBlock ASLR**: The pointer addresses and relocation bounds come from the active pack/checkpoint. `reads.lua` dereferences them on each call; never cache or hardcode the live target.
+- **Nuzlocke gate is in Lua**: The server trusts that the client will not send `no_catch` before its decoded ball count is positive. The server's own faint-related gate remains `pokeballs_obtained`.
+- **Admission is fail-closed**: `Entry.admit` admits only pinned FireRed, LeafGreen, and Radical Red artifacts; Emerald and Archipelago-FRLG are refused before the client graph is built.
+- **Profile-driven reads**: FRLG and Radical Red share the composition root but differ in pack data and record rules. Do not add a title branch or a client-side address database.
+- **Borrowed-party battles (Radical Red)**: At `battle_begin`, the client snapshots the known party keys. If the live party has no overlap with that baseline, the reducer freezes party learning and omits party data from ticks until the own party returns; queued battle writes remain held.
 - **Persistent run metadata**: `rom_type` and `trainer_names` in `SoulLinkState` are set-once — committed on first hello, never overwritten. Read by `_page_title()`, `_is_rr`, and `trainer_name` dict seeding.
 
 ---
-
 ## Link Clause Rules (Optional)
 
 All clauses are **disabled by default** and enabled independently via CLI flags or the Run Manager UI.
@@ -1339,6 +1192,7 @@ Rejects a link if both mons belong to the same evolution family. Uses `base_form
 ### Gender Clause (`--gender-clause`)
 
 Rejects a link if both mons are the same binary gender (♂+♂ or ♀+♀). Gender is derived server-side from `personality & 0xFF` vs the species' `GENDER_RATIO` threshold. **Genderless mons are exempt** — genderless + genderless or genderless + gendered never triggers a violation.
+
 
 ### Type Clause (`--type-clause`)
 
@@ -1400,24 +1254,9 @@ Prevents wrong-save connections from corrupting run state. On the first `hello` 
 
 Abilities are shown on the status page for party mons, PC box mons, and enemy/wild mons. Hovering over an ability name shows a tooltip description. Descriptions are sourced from funnotbun's RR Dex (for RR/CFRU) with vanilla pret/pokefirered fallbacks for non-RR profiles. The `ability_description(id, is_rr)` function in `server/pokemon_data.py` handles the lookup. Generator script: `tools/gen_ability_descriptions.py`.
 
-### Borrowed-Party Battle Protection (CFRU)
+### Borrowed-party handling (Radical Red)
 
-Radical Red has battles that replace the player's party (Poké Dude tutorial, mock/scripted battles). The Lua client uses two complementary detection methods:
-
-**Method 1 — `M.isBorrowedBattle()`**: Checks `gBattleTypeFlags & BATTLE_TYPE_BORROWED_MASK` (`0x1010000` = Poké Dude | Mock Battle). When true, immediately freezes party tracking.
-
-**Method 2 — Rolling gift capture buffer**: If 3+ gift captures appear within 45 frames (~0.75s), party tracking freezes. This catches RR scripted battles where the borrowed flag isn't set until after the party swap has already occurred. Key details:
-- `all_known_keys` writes are deferred to buffer flush (not committed during freeze)
-- `pre_freeze_keys` filtered by `all_known_keys` to exclude borrowed mons
-- Timeout countdown paused during battle
-- `battle_just_ended` is an explicit unfreeze trigger
-- ALL party events (capture, faint, party_to_box, box_to_party) gated on `not party_frozen`
-
-**Freeze/unfreeze lifecycle**:
-- **At battle start**: If borrowed (either method), snapshot real `prev_party`, freeze `party_diff_ok = false`
-- **During battle**: Tick events omit party data to prevent false mon tracking
-- **At battle end**: Restore pre-borrowed party snapshot, discard battle HP cache, skip HP writeback
-- **Tag battles** (`BATTLE_TYPE_INGAME_PARTNER = 0x400000`) are NOT frozen — NPC partners use separate battler slots
+At `battle_begin`, `client.lua` snapshots the keys in the pre-battle party. On each party read, `update_frozen()` compares the live keys with that baseline. A party with no overlap is treated as borrowed: the reducer does not settle captures, faints, or PC moves, and `tick` omits party data. When the own-party keys overlap again, the client rebaselines and resumes normal reduction. Queued battle writes remain held until the real party is restored. The legacy rolling-gift detector is not part of the new client.
 
 ### Persistent Run Metadata (Set-Once)
 
@@ -1435,48 +1274,29 @@ Radical Red has battles that replace the player's party (Poké Dude tutorial, mo
 
 `_cache_mon_info()` permanently backfills `MonInfo.level=0` entries when a tick provides party data with level, then saves. It also backfills stale link entry nicknames from live party data (not just level=0 entries).
 
-### How abilities are read (Lua → Server)
+### How abilities are read (Gen 3 → Server)
 
-1. **Primary**: `memory.lua` decrypts species ID + ability bit from substruct data, looks up `gBaseStats[species].ability1/ability2`
-2. **Fallback**: `_ability_cache` in `client.lua` — keyed by monKey, populated from `gBattleMons[battler].ability` (offset `+0x20`) during battle. Used when substruct decryption returns 0.
-3. **Server**: `pokemon_data.py` `ability_name(ability_id, is_rr)` and `ability_description(ability_id, is_rr)` — 255-entry RR table + 165-entry vanilla table. Vanilla uses `_VANILLA_ABILITY_NAMES` and `_VANILLA_ABILITY_DESCRIPTIONS` (complete Gen III–V). RR descriptions from funnotbun's Radical Red Dex.
-4. **Per-tick refresh (RR)**: the Gen 3 client re-reads each party **and box** mon's ability every tick. RR's Ability Patch can flip the hidden-ability bit without changing personality/otId (so no `key_change` fires); re-reading every tick keeps the displayed ability correct.
+1. **Client decode:** `lua/gen3/reads.lua` decrypts the Gen III record and exposes the ability bit (`ability_num`) alongside the rest of the party/box record. The client has no separate ability cache or `gBaseStats` address path.
+2. **Wire/server boundary:** when a party detail carries an `ability_id`, the server's Gen 3 adapter and `pokemon_data.py` resolve the display name and description, including Radical Red overrides.
+3. **Refresh rule:** the new client publishes decoded party/box records through its normal hello/tick/settle paths; a hidden-ability change is not assumed to produce a PID:OTID `key_change`.
 
-### gBaseStats addresses by profile
+### Ability data boundary
 
-| Profile | Address | Notes |
-|---|---|---|
-| Vanilla | `0x08254784` | Hardcoded from pret/pokefirered |
-| AP | `0x0825634C` | AP recompiles from source; shifted from vanilla |
-| RR/CFRU | `ptr @ 0x080001BC` | Dynamic — CFRU stores function pointer, dereferenced at runtime |
+`gBaseStats` is not a Gen 3 client dependency in the rewritten architecture. Species/ability tables and Radical Red overrides are server presentation data; the client supplies decoded records and pack-backed capability facts.
 
 ---
 
-## Nature Change Detection
+## Key-change handling
 
-RR's Nature Changer NPC modifies a mon's personality value (nature = personality % 25), which changes the monKey identity. The system detects and migrates this transparently.
+The current Gen 3 client emits `key_change` when an NPC trade changes the PID:OTID identity in the decoded party; it sends the old/new keys and `reason="npc_trade"` to the shared identity/session layer. The server still accepts the protocol's generic `key_change` event, but the new client does not claim the archived signature-based personality scan or a Radical Red Nature Changer detector.
 
-**Lua-side detection** (`client.lua`): Before processing capture/faint diffs each frame, match disappeared keys against appeared keys using an `otId + species + level + nickname` signature. Strict 1:1 matching only — if multiple candidates share the same signature, no migration occurs. On match:
-- Fresh `readPartySlot()` for the new key (ability changes with personality)
-- Migrates all caches: `all_known_keys`, `_display_cache`, `_ability_cache`, `_mk_*` slot caches, and in-flight state (`captured_this_battle`, battle HP cache)
-- Sends `key_change` event: `{"event": "key_change", "old_key": "...", "new_key": "...", "player": "a"}`
-
-**Server-side handling** (`state.py`): `_handle_key_change()` migrates the old key to the new key across all state:
-- `links` (MonInfo key field in LinkEntry)
-- `_key_index` (fast key→link lookup)
-- `pending_captures`
-- `party_keys`
-- `mon_stats`
-- `bonus_keys`
-- `pending_bonus` (shiny key references in the partner's queue)
-- `pending_memorials`
-- `queued_commands` (rewrites key field in pending force_faint/memorialize commands)
+**Server-side handling** (`state.py`): `_handle_key_change()` migrates the old key to the new key across links, indexes, pending captures, party/stat caches, bonus state, memorials, and queued commands.
 
 ---
 
 ## Stream Overlay Sprites
 
-Stream overlays (`/stream/links`, `/stream/party-a`, `/stream/party-b`) now use `sprite_html` from the JSON API response (with fallback to the old client-side `spriteTag()` function). The `sprite_html` field is also included in `party_details` in the `/api/status` response. Server-side `_sprite_img_html()` handles CFRU→NatDex species ID conversion for correct sprite URLs.
+Stream overlays (`/stream/links`, `/stream/party-a`, `/stream/party-b`) use `sprite_html` from the JSON API response as the source of truth; older overlays may retain a client-side fallback. The `sprite_html` field is also included in `party_details` in `/api/status`, and server-side sprite generation handles CFRU→NatDex species conversion.
 
 ---
 
@@ -1540,7 +1360,7 @@ When a player catches a shiny Pokémon, their partner's **next encounter** becom
 
 ## Enemy Battle Type Badges
 
-The status page party tables now display enemy battle type badges (Wild, Trainer, etc.) alongside enemy mon data during active battles. Enemy held items are shown inline with the species name (e.g., "Pidgey @ Oran Berry"), matching player party display style. Items are read from `gEnemyParty` (vanilla/AP) or `gBattleMons` offset `+0x02` (CFRU/RR fallback).
+The status page party tables now display enemy battle type badges (Wild, Trainer, etc.) alongside enemy mon data during active battles. Enemy held items are shown inline with the species name (e.g., "Pidgey @ Oran Berry"), matching player party display style. The active Gen 3 client reads enemy-party/item fields through its pack-backed read layer; the server presentation layer supplies the battle badge and item name.
 
 ---
 

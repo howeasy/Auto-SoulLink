@@ -1,0 +1,29 @@
+# FR scripted play run 11, 2026-09-21 (vanilla FR US 1.0 sha1 41cb23d8..., observer beside, admitted by hash, 21 sites)
+phase start frame=1 title=firered
+phase field frame=635 map=(3,0)
+phase shadow frame=635 observer started admitted_by=hash
+phase leg-start frame=635 starter
+phase in-lab frame=2187 map=1027 at=(6,12)
+phase scene-done frame=4034 var=2, idle+unlocked held 60f
+phase pre-walk frame=4034 obj0=(6,4) sb1=(6,4)
+phase post-walk frame=4098 obj0=(9,5) sb1=(9,5)
+phase facing frame=4130 dir=2 (2=up)
+phase starter-got frame=4659 party=1
+phase starter-idle frame=5571 party=1
+phase leg-done frame=5571 starter
+phase leg-start frame=5571 rival_battle
+phase battle-begin frame=6067
+phase battle-end frame=11667
+phase rival-gone frame=12134 at=(7,8)
+phase leg-done frame=12134 rival_battle
+phase leg-start frame=12134 leave_lab_for_parcel
+RESULT: FAIL leave_lab_for_parcel: map never changed from 1027
+## shadow
+STATUS frame=9035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8352
+STATUS frame=9635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8935
+STATUS frame=10235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=9522
+STATUS frame=10835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=10111
+STATUS frame=11435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=10711
+SHADOW t=4 frame=11663 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=12035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=11304
+STATUS frame=12635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=11904

@@ -1,0 +1,60 @@
+G4-LANE-2 P+H live row: linked_faint_active_whiteout_gen3, LG as A (gen3_lgfr), cut b0483efe
+lane: E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean (detached; HEAD moved with update-ref because the shared
+  broken ref refs/heads/codex/gen2-foundation (1) makes checkout die after updating the tree); tracked_clean before/after below
+ROMs: FR US 1.0 sha1 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc, LG US 1.0 sha1 574fa542ffebb14be69902d1d36f1ec0a4afd71e (staged in patch/build)
+machine: shared with a live Gen 2 session; LOAD line = snapshot taken just before launch (local time; start/end are UTC)
+note: PASS, attempt 1 of 1
+
+--- run (verbatim) ---
+=== linked_faint_active_whiteout_gen3 --game gen3_lgfr  lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean sha=b0483efe38de8b9d0afa61088c4eac9229dfb4ab tracked_dirty_before=0
+LOAD 2026-09-24T08:10:32 cpu=90% emuhawk=1 python=9
+  emuhawk pid=28440 E:/Howard/Bizhawk\EmuHawk.exe --lua=patch/build/gen2_evo_dev.lua --config=patch/build/gate_cfg_gen2_evo_dev_crystal.ini .cache/gen2-build/pokecrystal/pokecrystal.gbc
+start_utc=2026-09-24T12:10:32Z
+$ python tools/e2e_duo.py --game gen3_lgfr --scenario linked_faint_active_whiteout_gen3
+
+========== scenario: linked_faint_active_whiteout_gen3 ==========
+[duo] linked_faint_active_whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae b=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e write_checkpoint.json=e96a7ba14f6f3a061d1de7302f7f6b9d3a5db6641c9d418811849f882fae0329 profile.json=da819ece2088bb35a2ae8f4942d2e987fc528ceb1595419a3b1efca3dda39668 source=b0483efe38de8b9d0afa61088c4eac9229dfb4ab
+[duo] server up: tcp=55611 http=55612 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_jnggkbyw
+[duo] cleared 5 stale artifact(s) for linked_faint_active_whiteout_gen3: e2e_linked_faint_active_whiteout_gen3_a_attempt1_result.txt, e2e_linked_faint_active_whiteout_gen3_a_result.txt, e2e_linked_faint_active_whiteout_gen3_b_attempt1_result.txt, e2e_linked_faint_active_whiteout_gen3_b_result.txt, e2e_linked_faint_active_whiteout_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=BC73F9B0:1C600D89 b=2D356A90:99DE0D8A
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked BC73F9B0:1C600D89 <-> 2D356A90:99DE0D8A
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked BC73F9B0:1C600D89)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (whiteout))
+[duo] SAVE_WITNESS_SHA256 inst=a site=7b397c80e8982474e36bf9704b4fec6e08e7a5c85d1878e648322d6e89f4a618 file=7b397c80e8982474e36bf9704b4fec6e08e7a5c85d1878e648322d6e89f4a618 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=045c4e7e1715770c143310706e1a434b55cbf4f90801480da1c266535405b3b2 file=045c4e7e1715770c143310706e1a434b55cbf4f90801480da1c266535405b3b2 match=true saves=1 counter=7->8 rtc=normalized
+[duo] linked_faint_active[whiteout]: engine faint BC73F9B0:1C600D89 -> P+H commit on active 2D356A90:99DE0D8A -> hand-off -> Perish KO in battle with no input; both memorials saved
+[duo] MARKER a: ENGINE_FAINT_SITE frame=16422 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint BC73F9B0:1C600D89 {"area_id":"route_1","event":"faint","key":"BC73F9B0:1C600D89","player":"a","seq":534}
+[duo] MARKER a: TX memorialize_done BC73F9B0:1C600D89 {"box":13,"event":"memorialize_done","key":"BC73F9B0:1C600D89","player":"a","seq":576}
+[duo] MARKER b: READY_ACTIVE 2D356A90:99DE0D8A case=whiteout
+[duo] MARKER b: RX force_faint key=2D356A90:99DE0D8A
+[duo] MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 2D356A90:99DE0D8A
+[duo] MARKER b: ACTIVE_COMMIT 2D356A90:99DE0D8A frame=18325 writes=5 attempted=41 handoff=1 status3=0x20 ctrl=0x0802E33D counter=0 last_move=0 pp=28/30/30/0 why="active faint committed"
+[duo] MARKER b: HANDOFF 2D356A90:99DE0D8A from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO 2D356A90:99DE0D8A frame=19020 in_battle=1 battle_hp=0 status3=0x0 pp=28/30/30/0 last_move=0 inputs=0 hp_writes=0 attempted=41
+[duo] MARKER b: ACTIVE_FAINT_SITE 2D356A90:99DE0D8A frame=19020 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: TX whiteout - {"event":"whiteout","player":"b","seq":651}
+[duo] MARKER b: ACTIVE_OUTCOME 2D356A90:99DE0D8A outcome=2 sent_out=nil whiteout_tx=1
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_whiteout_gen3_b_1_witness.bin bytes=131072 saves=1 frame=21919 counter=8
+[duo] MARKER b: FORCED_HP0 2D356A90:99DE0D8A frame=19020 in_battle=1 battler=1
+[duo] MARKER b: RX memorialize key=2D356A90:99DE0D8A
+[duo] MARKER b: RX game_over
+[duo] MARKER b: [client] [SLink-gen3] memorialize dropped: last mon after game over 2D356A90:99DE0D8A
+[duo] MARKER b: LAST_MON_KEPT 2D356A90:99DE0D8A
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_whiteout_gen3: a=PASS b=PASS
+
+========== summary ==========
+  linked_faint_active_whiteout_gen3: PASS (attempt 1 of 1)
+exit=0
+end_utc=2026-09-24T12:12:19Z
+tracked_dirty_after=0

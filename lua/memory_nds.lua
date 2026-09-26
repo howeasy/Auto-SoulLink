@@ -1097,7 +1097,7 @@ end
 -- sign-extended and shifted by +6, which made neutral-stat reads (byte 6) come
 -- out as 12 (clamped max). That's why every wild encounter looked like every
 -- battler was at +6 across the board at battle start. Cross-checked with the
--- Gen 3 reader in memory_gba.lua:readStatStages which uses the raw byte.
+-- Gen 3 reader in archive/gen3-old-client:lua/memory_gba.lua:readStatStages which uses the raw byte.
 function M.readStatStages(battler_idx)
     local addr = _stat_stages_addr(battler_idx)
     if not addr then return nil end
@@ -1528,7 +1528,7 @@ end
 -- Cached variant of monKey: keyed by slotAddr, invalidated when the
 -- underlying PID changes. Eliminates per-frame string.format churn on
 -- hot paths (party scan, box snapshot, battle enemy reads). Mirrors
--- memory_gba.lua's monKeyCached pattern.
+-- archive/gen3-old-client:lua/memory_gba.lua's monKeyCached pattern.
 M._mk_cache = {}
 function M.monKeyCached(slotAddr)
     local pid = r32(slotAddr)

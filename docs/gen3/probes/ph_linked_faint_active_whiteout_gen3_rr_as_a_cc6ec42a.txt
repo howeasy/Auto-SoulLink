@@ -1,0 +1,50 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr_new --scenario linked_faint_active_whiteout_gen3
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=cc6ec42a tracked_clean=True runner=coordinator 2026-09-24
+
+========== scenario: linked_faint_active_whiteout_gen3 ==========
+[duo] linked_faint_active_whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=140ad05c6325180bdc7fae0bb590157310f250fa65c5b8b43b1fb24d6a3ffe2b write_checkpoint.json=da83dce46ce0c91b70c88db07e2a459c46cfae5f84d5eb4f223183a12163f66d profile.json=ae982c2fb4d320cdbd791a21923d000f494f85872d6c67e64247b5f496529723 source=cc6ec42a1bc3bb44463f89425b88ebd55610061e
+[duo] server up: tcp=56843 http=56844 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_whiteout_gen3_jdj7kj7c
+[duo] cleared 9 stale artifact(s) for linked_faint_active_whiteout_gen3: e2e_linked_faint_active_whiteout_gen3_a_1_witness.bin, e2e_linked_faint_active_whiteout_gen3_a_1_witness_ext.bin, e2e_linked_faint_active_whiteout_gen3_a_attempt1_result.txt, e2e_linked_faint_active_whiteout_gen3_a_result.txt, e2e_linked_faint_active_whiteout_gen3_b_1_witness.bin, e2e_linked_faint_active_whiteout_gen3_b_1_witness_ext.bin, e2e_linked_faint_active_whiteout_gen3_b_attempt1_result.txt, e2e_linked_faint_active_whiteout_gen3_b_result.txt, e2e_linked_faint_active_whiteout_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked EBEF11DA:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (whiteout))
+[duo] SAVE_WITNESS_SHA256 inst=a site=bed9e86b862068d649b5bec8d29ec3b8d48907381ff9aca3dfd389f5cabdfd34 file=bed9e86b862068d649b5bec8d29ec3b8d48907381ff9aca3dfd389f5cabdfd34 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=536089a5903da71ff814a2376e7d65a5224973fabd1f00d0dd97ed35a67dce22 file=536089a5903da71ff814a2376e7d65a5224973fabd1f00d0dd97ed35a67dce22 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] linked_faint_active[whiteout]: engine faint EBEF11DA:2BDDC8BF -> force_faint -> the hand-off commit on active EBEF11DA:D4223740 -> engine KO in battle with no input; memorials saved (last mon kept: a,b)
+[duo] MARKER a: ENGINE_FAINT_SITE frame=9173 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint EBEF11DA:2BDDC8BF {"area_id":"route_1","event":"faint","key":"EBEF11DA:2BDDC8BF","player":"a","seq":287}
+[duo] MARKER a: RX memorialize key=EBEF11DA:2BDDC8BF
+[duo] MARKER a: RX game_over
+[duo] MARKER a: [client] [SLink-gen3] memorialize dropped: last mon after game over EBEF11DA:2BDDC8BF
+[duo] MARKER a: LAST_MON_KEPT EBEF11DA:2BDDC8BF
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_whiteout_gen3_a_1_witness.bin bytes=131072 saves=1 frame=10810 counter=4
+[duo] MARKER b: READY_ACTIVE EBEF11DA:D4223740 case=whiteout
+[duo] MARKER b: RX force_faint key=EBEF11DA:D4223740
+[duo] MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 EBEF11DA:D4223740
+[duo] MARKER b: ACTIVE_COMMIT EBEF11DA:D4223740 frame=9692 writes=5 attempted=1214 handoff=1 status3=0x80020 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/25/35 why="active faint committed"
+[duo] MARKER b: HANDOFF EBEF11DA:D4223740 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO EBEF11DA:D4223740 frame=9932 in_battle=1 battle_hp=0 status3=0x80000 pp=35/30/25/35 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=1611
+[duo] MARKER b: ACTIVE_FAINT_SITE EBEF11DA:D4223740 frame=11240 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: TX whiteout - {"event":"whiteout","player":"b","seq":366}
+[duo] MARKER b: ACTIVE_OUTCOME EBEF11DA:D4223740 outcome=2 sent_out=nil whiteout_tx=1
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_whiteout_gen3_b_1_witness.bin bytes=131072 saves=1 frame=12942 counter=4
+[duo] MARKER b: FORCED_HP0 EBEF11DA:D4223740 frame=9932 in_battle=1 battler=1
+[duo] MARKER b: RX memorialize key=EBEF11DA:D4223740
+[duo] MARKER b: RX game_over
+[duo] MARKER b: [client] [SLink-gen3] memorialize dropped: last mon after game over EBEF11DA:D4223740
+[duo] MARKER b: LAST_MON_KEPT EBEF11DA:D4223740
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_whiteout_gen3: a=PASS b=PASS
+
+========== summary ==========
+  linked_faint_active_whiteout_gen3: PASS (attempt 1 of 1)

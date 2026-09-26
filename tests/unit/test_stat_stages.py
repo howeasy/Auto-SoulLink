@@ -9,6 +9,7 @@ Tests:
 The chips themselves are rendered by the `stat_stages_row` macro in templates/_macros.html,
 covered by the page tests.
 """
+import pytest
 
 # ── party_details stat_stages passthrough ─────────────────────────────────────
 
@@ -148,34 +149,187 @@ class TestEnrichBattleStatePassthrough:
         assert enriched[0]["sprite_html"]
 
 # ── Offset correctness: 0x19 skips both vanilla HP-stage and CFRU type3 ──────
+# The Gen 3 client reads stat stages through lua/gen3/reads.lua read_stat_stages, which takes
+# the ATK offset from the pack: profile.derived.BATTLE_MON_STAT_STAGES_OFF. +0x18 is statStages
+# [STAT_HP] in vanilla (always 6, pret include/pokemon.h:187) but CFRU's type3 byte on RR.
+
+GEN3_TITLES = [("gen3_frlg", "firered"), ("gen3_frlg", "leafgreen"), ("gen3_rr", "radical_red")]
+TYPE3_FAIRY = 0x17                     # what a 0x18 read would surface as a "stage" on RR
+STAGES = [8, 4, 6, 7, 5, 6, 12]        # ATK+2 DEF-2 SPD SATK+1 SDEF-1 ACC EVA+6
+
+
+def _poke_battler(w, battler, stages, hp=20, mon=None):
+    """gBattleMons[battler]: stages at +0x18, hp/maxHP, and (given `mon`) its identity --
+    personality +0x48, otId +0x54 (pret include/pokemon.h:202,205 struct BattlePokemon)."""
+    base = w.ram["BATTLE_MONS_ADDR"] + battler * 0x58   # sizeof(struct BattlePokemon)
+    w.poke(base + 0x18, bytes([TYPE3_FAIRY, *stages]))
+    w.poke_int(base + 0x28, hp, 2)
+    w.poke_int(base + 0x2C, hp, 2)
+    if mon is not None:
+        w.poke_int(base + 0x48, mon["personality"], 4)
+        w.poke_int(base + 0x54, mon["ot_id"], 4)
+
 
 class TestOffsetConstant:
-    """Regression guard: the magic offset 0x19 must never silently revert to 0x18."""
+    """Regression guard: the ATK stat-stage offset must never silently revert to 0x18."""
 
-    def test_stat_stages_offset_is_0x19(self):
-        """Read the constant directly from the memory_gba module source to ensure
-        it hasn't been changed back to 0x18 (which would read CFRU type3 as a stage)."""
-        import pathlib
-        import re
-        src = pathlib.Path("lua/memory_gba.lua").read_text(encoding="utf-8")
-        match = re.search(
-            r"M\.BATTLE_MON_STAT_STAGES_OFF\s*=\s*(0x[0-9a-fA-F]+|\d+)", src
-        )
-        assert match, "M.BATTLE_MON_STAT_STAGES_OFF constant not found in memory_gba.lua"
-        value = int(match.group(1), 0)
-        assert value == 0x19, (
-            f"M.BATTLE_MON_STAT_STAGES_OFF is 0x{value:02X}, expected 0x19. "
-            "Using 0x18 would read CFRU type3 (Fairy type ID) as a stat stage bonus."
-        )
+    @pytest.mark.parametrize("pack,title", GEN3_TITLES)
+    def test_stat_stages_offset_is_0x19(self, pack, title):
+        from tests.unit.gen3_world import World, lua_to_py
+        w = World(pack, title)
+        assert w.d["BATTLE_MON_STAT_STAGES_OFF"] == 0x19, (
+            "Using 0x18 would read CFRU type3 (or the vanilla HP stage) as the ATK stage.")
+        _poke_battler(w, 1, STAGES)
+        assert lua_to_py(w.parts.reads.read_stat_stages(1)) == STAGES
 
-    def test_stat_stage_offset_comment_mentions_cfru(self):
-        """The comment explaining the CFRU/vanilla difference should be present."""
-        import pathlib
-        src = pathlib.Path("lua/memory_gba.lua").read_text(encoding="utf-8")
-        assert "type3" in src or "CFRU" in src, (
-            "memory_gba.lua should document why 0x19 is used instead of 0x18 "
-            "(CFRU has type3 at +0x18, vanilla has HP-stage there — never display either)."
-        )
+    @pytest.mark.parametrize("pack,title,needle", [
+        ("gen3_frlg", "firered", "include/pokemon.h"),
+        ("gen3_rr", "radical_red", "type3"),
+    ])
+    def test_stat_stage_offset_is_sourced(self, pack, title, needle):
+        """The profile says WHY 0x19: pret for vanilla, the old client's CFRU type3 note for RR."""
+        from tests.unit.gen3_world import World
+        assert needle in World(pack, title).profile["_src"]["derived.BATTLE_MON_STAT_STAGES_OFF"]
+
+    @pytest.mark.parametrize("pack,title", [GEN3_TITLES[0], GEN3_TITLES[2]])
+    def test_the_active_mons_carry_stat_stages_on_the_tick(self, pack, title):
+        """Wire parity with the old client: active player mon + active foe carry stat_stages."""
+        from tests.unit.gen3_world import World, mon_record
+        w = World(pack, title)
+        mine = [mon_record(0x11111111, 0xABCD, species=4, hp=20),
+                mon_record(0x22222222, 0xABCD, species=5, hp=20)]
+        foe = mon_record(0x77777777, 0x1234, species=19, level=3)
+        w.set_party(mine)
+        w.step_to(60)
+        w.enter_battle([foe])
+        _poke_battler(w, 0, [7, 6, 6, 6, 6, 6, 6], mon=mine[0])
+        _poke_battler(w, 1, STAGES, mon=foe)
+        w.step(61)
+        tick = [t for t in w.events("tick") if t["in_battle"]][-1]
+        party = {m["slot"]: m for m in tick["party"]}
+        assert party[0]["active"] is True and party[0]["stat_stages"] == [7, 6, 6, 6, 6, 6, 6]
+        assert "stat_stages" not in party[1]
+        assert tick["enemy_party"][0]["stat_stages"] == STAGES
+
+
+
+# ── coherence: stages ride a battler only while gBattleMons holds that mon ────────────────
+# G5-STAGES-COHERENCE. A switch writes gBattlerPartyIndexes[battler] first and copies the new
+# mon into gBattleMons (resetting its stages) only later (pret src/battle_script_commands.c
+# 4452-4463 vs 4470-4503; the battle intro has the same order). In that window the index names
+# the incoming mon while gBattleMons still holds the outgoing one, so the client publishes
+# neither `active` nor `stat_stages` for it until the identities (personality + otId) agree.
+
+MINE = [(0x11111111, 0xABCD, 4), (0x22222222, 0xABCD, 5)]
+FOES = [(0x77777777, 0x1234, 19), (0x88888888, 0x1234, 16)]
+NEUTRAL = [6] * 7
+
+
+def _coherence_world(pack, title, doubles=False, foes=1):
+    from tests.unit.gen3_world import World, mon_record
+    w = World(pack, title)
+    mine = [mon_record(p, o, species=s, hp=20) for p, o, s in MINE]
+    enemy = [mon_record(p, o, species=s, level=3) for p, o, s in FOES[:foes]]
+    w.set_party(mine)
+    w.step_to(60)
+    w.enter_battle(enemy, doubles=doubles, active=(0, 1) if doubles else (0,))
+    return w, mine, enemy
+
+
+def _tick(w):
+    w.step(61)
+    tick = [t for t in w.events("tick") if t["in_battle"]][-1]
+    return {m["slot"]: m for m in tick["party"]}, tick["enemy_party"]
+
+
+class TestStagesCoherence:
+    @pytest.mark.parametrize("pack,title", [GEN3_TITLES[0], GEN3_TITLES[2]])
+    def test_player_switch_publishes_nothing_until_gbattlemons_holds_the_incoming_mon(self, pack, title):
+        w, mine, enemy = _coherence_world(pack, title)
+        _poke_battler(w, 0, STAGES, mon=mine[0])
+        _poke_battler(w, 1, NEUTRAL, mon=enemy[0])
+        party, _ = _tick(w)
+        assert party[0]["active"] is True and party[0]["stat_stages"] == STAGES   # control
+        w.set_active([1])                        # index written first; gBattleMons still slot 0
+        party, _ = _tick(w)
+        for slot in (0, 1):
+            assert party[slot]["active"] is False, slot
+            assert "stat_stages" not in party[slot], slot
+        _poke_battler(w, 0, NEUTRAL, mon=mine[1])   # the copy lands, stages reset
+        party, _ = _tick(w)
+        assert party[1]["active"] is True and party[1]["stat_stages"] == NEUTRAL
+        assert party[0]["active"] is False and "stat_stages" not in party[0]
+
+    @pytest.mark.parametrize("pack,title", [GEN3_TITLES[0], GEN3_TITLES[2]])
+    def test_foe_switch_publishes_nothing_until_gbattlemons_holds_the_incoming_foe(self, pack, title):
+        w, mine, enemy = _coherence_world(pack, title, foes=2)
+        _poke_battler(w, 0, NEUTRAL, mon=mine[0])
+        _poke_battler(w, 1, STAGES, mon=enemy[0])
+        _, foes = _tick(w)
+        assert foes[0]["active"] is True and foes[0]["stat_stages"] == STAGES     # control
+        w.poke_int(w.ram["BATTLER_PARTY_INDEXES_ADDR"] + 2 * 1, 1, 2)            # foe index -> 1
+        _, foes = _tick(w)
+        for i in (0, 1):
+            assert foes[i]["active"] is False, i
+            assert "stat_stages" not in foes[i], i
+        _poke_battler(w, 1, NEUTRAL, mon=enemy[1])
+        _, foes = _tick(w)
+        assert foes[1]["active"] is True and foes[1]["stat_stages"] == NEUTRAL
+        assert foes[0]["active"] is False and "stat_stages" not in foes[0]
+
+    @pytest.mark.parametrize("pack,title", [GEN3_TITLES[0], GEN3_TITLES[2]])
+    def test_singles_never_expose_battlers_2_and_3(self, pack, title):
+        """battlersCount=2: battlers 2/3 hold sentinel bytes whose index and identity even name
+        real mons; nothing past gBattlersCount is ever read onto the wire."""
+        w, mine, enemy = _coherence_world(pack, title, foes=2)
+        _poke_battler(w, 0, NEUTRAL, mon=mine[0])
+        _poke_battler(w, 1, NEUTRAL, mon=enemy[0])
+        sentinel = [0x0B] * 7
+        _poke_battler(w, 2, sentinel, mon=mine[1])
+        _poke_battler(w, 3, sentinel, mon=enemy[1])
+        w.poke_int(w.ram["BATTLER_PARTY_INDEXES_ADDR"] + 2 * 2, 1, 2)
+        w.poke_int(w.ram["BATTLER_PARTY_INDEXES_ADDR"] + 2 * 3, 1, 2)
+        party, foes = _tick(w)
+        assert party[0]["stat_stages"] == NEUTRAL and foes[0]["stat_stages"] == NEUTRAL  # control
+        assert party[1]["active"] is False and "stat_stages" not in party[1]
+        assert foes[1]["active"] is False and "stat_stages" not in foes[1]
+
+    @pytest.mark.parametrize("pack,title", [GEN3_TITLES[0], GEN3_TITLES[2]])
+    def test_doubles_map_four_distinct_battlers(self, pack, title):
+        w, mine, enemy = _coherence_world(pack, title, doubles=True, foes=2)
+        stages = {b: [6 + b, 6, 6, 6, 6, 6, 12 - b] for b in range(4)}
+        for b, mon in ((0, mine[0]), (1, enemy[0]), (2, mine[1]), (3, enemy[1])):
+            _poke_battler(w, b, stages[b], mon=mon)
+        party, foes = _tick(w)
+        assert party[0]["stat_stages"] == stages[0] and party[1]["stat_stages"] == stages[2]
+        assert foes[0]["stat_stages"] == stages[1] and foes[1]["stat_stages"] == stages[3]
+        assert all(e["active"] is True for e in (party[0], party[1], foes[0], foes[1]))
+
+    @pytest.mark.parametrize("pack,title", [GEN3_TITLES[0], GEN3_TITLES[2]])
+    def test_a_link_battle_publishes_no_stages(self, pack, title):
+        """Link battles: battler ids are not positions (pret battle_controllers.c:151-168)."""
+        w, mine, enemy = _coherence_world(pack, title)
+        _poke_battler(w, 0, STAGES, mon=mine[0])
+        _poke_battler(w, 1, STAGES, mon=enemy[0])
+        flags = w._read(w.ram["BATTLE_TYPE_ADDR"], 4)
+        w.poke_int(w.ram["BATTLE_TYPE_ADDR"], flags | 0x02, 4)   # BATTLE_TYPE_LINK
+        party, foes = _tick(w)
+        assert "stat_stages" not in party[0] and "stat_stages" not in foes[0]
+
+    @pytest.mark.parametrize("pack,title", GEN3_TITLES)
+    def test_identity_and_link_facts_come_from_the_pack(self, pack, title):
+        """pret BattlePokemon for vanilla; the RR values are read out of the RR companion ROM's
+        own bytes (CopyPlayerMonData, byte-identical to FireRed's; InitBattleControllers)."""
+        from tests.unit.gen3_world import World
+        w = World(pack, title)
+        assert (w.d["BATTLE_MON_PERSONALITY_OFF"], w.d["BATTLE_MON_OT_ID_OFF"],
+                w.d["BATTLE_TYPE_LINK_MASK"]) == (0x48, 0x54, 0x02)
+        src = w.profile["_src"]
+        needle = "rom:patch/build/slink_RR.gba" if pack == "gen3_rr" else "include/pokemon.h"
+        for key in ("BATTLE_MON_PERSONALITY_OFF", "BATTLE_MON_OT_ID_OFF"):
+            assert needle in src[f"derived.{key}"], key
+        link_needle = "rom:patch/build/slink_RR.gba" if pack == "gen3_rr" else "include/constants/battle.h"
+        assert link_needle in src["derived.BATTLE_TYPE_LINK_MASK"]
 
 
 # ── the status_pill macro ─────────────────────────────────────────────────────

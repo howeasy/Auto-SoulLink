@@ -1,0 +1,28 @@
+# RR wild_faint leg with the re-pinned faint row (8eb2717), 2026-09-21
+phase leg-state frame=1010 wild_faint <- E:/Howard/Bizhawk/GBA/State/slink_prebattle.State
+phase survived frame=4819 encounter 1: hp_positive=true hp_zero=false faints 0->0 outcome=1
+phase survived frame=6482 encounter 2: hp_positive=true hp_zero=false faints 0->0 outcome=1
+phase survived frame=8032 encounter 3: hp_positive=true hp_zero=false faints 0->0 outcome=1
+phase fainted frame=9854 player battler went positive -> 0 HP in battle; playerFaintCounter 0 -> 1; party=1
+phase leg-done frame=9854 wild_faint
+phase leg-state frame=780 door_warp <- E:/Howard/Bizhawk/GBA/State/slink_door.State
+phase leg-done frame=892 door_warp
+## shadow
+STATUS frame=3854 registered=19 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=10700
+5
+SHADOW t=1 frame=2359 kind=faint key= address=151645906 callback_address=151645906 cpsr=63 mode=thumb raw_r15=151645908 sp=50363796 thumb=1
+SHADOW t=2 frame=2496 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=3 frame=2711 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+SHADOW t=4 frame=4440 kind=faint key= address=151645906 callback_address=151645906 cpsr=63 mode=thumb raw_r15=151645908 sp=50363796 thumb=1
+SHADOW t=5 frame=4799 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=6 frame=5014 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+SHADOW t=7 frame=6329 kind=faint key= address=151645906 callback_address=151645906 cpsr=63 mode=thumb raw_r15=151645908 sp=50363796 thumb=1
+SHADOW t=8 frame=6469 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=9 frame=6788 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+SHADOW t=10 frame=7877 kind=faint key= address=151645906 callback_address=151645906 cpsr=63 mode=thumb raw_r15=151645908 sp=50363796 thumb=1
+SHADOW t=11 frame=8007 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=1610612799 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=12 frame=8242 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+SHADOW t=13 frame=9556 kind=faint key= address=151645906 callback_address=151645906 cpsr=63 mode=thumb raw_r15=151645908 sp=50363796 thumb=1
+SHADOW t=14 frame=9719 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=1610612799 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=15 frame=9846 kind=whiteout key= address=134571774 callback_address=134571774 cpsr=1073741887 mode=thumb raw_r15=134571776 sp=50363924 thumb=1
+SHADOW t=16 frame=883 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1

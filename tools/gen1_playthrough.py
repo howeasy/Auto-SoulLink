@@ -203,6 +203,21 @@ EMU_WINDOW = os.environ.get("SLINK_EMU_WINDOW", "1200,-1300")
 EMU_SOUND = os.environ.get("SLINK_EMU_SOUND", "0") == "1"
 
 
+def disable_rewind(cfg: dict) -> dict:
+    """Force BizHawk's rewind off in a loaded config.ini dict (key `Rewind.Enabled`, BizHawk
+    2.11 Client.Common RewindConfig; the machine's own config reads `"Rewind": {"Enabled": true,
+    ...}`). Rewind's capture snapshots the core every few frames (MainForm.CaptureRewind ->
+    ZwinderBuffer.Capture -> MGBAHawk.SaveStateBinary -> BizStartGetState), and on the GBA core
+    that crashed BOTH duo instances with an AccessViolationException (run 61569,
+    patch/build/duo_61569_{a,b}.out) -- no harness run needs rewind. setdefault keeps every
+    other field BizHawk wrote."""
+    rewind = cfg.get("Rewind")
+    if not isinstance(rewind, dict):
+        rewind = cfg["Rewind"] = {}
+    rewind["Enabled"] = False
+    return cfg
+
+
 def write_run_config(src: str, dst: str, saveram_dir: str | None = None,
                      purergb: bool = False) -> None:
     """Copy BizHawk's config, muted and positioned, without touching the user's own.
@@ -229,10 +244,13 @@ def write_run_config(src: str, dst: str, saveram_dir: str | None = None,
     try:
         with open(src, encoding="utf-8-sig") as f:
             cfg = json.load(f)
-    except (OSError, ValueError):
-        shutil.copyfile(src, dst)          # unparseable: fall back to a plain copy
-        return
+    except (OSError, ValueError) as exc:
+        # NOT a plain copy: that would carry BizHawk's default Rewind.Enabled=true, the setting
+        # that crashed EmuHawk (duo run 61569). A config we cannot read is a harness error.
+        raise RuntimeError(f"cannot parse BizHawk config {src} ({exc}); refusing to write a run "
+                           f"config whose rewind cannot be turned off") from exc
 
+    disable_rewind(cfg)
     if not EMU_SOUND:
         for key in ("SoundEnabled", "SoundEnabledNormal", "SoundEnabledRWFF"):
             cfg[key] = False

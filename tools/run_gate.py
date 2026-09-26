@@ -21,7 +21,6 @@ write race when gates run back to back.
 import argparse
 import os
 import re
-import shutil
 import subprocess
 import sys
 import time
@@ -40,16 +39,23 @@ DEFAULT_ROM = "patch/build/slink_RR.gba"
 # never fired in practice (measured: one file touched per run) but it is a landmine under every
 # "N gates pass" claim, and there is no reason to leave it armed.
 _OUT_RE = re.compile(r"patch/build/([A-Za-z0-9_]+_result\.txt)")
+# Gen 3 gates open their result through the shared helper (lua/tests/gen3_boot_check.lua
+# M.open: patch/build/<name>_result.txt), so the path never appears literally in their source.
+_GOPEN_RE = re.compile(r'G\.open\(\s*"([A-Za-z0-9_]+)"\s*\)')
 
 
 def _result_path_for(script):
     """The result file THIS gate writes, read from its own source. None if it declares none."""
     try:
         with open(os.path.join(REPO, script), encoding="utf-8", errors="replace") as f:
-            m = _OUT_RE.search(f.read())
+            src = f.read()
+        m = _OUT_RE.search(src)
     except OSError:
         return None
-    return os.path.join(BUILD, m.group(1)) if m else None
+    if m:
+        return os.path.join(BUILD, m.group(1))
+    g = _GOPEN_RE.search(src)
+    return os.path.join(BUILD, g.group(1) + "_result.txt") if g else None
 
 
 def _has_verdict(path):
@@ -63,7 +69,32 @@ def _has_verdict(path):
         return False
 
 
-def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False):
+def write_gate_config(src, dst):
+    """The per-run copy of BizHawk's config.ini, with rewind forced off (gen1_playthrough.
+    disable_rewind: rewind's core snapshots crashed EmuHawk on mGBA, duo run 61569). A config
+    that cannot be parsed is a loud error, never a plain copy with rewind still on."""
+    import json
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from gen1_playthrough import disable_rewind
+
+    try:
+        with open(src, encoding="utf-8-sig") as f:
+            cfg = json.load(f)
+    except (OSError, ValueError) as exc:
+        raise RuntimeError(f"cannot parse BizHawk config {src} ({exc}); refusing to write a gate "
+                           f"config whose rewind cannot be turned off") from exc
+    disable_rewind(cfg)
+    # sound off, as gen1_playthrough.write_run_config does (W23 EMU-SPEED): runs read RAM only,
+    # and two duo instances need not both hold the audio device
+    for key in ("SoundEnabled", "SoundEnabledNormal", "SoundEnabledRWFF"):
+        cfg[key] = False
+    cfg["SoundVolume"] = 0
+    with open(dst, "w", encoding="utf-8") as f:
+        json.dump(cfg, f, indent=2)
+
+
+def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False, shadow=False):
     """Run one gate. Returns (passed: bool, result_path: str|None, text: str)."""
     if not os.path.exists(EMUHAWK):
         raise FileNotFoundError(f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)")
@@ -72,7 +103,7 @@ def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False):
     os.makedirs(BUILD, exist_ok=True)
     tag = os.path.splitext(os.path.basename(script))[0]
     cfg_rel = f"patch/build/gate_cfg_{tag}.ini"
-    shutil.copyfile(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
+    write_gate_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
 
     # Delete this gate's own result file up front so a leftover from a previous run cannot be
     # mistaken for this one's verdict — an mtime comparison would not catch a file the gate never
@@ -81,6 +112,8 @@ def run_gate(script, rom=DEFAULT_ROM, timeout=240, quiet=False):
     if out_path and os.path.exists(out_path):
         os.remove(out_path)
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"))
+    if shadow:
+        env["SLINK_SHADOW"] = "1"
     cmd = [EMUHAWK, f"--config={cfg_rel}", f"--lua={script}", rom]
     if not quiet:
         print(f"[gate] {' '.join(cmd)}")
@@ -117,8 +150,10 @@ def main():
     ap.add_argument("script", help="path to the gate, relative to the repo root")
     ap.add_argument("--rom", default=DEFAULT_ROM)
     ap.add_argument("--timeout", type=int, default=240)
+    ap.add_argument("--shadow", action="store_true",
+                     help="export SLINK_SHADOW=1 to the EmuHawk process (PLAN §5.7 P3 observer)")
     args = ap.parse_args()
-    passed, path, text = run_gate(args.script, args.rom, args.timeout)
+    passed, path, text = run_gate(args.script, args.rom, args.timeout, shadow=args.shadow)
     if text and not passed:
         print("--- result ---")
         print(text[-3000:])

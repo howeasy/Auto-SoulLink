@@ -1,0 +1,17 @@
+# gen3_final_cut row=bootcheck_firered_party_town item=§8_item4 cut=6e85ddfcb0ce7c5032f3118820d32d04a20d20af
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/gen3_fixtures.py boot-check --rom 'patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba' --fixture tests/fixtures/gen3/firered_party_town.sav --title firered   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac
+--- attempt 1 of 1 ---
+LOAD 2026-09-24T12:58:12 cpu=17% emuhawk=0 python=2
+start_utc=2026-09-24T16:58:11Z tracked_clean_before=True
+BOOT-CHECK FAIL tests\fixtures\gen3\firered_party_town.sav: the emulator driver did not report PASS
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_fixture_runs\bootcheck_firered_party_town\gen3 gen3 Pokemon - FireRed Version (USA).SaveRAM from tests\fixtures\gen3\firered_party_town.sav (counter=4)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] gen3_boot_check: RESULT: FAIL the battery is erased at boot — the fixture was not seeded into the per-run SaveRAM directory BizHawk was configured with  (3s)
+phase start frame=1 title=firered
+phase domain frame=1 SRAM
+RESULT: FAIL the battery is erased at boot — the fixture was not seeded into the per-run SaveRAM directory BizHawk was configured with
+exit=1 end_utc=2026-09-24T16:58:16Z tracked_clean_after=True classification=real

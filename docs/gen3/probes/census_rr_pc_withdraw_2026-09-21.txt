@@ -1,0 +1,114 @@
+phase start frame=1 title=radical_red
+phase state frame=1623 loaded E:/Howard/Bizhawk/GBA/State/slink_pokecenter_full.State
+phase field frame=1653 map=5,4
+phase registered frame=1653 10 functions
+phase script frame=1683 wait30 frame=1683 party=3 pos=(7,8) map=5,4 facing=2
+phase script frame=1704 Up frame=1704 party=3 pos=(7,7) map=5,4 facing=2
+phase script frame=1725 Up frame=1725 party=3 pos=(7,6) map=5,4 facing=2
+phase script frame=1746 Up frame=1746 party=3 pos=(7,5) map=5,4 facing=2
+phase script frame=1767 Up frame=1767 party=3 pos=(7,4) map=5,4 facing=2
+phase script frame=1796 Right frame=1796 party=3 pos=(8,4) map=5,4 facing=4
+phase script frame=1817 Right frame=1817 party=3 pos=(9,4) map=5,4 facing=4
+phase script frame=1838 Right frame=1838 party=3 pos=(10,4) map=5,4 facing=4
+phase script frame=1859 Right frame=1859 party=3 pos=(11,4) map=5,4 facing=4
+phase script frame=1888 Up frame=1888 party=3 pos=(11,3) map=5,4 facing=2
+phase script frame=1909 Up frame=1909 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=1977 Up frame=1977 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=1997 wait20 frame=1997 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2013 A frame=2013 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2133 wait120 frame=2133 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2149 A frame=2149 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2269 wait120 frame=2269 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2285 A frame=2285 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2405 wait120 frame=2405 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2421 A frame=2421 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2541 wait120 frame=2541 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2557 A frame=2557 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2737 wait180 frame=2737 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2805 Down frame=2805 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2825 wait20 frame=2825 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=2841 A frame=2841 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3021 wait180 frame=3021 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3089 Down frame=3089 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3109 wait20 frame=3109 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3125 A frame=3125 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3245 wait120 frame=3245 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3261 A frame=3261 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3381 wait120 frame=3381 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3397 A frame=3397 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3637 wait240 frame=3637 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3653 B frame=3653 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3683 wait30 frame=3683 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=3699 B frame=3699 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3729 wait30 frame=3729 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3745 B frame=3745 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3775 wait30 frame=3775 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3791 B frame=3791 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3821 wait30 frame=3821 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3837 B frame=3837 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3867 wait30 frame=3867 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3883 B frame=3883 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3913 wait30 frame=3913 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3929 B frame=3929 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3959 wait30 frame=3959 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=3975 B frame=3975 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4005 wait30 frame=4005 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4021 B frame=4021 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4051 wait30 frame=4051 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4067 B frame=4067 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4097 wait30 frame=4097 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4165 Up frame=4165 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4185 wait20 frame=4185 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4201 A frame=4201 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4321 wait120 frame=4321 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4337 A frame=4337 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4457 wait120 frame=4457 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4473 A frame=4473 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4593 wait120 frame=4593 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4609 A frame=4609 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4729 wait120 frame=4729 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4745 A frame=4745 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4925 wait180 frame=4925 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4925 shot frame=4925 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=4941 A frame=4941 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5121 wait180 frame=5121 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5121 shot frame=5121 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5137 A frame=5137 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5257 wait120 frame=5257 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5257 shot frame=5257 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5273 A frame=5273 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5513 wait240 frame=5513 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5513 shot frame=5513 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5529 B frame=5529 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5559 wait30 frame=5559 party=2 pos=(11,2) map=5,4 facing=2
+phase script frame=5575 B frame=5575 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5605 wait30 frame=5605 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5621 B frame=5621 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5651 wait30 frame=5651 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5667 B frame=5667 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5697 wait30 frame=5697 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5713 B frame=5713 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5743 wait30 frame=5743 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5759 B frame=5759 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5789 wait30 frame=5789 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5805 B frame=5805 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5835 wait30 frame=5835 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5851 B frame=5851 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5881 wait30 frame=5881 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5897 B frame=5897 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5927 wait30 frame=5927 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5943 B frame=5943 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5973 wait30 frame=5973 party=3 pos=(11,2) map=5,4 facing=2
+phase script frame=5973 shot frame=5973 party=3 pos=(11,2) map=5,4 facing=2
+phase walked frame=7653 map=5,4 in_battle=0
+phase count frame=7653 CreatePCMenu addr=0x0809D040 hits=4 first_cb=0x0809D040 first_frame=2140
+phase count frame=7653 ShowPokemonStorageSystemPC addr=0x0808C6A8 hits=2 first_cb=0x0808C6A8 first_frame=2542
+phase count frame=7653 Task_PCMainMenu addr=0x0808C39C hits=622 first_cb=0x0808C39C first_frame=2542
+phase count frame=7653 EnterPokeStorage addr=0x0808CDE4 hits=2 first_cb=0x0808CDE4 first_frame=2847
+phase count frame=7653 Task_InitPokeStorage addr=0x0808D020 hits=30 first_cb=0x0808D020 first_frame=2848
+phase count frame=7653 CB2_PokeStorage addr=0x0808CDC4 hits=1439 first_cb=0x0808CDC4 first_frame=2848
+phase count frame=7653 Task_DepositMenu addr=0x0808DD88 hits=135 first_cb=0x0808DD88 first_frame=3246
+phase count frame=7653 TryStorePartyMonInBox addr=0x080930E4 hits=1 first_cb=0x080930E4 first_frame=3381
+phase count frame=7653 Task_WithdrawMon addr=0x0808DC9C hits=69 first_cb=0x0808DC9C first_frame=5258
+phase silent frame=7653 CB2_ReturnToPokeStorage
+RESULT: PASS 9 of 10 hooked functions fired over 6000 frames

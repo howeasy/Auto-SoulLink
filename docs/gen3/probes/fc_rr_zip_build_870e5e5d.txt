@@ -1,0 +1,91 @@
+# gen3_final_cut row=rr_zip_build item=§9_item5_RR cut=870e5e5dd59bcfb26a17e50ea77103b0a7118cd1
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/make_release.py --version g4-870e5e5d --out 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/dist' --skip-generators   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T08:46:27 cpu=77% emuhawk=1 python=8
+start_utc=2026-09-25T12:46:26Z tracked_clean_before=True
+Building E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\dist\SLink-player-g4-870e5e5d.zip ...
+  [added]   SLink-player-g4-870e5e5d/lua/slink.lua
+  [added]   SLink-player-g4-870e5e5d/lua/slink_gen1.lua
+  [added]   SLink-player-g4-870e5e5d/lua/slink_gen2.lua
+  [added]   SLink-player-g4-870e5e5d/lua/slink_gen3.lua
+  [added]   SLink-player-g4-870e5e5d/lua/slink_gen4.lua
+  [added]   SLink-player-g4-870e5e5d/lua/slink_gen5.lua
+  [added]   SLink-player-g4-870e5e5d/lua/connector.lua
+  [added]   SLink-player-g4-870e5e5d/lua/game_detect.lua
+  [added]   SLink-player-g4-870e5e5d/lua/hud.lua
+  [added]   SLink-player-g4-870e5e5d/lua/memory_gb.lua
+  [added]   SLink-player-g4-870e5e5d/lua/memory_nds.lua
+  [added]   SLink-player-g4-870e5e5d/lua/socket.lua
+  [added]   SLink-player-g4-870e5e5d/lua/json_codec.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1_write_safety.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen2_crystal_areas.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen2_crystal_locations.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/run.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/entry.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/client.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/reads.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/signals.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/writes.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/boxes.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/rom.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/trade_overlay.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen1/panel.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/run.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/entry.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/client.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/reads.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/signals.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/writes.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/safety.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/boxes.lua
+  [added]   SLink-player-g4-870e5e5d/lua/gen3/native.lua
+  [added]   SLink-player-g4-870e5e5d/lua/core/session.lua
+  [added]   SLink-player-g4-870e5e5d/lua/core/identity.lua
+  [added]   SLink-player-g4-870e5e5d/lua/core/deferred.lua
+  [added]   SLink-player-g4-870e5e5d/lua/clients/gen2_crystal_client.lua
+  [added]   SLink-player-g4-870e5e5d/lua/clients/gen4_hgsspt_client.lua
+  [added]   SLink-player-g4-870e5e5d/lua/clients/gen5_bw_client.lua
+  [added]   SLink-player-g4-870e5e5d/lua/games/gen2_crystal.lua
+  [added]   SLink-player-g4-870e5e5d/lua/games/gen2_crystal_trainers.lua
+  [added]   SLink-player-g4-870e5e5d/lua/games/gen4_hgsspt.lua
+  [added]   SLink-player-g4-870e5e5d/lua/games/gen5_bw.lua
+  [added]   SLink-player-g4-870e5e5d/lua/x64/socket-windows-5-4.dll
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_rby/profile.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_rby/engine_signals.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_rby/write_checkpoint.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_rby/area_map.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_rby/static_encounters.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/admission.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/area_map.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/charmap.lua
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/engine_signals.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/profile.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/species_index.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/static_encounters.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/write_checkpoint.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/admission_overlay.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/engine_signals_overlay.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/profile_overlay.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen1_purergb/write_checkpoint_overlay.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_frlge/gen3_frlge_areas.lua
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_frlge/gen3_frlge_locations.lua
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_frlge/area_map.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_frlg/profile.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_frlg/engine_signals.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_frlg/write_checkpoint.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_rr/profile.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_rr/engine_signals.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen3_rr/write_checkpoint.json
+  [added]   SLink-player-g4-870e5e5d/data/games/gen4_hgsspt/gen4_hgsspt_areas.lua
+  [added]   SLink-player-g4-870e5e5d/data/games/gen4_hgsspt/gen4_hgsspt_areas_pt.lua
+  [added]   SLink-player-g4-870e5e5d/data/games/gen4_hgsspt/gen4_hgsspt_locations.lua
+  [added]   SLink-player-g4-870e5e5d/data/games/gen4_hgsspt/gen4_hgsspt_locations_pt.lua
+  [added]   SLink-player-g4-870e5e5d/data/games/gen5_bw/gen5_bw_areas.lua
+  [added]   SLink-player-g4-870e5e5d/data/games/gen5_bw/gen5_bw_locations.lua
+
+Done — SLink-player-g4-870e5e5d.zip  (450 KB)
+exit=0 end_utc=2026-09-25T12:46:28Z tracked_clean_after=True classification=pass

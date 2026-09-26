@@ -1,0 +1,10 @@
+CreatePCMenu=0x0809D040
+ShowPokemonStorageSystemPC=0x0808C6A8
+Task_PCMainMenu=0x0808C39C
+EnterPokeStorage=0x0808CDE4
+CB2_PokeStorage=0x0808CDC4
+CB2_ReturnToPokeStorage=0x0808CE60
+Task_InitPokeStorage=0x0808D020
+Task_DepositMenu=0x0808DD88
+Task_WithdrawMon=0x0808DC9C
+TryStorePartyMonInBox=0x080930E4

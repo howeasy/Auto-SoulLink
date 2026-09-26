@@ -291,6 +291,156 @@ def _area_tag(name: str) -> str:
     return re.sub(r"[^0-9A-Za-z]", "", name or "").upper()[:4]
 
 
+class _WireTap:
+    """`--wire-log`: a JSONL transcript of one connection's lines (card gen3-P1-C1-3, C1-3b).
+
+    Wraps the connection's StreamWriter, so every reply is captured where it is actually
+    written and `_respond`'s seven call sites stay untouched; `c2s` is called once per
+    inbound line, right after it parses. Nothing here is constructed unless --wire-log
+    named a directory, so the flag's absence costs one `if` per connection and per line.
+
+    `t` is capture order: a per-FILE monotonic counter starting at 1, shared by every
+    direction and every connection that ever writes to that file (files outlive a single
+    connection -- see below) -- never the protocol's own `seq`, which restarts on
+    reconnect and only exists on c2s lines. A reply carries `req`, the local `t` or a
+    cross-sink {sink, t} reference, or null. Every record carries a process-wide `conn` id.
+    See tests/fixtures/gen3/wire/README.md.
+
+    Only a string `msg["player"]` in VALID_PLAYERS gets its own file:
+    `wire_a.jsonl` / `wire_b.jsonl`.
+    Everything else -- an unrecognised id, a line that parsed as JSON but wasn't an object --
+    goes to one bounded sink, `wire_rejected.jsonl`, capped at `_REJECTED_CAP` lines and then
+    silently dropped. That caps this process at three open handles, ever, and they outlive
+    the connection that opened them by design: a reconnect's lines land in the same file,
+    which is why `_connect`/`_disconnect` meta records exist -- without them a reconnect
+    would be invisible in the transcript.
+    """
+
+    _REJECTED_CAP = 200  # wire_rejected.jsonl: bounded, then dropped -- never unbounded disk use
+    _RAW_CAP = 1024       # a malformed (non-dict) line is recorded truncated to this many bytes
+    _next_conn = 0
+
+    def __init__(self, writer, dirpath: str, files: dict):
+        self._writer = writer
+        self._dir = dirpath
+        # key ("a" | "b" | "rejected") -> {"handle": file, "t": int, "lines": int}.
+        # Shared by every connection in this process, so a key's handle/counter persist
+        # across reconnects -- that is what makes `t` meaningful as capture order.
+        self._files = files
+        self.player: str | None = None  # set once a line names a valid player; sticky after that
+        _WireTap._next_conn += 1
+        self.conn = _WireTap._next_conn
+        self._request: tuple[str, int] | None = None
+        self._last_sink: str | None = None
+        self._connect_written = False
+
+    def __getattr__(self, name):  # drain / wait_closed / get_extra_info
+        return getattr(self._writer, name)
+
+    def close(self):
+        try:
+            if self._last_sink is not None:
+                self._emit(self._last_sink, "meta", msg={"event": "_disconnect"})
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"[wire-log] dropped disconnect: {exc!r}")
+        return self._writer.close()
+
+    def write(self, data: bytes):
+        # _respond always writes one json.dumps'd {"commands": [...]} line -- this parse is
+        # not expected to fail, but the tap must never crash the reply path over it.
+        try:
+            msg = json.loads(data.decode("utf-8", errors="replace"))
+            key = self.player or "rejected"
+            req = None
+            if self._request is not None:
+                sink, t = self._request
+                req = t if sink == key else {"sink": sink, "t": t}
+            self._emit(key, "s2c", msg=msg, req=req)
+        except Exception as exc:  # noqa: BLE001
+            self._request = None
+            log.warning(f"[wire-log] dropped reply: {exc!r}")
+        self._writer.write(data)
+
+    def c2s(self, line: str, msg) -> None:
+        """One inbound line, called right after handle_client's own `json.loads(line)`.
+
+        The wire protocol expects an object, but `json.loads` on a bare `42` or `[1, 2]` also
+        succeeds and hands back something with no `.get` -- that must never raise here, so a
+        non-dict `msg` is recorded as a malformed line (`raw`, truncated, `msg: null`) instead
+        of read like an event.
+        """
+        self._request = None
+        try:
+            if not isinstance(msg, dict):
+                self.c2s_raw(line)
+                return
+            player = msg.get("player")
+            key = player if isinstance(player, str) and player in VALID_PLAYERS else "rejected"
+            if key != "rejected":
+                self.player = key
+            t = self._emit(key, "c2s", msg=msg)
+            if t is not None:
+                self._request = (key, t)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"[wire-log] dropped request: {exc!r}")
+
+    def c2s_raw(self, line: str) -> None:
+        self._request = None
+        try:
+            raw = line.encode("utf-8")[:self._RAW_CAP].decode("utf-8", errors="replace")
+            # A replacement for a partial final codepoint can expand beyond the byte cap.
+            while len(raw.encode("utf-8")) > self._RAW_CAP:
+                raw = raw[:-1]
+            t = self._emit("rejected", "c2s", raw=raw)
+            if t is not None:
+                self._request = ("rejected", t)
+        except Exception as exc:  # noqa: BLE001
+            log.warning(f"[wire-log] dropped raw request: {exc!r}")
+
+    def _emit(self, key: str, direction: str, msg=None, raw=None, req=None):
+        """Write one record to `key`'s file. Returns the `t` it was given, or None if dropped.
+
+        A transcript is evidence, never a dependency: any failure here (disk full, bad DIR,
+        permissions, an unopenable file) is logged and dropped so the tap can never kill a
+        client (adapter-guard finding on b0e0538) -- same for the `wire_rejected.jsonl` cap.
+        """
+        try:
+            if not self._connect_written and direction != "meta":
+                if self._emit(key, "meta", msg={"event": "_connect"}) is None:
+                    return None
+                self._connect_written = True
+            entry = self._files.get(key)
+            if entry is None:
+                os.makedirs(self._dir, exist_ok=True)
+                name = "wire_rejected.jsonl" if key == "rejected" else f"wire_{key}.jsonl"
+                # The handle outlives this call by design: it stays open for the process.
+                entry = self._files[key] = {
+                    "handle": open(os.path.join(self._dir, name), "w", encoding="utf-8"),  # noqa: SIM115
+                    "t": 0, "lines": 0,
+                }
+            if key == "rejected" and entry["lines"] >= self._REJECTED_CAP:
+                return None
+            entry["t"] += 1
+            t = entry["t"]
+            record = {"dir": direction, "t": t, "conn": self.conn}
+            if direction == "s2c":
+                record["req"] = req
+            if raw is not None:
+                record["raw"] = raw
+                record["msg"] = None
+            else:
+                record["msg"] = msg
+            entry["handle"].write(json.dumps(record) + "\n")
+            entry["handle"].flush()
+            entry["lines"] += 1
+            self._last_sink = key
+            return t
+        except Exception as exc:  # noqa: BLE001
+            self._request = None
+            log.warning(f"[wire-log] dropped {direction} line for {key}: {exc!r}")
+            return None
+
+
 # `foundation` is OPTIONAL on the wire, and "absent" is not "empty": a hello that omits
 # the key gets the derived foundation, a hello that sends `null`/`""`/`0` is asserting
 # something and asserting it wrong. A default of None could not tell those apart (json
@@ -328,7 +478,12 @@ class SLinkServer:
                  type_lock: bool = False, explode_mode: bool = False,
                  rival_team_swap: bool = False, overworld_presence: bool = False,
                  native_messages: bool = False, native_sounds: bool = False,
-                 battle_calc: bool = True, pc_trade_npc: bool = True):
+                 battle_calc: bool = True, pc_trade_npc: bool = True,
+                 wire_log: str = None):
+        # --wire-log DIR: capture every line of every connection (card gen3-P1-C1-3).
+        # None (the default) means no _WireTap is ever built and nothing changes.
+        self._wire_log = wire_log
+        self._wire_files: dict = {}
         self._data_dir = data_dir  # None → use global DATA_DIR (backward compat)
         self._run_id   = run_id
         self._run_name = run_name
@@ -1342,6 +1497,8 @@ class SLinkServer:
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         peer = writer.get_extra_info("peername")
         log.info(f"Client connected: {peer}")
+        if self._wire_log:
+            writer = _WireTap(writer, self._wire_log, self._wire_files)
         self._client_connections.add(writer)
         # Per-CONNECTION session state. The seq counter used to be per-slot
         # (`self._last_seq`), which outlived the socket it described — see the guards below.
@@ -1382,8 +1539,15 @@ class SLinkServer:
                     msg = json.loads(line)
                 except json.JSONDecodeError as e:
                     log.warning(f"Bad JSON from {peer}: {e}")
+                    if self._wire_log:
+                        writer.c2s_raw(line)
                     await self._respond(writer, [{"cmd": "noop"}])
                     continue
+                if self._wire_log:
+                    writer.c2s(line, msg)
+                    if not isinstance(msg, dict) or not isinstance(msg.get("player", ""), str):
+                        await self._respond(writer, [{"cmd": "noop"}])
+                        continue
 
                 player_id = msg.get("player", "")
                 if player_id not in VALID_PLAYERS:
@@ -1635,12 +1799,14 @@ class SLinkServer:
         alive = sum(1 for e in s.links if e.status == LinkStatus.ALIVE)
         rows.append(f"Pairs alive|{alive}/{npairs}")
         rows.append(f"Dead zones|{len(dead_zones)}")
-        # NOTE for the Gen 1 native panel (Phase 5): this reads SoulLinkState.player_badges,
-        # which is a COUNT set only by the `status` event -- a different attribute from
-        # SLinkServer.player_badges, which holds the BITMASK from hello/tick. Gen 1 never
-        # sends `status`, so this row would read 0/8 there. Correct for Gen 3 as written;
-        # switch it to popcount(self.player_badges[...]) when Gen 1 gets the panel.
-        rows.append(f"Badges|{s.player_badges.get(player_id, 0)}/8")
+        # popcount the BITMASK hello/tick deliver (SLinkServer.player_badges). SoulLinkState's
+        # player_badges was a count only the deleted old Gen 3 client's `status` event set, so
+        # the row read 0/8 on every live client (UI-lane old-client survey, 2026-09-25).
+        try:
+            badges = bin(int(self.player_badges.get(player_id, 0) or 0)).count("1")
+        except (TypeError, ValueError):
+            badges = 0
+        rows.append(f"Badges|{badges}/8")
         # NAME the dead zones. A count tells a player a number; the names tell them where they can
         # no longer catch, which is the part they can act on. Pagination carries the overflow.
         for area_id in dead_zones:
@@ -1654,16 +1820,6 @@ class SLinkServer:
         width = self.adapter.info_panel_width()
         if width and width <= 20:
             npairs_alive = f"{alive}/{npairs}"
-            # popcount the BITMASK here. The row above uses SoulLinkState.player_badges,
-            # which is a count set only by the `status` event -- and Gen 1 never sends one,
-            # so it would always read 0/8. SLinkServer.player_badges holds the bitmask that
-            # hello and tick actually deliver.
-            mask = 0
-            try:
-                mask = int(self.player_badges.get(player_id, 0) or 0)
-            except (TypeError, ValueError):
-                mask = 0
-            badges = bin(mask).count("1")
             compact = [
                 "SOUL LINK",
                 "",
@@ -5307,7 +5463,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                rival_team_swap: bool = False, overworld_presence: bool = False,
                native_messages: bool = False, native_sounds: bool = False,
                battle_calc: bool = True, pc_trade_npc: bool = True,
-               manager_port: int = 0, verbose: bool = False):
+               manager_port: int = 0, verbose: bool = False,
+               wire_log: str = None):
     _configure_logging(data_dir, verbose)
     if reset:
         links_path = os.path.join(data_dir, "links.json") if data_dir else LINKS_PATH
@@ -5325,7 +5482,8 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                       native_messages=native_messages,
                       native_sounds=native_sounds,
                       battle_calc=battle_calc,
-                      pc_trade_npc=pc_trade_npc)
+                      pc_trade_npc=pc_trade_npc,
+                      wire_log=wire_log)
 
     # TCP game server.
     # limit=4 MiB lifts asyncio's default 64 KiB readline buffer so Gen 5's
@@ -5411,6 +5569,8 @@ if __name__ == "__main__":
         help="Disable the Pokémon-Center trade NPC (RR + patch; on by default, only active while overworld presence is off)")
     parser.add_argument("--manager-port", type=int, default=0,   help="Manager HTTP port (enables 'Run Manager' link on status page)")
     parser.add_argument("--verbose",      action="store_true",   help="Enable DEBUG-level logging to file and console (default: INFO only)")
+    parser.add_argument("--wire-log",     default=None, metavar="DIR",
+                        help="Capture every TCP line to DIR/wire_<player>.jsonl (debug/characterization)")
     parser.add_argument("--allow-host",   action="append", default=[], metavar="NAME",
         help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
     args = parser.parse_args()
@@ -5427,4 +5587,5 @@ if __name__ == "__main__":
                      battle_calc=args.battle_calc,
                      pc_trade_npc=args.pc_trade_npc,
                      manager_port=args.manager_port,
-                     verbose=args.verbose))
+                     verbose=args.verbose,
+                     wire_log=args.wire_log))

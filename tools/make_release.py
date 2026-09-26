@@ -66,8 +66,8 @@ _LUA_ROOT = [
     "connector.lua",
     "game_detect.lua",
     "hud.lua",
-    "memory_gba.lua",
     "memory_nds.lua",
+    # lua/gen2/panel.lua dofiles ../sfx_arbiter.lua (one sound cue per frame).
     "sfx_arbiter.lua",
     "socket.lua",
     "json_codec.lua",
@@ -90,11 +90,6 @@ _LUA_ROOT = [
     "reply_dispatch.lua",
     # the GB clients' owed trade reports (lua/gen1/entry.lua, lua/gen2/entry.lua; review MAJOR-1)
     "owed_reports.lua",
-    # Companion-patch modules (RR native features) — pcall-required by the Gen 3 client.
-    # Required for the companion patch to work; harmless when the ROM is unpatched
-    # (patch_present() stays false, so the client falls back to RAM-poke).
-    "mailbox.lua",
-    "peer_ghost_npc.lua",
     # Gen 3/4/5 area tables live in data/games/<gen>/ (loaded via _proj_root)
 ]
 
@@ -111,6 +106,30 @@ _LUA_GEN1 = [
     "rom.lua",
     "trade_overlay.lua",
     "panel.lua",
+]
+
+# lua/gen3/ — the rewritten Gen 3 (FRLG) client. run.lua is what lua/slink.lua's Gen 3 route
+# dofiles; everything else is pulled in by entry.lua's composition root (mirrors _LUA_GEN1).
+# shadow_run.lua is P3's observer-only bootstrap (not reachable from a production launcher)
+# and deliberately excluded, same as the Gen 1 manifest excludes nothing analogous to it.
+_LUA_GEN3 = [
+    "run.lua",
+    "entry.lua",
+    "client.lua",
+    "reads.lua",
+    "signals.lua",
+    "writes.lua",
+    "safety.lua",
+    "boxes.lua",
+    "native.lua",   # RR companion mailbox part; Entry builds it for the companion kind (C4-7)
+]
+
+# lua/core/ — the shared client core (session/identity/deferred) Gen 3 binds first (P4 C4-1);
+# Gen 1 re-binds later. lua/gen1/* stays on its own copies until then.
+_LUA_CORE = [
+    "session.lua",
+    "identity.lua",
+    "deferred.lua",
 ]
 
 # lua/gen2/ — the Gen 2 client (Crystal, Gold and Silver; U5 cutover). run.lua is what lua/slink.lua
@@ -132,14 +151,12 @@ _LUA_GEN2 = [
 
 # lua/clients/
 _LUA_CLIENTS = [
-    "gen3_frlge_client.lua",
     "gen4_hgsspt_client.lua",
     "gen5_bw_client.lua",
 ]
 
 # lua/games/
 _LUA_GAMES = [
-    "gen3_frlge.lua",
     "gen4_hgsspt.lua",
     "gen5_bw.lua",
 ]
@@ -265,6 +282,22 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
         "gen3_frlge_locations.lua",
+        # Read by lua/gen3/entry.lua Entry.PACK_FILES[*].area_map for BOTH gen3 packs (RR is a
+        # FireRed map hack sharing this table): "group:num" -> area id.
+        "area_map.json",
+    ],
+    "gen3_frlg": [
+        # Read by lua/gen3/entry.lua Entry.build: memory profile, engine signal sites (also
+        # read by Entry.admit/admission_table for every pack, so gen3_rr's ship too even on a
+        # gen3_frlg cartridge) and the write checkpoint.
+        "profile.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+    ],
+    "gen3_rr": [
+        "profile.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
     ],
     "gen4_hgsspt": [
         "gen4_hgsspt_areas.lua",
@@ -278,7 +311,9 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
     ],
 }
 
-# lua/x64/ — DLL optional (present on dev machine, excluded from git)
+# lua/x64/ — the DLL is optional to the ZIP (a player may supply it from Archipelago) but it IS
+# tracked in git (blob 896b3cba at master, lua/x64/README.md alongside it), so a checkout has it;
+# only a hand-stripped tree would miss it. Absent -> warn, do not fail.
 _LUA_X64_OPTIONAL = ["socket-windows-5-4.dll"]
 
 # ── Companion patch (Radical Red native code-injection) — optional add-on ──────
@@ -307,13 +342,14 @@ _LAUNCHER_SCRIPTS: set[str] = {
 
 # The oldest BizHawk each game family runs on -- the one place setup text (this guide, the
 # Manager's run page) takes it from. Gen 1's is enforced at load by lua/slink.lua, which
-# refuses anything older (tests/unit/test_player_pack.py pins the two together); the rest is
-# the Lua 5.4 LuaSocket floor (lua/connector.lua). Gen 4/5 stay unlisted (experimental).
-BIZHAWK_MIN = {"Gen 1": "2.11", "Gen 2 and 3": "2.9"}
+# refuses anything older (tests/unit/test_player_pack.py pins the two together), and so is
+# Gen 3's (the same lua/slink.lua guard on the Gen 3 route); Gen 2's is the Lua 5.4 LuaSocket
+# floor (lua/connector.lua). Gen 4/5 stay unlisted (experimental).
+BIZHAWK_MIN = {"Gen 1": "2.11", "Gen 2": "2.9", "Gen 3": "2.11"}
 
 
 def bizhawk_requirement() -> str:
-    """'2.11+ for Gen 1, 2.9+ for Gen 2 and 3'"""
+    """'2.11+ for Gen 1, 2.9+ for Gen 2, 2.11+ for Gen 3'"""
     return ", ".join(f"{v}+ for {k}" for k, v in BIZHAWK_MIN.items())
 
 
@@ -329,7 +365,8 @@ SLink in BizHawk. You do **not** need Python — the host handles the server.
 
 | Requirement | Detail |
 |---|---|
-| BizHawk | BIZHAWK_REQ. https://github.com/TASEmulators/BizHawk/releases |
+| BizHawk | BIZHAWK_REQ (older versions refuse to start). https://github.com/TASEmulators/BizHawk/releases |
+| A writable folder | Unzip somewhere you can write (not Program Files): Gen 3 keeps a small session file next to `lua/`. |
 | Your ROM | Gen 1 (Red/Blue/Yellow), Gen 2 (Crystal), Gen 3 (FireRed/LeafGreen/Radical Red) |
 | LuaSocket DLL | Already in `lua/x64/`. If missing, see the note below. |
 """
@@ -515,6 +552,8 @@ def build_release(
     required: list[Path] = (
         [REPO_ROOT / "lua" / f for f in _LUA_ROOT]
         + [REPO_ROOT / "lua" / "gen1" / f for f in _LUA_GEN1]
+        + [REPO_ROOT / "lua" / "gen3" / f for f in _LUA_GEN3]
+        + [REPO_ROOT / "lua" / "core" / f for f in _LUA_CORE]
         + [REPO_ROOT / "lua" / "gen2" / f for f in _LUA_GEN2]
         + [REPO_ROOT / "lua" / "clients" / f for f in _LUA_CLIENTS]
         + [REPO_ROOT / "lua" / "games" / f for f in _LUA_GAMES]
@@ -580,9 +619,17 @@ def build_release(
             zf.write(REPO_ROOT / "lua" / "gen1" / fname, prefix + f"lua/gen1/{fname}")
             say(f"  [added]   {prefix}lua/gen1/{fname}")
 
+        for fname in _LUA_GEN3:
+            zf.write(REPO_ROOT / "lua" / "gen3" / fname, prefix + f"lua/gen3/{fname}")
+            say(f"  [added]   {prefix}lua/gen3/{fname}")
+
+        for fname in _LUA_CORE:
+            zf.write(REPO_ROOT / "lua" / "core" / fname, prefix + f"lua/core/{fname}")
+            say(f"  [added]   {prefix}lua/core/{fname}")
+
         for fname in _LUA_GEN2:
             zf.write(REPO_ROOT / "lua" / "gen2" / fname, prefix + f"lua/gen2/{fname}")
-            print(f"  [added]   {prefix}lua/gen2/{fname}")
+            say(f"  [added]   {prefix}lua/gen2/{fname}")
 
         for fname in _LUA_CLIENTS:
             zf.write(REPO_ROOT / "lua" / "clients" / fname, prefix + f"lua/clients/{fname}")

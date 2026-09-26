@@ -1095,7 +1095,7 @@ def test_the_dispatcher_always_passes_results_and_the_oracle_kwargs(runner):
 
 
 def test_a_non_gen1_new_scenario_without_an_oracle_keeps_the_legacy_path(runner):
-    runner.game = "gen3_rr"
+    runner.game = "legacy"          # gen3_rr is the new battery row since ac448144 (oracle_required)
     runner.cfg = {"flags": []}
     runner._run_oracle({"a": "", "b": ""})  # a client RESULT is this scenario's whole verdict
 

@@ -57,7 +57,7 @@
             <h2 class="mk-h2"><span id="game-label">Game</span><i></i><em>any two cartridges of a family can link</em></h2>
             <div class="mk-games" role="radiogroup" aria-labelledby="game-label" @keydown="radioKeys($event)">
               <template x-for="g in form.games" :key="g.key">
-                <button type="button" class="mk-gchip" role="radio" :aria-checked="draft.game === g.key" :tabindex="draft.game === g.key ? 0 : -1"
+                <button type="button" class="mk-gchip" role="radio" :aria-checked="draft.game === g.key" :tabindex="draft.game === g.key ? 0 : -1" :disabled="g.unadmitted"
                         :class="[draft.game === g.key ? 'active' : '', g.key === '' ? 'detect' : '']" @click="draft.game = g.key" x-text="g.label"></button>
               </template>
             </div>

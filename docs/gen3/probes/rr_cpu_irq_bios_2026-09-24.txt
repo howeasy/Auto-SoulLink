@@ -1,0 +1,67 @@
+G5-RR-CPU-IRQ (W1), owner ruling 23: where RR's frame ends with the client's exec hooks, what R14 holds there,
+and where the BIOS halt is. Live, 2026-09-24, lane gen3-lane-2, BizHawk 2.11.1 (mGBA core), no GBA BIOS
+firmware installed (E:/Howard/Bizhawk/Firmware is empty, SkipBios=true): the BIOS is mGBA's built-in HLE
+BIOS (source: mgba-emu/mgba src/gba/hle-bios.s). ROM patch/build/slink_RR.gba sha1 ea5352f8a3b9..., battery
+tests/fixtures/gen3/rr_battle.sav, config = R4 side-A duo ini with the Save RAM path moved to a W1 dir.
+No server, no client: one probe script (below), one EmuHawk run (PID 31632, exit 0).
+
+Probe script (patch/build/w1_irq_probe.lua, untracked):
+  read BIOS domain 0x000..0x3FF; frames 1..900 with NO hook, sample every 15th frame from 540;
+  then event.on_bus_exec(<counter>, 0x0800051A) (CallCallbacks' per-frame site) and frames 901..1200,
+  sampled every 15th frame. Each sample: emu.getregisters() (every key) plus getregister R14/R15/CPSR,
+  read right after emu.frameadvance().
+
+getregisters() keys (every sample): CPSR R0..R15 SPSR. No R14_irq / banked names: R13/R14/SPSR are the
+CURRENT mode's bank. Proof: the same frame state read in System mode vs IRQ mode gives different R13/R14:
+  NOHOOK f=541..901 (24/25 samples): R15=000001C4 CPSR=2000001F (System, ARM) R13=03007E20 R14=000000A4 SPSR=00000000
+  NOHOOK f=556 (1 sample): R15=08004C34 CPSR=0000003F (game code, Thumb) -- a busy frame, refused as before
+  HOOK   f=916..1201 (20/20 samples, hits +15/15 frames): R15=0000001C CPSR=20000092 (IRQ, I set, ARM)
+         R13=03007FA0 R14=000001C4 SPSR=2000001F; R0..R12 identical to the System-mode park
+So with any exec hook, the frame boundary moves to the IRQ entry: R15 = 0x1C = vector 0x18 + 4 (mGBA's PC
+after ARMRaiseIRQ, before the handler's first instruction), R14_irq = 0x1C4, SPSR = the System-mode halt's
+CPSR. The census park (System, R15 0x1C4) is the same instant seen before the IRQ is taken. This matches W9's
+receipt (7d730a89, R15=1C CPSR=20000092 with the full client).
+
+BIOS facts (bytes read from the live BIOS domain, disassembled with capstone ARM):
+BIOS domain 0x000..0x3FF sha1 d0418465f8783dc6cbb180a16808fc9d3a7bae1d
+swiTable @0xD4: [2] Halt=0x1B4  [4] IntrWait=0x1CC  [5] VBlankIntrWait=0x1C4
+-- vectors
+  0000: d30000ea  b #0x354
+  0004: e10000ea  b #0x390
+  0008: 0c0000ea  b #0x40
+  000c: df0000ea  b #0x390
+  0010: de0000ea  b #0x390
+  0014: 0000a0e1  mov r0, r0
+  0018: 590000ea  b #0x184
+  001c: db0000ea  b #0x390
+-- irqBase (vector 0x18 -> b 0x184)
+  0184: 0f502de9  push {r0, r1, r2, r3, ip, lr}
+  0188: 0103a0e3  mov r0, #0x4000000
+  018c: 00e08fe2  add lr, pc, #0
+  0190: 04f010e5  ldr pc, [r0, #-4]
+  0194: 0f50bde8  pop {r0, r1, r2, r3, ip, lr}
+  0198: 04f05ee2  subs pc, lr, #4
+-- Halt (SWI 2)
+  01b4: 00b0a0e3  mov fp, #0
+  01b8: 01c3a0e3  mov ip, #0x4000000
+  01bc: 01b3cce5  strb fp, [ip, #0x301]
+  01c0: 1eff2fe1  bx lr
+-- IntrWait halt loop (not admitted)
+  01f0: 0103cce5  strb r0, [ip, #0x301]
+  01f4: 0802cce5  strb r0, [ip, #0x208]
+  01f8: b8305ce1  ldrh r3, [ip, #-8]
+  01fc: 013013e0  ands r3, r3, r1
+  0200: 01302310  eorne r3, r3, r1
+  0204: b8304c11  strhne r3, [ip, #-8]
+  0208: 0822cce5  strb r2, [ip, #0x208]
+  020c: f7ffff0a  beq #0x1f0
+
+Conclusion: RR (CFRU) idles in SWI 2 Halt. The HALTCNT write is strb @0x1BC; the IRQ that ends the halt is
+taken with the next instruction 0x1C0 (bx lr), so R14_irq = 0x1C0 + 4 = 0x1C4, and irqBase returns with
+subs pc, lr, #4 to 0x1C0. The admitted IRQ shape (write_checkpoint radical_red.cpu.irq_entry): mode 0x12,
+ARM, R15 in {0x1C}, R14 in [0x1B8, 0x1C4], i.e. R14 - 4 inside Halt's body 0x1B4..0x1C0. Any R14 outside
+(ROM/RAM game code, the SWI dispatcher, IntrWait's halt @0x1F0 -> R14 0x1F8, not witnessed on RR) is refused.
+BIOS-independence of the safety argument: R14 in 0x1B8..0x1C4 means the interrupted instruction was in the
+BIOS region, which game code cannot execute from, so no game write can be mid-way; with a different BIOS the
+addresses would simply not match and the frame would be refused (fail-closed).
+Lane left clean: the probe files are untracked under patch/build/, no EmuHawk of mine running.

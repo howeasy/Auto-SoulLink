@@ -112,16 +112,89 @@ do
     end
 end
 
+-- ── Gen 3 route ──────────────────────────────────────────────────────────────
+-- FireRed/LeafGreen (pack gen3_frlg) and Radical Red (pack gen3_rr) admitted by HASH or
+-- ANCHORS run under lua/gen3/, the rewritten client. The old Gen 3 client was archived at
+-- C5-6 (tag archive/gen3-old-client, owner ruling 24): every other GBA cartridge -- Emerald,
+-- the Archipelago FireRed/LeafGreen builds, a header-only admission (an unpinned hack or a
+-- bad dump that merely says BPRE/BPGE) -- is refused here by name, never handed to
+-- game_detect. RR carries FireRed's header code, so a header-only admission is refused rather
+-- than routed: the new client's site check would refuse it anyway, less legibly.
+--
+-- The routed set lives in entry.lua (Entry.ROUTED); the launcher keeps no copy of it.
+do
+    local sys_ok, sys = pcall(function() return emu.getsystemid() end)
+    -- Fail closed: an unidentifiable system must never fall through to game_detect (the
+    -- Gen 2/4/5 registry), which could silently misroute a GBA cartridge that briefly failed
+    -- to identify itself. GB/GBC/SGB (Gen 1 and Gen 2, handled above) and NDS (Gen 4/5) are the only
+    -- known non-GBA systems game_detect is ever asked to route.
+    if not sys_ok then
+        error("[SLink] could not determine the loaded system (emu.getsystemid failed): "
+              .. tostring(sys), 0)
+    elseif sys ~= "GBA" and sys ~= "GB" and sys ~= "GBC" and sys ~= "SGB" and sys ~= "NDS" then
+        error("[SLink] could not determine the loaded system: emu.getsystemid() returned "
+              .. tostring(sys) .. " (expected GB, GBC, SGB, GBA or NDS)", 0)
+    end
+    if sys == "GBA" then
+        -- Admission itself is isolated in a pcall so an admission error becomes a named
+        -- refusal. The BizHawk-version guard below is deliberately OUTSIDE this pcall so it
+        -- propagates like the Gen 1 route's does.
+        local header_code = "?"
+        local admit_ok, Entry, admitted, why = pcall(function()
+            local E = dofile(_dir .. "gen3/entry.lua")
+            assert(E, "lua/gen3/entry.lua did not load")
+            local function rom_read(off, n)
+                local t = {}
+                for i = 1, n do t[i] = memory.read_u8(off + i - 1, "ROM") end
+                return t
+            end
+            local hash = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or ""
+            local ok_hc, hc = pcall(E.header_code, rom_read)
+            header_code = ok_hc and hc or ""
+            local a, reason = E.admit({ root = _dir .. "..", json = dofile(_dir .. "json_codec.lua"),
+                                        rom_hash = hash, rom_read = rom_read,
+                                        header_code = header_code })
+            return E, a, reason
+        end)
+        if admit_ok and Entry and admitted and Entry.ROUTED[admitted.pack]
+           and admitted.admitted_by ~= "header" then
+            -- The engine hooks are only proven on 2.11.x (same guard as the Gen 1 route,
+            -- slink.lua Gen 1 block above).
+            local ver = tostring(client.getversion and client.getversion() or "?")
+            local maj, min = ver:match("^(%d+)%.(%d+)")
+            if not maj or tonumber(maj) * 100 + tonumber(min) < 211 then
+                error("[SLink] BizHawk " .. ver .. " is too old for Gen 3 -- install BizHawk 2.11 or newer", 0)
+            end
+            dofile(_dir .. "gen3/run.lua")
+            return
+        end
+        local what
+        if header_code == "BPEE" then
+            what = "Pokemon Emerald is not supported yet"
+        elseif admit_ok and admitted and admitted.admitted_by == "header" then
+            what = "this " .. tostring(admitted.title) .. " build (header " .. header_code
+                   .. ") is not a pinned cartridge -- Archipelago builds and unknown hacks are not supported yet"
+        elseif not admit_ok then
+            what = "admission failed (" .. tostring(Entry) .. ")"
+        else
+            what = "this cartridge (header " .. tostring(header_code) .. ") is not supported ("
+                   .. tostring(why) .. ")"
+        end
+        error("[SLink] Unsupported Gen 3 cartridge: " .. what
+              .. ". Supported: FireRed, LeafGreen and Radical Red.", 0)
+    end
+end
+
 -- Detect which game is loaded
 package.loaded["game_detect"]       = nil
 local game_detect = require("game_detect")
 local detected    = game_detect.detect()
 
 -- Map game_id to client script path
--- No Game Boy rows: the Gen 1 and Gen 2 routes above return or refuse for every GB/GBC/SGB
--- core before this table is reached (the legacy gen2_crystal row went with P3b.8).
+-- No Game Boy or GBA rows: the Gen 1, Gen 2 and Gen 3 routes above return or refuse for every
+-- GB/GBC/SGB/GBA core before this table is reached (the legacy gen2_crystal row went with P3b.8,
+-- the old gen3_frlge row with C5-6).
 local _CLIENT_MAP = {
-    gen3_frlge    = "clients/gen3_frlge_client.lua",
     gen4_hgsspt   = "clients/gen4_hgsspt_client.lua",
     gen5_bw       = "clients/gen5_bw_client.lua",
 }

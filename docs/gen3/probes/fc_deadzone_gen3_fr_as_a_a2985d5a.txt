@@ -1,0 +1,40 @@
+# gen3_final_cut row=deadzone_gen3_fr_as_a item=§2-3_item1-2 cut=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario deadzone_gen3   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-25T10:09:44 cpu=40% emuhawk=1 python=5
+start_utc=2026-09-25T14:09:42Z tracked_clean_before=True
+
+========== scenario: deadzone_gen3 ==========
+[duo] deadzone_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae write_checkpoint.json=d36fe6badf2bf3864811741c6bb41011f0f3dbf81063d10e4e7ef08e473c9bf3 profile.json=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65 source=a2985d5ad068c1afcaa9ef8eb8ebf402c52c4e28
+[duo] server up: tcp=57145 http=57146 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_rky88x1c
+[duo] cleared 9 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_1_witness.bin, e2e_deadzone_gen3_a_1_witness_ext.bin, e2e_deadzone_gen3_a_attempt1_result.txt, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_1_witness.bin, e2e_deadzone_gen3_b_1_witness_ext.bin, e2e_deadzone_gen3_b_attempt1_result.txt, e2e_deadzone_gen3_b_result.txt, e2e_deadzone_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] launched b phase=initial seed=True
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_1
+[duo] go-file written for b
+[duo] B caught C2FEE2EC:1C600D89 in the dead zone; force-fainted, memorialized
+[duo] links.json: 1 dead_zone entry for route_1; B's C2FEE2EC:1C600D89 retired
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: PASS (dead-zone capture C2FEE2EC:1C600D89 retired)
+[duo] SAVE_WITNESS_SHA256 inst=a site=deae877c2a1646cadb6f784463baae87c24a7c2abae644c1b2e1742ffcd8fa4e file=deae877c2a1646cadb6f784463baae87c24a7c2abae644c1b2e1742ffcd8fa4e match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=e90bc16ba80868f2a09b98e0d1d527c5f89d6842e627c51cb0c3299741bfcc0e file=e90bc16ba80868f2a09b98e0d1d527c5f89d6842e627c51cb0c3299741bfcc0e match=true saves=1 counter=4->5 rtc=normalized
+[duo] deadzone: route_1 locked by A's no_catch (species 16); B's C2FEE2EC:1C600D89 saved only in the memorial box
+[duo] MARKER b: FAINTED C2FEE2EC:1C600D89 frame=4247 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=C2FEE2EC:1C600D89
+[duo] MARKER b: TX memorialize_done C2FEE2EC:1C600D89 {"box":13,"event":"memorialize_done","key":"C2FEE2EC:1C600D89","player":"b","seq":130}
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+
+========== summary ==========
+  deadzone_gen3: PASS (attempt 1 of 3)
+exit=0 end_utc=2026-09-25T14:10:05Z tracked_clean_after=True classification=pass

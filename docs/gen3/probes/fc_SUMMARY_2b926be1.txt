@@ -1,0 +1,8 @@
+# G4 final cut 2b926be1f2e623c97f29f74eb517c3e0f9a492bd -- tools/gen3_final_cut.py summary (written 2026-09-24T17:22:32Z)
+# RUN 1 / CARRIED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | release_gate_quick | §11 gate | PASS | 1 | fc_release_gate_quick_2b926be1.txt |
+
+OVERALL: PASS (1/1 rows)

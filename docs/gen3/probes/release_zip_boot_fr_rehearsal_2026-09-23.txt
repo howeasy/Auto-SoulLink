@@ -1,0 +1,19 @@
+G4 item 5 REHEARSAL: the extracted release zip boots FireRed on the NEW client
+zip: SLink-player-0.0.0-g4check built by OMP (C4-ZIP). CORRECTION (C4-ZIPCHK): the export was an unpinned `git archive HEAD`, so the zip is NOT a0657c20; tools/check_release_zip.py PASSES it at --rev 99c70d9c (85 members == blobs, 23/23 closure) and FAILS it at a0657c20 on exactly the C5 files, so this boot ran the committed C5 stack (2dc1b750).
+boot: EmuHawk --config=<temp cfg, GBA SaveRAM in a temp dir seeded with tests/fixtures/gen3/firered_party_town.sav> --lua=<bootstrap: sets SLINK_HOST/PORT/PLAYER, taps A 300-1500 frames, dofile <extract>/lua/slink.lua> 'Pokemon - FireRed Version (USA).gba' (sha1 41cb23d8); server: python -m server.server from the same export
+The final receipt is re-taken on the final cut.
+
+--- <extract>/slink_lua.log ---
+=== SLink Lua boot Wed Sep 23 15:17:17 2026 ===
+[SLink] Console tee -> C:/Users/howar/AppData/Local/Temp/szc2/extract/SLink-player-0.0.0-g4check/lua/../slink_lua.log
+[SLink] TCP connecting to 127.0.0.1:54391 (non-blocking)…
+[SLink-gen3] gen3_frlg/firered (clean by hash) player a -> 127.0.0.1:54391 (rom 41cb23d8)
+[SLink] TCP connected to 127.0.0.1:54391
+[SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
+[SLink-gen3] writes ENABLED
+
+--- server log ---
+2026-09-23 15:17:17,209 [INFO] Client connected: ('127.0.0.1', 54845)
+2026-09-23 15:17:19,800 [INFO] [a] hello rom=firered area='viridian_city' party=2
+2026-09-23 15:17:19,802 [INFO] Committed ROM type 'firered' for this run
+2026-09-23 15:17:19,802 [INFO] Committed trainer name 'JONN' for player a

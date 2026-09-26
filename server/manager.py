@@ -72,14 +72,11 @@ GAMES = [
     ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
     ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
-    ("gen3_ap", "FireRed · LeafGreen (Archipelago)", ["firered_ap", "leafgreen_ap"]),
+    ("gen3_ap", "FireRed · LeafGreen (Archipelago) — not admitted by the SLink client yet", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
-    ("gen3_e", "Emerald", ["emerald"]),
-    ("gen4_hgss", "HeartGold · SoulSilver", ["heartgold", "soulsilver"]),
-    ("gen4_pt", "Platinum · Renegade Platinum", ["platinum", "renegade_platinum"]),
-    ("gen5_bw", "Black · White", ["pokemon_black", "pokemon_white"]),
-    ("gen5_bw2", "Black 2 · White 2", ["pokemon_black_2", "pokemon_white_2"]),
+    ("gen3_e", "Emerald — not admitted by the SLink client yet", ["emerald"]),
 ]
+UNADMITTED_GAMES = frozenset({"gen3_ap", "gen3_e"})  # labelled "not admitted"; handle_new refuses them
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a Gen 1 game names (upr_settings.FAMILY_*): a pure run takes pure
@@ -166,7 +163,7 @@ OPTION_SUPPORT = {
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen3_frlge_rr": {"ok": True}},
     "overworld_presence": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
-    "native_messages": {"all": False, "why": "Radical Red only.", "gen3_frlge_rr": {"ok": True}},
+    "native_messages": {"all": False, "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."},
     "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB).",
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},
@@ -280,7 +277,8 @@ def new_run_form() -> dict:
     """Everything the New-run form needs, computed here so the reasons and the greying
     come from one table: per game family, per option, (ok, why)."""
     return {
-        "games": [{"key": k, "label": lbl, "members": m} for k, lbl, m in GAMES],
+        "games": [{"key": k, "label": lbl, "members": m, "unadmitted": k in UNADMITTED_GAMES}
+                  for k, lbl, m in GAMES],
         "groups": [{"label": lbl, "keys": keys} for lbl, keys in OPTION_GROUPS],
         "options": {k: {"label": lbl, "desc": d} for k, (lbl, d) in OPTIONS.items()},
         "support": {k: {opt: option_support(opt, m or [""]) for opt in OPTIONS} for k, _, m in GAMES},
@@ -1198,6 +1196,12 @@ class RunManager:
             return web.json_response({"ok": False, "error": "name is required"}, status=400)
         if len(name) > 80:
             return web.json_response({"ok": False, "error": "name is too long (80 characters max)"}, status=400)
+        # Listed but not admitted (docs/gen3/PLAN.md:112): visible in the Manager, never created,
+        # because the client would refuse the run at hello.
+        game = str(body.get("game", "") or "").strip().lower()  # one normalized key: check, store, message
+        if game in UNADMITTED_GAMES:
+            return web.json_response({"ok": False, "error": f"{GAME_LABELS[game]}: cannot create a run"},
+                                     status=400)
 
         runs = _load_registry()
         run_id = "run_" + datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
@@ -1220,7 +1224,7 @@ class RunManager:
             "pid":        None,
             **run_options(body),
             # The game FAMILY, when named up front; "" means detect from the first hello.
-            "game": str(body.get("game", "") or "") if str(body.get("game", "") or "") in GAME_MEMBERS else "",
+            "game": game if game in GAME_MEMBERS else "",
         }
         # Create data directory immediately
         os.makedirs(os.path.join(MANAGER_DIR, run_id), exist_ok=True)
@@ -1458,7 +1462,7 @@ class RunManager:
             wanted = _game_family(run.get("game"))
             if wanted and wanted != family:
                 return web.json_response({"ok": False, "error": (
-                    f"this run is {GAME_LABELS[run['game']]}; these are "
+                    f"this run is {GAME_LABELS.get(run['game'], run['game'])}; these are "
                     f"{'pureRGB' if family == FAMILY_PURE else 'vanilla'} cartridges -- pick "
                     f"{'pureRGB' if wanted == FAMILY_PURE else 'vanilla Red / Blue / Yellow'} dumps")}, status=400)
         # Either a settings file the user built in UPR's GUI, the form's spec (every option

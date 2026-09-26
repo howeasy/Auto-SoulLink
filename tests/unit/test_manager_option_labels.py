@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from server.manager import GAMES, OPTIONS, new_run_form, option_support
+from server.manager import GAME_LABELS, GAMES, OPTIONS, new_run_form, option_support
 
 GEN1 = ["red", "blue"]
 RR = ["firered_rr", "firered_rr"]
@@ -28,7 +28,7 @@ def test_the_no_patch_generations_are_allowed_and_say_so(key):
     assert "no patch" in s["why"].lower(), s
 
 
-@pytest.mark.parametrize("key", ["overworld_presence", "native_messages",
+@pytest.mark.parametrize("key", ["overworld_presence",
                                  "battle_calc", "pc_trade_npc"])
 def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     """The other half of the same honesty: a Gen 1 player switching these on gets nothing,
@@ -84,3 +84,41 @@ def test_the_form_table_covers_every_family_and_option():
     for family in form["support"].values():
         assert set(family) == set(OPTIONS)
         assert all({"ok", "why"} <= set(v) for v in family.values())
+
+
+def test_native_messages_is_disabled_for_every_game(tmp_path):
+    """Native text is disabled for the Gen 3 RC (owner 2026-09-23, docs/gen3/TODO.md):
+    greyed on Radical Red too, and the server ignores every way of turning it on."""
+    from server.state import SoulLinkState
+    s = option_support("native_messages", RR)
+    assert not s["ok"] and "post-rc" in s["why"].lower(), s
+    assert SoulLinkState(data_dir=str(tmp_path), native_messages=True).native_messages is False
+
+
+def test_unadmitted_gen3_variants_carry_the_suffix():
+    """Archipelago FRLG and Emerald are not admitted by the Gen 3 client yet (owner
+    2026-09-23, docs/gen3/PLAN.md §14.1). Their labels carry a 'not admitted' suffix
+    so players know they cannot start a SLink with them. Vanilla gen3 and gen3_rr are
+    admitted and have no such suffix."""
+    labels = GAME_LABELS
+    assert "not admitted by the SLink client yet" in labels["gen3_ap"]
+    for game in ("gen3_e",):
+        assert "not admitted by the SLink client yet" in labels[game]
+    assert "not admitted by the SLink client yet" not in labels["gen3"]
+    assert "not admitted by the SLink client yet" not in labels["gen3_rr"]
+
+
+def test_new_run_form_marks_exactly_the_unadmitted_games():
+    """The template greys a chip from this flag (manager.html :disabled="g.unadmitted"), derived
+    from UNADMITTED_GAMES, so the chips and the handle_new refusal cannot drift apart."""
+    from server.manager import UNADMITTED_GAMES, new_run_form
+    flagged = {g["key"] for g in new_run_form()["games"] if g["unadmitted"]}
+    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap", "gen3_e"}
+
+
+def test_gen4_and_gen5_are_not_offered_in_the_manager():
+    """Owner 2026-09-23: Gen 4/5 never ran on a real game; their code stays (tag
+    archive/gen4-gen5) but the New-run form must not list them at all."""
+    from server.manager import new_run_form
+    keys = {g["key"] for g in new_run_form()["games"]}
+    assert not {k for k in keys if k.startswith(("gen4", "gen5"))}

@@ -10,126 +10,18 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.9+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, AP-patched, or Radical Red 4.1) |
+| BizHawk 2.9+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, or Radical Red 4.1) |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
 | Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 3 onward) |
 | Status page | `http://localhost:8080/` — flicker-free auto-refresh every 2 s (HTMX + idiomorph morph swap); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
-| Scripts in `lua/` | `memory_gba.lua`, `connector.lua`, `socket.lua`, `slink.lua`, all files in `tests/` |
+| Scripts in `lua/` | `slink.lua`, `gen3/`, `core/`, `connector.lua`, `socket.lua`, all files in `tests/` |
 | Save states | Make a BizHawk save state before Test 2 (it writes RAM) |
 
 ---
 
-## Test 1 — Memory Reader
+## Tests 1–3 — removed (old Gen 3 client)
 
-**Script:** `lua/tests/test_1_memory.lua`  
-**Emulators:** Either one. **No server. No writes. Safe on any save.**
-
-Load the script and play normally. A live overlay appears showing party data, map info, and battle state.
-
-### Pass Criteria
-
-| # | What to check | Expected |
-|---|---|---|
-| 1 | ROM validation line | `ROM: firered OK` or `ROM: leafgreen OK` (or `firered_ap` / `leafgreen_ap` for AP ROMs, `radical_red` for RR/CFRU ROMs) |
-| 2 | Party count | Matches the number of Pokémon in your in-game party menu |
-| 3 | HP / MaxHP for each slot | Matches the HP bar shown in the party menu |
-| 4 | Level for each slot | Matches the level shown in the party menu |
-| 5 | Map field | Changes (e.g. `3:5` → `4:1`) when you walk across a route boundary |
-| 6 | Area ID field | Shows a recognisable name (e.g. `route_1`) where mapped; `""` for unmapped interiors is acceptable |
-| 7 | In-battle flag | Shows `true` when a wild or trainer battle starts; `false` in the overworld |
-
-**PASS:** All 7 criteria hold while playing normally.  
-**FAIL:** Any value looks wrong — note which slot/field and paste the console output.
-
----
-
-## Test 2 — Force Faint (RAM Write)
-
-**Script:** `lua/tests/test_2_force_faint.lua`  
-**Emulators:** Either one. **⚠ Writes to RAM — save a BizHawk state first.**
-
-### Controls
-
-| Key | Action |
-|---|---|
-| F1 | Force-faint party slot 0 |
-| F2 | Force-faint party slot 1 |
-| F3 | Force-faint party slot 2 |
-| F4 | **Restore all HP to maxHP** (undo — use this to reset between tests) |
-| F5 | Force-faint the **last living** party mon (whiteout trigger) |
-| F6 | Force-faint **all** party mons simultaneously |
-| F7 | **Immediate whiteout** (in-battle only) — skips faint animation, jumps straight to blackout |
-
-### Pass Criteria
-
-| # | What to do | Expected |
-|---|---|---|
-| 1 | Press F1 | Slot 0 HP drops to 0 on the same frame |
-| 2 | Press F1 **during a battle** | The mon plays its faint animation; whiteout fires when all party mons are at 0 HP |
-| 3 | Press F1 **in the overworld** | HP bar shows 0 in the party menu |
-| 4 | Press F4 after any faint | All slots restored to maxHP |
-| 5 | Press F5 in battle with one mon alive | Faint animation plays, then whiteout — player teleports to Pokémon Center |
-| 6 | Press F7 during any battle | Whiteout screen appears within 1–2 frames (no animation) |
-| 7 | Press F6 in the overworld | All party mons set to 0 HP; console: `ALL PARTY FAINTED (overworld — no automatic whiteout)` |
-
-**PASS:** HP changes instantly on the correct slot; game reacts correctly in battle.  
-**FAIL:** HP does not change → check `Writes: ON` in the overlay. If it says `OFF`, validation failed — load a save first.  
-**FAIL:** F7 freezes or glitches → reload the save state and retry from a quieter battle state (not mid-animation).
-
----
-
-## Test 3 — Server Connectivity + Auto Event Detection
-
-**Script:** `lua/tests/test_3_server.lua`  
-**Emulators:** Either one.  
-**Server required:** `python -m server.server --host 127.0.0.1 --port 54321`
-
-Edit `SERVER_HOST` / `SERVER_PORT` / `PLAYER_ID` at the top of the file if needed.  
-All output goes to the Lua **console panel** — no GUI overlay.  
-The script auto-detects all event types and logs them as they happen.
-
-### Controls
-
-| Key | Action |
-|---|---|
-| F1 | Manual `area_enter` — current map area_id |
-| F2 | Manual `capture` — party slot 0 (real key, level, HP, area) |
-| F3 | Manual `faint` — party slot 0 key |
-| F4 | Manual `no_catch` — current area_id |
-| F5 | Manual `whiteout` |
-| F6 | Manual `safe` |
-| F7 | Manual `tick` |
-
-### Auto-Detection Criteria
-
-| What to do | Expected console output |
-|---|---|
-| Walk into a route | `AUTO area_enter:route_N → noop` |
-| Catch a wild Pokémon (party not full) | `AUTO capture:<key8chars> → noop` |
-| Catch with a full party (6/6) | `AUTO capture:<key8chars>(box) → noop` (from PC box) |
-| Battle start | `[T3] Battle: overworld → IN BATTLE  wild=true  area=route_N` |
-| Battle end | `[T3] Battle: IN BATTLE → overworld (grace window started)` |
-| Trainer battle end | No `no_catch` fired (trainer battles excluded by `gBattleTypeFlags`) |
-| Wild battle — run away or KO | After 15-frame grace: `AUTO no_catch:route_N → noop` |
-| **Second battle in same area** | No second `no_catch` — area already resolved |
-| Party mon HP → 0 | `AUTO faint:<key8chars>` |
-| All party mons fainted | `AUTO whiteout → noop` |
-| Return to overworld | `AUTO safe → noop` |
-
-### Additional Checks
-
-| Check | Expected |
-|---|---|
-| Startup | `[T3] TCP: connected to 127.0.0.1:54321` |
-| Writes enabled | `Writes: ON` — ROM validated |
-| Response format | Every response contains `"commands"` JSON |
-| `force_faint` dispatched | `↳ DISPATCHED force_faint slot=N key=...` when server sends one |
-| No `no_catch` after successful catch | Catching on a route suppresses `no_catch` for that route for the rest of the session |
-
-**PASS:** All auto-detection events fire correctly; no false `no_catch` after successful catches or on repeated battles in the same area.  
-**FAIL:** `NOT CONNECTED` repeated in console → server not running or wrong host/port.  
-**FAIL:** `no_catch` fires after a successful catch → `resolved_areas` bug; check `gen3_frlge_client.lua`.  
-**FAIL:** `no_catch` fires after trainer battle → `isWildBattle()` bug; check `memory_gba.lua`.
+`test_1_memory.lua`, `test_2_force_faint.lua` and `test_3_server.lua` drove the old Gen 3 client's `memory_gba.lua` and were deleted with it at C5-6 (they remain at tag `archive/gen3-old-client`). Their coverage is the headless `test_live_*` gates (`tests/live/test_lua_gates.py`) and the Gen 3 duo scenarios. Start at Test 4.
 
 ---
 
@@ -261,10 +153,10 @@ The status page uses **HTMX morph swaps** (`idiomorph-ext.min.js`) — sprites, 
 
 **PASS:** All event types fire correctly; negative cases are silent; `force_faint`, `memorialize`, `box_mon`, and `party_mon` commands dispatched when received; illegal captures (dead zone or extra capture in linked area) are force-fainted and sent to Box 13; status page gender symbols, abilities, and dead zone encounter species display correctly; party_mon fails gracefully on party-full or missing stats (no infinite loop); identity lock rejects wrong saves cleanly; borrowed-party battles (CFRU) produce no false events.  
 **FAIL:** `NOT CONNECTED` in console → server not running or wrong host/port.  
-**FAIL:** `no_catch` after successful catch → `resolved_areas` bug in `gen3_frlge_client.lua`.  
-**FAIL:** `no_catch` fires on trainer battle → `isWildBattle()` bug in `memory_gba.lua`.  
+**FAIL:** `no_catch` after successful catch → `resolved_areas` handling in the Gen 3 client (`lua/gen3/client.lua`).  
+**FAIL:** `no_catch` fires on trainer battle → wild-vs-trainer detection in `lua/gen3/reads.lua`.  
 **FAIL:** `Writes: OFF` → ROM validation failed; load a save first.  
-**FAIL:** `no_catch` fires before Pokéballs obtained → `nuzlocke_active` gate bug in `gen3_frlge_client.lua`.  
+**FAIL:** `no_catch` fires before Pokéballs obtained → the Poké Ball gate in the Gen 3 client (`lua/gen3/client.lua`).  
 **FAIL:** `party_mon failed: party full` loops endlessly → `exec_party_mon` retry bug.  
 **FAIL:** Ability shows "Unknown" or 0 → check `BASESTATS_ADDR` in the ROM profile; run `lua/tests/test_ability_diag.lua` to diagnose.  
 **FAIL:** Wrong-save connection modifies state → identity lock bug in `server/state.py`.
@@ -595,7 +487,7 @@ SLINK_LIVE=1 pytest tests/live -q
 3. Snorlax `maxhp` > Diglett `maxhp` (species-specific base stats reached the enemy side).
 4. `gEnemyPartyCount` bumped to 3.
 
-**`test_live_enemyparty_route.lua`** — savestate-free (pure EWRAM memcpy, validated from a fresh boot). Mirrors exactly what `gen3_frlge_client.lua` does on `replace_rival_team` with the patch present: stages three deterministic synthetic 100-byte party-mon blobs in the patch's blob buffer, then `MB.send(OP_SET_ENEMY_PARTY, {count})`. Result file: `patch/build/enemypartyroute_result.txt`.
+**`test_live_enemyparty_route.lua`** — savestate-free (pure EWRAM memcpy, validated from a fresh boot). Mirrors what the Gen 3 client's native layer (`lua/gen3/native.lua`) does on `replace_rival_team` with the patch present: stages three deterministic synthetic 100-byte party-mon blobs in the patch's blob buffer, then `MB.send(OP_SET_ENEMY_PARTY, {count})`. Result file: `patch/build/enemypartyroute_result.txt`.
 
 **Pass criteria:**
 1. Beacon appears during boot (~frame 13).
@@ -618,32 +510,11 @@ Run the full Test 4 setup (`lua/slink.lua` on both BizHawks, patched RR ROMs) wi
 
 ## Test 6 — Explode Mode (Radical Red only, RAM Write)
 
-**Script:** `lua/tests/test_force_explosion.lua` (single-instance isolation harness)  
-**Emulators:** **One** is enough for Phase 0. **⚠ Writes to RAM — save a BizHawk state first.** Writes only overwrite the active battler's move slots in `gBattleMons` (transient EWRAM), so no save corruption.
-
 When `--explode-mode` is active, a linked partner's death sends `force_explode` instead of `force_faint`: the surviving mon's active battler is coerced into using Explosion (`M.forceExplodeBattler`) rather than being silently zeroed. Vanilla / AP / Emerald and bench (non-active) mons fall back to `force_faint`.
 
-### Phase 0 — Isolation harness (no server, no partner)
+### Phase 0 — archived
 
-Load `test_force_explosion.lua` from the BizHawk Lua console with Radical Red running, then enter any battle.
-
-| Key | Action |
-|---|---|
-| F1 | Coerce battler 0 (player primary) to Explosion — overwrites all 4 move slots with Explosion (move 153, 5 PP) |
-| F2 | Coerce battler 2 (player secondary, doubles only) |
-| F3 | Restore battler 0/2's original moves + PP from party data |
-| F4 | Dump current `gBattleMons` moves + PP for all battlers |
-| F5 | Instant fallback: faint slot 0 immediately (simulates the timeout firing after a Damp / type-immunity stall) |
-
-**Pass criteria:**
-1. **Golden path** — F4 shows legitimate moves; F1 → HUD `moves=[153,153,153,153] pp=[5,5,5,5]`; FIGHT shows Explosion in all 4 slots; picking any slot Explodes and self-faints with no crash.
-2. **Abort / restore** — after F1, F3 returns the FIGHT menu to the original moves.
-3. **Damp / no-effect** — vs a Damp mon (Poliwag/Wooper), Explosion "But it failed!"; F5 then zeros slot 0 HP via the fallback path.
-4. **Doubles** — F2 changes only battler 2's move row; battler 0 untouched.
-5. **Out of battle** — F1 in the overworld logs `(not in battle — refused)`; no writes, no crash.
-
-**FAIL:** `M.forceExplodeBattler` returns false in battle → check `M.BATTLE_MONS_ADDR` for the active profile.  
-**FAIL:** writes succeed but FIGHT still shows old moves → menu cached; reopen FIGHT or check `BATTLE_MON_MOVES_OFF`.
+The single-instance harness `test_force_explosion.lua` drove the old client (tag `archive/gen3-old-client`) and is archived in `lua/tests/archive/gen3_old_client/` (C5-6). The explode plumbing is gated headlessly by `test_live_forcemove.lua` and `test_live_explode_route.lua`.
 
 ### Phase 1 — End-to-end with server + partner
 

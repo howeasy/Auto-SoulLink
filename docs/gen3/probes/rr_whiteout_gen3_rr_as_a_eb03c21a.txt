@@ -1,0 +1,139 @@
+# receipt: SLINK_GEN3_RR_TRACE=1 python tools/e2e_duo.py --game gen3_rr --scenario whiteout_gen3 --lane rrwhite5
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2 sha=eb03c21a tracked_clean=True runner=subagent G5-RR-WHITEOUT 2026-09-24
+#
+# NOT a PASS. This receipt is player a's full result log (patch/build/e2e_whiteout_gen3_a_result.txt
+# from this run), not the duo orchestration transcript. It documents two things:
+#   1. The card's target bug IS FIXED: [rr-trace] lines #1-#18 below show
+#      pokecenter_door_to_route1_edge completing all 18 steps (the old stall was step #2 Left,
+#      which now succeeds after one wait-and-retry round) and the walk reaching Route 1.
+#   2. A SEPARATE, previously-masked bug then surfaces further downstream, unrelated to this
+#      card's leg or to any file this card touched: after the resulting (legitimate) whiteout,
+#      ctx.center_state()'s landing-tile snapshot reads pokemon_storage_base=0x00000000 (an
+#      insane EWRAM pointer), and scenario_gen3_whiteout.lua's G4-item-2a receipt check fails
+#      the run on it: "RESULT: FAIL (CENTER_STATE: insane pointer:pokemon_storage_base)".
+#      Out of scope for G5-RR-WHITEOUT (see report to the coordinator).
+
+duo instance a scenario=whiteout_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:57891 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:57891 (rom ea5352f8)
+client built by lua/gen3/run.lua: title=radical_red player=a -> 127.0.0.1:57891
+[client] [SLink] TCP connected to 127.0.0.1:57891
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:2BDDC8BF
+PARTY slot=1 key=F56D8C1D:2BDDC8BF species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","par
+RX resolved_areas
+RX config
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 616
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 616
+JITTER requested=0 applied=0 attempt=1
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+[client] [gen3] phase encounter frame=1407 #1 during step Up at (16,15)
+ENGINE_FAINT_SITE frame=5284 active=1 battler0_slot=0 battle_hp=22 party_hp=22 counter=0
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"a","seq":169,"species_id":1208}
+TX safe - {"event":"safe","player":"a","seq":170}
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5631
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 5631
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 5631
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5631
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5631
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5631
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 5631
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5631
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5631
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5631
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5631
+[client] [gen3] phase encounter-done frame=5727 #1 resolved at (16,15)
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":187}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_pokemon_center_1f","player":"a","seq":202}
+TX party_to_box F56D8C1D:2BDDC8BF {"event":"party_to_box","key":"F56D8C1D:2BDDC8BF","player":"a","seq":230,"stats":{"attack":9,"defense":9,"level":4,"maxHP":18,"pp1":35,"pp2":20,"pp3":0,"pp4":0,"spAtk":9,"spDef":10,"speed":8}}
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 7344
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 7344
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 7344
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 7344
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 7344
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 7344
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 7344
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 7344
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 7344
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 7344
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 7344
+[client] [gen3] phase pc-exit frame=7356 step=1 tasks=[0808D2BD] storage_state=0 script_status=1 result=0 menu_cursor=0
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 7413
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 7413
+[client] [SLink-gen3] write native 0x0203FD6C +23 frame 7413
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 7413
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 7413
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 7413
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 7413
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 7413
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 7413
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 7413
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 7413
+[client] [gen3] phase pc-exit frame=7462 step=2 tasks=[0808ECE5] storage_state=2 script_status=1 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=7568 step=3 tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35,0808C39D] storage_state=-1 script_status=1 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=7600 owner list closed cancel_seen=false tasks=[08079E0D,0806E811,0806E83D,081199FD,080F8B35,08119D35] storage_state=-1 script_status=2 result=0 menu_cursor=0
+BOXED_OBSERVED F56D8C1D:2BDDC8BF box=0:0
+DEPOSITED_FOR_REBUILD F56D8C1D:2BDDC8BF
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":250}
+[client] [rr-trace] pokecenter_door_to_route1_edge #1 dir=Left player=(26,27) facing=1 locked=true obj1(id=20@26,26) obj2(id=6@33,26)
+[client] [rr-trace] pokecenter_door_to_route1_edge #2 dir=Left player=(25,27) facing=3 locked=false obj1(id=20@26,26) obj2(id=6@33,26) obj3(id=7@16,22)
+[client] [rr-trace] pokecenter_door_to_route1_edge #2 dir=Left waited round 1 locked=false in_battle=false
+[client] [rr-trace] pokecenter_door_to_route1_edge #3 dir=Left player=(24,27) facing=3 locked=false obj1(id=20@25,27) obj2(id=6@33,26) obj3(id=7@15,23)
+[client] [rr-trace] pokecenter_door_to_route1_edge #4 dir=Left player=(23,27) facing=3 locked=false obj1(id=20@24,27) obj2(id=6@33,26) obj3(id=7@15,23) obj4(id=12@14,25)
+[client] [rr-trace] pokecenter_door_to_route1_edge #5 dir=Down player=(22,27) facing=3 locked=false obj1(id=20@23,27) obj3(id=7@15,23) obj4(id=12@14,25)
+[client] [rr-trace] pokecenter_door_to_route1_edge #6 dir=Down player=(22,28) facing=1 locked=false obj1(id=20@22,27) obj3(id=7@15,23) obj4(id=12@14,25)
+[client] [rr-trace] pokecenter_door_to_route1_edge #7 dir=Down player=(22,29) facing=1 locked=false obj1(id=20@22,28) obj3(id=7@15,24) obj4(id=12@14,25)
+[client] [rr-trace] pokecenter_door_to_route1_edge #8 dir=Down player=(22,30) facing=1 locked=false obj1(id=20@22,29) obj3(id=7@15,24) obj4(id=12@14,25)
+[client] [rr-trace] pokecenter_door_to_route1_edge #9 dir=Right player=(22,31) facing=1 locked=false obj1(id=20@22,30) obj3(id=7@15,24) obj4(id=12@14,25)
+[client] [rr-trace] pokecenter_door_to_route1_edge #10 dir=Right player=(23,31) facing=4 locked=false obj1(id=20@22,31) obj2(id=6@33,26) obj3(id=7@15,24) obj4(id=12@14,25)
+[client] [rr-trace] pokecenter_door_to_route1_edge #11 dir=Down player=(24,31) facing=4 locked=false obj1(id=20@23,31) obj2(id=6@33,26) obj3(id=7@15,24)
+[client] [rr-trace] pokecenter_door_to_route1_edge #12 dir=Down player=(24,32) facing=1 locked=false obj1(id=20@24,31) obj2(id=6@33,26)
+[client] [rr-trace] pokecenter_door_to_route1_edge #13 dir=Down player=(24,33) facing=1 locked=false obj1(id=20@24,32) obj2(id=6@33,26)
+[client] [rr-trace] pokecenter_door_to_route1_edge #14 dir=Down player=(24,34) facing=1 locked=false obj1(id=20@24,33)
+[client] [rr-trace] pokecenter_door_to_route1_edge #15 dir=Down player=(24,35) facing=1 locked=false obj1(id=20@24,34)
+[client] [rr-trace] pokecenter_door_to_route1_edge #16 dir=Down player=(24,36) facing=1 locked=false obj1(id=20@24,35)
+[client] [rr-trace] pokecenter_door_to_route1_edge #17 dir=Down player=(24,37) facing=1 locked=false obj1(id=20@24,36)
+[client] [rr-trace] pokecenter_door_to_route1_edge #18 dir=Down player=(24,38) facing=1 locked=false obj1(id=20@24,37)
+TX area_enter - {"area_id":"route_1","event":"area_enter","loc_name":"route1","player":"a","seq":289}
+[client] [gen3] phase encounter frame=9489 #1 during step Down at (16,16)
+ENGINE_FAINT_SITE frame=10517 active=1 battler0_slot=0 battle_hp=22 party_hp=22 counter=0
+TX safe - {"event":"safe","player":"a","seq":343}
+[client] [gen3] phase encounter-done frame=10734 #1 resolved at (16,16)
+[client] [gen3] phase encounter frame=11422 #2 during step Down at (12,37)
+ENGINE_FAINT_SITE frame=14020 active=1 battler0_slot=0 battle_hp=1 party_hp=1 counter=0
+TX safe - {"event":"safe","player":"a","seq":462}
+[client] [gen3] phase encounter-done frame=14271 #2 resolved at (12,37)
+[client] [gen3] phase encounter-found frame=14543 whiteout a: cycle 2 mid-step Up at (12,38)
+[client] [gen3] phase battle-state-saved frame=14543 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+LOSE EBEF11DA:2BDDC8BF status_move_slot=1
+FORCED_HP0 EBEF11DA:2BDDC8BF frame=15172 in_battle=1 battler=1
+ENGINE_FAINT_SITE frame=15221 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+TX faint EBEF11DA:2BDDC8BF {"area_id":"route_1","event":"faint","key":"EBEF11DA:2BDDC8BF","player":"a","seq":498}
+TX safe - {"event":"safe","player":"a","seq":502}
+TX whiteout - {"event":"whiteout","player":"a","seq":507}
+RX party_mon key=F56D8C1D:2BDDC8BF
+RX rebuild_start text=REBUILDING: Aaaaaaaaaa
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_pokemon_center_1f","player":"a","seq":508}
+CENTER_STATE map=5.4 at=(7,4) frame=15478 tasks=[08079DBD,0806E811,0806E83D,081199FD,0807F45D,080F8B35,08119D35] storage_state=-1 script_status=2 result=1 menu_cursor=0 cpu=[R15=0x08003384,CPSR=0x6000003F,R14=0x08005BF5!] ptrs=[gPokemonStoragePtr=0x02029314,gSaveBlock1Ptr=0x0202552C,gSaveBlock2Ptr=0x02024588,pokemon_storage_base=0x00000000] preds=[callback1=0x8056535,callback2=0x80565B5,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] overworld_writes_before=0
+WRITES 45
+RESULT: FAIL (CENTER_STATE: insane pointer:pokemon_storage_base)

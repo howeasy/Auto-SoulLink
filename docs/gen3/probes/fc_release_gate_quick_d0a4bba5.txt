@@ -1,0 +1,100 @@
+# gen3_final_cut row=release_gate_quick item=§11_gate cut=d0a4bba5840c6c3c01421b5e6568b649a4eef928
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/verify_gen3_release.py --quick   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+# env: SLINK_ARMGCC=E:/Google Drive/SLink\patch\vendor\armgcc\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-24T13:07:53 cpu=46% emuhawk=2 python=4
+start_utc=2026-09-24T17:07:52Z tracked_clean_before=True
+Gen 3 release gate — 4 lanes
+
+[ .. ] unit
+ignals.py:881: in resolve
+    fn = symbol_table(reference)[binding["function"]]
+         ^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+name = 'fr'
+
+    @lru_cache(maxsize=2)
+    def symbol_table(name: str) -> dict:
+        path = ROOT / "data/gen3/pret" / SYMBOL_FILES[name]
+        raw = path.read_bytes()
+        provenance = json.loads((path.parent / "provenance.json").read_text())
+        if (hashlib.sha256(raw).hexdigest() != SYMBOL_HASHES[name]
+                or provenance["files"][path.name] != SYMBOL_HASHES[name]
+                or provenance["source"]["commit"] != PRET.split("/")[-2]
+                or provenance["roms"][path.name.replace(".sym", ".gba")] != ROM_SPECS[name][4]):
+>           raise ValueError(f"{name}: symbol/build provenance mismatch")
+E           ValueError: fr: symbol/build provenance mismatch
+
+tools\gen_gen3_engine_signals.py:541: ValueError
+____________________ test_json_is_deterministic[gen3_frlg] ____________________
+
+pack = 'gen3_frlg'
+
+    @pytest.mark.parametrize("pack", sorted(PROFILES))
+    def test_json_is_deterministic(pack: str) -> None:
+        raw = PROFILES[pack].read_bytes()
+>       assert b"\r\n" not in raw, f"{pack}: CRLF line endings"
+E       AssertionError: gen3_frlg: CRLF line endings
+E       assert b'\r\n' not in b'{\r\n  "generator": "tools/gen_gen3_profile.py",\r\n  "pack": "gen3_frlg",\r\n  "schema": "gen3-profile-v1",\r\n  "s...WRITER_TASKS",\r\n        "RETURN_FROM_BATTLE_ADDR"\r\n      ],\r\n      "variant": "vanilla"\r\n    }\r\n  }\r\n}\r\n'
+
+tests\unit\test_gen3_profile.py:667: AssertionError
+_____________________ test_json_is_deterministic[gen3_rr] _____________________
+
+pack = 'gen3_rr'
+
+    @pytest.mark.parametrize("pack", sorted(PROFILES))
+    def test_json_is_deterministic(pack: str) -> None:
+        raw = PROFILES[pack].read_bytes()
+>       assert b"\r\n" not in raw, f"{pack}: CRLF line endings"
+E       AssertionError: gen3_rr: CRLF line endings
+E       assert b'\r\n' not in b'{\r\n  "generator": "tools/gen_gen3_profile.py",\r\n  "native": {\r\n    "ABI": 1,\r\n    "BASE": 33814528,\r\n    "...ER_TASKS",\r\n        "RETURN_FROM_BATTLE_ADDR"\r\n      ],\r\n      "variant": "radical_red"\r\n    }\r\n  }\r\n}\r\n'
+
+tests\unit\test_gen3_profile.py:667: AssertionError
+_______________________ test_gen3_published_provenance ________________________
+
+    def test_gen3_published_provenance():
+        receipt = OUT / "provenance.json"
+        expected = {f"{name}.{ext}" for name in ("pokefirered", "pokeleafgreen")
+                    for ext in ("sym", "map")}
+        if not receipt.exists():
+            # An absent build is permitted; orphaned artifacts are not evidence.
+            assert not any((OUT / name).exists() for name in expected)
+            return
+        lock = json.loads(LOCK_PATH.read_text(encoding="utf-8"))
+        provenance = json.loads(receipt.read_text(encoding="utf-8"))
+        assert provenance["schema"] == "gen3-pret-build-provenance-v1"
+        assert provenance["source"] == lock["source"]
+        assert provenance["agbcc"] == lock["agbcc"]
+        assert provenance["host"] and provenance["generated"] and provenance["toolchain"]
+        assert set(provenance["files"]) == expected
+        assert provenance["roms"] == {
+            spec["filename"]: spec["sha1"] for spec in lock["outputs"].values()
+        }
+        for name, digest in provenance["files"].items():
+            data = (OUT / name).read_bytes()
+            assert data
+>           assert hashlib.sha256(data).hexdigest() == digest, name
+E           AssertionError: pokefirered.sym
+E           assert '4ac4648d510a...a1462d0519af6' == '6f9d2929b78d...3b4d14151f7b0'
+E             
+E             - 6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0
+E             + 4ac4648d510a539b25aae221b488e723ed5b87843e84c1a6c3fa1462d0519af6
+
+tests\unit\test_gen3_syms_build.py:58: AssertionError
+12 failed, 2608 passed in 72.10s (0:01:12)
+
+[FAIL] unit               2608 passed, 0 skipped (0 unexplained), 12 failed, 0 xfailed, 0 deselected  (73s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] pins
+[PASS] pins               exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (1s)
+
+GATE FAILED — unit
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
+exit=1 end_utc=2026-09-24T17:09:08Z tracked_clean_after=True classification=real

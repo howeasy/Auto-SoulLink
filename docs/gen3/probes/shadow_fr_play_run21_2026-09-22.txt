@@ -1,0 +1,12 @@
+phase start frame=1 title=firered
+phase resume frame=1 from=route1_catch
+phase field frame=635 map=(3,0)
+phase shadow frame=635 observer started admitted_by=hash
+phase leg-state frame=34050 route1_catch <- E:/Howard/Bizhawk/GBA/State/slink_fr_parcel_deliver.State
+phase leg-start frame=34050 route1_catch
+phase encounter-found frame=35001 route1_catch: cycle 2 mid-step Left at (13,38)
+phase battle-state-saved frame=35001 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+phase encounter-found frame=38700 route1_catch: cycle 1 at (13,38)
+phase encounter-found frame=42108 route1_catch: cycle 1 at (13,38)
+phase encounter-found frame=45516 route1_catch: cycle 1 at (13,38)
+RESULT: FAIL route1_catch: never reached B_OUTCOME_CAUGHT (last outcome=0) after 4 encounters — the bag-menu mash (RISK, see header) is the likely culprit

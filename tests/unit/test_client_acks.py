@@ -36,8 +36,9 @@ def test_there_are_clients_to_check():
     rather than a BizHawk entry script, and its acks are covered below against that path.
     Written as a lower bound so it holds before and after the old client's deletion.
     P3b.8: three -- Gen 2's legacy client went the same way (lua/gen2/ replaces it).
+    C5-6: two -- the old Gen 3 client was deleted too (lua/gen3/ replaces it).
     """
-    assert len(CLIENTS) >= 3
+    assert len(CLIENTS) >= 2
 
 
 GEN1_CLIENT = os.path.join(REPO, "lua", "gen1", "client.lua")

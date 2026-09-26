@@ -1,0 +1,6 @@
+# reads == PYDEC, vanilla FR (firered_town.sav pre-starter, box 0), 2026-09-21
+## python
+OK: reads.lua and gen3_codec.py agree on every field (firered, rr=False)
+## planted-offender control (--mutate): rc=1
+DUMP name=party addr=0x2024284 len=0 frame=635 hex=
+DUMP name=box0 addr=0x202938C len=2400 frame=635 hex=000000000000000000000000000

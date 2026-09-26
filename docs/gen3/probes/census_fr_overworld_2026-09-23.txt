@@ -1,0 +1,29 @@
+[probe] title=firered sha1=41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc hash=41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc pack=gen3_frlg kind=clean admission=hash
+[probe] gMain.callback1 offset +0x00, callback2 +0x04 (pret include/main.h:12-16)
+[probe] armed — sampling frame-end CPU/state census for 1800 frames
+[probe] emu.getregisters() keys: CPSR,R0,R1,R10,R11,R12,R13,R14,R15,R2,R3,R4,R5,R6,R7,R8,R9,SPSR
+---- [probe] interim at frame 600 (bios_seen=true) ----
+  overworld-idle: 600 frames
+    R15=0x080008AC x253
+    R15=0x080008B0 x85
+    R15=0x080008B2 x81
+    R15=0x080008B4 x73
+    R15=0x080008AE x68
+    R15=0x0000001C x40
+    CPSR mode/T=31/1 x560
+    CPSR mode/T=18/0 x40
+    tasks={0806E811,0806E83D,08079E0D} x600
+    (1 distinct task-function sets total)
+---- [probe] final at frame 1800 (bios_seen=true) ----
+  overworld-idle: 1800 frames
+    R15=0x080008AC x780
+    R15=0x080008B0 x244
+    R15=0x080008B2 x232
+    R15=0x080008B4 x230
+    R15=0x080008AE x221
+    R15=0x0000001C x93
+    CPSR mode/T=31/1 x1707
+    CPSR mode/T=18/0 x93
+    tasks={0806E811,0806E83D,08079E0D} x1800
+    (1 distinct task-function sets total)
+RESULT: PASS

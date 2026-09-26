@@ -35,6 +35,9 @@ import sys
 import time
 import zipfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gen3_fixtures  # noqa: E402 -- for saveram_name, the one place BizHawk's ROM->SaveRAM
+
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BIZHAWK = os.environ.get("SLINK_BIZHAWK_HOME", "E:/Howard/Bizhawk")
 EMUHAWK = os.environ.get("SLINK_EMUHAWK", os.path.join(BIZHAWK, "EmuHawk.exe"))
@@ -42,8 +45,9 @@ BIZHAWK_CONFIG = os.environ.get("SLINK_BIZHAWK_CONFIG", os.path.join(BIZHAWK, "c
 STATE_DIR = os.path.join(BIZHAWK, "GBA", "State")
 SAVERAM_DIR = os.path.join(BIZHAWK, "GBA", "SaveRAM")
 ROM_REL = "patch/build/slink_RR.gba"
-# BizHawk keys SaveRAM by ROM basename, so the patched build needs its own copy of the save.
-SAVERAM_DST = "slink_RR.SaveRAM"
+# BizHawk keys SaveRAM by ROM basename WITH UNDERSCORES SHOWN AS SPACES (gen3_fixtures.
+# saveram_name, proven against a physical boot-check) -- not the literal filename.
+SAVERAM_DST = gen3_fixtures.saveram_name(ROM_REL)
 SAVERAM_OVERRIDE = None   # set by --saveram
 
 # name -> how it is produced.  None = hand-captured only (see module docstring).
@@ -123,14 +127,31 @@ def find_saveram():
     cands = []
     for p in glob.glob(os.path.join(SAVERAM_DIR, "*.SaveRAM")):
         name = os.path.basename(p)
-        if name == SAVERAM_DST or ".AutoSaveRAM." in name:
-            continue                       # our own copy, and BizHawk's autosave shadow
+        if ".AutoSaveRAM." in name:
+            continue                       # BizHawk's autosave shadow (SAVERAM_DST is the player's own save: a candidate)
         if not re.search(r"(?i)(?:^|[^a-z])(rr|radical)(?:[^a-z]|$)", name):
             continue
         if is_blank_save(p):
             continue
         cands.append(p)
     return max(cands, key=os.path.getmtime) if cands else None
+
+
+def seed_saveram(src):
+    """Make src the battery BizHawk boots (SAVERAM_DST). SAVERAM_DST is the player's real save, so a
+    different file there is backed up first (timestamped, never overwritten) instead of lost."""
+    import filecmp
+    import time
+    dst = os.path.join(SAVERAM_DIR, SAVERAM_DST)
+    if os.path.exists(dst) and os.path.abspath(src) == os.path.abspath(dst):
+        print(f"[mkstates] booting {SAVERAM_DST} in place")
+        return
+    if os.path.exists(dst) and not filecmp.cmp(src, dst, shallow=False):
+        bak = f"{dst}.mkstates-bak-{time.strftime('%Y%m%d-%H%M%S')}"
+        shutil.copyfile(dst, bak)
+        print(f"[mkstates] backed up {SAVERAM_DST} -> {os.path.basename(bak)}")
+    shutil.copyfile(src, dst)
+    print(f"[mkstates] seeded {SAVERAM_DST} from {os.path.basename(src)}")
 
 
 NO_SAVE_HELP = """\
@@ -145,7 +166,7 @@ plain flash content and is NOT version-locked:
   1. Get BizHawk 2.9.1 (portable, alongside your 2.11.1 install).
   2. Load patch/build/slink_RR.gba, then load slink_overworld.State.
   3. SAVE IN-GAME (the in-game menu, not a savestate) and close the emulator.
-  4. Copy "GBA/SaveRAM/slink_RR.SaveRAM" from that install to this one.
+  4. Copy "GBA/SaveRAM/{saveram}" from that install to this one.
   5. python tools/mkstates.py
 
 If you'd rather not install 2.9.1: play RR in 2.11.1 to any point with a party you're happy
@@ -161,7 +182,10 @@ def _run_mkstate(kind, target, timeout, extra_env=None):
     if os.path.exists(result):
         os.remove(result)
     cfg_rel = "patch/build/mkstate_cfg.ini"
-    shutil.copyfile(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from run_gate import write_gate_config
+
+    write_gate_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel))   # rewind off (run 61569)
 
     env = dict(os.environ, SLINK_ROOT=REPO.replace("\\", "/"),
                SLINK_STATE_OUT=target.replace("\\", "/"), SLINK_STATE_KIND=kind,
@@ -197,10 +221,9 @@ def build_town(timeout=600):
     in front of a Pokemon Center door."""
     src = SAVERAM_OVERRIDE or find_saveram()
     if not src:
-        print(NO_SAVE_HELP.format(emu=emuhawk_version()))
+        print(NO_SAVE_HELP.format(emu=emuhawk_version(), saveram=SAVERAM_DST))
         return False
-    shutil.copyfile(src, os.path.join(SAVERAM_DIR, SAVERAM_DST))
-    print(f"[mkstates] seeded {SAVERAM_DST} from {os.path.basename(src)}")
+    seed_saveram(src)
     return _run_mkstate("town", os.path.join(STATE_DIR, "slink_pokecenter.State"), timeout,
                         {"SLINK_STATE_DIR": STATE_DIR.replace("\\", "/")})
 
@@ -214,10 +237,9 @@ def build_battle(timeout=600):
     """
     src = SAVERAM_OVERRIDE or find_saveram()
     if not src:
-        print(NO_SAVE_HELP.format(emu=emuhawk_version()))
+        print(NO_SAVE_HELP.format(emu=emuhawk_version(), saveram=SAVERAM_DST))
         return False
-    shutil.copyfile(src, os.path.join(SAVERAM_DIR, SAVERAM_DST))
-    print(f"[mkstates] seeded {SAVERAM_DST} from {os.path.basename(src)}")
+    seed_saveram(src)
     return _run_mkstate("battle", os.path.join(STATE_DIR, "slink_battle.State"), timeout,
                         {"SLINK_STATE_DIR": STATE_DIR.replace("\\", "/")})
 

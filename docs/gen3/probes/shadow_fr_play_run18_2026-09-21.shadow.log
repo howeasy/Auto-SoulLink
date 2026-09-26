@@ -1,0 +1,92 @@
+STATUS frame=635 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=1235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=596
+STATUS frame=1835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1196
+SHADOW t=1 frame=2189 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=2435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1788
+STATUS frame=3035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2388
+STATUS frame=3635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2988
+STATUS frame=4235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3588
+SHADOW t=2 frame=4640 kind=mon_given key= address=134482826 callback_address=134482826 cpsr=1073741887 mode=thumb raw_r15=134482828 sp=50363812 thumb=1
+STATUS frame=4835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4186
+STATUS frame=5435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4786
+STATUS frame=6035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5386
+SHADOW t=3 frame=6059 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=6635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5973
+STATUS frame=7235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=6572
+STATUS frame=7835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7172
+STATUS frame=8435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7763
+STATUS frame=9035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8352
+STATUS frame=9635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8935
+STATUS frame=10235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=9522
+STATUS frame=10835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=10111
+STATUS frame=11435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=10711
+SHADOW t=4 frame=11663 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=12035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=11304
+SHADOW t=5 frame=12292 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=12635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=11896
+SHADOW t=6 frame=13042 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=13235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=12479
+STATUS frame=13835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=13066
+STATUS frame=14435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=13647
+STATUS frame=15035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=14234
+SHADOW t=7 frame=15300 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=15635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=14827
+SHADOW t=8 frame=15937 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=16235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=15411
+STATUS frame=16835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=15996
+STATUS frame=17435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=16581
+STATUS frame=18035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=17170
+SHADOW t=9 frame=18572 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=18635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=17750
+STATUS frame=19235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=18348
+SHADOW t=10 frame=19755 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=19835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=18941
+STATUS frame=20435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=19540
+SHADOW t=11 frame=20807 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=21035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=20132
+SHADOW t=12 frame=21312 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=21635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=20693
+STATUS frame=22235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=21293
+STATUS frame=22835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=21893
+SHADOW t=13 frame=23049 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=23435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=22469
+SHADOW t=14 frame=23887 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=24035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=23052
+STATUS frame=24635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=23641
+STATUS frame=25235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=24220
+STATUS frame=25835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=24807
+SHADOW t=15 frame=26190 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=26435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=25400
+SHADOW t=16 frame=26830 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=27035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=25984
+STATUS frame=27635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=26573
+STATUS frame=28235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=27156
+STATUS frame=28835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=27744
+SHADOW t=17 frame=28878 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=18 frame=29101 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=29435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=28322
+STATUS frame=30035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=28901
+STATUS frame=30635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=29488
+SHADOW t=19 frame=30917 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=-2147483585 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=20 frame=31208 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=31235 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil frame_control=30070
+STATUS frame=31835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=30655
+STATUS frame=32435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=31241
+STATUS frame=33035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=31827
+SHADOW t=21 frame=33258 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=1610612799 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+STATUS frame=33635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=32407
+SHADOW t=22 frame=33802 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+SHADOW t=23 frame=34233 kind=map_load key= address=134571896 callback_address=134571896 cpsr=-2147483585 mode=thumb raw_r15=134571898 sp=50363928 thumb=1
+STATUS frame=34235 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil frame_control=32993
+STATUS frame=34835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=33591
+SHADOW t=24 frame=34935 kind=battle_begin key= address=134282652 callback_address=134282652 cpsr=536870975 mode=thumb raw_r15=134282654 sp=50363932 thumb=1
+STATUS frame=35435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=34167
+STATUS frame=36035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=34752
+SHADOW t=25 frame=36214 kind=faint key= address=134353864 callback_address=134353864 cpsr=63 mode=thumb raw_r15=134353866 sp=50363868 thumb=1
+STATUS frame=36635 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=35350
+SHADOW t=26 frame=36899 kind=battle_end key= address=134306768 callback_address=134306768 cpsr=1610612799 mode=thumb raw_r15=134306770 sp=50363904 thumb=1
+SHADOW t=27 frame=37026 kind=whiteout key= address=134571774 callback_address=134571774 cpsr=1610612799 mode=thumb raw_r15=134571776 sp=50363924 thumb=1
+STATUS frame=37235 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=35915
+STATUS frame=37835 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=36515
+STATUS frame=38435 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=37115
+STATUS frame=39035 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=37715

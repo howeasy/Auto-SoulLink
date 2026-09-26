@@ -1,0 +1,18 @@
+phase probe-state frame=34021 idle terminal=field_idle_300
+phase probe-state frame=34021 walking terminal=position_changed_120
+phase probe-state frame=34054 start_menu terminal=field_controls_locked
+phase probe-state frame=35088 dialog terminal=save_dialog_cb_nonzero
+phase probe-state frame=35208 save terminal=new_counter_partial_slot_then_14_sectors
+phase probe-state frame=35002 battle terminal=in_battle_mask_nonzero
+phase probe-state frame=865 fade terminal=palette_fade_active_then_map_changed
+PROBE idle PASS sampled=300 true=275 false=25 terminal=field_idle_300 reached=true R15=134219950 CPSR=1610612799 frame=34321 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:61: CPU outside parked checkpoint
+PROBE walking PASS sampled=120 true=109 false=11 terminal=position_changed_120 reached=true R15=134219948 CPSR=1610612799 frame=34141 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:61: CPU outside parked checkpoint
+PROBE start_menu PASS sampled=120 true=0 false=120 terminal=field_controls_locked reached=true R15=134219948 CPSR=1610612799 frame=34174 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: field_controls_locked
+PROBE dialog PASS sampled=120 true=0 false=120 terminal=save_dialog_cb_nonzero reached=true R15=134219948 CPSR=1610612799 frame=35208 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: field_controls_locked
+PROBE save PASS sampled=253 true=0 false=253 terminal=new_counter_partial_slot_then_14_sectors reached=true R15=136178198 CPSR=63 frame=35851 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: field_controls_locked
+PROBE battle PASS sampled=120 true=0 false=120 terminal=in_battle_mask_nonzero reached=true R15=134219952 CPSR=63 frame=35122 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: in_battle
+PROBE fade PASS sampled=43 true=0 false=43 terminal=palette_fade_active_then_map_changed reached=true R15=134219956 CPSR=1610612799 frame=978 reason=...trees/gen3-migration-planning-5d8e45/lua/gen3/safety.lua:55: forbidden state: field_controls_locked
+PROBE pc_menu SKIP not selected for firered/clean
+PROBE script_running SKIP not selected for firered/clean
+WRITE_LOG count=0 scope=predicate_only no_writes_instance=true native_idle=opcode_queue_only
+RESULT: PASS all checkpoint controls

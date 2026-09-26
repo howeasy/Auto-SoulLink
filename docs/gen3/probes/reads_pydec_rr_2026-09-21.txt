@@ -1,0 +1,7 @@
+# reads == PYDEC, RR companion (slink_overworld.State, party 1 Treecko + box 0), 2026-09-21
+LUA name=party slot=0 key=EBEF11DA:2BDDC8BF species=277 level=6 hp=22 nickname=Treecko
+DUMP name=party addr=0x2024284 len=100 frame=970 hex=da11efebbfc8dd2bcee6d9d9d7dfe3ff6d000
+DUMP name=box0 addr=0x2029318 len=1740 frame=970 hex=0000000000000000000000000000000000000
+## python
+OK: reads.lua and gen3_codec.py agree on every field (radical_red, rr=True)
+## planted-offender control (--mutate): rc=1

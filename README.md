@@ -6,8 +6,8 @@ Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [Bi
 
 | Gen | Games | ROM Variants | Status |
 |-----|-------|-------------|--------|
-| 3 | FireRed, LeafGreen | Vanilla, randomized, Archipelago, Radical Red 4.1 (CFRU) | **✅ Stable** |
-| 3 | Emerald | Vanilla | ⚠️ Experimental — RAM profile is complete, but the area/location name tables are not generated, so area resolution falls back to FireRed and is wrong |
+| 3 | FireRed, LeafGreen | Vanilla, randomized, Radical Red 4.1 (CFRU) | **✅ Stable** |
+| 3 | Emerald, Archipelago FireRed/LeafGreen | — | ❌ Not supported — they ran only on the old Gen 3 client, archived at tag `archive/gen3-old-client`; the launcher refuses them by name until they are ported to `lua/gen3/` |
 | 1 | Red, Blue, Yellow | US English | ⚠️ Partially verified — mechanisms proven on real cartridges, no full playthrough |
 | 1 | PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6) | The pinned build only (admitted by ROM sha1); optional SLink companion overlay; randomized pairs via the SLink fork of UPR ZX | ⚠️ Same evidence bar as Red/Blue — the same duo harness runs on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing (`docs/purergb/PLAN.md` §13.1) |
 | 2 | Crystal | GBC | ⚠️ Partially verified — Crystal only, mechanisms proven on a real cartridge, no full playthrough |
@@ -101,7 +101,7 @@ Shiny bonus pairs are always on — catching a shiny gives the partner an extra 
 
 ### Optional Run Augmentations (Radical Red)
 
-Opt-in per-run rules — passed as CLI flags (or toggled in the Run Manager's new-run form) and **only active on Radical Red**; vanilla / Archipelago / Emerald fall back to default behavior.
+Opt-in per-run rules — passed as CLI flags (or toggled in the Run Manager's new-run form) and **only active on Radical Red**; vanilla FireRed/LeafGreen fall back to default behavior.
 
 | Flag | Effect |
 |------|--------|

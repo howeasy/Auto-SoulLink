@@ -403,7 +403,40 @@ against `BPRE.ld` and disassembled (capstone):
 | 24 | DEPOSIT_MON | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→PC box (CFRU `CreateCompressedMonFromBoxMon` + shift-compact party). LIVE (`test_live_boxsync`). See "PC storage / box migration reference" |
 | 25 | WITHDRAW_MON | `[0]`=boxId `[1]`=boxPos `[2]`=partySlot | PC box→party (CFRU `CompressedMonToMon`; engine recomputes level/stats/PP). LIVE (`test_live_boxsync`) |
 | 26 | MEMORIALIZE | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→memorial box. Same compress as DEPOSIT_MON but removal is **zero + SWAP-WITH-LAST** (not shift) so survivors keep their slot indices — CFRU's deferred battle writes target slots (mirrors Lua `M.memorializeMon`). Lua picks the free memorial slot + renames boxes. LIVE (`test_live_memorialize`) |
+| 28 | RIVAL_SWAP | `[0]`=count (1..6) `[1..2]`=trainer_id (u16 LE); blobs staged in `SLINK_BLOB_BUF` | **C5-11a** — the RIVAL SWAP's own opcode. Same byte-copy basis as 16 (`stage_enemy_party`), but gated by the five-part consumption check below. `OP_SET_ENEMY_PARTY` (16) stays the FIELD TRADE's staging and carries no window check: `OP_TRADE_SCENE`'s handler documents that it trades against `gEnemyParty[0]` staged by 16, so a check there would reject every trade. See `docs/gen3/research/rival_swap_refresh_window.md` §5.3 |
 | 23 | SHOW_BATTLE_MESSAGE | `[0..1]`=duration frames, `[2]`=window id (0→`0xD`). FR text in `SLINK_TEXT_BUF` | **native IN-BATTLE text** (the BizHawk-HUD-in-battle replacement), drawn into the Battle Calc's move-info window (`0xD`, top-left). `BattleNotif`@`0x0203FD00` {active,win,task,phase,frames}. **Two parts:** (1) build.py RE-POINTS the calc's `BattlePutTextOnWindow` detour @`0x080D87BE` (was `BL 0x08378CA8`) to naked shim `slink_battletext_hook` → `slink_battle_inject` swaps the text ptr for window `BN->win` IN-CONTEXT (inside the engine's draw), then `bx 0x08378CA9` (calc trampoline). REAL callable entry = `0x080D87BD` (prologue @`0x080D87BC`), NOT the detour @`0x080D87BE`. (2) `drive_battle_notif` `CreateTask`s `slink_notif_task` which draws every frame via **RunTasks** (the in-context point — calling `BattlePutTextOnWindow` from the slink_hook frame hook WHITE-OUTS the BG); on teardown draws an empty FR string then `DestroyTask 0x08077508` (poking the task struct @+0 corrupts the FUNC ptr → RunTasks crash; isActive@+4). SYNC ack |
+
+### Fail reason codes (`Mailbox.reason`, u16 @14)
+
+| code | name | set by |
+|---|---|---|
+| 1 | `REASON_SCRIPT_CONTEXT` | `sScriptContext2Enabled` (a script owns the field) |
+| 2 | `REASON_BAD_ARGS` | out-of-range args |
+| 3 | `REASON_NOT_ON_FIELD` | `on_field()` false |
+| 8 | `REASON_WINDOW_CLOSED` | **C5-11a** — `OP_RIVAL_SWAP` consumed outside the rival-swap window. `lua/gen3/native.lua` mirrors this table (`FAIL_REASONS`) and surfaces the NAME to the job, which replies `rival_team_replaced{error="window_closed", reason="window_closed"}` (G5-RR-RIVAL review F3; was error="refresh_failed") |
+
+### Rival-swap window constants (`OP_RIVAL_SWAP`, C5-11a)
+
+Radical Red addresses (the profile's `ram` block carries the same values; the rebuild re-verifies
+them). The check runs at CONSUMPTION, before the first byte is copied — failing any part means no
+copy at all.
+
+| name | address | meaning |
+|---|---|---|
+| `RV_BATTLE_COMM` | `0x02023E82` | `gBattleCommunication[0]` = `MULTIUSE_STATE`; `>= 15` means `CB2_HandleStartBattle` case 15 (`InitBattleControllers` → `SetBattlePartyIds`) has run |
+| `RV_BATTLE_MAIN_FUNC` | `0x03004F84` | `gBattleMainFunc`; must still be `BeginBattleIntroDummy|1` |
+| `RV_GMAIN_CB2` | `0x030030F4` | `gMain + 4` (`callback2`); must be `CB2_HandleStartBattle|1` |
+| `RV_BATTLE_TYPE` | `0x02022B4C` | `gBattleTypeFlags`; `& BATTLE_TYPE_LINK (0x02)` must be 0 |
+| `RV_TRAINER_OPPONENT` | `0x020386AE` | `gTrainerBattleOpponent_A` (u16); must equal `args[1..2]` |
+| `RV_BEGIN_DUMMY` | `0x080123BD` | `BeginBattleIntroDummy|1` (C5-9 pin; RR-BIN stores it at pool `0xD2E8`) |
+| `RV_CB2_START_BATTLE` | `0x08010509` | `CB2_HandleStartBattle|1` (SYM / write_checkpoint pack) |
+
+**ABI version stays `1`.** The mailbox *layout* is unchanged, and `lua/gen3/native.lua`'s
+`present()` requires EXACT equality of the ABI word — bumping it for an additive opcode would report
+the native part absent on every older patch and disable trades, menus and sounds with it.
+Compatibility comes from the dispatcher: an unknown opcode takes the default `ack(ST_FAIL)`, so a
+new client on an old patch refuses the swap cleanly. A future change that alters the *layout* must
+bump the version and ship a range check in `present()`.
 
 **RR `gSpecials` is REORDERED** — the FireRed `special` indices (e.g. ChoosePartyMon 170, DoInGameTradeScene
 265) DO NOT work on RR (live-proven no-ops). The native menus/scene are invoked **by address** via CFRU's
@@ -525,7 +558,7 @@ itself, execute a move** from the action menu. `HandleTurnActionSelectionState` 
 3. on USE_MOVE it **re-emits ChooseMove** (the move submenu) — so committing the action
    only loops back to move-select.
 **Both pure-RAM paths are now ruled out (source + empirical):**
-- *Variant-3 action commit* (gChosenAction/comm/bs) — insufficient: state-2 reads
+- *Variant-3 action commit* (gChosenAction/comm/bs) — insufficient: state 1 (`STATE_WAIT_ACTION_CHOSEN`) reads
   `gBattleBufferB[battler][1]`, not `gChosenActionByBank`, and re-emits ChooseMove.
 - *MULTIPLETURNS rampage lock* — SLink already tried `LOCK_STATUS2_VALUE = 0x1000 / 0x1800`
   (the correct CFRU bit) and it failed/softlocked (see `gen3_frlge.lua` RR profile comment,
@@ -538,31 +571,74 @@ at `STATE_WAIT_ACTION_CHOSEN`, when the multi-nibble exec mask clears, the engin
 **two-stage** controller handshake (choose action, then choose move), each gated by the exec
 mask and read from `gBattleBufferB`.
 
-**Full 3-state protocol RE'd** (`battle_main.c`, comm enum confirmed by live probe):
-BEFORE_ACTION_CHOSEN=1 → WAIT_ACTION_CHOSEN=2 → WAIT_ACTION_CASE_CHOSEN=3 → CONFIRMED_STANDBY=4.
-- comm 2: engine reads `gBattleBufferB[b][1]` (action); USE_MOVE(0) → emits ChooseMove, comm→3.
-- comm 3: reads `gBattleBufferB[b][1]==10` + `[2]`=move_pos + `[3]`=target → sets
-  `chosenMovePositions=[2]`, `gChosenMoveByBattler=moves[[2]]`, `moveTarget=[3]`, comm→4 (executes).
+**The comm protocol (CORRECTED 2026-09-23, C5-FMS-FIX — the enum is 0-based).** pret
+`battle_main.c:3086-3095`; RR's jump table at `0x0801409C` is byte-identical to FR's
+(`0x080140B8 0x080141DC 0x08014764 0x08014AA0 0x08014B44 0x08014B88 0x08014C20`), and the case [3]/[4]
+bodies are byte-identical too:
+BEFORE_ACTION_CHOSEN=0 → WAIT_ACTION_CHOSEN=1 → WAIT_ACTION_CASE_CHOSEN=2 → CONFIRMED_STANDBY=3 →
+CONFIRMED=4 (→ SELECTION_SCRIPT=5, WAIT_SET_BEFORE_ACTION=6).
+- comm 0: emits ChooseAction + Mark, comm→1. **The action menu parks at comm 1** (exec bit set),
+  under EITHER of two controller spellings: `0x0802E439` (`HandleInputChooseAction`, whose entry is
+  detoured to the CFRU body) or **`0x090A9EA1`** (the CFRU body itself, stored directly by
+  `LDR@0x090A9E76` when the CFRU L-button window closes). CFRU's own sprite callbacks compare the slot
+  against both (`LDR@0x09068D6C/72`, `0x09069832/38`); `tools/research/rr_battle_tuple.py` pins
+  detour(`0x0802E438`) == `0x090A9EA1`. Research: `docs/gen3/research/rr_battle_tuple_2026-09-23.md` §1.
+- comm 1: when the exec mask clears, reads `gBattleBufferB[b][1]` (action); USE_MOVE(0) → emits
+  ChooseMove, comm→2. **The move menu parks at comm 2.**
+- comm 2: reads `gBattleBufferB[b][2]`=move_pos + `[3]`=target → sets `chosenMovePositions=[2]`,
+  `gChosenMoveByBattler=moves[[2]]`, `moveTarget=[3]`, comm→3.
+- comm 3 (case body `0x08014AA0`): `BtlController_EmitLinkStandbyMsg` (BL@`0x08014B02`/`0x08014B20` →
+  `0x0800EB54`; stops the healthbox/mon bounce) + Mark, comm→4. Needs a LIVE player controller.
+- comm 4 (`0x08014B44`): counts the battler as confirmed (`++gBattleCommunication[4]`); all counted →
+  `SetActionsAndBattlersTurnOrder`.
+The old 1-based reading here ("comm enum confirmed by live probe") was wrong: see the next section.
 Move emit (`battle_controller_player.c:342`): `EmitTwoReturnValues(1, 10, cursor | (target<<8))`.
 
-### SOLVED — FORCE_MOVE_SLOT (opcode 5), live-validated
+### FORCE_MOVE_SLOT (opcode 5) — FIXED IN SOURCE 2026-09-23 (C5-FMS-FIX), NOT YET IN ANY ROM
 A pre-callback2 hook can't win the buffer race (the controller/DMA overwrites it during
 callback2). The fix is a **controller-pointer swap**: when armed and the player's menu is up,
 the frame hook repoints `gBattlerControllerFuncs[battler]` (0x3004FE0) to our own routine, which
 therefore runs *as* the controller (authoritative). That routine sets `gChosenActionByBank=USE_MOVE`,
 `gChosenMovesByBanks[b]=gBattleMons[b].moves[move_pos]`, `gBattleStruct->chosenMovePositions[b]`/
-`moveTarget[b]`, and **jumps comm straight to STATE_WAIT_ACTION_CONFIRMED_STANDBY (4)** + clears the
-exec mask, then disarms (fires once via an `armed` guard; the engine reassigns the controller at the
-next menu). Jumping to CONFIRMED sidesteps both the buffer-transfer round-trip *and* CFRU's Z-move
-byte (a stale value made Scratch fire as "Breakneck Blitz").
+`moveTarget[b]`, **jumps comm to STATE_WAIT_ACTION_CONFIRMED_STANDBY (3)** + clears the exec mask,
+disarms (fires once via an `armed` guard), and calls **`PlayerBufferExecCompleted` (`0x0802E33D`)**,
+which hands the slot back to `PlayerBufferRunCommand` (or CFRU's `0x090ACD8D`, via the detour at
+`0x0802E34A`→`0x0904459A`) and clears exec bit b, exactly as a real menu pick does. Skipping the menus
+sidesteps both the buffer-transfer round-trip *and* CFRU's Z-move byte (a stale value made Scratch
+fire as "Breakneck Blitz"). The exec mask is `bit|bit<<4|bit<<8|bit<<12|0xF0000000` on
+`gBattleExecBuffer=0x02023BC8`.
 
-**Live-validated** (`test_live_forcemove.lua`): forcing slot 1 (Growl) on the lead → slot-1 PP drops,
-fires once, no corruption, no Z-move. Comm enum confirmed: 1 BEFORE → 2 WAIT_ACTION → 3 CASE_CHOSEN
-→ 4 CONFIRMED_STANDBY. The exec mask is `bit|bit<<4|bit<<8|bit<<12|0xF0000000` on `gBattleExecBuffer
-=0x02023BC8`.
+**Gate (C5-FMS-FIX follow-up):** swap only when NOT a link battle (`gBattleTypeFlags & 2 == 0`:
+`PlayerBufferExecCompleted` has a link branch, pret `battle_controller_player.c:186-195`) and either
+comm 1 with `0x0802E439` or `0x090A9EA1`, or comm 2 with `0x0802EA11`.
+
+**Contract.** A forced slot overrides the menu's own checks: Disable, Encore, Taunt, Choice lock,
+`AreAllMovesUnusable`/Struggle (pret `battle_main.c:3146-3160`, `3285-3293`); that is the point of
+forcing. The one refusal: `pp[move_pos] == 0` (this also covers an empty slot) → disarm, ack
+`ST_FAIL` reason **11**, and the menu stays with the player. `OP_FORCE_MOVE_SLOT` staging bounds
+battler, target and move_pos to 0..3 (reason 2); target is written to `moveTarget[b]`, a battler id.
+
+**What was wrong before C5-FMS-FIX** (evidence: `docs/gen3/research/rr_battle_tuple_2026-09-23.md` §7,
+`tests/unit/test_patch_force_move_slot.py`):
+1. The swap gated on `comm == 2` for the action menu and `comm == 3` for the move menu. They park at
+   **1** and **2**. The old action clause could only match after something cleared the exec flags
+   behind the engine's back; the `0x0802E3B5` alternative is `PlayerBufferRunCommand` (FR .sym), the
+   idle dispatcher, not a menu. Real play: "the swap did not fire" (`lua/clients/gen3_frlge_client.lua`).
+2. It wrote comm **4** (`STATE_WAIT_ACTION_CONFIRMED`), skipping the standby/stop-bounce step at 3.
+3. It never restored `gBattlerControllerFuncs[b]`. The engine does not reassign controller slots (pret:
+   only `battle_controllers.c` init and the controllers themselves write them; the note that "the engine
+   reassigns the controller at the next menu" was wrong), so the player's controller stayed a no-op and
+   the first message/animation marked for battler b could never complete.
+The old "live-validated" result (`test_live_forcemove.lua`: slot-1 PP drops) was produced by the gate's
+own nudge, which clears battler 0's exec flags every frame while comm < 2 or >= 4. That unblocked the
+parked menu (so comm reached 2 under the action controller) and every hung controller exec. Together these
+likely explain the 2026-06 real-play softlock (INFERRED; nothing here was run on an emulator).
+
+**REBUILT 2026-09-24 (C5-3, `998666b6`; owner-approved).** The companion now carries this fix: patched ROM md5 `6cf77ba4a63634a0fd452be6f206bfc3`, sha1 `ea5352f8a3b9073f8ae20870ad12857925d442cd` (was `bf8e94a0…`/`b7d1e075…`). The re-pinned sites are listed in `docs/gen3/research/pins_inventory.md` ("C5-3 companion rebuild (2026-09-24)"); `tests/unit/test_patch_force_move_slot.py::test_companion_hash_pins_agree` keeps them together. Still owed: a live re-run of `test_live_forcemove.lua` with its nudge loop re-derived for the 0-based enum (the C5-4b port), proving that the turn completes (the battle reaches the next action menu), not just the PP drop.
 
 **RR-build-specific addresses (runtime-discovered — re-discover per RR version):**
-action-menu controllers `0x0802E439`/`0x0802E3B5`, move-menu controller thunk `0x0802EA11`
+action-menu controller `0x0802E439` (`HandleInputChooseAction`; `0x0802E3B5` is `PlayerBufferRunCommand`,
+the idle dispatcher, not a menu), move-menu controller thunk `0x0802EA11`
 (→ real `HandleInputChooseMove` 0x090AB8B8). **RE-VALIDATED 2026-06-11 on the current build**
 (`lua/tests/probe_movecursor_thunks.lua`): live `gBattlerControllerFuncs[0]` reads exactly
 `0x0802E439` at the action menu and `0x0802EA11` at the move menu — the constants are correct,

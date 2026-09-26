@@ -14,11 +14,11 @@
 -- player is looking at is exactly the bug that would be impossible to attribute later.
 --
 --   python tools/run_gate.py lua/tests/test_live_ewramtail.lua --timeout 420
-local SDIR = "E:/Howard/Bizhawk/GBA/State"
-local WT = SLINK_ROOT or os.getenv("SLINK_ROOT") or debug.getinfo(1, "S").source:match([=[^@(.*)[/\]lua[/\]tests[/\]]=])
-assert(WT, "repo root unknown — launch via: python tools/run_gate.py <this script>")
-local OUT = WT .. "/patch/build/ewram_tail_result.txt"
-local MB = dofile(WT .. "/lua/mailbox.lua")
+--
+-- Bound to lua/tests/gen3_gatelib.lua (the new Gen 3 native layer): the paint and the beacon clobber
+-- below are the probe's own instrumentation, not native ops, so they stay raw memory writes.
+local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
+local t = G.open("ewram_tail")
 
 -- The FREE tail: what the patch has not claimed. It began at 0x0203FD44 (where EvRing ends) and
 -- the first run of this gate proved all 700 bytes of that run untouched across 7 savestates. §6
@@ -28,18 +28,15 @@ local MB = dofile(WT .. "/lua/mailbox.lua")
 -- itself, which is exactly how this gate started failing when SlinkInfo landed.
 local TAIL_LO, TAIL_HI = 0x0203FE4C, 0x0203FFFF     -- SlinkInfo ends 0x0203FE4C (exclusive)
 local N = TAIL_HI - TAIL_LO + 1                     -- 436
-
-local lines = {}
-local function log(s) lines[#lines + 1] = s; console.log(s) end
-local function finish(ok)
-    log(ok and "RESULT: PASS" or "RESULT: FAIL")
-    local f = io.open(OUT, "w")
-    if f then f:write(table.concat(lines, "\n") .. "\n"); f:close() end
-    client.exit()
+-- SlinkInfo is 264 bytes (write_checkpoint native.spans INFO): the tail must start where it ends.
+if t.P.INFO + 264 ~= TAIL_LO then
+    t.fail("the watched tail starts where SlinkInfo ends", string.format("INFO+264=0x%08X", t.P.INFO + 264))
 end
-
-pcall(memory.usememorydomain, "System Bus")
-pcall(function() client.speedmode(400) end)
+local log = t.log
+local function finish(ok)
+    t.check("EWRAM tail untouched across every scene", ok)
+    t.finish()
+end
 
 -- Per-address pattern, so a hit tells us WHICH address was written even if the value is copied
 -- around, and so a memset-to-zero or a memset-to-0xFF both register as a change everywhere.
@@ -88,25 +85,24 @@ local PRESS = { { Up = true }, { Right = true }, { A = true }, { Down = true }, 
 -- The mailbox signature is rewritten with 'SLNK' by the frame hook every frame, so painting over
 -- it and watching it come back proves paint + read + frame advance are all really happening.
 local function detector_works()
-    for i = 0, 3 do memory.write_u8(MB.BASE + i, 0x5A) end
-    if memory.read_u32_le(MB.BASE) ~= 0x5A5A5A5A then return false, "paint did not stick" end
+    for i = 0, 3 do memory.write_u8(t.P.BASE + i, 0x5A) end
+    if memory.read_u32_le(t.P.BASE) ~= 0x5A5A5A5A then return false, "paint did not stick" end
     for _ = 1, 10 do
-        emu.frameadvance()
-        if memory.read_u32_le(MB.BASE) == 0x4B4E4C53 then return true end
+        t.step(nil)
+        if memory.read_u32_le(t.P.BASE) == t.P.SIG then return true end
     end
     return false, "beacon never restored — frames not advancing, or hook not running"
 end
 
 local function soak(name, state, frames)
-    if not pcall(savestate.load, SDIR .. "/" .. state) then
+    local f = io.open(G.STATE_DIR .. "/" .. state, "rb")
+    if not f then
         log("SKIP " .. name .. ": no savestate " .. state)
         return false
     end
-    emu.frameadvance()
+    f:close()
     -- Let the beacon come up first: painting before the hook runs would be testing nothing.
-    local up = false
-    for _ = 1, 240 do emu.frameadvance(); if MB.present() then up = true; break end end
-    if not up then log("SKIP " .. name .. ": no 'SLNK' beacon (unpatched ROM?)"); return false end
+    t.boot({ state = state, beacon = 240 })
 
     -- Hard failure, not a skip: a blind watch reporting "clean" is worse than no watch at all.
     local okd, why = detector_works()
@@ -118,8 +114,7 @@ local function soak(name, state, frames)
     paint()
     local before = nhits
     for f = 1, frames do
-        joypad.set(PRESS[(f // 12) % #PRESS + 1])
-        emu.frameadvance()
+        t.step(PRESS[(f // 12) % #PRESS + 1])
         if f % 6 == 0 then check(name, f) end
     end
     check(name, frames)

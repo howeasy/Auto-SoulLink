@@ -133,15 +133,21 @@ def test_an_unrecognised_gameboy_cartridge_is_refused_before_game_detect(header)
 
 def test_a_non_gameboy_core_is_untouched_by_the_gen2_route():
     """A GBA core never reaches Entry.detect_title (gen2) at all -- not even a header that
-    happens to spell PM_CRYSTAL routes a non-Game-Boy core into the Gen 2 client."""
-    loaded = _run_launcher("GBA", _rom("PM_CRYSTAL"), detected_game_id="gen3_frlge")
+    happens to spell PM_CRYSTAL routes a non-Game-Boy core into the Gen 2 client. (Since the Gen 3
+    merge a GBA core goes to the Gen 3 route, which refuses a cartridge it cannot admit; the old
+    gen3_frlge_client fall-through was deleted at C5-6.)"""
+    loaded: list[str] = []
+    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge"):
+        _run_launcher("GBA", _rom("PM_CRYSTAL"), detected_game_id="gen3_frlge", loaded=loaded)
     assert _NEW_CLIENT not in loaded, loaded
     assert "lua/gen2/entry.lua" not in loaded, loaded
-    assert "lua/clients/gen3_frlge_client.lua" in loaded, loaded
 
 
 def test_a_failing_system_probe_does_not_route_to_gen2():
-    loaded = _run_launcher(None, _rom("PM_CRYSTAL"))
+    # the Gen 3 route fails closed on an unidentifiable system (never on to game_detect)
+    loaded: list[str] = []
+    with pytest.raises(lupa.LuaError, match="could not determine the loaded system"):
+        _run_launcher(None, _rom("PM_CRYSTAL"), loaded=loaded)
     assert _NEW_CLIENT not in loaded, loaded
 
 

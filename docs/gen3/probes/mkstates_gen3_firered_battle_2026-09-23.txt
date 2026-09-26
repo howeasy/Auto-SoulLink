@@ -1,0 +1,10 @@
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\patch\build\gen3_fixture_runs\mkstates_firered_battle\Pokemon - FireRed Version (USA).SaveRAM from E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\tests\fixtures\gen3\firered_party_battle.sav; states -> E:\Google Drive\SLink\.claude\worktrees\gen3-lane-clean\patch\build\gen3_probe_states\firered
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3.ini --lua=lua/tests/mkstates_gen3.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] mkstates_gen3: RESULT: PASS battle states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/patch/build/gen3_probe_states/firered  (6s)
+phase start frame=1 title=firered kind=battle dir=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/patch/build/gen3_probe_states/firered
+phase field frame=778 map=(3,19)
+phase settled frame=1087
+phase state-saved frame=1327 slink_preintro.State main=080123BD comm0=0 flags=00000000 ctrl=0802E311 outcome=0
+phase state-saved frame=1829 slink_prebattle.State main=08014041 comm0=1 flags=00000001 ctrl=0802E439 outcome=0
+phase state-saved frame=1883 slink_postbattle.State main=08015851 comm0=4 flags=00000000 ctrl=0802E3B5 outcome=4
+RESULT: PASS battle states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/patch/build/gen3_probe_states/firered

@@ -1,0 +1,16 @@
+# G4 final cut 382703b319c3d0cece05f880e72ea055fc7ea138 -- tools/gen3_final_cut.py summary (written 2026-09-25T12:28:19Z)
+# RUN 9 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | link_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_link_gen3_fr_as_a_382703b3.txt |
+| 2 | active_end_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_active_end_gen3_lg_as_a_382703b3.txt |
+| 3 | linked_faint_active_trainer_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_trainer_gen3_fr_as_a_382703b3.txt |
+| 4 | linked_faint_active_trainer_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_trainer_gen3_lg_as_a_382703b3.txt |
+| 5 | save_then_write_gen3_fr_as_a | §7 save-rows | PASS | 1 | fc_save_then_write_gen3_fr_as_a_382703b3.txt |
+| 6 | bootcheck_firered_party_town | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_town_382703b3.txt |
+| 7 | bootcheck_firered_party_battle | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_battle_382703b3.txt |
+| 8 | bootcheck_leafgreen_party_town | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_town_382703b3.txt |
+| 9 | bootcheck_leafgreen_party_town_b | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_town_b_382703b3.txt |
+
+OVERALL: PASS (9/9 rows)
