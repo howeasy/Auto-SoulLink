@@ -15,8 +15,14 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
     1. Wait for Gen 2's re-sweep to finish (they asked for no heavy emulator use and no shared-code landing meanwhile).
     2. Run trade_gen3 / trade_decline_gen3 / infopanel_gen3 / infopanel_dex_gen3 ×2 in lane C:/slink-wt/rrduo at the branch head, with the new slink_RR.gba in patch/build.
     3. Land the whole shared-code batch on master in ONE ff and ping Gen 2 Boogaloo (they re-sweep once).
-    4. Re-run the RR frozen cut on the new companion.
-    5. Update G5 (the trade/panel note becomes real evidence).
+    4. Ping Emerald ('Emerald support planning'): it merges master, then starts T2/T3.
+    5. The RR frozen cut runs ONCE, after the Emerald lane's RR durable-trade row is green (T2 rebuilds the RR companion again).
+  - **Ruling 27** (FR/LG patched trade IN this RC):
+    - Built in the Emerald worktree. T1 design approved: `docs/gen3/research/patched_trade_design.md` + `_bindings.md` on claude/gen3-emerald-trade 5ecc0516, merged d0599417.
+    - After my landing, the Emerald lane owns ALL trade files, RR included. The Gen 3 lane reviews and owns the G4/G5/requirements docs.
+    - T2 + T4 shared code lands once, with a Gen 2 ping.
+    - The §7 PLAN/requirements diff comes to me for review before master.
+    - G4 and G5 both wait on T5 receipts (FR↔LG, RR↔RR; E↔E is Emerald's own gate).
 
 - Local master is **615ea688** (Gen 1+2+3 + the docs sweep, NOT pushed).
 - Gen 2's evidence is re-pinned 98/98 at CODE_DIGEST e8ca0067. Gen 1 is clean.
