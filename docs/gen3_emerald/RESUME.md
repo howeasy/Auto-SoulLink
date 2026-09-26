@@ -71,8 +71,10 @@ Defects fixed in `611913a2`–`414afb92`, each found live:
    - codec API refusals;
    - server foundation `emerald -> gen3_emerald`;
    - ROUTED at EG4.
-3. Gen 3 lane card: the shared `PC.mode` should wait for progress (`~= current`), not the
-   target (OMP cx-6559e6e9). Emerald uses `EMH.pc_top_row` meanwhile.
+3. Merge master `b6bd8f2b` (Gen 3 fixed both lane cards: `PC.mode` now waits for progress, and
+   playlib finishes a raising leg check/run by name with a screenshot). Then retire
+   `EMH.pc_top_row`, call `PC.mode` directly, and re-run the pc group live. Tell Gen 3 if E3 needs
+   `read_u16` in the three sibling `Reads.new` io tables.
 
 **After the request (all on top of the frozen cut; docs, tests and one guard):**
 - `bfaccf71`: the request was corrected per OMP fact check cx-3b167167. The hooks and census gates
