@@ -4463,7 +4463,7 @@ FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
     "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
-    "ea5352f8a3b9073f8ae20870ad12857925d442cd": REPO / "patch" / "build" / "slink_RR.gba",
+    "97f28ec1a36c8526760da6fa7606cf78e1ceb016": REPO / "patch" / "build" / "slink_RR.gba",
 }
 
 
@@ -4564,7 +4564,7 @@ def test_rr_party_menu_words_hold_in_the_rr_rom(sha):
     assert body(rr, 0x08122C5C, 188) == body(fr, 0x08122C5C, 188)
     assert body(rr, 0x0811FB28, 4) == bytes.fromhex("00490847")                       # ldr r1,[pc]; bx r1
     # the companion's own code (0x0837xxxx / 0x0936xxxx) adds these referrers, nothing else
-    extra = COMPANION_EXTRA_REFS if sha.startswith("ea5352f8") else {}
+    extra = COMPANION_EXTRA_REFS if RR_ARTIFACTS[sha].name == "slink_RR.gba" else {}
 
     def exact(value, base):
         got = refs(rr, value)

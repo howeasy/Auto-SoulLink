@@ -114,7 +114,7 @@ with hardcoded offsets — `desc[i] = *(base+8+4i)` (13 entries, ending `0x09148
 over **id 8** instead — a second PLAYER row that only `SetUpStartMenu_Link` appends, and which
 `lua/tests/test_live_startmenu.lua` proves absent from the menu a real player opens.
 
-`build.py` rewrites four words, each verified against its expected current value first:
+`build.py` rewrites five words, each verified against its expected current value first:
 
 | ROM word | was | becomes |
 |---|---|---|
@@ -122,11 +122,17 @@ over **id 8** instead — a second PLAYER row that only `SetUpStartMenu_Link` ap
 | `0x09149030` (`act[8].text`) | `0x0841628E` | `sSoulLinkLabel` |
 | `0x09149034` (`act[8].func`) | `0x0806F56D` | `slink_startmenu_cb\|1` |
 | `0x0806ED58` (`SetUpStartMenu` literal) | `0x090BE179` | `slink_setup_start_menu\|1` |
+| `0x090BDD54` (page-switch rebuild callback) | `0x090BE30D` | `slink_start_menu_redraw\|1` |
 
 Menu globals, both located live: **`sNumStartMenuActions = 0x020370F5`**, **`sStartMenuOrder =
-0x020370F6`**. A normal field menu is exactly `[1 2 3 4 5 6]` with EXIT (id 6) last, so the wrapper
-splices SOULLINK at index 5 and pushes EXIT to 6 — and it splices *only* into that exact shape, so
-the link menu and any future RR revision are left alone rather than guessed at.
+0x020370F6`**. RR's `SetUpStartMenu` (`0x090BE178`) builds the main page as `[(0) (1) (2) (3) (4) 5 EXIT]`
+(POKEDEX appears with FLAG_SYS_POKEDEX_GET, so 6 rows before the Pokedex and 7 after), where EXIT is id 6,
+or id 11 once the DexNav/PC tools page exists (flag 0x91E). The wrapper splices SOULLINK right before
+EXIT on that main page only; link (`[1 2 8 5 6]`), union room, Safari (`[7 ...]`) and the tools page
+(`[.. 12]`) get no row, and at most 8 rows (CFRU sizes the window 2n-1 tiles). RR's L/R page switch
+rebuilds through `0x090BE30C`, a direct `bl` that bypasses the literal above, so its one callback
+literal is repointed to `slink_start_menu_redraw`, which replays its prologue through the wrapper and
+falls into its own tail. `lua/tests/test_live_startmenu_shapes.lua` gates every shape.
 
 ### The info screen (opcode 27)
 

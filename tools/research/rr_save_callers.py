@@ -40,7 +40,7 @@ ROMS = {  # same pins as tools/gen_gen3_write_checkpoint.py ROMS
     "clean": (pathlib.Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba"),
               "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     "companion": (ROOT / "patch" / "build" / "slink_RR.gba",
-                  "ea5352f8a3b9073f8ae20870ad12857925d442cd"),
+                  "97f28ec1a36c8526760da6fa7606cf78e1ceb016"),
 }
 SYM = ROOT / "data" / "gen3" / "pret" / "pokefirered.sym"
 FR_RODATA = 0x081E9F10  # pokefirered.map: .rodata start

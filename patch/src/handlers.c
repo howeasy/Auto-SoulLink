@@ -1786,7 +1786,7 @@ static void drive_events(void)
  * So take over id 8 instead: a second PLAYER row that only SetUpStartMenu_Link ever appends, and
  * which lua/tests/test_live_startmenu.lua proves absent from the menu a real player opens. build.py
  * repoints three table words at the strings and callback below (each verified before it is
- * written) plus the SetUpStartMenu redirect literal at the wrapper. Four words, no relocation.
+ * written) plus the SetUpStartMenu redirect literal at the wrapper, and the page-switch rebuild literal. Five words, no relocation.
  *
  * The callback deliberately does NOT draw. It bumps a counter and closes the menu, which is what
  * makes this step gateable on its own: the entry can be proven to appear and fire before a single
@@ -1825,16 +1825,53 @@ u8 slink_startmenu_cb(void)
     return StartMenu_Exit();
 }
 
+/* RR's own SetUpStartMenu (0x090BE178, disassembled) builds the order from these, in this order:
+ *   link (0x0805642D != 0)  -> SetUpStartMenu_Link   [1 2 8 5 6]
+ *   InUnionRoom()           -> SetUpStartMenu_UnionRoom [1 2 3 5 6]
+ *   GetSafariZoneFlag()     -> [7 (0) (1) 2 3 5 EXIT]
+ *   page byte == 1          -> the DexNav/PC tools page [(9) (10) .. 12]
+ *   else, the main page     -> [(0 POKEDEX) (1) (2) (3) (4) 5 EXIT]
+ * where EXIT is id 6, or id 11 ("Exit" + the R page hint) once the tools page exists. The row count
+ * therefore varies with FLAG_SYS_POKEDEX_GET & co. (6 before the Pokedex, 7 after), so splice by
+ * SHAPE, not by count: only the main page, SOULLINK right before its EXIT, at most 8 rows (CFRU's
+ * AddStartMenuWindow hook sizes the window 2n-1 tiles: 8 rows = 15, still on screen; 9 bytes of
+ * sStartMenuOrder). Link, union room and Safari get no row; the tools page ends in EXIT id 12, so
+ * the EXIT test below already leaves it alone. */
+#define StartMenu_IsLinkMenu ((u8 (*)(void))0x0805642Du)  /* RR SetUpStartMenu's link test */
+#define InUnionRoom          ((u8 (*)(void))0x0811B0D1u)
+#define GetSafariZoneFlag    ((u8 (*)(void))0x080A0E91u)  /* FlagGet(0x800) */
+#define START_EXIT    6
+#define START_EXIT_R  11
+
 void slink_setup_start_menu(void)
 {
     SetUpStartMenu_Orig();
     if (!SI->enable) return;
-    /* Splice ONLY into the exact menu shape test_live_startmenu.lua validated — 6 rows ending in EXIT.
-     * Any other shape (the link menu, a future RR revision) is left alone rather than guessed at. */
-    if (R8(sNumStartMenuActions) != 6 || R8(sStartMenuOrder + 5) != 6) return;
-    R8(sStartMenuOrder + 5) = 8;   /* SOULLINK takes EXIT's place... */
-    R8(sStartMenuOrder + 6) = 6;   /* ...and EXIT moves down, staying last */
-    R8(sNumStartMenuActions) = 7;
+    u8 n = R8(sNumStartMenuActions);
+    if (n == 0 || n > 7) return;
+    if (StartMenu_IsLinkMenu() || InUnionRoom() || GetSafariZoneFlag()) return;
+    u8 exit = R8(sStartMenuOrder + n - 1);
+    if (exit != START_EXIT && exit != START_EXIT_R) return;   /* not a shape we RE'd: leave it */
+    R8(sStartMenuOrder + n - 1) = 8;   /* SOULLINK takes EXIT's place... */
+    R8(sStartMenuOrder + n) = exit;    /* ...and EXIT moves down, staying last */
+    R8(sNumStartMenuActions) = n + 1;
+}
+
+/* RR's page switch (L/R on the main/tools page) rebuilds through 0x090BE30C, which is
+ * `push {r4,lr}; bl 0x090BE178; <draw the window>; pop {r4,pc}` -- a DIRECT bl that bypasses the
+ * 0x0806ED58 literal, so switching back to the main page would drop SOULLINK. build.py repoints that
+ * function's only reference (the callback literal at 0x090BDD54) here: replay its prologue with our
+ * wrapper, then fall into its own tail at 0x090BE312 (reads nothing we clobber; pops {r4,pc}). */
+__attribute__((naked, used)) void slink_start_menu_redraw(void)
+{
+    __asm__ volatile(
+        ".syntax unified            \n"
+        ".thumb                     \n"
+        "push {r4, lr}              \n"
+        "bl   slink_setup_start_menu\n"
+        "ldr  r0, =0x090BE313       \n"
+        "bx   r0                    \n"
+        ".ltorg                     \n");
 }
 
 /* C5-11a: the shared gEnemyParty staging of OP_SET_ENEMY_PARTY/OP_RIVAL_SWAP. Faithful byte

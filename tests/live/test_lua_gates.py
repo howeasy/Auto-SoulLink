@@ -80,6 +80,7 @@ PORTED = (
     "test_live_setpartymon.lua",       # native:transfer("party")
     "test_live_soullinkmenu.lua",      # native:link_panel staging + the START-menu hook
     "test_live_startmenu.lua",         # read-only START-menu recon
+    "test_live_startmenu_shapes.lua",  # SOULLINK row: with-Pokedex / Safari / tools-page shapes
     "test_live_tradescene.lua",        # native:transfer("enemy") then transfer("scene")
     "test_mailbox_absent.lua",         # negative control: native absent on the clean ROM
     "test_mailbox_battle.lua",         # raw OP_FORCE_FAINT / OP_FORCE_MOVE / unknown opcode
