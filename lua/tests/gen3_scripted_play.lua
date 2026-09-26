@@ -3012,7 +3012,9 @@ LEGS[#LEGS + 1] = {
 -- tile. (Oldale Town's own west connection does lead onto Route 102 in principle, but no BFS
 -- path threading all three fixtures together has been computed or verified, so this driver does
 -- not attempt it -- see the report for why three independent starts, not one long walk.)
-local EMERALD_LEGS = {}
+-- ponytail: EMH holds the E2-LEGS round-2 Emerald helpers in one table -- the main chunk sits at
+-- Lua's 200-local cap. Empty unless TITLE == "emerald", like EMERALD_LEGS.
+local EMERALD_LEGS, EMH = {}, {}
 if TITLE == "emerald" then
 
 --- group/num/x/y destination check for a leg's own `check(cp)` -- returns a message (leg
@@ -3071,7 +3073,10 @@ local EMERALD_START_SYM_NAMES = {
     -- card E2-LEGS: the MOVE POKeMON grab/place tasks and the carried-mon flag
     -- (src/pokemon_storage_system.c:2737-2775, :574), which gen3_title_syms.lua has no entry for.
     "Task_MoveMon", "Task_PlaceMon", "sIsMonBeingMoved",
+    -- round 2: the battle script's position, for EMH.battle_dump's failure message
+    "gBattlescriptCurrInstr", "gBattleCommunication",
 }
+
 local function load_emerald_start_syms()
     local want, out = {}, {}
     for _, n in ipairs(EMERALD_START_SYM_NAMES) do want[n] = true end
@@ -3304,6 +3309,29 @@ local function em_fail(label, msg)
     return false
 end
 
+--- Steer the storage top menu (Task_PCMainMenu) to `row` one witnessed Down at a time, THEN hand
+--- over to PC.mode. PC.mode's own Down loop waits for tSelectedOption == row after EACH press,
+--- which only holds for rows 0/1 (FR never needed more). Live E2-LEGS run 1: PC.mode(L, 2)
+--- failed pc_storage_top_cursor_stalled with Task_PCMainMenu (080C7268 = pokeemerald.sym
+--- Task_PCMainMenu) live and menu_cursor=1 -- the first Down HAD landed, on row 1, and the
+--- wait for row 2 timed out. storage_state=-1 there is expected: sStorage is only allocated
+--- once storage opens (EnterPokeStorage), not on the top menu. With the row already selected,
+--- PC.mode's loop breaks before pressing anything (tSelectedOption @task+10, :1558-1575).
+function EMH.pc_top_row(label, row)
+    local main = pc_task(PC_MAIN_MENU)
+    if not main or memory.read_u16_le(main + 8) ~= 2 then return pc_fail(label, "storage_top_not_ready") end
+    for _ = 1, 5 do
+        local current = memory.read_u16_le(main + 10)
+        if current == row then return true end
+        G.tap("Down", 3, 20)
+        if not pc_wait(label, "storage_top_cursor_stalled", function()
+            return memory.read_u16_le(main + 10) == (current + 1) % 5
+               and memory.read_u8(PC_MENU_CURSOR) == (current + 1) % 5
+        end, 90) then return false end
+    end
+    return pc_fail(label, "storage_top_wrong_row")
+end
+
 EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     name = "emerald_pc_deposit",
     exercises = { "pc_deposit" },
@@ -3410,6 +3438,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         -- MOVE POKeMON (row 2): the box cursor opens on slot 0; Right to slot 1, A, A = MOVE (grab);
         -- Left to slot 0, A, A = PLACE. The carried flag must rise and fall between the two.
         PC.open(cp, L)
+        EMH.pc_top_row(L, 2)
         PC.mode(L, 2)
         em_box_cursor(L, 1)
         em_move_popup_row0(L, em_thumb(ES.Task_MoveMon))
@@ -3657,7 +3686,10 @@ end
 --- returns a named failure (via G.finish(false, ...), the same fail-loud shape every leg here
 --- uses).
 local function emerald_throw_ball(cp, label)
-    if not play.in_battle(cp) then return end
+    if not play.in_battle(cp) then
+        G.finish(false, label .. ": the battle ended before the bag opened")
+        return false
+    end
 
     -- step 2 (bag input-ready): item_menu.c:746-747,774-779,1217.
     local ready = false
@@ -3670,7 +3702,7 @@ local function emerald_throw_ball(cp, label)
         G.finish(false, string.format(
             "%s: the bag never took input in %d frames (callback2 CB2_BagMenuRun, palette fade "
             .. "clear, Task_BagMenu_HandleInput active)", label, BAG_INPUT_WAIT_FRAMES))
-        return
+        return false
     end
 
     -- step 3 (pocket, BY VALUE): press, wait (bounded) for gBagPosition.pocket to change, wait
@@ -3693,7 +3725,7 @@ local function emerald_throw_ball(cp, label)
         if not settled then
             G.shot("stuck")
             G.finish(false, label .. ": the bag never settled back to input after a pocket switch")
-            return
+            return false
         end
     end
     if em_bag_pocket() ~= BALLS_POCKET then
@@ -3701,7 +3733,7 @@ local function emerald_throw_ball(cp, label)
         G.finish(false, string.format(
             "%s: could not steer gBagPosition.pocket to BALLS_POCKET(%d) (reads %d)",
             label, BALLS_POCKET, em_bag_pocket()))
-        return
+        return false
     end
 
     -- step 4 (row 0): the value is live every frame (item_menu.c:1213-1214,1245).
@@ -3709,13 +3741,14 @@ local function emerald_throw_ball(cp, label)
         G.shot("stuck")
         G.finish(false, string.format(
             "%s: the BALLS pocket's cursor is not on row 0 (reads %d)", label, em_bag_row0()))
-        return
+        return false
     end
 
     -- Select it (item_menu.c:1245-1267 Task_BagMenu_HandleInput -> OpenContextMenu on A). The
     -- task-func assertion for THIS A is em_bag_input_ready's own task_active(TASK_BAG_MENU_
     -- HANDLE_INPUT) check just above (no frame advanced since, on the "already correct pocket"
     -- path; the settle check on the "steered" path).
+    local last_used_before = memory.read_u16_le(LAST_USED_ITEM_ADDR)
     G.tap("A", 3, 20)
 
     -- step 6 (context menu): Task_ItemContext_SingleRow (asserted before this A, hard rule)
@@ -3735,7 +3768,17 @@ local function emerald_throw_ball(cp, label)
         G.finish(false, string.format(
             "%s: the USE/CANCEL context menu never came up (Task_ItemContext_SingleRow active, "
             .. "contextMenuNumItems==2; reads %d)", label, em_context_menu_num_items()))
-        return
+        return false
+    end
+
+    -- The select-A wrote the highlighted slot's item into gSpecialVar_ItemId before opening this
+    -- menu (item_menu.c:1266) -- the same check FR's throw_pokeball_from_bag makes.
+    if memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR) ~= ITEM_POKE_BALL then
+        G.shot("stuck")
+        G.finish(false, string.format("%s: the selected bag item is %d, not ITEM_POKE_BALL(%d) "
+                 .. "(gSpecialVar_ItemId)", label, memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR),
+                 ITEM_POKE_BALL))
+        return false
     end
 
     -- step 7 (USE): only pressed once ctx_ready confirmed the exact task func above (hard rule).
@@ -3761,8 +3804,11 @@ local function emerald_throw_ball(cp, label)
         G.finish(false, string.format(
             "%s: the throw never committed (callback2 BattleMainCB2, no bag task, "
             .. "gLastUsedItem==ITEM_POKE_BALL) within 600 frames", label))
-        return
+        return false
     end
+    G.phase("ball-thrown", string.format("gLastUsedItem %d -> %d", last_used_before,
+                                         memory.read_u16_le(LAST_USED_ITEM_ADDR)))
+    return true
 end
 
 -- ── leg: emerald_route102_catch (capture_wild) ──────────────────────────────────────────────────
@@ -3771,52 +3817,92 @@ end
 -- has the root-cause story for why). verify_fight_cursor (generic, already resolves for Emerald
 -- via S) both clears the "Wild X appeared!" intro text and steers the action cursor to FIGHT(0)
 -- before this loop toggles it to BAG(1) -- reused as-is, not re-derived.
+--- What the battle is doing, for a failure message (card E2-LEGS round 2): callback2, the battle
+--- script's current opcode and gBattleCommunication[0..1] (MULTIUSE_STATE / CURSOR_POSITION,
+--- include/constants/battle_script_commands.h:287-288), the action-menu witness and the outcome.
+function EMH.battle_dump()
+    local ok, msg = pcall(function()
+        local instr = memory.read_u32_le(ES.gBattlescriptCurrInstr)
+        local op = (instr >= 0x08000000 and instr < 0x0A000000) and memory.read_u8(instr) or -1
+        return string.format("callback2=%08X instr=%08X op=%02X comm=[%d,%d] action_menu=%s "
+            .. "outcome=%d item=%d last_used=%d", memory.read_u32_le(GMAIN_CALLBACK2_ADDR), instr,
+            op, memory.read_u8(ES.gBattleCommunication), memory.read_u8(ES.gBattleCommunication + 1),
+            tostring(action_menu_up()), battle_outcome(), memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR),
+            memory.read_u16_le(LAST_USED_ITEM_ADDR))
+    end)
+    return ok and msg or ("battle dump failed: " .. tostring(msg))
+end
+
+--- After a committed throw, resolve with B, never A (card E2-LEGS round 2). Live run 1 mashed A:
+--- a caught mon reaches BattleScript_TryNicknameCaughtMon (data/battle_scripts_2.s:74-86), whose
+--- yes/no starts on YES (Cmd_trygivecaughtmonnick case 0, CURSOR_POSITION = 0,
+--- battle_script_commands.c:10224-10229); A there opens the naming screen (:10246-10252,
+--- :10264-10275), where more A only types letters -- in_battle stays set and givecaughtmon
+--- (capture_wild) never runs: exactly the shadow log (battle_begin, no capture_wild, no
+--- battle_end). B is safe at every stop on this path: it advances battle text (text.c:875,893
+--- TextPrinterWait*), dismisses the caught-mon dex page (pokedex.c:4032), and declines the
+--- nickname (MULTIUSE_STATE = 4, :10256-10260). Returns "ended", "missed" (the action menu came
+--- back: the ball broke free) or nil after G.finish.
+function EMH.resolve_throw(cp, label)
+    for _ = 1, 600 do
+        if not play.in_battle(cp) then return "ended" end
+        if action_menu_up() then return "missed" end
+        G.tap("B", 3, 13)
+    end
+    G.shot("stuck")
+    G.finish(false, label .. ": the throw never resolved (battle still up, no action menu) "
+             .. EMH.battle_dump())
+end
+
+-- EMH.POKE_BALLS: tests/fixtures/gen3/README.md (emerald_battle.sav: 5 Poke Balls) -- one throw
+-- per ball, across turns AND encounters (OMP review cx-6903a836 #6: a 6th try has no ball).
+EMH.POKE_BALLS = 5
 local function emerald_route102_catch_loop(cp)
-    local caught = false
-    for encounter = 1, 6 do
-        if not emerald_hunt_grass(cp, 40) then
-            G.shot("stuck")
-            G.finish(false, string.format(
-                "emerald_route102_catch: 40 cycles of the grass loop produced no wild encounter "
-                .. "(attempt %d, at %s)", encounter, play.at(cp)))
-            return
-        end
-        if play.in_battle(cp) then
-            local menu = verify_fight_cursor(cp, "emerald_route102_catch")
-            if menu == "fight" then
-                G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG(1), pinned bit toggle
-                if action_cursor() ~= ACTION_BAG then
-                    G.shot("stuck")
-                    G.finish(false, string.format(
-                        "emerald_route102_catch: Right did not move the cursor to BAG (read %d)",
-                        action_cursor()))
-                    return
-                end
-                G.tap("A", 3, 30)  -- opens the battle bag (CB2_BagMenuFromBattle)
-                emerald_throw_ball(cp, "emerald_route102_catch")
-            end
-            -- Whatever the throw did (caught, missed, or the wild mon fled), mash through to the
-            -- battle's end -- catching is retried across encounters, not across turns.
-            local ended = play.mash_a(1200, function() return not play.in_battle(cp) end)
-            if not ended then
+    local L = "emerald_route102_catch"
+    for throw = 1, EMH.POKE_BALLS do
+        if not play.in_battle(cp) then
+            if not emerald_hunt_grass(cp, 40) then
                 G.shot("stuck")
-                G.finish(false, "emerald_route102_catch: in_battle never cleared within budget")
+                G.finish(false, string.format("%s: 40 cycles of the grass loop produced no wild "
+                         .. "encounter (throw %d, at %s)", L, throw, play.at(cp)))
                 return
             end
         end
-        if battle_outcome() == B_OUTCOME_CAUGHT then
-            caught = true
-            break
+        local menu = verify_fight_cursor(cp, L)
+        if menu ~= "fight" then
+            if play.in_battle(cp) then
+                G.finish(false, L .. ": no action menu to throw from " .. EMH.battle_dump())
+                return
+            end
+        else
+            G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG(1), pinned bit toggle
+            if action_cursor() ~= ACTION_BAG then
+                G.shot("stuck")
+                G.finish(false, string.format("%s: Right did not move the cursor to BAG (read %d)",
+                                              L, action_cursor()))
+                return
+            end
+            G.tap("A", 3, 30)  -- opens the battle bag (CB2_BagMenuFromBattle)
+            -- A false verdict has already finished the run with its named stage (OMP cx-6903a836
+            -- #7): stop here, before a single further press can land in a possibly-open bag.
+            if not emerald_throw_ball(cp, L) then return end
+            local result = EMH.resolve_throw(cp, L)
+            if not result then return end
+            G.phase("throw-resolved", string.format("throw %d: %s, outcome=%d", throw, result,
+                                                    battle_outcome()))
+            if result == "ended" then
+                if battle_outcome() == B_OUTCOME_CAUGHT then
+                    play.wait_scene_settled(cp, 1800)
+                    G.phase("caught", "outcome=" .. battle_outcome())
+                    return
+                end
+                play.wait_scene_settled(cp, 1800)   -- fled/other: hunt the next encounter
+            end
         end
     end
-    if not caught then
-        G.shot("stuck")
-        G.finish(false, string.format(
-            "emerald_route102_catch: never reached B_OUTCOME_CAUGHT (last outcome=%d) after 6 "
-            .. "encounters", battle_outcome()))
-        return
-    end
-    G.phase("caught", "outcome=" .. battle_outcome())
+    G.shot("stuck")
+    G.finish(false, string.format("%s: never reached B_OUTCOME_CAUGHT after %d balls (last "
+             .. "outcome=%d) %s", L, EMH.POKE_BALLS, battle_outcome(), EMH.battle_dump()))
 end
 
 EMERALD_LEGS[#EMERALD_LEGS + 1] = {
@@ -3842,6 +3928,10 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         .. "decrement); src/battle_main.c:4413 (BattleMainCB2); src/battle_util.c:318-322 "
         .. "(HandleAction_UseItem sets gLastUsedItem before gBattlescriptsForBallThrow)",
         "include/constants/battle.h:106 (B_OUTCOME_CAUGHT=7)",
+        "data/battle_scripts_2.s:64-86; src/battle_script_commands.c:10220-10290 (caught-mon "
+        .. "nickname yes/no starts on YES; B declines) -- the post-throw resolution presses B only",
+        "src/text.c:875,893; src/pokedex.c:4032 (B advances battle text and the caught dex page)",
+        "src/item_menu.c:1266 (the select-A writes gSpecialVar_ItemId)",
         "tests/fixtures/gen3/README.md (emerald_battle.sav: 5 Poke Balls, no bag items besides "
         .. "the Poke Balls -- the fixture fact em_bag_row0's ==0 check relies on)",
     },
@@ -4154,6 +4244,7 @@ return {
     LEGS = LEGS, PATHS = PATHS, play = play,
     EMERALD_LEGS = EMERALD_LEGS, PROFILE_PACK_BY_TITLE = PROFILE_PACK_BY_TITLE,
     emerald_stopped_legs = emerald_stopped_legs,
+    EMH = EMH,
     GRASS_LOOP = GRASS_LOOP, GRASS_ORIGIN = GRASS_ORIGIN,
     return_to_grass_origin = return_to_grass_origin,
     hunt_encounter = hunt_encounter,

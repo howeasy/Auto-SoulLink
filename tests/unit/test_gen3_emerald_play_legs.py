@@ -461,3 +461,91 @@ def test_emerald_boot_counts_frames_only_while_the_field_is_free():
     assert 'not G.pred_ok(cp, "field_controls_locked")' not in boot
     save = _function_body("emerald_save_via_menu")
     assert 'not G.pred_ok(cp, "field_controls_locked")' not in save
+
+
+# -- 8. card E2-LEGS round 2: live failures of box_place and catch, and OMP cx-6903a836 -----------
+
+# A fake storage top menu: Task_PCMainMenu live in gTasks[0] (func @+0, isActive @+4, tState
+# data[0] @+8 = 2 HANDLE_INPUT, tSelectedOption data[1] @+10), sMenu.cursorPos at sMenu+2. Each
+# NEW Down press moves both one row, wrapping at 5 (pokemon_storage_system.c:1558-1575). Enough
+# host (joypad/emu/console/client) for G.tap/G.advance/G.finish to run under lupa.
+_FAKE_MENU_HOST = """
+DOWNS, EXITED = 0, nil
+local joy, prev = {}, {}
+joypad = { set = function(t) joy = t end }
+console = { log = function() end }
+client = { exit = function() error("EXIT", 0) end, screenshot = function() end }
+emu = { framecount = function() return 0 end,
+        frameadvance = function()
+          if joy.Down and not prev.Down then
+            DOWNS = DOWNS + 1
+            local row = (read16(TASK + 10) + 1) % 5
+            poke(TASK + 10, row, 2); poke(MENU + 2, row, 1)
+          end
+          prev = joy
+        end }
+function read16(a) return memory.read_u16_le(a) end
+"""
+_TASKS, _PC_MAIN_MENU, _SMENU = 0x03005E00, 0x080C7269, 0x0203CD90
+
+
+def test_box_place_steers_the_storage_top_menu_to_move_mons_one_witnessed_down_at_a_time(lua, module):
+    """Live run 1: PC.mode(L, 2) died pc_storage_top_cursor_stalled on Task_PCMainMenu
+    (080C7268 in pokeemerald.sym) with menu_cursor=1 -- PC.mode waits for row == target after
+    EACH Down, which only holds for rows 0/1. EMH.pc_top_row walks to row 2 first."""
+    lua.execute(_FAKE_RAM)
+    lua.execute(_FAKE_MENU_HOST)
+    g = lua.globals()
+    g.TASK, g.MENU = _TASKS, _SMENU
+    g.poke(_TASKS, _PC_MAIN_MENU, 4)
+    g.poke(_TASKS + 4, 1, 1)
+    g.poke(_TASKS + 8, 2, 2)
+    g.poke(_TASKS + 10, 0, 2)
+    assert module.EMH.pc_top_row("t", 2) is True
+    assert g.read16(_TASKS + 10) == 2
+    assert g.DOWNS == 2
+    chunk = next(c for c in _leg_chunks(_SCRIPT_SRC) if 'name = "emerald_pc_box_place"' in c)
+    assert chunk.index("EMH.pc_top_row(L, 2)") < chunk.index("PC.mode(L, 2)")
+
+
+def _emh_body(name):
+    start = re.search(rf'function EMH\.{re.escape(name)}\(', _SCRIPT_SRC)
+    assert start, f"EMH.{name} not found"
+    close = re.search(r'^end$', _SCRIPT_SRC[start.start():], re.M)
+    return _SCRIPT_SRC[start.start():start.start() + close.end()]
+
+
+def test_catch_resolves_a_committed_throw_with_b_never_a():
+    """Live run 1: after the throw the leg mashed A; the caught-mon nickname yes/no starts on YES
+    (battle_script_commands.c:10224-10229) so A opened the naming screen and the battle never
+    ended (shadow: no capture_wild). B advances text, the dex page and declines the nickname."""
+    body = _emh_body("resolve_throw")
+    assert 'G.tap("B"' in body
+    assert 'G.tap("A"' not in body and "mash_a(" not in body
+    loop = _function_body("emerald_route102_catch_loop")
+    after = loop[loop.index("emerald_throw_ball(cp, L)"):]
+    assert "EMH.resolve_throw(cp, L)" in after
+    assert "mash_a(" not in after and 'G.tap("A"' not in after
+
+
+def test_catch_attempts_are_bounded_by_the_five_balls():
+    loop = _function_body("emerald_route102_catch_loop")
+    assert "for throw = 1, EMH.POKE_BALLS do" in loop
+    assert "EMH.POKE_BALLS = 5" in _SCRIPT_SRC
+    assert not re.search(r"for encounter = 1, 6", loop)
+
+
+def test_throw_ball_returns_a_verdict_and_the_caller_stops_on_false():
+    body = _function_body("emerald_throw_ball")
+    assert not re.search(r"^\s+return\s*$", body, re.M), "a bare return leaves the verdict nil"
+    assert body.rstrip().endswith("return true\nend")
+    loop = _function_body("emerald_route102_catch_loop")
+    assert "if not emerald_throw_ball(cp, L) then return end" in loop
+
+
+def test_throw_ball_checks_the_selected_item_and_snapshots_last_used_item():
+    body = _function_body("emerald_throw_ball")
+    select_a = body.index("local last_used_before = memory.read_u16_le(LAST_USED_ITEM_ADDR)")
+    item_check = body.index("memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR) ~= ITEM_POKE_BALL")
+    use_a = body.index('G.tap("A", 3, 30)')
+    assert select_a < body.index('G.tap("A", 3, 20)') < item_check < use_a
