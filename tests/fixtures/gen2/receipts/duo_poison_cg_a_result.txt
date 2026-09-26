@@ -11,64 +11,137 @@ RX config
 RX dead_keys
 BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 F794:B541:9E
-  phase walk @3414 xy=53,12
-  phase battle @3679 xy=52,12
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6568,"key":"6D42:B541:A3","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":163}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":14,"in_box":false,"key":"6D42:B541:A3","level":2,"maxHP":14,"nickname":"HOOTHOOT","player":"a","seq":57,"species_id":163,"stats":{"level":2,"maxH
-CAPTURE_SENT {"frame":6568,"key":"6D42:B541:A3","seq":57}
-CAUGHT 6D42:B541:A3
-RX box_mon key=6D42:B541:A3
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"a","seq":59}
-TX {"event":"stats_cache","key":"6D42:B541:A3","player":"a","seq":62,"stats":{"level":2,"maxHP":14}}
+  phase walk @3567 xy=53,12
+  phase battle @3944 xy=52,12
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":6656,"key":"F0D0:B541:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":15,"in_box":false,"key":"F0D0:B541:A1","level":3,"maxHP":15,"nickname":"SENTRET","player":"a","seq":66,"species_id":161,"stats":{"level":3,"maxHP
+CAPTURE_SENT {"frame":6656,"key":"F0D0:B541:A1","seq":66}
+CAUGHT F0D0:B541:A1
+RX box_mon key=F0D0:B541:A1
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"a","seq":68}
+TX {"event":"stats_cache","key":"F0D0:B541:A1","player":"a","seq":71,"stats":{"level":3,"maxHP":15}}
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":8882,"text":"HOOTHOOT and HOOTHOOT linked!"}
-RX party_mon key=6D42:B541:A3
-TX {"event":"sync_retrieve_done","key":"6D42:B541:A3","player":"a","seq":138}
-  phase save @8883 xy=52,12
-  phase saved @9547 xy=52,12
+RX_TEXT {"cmd":"msgbox","frame":7532,"text":"SENTRET and SENTRET linked!"}
+RX party_mon key=F0D0:B541:A1
+TX {"event":"sync_retrieve_done","key":"F0D0:B541:A1","player":"a","seq":99}
+  phase save @7533 xy=52,12
+  phase saved @8199 xy=52,12
 MYKEY 0 F794:B541:9E
-MYKEY 1 6D42:B541:A3
-LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"aad578fb18c6a61c08a674d3b74f5b0135124897067ce008ce3918966e51cb81","client_saves":1,"frame":9577,"gate_saves":1,"key":"6D42:B541:A3","save_completed_frame":9547,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_poison_s51_a_link_save.SaveRAM"}
-  PI battle mode=0 map=24:3 xy=52,12 phase=travel active=nil foe_sting=nil party=0:21/21:0 1:14/14:0
-  phase settle @9631 xy=52,12
-  phase travel @9741 xy=52,12
-  PI battle mode=1 map=24:3 xy=16,6 phase=travel active=0 foe_sting=false party=0:21/21:0 1:14/14:0
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":236}
-  PI battle mode=0 map=24:3 xy=16,6 phase=travel active=nil foe_sting=nil party=0:21/21:0 1:14/14:0
-TX {"area_id":"cherrygrove_city","event":"area_enter","loc_name":"CHERRYGROVE CITY","player":"a","seq":252}
+MYKEY 1 F0D0:B541:A1
+LINK_SAVE {"cartram_bytes":32768,"cartram_sha256":"b9b558b42ff4dd44a22ef6b4318a76cbaded7602f01bb796b595889339dc6fe6","client_saves":1,"frame":8229,"gate_saves":1,"key":"F0D0:B541:A1","save_completed_frame":8199,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_poison_s51_a_link_save.SaveRAM"}
+  PI battle mode=0 map=24:3 xy=52,12 phase=travel active=nil foe_sting=nil party=0:18/21:0 1:15/15:0
+  phase settle @8259 xy=52,12
+  phase travel @8393 xy=52,12
+  PI battle mode=1 map=24:3 xy=44,14 phase=travel active=0 foe_sting=false party=0:18/21:0 1:15/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":157}
+  PI battle mode=0 map=24:3 xy=44,14 phase=travel active=nil foe_sting=nil party=0:18/21:0 1:15/15:0
+  PI battle mode=1 map=24:3 xy=32,7 phase=travel active=0 foe_sting=false party=0:18/21:0 1:15/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":200}
+  PI battle mode=0 map=24:3 xy=32,7 phase=travel active=nil foe_sting=nil party=0:18/21:0 1:15/15:0
+  PI battle mode=1 map=24:3 xy=15,6 phase=travel active=0 foe_sting=false party=0:18/21:0 1:15/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":240}
+  PI battle mode=0 map=24:3 xy=15,6 phase=travel active=nil foe_sting=nil party=0:18/21:0 1:15/15:0
+TX {"area_id":"cherrygrove_city","event":"area_enter","loc_name":"CHERRYGROVE CITY","player":"a","seq":255}
 TX {"area_id":"route_30","event":"area_enter","loc_name":"ROUTE 30","player":"a","seq":324}
-  phase hunt @14932 xy=8,49
-  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:14/14:0
-TX {"area_id":"route_30","event":"no_catch","level":3,"player":"a","seq":352,"species_id":163}
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":353}
-  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:14/14:0
+  phase hunt @15454 xy=8,49
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:15/15:0
+TX {"area_id":"route_30","event":"no_catch","level":4,"player":"a","seq":358,"species_id":10}
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":359}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:15/15:0
 RX play_sound sound=26
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":15961,"text":"Route 30 is a dead zone!"}
-  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:14/14:0
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":383}
-  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:14/14:0
-  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:14/14:0
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":418}
-  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:20/21:0 1:14/14:0
-  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:20/21:0 1:14/14:0
-  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:20/21:0 1:14/14:0 items=TACKLE|GROWL
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":499}
-  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:20/21:0 1:9/14:8
-  phase tick @22547 xy=8,48
-ENGINE_FAINT {"cause":"poison","frame":23586,"key":"6D42:B541:A3","site_id":"poison_faint","slot":1}
-TX {"area_id":"route_30","event":"faint","key":"6D42:B541:A3","player":"a","seq":537}
-FAINT_SENT {"frame":23586,"key":"6D42:B541:A3","seq":537}
-RX memorialize key=6D42:B541:A3
+RX_TEXT {"cmd":"msgbox","frame":16696,"text":"Route 30 is a dead zone!"}
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:15/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":405}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:15/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:15/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":436}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:15/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:15/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":471}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:15/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:15/15:0
+  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:21/21:0 1:15/15:0 items=TACKLE
+  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:21/21:0 1:15/15:0 items=TACKLE
+  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:21/21:0 1:15/15:0 items=TACKLE
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":568}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":592}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":627}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":651}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":679}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":705}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":727}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":753}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":779}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":811}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":836}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":864}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":890}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":915}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":944}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":974}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":1002}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":1031}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,49 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":1054}
+  PI battle mode=0 map=26:1 xy=8,49 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:13/15:0
+  PI battle mode=1 map=26:1 xy=8,48 phase=hunt active=0 foe_sting=false party=0:21/21:0 1:13/15:0
+  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:21/21:0 1:13/15:0 items=TACKLE
+  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:21/21:0 1:13/15:0 items=TACKLE
+  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:21/21:0 1:13/15:0 items=TACKLE
+  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:21/21:0 1:11/15:0 items=TACKLE
+  PI moves mode=1 map=26:1 xy=8,48 phase=hunt active=1 foe_sting=true party=0:21/21:0 1:11/15:0 items=TACKLE
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":4,"player":"a","seq":1175}
+  PI battle mode=0 map=26:1 xy=8,48 phase=hunt active=nil foe_sting=nil party=0:21/21:0 1:9/15:8
+  phase tick @51202 xy=8,48
+ENGINE_FAINT {"cause":"poison","frame":52240,"key":"F0D0:B541:A1","site_id":"poison_faint","slot":1}
+TX {"area_id":"route_30","event":"faint","key":"F0D0:B541:A1","player":"a","seq":1213}
+FAINT_SENT {"frame":52240,"key":"F0D0:B541:A1","seq":1213}
+RX memorialize key=F0D0:B541:A1
 RX game_over
-MEMORIAL_PREIMAGE {"frame":23706,"key":"6D42:B541:A3","nickname_raw_hex":"878e8e93878e8e93505050","ot_raw_hex":"8287918892505050505050","raw_hex":"a300212d0000b541000008000000000000000000006d42232700004100c2020200000000000e00060006000700060007","slot":1,"species_marker":163}
-TX {"box":13,"event":"memorialize_done","key":"6D42:B541:A3","player":"a","seq":541}
-MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":23706,"key":"6D42:B541:A3","ticks":526}
-  phase park @23707 xy=7,49
-  phase poisoned @23708 xy=7,49
-  phase save @23738 xy=7,49
-  phase saved @24401 xy=7,49
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"6ccfd9aebc80c20f67d3b16d1c3ca891ff49aa5b68aa6ecaa513e2fe640465fd","client_saves":2,"flushed_matches":true,"frame":24431,"gate_saves":2,"save_completed_frame":24401,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_poison_s51_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_poison_s51_a_witness.SaveRAM"}
-RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":6568,"key":"6D42:B541:A3","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":163},"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"faint":{"cause":"poison","frame":23586,"key":"6D42:B541:A3","site_id":"poison_faint","slot":1},"faint_sent":{"frame":23586,"key":"6D42:B541:A3","seq":537},"fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3303,"has_pokeballs":true,"ot_id":46401},"input_mode":"normal_buttons","key":"6D42:B541:A3","link_save":{"cartram_bytes":32768,"cartram_sha256":"aad578fb18c6a61c08a674d3b74f5b0135124897067ce008ce3918966e51cb81","client_saves":1,"frame":9577,"gate_saves":1,"key":"6D42:B541:A3","save_completed_frame":9547,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_poison_s51_a_link_save.SaveRAM"},"memorial":{"ack":{"box":13,"event":"memorialize_done","frame":23706,"key":"6D42:B541:A3","ticks":526},"preimage_frame":23706},"player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"6ccfd9aebc80c20f67d3b16d1c3ca891ff49aa5b68aa6ecaa513e2fe640465fd","client_saves":2,"flushed_matches":true,"frame":24431,"gate_saves":2,"save_completed_frame":24401,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_poison_s51_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_poison_s51_a_witness.SaveRAM"},"scenario":"gen2_poison","schema":"gen2-duo-poison-v1","title":"crystal"}
-RESULT: PASS (poisoned to death: 6D42:B541:A3)
+MEMORIAL_PREIMAGE {"frame":52357,"key":"F0D0:B541:A1","nickname_raw_hex":"92848d9391849350505050","ot_raw_hex":"8287918892505050505050","raw_hex":"a10021000000b54100003100280022001e00320014f0d01b000000410083020300000000000f00080007000600070007","slot":1,"species_marker":161}
+TX {"box":13,"event":"memorialize_done","key":"F0D0:B541:A1","player":"a","seq":1218}
+MEMORIAL_ACK {"box":13,"event":"memorialize_done","frame":52357,"key":"F0D0:B541:A1","ticks":1181}
+  phase park @52358 xy=7,49
+  phase poisoned @52359 xy=7,49
+  phase save @52389 xy=7,49
+  phase saved @53052 xy=7,49
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"15721f9c23eb9380b0a4f6e5103c3abe86b85d99f38d392b5819ff9ba923cac2","client_saves":2,"flushed_matches":true,"frame":53082,"gate_saves":2,"save_completed_frame":53052,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/saveram_gen2_poison_s51_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_poison_s51_a_witness.SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"capture":{"acquisition":"wild","area_id":"route_29","destination":"party","frame":6656,"key":"F0D0:B541:A1","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":161},"case":"crystal_battle","client":{"pack":"gen2_crystal","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","title":"crystal"},"faint":{"cause":"poison","frame":52240,"key":"F0D0:B541:A1","site_id":"poison_faint","slot":1},"faint_sent":{"frame":52240,"key":"F0D0:B541:A1","seq":1213},"fixture_sha256":"f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3303,"has_pokeballs":true,"ot_id":46401},"input_mode":"normal_buttons","key":"F0D0:B541:A1","link_save":{"cartram_bytes":32768,"cartram_sha256":"b9b558b42ff4dd44a22ef6b4318a76cbaded7602f01bb796b595889339dc6fe6","client_saves":1,"frame":8229,"gate_saves":1,"key":"F0D0:B541:A1","save_completed_frame":8199,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_poison_s51_a_link_save.SaveRAM"},"memorial":{"ack":{"box":13,"event":"memorialize_done","frame":52357,"key":"F0D0:B541:A1","ticks":1181},"preimage_frame":52357},"player":"a","rom_sha1":"f4cd194bdee0d04ca4eac29e09b8e4e9d818c133","save":{"cartram_bytes":32768,"cartram_sha256":"15721f9c23eb9380b0a4f6e5103c3abe86b85d99f38d392b5819ff9ba923cac2","client_saves":2,"flushed_matches":true,"frame":53082,"gate_saves":2,"save_completed_frame":53052,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/saveram_gen2_poison_s51_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs4/patch/build/e2e_gen2_poison_s51_a_witness.SaveRAM"},"scenario":"gen2_poison","schema":"gen2-duo-poison-v1","title":"crystal"}
+RESULT: PASS (poisoned to death: F0D0:B541:A1)

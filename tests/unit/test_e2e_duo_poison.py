@@ -280,6 +280,33 @@ def test_seed_instance_save_uses_the_per_instance_target(tmp_path, monkeypatch):
                                                 str(tmp_path / "saves_b")]
 
 
+def test_seed_instance_save_pins_the_gen2_boot_clock_to_day(tmp_path):
+    """DUO-CLOCK: a Gen 2 duo's boot copy is pinned to DUO_CLOCK_HOUR (day), matching the gate's
+    U1_CLOCK (tests/live/test_gen2_frame_align.py), so a duo's route stays host-clock independent.
+    fsw-gen3merge 2026-09-25/26 (a ~00:30-01:30 host-clock sweep): gen2_new/gen2_poison's Route 30
+    hunt never saw a Weedle because Crystal's Route 30 table is day/morn only (data/wild/
+    johto_grass.asm ROUTE_30) and the unpinned fixture's RTC ran on with the host clock into night.
+    The committed fixture on disk must stay untouched (every oracle that reads it -- fixture_sha256,
+    boot_saveram, O-33 synth disclosures -- binds against those exact bytes); only the runtime copy
+    BizHawk actually boots carries the pinned trailer."""
+    import hashlib
+
+    fixture = REPO / "tests/fixtures/gen2/gold_battle.SaveRAM"
+    raw = fixture.read_bytes()
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg = {"launch_profile": "gen2"}
+    run._gen2_inputs = {"a": {"fixture": str(fixture), "sha256": hashlib.sha256(raw).hexdigest(), "title": "gold"}}
+    run._gen2_plans = {"a": {"directory": str(tmp_path), "saveram_name": "boot.SaveRAM"}}
+    notes = []
+    run._pydec_note = lambda fact: notes.append(str(fact))
+    dest = run._seed_instance_save("a")
+    written = Path(dest).read_bytes()
+    assert written[:0x8000] == raw[:0x8000], "CartRAM must be byte-identical; only the RTC trailer may differ"
+    assert written[0x8000:] != raw[0x8000:], "the boot copy was not pinned at all"
+    assert fixture.read_bytes() == raw, "the committed fixture on disk must never be rewritten"
+    assert any(n.startswith("a: clock_setup ") and "'game_hour': 11" in n for n in notes), notes
+
+
 def test_poison_oracle_refuses_an_orphan_memorialize_command(tmp_path, monkeypatch):
     """r2 finding 4: an orphan `memorialize` command leaves no events.json row — server.py:1945-1954
     logs the row only when a link's status transitions to memorial — so the receipt and the link

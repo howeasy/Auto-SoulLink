@@ -2103,6 +2103,10 @@ def bizhawk_path_problem(paths, limit=BIZHAWK_PATH_LIMIT):
     return None
 
 
+# DUO-CLOCK: every Gen 2 duo boot's RTC is pinned to this in-game hour (_seed_instance_save), matching
+# U1_CLOCK's hour (tests/live/test_gen2_frame_align.py) -- inside Route 30's day/morn window
+# (data/wild/johto_grass.asm ROUTE_30: 10:00-17:59 is DAY) so a duo's route stays host-clock independent.
+DUO_CLOCK_HOUR = 11
 # Gold has no day POISON_STING foe south of the Route 30 battle demo: its poison A plays the
 # post-errand save (U1 ruling, tests/live/test_gen2_frame_align.py U1_FIXTURE); cc/cg keep the pairing.
 GEN2_POISON_FIXTURES = {"gen2_gold_silver": {"a": "gold_battle_errand"}}
@@ -2908,6 +2912,26 @@ class DuoRun:
             raw = Path(fixture["fixture"]).read_bytes()
             if hashlib.sha256(raw).hexdigest() != fixture["sha256"]:
                 raise RuntimeError(f"{inst}: qualified fixture changed after preflight")
+            # DUO-CLOCK: every Gen 2 duo boot is pinned to a fixed DAY hour (matching the gate's
+            # U1_CLOCK, tests/live/test_gen2_frame_align.py) with the same day_clock mechanism and
+            # disclosure pattern -- the committed fixture on disk (source_rom_sha1 check above) is
+            # untouched; only this runtime copy carries the pinned RTC trailer, so every oracle that
+            # reads the boot fixture (fixture_sha256, boot_saveram, O-33 synth disclosures) still
+            # binds against the qualified bytes. Without a pin, "the fixture RTC runs on with the
+            # host clock" (same file, same comment as U1_CLOCK): fsw-gen3merge 2026-09-25/26, a
+            # ~00:30-01:30 host-clock sweep, put gen2_new/gen2_poison's Route 30 hunt at night, where
+            # Crystal's Weedle (data/wild/johto_grass.asm ROUTE_30) never appears (day/morn only).
+            # A non-gameplay filler boot (e.g. a unit test's placeholder bytes, never a real save --
+            # the sha256 check above only binds it to ITS OWN declared hash, not to a real save's
+            # checksums) cannot be clock-pinned at all; that is disclosed, never silently skipped.
+            from tools import gen2_synth_fixtures
+
+            try:
+                raw, clock = gen2_synth_fixtures.day_clock(raw, hour=DUO_CLOCK_HOUR, now=int(time.time()),
+                                                           title=fixture["title"])
+                self._pydec_note(f"{inst}: clock_setup {clock}")
+            except Exception as exc:  # noqa: BLE001 -- disclosed, not raised: see comment above
+                self._pydec_note(f"{inst}: clock_setup skipped (not a played save): {exc!r}")
             destination = Path(plan["directory"]) / plan["saveram_name"]
             destination.parent.mkdir(parents=True, exist_ok=True)
             destination.write_bytes(raw)
