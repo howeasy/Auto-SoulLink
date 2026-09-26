@@ -12,6 +12,7 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
   - a20cd945: check_release_zip now expects lua/gen2 members (Gen 2's _LUA_GEN2), plus a coverage test.
   - 794b789c: the LG fixture_qualify test stubs its ROM lookup; rr_harness_syms.load accepts only a pin-matching RR build. A class check ran every Gen 3 unit test in an unprovisioned worktree: no Gen 3 failures. Master = 794b789c.
   - b6bd8f2b (Emerald-lane cards): PC.mode reaches rows >= 2, and a playlib leg whose run/check raises is finished by name. Master = b6bd8f2b.
+  - Gen 2 then merged its unprovisioned-source fix: master = **88c2c1ac** (Gen 2 moved it, not pushed). The Gen 3 branch merged it (ba9a9159). `pytest tests/unit --collect-only` now collects 14201 with no error on a checkout without Gen 2 builds. Gen 2's re-sweep runs at 7ba4d552 (CODE_DIGEST e8ca0067, the same as master).
 - **Post-merge passes on master:**
   - FR/LG: a9ad03d3 shards 1 (13/13) and 2 (29/30, zip_check), then the zip rows at a20cd945 3/3. **All green.**
   - RR: a9ad03d3 18/19 (rr_zip_check), then the zip rows at a20cd945 3/3. **All green.**
