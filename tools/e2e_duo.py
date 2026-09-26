@@ -2113,15 +2113,19 @@ def gen3_trade_chain(inst, ka, kb, decline):
     run the native scene on BOTH sides (no silent swap)."""
     tx = lambda ev, body="": rf"(?m)^TX {ev} - .*{body}"          # noqa: E731
     rx = lambda cmd: rf"(?m)^RX {cmd}(?=\s|$)"                    # noqa: E731
+    # TALKED is a required witness but not an ordering anchor: the patch sends trade_request in the
+    # frame A talks, and the scenario logs TALKED only once it sees pi_count move (receipt
+    # rr_trade_gen3_gen3_rr_as_a_539e0aea_RED.txt), so the send line comes first.
+    talked = [r"(?m)^TALKED "] if inst == "a" else []
     if inst == "a":
-        chain = [r"(?m)^TALKED ", tx("trade_request"), rx("show_choices"), tx("menu_result", '"choice":0'),
+        chain = [tx("trade_request"), rx("show_choices"), tx("menu_result", '"choice":0'),
                  rx("choose_mon"), tx("mon_chosen", '"slot":1')]
         if decline:
             chain.append(r"(?m)^RX msgbox text=Your partner declined")
     else:
         chain = [rx("show_menu"), tx("menu_result", f'"choice":{0 if decline else 1}')]
     if decline:
-        return chain, list(zip(chain, chain[1:], strict=False)), [rx("apply_trade"), tx("trade_done"),
+        return talked + chain, list(zip(chain, chain[1:], strict=False)), [rx("apply_trade"), tx("trade_done"),
                                                      r"(?m)^TRADED "]
     gets = kb if inst == "a" else ka
     gives = ka if inst == "a" else kb
@@ -2130,7 +2134,7 @@ def gen3_trade_chain(inst, ka, kb, decline):
     # each side ran the NATIVE scene (lua/gen3/client.lua trade_readback), never the silent-swap
     # fallback the initiator used while the party chooser left its script waiting
     native = rf"trade: native scene complete; trade_done {re.escape(gives)} -> {re.escape(gets)}"
-    return chain + [native], list(zip(chain, chain[1:], strict=False)), [r"silent swap"]
+    return talked + chain + [native], list(zip(chain, chain[1:], strict=False)), [r"silent swap"]
 
 
 def gen3_panel_text(raw: bytes) -> str:

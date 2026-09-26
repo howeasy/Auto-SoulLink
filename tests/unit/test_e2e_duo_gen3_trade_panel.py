@@ -92,6 +92,18 @@ def test_trade_chain_positive_and_negative():
     assert duo.gen3_receipt_problems("a", _receipt_a(True) + "\nRX apply_trade", req, forb, order)
 
 
+
+def test_trade_chain_accepts_the_live_order_talk_logged_after_the_send():
+    """Live receipt rr_trade_gen3_gen3_rr_as_a_539e0aea_RED.txt: the patch sends trade_request in the
+    frame A talks, and the scenario only logs TALKED once it sees pi_count move, so the send line
+    precedes TALKED in A's result file. TALKED is a required witness, not an ordering anchor."""
+    req, order, forb = duo.gen3_trade_chain("a", KA, KB, False)
+    lines = _receipt_a().split("\n")
+    live = "\n".join([lines[1], lines[0], *lines[2:]])
+    assert duo.gen3_receipt_problems("a", live, req, forb, order) == []
+    no_talk = "\n".join(lines[1:])                       # never talked to the NPC at all
+    assert duo.gen3_receipt_problems("a", no_talk, req, forb, order)
+
 ROWS = ["DUO0|Treecko|6|22/22|38||", "|Treecko|6|22/22|38||", "DUO1|Mon|4|18/18|38||",
         "|Mon|4|18/18|38||", "Pairs alive|2/2", "Dead zones|0", "Badges|0/8"]
 
