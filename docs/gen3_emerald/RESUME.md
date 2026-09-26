@@ -74,6 +74,19 @@ Defects fixed in `611913a2`–`414afb92`, each found live:
 3. Gen 3 lane card: the shared `PC.mode` should wait for progress (`~= current`), not the
    target (OMP cx-6559e6e9). Emerald uses `EMH.pc_top_row` meanwhile.
 
+**After the request (all on top of the frozen cut; docs, tests and one guard):**
+- `bfaccf71`: the request was corrected per OMP fact check cx-3b167167. The hooks and census gates
+  were re-run tracked-clean (`probes/hooks_emerald_2026-09-26.txt`), EW-1 is now ◐ (pc_menu
+  and other rows not run, no writer in the probe), and the negatives manifest is 75/75.
+- `a3545846`: behavioural fake-RAM tests for the leg guards (one LuaRuntime per test).
+- `d4a7f94e`: the evolution.h cite is back to :129, every leg must have run(), and the poison
+  guard also checks the second mon's HP. This is stricter than at the run cut 414afb92;
+  `emerald_poison.sav` slot 1 reads HP 15 status 0, so the guard passes offline.
+- Lesson: I applied an OMP citation "fix" (cx-fe784f21 F9, :129→:132) without checking pret, and
+  it was wrong. A later OMP review caught it. Check every OMP line number before editing.
+- Gen 3 lane cards sent (not ours to fix): the shared `PC.mode` should wait for progress; playlib
+  should pcall leg.check/run so a Lua error is named instead of a silent timeout.
+
 **Open review items (not blocking):**
 - cx-fe784f21:
   - F6/F7/F8: the play-leg tests are mostly source-text assertions; a behavioural fake-RAM test
