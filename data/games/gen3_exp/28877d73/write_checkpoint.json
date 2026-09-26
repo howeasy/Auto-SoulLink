@@ -3689,6 +3689,7 @@
         ]
       },
       "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c. Name transfer only; no physical qualification.",
+      "status": "OPEN",
       "struct_size": 40,
       "symbol": "gTasks",
       "transferred_emerald_task_names": [

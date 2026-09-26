@@ -1330,6 +1330,10 @@ def build_expansion(context):
              "struct_size": types["Task"]["size"], "count": const["NUM_TASKS"],
              "func_offset": types["Task"]["fields"]["func"]["offset"],
              "is_active_offset": types["Task"]["fields"]["isActive"]["offset"],
+             # F2: name transfer only (no physical frame qualification), so the allow-list
+             "status": "OPEN",
+             # gets the same "OPEN" marker as cpu below -- a consumer keying off status
+             # (like cpu's own) refuses to treat this table as a qualified allow-list.
              "allowed_overworld_tasks": allowed, "forbidden_inventory": forbidden,
              "non_allowed_task_census": census,
              "transferred_emerald_task_names": list(allowed_names),

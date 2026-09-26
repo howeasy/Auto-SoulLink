@@ -7,9 +7,11 @@ import re
 import subprocess
 from pathlib import Path
 
+import lupa
 import pytest
 
 from tools import (
+    extract_expansion_data as ex,
     gen_area_map as areas,
     gen_gen3_engine_signals as signals,
     gen_gen3_profile as profile,
@@ -184,3 +186,100 @@ def test_expansion_area_outputs_from_own_source(tmp_path):
         text = (PACK / name).read_text(encoding="utf-8")
         assert text.count("return {") == 1
     assert len(re.findall(r'^  \["', (PACK / "gen3_exp_locations.lua").read_text(), re.M)) == 935
+
+
+# ── F1: gen3_exp is data-only -- nothing routes a real cartridge into it ────────────────────
+def test_gen3_exp_is_unreachable_from_entry_lua_and_manager():
+    """The pack is deliberately UNADMITTED (module docstring): it must not be registered in
+    lua/gen3/entry.lua's Entry.PACKS (so no ROM hash/header can admit it) or Entry.ROUTED (so an
+    admitted cartridge could not be sent to a client build for it), and server/manager.py must
+    not offer it as a playable GAMES entry or even list it as a named UNADMITTED_GAMES key."""
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    entry_path = (ROOT / "lua/gen3/entry.lua").as_posix()
+    Entry = lua.eval(f'dofile("{entry_path}")')
+    assert "gen3_exp" not in {key for key, _ in Entry.PACKS.items()}
+    assert "gen3_exp" not in {key for key, _ in Entry.ROUTED.items()}
+
+    from server.manager import GAMES, UNADMITTED_GAMES
+    assert "gen3_exp" not in {key for key, _, _ in GAMES}
+    assert "gen3_exp" not in UNADMITTED_GAMES
+
+
+# ── F3/F4: a ROM-value oracle independent of the generator's own decode path ────────────────
+def _rom_table_row(context, layout, table, row_id):
+    """Decode one row of a layout.json table straight off the reference ROM bytes, using only
+    ex.Rom/ex.number (never gen_expansion_facts.py's own pipeline) as an independent check that
+    layout.json's offsets/widths/shifts actually land on the values the compiler emitted."""
+    rom = ex.Rom(context["rom"])
+    spec = layout["tables"][table]
+    pointer = context["facts"]["headers"]["gf"][table]
+    base = rom.address(pointer, spec["stride"] * (row_id + 1))
+    pos = base + row_id * spec["stride"]
+    return {key: ex.number(rom, pos, field, spec["stride"]) for key, field in spec["fields"].items()}
+
+
+def test_move_priority_matches_the_rom_for_four_known_moves(context):
+    # ids from this build's own include/constants/moves.h (Quick Attack=98, Extreme Speed=245,
+    # Protect=182, Pound=1) -- never a vanilla id (owner note: RR types/ids are non-standard).
+    layout = read("layout.json")
+    expected = {1: 0, 98: 1, 182: 4, 245: 2}  # Pound, Quick Attack, Protect, Extreme Speed
+    for move_id, priority in expected.items():
+        row = _rom_table_row(context, layout, "moves", move_id)
+        assert row["priority"] == priority, move_id
+
+
+def test_species_base_stats_match_the_rom_for_bulbasaur(context):
+    layout = read("layout.json")  # SPECIES_BULBASAUR = 1 (this build's constants/species.h)
+    row = _rom_table_row(context, layout, "species", 1)
+    assert (row["baseHP"], row["baseAttack"], row["baseDefense"], row["baseSpeed"],
+            row["baseSpAttack"], row["baseSpDefense"]) == (45, 49, 49, 45, 65, 65)
+
+
+def test_item_row_matches_the_rom_for_potion(context):
+    layout = read("layout.json")  # ITEM_POTION = 28; I_PRICE=GEN_LATEST(9)>=GEN_7 -> 200
+    row = _rom_table_row(context, layout, "items", 28)
+    assert row["price"] == 200
+    assert row["holdEffectParam"] == 20
+
+
+# ── F2: the overworld task allow-list is explicitly OPEN, like cpu ──────────────────────────
+def test_tasks_allow_list_carries_an_explicit_open_status():
+    p = read("write_checkpoint.json")[TITLE]
+    assert p["tasks"]["status"] == "OPEN"
+    assert p["cpu"]["status"] == "OPEN"
+
+
+# ── F6: a ValueError from generate_emerald(check=...) is a message, not a traceback ─────────
+def test_area_map_main_turns_expansion_value_error_into_exit_1(monkeypatch, capsys):
+    source = ROOT / ".cache/expansion-src"
+    if not source.exists():
+        pytest.skip(f"pokeemerald not cloned: {source}")
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("area_id 'x' would merge unrelated maps")
+
+    monkeypatch.setattr(areas, "generate_emerald", boom)
+    monkeypatch.setattr("sys.argv", ["gen_area_map.py", "--game", "emerald",
+                                     "--expansion", "28877d73", "--source", str(source)])
+    assert areas.main() == 1
+    assert "area_id 'x' would merge unrelated maps" in capsys.readouterr().err
+
+
+# ── F7: facts.json's on-disk bytes are exactly gen_gen3_profile.render's serialization ──────
+def test_facts_json_bytes_match_profiles_render_and_its_recorded_sha256():
+    raw = (PACK / "facts.json").read_bytes()
+    assert profile.render(json.loads(raw)).encode("utf-8") == raw
+    digest = hashlib.sha256(raw).hexdigest()
+    assert read("profile.json")["source"]["facts_sha256"] == digest
+    assert read("write_checkpoint.json")[TITLE]["source"]["facts_sha256"] == digest
+
+
+# ── F8: the generated Lua headers are bound to the exact source JSON they were built from ──
+def test_expansion_area_lua_headers_carry_the_source_sha256():
+    source = ROOT / ".cache/expansion-src"
+    if not source.exists():
+        pytest.skip(f"pokeemerald not cloned: {source}")
+    expected = f"-- source_sha256: {areas._expansion_source_sha256(source)}"
+    for name in ("gen3_exp_areas.lua", "gen3_exp_locations.lua"):
+        lines = (PACK / name).read_text(encoding="utf-8").splitlines()
+        assert expected in lines[:5], name
