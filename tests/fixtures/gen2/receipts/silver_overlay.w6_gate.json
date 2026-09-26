@@ -1,7 +1,7 @@
 {
  "code_digest": {
-  "commit": "543cd1dcb1543aa168f8be43414ddc3edf24a34d",
-  "digest": "593616e6e91647e3640a97675f6e114a5e1caa2f7d75d4f2547fae3586bf6dd1",
+  "commit": "7ba4d552240a8cd120043877d4b849ac4abcf1fa",
+  "digest": "e8ca0067c9db0f863e39e45a21a096d45102b5e576320a37f26cd481c0913795",
   "dirty": [],
   "schema": "gen2-code-digest-v1",
   "scope": [
@@ -14,7 +14,7 @@
    "data/games/gen2_silver/**"
   ]
  },
- "corpus_frames": 44708,
+ "corpus_frames": 46025,
  "evidence_level": "PHYSICAL",
  "facts": {
   "allow": [
@@ -80,7 +80,7 @@
  "input_mode": "normal_buttons",
  "legs": {
   "panel": {
-   "allowed_writes": 149603,
+   "allowed_writes": 147926,
    "armed_frame": 1,
    "boot_clear": {},
    "boot_writes": 0,
@@ -91,18 +91,18 @@
     "lua_kind": "harness",
     "lua_source": "main",
     "native_addr": 52970,
-    "native_allowed": 11499,
+    "native_allowed": 11370,
     "native_caught": true,
-    "native_flagged": 12749,
+    "native_flagged": 12581,
     "native_writers": {
-     "00:0068 SlinkDelayFrameBridge+0x5": 11499,
-     "00:01CE VBlank_Normal.done_oam+0x4": 12507,
+     "00:0068 SlinkDelayFrameBridge+0x5": 11370,
+     "00:01CE VBlank_Normal.done_oam+0x4": 12339,
      "00:021D VBlank_Cutscene.skip_lcd+0x4": 190,
      "00:0607 Init.ByteFill+0x2": 1,
      "33:41DF BattleAnimDelayFrame.wait+0x0": 51
     }
    },
-   "corpus_frames": 12918,
+   "corpus_frames": 12750,
    "driver": null,
    "evidence_level": "PHYSICAL",
    "fixture": "silver_battle",
@@ -145,18 +145,18 @@
    "violation_count": 0,
    "violations": [],
    "writers": {
-    "13:4006 SlinkService+0x6": 11499,
-    "13:4009 SlinkService+0x9": 11499,
-    "13:400C SlinkService+0xc": 11499,
-    "13:400F SlinkService+0xf": 11499,
-    "13:4012 SlinkService+0x12": 11499,
-    "13:4017 SlinkService+0x17": 11499,
+    "13:4006 SlinkService+0x6": 11370,
+    "13:4009 SlinkService+0x9": 11370,
+    "13:400C SlinkService+0xc": 11370,
+    "13:400F SlinkService+0xf": 11370,
+    "13:4012 SlinkService+0x12": 11370,
+    "13:4017 SlinkService+0x17": 11370,
     "13:4026 SlinkService+0x26": 1,
     "13:402A SlinkService+0x2a": 1,
     "13:402D SlinkService+0x2d": 1,
-    "13:403D SlinkService.sample+0xe": 11498,
-    "13:4045 SlinkService.remember+0x0": 11498,
-    "13:4049 SlinkService.remember+0x4": 11499,
+    "13:403D SlinkService.sample+0xe": 11369,
+    "13:4045 SlinkService.remember+0x0": 11369,
+    "13:4049 SlinkService.remember+0x4": 11370,
     "13:4B33 SlinkPanel+0xb": 15,
     "13:4B36 SlinkPanel+0xe": 15,
     "13:4B39 SlinkPanel+0x11": 15,
@@ -166,14 +166,14 @@
     "13:4BA4 SlinkPanel.close+0x4": 15,
     "13:4BA7 SlinkPanel.close+0x7": 15,
     "13:4BAA SlinkPanel.close+0xa": 15,
-    "13:4CE2 SlinkPhoneService.armed_valid+0x6": 11499,
-    "13:4E03 SlinkSfxService.reset_blocked+0x0": 11499,
-    "13:4E07 SlinkSfxService.reset_blocked+0x4": 11499,
-    "13:4E0A SlinkSfxService.reset_blocked+0x7": 11499
+    "13:4CE2 SlinkPhoneService.armed_valid+0x6": 11370,
+    "13:4E03 SlinkSfxService.reset_blocked+0x0": 11370,
+    "13:4E07 SlinkSfxService.reset_blocked+0x4": 11370,
+    "13:4E0A SlinkSfxService.reset_blocked+0x7": 11370
    }
   },
   "sfx": {
-   "allowed_writes": 67776,
+   "allowed_writes": 70116,
    "armed_frame": 1,
    "boot_clear": {
     "00:0607 Init.ByteFill+0x2": 39
@@ -186,18 +186,18 @@
     "lua_kind": "harness",
     "lua_source": "main",
     "native_addr": 52970,
-    "native_allowed": 5225,
+    "native_allowed": 5405,
     "native_caught": true,
-    "native_flagged": 6409,
+    "native_flagged": 6576,
     "native_writers": {
-     "00:0068 SlinkDelayFrameBridge+0x5": 5225,
-     "00:01CE VBlank_Normal.done_oam+0x4": 6166,
+     "00:0068 SlinkDelayFrameBridge+0x5": 5405,
+     "00:01CE VBlank_Normal.done_oam+0x4": 6333,
      "00:021D VBlank_Cutscene.skip_lcd+0x4": 190,
      "00:0607 Init.ByteFill+0x2": 2,
      "33:41DF BattleAnimDelayFrame.wait+0x0": 51
     }
    },
-   "corpus_frames": 6463,
+   "corpus_frames": 6630,
    "driver": null,
    "evidence_level": "PHYSICAL",
    "fixture": "silver_battle",
@@ -205,7 +205,7 @@
    "gate": "lua/tests/gen2_sfx_gate.lua",
    "init_entries": [
     1,
-    5592
+    5759
    ],
    "inner_completed": true,
    "leg": "sfx",
@@ -244,32 +244,32 @@
     "00:0086 SlinkResetSoundBridge+0x6": 1,
     "00:008A SlinkResetSoundBridge+0xa": 1,
     "00:008D SlinkResetSoundBridge+0xd": 1,
-    "13:4006 SlinkService+0x6": 5225,
-    "13:4009 SlinkService+0x9": 5225,
-    "13:400C SlinkService+0xc": 5225,
-    "13:400F SlinkService+0xf": 5225,
-    "13:4012 SlinkService+0x12": 5225,
-    "13:4017 SlinkService+0x17": 5225,
+    "13:4006 SlinkService+0x6": 5405,
+    "13:4009 SlinkService+0x9": 5405,
+    "13:400C SlinkService+0xc": 5405,
+    "13:400F SlinkService+0xf": 5405,
+    "13:4012 SlinkService+0x12": 5405,
+    "13:4017 SlinkService+0x17": 5405,
     "13:4026 SlinkService+0x26": 2,
     "13:402A SlinkService+0x2a": 2,
     "13:402D SlinkService+0x2d": 2,
-    "13:403D SlinkService.sample+0xe": 5223,
-    "13:4045 SlinkService.remember+0x0": 5223,
-    "13:4049 SlinkService.remember+0x4": 5225,
-    "13:4CE2 SlinkPhoneService.armed_valid+0x6": 5225,
+    "13:403D SlinkService.sample+0xe": 5403,
+    "13:4045 SlinkService.remember+0x0": 5403,
+    "13:4049 SlinkService.remember+0x4": 5405,
+    "13:4CE2 SlinkPhoneService.armed_valid+0x6": 5405,
     "13:4DD8 SlinkSfxService.play+0xf": 10,
     "13:4DDB SlinkSfxService.play+0x12": 10,
     "13:4DDE SlinkSfxService.play+0x15": 10,
     "13:4DEF SlinkSfxService.hold+0xc": 1,
     "13:4DF3 SlinkSfxService.count+0x0": 1,
     "13:4DFE SlinkSfxService.count+0xb": 62,
-    "13:4E03 SlinkSfxService.reset_blocked+0x0": 5121,
-    "13:4E07 SlinkSfxService.reset_blocked+0x4": 5153,
-    "13:4E0A SlinkSfxService.reset_blocked+0x7": 5153
+    "13:4E03 SlinkSfxService.reset_blocked+0x0": 5301,
+    "13:4E07 SlinkSfxService.reset_blocked+0x4": 5333,
+    "13:4E0A SlinkSfxService.reset_blocked+0x7": 5333
    }
   },
   "u1": {
-   "allowed_writes": 202411,
+   "allowed_writes": 197497,
    "armed_frame": 1,
    "boot_clear": {},
    "boot_writes": 0,
@@ -279,11 +279,11 @@
     "cartram_sha256": "463d6b35dcd3ae97078386c7337a4c890bfb30ed05198a7fabc250abfec9926e",
     "field": "BizHawk gambatte RTC trailer",
     "game_hour": 11,
-    "host_time": 1790354520,
-    "new_hex": "000000006ab6a4580003010105001cdf600003010105",
+    "host_time": 1790401542,
+    "new_hex": "000000006ab75c060004010105001cdf600004010105",
     "old_hex": "000000006ab345eb000000042c001cdf60000000042c",
     "schema": "gen2-clock-setup-v1",
-    "sha256": "26fd450f31543495116362fceed24c0917e805e1784bb6f54e7721c3d704298e",
+    "sha256": "85ffdb4de743aa3bc3f6e4178e5322605f5456cd1c35900d9864e51fb3330914",
     "source_facts": [
      "home/time.asm FixTime: game time = wStartHour/Minute/Second + RTC",
      "libgambatte cartridge.cpp:504-580: the 22-byte RTC trailer"
@@ -301,18 +301,18 @@
     "lua_kind": "harness",
     "lua_source": "main",
     "native_addr": 52970,
-    "native_allowed": 15570,
+    "native_allowed": 15192,
     "native_caught": true,
-    "native_flagged": 27610,
+    "native_flagged": 29587,
     "native_writers": {
-     "00:0068 SlinkDelayFrameBridge+0x5": 15570,
-     "00:01CE VBlank_Normal.done_oam+0x4": 21175,
-     "00:021D VBlank_Cutscene.skip_lcd+0x4": 3971,
+     "00:0068 SlinkDelayFrameBridge+0x5": 15192,
+     "00:01CE VBlank_Normal.done_oam+0x4": 21983,
+     "00:021D VBlank_Cutscene.skip_lcd+0x4": 4491,
      "00:0607 Init.ByteFill+0x2": 1,
-     "33:41DF BattleAnimDelayFrame.wait+0x0": 2463
+     "33:41DF BattleAnimDelayFrame.wait+0x0": 3112
     }
    },
-   "corpus_frames": 25327,
+   "corpus_frames": 26645,
    "driver": {
     "files": {
      "lua/tests/duo/gen2_faint_inputs.lua": {
@@ -373,22 +373,22 @@
    "violation_count": 0,
    "violations": [],
    "writers": {
-    "13:4006 SlinkService+0x6": 15570,
-    "13:4009 SlinkService+0x9": 15570,
-    "13:400C SlinkService+0xc": 15570,
-    "13:400F SlinkService+0xf": 15570,
-    "13:4012 SlinkService+0x12": 15570,
-    "13:4017 SlinkService+0x17": 15570,
+    "13:4006 SlinkService+0x6": 15192,
+    "13:4009 SlinkService+0x9": 15192,
+    "13:400C SlinkService+0xc": 15192,
+    "13:400F SlinkService+0xf": 15192,
+    "13:4012 SlinkService+0x12": 15192,
+    "13:4017 SlinkService+0x17": 15192,
     "13:4026 SlinkService+0x26": 1,
     "13:402A SlinkService+0x2a": 1,
     "13:402D SlinkService+0x2d": 1,
-    "13:403D SlinkService.sample+0xe": 15569,
-    "13:4045 SlinkService.remember+0x0": 15569,
-    "13:4049 SlinkService.remember+0x4": 15570,
-    "13:4CE2 SlinkPhoneService.armed_valid+0x6": 15570,
-    "13:4E03 SlinkSfxService.reset_blocked+0x0": 15570,
-    "13:4E07 SlinkSfxService.reset_blocked+0x4": 15570,
-    "13:4E0A SlinkSfxService.reset_blocked+0x7": 15570
+    "13:403D SlinkService.sample+0xe": 15191,
+    "13:4045 SlinkService.remember+0x0": 15191,
+    "13:4049 SlinkService.remember+0x4": 15192,
+    "13:4CE2 SlinkPhoneService.armed_valid+0x6": 15192,
+    "13:4E03 SlinkSfxService.reset_blocked+0x0": 15192,
+    "13:4E07 SlinkSfxService.reset_blocked+0x4": 15192,
+    "13:4E0A SlinkSfxService.reset_blocked+0x7": 15192
    }
   }
  },
@@ -401,18 +401,18 @@
   "00:0086 SlinkResetSoundBridge+0x6": 1,
   "00:008A SlinkResetSoundBridge+0xa": 1,
   "00:008D SlinkResetSoundBridge+0xd": 1,
-  "13:4006 SlinkService+0x6": 32294,
-  "13:4009 SlinkService+0x9": 32294,
-  "13:400C SlinkService+0xc": 32294,
-  "13:400F SlinkService+0xf": 32294,
-  "13:4012 SlinkService+0x12": 32294,
-  "13:4017 SlinkService+0x17": 32294,
+  "13:4006 SlinkService+0x6": 31967,
+  "13:4009 SlinkService+0x9": 31967,
+  "13:400C SlinkService+0xc": 31967,
+  "13:400F SlinkService+0xf": 31967,
+  "13:4012 SlinkService+0x12": 31967,
+  "13:4017 SlinkService+0x17": 31967,
   "13:4026 SlinkService+0x26": 4,
   "13:402A SlinkService+0x2a": 4,
   "13:402D SlinkService+0x2d": 4,
-  "13:403D SlinkService.sample+0xe": 32290,
-  "13:4045 SlinkService.remember+0x0": 32290,
-  "13:4049 SlinkService.remember+0x4": 32294,
+  "13:403D SlinkService.sample+0xe": 31963,
+  "13:4045 SlinkService.remember+0x0": 31963,
+  "13:4049 SlinkService.remember+0x4": 31967,
   "13:4B33 SlinkPanel+0xb": 15,
   "13:4B36 SlinkPanel+0xe": 15,
   "13:4B39 SlinkPanel+0x11": 15,
@@ -422,15 +422,15 @@
   "13:4BA4 SlinkPanel.close+0x4": 15,
   "13:4BA7 SlinkPanel.close+0x7": 15,
   "13:4BAA SlinkPanel.close+0xa": 15,
-  "13:4CE2 SlinkPhoneService.armed_valid+0x6": 32294,
+  "13:4CE2 SlinkPhoneService.armed_valid+0x6": 31967,
   "13:4DD8 SlinkSfxService.play+0xf": 10,
   "13:4DDB SlinkSfxService.play+0x12": 10,
   "13:4DDE SlinkSfxService.play+0x15": 10,
   "13:4DEF SlinkSfxService.hold+0xc": 1,
   "13:4DF3 SlinkSfxService.count+0x0": 1,
   "13:4DFE SlinkSfxService.count+0xb": 62,
-  "13:4E03 SlinkSfxService.reset_blocked+0x0": 32190,
-  "13:4E07 SlinkSfxService.reset_blocked+0x4": 32222,
-  "13:4E0A SlinkSfxService.reset_blocked+0x7": 32222
+  "13:4E03 SlinkSfxService.reset_blocked+0x0": 31863,
+  "13:4E07 SlinkSfxService.reset_blocked+0x4": 31895,
+  "13:4E0A SlinkSfxService.reset_blocked+0x7": 31895
  }
 }

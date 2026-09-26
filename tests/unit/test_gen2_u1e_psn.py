@@ -17,6 +17,7 @@ No emulator: fixture-build reproducibility, the disclosure's exact delta and Gol
 offline/pure checks."""
 from __future__ import annotations
 
+import inspect
 import json
 from pathlib import Path
 
@@ -29,7 +30,10 @@ from tests.live.test_gen2_frame_align import (
     POISON_PARK,
     POISON_ROUTE,
     POISON_TRAINER,
+    SYNTH_PSN_HUNT,
+    SYNTH_PSN_PARK,
     poison_facts,
+    u1_facts,
 )
 from tools import gen2_duo_oracles as oracles, gen2_source_data, gen2_synth_fixtures as synth
 
@@ -107,24 +111,48 @@ def test_master_balls_replace_the_stock_poke_balls():
     assert oracles._ball_pocket(raw[:0x8000], layout) == [(master_ball_id, 5)]
 
 
-# --- Gold's leg selection ----------------------------------------------------------------------------------------
+# --- Gold's leg selection: synth_psn scopes the override to the gate's own gold_synth_psn run only ----------------
+#
+# Regression (re-sweep 7ba4d552, owner report 2026-09-26): an earlier cut changed POISON_ROUTE["gold"] etc.
+# directly, which EVERY Gold caller shares -- including the duo scenarios (tools/e2e_duo.py -> u1_facts ->
+# poison_facts), which boot the NATURAL, unpoisoned Gold fixture and still need the real Wade route. Only
+# test_engine_sites_fire_at_their_routines's own gold_synth_psn gate run passes synth_psn=True.
 
-def test_gold_no_longer_travels_or_hunts_or_fights_a_trainer():
-    assert POISON_ROUTE["gold"] == ()
-    assert "gold" not in POISON_TRAINER
-    assert "gold" not in POISON_HEAL
-    assert POISON_HUNT["gold"] == "Route29" and POISON_PARK["gold"] == ({"x": 53, "y": 11}, {"x": 52, "y": 11})
-
-
-def test_crystal_and_silver_keep_their_natural_route30_leg():
+def test_the_module_constants_keep_golds_natural_wade_route_for_every_other_caller():
+    """POISON_ROUTE/POISON_HUNT/POISON_PARK/POISON_TRAINER/POISON_HEAL are what a plain poison_facts(ctx) call
+    (synth_psn=False, the duo's own call shape) gets -- Gold's Wade route, same as Crystal/Silver's shape."""
+    assert POISON_ROUTE["gold"] and POISON_HUNT["gold"] == "Route31" and "gold" in POISON_TRAINER
+    assert POISON_PARK["gold"] == ({"x": 20, "y": 12}, {"x": 21, "y": 12}) and "gold" in POISON_HEAL
     for title in ("crystal", "silver"):
         assert POISON_ROUTE[title] and POISON_HUNT[title] == "Route30" and title in POISON_HEAL
         assert title not in POISON_TRAINER
 
 
-def test_gold_poison_facts_start_in_tick_on_its_own_catch_map():
+def test_synth_psn_override_constants_are_golds_own_catch_map():
+    assert SYNTH_PSN_HUNT == "Route29" and SYNTH_PSN_PARK == ({"x": 53, "y": 11}, {"x": 52, "y": 11})
+
+
+def test_duo_shaped_call_keeps_the_wade_route_and_no_start_phase():
+    """The duo's own call shape: poison_facts(ctx) with no synth_psn (tools/e2e_duo.py -> u1_facts, and
+    u1_facts's own default) -- Gold must still travel to Route 31 and fight Wade, exactly as it did before
+    gold_synth_psn existed. Red before the regression fix (7ba4d552 broke this)."""
     ctx = gen2_source_data.load_context("gold", root=ROOT)
     facts = poison_facts(ctx)
+    assert "start_phase" not in facts
+    assert facts["hunt_map"] == "Route31" and facts["legs"] and "heal" in facts and "trainer" in facts
+
+
+def test_u1_facts_defaults_synth_psn_false():
+    """u1_facts(ctx, facts, attempt_id) with no synth_psn is exactly the duo's own call shape
+    (tools/e2e_duo.py:3196: `u1_facts(ctx, facts, row["qualification_attempt_id"])`), which must keep
+    poison_facts on its own default (the Wade route)."""
+    default = inspect.signature(u1_facts).parameters["synth_psn"].default
+    assert default is False
+
+
+def test_gold_poison_facts_start_in_tick_on_its_own_catch_map_when_synth_psn():
+    ctx = gen2_source_data.load_context("gold", root=ROOT)
+    facts = poison_facts(ctx, synth_psn=True)
     assert facts["start_phase"] == "tick" and facts["hunt_map"] == "Route29"
     assert facts["legs"] == [] and "heal" not in facts and "trainer" not in facts
     # the park pair really is floor on the live map, not just asserted inside poison_facts
@@ -133,7 +161,13 @@ def test_gold_poison_facts_start_in_tick_on_its_own_catch_map():
         assert route29["grid"][tile["y"] * route29["width"] + tile["x"]] == 1
 
 
-def test_crystal_poison_facts_keep_their_start_phase_unset():
-    ctx = gen2_source_data.load_context("crystal", root=ROOT)
-    facts = poison_facts(ctx)
-    assert "start_phase" not in facts and facts["hunt_map"] == "Route30" and facts["legs"]
+def test_synth_psn_is_refused_for_crystal_and_silver():
+    for title in ("crystal", "silver"):
+        ctx = gen2_source_data.load_context(title, root=ROOT)
+        with pytest.raises(ValueError, match="Gold-only"):
+            poison_facts(ctx, synth_psn=True)
+
+
+def test_gate_call_site_passes_synth_psn_only_for_gold():
+    source = (ROOT / "tests/live/test_gen2_frame_align.py").read_text(encoding="utf-8")
+    assert 'synth_psn=title == "gold"' in source

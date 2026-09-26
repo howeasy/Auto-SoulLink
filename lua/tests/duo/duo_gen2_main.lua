@@ -599,7 +599,7 @@ function h.play(opts)
         reported=function() return rec.caught ~= nil end, settled=opts and opts.settled,
         max_frames=math.max(1, timeout - api.framecount()), max_phase_frames=D.max_phase_frames})
     return F.play(host, spec, driver, observe, {log=log, frame=api.framecount,
-        screen=function() return SG.screen(ctx) end, where=function() return "-" end,
+        screen=function() return SG.screen(ctx) end, where=function() local ok, pc, bank, sp = pcall(function() return api.register("PC"), api.read_u8(ctx.profile.hram.hROMBank, "System Bus"), api.register("SP") end) return ok and string.format("%02X:%04X SP=%04X", bank, pc, sp) or "-" end,
         trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
 end
 -- Poke Balls in the live Ball pocket, through the gate's own decoder (never production's).
@@ -619,7 +619,7 @@ function h.ball_gate_leg(mode)
                          max_frames=left, max_phase_frames=math.min(D.max_phase_frames or 40000, left),
                          settle_frames=F.BUDGET.settle_frames},
                   driver, SG.observer(ctx), {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end,
-                                             where=function() return "-" end, trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
+                                             where=function() local ok, pc, bank, sp = pcall(function() return api.register("PC"), api.read_u8(ctx.profile.hram.hROMBank, "System Bus"), api.register("SP") end) return ok and string.format("%02X:%04X SP=%04X", bank, pc, sp) or "-" end, trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
 end
 -- DUO-WAVE-D O-33 setups (lua/tests/duo/gen2_synth_duo.lua): the U1G route driver (lua/tests/gen2_u1g_inputs.lua
 -- U.driver, SLINK_GEN2_U1_FACTS.u1g) over the scripted gate's point plus party species, the party cursor and the box
@@ -642,7 +642,7 @@ function h.synth_leg(driver)
     return F.play(host, {name="duo-gen2-synth", terminal=driver.terminal, terminal_idle=true, max_frames=left,
                          max_phase_frames=math.min(D.max_phase_frames or 40000, left), settle_frames=F.BUDGET.settle_frames},
                   driver, observe, {log=log, frame=api.framecount, screen=function() return SG.screen(ctx) end,
-                                    where=function() return "-" end, trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
+                                    where=function() local ok, pc, bank, sp = pcall(function() return api.register("PC"), api.read_u8(ctx.profile.hram.hROMBank, "System Bus"), api.register("SP") end) return ok and string.format("%02X:%04X SP=%04X", bank, pc, sp) or "-" end, trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
 end
 -- The flushed native save: CartRAM digest == the first 0x8000 bytes of the flushed SaveRAM file.
 local function flushed()
@@ -712,7 +712,7 @@ function h.slot_of(key)
 end
 local function play(spec, driver, observe)
     return F.play(host, spec, driver, observe, {log=log, frame=api.framecount,
-        screen=function() return SG.screen(ctx) end, where=function() return "-" end,
+        screen=function() return SG.screen(ctx) end, where=function() local ok, pc, bank, sp = pcall(function() return api.register("PC"), api.read_u8(ctx.profile.hram.hROMBank, "System Bus"), api.register("SP") end) return ok and string.format("%02X:%04X SP=%04X", bank, pc, sp) or "-" end,
         trace=os.getenv("SLINK_GEN2_TRACE") == "1"})
 end
 -- START -> SAVE -> YES (-> overwrite) from the overworld: the link route's own save phase, alone.

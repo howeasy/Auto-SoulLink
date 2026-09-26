@@ -12,26 +12,26 @@ RX dead_keys
 BOOTED {"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 EC63:C4A6:9E
 HELLO_AT_CHECKPOINT {"frame":3368,"hellos":1,"ot_id":50342,"writes_enabled":true}
-CHORD_GATE {"frame":3404}
-CHORD {"frame":3404,"frames":4}
-RESET_SEEN {"delta":39,"frame":3443}
-HELLO_CLEARED {"delta":0,"frame":3443}
-WRITES_PAUSED {"delta":277,"frame":3720}
+CHORD_GATE {"frame":3396}
+CHORD {"frame":3396,"frames":4}
+RESET_SEEN {"delta":39,"frame":3435}
+HELLO_CLEARED {"delta":0,"frame":3435}
+WRITES_PAUSED {"delta":285,"frame":3720}
   phase title @3720
-  phase continue @6654
+  phase continue @6647
 TX {"area_id":"route_29","artifact_kind":"clean","badges":0,"ball_count":10,"event":"hello","foundation":"gen2_gsc","has_pokeballs":true,"in_battle":false,"kanto_badges":0,"loc_name":"ROUTE 29","ot_id":50342,"panel":false,"
-HELLO_AGAIN {"frame":6774,"n":2,"ot_id":50342}
-  phase loaded @6774
+HELLO_AGAIN {"frame":6767,"n":2,"ot_id":50342}
+  phase loaded @6767
 RX resolved_areas
 RX config
 RX dead_keys
-REBOOTED {"frame":6804,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
-WRITES_RESUMED {"delta":3361,"frame":6804}
-REHELLO {"frame":6804,"hellos":2,"ot_id":50342}
+REBOOTED {"frame":6797,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
+WRITES_RESUMED {"delta":3362,"frame":6797}
+REHELLO {"frame":6797,"hellos":2,"ot_id":50342}
 NO_WRITES_IN_WINDOW {"writes":0}
 MYKEY 0 EC63:C4A6:9E
-  phase save @6804 xy=53,12
-  phase saved @7498 xy=53,12
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"3e738d4e15ee82231cf5617140c088b1caa3f474ae1aaa5a6f93666863f19e54","client_saves":1,"flushed_matches":true,"frame":7528,"gate_saves":1,"save_completed_frame":7498,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_soft_reset_s941_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_soft_reset_s941_a_witness.SaveRAM"}
-RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":50342},"input_mode":"normal_buttons","paused":{"delta":277,"frame":3720},"player":"a","rehello":{"frame":6804,"hellos":2,"ot_id":50342},"reset":{"delta":39,"frame":3443},"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"3e738d4e15ee82231cf5617140c088b1caa3f474ae1aaa5a6f93666863f19e54","client_saves":1,"flushed_matches":true,"frame":7528,"gate_saves":1,"save_completed_frame":7498,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/saveram_gen2_soft_reset_s941_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs2/patch/build/e2e_gen2_soft_reset_s941_a_witness.SaveRAM"},"scenario":"gen2_soft_reset","schema":"gen2-duo-soft-reset-v1","title":"gold"}
+  phase save @6797 xy=53,12
+  phase saved @7491 xy=53,12
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"6063363b17c8bc8ea7e774eb302f459274d776ece54062f8064767f0fc73439a","client_saves":1,"flushed_matches":true,"frame":7521,"gate_saves":1,"save_completed_frame":7491,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_soft_reset_s941_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_soft_reset_s941_a_witness.SaveRAM"}
+RECEIPT {"attempt":1,"booted":{"frame":3368,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12},"case":"gold_battle","client":{"pack":"gen2_gold","production_admitted":true,"qualification":"PHYSICAL_RECEIPTED","registered_sites":["battle_end","battle_faint","capture_box","capture_box_finalized","capture_party","capture_party_finalized","change_box_begin","change_box_loaded","evolution_species_published","gift_begin","gift_party_finalized","hatch_finalized","hatch_species","npc_trade_begin","npc_trade_finalized","pc_deposit_begin","pc_deposit_complete","pc_release_box_begin","pc_release_box_complete","pc_release_party_begin","pc_release_party_complete","pc_withdraw_begin","pc_withdraw_complete","poison_faint","save_completed","whiteout_before_heal","wild_ready"],"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","title":"gold"},"fixture_sha256":"6864b34a79e63fa9c8954c37cb805a690da4cf36447bda179ecf0742a072a3b6","harness_write_scopes":[],"hello":{"ball_count":10,"frame":3338,"has_pokeballs":true,"ot_id":50342},"input_mode":"normal_buttons","paused":{"delta":285,"frame":3720},"player":"a","rehello":{"frame":6797,"hellos":2,"ot_id":50342},"reset":{"delta":39,"frame":3435},"rom_sha1":"d8b8a3600a465308c9953dfa04f0081c05bdcb94","save":{"cartram_bytes":32768,"cartram_sha256":"6063363b17c8bc8ea7e774eb302f459274d776ece54062f8064767f0fc73439a","client_saves":1,"flushed_matches":true,"frame":7521,"gate_saves":1,"save_completed_frame":7491,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/saveram_gen2_soft_reset_s941_a/Pokemon - Gold Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs3/patch/build/e2e_gen2_soft_reset_s941_a_witness.SaveRAM"},"scenario":"gen2_soft_reset","schema":"gen2-duo-soft-reset-v1","title":"gold"}
 RESULT: PASS (same-save soft reset: one re-hello, no writes in the cleared window)
