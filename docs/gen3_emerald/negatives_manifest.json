@@ -87,6 +87,10 @@
     {
      "kind": "map_load",
      "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+    },
+    {
+     "kind": "faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. The lead never faints on this run (the receipt's phases end with it standing)."
     }
    ]
   },
@@ -123,6 +127,10 @@
     {
      "kind": "map_load",
      "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+    },
+    {
+     "kind": "faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. The lead never faints on this run (the receipt's phases end with it standing)."
     }
    ]
   },
@@ -207,6 +215,10 @@
     {
      "kind": "map_load",
      "why": "docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.txt runs only the legs emerald_calvin_trainer_battle..emerald_calvin_trainer_battle from emerald_trainer.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+    },
+    {
+     "kind": "faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.txt runs only the legs emerald_calvin_trainer_battle..emerald_calvin_trainer_battle from emerald_trainer.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. The lead never faints on this run (the receipt's phases end with it standing)."
     }
    ]
   },
@@ -247,6 +259,10 @@
     {
      "kind": "map_load",
      "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+    },
+    {
+     "kind": "faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. The lead never faints on this run (the receipt's phases end with it standing)."
     }
    ]
   },
@@ -343,6 +359,10 @@
     {
      "kind": "poison_faint",
      "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "map_load",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Talking to an NPC warps nowhere; map_load hooks CB2_LoadMap2 only."
     }
    ]
   }

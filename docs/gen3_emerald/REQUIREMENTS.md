@@ -82,7 +82,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| EW-1 | Checkpoint true in Littleroot/Oldale overworld; false with an empty write log in every reachable forbidden state; unreachable states recorded as SOURCE-only limits | ENGINE + CONTROL | ✓ | ✓ | ✓ |
+| EW-1 | Checkpoint true in Littleroot/Oldale overworld; false with an empty write log in every reachable forbidden state; unreachable states recorded as SOURCE-only limits | ENGINE + CONTROL | ✓ | ✓ | ◐ |
 | EW-2 | P+H active in-battle faint on Emerald singles (re-pinned list in `PLAN.md` §3 E4); doubles/Steven multi hold | GAME | · | · | · |
 | EW-3 | Writes inside Emerald Pokémon Centers (Union Room tasks allowed, as FRLG ruling) | GAME | · | · | · |
 
@@ -98,13 +98,15 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 - **ER-3:** badges at 0 and at 4 (`probes/reads_pydec_emerald_badges_2026-09-26.txt`, straddle
   0x10C/0x10D) and balls are PHYSICAL. Badges 5-8, battle reads and trainer reads are
   SOURCE/MODEL only.
-- **ES-1:** `probes/hooks_emerald_2026-09-25.txt`; the live gate passes at the clean cut ddff9b81.
+- **ES-1:** `probes/hooks_emerald_2026-09-26.txt`, tracked-clean at `c891455d`. Rows a-return, b-interior and f are OPEN, as on FR.
 - **ES-2:** there are eight observer receipts (`probes/shadow_emerald_*_2026-09-26.*`) and the
-  negatives manifest (`negatives_manifest.json`, 70/70). 11 of the 12 coverage kinds are
+  negatives manifest (`negatives_manifest.json`, 75/75, the complete matrix). 11 of the 12 coverage kinds are
   PHYSICAL; `trade_done` needs a link partner (E5).
-- **EW-1:** `probes/checkpoint_emerald_2026-09-25.txt` (core + Oldale Center + map popup) and
-  `probes/checkpoint_emerald_battle_2026-09-26.txt` (21/21) establish it. The Emerald-only
-  forbidden states are SOURCE-only (`write_checkpoint.md` §8).
+- **EW-1 ◐:** `probes/checkpoint_emerald_battle_2026-09-26.txt` (21/21, tracked-clean) covers
+  every probed row. NOT run on Emerald: `pc_menu` (the PC write window), `battle_faint_prompt`,
+  `battle_link` and the companion/RR rows. The probe constructs no writer, so an empty write
+  log is not evidence here. The Emerald-only forbidden states are SOURCE-only
+  (`write_checkpoint.md` §8).
 
 
 ## C: Client / server / pairing

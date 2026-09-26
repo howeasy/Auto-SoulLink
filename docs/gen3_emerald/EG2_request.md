@@ -3,7 +3,9 @@
 - **Branch:** `claude/gen3-emerald` (worktree `.claude/worktrees/gen3-emerald`). Local only: not
   pushed.
 - **Base:** master `a20cd945` (Gen 3 landed per ruling 26) is merged in.
-- **Frozen cut for this request:** `c7fcbe50`; the live runs ran at `414afb92`.
+- **Frozen cut for this request:** `c7fcbe50`; the live runs ran at `414afb92`. The hooks
+  re-run and the request corrections from the OMP fact check cx-3b167167 land on top (docs and
+  receipts only).
 - **Plan:** `docs/gen3_emerald/PLAN.md` (E2 row). **Ledger:** `docs/gen3_emerald/REQUIREMENTS.md`
   (E2 evidence block).
 
@@ -15,8 +17,14 @@ you sign that:
 - **Sites.** The `gen3_emerald` engine sites fire on real play, with a positive and a negative
   receipt per exercised kind (§2). 11 of the 12 coverage kinds are PHYSICAL; `trade_done` is OPEN
   (link partner, E5).
-- **Checkpoint.** The write checkpoint judges every reachable Emerald state correctly, and the
-  write log stays empty: 21/21 rows, plus the core seven and the Oldale Center/map-popup rows.
+- **Checkpoint.** The write checkpoint predicate judges every PROBED Emerald state correctly:
+  21/21 rows (the core seven, the Oldale Center and map-popup rows, the Emerald battle-field rows
+  and nine battle-reason rows), tracked-clean at `3c17af21`. The probe constructs no writer
+  (`WRITE_SURFACE none`), so every negative row is a refusal count; write behaviour itself is not
+  exercised here (duos, E4). Rows NOT run on Emerald, carried in §5: `pc_menu`,
+  `battle_faint_prompt`, `battle_link`, `native_idle_field`, `native_idle_battle`,
+  `battle_commit_held_rr` (the last three are companion/RR rows). **`pc_menu` matters:** the
+  `pc_move` SITES fire (§2), but the checkpoint's PC write window is not proven on Emerald.
 - **Reads.** `reads.lua` == the PYDEC twin on live Emerald RAM: party/box, location, balls, and
   badges at 0 and at 4 across the flag-byte straddle.
 
@@ -68,30 +76,36 @@ The observer builds the unadmitted title only through the observer-only seam
 
 | Kind (semantic) | Positive receipt (count) | Negative receipts (manifest must_not) | Status |
 |---|---|---|---|
-| map_load | pc: door warp into the Center (1) | battle, catch, lowhp, trainer, evolve, poison (structural: `CB2_LoadMap2` has one caller, pret `overworld.c:1579`) | PHYSICAL |
+| map_load | pc: door warp into the Center (1) | battle, catch, lowhp, trainer, evolve, poison, gift (structural: `CB2_LoadMap2` has one caller, pret `overworld.c:1579`) | PHYSICAL |
 | save | pc: `save_town` (1); fires ~230 frames after the flash counter flips | battle, catch, lowhp, trainer, evolve, poison, gift | PHYSICAL |
 | battle_begin / battle_end | battle, catch, lowhp, trainer, evolve (5/5) | pc, poison, gift | PHYSICAL |
-| faint | lowhp (in battle), poison (field) (2) | pc, gift | PHYSICAL |
-| whiteout | lowhp: 1-HP Mudkip faints, returns to Oldale (1) | pc, battle, catch, trainer, evolve, poison | PHYSICAL |
-| pc_move (deposit/withdraw/box_place/release) | pc (6 raw; `pc_box_place` co-fires with deposit/withdraw as on FR/RR) | battle, catch, lowhp, trainer, evolve, poison, gift | PHYSICAL |
-| capture_wild | catch: 3 real throws, balls 20→17, outcome CAUGHT (1) | battle, lowhp, trainer, evolve, poison, gift | PHYSICAL |
+| faint | lowhp: the raw battle `faint` site (1); the poison receipt adds 1 through the reducer's poison_faint→faint fold, and the raw `faint` site does NOT fire on field poison | pc, battle, catch, trainer, evolve, gift | PHYSICAL |
+| whiteout | lowhp: 1-HP Mudkip faints, returns to Oldale (1) | pc, battle, catch, trainer, evolve, poison, gift | PHYSICAL |
+| pc_move (deposit/withdraw/box_place/release) | pc: 6 normalized events from 7 raw `pc_*` lines (`pc_release_begin` folds into release; `pc_box_place` co-fires with deposit/withdraw as on FR/RR) | battle, catch, lowhp, trainer, evolve, poison, gift | PHYSICAL |
+| capture_wild | catch: 3 real throws, balls 20→17, outcome CAUGHT (1) | pc, battle, lowhp, trainer, evolve, poison, gift | PHYSICAL |
 | mon_given | gift: the Lavaridge egg (1); catch (co-fires through `GiveMonToPlayer`) | pc, battle, lowhp, trainer, evolve, poison | PHYSICAL |
 | evolve_species_store | evolve: Mudkip → Marshtomp, A only (1) | pc, battle, catch, lowhp, trainer, poison, gift | PHYSICAL |
-| poison_faint | poison: field poison takes a 1-HP lead to 0, no whiteout (1) | pc, battle, catch, lowhp, trainer, evolve, gift | PHYSICAL |
+| poison_faint | poison: field poison takes a 1-HP lead to 0 (1); a healthy second mon keeps the party up by design | pc, battle, catch, lowhp, trainer, evolve, gift | PHYSICAL |
 | trade_done | none | all eight receipts | OPEN (link partner; E5) |
 
 `python tools/gen3_shadow_negatives.py docs/gen3_emerald/negatives_manifest.json`: 8 receipts,
-70 expected-zero checks, all PASS.
+75 expected-zero checks, all PASS: the complete matrix, 12 kinds × 8 receipts minus the 21
+present-kind cells.
 
 **Checkpoint:**
 - `probes/checkpoint_emerald_2026-09-25.txt`: core seven, center_idle, and map_popup with its
-  falsifier run.
+  falsifier run. A DIRTY-tree receipt (`ead073d6` + edits); every row is re-covered tracked-clean
+  by the 09-26 receipt.
 - `probes/checkpoint_emerald_battle_2026-09-26.txt`: 21/21 at `3c17af21`, tracked-clean.
 
 **Reads:** `probes/reads_pydec_emerald_2026-09-26.txt` (two states) and
 `probes/reads_pydec_emerald_badges_2026-09-26.txt` (4 badges).
 
-**Probe matrix:** `probes/hooks_emerald_2026-09-25.txt` (rows a–g); the live gate passes at `ddff9b81`.
+**Probe matrix:** `probes/hooks_emerald_2026-09-26.txt`, tracked-clean at `c891455d` (code ==
+the run cut); it replaces the dirty-tree 09-25 receipt. Rows a, b-base, c, d, e and g PASS.
+OPEN: a-return (no battle driven, by design), b-interior (+1/+2 interior hooks never fire, as on
+FR), and f (the fps legs pin at 60 under the 1x-throttled gate config). The frame-end census
+passes in the same run (overworld idle 1800/1800 at the modal PC).
 
 ## 3 Defects found and fixed during E2
 
@@ -126,7 +140,14 @@ Most were found only by live runs:
 
 - The Emerald-only forbidden states (contests, secret bases, record mixing, Frontier,
   multi-partner) are SOURCE-only (`docs/gen3_emerald/write_checkpoint.md` §8).
-- ER-3: badges 5-8, battle reads and trainer reads are SOURCE/MODEL only.
+- ER-3: badges 5-8, battle reads and trainer reads are SOURCE/MODEL only. (The 09-26
+  reads receipt's "badges only at 0" line predates the badges receipt of the same day.)
+- EW-1: the checkpoint rows not run on Emerald (§1); the PC write window (`pc_menu`); and write
+  behaviour under the predicate (no writer in the probe).
+- Hooks rows a-return, b-interior and f stay OPEN, as on FR.
+- Pins: pret master `5eff7864` was the research snapshot; the symbols branch `dba968c6` is
+  built FROM source commit `c65e93f2`. Every address and citation uses `c65e93f2`, the commit
+  EG0 signed.
 - F-C (`gen3_boot_check.lua` SIZES) and F-D (reads dump driver rows) are still open.
 - **To E3** (the Gen 3 coordinator approved the direction on these conditions: the FR/LG/RR packs
   gain explicit fields, the FR/LG/RR client stays byte-identical, and a missing field fails
