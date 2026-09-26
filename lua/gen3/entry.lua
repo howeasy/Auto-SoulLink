@@ -114,7 +114,7 @@ for _, pack in pairs(Entry.PACKS) do
 end
 -- A header-named vanilla family (an unknown-hash cartridge that still says BPRE/BPGE) reads
 -- the clean artifact's pack data; if its bytes really differ, the site check refuses it.
-Entry.BASE_KIND = { named = "clean" }
+Entry.BASE_KIND = { named = "clean", rand = "clean" }
 
 -- ── admission ────────────────────────────────────────────────────────────────────────
 
@@ -213,7 +213,9 @@ function Entry.admit(args)
         local matches = Entry.anchor_matches(args)
         if #matches == 1 then
             local m = matches[1]
-            return { pack = m.pack, title = m.title, kind = m.kind, rom_type = m.rom_type,
+            local kind = m.kind
+            if kind == "clean" and Entry.PACKS[m.pack].randomizable == true then kind = "rand" end
+            return { pack = m.pack, title = m.title, kind = kind, rom_type = m.rom_type,
                      rom_hash = hash, admitted_by = "anchors" }
         elseif #matches > 1 then
             local names = {}
