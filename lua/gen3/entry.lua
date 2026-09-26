@@ -59,6 +59,7 @@ end
 --                with an unknown hash is admitted by anchors or not at all.
 Entry.PACKS = {
     gen3_frlg = {
+        randomizable = true, -- R0; Emerald gets its own E-bind later, never inherited
         rom_type = { firered = "firered", leafgreen = "leafgreen" },
         header_code = { BPRE = "firered", BPGE = "leafgreen" },
     },
