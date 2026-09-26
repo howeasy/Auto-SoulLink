@@ -42,17 +42,22 @@ EMERALD_ONLY_FIRST = EMERALD_ONLY[0][0]
 KNOWN_MOVE_DIFFS = {"MOVE_NATURE_POWER": {"accuracy": (0, 95)}}
 
 
-def _pret_available() -> bool:
+def _missing_pret_repos() -> list[str]:
+    """Which of the two checkouts this test needs are actually absent, so the skip reason names
+    the repo that is missing instead of a blanket message covering both regardless of which."""
+    missing = []
     for repo in (PRET_FRLG, PRET_EMERALD):
         try:
             gam._find_pret_checkout(repo)
         except FileNotFoundError:
-            return False
-    return True
+            missing.append(repo)
+    return missing
 
 
+_MISSING_PRET = _missing_pret_repos()
 needs_pret = pytest.mark.skipif(
-    not _pret_available(), reason="pret/pokefirered + pret/pokeemerald checkouts not present locally"
+    bool(_MISSING_PRET),
+    reason=" and ".join(f"{repo} not cloned" for repo in _MISSING_PRET),
 )
 
 _DEFINE_RE = re.compile(r"^#define\s+([A-Z0-9_]+)\s+(\d+)\s*$")

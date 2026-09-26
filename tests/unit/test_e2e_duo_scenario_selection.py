@@ -627,17 +627,24 @@ def test_every_game_runs_something(game):
 # was wrong.
 
 
-@pytest.mark.parametrize("game", sorted(GAMES))
-def test_savestate_games_are_never_given_a_batteryless_scenario(game):
+def test_savestate_games_are_never_given_a_batteryless_scenario():
     """This direction IS load-bearing: tests/e2e/test_duo.py KeyErrors in `_states_for` on a
     scenario with no savestate, so selecting one for Gen 3 breaks collection of the whole
-    module rather than failing a single test."""
-    if not GAMES[game]["uses_savestate"]:
-        pytest.skip(f"{game} boots from a battery save")
-    offenders = [n for n in scenarios_for(game) if "savestate" not in SCENARIOS[n]]
-    assert not offenders, (
-        f"{game} loads savestates but would be given scenario(s) that declare none: "
-        f"{offenders}")
+    module rather than failing a single test.
+
+    Every current GAMES row battery-boots (the old Gen 3 client's savestate row retired with
+    lua/tests/duo/duo_main.lua to tag archive/gen3-old-client, C5-5/46a5f597), so this loop runs
+    zero iterations today and passes vacuously -- it is a guard for a future savestate-boot row,
+    not dead weight: parametrizing over GAMES and skipping the batteryless ones (the previous
+    shape of this test) reported a skip per game instead of asserting nothing had to be skipped.
+    """
+    for game in GAMES:
+        if not GAMES[game]["uses_savestate"]:
+            continue
+        offenders = [n for n in scenarios_for(game) if "savestate" not in SCENARIOS[n]]
+        assert not offenders, (
+            f"{game} loads savestates but would be given scenario(s) that declare none: "
+            f"{offenders}")
 
 
 def test_gen3_rr_selection_is_exactly_the_radical_red_set():
@@ -1084,7 +1091,6 @@ def test_gold_poison_a_plays_the_post_errand_save():
 
 def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     """A 255-char SaveRAM path was never written by BizHawk (silent); the lane refuses at 240 before any launch."""
-    from types import SimpleNamespace
     assert duo_module.bizhawk_path_problem(["C:/x/" + "a" * 200]) is None
     long = "C:/x/" + "a" * 250
     assert duo_module.bizhawk_path_problem(["C:/x/short", long]) == os.path.abspath(long)

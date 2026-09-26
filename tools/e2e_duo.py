@@ -2273,12 +2273,6 @@ GAMES = {
         "fixture": {"a": "crystal_battle", "b": "gold_battle"},
         "scenario_prefix": "gen2_",
     },
-    "gen3_rr": {
-        "main": "lua/tests/duo/duo_main.lua",
-        "rom": {"a": ROM_REL, "b": ROM_REL},
-        "uses_savestate": True,
-        "scenario_prefix": "",
-    },
     # The NEW Gen 1 client (lua/gen1/entry.lua composition root), Red as A and Blue as B, on
     # the battle fixtures rebuilt from scripted play (tools/gen1_fixtures.py). The scenarios it
     # runs are the ones that NAME it: `gen1_new` is opt-in (OPT_IN_GAMES), so the
