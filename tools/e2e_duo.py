@@ -2390,6 +2390,9 @@ GAMES = {
         "game": "gen3_emerald",
         "play": "gen3_fixtures",
         "sides": {"a": ("emerald", "emerald_{target}"), "b": ("emerald", "emerald_{target}_b")},
+        # the grass the drivers hunt (EMH.hunt_grass, Route 102 (21..22,16..17)): the server's
+        # area id every route_1-bound oracle reads through DuoRun._hunt_area
+        "hunt_area": "route_102",
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,
@@ -2563,6 +2566,12 @@ class DuoRun:
         """The row decodes Radical Red's layout (GAMES[...]["rr"]); every saved-state read,
         record-validity rule and bag read below threads it (Codex C4-6b finding 1)."""
         return bool((getattr(self, "gcfg", None) or {}).get("rr"))
+
+    @property
+    def _hunt_area(self) -> str:
+        """The server area id of the row's hunting grass (GAMES[...]["hunt_area"]; Route 1 unless
+        the row says otherwise -- gen3_emerald hunts Route 102)."""
+        return (getattr(self, "gcfg", None) or {}).get("hunt_area", "route_1")
 
     def _gen3_limits(self, inst):
         """gen3_limits for this instance's title over the ROM it booted (cached per ROM path):
@@ -6054,8 +6063,8 @@ class DuoRun:
         self._go_one("a")
         area = self.wait_for("A's failed encounter to lock an area", self._dead_zone_area,
                         self.cfg["timeout"])
-        if area != "route_1":
-            raise RuntimeError(f"A locked {area!r}, expected route_1")
+        if area != self._hunt_area:
+            raise RuntimeError(f"A locked {area!r}, expected {self._hunt_area}")
         self.wait_for("A to report its no_catch",
                  lambda: "NO_CATCH" in (read_result(self.scenario, "a") or ""), 60)
         print(f"[duo] DEAD ZONE FROM REAL PLAY (new client): {area}")
@@ -7329,13 +7338,13 @@ class DuoRun:
         in its saved party exactly once (appended, boxed nowhere, species as sent), and each
         saved POKe BALLS pocket is the fixture's minus the throws that half logged."""
         self._gen3_flush_boundary()
-        row = self._gen3_one_link("alive")
-        problems = [] if row.get("area_id") == "route_1" else [f"link area {row.get('area_id')!r}"]
+        row, area = self._gen3_one_link("alive"), self._hunt_area
+        problems = [] if row.get("area_id") == area else [f"link area {row.get('area_id')!r}"]
         for inst in ("a", "b"):
             key, text = self._link_keys[inst], results[inst]
             sent = self._gen3_sent_event(text, "capture", key) or {}
-            if sent.get("area_id") != "route_1":
-                problems.append(f"{inst}: no capture of {key} sent for route_1")
+            if sent.get("area_id") != area:
+                problems.append(f"{inst}: no capture of {key} sent for {area}")
             problems += gen3_capture_problems(inst, self._gen3_saved(inst),
                                               self._gen3_fixture_saved(inst), key, sent,
                                               rr=self._gen3_rr, limits=self._gen3_limits(inst))
