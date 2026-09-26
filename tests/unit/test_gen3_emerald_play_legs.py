@@ -62,7 +62,7 @@ _FIXTURE_TILES = {
 _LEG_MARKER = "EMERALD_LEGS[#EMERALD_LEGS + 1] = {"
 _LEG_NAME = re.compile(r'name = "(?P<name>emerald_\w+)"')
 _CHECK_CALL = re.compile(
-    r'check = emerald_at\((?P<g>\d+), (?P<n>\d+), (?P<x>\d+), (?P<y>\d+)\)')
+    r'check = emerald_at\((?P<g>\d+), (?P<n>\d+), (?P<x>\d+), (?P<y>\d+)[,)]')
 
 
 def _leg_chunks(src):
@@ -192,6 +192,7 @@ def test_group_start_checks_match_the_committed_fixture_tiles():
         "emerald_enter_pc": _FIXTURE_TILES["town"],
         "emerald_route102_wild_battle": _FIXTURE_TILES["battle"],
         "emerald_calvin_trainer_battle": _FIXTURE_TILES["trainer"],
+        "emerald_route102_faint": _FIXTURE_TILES["battle"],  # emerald_lowhp.sav: same tile
     }
     for name, want in expected.items():
         assert name in found, f"leg {name!r} carries no check = emerald_at(...)"
@@ -351,3 +352,112 @@ def test_every_new_title_syms_entry_resolves_for_emerald():
     ):
         assert name in got, f"{name}: missing from for_title('emerald')"
         assert isinstance(got[name], int) and got[name] > 0
+
+
+# -- 6. card E2-LEGS: the four PC legs and faint/whiteout are real, and their group guards bite ---
+
+_E2_LEGS = (
+    "emerald_pc_deposit", "emerald_pc_withdraw", "emerald_pc_box_place", "emerald_pc_release",
+    "emerald_route102_faint", "emerald_route102_whiteout",
+)
+
+
+def _leg(legs, name):
+    for i in range(1, len(legs) + 1):
+        if legs[i]["name"] == name:
+            return legs[i]
+    raise AssertionError(f"leg {name!r} not found")
+
+
+@pytest.mark.parametrize("name", _E2_LEGS)
+def test_e2_legs_are_real_legs_with_kinds_and_sources(legs, name):
+    leg = _leg(legs, name)
+    assert not leg["open"], f"{name}: still OPEN ({leg['open_reason']})"
+    assert leg["run"] is not None, f"{name}: no run()"
+    assert _py_list(leg["exercises"]), f"{name}: no exercises"
+    assert _py_list(leg["source"]), f"{name}: no pret source"
+
+
+# A fake GBA RAM so a leg's check(cp) runs under lupa: the same SaveBlock1-pointer chain G.map /
+# G.pos read, plus gPlayerPartyCount and slot 0's HP words.
+_FAKE_RAM = """
+RAM = {}
+local function b(a) return RAM[a] or 0 end
+memory = {
+  read_u8 = b,
+  read_u16_le = function(a) return b(a) | (b(a + 1) << 8) end,
+  read_s16_le = function(a) local v = b(a) | (b(a + 1) << 8); if v >= 0x8000 then v = v - 0x10000 end; return v end,
+  read_u32_le = function(a) return b(a) | (b(a + 1) << 8) | (b(a + 2) << 16) | (b(a + 3) << 24) end,
+}
+function poke(a, v, n) for i = 0, n - 1 do RAM[a + i] = (v >> (8 * i)) & 0xFF end end
+"""
+_SB1_PTR, _SB1 = 0x03005D8C, 0x02025A00
+_PARTY_COUNT, _PARTY = 0x020244E9, 0x020244EC
+
+
+def _world(lua, group, num, x, y, party_n, hp, maxhp):
+    lua.execute(_FAKE_RAM)
+    poke = lua.globals().poke
+    poke(_SB1_PTR, _SB1, 4)
+    poke(_SB1 + 0, x, 2)
+    poke(_SB1 + 2, y, 2)
+    poke(_SB1 + 4, group, 1)
+    poke(_SB1 + 5, num, 1)
+    poke(_PARTY_COUNT, party_n, 1)
+    poke(_PARTY + 0x56, hp, 2)
+    poke(_PARTY + 0x58, maxhp, 2)
+    return lua.eval(f"{{pointers = {{gSaveBlock1Ptr = {{address = {_SB1_PTR}}}}}}}")
+
+
+def test_pc_group_guard_takes_emerald_pc_sav_and_rejects_the_one_mudkip_town_fixture(lua, legs):
+    check = _leg(legs, "emerald_enter_pc")["check"]
+    assert check(_world(lua, 0, 10, 6, 17, 2, 20, 20)) is None      # emerald_pc.sav
+    why = check(_world(lua, 0, 10, 6, 17, 1, 20, 20))                 # emerald_town.sav
+    assert why and "party" in why
+
+
+def test_faint_group_guard_takes_lowhp_and_rejects_the_full_hp_battle_fixture(lua, legs):
+    check = _leg(legs, "emerald_route102_faint")["check"]
+    assert check is not None, "emerald_route102_faint starts the lowhp group and needs a check"
+    assert check(_world(lua, 0, 17, 21, 16, 1, 1, 20)) is None       # emerald_lowhp.sav
+    why = check(_world(lua, 0, 17, 21, 16, 1, 20, 20))                # emerald_battle.sav
+    assert why and "HP" in why
+    assert check(_world(lua, 0, 17, 22, 16, 1, 1, 20))                # wrong tile still refused
+
+
+def test_grass_legs_walk_back_to_the_group_origin_before_the_next_legs_check():
+    chunks = {}
+    for c in _leg_chunks(_SCRIPT_SRC):
+        m = _LEG_NAME.search(c)
+        if m:
+            chunks[m.group("name")] = c
+    for name in ("emerald_route102_wild_battle", "emerald_route102_catch"):
+        assert "emerald_return_to_grass_origin(cp," in chunks[name], name
+
+
+# -- 7. SLINK_GEN3_PLAY_STOP_AFTER on EMERALD_LEGS, and the boot's field-free polarity ------------
+
+def test_emerald_stop_after_truncates_and_appends_nothing(module, legs):
+    cut = module.emerald_stopped_legs
+    got = cut("emerald_save_town")
+    names = [got[i]["name"] for i in range(1, len(got) + 1)]
+    assert names[-1] == "emerald_save_town"
+    assert names == [legs[i]["name"] for i in range(1, len(names) + 1)]
+    last = cut(legs[len(legs)]["name"])
+    assert len(last) == len(legs)
+
+
+def test_emerald_stop_after_refuses_an_unknown_leg(module):
+    got, why = module.emerald_stopped_legs("no_such_leg")
+    assert got is None and "no_such_leg" in why
+
+
+def test_emerald_boot_counts_frames_only_while_the_field_is_free():
+    """pred_ok(cp, "field_controls_locked") is TRUE when sLockFieldControls == 0 (free). The live
+    run's boot negated it and waited 9000 frames for a locked field (coordinator, 2026-09-26)."""
+    start = _SCRIPT_SRC.index("-- A-only boot (no Start pulse)")
+    boot = _SCRIPT_SRC[start:_SCRIPT_SRC.index("shadow = {", start)]
+    assert 'G.pred_ok(cp, "callback2") and G.pred_ok(cp, "field_controls_locked")' in boot
+    assert 'not G.pred_ok(cp, "field_controls_locked")' not in boot
+    save = _function_body("emerald_save_via_menu")
+    assert 'not G.pred_ok(cp, "field_controls_locked")' not in save
