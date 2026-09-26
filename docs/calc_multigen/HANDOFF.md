@@ -114,7 +114,7 @@ Hand-worked cases that matched the calc exactly:
   (`tests/unit/test_calc_trainer_sets.py`, `test_emerald_species_levels_match_pret` +
   `test_emerald_named_trainer_details_match_pret`): whole-file species+level, plus per-trainer
   item/explicit-or-derived-moves/IV for every trainer whose name uniquely identifies one
-  `gTrainers[]` entry. That pass found and fixed 172 wrong values (163 IV, 7 held item, 2 moves)
+  `gTrainers[]` entry. That pass found and fixed 178 wrong values (169 IV, 7 held item, 2 moves)
   -- see the file's own header comment. Left unchecked and documented as such: trainers with an
   ambiguous or generic name (can't be resolved to one `gTrainers[]` entry from the label text
   alone), and nature/ability (both are deterministic in the real engine, but replicating the

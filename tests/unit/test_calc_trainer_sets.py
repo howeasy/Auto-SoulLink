@@ -845,6 +845,8 @@ EMERALD_SL_MAX_PRET_ONLY = 828
 # correctly but whose vendored team is missing a few of that trainer's own mons (not a wrong
 # value on the mons it does have -- see the module-level "Emerald has no rematch system"
 # note above; this is that same curation gap, just visible per-trainer instead of file-wide).
+# 654 vendored mons resolve to a uniquely named pret trainer; 343 labels are ambiguous or generic.
+EMERALD_CHECKED_MONS, EMERALD_UNMATCHED_LABELS = 654, 343
 EMERALD_PARTIAL_TEAM_ALLOWLIST = {
     "PAT": "Pokemon Breeder Pat has 6 pret mons (poochyena/shroomish/electrike/marill/"
            "sandshrew/gulpin, all lvl 25); the vendor only carries 3 of them",
@@ -1028,7 +1030,7 @@ def test_emerald_named_trainer_details_match_pret():
     trainers = _parse_emerald_trainers(os.path.join(pret_dir, "src", "data", "trainers.h"), parties, class_display)
     unique_by_name = _emerald_unique_by_name(trainers)
     species_to_arr, learnset_arrays = _parse_emerald_learnsets(pret_dir)
-    by_const, _unmatched = _emerald_group_by_trainer(vdex, unique_by_name)
+    by_const, unmatched = _emerald_group_by_trainer(vdex, unique_by_name)
     trainers_by_const = {t["const"]: t for t in trainers}
 
     mismatches = []
@@ -1040,11 +1042,11 @@ def test_emerald_named_trainer_details_match_pret():
         vend_sl = Counter((_canon(sp), e["level"]) for sp, e in vend_entries)
         if pret_sl != vend_sl:
             if const in EMERALD_PARTIAL_TEAM_ALLOWLIST and all(vend_sl[k] <= pret_sl[k] for k in vend_sl):
-                partial_team.append(const)
+                partial_team.append(const)  # the mons it does carry are still checked below
             else:
                 mismatches.append({"trainer": t["name"], "const": const, "type": "species_level",
                                     "pret": dict(pret_sl), "vendor": dict(vend_sl)})
-            continue
+                continue
 
         pret_by_key = defaultdict(list)
         for p in t["party"]:
@@ -1082,7 +1084,10 @@ def test_emerald_named_trainer_details_match_pret():
         f"EMERALD_PARTIAL_TEAM_ALLOWLIST is stale: saw {sorted(partial_team)}, "
         f"allowlist has {sorted(EMERALD_PARTIAL_TEAM_ALLOWLIST)}"
     )
-    assert checked > 400, f"identity-matching heuristic found suspiciously few mons to check (got {checked})"
+    # Exact counts (review OMP cx-1eea9acb): a pret rename or vendor relabel that breaks identity
+    # resolution must go red, not quietly shrink coverage.
+    assert (checked, unmatched) == (EMERALD_CHECKED_MONS, EMERALD_UNMATCHED_LABELS), (
+        f"Emerald identity coverage moved: checked {checked}, unmatched labels {unmatched}")
     assert not mismatches, f"Emerald named-trainer mismatches vs pret (total {len(mismatches)}): {mismatches[:15]}"
 
 

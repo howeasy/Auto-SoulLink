@@ -676,7 +676,7 @@ class Gen3Adapter(GameAdapter):
 
     def calc_profile(self) -> dict | None:
         """RR runs the calc at gen 9 with its own sets; vanilla FR/LG and Emerald at gen 3 with
-        their vendored (not fully pret-verified -- see test_calc_trainer_sets.py) trainer sets."""
+        their vendored trainer sets (pret coverage per game: test_calc_trainer_sets.py)."""
         if self._is_rr:
             return {"gen": 9, "dex": "rr"}
         sets = ({"file": "Emerald.js", "var": "CUSTOMSETDEX_E"} if self._rom_type == "emerald"
