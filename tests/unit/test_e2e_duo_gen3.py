@@ -5103,43 +5103,17 @@ def test_traced_follow_rr_trace_is_silent_without_the_env_flag():
 
 
 # ── E4: the gen3_emerald row (E<->E) ─────────────────────────────────────────────────────
-_ADMISSION_FN = re.compile(r"local function test_admission_codec\(.*?\nend\n", re.S)
-
-
-def _admission():
-    from lupa import LuaRuntime
-
-    lua = LuaRuntime(unpack_returned_tuples=True)
-    body = _ADMISSION_FN.search(DRIVER.read_text(encoding="utf-8"))
-    assert body, "duo_gen3_main.lua must define test_admission_codec"
-    fn = lua.execute(body.group(0) + "\nreturn test_admission_codec")
-    json_codec = lua.execute(f"return dofile([[{REPO / 'lua' / 'json_codec.lua'}]])")
-    return lua, fn, json_codec
-
-
-def test_emerald_test_admission_is_a_noop_off_the_emerald_row():
-    lua, fn, json_codec = _admission()
-    logged = []
-    same = lua.eval("rawequal")
-    for game in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new", None):
-        assert same(fn(game, json_codec, logged.append), json_codec)
-    wrapped = fn("gen3_emerald", json_codec, logged.append)
-    assert not same(wrapped, json_codec)
-    doc = wrapped.decode('{"titles":{"emerald":{"admitted":false},"firered":{"admitted":false}}}')
-    assert doc.titles.emerald.admitted is True
-    assert doc.titles.firered.admitted is False          # only titles.emerald is touched
-    assert wrapped.decode('{"a":1}').a == 1 and same(wrapped.encode, json_codec.encode)
-    assert logged == ["TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)"]
-
-
-def test_emerald_admission_stays_refused_in_production():
-    """Ruling 24: the duo's seam is test-only -- every production refusal is still in place."""
+def test_emerald_admission_is_production_only():
+    """EG4: Emerald is admitted by production code alone -- the duo driver's pre-EG4 TEST-ONLY
+    seam (test_admission_codec, which faked titles.emerald.admitted for the duo row only) is
+    gone now that it would be a no-op."""
     profile = json.loads((REPO / "data/games/gen3_emerald/profile.json").read_text(encoding="utf-8"))
-    assert profile["titles"]["emerald"]["admitted"] is False
+    assert profile["titles"]["emerald"]["admitted"] is True
     entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
-    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true \}", entry)
-    assert 'header_code == "BPEE"' in (REPO / "lua/slink.lua").read_text(encoding="utf-8")
+    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
+                      entry)
     assert "test_admission_codec" not in entry
+    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
 
 
 def test_emerald_row_resolves_pack_fixtures_and_layout():

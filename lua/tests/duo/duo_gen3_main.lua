@@ -410,33 +410,11 @@ SLINK_GEN3_CLIENT = nil
 -- Entry.build's second return. Restore dofile even if startup fails. No production code changed.
 -- Always captured: ctx.center_state asks the client's own safety instance for its CPU verdict.
 local battle_parts
---- TEST-ONLY admission of gen3_emerald/emerald (E4, coordinator ruling 24): the profile's
---- admitted=false, the lua/slink.lua BPEE refusal and Entry.ROUTED all stay until EG4. On the
---- gen3_emerald duo row ONLY, json_codec's decode is wrapped so a decoded document whose
---- titles.emerald.admitted is false reads true, letting Entry.build's production assert boot
---- run.lua; any other game gets `json` back untouched. Self-contained (no upvalues) so
---- tests/unit/test_e2e_duo_gen3.py runs this exact body.
-local function test_admission_codec(game, json, logf)
-    if game ~= "gen3_emerald" or type(json) ~= "table" then return json end
-    local decode = json.decode
-    return setmetatable({ decode = function(...)
-        local doc = decode(...)
-        local em = type(doc) == "table" and type(doc.titles) == "table" and doc.titles.emerald
-        if type(em) == "table" and em.admitted == false then
-            em.admitted = true
-            logf("TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)")
-        end
-        return doc
-    end }, { __index = json })
-end
 local original_dofile = dofile
 local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
 do
     dofile = function(path)
         local value = original_dofile(path)
-        if tostring(path):gsub("\\", "/"):match("/lua/json_codec%.lua$") then
-            value = test_admission_codec(D.game, value, log)
-        end
         if path == ROOT .. "/lua/gen3/entry.lua" then
             local build = value.build
             value.build = function(...)
