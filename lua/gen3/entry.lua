@@ -384,7 +384,12 @@ local function build_production(deps, c)
         area_map = load_json(c.json, c.root .. "/" .. files.area_map),
         locations = dofile(c.root .. "/" .. files.locations),
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
-        foundation = pack, artifact_kind = c.artifact_kind, native = native, log = deps.log, core = core,
+        foundation = pack, artifact_kind = c.parts.kind == "rand" and "rand" or c.artifact_kind,
+        native = native, log = deps.log, core = core,
+        rom_size = deps.rom_size,
+        rom_content_new = deps.rom_content_new or function(tbl, rom_io)
+            return L("lua/gen3/rom_content.lua").new(tbl, rom_io)
+        end,
         -- the battle request nonce seed (card C5-10b): the bootstrap's entropy, or the harness
         -- seam for determinism. Client.new validates it and mints NO identity without it.
         -- the env seam wins over the bootstrap so a harness can pin a session deterministically

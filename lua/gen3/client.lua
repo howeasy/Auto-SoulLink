@@ -950,6 +950,31 @@ function Client.new(p)
         rival_authority = nil
     end
 
+    -- One read-only cartridge snapshot per session, including cached failure. The Gen 3
+    -- reader owns bounds/pointer walking; this hook only binds table metadata and transport.
+    local content_cache = {attempted=false}
+    local function rom_content()
+        if p.artifact_kind ~= "rand" then return nil end
+        if not content_cache.attempted then
+            content_cache.attempted = true
+            local ok, payload, why = pcall(function()
+                local source = assert(profile.rom_tables, "profile has no rom_tables")
+                local tables = {rom_size=p.rom_size} -- reader's documented 32 MiB window default if absent
+                for _, name in ipairs({"gTrainers", "gWildMonHeaders", "gEvolutionTable", "gSpeciesInfo", "gTrainerClassNames"}) do
+                    local row = assert(source[name], "missing ROM table " .. name)
+                    tables[name] = {address=tonumber(row.address), count=tonumber(row.count), size=tonumber(row.size)}
+                end
+                local reader = assert(p.rom_content_new, "ROM content reader unavailable")(tables, {read_u8=io.read_u8})
+                return reader:payload()
+            end)
+            if ok and type(payload) == "table" and type(payload.tables) == "table" and type(payload.fingerprint) == "string" then
+                content_cache.payload = payload
+            else
+                log("rom_content unavailable: " .. tostring(ok and (why or "invalid reader result") or payload))
+            end
+        end
+        return content_cache.payload
+    end
     -- No wire side effect here (no area_enter, no banner): hello is the connection's first line.
     function drv.hello_fields()
         local party = party_read() or {}
@@ -990,6 +1015,7 @@ function Client.new(p)
         end
         if trade and trade:hide_party() then f.pc_boxes, f.pc_boxes_generation = nil, nil end
         f.trade_prepare = trade ~= nil and trade:capable() == true
+        f.rom_content = rom_content()
         return f
     end
 
