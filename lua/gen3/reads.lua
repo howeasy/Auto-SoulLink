@@ -202,16 +202,37 @@ function R.new(profile, io, pointers)
         return table.concat(out)
     end
 
+    -- XR-1 (pokeemerald-expansion, include/pokemon.h at expansion/1.17.0
+    -- e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7): species/heldItem/move1-4 are
+    -- masked bitfields sharing their vanilla u16 lane with new bits (teraType,
+    -- evolutionTracker, hyperTrained); a pack pins the surviving-bits mask so
+    -- vanilla packs (no derived.MON_*_MASK) decode byte-for-byte as before.
+    local species_mask = d.MON_SPECIES_MASK or 0xFFFF
+    local item_mask = d.MON_ITEM_MASK or 0xFFFF
+    local move_mask = d.MON_MOVE_MASK or 0xFFFF
+
     -- include/pokemon.h: the four 12-byte substructs, already put back in
     -- Growth / Attacks / EVs / Misc order.
     local function decode_secure(g, at, e, m)
         local ivs, met = u(m, 4, 4), u(m, 2, 2)
         local moves, pp, contest = {}, {}, {}
-        for i = 0, 3 do moves[i + 1] = u(at, i * 2, 2) end
+        -- The expansion's 11th nickname character shares the Growth substruct's
+        -- experience u32 lane (PokemonSubstruct0.nickname11:8 at bit 21); when a
+        -- pack's derived.NICKNAME_EXTRA names that lane (word_off 4) mask
+        -- experience down to the bits below it so it still decodes as plain XP.
+        local experience_mask = 0xFFFFFFFF
+        local extra = d.NICKNAME_EXTRA
+        if type(extra) == "table" and type(extra.chars) == "table" then
+            for _, char in ipairs(extra.chars) do
+                if char.word_off == 4 then experience_mask = (1 << char.shift) - 1 end
+            end
+        end
+        for i = 0, 3 do moves[i + 1] = u(at, i * 2, 2) & move_mask end
         for i = 0, 3 do pp[i + 1] = at[9 + i] end
         for i = 0, 5 do contest[i + 1] = e[7 + i] end
         return {
-            species = u(g, 0, 2), held_item = u(g, 2, 2), experience = u(g, 4, 4),
+            species = u(g, 0, 2) & species_mask, held_item = u(g, 2, 2) & item_mask,
+            experience = u(g, 4, 4) & experience_mask,
             pp_bonuses = g[9], friendship = g[10], growth_filler = u(g, 10, 2),
             moves = moves, pp = pp,
             evs = { hp = e[1], attack = e[2], defense = e[3], speed = e[4],
@@ -248,6 +269,26 @@ function R.new(profile, io, pointers)
         end
         local flags, stored = raw[0x13 + 1], u(raw, 0x1C, 2)
         local nick = take(raw, 0x08, R.NICKNAME_LEN)
+        -- XR-1: chars 11/12 live in Growth-substruct bitfields (nickname11 at the
+        -- experience u32's bits 21-28, nickname12 at the pokeball u16's bits 6-13),
+        -- not in the raw 10-byte BoxPokemon.nickname array. pret's own
+        -- GetBoxMonData3 (src/pokemon.c) treats "both zero" as a vanilla (10-char)
+        -- record and omits them; only append when at least one is non-zero.
+        local nick_extra = d.NICKNAME_EXTRA
+        if type(nick_extra) == "table" and type(nick_extra.chars) == "table"
+           and #nick_extra.chars > 0 then
+            local growth = ordered[1]
+            local chars, any_nonzero = {}, false
+            for _, char in ipairs(nick_extra.chars) do
+                local word = u(growth, char.word_off, char.word_size)
+                local value = (word >> char.shift) & ((1 << char.width) - 1)
+                chars[#chars + 1] = value
+                if value ~= 0 then any_nonzero = true end
+            end
+            if any_nonzero then
+                for _, value in ipairs(chars) do nick[#nick + 1] = value end
+            end
+        end
         local ot = take(raw, 0x14, R.OT_NAME_LEN)
         local mon = {
             personality = personality, ot_id = ot_id,

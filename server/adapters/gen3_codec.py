@@ -173,20 +173,47 @@ def _substruct_positions(personality: int, rr: bool) -> tuple[int, ...]:
     return _FIXED_ORDER if rr else SUBSTRUCT_ORDER[personality % 24]
 
 
-def _decode_secure(plain_by_type: list[bytes]) -> dict:
+def _decode_secure(plain_by_type: list[bytes], layout: dict | None = None) -> dict:
     """Decode the four substructs, already put back in Growth/Attacks/EVs/Misc
-    order.  Field maps: include/pokemon.h#L8-L85."""
+    order.  Field maps: include/pokemon.h#L8-L85.
+
+    ``layout`` is XR-1's optional expansion mask block (additive; ``None`` or
+    ``{}`` reproduces this function's pre-XR-1 output byte for byte).  Keys,
+    verified against rh-hideout/pokeemerald-expansion at tag ``expansion/1.17.0``
+    (commit ``e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7``), ``include/pokemon.h``
+    ``struct PokemonSubstruct0/1``:
+
+    - ``MON_SPECIES_MASK`` (default 0xFFFF): species is an 11-bit field sharing
+      its u16 lane with a new 5-bit ``teraType`` (species:11, teraType:5).
+    - ``MON_ITEM_MASK`` (default 0xFFFF): heldItem is a 10-bit field (heldItem:10,
+      6 unused bits) in the next u16 lane.
+    - ``MON_MOVE_MASK`` (default 0xFFFF): move1..4 are each an 11-bit field
+      sharing their u16 lane with an evolution-tracker/hyper-trained bit.
+    - ``NICKNAME_EXTRA``: see :func:`_decode_mon`; when its chars land in the
+      Growth substruct's offset-4 u32 (nickname11, bits 21-28), that lane is
+      shared with ``experience`` (21 bits) -- masking it here keeps XP correct.
+    """
     g, a, e, m = plain_by_type
+    layout = layout or {}
+    species_mask = layout.get("MON_SPECIES_MASK", 0xFFFF)
+    item_mask = layout.get("MON_ITEM_MASK", 0xFFFF)
+    move_mask = layout.get("MON_MOVE_MASK", 0xFFFF)
+    experience_mask = 0xFFFFFFFF
+    nickname_extra = layout.get("NICKNAME_EXTRA")
+    if nickname_extra:
+        for char in nickname_extra["chars"]:
+            if char["word_off"] == 4:
+                experience_mask = (1 << char["shift"]) - 1
     ivs = _u(m, 4, 4)
     met = _u(m, 2, 2)
     return {
-        "species": _u(g, 0, 2),
-        "held_item": _u(g, 2, 2),
-        "experience": _u(g, 4, 4),
+        "species": _u(g, 0, 2) & species_mask,
+        "held_item": _u(g, 2, 2) & item_mask,
+        "experience": _u(g, 4, 4) & experience_mask,
         "pp_bonuses": g[8],
         "friendship": g[9],
         "growth_filler": _u(g, 10, 2),
-        "moves": [_u(a, i * 2, 2) for i in range(4)],
+        "moves": [_u(a, i * 2, 2) & move_mask for i in range(4)],
         "pp": list(a[8:12]),
         "evs": {
             "hp": e[0], "attack": e[1], "defense": e[2],
@@ -236,7 +263,7 @@ def _encode_secure(d: dict) -> list[bytes]:
     return [growth, attacks, evs, misc]
 
 
-def _decode_mon(raw: bytes, rr: bool, party: bool) -> dict:
+def _decode_mon(raw: bytes, rr: bool, party: bool, layout: dict | None = None) -> dict:
     want = PARTY_MON_SIZE if party else BOX_MON_SIZE
     if len(raw) != want:
         raise ValueError(f"expected {want} bytes, got {len(raw)}")
@@ -248,7 +275,22 @@ def _decode_mon(raw: bytes, rr: bool, party: bool) -> dict:
 
     flags = raw[_OFF_FLAGS]
     stored_checksum = _u(raw, _OFF_CHECKSUM, 2)
-    nick = raw[_OFF_NICKNAME:_OFF_NICKNAME + NICKNAME_LEN]
+    nick = bytearray(raw[_OFF_NICKNAME:_OFF_NICKNAME + NICKNAME_LEN])
+    # XR-1: the expansion's 11th/12th nickname characters are bitfields inside
+    # the Growth substruct (PokemonSubstruct0.nickname11/nickname12), not part
+    # of the raw 10-byte array above.  pret's GetBoxMonData3 (src/pokemon.c)
+    # treats "both zero" as a vanilla (10-char) record and omits them.
+    nickname_extra = (layout or {}).get("NICKNAME_EXTRA")
+    if nickname_extra and nickname_extra.get("chars"):
+        growth = ordered[0]
+        chars = [
+            (_u(growth, c["word_off"], c["word_size"]) >> c["shift"])
+            & ((1 << c["width"]) - 1)
+            for c in nickname_extra["chars"]
+        ]
+        if any(chars):
+            nick.extend(chars)
+    nick = bytes(nick)
     ot = raw[_OFF_OT_NAME:_OFF_OT_NAME + OT_NAME_LEN]
     mon = {
         "personality": personality,
@@ -267,7 +309,7 @@ def _decode_mon(raw: bytes, rr: bool, party: bool) -> dict:
         "checksum": stored_checksum,
         "unknown": _u(raw, _OFF_UNKNOWN, 2),
     }
-    mon.update(_decode_secure(ordered))
+    mon.update(_decode_secure(ordered, layout))
     # CFRU never validates the BoxPokemon checksum, and its reconstruction
     # leaves the field zero (flash_save.md §3; archive/gen3-old-client:lua/memory_gba.lua:1075-1083),
     # so there is nothing to check in rr mode.
@@ -325,6 +367,21 @@ def encode_party_mon(mon: dict, rr: bool = False) -> bytes:
 
 def decode_box_mon(raw: bytes, rr: bool = False) -> dict:
     return _decode_mon(raw, rr, party=False)
+
+
+def decode_party_mon_masked(raw: bytes, rr: bool = False, layout: dict | None = None) -> dict:
+    """XR-1: same as :func:`decode_party_mon`, plus an optional expansion mask
+    block (see :func:`_decode_secure`/:func:`_decode_mon`).  A NEW function,
+    not a change to the frozen ``decode_party_mon(raw, rr=False)`` contract
+    (test_gen3_codec_emerald.py::test_decode_party_mon_signature_and_frozen_keys
+    pins that signature literally).  ``layout=None`` reproduces
+    ``decode_party_mon`` byte-for-byte."""
+    return _decode_mon(raw, rr, party=True, layout=layout)
+
+
+def decode_box_mon_masked(raw: bytes, rr: bool = False, layout: dict | None = None) -> dict:
+    """XR-1 twin of :func:`decode_party_mon_masked` for box records."""
+    return _decode_mon(raw, rr, party=False, layout=layout)
 
 
 def encode_box_mon(mon: dict, rr: bool = False) -> bytes:
