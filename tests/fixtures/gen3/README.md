@@ -602,6 +602,7 @@ Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
 | `emerald_trainer_b.sav` | same | same | `derive-b` | `ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6` |
 | `emerald_pc.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; party Mudkip Lv5 + Poochyena Lv3, box 1 slots 0/1 Zigzagoon Lv3 / Wurmple Lv3 (E2-FIX-VARIANTS) | `ef2facb5d390b87e05ad8d86cb814c961880896b72b5b924724b85252a70975b` |
 | `emerald_lowhp.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv5 at 1 HP (E2-FIX-VARIANTS) | `c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b` |
+| `emerald_badges.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; badge flags 0x867-0x86A (FLAG_BADGE01..04_GET, flags.h:1359-1362) set in the SYNTH seed, straddling flag bytes 0x10C/0x10D (E2-BADGES) | `04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f` |
 
 The first six: slot 0, counter 2, one Mudkip Lv5 (the pc/lowhp variants: see their section; both built by `make-emerald --kind pc|lowhp`, 2026-09-26, the game's own re-save kept HP=1 and the two boxed mons); `a` side `EMER` #20250925, `_b` side `EMERB`
 #DFDAF6DA; 5 Poké Balls. Each passed `qualify --title emerald` and a physical `boot-check --title

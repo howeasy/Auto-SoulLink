@@ -51,6 +51,7 @@ FIXTURE_SHA256 = {
     "emerald_trainer_b.sav": "ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6",
     "emerald_pc.sav": "ef2facb5d390b87e05ad8d86cb814c961880896b72b5b924724b85252a70975b",
     "emerald_lowhp.sav": "c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b",
+    "emerald_badges.sav": "04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f",
 }
 
 

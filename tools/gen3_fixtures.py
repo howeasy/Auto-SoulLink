@@ -935,7 +935,12 @@ EMERALD_KINDS = {
     "pc": ("OldaleTown", 0, 10, 11, 6, 17),
     # card E2-FIX-VARIANTS: same tile as "battle" -- the faint/whiteout leg needs tall grass
     "lowhp": ("Route102", 0, 17, 18, 21, 16),
+    # E2-BADGES: the town tile with four badge flags set, so reads == PYDEC is proven above 0
+    "badges": ("OldaleTown", 0, 10, 11, 6, 17),
 }
+# FLAG_BADGE01_GET..FLAG_BADGE04_GET (pret include/constants/flags.h:1359-1362): 0x867 is byte
+# 0x10C bit 7 and 0x868..0x86A are byte 0x10D bits 0-2, so the set straddles a flag byte
+EMERALD_BADGE_FLAGS = (0x867, 0x868, 0x869, 0x86A)
 EMERALD_HEAL = (0, 10, 6, 17)          # HEAL_LOCATION_OLDALE_TOWN: MAP_OLDALE_TOWN (6,17)
 EMERALD_OT = ("EMER", 0x20250925)      # SYNTH identity; `derive-b --title emerald` makes the _b side
 EMERALD_SEED_COUNTER = 1               # the seed's slot is 1; the game's save writes counter 2, slot 0
@@ -1141,6 +1146,8 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     sb1[0x490:0x494] = EMERALD_MONEY.to_bytes(4, "little")   # money, :1002
     # bagPocket_PokeBalls[0]; SetBagItemQuantity stores `quantity ^ encryptionKey` (src/item.c:31-34)
     struct.pack_into("<HH", sb1, SB1_BALL_POCKET_EMERALD, ITEM_POKE_BALL, EMERALD_BALLS)
+    if kind == "badges":
+        flags = [*flags, *EMERALD_BADGE_FLAGS]
     for flag in flags:                                 # flags[NUM_FLAG_BYTES], :1020
         sb1[0x1270 + flag // 8] |= 1 << (flag % 8)
 
@@ -1232,6 +1239,10 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
         if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
                                                                               STARTER_LEVEL, True)]:
             problems.append(f"party is not one Lv{STARTER_LEVEL} Mudkip: {party}")
+    if kind == "badges":
+        missing = [f for f in EMERALD_BADGE_FLAGS if not sb1[0x1270 + f // 8] >> (f % 8) & 1]
+        if missing:
+            problems.append(f"badge flags not set after the re-save: {[hex(f) for f in missing]}")
     balls = emerald_ball_pocket(body)
     if balls != [(ITEM_POKE_BALL, EMERALD_BALLS)]:
         problems.append(f"ball pocket {balls} != [(ITEM_POKE_BALL, {EMERALD_BALLS})]")
