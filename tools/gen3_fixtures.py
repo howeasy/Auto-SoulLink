@@ -931,6 +931,10 @@ EMERALD_KINDS = {
     # one step W of Youngster Calvin's sight line: he stands at (33,14) facing down with sight 3
     # (data/maps/Route102/map.json), so one Right step onto (33,16) starts his battle
     "trainer": ("Route102", 0, 17, 18, 32, 16),
+    # card E2-FIX-VARIANTS: same tile as "town" -- the PC/box leg needs no wild encounters
+    "pc": ("OldaleTown", 0, 10, 11, 6, 17),
+    # card E2-FIX-VARIANTS: same tile as "battle" -- the faint/whiteout leg needs tall grass
+    "lowhp": ("Route102", 0, 17, 18, 21, 16),
 }
 EMERALD_HEAL = (0, 10, 6, 17)          # HEAL_LOCATION_OLDALE_TOWN: MAP_OLDALE_TOWN (6,17)
 EMERALD_OT = ("EMER", 0x20250925)      # SYNTH identity; `derive-b --title emerald` makes the _b side
@@ -964,6 +968,71 @@ SB2_ENCRYPTION_KEY = 0xAC  # u32 encryptionKey, include/global.h:532
 EMERALD_STORY_FLAGS = ("FLAG_SYS_POKEMON_GET", "FLAG_ADVENTURE_STARTED",
                        "FLAG_RECEIVED_POTION_OLDALE", "FLAG_VISITED_OLDALE_TOWN",
                        "FLAG_HIDE_OLDALE_TOWN_RIVAL", "FLAG_HIDE_ROUTE_103_RIVAL")
+
+# card E2-FIX-VARIANTS: the "pc" kind's second party slot and its two box[0] mons, all
+# GROWTH_MEDIUM_FAST (EXP_MEDIUM_FAST(n) = n^3, src/data/pokemon/experience_tables.h:6),
+# genderRatio PERCENT_FEMALE(50) = min(254, 255*50//100) = 127 (species_info.h:3), friendship
+# STANDARD_FRIENDSHIP 70 (include/constants/pokemon.h:194). pokeemerald c65e93f2:
+#   SPECIES_POOCHYENA 286 (species.h:292); base 35/55/35/35/30/30 (species_info.h:7889-7917);
+#     Lv3 knows only MOVE_TACKLE 33 pp35 (level_up_learnsets.h:3730-3736; next move at Lv5)
+#   SPECIES_ZIGZAGOON 288 (species.h:294); base 38/30/41/60/30/41 (species_info.h:7949-7977);
+#     Lv3 knows MOVE_TACKLE 33 pp35 + MOVE_GROWL 45 pp40 (both Lv1, level_up_learnsets.h:3765-3771)
+#   SPECIES_WURMPLE 290 (species.h:296); base 45/45/35/20/20/30 (species_info.h:8009-8037);
+#     Lv3 knows MOVE_TACKLE 33 pp35 + MOVE_STRING_SHOT 81 pp40 (both Lv1,
+#     level_up_learnsets.h:3799-3803; battle_moves.h:1056-1067 STRING_SHOT pp)
+POOCHYENA = {"species": 286, "name": "POOCHYENA", "friendship": 70,
+             "base": {"hp": 35, "attack": 55, "defense": 35, "speed": 35,
+                      "sp_attack": 30, "sp_defense": 30},
+             "moves": [33, 0, 0, 0], "pp": [35, 0, 0, 0]}
+ZIGZAGOON = {"species": 288, "name": "ZIGZAGOON", "friendship": 70,
+             "base": {"hp": 38, "attack": 30, "defense": 41, "speed": 60,
+                      "sp_attack": 30, "sp_defense": 41},
+             "moves": [33, 45, 0, 0], "pp": [35, 40, 0, 0]}
+WURMPLE = {"species": 290, "name": "WURMPLE", "friendship": 70,
+           "base": {"hp": 45, "attack": 45, "defense": 35, "speed": 20,
+                    "sp_attack": 20, "sp_defense": 30},
+           "moves": [33, 81, 0, 0], "pp": [35, 40, 0, 0]}
+BOX1_LEVEL = 3   # the "pc" kind's second party mon and its two box[0] mons
+
+
+def _synth_mon(species: dict, level: int, pid_seed: int, ot_name: str, tid: int, *,
+               party: bool) -> dict:
+    """A Hardy-nature (personality % NUM_NATURES(25) == 0), non-shiny (SHINY_ODDS=8,
+    src/pokemon.c IsShinyOtIdPersonality) GROWTH_MEDIUM_FAST mon at `level`, IVs pinned to
+    STARTER_IV. `party=False` omits the party-only tail (no level/hp/status: BoxPokemon has
+    none of those -- the game derives level from `experience` at display time,
+    src/pokemon.c:2910-2920 GetLevelFromMonExp). Deliberately independent of emerald_starter:
+    never touches MUDKIP's own byte output (town/battle/trainer stay byte-identical)."""
+    pid = next(p for p in itertools.count(pid_seed)
+               if p % 25 == 0
+               and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+    mon = {
+        "personality": pid, "ot_id": tid, "nickname": species["name"], "language": LANGUAGE_ENGLISH,
+        "is_bad_egg": 0, "has_species": 1, "is_egg_flag": 0, "block_box_rs": 0, "flags_unused": 0,
+        "ot_name": ot_name, "markings": 0, "unknown": 0,
+        "species": species["species"], "held_item": 0, "experience": level ** 3,  # EXP_MEDIUM_FAST
+        "pp_bonuses": 0, "friendship": species["friendship"], "growth_filler": 0,
+        "moves": list(species["moves"]), "pp": list(species["pp"]),
+        "evs": dict.fromkeys(species["base"], 0), "contest": [0] * 6,
+        "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": level,
+        "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
+        "ivs": dict.fromkeys(species["base"], STARTER_IV),
+        "is_egg": 0, "ability_num": pid & 1, "ribbons": 0,
+    }
+    if party:
+        stats = {k: (2 * b + STARTER_IV) * level // 100 + 5 for k, b in species["base"].items()}
+        stats["hp"] = (2 * species["base"]["hp"] + STARTER_IV) * level // 100 + level + 10
+        mon.update(status=0, level=level, mail=0xFF, max_hp=stats["hp"], **stats)
+    return mon
+
+
+def _box_mon_level(mon: dict) -> int:
+    """GetLevelFromMonExp (src/pokemon.c:2910-2920), specialised to GROWTH_MEDIUM_FAST
+    (EXP_MEDIUM_FAST(n) = n^3): the level a BoxPokemon's stored `experience` displays as."""
+    level = 1
+    while level <= 100 and level ** 3 <= mon["experience"]:
+        level += 1
+    return level - 1
 
 
 def pret_emerald() -> Path:
@@ -1056,9 +1125,19 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     sb1[0x0C:0x14] = _warp(group, num, x, y)      # continueGameWarp, :988
     sb1[0x1C:0x24] = _warp(*EMERALD_HEAL)         # lastHealLocation, :990 (SetLastHealLocationWarp)
     sb1[0x32:0x34] = layout_id.to_bytes(2, "little")   # mapLayoutId, :997 (0 = a NULL layout)
-    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 1
+    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 2 if kind == "pc" else 1
     start = codec.SB1_PARTY_OFFSET_EMERALD
-    sb1[start:start + codec.PARTY_MON_SIZE] = codec.encode_party_mon(emerald_starter(name, tid))
+    starter = emerald_starter(name, tid)
+    if kind == "lowhp":
+        # card E2-FIX-VARIANTS: current HP only, for the native faint/whiteout legs. max_hp and
+        # every stat/substruct byte (and so the checksum) are untouched.
+        starter = dict(starter, hp=1)
+    sb1[start:start + codec.PARTY_MON_SIZE] = codec.encode_party_mon(starter)
+    if kind == "pc":
+        # card E2-FIX-VARIANTS: second party slot, a Lv3 Poochyena (independent of emerald_starter)
+        poochyena = _synth_mon(POOCHYENA, BOX1_LEVEL, 0x504F4F43, name, tid, party=True)
+        at = start + codec.PARTY_MON_SIZE
+        sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(poochyena)
     sb1[0x490:0x494] = EMERALD_MONEY.to_bytes(4, "little")   # money, :1002
     # bagPocket_PokeBalls[0]; SetBagItemQuantity stores `quantity ^ encryptionKey` (src/item.c:31-34)
     struct.pack_into("<HH", sb1, SB1_BALL_POCKET_EMERALD, ITEM_POKE_BALL, EMERALD_BALLS)
@@ -1070,6 +1149,14 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
         at = codec.BOX_NAMES_OFFSET + box * 9          # boxNames[14][BOX_NAME_LENGTH + 1], pokemon_storage_system.h:23
         storage[at:at + 9] = codec.encode_name(f"BOX{box + 1}", 9)
         storage[0x83C2 + box] = box % 4                # boxWallpapers, :24; % (MAX_DEFAULT_WALLPAPER + 1), wallpapers.h:21
+    if kind == "pc":
+        # card E2-FIX-VARIANTS: box 1 (index 0) slot 0/1, a Lv3 Zigzagoon and Wurmple; every
+        # other box slot stays empty (personality==0, the storage bytearray's zero-init)
+        zigzagoon = _synth_mon(ZIGZAGOON, BOX1_LEVEL, 0x5A49475A, name, tid, party=False)
+        wurmple = _synth_mon(WURMPLE, BOX1_LEVEL, 0x5755524D, name, tid, party=False)
+        for slot, mon in enumerate((zigzagoon, wurmple)):
+            at = codec.BOX_DATA_OFFSET + slot * codec.BOX_MON_SIZE   # box[0][slot]
+            storage[at:at + codec.BOX_MON_SIZE] = codec.encode_box_mon(mon)
 
     layout = codec.slot_layout(title=codec.TITLE_EMERALD)
     blocks = {"sb2": bytes(sb2), "sb1": bytes(sb1), "storage": bytes(storage)}
@@ -1096,8 +1183,13 @@ def emerald_ball_pocket(body: bytes) -> list[tuple[int, int]]:
 def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
     """What a NATIVE re-save of a `kind` seed must show: it qualifies, the game cleared the
     continue-game warp (so it ran the warp-in and wrote SaveBlock1 itself), the player stands on
-    the kind's tile of the kind's map, the party is the one Mudkip, and the ball pocket still
-    holds the seeded Poke Balls once decrypted with the game's re-rolled key."""
+    the kind's tile of the kind's map, the ball pocket still holds the seeded Poke Balls once
+    decrypted with the game's re-rolled key, and the party (town/battle/trainer: the one Mudkip;
+    "lowhp": the one Mudkip at 1 HP; "pc": Mudkip + a Lv3 Poochyena, plus box[0] holding a Lv3
+    Zigzagoon and Wurmple with every other slot empty). †UNVERIFIED (reasoned from
+    src/load_save.c and src/pokemon_storage_system.c, not a physical run): that "lowhp"'s HP and
+    "pc"'s box contents survive the CONTINUE->save round trip unchanged -- only the coordinator's
+    boot-check/make-emerald run on real hardware can confirm the game does not touch them."""
     ok, msg = codec.qualify_flash(body, title=codec.TITLE_EMERALD)
     if not ok:
         return [f"does not qualify as Emerald: {msg}"]
@@ -1113,9 +1205,33 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
     if int.from_bytes(sb1[0x32:0x34], "little") != layout_id:
         problems.append(f"mapLayoutId {int.from_bytes(sb1[0x32:0x34], 'little')} != {layout_id}")
     party = codec.party_from_save(body, title=codec.TITLE_EMERALD)
-    if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
-                                                                          STARTER_LEVEL, True)]:
-        problems.append(f"party is not one Lv{STARTER_LEVEL} Mudkip: {party}")
+    if kind == "lowhp":
+        want = [(MUDKIP["species"], STARTER_LEVEL, True)]
+        got = [(m["species"], m["level"], m["checksum_ok"]) for m in party]
+        if got != want:
+            problems.append(f"party is not one Lv{STARTER_LEVEL} Mudkip: {party}")
+        elif party[0]["hp"] != 1:
+            problems.append(f"party[0] hp={party[0]['hp']} != 1 (lowhp fixture)")
+    elif kind == "pc":
+        want = [(MUDKIP["species"], STARTER_LEVEL, True), (POOCHYENA["species"], BOX1_LEVEL, True)]
+        got = [(m["species"], m["level"], m["checksum_ok"]) for m in party]
+        if got != want:
+            problems.append(f"party is not [Lv{STARTER_LEVEL} Mudkip, Lv{BOX1_LEVEL} Poochyena]: {party}")
+        boxes = codec.boxes_from_save(body, title=codec.TITLE_EMERALD)
+        box0 = boxes[0]
+        want_box = [(ZIGZAGOON["species"], BOX1_LEVEL), (WURMPLE["species"], BOX1_LEVEL)]
+        got_box = [(box0[i]["species"], _box_mon_level(box0[i])) for i in (0, 1)]
+        if got_box != want_box or not (box0[0]["checksum_ok"] and box0[1]["checksum_ok"]):
+            problems.append(f"box[0][0:2] is not [Lv{BOX1_LEVEL} Zigzagoon, Lv{BOX1_LEVEL} Wurmple]: "
+                            f"{[(m['species'], m['checksum_ok']) for m in box0[:2]]}")
+        occupied = [(b, s) for b in range(codec.BOXES_PER_STORE) for s in range(codec.MONS_PER_BOX)
+                    if not (b == 0 and s in (0, 1)) and boxes[b][s]["species"]]
+        if occupied:
+            problems.append(f"unexpected occupied box slots: {occupied[:5]}")
+    else:
+        if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
+                                                                              STARTER_LEVEL, True)]:
+            problems.append(f"party is not one Lv{STARTER_LEVEL} Mudkip: {party}")
     balls = emerald_ball_pocket(body)
     if balls != [(ITEM_POKE_BALL, EMERALD_BALLS)]:
         problems.append(f"ball pocket {balls} != [(ITEM_POKE_BALL, {EMERALD_BALLS})]")

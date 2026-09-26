@@ -600,8 +600,10 @@ Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
 | `emerald_battle_b.sav` | same | same | `derive-b` | `61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50` |
 | `emerald_trainer.sav` | Route 102 (0.17) | (32,16) | one Right step onto (33,16), inside Youngster Calvin's sight line (he stands at (33,14) facing down, sight 3) | `1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6` |
 | `emerald_trainer_b.sav` | same | same | `derive-b` | `ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6` |
+| `emerald_pc.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; party Mudkip Lv5 + Poochyena Lv3, box 1 slots 0/1 Zigzagoon Lv3 / Wurmple Lv3 (E2-FIX-VARIANTS) | `ef2facb5d390b87e05ad8d86cb814c961880896b72b5b924724b85252a70975b` |
+| `emerald_lowhp.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv5 at 1 HP (E2-FIX-VARIANTS) | `c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b` |
 
-All six: slot 0, counter 2, one Mudkip Lv5; `a` side `EMER` #20250925, `_b` side `EMERB`
+The first six: slot 0, counter 2, one Mudkip Lv5 (the pc/lowhp variants: see their section; both built by `make-emerald --kind pc|lowhp`, 2026-09-26, the game's own re-save kept HP=1 and the two boxed mons); `a` side `EMER` #20250925, `_b` side `EMERB`
 #DFDAF6DA; 5 Poké Balls. Each passed `qualify --title emerald` and a physical `boot-check --title
 emerald` (counter 2→3, party unchanged, tile unchanged, `emerald_fixture_problems` empty). Receipt:
 `docs/gen3_emerald/probes/fixtures_2026-09-25b.txt` (the pre-ball build:
@@ -623,3 +625,42 @@ and it runs `emerald_fixture_problems` for the kind the fixture's filename names
 (`emerald_<kind>[_b].sav`), or prints that it did not.
 `SLINK_GEN3_FIXTURE_RUNS` moves the per-run SaveRAM directories off Drive (MAX_PATH).
 `make-emerald` needs the pret checkout (`.cache/pret/pokeemerald`, or `$SLINK_PRET_EMERALD`).
+
+### emerald_pc.sav / emerald_lowhp.sav (card E2-FIX-VARIANTS) — two more SYNTH kinds, not yet built
+
+Same `make-emerald` machinery and provenance as above (O-33 SYNTH, disclosed); these two kinds are
+additive to `EMERALD_KINDS` and do not change the town/battle/trainer seeds' bytes (pinned by
+`tests/unit/test_gen3_emerald_fixture_qualify.py` against their source-cut sha256). Not committed
+yet — the coordinator's emulator lane still needs to run
+`make-emerald --kind pc --out tests/fixtures/gen3/emerald_pc.sav` and
+`make-emerald --kind lowhp --out tests/fixtures/gen3/emerald_lowhp.sav`; this section documents
+what the SYNTH seed carries and `emerald_fixture_problems` checks for each, for the E2-LEGS
+scripted-play worker.
+
+- **`pc`** — same map/tile as `town` (Oldale Town 0.10, (6,17)). Party count 2: slot 0 the usual
+  Mudkip Lv5 starter (unchanged), slot 1 a **SYNTH Poochyena Lv3** (species 286, Hardy,
+  IVs 15, EVs 0, only `TACKLE` known — it hasn't reached Lv5's `HOWL` yet), both at full HP with
+  valid checksums, OT `EMER`, no HMs, no mail. Storage box 1 (index 0): slot 0 a SYNTH Zigzagoon
+  Lv3 (species 288, `TACKLE`+`GROWL`), slot 1 a SYNTH Wurmple Lv3 (species 290,
+  `TACKLE`+`STRING_SHOT`) — both valid-checksum `BoxPokemon` records (no party tail: their level
+  is `GetLevelFromMonExp` over `experience` = `level**3`, `GROWTH_MEDIUM_FAST`). Every other box
+  slot (including box[0] slot 2, where a PC deposit would land) is the zero-init empty
+  `BoxPokemon`. `PokemonStorage.currentBox` is untouched, so 0. 5 Poké Balls, as today.
+- **`lowhp`** — same map/tile as `battle` (Route 102 grass 0.17, (21,16)). Party count 1: the
+  same Mudkip Lv5 starter, byte-identical except `hp` (party tail +0x56) forced to **1**; `max_hp`
+  and every substruct byte (so the checksum) are untouched. `moves[0]` is still `TACKLE` (pp 35,
+  full) for the faint leg's damaging move. 5 Poké Balls, as today.
+- Both kinds carry the same `lastHealLocation` as every other kind: Oldale Town (0,10,6,17)
+  (`EMERALD_HEAL`, independent of the kind's own tile) — `DoWhiteOut`'s landing spot for the
+  `lowhp` whiteout leg.
+- `emerald_fixture_problems(body, "pc")` checks the party (species/level/checksum for both slots)
+  and box[0] slots 0/1 (species/level/checksum) instead of the one-Mudkip rule; it also refuses
+  any other box slot being occupied. `emerald_fixture_problems(body, "lowhp")` checks the one
+  Mudkip and additionally refuses `hp != 1`. The one-Mudkip rule is unchanged for
+  town/battle/trainer.
+- **What the game's own re-save could plausibly change and this build does not control for:**
+  CONTINUE re-keys `SaveBlock2.encryptionKey` (as for every kind) but that never touches HP or box
+  data; nothing else on the CONTINUE→save path recalculates stats or clears storage, so both
+  kinds' native re-save is expected to reproduce the seed's HP/box contents unchanged. This is
+  reasoned from `src/load_save.c` and `src/pokemon_storage_system.c`, not from a physical run —
+  the coordinator's `boot-check --title emerald` on the flushed save is the actual signer.

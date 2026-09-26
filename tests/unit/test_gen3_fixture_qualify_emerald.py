@@ -32,6 +32,10 @@ EM = codec.TITLE_EMERALD
 
 # build_emerald_seed(kind, emerald_new_game_flags(pret)) at pokeemerald c65e93f2 (card E1-FIX-2,
 # with the ball pocket); make-emerald prints the same digest as "SYNTH seed <kind>: ... sha256=".
+# the one-Mudkip kinds; pc/lowhp (E2-FIX-VARIANTS) have their own tests in
+# test_gen3_emerald_fixture_qualify.py
+ONE_MUDKIP = ("battle", "town", "trainer")
+
 SEED_SHA256 = {
     "battle": "6ad42abbfd481978b237a4f2d3bc92eb4fb1dfdf97eba74572e7b4b0dfcc35a9",
     "town": "816d33b8e856ccb8fcf84b45f799495a6cfb00d77677ce7ce152cfbe21e7aca5",
@@ -45,6 +49,8 @@ FIXTURE_SHA256 = {
     "emerald_battle_b.sav": "61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50",
     "emerald_trainer.sav": "1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6",
     "emerald_trainer_b.sav": "ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6",
+    "emerald_pc.sav": "ef2facb5d390b87e05ad8d86cb814c961880896b72b5b924724b85252a70975b",
+    "emerald_lowhp.sav": "c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b",
 }
 
 
@@ -72,7 +78,7 @@ def test_committed_emerald_fixture_is_a_game_resave_on_its_tile(kind, suffix):
     assert len(body) == codec.FLASH_SIZE
     assert fx.emerald_fixture_problems(body, kind) == []
     r = fx.qualify_one(body, rr=False, title=EM)
-    assert r["ok"] and r["counter"] == 2 and len(r["party"]) == 1
+    assert r["ok"] and r["counter"] == 2 and len(r["party"]) == (2 if kind == "pc" else 1)
 
 
 @pytest.mark.parametrize("kind", sorted(fx.EMERALD_KINDS))
@@ -106,7 +112,7 @@ def test_derive_b_emerald_rekeys_the_party_at_the_emerald_offset():
 
 # --- (b) the SYNTH seed -------------------------------------------------------
 
-@pytest.mark.parametrize("kind", sorted(fx.EMERALD_KINDS))
+@pytest.mark.parametrize("kind", ONE_MUDKIP)
 def test_seed_is_one_slot_asking_for_the_continue_warp(kind):
     seed = fx.build_emerald_seed(kind, fx.emerald_new_game_flags(_pret()))
     r = fx.qualify_one(seed, rr=False, title=EM)
@@ -234,7 +240,7 @@ def _define(pret, rel, name):
     return int(re.search(rf"^#define {name}\s+\(?(-?\w+)\)?", text, re.M).group(1), 0)
 
 
-@pytest.mark.parametrize("kind", sorted(fx.EMERALD_KINDS))
+@pytest.mark.parametrize("kind", ONE_MUDKIP)
 def test_seed_reproduces_its_recorded_sha256(kind):
     seed = fx.build_emerald_seed(kind, fx.emerald_new_game_flags(_pret()))
     assert hashlib.sha256(seed).hexdigest() == SEED_SHA256[kind]
