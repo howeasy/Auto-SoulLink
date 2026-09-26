@@ -817,15 +817,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_a_result.txt",
-              "sha256": "f65ed3f17d167dbd7e03e40d9c84d4a81cfb4a80673b2d9c45bb0e2df0b92d95"
+              "sha256": "1d20a9e47846637febe25f6003568545b5309ded348415bbbfa7f91eecdba983"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_b_result.txt",
-              "sha256": "850579655791e3d3ea66391db020994859046fcb8ed65e40d4b8531e1dc01499"
+              "sha256": "9f8bc056c06df9ec45e69c80d0d7646fe61a51b1b11c3edff22dc8d7fc31d039"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_gender_clause_gs_pydec_result.txt",
-              "sha256": "43598a4bddd34fd30d07fe143ddad9ede57c87c67ba147a16d0aa8ba6b7210cd"
+              "sha256": "1a277b0d4680aa2facfa33417b86c5cd88ac969ae8e4d21abd2aff7fe0162c2c"
             }
           }
         },
