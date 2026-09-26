@@ -24,8 +24,8 @@ Rows stay `·` until their phase in `PLAN.md` §3 lands a receipt.
 | pret/pokeemerald source | master `5eff78649e7170a877b961ef0b3da13b81a16038` (2026-09-01); the `symbols` branch is `dba968c67d85caf9595abe12a51ff739d4dc5937` (2026-08-26): its published `pokeemerald.sym` IS the pinned symbol source (EG0 decision 2; no `.map`, the player-controller span is derived from the `.sym`) — **SIGNED EG0: `c65e93f2`** |
 | agbcc | pret/agbcc `da598c1d918402c42c0c0d7128ba14567f3175e9` (the FRLG pin, `data/gen3_sources.lock.json`); reuse for pokeemerald is to be proven by the E1-SYM build sha1 |
 | BizHawk | 2.11.1 + installed hashes as `docs/gen3_requirements.md` Pins (unchanged) |
-| pokeemerald-expansion | tag `expansion/1.17.0` (published 2026-08-31T18:12:55Z); commit sha to record at XG0 |
-| Expansion compiler | modern `arm-none-eabi-gcc` only (agbcc removed at 1.9). Choose at XG0: vendored xPack 15.2.1 (`patch/vendor/armgcc/xpack-arm-none-eabi-gcc-15.2.1-1.1`) or CI apt `gcc-arm-none-eabi`; double-build sha1 receipt |
+| pokeemerald-expansion | tag `expansion/1.17.0` = commit `e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7`, 23 config headers sha256-pinned in `data/gen3_exp_sources.lock.json`; reference ROM sha1 `28877d733492299599f2b8fff50493109d72653c` — **SIGNED XG0 2026-09-26** |
+| Expansion compiler | Linux reference host (owner VM, Linux Mint 22.3 / Ubuntu noble), package `gcc-arm-none-eabi` `15:13.2.rel1-2` (13.2.1), binary sha256 in the lock; native Windows builds unsupported (preproc `%ld` LLP64 + mapjson CreateProcess limit, `probes/x0_*`); double-build receipt `probes/x0_build_repro_2026-09-26.txt` — **SIGNED XG0 2026-09-26** |
 | Wire contract | `docs/protocol.md` (unchanged) |
 
 ## Oracles
@@ -58,7 +58,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 | EF-8 | Statics/gifts/daycare: starters, Castform per form, Beldum, Lavaridge Wynaut egg vs Route 117 daycare, fossils, legendaries, scripted Voltorb/Electrode/Kecleon/Unown | `data/games/gen3_emerald/statics.json` from pret scripts/flags | SERVER | ✓ | · | · |
 | EF-9 | Items: common 0–374 table (Gen 3 `5f050857`) + Emerald overlay {375 Magma Emblem, 376 Old Sea Map}; move stats FR == E (two-source assertion) | generator + tests | CONTROL | ✓ | · | — |
 | EF-10 | Fixtures `emerald_{town,battle,trainer}{,_b}.sav` pass `--qualify` and `--boot-check` | `tools/gen3_fixtures.py` | GAME + PYDEC | — | ✓ | ✓ |
-| XF-1 | Reference build reproducible (two builds, same sha1); `.elf/.map/.sym` kept, ROM never published | `tools/build_expansion.py` | CONTROL | · | — | — |
+| XF-1 | Reference build reproducible (two builds, same sha1); `.elf/.map/.sym` kept, ROM never published | `tools/build_expansion.py` | CONTROL | ✓ | — | — |
 | XF-2 | Struct offsets (BattlePokemon, SaveBlock1/2, SpeciesInfo, MoveInfo, ItemInfo) from the offsetof probe; consistent with `.map` sizes | `tools/gen_expansion_facts.py` | CONTROL | · | · | — |
 | XF-3 | Per-build data pack: species count == RHH `numSpecies`; names/types/abilities/natDex/evolution families; moves; items. The extractor run on vanilla Emerald reproduces pret | `tools/extract_expansion_data.py` | HEADER + CONTROL | · | · | — |
 
