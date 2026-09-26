@@ -19,11 +19,12 @@ a third, opt-in plan: the SOURCE-lane generator checks, the Emerald states/duo/b
 Emerald-only slice of the probe-gates live suite, the shadow-negatives manifest check, and the
 release zip built, checked and booted on Emerald (emerald_zip_build, emerald_zip_check,
 zip_boot_emerald); its summary is fc_SUMMARY_<cut8>_emerald.txt. §13 of the runbook is its source.
-Emerald is Manager-unadmitted until EG4 (ruling 24: lua/gen3/entry.lua:108's Entry.ROUTED has no
-gen3_emerald entry yet), so zip_boot_emerald checks that precondition itself and reports
-SKIP-ALLOWED BLOCKED-EG4 (not a silent skip, not a PASS) instead of attempting a boot the shipped
-client would refuse by design. --title defaults to "frlg", so the default plan and its row ids are
-unchanged.
+EG4 (ruling 24) landed lua/gen3/entry.lua:108's Entry.ROUTED gen3_emerald admission, so
+zip_boot_emerald now actually boots Emerald like any other title. zip_boot() still checks the
+EXTRACTED zip's own entry.lua before attempting the boot (emerald_admission_blocker) and reports
+SKIP-ALLOWED BLOCKED-EG4 (not a silent skip, not a PASS) if that particular zip predates EG4 --
+a real possibility when re-running an old --cut, just no longer the expected outcome on a current
+one. --title defaults to "frlg", so the default plan and its row ids are unchanged.
 Sequential, one emulator lane (docs/gen3/PLAN.md:23). Order: provision the lane at --cut (and the
 master tree when item 6 is selected), then every selected row in runbook order. Each row writes
 docs/gen3/probes/fc_<row>_<cut8>.txt through gen3_probe_receipt.run_receipt_text, and the pass
@@ -117,6 +118,31 @@ EMERALD_PINNED_INPUTS = {
 # extra input (like EMERALD_PINNED_INPUTS above), never added to the shared UNPINNED_INPUTS, which
 # the frlg/rr preamble prints unconditionally.
 EMERALD_UNPINNED_INPUTS = [".cache/pret/pokeemerald/"]
+# E7-SKIPS: unit_emerald's own tests, selected by FILE, never `-k` (release_lanes.py's own
+# rule, verify_gen3_release.py's _UNIT_FILES). `-k "gen3 and emerald"` over the whole tests/unit
+# tree still IMPORTS every module under the path first -- a `-k` selector filters ITEMS, not
+# which files get collected -- so test_gen1_purergb_rom_content.py's own module-level
+# `pytest.skip(..., allow_module_level=True)` and tests/conftest.py's pokecrystal-clone guard
+# both fired unconditionally, regardless of -k (reproduced: they still fire under a -k that
+# cannot possibly match anything). The substring filter also incidentally pulled in unrelated
+# Gen 2 parametrize ids, e.g. test_gen2_pairing_matrix.py's
+# test_a_gen2_half_beside_a_gen1_or_gen3_half_is_refused[...-emerald] ("or_gen3" in the function
+# name, "emerald" as one of three parametrized opponents) -- nothing to do with this row.
+EMERALD_UNIT_FILES = [
+    "tests/unit/test_gen3_codec_emerald.py",
+    "tests/unit/test_gen3_emerald_areas.py",
+    "tests/unit/test_gen3_emerald_badges.py",
+    "tests/unit/test_gen3_emerald_checkpoint.py",
+    "tests/unit/test_gen3_emerald_client.py",
+    "tests/unit/test_gen3_emerald_entry.py",
+    "tests/unit/test_gen3_emerald_fixture_qualify.py",
+    "tests/unit/test_gen3_emerald_moves_items.py",
+    "tests/unit/test_gen3_emerald_pack.py",
+    "tests/unit/test_gen3_emerald_play_legs.py",
+    "tests/unit/test_gen3_emerald_server.py",
+    "tests/unit/test_gen3_fixture_qualify_emerald.py",
+    "tests/unit/test_gen3_title_syms.py",
+]
 UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
                    "patch/build/gen1_red.gb", "patch/build/gen1_blue.gb",
                    "patch/build/gen1_yellow.gbc", "patch/build/gen2_crystal.gbc",
@@ -134,10 +160,11 @@ ITEM6_INPUTS = [p for p in UNPINNED_INPUTS if not p.endswith("/")]   # the Gen 1
 ALLOWED_SKIPS = [
     ("linked_faint_active_mega_gen3_*", "R5 needs an RR trainer route",
      "owner ruling 20 (G4_request_draft.md §6): RR row R5 is a signed G5 limit, kept as a named SKIP"),
-    ("zip_boot_emerald", "BLOCKED-EG4:",
-     "ruling 24 (docs/gen3_emerald/PLAN.md; lua/gen3/entry.lua:69-70,108): Entry.ROUTED and the "
-     "Manager admission flag flip only at EG4, so a zip boot refuses Emerald by design before "
-     "that signature -- not a defect to chase, and not silently skipped (named here)"),
+    # "zip_boot_emerald" / "BLOCKED-EG4:" lived here while ruling 24 was unsigned; EG4 landed
+    # (lua/gen3/entry.lua:108's Entry.ROUTED admits gen3_emerald) and zip_boot_emerald now PASSes
+    # for real (fc_SUMMARY_9c96e745_emerald.txt row 24), so the entry is retired. zip_boot()'s own
+    # emerald_admission_blocker still reports BLOCKED-EG4 for a zip built before that signature
+    # (e.g. re-running an old --cut) -- a real FAIL on a current cut, not a named skip anymore.
 ]
 
 ORIENT = {"gen3_frlg": "fr_as_a", "gen3_lgfr": "lg_as_a", "gen3_rr": "rr_as_a",
@@ -380,8 +407,8 @@ def build_plan_emerald(cut, lane, master):
             [PY, "tools/gen_area_map.py", "--game", "emerald", "--check"], lane, 120,
             emulator=False),
         Row("unit_emerald", "§13.1 source",
-            [PY, "-m", "pytest", "tests/unit", "-q", "-k", "gen3 and emerald", "-p", "no:randomly",
-             "-rs"], lane, 900, emulator=False),
+            [PY, "-m", "pytest", *EMERALD_UNIT_FILES, "-q", "-p", "no:randomly", "-rs"], lane, 900,
+            emulator=False),
     ]
     # §13.2: the probe-state builds a future checkpoint row would need. town/battle/trainer are
     # the only EMERALD_KINDS entries with both a committed *_party-equivalent fixture and scripted
@@ -427,7 +454,9 @@ def build_plan_emerald(cut, lane, master):
                     [PY, "tools/gen3_shadow_negatives.py",
                      "docs/gen3_emerald/negatives_manifest.json"], lane, 120, emulator=False))
     # §13.6: the release zip built FROM the cut, checked AT the cut, then booted on Emerald
-    # (BLOCKED-EG4 today -- zip_boot()'s own precondition check, ALLOWED_SKIPS "zip_boot_emerald").
+    # (EG4/ruling 24 landed, so this boots for real now; zip_boot()'s own precondition check,
+    # emerald_admission_blocker, only still returns BLOCKED-EG4 -- a real FAIL, no longer an
+    # allowed skip -- for a zip built before that signature).
     rows += zip_rows(cut, lane, "emerald")
     for r in rows:
         r.deps = row_deps(r)
@@ -870,8 +899,8 @@ ZIP_BOOT = {
     # emerald (card E4b-FINALCUT): a clean dump BizHawk's gamedb knows (like FR/LG, unlike RR's
     # companion), so the launched filename is arbitrary and the battery files under the gamedb
     # title (EMERALD_SAVERAM); rom_type "emerald" and pack "gen3_emerald" per
-    # lua/gen3/entry.lua:72 (rom_type), :98 (pack). Only reachable post-EG4 -- see zip_boot()'s
-    # own precondition check, ALLOWED_SKIPS "zip_boot_emerald".
+    # lua/gen3/entry.lua:72 (rom_type), :98 (pack). EG4 (ruling 24) has landed, so this row is
+    # reachable for real now -- see zip_boot()'s own precondition check, emerald_admission_blocker.
     "emerald": (STAGED["emerald"], "emerald.gba", "emerald_town.sav", EMERALD_SAVERAM,
                 r"\[SLink-gen3\] gen3_emerald/emerald \(clean by hash\) player a ",
                 "hello rom=emerald "),
@@ -928,11 +957,11 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
         if blocked:
             kind, reason = blocked
             if kind == "BLOCKED-EG4":
-                # ruling 24: ROUTED/UNADMITTED_GAMES flip only at EG4, so a zip built before that
-                # signature refuses Emerald by design -- named as an ALLOWED_SKIPS entry (not a
-                # silent skip, not a PASS) rather than launching a boot the shipped client would
-                # itself refuse.
-                print(f"  zip_boot_emerald: SKIP (allowed: EG4 not yet signed) — "
+                # ruling 24 (EG4) has landed on this branch, so a zip reaching this path was built
+                # before that signature -- re-running an old --cut, not the current one. No longer
+                # an ALLOWED_SKIPS entry: this SKIP is unexcused and fails the row, same as any
+                # other unexplained skip.
+                print(f"  zip_boot_emerald: SKIP (not allowed: EG4 has landed) — "
                       f"BLOCKED-EG4: {reason}")
                 return 3
             # ZIP-DEFECT: the zip itself is malformed -- a real failure, never the allowed skip.
