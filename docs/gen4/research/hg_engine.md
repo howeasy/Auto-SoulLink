@@ -112,13 +112,39 @@ The wild species/level roll is **wrapped**: vanilla code runs, and hge decodes s
 
 **Design consequence:** build the hge pack from the shared site set plus per-build symbols for the replaced ones. The client code is the same. Only the pack differs.
 
+## 4b. Battle data layout vs vanilla (G4-R9 `cx-d11ad936`)
+
+The coordinator re-checked `hooks:387` and `include/battle.h:881, 914, 1392, 1403`, and `src/battle/battle_start.c:34-38`.
+
+**One offset table serves both ROMs.** These are identical in vanilla HGSS and the hge build (pret `battle.h` vs hge `include/battle.h:852-923, 1392-1446, 1587`):
+
+| Field | Offset |
+|---|---|
+| ctx pointer | `BattleSystem+0x30` |
+| selected party index per battler (6 = empty) | `ctx+0x219C` |
+| `battleMons[i]` | `ctx+0x2D40 + 0xC0*i` |
+| (vanilla `unk_312C`) | `ctx+0x312C` |
+| BattleMon species / moves / form-shiny / level / nickname / hp / maxHp / exp / personality / status / status2 / gender | 0x00 / 0x0C / 0x26 / 0x34 / 0x36 / 0x4C / 0x50 / 0x64 / 0x68 / 0x6C / 0x70 / 0x7E |
+| BattleMon size | 0xC0 |
+| `BattleSetup` (unchanged) | `{type 0x0, party[4] 0x4, winFlag 0x14}` |
+| outcome byte (vanilla accessors, unhooked) | `BattleSystem+0x2420` |
+
+Battler→party resolution is vanilla code in both ROMs (`Battle_GetClientPartyMon` 0x0223A880).
+
+**Differences, carried by the pack:**
+- **Ability:** vanilla `u8` @0x27; hge `u16` @**0x7A**, with 0x27 now a dead `dummy` (`armips/asm/abilities.s:59-69, 180`).
+- **0x30C4-0x30DB:** repurposed in hge. Not read by Soul Link.
+- **The struct grows past vanilla's 0x3158** (move table at 0x317E, total ≥0x6B40).
+- **Allocation:** hge allocates the context itself; `ServerInit` is replaced (`hooks:387`, `battle_start.c:37`).
+
+Which offsets apply comes from the pack chosen by admission, not from a runtime probe.
+
 ## 5. FYI for the owner's fork (not a Soul Link issue)
 
 `hooks:632-636` files five **overlay-2** encounter-slot hooks (0x0224768C…0x022477C0) under `arm9`. `scripts/make.py:357-360` therefore writes them into `base/arm9.bin` at offset 0x24768C+, not into overlay 2, so the hge slot-roll C (`src/field/encounter_check.c:20`) is dead code. The region column should be `0002`.
 
 ## Open
 
-- Battler→party mapping inside hge's battle (`CLIENT_PARAM` layout): use the shared `Battle_GetClientPartyMon`.
 - The size effect of the `hooks:632-636` misfile.
 - Whether overlays 129 and 131 overlap in practice (linker ranges overlap on paper).
 - Per-build addresses of the replacement C (`offsets.ini`).

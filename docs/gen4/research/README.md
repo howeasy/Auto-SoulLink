@@ -25,6 +25,7 @@ The coordinator re-checked the load-bearing citations in each card. The spot che
 | G4-R5 `cx-e3501ded` | OMP headless | which vanilla sites survive in hg-engine | [hg_engine.md](hg_engine.md) §4 (26 / 0) |
 | G4-R6 `cx-8f1d0eff` | OMP headless | checkpoint / battle copy-back | [checkpoint.md](checkpoint.md) (13 / 0) |
 | G4-R7 `cx-2fe25ca0` | OMP headless | battle struct offsets, idle clauses, save driver | [engine_sites.md](engine_sites.md), [checkpoint.md](checkpoint.md) (corrections) |
+| G4-R9 `cx-d11ad936` | OMP headless | hge battle layout vs vanilla | [hg_engine.md](hg_engine.md) §4b |
 | G4-R8 `cx-5e4819dc` | OMP headless | Platinum bind falsifiers | [platinum_bind.md](platinum_bind.md) |
 | Plan agents (2) | Claude Plan | architecture; phasing/gates | [../PLAN.md](../PLAN.md) |
 
