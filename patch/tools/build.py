@@ -91,6 +91,57 @@ def require_ready(title):
     return spec
 
 
+def thumb_entry_jump(address, destination):
+    """Aligned eight-byte Thumb-1 entry veneer: ldr r3,[pc]; bx r3; target|1.
+
+    Only valid when replacing the whole callee's behavior, not returning into
+    overwritten PC-relative instructions. Caller LR is preserved.
+    """
+    if address & 3 or destination & 1:
+        raise ValueError("entry/destination must be aligned")
+    return bytes.fromhex("004b1847") + (destination | 1).to_bytes(4, "little")
+
+
+def build_arena_probe(title, rom_path, mode):
+    """Private diagnostic ROM only. Never writes dist, UPS or a production beacon."""
+    if title != "firered":
+        raise ValueError("arena probe currently has only FireRed source bindings")
+    clean = Path(rom_path).read_bytes()
+    spec = validate_base(title, clean)
+    validate_detour(clean, spec["HEAP_INIT"], bytes.fromhex(spec["HEAP_INIT_BYTES"]))
+    out = Path(BUILD) / f"arena-{title}-{mode}"
+    out.mkdir(parents=True, exist_ok=True)
+    header = Path(SRC) / "trade_targets" / f"{title}.h"
+    obj, elf, binary = out / "probe.o", out / "probe.elf", out / "probe.bin"
+    run([GCC, *CFLAGS, f"-DSLINK_ARENA_PROBE={1 if mode == 'positive' else 2}",
+         "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
+    run([LD, "-T", str(header.with_suffix(".ld")), "-e", "slink_heap_probe",
+         "--no-warn-rwx-segments", str(obj), "-o", str(elf)])
+    found = [line.split()[0] for line in run([NM, str(elf)]).splitlines()
+             if line.split()[-1:] == ["slink_heap_probe"]]
+    if found != [f"{spec['CODE_CANDIDATE']:08x}"]:
+        raise ValueError("probe entry is not at the verified payload candidate")
+    run([OBJCOPY, "-O", "binary", str(elf), str(binary)])
+    blob = binary.read_bytes()
+    offset = spec["CODE_CANDIDATE"] - ROM_BASE
+    if not blob or len(blob) > 0x14000 or clean[offset:offset + len(blob)] != b"\xff" * len(blob):
+        raise ValueError("probe payload candidate not free/within linker bound")
+    data = bytearray(clean)
+    data[offset:offset + len(blob)] = blob
+    hook = spec["HEAP_INIT"] - ROM_BASE
+    data[hook:hook + 8] = thumb_entry_jump(spec["HEAP_INIT"], spec["CODE_CANDIDATE"])
+    rom = out / "probe.gba"
+    rom.write_bytes(data)
+    receipt = {"status": "UNQUALIFIED_DIAGNOSTIC_ONLY", "target": title, "mode": mode,
+               "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
+               "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),
+               "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],
+               "replacement": data[hook:hook + 8].hex(), "arena_candidate": spec["ARENA_CANDIDATE"],
+               "compiler": run([GCC, "--version"])}
+    (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    print(f"DIAGNOSTIC ONLY: {rom} (no UPS, no qualification)")
+
+
 def _toolchain_dir():
     """Locate the arm-none-eabi bin dir: $SLINK_ARMGCC, then patch/vendor/armgcc/*/bin
     (newest first), then PATH.  Globbed rather than version-pinned so bumping the
@@ -197,6 +248,8 @@ def main():
     ap.add_argument("--target", choices=TARGET_NAMES, default="radical_red")
     ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
     ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
+    ap.add_argument("--arena-probe", choices=("positive", "negative"),
+                    help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")
     ap.add_argument("--no-battle-calc", action="store_true",
@@ -209,6 +262,12 @@ def main():
     args = ap.parse_args()
     if args.describe:
         print(json.dumps(target_spec(args.target), indent=2))
+        return 0
+    if args.arena_probe:
+        try:
+            build_arena_probe(args.target, args.rom, args.arena_probe)
+        except (ValueError, OSError) as error:
+            ap.error(str(error))
         return 0
     if args.target != "radical_red" or args.abi_version == 2:
         try:

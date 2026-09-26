@@ -28,7 +28,10 @@
 #define SLINK_INFO_OFFSET 0x6E0u
 #define SLINK_INFO_SIZE 264u
 #define SLINK_CONTROL_OFFSET 0x800u
-#define SLINK_CONTROL_SIZE 0x800u
+#define SLINK_CONTROL_SIZE 0x600u
+#define SLINK_CALL_WITNESS_OFFSET 0xE00u
+#define SLINK_CALL_RECORD_OFFSET 0xE40u
+#define SLINK_CALL_COOLDOWN_FRAMES 10800u
 
 /* v1 IDs are stable. Removed IDs 10..12 remain reserved. 18 is raw record
  * replacement ONLY, never a successful trade path. V2 21 requires a prepared
@@ -47,7 +50,8 @@ enum SlinkOpcode {
     SLINK_OP_WITHDRAW_MON = 25, SLINK_OP_MEMORIALIZE = 26,
     SLINK_OP_SHOW_INFO = 27, SLINK_OP_RIVAL_SWAP = 28,
     SLINK_OP_TRADE_PREPARE = 29, SLINK_OP_TRADE_WITHDRAW = 30,
-    SLINK_OP_TRADE_STATUS = 31
+    SLINK_OP_TRADE_STATUS = 31,
+    SLINK_OP_MATCH_CALL = 32 /* Emerald only; ACK is queued/copied, not delivered */
 };
 enum SlinkCapability {
     SLINK_CAP_DURABLE_TRADE = 1u << 0,
@@ -55,7 +59,8 @@ enum SlinkCapability {
     SLINK_CAP_NATIVE_SOUND = 1u << 2,
     SLINK_CAP_EXPLODE = 1u << 3,
     SLINK_CAP_RIVAL_SWAP = 1u << 4,
-    SLINK_CAP_BATTLE_CALC = 1u << 5 /* RR only */
+    SLINK_CAP_BATTLE_CALC = 1u << 5, /* RR only */
+    SLINK_CAP_MATCH_CALL = 1u << 6  /* Emerald only; absent => no phone writes */
 };
 enum SlinkStatus { SLINK_ST_BUSY = 1, SLINK_ST_OK = 2, SLINK_ST_FAIL = 3 };
 enum SlinkTradeMilestone {
@@ -112,6 +117,30 @@ typedef struct {
     uint32_t received_pid, received_otid; /* 0x48, 0x4C */
 } SlinkTradeWitnessV2;
 
+/* docs/protocol.md phone_data: fallen=1, dead_zone=2, first_link=3;
+ * lower event ID wins pending priority. Stage at TEXT_OFFSET, copy natively
+ * into CALL_RECORD_OFFSET before ACK, and retain through COMPLETE. Every name
+ * must contain 0xFF within its array. Species IDs are u16, never GB-size bytes.
+ * Neither opcode acceptance nor ARMED is delivery. Publish DELIVERED only on
+ * actual Match Call UI entry, then COMPLETE when no native UI owns the text. */
+typedef struct {
+    uint8_t event, has_names;
+    uint16_t caller_species, receiver_species;
+    uint8_t trainer[8], caller_nick[11], receiver_nick[11];
+} SlinkCallRecordV2;
+enum SlinkCallPhase {
+    SLINK_CALL_EMPTY = 0, SLINK_CALL_ARMED = 1, SLINK_CALL_DELIVERED = 2,
+    SLINK_CALL_REFUSED = 3, SLINK_CALL_COMPLETE = 4
+};
+typedef struct {
+    uint32_t session_epoch;
+    uint16_t seq, revision; /* same odd/even snapshot rule; bind epoch + seq */
+    uint8_t phase, event;
+    uint16_t reason;
+    uint32_t armed_frame, delivered_frame;
+    uint32_t reserved[3];
+} SlinkCallWitnessV2;
+
 /* Structural completion gate only. Caller must first bind the coherent witness
  * to its live epoch, token, visit and per-milestone command sequences. This is
  * not evidence of an actual flash write; producer tests/probes must establish it. */
@@ -135,5 +164,9 @@ _Static_assert(offsetof(SlinkTradeWitnessV2, milestone_seq) == 0x20, "milestone 
 _Static_assert(SLINK_WITNESS_OFFSET + sizeof(SlinkTradeWitnessV2) <= SLINK_BLOB_OFFSET, "witness/blob overlap");
 _Static_assert(SLINK_BLOB_OFFSET + SLINK_BLOB_SIZE <= SLINK_TEXT_OFFSET, "blob/text overlap");
 _Static_assert(SLINK_INFO_OFFSET + SLINK_INFO_SIZE <= SLINK_CONTROL_OFFSET, "info/control overlap");
-_Static_assert(SLINK_CONTROL_OFFSET + SLINK_CONTROL_SIZE == SLINK_ARENA_SIZE, "arena ABI extent");
+_Static_assert(sizeof(SlinkCallRecordV2) == 36, "call record ABI size");
+_Static_assert(sizeof(SlinkCallWitnessV2) == 32, "call witness ABI size");
+_Static_assert(SLINK_CONTROL_OFFSET + SLINK_CONTROL_SIZE == SLINK_CALL_WITNESS_OFFSET, "control/call overlap");
+_Static_assert(SLINK_CALL_WITNESS_OFFSET + sizeof(SlinkCallWitnessV2) <= SLINK_CALL_RECORD_OFFSET, "call witness/record overlap");
+_Static_assert(SLINK_CALL_RECORD_OFFSET + sizeof(SlinkCallRecordV2) <= SLINK_ARENA_SIZE, "arena ABI extent");
 #endif
