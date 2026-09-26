@@ -66,6 +66,19 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
   2. Merge master into this branch in a scratch worktree (Opus, by intent), then 2 independent reviews.
   3. Re-run the FR/LG and RR passes plus the Gen 1 gate on the merged tree.
   4. Merge Gen 3 → master with the owner's say-so.
+  - **Gen 2 hunks that must WIN in step 2** (Gen 2 Boogaloo, each test-pinned):
+    - server.py:
+      (1) the hello transaction in _dispatch: stage, apply, then _rollback_hello on a refusal, `_rejected`, or any exception (test_server_hello_transaction.py);
+      (2) the adapter is rebuilt from the FULL rom_type while it is uncommitted, and committed only on an accepted hello;
+      (3) _reset_connection_and_display_state() is shared by /api/reset and handle_debug_rollback, and /api/reset clears connected_players;
+      (4) adapter_for(pid) on every per-player read (test_gen2_cross_title.py);
+      (5) _bind_player_adapter runs after the artifact_kind commit, and set_artifact_kind is applied to the bound adapters.
+    - state.py: KEY-SCOPE-5 (test_state_key_scope, test_state_key_change_ack).
+    - protocol.md: the Gen 2 rows.
+    - .gitattributes: Gen 2's eol=lf rules.
+    - gen1 sfx receipts: take master's (f5001c5e).
+    - Gen 3's intent wins on slink.lua's GBA branch.
+  - **Cross-lane cost:** Gen 2's CODE_DIGEST covers lua/*.lua, lua/core/**, server/**/*.py and data/games/gen2_*/**. The Gen 3 merge will change it, so run `python tools/verify_gen2_release.py --lane release-evidence` afterwards. If it's stale, Gen 2 re-sweeps (about 2 hours). Also run the full tests/unit and Gen 2's no-emulator lanes (fixtures, duo-pairs, live-gates, live-trade-gates, live-new-gates).
 - **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
   - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
   - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.
