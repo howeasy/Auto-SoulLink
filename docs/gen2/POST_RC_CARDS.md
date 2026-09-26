@@ -44,6 +44,60 @@ Found after the batch and also done: an unprovisioned checkout (no `.cache/gen2-
 The fix is a named "not cloned" skip (`87779879`, `3d8e8999`, `50d307bf`; rule in `tests/TESTING.md`).
 The Gen 2 duo boot RTC is pinned to 11:00 (`67c5161a`).
 
+## PARKED for the next forced Gen 2 re-sweep: DIGEST-DOCS + CRYSTAL-PACK-README
+
+Both change the Gen 2 CODE_DIGEST, so they land together with the next re-sweep that a shared-code
+change forces anyway (the owner can choose to pay the ~2 h now instead). Agreed with Gen1-Collab2 on
+2026-09-26.
+
+1. **DIGEST-DOCS: a defect, not a convenience.** `tools/gen2_code_digest.py` says docs are "harness
+   and prose, so they are not included", but `CODE_SCOPE`/`is_production()` take every file under
+   `data/games/gen2_{crystal,gold,silver}/` whatever its suffix. The comment describes behaviour the
+   code doesn't have. Today the only such file is `data/games/gen2_crystal/README.md` (the packs hold
+   66 `.json`, 3 `.lua`, 1 `.md`). Fix, fail-safe: exclude an explicit list of documentation suffixes
+   (`.md`, `.txt`, `.rst`) and add a unit test asserting that every remaining file under the three
+   packs is `.json` or `.lua`, so a new file type forces a decision instead of silently leaving the
+   digest. Not an allowlist: that would fail UNSAFE on a new behavioural file type.
+2. **CRYSTAL-PACK-README.** The pack is live (`gen2_gsc` reads all three per-title packs); its README
+   still describes the removed `gen2_crystal` adapter. Replacement text, ready to drop in:
+
+````markdown
+# Gen 2 data pack: Crystal
+
+One of three per-title packs (`data/games/gen2_crystal`, `gen2_gold`, `gen2_silver`) that
+`server/adapters/gen2_gsc.py` reads for Crystal, Gold and Silver alike, with
+`server/adapters/gen2_codec.py` (save and party structs) and `server/adapters/gen2_rom_scan.py`.
+The legacy `gen2_crystal` *adapter* this directory was once named after was removed at P3b.8
+(`server/adapters/__init__.py`); the directory name now just names the title.
+
+**These files are inside the Gen 2 CODE_DIGEST** (`tools/gen2_code_digest.py`): editing any file
+here, this README included, makes every Gen 2 receipt stale until the next evidence sweep.
+
+## Status
+
+Current Gen 2 evidence and verdicts: `python tools/verify_gen2_release.py --list` and
+`docs/gen2/PLAN.md`. The companion overlays are BUILT, not ADMITTED, until the owner's G4.
+
+## Files
+
+Generated from the pinned decomp (pret/pokecrystal; `data/gen2_sources.lock.json`) by
+`tools/gen_gen2_<name>.py`; each generator's `--check` verifies the committed file.
+
+- `profile.json`: RAM/SRAM symbols and constants for this title (`gen_gen2_profile.py`)
+- `admission.json`: admitted artifact rows (clean and overlay) (`gen_gen2_admission.py`)
+- `engine_signals.json`, `write_checkpoint.json`: engine sites and write windows the client arms
+- `species_index.json`, `moves.json`, `items.json`, `evolutions.json`, `trainers.json`
+- `area_map.json`, `map_names.json`, `encounter_tables.json` (Morn/Day/Nite), `static_encounters.json`, `gifts.json`
+- `charmap.lua`: the text charmap the Lua client uses
+- `receipts/`: shipped qualification, engine-site, write-window and O-33 synth receipts the client re-validates at load
+
+## Notes
+
+- Mon identity key: `gen2_codec.key()`.
+- Memorial box: the last box, `NUM_BOXES - 1` (`gen2_gsc.py`, `memorial_box_index`).
+- Test inputs: an absent `.cache/gen2-build` clone is a named skip; see `tests/TESTING.md`.
+````
+
 ## Ordering
 
 1. KEY-SCOPE-5: **GATE before Gen 3 rides this server**. It is also an owner decision whether Gen 2's release waits for it.
