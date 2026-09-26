@@ -1825,10 +1825,13 @@ function PC.mode(label, row)
     if not main or memory.read_u16_le(main + 8) ~= 2 then return pc_fail(label, "storage_top_not_ready") end
     if memory.read_u8(PC_MENU_MAX_CURSOR) ~= 4 then return pc_fail(label, "storage_top_wrong_row_count") end
     for _ = 1, 4 do
-        if memory.read_u16_le(main + 10) == row then break end
+        local cur = memory.read_u16_le(main + 10)
+        if cur == row then break end
         G.tap("Down", 3, 20)
+        -- each Down moves ONE row: wait for the cursor to leave `cur`, not to reach `row` (a target
+        -- of 2+ stalled after the first Down landed on 1; Emerald's MOVE POKEMON is row 2)
         if not pc_wait(label, "storage_top_cursor_stalled", function()
-            return memory.read_u16_le(main + 10) == row
+            return memory.read_u16_le(main + 10) ~= cur
         end, 90) then return false end
     end
     if memory.read_u16_le(main + 10) ~= row then return pc_fail(label, "storage_top_wrong_row") end

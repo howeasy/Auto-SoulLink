@@ -684,6 +684,33 @@ def test_finish_inside_a_leg_is_not_swallowed_by_the_recovery_pcall(lua, world):
     assert "RESULT: FAIL a real failure" in log
 
 
+def test_a_leg_whose_run_raises_is_finished_by_name(lua, world):
+    """A Lua error in a leg body used to be re-raised bare: no RESULT, screenshot or phase trail,
+    only the gate timeout (Emerald lost a 1500 s run; OMP cx-7ebf0d0f #8)."""
+    play = _bind(lua)
+    legs = lua.execute("""
+        return { { name = "boom", run = function() local t = nil; return t.x end } }
+    """)
+    ok, log, _err = world.guard(
+        lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
+    assert not ok
+    assert "RESULT: FAIL boom: run raised:" in log
+    assert log.count("RESULT:") == 1
+
+
+def test_a_leg_whose_check_raises_is_finished_by_name(lua, world):
+    play = _bind(lua)
+    legs = lua.execute("""
+        return { { name = "guard", check = function() error("probe blew up") end,
+                   run = function() RAN_GUARD = true end } }
+    """)
+    ok, log, _err = world.guard(
+        lua.eval('function(p, L) return p.main(L, { name = "fake" }) end'), play, legs)
+    assert not ok
+    assert "RESULT: FAIL guard: check raised:" in log and "probe blew up" in log
+    assert lua.eval("RAN_GUARD") is None
+
+
 # == the Codex cx-67a6e199 findings, one test each ============================================
 
 

@@ -1,6 +1,26 @@
-# Gen 3 migration — resume note (updated 2026-09-25, checkpoint 19: FROZEN CUT 870e5e5d, final passes running; RR 13/13; master merged; HUD code-reference fix)
+# Gen 3 migration — resume note (updated 2026-09-26, checkpoint 20: GEN 3 LANDED ON LOCAL MASTER; post-merge passes green)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
+
+## CHECKPOINT 20 (2026-09-26): Gen 3 landed on LOCAL master (not pushed); resume here
+
+- **Owner ruling 26: "Lets just merge it."** Master (Gen 2 merged at 062977a9) was merged into the Gen 3 line in the isolated worktree `.claude/worktrees/gen3-land` (3da0615b, plus a9ad03d3 for the docs). Local master was then fast-forwarded: a9ad03d3 → 280c1af7 → **a20cd945**.
+  - Verified master against the merge in the same unprovisioned env: only 1 new failure, an env artifact (the stale root slink_RR.gba). The Gen 1 gate was identical at both; Gen 2's lanes were identical except 99 STALE digest gaps (expected; Gen 2 re-sweeps).
+  - The slink-adapter-guard review passed.
+- **Post-merge fixes:**
+  - 280c1af7: test_gen3_routes/tutorial_states no longer count parents[2] (IndexError on the main checkout; Gen1-Collab2 found it). A repo-wide grep found no other instance.
+  - a20cd945: check_release_zip now expects lua/gen2 members (Gen 2's _LUA_GEN2), plus a coverage test.
+  - 794b789c: the LG fixture_qualify test stubs its ROM lookup; rr_harness_syms.load accepts only a pin-matching RR build. A class check ran every Gen 3 unit test in an unprovisioned worktree: no Gen 3 failures. Master = 794b789c.
+- **Post-merge passes on master:**
+  - FR/LG: a9ad03d3 shards 1 (13/13) and 2 (29/30, zip_check), then the zip rows at a20cd945 3/3. **All green.**
+  - RR: a9ad03d3 18/19 (rr_zip_check), then the zip rows at a20cd945 3/3. **All green.**
+- **Other lanes:**
+  - Gen 1: verified clean by Gen1-Collab2 at 062977a9, a9ad03d3 and 280c1af7 (1659 passed, 0 failed).
+  - Gen 2: its loader fix (87779879, SourceUnavailable becomes a named skip) merges next. Its 98-cell re-sweep runs on the merged master.
+  - Emerald: branch claude/gen3-emerald merged a9ad03d3; E3 has approved-direction items pending.
+- **Still open:**
+  - The owner's G4/G5 play session and signature. Ruling 26 landed the code first, but the release is still gated.
+  - P6: requirements rows, docs and release notes, 2 reviews, then G6 (the owner tags and ships). Nothing is pushed.
 
 ## CHECKPOINT 19 (2026-09-25, 1.5-hour block): resume here
 

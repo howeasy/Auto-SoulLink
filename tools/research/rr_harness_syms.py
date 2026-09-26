@@ -27,21 +27,17 @@ RR_ARTIFACTS = {"964f951a0fdaf209e4ea1344883ef0d557bb3a80": "Pokemon - Radical R
 NOTE = "docs/gen3/research/rr_harness_syms_2026-09-24.md"
 
 
-def find(rel):
-    for base in (REPO, *REPO.parents):
-        if (base / rel).is_file():
-            return base / rel
-    return None
-
-
 def load(rel, sha):
-    path = find(rel)
-    if path is None:
-        return None
-    rom = path.read_bytes()
-    if hashlib.sha1(rom).hexdigest() != sha:
-        raise SystemExit(f"{path} is not {sha}")
-    return rom
+    """The nearest copy of `rel` whose sha1 is the pinned one, else None (absent). A stale copy
+    higher up -- the main checkout's July slink_RR.gba -- is skipped, not taken: the first match
+    used to win and SystemExit a clean worktree on someone else's leftover build."""
+    for base in (REPO, *REPO.parents):
+        path = base / rel
+        if path.is_file():
+            rom = path.read_bytes()
+            if hashlib.sha1(rom).hexdigest() == sha:
+                return rom
+    return None
 
 
 def refs(rom, value):

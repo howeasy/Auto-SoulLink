@@ -1,0 +1,23 @@
+# gen3_final_cut row=tutorials_firered item=§1.2_build cut=a9ad03d3acc705420ffeaa58ab690068169132fa
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2
+# command: python tools/mkstates_gen3_tutorials.py --title firered --out-dir 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states/firered'   (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T00:13:22 cpu=85% emuhawk=2 python=7
+start_utc=2026-09-26T04:13:20Z tracked_clean_before=True
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_fixture_runs\mkstates_tutorials_firered\Pokemon - FireRed Version (USA).SaveRAM from E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\tests\fixtures\gen3\firered_party_town.sav; states -> E:\Google Drive\SLink\.claude\worktrees\gen3-lane-2\patch\build\gen3_probe_states\firered
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3_tutorials.ini --lua=lua/tests/mkstates_gen3_tutorials.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] mkstates_gen3_tutorials: RESULT: PASS tutorial states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states/firered  (16s)
+phase start frame=1 title=firered dir=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states/firered
+phase field frame=778 map=(3,1)
+phase segment frame=1068 at 3.1 (24,31), want 3.1 (24,31)
+phase segment frame=1103 at 3.1 (22,31), want 3.1 (22,31)
+phase segment frame=1458 at 3.1 (22,9), want 3.1 (22,9)
+phase state-saved frame=2990 slink_oldman.State in_battle=true flags=00000204 ctrl0=080E78E1
+phase teachy-tv frame=6212 var 0x4051=2 key slot 0
+phase ttv-battle frame=6435 row 0 chosen
+phase state-saved frame=9218 slink_pokedude.State in_battle=true flags=00010004 ctrl0=0815614D
+RESULT: PASS tutorial states in E:/Google Drive/SLink/.claude/worktrees/gen3-lane-2/patch/build/gen3_probe_states/firered
+exit=0 end_utc=2026-09-26T04:13:39Z tracked_clean_after=True classification=pass
