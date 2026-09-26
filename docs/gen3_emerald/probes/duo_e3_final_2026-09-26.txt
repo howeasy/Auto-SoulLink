@@ -1,0 +1,39 @@
+# E3 final regression duos at ef99d9b8 (client native SE mapping + gift-list validation), 2026-09-26 12:08-12:10Z
+# lane HEAD=ef99d9b8 tracked-clean; python tools/e2e_duo.py --game <g> --scenario <s> --lane em4<s>
+# deadzone_gen3 attempts 1-2: 'the cartridge's only ball missed' (hunt ended out-of-balls; the known one-ball fixture miss, retried by the harness on that reason only); attempt 3 PASS.
+## duo2_gen3_frlg_deadzone_gen3.log
+[duo] deadzone: route_1 locked by A's no_catch (species 45698); B's 24473809:1C600D89 saved only in the memorial box
+[duo] MARKER b: FAINTED 24473809:1C600D89 frame=5488 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=24473809:1C600D89
+[duo] MARKER b: TX memorialize_done 24473809:1C600D89 {"box":13,"event":"memorialize_done","key":"24473809:1C600D89","player":"b","seq":171}
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+  deadzone_gen3: PASS (attempt 3 of 3)
+## duo2_gen3_frlg_linked_faint_active_gen3.log
+[duo] MARKER b: ACTIVE_OUTCOME BC73F9B0:1C600D89 outcome=4 sent_out=1 whiteout_tx=0
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_b_1_witness.bin bytes=131072 saves=1 frame=8984 counter=5
+[duo] MARKER b: FORCED_HP0 BC73F9B0:1C600D89 frame=7224 in_battle=1 battler=1
+[duo] MARKER b: TX memorialize_done BC73F9B0:1C600D89 {"box":13,"event":"memorialize_done","key":"BC73F9B0:1C600D89","player":"b","seq":255}
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_gen3: a=PASS b=PASS
+  linked_faint_active_gen3: PASS (attempt 1 of 1)
+## duo2_gen3_rr_explode_gen3.log
+[duo] MARKER b: RX memorialize key=EBEF11DA:D4223740
+[duo] MARKER b: RX game_over
+[duo] MARKER b: [client] [SLink-gen3] memorialize dropped: last mon after game over EBEF11DA:D4223740
+[duo] MARKER b: LAST_MON_KEPT EBEF11DA:D4223740
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] explode_gen3: a=PASS b=PASS
+  explode_gen3: PASS (attempt 1 of 1)
+## duo2_gen3_rr_faint_cmd_gen3.log
+[duo] MARKER b: FORCED_HP0 F56D8C1D:D4223740 frame=722 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=F56D8C1D:D4223740
+[duo] MARKER b: TX memorialize_done F56D8C1D:D4223740 {"box":24,"event":"memorialize_done","key":"F56D8C1D:D4223740","player":"b","seq":6}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x0202433E +2 frame 722
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_gen3: a=PASS b=PASS
+  faint_cmd_gen3: PASS (attempt 1 of 1)

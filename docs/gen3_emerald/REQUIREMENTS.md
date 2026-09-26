@@ -113,10 +113,16 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| EC-1 | Foundation `gen3_emerald`; FR↔E and RR↔E refused before adapter reselection, `links.json` bytes unchanged | SERVER | · | · | — |
-| EC-2 | `Gen3Adapter` keeps `rom_type`; title data (statics, items overlay, sprites `generation-iii/emerald`, label "Emerald", title-aware area catalog) | SERVER | · | · | · |
+| EC-1 | Foundation `gen3_emerald`; FR↔E and RR↔E refused before adapter reselection, `links.json` bytes unchanged | SERVER | ✓ | ✓ | — |
+| EC-2 | `Gen3Adapter` keeps `rom_type`; title data (statics, items overlay, sprites `generation-iii/emerald`, label "Emerald", title-aware area catalog) | SERVER | ✓ | ✓ | ◐ |
 | EC-3 | By-name refusal (`lua/slink.lua`) and `UNADMITTED_GAMES` flip only with EG4 (ruling 24) | CONTROL | · | · | · |
-| EC-4 | Conformance World rows + capabilities fixture regenerated | MODEL | · | · | — |
+| EC-4 | Conformance World rows + capabilities fixture regenerated | MODEL | ✓ | ✓ | — |
+
+### E3 evidence (2026-09-26; see `docs/gen3_emerald/EG3_request.md`)
+
+- **EC-1:** `test_mixed_foundations.py` covers the FR/RR↔E refusal in 4 arrival orders, with the `links.json` bytes unchanged, and E↔E admission.
+- **EC-2 ◐:** the title data plus restart/rollback are in `test_gen3_emerald_server.py`. PHYSICAL only on FR/LG/RR (regression duos); the Emerald client runs only in tests until EG4.
+- **EC-4:** `test_protocol_conformance.py::test_world_rows_on_emerald` (test-only admitted pack copy) and `test_mockup_fixtures.py`.
 | XC-1 | `gen3_expansion.py` adapter contract (full `base.py` surface; empty trainer/encounter = recorded limit); `pokemon_data.py` untouched | SERVER | · | · | · |
 
 ## D: Duos (E4 / X3)
