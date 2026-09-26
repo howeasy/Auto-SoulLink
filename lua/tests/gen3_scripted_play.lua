@@ -4157,7 +4157,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         .. "evolve_species_store site, docs/gen3_emerald/engine_sites.md)",
         "src/evolution_scene.c:930-946 (the learn-move yes/no; B == NO) -- unreachable here: the guard "
         .. "requires a free move slot",
-        "src/data/pokemon/evolution.h:132 (SPECIES_MUDKIP: EVO_LEVEL 16 -> SPECIES_MARSHTOMP)",
+        "src/data/pokemon/evolution.h:129 (SPECIES_MUDKIP: EVO_LEVEL 16 -> SPECIES_MARSHTOMP)",
         "src/battle_controller_player.c (gActionSelectionCursor resets to FIGHT(0) each battle: A,A = move 0)",
     },
     run = function(cp)
@@ -4208,12 +4208,13 @@ function EMH.poison_party()
         local hp, maxhp = slot0_hp()
         local status = memory.read_u32_le(PARTY_BASE + EMH.OFF_STATUS)
         -- the second mon must be healthy, or a faint would white out (field_poison.c:27-38)
-        local status2 = memory.read_u32_le(PARTY_BASE + 100 + EMH.OFF_STATUS)
+        local status2 = memory.read_u32_le(PARTY_BASE + MON_SIZE + EMH.OFF_STATUS)
+        local hp2 = memory.read_u16_le(PARTY_BASE + MON_SIZE + OFF_HP)
         if count ~= 2 or hp ~= 1 or maxhp <= 1 or status & EMH.STATUS1_PSN_ANY == 0
-            or status2 ~= 0 then
-            return string.format("expected [poisoned lead at 1 HP, second mon], read party=%d HP "
-                                 .. "%d/%d status=0x%X -- wrong fixture loaded for this leg",
-                                 count, hp, maxhp, status)
+            or status2 ~= 0 or hp2 == 0 then
+            return string.format("expected [poisoned lead at 1 HP, healthy second mon], read party=%d "
+                                 .. "HP %d/%d status=0x%X second HP %d status=0x%X -- wrong fixture "
+                                 .. "loaded for this leg", count, hp, maxhp, status, hp2, status2)
         end
     end
 end

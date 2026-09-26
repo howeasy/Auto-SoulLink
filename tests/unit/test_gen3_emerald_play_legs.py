@@ -159,6 +159,9 @@ def test_open_legs_carry_a_reason(legs):
         if legs[i]["open"]:
             assert legs[i]["open_reason"], f"leg {legs[i]['name']!r} is open with no reason"
     assert opened == [], f"legs reopened: {opened}"
+    # OMP cx-7ebf0d0f #1: "not open" alone passes a leg that lost its body; every leg runs
+    no_run = [legs[i]["name"] for i in range(1, len(legs) + 1) if legs[i]["run"] is None]
+    assert no_run == [], f"legs without run(): {no_run}"
 
 
 def test_pinned_legs_are_not_open(legs):
@@ -719,12 +722,13 @@ def test_poison_party_guard_accepts_the_fixture_and_refuses_each_break():
     poke = lua.globals().poke
     check = mod.EMH.poison_party()
 
-    def setup(count, hp, maxhp, status, status2):
+    def setup(count, hp, maxhp, status, status2, hp2=15):
         poke(_PARTY_COUNT, count, 1)
         poke(_PARTY + 0x56, hp, 2)
         poke(_PARTY + 0x58, maxhp, 2)
         poke(_PARTY + 0x50, status, 4)
         poke(_PARTY + _PARTY_MON_SIZE + 0x50, status2, 4)
+        poke(_PARTY + _PARTY_MON_SIZE + 0x56, hp2, 2)   # emerald_poison.sav: Poochyena HP 15
 
     setup(2, 1, 20, 0x08, 0)               # emerald_poison.sav's own shape: accepted
     assert check() is None
@@ -740,6 +744,9 @@ def test_poison_party_guard_accepts_the_fixture_and_refuses_each_break():
 
     setup(1, 1, 20, 0x08, 0)               # wrong party count
     assert check() is not None
+
+    setup(2, 1, 20, 0x08, 0, hp2=0)        # second mon already fainted -> the faint whites out
+    assert "second HP 0" in check()
 
 
 def _poke_lead(poke, species, level, moves):
