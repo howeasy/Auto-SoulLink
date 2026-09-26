@@ -20,10 +20,10 @@
 
 | Property | Value | Cite |
 |---|---|---|
-| Carrier | TCP, one connection per client, server is `asyncio.start_server` | `server.py:5507-5508` |
+| Carrier | TCP, one connection per client, server is `asyncio.start_server` | `server.py:5500-5501` |
 | Framing | one JSON object per line, `\n` terminated, both directions | `connector.lua:7-9`, `server.py:2685`, `server.py:2835` |
 | Encoding | UTF-8; server decodes with `errors="replace"` and `.strip()`s the line; blank lines are ignored | `server.py:2710-2712` |
-| Max inbound line (server) | 4 MiB (`limit=4*1024*1024`); an over-long line is drained to the next `\n`, logged, and the connection stays up. **No reply is sent for the dropped line.** | `server.py:1546-1561`, `server.py:5507-5508` |
+| Max inbound line (server) | 4 MiB (`limit=4*1024*1024`); an over-long line is drained to the next `\n`, logged, and the connection stays up. **No reply is sent for the dropped line.** | `server.py:1546-1561`, `server.py:5500-5501` |
 | Max inbound line (client) | 4 MiB (`MAX_LINE`); an over-long server line is discarded and the reader resyncs at the next `\n` | `connector.lua:51`, `connector.lua:242-247`, `connector.lua:221-228` |
 | Client → server envelope | `{"event": "<type>", "player": "a"\|"b", "seq": N, ...fields}` — `send()` stamps `seq` and `player` on every event | `lua/core/session.lua:78-88` |
 | Server → client envelope | **exactly one line per inbound line**: `{"commands": [ {...}, {...} ]}`. Never fewer than one element: an empty queue is `[{"cmd":"noop"}]` | `server.py:1575`, `server.py:1586`, `state.py:576` |
@@ -237,8 +237,8 @@ Built by `party_wire`/`party_entry` (`lua/gen3/client.lua:251-270`, fields at `:
 | `key` | key | **MUST** | `party_keys` (`m["key"]` — a missing key raises `KeyError` in `_handle_hello` and kills the connection coroutine), `_reconcile_party_keys`, blobs, `party_details` (skipped if falsy) | `state.py:1659`, `state.py:3165`, `server.py:3197` |
 | `maxHP` | int | MUST | hello: only `maxHP > 0` entries count as party members; HP bars | `state.py:1759`, `server.py:3296-3312` |
 | `hp` | int | MUST | hello offline-faint detection (`hp == 0`), alive set for re-quarantine; HP bars | `state.py:1772`, `state.py:1797-1808` |
-| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:4032`, `server.py:5157` |
-| `slot` | int 0-5 | SHOULD | `partner_blobs.slot` (trade `apply_trade.slot`), party ordering (`999` fallback) | `state.py:4030`, `server.py:5155` |
+| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:4032`, `server.py:5150` |
+| `slot` | int 0-5 | SHOULD | `partner_blobs.slot` (trade `apply_trade.slot`), party ordering (`999` fallback) | `state.py:4030`, `server.py:5148` |
 | `species_id` | int (game-internal) | SHOULD | display back-fill into MonInfo, blobs, sprites, names, types | `state.py:1872`, `server.py:2734-2737` |
 | `nickname` | str | SHOULD | MonInfo back-fill, HUD labels, dashboard | `state.py:1866-1883` |
 | `active` | bool | SHOULD (battle) | active-battler marker, `stat_stages` shown only when true, doubles inference on foes | `server.py:3317-3318`, `server.py:3237`, `server.py:2388-2390` |
@@ -296,12 +296,12 @@ Built by `rescan_boxes` (`lua/gen3/client.lua:289-304`, entry at `:275-277`): th
 
 | Field | Type | Consumer | Cite |
 |---|---|---|---|
-| `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:5085`, `4652`, `4701` |
-| `slot` | int, 0-based | display `slot+1`, logs | `server.py:5106`, `4702` |
+| `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:5078`, `4652`, `4701` |
+| `slot` | int, 0-based | display `slot+1`, logs | `server.py:5099`, `4702` |
 | `key` | key | `_cache_mon_info`, dead-in-regular-box re-memorialize, level fallbacks | `server.py:1895-1941`, `8066-8079` |
 | `species_id`, `nickname` | int, str | display | `server.py:2746-2755` (`_enrich_box`, wire-through to the template) |
-| `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:5157-5176` |
-| `held_item_id`, `ability_id`, `moves` | | box table | `server.py:4755-4756`, `3430-3439` |
+| `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:5150-5169` |
+| `held_item_id`, `ability_id`, `moves` | | box table | `server.py:4748-4749`, `3430-3439` |
 
 There is **no** "active box index" on the wire.
 
@@ -314,8 +314,8 @@ There is **no** "active box index" on the wire.
 | `_build_link_panel` `server.py:1774-1882` | links, `party_details` (`species_id, nickname, level, hp, maxHP, status_cond`), `_mon_cache`, `area_states`, `SoulLinkState.player_badges` (count) or `SLinkServer.player_badges` (bitmask) | `area_display_name`, `species_name`, `status_token`, `info_panel_width`, `supports_info_panel` |
 | `_build_party_overlay_context` `server.py:3152-3200` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
 | `_build_badges_overlay_context` `server.py:3583-3603` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
-| `_check_memorial_box_contamination` `server.py:5046-5145` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
-| `_memorial_box_indices` `server.py:4948-4967` | dead count | `memorial_box_index`, `mons_per_box` |
+| `_check_memorial_box_contamination` `server.py:5039-5138` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
+| `_memorial_box_indices` `server.py:4941-4960` | dead count | `memorial_box_index`, `mons_per_box` |
 
 `status_pill` (`server/templates/_macros.html:43-53`) decodes `status_cond` with the Gen 3 bit layout directly (SLP bits 0-2, TOX 0x80, PSN 0x08, BRN 0x10, FRZ 0x20, PAR 0x40). A client for a generation with a different layout MUST translate to this layout on the wire (see §8).
 
@@ -502,7 +502,7 @@ Accepts only in phase `applying`; ignores a mismatching non-empty `token`; buffe
 | `sprite_src` | `(species_id) -> url` | PokeAPI by national dex | encounter panel | `base.py:553-564` |
 | `move_name` / `move_data` | `(move_id) -> str` / `-> {name,type_id,type_name,power,accuracy,pp,split}\|None` | `""` / `None` | move tables `server.py:164`, `2708` | `base.py:566-579` |
 | `stat_stage_labels` | `() -> list[str]` (7 slots; `""` blanks a slot) | `["ATK","DEF","SPD","SATK","SDEF","ACC","EVA"]` | `server/ui_capabilities.py:30` | `base.py:581-589` |
-| `mons_per_box` | property → int | `30` | memorial overflow box count `server.py:4961` | `base.py:592-600` |
+| `mons_per_box` | property → int | `30` | memorial overflow box count `server.py:4954` | `base.py:592-600` |
 | `memorial_box_index` | property → int (0-based; `-1` = none) | `-1` | contamination scan, memorial contents | `base.py:603-610` |
 | `gym_badge_slugs` | `(rom_type) -> [(pokeapi_id, name)]` | Kanto 1-8 | badges overlay | `base.py:612-630` |
 | `calc_name` | `(kind, name) -> str`; kind is species/ability/item/move | identity | calc payload names (`_build_mon_entry`) `server.py:156`, `160`, `166` | `base.py:502-508` |
