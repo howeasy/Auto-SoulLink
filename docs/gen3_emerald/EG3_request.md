@@ -1,5 +1,7 @@
 # EG3 request: E3, the Emerald shared server/client diff (2026-09-26)
 
+**SIGNED 2026-09-26** by the owner in chat ("Signed. Lets go."): all five decisions in §6 accepted.
+
 - **Branch:** `claude/gen3-emerald`, local only: not pushed, not on master. It contains master
   `1d02702f` (Gen 3 landed).
 - **Cut for this request:** `ef99d9b8`, plus the review follow-ups in `7cf4a3c9`: the rebuild refusal is logged (state.py, guard CLEAN), derive-b uses the codec title normaliser, and a test that every pack maps every wire SE id.
