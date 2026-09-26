@@ -66,6 +66,9 @@ def _rgbds() -> tuple[Path, str]:
 @pytest.fixture(scope="module")
 def built() -> dict[str, bytes]:
     _rgbds()
+    for key in TARGETS:  # absent input skips (tests/TESTING.md); build.py exits on a missing dump
+        if not (ROOT / manifest.ROMS[key][0]).is_file():
+            pytest.skip(f"clean Gen 1 {key} dump absent: {manifest.ROMS[key][0]}")
     env = {**os.environ, "PYTHONDONTWRITEBYTECODE": "1"}
     result = subprocess.run([sys.executable, str(ROOT / "patch/gen1/tools/build.py")],
                             cwd=ROOT, env=env, capture_output=True, text=True, check=False)

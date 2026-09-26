@@ -111,7 +111,7 @@ def test_the_calc_bridge_reads_the_prep_param_the_button_sends():
 _SETS_HARNESS = r"""
 const fs = require('fs');
 const src = fs.readFileSync(process.argv[1], 'utf8');
-const fn = /(  function _maybeLoadGameSets[\s\S]*?\n  \}\n)/.exec(src)[1];
+const fn = /(  function _maybeLoadGameSets[\s\S]*?\r?\n  \}\r?\n)/.exec(src)[1];
 const pending = [];
 const window = { CUSTOMSETDEX_C: { Onix: { 'Leader Falkner': {} } } };
 const document = { createElement: () => ({}), head: { appendChild: s => pending.push(s) } };
