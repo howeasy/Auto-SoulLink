@@ -1,11 +1,11 @@
 duo instance b scenario=faint_cmd_gen3 phase=initial title=emerald attempt=1
 SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
-[client] [SLink] TCP connecting to 127.0.0.1:58447 (non-blocking)…
+[client] [SLink] TCP connecting to 127.0.0.1:51690 (non-blocking)…
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
-[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:58447 (rom f3ae0881)
-client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:58447
-[client] [SLink] TCP connected to 127.0.0.1:58447
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:51690 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:51690
+[client] [SLink] TCP connected to 127.0.0.1:51690
 [client] [SLink-gen3] writes ENABLED
 TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_i
 RX resolved_areas
@@ -22,30 +22,30 @@ JITTER requested=0 applied=0 attempt=1
 READY 504F4F4D:DFDAF6DA
 RX force_faint key=504F4F4D:DFDAF6DA
 RX play_sound
-[client] [SLink-gen3] write sound 0x030075F0 +4 frame 662
-[client] [SLink-gen3] write sound 0x030075F8 +1 frame 662
-[client] [SLink-gen3] write sound 0x030075F9 +1 frame 662
-[client] [SLink-gen3] write sound 0x030075FC +4 frame 662
-[client] [SLink-gen3] write sound 0x03001660 +4 frame 662
-[client] [SLink-gen3] write sound 0x03001660 +1 frame 662
-[client] [SLink-gen3] write sound 0x0300166F +1 frame 662
-[client] [SLink-gen3] write sound 0x03001673 +1 frame 662
-[client] [SLink-gen3] write sound 0x03001679 +1 frame 662
-[client] [SLink-gen3] write sound 0x03001680 +4 frame 662
-[client] [SLink-gen3] write sound 0x030016A0 +4 frame 662
-[client] [SLink-gen3] write sound 0x030075F4 +4 frame 662
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 692
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 692
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 692
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 692
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 692
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 692
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 692
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 692
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 692
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 692
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 692
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 692
 RX memorialize key=504F4F4D:DFDAF6DA
 RX game_over
-[client] [SLink-gen3] write overworld 0x020245A6 +2 frame 662
-FORCED_HP0 504F4F4D:DFDAF6DA frame=662 in_battle=0 battler=0
-[client] [SLink-gen3] write overworld 0x02031228 +80 frame 663
-[client] [SLink-gen3] write overworld 0x02024550 +100 frame 663
-[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 663
-TX memorialize_done 504F4F4D:DFDAF6DA {"box":13,"event":"memorialize_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":7}
-[client] [gen3] phase save-menu frame=723 counter=2
-[client] [gen3] phase save-dialog frame=783 row=3/6
-[client] [gen3] phase saved frame=1183 counter=2->3
-SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_b_1_witness.bin bytes=131072 saves=1 frame=1411 counter=3
+[client] [SLink-gen3] write overworld 0x020245A6 +2 frame 692
+FORCED_HP0 504F4F4D:DFDAF6DA frame=692 in_battle=0 battler=0
+[client] [SLink-gen3] write overworld 0x02031228 +80 frame 693
+[client] [SLink-gen3] write overworld 0x02024550 +100 frame 693
+[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 693
+TX memorialize_done 504F4F4D:DFDAF6DA {"box":13,"event":"memorialize_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":8}
+[client] [gen3] phase save-menu frame=753 counter=2
+[client] [gen3] phase save-dialog frame=813 row=3/6
+[client] [gen3] phase saved frame=1213 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_b_1_witness.bin bytes=131072 saves=1 frame=1442 counter=3
 SAVE_WITNESS faint_cmd counter=2->3
 WRITES 16
 RESULT: PASS (memorialized 504F4F4D:DFDAF6DA)

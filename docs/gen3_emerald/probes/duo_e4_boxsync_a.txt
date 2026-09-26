@@ -1,45 +1,45 @@
 duo instance a scenario=boxsync_gen3 phase=initial title=emerald attempt=1
 SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
-[client] [SLink] TCP connecting to 127.0.0.1:58764 (non-blocking)…
+[client] [SLink] TCP connecting to 127.0.0.1:53233 (non-blocking)…
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
-[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:58764 (rom f3ae0881)
-client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:58764
-[client] [SLink] TCP connected to 127.0.0.1:58764
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:53233 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:53233
+[client] [SLink] TCP connected to 127.0.0.1:53233
 [client] [SLink-gen3] writes ENABLED
 TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_i
 RX resolved_areas
 RX config
 RX dead_keys
 [client] [SLink-gen3] unhandled command dead_keys
-[client] [gen3] phase field frame=580 map=(0,10)
+[client] [gen3] phase field frame=581 map=(0,10)
 MYKEY 0 4D55444B:20250925
 PARTY slot=0 key=4D55444B:20250925 species=283 level=5 hp=20/20
 MYKEY 1 504F4F4D:20250925
 PARTY slot=1 key=504F4F4D:20250925 species=286 level=3 hp=15/15
-booted frame=580 map=map=10 at=(6,17) balls=5
+booted frame=581 map=map=10 at=(6,17) balls=5
 JITTER requested=0 applied=0 attempt=1
-TX area_enter - {"area_id":"","event":"area_enter","loc_name":"oldale_town_pokemon_center_1f","player":"a","seq":8}
-TX party_to_box 504F4F4D:20250925 {"event":"party_to_box","key":"504F4F4D:20250925","player":"a","seq":37,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
-[client] [gen3] phase pc-exit frame=1550 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
-[client] [gen3] phase pc-exit frame=1656 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
-[client] [gen3] phase pc-exit frame=1762 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=1
-[client] [gen3] phase pc-exit frame=1868 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=1
-[client] [gen3] phase pc-exit frame=1900 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"oldale_town_pokemon_center_1f","player":"a","seq":7}
+TX party_to_box 504F4F4D:20250925 {"event":"party_to_box","key":"504F4F4D:20250925","player":"a","seq":36,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+[client] [gen3] phase pc-exit frame=1520 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=1626 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=1732 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=1838 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=1
+[client] [gen3] phase pc-exit frame=1870 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
 BOXED_OBSERVED 504F4F4D:20250925 box=0:2
 DEPOSITED 504F4F4D:20250925
-TX box_to_party 504F4F4D:20250925 {"area_id":"","event":"box_to_party","key":"504F4F4D:20250925","player":"a","seq":71}
-[client] [gen3] phase pc-exit frame=2562 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
-[client] [gen3] phase pc-exit frame=2668 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
-[client] [gen3] phase pc-exit frame=2774 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=0
-[client] [gen3] phase pc-exit frame=2880 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=0
-[client] [gen3] phase pc-exit frame=2912 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
+TX box_to_party 504F4F4D:20250925 {"area_id":"","event":"box_to_party","key":"504F4F4D:20250925","player":"a","seq":70}
+[client] [gen3] phase pc-exit frame=2554 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=2660 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=2766 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=2872 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=0
+[client] [gen3] phase pc-exit frame=2904 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
 RETURNED_OBSERVED 504F4F4D:20250925 slot=1
 WITHDRAWN 504F4F4D:20250925
-[client] [gen3] phase save-menu frame=2944 counter=2
-[client] [gen3] phase save-dialog frame=3004 row=3/6
-[client] [gen3] phase saved frame=3404 counter=2->3
-SAVE_WITNESS_DUMP path=patch/build/e2e_boxsync_gen3_a_1_witness.bin bytes=131072 saves=1 frame=3635 counter=3
+[client] [gen3] phase save-menu frame=2905 counter=2
+[client] [gen3] phase save-dialog frame=2965 row=3/6
+[client] [gen3] phase saved frame=3365 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_boxsync_gen3_a_1_witness.bin bytes=131072 saves=1 frame=3596 counter=3
 SAVE_WITNESS boxsync counter=2->3
 WRITES 0
 RESULT: PASS (round trip of 504F4F4D:20250925)

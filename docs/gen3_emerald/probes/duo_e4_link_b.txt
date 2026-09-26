@@ -1,11 +1,11 @@
-duo instance b scenario=link_gen3 phase=initial title=emerald attempt=1
+duo instance b scenario=link_gen3 phase=initial title=emerald attempt=2
 SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
-[client] [SLink] TCP connecting to 127.0.0.1:58739 (non-blocking)…
+[client] [SLink] TCP connecting to 127.0.0.1:52599 (non-blocking)…
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
-[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:58739 (rom f3ae0881)
-client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:58739
-[client] [SLink] TCP connected to 127.0.0.1:58739
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:52599 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:52599
+[client] [SLink] TCP connected to 127.0.0.1:52599
 [client] [SLink-gen3] writes ENABLED
 TX hello - {"area_id":"route_102","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"route102"
 RX resolved_areas
@@ -16,43 +16,41 @@ RX dead_keys
 MYKEY 0 4D55444B:DFDAF6DA
 PARTY slot=0 key=4D55444B:DFDAF6DA species=283 level=5 hp=20/20
 booted frame=580 map=map=17 at=(21,16) balls=5
-JITTER requested=0 applied=0 attempt=1
-[client] [gen3] phase ball-thrown frame=1586 gLastUsedItem 0 -> 0, balls 5 -> 4
+JITTER requested=37 applied=37 attempt=2
+[client] [gen3] phase ball-thrown frame=1654 gLastUsedItem 0 -> 0, balls 5 -> 4
 THREW 1
-TX capture A09DD804:DFDAF6DA {"area_id":"route_102","event":"capture","held_item_id":0,"hp":18,"is_egg":false,"key":"A09DD804:DFDAF6DA","level":4,"maxHP":18,"nickname":"WURMPLE","player":"b","seq":79,"species_id":290}
-RX box_mon key=A09DD804:DFDAF6DA
-TX safe - {"event":"safe","player":"b","seq":81}
-[client] [SLink-gen3] write overworld 0x02029884 +80 frame 2912
-[client] [SLink-gen3] write overworld 0x02024550 +100 frame 2912
-[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 2912
-TX stats_cache A09DD804:DFDAF6DA {"event":"stats_cache","key":"A09DD804:DFDAF6DA","player":"b","seq":84,"stats":{"attack":8,"defense":8,"level":4,"maxHP":18,"pp1":35,"pp2":40,"pp3":0,"pp4":0,"spAtk":6,"spDef":7,"speed":7}}
-CAUGHT A09DD804:DFDAF6DA
+[client] [gen3] phase ball-thrown frame=2742 gLastUsedItem 0 -> 0, balls 4 -> 3
+THREW 2
+RX hud_show text=Partner caught WURMPLE in Route 102
+[client] [gen3] phase ball-thrown frame=3741 gLastUsedItem 0 -> 0, balls 3 -> 2
+THREW 3
+[client] [gen3] phase ball-thrown frame=4661 gLastUsedItem 0 -> 0, balls 2 -> 1
+THREW 4
+TX capture 6C6D0D8B:DFDAF6DA {"area_id":"route_102","event":"capture","held_item_id":0,"hp":15,"is_egg":false,"key":"6C6D0D8B:DFDAF6DA","level":3,"maxHP":15,"nickname":"POOCHYENA","player":"b","seq":182,"species_id":286}
 RX play_sound
-[client] [SLink-gen3] write sound 0x030075F0 +4 frame 4682
-[client] [SLink-gen3] write sound 0x030075F8 +1 frame 4682
-[client] [SLink-gen3] write sound 0x030075F9 +1 frame 4682
-[client] [SLink-gen3] write sound 0x030075FC +4 frame 4682
-[client] [SLink-gen3] write sound 0x03001660 +4 frame 4682
-[client] [SLink-gen3] write sound 0x03001660 +1 frame 4682
-[client] [SLink-gen3] write sound 0x0300166F +1 frame 4682
-[client] [SLink-gen3] write sound 0x03001673 +1 frame 4682
-[client] [SLink-gen3] write sound 0x03001679 +1 frame 4682
-[client] [SLink-gen3] write sound 0x03001680 +4 frame 4682
-[client] [SLink-gen3] write sound 0x030016A0 +4 frame 4682
-[client] [SLink-gen3] write sound 0x030075F4 +4 frame 4682
-RX msgbox text=LOTAD and WURMPLE linked!
-RX party_mon key=A09DD804:DFDAF6DA
-[client] [SLink-gen3] write overworld 0x02024550 +100 frame 4682
-[client] [SLink-gen3] write overworld 0x02029884 +80 frame 4682
-[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 4682
-TX sync_retrieve_done A09DD804:DFDAF6DA {"event":"sync_retrieve_done","key":"A09DD804:DFDAF6DA","player":"b","seq":144}
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 5914
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 5914
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 5914
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 5914
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 5914
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 5914
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 5914
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 5914
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 5914
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 5914
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 5914
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 5914
+RX msgbox text=WURMPLE and POOCHYENA linked!
+RX party_mon key=6C6D0D8B:DFDAF6DA
+TX safe - {"event":"safe","player":"b","seq":184}
+TX sync_retrieve_done 6C6D0D8B:DFDAF6DA {"event":"sync_retrieve_done","key":"6C6D0D8B:DFDAF6DA","player":"b","seq":186}
+CAUGHT 6C6D0D8B:DFDAF6DA
 PARTY slot=0 key=4D55444B:DFDAF6DA species=283
-PARTY slot=1 key=A09DD804:DFDAF6DA species=290
-RETURNED_OBSERVED A09DD804:DFDAF6DA slot=1
-[client] [gen3] phase save-menu frame=4802 counter=2
-[client] [gen3] phase save-dialog frame=4862 row=3/6
-[client] [gen3] phase saved frame=5262 counter=2->3
-SAVE_WITNESS_DUMP path=patch/build/e2e_link_gen3_b_1_witness.bin bytes=131072 saves=1 frame=5485 counter=3
+PARTY slot=1 key=6C6D0D8B:DFDAF6DA species=286
+[client] [gen3] phase save-menu frame=6168 counter=2
+[client] [gen3] phase save-dialog frame=6228 row=3/6
+[client] [gen3] phase saved frame=6628 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_link_gen3_b_2_witness.bin bytes=131072 saves=1 frame=6850 counter=3
 SAVE_WITNESS link counter=2->3
-WRITES 18
-RESULT: PASS (caught A09DD804:DFDAF6DA)
+WRITES 12
+RESULT: PASS (caught 6C6D0D8B:DFDAF6DA)

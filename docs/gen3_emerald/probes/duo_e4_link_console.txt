@@ -2,8 +2,8 @@
 ========== scenario: link_gen3 ==========
 [duo] link_gen3: attempt 1 of 3
 [duo] JITTER requested=0 attempt=1
-[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=80a4c155a3e6987da2799e71bb0dff488dfd0a41
-[duo] server up: tcp=58739 http=58740 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_mb1692jc
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=cd93382ba7f07e7bd712fccbfca68844467cfb77
+[duo] server up: tcp=51854 http=51855 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_xmsoq8ra
 [duo] timing server 0.6s
 [duo] cleared 7 stale artifact(s) for link_gen3: e2e_link_gen3_a_1_witness.bin, e2e_link_gen3_a_attempt1_result.txt, e2e_link_gen3_a_result.txt, e2e_link_gen3_b_1_witness.bin, e2e_link_gen3_b_attempt1_result.txt, e2e_link_gen3_b_result.txt, e2e_link_gen3_pydec_attempt1_result.txt
 [duo] launched a phase=initial seed=True
@@ -15,21 +15,95 @@
 [duo] both players connected
 [duo] go-file written for a
 [duo] go-file written for b
-[duo] real captures: a=B8A7E5A1:20250925 b=A09DD804:DFDAF6DA
-[duo] ENCOUNTER LINK FROM REAL PLAY (new client): B8A7E5A1:20250925 <-> A09DD804:DFDAF6DA on route_102, alive
-[duo] timing orchestrate 20.2s
+[duo] timing orchestrate 29.7s
+[duo] RESULT_LINE a: RESULT: FAIL (hunt ended out-of-balls)
+[duo] RESULT_LINE b: (none)
+[duo] PYDEC: FAIL client RESULT before both RESULT lines
+[duo] link_gen3: a client finished before 'both RESULT lines' (a: RESULT: FAIL (hunt ended out-of-balls); b: no RESULT)
+--- link_gen3 a result (last 25 lines) ---
+[client] [gen3] phase ball-thrown frame=3947 gLastUsedItem 0 -> 0, balls 3 -> 2
+THREW 3
+RX hud_show text=Partner caught LOTAD in Route 102
+[client] [gen3] phase ball-thrown frame=5087 gLastUsedItem 0 -> 0, balls 2 -> 1
+THREW 4
+[client] [gen3] phase ball-thrown frame=6335 gLastUsedItem 0 -> 0, balls 1 -> 0
+THREW 5
+TX no_catch - {"area_id":"route_102","event":"no_catch","level":4,"player":"a","seq":234,"species_id":392}
+TX safe - {"event":"safe","player":"a","seq":235}
+RX play_sound
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 7496
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 7496
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 7496
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 7496
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 7496
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 7496
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 7496
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 7496
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 7496
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 7496
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 7496
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 7496
+RX msgbox text=Route 102 is a dead zone!
+WRITES 12
+RESULT: FAIL (hunt ended out-of-balls)
+--- link_gen3 b result (last 25 lines) ---
+[client] [SLink-gen3] write overworld 0x0202986C +80 frame 4243
+[client] [SLink-gen3] write overworld 0x02024550 +100 frame 4243
+[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 4243
+TX stats_cache AA092C1C:DFDAF6DA {"event":"stats_cache","key":"AA092C1C:DFDAF6DA","player":"b","seq":128,"stats":{"attack":7,"defense":5,"level":3,"maxHP":15,"pp1":15,"pp2":39,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":7}}
+CAUGHT AA092C1C:DFDAF6DA
+RX play_sound
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 7352
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 7352
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 7352
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 7352
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 7352
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 7352
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 7352
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 7352
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 7352
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 7352
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 7352
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 7352
+RX msgbox text=Route 102 is a dead zone!
+RX force_faint key=AA092C1C:DFDAF6DA
+[client] [SLink-gen3] force_faint: key not in party AA092C1C:DFDAF6DA
+RX memorialize key=AA092C1C:DFDAF6DA
+[client] [SLink-gen3] write overworld 0x0203124C +80 frame 7352
+[client] [SLink-gen3] write overworld 0x0202986C +80 frame 7352
+TX memorialize_done AA092C1C:DFDAF6DA {"box":13,"event":"memorialize_done","key":"AA092C1C:DFDAF6DA","player":"b","seq":233}
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_xmsoq8ra
+[duo] link_gen3: the cartridge's only ball missed; restarting attempt 2 of 3 with a fresh server, run directory and SaveRAM seeds
+[duo] link_gen3: attempt 2 of 3
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=cd93382ba7f07e7bd712fccbfca68844467cfb77
+[duo] server up: tcp=52599 http=52600 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_hub15et3
+[duo] timing server 1.0s
+[duo] cleared 5 stale artifact(s) for link_gen3: e2e_link_gen3_a_attempt1_result.txt, e2e_link_gen3_a_result.txt, e2e_link_gen3_b_attempt1_result.txt, e2e_link_gen3_b_result.txt, e2e_link_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=E99B0534:20250925 b=6C6D0D8B:DFDAF6DA
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): E99B0534:20250925 <-> 6C6D0D8B:DFDAF6DA on route_102, alive
+[duo] timing orchestrate 24.1s
 [duo] timing results 3.2s
-[duo] RESULT_LINE a: RESULT: PASS (caught B8A7E5A1:20250925)
-[duo] RESULT_LINE b: RESULT: PASS (caught A09DD804:DFDAF6DA)
-[duo] SAVE_WITNESS_SHA256 inst=a site=04c71a30b3f712c2cb6193559ae8bc4a2343456a91401fbb9a03eb6e3f29a179 file=04c71a30b3f712c2cb6193559ae8bc4a2343456a91401fbb9a03eb6e3f29a179 match=true saves=1 counter=2->3 rtc=normalized
-[duo] SAVE_WITNESS_SHA256 inst=b site=aa049f94f113bc0cd86d0296e04a5d1e3a62587dca06a65b749deb758265e207 file=aa049f94f113bc0cd86d0296e04a5d1e3a62587dca06a65b749deb758265e207 match=true saves=1 counter=2->3 rtc=normalized
-[duo] BAG_BALLS baseline=5 final=2 throws=3 inst=a
-[duo] BAG_BALLS baseline=5 final=4 throws=1 inst=b
-[duo] link: B8A7E5A1:20250925 <-> A09DD804:DFDAF6DA alive on route_102 and saved once in each party
+[duo] RESULT_LINE a: RESULT: PASS (caught E99B0534:20250925)
+[duo] RESULT_LINE b: RESULT: PASS (caught 6C6D0D8B:DFDAF6DA)
+[duo] SAVE_WITNESS_SHA256 inst=a site=1fd33d45c728d944a9e3b8068a1b4274ff5656930af7361accb827ba1448ac44 file=1fd33d45c728d944a9e3b8068a1b4274ff5656930af7361accb827ba1448ac44 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=099e28b2ce2ec1295a7223e0f032415e86da04442164fc92f8f4c9d7a519440f file=099e28b2ce2ec1295a7223e0f032415e86da04442164fc92f8f4c9d7a519440f match=true saves=1 counter=2->3 rtc=normalized
+[duo] BAG_BALLS baseline=5 final=4 throws=1 inst=a
+[duo] BAG_BALLS baseline=5 final=1 throws=4 inst=b
+[duo] link: E99B0534:20250925 <-> 6C6D0D8B:DFDAF6DA alive on route_102 and saved once in each party
 [duo] timing oracle 0.3s
 [duo] PYDEC: PASS asserted scenario facts
 [duo] link_gen3: a=PASS b=PASS
 
 ========== summary ==========
-  link_gen3: PASS (attempt 1 of 3)
+  link_gen3: PASS (attempt 2 of 3)
 EXIT 0

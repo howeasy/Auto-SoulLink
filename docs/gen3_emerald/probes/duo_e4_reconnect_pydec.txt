@@ -1,11 +1,11 @@
 attempt 1 of 1
-IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=80a4c155a3e6987da2799e71bb0dff488dfd0a41
+IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=cd93382ba7f07e7bd712fccbfca68844467cfb77
 C-2 same OT accepted; alive link 504F4F4D:20250925 / 504F4F4D:DFDAF6DA; zero duplicate gameplay events
 C-1 wrong OT 3755669210 rejected; links.json byte-identical, no gameplay events
 RESULT_LINE a: RESULT: PASS (wrong save refused; nothing attempted, party and PC RAM unchanged)
 RESULT_LINE b: RESULT: PASS (B online through both relaunches)
 SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
-SAVE_WITNESS_SHA256 inst=b site=c1e48e7bea1d40aa23f4b5467b8aa868a0a1cd17f65b0d3180a6cd8f5292d1bd file=c1e48e7bea1d40aa23f4b5467b8aa868a0a1cd17f65b0d3180a6cd8f5292d1bd match=true saves=1 counter=2->3 rtc=normalized
+SAVE_WITNESS_SHA256 inst=b site=87061cc0b5cc759ec7c127a46ca477a470dbe416de4443fb60083e804a321591 file=87061cc0b5cc759ec7c127a46ca477a470dbe416de4443fb60083e804a321591 match=true saves=1 counter=2->3 rtc=normalized
 reconnect: A's batteries untouched across both relaunches (zero client writes on the wrong save); B saved its half
 MARKER a: WRITES 0
 MARKER a: WRONG_SAVE_ZERO attempted=0 writes=0 party=unchanged box=unchanged
