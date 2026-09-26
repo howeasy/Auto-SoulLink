@@ -82,6 +82,25 @@ ALLOWED_SKIPS = [
      "did not select is not part of it — the lane-selection counterpart of the input skips above, "
      "which stay unexcused. Only the selection reason matches this fragment; a lane that names "
      "purered still fails if purered's dump or fixture is missing."),
+    # Gen 2 and Gen 3 landed on master 2026-09-26, so this lane now runs their tests too. Their
+    # INPUTS are out of Gen 1's scope by the same argument as the pokecrystal entries above, and
+    # each fragment below names its generation so it cannot silently excuse a Gen 1 skip. Every
+    # Gen 1 input reason ("cartridge dump not present", "SaveRAM not present", "EmuHawk not
+    # found") stays unexcused, which is the line this list exists to hold.
+    #
+    # Two Gen 2 fragments briefly lived here and are deliberately gone: "pinned decomps not
+    # built" and "pinned pokecrystal source not present" were older ad-hoc skips that could not
+    # tell an absent clone from a present-but-incomplete one. The Gen 2 lane rewrote both to skip
+    # only on an absent clone, under the shared "<repo> not cloned" wording the entries above
+    # already cover, so a present clone missing a file now FAILS. Prefer that outcome to a new
+    # fragment: this list should shrink when a lane sharpens its own reasons.
+    ("no staged FR ROM",
+     "Gen 3 FireRed staging; not required for a Gen 1 release"),
+    ("local copyrighted ROMs absent",
+     "Gen 3 profile anchors are embedded, so the test pins the bytes without the dumps; not a "
+     "Gen 1 input"),
+    ("shadow captures not present",
+     "Gen 3 shadow-wire captures (patch/build/shadow_wire); not required for a Gen 1 release"),
 ]
 
 

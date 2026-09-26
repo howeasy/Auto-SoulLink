@@ -1,0 +1,10 @@
+# G4 final cut a20cd94538b0b5b207731a216f132b84dc71cd65 -- tools/gen3_final_cut.py summary (written 2026-09-26T04:28:47Z)
+# RUN 3 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | rr_zip_build | §9 item5 RR | PASS | 1 | fc_rr_zip_build_a20cd945.txt |
+| 2 | rr_zip_check | §9 item5 RR | PASS | 1 | fc_rr_zip_check_a20cd945.txt |
+| 3 | zip_boot_radicalred | §9 item5 RR | PASS | 1 | fc_zip_boot_radicalred_a20cd945.txt |
+
+OVERALL: PASS (3/3 rows)

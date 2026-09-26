@@ -1,7 +1,7 @@
 {
  "code_digest": {
-  "commit": "543cd1dcb1543aa168f8be43414ddc3edf24a34d",
-  "digest": "593616e6e91647e3640a97675f6e114a5e1caa2f7d75d4f2547fae3586bf6dd1",
+  "commit": "7ba4d552240a8cd120043877d4b849ac4abcf1fa",
+  "digest": "e8ca0067c9db0f863e39e45a21a096d45102b5e576320a37f26cd481c0913795",
   "dirty": [],
   "schema": "gen2-code-digest-v1",
   "scope": [
@@ -14,7 +14,7 @@
    "data/games/gen2_silver/**"
   ]
  },
- "corpus_frames": 69448,
+ "corpus_frames": 75851,
  "evidence_level": "PHYSICAL",
  "facts": {
   "allow": [
@@ -80,7 +80,7 @@
  "input_mode": "normal_buttons",
  "legs": {
   "panel": {
-   "allowed_writes": 143817,
+   "allowed_writes": 143669,
    "armed_frame": 1,
    "boot_clear": {
     "00:01B3 Init.ByteFill+0x2": 40
@@ -93,19 +93,19 @@
     "lua_kind": "harness",
     "lua_source": "main",
     "native_addr": 53171,
-    "native_allowed": 11300,
+    "native_allowed": 11289,
     "native_caught": true,
-    "native_flagged": 12222,
+    "native_flagged": 12209,
     "native_writers": {
-     "00:0068 SlinkDelayFrameBridge+0x5": 11300,
+     "00:0068 SlinkDelayFrameBridge+0x5": 11289,
      "00:01B3 Init.ByteFill+0x2": 1,
-     "00:0300 VBlank_Normal.done_oam+0x4": 11980,
+     "00:0300 VBlank_Normal.done_oam+0x4": 11967,
      "00:0355 VBlank_Cutscene.done+0x4": 146,
      "00:03B7 VBlank_CutsceneCGB.done+0x4": 44,
      "33:4200 BattleAnimDelayFrame.wait+0x0": 51
     }
    },
-   "corpus_frames": 12470,
+   "corpus_frames": 12457,
    "driver": null,
    "evidence_level": "PHYSICAL",
    "fixture": "crystal_battle",
@@ -148,18 +148,18 @@
    "violation_count": 0,
    "violations": [],
    "writers": {
-    "75:4006 SlinkService+0x6": 11300,
-    "75:4009 SlinkService+0x9": 11300,
-    "75:400C SlinkService+0xc": 11300,
-    "75:400F SlinkService+0xf": 11300,
-    "75:4012 SlinkService+0x12": 11300,
-    "75:4017 SlinkService+0x17": 11300,
+    "75:4006 SlinkService+0x6": 11289,
+    "75:4009 SlinkService+0x9": 11289,
+    "75:400C SlinkService+0xc": 11289,
+    "75:400F SlinkService+0xf": 11289,
+    "75:4012 SlinkService+0x12": 11289,
+    "75:4017 SlinkService+0x17": 11289,
     "75:4026 SlinkService+0x26": 1,
     "75:402A SlinkService+0x2a": 1,
     "75:402D SlinkService+0x2d": 1,
-    "75:403D SlinkService.sample+0xe": 11299,
-    "75:4045 SlinkService.remember+0x0": 11299,
-    "75:4049 SlinkService.remember+0x4": 11300,
+    "75:403D SlinkService.sample+0xe": 11288,
+    "75:4045 SlinkService.remember+0x0": 11288,
+    "75:4049 SlinkService.remember+0x4": 11289,
     "75:4B5B SlinkPanel+0xb": 15,
     "75:4B5E SlinkPanel+0xe": 15,
     "75:4B61 SlinkPanel+0x11": 15,
@@ -169,14 +169,14 @@
     "75:4BCC SlinkPanel.close+0x4": 15,
     "75:4BCF SlinkPanel.close+0x7": 15,
     "75:4BD2 SlinkPanel.close+0xa": 15,
-    "75:4D0A SlinkPhoneService.armed_valid+0x6": 8101,
-    "75:4E2B SlinkSfxService.reset_blocked+0x0": 11300,
-    "75:4E2F SlinkSfxService.reset_blocked+0x4": 11300,
-    "75:4E32 SlinkSfxService.reset_blocked+0x7": 11300
+    "75:4D0A SlinkPhoneService.armed_valid+0x6": 8085,
+    "75:4E2B SlinkSfxService.reset_blocked+0x0": 11289,
+    "75:4E2F SlinkSfxService.reset_blocked+0x4": 11289,
+    "75:4E32 SlinkSfxService.reset_blocked+0x7": 11289
    }
   },
   "sfx": {
-   "allowed_writes": 75807,
+   "allowed_writes": 70197,
    "armed_frame": 1,
    "boot_clear": {
     "00:01B3 Init.ByteFill+0x2": 80
@@ -189,19 +189,19 @@
     "lua_kind": "harness",
     "lua_source": "main",
     "native_addr": 53171,
-    "native_allowed": 6080,
+    "native_allowed": 5648,
     "native_caught": true,
-    "native_flagged": 6892,
+    "native_flagged": 6423,
     "native_writers": {
-     "00:0068 SlinkDelayFrameBridge+0x5": 6080,
+     "00:0068 SlinkDelayFrameBridge+0x5": 5648,
      "00:01B3 Init.ByteFill+0x2": 2,
-     "00:0300 VBlank_Normal.done_oam+0x4": 6649,
+     "00:0300 VBlank_Normal.done_oam+0x4": 6180,
      "00:0355 VBlank_Cutscene.done+0x4": 146,
      "00:03B7 VBlank_CutsceneCGB.done+0x4": 44,
      "33:4200 BattleAnimDelayFrame.wait+0x0": 51
     }
    },
-   "corpus_frames": 6914,
+   "corpus_frames": 6445,
    "driver": null,
    "evidence_level": "PHYSICAL",
    "fixture": "crystal_battle",
@@ -209,7 +209,7 @@
    "gate": "lua/tests/gen2_sfx_gate.lua",
    "init_entries": [
     1,
-    6043
+    5574
    ],
    "inner_completed": true,
    "leg": "sfx",
@@ -248,32 +248,32 @@
     "00:0086 SlinkResetSoundBridge+0x6": 1,
     "00:008A SlinkResetSoundBridge+0xa": 1,
     "00:008D SlinkResetSoundBridge+0xd": 1,
-    "75:4006 SlinkService+0x6": 6080,
-    "75:4009 SlinkService+0x9": 6080,
-    "75:400C SlinkService+0xc": 6080,
-    "75:400F SlinkService+0xf": 6080,
-    "75:4012 SlinkService+0x12": 6080,
-    "75:4017 SlinkService+0x17": 6080,
+    "75:4006 SlinkService+0x6": 5648,
+    "75:4009 SlinkService+0x9": 5648,
+    "75:400C SlinkService+0xc": 5648,
+    "75:400F SlinkService+0xf": 5648,
+    "75:4012 SlinkService+0x12": 5648,
+    "75:4017 SlinkService+0x17": 5648,
     "75:4026 SlinkService+0x26": 2,
     "75:402A SlinkService+0x2a": 2,
     "75:402D SlinkService+0x2d": 2,
-    "75:403D SlinkService.sample+0xe": 6078,
-    "75:4045 SlinkService.remember+0x0": 6078,
-    "75:4049 SlinkService.remember+0x4": 6080,
-    "75:4D0A SlinkPhoneService.armed_valid+0x6": 2992,
+    "75:403D SlinkService.sample+0xe": 5646,
+    "75:4045 SlinkService.remember+0x0": 5646,
+    "75:4049 SlinkService.remember+0x4": 5648,
+    "75:4D0A SlinkPhoneService.armed_valid+0x6": 2566,
     "75:4E00 SlinkSfxService.play+0xf": 10,
     "75:4E03 SlinkSfxService.play+0x12": 10,
     "75:4E06 SlinkSfxService.play+0x15": 10,
     "75:4E17 SlinkSfxService.hold+0xc": 1,
     "75:4E1B SlinkSfxService.count+0x0": 1,
     "75:4E26 SlinkSfxService.count+0xb": 60,
-    "75:4E2B SlinkSfxService.reset_blocked+0x0": 5978,
-    "75:4E2F SlinkSfxService.reset_blocked+0x4": 6010,
-    "75:4E32 SlinkSfxService.reset_blocked+0x7": 6010
+    "75:4E2B SlinkSfxService.reset_blocked+0x0": 5546,
+    "75:4E2F SlinkSfxService.reset_blocked+0x4": 5578,
+    "75:4E32 SlinkSfxService.reset_blocked+0x7": 5578
    }
   },
   "u1": {
-   "allowed_writes": 364914,
+   "allowed_writes": 433815,
    "armed_frame": 1,
    "boot_clear": {
     "00:01B3 Init.ByteFill+0x2": 40
@@ -286,19 +286,19 @@
     "lua_kind": "harness",
     "lua_source": "main",
     "native_addr": 53171,
-    "native_allowed": 28701,
+    "native_allowed": 34211,
     "native_caught": true,
-    "native_flagged": 56691,
+    "native_flagged": 62168,
     "native_writers": {
-     "00:0068 SlinkDelayFrameBridge+0x5": 28701,
+     "00:0068 SlinkDelayFrameBridge+0x5": 34211,
      "00:01B3 Init.ByteFill+0x2": 1,
-     "00:0300 VBlank_Normal.done_oam+0x4": 40101,
-     "00:0355 VBlank_Cutscene.done+0x4": 2336,
-     "00:03B7 VBlank_CutsceneCGB.done+0x4": 7216,
-     "33:4200 BattleAnimDelayFrame.wait+0x0": 7037
+     "00:0300 VBlank_Normal.done_oam+0x4": 46772,
+     "00:0355 VBlank_Cutscene.done+0x4": 3796,
+     "00:03B7 VBlank_CutsceneCGB.done+0x4": 5804,
+     "33:4200 BattleAnimDelayFrame.wait+0x0": 5795
     }
    },
-   "corpus_frames": 50064,
+   "corpus_frames": 56949,
    "driver": {
     "files": {
      "lua/tests/duo/gen2_faint_inputs.lua": {
@@ -363,22 +363,22 @@
    "violation_count": 0,
    "violations": [],
    "writers": {
-    "75:4006 SlinkService+0x6": 28701,
-    "75:4009 SlinkService+0x9": 28701,
-    "75:400C SlinkService+0xc": 28701,
-    "75:400F SlinkService+0xf": 28701,
-    "75:4012 SlinkService+0x12": 28701,
-    "75:4017 SlinkService+0x17": 28701,
+    "75:4006 SlinkService+0x6": 34211,
+    "75:4009 SlinkService+0x9": 34211,
+    "75:400C SlinkService+0xc": 34211,
+    "75:400F SlinkService+0xf": 34211,
+    "75:4012 SlinkService+0x12": 34211,
+    "75:4017 SlinkService+0x17": 34211,
     "75:4026 SlinkService+0x26": 1,
     "75:402A SlinkService+0x2a": 1,
     "75:402D SlinkService+0x2d": 1,
-    "75:403D SlinkService.sample+0xe": 28700,
-    "75:4045 SlinkService.remember+0x0": 28700,
-    "75:4049 SlinkService.remember+0x4": 28701,
-    "75:4D0A SlinkPhoneService.armed_valid+0x6": 20501,
-    "75:4E2B SlinkSfxService.reset_blocked+0x0": 28701,
-    "75:4E2F SlinkSfxService.reset_blocked+0x4": 28701,
-    "75:4E32 SlinkSfxService.reset_blocked+0x7": 28701
+    "75:403D SlinkService.sample+0xe": 34210,
+    "75:4045 SlinkService.remember+0x0": 34210,
+    "75:4049 SlinkService.remember+0x4": 34211,
+    "75:4D0A SlinkPhoneService.armed_valid+0x6": 23282,
+    "75:4E2B SlinkSfxService.reset_blocked+0x0": 34211,
+    "75:4E2F SlinkSfxService.reset_blocked+0x4": 34211,
+    "75:4E32 SlinkSfxService.reset_blocked+0x7": 34211
    }
   }
  },
@@ -391,18 +391,18 @@
   "00:0086 SlinkResetSoundBridge+0x6": 1,
   "00:008A SlinkResetSoundBridge+0xa": 1,
   "00:008D SlinkResetSoundBridge+0xd": 1,
-  "75:4006 SlinkService+0x6": 46081,
-  "75:4009 SlinkService+0x9": 46081,
-  "75:400C SlinkService+0xc": 46081,
-  "75:400F SlinkService+0xf": 46081,
-  "75:4012 SlinkService+0x12": 46081,
-  "75:4017 SlinkService+0x17": 46081,
+  "75:4006 SlinkService+0x6": 51148,
+  "75:4009 SlinkService+0x9": 51148,
+  "75:400C SlinkService+0xc": 51148,
+  "75:400F SlinkService+0xf": 51148,
+  "75:4012 SlinkService+0x12": 51148,
+  "75:4017 SlinkService+0x17": 51148,
   "75:4026 SlinkService+0x26": 4,
   "75:402A SlinkService+0x2a": 4,
   "75:402D SlinkService+0x2d": 4,
-  "75:403D SlinkService.sample+0xe": 46077,
-  "75:4045 SlinkService.remember+0x0": 46077,
-  "75:4049 SlinkService.remember+0x4": 46081,
+  "75:403D SlinkService.sample+0xe": 51144,
+  "75:4045 SlinkService.remember+0x0": 51144,
+  "75:4049 SlinkService.remember+0x4": 51148,
   "75:4B5B SlinkPanel+0xb": 15,
   "75:4B5E SlinkPanel+0xe": 15,
   "75:4B61 SlinkPanel+0x11": 15,
@@ -412,15 +412,15 @@
   "75:4BCC SlinkPanel.close+0x4": 15,
   "75:4BCF SlinkPanel.close+0x7": 15,
   "75:4BD2 SlinkPanel.close+0xa": 15,
-  "75:4D0A SlinkPhoneService.armed_valid+0x6": 31594,
+  "75:4D0A SlinkPhoneService.armed_valid+0x6": 33933,
   "75:4E00 SlinkSfxService.play+0xf": 10,
   "75:4E03 SlinkSfxService.play+0x12": 10,
   "75:4E06 SlinkSfxService.play+0x15": 10,
   "75:4E17 SlinkSfxService.hold+0xc": 1,
   "75:4E1B SlinkSfxService.count+0x0": 1,
   "75:4E26 SlinkSfxService.count+0xb": 60,
-  "75:4E2B SlinkSfxService.reset_blocked+0x0": 45979,
-  "75:4E2F SlinkSfxService.reset_blocked+0x4": 46011,
-  "75:4E32 SlinkSfxService.reset_blocked+0x7": 46011
+  "75:4E2B SlinkSfxService.reset_blocked+0x0": 51046,
+  "75:4E2F SlinkSfxService.reset_blocked+0x4": 51078,
+  "75:4E32 SlinkSfxService.reset_blocked+0x7": 51078
  }
 }

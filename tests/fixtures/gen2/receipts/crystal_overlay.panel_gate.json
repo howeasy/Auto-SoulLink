@@ -8,8 +8,8 @@
  },
  "client_write_scope": "panel (lua/gen2/panel.lua permit, WRAM0 tilemap/attrmap/mailbox)",
  "code_digest": {
-  "commit": "543cd1dcb1543aa168f8be43414ddc3edf24a34d",
-  "digest": "593616e6e91647e3640a97675f6e114a5e1caa2f7d75d4f2547fae3586bf6dd1",
+  "commit": "7ba4d552240a8cd120043877d4b849ac4abcf1fa",
+  "digest": "e8ca0067c9db0f863e39e45a21a096d45102b5e576320a37f26cd481c0913795",
   "dirty": [],
   "schema": "gen2-code-digest-v1",
   "scope": [
@@ -32,13 +32,13 @@
   "armed": 256,
   "below_sp_writes": 0,
   "bottom": 49152,
-  "early_hits": 40,
+  "early_hits": 42,
   "low_water_addr": 49285,
-  "low_water_frame": 12224,
+  "low_water_frame": 12394,
   "low_water_sp": 49285,
   "margin_bytes": 133,
   "pushes_seen": 102,
-  "span_frames": 9162,
+  "span_frames": 9331,
   "top": 49407
  },
  "overlay_sha1": "b405446ed7b40c0f84eefa8411a07c96b9406057",

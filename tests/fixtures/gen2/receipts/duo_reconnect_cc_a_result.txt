@@ -12,22 +12,22 @@ RX dead_keys
 BOOTED {"frame":3333,"map_group":24,"map_number":3,"party_count":1,"x":53,"y":12}
 MYKEY 0 F794:B541:9E
   phase walk @3333 xy=53,12
-  phase battle @3654 xy=52,12
-ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":5317,"key":"25C1:B541:A3","level":3,"site_id":"capture_party_finalized","slot":1,"species_id":163}
-TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":16,"in_box":false,"key":"25C1:B541:A3","level":3,"maxHP":16,"nickname":"HOOTHOOT","player":"a","seq":40,"species_id":163,"stats":{"level":3,"maxH
-CAPTURE_SENT {"frame":5317,"key":"25C1:B541:A3","seq":40}
-CAUGHT 25C1:B541:A3
-RX box_mon key=25C1:B541:A3
-TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"a","seq":41}
-TX {"event":"stats_cache","key":"25C1:B541:A3","player":"a","seq":44,"stats":{"level":3,"maxHP":16}}
+  phase battle @3664 xy=52,12
+RX hud_show
+RX_TEXT {"cmd":"hud_show","frame":6332,"text":"Partner caught SENTRET in Route 29"}
+ENGINE_CAPTURE {"acquisition":"wild","area_id":"route_29","destination":"party","frame":7434,"key":"EDD4:B541:A1","level":2,"site_id":"capture_party_finalized","slot":1,"species_id":161}
+TX {"area_id":"route_29","event":"capture","gift":false,"held_item_id":0,"hp":13,"in_box":false,"key":"EDD4:B541:A1","level":2,"maxHP":13,"nickname":"SENTRET","player":"a","seq":73,"species_id":161,"stats":{"level":2,"maxHP
+CAPTURE_SENT {"frame":7434,"key":"EDD4:B541:A1","seq":73}
+CAUGHT EDD4:B541:A1
 RX play_sound sound=25
 RX msgbox
-RX_TEXT {"cmd":"msgbox","frame":6782,"text":"HOOTHOOT and HOOTHOOT linked!"}
-RX party_mon key=25C1:B541:A3
-TX {"event":"sync_retrieve_done","key":"25C1:B541:A3","player":"a","seq":92}
-  phase save @6784 xy=52,12
-  phase saved @7449 xy=52,12
+RX_TEXT {"cmd":"msgbox","frame":7436,"text":"SENTRET and SENTRET linked!"}
+RX party_mon key=EDD4:B541:A1
+TX {"event":"safe","pc_boxes":[],"pc_boxes_generation":2,"player":"a","seq":75}
+TX {"event":"sync_retrieve_done","key":"EDD4:B541:A1","player":"a","seq":78}
+  phase save @7501 xy=52,12
+  phase saved @8166 xy=52,12
 MYKEY 0 F794:B541:9E
-MYKEY 1 25C1:B541:A3
-SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"6c9ff98c4bbad06f5d5bf284bc1204ef968a8860b6d111d96960ef3780407d11","client_saves":1,"flushed_matches":true,"frame":7479,"gate_saves":1,"save_completed_frame":7449,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/saveram_gen2_reconnect_s531_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_reconnect_s531_a_witness.SaveRAM"}
-RECONNECT_READY {"frame":7479,"key":"25C1:B541:A3","phase":"initial","player":"a"}
+MYKEY 1 EDD4:B541:A1
+SAVE_WITNESS {"cartram_bytes":32768,"cartram_sha256":"4aab9b4c133103f85d866126f3db910b0c9006717985d9e748904acc09b04a49","client_saves":1,"flushed_matches":true,"frame":8196,"gate_saves":1,"save_completed_frame":8166,"saveram_bytes":32790,"saveram_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/saveram_gen2_reconnect_s531_a/Pokemon - Crystal Version (USA, Europe).SaveRAM","snapshot_path":"C:/Users/howar/AppData/Local/Temp/fs1/patch/build/e2e_gen2_reconnect_s531_a_witness.SaveRAM"}
+RECONNECT_READY {"frame":8196,"key":"EDD4:B541:A1","phase":"initial","player":"a"}

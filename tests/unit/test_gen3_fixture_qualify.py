@@ -252,6 +252,10 @@ def test_make_party_wires_the_leafgreen_title_saveram_and_run_dir(monkeypatch, t
         return False, "RESULT: FAIL (stub)", tmp_path, "stub.SaveRAM"
 
     monkeypatch.setattr(fx, "_run_fr_party_attempts", fake_attempts)
+    # the default-ROM lookup is under test, not the dump: resolve it inside tmp_path so an
+    # unprovisioned checkout (no ROMs) runs this too (Gen 2 found it KeyError'ing there)
+    monkeypatch.setattr(fx, "_rom_candidates", lambda want: [tmp_path / want])
+    (tmp_path / "Pokemon - LeafGreen Version (USA).gba").write_bytes(b"\0")
     seed = tmp_path / "seed.sav"
     seed.write_bytes(_build_image(party_mons=[_mon(1, 0x1234, "RED", party=True)]))
     code = fx.cmd_make_fr_party(argparse.Namespace(

@@ -41,7 +41,11 @@ def _count_outcomes(text: str) -> dict:
     for key in out:
         # Collection output may contain parameter IDs such as "[3 passed]".
         # Only a summary line supplies positive execution evidence.
-        pattern = (r"(?m)^[ \t=]*(\d+) passed(?=,|[ \t]+in[ \t]|\s*$)"
+        # `passed` is anchored to a summary line so a parameter ID like "[3 passed]" in
+        # collection output cannot be read as execution evidence. The `(?:\d+ \w+, )*` hop is
+        # load-bearing: pytest puts failures FIRST ("27 failed, 11297 passed, ..."), so without
+        # it the count reads 0 exactly when a run has failures — i.e. when the numbers matter.
+        pattern = (r"(?m)^[ \t=]*(?:\d+ \w+, )*(\d+) passed(?=,|[ \t]+in[ \t]|\s*$)"
                    if key == "passed" else rf"(\d+) {key}")
         m = re.search(pattern, text)
         if m:
@@ -80,7 +84,12 @@ def run_lane(lane: Lane, quiet: bool, allowed_skips) -> tuple[bool, str]:
         unexplained = _unexplained_skips(text, allowed_skips)
         # A `skipped` count with no SKIPPED line behind it means the reason was never printed,
         # so no ALLOWED_SKIPS entry can have excused it: unexplained by construction.
-        reason_lines = sum(1 for line in text.splitlines() if line.startswith("SKIPPED"))
+        # pytest AGGREGATES identical (location, reason) pairs as "SKIPPED [N] path: reason",
+        # so the number of lines is not the number of skips: sum the bracketed counts instead.
+        # Counting lines read fine while skips were few and distinct, and started failing every
+        # lane the moment one generation contributed hundreds of same-reason skips.
+        reason_lines = sum(int(m.group(1) or 1) for m in
+                           re.finditer(r"(?m)^SKIPPED(?:[ \t]*\[(\d+)\])?", text))
         detail = (f"{counts['passed']} passed, {counts['skipped']} skipped "
                   f"({len(unexplained)} unexplained), {counts['failed']} failed, "
                   f"{counts['xfailed']} xfailed, {counts['deselected']} deselected  "

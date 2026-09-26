@@ -29,13 +29,18 @@ import gen1_playthrough as g1  # noqa: E402
 
 
 def test_gen2_seeds_distinct_fixtures_under_the_same_name_in_separate_dirs(monkeypatch, tmp_path):
+    import tools.gen2_synth_fixtures as gen2_synth_fixtures  # noqa: PLC0415
+
     monkeypatch.setattr(duo, "BUILD", str(tmp_path))
+    # DUO-CLOCK pins the boot copy's RTC (_seed_instance_save); this test's fake bytes are not a
+    # real SaveRAM and this is not what it is testing, so day_clock is a no-op passthrough here.
+    monkeypatch.setattr(gen2_synth_fixtures, "day_clock", lambda raw, **_kw: (raw, {}))
     run = duo.DuoRun("link", _args(game="gen2_new", scenario="link", lane="cc"))
     run._gen2_inputs, run._gen2_plans = {}, {}
     for side, raw in (("a", b"qualified A"), ("b", b"qualified B")):
         fixture = tmp_path / f"{side}.SaveRAM"
         fixture.write_bytes(raw)
-        run._gen2_inputs[side] = {"fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest()}
+        run._gen2_inputs[side] = {"fixture": fixture, "sha256": hashlib.sha256(raw).hexdigest(), "title": side}
         run._gen2_plans[side] = {"directory": Path(run._saveram_dir(side)),
                                  "saveram_name": "same-rom.SaveRAM"}
     a = Path(run._seed_instance_save("a"))
@@ -49,6 +54,7 @@ def test_gen2_seeds_distinct_fixtures_under_the_same_name_in_separate_dirs(monke
 
 
 def test_gen2_launch_uses_cgb_300_percent_and_isolated_process_environment(monkeypatch, tmp_path):
+    import tools.gen2_synth_fixtures as gen2_synth_fixtures
     import run_gb_gate as gate
 
     monkeypatch.setattr(duo, "BUILD", str(tmp_path))
@@ -56,6 +62,10 @@ def test_gen2_launch_uses_cgb_300_percent_and_isolated_process_environment(monke
     monkeypatch.setattr(duo, "WT_FWD", tmp_path.as_posix())
     monkeypatch.setattr(gate, "BIZHAWK_CONFIG", str(_config_file(tmp_path)))
     monkeypatch.setattr(duo.importlib.import_module("gen2_code_digest"), "run_stamp", lambda *_a, **_k: {})
+    # DUO-CLOCK pins the boot copy's RTC (_seed_instance_save, called by launch_instance below);
+    # this test's fake bytes are not a real SaveRAM and this is not what it is testing, so
+    # day_clock is a no-op passthrough here.
+    monkeypatch.setattr(gen2_synth_fixtures, "day_clock", lambda raw, **_kw: (raw, {}))
     launched = []
     monkeypatch.setattr(duo.subprocess, "Popen",
                         lambda cmd, **kwargs: launched.append((cmd, kwargs)) or SimpleNamespace())
@@ -64,7 +74,7 @@ def test_gen2_launch_uses_cgb_300_percent_and_isolated_process_environment(monke
     for side in ("a", "b"):
         fixture = tmp_path / f"fixture_{side}.SaveRAM"
         fixture.write_bytes(side.encode())
-        run._gen2_inputs[side] = {"fixture": fixture, "sha256": hashlib.sha256(side.encode()).hexdigest()}
+        run._gen2_inputs[side] = {"fixture": fixture, "sha256": hashlib.sha256(side.encode()).hexdigest(), "title": side}
         run._gen2_plans[side] = {"directory": Path(run._saveram_dir(side)),
             "saveram_name": "same-rom.SaveRAM", "rom": tmp_path / "pinned.gbc", "speed_percent": 300,
             "env": {"SLINK_GEN2_SAVERAM_DIR": run._saveram_dir(side), "SLINK_GEN2_CORE_MODE": "CGB"}}

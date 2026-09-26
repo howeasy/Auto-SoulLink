@@ -1,0 +1,37 @@
+# gen3_final_cut row=zip_boot_radicalred item=§9_item5_RR cut=a20cd94538b0b5b207731a216f132b84dc71cd65
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean
+# command: python tools/gen3_final_cut.py zip-boot --zip 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/dist/SLink-player-g4-a20cd945.zip' --lane 'E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean' --title radical_red   (cwd=E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T00:28:14 cpu=49% emuhawk=1 python=6
+start_utc=2026-09-26T04:28:13Z tracked_clean_before=True
+zip=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean/dist/SLink-player-g4-a20cd945.zip
+extract=C:\Users\howar\AppData\Local\Temp\slink_zipboot_3nkc2j9w\extract entry=C:\Users\howar\AppData\Local\Temp\slink_zipboot_3nkc2j9w\extract\SLink-player-g4-a20cd945\lua\slink.lua
+fixture=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean\tests\fixtures\gen3\rr_town.sav
+server: python -m server.server --port 52245 --http-port 52246 (cwd=E:/Google Drive/SLink/.claude/worktrees/gen3-lane-clean)
+[zip-boot] E:/Howard/Bizhawk/EmuHawk.exe --config=config.ini --lua=boot.lua slink_RR.gba  (cwd=C:\Users\howar\AppData\Local\Temp\slink_zipboot_3nkc2j9w)
+--- C:\Users\howar\AppData\Local\Temp\slink_zipboot_3nkc2j9w\extract\SLink-player-g4-a20cd945\slink_lua.log ---
+=== SLink Lua boot Sat Sep 26 00:28:45 2026 ===
+[SLink] Console tee -> C:/Users/howar/AppData/Local/Temp/slink_zipboot_3nkc2j9w/extract/SLink-player-g4-a20cd945/lua/../slink_lua.log
+[SLink] TCP connecting to 127.0.0.1:52245 (non-blocking)…
+[SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:52245 (rom ea5352f8)
+[SLink] TCP connected to 127.0.0.1:52245
+[SLink-gen3] unhandled command dead_keys
+
+--- server log ---
+2026-09-26 00:28:15,842 [INFO] Logging to C:\Users\howar\AppData\Local\Temp\slink_zipboot_3nkc2j9w\data\slink.log
+2026-09-26 00:28:15,842 [INFO] SLink TCP server listening on ('127.0.0.1', 52245)
+2026-09-26 00:28:15,849 [WARNING] Twitch bot: TWITCH_ACCESS_TOKEN not set — bot disabled
+2026-09-26 00:28:15,849 [INFO] SLink status page at http://127.0.0.1:52246/
+2026-09-26 00:28:46,010 [INFO] Client connected: ('127.0.0.1', 52391)
+2026-09-26 00:28:46,097 [INFO] [a] admission: admitted — no randomized-ROM contract for this run
+2026-09-26 00:28:46,098 [INFO] [a] hello rom=firered_rr area='route_1' party=1
+2026-09-26 00:28:46,098 [INFO] [a] Identity locked: A (OT 2BDDC8BF)
+2026-09-26 00:28:46,102 [INFO] Adapter switched to gen3_frlge (rom_type=firered_rr)
+2026-09-26 00:28:46,103 [INFO] Committed ROM type 'firered_rr' for this run
+2026-09-26 00:28:46,439 [INFO] Client disconnected: ('127.0.0.1', 52391)
+
+RESULT: PASS the extracted zip booted radical_red on the new client
+exit=0 end_utc=2026-09-26T04:28:46Z tracked_clean_after=True classification=pass

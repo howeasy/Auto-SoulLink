@@ -51,6 +51,13 @@ def _hash(data: bytes, expected: str, label: str, algorithm: str = "sha256") -> 
         raise ValueError(f"{label}: {algorithm} {actual} differs from pinned {expected}")
 
 
+class SourceUnavailable(ValueError):
+    """The pinned decomp clone is ABSENT (.cache/gen2-build/<repo> not provisioned). Distinct from a
+    source that exists but is dirty, at another commit or hash-mismatched: those stay plain ValueError
+    hard failures. Tests turn only this one into a named skip (tests/conftest.py); a release gate that
+    needs the source still counts that skip as red."""
+
+
 def _git(source: Path, *args: str) -> str:
     result = subprocess.run(["git", "-C", str(source), *args], capture_output=True,
                             text=True, check=False)
@@ -179,6 +186,8 @@ def _load_context(title: str, root: Path = ROOT) -> SourceContext:
     spec = lock["outputs"][artifact]
     source = (root / ".cache/gen2-build" / spec["source"]).resolve()
     expected_commit = lock["sources"][spec["source"]]["commit"]
+    if not source.is_dir():
+        raise SourceUnavailable(f"{spec['source']} not cloned: {source}")
     if Path(_git(source, "rev-parse", "--show-toplevel")).resolve() != source:
         raise ValueError(f"source directory is not a repository root: {source}")
     if _git(source, "rev-parse", "HEAD") != expected_commit:
