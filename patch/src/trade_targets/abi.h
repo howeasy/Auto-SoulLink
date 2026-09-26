@@ -71,10 +71,10 @@ enum SlinkTradeResult {
     SLINK_TRADE_PENDING = 0, SLINK_TRADE_COMMITTED = 1,
     SLINK_TRADE_UNCHANGED = 2, SLINK_TRADE_UNCERTAIN = 3
 };
-/* Final success requires all four milestone bits and SAVE_STATUS_OK (1).
+/* Final success requires all five milestone bits and SAVE_STATUS_OK (1).
  * Refused before mutation => UNCHANGED. Any failure after COMMIT_ENTERED =>
  * UNCERTAIN, retained until reset/reconciliation; never raw-copy or release. */
-#define SLINK_SUCCESS_MILESTONES 0x0Fu
+#define SLINK_SUCCESS_MILESTONES 0x1Fu
 #define SLINK_SAVE_OK 1u
 #define SLINK_SAVE_FAILED 0xFFu
 
@@ -115,8 +115,12 @@ typedef struct {
 /* Structural completion gate only. Caller must first bind the coherent witness
  * to its live epoch, token, visit and per-milestone command sequences. This is
  * not evidence of an actual flash write; producer tests/probes must establish it. */
-static inline int slink_trade_success_is_durable(const SlinkTradeWitnessV2 *w)
+static inline int slink_trade_success_is_durable(const SlinkTradeWitnessV2 *w,
+                                                uint16_t prepare_seq, uint16_t scene_seq)
 {
+    if (w->milestone_seq[SLINK_PRE_SAVE_OK] != prepare_seq) return 0;
+    for (unsigned i = SLINK_COMMIT_ENTERED; i <= SLINK_FINAL_RESULT; i++)
+        if (w->milestone_seq[i] != scene_seq) return 0;
     return w->final_result == SLINK_TRADE_COMMITTED
         && (w->visit_flags & (SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT))
             == (SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT)

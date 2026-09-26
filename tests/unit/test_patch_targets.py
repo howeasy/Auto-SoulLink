@@ -18,6 +18,11 @@ def test_firered_refuses_rr_mailbox_allocator_overlap():
         build.validate_arena("firered", 0x0203F800, 0x800)
 
 
+def test_zero_sized_linker_heap_symbol_does_not_mean_free_ram():
+    with pytest.raises(ValueError, match="overlap.*gHeap"):
+        build.validate_arena("firered", 0x0201B000, 0x1000)
+
+
 def test_wrong_base_and_detour_refused_before_compile():
     with pytest.raises(ValueError, match="base ROM"):
         build.validate_base("firered", bytes(0x1000000))
@@ -42,13 +47,20 @@ int main(void) {
     w.visit_flags = SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT;
     w.final_result = SLINK_TRADE_COMMITTED;
     w.save_status = SLINK_SAVE_OK;
+    w.milestone_seq[SLINK_PRE_SAVE_OK] = 7;
+    for (unsigned i = 1; i < 5; i++) w.milestone_seq[i] = 9;
     w.milestones = (1u << SLINK_PRE_SAVE_OK) | (1u << SLINK_COMMIT_ENTERED)
                  | (1u << SLINK_SCENE_EVOLUTION_DONE);
-    if (slink_trade_success_is_durable(&w)) return 1;
+    if (slink_trade_success_is_durable(&w, 7, 9)) return 1;
     w.milestones |= (1u << SLINK_POST_SAVE_OK);
-    if (!slink_trade_success_is_durable(&w)) return 2;
+    if (slink_trade_success_is_durable(&w, 7, 9)) return 2;
+    w.milestones |= (1u << SLINK_FINAL_RESULT);
+    if (!slink_trade_success_is_durable(&w, 7, 9)) return 3;
+    w.milestone_seq[SLINK_FINAL_RESULT] = 8;
+    if (slink_trade_success_is_durable(&w, 7, 9)) return 4;
+    w.milestone_seq[SLINK_FINAL_RESULT] = 9;
     w.save_status = SLINK_SAVE_FAILED;
-    if (slink_trade_success_is_durable(&w)) return 3;
+    if (slink_trade_success_is_durable(&w, 7, 9)) return 5;
     return 0;
 }
 ''')

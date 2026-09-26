@@ -65,6 +65,12 @@ def validate_arena(title, start, size):
     if size <= 0 or start < 0x02000000 or start + size > 0x02040000:
         raise ValueError("arena outside EWRAM")
     spec = target_spec(title)
+    # FR/LG's linker emits gHeap with size zero in .sym. The reservation is
+    # nevertheless real: pret include/malloc.h:6 and src/main.c:154. A future
+    # carve-out needs explicit ROM mutation + runtime proof; zero symbol size
+    # cannot silently authorize it.
+    if max(start, spec["HEAP_BASE"]) < min(start + size, spec["HEAP_BASE"] + spec["HEAP_SIZE"]):
+        raise ValueError("arena overlap with gHeap reservation (heap clamp not qualified)")
     if not spec["SYMBOLS"]:
         raise ValueError("RR has no matching source symbols; its arena needs a binary/physical proof")
     path = Path(PATCH).parent / "data/gen3/pret" / spec["SYMBOLS"]
