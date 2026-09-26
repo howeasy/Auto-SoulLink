@@ -74,9 +74,9 @@ GAMES = [
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
     ("gen3_ap", "FireRed · LeafGreen (Archipelago) — not admitted by the SLink client yet", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
-    ("gen3_e", "Emerald — not admitted by the SLink client yet", ["emerald"]),
+    ("gen3_e", "Emerald", ["emerald"]),
 ]
-UNADMITTED_GAMES = frozenset({"gen3_ap", "gen3_e"})  # labelled "not admitted"; handle_new refuses them
+UNADMITTED_GAMES = frozenset({"gen3_ap"})  # labelled "not admitted"; handle_new refuses them
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a game names (upr_settings.FAMILY_*): a pure run takes pure

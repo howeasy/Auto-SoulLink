@@ -1,0 +1,31 @@
+# reads == PYDEC on BPEE at HEAD=3c17af21 (committed lua/gen3/reads.lua incl. the F-A badge guard, ddff9b81), 2026-09-26
+# driver: C:/slink-wt/emerald-e2/run_reads_pydec.py <state> (gen3_reads_dump_emerald.lua dump -> tools/gen3_reads_pydec.py decoders via server/adapters/gen3_codec.py)
+# Limit (unchanged): badges agree only at 0 badges; no fixture with badges yet.
+## state slink_overworld.State
+[gate] gen3_reads_dump_emerald: RESULT: PASS party=1 dumped  (3s)
+RESULT: PASS party=1 dumped
+## party/box: 0 difference(s) over 155 LUA mon line(s)
+## planted-offender control: flipped byte 0 of the first party record -> 2 difference(s)
+OK   trainer.ot_id lua=539298085 py=539298085
+OK   trainer.name lua=EMER py=EMER
+OK   location.map_group lua=0 py=0
+OK   location.map_num lua=10 py=10
+OK   badges.value lua=0 py=0
+OK   balls.ball_count lua=5 py=5
+OK   balls.has_pokeballs lua=true py=True
+# encryptionKey low16=0xFCED (raw ball qty words XOR it)
+RESULT: PASS
+## state slink_prebattle.State
+[gate] gen3_reads_dump_emerald: RESULT: PASS party=1 dumped  (3s)
+RESULT: PASS party=1 dumped
+## party/box: 0 difference(s) over 155 LUA mon line(s)
+## planted-offender control: flipped byte 0 of the first party record -> 2 difference(s)
+OK   trainer.ot_id lua=539298085 py=539298085
+OK   trainer.name lua=EMER py=EMER
+OK   location.map_group lua=0 py=0
+OK   location.map_num lua=17 py=17
+OK   badges.value lua=0 py=0
+OK   balls.ball_count lua=5 py=5
+OK   balls.has_pokeballs lua=true py=True
+# encryptionKey low16=0x4FA9 (raw ball qty words XOR it)
+RESULT: PASS

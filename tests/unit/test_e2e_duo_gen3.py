@@ -758,8 +758,8 @@ def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     run.gcfg = dict(row, sides=dict(row["sides"], b=("firered", "firered_party_{target}_b")))
     assert run._gen3_title("b") == "firered"
     assert run._gen3_fixture_path("b").endswith("firered_party_town_b.sav")
-    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen.
-    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red"}
+    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen; E4: emerald.
+    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red", "emerald"}
     for inst in ("a", "b"):
         assert row["sides"][inst][0] in duo.GEN3_TITLES
 
@@ -1049,7 +1049,8 @@ local DECODED = {{
 local MODULES = {{
   ["/repo/lua/json_codec.lua"] = {{ decode = function(t) return DECODED[t] or {{}} end }},
   ["/repo/lua/tests/gen3_boot_check.lua"] = {{ title = "", budget = 0 }},
-  ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}} }},
+  ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}}, PROFILE_PACK_BY_TITLE = {{
+      firered = "gen3_frlg", leafgreen = "gen3_frlg", radical_red = "gen3_rr", emerald = "gen3_emerald" }} }},
   ["/repo/lua/gen3/reads.lua"] = {{ new = function() return {{}} end }},
   ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end }},
 }}
@@ -1168,9 +1169,12 @@ def test_the_scripted_play_exports_and_paths_the_driver_uses_exist():
     for name in set(re.findall(r"\bSP\.(\w+)", text)):
         assert re.search(rf"\b{name}\s*=", exports), f"gen3_scripted_play does not export {name}"
     paths = scripted[scripted.index("local PATHS = {"):scripted.index("local H = {")]
-    used = set(re.findall(r'(?:follow\(cp, |reversed\()"(\w+)"', text)) - {"pc_to_pokecenter_entrance"}
+    used = set(re.findall(r'(?:follow\(cp, |reversed\()"(\w+)"', text)) - set(
+        re.findall(r'reversed\("\w+", "(\w+)"\)', text))   # built by the driver's reversed()
     for name in used:
-        assert re.search(rf"^\s+{name} = \{{", paths, re.M), f"no PATHS entry {name}"
+        # E4: the Emerald paths are assigned in the Emerald block (PATHS.em_... = {)
+        assert (re.search(rf"^\s+{name} = \{{", paths, re.M)
+                or re.search(rf"^PATHS\.{name} = \{{", scripted, re.M)), f"no PATHS entry {name}"
     for dest in set(re.findall(r"SP\.DEST\.(\w+)", text)):
         assert re.search(rf"\b{dest} = \{{", scripted), f"no DEST {dest}"
 
@@ -1187,7 +1191,14 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 1, key = "K1", hp = 5, max_hp = 17, species = 16, level = 4 },
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
-                  D = {}, hp0_tag = "FORCED_HP0", title = "firered", rr = spec.rr and true or false }
+                  D = {}, hp0_tag = "FORCED_HP0", title = spec.emerald and "emerald" or "firered",
+                  rr = spec.rr and true or false }
+    -- E4c-2: an Emerald whiteout heals in C before the landing (overworld.c:357-366), so the
+    -- Emerald party reads full; spec.unhealed leaves the lead short (the landing must refuse it)
+    if spec.emerald then
+        for _, m in ipairs(party) do m.hp = m.max_hp end
+        if spec.unhealed then party[1].hp = party[1].max_hp - 1 end
+    end
     -- C4-SAVE-ROWS: the pret statics a scenario reads through ctx.peek (SYMS addresses; the
     -- callbacks compare with the Thumb bit, as the real S table does)
     ctx.sym = { SaveDialogCB_AskSaveHandleInput = 0x0806F7F8, SaveDialogCB_ReturnSuccess = 0x0806F9E0,
@@ -1355,7 +1366,9 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.writes = function() return writes end
     ctx.wrong_save_hud = function() return true end
-    local CENTER = { group = 5, num = 4, x = 7, y = 4 }
+    -- E4c-2: Emerald lands on lastHealLocation Oldale 0.10 (6,17), outdoors (the model's name
+    -- stays CENTER: it is the whiteout destination every branch below compares against)
+    local CENTER = spec.emerald and { group = 0, num = 10, x = 6, y = 17 } or { group = 5, num = 4, x = 7, y = 4 }
     local function snap(at, bad)
         return { group = at.group, num = at.num, x = at.x, y = at.y, frame = 7, bad = bad or {},
                  ptrs = { gSaveBlock1Ptr = 0x02025000 } }
@@ -1363,7 +1376,9 @@ function FAKE(scenario, player, phase, spec)
     local here = snap(CENTER)
     function here_at(g, n, x, y) here = snap({ group = g, num = n, x = x, y = y }) end
     ctx.SP = { verify_fight_cursor = function() return "fight" end,
-               whiteout_destination = function() return CENTER end, warp_to = function() end }
+               whiteout_destination = function() return CENTER end, warp_to = function() end,
+               -- Emerald's START-menu witness (EMH.menu_ready), the same open flag as RR's
+               EMH = { menu_ready = function() return rr_menu_open end } }
     -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
     ctx.peek_u8 = function(addr)
         if addr == 0x0203ABE0 then return rr_menu_open and 1 or 0xFF end
@@ -1371,7 +1386,7 @@ function FAKE(scenario, player, phase, spec)
     end
     ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
               pred_ok = function(_, name)
-                  if ctx.rr and name == "field_controls_locked" then
+                  if (ctx.rr or ctx.title == "emerald") and name == "field_controls_locked" then
                       return not (rr_menu_open or (spec.other_lock and start_taps > 0))
                   end
                   if name == "field_controls_locked" and (menu.open or menu.stuck) then return false end
@@ -1389,7 +1404,7 @@ function FAKE(scenario, player, phase, spec)
               end,
               tap = function(btn)
                   if scenario == "save_then_write" then return menu_tap(btn) end
-                  if btn == "Start" and ctx.rr then
+                  if btn == "Start" and (ctx.rr or ctx.title == "emerald") then
                       if rr_menu_open then error("test: Start tapped again after the START menu already opened", 0) end
                       start_taps = start_taps + 1
                       if start_taps > (spec.swallow_start or 0) then rr_menu_open = true end
@@ -1595,6 +1610,12 @@ def _run_module(lua, scenario, player, phase, spec):
     # START menu, named start_menu; the menu opens on the first tap by default (swallow_start=0)
     ("whiteout", "a", "initial", {"rr": "lua:true"},
      ["CONTROL_LIVE start_menu K1 map=5.4",
+      "CONTROL_REFUSED start_menu box_mon K1 clause=field_controls_locked"]),
+    # E4c-2: Emerald lands healed outdoors at Oldale 0.10 (6,17): LANDING_STATE / WRITE_AT_LANDING
+    # and the START-menu control with Emerald's own menu witness
+    ("whiteout", "a", "initial", {"emerald": "lua:true"},
+     ["CONTROL_LIVE start_menu K1 map=0.10", "LANDING_STATE map=0.10 at=(6,17)",
+      "healed=K0=20/20,K1=17/17,K9=9/9", "WRITE_AT_LANDING map=0.10 at=(6,17)",
       "CONTROL_REFUSED start_menu box_mon K1 clause=field_controls_locked"]),
     # the first two Start taps swallowed (the field only just freed), the menu opens on the third
     ("whiteout", "a", "initial", {"rr": "lua:true", "swallow_start": 2},
@@ -2797,6 +2818,11 @@ def test_the_attempt_jitter_lands_after_go(tmp_path):
     ({"bytes_change": "lua:true"}, "the party bytes changed while held"),
     ({"unkeyed": "lua:true"}, "no write of K1's party record in the write frame"),
     ({"off_checkpoint": "lua:true"}, "the write landed off the checkpoint: cpu"),
+    # E4c-2: the Emerald landing refuses an unhealed party and a write off the heal tile
+    ({"emerald": "lua:true", "unhealed": "lua:true"},
+     "never saw the healed party at lastHealLocation 0.10 (6,17)"),
+    ({"emerald": "lua:true", "write_at": "outside"}, "landed outside the heal-location tile"),
+    ({"emerald": "lua:true", "off_checkpoint": "lua:true"}, "the write landed off the checkpoint: cpu"),
 ])
 def test_whiteout_a_proves_the_center_write_or_fails_by_name(lua, spec, why):
     ok, passed, msg, _ = _run_module(lua, "whiteout", "a", "initial", spec)
@@ -2907,6 +2933,53 @@ def test_whiteout_oracle_requires_the_center_receipt(monkeypatch, tmp_path):
         with pytest.raises(RuntimeError, match=marker):
             run.assert_whiteout_gen3_saved(dict(receipts, a=cut))
     # the held box_mon landing (an ACK) is a failed control, not a pass
+    landed = dict(receipts, a=receipts["a"] + f"TX stats_cache {k} {{}}\n")
+    with pytest.raises(RuntimeError, match="stats_cache"):
+        run.assert_whiteout_gen3_saved(landed)
+
+
+def _emerald_whiteout_receipts(k, tile="map=0.10 at=(6,17)"):
+    a = (f"BOXED_OBSERVED {k} box=0:2\nTX whiteout - {{}}\n"
+         f"LANDING_STATE {tile} frame=9440 tasks=[] preds=[] healed=A=20/20 overworld_writes_before=0\n"
+         "WHITED_OUT at here\nRX rebuild_start text=REBUILDING\n"
+         f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nWRITE_AT_LANDING {tile} frame=9464 | keyed\n"
+         f"RX rebuild_done\nRETURNED_OBSERVED {k} slot=1\nCONTROL_LIVE start_menu {k} map=0.10\n"
+         f"RX box_mon key={k}\nCONTROL_REFUSED start_menu box_mon {k} clause=field_controls_locked held\n")
+    b = (f"RX box_mon key={k}\nTX stats_cache {k} {{}}\nBOXED_OBSERVED {k} box=0:2\n"
+         f"RX party_mon key={k}\nTX sync_retrieve_done {k} {{}}\nRETURNED_OBSERVED {k} slot=1\n")
+    return {"a": a, "b": b}
+
+
+def test_emerald_whiteout_oracle_requires_the_landing_receipt(monkeypatch, tmp_path):
+    """E4c-2: assert_whiteout_gen3_saved on the gen3_emerald row, over the real Emerald pc fixture
+    (saved == fixture: the round trip put everything back). LANDING_STATE / WRITE_AT_LANDING must
+    name A's fixture lastHealLocation (0.10 (6,17)); each Emerald marker is required by name, the
+    FR Center markers are not accepted in their place, and the held probe landing still fails."""
+    image = (REPO / "tests/fixtures/gen3/emerald_pc.sav").read_bytes()
+    k = duo.gen3_key(duo.gen3_decode(image, title="emerald")[0][1])
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "whiteout_gen3", {"a": image, "b": image},
+                              image, [{"a": {"key": k}, "b": {"key": k}, "status": "alive"}])
+    run.gcfg = dict(duo.GAMES["gen3_emerald"])
+    run._link_keys = {"a": k, "b": k}
+    assert run._gen3_fixture_heal_tile("a") == r"map=0\.10 at=\(6,17\)"
+    receipts = _emerald_whiteout_receipts(k)
+    run.assert_whiteout_gen3_saved(receipts)
+    assert notes and "whiteout" in notes[-1]
+    for marker in ("LANDING_STATE", "WRITE_AT_LANDING", "CONTROL_REFUSED"):
+        cut = "\n".join(line for line in receipts["a"].splitlines() if not line.startswith(marker))
+        with pytest.raises(RuntimeError, match=marker):
+            run.assert_whiteout_gen3_saved(dict(receipts, a=cut))
+    # a write anywhere but the fixture's heal tile is not the Emerald receipt
+    elsewhere = dict(receipts, a=receipts["a"].replace("WRITE_AT_LANDING map=0.10 at=(6,17)",
+                                                       "WRITE_AT_LANDING map=0.10 at=(6,16)"))
+    with pytest.raises(RuntimeError, match="WRITE_AT_LANDING"):
+        run.assert_whiteout_gen3_saved(elsewhere)
+    unhealed = dict(receipts, a=receipts["a"].replace(" healed=A=20/20", ""))
+    with pytest.raises(RuntimeError, match="LANDING_STATE"):
+        run.assert_whiteout_gen3_saved(unhealed)
+    # FR's Center receipt is not accepted on the Emerald row
+    with pytest.raises(RuntimeError, match="LANDING_STATE"):
+        run.assert_whiteout_gen3_saved(_whiteout_receipts(k))
     landed = dict(receipts, a=receipts["a"] + f"TX stats_cache {k} {{}}\n")
     with pytest.raises(RuntimeError, match="stats_cache"):
         run.assert_whiteout_gen3_saved(landed)
@@ -4177,7 +4250,7 @@ def test_active_faint_chain_is_red_on_the_old_hold_and_a_press(ph, mutate, probl
 
 
 def test_p_h_rows_are_registered_with_their_cases():
-    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr")),
+    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr", "gen3_emerald")),
              "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr")),
              "linked_faint_active_trainer_gen3": ("trainer", ("gen3_frlg",)),
              "active_end_gen3": ("command", ("gen3_frlg",)),
@@ -5029,3 +5102,122 @@ def test_traced_follow_rr_trace_is_silent_without_the_env_flag():
     assert ok is True, err
     assert list(w.log.values()) == []
 
+
+
+# ── E4: the gen3_emerald row (E<->E) ─────────────────────────────────────────────────────
+def test_emerald_admission_is_production_only():
+    """EG4: Emerald is admitted by production code alone -- the duo driver's pre-EG4 TEST-ONLY
+    seam (test_admission_codec, which faked titles.emerald.admitted for the duo row only) is
+    gone now that it would be a no-op."""
+    profile = json.loads((REPO / "data/games/gen3_emerald/profile.json").read_text(encoding="utf-8"))
+    assert profile["titles"]["emerald"]["admitted"] is True
+    entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
+    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
+                      entry)
+    assert "test_admission_codec" not in entry
+    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
+
+
+def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():
+    """RC risk: deadzone_gen3 on Emerald burned all three RNG retries because B ran out of the
+    plain "battle" fixture's 5 Poke Balls twice. Every ball_hunt scenario that lists gen3_emerald
+    must hunt on a fixture carrying >= 20 balls (the "catch" kind), and GAMES["gen3_emerald"]
+    ["hunt_area"] must name that target."""
+    row = duo.GAMES["gen3_emerald"]
+    ball_hunts = [(name, entry) for name, entry in duo.SCENARIOS.items()
+                  if entry.get("ball_hunt") and "gen3_emerald" in entry.get("games", ())]
+    assert ball_hunts, "no ball_hunt scenario lists gen3_emerald -- test is vacuous"
+    for name, entry in ball_hunts:
+        target = duo.scenario_target(entry, "gen3_emerald")
+        assert target in row["hunt_area"], f"{name}: hunt_area names no {target!r} target"
+        body = (REPO / f"tests/fixtures/gen3/emerald_{target}.sav").read_bytes()
+        balls = sum(qty for item, qty in gen3_fixtures.emerald_ball_pocket(body)
+                    if item == gen3_fixtures.ITEM_POKE_BALL)
+        assert balls >= 20, f"{name}: emerald_{target}.sav only carries {balls} balls"
+
+
+def test_emerald_row_resolves_pack_fixtures_and_layout():
+    row = duo.GAMES["gen3_emerald"]
+    assert row["game"] == "gen3_emerald" and duo.scenario_family("gen3_emerald") == "gen3_emerald"
+    assert "gen3_emerald" in duo.OPT_IN_GAMES and duo.rng_retry_family("gen3_emerald")
+    assert duo.gen3_profile_path("emerald").endswith(os.path.join("gen3_emerald", "profile.json"))
+    assert duo.gen3_profile_path("firered").endswith(os.path.join("gen3_frlg", "profile.json"))
+    assert duo.gen3_profile_path("radical_red") == duo.GEN3_RR_PROFILE
+    assert duo.gen3_codec_title("radical_red") == "frlg" and duo.gen3_codec_title("emerald") == "emerald"
+    for name in ("faint_cmd_gen3", "reconnect_gen3", "deadzone_gen3", "link_gen3", "boxsync_gen3",
+                 "linked_faint_active_gen3", "whiteout_gen3"):
+        assert duo.scenario_applies(name, "gen3_emerald"), name
+        run = duo.DuoRun.__new__(duo.DuoRun)
+        run.gcfg, run.cfg, run.game = dict(row), dict(duo.SCENARIOS[name]), "gen3_emerald"
+        assert run._hunt_area == \
+            {"battle": "route_102", "pc": "route_103", "catch": "route_102"}[run._target_for("a")], name
+        for inst in ("a", "b"):
+            assert run._gen3_title(inst) == "emerald"
+            assert os.path.isfile(run._gen3_fixture_path(inst)), run._gen3_fixture_path(inst)
+    frlg = duo.DuoRun.__new__(duo.DuoRun)
+    frlg.gcfg = dict(duo.GAMES["gen3_frlg"])
+    assert frlg._hunt_area == "route_1"
+    # the Emerald layout, not FR's: emerald_pc.sav's two-mon party and two boxed mons
+    image = (REPO / "tests/fixtures/gen3/emerald_pc.sav").read_bytes()
+    party, boxes = duo.gen3_decode(image, title="emerald")
+    assert [m["species"] for m in party] == [283, 286] and len(boxes) == 2
+    assert duo.gen3_ball_count(image, "emerald") == 5
+    # the raw party record comes from Emerald's own SaveBlock1 offset, not FR's
+    pc = duo.DuoRun.__new__(duo.DuoRun)
+    pc.gcfg, pc.cfg, pc.game = dict(row), dict(duo.SCENARIOS["faint_cmd_gen3"]), "gen3_emerald"
+    assert codec.decode_party_mon(bytes.fromhex(pc._gen3_party_record_hex("a", 1))) == party[1]
+
+
+def test_hunt_area_fails_loud_off_kanto():
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg = {"game": "gen3_emerald"}                   # an Emerald-family row without the key
+    with pytest.raises(RuntimeError, match="names no hunt_area"):
+        _ = run._hunt_area
+    for game in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new"):
+        run.gcfg = dict(duo.GAMES[game])
+        assert run._hunt_area == "route_1", game
+
+
+# ── E4-DUO-2: whiteout_destination on Emerald (raw lastHealLocation) vs FR (projection) ───
+def _scripted_machine(title):
+    from lupa import LuaRuntime
+    from test_gen3_fr_story_oracles import HARNESS
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SLINK_ROOT = REPO.as_posix()
+    lua.globals().SLINK_GEN3_TITLE = title
+    lua.execute(HARNESS)
+    return lua, lua.execute(f'return dofile("{SCRIPTED.as_posix()}")')
+
+
+def test_sb1_pointer_bound_follows_the_title_saveblock1_size():
+    """sb1_ptr's upper bound is 0x02040000 - sizeof(SaveBlock1): FR/LG 0x3D68, Emerald 0x3D88
+    (gen3_codec SAVEBLOCK1_SIZE_EMERALD). 0x0203C290 fits FR's block but not Emerald's."""
+    from lupa import LuaError
+
+    assert codec.SAVEBLOCK1_SIZE_EMERALD == 0x3D88
+    at = 0x0203C290
+    assert 0x02040000 - 0x3D88 < at <= 0x02040000 - 0x3D68
+    lua, mod = _scripted_machine("emerald")
+    lua.globals().F.w32(0x03005008, at)
+    with pytest.raises(LuaError, match="whiteout_heal_pointer"):
+        mod.whiteout_destination(lua.globals().F.cp)
+    lua, mod = _scripted_machine("firered")
+    lua.globals().F.w32(0x03005008, at)
+    with pytest.raises(LuaError, match="whiteout_heal_unsupported"):   # the pointer passed
+        mod.whiteout_destination(lua.globals().F.cp)
+
+
+def test_emerald_whiteout_lands_on_the_raw_heal_tile_and_fr_still_projects():
+    from lupa import LuaError
+
+    lua, mod = _scripted_machine("emerald")
+    oldale = lua.eval("{group=0, num=10, warp=255, x=6, y=17}")
+    dest = mod.whiteout_destination(lua.globals().F.cp, oldale)
+    assert (dest.group, dest.num, dest.x, dest.y) == (0, 10, 6, 17)
+    lua, mod = _scripted_machine("firered")
+    cp = lua.globals().F.cp
+    dest = mod.whiteout_destination(cp, lua.eval("{group=3, num=1, warp=255, x=26, y=27}"))
+    assert (dest.group, dest.num, dest.x, dest.y) == (5, 4, 7, 4)     # Viridian Center, unchanged
+    with pytest.raises(LuaError, match="whiteout_heal_unsupported"):
+        mod.whiteout_destination(cp, lua.eval("{group=0, num=10, warp=255, x=6, y=17}"))  # FR: no raw tile

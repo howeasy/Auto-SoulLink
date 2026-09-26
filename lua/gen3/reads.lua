@@ -176,12 +176,73 @@ end
 -- `pointers` is the pack's write_checkpoint `pointers` block (Entry.build passes
 -- parts.write_checkpoint.pointers), so the pointer symbols arrive as data like every other
 -- address. When it is absent the equivalent profile.ram symbol is used instead.
+-- XR-2 (review cx-fcdc11c5 F7/F9): validate an optional expansion bitfield/mask
+-- block ONCE, at R.new, rather than crashing mid-decode (`nil >> shift`) or
+-- silently honouring a malformed layout. A key that is absent (Lua nil) is
+-- always fine; a key that IS present must be well-formed or R.new refuses by
+-- name. The Python twin is validate_expansion_layout (gen3_codec.py).
+local function bitfield(blob, field)
+    return (u(blob, field.word_off, field.word_size) >> field.shift) & ((1 << field.width) - 1)
+end
+
+local function validate_mask(label, value)
+    if type(value) == "number" then
+        assert(value > 0, label .. ": mask must be a positive number (got " .. tostring(value) .. ")")
+    end
+end
+
+local function validate_bitfield(label, field, container_size)
+    assert(type(field) == "table", label .. ": must be an object")
+    for _, key in ipairs({ "word_off", "word_size", "shift", "width" }) do
+        assert(type(field[key]) == "number", label .. ": missing or non-numeric " .. key)
+    end
+    assert(field.word_size == 1 or field.word_size == 2 or field.word_size == 4,
+           label .. ": word_size must be 1, 2 or 4")
+    assert(field.word_off >= 0 and field.word_off + field.word_size <= container_size,
+           label .. ": word_off/word_size exceeds the " .. container_size .. "-byte container")
+    assert(field.width >= 1 and field.shift >= 0 and field.shift + field.width <= field.word_size * 8,
+           label .. ": shift+width exceeds the " .. (field.word_size * 8) .. "-bit word")
+end
+
+local function validate_fixed_bitfield(label, field, total_bits)
+    assert(type(field) == "table", label .. ": must be an object")
+    for _, key in ipairs({ "shift", "width" }) do
+        assert(type(field[key]) == "number", label .. ": missing or non-numeric " .. key)
+    end
+    assert(field.width >= 1 and field.shift >= 0 and field.shift + field.width <= total_bits,
+           label .. ": shift+width exceeds the " .. total_bits .. "-bit field")
+end
+
+local MASK_KEYS = { "MON_SPECIES_MASK", "MON_ITEM_MASK", "MON_MOVE_MASK",
+                    "EXPERIENCE_MASK", "PP_MASK", "MARKINGS_MASK" }
+
+local function validate_layout(d)
+    for _, key in ipairs(MASK_KEYS) do validate_mask(key, d[key]) end
+    if type(d.NICKNAME_EXTRA) == "table" then
+        assert(type(d.NICKNAME_EXTRA.chars) == "table",
+               "NICKNAME_EXTRA: must be an object with a 'chars' list")
+        for i, char in ipairs(d.NICKNAME_EXTRA.chars) do
+            validate_bitfield("NICKNAME_EXTRA.chars[" .. i .. "]", char, R.SUBSTRUCT_SIZE)
+        end
+    end
+    if type(d.POKEBALL_FIELD) == "table" then
+        validate_bitfield("POKEBALL_FIELD", d.POKEBALL_FIELD, R.SUBSTRUCT_SIZE)
+    end
+    if type(d.ABILITY_NUM_FIELD) == "table" then
+        validate_bitfield("ABILITY_NUM_FIELD", d.ABILITY_NUM_FIELD, R.SUBSTRUCT_SIZE)
+    end
+    if type(d.SHINY_MODIFIER_FIELD) == "table" then
+        validate_fixed_bitfield("SHINY_MODIFIER_FIELD", d.SHINY_MODIFIER_FIELD, 16)
+    end
+end
+
 function R.new(profile, io, pointers)
     assert(type(profile) == "table" and type(profile.ram) == "table"
            and type(profile.derived) == "table", "Gen 3 title profile required")
     assert(type(io) == "table" and R.callable(io.read_u8) and R.callable(io.read_u32)
            and R.callable(io.read_bytes), "injected read-only byte reader required")
     local a, d = profile.ram, profile.derived
+    validate_layout(d)
     local cm = R.charmap(profile)
     -- Radical Red / CFRU: fixed substruct order, no XOR, no BoxPokemon checksum.
     local rr = d.CFRU_NO_ENCRYPT == true
@@ -202,16 +263,51 @@ function R.new(profile, io, pointers)
         return table.concat(out)
     end
 
+    -- XR-1 (pokeemerald-expansion, include/pokemon.h at expansion/1.17.0
+    -- e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7): species/heldItem/move1-4 are
+    -- masked bitfields sharing their vanilla u16 lane with new bits (teraType,
+    -- evolutionTracker, hyperTrained); a pack pins the surviving-bits mask so
+    -- vanilla packs (no derived.MON_*_MASK) decode byte-for-byte as before.
+    -- All of these are computed ONCE here (not per record) and already
+    -- validate_layout()-checked above (XR-2 F2/F7).
+    local species_mask = d.MON_SPECIES_MASK or 0xFFFF
+    local item_mask = d.MON_ITEM_MASK or 0xFFFF
+    local move_mask = d.MON_MOVE_MASK or 0xFFFF
+    -- First-class key (XR-2 F2): experience:21 shares its u32 lane with the
+    -- new nickname11:8 (include/pokemon.h#L138-140) -- no longer inferred by
+    -- scanning NICKNAME_EXTRA.chars for word_off == 4.
+    local experience_mask = d.EXPERIENCE_MASK or 0xFFFFFFFF
+    -- Each PP byte's top bit is a hyperTrained* flag (#L160-167).
+    local pp_mask = d.PP_MASK or 0xFF
+    -- {word_off, word_size, shift, width} relative to the Growth substruct:
+    -- pokeball moved there (pokeball:6, #L143); absent = vanilla (Misc met u16).
+    local pokeball_field = type(d.POKEBALL_FIELD) == "table" and d.POKEBALL_FIELD or nil
+    -- {word_off, word_size, shift, width} relative to the Misc substruct:
+    -- abilityNum moved into the ribbons u32 (abilityNum:2, #L221); absent =
+    -- vanilla (bit31 of the IVs u32).
+    local ability_field = type(d.ABILITY_NUM_FIELD) == "table" and d.ABILITY_NUM_FIELD or nil
+    -- markings:4 shares its byte with compressedStatus:4 (#L272-273).
+    local markings_mask = d.MARKINGS_MASK or 0xFF
+    -- {shift, width} relative to BoxPokemon.unknown (hpLost:14 + shinyModifier:1
+    -- + unused_1E:1, #L275-276); absent = not decoded (server's shiny rule is
+    -- key-based, docs/gen3_emerald/research/expansion_record_layout.md).
+    local shiny_field = type(d.SHINY_MODIFIER_FIELD) == "table" and d.SHINY_MODIFIER_FIELD or nil
+    -- Chars validated once above; hoisted so decode_mon does not re-check per record.
+    local nickname_extra = type(d.NICKNAME_EXTRA) == "table" and d.NICKNAME_EXTRA or nil
+
     -- include/pokemon.h: the four 12-byte substructs, already put back in
     -- Growth / Attacks / EVs / Misc order.
     local function decode_secure(g, at, e, m)
         local ivs, met = u(m, 4, 4), u(m, 2, 2)
         local moves, pp, contest = {}, {}, {}
-        for i = 0, 3 do moves[i + 1] = u(at, i * 2, 2) end
-        for i = 0, 3 do pp[i + 1] = at[9 + i] end
+        for i = 0, 3 do moves[i + 1] = u(at, i * 2, 2) & move_mask end
+        for i = 0, 3 do pp[i + 1] = at[9 + i] & pp_mask end
         for i = 0, 5 do contest[i + 1] = e[7 + i] end
+        local pokeball = pokeball_field and bitfield(g, pokeball_field) or (met >> 11) & 0x0F
+        local ability_num = ability_field and bitfield(m, ability_field) or (ivs >> 31) & 1
         return {
-            species = u(g, 0, 2), held_item = u(g, 2, 2), experience = u(g, 4, 4),
+            species = u(g, 0, 2) & species_mask, held_item = u(g, 2, 2) & item_mask,
+            experience = u(g, 4, 4) & experience_mask,
             pp_bonuses = g[9], friendship = g[10], growth_filler = u(g, 10, 2),
             moves = moves, pp = pp,
             evs = { hp = e[1], attack = e[2], defense = e[3], speed = e[4],
@@ -219,11 +315,11 @@ function R.new(profile, io, pointers)
             contest = contest,
             pokerus = m[1], met_location = m[2],
             met_level = met & 0x7F, met_game = (met >> 7) & 0x0F,
-            pokeball = (met >> 11) & 0x0F, ot_gender = (met >> 15) & 1,
+            pokeball = pokeball, ot_gender = (met >> 15) & 1,
             ivs = { hp = ivs & 0x1F, attack = (ivs >> 5) & 0x1F,
                     defense = (ivs >> 10) & 0x1F, speed = (ivs >> 15) & 0x1F,
                     sp_attack = (ivs >> 20) & 0x1F, sp_defense = (ivs >> 25) & 0x1F },
-            is_egg = (ivs >> 30) & 1, ability_num = (ivs >> 31) & 1,
+            is_egg = (ivs >> 30) & 1, ability_num = ability_num,
             ribbons = u(m, 8, 4),
         }
     end
@@ -248,7 +344,25 @@ function R.new(profile, io, pointers)
         end
         local flags, stored = raw[0x13 + 1], u(raw, 0x1C, 2)
         local nick = take(raw, 0x08, R.NICKNAME_LEN)
+        -- XR-1: chars 11/12 live in Growth-substruct bitfields (nickname11 at the
+        -- experience u32's bits 21-28, nickname12 at the pokeball u16's bits 6-13),
+        -- not in the raw 10-byte BoxPokemon.nickname array. pret's own
+        -- GetBoxMonData3 (src/pokemon.c) treats "both zero" as a vanilla (10-char)
+        -- record and omits them; only append when at least one is non-zero.
+        if nickname_extra then
+            local growth = ordered[1]
+            local chars, any_nonzero = {}, false
+            for _, char in ipairs(nickname_extra.chars) do
+                local value = bitfield(growth, char)
+                chars[#chars + 1] = value
+                if value ~= 0 then any_nonzero = true end
+            end
+            if any_nonzero then
+                for _, value in ipairs(chars) do nick[#nick + 1] = value end
+            end
+        end
         local ot = take(raw, 0x14, R.OT_NAME_LEN)
+        local unknown = u(raw, 0x1E, 2)
         local mon = {
             personality = personality, ot_id = ot_id,
             nickname = r.decode_name(nick), nickname_bytes = nick,
@@ -257,9 +371,12 @@ function R.new(profile, io, pointers)
             is_egg_flag = (flags >> 2) & 1, block_box_rs = (flags >> 3) & 1,
             flags_unused = (flags >> 4) & 0x0F,
             ot_name = r.decode_name(ot), ot_name_bytes = ot,
-            markings = raw[0x1B + 1], checksum = stored, unknown = u(raw, 0x1E, 2),
+            markings = raw[0x1B + 1] & markings_mask, checksum = stored, unknown = unknown,
             box = not party,
         }
+        if shiny_field then
+            mon.shiny_modifier = (unknown >> shiny_field.shift) & ((1 << shiny_field.width) - 1)
+        end
         for key, value in pairs(decode_secure(ordered[1], ordered[2], ordered[3], ordered[4])) do
             mon[key] = value
         end
@@ -433,8 +550,40 @@ function R.new(profile, io, pointers)
 
     -- SaveBlock1.flags[]: the 8 FLAG_BADGE0x_GET bits sit consecutively inside one byte
     -- (pret include/constants/flags.h:1324,1364-1371) -- bit i (0-based) is badge i+1.
+    --
+    -- Emerald's badges (FLAG_BADGE01_GET = SYSTEM_FLAGS+7 = 0x867, flags.h:1359) straddle a
+    -- byte instead (0x867..0x86E = byte 0x10C bit 7, then byte 0x10D bits 0-6), so a pack that
+    -- cannot say it with one byte carries profile.derived.BADGE_FIRST_FLAG (the flag id) and
+    -- leaves SB1_BADGE_BYTE_OFFSET null; each bit is then read from its own flags byte. The
+    -- Python twin is tools/gen3_reads_pydec.py's decode_badges_straddle.
     function r.read_badges()
-        if not d.SB1_FLAGS_OFFSET or not d.SB1_BADGE_BYTE_OFFSET then
+        -- json_codec.lua decodes a JSON null to the sentinel M.null = {} (json_codec.lua:4,174),
+        -- not Lua nil, and the real Emerald profile carries SB1_BADGE_BYTE_OFFSET: null. A plain
+        -- `~= nil` check treats that sentinel table as "set" and misfires the refusal below on
+        -- every real Emerald load; only a number means the field is actually set (F-A).
+        local first_flag_set = type(d.BADGE_FIRST_FLAG) == "number"
+        local byte_offset_set = type(d.SB1_BADGE_BYTE_OFFSET) == "number"
+        if first_flag_set then
+            -- A profile that carries both fields is self-contradictory (one says "straddled,
+            -- read per-bit", the other says "shares one byte"): refuse by name rather than
+            -- picking a side (F10).
+            if byte_offset_set then
+                return nil, "profile derived sets both BADGE_FIRST_FLAG and SB1_BADGE_BYTE_OFFSET"
+            end
+            if not d.SB1_FLAGS_OFFSET then
+                return nil, "profile has no derived.SB1_FLAGS_OFFSET"
+            end
+            local sb1, why = r.read_sb1()
+            if not sb1 then return nil, why end
+            local out = 0
+            for i = 0, 7 do
+                local bit_index = d.BADGE_FIRST_FLAG + i
+                local byte = io.read_u8(sb1 + d.SB1_FLAGS_OFFSET + (bit_index >> 3))
+                if (byte >> (bit_index & 7)) & 1 == 1 then out = out | (1 << i) end
+            end
+            return out
+        end
+        if not d.SB1_FLAGS_OFFSET or not byte_offset_set then
             return nil, "profile has no derived.SB1_FLAGS_OFFSET/SB1_BADGE_BYTE_OFFSET"
         end
         local sb1, why = r.read_sb1()

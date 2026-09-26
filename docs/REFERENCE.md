@@ -3,12 +3,15 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps) and Radical Red 4.1 (CFRU, clean or companion-patched)
-  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the frozen-cut gate passes FR/LG
-  43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`, `G5_request_draft.md`); the
-  owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM hash (`lua/slink.lua`);
-  randomized and other unpinned builds are refused by name.
-- **Gen 3** — Emerald and the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
+- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, clean or companion-patched)
+  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the
+  frozen-cut gate passes FR/LG 43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`,
+  `G5_request_draft.md`); the owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM
+  hash (`lua/slink.lua`); randomized and other unpinned builds are refused by name.
+- **Gen 3** — Emerald (pinned US dump) — 🟡 **Release candidate** on its own `gen3_emerald` pack under
+  `lua/gen3/`; admitted by ROM hash or by its engine-site anchors (header-only builds refused) and pairs only with itself, never with FRLG/RR. The owner's EG4
+  sign-off is pending (`docs/gen3_emerald/PLAN.md` §10, `docs/gen3_emerald/`).
+- **Gen 3** — the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
   the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`
   refuses them by name until they are ported to `lua/gen3/`.
 - **Gen 1** — Red, Blue, Yellow (US English) — 🟡 **Partially verified.** The Soul Link
@@ -136,8 +139,8 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen or Radical Red ROMs. **Gen 4:** Two instances with US HGSS ROMs |
-| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 2:** Crystal (US 1.0 or 1.1), Gold, Silver (US); the overlay is applied from `patch/dist/SLink-*.ups`. **Gen 3:** the pinned FireRed/LeafGreen US 1.0 dumps, or Radical Red 4.1 (clean or with the SLink companion patch), admitted by ROM hash — randomized builds are refused. **Gen 4:** HeartGold/SoulSilver US |
+| BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen, Radical Red, or Emerald ROMs (Emerald pairs only with Emerald, never with FRLG/RR). **Gen 4:** Two instances with US HGSS ROMs |
+| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 2:** Crystal (US 1.0 or 1.1), Gold, Silver (US); the overlay is applied from `patch/dist/SLink-*.ups`. **Gen 3:** the pinned FireRed/LeafGreen US 1.0 dumps, Radical Red 4.1 (clean or with the SLink companion patch), or the pinned Emerald (US) dump on its own `gen3_emerald` pack — admitted by ROM hash, randomized builds refused; Emerald pairs only with Emerald. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `gen3/`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
@@ -808,6 +811,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | ROM validation (FireRed/LeafGreen US 1.0) | ✅ Working |
 | Archipelago (AP) patched ROM support | ❌ Not supported — AP FireRed/LeafGreen ran only on the old, now-archived Gen 3 client; `lua/slink.lua` refuses them by name until they are ported to `lua/gen3/` |
 | Radical Red 4.1 (CFRU) support | ✅ Working |
+| Emerald (pinned US dump, `gen3_emerald` pack, E<->E pairing only) | 🟡 Release candidate — EG4 owner sign-off pending (`docs/gen3_emerald/`) |
 | Area mapping (all FRLG routes/dungeons/locations) | ✅ Working |
 | Encounter linking | ✅ Working |
 | Nuzlocke gate (Pokéball check) | ✅ Working |
@@ -1069,7 +1073,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{cryst
 | `lua/gen1/run.lua` | **Gen 1 production client entry point** — both launchers (`lua/slink.lua`'s GB/GBC route, `lua/slink_gen1.lua`) `dofile` this. BizHawk bootstrap: title detection via `entry.lua`'s `Entry.detect_title`, connector/HUD setup, guarded frame callback and shutdown (commit `ca17a26`). |
 | `lua/gen1/entry.lua` | Composition root over injected io/net/HUD — wires reads/writes/signals/boxes/rom/trade_overlay/panel; the same construction path serves production and the model test harness. |
 | `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` | The rewritten Gen 1 modules `entry.lua` composes: engine-signal dispatch, guarded write windows, party/box/PC decoding, cartridge dex/base-stat tables, the native trade overlay and the native info panel — Red, Blue and Yellow via profile, not per-title branches. |
-| `lua/gen3/run.lua`, `lua/gen3/entry.lua` | **Gen 3 production client** (FireRed/LeafGreen/Radical Red) — `lua/slink.lua`'s GBA route admits the cartridge (`Entry.admit`, hash then anchors) and dofiles `run.lua`; `entry.lua` wires `lua/gen3/{client,reads,signals,writes,safety,boxes,native}.lua` over `lua/core/` |
+| `lua/gen3/run.lua`, `lua/gen3/entry.lua` | **Gen 3 production client** (FireRed/LeafGreen/Radical Red/Emerald) — `lua/slink.lua`'s GBA route admits the cartridge (`Entry.admit`, hash then anchors) and dofiles `run.lua`; `entry.lua` wires `lua/gen3/{client,reads,signals,writes,safety,boxes,native}.lua` over `lua/core/`; Emerald is its own `gen3_emerald` pack, pairing only with itself |
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
 | `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |
 | `lua/memory_nds.lua` | Gen 4/5 NDS RAM helpers — LCRNG encryption/decryption, 2-level pointer chain, HP debounce, party/box/battle reads |
@@ -1090,6 +1094,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{cryst
 | `data/games/gen1_rby/` | Gen 1 game data — generated JSON tables the rewritten client's `entry.lua` opens directly (`profile.json`, `engine_signals.json`, `area_map.json`, `write_checkpoint.json`, `wild_encounter_sites.json`, plus `evolutions.json`, `trainers.json`, `species_index.json`, `static_encounters.json`, `continue_sites.json`, `moves.json`, `floor_labels.json`); the old `gen1_rby_areas.lua`/`gen1_rby_locations.lua` mapping files were deleted with the legacy client (`21ff0d7`) |
 | `data/games/gen3_frlge/` | Gen 3 game data — area maps, RR items/sprites/types/species/trainers |
 | `data/games/gen3_frlge/rr_priority_trainers.json` | Generated RR priority/key-trainer roster (areas → trainers, parties, level caps) feeding the Upcoming Key Trainers panel + calc Prep tab |
+| `data/games/gen3_emerald/` | Emerald game data — its own profile, engine signals, checkpoint, area map, statics and gift areas; pairs only with itself |
 | `data/games/gen4_hgsspt/` | Gen 4 game data — HGSS area map |
 | `data/games/gen5_bw/` | Gen 5 game data — BW/BW2 area maps and location tables |
 | `data/links.json` | Persisted link table — written after every state change |

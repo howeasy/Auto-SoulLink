@@ -1,0 +1,27 @@
+# gen3_final_cut row=unit_emerald item=§13.1_source cut=9c96e745b3439a240c08d787c3566858fbe3551f
+# lane=C:/slink-wt/emerald-fc
+# command: python -m pytest tests/unit -q -k 'gen3 and emerald' -p no:randomly -rs   (cwd=C:/slink-wt/emerald-fc)
+# env: (none)
+# verdict: FAIL skipped, and ALLOWED_SKIPS does not excuse it
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T14:55:30 cpu=53% emuhawk=0 python=3
+start_utc=2026-09-26T18:55:29Z tracked_clean_before=True
+......s................................................................. [ 16%]
+........................................................................ [ 32%]
+........................................................................ [ 49%]
+........................................................................ [ 65%]
+.....................................................................s.. [ 81%]
+sss.s..s..sss.s......................................................... [ 98%]
+........                                                                 [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\unit\test_gen1_purergb_rom_content.py:31: pureRGB checkout not found at C:\slink-wt\emerald-fc\.cache\purergb (set SLINK_PURERGB_SRC)
+SKIPPED [1] tests\conftest.py:138: pokecrystal not cloned: C:\slink-wt\emerald-fc\.cache\gen2-build\pokecrystal
+SKIPPED [1] tests\unit\test_e2e_duo_scenario_selection.py:636: gen3_emerald boots from a battery save
+SKIPPED [2] tests\unit\test_gen3_fixture_qualify_emerald.py:74: emerald_badges_b.sav not built
+SKIPPED [2] tests\unit\test_gen3_fixture_qualify_emerald.py:74: emerald_evolve_b.sav not built
+SKIPPED [2] tests\unit\test_gen3_fixture_qualify_emerald.py:74: emerald_gift_b.sav not built
+SKIPPED [2] tests\unit\test_gen3_fixture_qualify_emerald.py:74: emerald_lowhp_b.sav not built
+SKIPPED [2] tests\unit\test_gen3_fixture_qualify_emerald.py:74: emerald_poison_b.sav not built
+429 passed, 13 skipped, 14231 deselected in 33.35s
+exit=0 end_utc=2026-09-26T18:56:06Z tracked_clean_after=True classification=real

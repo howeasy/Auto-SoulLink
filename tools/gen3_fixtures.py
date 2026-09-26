@@ -27,10 +27,13 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import os
+import re
 import shutil
 import stat
+import struct
 import subprocess
 import sys
 import time
@@ -53,13 +56,13 @@ def sha256_hex(data: bytes) -> str:
 # import
 # ---------------------------------------------------------------------------
 
-def import_savedata(src: bytes, *, rr: bool) -> bytes:
+def import_savedata(src: bytes, *, rr: bool, title: str = codec.TITLE_FRLG) -> bytes:
     """Strip the optional RTC suffix, refuse a blank or unqualified save,
     return the 128 KiB flash body to write as a fixture."""
     body, _rtc = codec.split_rtc(src)
     if all(b == 0xFF for b in body):
         raise ValueError("blank/erased save (flash body is all 0xFF)")
-    ok, msg = codec.qualify_flash(body, cfru=rr)
+    ok, msg = codec.qualify_flash(body, cfru=rr, title=title)
     if not ok:
         raise ValueError(f"qualify_flash refused: {msg}")
     return body
@@ -101,12 +104,13 @@ def _party_entry(mon: dict) -> dict:
             "level": mon["level"]}
 
 
-def qualify_one(data: bytes, *, rr: bool) -> dict:
+def qualify_one(data: bytes, *, rr: bool, title: str = codec.TITLE_FRLG) -> dict:
     """Everything `qualify` prints, as a dict, so the test suite can assert
-    on it directly instead of parsing stdout."""
+    on it directly instead of parsing stdout. ``title`` is the codec's save-layout
+    title (frlg | emerald); RR ignores it."""
     body, rtc = codec.split_rtc(data)
-    ok, msg = codec.qualify_flash(body, cfru=rr)
-    parsed = codec.parse_flash(body, cfru=rr)
+    ok, msg = codec.qualify_flash(body, cfru=rr, title=title)
+    parsed = codec.parse_flash(body, cfru=rr, title=title)
     name, trainer_id = _trainer_identity(parsed["sb2"])
     result: dict = {
         "ok": ok, "message": msg, "slot": parsed["slot"],
@@ -127,9 +131,9 @@ def qualify_one(data: bytes, *, rr: bool) -> dict:
         result["boxes_note"] = ("RR layout pinned; extension sectors 30/31 have no checksum "
                                 "or generation counter (rr_save_layout.md §5, §7)")
     else:
-        party = codec.party_from_save(body, rr=False)
+        party = codec.party_from_save(body, rr=False, title=title)
         result["party"] = [_party_entry(m) for m in party]
-        boxes = codec.boxes_from_save(body, rr=False)
+        boxes = codec.boxes_from_save(body, rr=False, title=title)
         result["boxes"] = sum(1 for box in boxes for mon in box
                               if mon["personality"] or mon["ot_id"])
     return result
@@ -140,7 +144,7 @@ def cmd_qualify(args: argparse.Namespace) -> int:
     for path in args.files:
         data = Path(path).read_bytes()
         try:
-            r = qualify_one(data, rr=args.rr)
+            r = qualify_one(data, rr=args.rr, title=args.title)
         except ValueError as exc:
             print(f"{path}: REFUSED {exc}")
             exit_code = 1
@@ -185,16 +189,19 @@ def _rekey_mon(raw: bytes, *, party: bool, old_tid: int, new_tid: int,
     return new_raw, new_raw != raw
 
 
-def derive_b(a_body: bytes, *, rr: bool = False) -> tuple[bytes, list[str]]:
+def derive_b(a_body: bytes, *, rr: bool = False,
+             title: str = codec.TITLE_FRLG) -> tuple[bytes, list[str]]:
     """Variant-specific distinct-OT derivation (flash_save.md §5). Returns
     (new_flash_body, manifest_lines); raises ValueError if the source does
-    not qualify."""
+    not qualify. ``title`` (frlg | emerald) picks the vanilla save layout: Emerald's
+    SaveBlocks are bigger and its party sits at SB1+0x234/+0x238 (gen3_codec)."""
     if rr:
         return _derive_b_rr(a_body)
-    ok, msg = codec.qualify_flash(a_body)
+    ok, msg = codec.qualify_flash(a_body, title=title)
     if not ok:
         raise ValueError(f"source fixture does not qualify: {msg}")
-    parsed = codec.parse_flash(a_body)
+    parsed = codec.parse_flash(a_body, title=title)
+    party_count_off, party_off = codec._TITLE_PARTY_OFFSETS[codec._title(title)]
     sb2 = bytearray(parsed["sb2"])
     sb1 = bytearray(parsed["sb1"])
     storage = bytearray(parsed["storage"])
@@ -212,9 +219,9 @@ def derive_b(a_body: bytes, *, rr: bool = False) -> tuple[bytes, list[str]]:
     # SaveBlock2.encryptionKey (+0xF20) is deliberately untouched: an OT-only
     # transformation does not need a bag/stats rekey (flash_save.md §5.5).
 
-    count = min(sb1[codec.SB1_PARTY_COUNT_OFFSET], codec.PARTY_CAPACITY)
+    count = min(sb1[party_count_off], codec.PARTY_CAPACITY)
     for i in range(count):
-        start = codec.SB1_PARTY_OFFSET + i * codec.PARTY_MON_SIZE
+        start = party_off + i * codec.PARTY_MON_SIZE
         raw = bytes(sb1[start:start + codec.PARTY_MON_SIZE])
         new_raw, changed = _rekey_mon(raw, party=True, old_tid=old_tid,
                                        new_tid=new_tid, new_name=new_name)
@@ -241,7 +248,7 @@ def derive_b(a_body: bytes, *, rr: bool = False) -> tuple[bytes, list[str]]:
     # UNVERIFIED to enumerate exhaustively -- flash_save.md §5.3 restricts
     # simple fixtures to leaving them untouched rather than guessing.
 
-    layout = codec.slot_layout()
+    layout = codec.slot_layout(title=title)
     objects = {"sb2": bytes(sb2), "sb1": bytes(sb1), "storage": bytes(storage)}
     base = codec.NUM_SECTORS_PER_SLOT * parsed["slot"]
     new_body = bytearray(a_body)
@@ -357,11 +364,11 @@ def _derive_b_rr(a_body: bytes) -> tuple[bytes, list[str]]:
 def cmd_derive_b(args: argparse.Namespace) -> int:
     try:
         a_body = codec.split_rtc(Path(args.a).read_bytes())[0]
-        b_body, manifest = derive_b(a_body, rr=args.rr)
+        b_body, manifest = derive_b(a_body, rr=args.rr, title=args.title)
     except (ValueError, OSError) as exc:
         print(f"refused: {exc}", file=sys.stderr)
         return 1
-    ok, msg = codec.qualify_flash(b_body, cfru=args.rr)
+    ok, msg = codec.qualify_flash(b_body, cfru=args.rr, title=args.title)
     if not ok:
         print(f"refused: derived save does not re-qualify: {msg}", file=sys.stderr)
         return 1
@@ -387,7 +394,10 @@ def cmd_derive_b(args: argparse.Namespace) -> int:
 BOOT_CHECK_LUA = "lua/tests/gen3_boot_check.lua"
 FR_NEWGAME_LUA = "lua/tests/gen3_fr_newgame_inputs.lua"
 FR_PARTY_LUA = "lua/tests/gen3_fixture_from_state.lua"
-RUN_DIR = Path(REPO) / "patch" / "build" / "gen3_fixture_runs"
+# SLINK_GEN3_FIXTURE_RUNS moves the per-run SaveRAM dirs off Drive to a short lane path
+# (reference_bizhawk_maxpath_saveram: SaveRAM writes fail silently near 260 chars).
+RUN_DIR = Path(os.environ.get("SLINK_GEN3_FIXTURE_RUNS")
+               or Path(REPO) / "patch" / "build" / "gen3_fixture_runs")
 CHECKPOINTS = {False: Path(REPO) / "data/games/gen3_frlg/write_checkpoint.json",
                True: Path(REPO) / "data/games/gen3_rr/write_checkpoint.json"}
 
@@ -434,6 +444,16 @@ PARTY_TITLES: dict[str, dict[str, object]] = {
         # post-intro walk/save (map id, flash sector counter), same as FR.
         "scripted_newgame": True,
     },
+    # E2-CKPT: the checkpoint-probe savestates (tools/mkstates_gen3.py) cold-boot the committed
+    # emerald_<kind>.sav fixtures. Emerald has no scripted new game here: its fixtures are the
+    # make-emerald SYNTH saves, so make-fr/make-fr-party refuse it on scripted_newgame.
+    "emerald": {
+        "rom": "Pokemon - Emerald Version (USA, Europe).gba",
+        "saveram": "Pokemon - Emerald Version (USA, Europe).SaveRAM",
+        "scripted_newgame": False,
+        "fixture": "emerald_{kind}.sav",
+        "checkpoint": "data/games/gen3_emerald/write_checkpoint.json",
+    },
 }
 
 
@@ -472,9 +492,11 @@ def _checked_title(args: argparse.Namespace) -> str:
     """The --title value, validated against PARTY_TITLES with a loud refusal (the party lane is
     vanilla FR/LG only). Absent --title keeps the historical FireRed behaviour byte-for-byte."""
     title = getattr(args, "title", None) or "firered"
-    if title not in PARTY_TITLES:
+    # E2-CKPT: emerald is in PARTY_TITLES for mkstates_gen3 only; the scripted lane stays FR/LG
+    lane = sorted(t for t, meta in PARTY_TITLES.items() if meta["scripted_newgame"])
+    if title not in lane:
         raise ValueError(f"title {title!r} is not drivable by the party lane; "
-                         f"admitted: {', '.join(sorted(PARTY_TITLES))}")
+                         f"admitted: {', '.join(lane)}")
     return title
 
 
@@ -617,19 +639,25 @@ def _prepare_run(name: str, rom: str, *, seed: bytes | None, saveram_name_overri
 
 def cmd_boot_check(args: argparse.Namespace) -> int:
     fixture = Path(args.fixture)
+    emerald = getattr(args, "title", None) == "emerald"
+    if emerald and args.rr:
+        print("BOOT-CHECK FAIL: --title emerald with --rr: Emerald is a vanilla title, not CFRU",
+              file=sys.stderr)
+        return 2
     data = fixture.read_bytes()
-    before = qualify_one(data, rr=args.rr)
+    layout = codec.TITLE_EMERALD if emerald else codec.TITLE_FRLG
+    before = qualify_one(data, rr=args.rr, title=layout)
     if not before["ok"]:
         print(f"BOOT-CHECK FAIL {fixture}: the fixture itself does not qualify: "
               f"{before['message']}", file=sys.stderr)
         return 1
     rom_rel, run_dir, battery = _prepare_run(
-        f"bootcheck_{fixture.stem}", args.rom,
-        seed=codec.split_rtc(data)[0], saveram_name_override=args.saveram_name)
+        f"bootcheck_{fixture.stem}", args.rom, seed=codec.split_rtc(data)[0],
+        saveram_name_override=args.saveram_name or (EMERALD_SAVERAM if emerald else None))
     print(f"seeded {run_dir / battery} from {fixture} (counter={before['counter']})")
 
-    passed, text = _launch(BOOT_CHECK_LUA, rom_rel, run_dir, rr=args.rr, timeout=args.timeout,
-                           title=getattr(args, "title", None))
+    passed, text = _launch(EMERALD_BOOT_LUA if emerald else BOOT_CHECK_LUA, rom_rel, run_dir,
+                           rr=args.rr, timeout=args.timeout, title=getattr(args, "title", None))
     print(text.rstrip())
     if not passed:
         print(f"BOOT-CHECK FAIL {fixture}: the emulator driver did not report PASS",
@@ -644,8 +672,18 @@ def cmd_boot_check(args: argparse.Namespace) -> int:
     if flushed.name != battery:
         print(f"note: BizHawk filed the battery as {flushed.name!r}, not the seeded "
               f"{battery!r} — pass --saveram-name {flushed.name!r} to seed it next time")
-    after = qualify_one(codec.split_rtc(flushed.read_bytes())[0], rr=args.rr)
+    body = codec.split_rtc(flushed.read_bytes())[0]
+    after = qualify_one(body, rr=args.rr, title=layout)
     ok, problems = boot_check_verdict(before, after)
+    if emerald:
+        kind = emerald_kind_of(fixture)
+        if kind is None:
+            print(f"note: emerald_fixture_problems NOT run: {fixture.name!r} names no "
+                  f"emerald_<{'|'.join(sorted(EMERALD_KINDS))}>[_b] kind")
+        else:
+            problems += emerald_fixture_problems(body, kind)
+            ok = not problems
+            print(f"emerald_fixture_problems({kind}): {len(problems)} problem(s)")
     for problem in problems:
         print(f"  {problem}", file=sys.stderr)
     print(f"BOOT-CHECK {'PASS' if ok else 'FAIL'} {fixture} counter={before['counter']}"
@@ -861,6 +899,518 @@ def cmd_make_fr_party(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Emerald (card E1-FIX, EF-10): a DISCLOSED O-33 SYNTH seed, re-saved natively by the game
+#
+# `make-emerald` writes a bootable Emerald flash save from pret facts (the SYNTH setup), cold-boots
+# it on the real ROM -> CONTINUE -> in-game SAVE, and keeps the GAME's own re-save as the fixture.
+# The seed sets SaveBlock2.specialSaveWarpFlags = CONTINUE_GAME_WARP, so CONTINUE runs pret's own
+# warp-in (CB2_ContinueSavedGame -> WarpIntoMap -> CB2_LoadMap, pret src/overworld.c:1739-1746)
+# instead of restoring a saved map view / object-event table the seed does not carry. The game
+# clears that flag (ClearContinueGameWarpStatus) and then writes a complete SaveBlock1 of its own;
+# `emerald_fixture_problems` refuses a result where it is still set. Only the boot, the warp-in
+# and the save run natively; everything in the seed is listed in tests/fixtures/gen3/README.md.
+# Struct offsets are pret's own annotations (pokeemerald c65e93f2 include/global.h).
+# ---------------------------------------------------------------------------
+
+EMERALD_ROM = "Pokemon - Emerald Version (USA, Europe).gba"
+# BizHawk gamedb_gba.txt:1979 knows the clean dump (sha1 F3AE0881...), so EmuHawk files the battery
+# under the gamedb title, not under the staged ROM's filename.
+EMERALD_SAVERAM = "Pokemon - Emerald Version (USA, Europe).SaveRAM"
+EMERALD_BOOT_LUA = "lua/tests/gen3_emerald_boot_check.lua"
+
+# kind -> (pret map dir, mapGroup, mapNum, LAYOUT_* id, x, y). Group/num are the map's position in
+# data/maps/map_groups.json; the layout id is its 1-based index in data/layouts/layouts.json
+# (gMapLayouts[mapLayoutId - 1], src/overworld.c:532-538). Tiles come from data/layouts/*/map.bin +
+# metatile attributes; tests/unit/test_gen3_fixture_qualify_emerald.py re-derives every claim.
+EMERALD_KINDS = {
+    # HEAL_LOCATION_OLDALE_TOWN (src/data/heal_locations.json), one step S of the Pokemon Center
+    # door warp (6,16) (data/maps/OldaleTown/map.json); towns carry no wild encounters
+    "town": ("OldaleTown", 0, 10, 11, 6, 17),
+    # MB_TALL_GRASS inside the (19..25, 16..17) patch; no trainer faces it
+    "battle": ("Route102", 0, 17, 18, 21, 16),
+    # one step W of Youngster Calvin's sight line: he stands at (33,14) facing down with sight 3
+    # (data/maps/Route102/map.json), so one Right step onto (33,16) starts his battle
+    "trainer": ("Route102", 0, 17, 18, 32, 16),
+    # card E2-FIX-VARIANTS: same tile as "town" -- the PC/box leg needs no wild encounters
+    "pc": ("OldaleTown", 0, 10, 11, 6, 17),
+    # card E2-FIX-VARIANTS: same tile as "battle" -- the faint/whiteout leg needs tall grass
+    "lowhp": ("Route102", 0, 17, 18, 21, 16),
+    # E2-BADGES: the town tile with four badge flags set, so reads == PYDEC is proven above 0
+    "badges": ("OldaleTown", 0, 10, 11, 6, 17),
+    # card E2-FIX-VARIANTS round 3: same tile as "battle" -- a wild win must level 15->16 and
+    # trigger the MUDKIP->MARSHTOMP evolution
+    "evolve": ("Route102", 0, 17, 18, 21, 16),
+    # round 3: same tile as "town" -- the poison-step tick needs no wild encounters either
+    "poison": ("OldaleTown", 0, 10, 11, 6, 17),
+    # round 3: LavaridgeTown, one step S of the EggWoman object event (4,7), who hands over
+    # SPECIES_WYNAUT unconditionally (data/maps/LavaridgeTown/scripts.inc
+    # LavaridgeTown_EventScript_EggWoman: no goto_if_set/checkflag gate besides the
+    # already-given flag FLAG_RECEIVED_LAVARIDGE_EGG, which the seed leaves clear) -- the
+    # fewest-SYNTH-flags gift site: needs nothing beyond the baseline emerald_new_game_flags()
+    "gift": ("LavaridgeTown", 0, 12, 13, 4, 8),
+    # coordinator add-on, round 3: same tile as "battle" -- 20 Poke Balls so five straight
+    # native misses (~0.56 miss chance each at Mudkip's catchRate 255) can't false-fail the leg
+    "catch": ("Route102", 0, 17, 18, 21, 16),
+}
+# FLAG_BADGE01_GET..FLAG_BADGE04_GET (pret include/constants/flags.h:1359-1362): 0x867 is byte
+# 0x10C bit 7 and 0x868..0x86A are byte 0x10D bits 0-2, so the set straddles a flag byte
+EMERALD_BADGE_FLAGS = (0x867, 0x868, 0x869, 0x86A)
+EMERALD_HEAL = (0, 10, 6, 17)          # HEAL_LOCATION_OLDALE_TOWN: MAP_OLDALE_TOWN (6,17)
+EMERALD_OT = ("EMER", 0x20250925)      # SYNTH identity; `derive-b --title emerald` makes the _b side
+EMERALD_SEED_COUNTER = 1               # the seed's slot is 1; the game's save writes counter 2, slot 0
+
+# The party: one starter as ScriptGiveMon would build it at Lv5 on Route 101 (pret src/pokemon.c
+# CreateBoxMon/CalculateMonStats). Species facts, pokeemerald c65e93f2:
+#   SPECIES_MUDKIP 283 (include/constants/species.h:289); base 50/70/50/40/50/50, genderRatio
+#   PERCENT_FEMALE(12.5) = 31, STANDARD_FRIENDSHIP 70, GROWTH_MEDIUM_SLOW
+#   (src/data/pokemon/species_info.h:7799-7821); Lv1 moves TACKLE 33 (pp 35) and GROWL 45 (pp 40)
+#   (level_up_learnsets.h:3676-3678, battle_moves.h:432-438/588-594).
+MUDKIP = {"species": 283, "name": "MUDKIP", "gender_ratio": 31, "friendship": 70,
+          "base": {"hp": 50, "attack": 70, "defense": 50, "speed": 40,
+                   "sp_attack": 50, "sp_defense": 50},
+          "moves": [33, 45, 0, 0], "pp": [35, 40, 0, 0]}
+STARTER_LEVEL, STARTER_IV = 5, 15
+MAPSEC_ROUTE_101 = 16      # src/data/region_map/region_map_sections.json, index of MAPSEC_ROUTE_101
+VERSION_EMERALD, LANGUAGE_ENGLISH, ITEM_POKE_BALL = 3, 2, 4   # constants/global.h:10,21; items.h:10
+EMERALD_MONEY = 3000       # NewGameInitData: SetMoney(&gSaveBlock1Ptr->money, 3000), src/new_game.c:172
+# SYNTH (card E1-FIX-2): Poke Balls in the ball pocket, so the client's has_pokeballs latches and a
+# faint / party-sync scenario can run (FR's battle fixture carries 4). bagPocket_PokeBalls is
+# SaveBlock1 +0x650, BAG_POKEBALLS_COUNT (16) x struct ItemSlot {u16 itemId, u16 quantity}
+# (include/global.h:590-594,1008; include/constants/global.h:53).
+EMERALD_BALLS = 5
+# coordinator add-on, round 3: the "catch" kind's ball count, large enough that five straight
+# native misses at Mudkip's catchRate 255 is a ~1e-5 event rather than a plausible one.
+EMERALD_CATCH_BALLS = 20
+SB1_BALL_POCKET_EMERALD, BALL_POCKET_SLOTS = 0x650, 16
+SB2_ENCRYPTION_KEY = 0xAC  # u32 encryptionKey, include/global.h:532
+STATUS1_POISON = 1 << 3    # include/constants/battle.h:117
+# Flags a player holds once Birch has handed over the Pokedex (FLAG_ADVENTURE_STARTED: its comment
+# in constants/flags.h:136 is "RECEIVED Pokedex") -- it is what unblocks Oldale's west exit to
+# Route 102 (data/maps/OldaleTown/scripts.inc OnTransition). Everything else a new game sets comes
+# from EventScript_ResetAllMapFlags (data/scripts/new_game.inc:115), read from pret at build time.
+EMERALD_STORY_FLAGS = ("FLAG_SYS_POKEMON_GET", "FLAG_ADVENTURE_STARTED",
+                       "FLAG_RECEIVED_POTION_OLDALE", "FLAG_VISITED_OLDALE_TOWN",
+                       "FLAG_HIDE_OLDALE_TOWN_RIVAL", "FLAG_HIDE_ROUTE_103_RIVAL")
+
+# card E2-FIX-VARIANTS: the "pc" kind's second party slot and its two box[0] mons, all
+# GROWTH_MEDIUM_FAST (EXP_MEDIUM_FAST(n) = n^3, src/data/pokemon/experience_tables.h:6),
+# genderRatio PERCENT_FEMALE(50) = min(254, 255*50//100) = 127 (species_info.h:3), friendship
+# STANDARD_FRIENDSHIP 70 (include/constants/pokemon.h:194). pokeemerald c65e93f2:
+#   SPECIES_POOCHYENA 286 (species.h:292); base 35/55/35/35/30/30 (species_info.h:7889-7917);
+#     Lv3 knows only MOVE_TACKLE 33 pp35 (level_up_learnsets.h:3730-3736; next move at Lv5)
+#   SPECIES_ZIGZAGOON 288 (species.h:294); base 38/30/41/60/30/41 (species_info.h:7949-7977);
+#     Lv3 knows MOVE_TACKLE 33 pp35 + MOVE_GROWL 45 pp40 (both Lv1, level_up_learnsets.h:3765-3771)
+#   SPECIES_WURMPLE 290 (species.h:296); base 45/45/35/20/20/30 (species_info.h:8009-8037);
+#     Lv3 knows MOVE_TACKLE 33 pp35 + MOVE_STRING_SHOT 81 pp40 (both Lv1,
+#     level_up_learnsets.h:3799-3803; battle_moves.h:1056-1067 STRING_SHOT pp)
+POOCHYENA = {"species": 286, "name": "POOCHYENA", "friendship": 70,
+             "base": {"hp": 35, "attack": 55, "defense": 35, "speed": 35,
+                      "sp_attack": 30, "sp_defense": 30},
+             "moves": [33, 0, 0, 0], "pp": [35, 0, 0, 0]}
+ZIGZAGOON = {"species": 288, "name": "ZIGZAGOON", "friendship": 70,
+             "base": {"hp": 38, "attack": 30, "defense": 41, "speed": 60,
+                      "sp_attack": 30, "sp_defense": 41},
+             "moves": [33, 45, 0, 0], "pp": [35, 40, 0, 0]}
+WURMPLE = {"species": 290, "name": "WURMPLE", "friendship": 70,
+           "base": {"hp": 45, "attack": 45, "defense": 35, "speed": 20,
+                    "sp_attack": 20, "sp_defense": 30},
+           "moves": [33, 81, 0, 0], "pp": [35, 40, 0, 0]}
+BOX1_LEVEL = 3   # the "pc" kind's second party mon and its two box[0] mons
+
+
+def _synth_mon(species: dict, level: int, pid_seed: int, ot_name: str, tid: int, *,
+               party: bool) -> dict:
+    """A Hardy-nature (personality % NUM_NATURES(25) == 0), non-shiny (SHINY_ODDS=8,
+    src/pokemon.c IsShinyOtIdPersonality) GROWTH_MEDIUM_FAST mon at `level`, IVs pinned to
+    STARTER_IV. `party=False` omits the party-only tail (no level/hp/status: BoxPokemon has
+    none of those -- the game derives level from `experience` at display time,
+    src/pokemon.c:2910-2920 GetLevelFromMonExp). Deliberately independent of emerald_starter:
+    never touches MUDKIP's own byte output (town/battle/trainer stay byte-identical). ability_num
+    is 0: CreateBoxMon only randomizes it (`personality & 1`) when the species has a second
+    ability (src/pokemon.c:2296-2300 `if (gSpeciesInfo[species].abilities[1])`); POOCHYENA,
+    ZIGZAGOON and WURMPLE are all single-ability (species_info.h RUN_AWAY/NONE, PICKUP/NONE,
+    SHIELD_DUST/NONE), so a real CreateBoxMon would leave it at its zero-init value."""
+    pid = next(p for p in itertools.count(pid_seed)
+               if p % 25 == 0
+               and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+    mon = {
+        "personality": pid, "ot_id": tid, "nickname": species["name"], "language": LANGUAGE_ENGLISH,
+        "is_bad_egg": 0, "has_species": 1, "is_egg_flag": 0, "block_box_rs": 0, "flags_unused": 0,
+        "ot_name": ot_name, "markings": 0, "unknown": 0,
+        "species": species["species"], "held_item": 0, "experience": level ** 3,  # EXP_MEDIUM_FAST
+        "pp_bonuses": 0, "friendship": species["friendship"], "growth_filler": 0,
+        "moves": list(species["moves"]), "pp": list(species["pp"]),
+        "evs": dict.fromkeys(species["base"], 0), "contest": [0] * 6,
+        "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": level,
+        "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
+        "ivs": dict.fromkeys(species["base"], STARTER_IV),
+        "is_egg": 0, "ability_num": 0, "ribbons": 0,
+    }
+    if party:
+        stats = {k: (2 * b + STARTER_IV) * level // 100 + 5 for k, b in species["base"].items()}
+        stats["hp"] = (2 * species["base"]["hp"] + STARTER_IV) * level // 100 + level + 10
+        mon.update(status=0, level=level, mail=0xFF, max_hp=stats["hp"], **stats)
+    return mon
+
+
+def _box_mon_level(mon: dict) -> int:
+    """GetLevelFromMonExp (src/pokemon.c:2910-2920), specialised to GROWTH_MEDIUM_FAST
+    (EXP_MEDIUM_FAST(n) = n^3): the level a BoxPokemon's stored `experience` displays as."""
+    level = 1
+    while level <= 100 and level ** 3 <= mon["experience"]:
+        level += 1
+    return level - 1
+
+
+def _exp_medium_slow(level: int) -> int:
+    """EXP_MEDIUM_SLOW(n) = 6*n^3/5 - 15*n^2 + 100*n - 140 (Mudkip's growth rate,
+    src/data/pokemon/experience_tables.h:7)."""
+    return 6 * level ** 3 // 5 - 15 * level ** 2 + 100 * level - 140
+
+
+# card E2-FIX-VARIANTS round 3: the "evolve" kind's Mudkip. pokeemerald c65e93f2
+# src/data/pokemon/evolution.h:129 [SPECIES_MUDKIP] = {{EVO_LEVEL, 16, SPECIES_MARSHTOMP}} --
+# EXP one short of the Lv16 threshold, so any wild win's EXP gain (always >=1) crosses it and
+# evolves the mon. Moves are TACKLE/GROWL/WATER_GUN only (Mudkip's own Lv6 MUD_SLAP dropped):
+# confirmed with E2-LEGS (round 3) that with only 3 of 4 slots filled, Marshtomp's own Lv16 move
+# MUD_SHOT (level_up_learnsets.h:3700) is auto-learned by GiveMoveToBoxMon (src/pokemon.c:2939-
+# 2955, returns MON_HAS_MAX_MOVES only once all 4 slots are full) instead of raising the
+# delete-a-move Yes/No prompt a 4th starting move would force. MOVE_WATER_GUN=55 pp25
+# (include/constants/moves.h:59, battle_moves.h "[MOVE_WATER_GUN]" pp).
+EVOLVE_LEVEL = 15
+EVOLVE_EXP = _exp_medium_slow(EVOLVE_LEVEL + 1) - 1
+EVOLVE_MOVES, EVOLVE_PP = [33, 45, 55, 0], [35, 40, 25, 0]
+
+
+def _evolve_mon(ot_name: str, tid: int) -> dict:
+    """The "evolve" kind's Lv15 Mudkip: same PID search as emerald_starter (Hardy, male, not
+    shiny), Lv15 stats, EXP = EVOLVE_EXP. Deliberately independent of emerald_starter so its own
+    byte output (town/battle/trainer/pc/lowhp/badges) is never touched."""
+    pid = next(p for p in itertools.count(0x4D55444B)
+               if p % 25 == 0 and (p & 0xFF) >= MUDKIP["gender_ratio"]
+               and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+    lv = EVOLVE_LEVEL
+    stats = {k: (2 * b + STARTER_IV) * lv // 100 + 5 for k, b in MUDKIP["base"].items()}
+    stats["hp"] = (2 * MUDKIP["base"]["hp"] + STARTER_IV) * lv // 100 + lv + 10
+    return {
+        "personality": pid, "ot_id": tid, "nickname": MUDKIP["name"], "language": LANGUAGE_ENGLISH,
+        "is_bad_egg": 0, "has_species": 1, "is_egg_flag": 0, "block_box_rs": 0, "flags_unused": 0,
+        "ot_name": ot_name, "markings": 0, "unknown": 0,
+        "species": MUDKIP["species"], "held_item": 0, "experience": EVOLVE_EXP,
+        "pp_bonuses": 0, "friendship": MUDKIP["friendship"], "growth_filler": 0,
+        "moves": list(EVOLVE_MOVES), "pp": list(EVOLVE_PP),
+        "evs": dict.fromkeys(MUDKIP["base"], 0), "contest": [0] * 6,
+        "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": lv,
+        "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
+        "ivs": dict.fromkeys(MUDKIP["base"], STARTER_IV),
+        # ability_num 0: Mudkip is single-ability too (TORRENT/NONE, species_info.h:7823), so
+        # CreateBoxMon never randomizes it (src/pokemon.c:2296-2300) -- see _synth_mon's docstring
+        "is_egg": 0, "ability_num": 0, "ribbons": 0,
+        "status": 0, "level": lv, "mail": 0xFF, "max_hp": stats["hp"], **stats,
+    }
+
+
+def pret_emerald() -> Path:
+    """The pokeemerald checkout: $SLINK_PRET_EMERALD, else <root>/.cache/pret/pokeemerald for this
+    repo root and the checkout a worktree belongs to (the _rom_candidates search)."""
+    env = os.environ.get("SLINK_PRET_EMERALD")
+    roots = [Path(env)] if env else [c.parent for c in _rom_candidates(".cache/pret/pokeemerald/x")]
+    for root in roots:
+        if (root / "include" / "global.h").exists():
+            return root
+    raise FileNotFoundError("pret pokeemerald not found in " + ", ".join(map(str, roots))
+                            + " -- set SLINK_PRET_EMERALD")
+
+
+def pret_flag_ids(pret: Path, names) -> list[int]:
+    """Evaluate FLAG_* names from include/constants/flags.h (+ opponents.h for MAX_TRAINERS_COUNT,
+    which TRAINER_FLAGS_END and so every SYSTEM_FLAGS flag hangs off)."""
+    defs = {}
+    for rel in ("include/constants/flags.h", "include/constants/opponents.h"):
+        text = (pret / rel).read_text(encoding="utf-8")
+        for m in re.finditer(r"^#define\s+(\w+)\s+(.+)$", text, re.M):
+            defs[m.group(1)] = m.group(2).split("//")[0].strip()
+
+    def value(name: str) -> int:
+        expr = re.sub(r"(?<!\w)[A-Za-z_]\w*", lambda m: str(value(m.group(0))), defs[name])
+        if not re.fullmatch(r"[\s0-9a-fA-FxX+\-()]+", expr):
+            raise ValueError(f"{name}: unsupported expression {defs[name]!r}")
+        return int(eval(expr, {"__builtins__": {}}))   # digits/+/-/() only, checked above
+    return [value(n) for n in names]
+
+
+def emerald_new_game_flags(pret: Path) -> list[int]:
+    """EventScript_ResetAllMapFlags's setflag list (new_game.inc:115-...) plus EMERALD_STORY_FLAGS."""
+    text = (pret / "data/scripts/new_game.inc").read_text(encoding="utf-8")
+    block = re.split(r"^\s*end\s*$", text.split("EventScript_ResetAllMapFlags::", 1)[1],
+                     maxsplit=1, flags=re.M)[0]
+    names = re.findall(r"^\s*setflag (\w+)", block, re.M)
+    return pret_flag_ids(pret, [*names, *EMERALD_STORY_FLAGS])
+
+
+def emerald_starter(ot_name: str, tid: int) -> dict:
+    """The codec dict for a Lv5 Mudkip. Personality: the first value from 'MUDK' that is Hardy
+    (neutral nature, pid % 25 == 0), male (pid & 0xFF >= genderRatio) and not shiny for `tid`."""
+    pid = next(p for p in itertools.count(0x4D55444B)
+               if p % 25 == 0 and (p & 0xFF) >= MUDKIP["gender_ratio"]
+               and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+    lv = STARTER_LEVEL
+    stats = {k: (2 * b + STARTER_IV) * lv // 100 + 5 for k, b in MUDKIP["base"].items()}
+    stats["hp"] = (2 * MUDKIP["base"]["hp"] + STARTER_IV) * lv // 100 + lv + 10
+    return {
+        "personality": pid, "ot_id": tid, "nickname": MUDKIP["name"], "language": LANGUAGE_ENGLISH,
+        "is_bad_egg": 0, "has_species": 1, "is_egg_flag": 0, "block_box_rs": 0, "flags_unused": 0,
+        "ot_name": ot_name, "markings": 0, "unknown": 0,
+        "species": MUDKIP["species"], "held_item": 0,
+        "experience": 6 * lv ** 3 // 5 - 15 * lv ** 2 + 100 * lv - 140,   # EXP_MEDIUM_SLOW
+        "pp_bonuses": 0, "friendship": MUDKIP["friendship"], "growth_filler": 0,
+        "moves": list(MUDKIP["moves"]), "pp": list(MUDKIP["pp"]),
+        "evs": dict.fromkeys(MUDKIP["base"], 0), "contest": [0] * 6,
+        "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": lv,
+        "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
+        "ivs": dict.fromkeys(MUDKIP["base"], STARTER_IV),
+        "is_egg": 0, "ability_num": pid & 1, "ribbons": 0,
+        "status": 0, "level": lv, "mail": 0xFF, "max_hp": stats["hp"], **stats,
+    }
+
+
+def _warp(group: int, num: int, x: int, y: int) -> bytes:
+    """struct WarpData (global.h:581-588): s8 mapGroup, mapNum, warpId, pad, s16 x, y. warpId is
+    WARP_ID_NONE (-1) so SetPlayerCoordsFromWarp uses x/y (overworld.c:603-615)."""
+    return struct.pack("<bbbxhh", group, num, -1, x, y)
+
+
+def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
+    """The SYNTH flash image for `kind` (see the section header). `flags` = emerald_new_game_flags."""
+    _map, group, num, layout_id, x, y = EMERALD_KINDS[kind]
+    name, tid = EMERALD_OT
+    sb2 = bytearray(codec.SAVEBLOCK2_SIZE_EMERALD)
+    sb2[0x00:0x08] = codec.encode_name(name, 8)   # playerName[PLAYER_NAME_LENGTH + 1], global.h:510
+    sb2[0x08] = 0                                 # playerGender MALE, :511
+    sb2[0x09] = 1                                 # specialSaveWarpFlags CONTINUE_GAME_WARP (save_location.h:5), :512
+    sb2[0x0A:0x0E] = tid.to_bytes(4, "little")    # playerTrainerId, :513
+    sb2[0x14] = 1                                 # optionsTextSpeed MID, :519; SetDefaultOptions new_game.c:91-99
+    # encryptionKey (+0xAC, :532) stays 0 as NewGameInitData leaves it (new_game.c:155): money and
+    # bag quantities are plain (x ^ 0). The game re-keys every one of them on CONTINUE
+    # (MoveSaveBlocks_ResetHeap, src/load_save.c:127-131), so a re-save reads back through the key.
+
+    sb1 = bytearray(codec.SAVEBLOCK1_SIZE_EMERALD)
+    sb1[0x00:0x04] = struct.pack("<hh", x, y)     # pos, global.h:986
+    sb1[0x04:0x0C] = _warp(group, num, x, y)      # location, :987
+    sb1[0x0C:0x14] = _warp(group, num, x, y)      # continueGameWarp, :988
+    sb1[0x1C:0x24] = _warp(*EMERALD_HEAL)         # lastHealLocation, :990 (SetLastHealLocationWarp)
+    sb1[0x32:0x34] = layout_id.to_bytes(2, "little")   # mapLayoutId, :997 (0 = a NULL layout)
+    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 2 if kind in ("pc", "poison") else 1
+    start = codec.SB1_PARTY_OFFSET_EMERALD
+    if kind == "evolve":
+        # card E2-FIX-VARIANTS round 3: a distinct Lv15 Mudkip, one EXP short of evolving
+        starter = _evolve_mon(name, tid)
+    else:
+        starter = emerald_starter(name, tid)
+        if kind == "lowhp":
+            # card E2-FIX-VARIANTS: current HP only, for the native faint/whiteout legs. max_hp
+            # and every stat/substruct byte (and so the checksum) are untouched.
+            starter = dict(starter, hp=1)
+        elif kind == "poison":
+            # round 3: STATUS1_POISON at 1 HP, so DoPoisonFieldEffect (src/field_poison.c:120-154)
+            # can tick it to 0 and faint it -- Emerald does NOT floor field poison at 1 HP like
+            # Gen 4+ (verified: `if (hp == 0 || --hp == 0) numFainted++;`, no floor). max_hp and
+            # every substruct byte (so the checksum) are untouched.
+            starter = dict(starter, status=STATUS1_POISON, hp=1)
+    sb1[start:start + codec.PARTY_MON_SIZE] = codec.encode_party_mon(starter)
+    if kind in ("pc", "poison"):
+        # card E2-FIX-VARIANTS: second party slot, a healthy Lv3 Poochyena (independent of
+        # emerald_starter) -- for "poison" so a field-poison faint doesn't white out
+        poochyena = _synth_mon(POOCHYENA, BOX1_LEVEL, 0x504F4F43, name, tid, party=True)
+        at = start + codec.PARTY_MON_SIZE
+        sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(poochyena)
+    sb1[0x490:0x494] = EMERALD_MONEY.to_bytes(4, "little")   # money, :1002
+    # bagPocket_PokeBalls[0]; SetBagItemQuantity stores `quantity ^ encryptionKey` (src/item.c:31-34)
+    balls = EMERALD_CATCH_BALLS if kind == "catch" else EMERALD_BALLS
+    struct.pack_into("<HH", sb1, SB1_BALL_POCKET_EMERALD, ITEM_POKE_BALL, balls)
+    if kind == "badges":
+        flags = [*flags, *EMERALD_BADGE_FLAGS]
+    for flag in flags:                                 # flags[NUM_FLAG_BYTES], :1020
+        sb1[0x1270 + flag // 8] |= 1 << (flag % 8)
+
+    storage = bytearray(codec.STORAGE_SIZE)            # ResetPokemonStorageSystem, pokemon_storage_system.c:1729-1749
+    for box in range(codec.BOXES_PER_STORE):
+        at = codec.BOX_NAMES_OFFSET + box * 9          # boxNames[14][BOX_NAME_LENGTH + 1], pokemon_storage_system.h:23
+        storage[at:at + 9] = codec.encode_name(f"BOX{box + 1}", 9)
+        storage[0x83C2 + box] = box % 4                # boxWallpapers, :24; % (MAX_DEFAULT_WALLPAPER + 1), wallpapers.h:21
+    if kind == "pc":
+        # card E2-FIX-VARIANTS: box 1 (index 0) slot 0/1, a Lv3 Zigzagoon and Wurmple; every
+        # other box slot stays empty (personality==0, the storage bytearray's zero-init)
+        zigzagoon = _synth_mon(ZIGZAGOON, BOX1_LEVEL, 0x5A49475A, name, tid, party=False)
+        wurmple = _synth_mon(WURMPLE, BOX1_LEVEL, 0x5755524D, name, tid, party=False)
+        for slot, mon in enumerate((zigzagoon, wurmple)):
+            at = codec.BOX_DATA_OFFSET + slot * codec.BOX_MON_SIZE   # box[0][slot]
+            storage[at:at + codec.BOX_MON_SIZE] = codec.encode_box_mon(mon)
+
+    layout = codec.slot_layout(title=codec.TITLE_EMERALD)
+    blocks = {"sb2": bytes(sb2), "sb1": bytes(sb1), "storage": bytes(storage)}
+    image = bytearray(b"\xFF" * codec.FLASH_SIZE)      # erased flash: the other slot reads EMPTY
+    half = codec.NUM_SECTORS_PER_SLOT * (EMERALD_SEED_COUNTER % codec.NUM_SAVE_SLOTS)
+    for entry in layout:
+        chunk = blocks[entry["object"]][entry["offset"]:entry["offset"] + entry["size"]]
+        at = (half + entry["id"]) * codec.SECTOR_SIZE
+        image[at:at + codec.SECTOR_SIZE] = codec.write_sector(chunk, entry["id"],
+                                                              EMERALD_SEED_COUNTER, layout)
+    return bytes(image)
+
+
+def emerald_ball_pocket(body: bytes) -> list[tuple[int, int]]:
+    """The non-empty (itemId, quantity) slots of bagPocket_PokeBalls. The quantity is decrypted
+    the way GetBagItemQuantity does it: `encryptionKey ^ *quantity` returned as u16, i.e. the low
+    16 bits of SaveBlock2.encryptionKey (pret src/item.c:26-29)."""
+    parsed = codec.parse_flash(body, title=codec.TITLE_EMERALD)
+    key = struct.unpack_from("<I", parsed["sb2"], SB2_ENCRYPTION_KEY)[0] & 0xFFFF
+    pocket = parsed["sb1"][SB1_BALL_POCKET_EMERALD:SB1_BALL_POCKET_EMERALD + 4 * BALL_POCKET_SLOTS]
+    return [(item, qty ^ key) for item, qty in struct.iter_unpack("<HH", pocket) if item]
+
+
+def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
+    """What a NATIVE re-save of a `kind` seed must show: it qualifies, the game cleared the
+    continue-game warp (so it ran the warp-in and wrote SaveBlock1 itself), the player stands on
+    the kind's tile of the kind's map, the ball pocket still holds the seeded Poke Balls (20 for
+    "catch", else 5) once decrypted with the game's re-rolled key, and the party:
+    town/battle/trainer/gift/catch: the one Mudkip; "lowhp": the one Mudkip at 1 HP; "pc": Mudkip
+    + a Lv3 Poochyena, plus box[0] holding a Lv3 Zigzagoon and Wurmple with every other slot
+    empty; "evolve": the one Mudkip at Lv15, EXP one short of its Lv16 evolution threshold;
+    "poison": the Mudkip STATUS1_POISON at 1 HP plus a healthy full-HP Lv3 Poochyena. †UNVERIFIED
+    (reasoned from src/load_save.c and src/pokemon_storage_system.c, not a physical run): that
+    "lowhp"/"poison"'s HP+status and "pc"'s box contents survive the CONTINUE->save round trip
+    unchanged -- only the coordinator's boot-check/make-emerald run on real hardware can confirm
+    the game does not touch them. "gift" is intentionally unchecked here beyond the generic
+    one-Mudkip party rule: giving the egg is the scripted leg's own native action, not something
+    this seed or its re-save produces."""
+    ok, msg = codec.qualify_flash(body, title=codec.TITLE_EMERALD)
+    if not ok:
+        return [f"does not qualify as Emerald: {msg}"]
+    parsed = codec.parse_flash(body, title=codec.TITLE_EMERALD)
+    sb1, sb2 = parsed["sb1"], parsed["sb2"]
+    _map, group, num, layout_id, x, y = EMERALD_KINDS[kind]
+    problems = []
+    if sb2[0x09] & 1:
+        problems.append("specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save")
+    where = struct.unpack_from("<hhbb", sb1, 0)
+    if where != (x, y, group, num):
+        problems.append(f"player at (x,y,group,num)={where}, expected {(x, y, group, num)}")
+    if int.from_bytes(sb1[0x32:0x34], "little") != layout_id:
+        problems.append(f"mapLayoutId {int.from_bytes(sb1[0x32:0x34], 'little')} != {layout_id}")
+    party = codec.party_from_save(body, title=codec.TITLE_EMERALD)
+    if kind == "lowhp":
+        want = [(MUDKIP["species"], STARTER_LEVEL, True)]
+        got = [(m["species"], m["level"], m["checksum_ok"]) for m in party]
+        if got != want:
+            problems.append(f"party is not one Lv{STARTER_LEVEL} Mudkip: {party}")
+        elif party[0]["hp"] != 1:
+            problems.append(f"party[0] hp={party[0]['hp']} != 1 (lowhp fixture)")
+    elif kind == "pc":
+        want = [(MUDKIP["species"], STARTER_LEVEL, True), (POOCHYENA["species"], BOX1_LEVEL, True)]
+        got = [(m["species"], m["level"], m["checksum_ok"]) for m in party]
+        if got != want:
+            problems.append(f"party is not [Lv{STARTER_LEVEL} Mudkip, Lv{BOX1_LEVEL} Poochyena]: {party}")
+        boxes = codec.boxes_from_save(body, title=codec.TITLE_EMERALD)
+        box0 = boxes[0]
+        want_box = [(ZIGZAGOON["species"], BOX1_LEVEL), (WURMPLE["species"], BOX1_LEVEL)]
+        got_box = [(box0[i]["species"], _box_mon_level(box0[i])) for i in (0, 1)]
+        if got_box != want_box or not (box0[0]["checksum_ok"] and box0[1]["checksum_ok"]):
+            problems.append(f"box[0][0:2] is not [Lv{BOX1_LEVEL} Zigzagoon, Lv{BOX1_LEVEL} Wurmple]: "
+                            f"{[(m['species'], m['checksum_ok']) for m in box0[:2]]}")
+        occupied = [(b, s) for b in range(codec.BOXES_PER_STORE) for s in range(codec.MONS_PER_BOX)
+                    if not (b == 0 and s in (0, 1)) and boxes[b][s]["species"]]
+        if occupied:
+            problems.append(f"unexpected occupied box slots: {occupied[:5]}")
+    elif kind == "evolve":
+        # round 3: still Mudkip at Lv15, one EXP short of the Lv16 threshold -- a native wild
+        # win is what evolves it, not this fixture itself
+        mon = party[0] if party else None
+        if len(party) != 1 or mon["species"] != MUDKIP["species"] or mon["level"] != EVOLVE_LEVEL \
+                or not mon["checksum_ok"]:
+            problems.append(f"party is not one Lv{EVOLVE_LEVEL} Mudkip: {party}")
+        elif mon["experience"] != EVOLVE_EXP:
+            problems.append(f"party[0] experience={mon['experience']} != {EVOLVE_EXP} "
+                            f"(EXP_MEDIUM_SLOW({EVOLVE_LEVEL + 1}) - 1)")
+    elif kind == "poison":
+        want = [(MUDKIP["species"], STARTER_LEVEL, True), (POOCHYENA["species"], BOX1_LEVEL, True)]
+        got = [(m["species"], m["level"], m["checksum_ok"]) for m in party]
+        if got != want:
+            problems.append(f"party is not [Lv{STARTER_LEVEL} Mudkip, Lv{BOX1_LEVEL} Poochyena]: {party}")
+        else:
+            if party[0]["status"] != STATUS1_POISON or party[0]["hp"] != 1:
+                problems.append(f"party[0] status={party[0]['status']:#x} hp={party[0]['hp']} "
+                                f"!= STATUS1_POISON at 1 HP")
+            if party[1]["status"] != 0 or party[1]["hp"] != party[1]["max_hp"]:
+                problems.append(f"party[1] (Poochyena) is not healthy at full HP: "
+                                f"status={party[1]['status']:#x} hp={party[1]['hp']}/{party[1]['max_hp']}")
+    else:
+        if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
+                                                                              STARTER_LEVEL, True)]:
+            problems.append(f"party is not one Lv{STARTER_LEVEL} Mudkip: {party}")
+    if kind == "badges":
+        missing = [f for f in EMERALD_BADGE_FLAGS if not sb1[0x1270 + f // 8] >> (f % 8) & 1]
+        if missing:
+            problems.append(f"badge flags not set after the re-save: {[hex(f) for f in missing]}")
+    want_balls = EMERALD_CATCH_BALLS if kind == "catch" else EMERALD_BALLS
+    balls = emerald_ball_pocket(body)
+    if balls != [(ITEM_POKE_BALL, want_balls)]:
+        problems.append(f"ball pocket {balls} != [(ITEM_POKE_BALL, {want_balls})]")
+    return problems
+
+
+def emerald_kind_of(fixture: Path) -> str | None:
+    """The EMERALD_KINDS key a fixture's filename names (emerald_<kind>[_b].sav), else None."""
+    m = re.fullmatch(r"emerald_(\w+?)(?:_b)?", fixture.stem)
+    return m.group(1) if m and m.group(1) in EMERALD_KINDS else None
+
+
+def cmd_make_emerald(args: argparse.Namespace) -> int:
+    rom = args.rom or next((str(c) for c in _rom_candidates(EMERALD_ROM) if c.exists()), None)
+    if not rom:
+        print(f"make-emerald FAIL: {EMERALD_ROM!r} not found -- pass --rom", file=sys.stderr)
+        return 1
+    try:
+        seed = build_emerald_seed(args.kind, emerald_new_game_flags(pret_emerald()))
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"make-emerald FAIL: cannot build the SYNTH seed: {exc}", file=sys.stderr)
+        return 1
+    before = qualify_one(seed, rr=False, title=codec.TITLE_EMERALD)
+    rom_rel, run_dir, battery = _prepare_run(
+        f"make_emerald_{args.kind}", rom, seed=seed,
+        saveram_name_override=args.saveram_name or EMERALD_SAVERAM)
+    print(f"SYNTH seed {args.kind}: {run_dir / battery} sha256={sha256_hex(seed)} "
+          f"counter={before['counter']} party={before['party']}")
+    passed, text = _launch(EMERALD_BOOT_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout,
+                           title="emerald")
+    print(text.rstrip())
+    flushed = _flushed_saveram(run_dir, battery)
+    if not passed or flushed is None:
+        print("make-emerald FAIL: the driver did not report PASS or left no *.SaveRAM",
+              file=sys.stderr)
+        return 1
+    try:
+        body = import_savedata(flushed.read_bytes(), rr=False, title=codec.TITLE_EMERALD)
+    except (ValueError, OSError) as exc:
+        print(f"make-emerald FAIL: candidate refused: {exc}", file=sys.stderr)
+        return 1
+    after = qualify_one(body, rr=False, title=codec.TITLE_EMERALD)
+    problems = boot_check_verdict(before, after)[1] + emerald_fixture_problems(body, args.kind)
+    if problems:
+        for problem in problems:
+            print(f"  {problem}", file=sys.stderr)
+        print("make-emerald FAIL: the re-save is not the fixture asked for", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(body)
+    print(f"wrote {out} ({len(body)} bytes) sha256={sha256_hex(body)} slot={after['slot']} "
+          f"counter={after['counter']} trainer={after['trainer_name']!r}"
+          f"#{after['trainer_id']:08X} party={after['party']}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__,
@@ -876,12 +1426,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_qualify = sub.add_parser("qualify", help="check fixtures with no emulator")
     p_qualify.add_argument("files", nargs="+")
     p_qualify.add_argument("--rr", action="store_true")
+    p_qualify.add_argument("--title", choices=[codec.TITLE_FRLG, codec.TITLE_EMERALD],
+                           default=codec.TITLE_FRLG, help="vanilla save layout (default frlg)")
     p_qualify.set_defaults(func=cmd_qualify)
 
     p_derive = sub.add_parser("derive-b", help="distinct-OT fixture derivation")
     p_derive.add_argument("a")
     p_derive.add_argument("b")
     p_derive.add_argument("--rr", action="store_true")
+    p_derive.add_argument("--title", choices=[codec.TITLE_FRLG, codec.TITLE_EMERALD],
+                          default=codec.TITLE_FRLG, help="vanilla save layout (default frlg)")
     p_derive.set_defaults(func=cmd_derive_b)
 
     p_boot = sub.add_parser("boot-check",
@@ -889,8 +1443,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_boot.add_argument("--rom", required=True, help="the .gba to boot (staged space-free)")
     p_boot.add_argument("--fixture", required=True)
     p_boot.add_argument("--rr", action="store_true")
+    # the write_checkpoint.json title keys (gen3_final_cut passes firered/leafgreen)
     p_boot.add_argument("--title", default=None,
-                        help="profile title for the run (default: firered, or radical_red with --rr)")
+                        choices=("firered", "leafgreen", "radical_red", "emerald"),
+                        help="profile title for the run (default: firered, or radical_red with "
+                             "--rr); emerald boots lua/tests/gen3_emerald_boot_check.lua and "
+                             "refuses --rr")
     p_boot.add_argument("--saveram-name", default=None,
                         help="battery filename to seed, when BizHawk's gamedb names it")
     p_boot.add_argument("--timeout", type=int, default=600)
@@ -926,6 +1484,15 @@ def build_parser() -> argparse.ArgumentParser:
     p_frp.add_argument("--saveram-name", default=None)
     p_frp.add_argument("--timeout", type=int, default=1800)
     p_frp.set_defaults(func=cmd_make_fr_party)
+
+    p_em = sub.add_parser("make-emerald", help="EMULATOR: SYNTH Emerald seed -> CONTINUE -> "
+                                              "in-game SAVE; the re-save is the fixture")
+    p_em.add_argument("--kind", choices=sorted(EMERALD_KINDS), required=True)
+    p_em.add_argument("--out", required=True)
+    p_em.add_argument("--rom", default=None, help=f"default: {EMERALD_ROM} at the checkout root")
+    p_em.add_argument("--saveram-name", default=None)
+    p_em.add_argument("--timeout", type=int, default=600)
+    p_em.set_defaults(func=cmd_make_emerald)
 
     return ap
 

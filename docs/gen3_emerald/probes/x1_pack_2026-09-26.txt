@@ -1,0 +1,239 @@
+X1-PACK - build 28877d73 - 2026-09-26
+
+Scope and identity
+------------------
+C:/slink-wt/em-x1, claude/gen3-emerald-x1. First merged exactly lane commit
+2e230f8a49ee1836600a83aae54edd6c86daed27 (owner XG0 record and builder fixes),
+producing merge 6bac587c. Follow-up to X1-EXTRACT 35d32eed and X1-PROBE 22674a69.
+SOURCE/COMPILER/ROM only. No emulator, runtime admission, write qualification,
+push or merge back to the coordinator lane/root. No data.json edit (peer Emerald's exclusive file).
+Owner wrap-up honored: finish this card, report verified work/OPEN items, stop.
+
+Reference source e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7, expansion/1.17.0.
+ROM SHA1 28877d733492299599f2b8fff50493109d72653c.
+ROM/SYM/MAP artifact sizes and SHA256s are checked against compiler-facts
+provenance; the original build/ELF identity is recorded in the prior receipt.
+Local witnesses: .cache/expansion-output/reference (own gitignored copies).
+Expansion source: .cache/expansion-src at exact pin, tracked tree clean.
+Title: emerald_expansion_28877d73, agreed with X2 adapter and X3 harness peers.
+Profile titles.<title>.admitted=false. Existing client routing is not changed.
+
+Generated pack
+--------------
+data/games/gen3_exp/28877d73/profile.json:
+  24 RAM bindings, 13 ROM bindings, 50 derived facts, each with _src evidence.
+  All addresses from this build's .sym; derived geometry/constants from its
+  compiler facts. Duplicate Task_LaunchLvlUpAnim is scoped to the player
+  controller .map .text span, not guessed by global occurrence/order.
+  gParties/gPartiesCount indexed with compiler B_TRAINER_PLAYER/OPPONENT_A and
+  PARTY_SIZE/Pokemon.size; never the address of gPlayerPartyCountPtr as a byte.
+  Removed absent STATUS3/DISABLE_STRUCTS/TRAINER_OPPONENT/BattleIntroGetMonsData
+  keys and STATUS3_PERISH_SONG/DISABLE_STRUCT_* geometry rather than nulls.
+  gMovesInfo replaces gBattleMoves. Species ordering includes Shedinja=292.
+  New nickname extension is two shifted bitfields (offset6/shift5 and
+  offset10/shift6), not a fabricated contiguous NICKNAME_EXTRA_OFFS. Their
+  descriptors are emitted; generic consumer support remains a later card.
+
+engine_signals.json:
+  18 unique, aligned pins, bounds-checked in their build .sym functions and
+  read from the SHA1-bound ROM. Every expected_hex and entry context compared
+  mechanically; live_verified=false. The checked-in capture offsets/contracts
+  are in gen_gen3_engine_signals.EXPANSION_BINDINGS; pin_gen3_site is reused.
+  SOURCE contracts were read at the expansion pin and checked against Capstone
+  5.0.7 Thumb disassembly. No vanilla instruction offset is transferred.
+  Internal disassembly scratch: .cache/x1-pack-call-inventory.txt.
+
+  kind                         enclosing symbol                 capture offset
+  frame_control                AgbMainLoop                       0x20
+  battle_begin                 CB2_InitBattle                    0
+  battle_end                   ReturnFromBattleToOverworld       0x38
+  faint                        Cmd_tryfaintmon                    0x8a
+  capture_wild                  GiveCapturedMonToPlayer           0x62
+  mon_given                    GiveCapturedMonToPlayer           0x62
+  pc_move                      CopyMonToPC                       0x72
+  whiteout                     CB2_WhiteOut                      0x80
+  map_load                     CB2_LoadMap2                      0x22
+  evolve_species_store         Task_EvolutionScene               0x2d6
+  trade_evolve_species_store   Task_TradeEvolutionScene          0x252
+  trade_begin                  TradeMons                         0
+  trade_done                   TradeMons                         0xe2
+  save                         TrySavingData                     0x16
+  poison_hp_before             DoPoisonFieldEffect               0x3c
+  poison_faint                 DoPoisonFieldEffect               0x54
+  pc_withdraw                  SetPlacedMonData                  0x9a
+  pc_box_place                 SetPlacedMonData                  0x5a
+
+  Main callback calls are inlined: frame_control is the main-loop input-poll
+  start, reached by both loop back edges, not the nonexistent CallCallbacks.
+  Capture and gift allocation share GiveCapturedMonToPlayer (pokemon.c:2941;
+  script_pokemon_util.c:76; battle_script_commands.c:8371). capture_wild requires
+  saved caller LR at R13+16 to equal 0x080aa0da or 0x080aa36a, plus success and
+  identity dedupe; generic mon_given includes scripts. Shared pins are NOT two
+  independent acquisition observations. Return-data/source-register contracts
+  and filtering requirements are explicit in each JSON site.
+  Faint point is after SetValuesOnFaint (battle_script_commands.c:1906,
+  battle_util.c:11125-11153), not a borrowed player-counter instruction.
+  Evolution writes use MON_DATA_SPECIES=18 from compiler constants, with normal
+  mon in R4 and trade mon in R7 (evolution_scene.c:787,1214).
+  Poison post-store branches converge before R4 advances; require oldHP>0 and
+  newHP==0. This reference build's poison code clamps valid HP at1, so these
+  bytes are not PHYSICAL poison-faint evidence (field_poison.c:125-149).
+
+  OPEN kinds: pc_deposit, pc_release_begin, pc_release. TryStorePartyMonInBox
+  and ReleaseMon are absent from the modern .sym; no unreviewed caller offset
+  substituted. Source names/call sites are in pokemon_storage_system.c; the
+  exact reasons remain in engine_signals.inventory, not hidden as a missing row.
+
+write_checkpoint.json:
+  5 full-function byte anchors; 10 predicates; source save-dialog witness;
+  all three save/storage pointer globals; sound-field geometry/IDs from compiler
+  facts; 7 battle clauses plus a compiler-derived commit threshold.
+  Task geometry is compiler-derived (40 bytes,16 tasks, func0, active4) and
+  checked against gTasks size. PaletteFade.active is offset15/mask0x80, NOT
+  vanilla's offset7. ScriptContext size116; PaletteFadeControl size24.
+  Private CONTEXT_SHUTDOWN and action-selection state enums are copied verbatim
+  from pinned src/script.c / src/battle_main.c into an ignored probe header and
+  compiled, not retyped numeric values. Globals use their own symbol widths.
+  Player HandleInputChooseAction is 0x0805ccd4 inside the player .text span
+  [0x08059620,0x0805d25c); first same-name occurrence 0x08057d38 is not used.
+  Local controller exec bit semantics checked at battle_controllers.h:94-110;
+  current action wait state from battle_main.c:3785-3875.
+
+  Eight Emerald allow-list task NAMES transfer, bound to expansion symbols:
+    Task_RunPerStepCallback, Task_RunTimeBasedEvents, Task_WeatherMain,
+    Task_InitUnionRoom, Task_SearchForChildOrParent, Task_UnionRoomListen,
+    Task_MuddySlope, Task_MapNamePopUpWindow.
+  Source starting points: field_tasks.c:169-209, field_weather.c, union_room.c,
+  link_rfu_2.c, map_name_popup.c. Name transfer is not PHYSICAL safety proof.
+  47 explicit forbidden-state entries (all Emerald inventory rows plus link
+  contest prefix). Complete .sym Task_* census has 1045 non-allowed names;
+  90 are new relative to vanilla Emerald's symbols. Every new name is listed
+  in tasks.new_non_allowed_task_names, with addresses in the full census.
+  New examples: Task_AbilityCapsule, Task_AbilityPatch, Task_AccessPokemonBoxLink,
+  Task_BannedSpeciesWindowInput, Task_BattleStart_Debug, Task_ChooseBoxMon.
+  No new task is automatically allowed. This is a symbol census, not live tasks.
+
+  OPEN CPU: WaitForVBlank is inlined and source has a wireless busy-wait branch
+  plus non-wireless BIOS VBlankIntrWait (main.c:422-437). No measured frame-end
+  parking or admitted BIOS range exists. cpu has explicit OPEN/reason and no
+  mode/range: safety.lua's cpu clause refuses, not a copied FR/RR range.
+  OPEN battle handoff: argument-taking controller ABI, Volatiles Perish head,
+  and last-ball shortcut unqualified. commit_hold is explicit; no vanilla
+  STATUS3/DisableStruct head or callable-ABI assumption copied. Source:
+  battle_controller_player.c:154-180,234-330. Generic battle qualifiers bound;
+  no PHYSICAL safe-menu or commit qualification claimed.
+
+area_map.json + gen3_exp_areas.lua + gen3_exp_locations.lua:
+  Reuse gen_area_map Emerald mode on expansion's own map_groups, map JSONs,
+  region-map sections and gWildMonHeaders. 240 wild-map entries,935 locations.
+  No vanilla statics.json is imported. Gift/static script-derived area census
+  remains OPEN and is named in both checkpoint and Lua header.
+  Expansion ships Kanto alongside Hoenn; distinct MAPSEC_ALTERING_CAVE_FRLG and
+  MAPSEC_KANTO_VICTORY_ROAD cannot collapse with their Hoenn names. Explicit
+  expansion-only MAPSEC suffix/prefix policy yields altering_cave_frlg and
+  kanto_victory_road, retaining existing Emerald dive/Safari rules and collision
+  rejection for any other unrelated MAPSECs. Vanilla outputs unchanged.
+
+Supplemental probe and adjudicated review folds
+----------------------------------------------
+Coordinator re-leased expansion_offsets.c/gen_expansion_facts.py/facts/layout
+for checkpoint geometry. Same original GCC13.2.1 CPP/preproc/CC1/AS pipeline and
+receipt flags; all work under ~/slink-exp/x1-probe-20260926, no build-tree edits.
+Now 29 structs,138 ordinary fields,91 bitfields,70 constants;39 independent
+compiler/ROM/.sym/.elf checks pass. Added Task, ScriptContext, PaletteFadeControl,
+BattleResults and sound structs used by the existing checkpoint generator.
+Updated normalized probe source SHA256:
+  46f385f1e6059726e521c529f49696cd7140b38bce13d56194ba42f53187473d
+Updated object SHA256:
+  a84e019195ce1f1ca16aa2d4d2ead2a097999121d5001361d1bf7e4610b62be1
+Old X1-PROBE receipt remains historical evidence for its preceding commit.
+
+OMP cx-c1fccf54, coordinator-adjudicated accepted fixes:
+  F4 always-on make_layout(facts,rom_sha1,provenance)==committed layout check.
+     Mutated layout offset and facts bit shift copies cause that guard to fail;
+     no ROM/decomp/object needed. Shared working files are never mutated.
+  F5 provenance hashes all 12 layout-defining headers (pokemon/move/item/global/
+     load_save/main/storage/task/script/palette/battle/gba-m4a), plus existing
+     config hashes, exact source enums and compiler/preprocessed/object hashes.
+  F6 explicit bits+shift<=32 check before inferring a read lane.
+  F2 sizeof(enum...) probe constants and stated source-typing policy. Observed:
+     Item=2, ItemSortType=1, Species=2, Move=2, Ability=2, Type=1, EggGroup=1,
+     NationalDexOrder=4, BattleMoveEffects=4, DamageCategory=1, Pocket=4,
+     BattlerId=1, BattleTrainer=1. No -fshort-enums was added.
+  Rejected review claims were not implemented (ELF st_type guard and the already
+  verified priority offset). Original extractor stays untouched for X2 ownership.
+Facts/layout metadata changed: X2 data.json and X3 harness metadata should be
+regenerated from these final files on integration. This card does not edit them.
+
+Validation and additive-output proof
+------------------------------------
+81 focused tests passed,0 skipped (7.25s): test_gen3_exp_pack,
+test_gen_expansion_facts, test_extract_expansion_data. Includes symbol resolution,
+every expected_hex, function bounds/unique patterns, wrong ROM/path refusal,
+controller ambiguity refusal, unadmitted/OPEN guards, independent source areas,
+and artifact-free layout mutation guards. Shared required skip wording for new
+pack ROM prerequisites: 'local copyrighted ROMs absent: <path>'; present wrong
+artifacts fail by hash, never skip.
+Broader snapshot before the final explicit-path refusal test:
+  python -m pytest tests/unit -q -p no:randomly -k "extract or gen3 or gen_expansion_facts" -rs
+  3800 passed,46 skipped,10929 deselected in156.26s; exit0.
+  No X1 skips. Lower skip count follows staging the exact pinned RR companion
+  witness in this worktree. Missing inputs/fixtures and four battery-save cases
+  remain; no live qualification inferred. Log .cache/x1-pack-tests.log.
+Ruff on all edited Python tools/tests and git diff --check: passed.
+
+Before edits: profile --check passed; signals --check and checkpoint --check
+passed after copying the exact EA5352F8... RR companion witness; Emerald area
+--check passed. FRLG area --check was unimplemented (exit1); captured this fact
+instead of claiming a pass. Its old generator was run in an ignored temporary
+directory: generated texts equal the committed outputs, raw files differ only
+by checkout EOL. Added a real non-writing FRLG --check plus a drift/no-write
+falsifier. After edits all five existing check invocations pass:
+  python tools/gen_gen3_profile.py --check
+  python tools/gen_gen3_engine_signals.py --check
+  python tools/gen_gen3_write_checkpoint.py --check
+  python tools/gen_area_map.py --game frlg --check
+  python tools/gen_area_map.py --game emerald --check
+New expansion outputs also pass each tool's --expansion 28877d73 --check;
+area tool additionally takes --game emerald. pin_gen3_site has no --check mode;
+its shared pinning code validates every emitted expansion site, and --rom exp
+enables its stdout-only exact-pattern search.
+
+Hard-rule proof: every one of the 17 original output files below retains its
+EXACT BEFORE raw SHA256 AFTER generation/checks (including checkout line endings).
+No existing pack/document was rewritten. Hash manifest captured before edits:
+.cache/x1-pack-before-hashes.json. All 17 comparisons true; changed list=[]:
+  data/games/gen3_frlg/profile.json
+    before=after=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65
+  data/games/gen3_frlg/engine_signals.json
+    before=after=67eb3918f7b9150d5e2b0a64bf8ed22babeee334c87d26507cf40a915a894bbf
+  data/games/gen3_frlg/write_checkpoint.json
+    before=after=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846
+  data/games/gen3_rr/profile.json
+    before=after=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c
+  data/games/gen3_rr/engine_signals.json
+    before=after=63b8fd58b1adc801bde7f212dbac2bf536a4103d65497c58366abe38b50ba255
+  data/games/gen3_rr/write_checkpoint.json
+    before=after=d60f99e98a34db62eef184ad171eedd40d52f7f7643d81ae9bc99dd023a789a1
+  data/games/gen3_emerald/profile.json
+    before=after=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27
+  data/games/gen3_emerald/engine_signals.json
+    before=after=4bee73814ebcfa50a063df9e043786cd3eb2ec7eec19a095156b446f9705754f
+  data/games/gen3_emerald/write_checkpoint.json
+    before=after=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61
+  data/games/gen3_frlge/area_map.json
+    before=after=a3578ee1820560b7fa6dfc3646ef5ea9ead405ac32673865e8c240fb4fabb5e6
+  data/games/gen3_frlge/gen3_frlge_areas.lua
+    before=after=60c606be194e619b328b93f1e30a334a8ea4601b94b96dab3a35ee5952fb1564
+  data/games/gen3_frlge/gen3_frlge_locations.lua
+    before=after=28c07fdb66fad2123d4a6a7f8a686cf0fed5beab4c3370f3c5382b836dd94a81
+  data/games/gen3_emerald/area_map.json
+    before=after=672af152c0fe33bb40d655fe948b150dfed929629f32e314a5e81ce0d377b1ef
+  data/games/gen3_emerald/gen3_emerald_areas.lua
+    before=after=2982e13a843bcf9d624b4b67f5748c0515dc88f70984e35f41e69431ff24ca58
+  data/games/gen3_emerald/gen3_emerald_locations.lua
+    before=after=9548541068e178cf18b5ea834a92016ec359a0033848071fa3614f7d85bf1705
+  docs/gen3_engine_sites.md
+    before=after=a95479230a433c1249ccad58ea88f139074fe72122d063c94e1066d349cb0bdc
+  docs/gen3_emerald/engine_sites.md
+    before=after=ce615a275f6d2320d9e050654d4068efa014ed09a8ef23c987a0a82301cfa7cd

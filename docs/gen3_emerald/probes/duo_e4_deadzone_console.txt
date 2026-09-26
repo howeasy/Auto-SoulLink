@@ -1,0 +1,186 @@
+
+========== scenario: deadzone_gen3 ==========
+[duo] deadzone_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=cf371bc12e7f970cd45c6c2dd6a0574f0cad31f4
+[duo] server up: tcp=62331 http=62332 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_d9d7j1_q
+[duo] timing server 0.6s
+[duo] cleared 9 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_1_witness.bin, e2e_deadzone_gen3_a_1_witness_ext.bin, e2e_deadzone_gen3_a_attempt1_result.txt, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_1_witness.bin, e2e_deadzone_gen3_b_1_witness_ext.bin, e2e_deadzone_gen3_b_attempt1_result.txt, e2e_deadzone_gen3_b_result.txt, e2e_deadzone_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_102
+[duo] go-file written for b
+[duo] timing orchestrate 24.7s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: FAIL (hunt ended out-of-balls)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] deadzone_gen3: a=PASS b=FAIL
+--- deadzone_gen3 a result ---
+TX area_enter - {"area_id":"route_102","event":"area_enter","loc_name":"route102","player":"a","seq":12}
+TX no_catch - {"area_id":"route_102","event":"no_catch","level":4,"player":"a","seq":36,"species_id":286}
+TX safe - {"event":"safe","player":"a","seq":37}
+RX play_sound
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 1500
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 1500
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 1500
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 1500
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 1500
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 1500
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 1500
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 1500
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 1500
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 1500
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 1500
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 1500
+RX msgbox text=Route 102 is a dead zone!
+NO_CATCH area=route_102 species=286
+[client] [gen3] phase save-menu frame=1592 counter=2
+[client] [gen3] phase save-dialog frame=1652 row=3/6
+[client] [gen3] phase saved frame=2052 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_deadzone_gen3_a_1_witness.bin bytes=131072 saves=1 frame=2272 counter=3
+SAVE_WITNESS deadzone counter=2->3
+WRITES 12
+RESULT: PASS (ran; route locked)
+--- deadzone_gen3 b result ---
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 1532
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 1532
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 1532
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 1532
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 1532
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 1532
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 1532
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 1532
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 1532
+RX msgbox text=Route 102 is a dead zone!
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase ball-thrown frame=2616 gLastUsedItem 0 -> 0, balls 5 -> 4
+THREW 1
+[client] [gen3] phase ball-thrown frame=3596 gLastUsedItem 0 -> 0, balls 4 -> 3
+THREW 2
+[client] [gen3] phase ball-thrown frame=4516 gLastUsedItem 0 -> 0, balls 3 -> 2
+THREW 3
+[client] [gen3] phase ball-thrown frame=5516 gLastUsedItem 0 -> 0, balls 2 -> 1
+THREW 4
+[client] [gen3] phase ball-thrown frame=6435 gLastUsedItem 0 -> 0, balls 1 -> 0
+THREW 5
+TX no_catch - {"area_id":"route_102","event":"no_catch","level":3,"player":"b","seq":238,"species_id":286}
+TX safe - {"event":"safe","player":"b","seq":239}
+WRITES 12
+RESULT: FAIL (hunt ended out-of-balls)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_d9d7j1_q
+[duo] deadzone_gen3: the cartridge's only ball missed; restarting attempt 2 of 3 with a fresh server, run directory and SaveRAM seeds
+[duo] deadzone_gen3: attempt 2 of 3
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=cf371bc12e7f970cd45c6c2dd6a0574f0cad31f4
+[duo] server up: tcp=62359 http=62360 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_jzlsz4z2
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_1_witness.bin, e2e_deadzone_gen3_a_attempt1_result.txt, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_attempt1_result.txt, e2e_deadzone_gen3_b_result.txt, e2e_deadzone_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_102
+[duo] go-file written for b
+[duo] timing orchestrate 28.3s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: FAIL (hunt ended out-of-balls)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] deadzone_gen3: a=PASS b=FAIL
+--- deadzone_gen3 a result ---
+JITTER requested=37 applied=37 attempt=2
+TX no_catch - {"area_id":"route_102","event":"no_catch","level":3,"player":"a","seq":43,"species_id":295}
+TX safe - {"event":"safe","player":"a","seq":44}
+RX play_sound
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 1752
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 1752
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 1752
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 1752
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 1752
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 1752
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 1752
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 1752
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 1752
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 1752
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 1752
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 1752
+RX msgbox text=Route 102 is a dead zone!
+NO_CATCH area=route_102 species=295
+[client] [gen3] phase save-menu frame=1844 counter=2
+[client] [gen3] phase save-dialog frame=1904 row=3/6
+[client] [gen3] phase saved frame=2304 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_deadzone_gen3_a_2_witness.bin bytes=131072 saves=1 frame=2524 counter=3
+SAVE_WITNESS deadzone counter=2->3
+WRITES 12
+RESULT: PASS (ran; route locked)
+--- deadzone_gen3 b result ---
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 1802
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 1802
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 1802
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 1802
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 1802
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 1802
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 1802
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 1802
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 1802
+RX msgbox text=Route 102 is a dead zone!
+JITTER requested=37 applied=37 attempt=2
+[client] [gen3] phase ball-thrown frame=2831 gLastUsedItem 0 -> 0, balls 5 -> 4
+THREW 1
+[client] [gen3] phase ball-thrown frame=3974 gLastUsedItem 0 -> 0, balls 4 -> 3
+THREW 2
+[client] [gen3] phase ball-thrown frame=5117 gLastUsedItem 0 -> 0, balls 3 -> 2
+THREW 3
+[client] [gen3] phase ball-thrown frame=6369 gLastUsedItem 0 -> 0, balls 2 -> 1
+THREW 4
+[client] [gen3] phase ball-thrown frame=7512 gLastUsedItem 0 -> 0, balls 1 -> 0
+THREW 5
+TX no_catch - {"area_id":"route_102","event":"no_catch","level":3,"player":"b","seq":275,"species_id":295}
+TX safe - {"event":"safe","player":"b","seq":277}
+WRITES 12
+RESULT: FAIL (hunt ended out-of-balls)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_jzlsz4z2
+[duo] deadzone_gen3: the cartridge's only ball missed; restarting attempt 3 of 3 with a fresh server, run directory and SaveRAM seeds
+[duo] deadzone_gen3: attempt 3 of 3
+[duo] JITTER requested=74 attempt=3
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=cf371bc12e7f970cd45c6c2dd6a0574f0cad31f4
+[duo] server up: tcp=62388 http=62389 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_n8tt78y9
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_2_witness.bin, e2e_deadzone_gen3_a_attempt2_result.txt, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_attempt2_result.txt, e2e_deadzone_gen3_b_result.txt, e2e_deadzone_gen3_pydec_attempt2_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_102
+[duo] go-file written for b
+[duo] B caught 9FEA6BAB:DFDAF6DA in the dead zone; force-fainted, memorialized
+[duo] links.json: 1 dead_zone entry for route_102; B's 9FEA6BAB:DFDAF6DA retired
+[duo] timing orchestrate 15.3s
+[duo] timing results 2.4s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: PASS (dead-zone capture 9FEA6BAB:DFDAF6DA retired)
+[duo] SAVE_WITNESS_SHA256 inst=a site=dce12d9ae702bd48ad12bfddc312957714b2aa0aeff322bc8637ba777b43ad27 file=dce12d9ae702bd48ad12bfddc312957714b2aa0aeff322bc8637ba777b43ad27 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=98eadfdf00489db462b53c0bc6d022c6af4eb1d59eb007cf34680379dbc0d628 file=98eadfdf00489db462b53c0bc6d022c6af4eb1d59eb007cf34680379dbc0d628 match=true saves=1 counter=2->3 rtc=normalized
+[duo] deadzone: route_102 locked by A's no_catch (species 290); B's 9FEA6BAB:DFDAF6DA saved only in the memorial box
+[duo] MARKER b: FAINTED 9FEA6BAB:DFDAF6DA frame=4177 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=9FEA6BAB:DFDAF6DA
+[duo] MARKER b: TX memorialize_done 9FEA6BAB:DFDAF6DA {"box":13,"event":"memorialize_done","key":"9FEA6BAB:DFDAF6DA","player":"b","seq":128}
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+
+========== summary ==========
+  deadzone_gen3: PASS (attempt 3 of 3)

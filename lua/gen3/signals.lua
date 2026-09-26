@@ -17,7 +17,7 @@
 --
 -- Fire-time contract (PLAN §5.2, receipts docs/gen3/probes/hooks_*_2026-09-21.txt):
 -- mGBA hands the callback the address it was REGISTERED at, while R15 already points at the
--- next instruction (probe row a: expected_addr=0x0800051A, reference_raw_r15=0x0800051C).
+-- next instruction (probe row a: expected_addr=0x0800051A, first_raw_r15=0x0800051C).
 -- So the assertion is `callback address == address + capture_offset`, and raw_r15 / cpsr /
 -- sp / frame are RECORDED separately, never used as the identity test. A fire whose
 -- callback address disagrees is rejected and counted; it is never queued or dispatched.

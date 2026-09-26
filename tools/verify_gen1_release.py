@@ -101,6 +101,10 @@ ALLOWED_SKIPS = [
      "Gen 1 input"),
     ("shadow captures not present",
      "Gen 3 shadow-wire captures (patch/build/shadow_wire); not required for a Gen 1 release"),
+    ("pokeemerald not cloned",
+     "Gen 3 Emerald decomp; not required for a Gen 1 release"),
+    ("pokefirered not cloned",
+     "Gen 3 FR/LG decomp; not required for a Gen 1 release"),
 ]
 
 

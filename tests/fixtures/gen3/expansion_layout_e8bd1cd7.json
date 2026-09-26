@@ -1,0 +1,33 @@
+{
+  "_source": "rh-hideout/pokeemerald-expansion tag expansion/1.17.0, commit e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7, include/pokemon.h",
+  "_note": "Single source of truth for the XR-1/XR-2 expansion layout (review cx-fcdc11c5 F3). server/adapters/gen3_codec.py and lua/gen3/reads.lua read the same field names out of a pack's profile.derived; this file is the test twin, not a shipped pack. The real pack will be generated from X1-PROBE's compiler facts (data/games/gen3_exp/<build>/facts.json) on claude/gen3-emerald-x1 -- do not create data/games/gen3_exp here.",
+  "_cites": {
+    "MON_SPECIES_MASK": "include/pokemon.h#L134 (species:11, shares its u16 lane with teraType:5)",
+    "MON_ITEM_MASK": "include/pokemon.h#L136-137 (heldItem:10, shares its u16 lane with 6 unused bits)",
+    "MON_MOVE_MASK": "include/pokemon.h#L150-157 (move1..4:11, each shares its u16 lane with an evolutionTracker/unused bits)",
+    "EXPERIENCE_MASK": "include/pokemon.h#L138-140 (experience:21, shares its u32 lane with nickname11:8 and 3 unused bits)",
+    "NICKNAME_EXTRA": "include/pokemon.h#L139 (nickname11, Growth+4 bits 21-28), #L143-144 (nickname12, Growth+10 bits 6-13)",
+    "POKEBALL_FIELD": "include/pokemon.h#L143 (pokeball:6 moved into Growth substruct, +10 bits 0-5; PokemonSubstruct3's old pokeball slot is now dynamaxLevel, #L192)",
+    "ABILITY_NUM_FIELD": "include/pokemon.h#L221 (abilityNum:2 moved into Misc substruct's ribbons u32, +8 bits 29-30; the vanilla bit31-of-IVs slot is now gigantamaxFactor, #L201)",
+    "PP_MASK": "include/pokemon.h#L160-167 (pp1..4:7, each shares its byte with a hyperTrained* bit at bit 7)",
+    "MARKINGS_MASK": "include/pokemon.h#L272-273 (markings:4 shares its byte with compressedStatus:4)",
+    "SHINY_MODIFIER_FIELD": "include/pokemon.h#L275-276 (BoxPokemon.unknown u16 is hpLost:14 + shinyModifier:1 + unused_1E:1; shiny_modifier is bit 14)"
+  },
+  "layout": {
+    "MON_SPECIES_MASK": 2047,
+    "MON_ITEM_MASK": 1023,
+    "MON_MOVE_MASK": 2047,
+    "EXPERIENCE_MASK": 2097151,
+    "NICKNAME_EXTRA": {
+      "chars": [
+        {"word_off": 4, "word_size": 4, "shift": 21, "width": 8},
+        {"word_off": 10, "word_size": 2, "shift": 6, "width": 8}
+      ]
+    },
+    "POKEBALL_FIELD": {"word_off": 10, "word_size": 2, "shift": 0, "width": 6},
+    "ABILITY_NUM_FIELD": {"word_off": 8, "word_size": 4, "shift": 29, "width": 2},
+    "PP_MASK": 127,
+    "MARKINGS_MASK": 15,
+    "SHINY_MODIFIER_FIELD": {"shift": 14, "width": 1}
+  }
+}

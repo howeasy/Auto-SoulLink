@@ -39,9 +39,11 @@
 -- settle -> one capture; SendMonToPC (pc_move) is acquisition to storage, not a user deposit.
 local Client = {}
 
--- Record geometry and game constants the packs do not ship yet (requested from C4-2a).
--- pret/pokefirered@c75f352 include/pokemon.h struct Pokemon / struct BattlePokemon, and the
--- old client's production values (archive/gen3-old-client:lua/memory_gba.lua:395-416); CFRU keeps the same layout.
+-- Record geometry and game constants the packs do not ship yet (requested from C4-2a), the same
+-- on every admitted title: pret/pokefirered@c75f352 include/pokemon.h struct Pokemon / struct
+-- BattlePokemon and the old client's production values (archive/gen3-old-client:lua/memory_gba.lua:395-416);
+-- CFRU keeps the same layout, and so does pret/pokeemerald@c65e93f2 (include/pokemon.h:219-231 hp
+-- at 0x56, :268 moves, :281 pp; include/constants/moves.h:157; include/battle.h:27).
 local PARTY_HP_OFF = 0x56            -- struct Pokemon.hp (u16)
 local BATTLE_MON_MOVES_OFF = 0x0C    -- BattlePokemon.moves[4] (u16 each)
 local BATTLE_MON_PP_OFF = 0x24       -- BattlePokemon.pp[4] (u8 each)
@@ -49,20 +51,15 @@ local MOVE_EXPLOSION = 153           -- include/constants/moves.h
 local EXPLODE_PP = 5                 -- Explosion's PP, so a PP drop proves the move executed
 -- CFRU action-commit values (archive/gen3-old-client:lua/memory_gba.lua:1318-1345, production-tested on RR):
 local B_ACTION_USE_MOVE = 0
-local STATE_ACTION_CONFIRMED_STANDBY = 3
 local TARGET_FOE_PRIMARY = 1
+-- (the committed state, STATE_WAIT_ACTION_CONFIRMED_STANDBY, is per title: p.commit_guard.value)
 -- The m4a SE1 poke (the old client's M.playSE, archive/gen3-old-client:lua/memory_gba.lua:2021-2066, production-tested
--- on FR/LG and RR). Every address and field offset comes from the checkpoint pack's sound block
+-- on FR/LG and RR). Every address, field offset and title SE id (se_ids) comes from the checkpoint pack's sound block
 -- (p.sound: player_se1 / sound_info_ptr, player_head_off / player_next_off / tracks_off, and
 -- `fields`, the exact m4a fields a sound write may touch); only the VALUES the old client
 -- stores are here.
 local TRK_START = 0xC0                        -- MusicPlayerTrack.flags: EXIST | START
 local TRK_BEND, TRK_VOLX, TRK_LFO = 2, 64, 22 -- the old client's per-track defaults
--- Gift/static areas (server/adapters/gen3_frlge.py via lua/games/gen3_frlge.lua:27-37): no
--- NEW ENCOUNTER banner and never a no_catch there.
-local GIFT_AREAS = { oaks_lab = true, intro = true, gift = true, cinnabar_lab = true,
-                     celadon_condominiums = true, silph_co_7f = true, saffron_dojo = true,
-                     route_4_pokecenter = true }
 local PC_KINDS = { pc_deposit = true, pc_withdraw = true, pc_box_place = true,
                    pc_release_begin = true, pc_release = true }
 local MENU_CMDS = { "show_menu", "show_choices", "choose_mon" }
@@ -86,6 +83,30 @@ function Client.new(p)
     local sink = p.log or function() end
     local TAG = "[SLink-gen3]"
     local function log(msg) sink(TAG .. " " .. msg) end
+    -- E3-CLIENT: title facts come from the pack, never FR literals, and a missing one fails
+    -- closed (logged once, here). STANDBY is this title's STATE_WAIT_ACTION_CONFIRMED_STANDBY
+    -- (battle.commit_guard.value: FR/LG/RR 3, Emerald 4); without it no battle commit is written.
+    local STANDBY = type(p.commit_guard) == "table" and num(p.commit_guard.value) or nil
+    if not STANDBY then log("pack has no battle.commit_guard.value: battle commits refused") end
+    -- Gift areas (the pack's gift_areas.ids): no NEW ENCOUNTER banner and never a no_catch there.
+    -- Without the list EVERY area counts as one: an area is never dead-zoned on a guess.
+    local gift_area
+    do
+        local ids = type(p.gift_areas) == "table" and p.gift_areas.ids
+        local set = ids and json.kind(ids) == "array" and {} or nil
+        for _, id in ipairs(set and ids or {}) do
+            -- a non-string or empty id would build a set nothing matches (fail OPEN): the whole
+            -- list is untrusted then, and takes the missing-list fallback
+            if type(id) ~= "string" or id == "" then set = nil; break end
+            set[id] = true
+        end
+        if set then
+            gift_area = function(id) return set[id] == true end
+        else
+            log("pack has no valid gift_areas.ids: every area treated as a gift area (no banner, no no_catch)")
+            gift_area = function() return true end
+        end
+    end
     local key = reads.key
     local session
     local function send(event, fields) return session.send(event, fields) end
@@ -361,7 +382,7 @@ function Client.new(p)
     local function settle_acquisitions(party, area_id, caught)
         local gift = not caught
         local function resolve_area()
-            if area_id ~= "" and not GIFT_AREAS[area_id] and not gift then session.resolved_areas[area_id] = true end
+            if area_id ~= "" and not gift_area(area_id) and not gift then session.resolved_areas[area_id] = true end
         end
         local found = false
         for _, m in ipairs(party) do
@@ -455,7 +476,7 @@ function Client.new(p)
         local here = area_id .. "|" .. loc
         if st.last_area ~= nil and st.last_area ~= here then
             send("area_enter", { area_id = area_id, loc_name = loc })
-            if st.has_pokeballs and session.seeded and area_id ~= "" and not GIFT_AREAS[area_id]
+            if st.has_pokeballs and session.seeded and area_id ~= "" and not gift_area(area_id)
                and not session.resolved_areas[area_id] and not in_battle() then
                 hud.show("** NEW ENCOUNTER **  " .. loc, 255, 220, 60, 240)
             end
@@ -509,7 +530,7 @@ function Client.new(p)
         local exempt = num(d.BATTLE_TYPE_NO_CATCH_MASK) and bt.type_flags
                        and (bt.type_flags & d.BATTLE_TYPE_NO_CATCH_MASK) ~= 0
         if not caught and bt.is_trainer == false and not exempt and bt.foe and st.has_pokeballs
-           and area_id ~= "" and not GIFT_AREAS[area_id] and not session.resolved_areas[area_id] then
+           and area_id ~= "" and not gift_area(area_id) and not session.resolved_areas[area_id] then
             session.resolved_areas[area_id] = true
             send("no_catch", { area_id = area_id, species_id = bt.foe.species, level = bt.foe.level })
         end
@@ -661,8 +682,8 @@ function Client.new(p)
             end
         end
         -- the committing state is itself the battle_commit guard (gBattleCommunication[battler]
-        -- < 3) and writes.lua re-validates before every write, so only the hand-off may follow it
-        plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY }
+        -- < STANDBY, the pack's commit_guard.value) and writes.lua re-validates before every write, so only the hand-off may follow it
+        plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STANDBY }
         -- G5-EXPLODE-HANDOFF (owner ruling 19): where the pack proves the Explode+H shape (RR,
         -- whose parked CFRU menu outlives the commit), the same hand-off as P ends the menu, so
         -- Explosion fires with no press. FR/LG packs carry no such shape: plan unchanged there.
@@ -685,6 +706,7 @@ function Client.new(p)
         local comm = io.read_u8(a.BATTLE_COMM_ADDR + battler)
         local ex = e.explode
         if ex and ex.failed then return "hold", ex.why end
+        if not STANDBY then return "hold", "pack has no battle.commit_guard.value" end
         -- A pre-existing multi-turn lock (Thrash/Outrage/Rollout: gLockedMoves[battler] ~= 0)
         -- owns the next action; committing Explosion over it would fight the engine. Held as
         -- the active battler instead, and nothing is written. Sleep and flinch need no case:
@@ -701,14 +723,14 @@ function Client.new(p)
             return "done"
         end
         if ex and pp0 < EXPLODE_PP then
-            if comm < STATE_ACTION_CONFIRMED_STANDBY then
+            if comm < STANDBY then
                 ex.failed, ex.why = true, "explosion failed; held as the active battler"
                 log("force_explode: Explosion executed and the battler survived; held as active " .. e.key)
                 return "hold", "explosion failed; held as the active battler"
             end
             return "hold", "explosion executing"
         end
-        if ex and comm >= STATE_ACTION_CONFIRMED_STANDBY then return "hold", "explosion committed" end
+        if ex and comm >= STANDBY then return "hold", "explosion committed" end
         -- first commit, or the engine reset the commit state at turn start: (re)write it
         local plan = commit_plan(battler, not ex)
         local ok, why = armed_write("battle_commit", plan, { battler = battler })
@@ -744,7 +766,7 @@ function Client.new(p)
             { timer, 1, io.read_u8(timer) & 0xF0 },
             { a.CHOSEN_ACTION_ADDR + battler, 1, d.B_ACTION_NOTHING_FAINTED },
             -- comm is the battle_commit guard: only the hand-off may follow it
-            { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY },
+            { a.BATTLE_COMM_ADDR + battler, 1, STANDBY },
         }
         local h = policy.handoff_entry and policy:handoff_entry(battler)
         if h then plan[#plan + 1] = { h[1], h[2], h[3] }; plan.handoff = true end
@@ -753,9 +775,9 @@ function Client.new(p)
 
     -- commit -> held until gBattleMons[b].hp == 0 (done: the engine's faint, or a foe KO first).
     -- The battler leaving (Roar) takes battle_write's bench path; the battle ending first (flee,
-    -- catch) takes its overworld path. A reset commit (comm < 3) with the mon alive is re-armed;
+    -- catch) takes its overworld path. A reset commit (comm < STANDBY) with the mon alive is re-armed;
     -- mid-turn the permit refuses that, so it can only land at a parked menu.
-    -- Review follow-up 2: the commit's comm[b] = 3 fails every later battle_faint (battle_comm_0)
+    -- Review follow-up 2: the commit's comm[b] = STANDBY fails every later battle_faint (battle_comm_0)
     -- until the next parked menu, which comes AFTER the Perish KO's party screen, where a bench
     -- mon still alive could be sent in. So the commit waits while another pending entry resolves
     -- to a bench slot: that entry lands later in this same flush (same permit, minus the guard)
@@ -774,6 +796,7 @@ function Client.new(p)
     end
 
     local function active_faint_step(e, mon, battler, b)
+        if not STANDBY then return "hold", "pack has no battle.commit_guard.value" end
         local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF)
         if e.perish and bhp == 0 then
             hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
@@ -781,7 +804,7 @@ function Client.new(p)
         end
         -- the carrier's contract (W2, G4-PH): e.why is exactly "active faint committed" after a
         -- hand-off; a pack without battle.handoff keeps the press hint
-        if e.perish and io.read_u8(a.BATTLE_COMM_ADDR + battler) >= STATE_ACTION_CONFIRMED_STANDBY then
+        if e.perish and io.read_u8(a.BATTLE_COMM_ADDR + battler) >= STANDBY then
             return "hold", e.handoff and "active faint committed" or "active faint committed (press A)"
         end
         if bench_write_pending(e, b) then return "hold", "bench write first" end
@@ -1562,6 +1585,7 @@ function Client.new(p)
         if #nodes < 2 then return nil, "m4a player list not initialised" end
         return nodes[#nodes - 1]
     end
+    -- id: the TITLE's song id (drv.play_sound translates the wire id once, for both paths)
     local function m4a_plan(id)
         local snd = p.sound
         if type(snd) ~= "table" or type(snd.fields) ~= "table" then
@@ -1624,8 +1648,16 @@ function Client.new(p)
         local f = io.framecount()
         if st.sound_frame == f then return end              -- one cue per frame
         st.sound_frame = f
-        if native and native.play_sound and native:play_sound(id) then return end
-        local plan, args = m4a_plan(id)
+        -- the wire id keeps FR numbering (docs/protocol.md "play_sound ids"); the pack's se_ids
+        -- maps it to this title's song id, and an id it does not map is refused. Translated ONCE,
+        -- before either path: the companion's OP_PLAY_SE plays a song number of the running ROM
+        -- (native.lua play_sound), exactly what the m4a poke needs, so both take the title id.
+        -- (RR's map is identity today; asserting identity would only refuse a future native title.)
+        local snd = type(p.sound) == "table" and p.sound or {}
+        local sid = type(snd.se_ids) == "table" and num(snd.se_ids[tostring(id)]) or nil
+        if not sid then return sound_refused("pack maps no title SE for wire id " .. tostring(id)) end
+        if native and native.play_sound and native:play_sound(sid) then return end
+        local plan, args = m4a_plan(sid)
         if not plan then return sound_refused(args) end
         local ok, awhy = armed_write("sound", plan, args)
         if not ok then sound_refused(tostring(awhy)) end

@@ -1,0 +1,54 @@
+duo instance a scenario=link_gen3 phase=initial title=emerald attempt=1
+SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
+[client] [SLink] TCP connecting to 127.0.0.1:62419 (non-blocking)…
+TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
+TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:62419 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:62419
+[client] [SLink] TCP connected to 127.0.0.1:62419
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"route_102","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"route102"
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=580 map=(0,17)
+MYKEY 0 4D55444B:20250925
+PARTY slot=0 key=4D55444B:20250925 species=283 level=5 hp=20/20
+booted frame=580 map=map=17 at=(21,16) balls=5
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase ball-thrown frame=1473 gLastUsedItem 0 -> 0, balls 5 -> 4
+THREW 1
+[client] [gen3] phase ball-thrown frame=2448 gLastUsedItem 0 -> 0, balls 4 -> 3
+THREW 2
+[client] [gen3] phase ball-thrown frame=3487 gLastUsedItem 0 -> 0, balls 3 -> 2
+THREW 3
+RX hud_show text=Partner caught WURMPLE in Route 102
+TX capture 12737D8C:20250925 {"area_id":"route_102","event":"capture","held_item_id":0,"hp":15,"is_egg":false,"key":"12737D8C:20250925","level":3,"maxHP":15,"nickname":"POOCHYENA","player":"a","seq":142,"species_id":286}
+RX play_sound
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 4740
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 4740
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 4740
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 4740
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 4740
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 4740
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 4740
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 4740
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 4740
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 4740
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 4740
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 4740
+RX msgbox text=POOCHYENA and WURMPLE linked!
+RX party_mon key=12737D8C:20250925
+TX safe - {"event":"safe","player":"a","seq":145}
+TX sync_retrieve_done 12737D8C:20250925 {"event":"sync_retrieve_done","key":"12737D8C:20250925","player":"a","seq":147}
+CAUGHT 12737D8C:20250925
+PARTY slot=0 key=4D55444B:20250925 species=283
+PARTY slot=1 key=12737D8C:20250925 species=286
+[client] [gen3] phase save-menu frame=4994 counter=2
+[client] [gen3] phase save-dialog frame=5054 row=3/6
+[client] [gen3] phase saved frame=5454 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_link_gen3_a_1_witness.bin bytes=131072 saves=1 frame=5676 counter=3
+SAVE_WITNESS link counter=2->3
+WRITES 12
+RESULT: PASS (caught 12737D8C:20250925)

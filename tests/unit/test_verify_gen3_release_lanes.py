@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import verify_gen3_release as gate  # noqa: E402  (tools/ is not a package; the gate is a script)
 
-LANE_ORDER = ["unit", "lua-parse", "pins", "profile-generated", "probe-gates",
-              "duo-pairs-gen3"]
+LANE_ORDER = ["unit", "lua-parse", "pins", "profile-generated",
+              "shadow-negatives-emerald", "probe-gates", "duo-pairs-gen3"]
 
 
 def test_lane_order_is_the_gate_order():
@@ -121,3 +121,27 @@ def test_an_unexplained_skip_fails_the_lane(monkeypatch):
         monkeypatch, "3 passed, 1 skipped in 0.4s\nSKIPPED [1] tests/x.py:12: no jar\n")
     assert not ok
     assert "1 skipped" in detail
+
+
+# ---------------------------------------------------------------------------
+# card E4b-FINALCUT: the two lanes this card added
+# ---------------------------------------------------------------------------
+
+def test_no_checkpoint_generated_lane_because_it_couples_the_shared_gate_to_emerald_falsifier():
+    """card E4b-CKPT review (OMP cx-6b619663 F1): gen_gen3_write_checkpoint.py --check runs its
+    ALL_PACKS loop in one process and aborts on the FIRST pack whose inputs are missing (verified:
+    on a machine without the RR ROM it never reaches Emerald's pack at all) -- adding it as a lane
+    here would make the shared FR/RR release gate depend on Emerald-only inputs (the Emerald ROM,
+    .cache/pret/pokeemerald/) it has no business needing. The check itself still runs as the
+    write_checkpoint_generated_check row inside build_plan_emerald's OWN plan (tools/
+    gen3_final_cut.py), where depending on Emerald's inputs is correct."""
+    assert not any(ln.name == "checkpoint-generated" for ln in gate.LANES)
+    assert "checkpoint-generated" not in gate.REQUIREMENTS
+
+
+def test_shadow_negatives_emerald_checks_the_committed_manifest_read_only():
+    lane = next(ln for ln in gate.LANES if ln.name == "shadow-negatives-emerald")
+    assert lane.argv == [sys.executable, "tools/gen3_shadow_negatives.py",
+                         "docs/gen3_emerald/negatives_manifest.json"]
+    assert lane.name not in gate._SLOW   # no emulator, no lane mutation -- a --quick lane
+    assert os.path.exists(os.path.join(_REPO, "docs/gen3_emerald/negatives_manifest.json"))

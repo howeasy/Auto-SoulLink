@@ -12,7 +12,10 @@ import os
 import re
 from functools import cache
 
-from server.data.items.gen3_vanilla import ITEM_NAMES as _FRLG_ITEM_NAMES
+from server.data.items.gen3_vanilla import (
+    EMERALD_OVERLAY as _EMERALD_ITEM_OVERLAY,
+    ITEM_NAMES as _FRLG_ITEM_NAMES,
+)
 from server.pokemon_data import (
     CFRU_FORM_SPRITE_ID,
     GENDER_SYMBOL,
@@ -59,6 +62,43 @@ _DAYCARE_AREAS = frozenset({
     "route5_pokemon_day_care",
     "four_island_pokemon_day_care",
 })
+
+# ── Emerald title data (docs/gen3_emerald/PLAN.md E3) ─────────────────────────────────
+# The client sends area_map[group:num] (data/games/gen3_emerald/area_map.json): wild maps, plus a
+# NAMED id for every statics.json map (FR/LG's precedent: gift areas like silph_co_7f, statics
+# like navel_rock). The gift set is the pack's own gift_areas.ids, the list the client consumes,
+# so the two cannot drift; the starter's wild route_101 is not in it (the starter links as
+# gift_route_101 through gift_link_area, a choice gift). Fixed-species areas are statics.json's
+# bypass_clauses rows: the Beldum/Wynaut/Castform gift areas and the Mew/Deoxys static areas
+# (faraway_island, birth_island: no wild table, so the whole area is that one mon). No daycare
+# id: the egg is handed over on wild Route 117 (pret data/maps/Route117/map.json:65), and a
+# daycare id there would let an egg consume that route. A missing pack file leaves the sets empty rather than breaking the
+# import for every game.
+_EMERALD_DIR = os.path.join(os.path.dirname(_DATA_DIR), "gen3_emerald")
+
+
+def _emerald_json(name: str) -> dict:
+    path = os.path.join(_EMERALD_DIR, name)
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _load_emerald() -> tuple[frozenset[str], frozenset[str]]:
+    area_map = _emerald_json("area_map.json")
+    statics = _emerald_json("statics.json").get("entries", [])
+    gifts = frozenset(_emerald_json("write_checkpoint.json").get("emerald", {})
+                      .get("gift_areas", {}).get("ids", []))
+    fixed = frozenset(area_map[e["map"]] for e in statics
+                      if e["bypass_clauses"] and e["map"] in area_map)
+    return gifts, fixed
+
+
+_EMERALD_GIFT_AREAS, _EMERALD_FIXED_SPECIES_GIFTS = _load_emerald()
+# The one Gen 3 move-table difference (EF-9): Nature Power's accuracy, pret pokeemerald
+# src/data/battle_moves.h:3479 (.accuracy = 95) vs pokefirered's 0. Shown on the board.
+_EMERALD_MOVE_ACCURACY = {267: 95}
 
 # RR trainer table: trainer index → {name, class, party_size}
 _RR_TRAINERS: dict[int, dict] = {}
@@ -222,6 +262,15 @@ _AREA_DISPLAY_RR_OVERRIDES: dict[str, str] = {
     "monean_chamber":    "Oak's Lab",
 }
 
+# Emerald's own display overrides (Hoenn ids; the table above is Kanto's)
+_AREA_DISPLAY_EMERALD_OVERRIDES: dict[str, str] = {
+    "mt_pyre":           "Mt. Pyre",
+    "cave_of_origin":    "Cave of Origin",
+    "rustboro_city_devon_corp_2f":   "Devon Corp. 2F",
+    "mossdeep_city_stevens_house":   "Steven's House",
+    "route119_weather_institute_2f": "Weather Institute 2F",
+}
+
 # RR item names (loaded if available)
 _RR_ITEMS: dict[int, str] = {}
 _rr_items_path = os.path.join(_DATA_DIR, "rr_items.json")
@@ -300,10 +349,10 @@ def _pokeapi_url(dex: int) -> str:
             f"/sprites/pokemon/{dex}.png")
 
 
-def _frlg_url(nat: int) -> str:
-    """PokeAPI FireRed/LeafGreen front-sprite URL for a Gen III dex number."""
+def _gen3_url(nat: int, version: str) -> str:
+    """PokeAPI title front-sprite URL (firered-leafgreen | emerald) for a Gen III dex number."""
     return (f"https://raw.githubusercontent.com/PokeAPI/sprites/master"
-            f"/sprites/pokemon/versions/generation-iii/firered-leafgreen/{nat}.png")
+            f"/sprites/pokemon/versions/generation-iii/{version}/{nat}.png")
 
 
 # Personality-value → nature, by (personality mod 25). Same table/derivation for RR and
@@ -335,19 +384,26 @@ class Gen3Adapter(GameAdapter):
         """
         self._is_rr = is_rr
         # The server passes the connecting client's rom_type (server.py get_adapter calls);
-        # only calc_profile reads it, to pick Emerald's trainer sets over FR/LG's.
+        # it selects the title's data: Emerald's gift sets, items, sprites, areas, calc sets.
         self._rom_type = kwargs.get("rom_type") or ""
         self._artifact_kind = kwargs.get("artifact_kind") or "clean"
         # This player's own cartridge tables (ingest_rom_content): None = none reported,
         # {} = reported but unreadable (shown as unavailable, never as the retail tables).
         self._rom_encounters: dict | None = None
         self._rom_trainers: dict | None = None
+        self._emerald = self._rom_type == "emerald"
         profile = "Radical Red / CFRU" if is_rr else "vanilla / AP / Emerald"
         log.debug(f"[ADAPTER] Gen3Adapter initialized: profile={profile!r}")
 
     @property
     def game_id(self) -> str:
         return "gen3_frlge"
+
+    @property
+    def rom_type(self) -> str:
+        """The rom_type this adapter was built for: a restored run whose saved rom_type differs
+        is rebuilt (state.py load), since the title data hangs off it and not off game_id."""
+        return self._rom_type
 
     @staticmethod
     def pairing_kind(kind: str) -> str:
@@ -380,13 +436,23 @@ class Gen3Adapter(GameAdapter):
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
     def is_gift_area(self, area_id: str) -> bool:
-        return area_id in _GIFT_AREAS or area_id.startswith("gift_")
+        return (area_id in (_EMERALD_GIFT_AREAS if self._emerald else _GIFT_AREAS)
+                or area_id.startswith("gift_"))
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
-        return area_id in _FIXED_SPECIES_GIFTS
+        # state.py runs gift_link_area first, so a gift received outside a gift area arrives as
+        # gift_<area> (e.g. a Deoxys flagged gift on birth_island); strip it, as gen2_gsc does.
+        # FR/RR's fixed ids are all gift areas, which gift_link_area never prefixes.
+        return (area_id.removeprefix("gift_")
+                in (_EMERALD_FIXED_SPECIES_GIFTS if self._emerald else _FIXED_SPECIES_GIFTS))
 
     def is_daycare_area(self, area_id: str) -> bool:
-        return area_id in _DAYCARE_AREAS
+        return not self._emerald and area_id in _DAYCARE_AREAS
+
+    @property
+    def area_pack(self) -> str:
+        """data/games/<dir> holding this title's area maps (the OBS/debug area catalog)."""
+        return "gen3_emerald" if self._emerald else "gen3_frlge"
 
     def evo_family(self, species_id: int) -> int:
         return base_form(species_id, self._is_rr)
@@ -498,7 +564,7 @@ class Gen3Adapter(GameAdapter):
             return ""
         gen_url = _pokeapi_url(nat)
         if nat <= _GEN3_DEX_CAP:
-            frlg_url = _frlg_url(nat)
+            frlg_url = _gen3_url(nat, "emerald" if self._emerald else "firered-leafgreen")
             return (f'<img class="mon-sprite" data-species="{nat}" src="{frlg_url}" '
                     f'onerror="if(this.src!==\'{gen_url}\'){{this.src=\'{gen_url}\';}}else{{this.style.display=\'none\';}}" '
                     f'alt="">')
@@ -692,6 +758,8 @@ class Gen3Adapter(GameAdapter):
             return ""
         if self._is_rr and item_id in _RR_ITEMS:
             return _RR_ITEMS[item_id]
+        if self._emerald and item_id in _EMERALD_ITEM_OVERLAY:
+            return _EMERALD_ITEM_OVERLAY[item_id]
         return _FRLG_ITEM_NAMES.get(item_id, f"Item #{item_id}")
 
     def calc_name(self, kind: str, name: str) -> str:
@@ -701,8 +769,8 @@ class Gen3Adapter(GameAdapter):
         return table.get(kind, {}).get(name, name)
 
     def calc_profile(self) -> dict | None:
-        """RR runs the calc at gen 9 with its own sets; vanilla FR/LG and Emerald at gen 3
-        with their vendored, pret-checked trainer sets (calc/src/js/data/sets/games)."""
+        """RR runs the calc at gen 9 with its own sets; vanilla FR/LG and Emerald at gen 3 with
+        their vendored trainer sets (pret coverage per game: test_calc_trainer_sets.py)."""
         if self._is_rr:
             return {"gen": 9, "dex": "rr"}
         sets = ({"file": "Emerald.js", "var": "CUSTOMSETDEX_E"} if self._rom_type == "emerald"
@@ -749,6 +817,8 @@ class Gen3Adapter(GameAdapter):
         # RR overrides take highest priority
         if self._is_rr and area_id in _AREA_DISPLAY_RR_OVERRIDES:
             return _AREA_DISPLAY_RR_OVERRIDES[area_id]
+        if self._emerald and area_id in _AREA_DISPLAY_EMERALD_OVERRIDES:
+            return _AREA_DISPLAY_EMERALD_OVERRIDES[area_id]
         # Manual overrides (apostrophes, accents, abbreviations)
         if area_id in _AREA_DISPLAY_OVERRIDES:
             return _AREA_DISPLAY_OVERRIDES[area_id]
@@ -756,7 +826,8 @@ class Gen3Adapter(GameAdapter):
         if area_id.startswith("gift_"):
             parts = area_id[5:].split("_", 1)  # "10_11" → ["10", "11"]
             if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                entry = _ROM_MAP_NAMES.get(f"{parts[0]}:{parts[1]}")
+                # Kanto map names (RR ROM scrape); no Emerald producer emits gift_<g>_<n>
+                entry = None if self._emerald else _ROM_MAP_NAMES.get(f"{parts[0]}:{parts[1]}")
                 if entry and entry.get("name"):
                     return f"Gift \u2013 {entry['name']}"
                 return "Gift"
@@ -802,7 +873,8 @@ class Gen3Adapter(GameAdapter):
             "type_id": type_id,
             "type_name": self.type_name(type_id),
             "power": raw.get("power", 0),
-            "accuracy": raw.get("accuracy", 0),
+            "accuracy": (_EMERALD_MOVE_ACCURACY.get(move_id, raw.get("accuracy", 0))
+                         if self._emerald else raw.get("accuracy", 0)),
             "pp": raw.get("pp", 0),
             "split": raw.get("split", 0),
         }

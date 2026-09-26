@@ -311,9 +311,9 @@ SCENARIOS = {
     # actually cross-checked against the RR binary (Task_DepositMenu/Task_WithdrawMon, a few
     # battle-flag addresses) are confirmed identical to FR's; the rest (battle action/move
     # cursors, map names/tile coordinates) are assumed, not verified.
-    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr"),
-                       "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 2000000,
-                       "oracle": "assert_faint_cmd_gen3_saved"},
+    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+                       "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": "town",
+                       "frames": 2000000, "oracle": "assert_faint_cmd_gen3_saved"},
     # G5-RR-BATTERY: on gen3_rr every row that links or trades the slot-1 mon, or throws a Poke
     # Ball, boots rr_battle2{,_b}.sav (two mons, nine balls; 80913bdf) via target_by_game --
     # rr_town / rr_battle hold ONE mon and no balls (live 3fa789da: KeyError 1 on the slot-1 key,
@@ -322,8 +322,9 @@ SCENARIOS = {
     # `target_by_game` (scenario_target): RR's rr_battle.sav holds ONE mon and no balls, so R1's
     # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
     "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
-                                 "games": ("gen3_frlg", "gen3_rr"),
-                                 "target": "battle", "target_by_game": {"gen3_rr": "battle2"},
+                                 "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+                                 "target": "battle",
+                                 "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"},
                                  "frames": 2500000,
                                  "oracle": "assert_linked_faint_active_gen3_saved"},
     # A1 (i) and R4: B's linked mon is its only mon -- a hand deposit of the slot-1 mon on FR/LG,
@@ -342,11 +343,16 @@ SCENARIOS = {
                                          "scenario_module": "linked_faint_active",
                                          "active_faint_case": "trainer",
                                          "oracle": "assert_linked_faint_active_trainer_gen3_saved"},
-    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
-                     "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
+    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+                     "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
-    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr"),
-                      "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+    # E4c: on gen3_emerald the receipt is Emerald's own landing, not FR's Center: DoWhiteOut heals
+    # in C and warps straight to gSaveBlock1Ptr->lastHealLocation, OUTDOORS (pret pokeemerald
+    # src/overworld.c:357-366,665-668; heal_locations.json:82-85 Oldale Town 0.10 (6,17)).
+    # Both sides boot the two-mon pc fixture (slot 1 is the linked mon; A deposits it at the Oldale
+    # PC and walks out to Route 103 with its lone starter).
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
     # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
@@ -361,15 +367,20 @@ SCENARIOS = {
                              "oracle": "assert_save_then_write_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
-    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
+    # gen3_emerald hunts "catch" (20 balls), not "battle" (5): deadzone_gen3 burned all three RNG
+    # retries on the 5-ball fixture (B ran out of balls twice) before the catch fixture existed.
+    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                   "ball_hunt": True,
-                  "target_by_game": {"gen3_rr": "battle2"}, "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
-    "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr"),
+                  "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch"},
+                  "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
+    "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                       "ball_hunt": True,
-                      "target_by_game": {"gen3_rr": "battle2"}, "target": "battle", "frames": 2500000,
+                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch"},
+                      "target": "battle", "frames": 2500000,
                       "oracle": "assert_deadzone_gen3_saved"},
-    "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr"),
-                       "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 2000000, "no_save": ("a",),
+    "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+                       "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": "town",
+                       "frames": 2000000, "no_save": ("a",),
                        "oracle": "assert_reconnect_gen3_saved"},
     # ── RR-only (P5, card C5-5): docs/gen3/PLAN.md §14 P5's nine minus the retired old-client
     # trade/ghost/infopanel rows and trade_abort (a later card; not built here, see the card's
@@ -478,7 +489,7 @@ SCENARIOS = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr")
+OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr", "gen3_emerald")
 
 
 def is_pure_pairing(game) -> bool:
@@ -575,7 +586,7 @@ RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
 # (retryable_gen1_rng), the per-attempt idle jitter the driver echoes (jitter_problems) and the
 # attempt budget (scenario_attempt_limit). A Gen 3 scenario opts in with `ball_hunt`: only a
 # half that throws Poke Balls can end on the out-of-balls cause.
-RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr")
+RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr", "gen3_emerald")
 # A partner half's own "I only failed because the other half did" line (the gen3 drivers phrase
 # it "CONSEQUENCE: <what>"). It never retries by itself: the pair still needs a CAUSE_RNG.
 CONSEQUENCE_PREFIX = "CONSEQUENCE: "
@@ -1244,6 +1255,9 @@ GEN3_TITLES = {
     "leafgreen": {"rom": "Pokemon - LeafGreen Version (USA).gba",
                   "saveram": "Pokemon - LeafGreen Version (USA).SaveRAM"},
     "radical_red": {"staged": ROM_REL, "saveram": "slink RR.SaveRAM"},
+    # E4: BizHawk's gamedb knows a clean BPEE dump (tools/gen3_fixtures.py EMERALD_SAVERAM).
+    "emerald": {"rom": "Pokemon - Emerald Version (USA, Europe).gba",
+                "saveram": "Pokemon - Emerald Version (USA, Europe).SaveRAM"},
 }
 # The raw, UNPATCHED Radical Red dump (patch/tools/build.py:91 DEFAULT_RR, patch/README.md:18),
 # for native_absent_gen3's clean-boot side only (`rom_kind`: "clean"). It resolves through the
@@ -1253,7 +1267,10 @@ GEN3_TITLES = {
 # naming is derived from the ORIGINAL filename and hand-transcribing it risks a typo.
 GEN3_CLEAN_RR_ROM = "Pokemon - Radical Red.gba"
 GEN3_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3")
-GEN3_PROFILE = os.path.join(REPO, "data", "games", "gen3_frlg", "profile.json")
+# Each title's pack directory under data/games (the same split duo_gen3_main.lua and
+# gen3_scripted_play.lua PROFILE_PACK_BY_TITLE make).
+GEN3_PACKS = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "radical_red": "gen3_rr",
+              "emerald": "gen3_emerald"}
 GEN3_RR_PROFILE = os.path.join(REPO, "data", "games", "gen3_rr", "profile.json")
 # Receipt lines the Gen 3 driver writes (lua/tests/duo/duo_gen3_main.lua): one per non-tick
 # event it SENDS and one per command it RECEIVES.
@@ -1275,25 +1292,33 @@ def gen3_key(mon) -> str:
     return f"{mon['personality']:08X}:{mon['ot_id']:08X}"
 
 
-def gen3_decode(image, rr=False):
+def gen3_decode(image, rr=False, title="frlg"):
     """(party, boxes) of a flash image; `boxes` maps (box, slot) -> mon, occupied only.
 
     `rr` selects RR's 25-scattered-box/fixed-order-party layout (gen3_codec party_from_save/
     boxes_from_save(rr=True), pinned commit 62887460) instead of vanilla FRLG's 14 boxes.
+    `title` is a gen3_codec title/alias (frlg, firered, leafgreen, emerald): Emerald's
+    SaveBlock sizes and party offsets differ (gen3_codec TITLE_EMERALD).
     """
     codec = gen3_codec()
     body = codec.split_rtc(image)[0]
     boxes = {}
-    for box, row in enumerate(codec.boxes_from_save(body, rr=rr)):
+    for box, row in enumerate(codec.boxes_from_save(body, rr=rr, title=title)):
         for slot, mon in enumerate(row):
             if mon["has_species"] and mon["species"]:
                 boxes[(box, slot)] = mon
-    return codec.party_from_save(body, rr=rr), boxes
+    return codec.party_from_save(body, rr=rr, title=title), boxes
+
+
+def gen3_codec_title(title) -> str:
+    """The gen3_codec layout title for a GEN3_TITLES title: radical_red decodes through rr=True
+    on the FR skeleton, every vanilla title names its own layout."""
+    return "frlg" if title == "radical_red" else title
 
 
 def gen3_profile_path(title) -> str:
-    """The pack profile.json this title's derived offsets live in (radical_red -> gen3_rr)."""
-    return GEN3_RR_PROFILE if title == "radical_red" else GEN3_PROFILE
+    """The pack profile.json this title's derived offsets live in (GEN3_PACKS)."""
+    return os.path.join(REPO, "data", "games", GEN3_PACKS[title], "profile.json")
 
 
 def gen3_ball_count(image, title="firered") -> int:
@@ -1316,7 +1341,7 @@ def gen3_ball_count(image, title="firered") -> int:
         pocket = codec._rr_read(codec._rr_regions(body), ram["BALL_POCKET_ADDR"], count * 4)
         key = 0
     else:
-        parsed = codec.parse_flash(body)
+        parsed = codec.parse_flash(body, title=gen3_codec_title(title))
         at = derived["SB1_BALL_POCKET_OFFSET"]
         pocket = parsed["sb1"][at:at + count * 4]
         key_at = derived["SB2_ENC_KEY_OFFSET"]
@@ -1335,7 +1360,7 @@ def _gen3_sectors(body, indexes):
     return b"".join(body[i * codec.SECTOR_SIZE:(i + 1) * codec.SECTOR_SIZE] for i in indexes)
 
 
-def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=None):
+def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=None, title="frlg"):
     """PLAN §5.5's check_save_witness_gen3, on bytes: returns the facts or raises, naming the rule.
 
     `witness` is the SRAM (flash) domain dumped inside the successful TrySavingData return,
@@ -1372,7 +1397,7 @@ def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=No
     if len(witness) != codec.FLASH_SIZE:
         raise RuntimeError(f"the save witness is {len(witness)} bytes, expected "
                            f"{codec.FLASH_SIZE} (0x{codec.FLASH_SIZE:X})")
-    ok, why = codec.qualify_flash(witness, cfru=rr)
+    ok, why = codec.qualify_flash(witness, cfru=rr, title=title)
     if not ok:
         raise RuntimeError(f"the save witness is not a complete save (sector set): {why}")
     try:
@@ -1380,8 +1405,8 @@ def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=No
         fixture_body = codec.split_rtc(fixture)[0]
     except ValueError as exc:
         raise RuntimeError(f"a battery image has an unsupported length: {exc}") from exc
-    before = codec.parse_flash(fixture_body, cfru=rr)["counter"]
-    after = codec.parse_flash(witness, cfru=rr)["counter"]
+    before = codec.parse_flash(fixture_body, cfru=rr, title=title)["counter"]
+    after = codec.parse_flash(witness, cfru=rr, title=title)["counter"]
     if after <= before:
         raise RuntimeError(f"the save counter did not advance over the fixture's "
                            f"({before} -> {after}): the witness is not a save this run made")
@@ -1398,8 +1423,8 @@ def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=No
     for name, indexes in untouched.items():
         if _gen3_sectors(witness, indexes) != _gen3_sectors(fixture_body, indexes):
             raise RuntimeError(f"{name} differ from the fixture; a normal save never writes them")
-    w_party, w_boxes = gen3_decode(witness, rr=rr)
-    f_party, f_boxes = gen3_decode(body, rr=rr)
+    w_party, w_boxes = gen3_decode(witness, rr=rr, title=title)
+    f_party, f_boxes = gen3_decode(body, rr=rr, title=title)
     if [gen3_key(m) for m in w_party] != [gen3_key(m) for m in f_party] or w_party != f_party:
         raise RuntimeError(f"the decoded party differs: witness {[gen3_key(m) for m in w_party]} "
                            f"vs flushed {[gen3_key(m) for m in f_party]}")
@@ -1439,6 +1464,8 @@ def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=No
 # data/games/gen3_rr/profile.json _src). A move's max PP is pret's CalculatePPWithBonus
 # (src/pokemon.c:3898-3902) over the title's own ROM move table (rom.BATTLE_MOVES_ADDR,
 # derived.BATTLE_MOVE_ENTRY_SIZE/BATTLE_MOVE_PP_OFFSET), the same read lua/gen3/boxes.lua makes.
+# NUM_SPECIES = SPECIES_EGG = 412 in both vanilla trees: pokefirered include/constants/species.h:421-423,
+# pokeemerald include/constants/species.h:418-420.
 GEN3_VANILLA_NUM_SPECIES = 412
 GEN3_RR_SPECIES = os.path.join(REPO, "data", "games", "gen3_frlge", "rr_species.json")
 MAIL_NONE = 0xFF                                  # pret include/constants/items.h:451
@@ -2223,6 +2250,7 @@ FAMILY_EVIDENCE = {
     # with no saved-state oracle FAILS, with check_save_witness_gen3 run first (PLAN §5.5).
     "gen3_frlg": EvidenceContract("check_save_witness_gen3", require_oracle=True),
     "gen3_rr": EvidenceContract("check_save_witness_gen3", require_oracle=True),
+    "gen3_emerald": EvidenceContract("check_save_witness_gen3", require_oracle=True),
 }
 
 
@@ -2533,6 +2561,27 @@ GAMES = {
         "oracle_required": True,
         "save_witness": "check_save_witness_gen3",
         "rr": True,
+    },
+    # E4: the NEW Gen 3 client on vanilla Emerald, E<->E (no second vanilla Hoenn title to pair
+    # with). Fixtures emerald_{town,battle,trainer}{,_b}.sav (tests/fixtures/gen3/README.md, the
+    # make-emerald SYNTH saves; `derive-b --title emerald` makes the _b side). `game` is its own
+    # family so duo_gen3_main.lua selects the gen3_emerald pack and pokeemerald.sym by title.
+    "gen3_emerald": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_emerald",
+        "play": "gen3_fixtures",
+        "sides": {"a": ("emerald", "emerald_{target}"), "b": ("emerald", "emerald_{target}_b")},
+        # the grass the drivers hunt, by fixture target (gen3_scripted_play.lua EMH.hunt): the
+        # battle/catch fixtures stand in Route 102's loop (21..22,16..17); the two-mon pc fixture
+        # starts in Oldale and walks to Route 103's loop (12..13,14..15). The server area id every
+        # route_1-bound oracle reads through DuoRun._hunt_area. "catch" (20 balls) is the same
+        # tile as "battle" (5 balls) -- link_gen3/deadzone_gen3 hunt there so a ball_hunt scenario
+        # never runs the fixture's Poke Balls out for real.
+        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102"},
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
     },
 }
 
@@ -2986,6 +3035,26 @@ class DuoRun:
         record-validity rule and bag read below threads it (Codex C4-6b finding 1)."""
         return bool((getattr(self, "gcfg", None) or {}).get("rr"))
 
+    @property
+    def _hunt_area(self) -> str:
+        """The server area id of the row's hunting grass (GAMES[...]["hunt_area"], a string or a
+        {target: area} map read with A's fixture target -- gen3_emerald: battle -> route_102, pc ->
+        route_103). Only the Kanto families (and a bare unit-stub run) default to Route 1: any
+        other row that reaches a hunt-area oracle without naming its grass fails loud."""
+        row = getattr(self, "gcfg", None) or {}
+        if "hunt_area" in row:
+            area = row["hunt_area"]
+            if isinstance(area, dict):
+                target = self._target_for("a")
+                if target not in area:
+                    raise RuntimeError(f"GAMES row names no hunt_area for target {target!r}")
+                area = area[target]
+            return area
+        if row and row.get("game") not in ("gen1_new", "gen3_frlg", "gen3_rr"):
+            raise RuntimeError(f"GAMES row family {row.get('game')!r} names no hunt_area; only the "
+                               f"Kanto rows default to route_1")
+        return "route_1"
+
     def _gen3_limits(self, inst):
         """gen3_limits for this instance's title over the ROM it booted (cached per ROM path):
         the species/level bounds and the move table every record's PP is checked against."""
@@ -2997,10 +3066,12 @@ class DuoRun:
         return cache[rom]
 
     def _gen3_saved(self, inst):
-        return gen3_decode(self._gen3_flushed(inst), rr=self._gen3_rr)
+        return gen3_decode(self._gen3_flushed(inst), rr=self._gen3_rr,
+                           title=gen3_codec_title(self._gen3_title(inst)))
 
     def _gen3_fixture_saved(self, inst):
-        return gen3_decode(self._gen3_fixture_bytes(inst), rr=self._gen3_rr)
+        return gen3_decode(self._gen3_fixture_bytes(inst), rr=self._gen3_rr,
+                           title=gen3_codec_title(self._gen3_title(inst)))
 
     # ── lifecycle ────────────────────────────────────────────────────────────
     def wait_for(self, desc, pred, timeout, interval=0.2):  # ponytail: 0.2 s cut ~2 s/row (W23); raise if polling ever costs CPU
@@ -4875,20 +4946,21 @@ class DuoRun:
         link = self.wait_for("the SERVER to pair the two real captures", linked, 180)
         st = self._status() or {}
         links = st.get("links") or []
-        area_state = (st.get("area_states") or {}).get("route_1")
+        area = self._hunt_area
+        area_state = (st.get("area_states") or {}).get(area)
         problems = []
         if len(links) != 1:
             problems.append(f"expected exactly one link, got {len(links)}: {links}")
         if link.get("status") != "alive":
             problems.append(f"link status is {link.get('status')!r}, not alive")
-        if link.get("area_id") != "route_1":
-            problems.append(f"link area is {link.get('area_id')!r}, not route_1")
+        if link.get("area_id") != area:
+            problems.append(f"link area is {link.get('area_id')!r}, not {area}")
         if area_state != "linked":
-            problems.append(f"area_states.route_1 is {area_state!r}, not linked")
+            problems.append(f"area_states.{area} is {area_state!r}, not linked")
         if problems:
             raise RuntimeError("; ".join(problems))
         print(f"[duo] ENCOUNTER LINK FROM REAL PLAY (new client): {a_key} <-> {b_key} "
-              f"on route_1, alive")
+              f"on {area}, alive")
         self._link_keys = {"a": a_key, "b": b_key}
         return a_key, b_key
 
@@ -6480,8 +6552,8 @@ class DuoRun:
         self._go_one("a")
         area = self.wait_for("A's failed encounter to lock an area", self._dead_zone_area,
                         self.cfg["timeout"])
-        if area != "route_1":
-            raise RuntimeError(f"A locked {area!r}, expected route_1")
+        if area != self._hunt_area:
+            raise RuntimeError(f"A locked {area!r}, expected {self._hunt_area}")
         self.wait_for("A to report its no_catch",
                  lambda: "NO_CATCH" in (read_result(self.scenario, "a") or ""), 60)
         print(f"[duo] DEAD ZONE FROM REAL PLAY (new client): {area}")
@@ -6983,7 +7055,8 @@ class DuoRun:
                                  if self._gen3_rr else (None, ""))
             facts = check_gen3_witness(witness, self._gen3_flushed(inst),
                                        self._gen3_fixture_bytes(inst), saves=len(dumps),
-                                       rr=self._gen3_rr, ext_ram=ext_ram)
+                                       rr=self._gen3_rr, ext_ram=ext_ram,
+                                       title=gen3_codec_title(self._gen3_title(inst)))
             # RR sectors 30-31: LIVE_RAM_MATCH only when the save-boundary RAM copy matched;
             # otherwise OPEN, stated, never claimed (Codex C4-6b finding 4).
             self._pydec_note(f"SAVE_WITNESS_SHA256 inst={inst} site={facts['site']} "
@@ -7263,7 +7336,7 @@ class DuoRun:
                                    f"{proc.stderr.strip()}")
             return proc.stdout
 
-        pack = os.path.join(REPO, "data", "games", "gen3_rr" if self._gen3_rr else "gen3_frlg")
+        pack = os.path.join(REPO, "data", "games", GEN3_PACKS[self._gen3_title("a")])
         sides = " ".join(f"{inst}={self._gen3_title(inst)}:rom={sha(self._gen3_rom(inst))}"
                          f":fixture={sha(self._gen3_fixture_path(inst))}" for inst in ("a", "b"))
         packs = " ".join(f"{name}={sha(os.path.join(pack, name))}"
@@ -7321,7 +7394,7 @@ class DuoRun:
         # G5-RR-NURSE-2: RR's nurse never refuses, so the control there is the START menu instead,
         # named start_menu (assert_whiteout_gen3_saved's control_name, same rule).
         ka = self._link_keys["a"]
-        control_name = "start_menu" if self._gen3_rr else "nurse"
+        control_name = self._gen3_whiteout_control()
         self._gen3_mark("a", rf"^CONTROL_LIVE {control_name} {re.escape(ka)} ",
                         f"A parked in the {control_name} negative control")
         self.queue_command("a", {"cmd": "box_mon", "key": ka})
@@ -7584,8 +7657,10 @@ class DuoRun:
         well-formed trade blob (the protocol's apply_trade blob_hex, docs/protocol.md §6.2)."""
         codec = gen3_codec()
         body = codec.split_rtc(self._gen3_fixture_bytes(inst))[0]
-        sb1 = codec.parse_flash(body, cfru=self._gen3_rr)["sb1"]
-        at = codec.SB1_PARTY_OFFSET + slot * codec.PARTY_MON_SIZE
+        layout = gen3_codec_title(self._gen3_title(inst))
+        sb1 = codec.parse_flash(body, cfru=self._gen3_rr, title=layout)["sb1"]
+        # the title's own SaveBlock1 party offset (Emerald's moved: gen3_codec TITLE_EMERALD)
+        at = codec._TITLE_PARTY_OFFSETS[codec._title(layout)][1] + slot * codec.PARTY_MON_SIZE
         return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
 
     def orchestrate_native_absent_gen3(self):
@@ -7608,15 +7683,17 @@ class DuoRun:
         differs from A's fixture. The trainer-id offset is the title's pack profile's."""
         codec = gen3_codec()
         title, rr = self._gen3_title("a"), self._gen3_rr
+        layout = gen3_codec_title(title)
         with open(gen3_profile_path(title), encoding="utf-8") as handle:
             at = json.load(handle)["titles"][title]["derived"]["SB2_OT_ID_OFFSET"]
 
         def trainer(image):
-            return int.from_bytes(codec.parse_flash(image, cfru=rr)["sb2"][at:at + 4], "little")
+            return int.from_bytes(codec.parse_flash(image, cfru=rr, title=layout)["sb2"][at:at + 4],
+                                  "little")
 
         with open(path, "rb") as handle:
             body = codec.split_rtc(handle.read())[0]
-        ok, why = codec.qualify_flash(body, cfru=rr)
+        ok, why = codec.qualify_flash(body, cfru=rr, title=layout)
         if not ok:
             raise RuntimeError(f"--wrong-save {path} is not a qualifying save: {why}")
         own = trainer(codec.split_rtc(self._gen3_fixture_bytes("a"))[0])
@@ -7999,10 +8076,20 @@ class DuoRun:
         # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
         # that box_mon (TX stats_cache would be the held write landing).
         center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
-        # G5-RR-NURSE-2: RR's nurse cutscene never refuses (no message/waitmessage anywhere in
-        # her script -- scenario_gen3_whiteout.lua's own comment), so the RR control is the START
-        # menu instead, named start_menu; FR/LG keep nurse. Same clause vocabulary either way.
-        control_name = "start_menu" if self._gen3_rr else "nurse"
+        if self._gen3_title("a") == "emerald":
+            # E4c replacements, each for a stated Emerald fact (pret pokeemerald c65e93f2):
+            #  CENTER_STATE (Union Room set live at the Center landing) -> LANDING_STATE at A's
+            #    fixture's own lastHealLocation (SaveBlock1 +0x1C WarpData, include/global.h:581-588,
+            #    990; the pc fixture's is 0.10 (6,17), HEAL_LOCATION_OLDALE_TOWN) with every party
+            #    mon at max HP: DoWhiteOut heals in C and warps there, outdoors
+            #    (overworld.c:357-366,665-668), so there is no Center landing and no Union Room set.
+            #  WRITE_IN_CENTER -> WRITE_AT_LANDING at that same tile: same checks (checkpoint
+            #    clean, pointers unchanged, keyed 100-byte record in the write frame), minus the
+            #    Union Room set, which an outdoor tile never has.
+            tile = self._gen3_fixture_heal_tile("a")
+            center = rf"(?m)^LANDING_STATE {tile} .* healed=\S+ "
+            landed = rf"(?m)^WRITE_AT_LANDING {tile} "
+        control_name = self._gen3_whiteout_control()
         control = [gen3_returned(ka), rf"(?m)^CONTROL_LIVE {control_name} {re.escape(ka)} ",
                    gen3_rx("box_mon", ka),
                    rf"(?m)^CONTROL_REFUSED {control_name} box_mon {re.escape(ka)} clause=\S+ "]
@@ -8022,6 +8109,25 @@ class DuoRun:
         self._gen3_raise(problems, f"whiteout: A whited out, the pair {ka} / {kb} was rebuilt "
                                    f"from both PCs and saved in party, still alive")
 
+    def _gen3_fixture_heal_tile(self, inst) -> str:
+        """The regex matching `map=G.N at=(X,Y)` for the instance's fixture lastHealLocation: SaveBlock1
+        +0x1C struct WarpData {s8 mapGroup, mapNum, warpId; pad; s16 x, y} (pret pokeemerald
+        include/global.h:581-588,990). Where an Emerald whiteout lands (overworld.c:665-668)."""
+        codec = gen3_codec()
+        body = codec.split_rtc(self._gen3_fixture_bytes(inst))[0]
+        sb1 = codec.parse_flash(body, title=gen3_codec_title(self._gen3_title(inst)))["sb1"]
+        group, num = int.from_bytes(sb1[0x1C:0x1D], "little", signed=True), int.from_bytes(
+            sb1[0x1D:0x1E], "little", signed=True)
+        x, y = (int.from_bytes(sb1[at:at + 2], "little", signed=True) for at in (0x20, 0x22))
+        return rf"map={group}\.{num} at=\({x},{y}\)"
+
+    def _gen3_whiteout_control(self) -> str:
+        """whiteout_gen3's post-save negative control. FR/LG: the Center nurse's live script.
+        G5-RR-NURSE-2: RR's nurse cutscene never refuses (no message/waitmessage in her script),
+        so RR holds the probe in the START menu (start_menu). E4c: Emerald lands OUTDOORS (no
+        nurse), so it takes the START-menu control too, with its own menu witness."""
+        return "start_menu" if self._gen3_rr or self._gen3_title("a") == "emerald" else "nurse"
+
     def _gen3_sent_event(self, text, event, key):
         """The decoded JSON of the first `TX <event> <key> {...}` line, or None."""
         match = re.search(gen3_tx(event, key) + r" (\{.*\})\s*$", text or "", re.M)
@@ -8036,13 +8142,13 @@ class DuoRun:
         in its saved party exactly once (appended, boxed nowhere, species as sent), and each
         saved POKe BALLS pocket is the fixture's minus the throws that half logged."""
         self._gen3_flush_boundary()
-        row = self._gen3_one_link("alive")
-        problems = [] if row.get("area_id") == "route_1" else [f"link area {row.get('area_id')!r}"]
+        row, area = self._gen3_one_link("alive"), self._hunt_area
+        problems = [] if row.get("area_id") == area else [f"link area {row.get('area_id')!r}"]
         for inst in ("a", "b"):
             key, text = self._link_keys[inst], results[inst]
             sent = self._gen3_sent_event(text, "capture", key) or {}
-            if sent.get("area_id") != "route_1":
-                problems.append(f"{inst}: no capture of {key} sent for route_1")
+            if sent.get("area_id") != area:
+                problems.append(f"{inst}: no capture of {key} sent for {area}")
             problems += gen3_capture_problems(inst, self._gen3_saved(inst),
                                               self._gen3_fixture_saved(inst), key, sent,
                                               rr=self._gen3_rr, limits=self._gen3_limits(inst))
@@ -8055,7 +8161,7 @@ class DuoRun:
                 problems.append(f"{inst}: saved {after} Poke Balls; the fixture had {before} and "
                                 f"the driver logged {throws} throw(s)")
         self._gen3_raise(problems, f"link: {self._link_keys['a']} <-> {self._link_keys['b']} "
-                                   f"alive on route_1 and saved once in each party")
+                                   f"alive on {area} and saved once in each party")
 
     def assert_deadzone_gen3_saved(self, results):
         """D-3 persisted on FRLG: route_1 is a dead zone with exactly one dead_zone event and no
@@ -8063,10 +8169,10 @@ class DuoRun:
         foe's species); B's catch there was force-fainted and memorialized, saved in the memorial
         box and nowhere else."""
         self._gen3_flush_boundary()
-        b_key = self._deadzone_b_key
+        b_key, area = self._deadzone_b_key, self._hunt_area
         problems = []
-        if ((self._status() or {}).get("area_states") or {}).get("route_1") != "dead_zone":
-            problems.append("route_1 is not a dead zone after the run")
+        if ((self._status() or {}).get("area_states") or {}).get(area) != "dead_zone":
+            problems.append(f"{area} is not a dead zone after the run")
         # the server logs dead_zone for the player AND the partner (server/server.py:2217-2220):
         # exactly one row each, never one in total (live deadzone_gen3 attempt 2 on 684bbb7a)
         rows = {}
@@ -8080,8 +8186,8 @@ class DuoRun:
             if b_key in keys and entry.get("status") == "alive":
                 problems.append(f"B's dead-zone catch {b_key} is in an alive link")
         species = self._gen3_sent_field(results["a"], "no_catch", "-", "species_id")
-        if not species or self._gen3_sent_field(results["a"], "no_catch", "-", "area_id") != "route_1":
-            problems.append("A sent no species-bearing no_catch for route_1")
+        if not species or self._gen3_sent_field(results["a"], "no_catch", "-", "area_id") != area:
+            problems.append(f"A sent no species-bearing no_catch for {area}")
         a_party, a_boxes = self._gen3_saved("a")
         f_party, f_boxes = self._gen3_fixture_saved("a")
         if [gen3_key(m) for m in a_party] != [gen3_key(m) for m in f_party] or {
@@ -8096,7 +8202,7 @@ class DuoRun:
             "b", results["b"], required=[rf"(?m)^FAINTED {re.escape(b_key)}\b",
                                          gen3_rx("memorialize", b_key),
                                          gen3_tx("memorialize_done", b_key)])
-        self._gen3_raise(problems, f"deadzone: route_1 locked by A's no_catch (species {species}); "
+        self._gen3_raise(problems, f"deadzone: {area} locked by A's no_catch (species {species}); "
                                    f"B's {b_key} saved only in the memorial box")
 
     def assert_reconnect_gen3_saved(self, results):

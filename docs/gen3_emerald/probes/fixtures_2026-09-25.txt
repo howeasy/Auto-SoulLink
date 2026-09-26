@@ -1,0 +1,176 @@
+E1-FIX receipt (EF-10): Emerald fixtures, 2026-09-25
+====================================================
+
+Approach: (b) disclosed O-33 SYNTH setup, re-saved natively. See tests/fixtures/gen3/README.md
+"emerald_*" section for the exact seed contents.
+ROM: Pokemon - Emerald Version (USA, Europe).gba sha1 f3ae088181bf583e55daf962a92bb46f4f1d07b7
+EmuHawk 2.11.1 (E:/Howard/Bizhawk/EmuHawk.exe), SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix
+Worktree: .claude/worktrees/gen3-emerald, branch claude/gen3-emerald (card cut cf05e86b; HEAD
+9538d3a4 when this receipt was written), tools/gen3_fixtures.py = working tree.
+pret: pokeemerald c65e93f2 (.cache/pret/pokeemerald), symbols data/gen3/pret/pokeemerald.sym.
+
+1. make-emerald (SYNTH seed -> cold boot -> CONTINUE (continue-game warp) -> in-game SAVE)
+----------------------------------------------------------------------------------------
+$ SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py make-emerald --kind <k> --out tests/fixtures/gen3/emerald_<k>.sav
+
+town:
+SYNTH seed town: ...\make_emerald_town\Pokemon - Emerald Version (USA, Europe).SaveRAM sha256=b89b29aea951b9562539896cb03fe58d9b9ce5ef58f3fcf72a762045ab46614f counter=1 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 1 -> 2 map=0.10 pos=(6,17)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=1
+phase overworld-cb2 frame=499 map=0.10 pos=(6,17)
+phase field frame=582 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=582 counter=1
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=1->2
+phase flushed frame=1605 map=0.10 pos=(6,17)
+RESULT: PASS counter 1 -> 2 map=0.10 pos=(6,17)
+wrote tests\fixtures\gen3\emerald_town.sav (131072 bytes) sha256=d43420f23a3ddd09e2525bcd18ede8de8883278b66a2c78b49dc5856add2e5b5 slot=0 counter=2 trainer='EMER'#20250925 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+
+battle:
+SYNTH seed battle: ...\make_emerald_battle\Pokemon - Emerald Version (USA, Europe).SaveRAM sha256=07d854e136698ababb59d694f61da8bfbd40ae1dfa855250e9988c784b18ddf7 counter=1 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 1 -> 2 map=0.17 pos=(21,16)  (5s)
+phase field frame=582 map=0.17 pos=(21,16) saveFileStatus=1
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=1->2
+RESULT: PASS counter 1 -> 2 map=0.17 pos=(21,16)
+wrote tests\fixtures\gen3\emerald_battle.sav (131072 bytes) sha256=7f70a815a09ea2c02c20ee3493416516ff34b402a06cc38abe8f330733fd71ba slot=0 counter=2 trainer='EMER'#20250925 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+
+trainer:
+SYNTH seed trainer: ...\make_emerald_trainer\Pokemon - Emerald Version (USA, Europe).SaveRAM sha256=c9f637f6ce68e3b061b3cea040c1e79ada74fe8e946fb1cef52a5d14286348ae counter=1 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 1 -> 2 map=0.17 pos=(32,16)  (5s)
+phase field frame=582 map=0.17 pos=(32,16) saveFileStatus=1
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=1->2
+RESULT: PASS counter 1 -> 2 map=0.17 pos=(32,16)
+wrote tests\fixtures\gen3\emerald_trainer.sav (131072 bytes) sha256=8865372111d1ceb7cfd03739627f87f04ead231b10893d349190916b2cb7afbe slot=0 counter=2 trainer='EMER'#20250925 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+
+make-emerald also required emerald_fixture_problems(...) == [] on each re-save: qualifies,
+specialSaveWarpFlags CONTINUE_GAME_WARP cleared by the game, SB1 pos/location on the kind tile,
+mapLayoutId as seeded, party = one Lv5 Mudkip with a valid checksum.
+
+2. derive-b --title emerald (OT identity only)
+----------------------------------------------
+$ python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_<k>.sav tests/fixtures/gen3/emerald_<k>_b.sav
+wrote tests\fixtures\gen3\emerald_town_b.sav (131072 bytes) sha256=d93795395b9438fbcd771de08806a9798127cac46de2cd42f13f422ec959fe53
+manifest:
+  sb2+0x0A..0x0E playerTrainerId 0x20250925 -> 0xdfdaf6da
+  sb2+0x00..0x07 playerName 'EMER' -> 'EMERB'
+  sb1+0x0238..0x029c party[0] OTID/OT-name re-keyed, secure re-encrypted+checksummed
+wrote tests\fixtures\gen3\emerald_battle_b.sav (131072 bytes) sha256=8fc35e013a31e14489493ae49ba47d89b95e0738befdf6f19a32b4870b75db26
+manifest:
+  sb2+0x0A..0x0E playerTrainerId 0x20250925 -> 0xdfdaf6da
+  sb2+0x00..0x07 playerName 'EMER' -> 'EMERB'
+  sb1+0x0238..0x029c party[0] OTID/OT-name re-keyed, secure re-encrypted+checksummed
+wrote tests\fixtures\gen3\emerald_trainer_b.sav (131072 bytes) sha256=91fc8c969c344884e0322dad9bd2753c6efd43b5b2c5923d481c469a775922b7
+manifest:
+  sb2+0x0A..0x0E playerTrainerId 0x20250925 -> 0xdfdaf6da
+  sb2+0x00..0x07 playerName 'EMER' -> 'EMERB'
+  sb1+0x0238..0x029c party[0] OTID/OT-name re-keyed, secure re-encrypted+checksummed
+
+3. qualify --title emerald (codec, no emulator)
+-----------------------------------------------
+$ python tools/gen3_fixtures.py qualify --title emerald tests/fixtures/gen3/emerald_*.sav
+tests/fixtures/gen3/emerald_battle.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_battle_b.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_town.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_town_b.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_trainer.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/emerald_trainer_b.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+  boxes: 0 occupied slots
+
+4. boot-check --title emerald (PHYSICAL: cold boot -> CONTINUE -> re-save -> reload)
+-------------------------------------------------------------------------------------
+$ SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py boot-check --title emerald --rom "<Emerald.gba>" --fixture tests/fixtures/gen3/emerald_<k>.sav
+seeded ...\bootcheck_emerald_town\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_town.sav (counter=2)
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.10 pos=(6,17)
+phase field frame=582 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.10 pos=(6,17)
+RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_town.sav counter=2->3 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+seeded ...\bootcheck_emerald_battle\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_battle.sav (counter=2)
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(21,16)
+phase field frame=582 map=0.17 pos=(21,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1589 map=0.17 pos=(21,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_battle.sav counter=2->3 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+seeded ...\bootcheck_emerald_trainer\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_trainer.sav (counter=2)
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(32,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(32,16)
+phase field frame=582 map=0.17 pos=(32,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1589 map=0.17 pos=(32,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(32,16)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_trainer.sav counter=2->3 party=[{'key': '4D55444B:20250925', 'species': 283, 'level': 5}]
+seeded ...\bootcheck_emerald_town_b\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_town_b.sav (counter=2)
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.10 pos=(6,17)
+phase field frame=582 map=0.10 pos=(6,17) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.10 pos=(6,17)
+RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_town_b.sav counter=2->3 party=[{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+seeded ...\bootcheck_emerald_battle_b\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_battle_b.sav (counter=2)
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(21,16)
+phase field frame=582 map=0.17 pos=(21,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.17 pos=(21,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_battle_b.sav counter=2->3 party=[{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+seeded ...\bootcheck_emerald_trainer_b\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_trainer_b.sav (counter=2)
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(32,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(32,16)
+phase field frame=582 map=0.17 pos=(32,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.17 pos=(32,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(32,16)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_trainer_b.sav counter=2->3 party=[{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+
+5. sha256 of the committed files
+--------------------------------
+7f70a815a09ea2c02c20ee3493416516ff34b402a06cc38abe8f330733fd71ba *tests/fixtures/gen3/emerald_battle.sav
+8fc35e013a31e14489493ae49ba47d89b95e0738befdf6f19a32b4870b75db26 *tests/fixtures/gen3/emerald_battle_b.sav
+d43420f23a3ddd09e2525bcd18ede8de8883278b66a2c78b49dc5856add2e5b5 *tests/fixtures/gen3/emerald_town.sav
+d93795395b9438fbcd771de08806a9798127cac46de2cd42f13f422ec959fe53 *tests/fixtures/gen3/emerald_town_b.sav
+8865372111d1ceb7cfd03739627f87f04ead231b10893d349190916b2cb7afbe *tests/fixtures/gen3/emerald_trainer.sav
+91fc8c969c344884e0322dad9bd2753c6efd43b5b2c5923d481c469a775922b7 *tests/fixtures/gen3/emerald_trainer_b.sav

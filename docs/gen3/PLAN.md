@@ -233,7 +233,7 @@ At every cutover gate the previous release bundle (old client + `SLink-RR.ups`, 
 ## 10. Deferred (recorded so nobody infers otherwise)
 
 - **Archipelago FRLG**: deferred post-RC (owner 2026-09-23, §0); title `firered_ap` kept unadmitted; the old-client " AP" header check on an AP dump is not an RC item; its "TODO VERIFY" fields (`games/gen3_frlge.lua:154-170`) carried as `†UNVERIFIED`; needs `ap` kind + gates.
-- **Emerald**: title `emerald` kept unadmitted; needs a `gen3_emerald` pack (today it resolves FireRed area ids with a one-time console warning, `games/gen3_frlge.lua:574-602` — an encounter-rule bug, not just a label bug).
+- **Emerald**: title `emerald` kept unadmitted; needs a `gen3_emerald` pack (today it resolves FireRed area ids with a one-time console warning, `games/gen3_frlge.lua:574-602` — an encounter-rule bug, not just a label bug). (Update: this deferral was for the old client only. Emerald now has its own `gen3_emerald` pack and is admitted on this release candidate; see `docs/gen3_emerald/`.)
 - **Native text (RR)**: removed from the RC (owner 2026-09-23, §0); no message opcodes in `native.lua`; notifications via `hud.lua`; tracked in `docs/gen3/TODO.md`.
 - **Peer ghost (RR)**: removed from the RC and deferred post-RC (§0, owner 2026-09-22); no `ghost.lua`, no `ghost` scenario, N-2 out; RR duo set drops to eight.
 - **Vanilla FRLG trade**: SUPERSEDED by owner ruling 27 (2026-09-26; §0): FR/LG trade on patched ROMs is in this RC. Previously: not in this release (§0); a vanilla trade UI (a shared prompt/input controller over `hud.lua` + a rollback-capable FSM) is its own later card with its own plan. Today vanilla cannot trade either.

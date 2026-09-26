@@ -463,3 +463,97 @@ def test_read_run_receipt_ignores_hand_written_and_missing_files(tmp_path):
     hand.write_text("G4-LANE-2 P+H live row: active_end_gen3\nnote: PASS\n", encoding="utf-8")
     assert receipt.read_run_receipt(str(hand)) is None
     assert receipt.read_run_receipt(str(tmp_path / "nope.txt")) is None
+
+
+# ---------------------------------------------------------------------------
+# card E4b-CKPT: build_env() picks the checkpoint pack by title (finding 1 of E4b-FINALCUT's
+# report); Emerald has no oldman/pokedude tutorial states, so its default --rows lets the pack's
+# own admission table decide (no SLINK_CHECKPOINT_ROWS restriction, matching how E2's scratch
+# driver C:/slink-wt/emerald-e2/run_probe.py actually invoked the probe: SLINK_CHECKPOINT_ROWS was
+# never set in the two committed evidence receipts, docs/gen3_emerald/probes/checkpoint_emerald_
+# {2026-09-25,battle_2026-09-26}.txt) and bw_* rows are refused by name, not pointed at states
+# that were never built (tools/mkstates_gen3_tutorials.py and tools/gen3_bw_hashes.py both accept
+# only --title firered/leafgreen).
+# ---------------------------------------------------------------------------
+
+def test_build_env_picks_the_checkpoint_pack_by_title():
+    fr = receipt.build_env("firered", "L:/lane", [], "clean")
+    lg = receipt.build_env("leafgreen", "L:/lane", [], "clean")
+    em = receipt.build_env("emerald", "L:/lane", [], "clean")
+    assert fr["SLINK_GEN3_CHECKPOINT"] == "L:/lane/data/games/gen3_frlg/write_checkpoint.json"
+    assert lg["SLINK_GEN3_CHECKPOINT"] == "L:/lane/data/games/gen3_frlg/write_checkpoint.json"
+    assert em["SLINK_GEN3_CHECKPOINT"] == "L:/lane/data/games/gen3_emerald/write_checkpoint.json"
+
+
+def test_emerald_state_dir_is_the_same_directory_the_final_cut_states_rows_write():
+    # tools/gen3_final_cut.py's states_emerald_{town,battle,trainer} rows write to exactly this
+    # path (card E4b-FINALCUT) -- a future checkpoint_emerald row must read from where they wrote.
+    env = receipt.build_env("emerald", "L:/lane", [], "clean")
+    assert env["SLINK_STATE_DIR"] == "L:/lane/patch/build/gen3_probe_states_c4p2/emerald"
+
+
+def test_emerald_default_rows_let_the_pack_decide_no_bw(tmp_path, capsys, monkeypatch):
+    """No --rows given for --title emerald: SLINK_CHECKPOINT_ROWS is empty (the E2 driver never
+    set it either -- P.planned() in lua/tests/probe_gen3_checkpoint.lua treats nil/"" identically,
+    running every row the pack's own artifacts table admits) and no bw_* machinery is touched."""
+    lane = tmp_path / "nolane"
+    monkeypatch.setattr(sys, "argv",
+                        ["gen3_probe_receipt.py", "--title", "emerald", "--lane", str(lane),
+                         "--dry-run"])
+    rc = receipt.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "SLINK_CHECKPOINT_ROWS=\n" in out   # empty value: no restriction, the pack decides
+    assert "gen3_emerald/write_checkpoint.json" in out
+    assert "SLINK_BW_HASHES" not in out
+    assert "gen3_bw_hashes.py" not in out
+
+
+def test_firered_default_rows_are_unchanged_by_the_emerald_fix(tmp_path, capsys, monkeypatch):
+    lane = tmp_path / "nolane"
+    monkeypatch.setattr(sys, "argv",
+                        ["gen3_probe_receipt.py", "--title", "firered", "--lane", str(lane),
+                         "--dry-run"])
+    rc = receipt.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert f"SLINK_CHECKPOINT_ROWS={','.join(receipt.DEFAULT_ROWS)}" in out
+    assert "SLINK_BW_HASHES=" in out   # bw rows are still in FR's default
+
+
+def test_explicit_bw_row_for_emerald_is_refused_by_name_not_pointed_at_nothing(monkeypatch, capsys):
+    calls = []
+    monkeypatch.setattr(receipt, "run_bw_hashes", lambda *a, **k: calls.append(a))
+    monkeypatch.setattr(receipt, "run_probe", lambda *a, **k: calls.append(("probe", a)))
+    monkeypatch.setattr(sys, "argv", [
+        "gen3_probe_receipt.py", "--title", "emerald", "--lane", "anywhere",
+        "--rows", "script_running,bw_n1_action_draw"])
+    rc = receipt.main()
+    err = capsys.readouterr().err
+    assert rc == 1
+    assert "bw_n1_action_draw" in err
+    assert "emerald" in err
+    assert calls == []   # never reached gen3_bw_hashes.py OR the probe launch
+
+
+def test_explicit_bw_row_for_emerald_is_refused_in_dry_run_too(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", [
+        "gen3_probe_receipt.py", "--title", "emerald", "--lane", "anywhere", "--dry-run",
+        "--rows", "bw_u1_oldman"])
+    rc = receipt.main()
+    captured = capsys.readouterr()
+    out, err = captured.out, captured.err
+    assert rc == 1
+    assert "bw_u1_oldman" in err
+    assert "SLINK_STATE_DIR" not in out   # refused before printing a misleading dry-run plan
+
+
+def test_firered_bw_rows_still_work_after_the_emerald_fix(monkeypatch, capsys):
+    """The refusal is emerald-specific; FR/LG's own bw_* rows must still be selectable."""
+    monkeypatch.setattr(sys, "argv", [
+        "gen3_probe_receipt.py", "--title", "firered", "--lane", "anywhere", "--dry-run",
+        "--rows", "script_running,bw_n1_action_draw"])
+    rc = receipt.main()
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "SLINK_BW_HASHES=" in out

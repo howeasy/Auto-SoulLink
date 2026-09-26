@@ -23,6 +23,11 @@ FIXTURES = REPO / "tests" / "fixtures" / "gen3"
 PACKS = {
     "gen3_frlg": REPO / "data" / "games" / "gen3_frlg",
     "gen3_rr": REPO / "data" / "games" / "gen3_rr",
+    # Registered in Entry.PACKS/Entry.PACK_FILES (E2-ENTRY) and, as of EG4, also in
+    # Entry.ROUTED (see test_gen3_emerald_entry.py); Entry.artifacts()/admission_table() open
+    # it unconditionally regardless, so the anchor- and hash-coverage tests below must
+    # exercise it too (F4/F13).
+    "gen3_emerald": REPO / "data" / "games" / "gen3_emerald",
 }
 
 
@@ -150,7 +155,8 @@ def test_admission_by_hash_covers_every_shipped_artifact():
     world = World(build=False)
     for pack, title, kinds in (("gen3_frlg", "firered", ["clean"]),
                                ("gen3_frlg", "leafgreen", ["clean"]),
-                               ("gen3_rr", "radical_red", ["clean", "companion"])):
+                               ("gen3_rr", "radical_red", ["clean", "companion"]),
+                               ("gen3_emerald", "emerald", ["clean"])):
         for kind in kinds:
             artifact = artifact_of(pack, title, kind)
             for digest in ("rom_sha1", "rom_md5"):
@@ -177,6 +183,19 @@ def test_admission_by_anchors_when_the_hash_is_unknown():
     assert got["admitted_by"] == "anchors"
     assert (got["pack"], got["title"], got["kind"]) == ("gen3_frlg", "firered", "clean")
     assert got["rom_type"] == "firered"
+
+
+def test_admission_by_anchors_when_the_hash_is_unknown_for_emerald():
+    """F4: mirrors test_admission_by_anchors_when_the_hash_is_unknown above -- a seeded Emerald
+    ROM with an unrecognized hash still admits by anchors alone (E2-ENTRY:
+    Entry.artifacts()/anchor_matches() open gen3_emerald unconditionally; since EG4 it is also
+    in Entry.ROUTED, same as gen3_frlg/gen3_rr)."""
+    world = World(pack="gen3_emerald", title="emerald", build=False)
+    got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
+                           header_code="BPEE"))
+    assert got["admitted_by"] == "anchors"
+    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "clean")
+    assert got["rom_type"] == "emerald"
 
 
 def test_anchors_alone_separate_every_shipped_artifact():
@@ -206,6 +225,9 @@ def test_admission_table_refuses_a_duplicate_digest(tmp_path):
     """G5-ADMIT-HARDEN: two artifact rows sharing one digest must be a hard error at table
     build, naming both rows -- not a silent last-write-wins (Lua's pairs() order is
     unspecified, so the row that silently won would be nondeterministic)."""
+    # PACKS (F4/F13) now includes gen3_emerald itself -- Entry.artifacts() opens every pack in
+    # Entry.PACKS unconditionally, so the doctored tmp_path tree needs it too, and this loop
+    # already covers it (no separate copytree call for it).
     for pack, source in PACKS.items():
         shutil.copytree(source, tmp_path / "data" / "games" / pack)
     doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
@@ -240,6 +262,9 @@ def test_admission_refuses_an_ambiguous_rom(tmp_path):
     """Two artifacts that pin the same bytes cannot be told apart, so admission refuses
     instead of picking one. The shipped packs are not ambiguous (see the test above), so
     the branch is exercised against a doctored copy of the pack tree."""
+    # PACKS (F4/F13) now includes gen3_emerald itself -- Entry.artifacts() opens every pack in
+    # Entry.PACKS unconditionally, so the doctored tmp_path tree needs it too, and this loop
+    # already covers it (no separate copytree call for it).
     for pack, source in PACKS.items():
         shutil.copytree(source, tmp_path / "data" / "games" / pack)
     doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
@@ -344,6 +369,7 @@ def _production(world, **over):
     ("gen3_frlg", "leafgreen", "clean"),
     ("gen3_rr", "radical_red", "clean"),
     ("gen3_rr", "radical_red", "companion"),
+    ("gen3_emerald", "emerald", "clean"),
 ])
 def test_production_build_returns_a_client_and_arms_no_hook_until_start(pack, title, kind):
     world = World(pack=pack, title=title, kind=kind, build=False)
@@ -525,7 +551,7 @@ def test_build_refuses_an_unadmitted_title():
 def test_build_refuses_an_unknown_pack_and_title():
     world = World(build=False)
     with pytest.raises(lupa.LuaError, match="unknown pack"):
-        world.Entry.build(world.deps(pack="gen3_emerald"))
+        world.Entry.build(world.deps(pack="gen3_bogus"))
     with pytest.raises(lupa.LuaError, match="unknown title"):
         world.Entry.build(world.deps(title="quartz"))
 
@@ -534,7 +560,7 @@ def test_pack_files_exist_and_are_the_only_named_foundation():
     """Every path in Entry.PACK_FILES ships; the release manifest derives from them."""
     world = World(build=False)
     files = lua_to_py(world.Entry.PACK_FILES)
-    assert set(files) == set(PACKS)
+    assert set(files) == set(PACKS) | {"gen3_emerald"}
     for pack, entries in files.items():
         for key, rel in entries.items():
             assert (REPO / rel).exists(), f"{pack}.{key} -> missing {rel}"

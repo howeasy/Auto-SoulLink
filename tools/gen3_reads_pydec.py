@@ -187,6 +187,39 @@ def decode_badges(flags_byte: int) -> int:
     return flags_byte & 0xFF
 
 
+def decode_badges_straddle(flags: bytes, first_flag: int) -> int:
+    """Emerald's badges (FLAG_BADGE01_GET = SYSTEM_FLAGS+7 = 0x867, pret
+    include/constants/flags.h:1359) straddle a byte instead of sharing one: badge i (0-based)
+    is bit ((first_flag+i) & 7) of `flags[(first_flag+i) >> 3]`. `flags` is
+    SaveBlock1.flags[] (or a slice covering both straddled bytes), `first_flag` is
+    profile.derived.BADGE_FIRST_FLAG. Independent of lua/gen3/reads.lua's read_badges on
+    purpose (PLAN §5.7); the two must agree bit for bit."""
+    out = 0
+    for i in range(8):
+        bit_index = first_flag + i
+        byte = flags[bit_index >> 3]
+        if (byte >> (bit_index & 7)) & 1:
+            out |= 1 << i
+    return out
+
+
+def decode_badges_for_profile(flags: bytes, derived: dict) -> tuple[int | None, str | None]:
+    """Profile-driven dispatch mirroring lua/gen3/reads.lua's read_badges (F10): picks
+    decode_badges_straddle vs decode_badges by which derived field the profile carries, and
+    refuses -- (None, reason), the Python shape of Lua's `return nil, why` -- when a profile is
+    self-contradictory (both BADGE_FIRST_FLAG and a non-null SB1_BADGE_BYTE_OFFSET). `flags` is
+    SaveBlock1.flags[] (or a slice covering whichever bytes the chosen path reads)."""
+    first_flag = derived.get("BADGE_FIRST_FLAG")
+    byte_off = derived.get("SB1_BADGE_BYTE_OFFSET")
+    if first_flag is not None:
+        if byte_off is not None:
+            return None, "profile derived sets both BADGE_FIRST_FLAG and SB1_BADGE_BYTE_OFFSET"
+        return decode_badges_straddle(flags, first_flag), None
+    if byte_off is None:
+        return None, "profile has no derived.SB1_FLAGS_OFFSET/SB1_BADGE_BYTE_OFFSET"
+    return decode_badges(flags[byte_off]), None
+
+
 def decode_ball_pocket(raw: bytes, count: int, key: int | None = None) -> dict:
     """ItemSlot{u16 itemId, u16 quantity} (pret include/global.h:400-404), `count` slots back
     to back. `key` is SaveBlock2.encryptionKey (src/item.c GetBagItemQuantity XORs the low 16

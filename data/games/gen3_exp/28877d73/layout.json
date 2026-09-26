@@ -1,0 +1,394 @@
+{
+  "evolutions": {
+    "end_method": 65535,
+    "fields": {
+      "method": {
+        "offset": 0,
+        "width": 2
+      },
+      "param": {
+        "offset": 2,
+        "width": 2
+      },
+      "target": {
+        "offset": 4,
+        "width": 2
+      }
+    },
+    "ignored_methods": [
+      0
+    ],
+    "max_entries": 256,
+    "stride": 12
+  },
+  "kind": "expansion",
+  "provenance": {
+    "artifacts": {
+      "pokeemerald.elf": {
+        "sha256": "179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b",
+        "size": 35972280
+      },
+      "pokeemerald.gba": {
+        "sha256": "08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39",
+        "size": 33554432
+      },
+      "pokeemerald.map": {
+        "sha256": "c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08",
+        "size": 4623407
+      },
+      "pokeemerald.sym": {
+        "sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e",
+        "size": 4812449
+      }
+    },
+    "compile": {
+      "build_receipt_sha256": "b21156de38449ad4267b0a68568a502195a5b31795d121dbf6cbadb5b76e329c",
+      "commands": [
+        [
+          "arm-none-eabi-cpp",
+          "-iquote",
+          "include",
+          "-Wno-trigraphs",
+          "-DMODERN=1",
+          "-DTESTING=0",
+          "-DEMERALD",
+          "-std=gnu17",
+          "/home/howard/slink-exp/x1-probe-20260926/work/expansion_offsets.c"
+        ],
+        [
+          "tools/preproc/preproc",
+          "-i",
+          "-g",
+          "build/assets",
+          "/home/howard/slink-exp/x1-probe-20260926/work/expansion_offsets.c",
+          "charmap.txt"
+        ],
+        [
+          "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1",
+          "-quiet",
+          "-mthumb",
+          "-mthumb-interwork",
+          "-O2",
+          "-mabi=apcs-gnu",
+          "-mtune=arm7tdmi",
+          "-march=armv4t",
+          "-Wno-pointer-to-int-cast",
+          "-std=gnu17",
+          "-Werror",
+          "-Wall",
+          "-Wno-strict-aliasing",
+          "-Wno-attribute-alias",
+          "-Woverride-init",
+          "-Wnonnull",
+          "-Wenum-conversion",
+          "-Wno-error=unused-variable",
+          "-Wno-error=unused-const-variable",
+          "-Wno-error=unused-parameter",
+          "-Wno-error=unused-function",
+          "-Wno-error=unused-but-set-parameter",
+          "-Wno-error=unused-but-set-variable",
+          "-Wno-error=unused-value",
+          "-Wno-error=unused-local-typedefs",
+          "-Wno-error=deprecated-declarations",
+          "-o",
+          "/home/howard/slink-exp/x1-probe-20260926/work/probe.s",
+          "-"
+        ],
+        [
+          "arm-none-eabi-as",
+          "-mcpu=arm7tdmi",
+          "-march=armv4t",
+          "-meabi=5",
+          "--defsym",
+          "MODERN=1",
+          "--defsym",
+          "EMERALD=1",
+          "-o",
+          "/home/howard/slink-exp/x1-probe-20260926/work/probe.o",
+          "/home/howard/slink-exp/x1-probe-20260926/work/probe.s"
+        ]
+      ],
+      "executables": {
+        "/home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/bedf3701743a4053b72b1128e68acd65/.cache/expansion/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/tools/preproc/preproc": "c41243f34b4a0e491bac8b25548f39eb0305f32045085c43898dbceca418f016",
+        "/usr/bin/arm-none-eabi-as": "ec839647452c629c6b26b35c8e29b56cd5be8d9bbf5221d01947451395bb7689",
+        "/usr/bin/arm-none-eabi-cpp": "38db291d05ab00f837b3e99a0d89e20a628327c715a039e22c1e0c4dcab062a5",
+        "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1": "1d284dd98e80e416ad199f5a2e24df5e704b43c0afd15ee3a34357dc46d8c5c0"
+      },
+      "flags": {
+        "AS": "arm-none-eabi-as",
+        "ASFLAGS": "-mcpu=arm7tdmi -march=armv4t -meabi=5 --defsym MODERN=1 --defsym EMERALD=1",
+        "ASSETS_DIR_NAME": "build/assets",
+        "CC1": "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1 -quiet",
+        "CFLAGS": "-mthumb -mthumb-interwork -O2 -mabi=apcs-gnu -mtune=arm7tdmi -march=armv4t -Wno-pointer-to-int-cast -std=gnu17 -Werror -Wall -Wno-strict-aliasing -Wno-attribute-alias -Woverride-init -Wnonnull -Wenum-conversion -Wno-error=unused-variable -Wno-error=unused-const-variable -Wno-error=unused-parameter -Wno-error=unused-function -Wno-error=unused-but-set-parameter -Wno-error=unused-but-set-variable -Wno-error=unused-value -Wno-error=unused-local-typedefs -Wno-error=deprecated-declarations",
+        "CPP": "arm-none-eabi-cpp",
+        "CPPFLAGS": "-iquote include -Wno-trigraphs -DMODERN=1 -DTESTING=0 -DEMERALD -std=gnu17",
+        "PREPROC": "tools/preproc/preproc"
+      },
+      "make_variables": {
+        "BUILD": "emerald",
+        "DEBUG": "0",
+        "LTO": "0",
+        "RELEASE": "0",
+        "TEST": "0"
+      },
+      "object_sha256": "a84e019195ce1f1ca16aa2d4d2ead2a097999121d5001361d1bf7e4610b62be1",
+      "preprocessed_sha256": "882f31bacb57ecdb6f57594713a9946707159341ebde1c72c48876f1292a9d66",
+      "probe_sha256": "46f385f1e6059726e521c529f49696cd7140b38bce13d56194ba42f53187473d",
+      "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+      "source_enums": {
+        "CONTEXT_SHUTDOWN": {
+          "line": 26,
+          "sha256": "d43e34d44e881206380b8efdedf5469d61871f38c58d29c1d81c6d14bb9f9ac9",
+          "source": "src/script.c",
+          "text": "enum {\n    CONTEXT_RUNNING,\n    CONTEXT_WAITING,\n    CONTEXT_SHUTDOWN,\n};"
+        },
+        "STATE_WAIT_ACTION_CHOSEN": {
+          "line": 3785,
+          "sha256": "03513f795a6653a1c1a8d336020cfcde479a6547739e7ddaa77b2af35da0c828",
+          "source": "src/battle_main.c",
+          "text": "enum\n{\n    STATE_TURN_START_RECORD,\n    STATE_BEFORE_ACTION_CHOSEN,\n    STATE_WAIT_ACTION_CHOSEN,\n    STATE_WAIT_ACTION_CASE_CHOSEN,\n    STATE_WAIT_ACTION_CONFIRMED_STANDBY,\n    STATE_WAIT_ACTION_CONFIRMED,\n    STATE_SELECTION_SCRIPT,\n    STATE_WAIT_SET_BEFORE_ACTION,\n    STATE_SELECTION_SCRIPT_MAY_RUN\n};"
+        }
+      },
+      "source_hash_normalization": "UTF-8/LF"
+    },
+    "compiler": {
+      "host": "Linux",
+      "package": "gcc-arm-none-eabi",
+      "package_version": "15:13.2.rel1-2",
+      "path": "/usr/bin/arm-none-eabi-gcc",
+      "sha256": "38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59",
+      "ssh_alias": "hgbox",
+      "status": "provisional",
+      "version": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "config_sha256": {
+      "include/config/ai.h": "e02715eb465d29944cfdf8a65ab270fcea9ffed84a9963a27bcc017dbbbdcea2",
+      "include/config/battle.h": "56d3eb68994173519b3910781e29de112d8dc6cf040928b9151917cc1026f94c",
+      "include/config/caps.h": "9736cf6ac82da0743b40cab86750a0f496430bb82829724cf013a39f151f6d48",
+      "include/config/contest.h": "23097e4537a9046f9084181dc00eb8f5e1ac998fd79a07466b81a509de94ab6e",
+      "include/config/debug.h": "866e0841ddf91176dc8f2144a039de70997908168acef539c556590d9c837d47",
+      "include/config/dexnav.h": "606e82fc4efa155d0d8b90b704497a062ffecf18e404f0a334956d5ad0c6e543",
+      "include/config/fishing.h": "a19ef43b62d92da6c0ec674fd798c93bfa100fc339b755aa675f5c7d56919c7a",
+      "include/config/follower_npc.h": "7473fad59ffe7db1a530dbfab3924cb97144dc3e7d1735af82918c03ecef6958",
+      "include/config/general.h": "270073678c6849e9d16816bc6dcaecdd1124988353a1e7d0dc2552e13e187fd5",
+      "include/config/item.h": "ce169ff6908456b6d337dc207328b5a3bfb41a3e7b46e79cbffd70fdcf6c747f",
+      "include/config/map_preview_screen.h": "bd0b33b507fac833f364fa61f796ca5a2047f672feba76c798d9e63e170c0560",
+      "include/config/name_box.h": "e5fb790a23cd2b5c01e4c5139c44f2cff6dc34dd7f8161cff2bf5f1ca2a61ba6",
+      "include/config/overworld.h": "85d30914688cbc1c24226568977333fc3656befc558f3840d8b1c2c3671cb2fd",
+      "include/config/pokedex_plus_hgss.h": "9b2663061b2c199e25a40fc51d8727ba01d972ab76b49aadc2f6ebcf7862d747",
+      "include/config/pokemon.h": "e476277d082276ac078452c44482cf9b3b6fb076159fe4745f0774bc276b85ba",
+      "include/config/pokerus.h": "6e0e78b779b45ecce4aa3f1ce840e4cef41d10c30926417c67a1b26b4ca4a4da",
+      "include/config/quickstart.h": "2f36941f8dc75b7a60540a0b12bc24ab09d6082314a1c97ee023d09a7fabf5d3",
+      "include/config/save.h": "cdad2f5dcd783f59b6b53e0ab9649659e683ef61cb07efe79727dd9fdac9dd45",
+      "include/config/species_enabled.h": "86a829d83a344bf23440a586706bf3c91ccef9a02c145afa0d1844c8824374eb",
+      "include/config/summary_screen.h": "ddaef0f2a089d9e09b053d7df3d123c524bdd862c866a9c3eb0cf38a7e4f6849",
+      "include/config/test.h": "63cbf70c00fee57daf812c5b18809030f6205afe4263d9c7ace7e258abc67fd1",
+      "include/config/text.h": "2c4f70e37f708c2d718a88331d3423e5c510805c0093213264a4788e88f91ee6",
+      "include/config/wild_encounter.h": "026ea3f8608fc61c847df71d4042cd841a5523929a9eb3bc3e0c894fd7f6eaab"
+    },
+    "extractor_sha256": "4aad52334caa7f7fb94ae5b64016d624d336f8e48a309fcb546992ec9104e8ab",
+    "generator_sha256": "bca6e97a3761fb0e352f9fe78756e29d6a560be62dd1e049b34674dac1efe8bd",
+    "layout_headers_sha256": {
+      "include/battle.h": "1d62757d9a475c6d4ea9ae97ad2450c3b49d61198644f63d183c309d068acddc",
+      "include/gba/m4a_internal.h": "365f76af9bc7a85bd97697c55d69dba95f1dfbc6a085f2070043bd3c270b5ed7",
+      "include/global.h": "265c63399ca88a7fc9421948e27bc03086a129ac4a731a14a367ff6759e0bcba",
+      "include/item.h": "1dada1cbf267e85654f76fa5a090fd9417a9ad3b9bce9da3b73c0cb9db62bbed",
+      "include/load_save.h": "4ce05e9afa8a4a703737ad776cf6b4c09d0774d9787b4410ec47931febef902d",
+      "include/main.h": "55c3bd5d7b653979764e3027ffe451853874ba67964e346077e1acdf93f1e686",
+      "include/move.h": "fadbf99995e02f6fcdb74f4c71523482c95f5888fc13fa2cc521c9ef6ca2aaca",
+      "include/palette.h": "9ff698eef8527eb71964665cebf4ed8ec1136ad35b6937308ca9d052c7c305aa",
+      "include/pokemon.h": "dc80cd74eae35b74036de600061fc5694ec6890d8992055bf544fc0134bb70c9",
+      "include/pokemon_storage_system.h": "4a849005435b2c87ed6c761656e79ac4ab3c0c6d255501ea1f2a2b95df7f4ae0",
+      "include/script.h": "3d16411675100556cf9c1315a6bebd4d0d01ad367a700e4a9f413f640ec38fd9",
+      "include/task.h": "d3660507b010b0b8275de304959a6d98ec2044f9c1b6b947ab0cb8fc07f47feb"
+    },
+    "makefile_sha256": "49cdf5f9c7a981eb20b286247684b563344b7712917f860af15e62130075a914",
+    "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+    "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
+  },
+  "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+  "schema": 1,
+  "tables": {
+    "abilities": {
+      "fields": {},
+      "name": {
+        "length": 17,
+        "offset": 0
+      },
+      "stride": 28
+    },
+    "items": {
+      "fields": {
+        "battleUsage": {
+          "offset": 33,
+          "width": 1
+        },
+        "holdEffect": {
+          "offset": 28,
+          "width": 1
+        },
+        "holdEffectParam": {
+          "offset": 29,
+          "width": 1
+        },
+        "pocket": {
+          "bits": 5,
+          "offset": 30,
+          "shift": 3,
+          "width": 1
+        },
+        "price": {
+          "offset": 0,
+          "width": 4
+        },
+        "secondaryId": {
+          "offset": 4,
+          "width": 2
+        }
+      },
+      "name": {
+        "length": 20,
+        "offset": 20,
+        "pointer": true
+      },
+      "stride": 48
+    },
+    "moves": {
+      "fields": {
+        "accuracy": {
+          "bits": 7,
+          "offset": 12,
+          "shift": 0,
+          "width": 1
+        },
+        "argument": {
+          "offset": 32,
+          "width": 4
+        },
+        "category": {
+          "bits": 2,
+          "offset": 10,
+          "shift": 5,
+          "width": 1
+        },
+        "effect": {
+          "bits": 16,
+          "offset": 8,
+          "shift": 0,
+          "width": 2
+        },
+        "power": {
+          "bits": 9,
+          "offset": 10,
+          "shift": 7,
+          "width": 2
+        },
+        "pp": {
+          "offset": 14,
+          "width": 1
+        },
+        "priority": {
+          "bits": 4,
+          "offset": 20,
+          "shift": 0,
+          "signed": true,
+          "width": 1
+        },
+        "target": {
+          "bits": 9,
+          "offset": 12,
+          "shift": 7,
+          "width": 2
+        },
+        "type": {
+          "bits": 5,
+          "offset": 10,
+          "shift": 0,
+          "width": 1
+        }
+      },
+      "name": {
+        "length": 17,
+        "offset": 0,
+        "pointer": true
+      },
+      "stride": 64
+    },
+    "species": {
+      "fields": {
+        "abilities": {
+          "count": 3,
+          "offset": 24,
+          "width": 2
+        },
+        "baseAttack": {
+          "offset": 1,
+          "width": 1
+        },
+        "baseDefense": {
+          "offset": 2,
+          "width": 1
+        },
+        "baseHP": {
+          "offset": 0,
+          "width": 1
+        },
+        "baseSpAttack": {
+          "offset": 4,
+          "width": 1
+        },
+        "baseSpDefense": {
+          "offset": 5,
+          "width": 1
+        },
+        "baseSpeed": {
+          "offset": 3,
+          "width": 1
+        },
+        "evolution_pointer": {
+          "offset": 160,
+          "width": 4
+        },
+        "expYield": {
+          "offset": 10,
+          "width": 2
+        },
+        "genderRatio": {
+          "offset": 18,
+          "width": 1
+        },
+        "growthRate": {
+          "offset": 21,
+          "width": 1
+        },
+        "itemCommon": {
+          "offset": 14,
+          "width": 2
+        },
+        "itemRare": {
+          "offset": 16,
+          "width": 2
+        },
+        "national_dex": {
+          "bits": 16,
+          "offset": 60,
+          "shift": 0,
+          "width": 2
+        },
+        "types": {
+          "count": 2,
+          "offset": 6,
+          "width": 1
+        }
+      },
+      "name": {
+        "length": 13,
+        "offset": 44
+      },
+      "stride": 264,
+      "zero_records": [
+        1435
+      ]
+    }
+  }
+}

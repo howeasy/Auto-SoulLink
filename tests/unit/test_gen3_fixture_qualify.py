@@ -100,8 +100,11 @@ def test_committed_fixtures_qualify(path):
     with open(path, "rb") as f:
         data = f.read()
     assert len(data) == codec.FLASH_SIZE == 131072
-    is_rr = "rr_" in os.path.basename(path)
-    result = fx.qualify_one(data, rr=is_rr)
+    name = os.path.basename(path)
+    if name.startswith("emerald_"):  # Emerald's own layout (SB1 0x3D88), not FR/LG's
+        result = fx.qualify_one(data, rr=False, title="emerald")
+    else:
+        result = fx.qualify_one(data, rr="rr_" in name)
     assert result["ok"], result["message"]
 
 
