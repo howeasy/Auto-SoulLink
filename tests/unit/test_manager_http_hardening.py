@@ -343,11 +343,11 @@ async def test_a_spawn_that_exits_on_startup_raises_with_its_reason(tmp_path, mo
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("game", sorted(manager.UNADMITTED_GAMES) + [" gen3_ap", "GEN3_E"])
+@pytest.mark.parametrize("game", sorted(manager.UNADMITTED_GAMES) + [" gen3_ap", "GEN3_AP"])
 async def test_manager_refuses_to_create_an_unadmitted_game(manager_client, manager_dir, monkeypatch, game):
-    """AP FRLG and Emerald stay listed with a 'not admitted' label (docs/gen3/PLAN.md:112),
-    but a run for them would be refused by the client at hello, so /api/runs/new refuses
-    it first: 400, nothing written, nothing spawned. Vanilla gen3 is still created."""
+    """AP FRLG stays listed with a 'not admitted' label (docs/gen3/PLAN.md:112), but a run for
+    it would be refused by the client at hello, so /api/runs/new refuses it first: 400, nothing
+    written, nothing spawned. Vanilla gen3 and gen3_e (Emerald, EG4) are still created."""
     async def unexpected_spawn(*args, **kwargs):
         pytest.fail("an unadmitted game must not spawn a run")
 
@@ -357,6 +357,21 @@ async def test_manager_refuses_to_create_an_unadmitted_game(manager_client, mana
     assert "cannot create a run" in (await response.json())["error"]
     assert manager._load_registry() == []
     assert [p.name for p in manager_dir.iterdir()] == []
+
+
+@pytest.mark.asyncio
+async def test_manager_creates_an_emerald_run_now_that_eg4_admits_it(manager_client, manager_dir, monkeypatch):
+    """EG4 falsifier: gen3_e left UNADMITTED_GAMES, so /api/runs/new must create the run (a
+    spawn failure, e.g. no BizHawk client attached, is reported in start_error, not a 400)."""
+    async def failing_spawn(*args, **kwargs):
+        raise RuntimeError("no client")
+
+    monkeypatch.setattr(manager, "_spawn_run", failing_spawn)
+    response = await manager_client.post("/api/runs/new", json={"name": "x", "game": "gen3_e"})
+    assert response.status == 200
+    body = await response.json()
+    assert body["ok"] is True and body["run"]["game"] == "gen3_e"
+    assert [r["game"] for r in manager._load_registry()] == ["gen3_e"]
 
 
 def test_a_saved_run_with_an_unknown_game_key_still_labels():

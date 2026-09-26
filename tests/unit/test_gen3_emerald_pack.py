@@ -35,7 +35,7 @@ def emerald() -> dict:
 @pytest.fixture(scope="module")
 def rom() -> bytes:
     if not ROM.is_file():
-        pytest.skip(f"ROM not present at {ROM}")
+        pytest.skip(f"local copyrighted ROMs absent: {ROM}")
     data = ROM.read_bytes()
     assert hashlib.sha1(data).hexdigest() == ROM_SHA1
     return data
@@ -59,7 +59,7 @@ def test_profile_has_the_firered_key_set_and_provenance(emerald):
             field = f"{section}.{key}"  # SE_SONG_HEADERS cites per id: rom.SE_SONG_HEADERS.<id>
             assert any(s == field or s.startswith(field + ".") for s in emerald["_src"]), field
     assert emerald["rom_thumb"] == firered["rom_thumb"]
-    assert (emerald["admitted"], emerald["variant"], emerald["rom_sha1"]) == (False, "emerald", ROM_SHA1)
+    assert (emerald["admitted"], emerald["variant"], emerald["rom_sha1"]) == (True, "emerald", ROM_SHA1)
 
 
 def test_profile_regenerates_byte_identical():
@@ -114,7 +114,7 @@ def test_box_data_offset_cross_checks_pret_boxnames(emerald):
     the boxNames field, cross-checked against pret's own offset comment on struct PokemonStorage
     (include/pokemon_storage_system.h), independent of the derived-value citation text."""
     if not PRET.is_dir():
-        pytest.skip(f"pret checkout not present at {PRET}")
+        pytest.skip(f"pokeemerald not cloned: {PRET}")
     text = (PRET / "include/pokemon_storage_system.h").read_text(encoding="utf-8")
     m = re.search(r"/\*(0x[0-9A-Fa-f]+)\*/\s*u8 boxNames", text)
     assert m, "pret pokemon_storage_system.h: boxNames offset comment not found"
@@ -254,7 +254,7 @@ def test_capture_instruction_mutation_check(kind):
 def test_pret_citations_carry_their_identifier(emerald):
     """Every `pret/pokeemerald@<sha>:path:lines (ident` in _src names lines that contain ident."""
     if not PRET.is_dir():
-        pytest.skip(f"pret checkout not present at {PRET}")
+        pytest.skip(f"pokeemerald not cloned: {PRET}")
     cite = re.compile(r"pret/pokeemerald@[0-9a-f]{40}:([\w/.]+):(\d+)(?:-(\d+))? \(([^;)]+)")
     checked = 0
     for key, where in emerald["_src"].items():
@@ -299,7 +299,7 @@ def test_cheap_derived_constants_equal_the_pret_define(emerald):
     """For the plain single-#define constants, evaluate the cited pret #define directly and
     compare -- stronger than just checking the identifier text is present on the cited line."""
     if not PRET.is_dir():
-        pytest.skip(f"pret checkout not present at {PRET}")
+        pytest.skip(f"pokeemerald not cloned: {PRET}")
     assert set(emerald["derived"]) >= CHEAP_KEYS
     for key in CHEAP_KEYS:
         where = emerald["_src"][f"derived.{key}"]
@@ -318,7 +318,7 @@ def test_engine_site_sources_cite_a_real_pret_range():
     pret file/line range, and the site's own function must actually be defined at or before the
     cited end line (catches a source citation pointing at the wrong file or function)."""
     if not PRET.is_dir():
-        pytest.skip(f"pret checkout not present at {PRET}")
+        pytest.skip(f"pokeemerald not cloned: {PRET}")
     from tools import gen_gen3_engine_signals as gen
 
     document = _json(PACK / "engine_signals.json")

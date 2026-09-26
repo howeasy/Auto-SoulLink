@@ -1,7 +1,7 @@
 # `gen3_emerald` pack
 
 Vanilla Pokémon Emerald (`BPEE` rev 0, sha1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7`).
-The JSON files are generated; do not hand-edit them. `admitted` stays `false` until EG4 (ruling 24).
+The JSON files are generated; do not hand-edit them. `admitted` is `true` since EG4 (ruling 24).
 
 | File | Generator | Check |
 |---|---|---|
@@ -59,5 +59,7 @@ bytes by disassembling the function against the pret source. `docs/gen3_emerald/
 has the per-kind contracts and the FR vs Emerald capture-offset table. `pc_move` is `CopyMonToPC`,
 the Emerald name for the FR `SendMonToPC`.
 
-`evidence` is `SOURCE_BYTE_PIN` and `live_verified` is `false`. No emulator has run against this
-pack.
+`evidence` is `SOURCE_BYTE_PIN` and `live_verified` stays `false` by convention (the site table is
+evidenced by byte pins, not by a live-verified flag flip). This is not a claim that no emulator has
+run against this pack: live duo receipts exist under `docs/gen3_emerald/probes/` (E2 census/
+checkpoint runs, E4 duo scenarios, e.g. `duo_e4_faint_cmd_*.txt`, `duo_e4_boxsync_*.txt`).

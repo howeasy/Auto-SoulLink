@@ -66,7 +66,8 @@ are zones of this one page, not other pages.
 | **1** | PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6) | ✅ **Verified** — the same duo harness on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing |
 | **2** | Gold, Silver, Crystal (1.0/1.1) | ✅ **Verified** — 98 live duo/gate cells on real dumps of all three titles (C↔C, G↔S, C↔G) |
 | **3** | FireRed, LeafGreen, Radical Red 4.1 | ✅ **Verified** — the frozen-cut gate passes FR/LG 43/43 and Radical Red 19/19 on real cartridges |
-| **3** | Emerald, Archipelago FR/LG | ❌ Not supported — they ran only on the old Gen 3 client (tag `archive/gen3-old-client`); the launcher refuses them by name |
+| **3** | Emerald | 🟡 **In progress** — all seven Emerald↔Emerald duo scenarios pass on real cartridges (admitted by ROM hash or engine-site anchors); release candidate once trainer panels, trade and randomized carts land |
+| **3** | Archipelago FR/LG | ❌ Not supported — it ran only on the old Gen 3 client (tag `archive/gen3-old-client`); the launcher refuses it by name |
 | **4** | HeartGold, SoulSilver, Platinum | ⚠️ Experimental — never run against a real game |
 | **5** | Black, White, Black 2, White 2 | ⚠️ Experimental — never run against a real game |
 
@@ -94,6 +95,9 @@ pins. Archipelago Crystal is **refused**, not experimental.
 - **Gen 3 (FR/LG and Radical Red)** — the largest live suite: FR/LG 43/43 and RR 19/19 at the
   frozen cut. Only pinned cartridges are admitted; header-only and randomized builds are refused
   by name.
+- **Gen 3 (Emerald)** — release candidate: all seven Emerald↔Emerald duo scenarios (faint, deadzone,
+  link, box sync, reconnect, linked faint, whiteout) pass on real cartridges at the frozen cut; the
+  owner's live-play sign-off (EG4) is still pending.
 - **Gens 4 and 5** — feature parity with Gen 3 on paper (moves/PP, stat stages, doubles, forms,
   egg detection, stream overlays) and their unit suites pass, but they have **never run against a
   real game**. Treat them as experimental. Their battle-struct addresses are scannable with

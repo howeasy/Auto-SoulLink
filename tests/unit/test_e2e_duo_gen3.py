@@ -5105,43 +5105,35 @@ def test_traced_follow_rr_trace_is_silent_without_the_env_flag():
 
 
 # ── E4: the gen3_emerald row (E<->E) ─────────────────────────────────────────────────────
-_ADMISSION_FN = re.compile(r"local function test_admission_codec\(.*?\nend\n", re.S)
-
-
-def _admission():
-    from lupa import LuaRuntime
-
-    lua = LuaRuntime(unpack_returned_tuples=True)
-    body = _ADMISSION_FN.search(DRIVER.read_text(encoding="utf-8"))
-    assert body, "duo_gen3_main.lua must define test_admission_codec"
-    fn = lua.execute(body.group(0) + "\nreturn test_admission_codec")
-    json_codec = lua.execute(f"return dofile([[{REPO / 'lua' / 'json_codec.lua'}]])")
-    return lua, fn, json_codec
-
-
-def test_emerald_test_admission_is_a_noop_off_the_emerald_row():
-    lua, fn, json_codec = _admission()
-    logged = []
-    same = lua.eval("rawequal")
-    for game in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new", None):
-        assert same(fn(game, json_codec, logged.append), json_codec)
-    wrapped = fn("gen3_emerald", json_codec, logged.append)
-    assert not same(wrapped, json_codec)
-    doc = wrapped.decode('{"titles":{"emerald":{"admitted":false},"firered":{"admitted":false}}}')
-    assert doc.titles.emerald.admitted is True
-    assert doc.titles.firered.admitted is False          # only titles.emerald is touched
-    assert wrapped.decode('{"a":1}').a == 1 and same(wrapped.encode, json_codec.encode)
-    assert logged == ["TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)"]
-
-
-def test_emerald_admission_stays_refused_in_production():
-    """Ruling 24: the duo's seam is test-only -- every production refusal is still in place."""
+def test_emerald_admission_is_production_only():
+    """EG4: Emerald is admitted by production code alone -- the duo driver's pre-EG4 TEST-ONLY
+    seam (test_admission_codec, which faked titles.emerald.admitted for the duo row only) is
+    gone now that it would be a no-op."""
     profile = json.loads((REPO / "data/games/gen3_emerald/profile.json").read_text(encoding="utf-8"))
-    assert profile["titles"]["emerald"]["admitted"] is False
+    assert profile["titles"]["emerald"]["admitted"] is True
     entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
-    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true \}", entry)
-    assert 'header_code == "BPEE"' in (REPO / "lua/slink.lua").read_text(encoding="utf-8")
+    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
+                      entry)
     assert "test_admission_codec" not in entry
+    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
+
+
+def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():
+    """RC risk: deadzone_gen3 on Emerald burned all three RNG retries because B ran out of the
+    plain "battle" fixture's 5 Poke Balls twice. Every ball_hunt scenario that lists gen3_emerald
+    must hunt on a fixture carrying >= 20 balls (the "catch" kind), and GAMES["gen3_emerald"]
+    ["hunt_area"] must name that target."""
+    row = duo.GAMES["gen3_emerald"]
+    ball_hunts = [(name, entry) for name, entry in duo.SCENARIOS.items()
+                  if entry.get("ball_hunt") and "gen3_emerald" in entry.get("games", ())]
+    assert ball_hunts, "no ball_hunt scenario lists gen3_emerald -- test is vacuous"
+    for name, entry in ball_hunts:
+        target = duo.scenario_target(entry, "gen3_emerald")
+        assert target in row["hunt_area"], f"{name}: hunt_area names no {target!r} target"
+        body = (REPO / f"tests/fixtures/gen3/emerald_{target}.sav").read_bytes()
+        balls = sum(qty for item, qty in gen3_fixtures.emerald_ball_pocket(body)
+                    if item == gen3_fixtures.ITEM_POKE_BALL)
+        assert balls >= 20, f"{name}: emerald_{target}.sav only carries {balls} balls"
 
 
 def test_emerald_row_resolves_pack_fixtures_and_layout():
@@ -5157,7 +5149,8 @@ def test_emerald_row_resolves_pack_fixtures_and_layout():
         assert duo.scenario_applies(name, "gen3_emerald"), name
         run = duo.DuoRun.__new__(duo.DuoRun)
         run.gcfg, run.cfg, run.game = dict(row), dict(duo.SCENARIOS[name]), "gen3_emerald"
-        assert run._hunt_area == {"battle": "route_102", "pc": "route_103"}[run._target_for("a")], name
+        assert run._hunt_area == \
+            {"battle": "route_102", "pc": "route_103", "catch": "route_102"}[run._target_for("a")], name
         for inst in ("a", "b"):
             assert run._gen3_title(inst) == "emerald"
             assert os.path.isfile(run._gen3_fixture_path(inst)), run._gen3_fixture_path(inst)

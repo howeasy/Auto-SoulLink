@@ -355,12 +355,16 @@ SCENARIOS = {
                              "oracle": "assert_save_then_write_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
+    # gen3_emerald hunts "catch" (20 balls), not "battle" (5): deadzone_gen3 burned all three RNG
+    # retries on the 5-ball fixture (B ran out of balls twice) before the catch fixture existed.
     "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                   "ball_hunt": True,
-                  "target_by_game": {"gen3_rr": "battle2"}, "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
+                  "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch"},
+                  "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
     "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                       "ball_hunt": True,
-                      "target_by_game": {"gen3_rr": "battle2"}, "target": "battle", "frames": 2500000,
+                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch"},
+                      "target": "battle", "frames": 2500000,
                       "oracle": "assert_deadzone_gen3_saved"},
     "reconnect_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                        "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": "town",
@@ -2554,10 +2558,12 @@ GAMES = {
         "play": "gen3_fixtures",
         "sides": {"a": ("emerald", "emerald_{target}"), "b": ("emerald", "emerald_{target}_b")},
         # the grass the drivers hunt, by fixture target (gen3_scripted_play.lua EMH.hunt): the
-        # battle fixtures stand in Route 102's loop (21..22,16..17); the two-mon pc fixture starts
-        # in Oldale and walks to Route 103's loop (12..13,14..15). The server area id every
-        # route_1-bound oracle reads through DuoRun._hunt_area.
-        "hunt_area": {"battle": "route_102", "pc": "route_103"},
+        # battle/catch fixtures stand in Route 102's loop (21..22,16..17); the two-mon pc fixture
+        # starts in Oldale and walks to Route 103's loop (12..13,14..15). The server area id every
+        # route_1-bound oracle reads through DuoRun._hunt_area. "catch" (20 balls) is the same
+        # tile as "battle" (5 balls) -- link_gen3/deadzone_gen3 hunt there so a ball_hunt scenario
+        # never runs the fixture's Poke Balls out for real.
+        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102"},
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,

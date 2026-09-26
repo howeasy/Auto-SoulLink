@@ -14,7 +14,7 @@ Status as of master `1d02702f` (2026-09-26).
 |---|---|---|---|---|---|
 | Radical Red | `gen3_frlge.py` (RR mode) | On | Gen 9 + `RR_PATCH` | RR's own (`normal.js`, `hardcore.js`, `slink_priority.js`) | Browser regression pass after the multi-gen changes |
 | FireRed / LeafGreen | `gen3_frlge.py` | On | Gen 3 tables | `FRLG.js` (vendored, pret-checked) | Browser, one hand-worked case (below) |
-| Emerald | `gen3_frlge.py` (`rom_type == "emerald"`) | Wired, unreachable | Gen 3 tables | `Emerald.js` (vendored, pret-checked subset -- see below) | None. Live runs refuse Emerald for now; the Emerald lane owns its check |
+| Emerald | `gen3_frlge.py` (`rom_type == "emerald"`) | Wired, reachable since EG4 | Gen 3 tables | `Emerald.js` (vendored, pret-checked subset -- see below) | None yet (no browser/live verification) |
 | Red / Blue / Yellow | `gen1_rby.py` | On | Gen 1 tables | `RedBlue.js` / `Yellow.js` (vendored, pret-reconciled) | Browser, hand-worked cases (below) |
 | pureRGB | `gen1_purergb.py` | On | Gen 1 rules on pureRGB's own dex (`calc.useDex('purergb')`) | `PureRGB.js` (generated) | Browser, one hand-worked case; limits in [PURERGB_MECHANICS.md](PURERGB_MECHANICS.md) |
 | Crystal / Gold / Silver | `gen2_gsc.py` (Gen 2 lane) | On | Gen 2 tables | Crystal only: `Crystal.js` (vendored, pret-checked) | Browser, one hand-worked case (below) |
@@ -109,8 +109,8 @@ Hand-worked cases that matched the calc exactly:
 - **Live check of the Gen 1 foe path.** On the next live Gen 1 trainer battle, confirm the foe's
   `blob_hex` decodes to the right species via `gen1_codec` and `dvs_raw` matches the game. Nobody
   has done this yet.
-- **Emerald.** Emerald is still refused in live runs (no browser/live verification). `Emerald.js`
-  itself now IS pret-checked against a local pokeemerald checkout pinned at `c65e93f2`
+- **Emerald.** The calc is reachable since the EG4 admission flip, with no browser/live verification yet. `Emerald.js`
+  itself IS pret-checked against a local pokeemerald checkout pinned at `c65e93f2`
   (`tests/unit/test_calc_trainer_sets.py`, `test_emerald_species_levels_match_pret` +
   `test_emerald_named_trainer_details_match_pret`): whole-file species+level, plus per-trainer
   item/explicit-or-derived-moves/IV for every trainer whose name uniquely identifies one

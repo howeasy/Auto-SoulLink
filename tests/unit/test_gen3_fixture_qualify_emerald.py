@@ -57,28 +57,42 @@ FIXTURE_SHA256 = {
     "emerald_poison.sav": "c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0",
     "emerald_gift.sav": "7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552",
     "emerald_catch.sav": "592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0",
+    "emerald_catch_b.sav": "cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b",
 }
 
 
 def _pret():
     try:
         return fx.pret_emerald()
-    except FileNotFoundError:
-        pytest.skip("pret pokeemerald checkout absent")
+    except FileNotFoundError as e:
+        pytest.skip(f"pokeemerald not cloned: {e}")
+
+
+# kinds with a committed _b fixture (README.md / FIXTURE_SHA256 above); the rest (lowhp, badges,
+# evolve, poison, gift) have no _b side by design, so a test needing one must never be
+# parametrized onto them -- see _FIXTURE_CASES and test_emerald_b_side_has_a_distinct_trainer_...
+FIXTURE_B_KINDS = {kind for kind in fx.EMERALD_KINDS if f"emerald_{kind}_b.sav" in FIXTURE_SHA256}
 
 
 def _read(name):
     path = os.path.join(FIXTURES_DIR, name)
     if not os.path.exists(path):
-        pytest.skip(f"{name} not built")
+        # Every name reaching here is one _FIXTURE_CASES/FIXTURE_B_KINDS says exists by design,
+        # so absence is a broken checkout, not an input the gate should excuse.
+        pytest.fail(f"{name} not built: fixture is committed, so this checkout is incomplete")
     with open(path, "rb") as f:
         return f.read()
 
 
 # --- (a) committed fixtures ---------------------------------------------------
 
-@pytest.mark.parametrize("kind", sorted(fx.EMERALD_KINDS))
-@pytest.mark.parametrize("suffix", ["", "_b"])
+# cross-product of kind x suffix, minus the by-design-no-_b combos: those must not be looked
+# up at all (never even collected), not skipped.
+_FIXTURE_CASES = [(kind, suffix) for kind in sorted(fx.EMERALD_KINDS) for suffix in ("", "_b")
+                  if suffix == "" or kind in FIXTURE_B_KINDS]
+
+
+@pytest.mark.parametrize("kind,suffix", _FIXTURE_CASES)
 def test_committed_emerald_fixture_is_a_game_resave_on_its_tile(kind, suffix):
     body = _read(f"emerald_{kind}{suffix}.sav")
     assert len(body) == codec.FLASH_SIZE
@@ -87,7 +101,7 @@ def test_committed_emerald_fixture_is_a_game_resave_on_its_tile(kind, suffix):
     assert r["ok"] and r["counter"] == 2 and len(r["party"]) == (2 if kind in ("pc", "poison") else 1)
 
 
-@pytest.mark.parametrize("kind", sorted(fx.EMERALD_KINDS))
+@pytest.mark.parametrize("kind", sorted(FIXTURE_B_KINDS))
 def test_emerald_b_side_has_a_distinct_trainer_at_the_same_place(kind):
     a, b = _read(f"emerald_{kind}.sav"), _read(f"emerald_{kind}_b.sav")
     ra, rb = (fx.qualify_one(x, rr=False, title=EM) for x in (a, b))

@@ -14,7 +14,8 @@ gen<N>_<abbreviations>
 | `gen2_crystal`  | Crystal (Gold/Silver supported as variant profiles) |
 | `gen3_frlg`     | FireRed, LeafGreen — admission profile/engine-signals pack for the `lua/gen3/` client |
 | `gen3_rr`       | Radical Red — admission profile/engine-signals pack for the `lua/gen3/` client |
-| `gen3_frlge`    | Shared Gen 3 area map, locations and Radical Red data tables (`rr_*.json`); FRLG/Emerald/RR area lookup |
+| `gen3_emerald`  | Emerald — its own admission profile/engine-signals/area-map pack for the `lua/gen3/` client; pairs only E<->E |
+| `gen3_frlge`    | Shared Gen 3 area map, locations and Radical Red data tables (`rr_*.json`); FRLG/RR area lookup |
 | `gen4_hgsspt`   | HeartGold, SoulSilver, Platinum                 |
 | `gen5_bw`       | Black, White, Black 2, White 2                  |
 

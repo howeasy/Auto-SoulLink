@@ -9,8 +9,10 @@ Python codec described in `docs/gen3/PLAN.md` §5.5 and derived per
 ## Naming
 
 `<pack>_<scene>[_b].sav`, e.g. `rr_town.sav`. `<pack>` is `rr` (Radical Red
-companion) or `fr`/`lg` (vanilla FireRed/LeafGreen; `make-fr`
-builds `firered_town.sav`, see below). `_b` marks a distinct-OT
+companion), `fr`/`lg` (vanilla FireRed/LeafGreen; `make-fr`
+builds `firered_town.sav`, see below), or `emerald` (the `gen3_emerald`
+pack, its own foundation — pairs only with `emerald`; e.g. `emerald_town.sav`,
+`emerald_battle.sav`). `_b` marks a distinct-OT
 derivation of the `a`-side fixture (`derive-b`), used for the harness's B
 player. Every committed file is exactly 131072 bytes (0x20000, the flash
 body with any optional 16-byte mGBA RTC suffix already stripped by
@@ -605,6 +607,7 @@ Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
 | `emerald_lowhp.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv5 at 1 HP (E2-FIX-VARIANTS) | `c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b` |
 | `emerald_badges.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; badge flags 0x867-0x86A (FLAG_BADGE01..04_GET, flags.h:1359-1362) set in the SYNTH seed, straddling flag bytes 0x10C/0x10D (E2-BADGES); a save the game cannot produce (4 badges, no story progress) that exists only to prove the badge read | `04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f` |
 | `emerald_catch.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; 20 Poké Balls (E2-FIX-VARIANTS r3) | `592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0` |
+| `emerald_catch_b.sav` | same | same | `derive-b --title emerald` over `emerald_catch.sav` (EG4-RC ball risk): `EMERB` #DFDAF6DA, the party mon re-keyed -- the B side of the deadzone_gen3/link_gen3 ball hunts on `gen3_emerald`, so a real half never runs the fixture out of its 5-ball `battle` allotment | `cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b` |
 | `emerald_evolve.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv15 at EXP 2534 (one short of Lv16), moves Tackle/Growl/Water Gun + a free slot (E2-FIX-VARIANTS r3) | `244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd` |
 | `emerald_poison.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; Mudkip Lv5 poisoned at 1 HP + Poochyena Lv3 (E2-FIX-VARIANTS r3) | `c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0` |
 | `emerald_gift.sav` | Lavaridge Town (0.12) | (4,8) | below the egg woman (LavaridgeTown_EventScript_EggWoman, giveegg WYNAUT); FLAG_RECEIVED_LAVARIDGE_EGG clear (E2-FIX-VARIANTS r3) | `7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552` |
@@ -621,6 +624,7 @@ also pins the seed and fixture sha256s above.
 SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py make-emerald --kind town --out tests/fixtures/gen3/emerald_town.sav
 python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_town.sav tests/fixtures/gen3/emerald_town_b.sav
 python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_pc.sav tests/fixtures/gen3/emerald_pc_b.sav
+python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_catch.sav tests/fixtures/gen3/emerald_catch_b.sav
 python tools/gen3_fixtures.py qualify --title emerald tests/fixtures/gen3/emerald_*.sav
 SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py boot-check --title emerald --rom "<path to Emerald.gba>" --fixture tests/fixtures/gen3/emerald_town.sav
 ```

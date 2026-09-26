@@ -218,7 +218,7 @@ def test_p4_c4_2a_emerald_badge_constants_match_the_pinned_pret_header() -> None
     self-referential against the generator it is meant to check."""
     pin_dir = pathlib.Path("E:/Google Drive/SLink/.cache/pret/pokeemerald")
     if not pin_dir.exists():
-        pytest.skip("no local pret checkout to re-derive against (BADGE_FIRST_FLAG is still "
+        pytest.skip(f"pokeemerald not cloned: {pin_dir} (BADGE_FIRST_FLAG is still "
                     "pinned in tools/gen_gen3_profile.py:EMERALD_DERIVED with a file:line citation)")
     flags_h = (pin_dir / "include" / "constants" / "flags.h").read_text(encoding="utf-8")
     global_h = (pin_dir / "include" / "global.h").read_text(encoding="utf-8")

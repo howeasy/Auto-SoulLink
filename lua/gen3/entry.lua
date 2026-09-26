@@ -66,8 +66,7 @@ Entry.PACKS = {
         rom_type = { radical_red = "firered_rr" },
     },
     -- Registered so the packs/admission tables build and the hash is recognized (E2-ENTRY);
-    -- NOT in Entry.ROUTED -- an admitted Emerald cartridge still falls through to the BPEE
-    -- refusal in lua/slink.lua until EG4 (docs/gen3_emerald/PLAN.md §5 E3 row).
+    -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
     gen3_emerald = {
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },
@@ -103,9 +102,10 @@ Entry.PACK_FILES = {
     },
 }
 -- Which packs lua/slink.lua's Gen 3 route sends to the rewritten client. The route reads this
--- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6): every admitted pack
--- is routed, and anything else on a GBA core is refused by the launcher.
-Entry.ROUTED = { gen3_frlg = true, gen3_rr = true }
+-- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6), gen3_emerald at EG4
+-- (owner ruling 24): every admitted pack is routed, and anything else on a GBA core is
+-- refused by the launcher.
+Entry.ROUTED = { gen3_frlg = true, gen3_rr = true, gen3_emerald = true }
 
 Entry.ROM_TYPE = {}
 for _, pack in pairs(Entry.PACKS) do
@@ -229,6 +229,29 @@ function Entry.admit(args)
         end
     end
     return nil, "header " .. code .. " is not an admitted Gen 3 cartridge: hash " .. hash
+end
+
+-- Entry.admit_routed(args) -- Entry.admit plus the LAUNCHER's own policy: a header-only
+-- admission (an unpinned hack or a bad dump that merely says BPRE/BPGE/BPEE) and a pack not
+-- (yet) in Entry.ROUTED are both refused here, never routed. This is the ONE place every
+-- caller enforces that policy -- lua/slink.lua and lua/gen3/run.lua both call it -- so a
+-- caller that dofiles run.lua directly (the duo harness, tests/unit) is held to the same gate
+-- the real launcher is. Before this, run.lua called Entry.admit alone and never re-checked
+-- ROUTED/admitted_by, so the duo evidence never actually exercised the launcher's refusal
+-- (OMP cx-dbabbd62).
+-- Returns the same shape as Entry.admit, or nil, reason.
+function Entry.admit_routed(args)
+    local admitted, why = Entry.admit(args)
+    if not admitted then return nil, why end
+    if admitted.admitted_by == "header" then
+        return nil, "this " .. tostring(admitted.title) .. " build (header "
+                    .. tostring(args.header_code) .. ") is not a pinned cartridge -- "
+                    .. "Archipelago builds and unknown hacks are not supported yet"
+    end
+    if not Entry.ROUTED[admitted.pack] then
+        return nil, "the " .. tostring(admitted.pack) .. " pack is not yet routed to the Gen 3 client"
+    end
+    return admitted
 end
 
 -- The GBA cartridge header: 12-byte game title at $A0, 4-byte game code at $AC (GBATEK 3.2).

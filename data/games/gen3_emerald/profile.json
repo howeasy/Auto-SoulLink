@@ -100,7 +100,7 @@
         "rom.SE_SONG_HEADERS.31": "data/gen3/pret/pokeemerald.sym:60015 (se_success); pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/songs.h:37 (SE_SUCCESS; SE id 31)",
         "rom.SE_SONG_HEADERS.32": "data/gen3/pret/pokeemerald.sym:60017 (se_failure); pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/songs.h:38 (SE_FAILURE; SE id 32)"
       },
-      "admitted": false,
+      "admitted": true,
       "derived": {
         "BADGE_FIRST_FLAG": 2151,
         "BASESTATS_ADDR_BY_GAME_CODE": {

@@ -30,13 +30,13 @@ HEAD_ROWS = {"perish_status": ("gStatuses3", 0x00),
 def rom_or_skip(pack: str = "gen3_emerald", title: str = "emerald") -> None:
     for kind in G.ALL_PACKS[pack][title][1]:
         if not G.ROMS[(pack, title, kind)][0].exists():
-            pytest.skip(f"ROM not present: {pack}/{title}/{kind}")
+            pytest.skip(f"local copyrighted ROMs absent: {pack}/{title}/{kind}")
 
 
 def pret_or_skip() -> pathlib.Path:
     repo = G.pret_repo(SYM)
     if not repo.is_dir():
-        pytest.skip(f"pret checkout not present at {repo}")
+        pytest.skip(f"pokeemerald not cloned: {repo}")
     return repo
 
 

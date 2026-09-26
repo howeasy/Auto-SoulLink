@@ -265,6 +265,20 @@ def test_every_entry_pack_file_is_in_the_release_manifest():
             )
 
 
+def test_every_emerald_adapter_data_file_is_in_the_release_manifest():
+    """OMP cx-9f0eacae F1: server/adapters/gen3_frlge.py `_emerald_json` returns {} for a missing
+    file, so an unshipped Emerald table fails OPEN (the fixed-gift clause bypasses silently vanish)
+    instead of refusing. Every file `_load_emerald()` opens must ship. MUTATION-CHECK: drop
+    "statics.json" from the gen3_emerald row of `_DATA_GAME_LUA` and this goes red."""
+    import inspect
+    import re
+    from server.adapters import gen3_frlge
+    opened = set(re.findall(r'_emerald_json\("([^"]+)"\)', inspect.getsource(gen3_frlge._load_emerald)))
+    assert opened >= {"area_map.json", "statics.json", "write_checkpoint.json"}, opened
+    missing = opened - set(make_release._DATA_GAME_LUA["gen3_emerald"])
+    assert not missing, f"gen3_emerald adapter tables not shipped in the release zip: {sorted(missing)}"
+
+
 def test_the_retired_gen3_modules_are_not_shipped(archive):
     """C5-6 (owner ruling 24): the old Gen 3 client is deleted and lua/games/gen3_frlge.lua stays
     only as cited source material; neither may ship in the player ZIP."""

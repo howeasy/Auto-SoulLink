@@ -109,7 +109,7 @@ def _py_list(lua_table):
 
 def _require_rom():
     if not os.path.exists(_ROM):
-        pytest.skip(f"Emerald ROM not present: {_ROM}")
+        pytest.skip(f"local copyrighted ROMs absent: {_ROM}")
 
 
 # ── 1. the module loads and the table has the shape the card asked for ─────────────────────────

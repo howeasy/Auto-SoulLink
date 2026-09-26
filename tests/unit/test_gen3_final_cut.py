@@ -260,7 +260,12 @@ def test_dry_run_title_emerald_plan(capsys):
     assert "$ python tools/e2e_duo.py --game gen3_emerald --scenario faint_cmd_gen3" in out
     assert "$ python tools/gen_gen3_profile.py --check" in out
     assert "$ python tools/gen_area_map.py --game emerald" in out
-    assert "-k 'gen3 and emerald'" in out
+    # unit_emerald (E7-SKIPS): selected by FILE, never -k -- a -k selector still collects every
+    # module under tests/unit first, which fired unrelated module-level skips (purergb,
+    # pokecrystal) and incidentally matched unrelated Gen 2 parametrize ids.
+    assert "tests/unit/test_gen3_codec_emerald.py" in out
+    assert "tests/unit/test_gen3_title_syms.py" in out
+    assert "-k 'gen3 and emerald'" not in out
     assert "-k emerald" in out
     assert "zip-boot --zip" in out and "--title emerald" in out
     assert "_emerald.txt" in out.split("summary ")[-1]   # its own summary, never FR's or RR's
@@ -431,12 +436,15 @@ def test_zip_boot_emerald_skips_blocked_before_launching_anything(tmp_path, monk
     assert "BLOCKED-EG4" in out and "SKIP" in out
 
 
-def test_the_zip_boot_emerald_skip_is_allowed_by_ruling_24():
-    out = ("  zip_boot_emerald: SKIP (allowed: EG4 not yet signed) — BLOCKED-EG4: lua/gen3/"
+def test_the_zip_boot_emerald_skip_is_no_longer_allowed_now_that_eg4_has_landed():
+    """EG4 (ruling 24) landed on this branch (lua/gen3/entry.lua:108's Entry.ROUTED already admits
+    gen3_emerald), so the ("zip_boot_emerald", "BLOCKED-EG4:") ALLOWED_SKIPS entry was retired: a
+    zip reaching BLOCKED-EG4 now means a stale/pre-EG4 zip, a real FAIL, not an excused SKIP."""
+    out = ("  zip_boot_emerald: SKIP (not allowed: EG4 has landed) — BLOCKED-EG4: lua/gen3/"
            "entry.lua Entry.ROUTED has no gen3_emerald entry in this zip (ruling 24: it flips "
            "only at EG4)")
     verdict, ok = fc.judge("zip_boot_emerald", 3, out)
-    assert ok and verdict.startswith("SKIP-ALLOWED")
+    assert not ok and verdict == "FAIL skipped, and ALLOWED_SKIPS does not excuse it"
 
 
 def test_an_unrelated_row_named_zip_boot_emerald_like_is_not_confused():
