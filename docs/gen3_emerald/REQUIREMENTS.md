@@ -161,7 +161,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 |---|---|---|---|---|---|
 | ED-1 | faint_cmd, linked_faint_active, boxsync, whiteout, link, deadzone, reconnect on E↔E with witness + oracle | GAME + SERVER | — | ✓ | ✓ |
 | ED-2 | Wrong-save refusal; zip boot `emerald`; `fc_SUMMARY_<cut>_emerald.txt` all PASS | GAME | — | ✓ | ◐ |
-| ED-3 | Vanilla trade duo FR↔FR and E↔E (E5, shared Gen 3) | GAME | · | · | · |
+| ED-3 | Patched in-game trade duos FR↔LG and E↔E (+ RR durable trade): native scene, evolution on receipt, native save before DONE, reset cases (E5, shared Gen 3, patched ROMs only) | GAME | · | · | · |
 | XD-1 | Seven duos on the expansion reference build | GAME + SERVER | — | · | · |
 
 ## Not in this release
