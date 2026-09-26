@@ -182,3 +182,20 @@ def test_emerald_adapter_uses_emerald_sets():
     from server.adapters.gen3_frlge import Gen3Adapter
     assert Gen3Adapter(rom_type="emerald").calc_profile()["sets"] == {"file": "Emerald.js", "var": "CUSTOMSETDEX_E"}
     assert _calc_profile_for_run({"game": "gen3_e"}, {"players": {}})["sets"]["file"] == "Emerald.js"
+
+
+def test_crystal_with_gold_keeps_the_gen2_calc_without_crystals_sets():
+    """Same rules, different trainer rosters: the calc stays up, Crystal's sets don't leak
+    onto the Gold player (review cx-66e7600f F4 -- the whole-dict compare hid the calc)."""
+    status = {"players": {"a": {"rom_type": "crystal"}, "b": {"rom_type": "gold"}}}
+    assert _calc_profile_for_run({"game": ""}, status) == {"gen": 2, "dex": "vanilla"}
+    both = {"players": {"a": {"rom_type": "crystal"}, "b": {"rom_type": "crystal"}}}
+    assert _calc_profile_for_run({"game": ""}, both)["sets"]["file"] == "Crystal.js"
+
+
+def test_server_calc_profile_crystal_with_gold(tmp_path):
+    from server.adapters.gen2_gsc import Gen2GSCAdapter
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv._player_adapters["a"] = Gen2GSCAdapter(rom_type="crystal")
+    srv._player_adapters["b"] = Gen2GSCAdapter(rom_type="gold")
+    assert srv._calc_profile() == {"gen": 2, "dex": "vanilla"}

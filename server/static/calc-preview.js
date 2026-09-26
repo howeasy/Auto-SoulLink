@@ -1,4 +1,4 @@
-// calc-preview.js — the in-battle damage preview for Radical Red runs.
+// calc-preview.js — the in-battle damage preview on the board (every game with a calc_profile).
 // Reads #calc-preview-{pid}[data-in-battle] (its data-calc JSON is _calc_preview in server.py)
 // and lazy-loads the damage engine exactly as the full calc page does: the same CommonJS shim
 // and the same compiled files in the same order (calc/src/normal.template.html). Those files
@@ -132,6 +132,12 @@ window.SLinkCalc = (function () {
       var c = JSON.parse(div.getAttribute('data-calc') || '{}');
       var moves = (c.player_moves || []).filter(Boolean);
       if (!c.player_species || !c.enemy_species || !moves.length) return;
+      // Gen 1 has two dexes; pick this run's before reading any Gen 1 data, as the full
+      // page's bridge does (calc/src/js/slink_bridge.js _applyCalcGen).
+      if (typeof window.calc.useDex === 'function') {
+        if (c.dex === 'purergb') window.calc.useDex('purergb');
+        else if (c.gen === 1) window.calc.useDex('vanilla');
+      }
       var gen = window.calc.Generations.get(c.gen || 9);
 
       // Trainer battles: pick the difficulty whose set matches the active enemy's level.
@@ -152,7 +158,11 @@ window.SLinkCalc = (function () {
       // enemy_hp_pct is null when the client hasn't decoded a max HP yet; _buildPokemon
       // already treats a non-0-100 value as "full HP" (its default), so null needs no guard.
       var defender = _buildPokemon(gen, c.enemy_species, {
-        level: c.enemy_level, nature: set.nature, ability: set.ability, item: set.item,
+        // A matched RR trainer set wins; otherwise what the client read off the live foe.
+        level: c.enemy_level,
+        nature: set.nature || c.enemy_nature || undefined,
+        ability: set.ability || c.enemy_ability || undefined,
+        item: set.item || c.enemy_item || undefined,
         ivs: enemyStats.ivs, evs: enemyStats.evs,
         status: c.enemy_status || '', boosts: c.enemy_boosts || {},
       }, c.enemy_hp_pct);

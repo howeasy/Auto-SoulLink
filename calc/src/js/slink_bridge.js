@@ -92,6 +92,7 @@
   var _gameIndex         = {};    // _buildTrainerIndex(_gameSetdex), for the Prep tab
   var _gameSetsLoadStarted = false;
   var _gameSetsFile      = null;  // the file currently loaded/loading; a dex switch reloads
+  var _gameSetsLoad      = 0;     // bumped per load and per clear: stale callbacks see a newer one
 
   // Prep tab state — mode is fixed to the current page (no cross-mode toggle)
   var _pageIsHC      = /hardcore/i.test(window.location.href);
@@ -195,16 +196,25 @@
     if (_isRR()) return;
     var sets = calcInfo && calcInfo.sets;
     if (!sets || !sets.file || !sets.var) {
-      _setdexReady = true; // nothing to load: Prep tab / enrichment just has no sets
+      // Nothing to load -- and drop any sets an earlier payload loaded: Crystal's trainers
+      // must not linger once a Gold/Silver player makes the shared profile set-less.
+      _gameSetdex = null;
+      _gameIndex = {};
+      _gameSetsLoadStarted = false;
+      _gameSetsFile = null;
+      _gameSetsLoad++;
+      _setdexReady = true;
       return;
     }
     if (_gameSetsLoadStarted && _gameSetsFile === sets.file) return;
     _gameSetsLoadStarted = true;
     _gameSetsFile = sets.file;
+    var load = ++_gameSetsLoad;
 
     var s = document.createElement('script');
     s.src = './js/data/sets/games/' + sets.file;
     s.onload = function () {
+      if (load !== _gameSetsLoad) return; // superseded while loading
       _gameSetdex = window[sets.var] || {};
       // Vendored Gen 1/2 trainer sets carry DVs but no stat exp; trainer mons have none
       // (pret add_mon.asm / move_mon.asm zero it), so say so rather than default to max.
@@ -220,6 +230,7 @@
       refreshPanel();
     };
     s.onerror = function () {
+      if (load !== _gameSetsLoad) return;
       console.warn('[SLink bridge] Failed to load trainer sets file: ' + sets.file);
       _gameSetdex = null;
       _setdexReady = true;
