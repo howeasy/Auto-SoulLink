@@ -1,4 +1,30 @@
-# Gen 2 implementation resume (updated 2026-09-23, session 8 late: FIRST PHYSICAL Gen 2 PRODUCTION WRITE (gen2_faint C<->C + G<->S); paused for compaction)
+# Gen 2 implementation resume
+
+## Current state (2026-09-26): read this first
+
+- **Where the code is:** Gen 2 is merged into LOCAL master with Gen 1 and Gen 3 (`1d02702f` at the
+  time of writing). **Not pushed**: `origin/master` is `d13d2b6e`. This worktree's branch,
+  `codex/gen2-foundation`, tracks master; nothing Gen 2 is unmerged except these notes.
+- **Evidence:** 98/98 Gen 2 sweep cells are pinned at CODE_DIGEST `e8ca0067` (`tools/gen2_code_digest.py`),
+  which is master's. The fixtures, duo-pairs, live-gates, live-trade-gates and live-new-gates lanes pass.
+  `release-evidence` is red only on the owner items below. The RC milestone tag
+  `gen2-rc-evidence-2026-09-25` records the earlier RC evidence (digest `ccd62421`).
+- **Owner items, all that's left:** the G4 ruling (play the overlay build; the quoted ruling goes in
+  PLAN.md §6.1), then `python tools/gen_gen2_admission.py --provenance data/gen2/build_provenance.json
+  --overlay-provenance data/gen2/overlay_provenance.json --promote-overlays` turns the three overlay rows
+  (C `b405446e`, G `69067c4b`, S `583d8df4`) from BUILT to ADMITTED; then the push.
+- **Re-sweep trigger:** any change to `lua/*.lua`, `lua/gen2/**`, `lua/core/**`, `server/**/*.py` or
+  `data/games/gen2_*/**` changes the digest and stales every Gen 2 receipt (a ~2 h, 98-cell
+  `tools/gen2_final_sweep.py` run). Two things are parked for the next one: the corrected
+  `data/games/gen2_crystal/README.md` (currently stale; that pack is live and read by `gen2_gsc`), and the
+  digest excluding `*.md`.
+- **Post-RC batch:** complete. See the status table at the top of `POST_RC_CARDS.md`.
+- **Queue:** the release verifier re-runs source verification on every `load_context` call (no
+  `shared_contexts()`); PER-PLAYER-TITLES-PERSISTED.
+
+Everything below is the chronological coordinator log. Older entries describe states that have since changed.
+
+## Log (first written 2026-09-23, session 8)
 
 ## Who coordinates
 
