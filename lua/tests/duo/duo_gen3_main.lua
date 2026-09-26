@@ -1492,7 +1492,6 @@ local function reversed(name, as)
     SP.PATHS[as] = { map = p.map, from = { p.to[1], p.to[2] }, to = { p.from[1], p.from[2] }, dirs = dirs }
 end
 reversed("pokecenter_entrance_to_pc", "pc_to_pokecenter_entrance")   -- the same tiles, walked back
-if title == "emerald" then reversed("em_oldale_center_to_pc", "em_pc_to_center_door") end
 
 --- Route 1 grass origin -> facing the Viridian Pokemon Center PC (the viridian_pc leg's walk).
 function ctx.walk_to_pc(label)
@@ -1517,13 +1516,6 @@ end
 
 --- The PC -> the Route 1 grass origin (Center door, Viridian, Route 1 north to south).
 function ctx.walk_pc_to_grass(label)
-    if title == "emerald" then
-        -- E4: back to the Oldale Center door (7,8), out onto Oldale (6,17); ctx.hunt walks on
-        play.follow(cp, "em_pc_to_center_door", label)
-        local ok, why = play.enter_warp(cp, "Down", 20)
-        if not ok then error(label .. ": the Oldale Center exit never fired a warp: " .. tostring(why)) end
-        return
-    end
     play.follow(cp, "pc_to_pokecenter_entrance", label)
     SP.warp_to(cp, "Down", 30, SP.DEST.center_exit, label .. " Center exit")
     -- G5-RR-WHITEOUT: this is the whiteout_gen3 stall site on RR -- an RR-only object near the

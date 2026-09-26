@@ -334,7 +334,12 @@ SCENARIOS = {
     "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
-    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    # E4 known gap: NOT on gen3_emerald. Its G4 receipt is FR's Center landing (CENTER_STATE with
+    # the Union Room set live, WRITE_IN_CENTER, the nurse/START control there), but Emerald's
+    # DoWhiteOut warps straight to gSaveBlock1Ptr->lastHealLocation, OUTDOORS (pret pokeemerald
+    # src/overworld.c:358-365,665-668; heal_locations.json:82-85 Oldale Town (6,17)) -- no Center
+    # landing to receipt. An Emerald whiteout receipt needs its own design (coordinator/owner).
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr"),
                       "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
