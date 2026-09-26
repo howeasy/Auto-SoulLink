@@ -27,7 +27,23 @@ base is Gen 3 `5f050857`.
     (`gen_gen3_write_checkpoint.py` ~957). Use an allowlist, else SystemExit.
   - tests: FR gift suppression (a failed wild battle in oaks_lab sends no no_catch), and every
     checkpoint title carries `sound.se_ids` and `gift_areas.ids`.
-- **Review cx-361cd02b (bc2b6967):** reply pending at the pause. If it is missing, re-run it.
+- **Review cx-361cd02b (bc2b6967) replied after the pause:** the pairing refusal holds and FR/LG/RR
+  are unchanged. Queued, to verify first:
+  - **F1 MAJOR, must land before EG4:** a restart or rollback keeps the default adapter.
+    `state.py` ~1558 rebuilds only on a game_id or is_rr mismatch, and Emerald persists
+    game_id gen3_frlge, so the run silently loses the Emerald title data (sprites, items 375/376,
+    Nature Power, the Hoenn area catalog). Fix: also rebuild when `adapter._rom_type !=
+    state.rom_type`, with restart + rollback tests. This touches shared state.py, so it needs the
+    guard + review and batching for Gen 2.
+  - **F2/F3:** these are the NEXT-1 gift/static gap. No producer emits `gift_<g>_<n>`, so
+    `_EMERALD_FIXED_SPECIES_GIFTS` and its tests are unreachable until the area-map generator
+    adds static/gift map rows driven by statics.json. Add the producer-coverage test: every
+    statics.json map is in area_map.json or is a declared gift id.
+  - **F4:** `gen3_frlge.py` `_load_emerald()` runs at import with no exists-guard, so a missing
+    Emerald pack file breaks `import server.adapters` for every game. Use the module's
+    os.path.exists idiom and an empty default.
+  - **F5:** the statics.json daycare row map (see NEXT-1). **F7:** the cave_of_origin/mt_pyre
+    overrides belong in a title-scoped table.
 
 **NEXT (in order):**
 1. **Gift/static linking gap** (found by both E3 workers). The client's `area_now` emits `""` for
