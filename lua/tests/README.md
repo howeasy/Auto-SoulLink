@@ -13,18 +13,20 @@ BizHawk Lua test scripts. Three families:
   and per-instance SaveRAM dirs) and orchestrates via the debug HTTP API. This automates the old "two-instance
   E2E (USER gate)".
 
-  `duo_gen1_main.lua` does **not** use prefix-based scenario lookup: its eighteen
+  `duo_gen1_main.lua` does **not** use prefix-based scenario lookup: its twenty
   `gen1_new` scenarios (`link_new`, `ball_gate_new`, `deadzone_new`, `species_clause_new`,
   `type_clause_new`, `reconnect_new`, `trade_new`, `trade_decline_new`,
-  `linked_faint_bench_new`, `linked_faint_active_new`, `explode_new`, `soft_reset_new`,
-  `pc_ops_new`, `changebox_new`, `whiteout_new`, `poison_new`, `rival_swap_new`,
-  `admit_randomized_new`) are `scenarios.<name>()` functions implemented directly in that
-  file. `duo_gen2_main.lua` resolves a scenario as `scenario_gen2_<name>.lua`:
+  `linked_faint_bench_new`, `linked_faint_active_new`, `linked_faint_bench_battle_new`,
+  `explode_new`, `explode_bench_battle_new`, `soft_reset_new`, `pc_ops_new`, `changebox_new`,
+  `whiteout_new`, `poison_new`, `rival_swap_new`, `admit_randomized_new`) are
+  `scenarios.<name>()` functions implemented directly in that file (`tests/e2e/test_duo_gen1_new.py`'s
+  `SCENARIOS` tuple is the same 20, one pytest case each). `duo_gen2_main.lua` resolves a
+  scenario as `scenario_gen2_<name>.lua`:
 
   | File(s) | Games |
   |---|---|
   | `scenario_gen3_*.lua` | Gen 3 battery rows (`gen3_frlg`, `gen3_lgfr`, `gen3_rr`) |
-  | `scenario_gen2_{link,faint}.lua` | Gen 2 (Crystal/Gold/Silver, same-title and cross-title pairings) |
+  | `scenario_gen2_*.lua` | Gen 2 (Crystal/Gold/Silver, same-title and cross-title pairings; `link`/`faint`/`reconnect`/`soft_reset`/`admit_wrong_rom` plus the clause/trade/poison/pc-ops/whiteout/evolution/gift family — see `tools/e2e_duo.py --game gen2_new --list`) |
 
   The old `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua`
   prefix files and the `gen1`/`gen1_yellow` duo titles they drove no longer exist — deleted
