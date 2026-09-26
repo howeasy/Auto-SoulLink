@@ -1331,7 +1331,10 @@ end
 --- Grass hunt from the pinned Route 1 square (gen3_scripted_play hunt_encounter).
 --- E4: Emerald hunts Route 102's pinned grass loop (gen3_scripted_play.lua EMH, proven at E2).
 function ctx.hunt(label)
-    if title == "emerald" then return SP.EMH.hunt_grass(cp, 40) end
+    if title == "emerald" then
+        SP.EMH.to_grass(cp, label)          -- the two-mon pc fixture starts in Oldale Town
+        return SP.EMH.hunt_grass(cp, 40)
+    end
     return SP.hunt_encounter(cp, label, 40)
 end
 

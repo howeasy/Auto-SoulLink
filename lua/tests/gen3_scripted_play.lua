@@ -3547,6 +3547,30 @@ local function emerald_hunt_grass(cp, max_cycles)
 end
 EMH.hunt_grass = emerald_hunt_grass   -- E4: duo_gen3_main.lua ctx.hunt on Emerald
 
+-- E4: Oldale Town (the two-mon emerald_pc.sav tile (6,17)) -> Route 102's grass origin, for the
+-- duo rows whose hunters need a bench mon. tools/gba_map.py "<Emerald ROM>" --sym
+-- data/gen3/pret/pokeemerald.sym --game emerald: --map 0.10 --connections -> "left: offset=0 ->
+-- 0.17 (50x20)"; --map 0.10 --bfs 6,17 0,11 -> the first 12 dirs below (the 13th Left crosses the
+-- connection onto Route 102 (49,11), offset 0); --map 0.17 --bfs 49,11 21,16 -> the second path.
+-- Route 102's grass on the way is fought through by playlib's encounter budget (battles on).
+PATHS.em_oldale_to_route102 = {
+    map = "OldaleTown", from = { 6, 17 }, to = { 0, 11 },
+    dirs = { "Left","Left","Up","Up","Up","Up","Up","Up","Left","Left","Left","Left","Left" },
+}
+PATHS.em_route102_edge_to_grass = {
+    map = "Route102", from = { 49, 11 }, to = { 21, 16 },
+    dirs = { "Left","Left","Down","Down","Left","Left","Left","Left","Down","Down","Left","Left",
+             "Left","Left","Down","Left","Left","Left","Left","Left","Left","Left","Left","Left",
+             "Left","Left","Left","Left","Left","Left","Left","Left","Left" },
+}
+--- Walk from Oldale (6,17) to the grass origin unless already on Route 102 (0.17).
+function EMH.to_grass(cp, label)
+    local g, n = G.map(cp)
+    if g == 0 and n == 17 then return end
+    play.follow(cp, "em_oldale_to_route102", label)
+    play.follow(cp, "em_route102_edge_to_grass", label)
+end
+
 --- Fight an already-triggered battle to its end, same pinned shape as this file's own
 --- rival_battle leg: gActionSelectionCursor resets to FIGHT(0) on every new battle
 --- (src/battle_controller_player.c, identical source across FR/LG/Emerald), so A,A is FIGHT ->

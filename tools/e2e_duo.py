@@ -311,7 +311,8 @@ SCENARIOS = {
     # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
     "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
                                  "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-                                 "target": "battle", "target_by_game": {"gen3_rr": "battle2"},
+                                 "target": "battle",
+                                 "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"},
                                  "frames": 2500000,
                                  "oracle": "assert_linked_faint_active_gen3_saved"},
     # A1 (i) and R4: B's linked mon is its only mon -- a hand deposit of the slot-1 mon on FR/LG,
