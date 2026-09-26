@@ -1,0 +1,191 @@
+[
+  {
+    "symbol": "HandleLoadOverlay",
+    "address": "0x02006FF8",
+    "hge_binary": "arm9",
+    "hge_bytes": "004a1047f5923d02051c009100f052f8",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": "REPLACED",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "UnloadOverlayByID",
+    "address": "0x02006F7C",
+    "hge_binary": "arm9",
+    "hge_bytes": "0049084761923d0200f0cef80022031c",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": "REPLACED",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "Encounter_GetResult",
+    "address": "0x020506F4",
+    "hge_binary": "arm9",
+    "hge_bytes": "10b5041c2268002a02d0206940691060",
+    "measured_verdict": "KEPT",
+    "prior_verdict": "KEPT",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "Task_Blackout",
+    "address": "0x02052858",
+    "hge_binary": "arm9",
+    "hge_bytes": "f8b586b0061cfdf7f5fe051c301cfdf7",
+    "measured_verdict": "KEPT",
+    "prior_verdict": "KEPT",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "Party_AddMon",
+    "address": "0x02074524",
+    "hge_binary": "arm9",
+    "hge_bytes": "38b5041c0a1c61682068814201db0020",
+    "measured_verdict": "KEPT",
+    "prior_verdict": "KEPT",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "PCStorage_PlaceMonInBoxFirstEmptySlot",
+    "address": "0x02073BFC",
+    "hge_binary": "arm9",
+    "hge_bytes": "004b1847c1c03d020e1c0192fef75cfe",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": "REPLACED",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "PCStorage_PlaceMonInFirstEmptySlotInAnyBox",
+    "address": "0x02073BB8",
+    "hge_binary": "arm9",
+    "hge_bytes": "004a104749c13d022c580e1c071c301c",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": "REPLACED",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "PCStorage_SwapMonsInBoxByIndexPair",
+    "address": "0x02073CC0",
+    "hge_binary": "arm9",
+    "hge_bytes": "60b4044d76462e6060bc68f39df90149",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "PCStorage_DeleteBoxMonByIndexPair",
+    "address": "0x02073D10",
+    "hge_binary": "arm9",
+    "hge_bytes": "004b1847adbf3d02c043844202d11220",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "Save_WriteManFinish",
+    "address": "0x02027CEC",
+    "hge_binary": "arm9",
+    "hge_bytes": "004b184781c93d02e5529b1ce552032a",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": "REPLACED",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "BtlCmd_TryFaintMon",
+    "address": "0x0223E22C",
+    "hge_binary": "arm9",
+    "hge_bytes": "00000000000000000000000000000000",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": "REPLACED",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "sub_0205239C",
+    "address": "0x0205239C",
+    "hge_binary": "arm9",
+    "hge_bytes": "f8b582b00c1c051ce068d6f779fd061c",
+    "measured_verdict": "KEPT",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "ov12_0223843C",
+    "address": "0x0223843C",
+    "hge_binary": "arm9",
+    "hge_bytes": "00000000000000000000000000000000",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "OS_WaitIrq",
+    "address": "0x020D0E6C",
+    "hge_binary": "arm9",
+    "hge_bytes": "70402de90050a0e10140a0e1ee0a00eb",
+    "measured_verdict": "KEPT",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "Task_HatchEggInParty",
+    "address": "0x020910D8",
+    "hge_binary": "arm9",
+    "hge_bytes": "f8b584b0051cbff7b7fa041c21680629",
+    "measured_verdict": "KEPT",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "ScrCmd_GiveMon",
+    "address": "0x0204D088",
+    "hge_binary": "arm9",
+    "hge_bytes": "f0b589b0041c80300068006a0068eef7",
+    "measured_verdict": "KEPT",
+    "prior_verdict": "REPLACED",
+    "verdict_matches_prior": false
+  },
+  {
+    "symbol": "ScrCmd_GiveEgg",
+    "address": "0x0204D248",
+    "hge_binary": "arm9",
+    "hge_bytes": "00490847ad923c020468e068dbf722fe",
+    "measured_verdict": "CHANGED",
+    "prior_verdict": "REPLACED",
+    "verdict_matches_prior": true
+  },
+  {
+    "symbol": "SetupAndStartTrainerBattle",
+    "address": "0x02051370",
+    "hge_binary": "arm9",
+    "hge_bytes": "f8b584b001900f1c161c0293fff766f9",
+    "measured_verdict": "KEPT",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "SetupAndStartWildBattle",
+    "address": "0x02051020",
+    "hge_binary": "arm9",
+    "hge_bytes": "f0b583b001900f1c02921e1cfff70efb",
+    "measured_verdict": "KEPT",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "FieldSystem_TaskIsRunning",
+    "address": "0x02050590",
+    "hge_binary": "arm9",
+    "hge_bytes": "0069002801d001207047002070470000",
+    "measured_verdict": "KEPT",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  },
+  {
+    "symbol": "sub_02075D3C",
+    "address": "0x02075D3C",
+    "hge_binary": "arm9",
+    "hge_bytes": "67300078012801d10120704700207047",
+    "measured_verdict": "KEPT",
+    "prior_verdict": null,
+    "verdict_matches_prior": null
+  }
+]

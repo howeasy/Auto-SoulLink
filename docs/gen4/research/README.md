@@ -58,4 +58,5 @@ Local copies of the two HGSS xMAPs are in `.cache/gen4/xmap/` (gitignored).
 - [platform.md](platform.md): BizHawk/melonDS configuration facts and live probe results
 - [platinum_bind.md](platinum_bind.md): D3 bind check at SOURCE level (what the profile schema must express)
 - [wire_contract.md](wire_contract.md): the message contract a Gen 4 client on `lua/core/session.lua` must meet
+- [offline_measurements.md](offline_measurements.md): FILE measurements (site bytes HG/SS, hge survival, acquisition manifest, NPC trades, player profile, encounters, hge save) + [data/](data/)
 - [prior_art.md](prior_art.md): legacy Gen 4 code audit, archived melonDS probe (and its error), the owner's AP HGSS injection

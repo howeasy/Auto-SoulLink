@@ -100,7 +100,7 @@ Also kept:
 | `BtlCmd_PlayFaintAnimation` | |
 | `PCStorage_PlaceMonInBoxFirstEmptySlot` 0x02073BFC **and** `PlaceMonInFirstEmptySlotInAnyBox` 0x02073BB8 | the latter is the party-full catch path; 25 PC functions rewritten, `hooks:434-462` |
 | `Save_WriteManFinish` 0x02027CEC | |
-| `ScrCmd_GiveMon` 0x020541DC | |
+| `GiveMon` 0x020541DC (script helper; the script command `ScrCmd_GiveMon` 0x0204D088 is **kept**, FILE-verified) | |
 | `ScrCmd_GiveEgg` 0x0204D248 | |
 | NPC trade `_CreateTradeMon` 0x02259C40 | |
 | evolution dispatch 0x02070E34 | `sub_02075A7C` itself is kept |
