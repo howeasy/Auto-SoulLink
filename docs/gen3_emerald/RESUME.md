@@ -18,6 +18,12 @@ base is Gen 3 `5f050857`.
   First cut 9c96e745 was 23/24 (all duos PASS attempt 1; only unit_emerald on unexcused skips).
 - **EG4 request:** `docs/gen3_emerald/EG4_request.md` on rc2. Owner: decide anchors vs hash-only
   admission for unknown-hash BPEE, play a live E<->E duo from the Manager, sign EG4.
+- **RC-mandatory (owner 2026-09-26): trainer names, Upcoming Key Trainers, calc Prep tab.** Not
+  built for Emerald (RR-only today). Work: pret trainers.h/trainer_parties.h trainer data + key
+  trainers per area behind the adapter trainer surface, client reports the opponent trainer, UI gate
+  made capability-driven by the UI lane (session "GUI notifications": asked for the exact adapter
+  methods and the RR-only gate location). EG4 request (rc2 `1f95b388`) asks the owner to sign
+  admission now with the RC label waiting on these, or to hold EG4.
 - **Trade (owner rulings 2026-09-26):** patched ROMs only, mimic the accepted Gen 1/2/RR
   frameworks, evolve on receipt, reset-without-save as patched Gen 1/2. The HUD design is
   WITHDRAWN. Gen 3 ruling 27: FR/LG patched trade is in the Gen 3 RC and is BUILT IN THIS
