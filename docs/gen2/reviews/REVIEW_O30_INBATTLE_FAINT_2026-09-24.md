@@ -1,5 +1,10 @@
 # Independent review: O-30 in-battle faint (Gen 2, with Gen 1 parity)
 
+> **Historical record.** Findings below are against commit `a78f9b56`. At least MAJOR-1/MAJOR-2
+> (a death queued before the battle starts / Battle Tower revival) have since been fixed — see the
+> "O-30 review MAJOR-1/2" comment at `lua/gen2/client.lua:1425`. Check current `lua/gen2/client.lua`
+> and `lua/gen1/client.lua` before treating any GAP row here as still open.
+
 Reviewer: Claude (Opus), not an author of the reviewed code. Read-only review of the COMMITTED code at
 `a78f9b56` (`git show HEAD:<path>`). Commits under review: e0442e96 (evolution fallback), a8e93be7
 (battle hold + W-2), ade01a6e (U2 `battle_faint` PHYSICAL), 7af546cd/45195b35 (REVIEW_RECORD O-30).

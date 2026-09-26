@@ -159,3 +159,5 @@ Both scratch reproductions (`r2tests/test_r2_findings.py`) now pass. The six aff
   flag appears nowhere: `boxes.lua` `mon()` and `writes.lua` `write_party_bytes` accept any held byte, and `wire.lua` only
   projects `held_item` (0..255). This is acceptable while native trade (P4) is unbuilt. The P4 transfer path must call the
   adapter gate, or the insertion binders need the mail set injected, before any held item is carried.
+  **Update: addressed once P4 (native trade) landed** — `lua/gen2/trade_overlay.lua:29` now documents and applies the
+  adapter's `is_valid_held_item` rule on the trade transfer path.

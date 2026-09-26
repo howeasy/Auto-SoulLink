@@ -1,5 +1,11 @@
 # Gen 2 duo scenario roadmap (worker SCN, 2026-09-23)
 
+> **Historical planning snapshot, pinned at `3a64b0e3`.** Wave A (`reconnect`, `soft_reset`,
+> `admit_wrong_rom`) shows "runnable now" below; those three drivers were subsequently written and
+> independently reviewed in `docs/gen2/reviews/OMP_WAVEA_REVIEW_2026-09-23.md`. Check that review
+> (and `tools/verify_gen2_release.py`'s current `duo-pairs` lane state) for what has actually landed
+> before treating any row's "prerequisites" column as still open.
+
 The `duo-pairs` lane of `tools/verify_gen2_release.py` is UNIMPLEMENTED. It lists the P3b.7 scenarios
 beyond `link`. This file gives one row per scenario: what the scenario closes, which Gen 1 scenario it
 copies, what Gen 2 must have first, and who owns each part. Rows are ordered by how soon they can run.

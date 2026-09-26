@@ -1,5 +1,12 @@
 # gen2-A3 — citation resolver for the Gen 2 plan
 
+**Historical record.** This is a mechanical citation check against `PLAN.md`/`gen2_requirements.md`
+frozen at commit `f1a69f3` — it does not judge or restate current facts. Some cited lines quote the
+now-retired `gen2_crystal` adapter (`server/adapters/__init__.py`); that adapter was removed at the
+P3b.8 cutover (see `_RETIRED_GAME_IDS` in that file). Current Gen 2 is served by `gen2_gsc.py` +
+`gen2_codec.py` + `gen2_rom_scan.py`. Treat every "resolves"/citation verdict below as scoped to the
+`f1a69f3` snapshot, not present-day code.
+
 Mechanical resolution of every `<path>:<line>` / `<path>:<a>-<b>` citation in the two frozen
 files. Nothing here judges the plan; it measures whether each citation lands.
 

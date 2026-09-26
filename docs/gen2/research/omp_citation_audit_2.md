@@ -1,5 +1,14 @@
 # gen2-A4 — citation resolver, second pass (GEN2_STANDARD_COMPARISON + GEN2_BINDING_PLAN)
 
+> **Historical record, frozen at commit `3a91a97` (2026-09-21).** Most paths this audit
+> resolves against — `lua/clients/gen2_crystal_client.lua`, `lua/games/gen2_crystal.lua`,
+> `server/adapters/gen2_crystal.py`, `tests/e2e/test_duo_gen2.py`,
+> `tests/unit/test_gen2_ap_addresses.py`, `tests/live/test_gen2_gates.py` — were removed at the
+> Gen 2 P3b.8 cutover. The current Gen 2 client/adapter lives in
+> `server/adapters/gen2_gsc.py` + `gen2_codec.py` + `gen2_rom_scan.py`, served from
+> `data/games/gen2_{crystal,gold,silver}/`. Read this file as citation-audit evidence for the
+> two frozen documents named in the title, not as a map of current file locations.
+
 Machine resolution of every `<path>:<line>` / `<path>:<a>-<b>` citation in the two frozen
 documents. It measures whether a citation lands; it does not judge the claims.
 
