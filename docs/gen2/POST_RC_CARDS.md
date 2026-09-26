@@ -8,6 +8,42 @@ ships without the owner's authority. Rows marked **GATE** must land before the n
 Evidence ids: `cx-…` are OMP (magi) task ids; reviews are read-only and every finding was checked against the
 source before it was accepted here.
 
+## Status (2026-09-26, local master `1d02702f`, not pushed)
+
+The post-RC batch is **complete**. Everything below is merged to local master with Gen 1 and Gen 3.
+Gen 2 evidence is 98/98 sweep cells re-pinned at CODE_DIGEST `e8ca0067` (after the Gen 3 land).
+`verify_gen2_release.py --lane release-evidence` on a provisioned box is red only on the owner's
+G4 signature and the three overlay rows, which stay BUILT until G4 + `tools/gen_gen2_admission.py
+--promote-overlays`. The card bodies below are the design record; this table is the current state.
+
+| Card | State | Evidence |
+|---|---|---|
+| KEY-SCOPE-5 | DONE | `4bd32cec` `ad1290fa` `628bfc87`; hello/reset review cx-2985fe38 `8418c931`, rollback-on-exception `543cd1dc` |
+| SP-LOWWATER | DONE | `db93e52c` `42f63152` `fa9b9626`; `sp_lowwater_gate` receipts pinned |
+| REVIEW-P4-HASH | DONE in the doc sweep | `docs/gen2/reviews/` historical headers |
+| PHONE-NAMES | DONE | `e6d7761d` `0857cbe7`; Opus regression review clean |
+| TITLE-VERSION A (version text) | DONE | `SLINK v0.0.0-dev` on the main menu (`patch/gen2/src/version.asm`) |
+| TITLE-VERSION B (logo) | PARKED | owner 2026-09-25 "Logo can wait" |
+| POISON-DUO-CAP | DECIDED | duo keeps the native Wade fight; the gate's Gold poison leg boots the O-33 `gold_synth_psn` fixture (`75888449`, scoped to the gate by `0f64dd93`) |
+| TRAINER-SEED-A, TRADE-EVOLVE-CATCH | NOT NEEDED | both cells passed in the post-RC and Gen 3-merge sweeps; the fallbacks stay described below |
+| TRAINER-FAINT-LIVE-TURN | DONE | `822d4352` |
+| GEN1-ENEMY-MAXHP | DONE | `0fbbeaca` `b86b5942`; merged with the calc lane's foe dict (maxHP stays plausibility-gated) |
+| MASTER-MERGE | DONE | Gen 2 on local master `062977a9`, then Gen 3 landed; current master `1d02702f` |
+| PER-PLAYER-TITLES-PERSISTED | OPEN (note) | restart persistence of per-player titles; not scheduled |
+| ADMISSION-MIXED-KINDS-VERDICT | DONE | `f0565960` |
+| GEN1-UPR-FORK-SOURCE | DONE | `9e7a8d5c`; the 0001-0010 jar pinned `f8e40a83` |
+| GEN1-GATE-REWRITES-RECEIPTS | DONE | `592a3f0c` `54db2b95` (capture is opt-in) |
+| GEN2-CALC | DONE | `2aaab0ff` `b1bbf4c0`; Crystal trainer sets `8858df36`; browser-verified by the calc lane |
+| CLAUSE-BENCH-LIMITS | KEPT BY DESIGN | see the card |
+| BOARD-AMBIGUOUS | DONE | cherry-picked as `a2ea8ea6` |
+| TEMP-LANES | DONE | `trl` `tr2` `tr3` `spd` `sp2` removed; `Temp/fs1..fs4` are the live sweep lanes |
+| PURERGB-OVERLAY-EOL | DONE | `65b3c4b1` |
+| OMP-TIMEOUTS | PROCESS RULE | headless OMP tasks state their kill limit in the task text |
+
+Found after the batch and also done: an unprovisioned checkout (no `.cache/gen2-build`) ran 0 unit tests.
+The fix is a named "not cloned" skip (`87779879`, `3d8e8999`, `50d307bf`; rule in `tests/TESTING.md`).
+The Gen 2 duo boot RTC is pinned to 11:00 (`67c5161a`).
+
 ## Ordering
 
 1. KEY-SCOPE-5: **GATE before Gen 3 rides this server**. It is also an owner decision whether Gen 2's release waits for it.
