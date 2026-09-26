@@ -267,7 +267,8 @@ def test_area_map_main_turns_expansion_value_error_into_exit_1(monkeypatch, caps
 
 # ── F7: facts.json's on-disk bytes are exactly gen_gen3_profile.render's serialization ──────
 def test_facts_json_bytes_match_profiles_render_and_its_recorded_sha256():
-    raw = (PACK / "facts.json").read_bytes()
+    # a CRLF (core.autocrlf) checkout still hashes the LF bytes the generator wrote and pinned
+    raw = (PACK / "facts.json").read_bytes().replace(b"\r\n", b"\n")
     assert profile.render(json.loads(raw)).encode("utf-8") == raw
     digest = hashlib.sha256(raw).hexdigest()
     assert read("profile.json")["source"]["facts_sha256"] == digest
