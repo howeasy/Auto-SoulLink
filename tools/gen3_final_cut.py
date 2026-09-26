@@ -110,6 +110,13 @@ EMERALD_PINNED_INPUTS = {
     ROOT_DUMPS["emerald"]: ("emerald", [ROOT_DUMPS["emerald"], STAGED["emerald"]]),
     STAGED["emerald"]: ("emerald", [STAGED["emerald"], ROOT_DUMPS["emerald"]]),
 }
+# card E4b-CKPT review (OMP cx-6b619663 F1): the unit_emerald row's own tests (test_gen3_codec_
+# emerald.py, test_gen3_emerald_{areas,badges,moves_items,pack}.py, test_gen3_title_syms.py) read
+# the pret CLONE at .cache/pret/pokeemerald/, the same way the shared "unit" lane's tests already
+# need .cache/pret/{pokered,pokefirered,pokecrystal}/ (UNPINNED_INPUTS above). Kept an Emerald-only
+# extra input (like EMERALD_PINNED_INPUTS above), never added to the shared UNPINNED_INPUTS, which
+# the frlg/rr preamble prints unconditionally.
+EMERALD_UNPINNED_INPUTS = [".cache/pret/pokeemerald/"]
 UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
                    "patch/build/gen1_red.gb", "patch/build/gen1_blue.gb",
                    "patch/build/gen1_yellow.gbc", "patch/build/gen2_crystal.gbc",
@@ -328,44 +335,51 @@ def build_plan_rr(cut, lane, master):
 # default plan is untouched. docs/gen3/G4_final_cut_runbook.md §13 is this plan's own source.
 # ---------------------------------------------------------------------------
 
-# The seven scenarios E4 pinned for Emerald (docs/gen3_emerald/PLAN.md §5 E4 row). Named here, not
-# derived from tools/e2e_duo.py (unlike rr_scenarios()): that file's gen3_emerald wiring is being
-# added concurrently by the parallel worktree em-legs (card E4-DUO), and this list must stay
-# stable regardless of when that lands. duo_budget() still reads e2e_duo lazily per row and falls
-# back to FALLBACK_DUO_BUDGET if the game isn't registered there yet.
+# The six scenarios E4-DUO actually wired for gen3_emerald (E<->E). Named here, not derived from
+# tools/e2e_duo.py (unlike rr_scenarios()): that file's gen3_emerald wiring is owned by the
+# parallel worktree em-legs (card E4-DUO), and this list must stay stable regardless of when that
+# lands. duo_budget() still reads e2e_duo lazily per row and falls back to FALLBACK_DUO_BUDGET if
+# the game isn't registered there yet. whiteout_gen3 is DELIBERATELY excluded (E4-DUO interface
+# note, branch claude/gen3-emerald-legs @ fba2f186): Emerald's whiteout lands outdoors at
+# lastHealLocation Oldale (6,17), so FR's Center-receipt check has nothing to verify there -- a
+# documented gap, not an oversight.
 EMERALD_DUO_SCENARIOS = ("faint_cmd_gen3", "reconnect_gen3", "deadzone_gen3", "link_gen3",
-                         "boxsync_gen3", "linked_faint_active_gen3", "whiteout_gen3")
+                         "boxsync_gen3", "linked_faint_active_gen3")
 
 
 def build_plan_emerald(cut, lane, master):
     """The E4b final-cut pass: the SOURCE-lane generator checks (tools/gen_gen3_profile.py,
     tools/gen_gen3_write_checkpoint.py, tools/gen_area_map.py --game emerald), the Emerald unit
-    suite, the §1-equivalent probe-state builds, the seven duo scenarios, the cold-boot admission
-    matrix, the Emerald slice of the live probe-gates suite, the shadow-negatives manifest check,
-    and the release zip built, checked and booted on Emerald (zip_rows, ZIP_BOOT["emerald"]).
+    suite, the §1-equivalent probe-state builds, the full checkpoint probe, the seven duo
+    scenarios, the cold-boot admission matrix, the Emerald slice of the live probe-gates suite,
+    the shadow-negatives manifest check, and the release zip built, checked and booted on Emerald
+    (zip_rows, ZIP_BOOT["emerald"]).
 
-    NOT included: a checkpoint_emerald row through tools/gen3_probe_receipt.py. That tool's
-    build_env() hardcodes SLINK_GEN3_CHECKPOINT at data/games/gen3_frlg/write_checkpoint.json
-    regardless of --title (tools/gen3_probe_receipt.py:70-71), so a --title emerald run through it
-    would silently check Emerald's ROM against FRLG's checkpoint pack instead of Emerald's own --
-    wrong, not merely incomplete. The tree's own committed Emerald checkpoint evidence
-    (docs/gen3_emerald/probes/checkpoint_emerald_battle_2026-09-26.txt) was taken through an
-    ad hoc per-lane script instead, for the same reason; this plan does not paper over it with a
-    row that would give a false PASS. `master` is accepted for CLI-signature parity with
-    build_plan but unused (no item6 row)."""
+    checkpoint_emerald (card E4b-CKPT) runs tools/gen3_probe_receipt.py --title emerald with no
+    --rows: that tool's build_env() now picks the checkpoint pack by title (CHECKPOINT_PACK in
+    tools/gen3_probe_receipt.py) instead of always reading FRLG's, and --title emerald's default
+    is "no restriction" rather than BASE_ROWS+BW_ROWS, since Emerald has no oldman/pokedude
+    tutorial states for the bw_* rows and its pack's own artifacts table already decides what is
+    admitted (lua/tests/probe_gen3_checkpoint.lua's P.planned() treats a nil/empty
+    SLINK_CHECKPOINT_ROWS as "everything the pack admits") -- exactly what the E2 evidence
+    (docs/gen3_emerald/probes/checkpoint_emerald_battle_2026-09-26.txt, taken through the ad hoc
+    scratch driver C:/slink-wt/emerald-e2/run_probe.py) actually relied on: that script never set
+    SLINK_CHECKPOINT_ROWS either. The launch mechanism itself stays run_gate.py (this tool's
+    existing, uniform path for every title), not the scratch driver's
+    gen3_fixtures._prepare_run/_launch: the probe loads a specific .State file for every phase
+    immediately, so the pre-loadstate SaveRAM content run_gate.py leaves unmanaged is no more a
+    risk for Emerald than it already is for the FR/LG checkpoint rows sharing this same path.
+    `master` is accepted for CLI-signature parity with build_plan but unused (no item6 row)."""
     del master
+    cut8 = cut[:8]
     rows = [
         Row("profile_generated_check", "§13.1 source",
             [PY, "tools/gen_gen3_profile.py", "--check"], lane, 120, emulator=False),
         Row("write_checkpoint_generated_check", "§13.1 source",
             [PY, "tools/gen_gen3_write_checkpoint.py", "--check"], lane, 120, emulator=False),
-        # gen_area_map.py has no --check of its own (tools/gen_area_map.py:739-747); it rewrites
-        # data/games/gen3_emerald/{area_map.json,gen3_emerald_areas.lua,gen3_emerald_locations.lua}
-        # in place, so a stale committed file makes the LANE tracked-dirty after this row runs --
-        # the runner's own generic "the lane is tracked-dirty after the row" check (run_row) is
-        # this row's staleness check; nothing emerald-specific added to it.
         Row("area_map_generated_emerald", "§13.1 source",
-            [PY, "tools/gen_area_map.py", "--game", "emerald"], lane, 120, emulator=False),
+            [PY, "tools/gen_area_map.py", "--game", "emerald", "--check"], lane, 120,
+            emulator=False),
         Row("unit_emerald", "§13.1 source",
             [PY, "-m", "pytest", "tests/unit", "-q", "-k", "gen3 and emerald", "-p", "no:randomly",
              "-rs"], lane, 900, emulator=False),
@@ -380,6 +394,11 @@ def build_plan_emerald(cut, lane, master):
                         [PY, "tools/mkstates_gen3.py", "--title", "emerald", "--kind", kind,
                          "--out-dir", out, "--rom", STAGED["emerald"]], lane,
                         1200 if kind == "trainer" else 600, outputs_dir=out))
+    # §13.2b: the full checkpoint probe (card E4b-CKPT) -- no --rows, so the pack's own artifacts
+    # table decides what runs, same as the E2 scratch driver's invocation.
+    rows.append(Row("checkpoint_emerald", "§13.2b checkpoint",
+                    [PY, "tools/gen3_probe_receipt.py", "--title", "emerald", "--lane", lane,
+                     "--out", f"checkpoint_emerald_clean_{cut8}.txt"], REPO, 1800))
     # §13.3: the seven duo scenarios, Emerald vs itself (the parallel worktree em-legs owns
     # tools/e2e_duo.py's gen3_emerald wiring -- named here by string, never imported from there).
     for s in EMERALD_DUO_SCENARIOS:
@@ -525,11 +544,13 @@ def main_checkout():
     return os.path.dirname(common)
 
 
-def provision_plan(tree, rev, extra_pinned=None):
-    """The commands provision() may run, for --dry-run. `extra_pinned` (--title emerald only:
-    EMERALD_PINNED_INPUTS) is appended so frlg/rr's printed plan is untouched at its default of
-    None -- every existing call site keeps calling this with two arguments."""
+def provision_plan(tree, rev, extra_pinned=None, extra_unpinned=None):
+    """The commands provision() may run, for --dry-run. `extra_pinned`/`extra_unpinned` (--title
+    emerald only: EMERALD_PINNED_INPUTS / EMERALD_UNPINNED_INPUTS) are appended so frlg/rr's
+    printed plan is untouched at their default of None -- every existing call site keeps calling
+    this with the same two positional arguments it always did."""
     pinned = {**PINNED_INPUTS, **(extra_pinned or {})}
+    unpinned = UNPINNED_INPUTS + list(extra_unpinned or [])
     return [f"git worktree add --detach {tree} {rev}   (only if {tree} does not exist)",
             f"git -C {tree} update-index -q --really-refresh && git -C {tree} status --porcelain "
             f"--untracked-files=no   (must be empty, else abort)",
@@ -538,7 +559,7 @@ def provision_plan(tree, rev, extra_pinned=None):
             f"git -C {tree} read-tree {rev} && git -C {tree} checkout-index -a -f   (fallback)",
             f"pinned inputs (sha1 vs the tree's own pins; lane, then this worktree, then the main "
             f"checkout; no match aborts): {', '.join(pinned)}",
-            f"unpinned inputs, copied only when missing: {', '.join(UNPINNED_INPUTS)}"]
+            f"unpinned inputs, copied only when missing: {', '.join(unpinned)}"]
 
 
 def _refreshed_clean(tree):
@@ -620,13 +641,14 @@ def _matches_pin(path, key, pins):
         (f"{key}:md5" not in pins or file_digest(path, "md5") == pins[f"{key}:md5"])
 
 
-def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None):
+def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None,
+                extra_unpinned=None):
     """Bring the tree's gitignored inputs in line (see PINNED_INPUTS / UNPINNED_INPUTS).
     `only`: just these unpinned inputs, no pinned ones (item 6's master tree needs only the
     Gen 1/2 inputs, and an older master may not carry the Gen 3 pin tables at all).
-    `extra_pinned` (--title emerald only: EMERALD_PINNED_INPUTS): merged in on top of
-    PINNED_INPUTS; every other call site keeps its default of None, so frlg/rr's provisioning is
-    unchanged."""
+    `extra_pinned`/`extra_unpinned` (--title emerald only: EMERALD_PINNED_INPUTS /
+    EMERALD_UNPINNED_INPUTS): merged in on top of PINNED_INPUTS/UNPINNED_INPUTS; every other call
+    site keeps its default of None, so frlg/rr's provisioning is unchanged."""
     repo = repo or REPO
     pins = {} if only is not None else (pins or rom_pins(tree))
     for dst_rel, (key, rels) in ({} if only is not None else
@@ -641,7 +663,7 @@ def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None):
                             f"checked {', '.join(cands)}")
         os.makedirs(os.path.dirname(dst), exist_ok=True)
         shutil.copyfile(src, dst)
-    for rel in UNPINNED_INPUTS if only is None else only:
+    for rel in (UNPINNED_INPUTS + list(extra_unpinned or [])) if only is None else only:
         dst = os.path.join(tree, rel)
         if os.path.exists(dst):
             continue                     # the lane's own copy is never overwritten
@@ -858,16 +880,31 @@ ZIP_BOOT = {
 
 
 def emerald_admission_blocker(lua_dir):
-    """None once the EXTRACTED zip's lua/gen3/entry.lua admits gen3_emerald (Entry.ROUTED, ruling
-    24); else the reason it does not. Checked against the artifact actually being booted, not the
-    lane's own checkout, so a hand-edited zip is judged on what it would really do."""
+    """(kind, reason) once something blocks Emerald's admission in the EXTRACTED zip's own
+    lua/gen3/entry.lua, checked against the artifact actually being booted (not the lane's own
+    checkout, so a hand-edited zip is judged on what it would really do); None once it admits
+    gen3_emerald (Entry.ROUTED, ruling 24).
+
+    kind distinguishes a real defect from the expected pre-EG4 state (card E4b-CKPT review F3/F4):
+      - "ZIP-DEFECT": the zip itself is malformed -- no lua/gen3/entry.lua, or no Entry.ROUTED
+        assignment at all. A real failure, never the allowed EG4 skip.
+      - "BLOCKED-EG4": the zip is well-formed but ROUTED does not (yet) admit gen3_emerald --
+        exactly ruling 24's pre-signature state, the allowed skip.
+    The search anchors on the actual `Entry.ROUTED = {...}` assignment (DOTALL, non-greedy to the
+    first closing brace), not the first `{...}` anywhere in the file, so an unrelated table earlier
+    in entry.lua is never mistaken for it. Both `gen3_emerald = true` and the bracket-string
+    spelling (`["gen3_emerald"] = true` / `['gen3_emerald'] = true`) count as admitted."""
     text = _read(os.path.join(lua_dir, "gen3", "entry.lua"))
     if not text:
-        return "the extracted zip has no lua/gen3/entry.lua"
-    m = re.search(r"Entry\.ROUTED\s*=\s*\{([^}]*)\}", text)
-    if not (m and re.search(r"\bgen3_emerald\s*=\s*true\b", m.group(1))):
-        return ("lua/gen3/entry.lua Entry.ROUTED has no gen3_emerald entry in this zip "
-                "(ruling 24: it flips only at EG4)")
+        return "ZIP-DEFECT", "the extracted zip has no lua/gen3/entry.lua"
+    m = re.search(r"Entry\.ROUTED\s*=\s*\{(.*?)\}", text, re.S)
+    if not m:
+        return "ZIP-DEFECT", "the extracted zip's lua/gen3/entry.lua has no Entry.ROUTED assignment"
+    admitted = re.search(r"""(?:\bgen3_emerald\b|\[\s*["']gen3_emerald["']\s*\])\s*=\s*true\b""",
+                         m.group(1))
+    if not admitted:
+        return ("BLOCKED-EG4", "lua/gen3/entry.lua Entry.ROUTED has no gen3_emerald entry in "
+                "this zip (ruling 24: it flips only at EG4)")
     return None
 
 
@@ -888,14 +925,20 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
         print("RESULT: FAIL the zip has no lua/slink.lua")
         return 1
     if title == "emerald":
-        blocker = emerald_admission_blocker(os.path.dirname(entry))
-        if blocker:
-            # ruling 24: ROUTED/UNADMITTED_GAMES flip only at EG4, so a zip built before that
-            # signature refuses Emerald by design -- named as an ALLOWED_SKIPS entry (not a
-            # silent skip, not a PASS) rather than launching a boot the shipped client would
-            # itself refuse.
-            print(f"  zip_boot_emerald: SKIP (allowed: EG4 not yet signed) — BLOCKED-EG4: {blocker}")
-            return 3
+        blocked = emerald_admission_blocker(os.path.dirname(entry))
+        if blocked:
+            kind, reason = blocked
+            if kind == "BLOCKED-EG4":
+                # ruling 24: ROUTED/UNADMITTED_GAMES flip only at EG4, so a zip built before that
+                # signature refuses Emerald by design -- named as an ALLOWED_SKIPS entry (not a
+                # silent skip, not a PASS) rather than launching a boot the shipped client would
+                # itself refuse.
+                print(f"  zip_boot_emerald: SKIP (allowed: EG4 not yet signed) — "
+                      f"BLOCKED-EG4: {reason}")
+                return 3
+            # ZIP-DEFECT: the zip itself is malformed -- a real failure, never the allowed skip.
+            print(f"RESULT: FAIL ZIP-DEFECT: {reason}")
+            return 1
     lua_log = os.path.join(os.path.dirname(os.path.dirname(entry)), "slink_lua.log")
     saveram = os.path.join(tmp, "saveram")
     os.makedirs(saveram)
@@ -1085,8 +1128,18 @@ def row_deps(row):
         return DUO_DEPS + RR_DEPS
     if row.id == "rr_opcode_gates":
         return RR_GATES_DEPS
+    if row.id == "checkpoint_emerald":
+        # PROBE_DEPS names neither data/games/gen3_emerald/** nor the emerald fixtures, so an
+        # Emerald-only change would carry a stale receipt: never carried until it does.
+        return None
     if row.id.startswith("checkpoint_"):
         return PROBE_DEPS
+    # card E4b-CKPT review (OMP cx-6b619663 F6): row_inputs() has no ROM/pack hash wired for
+    # Emerald's bootcheck rows yet, so giving them a real dep list here would let a stale carry
+    # decision skip re-checking their non-git ROM byte content -- never carry until row_inputs()
+    # actually hashes it (the smaller, honest fix over half-wiring row_inputs for one title).
+    if row.id.startswith("bootcheck_emerald_"):
+        return None
     if row.id.startswith("bootcheck_"):
         return GEN3_CLIENT + GEN3_HARNESS + [f"tests/fixtures/gen3/{row.id[len('bootcheck_'):]}.sav"]
     if row.id == "item6_route_diff":
@@ -1103,12 +1156,12 @@ def row_inputs(row, lane, root=None):
     rid = row.id
     if rid.endswith(("_fr_as_a", "_lg_as_a")):
         return {f"rom:{t}": at(STAGED[t]) for t in ("firered", "leafgreen")}
-    m = re.match(r"(states|tutorials|checkpoint|bootcheck)_(firered|leafgreen)", rid)
+    m = re.match(r"(states|tutorials|checkpoint|bootcheck)_(firered|leafgreen|emerald)", rid)
     if m:
         out = {f"rom:{m[2]}": at(STAGED[m[2]])}
-        if m[1] == "checkpoint":     # exactly the states its three builds produce
-            for kind, names in BUILD_OUTPUTS.items():
-                for n in names:
+        if m[1] == "checkpoint":     # exactly the states its title's builds produce
+            for kind in CHECKPOINT_BUILD_KINDS.get(m[2], ("town", "battle", "trainer", "tutorials")):
+                for n in BUILD_OUTPUTS[kind]:
                     out[f"state:{BUILD_DIRS[kind]}/{n}"] = at(f"patch/build/{BUILD_DIRS[kind]}/{m[2]}/{n}")
         return out
     if rid == "probe_gates":   # tests/live/test_gen3_probe_gates.py: the RR build + the root FR dump
@@ -1435,12 +1488,24 @@ BUILD_KEY_GLOBS = ["tools/mkstates_gen3.py", "tools/mkstates_gen3_tutorials.py",
 _MGBA = "BizHawk.Emulation.Cores.Nintendo.GBA.MGBAHawk"
 
 
+# card E4b-CKPT review (OMP cx-6b619663 F7): the per-title kinds a checkpoint row's builds cover.
+# FR/LG: town/battle (states_*) + tutorials (a separate tutorials_* row, oldman/pokedude). Emerald
+# has no tutorials row at all -- its third build is states_emerald_trainer.
+CHECKPOINT_BUILD_KINDS = {"firered": ("town", "battle", "trainer", "tutorials"),
+                          "leafgreen": ("town", "battle", "trainer", "tutorials"),
+                          "emerald": ("town", "battle", "trainer")}
+
+
+def checkpoint_build_row_id(title, kind):
+    return f"tutorials_{title}" if kind == "tutorials" else f"states_{title}_{kind}"
+
+
 def build_kind(row_id):
-    """(kind, title) of a §1 build row -- kind town / battle / tutorials -- else None."""
-    m = re.fullmatch(r"states_(firered|leafgreen)_(town|battle|trainer)", row_id)
+    """(kind, title) of a §1 build row -- kind town / battle / trainer / tutorials -- else None."""
+    m = re.fullmatch(r"states_(firered|leafgreen|emerald)_(town|battle|trainer)", row_id)
     if m:
         return m[2], m[1]
-    m = re.fullmatch(r"tutorials_(firered|leafgreen)", row_id)
+    m = re.fullmatch(r"tutorials_(firered|leafgreen)", row_id)   # no tutorials_emerald row exists
     return ("tutorials", m[1]) if m else None
 
 
@@ -1485,7 +1550,11 @@ def build_key(row, cut, lane, blobs=None, bizhawk=None):
     kind, title = build_kind(row.id)
     blobs = tree_blobs(cut) if blobs is None else blobs
     pats = [_glob_re(g) for g in BUILD_KEY_GLOBS]
-    fixture = f"tests/fixtures/gen3/{title}_party_{BUILD_FIXTURE[kind]}.sav"
+    # Emerald fixtures are emerald_<kind>.sav (tools/gen3_fixtures.py PARTY_TITLES["emerald"]
+    # "fixture", tools/mkstates_gen3.py) -- no "_party_" infix, and "trainer" is its OWN fixture,
+    # not remapped to "town" the way BUILD_FIXTURE does for FR/LG's shared town battery.
+    fixture = (f"tests/fixtures/gen3/{title}_{kind}.sav" if title == "emerald" else
+               f"tests/fixtures/gen3/{title}_party_{BUILD_FIXTURE[kind]}.sav")
     if fixture not in blobs:
         return None, f"fixture {fixture} not in the cut"
     rom = file_sha256(os.path.join(lane, STAGED[title]))
@@ -1571,12 +1640,12 @@ def predicted_checkpoint_inputs(row, cut, lane):
     its states' hashes cannot be known in advance)."""
     title = row.id[len("checkpoint_"):]
     out = {f"rom:{title}": file_sha256(os.path.join(lane, STAGED[title])) or "MISSING"}
-    for rid in (f"states_{title}_town", f"states_{title}_battle", f"tutorials_{title}"):
+    for kind in CHECKPOINT_BUILD_KINDS.get(title, ("town", "battle", "trainer", "tutorials")):
+        rid = checkpoint_build_row_id(title, kind)
         key, _m = build_key(Row(rid, "§1", [], lane, 0), cut, lane)
         meta = cache_lookup(key) if key else None
         if not meta:
             return None
-        kind = build_kind(rid)[0]
         for n, h in meta["files"].items():
             out[f"state:{BUILD_DIRS[kind]}/{n}"] = h
     return out
@@ -1595,11 +1664,17 @@ def parse_shard(text):
 
 def chain_of(row_id):
     """Rows that must share a shard, in plan order: a title's state/tutorial builds feed its
-    checkpoint probe (SLINK_STATE_DIR, the bw hashes), and zip_build feeds zip_check/zip_boot."""
-    m = re.match(r"(?:states|tutorials|checkpoint)_(firered|leafgreen)", row_id)
+    checkpoint probe (SLINK_STATE_DIR, the bw hashes), and zip_build feeds zip_check/zip_boot.
+    The zip test is by shape (endswith zip_build/zip_check, or the zip_boot_ prefix), not a fixed
+    prefix list, so a new title's zip_rows() prefix (card E4b-CKPT review F2: emerald_zip_build/
+    emerald_zip_check were missed by the old startswith(("zip_", "rr_zip_")) check and each fell
+    back to ITS OWN id, i.e. a singleton chain, scattering them from zip_boot_emerald) is covered
+    without another per-title branch here."""
+    m = re.match(r"(?:states|tutorials|checkpoint)_(firered|leafgreen|emerald)", row_id)
     if m:
         return f"probe_{m[1]}"
-    return "zip" if row_id.startswith(("zip_", "rr_zip_")) else row_id
+    return "zip" if row_id.endswith(("zip_build", "zip_check")) or \
+        row_id.startswith("zip_boot_") else row_id
 
 
 def shard_rows(rows, n, est):
@@ -1707,6 +1782,7 @@ def run_pass(args):
     # fc_SUMMARY_<cut8>_rr.txt / _emerald.txt: FR's stays put
     title_sfx = {"rr": "_rr", "emerald": "_emerald"}.get(args.title, "")
     emerald_pins = EMERALD_PINNED_INPUTS if args.title == "emerald" else None
+    emerald_unpinned = EMERALD_UNPINNED_INPUTS if args.title == "emerald" else None
     if args.merge_summary:
         return merge_summary(cut, rows, title_sfx)
     decisions, est = plan_decisions(rows, cut, args.carry, lane)
@@ -1725,7 +1801,7 @@ def run_pass(args):
     if args.dry_run:
         print(f"# G4 final cut {cut}  lane={lane}  master={master}  rows={len(rows)}"
               f"{f'  shard={args.shard}' if args.shard else ''}  carry={bool(args.carry)}")
-        for step in provision_plan(lane, cut, emerald_pins):
+        for step in provision_plan(lane, cut, emerald_pins, emerald_unpinned):
             print(f"# provision: {step}")
         if any(r.id == "item6_route_diff" for r in run_rows):
             print(f"# provision: the same for {master} at master")
@@ -1757,7 +1833,7 @@ def run_pass(args):
     try:
         if run_rows or cached_rows:
             provision(lane, cut, root)
-            copy_inputs(lane, root, extra_pinned=emerald_pins)
+            copy_inputs(lane, root, extra_pinned=emerald_pins, extra_unpinned=emerald_unpinned)
         if any(r.id == "item6_route_diff" for r in run_rows):
             provision(master, "master", root)
             copy_inputs(master, root, only=ITEM6_INPUTS)

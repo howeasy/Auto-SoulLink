@@ -569,12 +569,39 @@ _EMERALD_DIVE_HOST = {
 }
 
 
-def generate_emerald():
+def _write_or_check(path, content, check, newline=None):
+    """check=False: write `content` to `path` (creating parent dirs), same open() `newline` mode
+    the caller would otherwise have used. check=True: write NOTHING; read `path` back with
+    UNIVERSAL newline translation (regardless of `newline`, which only governs the write side) --
+    a Windows checkout with no `.gitattributes` eol rule for this path (verified: true for the
+    two .lua outputs here, unlike area_map.json's `eol: lf`) re-mangles a committed LF file to
+    CRLF, which is a checkout artifact, not real drift, and must not read as stale. Returns True
+    iff the (newline-normalised) committed content already equals `content` (a missing or
+    unreadable file counts as stale)."""
+    if not check:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "w", newline=newline, encoding="utf-8") as f:
+            f.write(content)
+        return True
+    try:
+        with open(path, encoding="utf-8") as f:
+            current = f.read()
+    except OSError:
+        current = None
+    ok = current == content
+    print(f"{'current' if ok else 'STALE'}: {path}")
+    return ok
+
+
+def generate_emerald(check=False):
     """Generate the Emerald pack from pret/pokeemerald source JSON (no hand tables).
 
     Outputs data/games/gen3_emerald/area_map.json, gen3_emerald_areas.lua,
     gen3_emerald_locations.lua -- same shapes as the FRLG outputs above.
-    """
+
+    check=True (card E4b-CKPT review F5/F8): generates the same three texts in memory and
+    compares them to the committed files instead of writing anything; returns False (never
+    raises) on the first byte difference or missing file, after reporting every file checked."""
     pret = _find_pret_checkout("pokeemerald")
     maps_dir = os.path.join(pret, "data", "maps")
 
@@ -676,10 +703,9 @@ def generate_emerald():
                              f"collides with {prior!r}")
         area_map[key] = area_id
 
-    os.makedirs(os.path.join("data", "games", "gen3_emerald"), exist_ok=True)
-
-    with open(os.path.join("data", "games", "gen3_emerald", "area_map.json"), "w") as f:
-        json.dump(area_map, f, indent=2, sort_keys=True)
+    area_map_path = os.path.join("data", "games", "gen3_emerald", "area_map.json")
+    area_map_text = json.dumps(area_map, indent=2, sort_keys=True)
+    ok = _write_or_check(area_map_path, area_map_text, check)
 
     sorted_keys = sorted(area_map.keys(), key=lambda x: tuple(int(n) for n in x.split(":")))
     lua_lines = [
@@ -700,9 +726,8 @@ def generate_emerald():
     for key in sorted_keys:
         lua_lines.append(f'  ["{key}"] = "{area_map[key]}",')
     lua_lines.append("}")
-    with open(os.path.join("data", "games", "gen3_emerald", "gen3_emerald_areas.lua"),
-              "w", newline="\n", encoding="utf-8") as f:
-        f.write("\n".join(lua_lines) + "\n")
+    areas_lua_path = os.path.join("data", "games", "gen3_emerald", "gen3_emerald_areas.lua")
+    ok = _write_or_check(areas_lua_path, "\n".join(lua_lines) + "\n", check, newline="\n") and ok
 
     # Locations - every map in map_groups.json (display/debug only), same to_snake()
     # convention as the FRLG table (folder-name derived, not MAPSEC derived).
@@ -722,30 +747,42 @@ def generate_emerald():
     for key in loc_sorted_keys:
         loc_lua_lines.append(f'  ["{key}"] = "{location_map[key]}",')
     loc_lua_lines.append("}")
-    with open(os.path.join("data", "games", "gen3_emerald", "gen3_emerald_locations.lua"),
-              "w", newline="\n", encoding="utf-8") as f:
-        f.write("\n".join(loc_lua_lines) + "\n")
+    locations_lua_path = os.path.join("data", "games", "gen3_emerald", "gen3_emerald_locations.lua")
+    ok = _write_or_check(locations_lua_path, "\n".join(loc_lua_lines) + "\n", check,
+                         newline="\n") and ok
 
-    print(f"Generated {len(area_map)} area entries")
-    print("  -> data/games/gen3_emerald/area_map.json")
-    print("  -> data/games/gen3_emerald/gen3_emerald_areas.lua")
-    print(f"Generated {len(location_map)} location entries")
-    print("  -> data/games/gen3_emerald/gen3_emerald_locations.lua")
+    verb = "Checked" if check else "Generated"
+    print(f"{verb} {len(area_map)} area entries")
+    print(f"  -> {area_map_path}")
+    print(f"  -> {areas_lua_path}")
+    print(f"{verb} {len(location_map)} location entries")
+    print(f"  -> {locations_lua_path}")
     print("Spot-checks (areas):")
     for key in ("3:9", "3:10", "1:0", "24:0"):
         print(f"  {key}: area={area_map.get(key)}  loc={location_map.get(key)}")
+    return ok
 
 
 def main():
     import argparse
+    import sys
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--game", choices=("frlg", "emerald"), default="frlg")
+    # card E4b-CKPT review (OMP cx-6b619663 F5/F8): a real --check, not the "rewrite in place, let
+    # the caller's own tracked-dirty abort catch drift" workaround the Emerald final-cut plan used
+    # before. FRLG's own default (write) behaviour is unchanged either way.
+    parser.add_argument("--check", action="store_true",
+                        help="compare the generated files to what is committed; write nothing; "
+                             "exit 1 on any difference (emerald only for now)")
     args = parser.parse_args()
     if args.game == "emerald":
-        generate_emerald()
-    else:
-        generate_frlg()
+        return 0 if generate_emerald(check=args.check) else 1
+    if args.check:
+        print("--check --game frlg: not implemented (frlg still always writes)", file=sys.stderr)
+        return 1
+    generate_frlg()
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

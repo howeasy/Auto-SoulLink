@@ -235,9 +235,9 @@ EMERALD_EXPECTED_ROWS = [
     "profile_generated_check", "write_checkpoint_generated_check", "area_map_generated_emerald",
     "unit_emerald",
     "states_emerald_town", "states_emerald_battle", "states_emerald_trainer",
+    "checkpoint_emerald",
     "faint_cmd_gen3_em_as_a", "reconnect_gen3_em_as_a", "deadzone_gen3_em_as_a",
     "link_gen3_em_as_a", "boxsync_gen3_em_as_a", "linked_faint_active_gen3_em_as_a",
-    "whiteout_gen3_em_as_a",
     "bootcheck_emerald_town", "bootcheck_emerald_town_b",
     "bootcheck_emerald_battle", "bootcheck_emerald_battle_b",
     "probe_gates_emerald", "shadow_negatives_emerald",
@@ -278,6 +278,19 @@ def test_title_emerald_pin_is_appended_only_to_emerald_provision_text(capsys):
     assert emerald_provision[0].startswith(frlg_provision[0])   # strictly appended, nothing removed
 
 
+def test_title_emerald_unpinned_pret_clone_is_appended_only_to_emerald_provision_text(capsys):
+    """card E4b-CKPT review (OMP cx-6b619663 F1): .cache/pret/pokeemerald/ is an Emerald-only
+    UNPINNED input (unit_emerald's own tests need it), never added to the shared UNPINNED_INPUTS
+    frlg/rr's preamble prints."""
+    cut = _git(fc.REPO, "rev-parse", "HEAD")
+    fc.main(["--cut", cut, "--dry-run", "--lane", LANE, "--master", MASTER])
+    frlg = next(ln for ln in capsys.readouterr().out.splitlines() if "unpinned inputs" in ln)
+    fc.main(["--cut", cut, "--title", "emerald", "--dry-run", "--lane", LANE, "--master", MASTER])
+    emerald = next(ln for ln in capsys.readouterr().out.splitlines() if "unpinned inputs" in ln)
+    assert ".cache/pret/pokeemerald/" not in frlg
+    assert emerald == frlg + ", .cache/pret/pokeemerald/"
+
+
 def test_build_plan_emerald_duo_rows_use_e2e_duo_with_the_emerald_game():
     rows = fc.build_plan_emerald("c" * 40, LANE, MASTER)
     faint = next(r for r in rows if r.id == "faint_cmd_gen3_em_as_a")
@@ -293,7 +306,8 @@ def test_build_plan_emerald_bootcheck_rows_reference_their_own_fixtures():
         "--fixture tests/fixtures/gen3/emerald_town.sav --title emerald "
         "--saveram-name 'Pokemon - Emerald Version (USA, Europe).SaveRAM'")
     assert town.deps == fc.row_deps(town)
-    assert "tests/fixtures/gen3/emerald_town.sav" in town.deps
+    # F6 (E4b-CKPT review): never carried until row_inputs() actually hashes the Emerald ROM
+    assert town.deps is None
 
 
 def test_build_plan_emerald_boots_the_zip_on_emerald():
@@ -315,25 +329,53 @@ def test_the_fr_and_rr_zip_rows_stay_disjoint_from_emeralds():
 
 def test_emerald_rows_are_never_carried_until_their_rom_and_state_inputs_are_hashed():
     for r in fc.build_plan_emerald("c" * 40, LANE, MASTER):
-        assert r.deps is None or r.id.startswith("bootcheck_"), r.id
+        assert r.deps is None or r.id.startswith(("bootcheck_", "checkpoint_")), r.id
 
 
-def test_area_map_generator_has_no_check_flag_so_the_row_relies_on_tracked_dirty():
-    """Documents WHY area_map_generated_emerald has no --check counterpart (unlike the other two
-    §13.1 source rows): a regression here is caught by run_row's generic "lane went tracked-dirty
-    after the row" abort, not by this row's own exit code."""
-    with open(os.path.join(fc.REPO, "tools", "gen_area_map.py"), encoding="utf-8") as f:
-        assert "--check" not in f.read()
+def test_area_map_generated_emerald_row_uses_a_real_check_not_tracked_dirty():
+    """card E4b-CKPT review (OMP cx-6b619663 F5/F8): the row now runs gen_area_map.py's own
+    --check (writes nothing, exits 1 on drift) instead of writing in place and relying on the
+    runner's generic tracked-dirty-after-the-row abort to catch a stale committed file."""
+    row = next(r for r in fc.build_plan_emerald("c" * 40, LANE, MASTER)
+               if r.id == "area_map_generated_emerald")
+    assert row.argv == [fc.PY, "tools/gen_area_map.py", "--game", "emerald", "--check"]
 
 
-def test_no_checkpoint_emerald_row_because_the_receipt_tool_hardcodes_frlg():
-    """gen3_probe_receipt.py's build_env() always points SLINK_GEN3_CHECKPOINT at
-    data/games/gen3_frlg/write_checkpoint.json, regardless of --title -- a --title emerald row
-    through it would silently check the wrong pack. Falsifier: this stays true (a fix would make
-    this test fail, which is the SIGNAL to add the row, not a report to route around)."""
+def test_gen_area_map_check_behaviourally_detects_drift_and_writes_nothing_falsifier(tmp_path):
+    """The actual behavioural falsifier F5/F8 asked for: a tampered committed file is reported
+    STALE and exit 1; nothing on disk is touched by the check itself."""
+    import gen_area_map as gam
+    area_dir = tmp_path / "data" / "games" / "gen3_emerald"
+    area_dir.mkdir(parents=True)
+    committed = area_dir / "gen3_emerald_areas.lua"
+    committed.write_text("stale content\n", encoding="utf-8")
+    before = committed.stat().st_mtime_ns
+    ok = gam._write_or_check(str(committed), "fresh content\n", check=True)
+    assert ok is False
+    assert committed.read_text(encoding="utf-8") == "stale content\n"   # never overwritten
+    assert committed.stat().st_mtime_ns == before
+
+
+def test_checkpoint_emerald_row_uses_the_emerald_pack_not_frlgs():
+    """card E4b-CKPT: gen3_probe_receipt.py's build_env() now picks the checkpoint pack by title
+    (CHECKPOINT_PACK), so a --title emerald run reads Emerald's own pack, not FRLG's -- the
+    inverse of this test's former falsifier (test_no_checkpoint_emerald_row_because_the_receipt_
+    tool_hardcodes_frlg), which is why the row can exist now."""
     env = receipts.build_env("emerald", LANE, ["script_running"], "clean")
-    assert env["SLINK_GEN3_CHECKPOINT"] == f"{LANE}/data/games/gen3_frlg/write_checkpoint.json"
-    assert not any(r.id == "checkpoint_emerald" for r in fc.build_plan_emerald("c" * 40, LANE, MASTER))
+    assert env["SLINK_GEN3_CHECKPOINT"] == f"{LANE}/data/games/gen3_emerald/write_checkpoint.json"
+    row = next(r for r in fc.build_plan_emerald("c" * 40, LANE, MASTER) if r.id == "checkpoint_emerald")
+    assert row.command() == (
+        "python tools/gen3_probe_receipt.py --title emerald --lane " + LANE +
+        " --out checkpoint_emerald_clean_cccccccc.txt")
+    assert row.cwd == fc.REPO
+    assert "--rows" not in row.argv   # no restriction: the pack's own artifacts table decides
+
+
+def test_checkpoint_emerald_row_never_names_bw_rows():
+    """A future --rows edit to this row must not reintroduce bw_* names for emerald -- gen3_probe_
+    receipt.py refuses them by name (NO_BW_TITLES), so naming one here would just fail the row."""
+    row = next(r for r in fc.build_plan_emerald("c" * 40, LANE, MASTER) if r.id == "checkpoint_emerald")
+    assert not any(a.startswith("bw_") for a in row.argv)
 
 
 # ---------------------------------------------------------------------------
@@ -350,7 +392,8 @@ def _write_entry_lua(tmp_path, routed_emerald):
 
 def test_emerald_admission_blocker_true_before_eg4(tmp_path):
     lua_dir = _write_entry_lua(tmp_path, routed_emerald=False)
-    assert "EG4" in fc.emerald_admission_blocker(str(lua_dir))
+    kind, reason = fc.emerald_admission_blocker(str(lua_dir))
+    assert kind == "BLOCKED-EG4" and "EG4" in reason
 
 
 def test_emerald_admission_blocker_none_once_routed(tmp_path):
@@ -359,7 +402,8 @@ def test_emerald_admission_blocker_none_once_routed(tmp_path):
 
 
 def test_emerald_admission_blocker_missing_entry_lua(tmp_path):
-    assert fc.emerald_admission_blocker(str(tmp_path)) is not None
+    kind, _reason = fc.emerald_admission_blocker(str(tmp_path))
+    assert kind == "ZIP-DEFECT"
 
 
 def test_zip_boot_emerald_skips_blocked_before_launching_anything(tmp_path, monkeypatch, capsys):
@@ -398,6 +442,194 @@ def test_an_unrelated_row_named_zip_boot_emerald_like_is_not_confused():
     # allowed_skip() fnmatches the row id; a real skip on a DIFFERENT row must not borrow this
     # ruling just because its output happens to mention BLOCKED-EG4.
     assert fc.allowed_skip("zip_build", "... BLOCKED-EG4: ...") is None
+
+
+# ---------------------------------------------------------------------------
+# card E4b-CKPT review (OMP cx-6b619663, coordinator-verified F2/F7): build_kind/row_inputs/
+# chain_of only knew firered/leafgreen, so predicted_checkpoint_inputs (the --carry path)
+# crashed for checkpoint_emerald; the zip chain and the states/checkpoint chain must group as one
+# shard unit; zip_boot_emerald must not confuse a malformed zip with the EG4 precondition.
+# ---------------------------------------------------------------------------
+
+def test_build_kind_accepts_emerald_states_rows_falsifier():
+    """F7: build_kind's regex knew only firered/leafgreen, so build_key's `kind, title =
+    build_kind(row.id)` raised TypeError (unpacking None) for every states_emerald_* /
+    checkpoint_emerald row -- reachable from plan_decisions() whenever --carry is passed."""
+    assert fc.build_kind("states_emerald_town") == ("town", "emerald")
+    assert fc.build_kind("states_emerald_battle") == ("battle", "emerald")
+    assert fc.build_kind("states_emerald_trainer") == ("trainer", "emerald")
+    assert fc.build_kind("tutorials_emerald") is None   # no such row -- emerald has no tutorials
+
+
+def test_predicted_checkpoint_inputs_does_not_crash_for_emerald_falsifier(tmp_path):
+    lane = str(tmp_path)
+    row = fc.Row("checkpoint_emerald", "§13.2b checkpoint", [], lane, 0)
+    cut = _git(fc.REPO, "rev-parse", "HEAD")   # a real cut: tree_blobs() needs a real tree object
+    # the lane (an empty tmp_path) has no staged ROM and no cache entries, so every build misses
+    # -> None, not the F7 TypeError (unpacking build_kind(None) inside build_key)
+    assert fc.predicted_checkpoint_inputs(row, cut, lane) is None
+
+
+def test_row_inputs_checkpoint_emerald_uses_towns_battle_trainer_not_tutorials():
+    """Emerald has no oldman/pokedude tutorial states; its checkpoint depends on the three
+    states_emerald_* builds (town/battle/trainer) instead of FR/LG's town/battle/tutorials."""
+    lane = "L:/lane"
+    row = fc.Row("checkpoint_emerald", "§13.2b checkpoint", [], lane, 0)
+    inputs = fc.row_inputs(row, lane)
+    assert inputs["rom:emerald"] == os.path.join(lane, fc.STAGED["emerald"])
+    joined = " ".join(inputs.values()).replace("\\", "/")
+    assert "gen3_probe_states_c4p2/emerald/slink_pretrainer.State" in joined
+    assert "gen3_probe_states_c4p2/emerald/slink_prefaint.State" in joined
+    assert "slink_oldman" not in joined and "slink_pokedude" not in joined
+
+
+def test_row_inputs_checkpoint_firered_is_unchanged_by_the_emerald_generalisation():
+    lane = "L:/lane"
+    row = fc.Row("checkpoint_firered", "§6 item3", [], lane, 0)
+    inputs = fc.row_inputs(row, lane)
+    joined = " ".join(inputs.values()).replace("\\", "/")
+    assert "gen3_probe_states/firered/slink_oldman.State" in joined
+    assert "gen3_probe_states/firered/slink_pokedude.State" in joined
+
+
+def test_build_key_uses_emeralds_own_fixture_naming_falsifier(tmp_path):
+    """F7 (parity with FR): Emerald's fixtures are emerald_<kind>.sav (no '_party_' infix, and
+    'trainer' is not remapped to 'town' the way BUILD_FIXTURE does for FR/LG)."""
+    lane = tmp_path
+    rom_rel = fc.STAGED["emerald"]
+    (lane / rom_rel).parent.mkdir(parents=True, exist_ok=True)
+    (lane / rom_rel).write_bytes(b"rom-bytes")
+    row = fc.Row("states_emerald_trainer", "§13.2 build", [], str(lane), 0)
+    blobs = {"tests/fixtures/gen3/emerald_trainer.sav": "deadbeef" * 5}
+    key, manifest = fc.build_key(row, "c" * 40, str(lane), blobs=blobs, bizhawk={})
+    assert key is not None, manifest
+    assert "tests/fixtures/gen3/emerald_trainer.sav" in manifest["git"]
+
+
+def test_chain_of_groups_emerald_states_and_checkpoint_falsifier():
+    assert fc.chain_of("states_emerald_town") == "probe_emerald"
+    assert fc.chain_of("states_emerald_battle") == "probe_emerald"
+    assert fc.chain_of("states_emerald_trainer") == "probe_emerald"
+    assert fc.chain_of("checkpoint_emerald") == "probe_emerald"
+
+
+def test_chain_of_frlg_states_are_unchanged():
+    assert fc.chain_of("states_firered_town") == "probe_firered"
+    assert fc.chain_of("checkpoint_leafgreen") == "probe_leafgreen"
+
+
+def test_chain_of_groups_the_emerald_zip_rows_falsifier():
+    """F2: the old startswith(("zip_", "rr_zip_")) test missed emerald_zip_build/
+    emerald_zip_check entirely (they returned their OWN id, i.e. a singleton chain each),
+    scattering them from zip_boot_emerald across shards."""
+    assert fc.chain_of("emerald_zip_build") == fc.chain_of("emerald_zip_check") == \
+        fc.chain_of("zip_boot_emerald")
+
+
+def test_chain_of_fr_and_rr_zip_rows_are_unchanged():
+    assert fc.chain_of("zip_build") == fc.chain_of("zip_check") == fc.chain_of("zip_boot_firered")
+    assert fc.chain_of("rr_zip_build") == fc.chain_of("rr_zip_check") == \
+        fc.chain_of("zip_boot_radicalred")
+
+
+@pytest.mark.parametrize("n", [2, 3])
+def test_shard_rows_keeps_the_emerald_checkpoint_chain_together_falsifier(n):
+    rows = fc.build_plan_emerald("c" * 40, LANE, MASTER)
+    est = {r.id: r.budget for r in rows}
+    shards = fc.shard_rows(rows, n, est)
+    homes = {r.id: i for i, shard in enumerate(shards) for r in shard}
+    chain = ["states_emerald_town", "states_emerald_battle", "states_emerald_trainer",
+            "checkpoint_emerald"]
+    assert len({homes[c] for c in chain}) == 1
+
+
+@pytest.mark.parametrize("n", [2, 3])
+def test_shard_rows_keeps_the_emerald_zip_chain_together_falsifier(n):
+    rows = fc.build_plan_emerald("c" * 40, LANE, MASTER)
+    est = {r.id: r.budget for r in rows}
+    shards = fc.shard_rows(rows, n, est)
+    homes = {r.id: i for i, shard in enumerate(shards) for r in shard}
+    zips = ["emerald_zip_build", "emerald_zip_check", "zip_boot_emerald"]
+    assert len({homes[z] for z in zips}) == 1
+
+
+# --- F3/F4: emerald_admission_blocker distinguishes a malformed zip from the EG4 precondition ---
+
+def test_admission_blocker_missing_entry_lua_is_a_zip_defect_falsifier(tmp_path):
+    kind, reason = fc.emerald_admission_blocker(str(tmp_path))
+    assert kind == "ZIP-DEFECT"
+    assert "BLOCKED-EG4" not in reason
+
+
+def test_admission_blocker_no_routed_assignment_is_a_zip_defect_falsifier(tmp_path):
+    lua_dir = tmp_path / "lua"
+    (lua_dir / "gen3").mkdir(parents=True)
+    (lua_dir / "gen3" / "entry.lua").write_text("-- no ROUTED table at all\n", encoding="utf-8")
+    kind, reason = fc.emerald_admission_blocker(str(lua_dir))
+    assert kind == "ZIP-DEFECT"
+    assert "BLOCKED-EG4" not in reason
+
+
+@pytest.mark.parametrize("routed_line", [
+    "Entry.ROUTED = { gen3_frlg = true, gen3_rr = true }",
+    'Entry.ROUTED = { gen3_frlg = true, ["gen3_emerald"] = false }',
+])
+def test_admission_blocker_unrouted_emerald_is_blocked_eg4_falsifier(tmp_path, routed_line):
+    lua_dir = tmp_path / "lua"
+    (lua_dir / "gen3").mkdir(parents=True)
+    (lua_dir / "gen3" / "entry.lua").write_text(routed_line + "\n", encoding="utf-8")
+    kind, reason = fc.emerald_admission_blocker(str(lua_dir))
+    assert kind == "BLOCKED-EG4"
+    assert "ruling 24" in reason
+
+
+@pytest.mark.parametrize("routed_line", [
+    "Entry.ROUTED = { gen3_frlg = true, gen3_emerald = true }",
+    'Entry.ROUTED = { gen3_frlg = true, ["gen3_emerald"] = true }',
+    "Entry.ROUTED = { gen3_frlg = true, ['gen3_emerald'] = true }",
+])
+def test_admission_blocker_accepts_both_spellings_falsifier(tmp_path, routed_line):
+    lua_dir = tmp_path / "lua"
+    (lua_dir / "gen3").mkdir(parents=True)
+    (lua_dir / "gen3" / "entry.lua").write_text(routed_line + "\n", encoding="utf-8")
+    assert fc.emerald_admission_blocker(str(lua_dir)) is None
+
+
+def test_admission_blocker_anchors_on_the_routed_assignment_not_any_brace_falsifier(tmp_path):
+    """F4: an unrelated {...} block earlier in the file must not be mistaken for ROUTED."""
+    lua_dir = tmp_path / "lua"
+    (lua_dir / "gen3").mkdir(parents=True)
+    (lua_dir / "gen3" / "entry.lua").write_text(
+        "local UNRELATED = { gen3_emerald = true }\n"
+        "Entry.ROUTED = { gen3_frlg = true }\n", encoding="utf-8")
+    kind, reason = fc.emerald_admission_blocker(str(lua_dir))
+    assert kind == "BLOCKED-EG4"   # the real ROUTED table, not the decoy, is what is checked
+
+
+def test_judge_on_a_zip_defect_is_a_plain_fail_falsifier():
+    """F3: a malformed zip must FAIL, never read as the (allowed) EG4 skip."""
+    out = "RESULT: FAIL ZIP-DEFECT: the extracted zip has no lua/gen3/entry.lua"
+    verdict, ok = fc.judge("zip_boot_emerald", 1, out)
+    assert not ok
+    assert not verdict.startswith("SKIP")
+
+
+def test_zip_boot_defect_never_launches_the_server_falsifier(tmp_path, monkeypatch, capsys):
+    zip_path = tmp_path / "z.zip"
+    lua_dir = tmp_path / "extract" / "lua"
+    lua_dir.mkdir(parents=True)
+    (lua_dir / "slink.lua").write_text("-- stub\n", encoding="utf-8")   # no gen3/entry.lua at all
+    import zipfile
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        zf.write(lua_dir / "slink.lua", (lua_dir / "slink.lua").relative_to(tmp_path / "extract"))
+
+    def _boom(*a, **k):
+        raise AssertionError("zip_boot must not reach the server/emulator launch")
+    monkeypatch.setattr(fc.subprocess, "Popen", _boom)
+    rc = fc.zip_boot(str(zip_path), str(tmp_path), title="emerald")
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "ZIP-DEFECT" in out and "BLOCKED-EG4" not in out
 
 
 # ---------------------------------------------------------------------------
@@ -1379,3 +1611,11 @@ def test_the_shard_plan_does_not_depend_on_carry_or_cache_decisions(pass_env):
     est = {r.id: r.budget for r in rows}
     a = [[r.id for r in s] for s in fc.shard_rows(rows, 2, est)]
     assert a == [[r.id for r in s] for s in fc.shard_rows(list(rows), 2, dict(est))]
+
+
+def test_no_emerald_row_is_carried_on_frlg_shaped_deps():
+    """Coordinator review of E4b-CKPT: every Emerald row either names its own inputs or is never
+    carried; PROBE_DEPS/DUO_DEPS know only the FR/LG pack and fixtures."""
+    for r in fc.build_plan_emerald("c" * 40, LANE, MASTER):
+        deps = fc.row_deps(r)
+        assert deps is None or any("gen3_emerald" in d or "emerald" in d for d in deps), r.id

@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import verify_gen3_release as gate  # noqa: E402  (tools/ is not a package; the gate is a script)
 
-LANE_ORDER = ["unit", "lua-parse", "pins", "profile-generated", "checkpoint-generated",
+LANE_ORDER = ["unit", "lua-parse", "pins", "profile-generated",
               "shadow-negatives-emerald", "probe-gates", "duo-pairs-gen3"]
 
 
@@ -127,12 +127,16 @@ def test_an_unexplained_skip_fails_the_lane(monkeypatch):
 # card E4b-FINALCUT: the two lanes this card added
 # ---------------------------------------------------------------------------
 
-def test_checkpoint_generated_checks_all_three_packs_not_just_emerald():
-    """gen_gen3_write_checkpoint.py --check covers FRLG/RR/Emerald in one invocation (its own
-    ALL_PACKS loop), so this lane's argv names no --title/--pack flag."""
-    lane = next(ln for ln in gate.LANES if ln.name == "checkpoint-generated")
-    assert lane.argv == [sys.executable, "tools/gen_gen3_write_checkpoint.py", "--check"]
-    assert not lane.is_pytest
+def test_no_checkpoint_generated_lane_because_it_couples_the_shared_gate_to_emerald_falsifier():
+    """card E4b-CKPT review (OMP cx-6b619663 F1): gen_gen3_write_checkpoint.py --check runs its
+    ALL_PACKS loop in one process and aborts on the FIRST pack whose inputs are missing (verified:
+    on a machine without the RR ROM it never reaches Emerald's pack at all) -- adding it as a lane
+    here would make the shared FR/RR release gate depend on Emerald-only inputs (the Emerald ROM,
+    .cache/pret/pokeemerald/) it has no business needing. The check itself still runs as the
+    write_checkpoint_generated_check row inside build_plan_emerald's OWN plan (tools/
+    gen3_final_cut.py), where depending on Emerald's inputs is correct."""
+    assert not any(ln.name == "checkpoint-generated" for ln in gate.LANES)
+    assert "checkpoint-generated" not in gate.REQUIREMENTS
 
 
 def test_shadow_negatives_emerald_checks_the_committed_manifest_read_only():
