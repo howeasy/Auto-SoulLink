@@ -12,8 +12,8 @@ Pointers must be in 0x08000000..0x09FFFFFF and backed by supplied bytes.
 
 Output uses cartridge IDs, without National Dex conversion or learned moves:
 * trainers: {trainer_id: {"class": int, "name": str, "party": [mon, ...]}}.
-  Default-move mons contain only species/level, as required by FRLG-R2a. Custom
-  mons additionally contain four moves and, for ItemCustomMoves, held_item.
+  All mons contain species/level. Custom-move mons additionally contain four
+  moves; both item layouts contain held_item (FRLG-R2c, owner ruling 31).
 * wild_encounters: {(map_group, map_num): [habitats, ...]}, where habitats maps
   land/water/rock_smash/fishing to None or {"rate": int, "mons": [mon, ...]}.
   Each wild mon has min_level/max_level/species. Multiple headers for one map
@@ -160,8 +160,8 @@ def decode_trainers(rom: RomData, address: int, count: int) -> dict[int, dict]:
             if flags & 1:
                 moves_offset = 8 if flags & 2 else 6
                 mon["moves"] = list(struct.unpack_from("<4H", party, offset + moves_offset))
-                if flags & 2:
-                    mon["held_item"] = struct.unpack_from("<H", party, offset + 6)[0]
+            if flags & 2:
+                mon["held_item"] = struct.unpack_from("<H", party, offset + 6)[0]
             mons.append(mon)
         trainers[trainer_id] = {"class": raw[1], "name": decode_name(raw[4:16]), "party": mons}
     return trainers

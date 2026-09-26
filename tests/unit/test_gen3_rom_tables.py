@@ -61,8 +61,8 @@ def _trainer_rom(flags=0):
         mon = {"species": species, "level": level}
         if flags & 1:
             mon["moves"] = list(moves)
-            if flags & 2:
-                mon["held_item"] = item
+        if flags & 2:
+            mon["held_item"] = item
         expected.append(mon)
     return rom, {0: {"class": 84, "name": "BROCK", "party": expected}}
 
@@ -79,6 +79,14 @@ def test_all_party_layouts_follow_a_repointed_party(flags):
     rom[0x100:0x100 + size] = b"\xEE" * size
     struct.pack_into("<I", rom, 0x64, ROM_BASE + 0x300)
     assert decode_trainers(bytes(rom), ROM_BASE + 0x40, 1) == expected
+
+
+@pytest.mark.parametrize("flags", (0, 1), ids=("NoItemDefaultMoves", "NoItemCustomMoves"))
+def test_no_item_layouts_never_emit_a_held_item(flags):
+    rom, _ = _trainer_rom(flags)
+    party = decode_trainers(bytes(rom), ROM_BASE + 0x40, 1)[0]["party"]
+    # Offset +6 contains nonzero padding or a move, not an item in these layouts.
+    assert party and all("held_item" not in mon for mon in party)
 
 
 def test_exact_sparse_ranges_follow_a_party_in_expanded_rom_space():
@@ -277,8 +285,8 @@ def test_clean_trainer_parties_and_names_match_pret_source(clean, pret, constant
         if kind.endswith("CUSTOM_MOVES"):
             move_names = re.search(r"\.moves\s*=\s*\{([^}]+)\}", member)[1]
             mon["moves"] = [constants[token.strip()] for token in move_names.split(",")]
-            if kind == "ITEM_CUSTOM_MOVES":
-                mon["held_item"] = constants[fields["heldItem"]]
+        if kind in ("ITEM_DEFAULT_MOVES", "ITEM_CUSTOM_MOVES"):
+            mon["held_item"] = constants[fields["heldItem"]]
         expected_party.append(mon)
     assert expected_party, name
     expected = {
@@ -287,6 +295,48 @@ def test_clean_trainer_parties_and_names_match_pret_source(clean, pret, constant
         "party": expected_party,
     }
     assert decoded["trainers"][constants[trainer]] == expected
+
+
+def test_every_nonzero_held_item_matches_its_pret_party(clean, pret, constants):
+    _, _, decoded = clean
+    source = (pret / "src/data/trainer_parties.h").read_text(encoding="utf-8")
+    held_parties, parsed_fields, layouts = {}, 0, set()
+    for layout, name in re.findall(r"static const struct (TrainerMon\w+) (sParty_\w+)\[\]", source):
+        body = _body(source, rf"\b{name}\[\]\s*=\s*\{{")
+        if ".heldItem" not in body:
+            continue
+        assert layout in ("TrainerMonItemDefaultMoves", "TrainerMonItemCustomMoves"), name
+        members = re.findall(r"\{\s*\.iv\s*=[^,]+,(.*?)\n\s*\},", body, re.S)
+        assert len(members) == len(re.findall(r"\.species\s*=", body)), name
+        expected = {}
+        for slot, member in enumerate(members):
+            item = re.search(r"\.heldItem\s*=\s*(\w+)\s*,", member)
+            if item:
+                parsed_fields += 1
+                value = _number(item[1], constants)
+                if value:
+                    expected[slot] = value
+        if expected:
+            held_parties[name] = (len(members), expected)
+            layouts.add(layout)
+    # Fail if the source parser drops any heldItem field or one item layout.
+    assert parsed_fields == len(re.findall(r"\.heldItem\s*=", source))
+    assert layouts == {"TrainerMonItemDefaultMoves", "TrainerMonItemCustomMoves"}
+
+    trainers = (pret / "src/data/trainers.h").read_text(encoding="utf-8")
+    checked = set()
+    for trainer in re.findall(r"\[(TRAINER_\w+)\]\s*=", trainers):
+        row = _body(trainers, rf"\[{trainer}\]\s*=\s*\{{")
+        ref = re.search(r"\.party\s*=\s*\w+\((sParty_\w+)\)", row)
+        if not ref or ref[1] not in held_parties:
+            continue
+        size, expected = held_parties[ref[1]]
+        party = decoded["trainers"][constants[trainer]]["party"]
+        assert len(party) == size, trainer
+        for slot, item in expected.items():
+            assert party[slot].get("held_item") == item, (trainer, ref[1], slot, item)
+        checked.add(ref[1])
+    assert checked == held_parties.keys(), "a pret held-item party has no decoded trainer control"
 
 
 @pytest.fixture(scope="module")
