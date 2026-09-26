@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.unit.test_gen2_companion_abi import rgbds
+from tests.unit.test_gen2_companion_abi import rgbds, pinned_repo
 from tools import build_gen2_companion as build
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 @pytest.mark.parametrize("title", ["crystal", "gold", "silver"])
 def test_receptionist_section_assembles_with_external_map_symbols(tmp_path, title):
-    pinned = ROOT / ".cache/gen2-build" / ("pokecrystal" if title == "crystal" else "pokegold")
+    pinned = pinned_repo("pokecrystal" if title == "crystal" else "pokegold")
     source = tmp_path / "script.asm"
     source.write_text(("" if title == "crystal" else f"DEF _{title.upper()} EQU 1\n")
                       + f'INCLUDE "{pinned.as_posix()}/includes.asm"\n'
