@@ -1424,6 +1424,8 @@ def check_gen3_witness(witness, flushed, fixture, *, saves, rr=False, ext_ram=No
 # data/games/gen3_rr/profile.json _src). A move's max PP is pret's CalculatePPWithBonus
 # (src/pokemon.c:3898-3902) over the title's own ROM move table (rom.BATTLE_MOVES_ADDR,
 # derived.BATTLE_MOVE_ENTRY_SIZE/BATTLE_MOVE_PP_OFFSET), the same read lua/gen3/boxes.lua makes.
+# NUM_SPECIES = SPECIES_EGG = 412 in both vanilla trees: pokefirered include/constants/species.h:421-423,
+# pokeemerald include/constants/species.h:418-420.
 GEN3_VANILLA_NUM_SPECIES = 412
 GEN3_RR_SPECIES = os.path.join(REPO, "data", "games", "gen3_frlge", "rr_species.json")
 MAIL_NONE = 0xFF                                  # pret include/constants/items.h:451
@@ -2570,9 +2572,16 @@ class DuoRun:
 
     @property
     def _hunt_area(self) -> str:
-        """The server area id of the row's hunting grass (GAMES[...]["hunt_area"]; Route 1 unless
-        the row says otherwise -- gen3_emerald hunts Route 102)."""
-        return (getattr(self, "gcfg", None) or {}).get("hunt_area", "route_1")
+        """The server area id of the row's hunting grass (GAMES[...]["hunt_area"]; gen3_emerald
+        hunts Route 102). Only the Kanto families (and a bare unit-stub run) default to Route 1: any
+        other row that reaches a hunt-area oracle without naming its grass fails loud."""
+        row = getattr(self, "gcfg", None) or {}
+        if "hunt_area" in row:
+            return row["hunt_area"]
+        if row and row.get("game") not in ("gen1_new", "gen3_frlg", "gen3_rr"):
+            raise RuntimeError(f"GAMES row family {row.get('game')!r} names no hunt_area; only the "
+                               f"Kanto rows default to route_1")
+        return "route_1"
 
     def _gen3_limits(self, inst):
         """gen3_limits for this instance's title over the ROM it booted (cached per ROM path):
@@ -6886,8 +6895,10 @@ class DuoRun:
         well-formed trade blob (the protocol's apply_trade blob_hex, docs/protocol.md §6.2)."""
         codec = gen3_codec()
         body = codec.split_rtc(self._gen3_fixture_bytes(inst))[0]
-        sb1 = codec.parse_flash(body, cfru=self._gen3_rr)["sb1"]
-        at = codec.SB1_PARTY_OFFSET + slot * codec.PARTY_MON_SIZE
+        layout = gen3_codec_title(self._gen3_title(inst))
+        sb1 = codec.parse_flash(body, cfru=self._gen3_rr, title=layout)["sb1"]
+        # the title's own SaveBlock1 party offset (Emerald's moved: gen3_codec TITLE_EMERALD)
+        at = codec._TITLE_PARTY_OFFSETS[codec._title(layout)][1] + slot * codec.PARTY_MON_SIZE
         return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
 
     def orchestrate_native_absent_gen3(self):

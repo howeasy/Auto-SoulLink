@@ -5052,7 +5052,7 @@ def test_emerald_test_admission_is_a_noop_off_the_emerald_row():
     lua, fn, json_codec = _admission()
     logged = []
     same = lua.eval("rawequal")
-    for game in ("gen3_frlg", "gen3_rr", "gen1_new", None):
+    for game in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new", None):
         assert same(fn(game, json_codec, logged.append), json_codec)
     wrapped = fn("gen3_emerald", json_codec, logged.append)
     assert not same(wrapped, json_codec)
@@ -5098,3 +5098,17 @@ def test_emerald_row_resolves_pack_fixtures_and_layout():
     party, boxes = duo.gen3_decode(image, title="emerald")
     assert [m["species"] for m in party] == [283, 286] and len(boxes) == 2
     assert duo.gen3_ball_count(image, "emerald") == 5
+    # the raw party record comes from Emerald's own SaveBlock1 offset, not FR's
+    pc = duo.DuoRun.__new__(duo.DuoRun)
+    pc.gcfg, pc.cfg, pc.game = dict(row), dict(duo.SCENARIOS["faint_cmd_gen3"]), "gen3_emerald"
+    assert codec.decode_party_mon(bytes.fromhex(pc._gen3_party_record_hex("a", 1))) == party[1]
+
+
+def test_hunt_area_fails_loud_off_kanto():
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg = {"game": "gen3_emerald"}                   # an Emerald-family row without the key
+    with pytest.raises(RuntimeError, match="names no hunt_area"):
+        _ = run._hunt_area
+    for game in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new"):
+        run.gcfg = dict(duo.GAMES[game])
+        assert run._hunt_area == "route_1", game
