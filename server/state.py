@@ -358,7 +358,11 @@ class SoulLinkState:
         # ROM-patch-required: the Lua side additionally self-gates on
         # patch_present(), so the feature is live only when this flag is ON AND
         # both players are patched.  Per-run rule, never flipped at runtime.
-        self.overworld_presence: bool = overworld_presence
+        # ponytail: the peer ghost is DEFERRED post-RC (owner 2026-09-22, docs/gen3/TODO.md). The new
+        # Gen 3 client never drives it, and presence ON disables the Pokemon Center trade NPC
+        # (lua/gen3/native.lua config), so the flag, CLI option and saved rule are accepted and
+        # ignored, like native_messages. Re-enable by deleting this override (here and in load()).
+        self.overworld_presence: bool = False
         # Native-enhancement toggles (ROM-patch features the Lua client can route either natively
         # or through its Lua fallback).  All four ride the same `config` command the client gets
         # on hello; none are flipped at runtime.  Unlike the opt-in run RULES above, these do not
@@ -1540,7 +1544,7 @@ class SoulLinkState:
                 state.type_lock = bool(saved_rules.get("type_lock", type_lock))
                 state.explode_mode = bool(saved_rules.get("explode_mode", explode_mode))
                 state.rival_team_swap = bool(saved_rules.get("rival_team_swap", rival_team_swap))
-                state.overworld_presence = bool(saved_rules.get("overworld_presence", overworld_presence))
+                state.overworld_presence = False  # deferred post-RC; see __init__
                 state.native_messages = False  # disabled for the RC; see __init__
                 state.native_sounds = bool(saved_rules.get("native_sounds", native_sounds))
                 state.battle_calc = bool(saved_rules.get("battle_calc", battle_calc))
