@@ -758,8 +758,8 @@ def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     run.gcfg = dict(row, sides=dict(row["sides"], b=("firered", "firered_party_{target}_b")))
     assert run._gen3_title("b") == "firered"
     assert run._gen3_fixture_path("b").endswith("firered_party_town_b.sav")
-    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen.
-    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red"}
+    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen; E4: emerald.
+    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red", "emerald"}
     for inst in ("a", "b"):
         assert row["sides"][inst][0] in duo.GEN3_TITLES
 
@@ -1049,7 +1049,8 @@ local DECODED = {{
 local MODULES = {{
   ["/repo/lua/json_codec.lua"] = {{ decode = function(t) return DECODED[t] or {{}} end }},
   ["/repo/lua/tests/gen3_boot_check.lua"] = {{ title = "", budget = 0 }},
-  ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}} }},
+  ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}}, PROFILE_PACK_BY_TITLE = {{
+      firered = "gen3_frlg", leafgreen = "gen3_frlg", radical_red = "gen3_rr", emerald = "gen3_emerald" }} }},
   ["/repo/lua/gen3/reads.lua"] = {{ new = function() return {{}} end }},
   ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end }},
 }}
@@ -1168,9 +1169,12 @@ def test_the_scripted_play_exports_and_paths_the_driver_uses_exist():
     for name in set(re.findall(r"\bSP\.(\w+)", text)):
         assert re.search(rf"\b{name}\s*=", exports), f"gen3_scripted_play does not export {name}"
     paths = scripted[scripted.index("local PATHS = {"):scripted.index("local H = {")]
-    used = set(re.findall(r'(?:follow\(cp, |reversed\()"(\w+)"', text)) - {"pc_to_pokecenter_entrance"}
+    used = set(re.findall(r'(?:follow\(cp, |reversed\()"(\w+)"', text)) - set(
+        re.findall(r'reversed\("\w+", "(\w+)"\)', text))   # built by the driver's reversed()
     for name in used:
-        assert re.search(rf"^\s+{name} = \{{", paths, re.M), f"no PATHS entry {name}"
+        # E4: the Emerald paths are assigned in the Emerald block (PATHS.em_... = {)
+        assert (re.search(rf"^\s+{name} = \{{", paths, re.M)
+                or re.search(rf"^PATHS\.{name} = \{{", scripted, re.M)), f"no PATHS entry {name}"
     for dest in set(re.findall(r"SP\.DEST\.(\w+)", text)):
         assert re.search(rf"\b{dest} = \{{", scripted), f"no DEST {dest}"
 
@@ -4177,7 +4181,7 @@ def test_active_faint_chain_is_red_on_the_old_hold_and_a_press(ph, mutate, probl
 
 
 def test_p_h_rows_are_registered_with_their_cases():
-    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr")),
+    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr", "gen3_emerald")),
              "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr")),
              "linked_faint_active_trainer_gen3": ("trainer", ("gen3_frlg",)),
              "active_end_gen3": ("command", ("gen3_frlg",)),
@@ -5027,3 +5031,112 @@ def test_traced_follow_rr_trace_is_silent_without_the_env_flag():
     assert ok is True, err
     assert list(w.log.values()) == []
 
+
+
+# ── E4: the gen3_emerald row (E<->E) ─────────────────────────────────────────────────────
+_ADMISSION_FN = re.compile(r"local function test_admission_codec\(.*?\nend\n", re.S)
+
+
+def _admission():
+    from lupa import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    body = _ADMISSION_FN.search(DRIVER.read_text(encoding="utf-8"))
+    assert body, "duo_gen3_main.lua must define test_admission_codec"
+    fn = lua.execute(body.group(0) + "\nreturn test_admission_codec")
+    json_codec = lua.execute(f"return dofile([[{REPO / 'lua' / 'json_codec.lua'}]])")
+    return lua, fn, json_codec
+
+
+def test_emerald_test_admission_is_a_noop_off_the_emerald_row():
+    lua, fn, json_codec = _admission()
+    logged = []
+    same = lua.eval("rawequal")
+    for game in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new", None):
+        assert same(fn(game, json_codec, logged.append), json_codec)
+    wrapped = fn("gen3_emerald", json_codec, logged.append)
+    assert not same(wrapped, json_codec)
+    doc = wrapped.decode('{"titles":{"emerald":{"admitted":false},"firered":{"admitted":false}}}')
+    assert doc.titles.emerald.admitted is True
+    assert doc.titles.firered.admitted is False          # only titles.emerald is touched
+    assert wrapped.decode('{"a":1}').a == 1 and same(wrapped.encode, json_codec.encode)
+    assert logged == ["TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)"]
+
+
+def test_emerald_admission_stays_refused_in_production():
+    """Ruling 24: the duo's seam is test-only -- every production refusal is still in place."""
+    profile = json.loads((REPO / "data/games/gen3_emerald/profile.json").read_text(encoding="utf-8"))
+    assert profile["titles"]["emerald"]["admitted"] is False
+    entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
+    assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true \}", entry)
+    assert 'header_code == "BPEE"' in (REPO / "lua/slink.lua").read_text(encoding="utf-8")
+    assert "test_admission_codec" not in entry
+
+
+def test_emerald_row_resolves_pack_fixtures_and_layout():
+    row = duo.GAMES["gen3_emerald"]
+    assert row["game"] == "gen3_emerald" and duo.scenario_family("gen3_emerald") == "gen3_emerald"
+    assert "gen3_emerald" in duo.OPT_IN_GAMES and duo.rng_retry_family("gen3_emerald")
+    assert duo.gen3_profile_path("emerald").endswith(os.path.join("gen3_emerald", "profile.json"))
+    assert duo.gen3_profile_path("firered").endswith(os.path.join("gen3_frlg", "profile.json"))
+    assert duo.gen3_profile_path("radical_red") == duo.GEN3_RR_PROFILE
+    assert duo.gen3_codec_title("radical_red") == "frlg" and duo.gen3_codec_title("emerald") == "emerald"
+    assert not duo.scenario_applies("whiteout_gen3", "gen3_emerald")   # E4 known gap (outdoor landing)
+    for name in ("faint_cmd_gen3", "reconnect_gen3", "deadzone_gen3", "link_gen3", "boxsync_gen3",
+                 "linked_faint_active_gen3"):
+        assert duo.scenario_applies(name, "gen3_emerald"), name
+        run = duo.DuoRun.__new__(duo.DuoRun)
+        run.gcfg, run.cfg, run.game = dict(row), dict(duo.SCENARIOS[name]), "gen3_emerald"
+        assert run._hunt_area == {"battle": "route_102", "pc": "route_103"}[run._target_for("a")], name
+        for inst in ("a", "b"):
+            assert run._gen3_title(inst) == "emerald"
+            assert os.path.isfile(run._gen3_fixture_path(inst)), run._gen3_fixture_path(inst)
+    frlg = duo.DuoRun.__new__(duo.DuoRun)
+    frlg.gcfg = dict(duo.GAMES["gen3_frlg"])
+    assert frlg._hunt_area == "route_1"
+    # the Emerald layout, not FR's: emerald_pc.sav's two-mon party and two boxed mons
+    image = (REPO / "tests/fixtures/gen3/emerald_pc.sav").read_bytes()
+    party, boxes = duo.gen3_decode(image, title="emerald")
+    assert [m["species"] for m in party] == [283, 286] and len(boxes) == 2
+    assert duo.gen3_ball_count(image, "emerald") == 5
+    # the raw party record comes from Emerald's own SaveBlock1 offset, not FR's
+    pc = duo.DuoRun.__new__(duo.DuoRun)
+    pc.gcfg, pc.cfg, pc.game = dict(row), dict(duo.SCENARIOS["faint_cmd_gen3"]), "gen3_emerald"
+    assert codec.decode_party_mon(bytes.fromhex(pc._gen3_party_record_hex("a", 1))) == party[1]
+
+
+def test_hunt_area_fails_loud_off_kanto():
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg = {"game": "gen3_emerald"}                   # an Emerald-family row without the key
+    with pytest.raises(RuntimeError, match="names no hunt_area"):
+        _ = run._hunt_area
+    for game in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new"):
+        run.gcfg = dict(duo.GAMES[game])
+        assert run._hunt_area == "route_1", game
+
+
+# ── E4-DUO-2: whiteout_destination on Emerald (raw lastHealLocation) vs FR (projection) ───
+def _scripted_machine(title):
+    from lupa import LuaRuntime
+    from test_gen3_fr_story_oracles import HARNESS
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SLINK_ROOT = REPO.as_posix()
+    lua.globals().SLINK_GEN3_TITLE = title
+    lua.execute(HARNESS)
+    return lua, lua.execute(f'return dofile("{SCRIPTED.as_posix()}")')
+
+
+def test_emerald_whiteout_lands_on_the_raw_heal_tile_and_fr_still_projects():
+    from lupa import LuaError
+
+    lua, mod = _scripted_machine("emerald")
+    oldale = lua.eval("{group=0, num=10, warp=255, x=6, y=17}")
+    dest = mod.whiteout_destination(lua.globals().F.cp, oldale)
+    assert (dest.group, dest.num, dest.x, dest.y) == (0, 10, 6, 17)
+    lua, mod = _scripted_machine("firered")
+    cp = lua.globals().F.cp
+    dest = mod.whiteout_destination(cp, lua.eval("{group=3, num=1, warp=255, x=26, y=27}"))
+    assert (dest.group, dest.num, dest.x, dest.y) == (5, 4, 7, 4)     # Viridian Center, unchanged
+    with pytest.raises(LuaError, match="whiteout_heal_unsupported"):
+        mod.whiteout_destination(cp, lua.eval("{group=0, num=10, warp=255, x=6, y=17}"))  # FR: no raw tile

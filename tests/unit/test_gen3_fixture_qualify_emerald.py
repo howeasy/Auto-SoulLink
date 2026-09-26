@@ -50,6 +50,7 @@ FIXTURE_SHA256 = {
     "emerald_trainer.sav": "1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6",
     "emerald_trainer_b.sav": "ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6",
     "emerald_pc.sav": "c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab",
+    "emerald_pc_b.sav": "75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6",  # E4-DUO derive-b
     "emerald_lowhp.sav": "c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b",
     "emerald_badges.sav": "04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f",
     "emerald_evolve.sav": "244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd",
@@ -92,7 +93,7 @@ def test_emerald_b_side_has_a_distinct_trainer_at_the_same_place(kind):
     ra, rb = (fx.qualify_one(x, rr=False, title=EM) for x in (a, b))
     assert (ra["trainer_name"], rb["trainer_name"]) == ("EMER", "EMERB")
     assert rb["trainer_id"] == ra["trainer_id"] ^ 0xFFFFFFFF
-    (ma,), (mb,) = (codec.party_from_save(x, title=EM) for x in (a, b))
+    ma, mb = (codec.party_from_save(x, title=EM)[0] for x in (a, b))   # lead; pc/poison hold two
     assert (ma["ot_id"], mb["ot_id"]) == (ra["trainer_id"], rb["trainer_id"])
     assert {k: ma[k] for k in ("species", "level", "hp", "personality")} == \
         {k: mb[k] for k in ("species", "level", "hp", "personality")}

@@ -1,0 +1,5 @@
+attempt 1 of 1
+IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=fba2f186141e3a9ddf4e226cfaeb46c69cda321c
+RESULT_LINE a: RESULT: FAIL (helper: whiteout_heal_unsupported: lastHealLocation 0.10 warp=255 (6,17))
+RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))
+PYDEC: FAIL client RESULT before saved-state oracle

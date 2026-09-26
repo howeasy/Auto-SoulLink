@@ -195,6 +195,14 @@ local function whiteout_destination(cp, checkpoint)
     local raw = checkpoint or last_heal_checkpoint(cp)
     if not raw then return nil end
     local group, num, warp, x, y = raw.group, raw.num, raw.warp, raw.x, raw.y
+    if TITLE == "emerald" and warp == 255 then
+        -- E4-DUO-2: Emerald has no interior projection. pret pokeemerald c65e93f2
+        -- src/overworld.c:357-366 DoWhiteOut -> SetWarpDestinationToLastHealLocation (:665-668)
+        -- warps straight to gSaveBlock1Ptr->lastHealLocation, which SetLastHealLocationWarp
+        -- (:670-676) stores as WARP_ID_NONE + the heal tile (heal_locations.json:82-85: Oldale
+        -- 0.10 (6,17), outdoors). SaveBlock1 +0x1C as on FR (include/global.h:990).
+        return {group = group, num = num, x = x, y = y}
+    end
     if group == 3 and num == 0 and warp == 255 and x == 6 and y == 8 then
         return {group = 4, num = 0, x = 8, y = 5}
     elseif group == 3 and num == 1 and warp == 255 and x == 26 and y == 27 then
@@ -3106,9 +3114,9 @@ local function em_save_dialog()
         or c == em_thumb(ES.SaveCallback)
 end
 local EM_MENU_ACTION_SAVE = 5  -- src/start_menu.c:51-58 (Emerald's own numbering; FR/LG's is 4)
-local function emerald_save_via_menu(cp)
-    local domain = select(1, G.flash_domain())
-    if not domain then G.finish(false, "emerald_save: no flash memory domain"); return end
+--- Emerald's START-menu SAVE as a library call (E4: duo_gen3_main.lua ctx.save reuses it):
+--- (ok, before_counter, after_counter, why) -- `why` names the failed step, nothing finishes.
+function EMH.save_via_menu(cp, domain)
     local before = G.save_counter(domain)
     G.phase("save-menu", "counter=" .. before)
     local opened = false
@@ -3124,31 +3132,20 @@ local function emerald_save_via_menu(cp)
         end
         if opened then break end
     end
-    if not opened then
-        G.shot("stuck")
-        G.finish(false, "emerald_save: the START menu never took input")
-        return
-    end
+    if not opened then return false, before, before, "the START menu never took input" end
     local n = memory.read_u8(ES.sNumStartMenuActions)
     local row = nil
     for i = 0, n - 1 do
         if memory.read_u8(ES.sCurrentStartMenuActions + i) == EM_MENU_ACTION_SAVE then row = i; break end
     end
-    if not row then
-        G.finish(false, string.format("emerald_save: no SAVE row among %d START items", n))
-        return
-    end
+    if not row then return false, before, before, string.format("no SAVE row among %d START items", n) end
     for _ = 1, n + 8 do
         if memory.read_u8(ES.sStartMenuCursorPos) == row then break end
-        if not em_menu_ready() then
-            G.finish(false, "emerald_save: the START menu closed during the row walk")
-            return
-        end
+        if not em_menu_ready() then return false, before, before, "the START menu closed during the row walk" end
         G.tap("Down", 3, 13)
     end
     if memory.read_u8(ES.sStartMenuCursorPos) ~= row then
-        G.finish(false, "emerald_save: cursor never reached the SAVE row " .. row)
-        return
+        return false, before, before, "cursor never reached the SAVE row " .. row
     end
     G.tap("A", 3, 0)
     local opened_dialog = false
@@ -3156,23 +3153,16 @@ local function emerald_save_via_menu(cp)
         if em_save_dialog() then opened_dialog = true; break end
         G.advance()
     end
-    if not opened_dialog then
-        G.shot("stuck")
-        G.finish(false, "emerald_save: the save dialog never opened")
-        return
-    end
+    if not opened_dialog then return false, before, before, "the save dialog never opened" end
     G.phase("save-dialog", "row=" .. row .. "/" .. n)
     -- YES is the default on the save prompt; the flash counter, not the presses, is the verdict.
     local after, moved = before, false
-    for i = 1, 300 do
+    for _ = 1, 300 do
         G.tap("A", 3, 13)
         after = G.save_counter(domain)
         if after > before then moved = true; break end
     end
-    if not moved then
-        G.finish(false, "emerald_save: the save counter never advanced")
-        return
-    end
+    if not moved then return false, before, after, "the save counter never advanced" end
     G.phase("saved", string.format("counter=%d->%d", before, after))
     -- SaveCallback's own success exit is the only one that frees the field controls again.
     local closed = false
@@ -3180,13 +3170,44 @@ local function emerald_save_via_menu(cp)
         G.tap("A", 3, 13)
         if G.pred_ok(cp, "field_controls_locked") then closed = true; break end  -- free again
     end
-    if not closed then
-        G.finish(false, "emerald_save: the save dialog never closed")
+    if not closed then return false, before, after, "the save dialog never closed" end
+    if not pcall(client.saveram) then return false, before, after, "SaveRAM flush failed" end
+    return true, before, after
+end
+local function emerald_save_via_menu(cp)
+    local domain = select(1, G.flash_domain())
+    if not domain then G.finish(false, "emerald_save: no flash memory domain"); return end
+    local ok, _, _, why = EMH.save_via_menu(cp, domain)
+    if not ok then
+        G.shot("stuck")
+        G.finish(false, "emerald_save: " .. why)
         return
     end
-    local ok = pcall(client.saveram)
-    if not ok then G.finish(false, "emerald_save: SaveRAM flush failed"); return end
     G.phase("flushed", play.where(cp))
+end
+
+--- Title screen -> CONTINUE -> the field (E4: duo_gen3_main.lua's Emerald boot). A only, never
+--- Start -- in the field Start opens the menu (gen3_emerald_boot_check.lua boot_to_field); the
+--- field is the pack's callback2 + palette_fade_active predicates held 60 frames, as
+--- gen3_boot_check.lua M.boot_to_field judges it.
+function EMH.boot_to_field(cp, frames)
+    local held = 0
+    for i = 1, (frames or 9000) do
+        if G.pred_ok(cp, "callback2") and G.pred_ok(cp, "palette_fade_active") then
+            joypad.set({})
+            held = held + 1
+            if held >= 60 then
+                G.phase("field", string.format("map=(%d,%d)", G.map(cp)))
+                return true
+            end
+        else
+            held = 0
+            joypad.set(i % 16 == 8 and { A = true } or {})
+        end
+        G.advance()
+    end
+    joypad.set({})
+    return false
 end
 
 -- ── TOWN group (emerald_town.sav, Oldale Town 0.10 (6,17)) ─────────────────────────────────
@@ -3279,6 +3300,7 @@ local function em_box_cursor(label, pos)
     end
     return pc_fail(label, "box_cursor_stalled")
 end
+EMH.box_cursor = em_box_cursor   -- E4: duo_gen3_main.lua ctx.pc_withdraw past occupied slots
 
 --- MOVE POKeMON mode's popup row 0 (MOVE on a mon, PLACE on an empty slot while carrying one):
 --- AddMenu starts the cursor on row 0 (:8001-8014), so A opens the popup and A takes row 0.
@@ -3514,22 +3536,69 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
 --- class of bug FR's grass_step comment documents.
 local EM_GRASS_ORIGIN = { 21, 16 }
 local EM_GRASS_NEXT = { ["21,16"] = "Right", ["22,16"] = "Down", ["22,17"] = "Left", ["21,17"] = "Up" }
-local function emerald_hunt_grass(cp, max_cycles)
+local function emerald_hunt_grass(cp, max_cycles, loop)
     local start_map = play.map(cp)
+    loop = loop or EM_GRASS_NEXT
     for _ = 1, max_cycles * 4 do
         if play.in_battle(cp) then return true end
         local px, py = G.pos(cp)
-        local d = EM_GRASS_NEXT[px .. "," .. py]
+        local d = loop[px .. "," .. py]
         if not d then
             G.shot("stuck")
-            G.finish(false, string.format("emerald_hunt_grass: (%d,%d) is not on the grass loop "
-                                          .. "(21..22,16..17)", px, py))
+            local tiles = {}
+            for k in pairs(loop) do tiles[#tiles + 1] = "(" .. k .. ")" end
+            table.sort(tiles)
+            G.finish(false, string.format("emerald_hunt_grass: (%d,%d) is not on the grass loop %s",
+                                          px, py, table.concat(tiles, " ")))
             return false
         end
         play.step(cp, d, start_map, nil, false)
         if play.in_battle(cp) then return true end
     end
     return play.in_battle(cp)
+end
+
+-- E4: Oldale Town (the two-mon emerald_pc.sav tile (6,17)) -> Route 103's grass, for the duo
+-- rows whose hunters need a bench mon. West to Route 102 is no good: its only corridor past
+-- x=33 is Youngster Calvin's sight line (33,15..17) (pret data/maps/Route102/map.json: (33,14)
+-- FACE_DOWN, sight 3; tools/gba_map.py --map 0.17 --bfs 49,11 32,y is None for every y outside
+-- 14..17), so a walk west starts his battle (live E4 linked_faint_active r1 stalled at (33,16)).
+-- Route 103's grass (12..17,13..15) lies by the south edge, every trainer at x >= 36 (pret
+-- data/maps/Route103/map.json), no coord events. tools/gba_map.py "<Emerald ROM>" --sym
+-- data/gen3/pret/pokeemerald.sym --game emerald: --map 0.10 --connections -> "up: offset=0 ->
+-- 0.18"; --map 0.10 --bfs 6,17 9,0 -> the first 20 dirs (the 21st Up crosses to (9,21));
+-- --map 0.18 --bfs 9,21 12,15 -> the second path; --find-behaviour 0x02 -> the 2x2 loop below
+-- is all MB_TALL_GRASS. Oldale's coord events (0,10) and (8..10,19) are off this path.
+-- `to` is Oldale's top row: the 21st Up crosses the map connection, and playlib's follow returns
+-- on that map change (playlib.lua P.follow), so the Route 103 landing (9,21) is the next path's
+-- pinned `from`, which follow checks. Both paths are battles=false and touch NO grass before
+-- their last tile: a fought approach encounter levels the linked mon (live E4-DUO-2 run: B's
+-- memorial differed from the fixture in exp 135->158 and one Attack EV). The walk stops on the
+-- loop's first grass tile (12,15) -- the only tile of the walk in grass (--find-behaviour 0x02:
+-- row 15 grass is x 12..17; x=9 rows 15..20 and (10,15),(11,15) are not) -- and an encounter
+-- rolled on that last step is the hunt's own (playlib P.step returns the landed step as moved
+-- before its enc=false in_battle check; EMH.hunt returns at once while in battle).
+PATHS.em_oldale_to_route103 = {
+    map = "OldaleTown", from = { 6, 17 }, to = { 9, 0 }, battles = false,
+    dirs = { "Right","Right","Right","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up",
+             "Up","Up","Up","Up","Up","Up","Up" },
+}
+PATHS.em_route103_edge_to_grass = {
+    map = "Route103", from = { 9, 21 }, to = { 12, 15 }, battles = false,
+    dirs = { "Up","Up","Up","Up","Up","Up","Right","Right","Right" },   -- --bfs 9,21 12,15
+}
+-- the 2x2 loop (12..13,14..15), all MB_TALL_GRASS; each edge --bfs-verified (one step apiece)
+EMH.GRASS103_NEXT = { ["12,15"] = "Right", ["13,15"] = "Up", ["13,14"] = "Left", ["12,14"] = "Down" }
+--- Hunt from wherever an Emerald duo fixture stands: Route 102's loop (the battle fixtures) or,
+--- from Oldale Town (the two-mon pc fixture), Route 103's loop after the walk above.
+function EMH.hunt(cp, label, max_cycles)
+    local g, n = G.map(cp)
+    if g == 0 and n == 17 then return emerald_hunt_grass(cp, max_cycles) end
+    if g == 0 and n == 10 then
+        play.follow(cp, "em_oldale_to_route103", label)
+        play.follow(cp, "em_route103_edge_to_grass", label)
+    end
+    return emerald_hunt_grass(cp, max_cycles, EMH.GRASS103_NEXT)
 end
 
 --- Fight an already-triggered battle to its end, same pinned shape as this file's own
@@ -3794,6 +3863,7 @@ local function emerald_throw_ball(cp, label)
                                          EMH.ball_count()))
     return true
 end
+EMH.throw_ball = emerald_throw_ball   -- E4: duo_gen3_main.lua ctx.catch on Emerald
 
 -- ── leg: emerald_route102_catch (capture_wild) ──────────────────────────────────────────────────
 -- Same "throw on the first action-menu turn, retry across ENCOUNTERS (bounded), never across
