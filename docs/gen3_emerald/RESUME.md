@@ -52,8 +52,7 @@ Defects fixed in `611913a2`–`414afb92`, each found live:
 - OPEN, carried to E4/E5: `trade_done` (needs link/E5).
 
 **NEXT (in order):**
-1. The owner reviews and signs `docs/gen3_emerald/EG2_request.md`. Nothing on the E3 track starts
-   before that.
+1. EG2 SIGNED 2026-09-26 (owner, confirmed in chat). E3 has started.
 2. E3, after EG2. The Gen 3 coordinator has approved the direction, with these conditions:
    - the FR/LG/RR packs gain explicit fields for today's values;
    - FR/LG/RR client behaviour stays byte-identical;
