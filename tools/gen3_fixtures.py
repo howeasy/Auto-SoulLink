@@ -937,6 +937,20 @@ EMERALD_KINDS = {
     "lowhp": ("Route102", 0, 17, 18, 21, 16),
     # E2-BADGES: the town tile with four badge flags set, so reads == PYDEC is proven above 0
     "badges": ("OldaleTown", 0, 10, 11, 6, 17),
+    # card E2-FIX-VARIANTS round 3: same tile as "battle" -- a wild win must level 15->16 and
+    # trigger the MUDKIP->MARSHTOMP evolution
+    "evolve": ("Route102", 0, 17, 18, 21, 16),
+    # round 3: same tile as "town" -- the poison-step tick needs no wild encounters either
+    "poison": ("OldaleTown", 0, 10, 11, 6, 17),
+    # round 3: LavaridgeTown, one step S of the EggWoman object event (4,7), who hands over
+    # SPECIES_WYNAUT unconditionally (data/maps/LavaridgeTown/scripts.inc
+    # LavaridgeTown_EventScript_EggWoman: no goto_if_set/checkflag gate besides the
+    # already-given flag FLAG_RECEIVED_LAVARIDGE_EGG, which the seed leaves clear) -- the
+    # fewest-SYNTH-flags gift site: needs nothing beyond the baseline emerald_new_game_flags()
+    "gift": ("LavaridgeTown", 0, 12, 13, 4, 8),
+    # coordinator add-on, round 3: same tile as "battle" -- 20 Poke Balls so five straight
+    # native misses (~0.56 miss chance each at Mudkip's catchRate 255) can't false-fail the leg
+    "catch": ("Route102", 0, 17, 18, 21, 16),
 }
 # FLAG_BADGE01_GET..FLAG_BADGE04_GET (pret include/constants/flags.h:1359-1362): 0x867 is byte
 # 0x10C bit 7 and 0x868..0x86A are byte 0x10D bits 0-2, so the set straddles a flag byte
@@ -964,8 +978,12 @@ EMERALD_MONEY = 3000       # NewGameInitData: SetMoney(&gSaveBlock1Ptr->money, 3
 # SaveBlock1 +0x650, BAG_POKEBALLS_COUNT (16) x struct ItemSlot {u16 itemId, u16 quantity}
 # (include/global.h:590-594,1008; include/constants/global.h:53).
 EMERALD_BALLS = 5
+# coordinator add-on, round 3: the "catch" kind's ball count, large enough that five straight
+# native misses at Mudkip's catchRate 255 is a ~1e-5 event rather than a plausible one.
+EMERALD_CATCH_BALLS = 20
 SB1_BALL_POCKET_EMERALD, BALL_POCKET_SLOTS = 0x650, 16
 SB2_ENCRYPTION_KEY = 0xAC  # u32 encryptionKey, include/global.h:532
+STATUS1_POISON = 1 << 3    # include/constants/battle.h:117
 # Flags a player holds once Birch has handed over the Pokedex (FLAG_ADVENTURE_STARTED: its comment
 # in constants/flags.h:136 is "RECEIVED Pokedex") -- it is what unblocks Oldale's west exit to
 # Route 102 (data/maps/OldaleTown/scripts.inc OnTransition). Everything else a new game sets comes
@@ -1007,7 +1025,11 @@ def _synth_mon(species: dict, level: int, pid_seed: int, ot_name: str, tid: int,
     STARTER_IV. `party=False` omits the party-only tail (no level/hp/status: BoxPokemon has
     none of those -- the game derives level from `experience` at display time,
     src/pokemon.c:2910-2920 GetLevelFromMonExp). Deliberately independent of emerald_starter:
-    never touches MUDKIP's own byte output (town/battle/trainer stay byte-identical)."""
+    never touches MUDKIP's own byte output (town/battle/trainer stay byte-identical). ability_num
+    is 0: CreateBoxMon only randomizes it (`personality & 1`) when the species has a second
+    ability (src/pokemon.c:2296-2300 `if (gSpeciesInfo[species].abilities[1])`); POOCHYENA,
+    ZIGZAGOON and WURMPLE are all single-ability (species_info.h RUN_AWAY/NONE, PICKUP/NONE,
+    SHIELD_DUST/NONE), so a real CreateBoxMon would leave it at its zero-init value."""
     pid = next(p for p in itertools.count(pid_seed)
                if p % 25 == 0
                and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
@@ -1022,7 +1044,7 @@ def _synth_mon(species: dict, level: int, pid_seed: int, ot_name: str, tid: int,
         "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": level,
         "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
         "ivs": dict.fromkeys(species["base"], STARTER_IV),
-        "is_egg": 0, "ability_num": pid & 1, "ribbons": 0,
+        "is_egg": 0, "ability_num": 0, "ribbons": 0,
     }
     if party:
         stats = {k: (2 * b + STARTER_IV) * level // 100 + 5 for k, b in species["base"].items()}
@@ -1038,6 +1060,54 @@ def _box_mon_level(mon: dict) -> int:
     while level <= 100 and level ** 3 <= mon["experience"]:
         level += 1
     return level - 1
+
+
+def _exp_medium_slow(level: int) -> int:
+    """EXP_MEDIUM_SLOW(n) = 6*n^3/5 - 15*n^2 + 100*n - 140 (Mudkip's growth rate,
+    src/data/pokemon/experience_tables.h:7)."""
+    return 6 * level ** 3 // 5 - 15 * level ** 2 + 100 * level - 140
+
+
+# card E2-FIX-VARIANTS round 3: the "evolve" kind's Mudkip. pokeemerald c65e93f2
+# src/data/pokemon/evolution.h:129 [SPECIES_MUDKIP] = {{EVO_LEVEL, 16, SPECIES_MARSHTOMP}} --
+# EXP one short of the Lv16 threshold, so any wild win's EXP gain (always >=1) crosses it and
+# evolves the mon. Moves are TACKLE/GROWL/WATER_GUN only (Mudkip's own Lv6 MUD_SLAP dropped):
+# confirmed with E2-LEGS (round 3) that with only 3 of 4 slots filled, Marshtomp's own Lv16 move
+# MUD_SHOT (level_up_learnsets.h:3700) is auto-learned by GiveMoveToBoxMon (src/pokemon.c:2939-
+# 2955, returns MON_HAS_MAX_MOVES only once all 4 slots are full) instead of raising the
+# delete-a-move Yes/No prompt a 4th starting move would force. MOVE_WATER_GUN=55 pp25
+# (include/constants/moves.h:59, battle_moves.h "[MOVE_WATER_GUN]" pp).
+EVOLVE_LEVEL = 15
+EVOLVE_EXP = _exp_medium_slow(EVOLVE_LEVEL + 1) - 1
+EVOLVE_MOVES, EVOLVE_PP = [33, 45, 55, 0], [35, 40, 25, 0]
+
+
+def _evolve_mon(ot_name: str, tid: int) -> dict:
+    """The "evolve" kind's Lv15 Mudkip: same PID search as emerald_starter (Hardy, male, not
+    shiny), Lv15 stats, EXP = EVOLVE_EXP. Deliberately independent of emerald_starter so its own
+    byte output (town/battle/trainer/pc/lowhp/badges) is never touched."""
+    pid = next(p for p in itertools.count(0x4D55444B)
+               if p % 25 == 0 and (p & 0xFF) >= MUDKIP["gender_ratio"]
+               and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+    lv = EVOLVE_LEVEL
+    stats = {k: (2 * b + STARTER_IV) * lv // 100 + 5 for k, b in MUDKIP["base"].items()}
+    stats["hp"] = (2 * MUDKIP["base"]["hp"] + STARTER_IV) * lv // 100 + lv + 10
+    return {
+        "personality": pid, "ot_id": tid, "nickname": MUDKIP["name"], "language": LANGUAGE_ENGLISH,
+        "is_bad_egg": 0, "has_species": 1, "is_egg_flag": 0, "block_box_rs": 0, "flags_unused": 0,
+        "ot_name": ot_name, "markings": 0, "unknown": 0,
+        "species": MUDKIP["species"], "held_item": 0, "experience": EVOLVE_EXP,
+        "pp_bonuses": 0, "friendship": MUDKIP["friendship"], "growth_filler": 0,
+        "moves": list(EVOLVE_MOVES), "pp": list(EVOLVE_PP),
+        "evs": dict.fromkeys(MUDKIP["base"], 0), "contest": [0] * 6,
+        "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": lv,
+        "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
+        "ivs": dict.fromkeys(MUDKIP["base"], STARTER_IV),
+        # ability_num 0: Mudkip is single-ability too (TORRENT/NONE, species_info.h:7823), so
+        # CreateBoxMon never randomizes it (src/pokemon.c:2296-2300) -- see _synth_mon's docstring
+        "is_egg": 0, "ability_num": 0, "ribbons": 0,
+        "status": 0, "level": lv, "mail": 0xFF, "max_hp": stats["hp"], **stats,
+    }
 
 
 def pret_emerald() -> Path:
@@ -1130,22 +1200,34 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     sb1[0x0C:0x14] = _warp(group, num, x, y)      # continueGameWarp, :988
     sb1[0x1C:0x24] = _warp(*EMERALD_HEAL)         # lastHealLocation, :990 (SetLastHealLocationWarp)
     sb1[0x32:0x34] = layout_id.to_bytes(2, "little")   # mapLayoutId, :997 (0 = a NULL layout)
-    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 2 if kind == "pc" else 1
+    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 2 if kind in ("pc", "poison") else 1
     start = codec.SB1_PARTY_OFFSET_EMERALD
-    starter = emerald_starter(name, tid)
-    if kind == "lowhp":
-        # card E2-FIX-VARIANTS: current HP only, for the native faint/whiteout legs. max_hp and
-        # every stat/substruct byte (and so the checksum) are untouched.
-        starter = dict(starter, hp=1)
+    if kind == "evolve":
+        # card E2-FIX-VARIANTS round 3: a distinct Lv15 Mudkip, one EXP short of evolving
+        starter = _evolve_mon(name, tid)
+    else:
+        starter = emerald_starter(name, tid)
+        if kind == "lowhp":
+            # card E2-FIX-VARIANTS: current HP only, for the native faint/whiteout legs. max_hp
+            # and every stat/substruct byte (and so the checksum) are untouched.
+            starter = dict(starter, hp=1)
+        elif kind == "poison":
+            # round 3: STATUS1_POISON at 1 HP, so DoPoisonFieldEffect (src/field_poison.c:120-154)
+            # can tick it to 0 and faint it -- Emerald does NOT floor field poison at 1 HP like
+            # Gen 4+ (verified: `if (hp == 0 || --hp == 0) numFainted++;`, no floor). max_hp and
+            # every substruct byte (so the checksum) are untouched.
+            starter = dict(starter, status=STATUS1_POISON, hp=1)
     sb1[start:start + codec.PARTY_MON_SIZE] = codec.encode_party_mon(starter)
-    if kind == "pc":
-        # card E2-FIX-VARIANTS: second party slot, a Lv3 Poochyena (independent of emerald_starter)
+    if kind in ("pc", "poison"):
+        # card E2-FIX-VARIANTS: second party slot, a healthy Lv3 Poochyena (independent of
+        # emerald_starter) -- for "poison" so a field-poison faint doesn't white out
         poochyena = _synth_mon(POOCHYENA, BOX1_LEVEL, 0x504F4F43, name, tid, party=True)
         at = start + codec.PARTY_MON_SIZE
         sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(poochyena)
     sb1[0x490:0x494] = EMERALD_MONEY.to_bytes(4, "little")   # money, :1002
     # bagPocket_PokeBalls[0]; SetBagItemQuantity stores `quantity ^ encryptionKey` (src/item.c:31-34)
-    struct.pack_into("<HH", sb1, SB1_BALL_POCKET_EMERALD, ITEM_POKE_BALL, EMERALD_BALLS)
+    balls = EMERALD_CATCH_BALLS if kind == "catch" else EMERALD_BALLS
+    struct.pack_into("<HH", sb1, SB1_BALL_POCKET_EMERALD, ITEM_POKE_BALL, balls)
     if kind == "badges":
         flags = [*flags, *EMERALD_BADGE_FLAGS]
     for flag in flags:                                 # flags[NUM_FLAG_BYTES], :1020
@@ -1190,13 +1272,18 @@ def emerald_ball_pocket(body: bytes) -> list[tuple[int, int]]:
 def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
     """What a NATIVE re-save of a `kind` seed must show: it qualifies, the game cleared the
     continue-game warp (so it ran the warp-in and wrote SaveBlock1 itself), the player stands on
-    the kind's tile of the kind's map, the ball pocket still holds the seeded Poke Balls once
-    decrypted with the game's re-rolled key, and the party (town/battle/trainer: the one Mudkip;
-    "lowhp": the one Mudkip at 1 HP; "pc": Mudkip + a Lv3 Poochyena, plus box[0] holding a Lv3
-    Zigzagoon and Wurmple with every other slot empty). †UNVERIFIED (reasoned from
-    src/load_save.c and src/pokemon_storage_system.c, not a physical run): that "lowhp"'s HP and
-    "pc"'s box contents survive the CONTINUE->save round trip unchanged -- only the coordinator's
-    boot-check/make-emerald run on real hardware can confirm the game does not touch them."""
+    the kind's tile of the kind's map, the ball pocket still holds the seeded Poke Balls (20 for
+    "catch", else 5) once decrypted with the game's re-rolled key, and the party:
+    town/battle/trainer/gift/catch: the one Mudkip; "lowhp": the one Mudkip at 1 HP; "pc": Mudkip
+    + a Lv3 Poochyena, plus box[0] holding a Lv3 Zigzagoon and Wurmple with every other slot
+    empty; "evolve": the one Mudkip at Lv15, EXP one short of its Lv16 evolution threshold;
+    "poison": the Mudkip STATUS1_POISON at 1 HP plus a healthy full-HP Lv3 Poochyena. †UNVERIFIED
+    (reasoned from src/load_save.c and src/pokemon_storage_system.c, not a physical run): that
+    "lowhp"/"poison"'s HP+status and "pc"'s box contents survive the CONTINUE->save round trip
+    unchanged -- only the coordinator's boot-check/make-emerald run on real hardware can confirm
+    the game does not touch them. "gift" is intentionally unchecked here beyond the generic
+    one-Mudkip party rule: giving the egg is the scripted leg's own native action, not something
+    this seed or its re-save produces."""
     ok, msg = codec.qualify_flash(body, title=codec.TITLE_EMERALD)
     if not ok:
         return [f"does not qualify as Emerald: {msg}"]
@@ -1235,6 +1322,28 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
                     if not (b == 0 and s in (0, 1)) and boxes[b][s]["species"]]
         if occupied:
             problems.append(f"unexpected occupied box slots: {occupied[:5]}")
+    elif kind == "evolve":
+        # round 3: still Mudkip at Lv15, one EXP short of the Lv16 threshold -- a native wild
+        # win is what evolves it, not this fixture itself
+        mon = party[0] if party else None
+        if len(party) != 1 or mon["species"] != MUDKIP["species"] or mon["level"] != EVOLVE_LEVEL \
+                or not mon["checksum_ok"]:
+            problems.append(f"party is not one Lv{EVOLVE_LEVEL} Mudkip: {party}")
+        elif mon["experience"] != EVOLVE_EXP:
+            problems.append(f"party[0] experience={mon['experience']} != {EVOLVE_EXP} "
+                            f"(EXP_MEDIUM_SLOW({EVOLVE_LEVEL + 1}) - 1)")
+    elif kind == "poison":
+        want = [(MUDKIP["species"], STARTER_LEVEL, True), (POOCHYENA["species"], BOX1_LEVEL, True)]
+        got = [(m["species"], m["level"], m["checksum_ok"]) for m in party]
+        if got != want:
+            problems.append(f"party is not [Lv{STARTER_LEVEL} Mudkip, Lv{BOX1_LEVEL} Poochyena]: {party}")
+        else:
+            if party[0]["status"] != STATUS1_POISON or party[0]["hp"] != 1:
+                problems.append(f"party[0] status={party[0]['status']:#x} hp={party[0]['hp']} "
+                                f"!= STATUS1_POISON at 1 HP")
+            if party[1]["status"] != 0 or party[1]["hp"] != party[1]["max_hp"]:
+                problems.append(f"party[1] (Poochyena) is not healthy at full HP: "
+                                f"status={party[1]['status']:#x} hp={party[1]['hp']}/{party[1]['max_hp']}")
     else:
         if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
                                                                               STARTER_LEVEL, True)]:
@@ -1243,9 +1352,10 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
         missing = [f for f in EMERALD_BADGE_FLAGS if not sb1[0x1270 + f // 8] >> (f % 8) & 1]
         if missing:
             problems.append(f"badge flags not set after the re-save: {[hex(f) for f in missing]}")
+    want_balls = EMERALD_CATCH_BALLS if kind == "catch" else EMERALD_BALLS
     balls = emerald_ball_pocket(body)
-    if balls != [(ITEM_POKE_BALL, EMERALD_BALLS)]:
-        problems.append(f"ball pocket {balls} != [(ITEM_POKE_BALL, {EMERALD_BALLS})]")
+    if balls != [(ITEM_POKE_BALL, want_balls)]:
+        problems.append(f"ball pocket {balls} != [(ITEM_POKE_BALL, {want_balls})]")
     return problems
 
 

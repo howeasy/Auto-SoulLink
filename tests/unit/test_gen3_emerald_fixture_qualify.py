@@ -1,15 +1,20 @@
-"""Falsifiers for card E2-FIX-VARIANTS: the new Emerald `pc` and `lowhp` SYNTH fixture kinds.
+"""Falsifiers for card E2-FIX-VARIANTS, rounds 1 and 3: the `pc`/`lowhp` (round 1) and
+`evolve`/`poison`/`gift`/`catch` (round 3) SYNTH Emerald fixture kinds.
 
 (a) build_emerald_seed for each new kind, decoded via the independent codec, carries exactly the
-    party/box contents the card specifies (species, level, checksum, HP, box slot);
-(b) card E2-FIX-VARIANTS is additive-only: the pre-existing town/battle/trainer seeds stay
+    party/box/ball contents the card specifies (species, level, checksum, HP, status, box slot);
+(b) additive-only across both rounds: the pre-existing town/battle/trainer seeds stay
     byte-identical to the source cut (c78db7bc) that shipped card E1-FIX-2's SEED_SHA256 values;
-(c) emerald_fixture_problems flags a "pc" re-save missing its box mons and a "lowhp" re-save
-    still at full HP -- the two mistakes a bad native re-save could plausibly make.
+(c) emerald_fixture_problems flags the mistakes a bad native re-save could plausibly make: a
+    "pc" re-save missing its box mons, a "lowhp"/"poison" re-save still at full HP, and an
+    "evolve" re-save at the wrong EXP.
 """
 
 import hashlib
+import json
 import os
+import re
+import struct
 import sys
 
 import pytest
@@ -24,11 +29,13 @@ import gen3_fixtures as fx  # noqa: E402  (tools/ is not a package)
 EM = codec.TITLE_EMERALD
 
 # Recorded by tests/unit/test_gen3_fixture_qualify_emerald.py (card E1-FIX-2) at the source cut
-# c78db7bc. Card E2-FIX-VARIANTS is additive-only: these three must reproduce bit for bit.
+# c78db7bc, and (badges) by this file at round 3's cut d5208074 (card E2-BADGES). Card
+# E2-FIX-VARIANTS is additive-only across every round: these four must reproduce bit for bit.
 UNCHANGED_SEED_SHA256 = {
     "battle": "6ad42abbfd481978b237a4f2d3bc92eb4fb1dfdf97eba74572e7b4b0dfcc35a9",
     "town": "816d33b8e856ccb8fcf84b45f799495a6cfb00d77677ce7ce152cfbe21e7aca5",
     "trainer": "f6f301bc99c778e35aebef796093465d178397893430ae99063e4c07326f596e",
+    "badges": "3aa798fd311cd63d6299d615c81bda63649738216eefcb9dda78aa1aab0d7196",
 }
 
 
@@ -150,3 +157,122 @@ def test_box_mon_level_matches_get_level_from_mon_exp():
         assert fx._box_mon_level({"experience": level ** 3}) == level
         if level < 100:
             assert fx._box_mon_level({"experience": level ** 3 + 1}) == level
+
+
+# --- round 3: evolve / poison / gift / catch ----------------------------------------------------
+
+def test_evolve_seed_is_one_exp_short_of_the_lv16_threshold():
+    seed = _seed("evolve")
+    (mon,) = codec.party_from_save(seed, title=EM)
+    assert (mon["species"], mon["level"], mon["checksum_ok"]) == \
+        (fx.MUDKIP["species"], fx.EVOLVE_LEVEL, True)
+    assert mon["experience"] == fx.EVOLVE_EXP == fx._exp_medium_slow(fx.EVOLVE_LEVEL + 1) - 1
+    assert mon["hp"] == mon["max_hp"] > 0
+    assert mon["moves"] == [33, 45, 55, 0] and 0 in mon["moves"]   # a free slot for MUD_SHOT
+    assert fx.emerald_fixture_problems(seed, "evolve") == [
+        "specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save"]
+
+
+def test_evolve_problems_flags_wrong_exp():
+    # a plain "battle"-kind starter (Lv5, exp 135) standing on evolve's own tile is exactly the
+    # mistake a re-save that didn't carry the Lv15 EXP-short mon would produce
+    seed = bytearray(_seed("battle"))
+    layout = codec.slot_layout(title=EM)
+    sb2 = bytearray(codec.parse_flash(bytes(seed), title=EM)["sb2"])
+    sb2[0x09] &= ~1
+    _rewrite_slot1(seed, layout, "sb2", bytes(sb2))
+    problems = fx.emerald_fixture_problems(bytes(seed), "evolve")
+    assert any("Lv15 Mudkip" in p or "experience=" in p for p in problems), problems
+
+
+def test_poison_seed_party_status_and_hp():
+    seed = _seed("poison")
+    party = codec.party_from_save(seed, title=EM)
+    assert [(m["species"], m["level"], m["checksum_ok"]) for m in party] == [
+        (fx.MUDKIP["species"], fx.STARTER_LEVEL, True),
+        (fx.POOCHYENA["species"], fx.BOX1_LEVEL, True),
+    ]
+    assert party[0]["status"] == fx.STATUS1_POISON == 0x08
+    assert party[0]["hp"] == 1 and party[0]["max_hp"] > 1
+    assert party[1]["status"] == 0 and party[1]["hp"] == party[1]["max_hp"] > 0
+    assert fx.EMERALD_KINDS["poison"] == fx.EMERALD_KINDS["town"]
+    assert fx.emerald_fixture_problems(seed, "poison") == [
+        "specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save"]
+
+
+def test_poison_problems_flags_full_hp():
+    seed = bytearray(_seed("pc"))          # already has [Mudkip, Poochyena]; neither is poisoned
+    layout = codec.slot_layout(title=EM)
+    sb2 = bytearray(codec.parse_flash(bytes(seed), title=EM)["sb2"])
+    sb2[0x09] &= ~1
+    _rewrite_slot1(seed, layout, "sb2", bytes(sb2))
+    problems = fx.emerald_fixture_problems(bytes(seed), "poison")
+    assert any("STATUS1_POISON" in p for p in problems), problems
+
+
+def test_gift_seed_is_lavaridge_next_to_the_egg_woman_with_room_in_the_party():
+    seed = _seed("gift")
+    (mon,) = codec.party_from_save(seed, title=EM)
+    assert (mon["species"], mon["level"]) == (fx.MUDKIP["species"], fx.STARTER_LEVEL)
+    assert fx.EMERALD_KINDS["gift"][0] == "LavaridgeTown"
+    sb1 = codec.parse_flash(seed, title=EM)["sb1"]
+    assert struct.unpack_from("<hh", sb1, 0x00) == (4, 8)
+    assert fx.emerald_fixture_problems(seed, "gift") == [
+        "specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save"]
+
+
+def test_gift_site_is_the_egg_woman_giving_wynaut_unconditionally():
+    pret = _pret()
+    m = json.loads((pret / "data/maps/LavaridgeTown/map.json").read_text())
+    egg_woman = next(o for o in m["object_events"]
+                     if o["script"] == "LavaridgeTown_EventScript_EggWoman")
+    assert (egg_woman["x"], egg_woman["y"]) == (4, 7)
+    assert egg_woman["movement_type"] == "MOVEMENT_TYPE_FACE_DOWN"
+    assert egg_woman["flag"] == "0"        # always present: no hide-flag gate
+    script = (pret / "data/maps/LavaridgeTown/scripts.inc").read_text(encoding="utf-8")
+    body = script.split("LavaridgeTown_EventScript_EggWoman::", 1)[1].split("\nLavaridgeTown_", 1)[0]
+    assert "giveegg SPECIES_WYNAUT" in body
+    # the only prior-state check in the whole body is the already-given flag, which the seed
+    # leaves clear -- confirming zero extra SYNTH flags are needed to reach the gift branch
+    assert re.findall(r"goto_if_set (FLAG_\w+)", body) == ["FLAG_RECEIVED_LAVARIDGE_EGG"]
+    groups = json.loads((pret / "data/maps/map_groups.json").read_text())
+    group_name = groups["group_order"][fx.EMERALD_KINDS["gift"][1]]
+    assert groups[group_name][fx.EMERALD_KINDS["gift"][2]] == "LavaridgeTown"
+    species = (pret / "include/constants/species.h").read_text()
+    assert re.search(r"#define SPECIES_WYNAUT (\d+)", species).group(1) == "360"
+
+
+def test_catch_seed_is_battles_tile_with_twenty_balls():
+    seed = _seed("catch")
+    assert fx.EMERALD_KINDS["catch"] == fx.EMERALD_KINDS["battle"]
+    (mon,) = codec.party_from_save(seed, title=EM)
+    assert (mon["species"], mon["level"], mon["checksum_ok"]) == \
+        (fx.MUDKIP["species"], fx.STARTER_LEVEL, True)
+    assert fx.emerald_ball_pocket(seed) == [(fx.ITEM_POKE_BALL, 20)]
+    assert fx.emerald_fixture_problems(seed, "catch") == [
+        "specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save"]
+
+
+# --- round 3, OMP finding cx-fd70ac8f: single-ability species never randomize ability_num ------
+
+def test_single_ability_synth_mons_have_ability_num_zero():
+    """src/pokemon.c:2296-2300: CreateBoxMon only sets MON_DATA_ABILITY_NUM from
+    `personality & 1` when the species has a second ability. POOCHYENA (RUN_AWAY/NONE),
+    ZIGZAGOON (PICKUP/NONE), WURMPLE (SHIELD_DUST/NONE) and MUDKIP (TORRENT/NONE) are all
+    single-ability, so a real CreateBoxMon leaves ability_num at its zero-init value."""
+    poochyena = fx._synth_mon(fx.POOCHYENA, fx.BOX1_LEVEL, 0x504F4F43, "EMER", 1, party=True)
+    zigzagoon = fx._synth_mon(fx.ZIGZAGOON, fx.BOX1_LEVEL, 0x5A49475A, "EMER", 1, party=False)
+    wurmple = fx._synth_mon(fx.WURMPLE, fx.BOX1_LEVEL, 0x5755524D, "EMER", 1, party=False)
+    evolve_mon = fx._evolve_mon("EMER", 1)
+    assert (poochyena["ability_num"], zigzagoon["ability_num"], wurmple["ability_num"],
+            evolve_mon["ability_num"]) == (0, 0, 0, 0)
+
+
+def test_catch_problems_flags_five_balls():
+    seed = bytearray(_seed("battle"))       # battle == catch's own tile, but only 5 balls
+    layout = codec.slot_layout(title=EM)
+    sb2 = bytearray(codec.parse_flash(bytes(seed), title=EM)["sb2"])
+    sb2[0x09] &= ~1
+    _rewrite_slot1(seed, layout, "sb2", bytes(sb2))
+    problems = fx.emerald_fixture_problems(bytes(seed), "catch")
+    assert any("ball pocket" in p for p in problems), problems

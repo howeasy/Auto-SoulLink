@@ -49,9 +49,13 @@ FIXTURE_SHA256 = {
     "emerald_battle_b.sav": "61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50",
     "emerald_trainer.sav": "1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6",
     "emerald_trainer_b.sav": "ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6",
-    "emerald_pc.sav": "ef2facb5d390b87e05ad8d86cb814c961880896b72b5b924724b85252a70975b",
+    "emerald_pc.sav": "c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab",
     "emerald_lowhp.sav": "c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b",
     "emerald_badges.sav": "04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f",
+    "emerald_evolve.sav": "244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd",
+    "emerald_poison.sav": "c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0",
+    "emerald_gift.sav": "7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552",
+    "emerald_catch.sav": "592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0",
 }
 
 
@@ -79,7 +83,7 @@ def test_committed_emerald_fixture_is_a_game_resave_on_its_tile(kind, suffix):
     assert len(body) == codec.FLASH_SIZE
     assert fx.emerald_fixture_problems(body, kind) == []
     r = fx.qualify_one(body, rr=False, title=EM)
-    assert r["ok"] and r["counter"] == 2 and len(r["party"]) == (2 if kind == "pc" else 1)
+    assert r["ok"] and r["counter"] == 2 and len(r["party"]) == (2 if kind in ("pc", "poison") else 1)
 
 
 @pytest.mark.parametrize("kind", sorted(fx.EMERALD_KINDS))
@@ -322,7 +326,8 @@ def test_committed_fixture_ball_pocket_survives_the_games_rekey(kind):
     body = _read(f"emerald_{kind}.sav")
     key = struct.unpack_from("<I", codec.parse_flash(body, title=EM)["sb2"], 0xAC)[0]
     assert key & 0xFFFF   # the re-save carries the key CONTINUE rolled (load_save.c:127-131)
-    assert fx.emerald_ball_pocket(body) == [(fx.ITEM_POKE_BALL, fx.EMERALD_BALLS)]
+    want = fx.EMERALD_CATCH_BALLS if kind == "catch" else fx.EMERALD_BALLS
+    assert fx.emerald_ball_pocket(body) == [(fx.ITEM_POKE_BALL, want)]
 
 
 def test_emerald_fixture_problems_refuses_an_empty_ball_pocket():
