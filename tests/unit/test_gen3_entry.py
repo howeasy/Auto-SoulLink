@@ -369,6 +369,7 @@ def _production(world, **over):
     ("gen3_frlg", "leafgreen", "clean"),
     ("gen3_rr", "radical_red", "clean"),
     ("gen3_rr", "radical_red", "companion"),
+    ("gen3_emerald", "emerald", "clean"),
 ])
 def test_production_build_returns_a_client_and_arms_no_hook_until_start(pack, title, kind):
     world = World(pack=pack, title=title, kind=kind, build=False)

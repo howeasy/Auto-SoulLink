@@ -24,8 +24,11 @@ guessed one.
 
 Vanilla Emerald (E1-CHECKPOINT, docs/gen3_emerald/write_checkpoint.md) is generated from
 data/gen3/pret/pokeemerald.sym (pret/pokeemerald c65e93f2) the FR/LG way, as SOURCE facts only:
-it is not an admitted pack (UNADMITTED_PACKS) until EG4 signs it.  pret publishes no
-pokeemerald.map, so the player controller's .text span comes from the .sym (sym_text_span).
+it is generated outside PACKS (UNADMITTED_PACKS) because it is not FR-shaped, not because
+Entry.ROUTED still refuses it -- that flipped at EG4 (prepared on branch
+claude/gen3-emerald-eg4, pending owner sign-off), on lua/gen3/entry.lua's own Entry.PACKS, a
+different registry from this file's. pret publishes no pokeemerald.map, so the player
+controller's .text span comes from the .sym (sym_text_span).
 
     python tools/gen_gen3_write_checkpoint.py            # rewrite every pack
     python tools/gen_gen3_write_checkpoint.py --check    # exit 1 if a committed file is stale
@@ -73,8 +76,10 @@ PACKS = {
                   "leafgreen": ("pokeleafgreen.sym", ("clean",))},
     "gen3_rr": {"radical_red": ("pokefirered.sym", ("clean", "companion"))},
 }
-# E1-CHECKPOINT: generated and --check'ed like the admitted packs, but kept out of PACKS: Emerald
-# stays unadmitted (ruling 24) until EG4 signs the port (docs/gen3_emerald/PLAN.md s0, s3 E1).
+# E1-CHECKPOINT: generated and --check'ed like the admitted packs, but generated outside PACKS:
+# the FR-shaped PACKS tests (RR-style re-derivation against FR symbols) do not apply to Emerald,
+# which has its own pret/pokeemerald.sym source (docs/gen3_emerald/PLAN.md s0, s3 E1) -- this is
+# unrelated to whether lua/gen3/entry.lua's Entry.ROUTED admits gen3_emerald (it does, since EG4).
 UNADMITTED_PACKS = {
     "gen3_emerald": {"emerald": ("pokeemerald.sym", ("clean",))},
 }

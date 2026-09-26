@@ -1,8 +1,9 @@
 """E3-CLIENT: lua/gen3/client.lua reads Emerald's title facts from the pack, not FR literals.
 
-The production Entry refuses Emerald by name until EG4 (ruling 24), so these tests build the
-REAL production client over a tmp copy of lua/ + data/games/gen3_emerald whose profile says
-admitted=true. Nothing else in the copy is changed unless a test doctors it on purpose.
+Since EG4 (ruling 24), Entry.build admits Emerald directly, so these tests build the REAL
+production client over a tmp copy of lua/ + data/games/gen3_emerald -- a tmp copy so a test's
+write_checkpoint doctoring (the `doctor` fixture arg below) never touches the shipped file.
+Nothing else in the copy is changed unless a test doctors it on purpose.
 
 Falsifiers (red on the FR-literal client, green here):
   * force_faint's P+H plan writes gBattleCommunication[0] = 4 (Emerald's
@@ -39,19 +40,9 @@ def emerald(tmp_path, monkeypatch):
     shutil.copytree(gw.REPO / "lua", tmp_path / "lua")
     pack_dir = tmp_path / "data" / "games" / PACK
     shutil.copytree(gw.REPO / "data" / "games" / PACK, pack_dir)
-    prof = json.loads((pack_dir / "profile.json").read_text("utf-8"))
-    prof["titles"]["emerald"]["admitted"] = True          # test-only: see the module docstring
-    (pack_dir / "profile.json").write_text(json.dumps(prof), "utf-8")
     monkeypatch.setattr(gw, "REPO", tmp_path)
     monkeypatch.setattr(gw, "ENTRY", (tmp_path / "lua" / "gen3" / "entry.lua").as_posix())
     monkeypatch.setitem(gw.PACK_DIRS, PACK, pack_dir)
-    # The schema still maps rom_type emerald to gen3_frlg (the server foundation
-    # emerald -> gen3_emerald is carried from EG1, EG2_request.md §5): only that one problem is
-    # waived; every other schema check on every line still runs.
-    real_validate = gw.ps.validate_event
-    waived = "foundation 'gen3_emerald' but rom_type 'emerald' is 'gen3_frlg'"
-    monkeypatch.setattr(gw.ps, "validate_event",
-                        lambda msg: [p for p in real_validate(msg) if not p.endswith(waived)])
 
     def make(doctor=None, native=None):
         if doctor:
