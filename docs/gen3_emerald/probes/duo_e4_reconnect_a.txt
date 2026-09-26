@@ -1,0 +1,23 @@
+duo instance a scenario=reconnect_gen3 phase=wrong_save title=emerald attempt=1
+SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
+[client] [SLink] TCP connecting to 127.0.0.1:54742 (non-blocking)…
+TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
+TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:54742 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:54742
+[client] [SLink] TCP connected to 127.0.0.1:54742
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_i
+RX hud_show text=[x] WRONG SAVE: slot A
+WRONG_SAVE_HUD [x] WRONG SAVE: slot A
+[client] [gen3] phase field frame=580 map=(0,10)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=283 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=286 level=3 hp=15/15
+booted frame=580 map=map=10 at=(6,17) balls=5
+RECONNECT_HELLO wrong_save count=1
+WRONG_SAVE_ZERO attempted=0 writes=0 party=unchanged box=unchanged
+JITTER requested=0 applied=0 attempt=1
+WRITES 0
+RESULT: PASS (wrong save refused; nothing attempted, party and PC RAM unchanged)

@@ -1,0 +1,49 @@
+duo instance a scenario=faint_cmd_gen3 phase=initial title=firered attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:58004 (non-blocking)…
+[client] [SLink-gen3] gen3_frlg/firered (clean by hash) player a -> 127.0.0.1:58004 (rom 41cb23d8)
+client built by lua/gen3/run.lua: title=firered player=a -> 127.0.0.1:58004
+[client] [SLink] TCP connected to 127.0.0.1:58004
+[client] [SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"viridian_city","artifact_kind":"clean","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":false,"loc_name":"viridia
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_mart","player":"a","seq":2}
+TX area_enter - {"area_id":"pallet_town","event":"area_enter","loc_name":"pallet_town","player":"a","seq":4}
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":8}
+[client] [gen3] phase field frame=778 map=(3,1)
+MYKEY 0 2D356A90:99DE0D8A
+PARTY slot=0 key=2D356A90:99DE0D8A species=7 level=9 hp=27/27
+MYKEY 1 263620B6:99DE0D8A
+PARTY slot=1 key=263620B6:99DE0D8A species=16 level=4 hp=17/17
+booted frame=778 map=map=769 at=(24,39) balls=4
+JITTER requested=0 applied=0 attempt=1
+READY 263620B6:99DE0D8A
+RX memorialize key=263620B6:99DE0D8A
+RX game_over
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 872
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 872
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 872
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 872
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 872
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 872
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 872
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 872
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 872
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 872
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 872
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 872
+[client] [SLink-gen3] write overworld 0x02030D44 +80 frame 908
+[client] [SLink-gen3] write overworld 0x020242E8 +100 frame 908
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 908
+TX memorialize_done 263620B6:99DE0D8A {"box":13,"event":"memorialize_done","key":"263620B6:99DE0D8A","player":"a","seq":17}
+[client] [gen3] phase save-menu frame=968 counter=4
+[client] [gen3] phase save-dialog frame=1050 row=4
+[client] [gen3] phase saved frame=1577 counter=4->5
+SAVE_WITNESS_DUMP path=patch/build/e2e_faint_cmd_gen3_a_1_witness.bin bytes=131072 saves=1 frame=1824 counter=5
+[client] [gen3] phase slot-complete frame=1839 sectors=14/14
+SAVE_WITNESS faint_cmd counter=4->5
+WRITES 15
+RESULT: PASS (memorialized 263620B6:99DE0D8A)
