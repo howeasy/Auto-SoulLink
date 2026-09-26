@@ -49,9 +49,11 @@ def test_reference_presentation_and_explicit_unsupported_surfaces():
     assert a.form_sprite_id(1572) is None
     assert a.gym_badge_slugs(ROM_TYPE)[0] == (17, "Stone Badge")
     assert a.gym_badge_slugs(ROM_TYPE)[-1] == (24, "Rain Badge")
-    assert a.calc_profile() is None and a.calc_stats({}) is None
-    assert a.calc_nature("00000000:00000000") is None
+    assert a.calc_profile() == {"gen": 9, "dex": "expansion"}
+    assert a.calc_stats({}) is None
+    assert a.calc_nature("00000000:00000000") == "Hardy"
     assert a.calc_name("species", "Mr. Mime") == "Mr. Mime"
+    assert a.calc_name("species", "Aegislash") == "Aegislash-Shield"
     assert a.encounter_table("route_101") is None
     assert a.trainers_for_area("route_101") == []
     assert a.trainer_party(1) == [] and a.trainer_brief(1) is None
@@ -117,6 +119,42 @@ def test_masked_party_record_feeds_only_expansion_facts():
     assert a.is_shiny(f"{mon['personality']:08X}:{mon['ot_id']:08X}",
                       shiny_modifier=mon["shiny_modifier"]) is False
     # No encoder receives a masked record: this adapter is read-only.
+
+
+def test_calc_stats_decodes_a_synthetic_masked_party_blob():
+    """XC3 (SYNTH, O-33): no ROM/save/emulator -- one hand-built 100-byte expansion
+    party record with known IVs/EVs and computed stats, run through calc_stats()."""
+    import struct
+
+    a = get_adapter("gen3_exp")
+    raw = bytearray(100)
+    # Growth (species=1 mon, no XOR since PID=OTID=0): only IVs/EVs/computed stats matter
+    # to calc_stats, so species/item/moves are left at 0.
+    ivs = {"hp": 31, "attack": 20, "defense": 15, "speed": 5, "sp_attack": 25, "sp_defense": 30}
+    evs = {"hp": 252, "attack": 0, "defense": 4, "speed": 252, "sp_attack": 0, "sp_defense": 0}
+    struct.pack_into("<6B", raw, 0x38, evs["hp"], evs["attack"], evs["defense"],
+                      evs["speed"], evs["sp_attack"], evs["sp_defense"])
+    packed_ivs = (ivs["hp"] | (ivs["attack"] << 5) | (ivs["defense"] << 10)
+                  | (ivs["speed"] << 15) | (ivs["sp_attack"] << 20) | (ivs["sp_defense"] << 25))
+    struct.pack_into("<I", raw, 0x48, packed_ivs)  # Misc substruct (0x44-0x4F) local offset 4
+    struct.pack_into("<H", raw, 0x1c, sum(struct.unpack_from("<24H", raw, 0x20)) & 0xffff)
+    # Party tail: computed stats (unaffected by the expansion mask -- outside the
+    # encrypted substruct region, same offsets as vanilla).
+    # _PARTY_TAIL order: hp, max_hp, attack, defense, speed, sp_attack, sp_defense.
+    struct.pack_into("<7H", raw, 0x56, 200, 200, 120, 80, 150, 90, 95)
+    detail = {"blob_hex": bytes(raw).hex()}
+    stats = a.calc_stats(detail)
+    assert stats == {
+        "ivs": {"hp": 31, "atk": 20, "def": 15, "spa": 25, "spd": 30, "spe": 5},
+        "evs": {"hp": 252, "atk": 0, "def": 4, "spa": 0, "spd": 0, "spe": 252},
+        "stats": {"hp": 200, "atk": 120, "def": 80, "spa": 90, "spd": 95, "spe": 150},
+    }
+
+
+def test_calc_stats_returns_none_without_a_blob():
+    a = get_adapter("gen3_exp")
+    assert a.calc_stats({}) is None
+    assert a.calc_stats({"blob_hex": "not hex"}) is None
 
 
 @pytest.mark.asyncio

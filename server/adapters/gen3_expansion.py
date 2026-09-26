@@ -10,7 +10,14 @@ Regenerate with tools/extract_expansion_data.py --rom <reference.gba>
 Recorded limits: encounter/trainer/area/static-policy packs and ability prose
 are not extracted. Explicit gift_ events work; no unproved fixed-gift exemption
 is inherited from vanilla. Sprites use National Dex base art, not form art.
-Expansion calc is unsupported. This adapter only READS expansion data/records.
+This adapter only READS expansion data/records.
+
+Calc: calc_profile()/calc_name()/calc_stats() (XC1-XC3,
+docs/gen3_emerald/research/expansion_calc_design_2026-09-26.md §4) run this
+build at the vendored calc's gen 9 mechanics -- no trainer "sets" yet (XC4).
+A handful of names have no gen-9 calc equivalent at all (homebrew abilities,
+Mega Stones -- Gen 9 has no Mega Evolution) and stay unresolved by design;
+see tools/gen_expansion_calc_names.py's EXPECTED_UNRESOLVED.
 
 Shiny product gap: src/pokemon.c:2480-2483 at e8bd1cd7 applies
 ((PID_hi ^ PID_lo ^ OT_hi ^ OT_lo) < SHINY_ODDS) ^ shinyModifier;
@@ -31,15 +38,49 @@ import re
 from html import escape
 from pathlib import Path
 
+from . import gen3_codec
 from .gen3_frlge import Gen3Adapter, _parse_pid_otid_key
 
 ROM_SHA1 = "28877d733492299599f2b8fff50493109d72653c"
 ROM_TYPE = "emerald_expansion_28877d73"
 PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/data.json"
+CONFIG_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/config.json"
+CALC_NAMES_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/calc_names.json"
 # include/constants/pokemon.h:5-28 at e8bd1cd7; NOT vanilla's zero-based types.
 TYPE_NAMES = ("None", "Normal", "Fighting", "Flying", "Poison", "Ground", "Rock", "Bug",
               "Ghost", "Steel", "???", "Fire", "Water", "Grass", "Electric", "Psychic",
               "Ice", "Dragon", "Dark", "Fairy", "Stellar")
+
+# The calc's gen789 mechanics module is a fixed "modern" engine with no per-config knob
+# (calc.ts:20-22; docs/gen3_emerald/research/expansion_calc_design_2026-09-26.md §3 point 1):
+# it always runs the Gen 9 crit/terrain/ability tables. Mapping a build to gen:9 is only
+# honest when that build's own damage-mechanics config targets the same generation.
+# include/config/general.h's GEN_1..GEN_9 enum is zero-indexed (GEN_9 == 8), so
+# GEN_LATEST's value 8 IS "Gen 9" here, not "Gen 8" -- confirmed by reading config.json.
+_CALC_CRITICAL_MACROS = ("B_CRIT_MULTIPLIER", "B_PHYSICAL_SPECIAL_SPLIT", "B_ABILITY_WEATHER")
+
+# XR-1/XR-2 party-record bit layout for this build (server/adapters/gen3_codec.py
+# decode_party_mon_masked/validate_expansion_layout), verified against
+# rh-hideout/pokeemerald-expansion tag expansion/1.17.0 (e8bd1cd7) include/pokemon.h and
+# cross-checked byte-for-byte against this ROM's own facts.json PokemonSubstruct0/1/3
+# bitfields (species mask 0x7ff, heldItem mask 0x3ff, move masks 0x7ff, experience mask
+# 0x1fffff, pp masks 0x7f, pokeball word_off10/width6, abilityNum word_off8/shift29/width2)
+# -- identical to tests/fixtures/gen3/expansion_layout_e8bd1cd7.json's "layout" block.
+EXPANSION_PARTY_LAYOUT = {
+    "MON_SPECIES_MASK": 2047,
+    "MON_ITEM_MASK": 1023,
+    "MON_MOVE_MASK": 2047,
+    "EXPERIENCE_MASK": 2097151,
+    "NICKNAME_EXTRA": {"chars": [
+        {"word_off": 4, "word_size": 4, "shift": 21, "width": 8},
+        {"word_off": 10, "word_size": 2, "shift": 6, "width": 8},
+    ]},
+    "POKEBALL_FIELD": {"word_off": 10, "word_size": 2, "shift": 0, "width": 6},
+    "ABILITY_NUM_FIELD": {"word_off": 8, "word_size": 4, "shift": 29, "width": 2},
+    "PP_MASK": 127,
+    "MARKINGS_MASK": 15,
+    "SHINY_MODIFIER_FIELD": {"shift": 14, "width": 1},
+}
 
 # data.json's id-0 rows carry sentinels, not names: SPECIES_NONE/MOVE_NONE/ITEM_NONE/
 # ABILITY_NONE are "??????????", "????????", "-" and "????????" in the shipped pack.
@@ -72,6 +113,8 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         self._moves = {row["id"]: row for row in data["moves"]}
         self._items = {row["id"]: row for row in data["items"]}
         self._abilities = {row["id"]: row for row in data["abilities"]}
+        self._config_macros = json.loads(CONFIG_PACK.read_text(encoding="utf-8"))["macros"]
+        self._calc_names = json.loads(CALC_NAMES_PACK.read_text(encoding="utf-8"))
 
     @property
     def game_id(self):
@@ -199,16 +242,45 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         return None
 
     def calc_name(self, kind, name):
-        return name
+        if not name:
+            return name
+        return self._calc_names.get(kind, {}).get(name, name)
 
     def calc_profile(self):
-        return None
+        latest = self._config_macros.get("GEN_LATEST", {}).get("value")
+        for macro in _CALC_CRITICAL_MACROS:
+            if self._config_macros.get(macro, {}).get("value") != latest:
+                return None  # config targets a generation the calc can't express (XC1 doc)
+        return {"gen": 9, "dex": "expansion"}
 
     def calc_stats(self, detail):
-        return None  # Never feed expansion records to the vanilla codec/encoder.
+        blob_hex = detail.get("blob_hex")
+        if not blob_hex:
+            return None
+        try:
+            blob = bytes.fromhex(blob_hex) if isinstance(blob_hex, str) else blob_hex
+            mon = gen3_codec.decode_party_mon_masked(bytes(blob), rr=False,
+                                                      layout=EXPANSION_PARTY_LAYOUT)
+        except (ValueError, TypeError):
+            return None
+
+        def _short(d):
+            return {"hp": d["hp"], "atk": d["attack"], "def": d["defense"],
+                    "spa": d["sp_attack"], "spd": d["sp_defense"], "spe": d["speed"]}
+
+        return {
+            "ivs": _short(mon["ivs"]),
+            "evs": _short(mon["evs"]),
+            "stats": {"hp": mon["max_hp"], "atk": mon["attack"], "def": mon["defense"],
+                      "spa": mon["sp_attack"], "spd": mon["sp_defense"], "spe": mon["speed"]},
+        }
 
     def calc_nature(self, key):
-        return None
+        try:
+            from .gen3_frlge import _NATURE_NAMES
+            return _NATURE_NAMES[int(key.split(":")[0], 16) % 25]
+        except (ValueError, AttributeError):
+            return None
 
     def gym_badge_slugs(self, rom_type):
         return super().gym_badge_slugs("emerald")

@@ -18,6 +18,21 @@ def test_rr_adapter_calc_profile():
     assert Gen3Adapter(is_rr=True).calc_profile() == {"gen": 9, "dex": "rr"}
 
 
+def test_gen3_expansion_adapter_calc_profile():
+    from server.adapters.gen3_expansion import Gen3ExpansionAdapter
+    assert Gen3ExpansionAdapter().calc_profile() == {"gen": 9, "dex": "expansion"}
+
+
+def test_gen3_expansion_adapter_calc_profile_is_none_off_gen_latest(monkeypatch):
+    """A build whose damage-mechanics config doesn't target the same generation
+    the calc's gen789 module implements can't be honestly mapped to gen:9."""
+    from server.adapters.gen3_expansion import Gen3ExpansionAdapter
+    a = Gen3ExpansionAdapter()
+    a._config_macros = dict(a._config_macros)
+    a._config_macros["B_CRIT_MULTIPLIER"] = {**a._config_macros["B_CRIT_MULTIPLIER"], "value": 5}
+    assert a.calc_profile() is None
+
+
 def test_vanilla_frlg_adapter_calc_profile_has_sets():
     assert Gen3Adapter(is_rr=False).calc_profile() == {
         "gen": 3, "dex": "vanilla",
@@ -177,6 +192,23 @@ async def test_calc_tab_shown_for_rr(tmp_path):
         assert srv._rail_ctx()["show_calc"] is True
     finally:
         await close()
+
+def test_calc_profile_for_run_expansion_vs_expansion_shows_the_calc():
+    """XC1-XC3 wiring check: two expansion adapters agree on gen+dex through
+    shared_calc_profile/manager._calc_profile_for_run with zero changes to
+    manager.py itself (adapter-isolation)."""
+    run = {"game": ""}
+    status = {"players": {"a": {"rom_type": "emerald_expansion_28877d73"},
+                           "b": {"rom_type": "emerald_expansion_28877d73"}}}
+    assert _calc_profile_for_run(run, status) == {"gen": 9, "dex": "expansion"}
+
+
+def test_shared_calc_profile_two_expansion_adapters_directly():
+    from server.adapters import shared_calc_profile
+    from server.adapters.gen3_expansion import Gen3ExpansionAdapter
+    a, b = Gen3ExpansionAdapter(), Gen3ExpansionAdapter()
+    assert shared_calc_profile([a.calc_profile(), b.calc_profile()]) == {"gen": 9, "dex": "expansion"}
+
 
 def test_emerald_adapter_uses_emerald_sets():
     from server.adapters.gen3_frlge import Gen3Adapter
