@@ -33,6 +33,8 @@ This is a decoder, not ROM admission or validation of a randomizer's patches.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import struct
 from bisect import bisect_right
 from collections.abc import Mapping
@@ -233,3 +235,21 @@ def decode_rom_tables(rom: RomData, title: str, *, symbol_dir: Path = SYMBOL_DIR
         "wild_encounters": decode_wild_encounters(rom, wild["address"], wild["count"]),
         "evolutions": decode_evolutions(rom, evolutions["address"], evolutions["count"]),
     }
+
+
+def _canon(obj):
+    if isinstance(obj, dict):
+        return {repr(k) if not isinstance(k, str) else k: _canon(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_canon(v) for v in obj]
+    return obj
+
+
+def gen3_content_fingerprint(tables: dict) -> str:
+    """sha256 of the decoded per-ROM tables (decode_rom_tables: trainers, wild encounters,
+    evolutions). A pure function of the DECODE, so the server (Gen3Adapter.rom_content_fingerprint,
+    from the byte ranges a client ships) and the Manager (server/upr_pipeline.py, from the whole
+    file, rom_contract.json) reach the same value."""
+    body = {k: tables[k] for k in ("trainers", "wild_encounters", "evolutions")}
+    return hashlib.sha256(json.dumps(_canon(body), sort_keys=True, separators=(",", ":"))
+                          .encode()).hexdigest()

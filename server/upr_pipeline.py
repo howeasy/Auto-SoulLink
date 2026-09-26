@@ -55,6 +55,7 @@ from server.adapters.gen1_rom_scan import (
     scan,
     scan_base_stats,
 )
+from server.adapters.gen3_rom_tables import gen3_content_fingerprint
 from server.upr_settings import (
     FAMILY_FRLG,
     FAMILY_PURE,
@@ -361,23 +362,6 @@ def _gen3_species_rules(rom: bytes, title: str) -> list[bytes]:
             rec[:6] = bytes(6)
         rows.append(bytes(rec))
     return rows
-
-
-def _canon(obj):
-    if isinstance(obj, dict):
-        return {repr(k) if not isinstance(k, str) else k: _canon(v) for k, v in obj.items()}
-    if isinstance(obj, (list, tuple)):
-        return [_canon(v) for v in obj]
-    return obj
-
-
-def gen3_content_fingerprint(tables: dict) -> str:
-    """sha256 of the decoded per-ROM tables (gen3_rom_tables.decode_rom_tables: trainers,
-    wild encounters, evolutions). A pure function of the DECODE, so the server reaches the same
-    value from the byte ranges a client ships (R2) as this does from the whole file."""
-    body = {k: tables[k] for k in ("trainers", "wild_encounters", "evolutions")}
-    return hashlib.sha256(json.dumps(_canon(body), sort_keys=True, separators=(",", ":"))
-                          .encode()).hexdigest()
 
 
 def gen3_fingerprint_rom(rom: bytes) -> str:
