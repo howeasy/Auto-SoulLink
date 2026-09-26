@@ -262,7 +262,7 @@ function M.start(opts)
         mode = "observer",
         -- probe-only seam (Emerald EG2 observer runs before EG4 admission): entry.lua honours
         -- it in observer mode only; nothing in production sets it
-        allow_unadmitted = os.getenv("SLINK_SHADOW_UNADMITTED") == "1",
+        allow_unadmitted = getenv("SLINK_SHADOW_UNADMITTED"),   -- "<pack>/<title>", e.g. gen3_emerald/emerald
         io = io_ro,
         ev = { on_bus_exec = ev_wrap.on_bus_exec, unregister = ev_wrap.unregister },
         net = nil, hud = nil,

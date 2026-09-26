@@ -391,10 +391,10 @@ function Entry.build(deps)
     local profile = assert(load_json(json, root .. "/" .. files.profile).titles[title],
                            "unknown title " .. title .. " in " .. pack)
     -- The one exception (Gen 3 grant 2026-09-26, Emerald EG2): an OBSERVER build of an
-    -- unadmitted title when the caller asks for it explicitly. Observer parts carry no writer,
-    -- native or net; production never honours the flag, whatever the environment says.
+    -- unadmitted title when the caller names exactly that "<pack>/<title>". Observer parts carry
+    -- no writer, native or net; production never honours it, whatever the environment says.
     local observe_unadmitted = profile.admitted == false and mode == "observer"
-        and deps.allow_unadmitted == true
+        and deps.allow_unadmitted == pack .. "/" .. title
     assert(profile.admitted ~= false or observe_unadmitted,
            title .. " is a known but unadmitted Gen 3 title in " .. pack)
     if observe_unadmitted then
