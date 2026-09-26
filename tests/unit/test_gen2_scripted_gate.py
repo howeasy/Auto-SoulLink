@@ -1084,9 +1084,11 @@ def press_then_release(d, value):
 def test_the_gate_battle_menu_grid_is_the_pinned_header_geometry():
     """G.BATTLE_MENU_GRID against BattleMenuHeader itself: the first label cell (left+2, top+2), rows,
     columns, spacing and every label's glyph run, derived from the pinned pokecrystal source the same
-    way the U1 live lane derives it. Skips only where that pinned tree is absent."""
-    if not BATTLE_MENU_HEADER.exists():
-        pytest.skip(f"pinned pokecrystal source not present: {BATTLE_MENU_HEADER}")
+    way the U1 live lane derives it. Skips only where that pinned tree is absent (the shared named
+    skip); a present clone missing the file fails."""
+    clone = BATTLE_MENU_HEADER.parents[2]   # .cache/gen2-build/pokecrystal
+    if not clone.is_dir():
+        pytest.skip(f"pokecrystal not cloned: {clone}")
     assert grid_as_python(battle_grid()) == source_battle_menu_grid()
 
 

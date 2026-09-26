@@ -1693,9 +1693,11 @@ def test_clause_gender_matches_the_server_rule_for_every_attack_and_speed_dv():
             assert K.gender(key) == ("female" if attack <= 7 else "male")
 
 
-@pytest.mark.skipif(not DECOMPS.exists(), reason="pinned decomps not built (.cache/gen2-build)")
 @pytest.mark.parametrize("repo,start", [("pokecrystal", 1237), ("pokegold", 1573)])
 def test_clause_route29_species_are_exactly_the_decomp_grass_table(repo, start):
+    # absent clone -> the shared named skip (tests/conftest.py); a present clone missing the file fails
+    if not (DECOMPS / repo).is_dir():
+        pytest.skip(f"{repo} not cloned: {DECOMPS / repo}")
     _, K = clause_facts()
     lines = (DECOMPS / repo / "data/wild/johto_grass.asm").read_text(encoding="utf-8").splitlines()
     assert lines[start - 1].strip() == "def_grass_wildmons ROUTE_29"
