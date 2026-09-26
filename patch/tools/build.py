@@ -113,7 +113,8 @@ def build_arena_probe(title, rom_path, mode):
     out.mkdir(parents=True, exist_ok=True)
     header = Path(SRC) / "trade_targets" / f"{title}.h"
     obj, elf, binary = out / "probe.o", out / "probe.elf", out / "probe.bin"
-    run([GCC, *CFLAGS, f"-DSLINK_ARENA_PROBE={1 if mode == 'positive' else 2}",
+    probe_mode = {"positive": 1, "negative": 2, "exhaustion": 3}[mode]
+    run([GCC, *CFLAGS, f"-DSLINK_ARENA_PROBE={probe_mode}",
          "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
     run([LD, "-T", str(header.with_suffix(".ld")), "-e", "slink_heap_probe",
          "--no-warn-rwx-segments", str(obj), "-o", str(elf)])
@@ -248,7 +249,7 @@ def main():
     ap.add_argument("--target", choices=TARGET_NAMES, default="radical_red")
     ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
     ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
-    ap.add_argument("--arena-probe", choices=("positive", "negative"),
+    ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion"),
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")
@@ -283,7 +284,13 @@ def main():
     except (ValueError, OSError) as error:
         ap.error(str(error))
     committed_ups = os.path.join(DIST, "SLink-RR.ups")
-    tmp = tempfile.mkdtemp(prefix="slink-build-") if args.check else None
+    tmp = None
+    if args.check:
+        parent = Path(PATCH) / "build"
+        if parent.resolve() != Path(PATCH).resolve() / "build":
+            ap.error("redirected build directory refused")
+        parent.mkdir(parents=True, exist_ok=True)
+        tmp = tempfile.mkdtemp(prefix="slink-build-", dir=parent)
     if args.check:
         if not os.path.exists(committed_ups):
             sys.exit(f"--check: no committed patch at {committed_ups}")
@@ -415,7 +422,10 @@ def main():
     if args.check:
         with open(committed_ups, "rb") as f:
             want = f.read()
-        shutil.rmtree(tmp, ignore_errors=True)
+        resolved = Path(tmp).resolve()
+        if resolved.parent != Path(PATCH).resolve() / "build" or not resolved.name.startswith("slink-build-"):
+            sys.exit(f"refusing cleanup outside owned build directory: {resolved}")
+        shutil.rmtree(resolved)
         if ups != want:
             sys.exit(f"CHECK FAIL: rebuilt UPS ({len(ups)} B, md5 "
                      f"{hashlib.md5(ups).hexdigest()}) != committed "

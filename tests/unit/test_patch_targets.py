@@ -76,3 +76,40 @@ int main(void) {
                               capture_output=True, text=True, timeout=30)
     assert compiled.returncode == 0, compiled.stderr
     assert subprocess.run([str(exe)], timeout=5).returncode == 0
+
+
+def test_full_name_requires_both_source_and_destination_bounds(tmp_path):
+    gcc = os.environ.get("SLINK_HOST_GCC") or shutil.which("gcc")
+    if not gcc:
+        pytest.skip("host C compiler absent; set SLINK_HOST_GCC")
+    source = tmp_path / "name.c"
+    source.write_text('''#include "abi.h"
+/* Negative control models the removed until-EOS copy, using a physically large
+ * backing array so the deliberate logical-capacity overrun is not host UB. */
+static void old_copy(uint8_t *d, const uint8_t *s) {
+    do { *d++ = *s; } while (*s++ != 0xFF);
+}
+int main(void) {
+    uint8_t src[32], out[48];
+    for (unsigned i=0;i<32;i++) src[i]=0xBB;
+    src[31]=0xFF;
+    for (unsigned i=0;i<48;i++) out[i]=0xCC;
+    old_copy(out,src);
+    if (out[20]==0xCC) return 1;
+    for (unsigned i=0;i<48;i++) out[i]=0xCC;
+    slink_copy_name_bounded(out,20,src,10);
+    if (out[9]!=0xBB || out[10]!=0xFF || out[20]!=0xCC) return 2;
+    slink_copy_name_bounded(out,8,src,10);
+    if (out[6]!=0xBB || out[7]!=0xFF) return 3;
+    src[2]=0xFF;
+    slink_copy_name_bounded(out,20,src,10);
+    if (out[2]!=0xFF) return 4;
+    return 0;
+}
+''')
+    exe = tmp_path / "name.exe"
+    compiled = subprocess.run([gcc, "-std=c11", "-Wall", "-Werror", "-I",
+                               str(ROOT / "patch/src/trade_targets"), str(source), "-o", str(exe)],
+                              capture_output=True, text=True, timeout=30)
+    assert compiled.returncode == 0, compiled.stderr
+    assert subprocess.run([str(exe)], timeout=5).returncode == 0
