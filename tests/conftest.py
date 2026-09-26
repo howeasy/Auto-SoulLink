@@ -112,3 +112,65 @@ def find_upr_jar() -> str | None:
     """Kept for the tests that import it from here; the server owns the search now."""
     from server.upr_pipeline import find_upr_jar as _find
     return _find()
+
+
+# ── An unprovisioned Gen 2 decomp clone is a named skip, not a collection abort ─────────────────
+# Gen 2 tests load the pinned pokecrystal/pokegold clone through tools.gen2_source_data, some at
+# module import. On a checkout without .cache/gen2-build/<repo> that aborted collection for the
+# whole suite (0 tests run; Gen1-Collab2 on master 062977a9). Only SourceUnavailable -- the clone is
+# ABSENT -- becomes pytest.skip("pokecrystal not cloned: ..."), which works at import, fixture and
+# test time; a present-but-dirty/other-commit/hash-mismatched source still raises and fails.
+def _skip_unprovisioned_gen2_sources():
+    # Tools that put tools/ on sys.path import the loader as plain `gen2_source_data` (e.g.
+    # tools/gen_gen2_evos.py); alias that name to the same module so there is ONE loader, one
+    # SourceUnavailable class and one wrapper.
+    try:
+        import tools.gen2_source_data as source_data
+    except Exception:  # noqa: BLE001 - tools not importable here: nothing to wrap
+        return
+    sys.modules.setdefault("gen2_source_data", source_data)
+    real = source_data._load_context
+
+    def _load_context(*args, **kwargs):
+        try:   # looked up per call so a test can stand in a raw loader (test_verify_gen2_release_lanes)
+            return _load_context.__wrapped__(*args, **kwargs)
+        except source_data.SourceUnavailable as exc:
+            pytest.skip(str(exc), allow_module_level=True)
+
+    _load_context.__wrapped__ = real   # test_gen2_source_unavailable.py reaches the unwrapped loader
+    source_data._load_context = _load_context
+
+
+_skip_unprovisioned_gen2_sources()
+
+
+
+# The same absent input reached without the loader: a test that reads a built ROM or a decomp file
+# under .cache/gen2-build/<repo>/ directly. Skipped ONLY when <repo> itself is absent (not cloned);
+# a present clone missing a file (not built, wrong layout) still fails.
+_GEN2_BUILD = os.path.join(REPO, ".cache", "gen2-build")
+
+
+def _absent_gen2_clone(exc):
+    seen = set()
+    while exc is not None and id(exc) not in seen:
+        seen.add(id(exc))
+        name = getattr(exc, "filename", None) if isinstance(exc, FileNotFoundError) else None
+        if name:
+            rel = os.path.relpath(os.path.abspath(str(name)), _GEN2_BUILD)
+            repo = rel.replace("\\", "/").split("/")[0]
+            if not rel.startswith("..") and repo and not os.path.isdir(os.path.join(_GEN2_BUILD, repo)):
+                return f"{repo} not cloned: {os.path.join(_GEN2_BUILD, repo)}"
+        exc = exc.__cause__ or exc.__context__
+    return None
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_makereport(item, call):
+    report = yield
+    if report.failed and call.excinfo is not None:
+        reason = _absent_gen2_clone(call.excinfo.value)
+        if reason:
+            report.outcome = "skipped"
+            report.longrepr = (str(item.path), (item.location[1] or 0) + 1, f"Skipped: {reason}")
+    return report

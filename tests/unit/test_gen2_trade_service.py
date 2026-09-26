@@ -6,7 +6,7 @@ import subprocess
 
 import pytest
 
-from tests.unit.test_gen2_companion_abi import ROOT, Machine, native_symbols, rgbds
+from tests.unit.test_gen2_companion_abi import ROOT, Machine, native_symbols, pinned_repo, rgbds
 
 
 class Symbols(dict):
@@ -18,7 +18,7 @@ def assemble_trade(tmp_path, title, source_files=None, stub_names=None):
         source_files = [f"trade_{name}.asm" for name in ("frame", "items", "snapshot", "service", "dispatch")]
     if stub_names is None:
         stub_names = ("SlinkTradeCommit",)
-    pinned = ROOT / ".cache/gen2-build" / ("pokecrystal" if title == "crystal" else "pokegold")
+    pinned = pinned_repo("pokecrystal" if title == "crystal" else "pokegold")
     native = native_symbols(title, ROOT / "data/gen2" / f"poke{title}.sym")
     paths = [ROOT / "patch/gen2/src" / name for name in source_files]
     source_text = "\n".join(path.read_text() for path in paths)

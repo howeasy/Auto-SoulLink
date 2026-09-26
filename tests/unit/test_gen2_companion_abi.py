@@ -10,6 +10,16 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def pinned_repo(name):
+    """The pinned decomp clone .cache/gen2-build/<name>; an ABSENT clone is the named skip Gen 1's gate
+    allows (tests/conftest.py). These MODEL checks assemble against it with rgbasm in a subprocess, where
+    a missing include surfaces as assembler text, not an exception the conftest hook could classify."""
+    repo = ROOT / ".cache/gen2-build" / name
+    if not repo.is_dir():
+        pytest.skip(f"{name} not cloned: {repo}")
+    return repo
+
+
 def rgbds(name):
     suffix = ".exe" if os.name == "nt" else ""
     candidates = [Path(os.environ.get("SLINK_RGBDS_BIN", ".")) / (name + suffix),
@@ -81,7 +91,7 @@ def assemble(tmp_path, title, extra="", *, panel=False, panel_dir=None, sfx=Fals
          else f"DEF {name} EQU ${native[name][1]:04x}\n") for name in names)
     prelude = ""
     if panel or sfx or phone or version:
-        repo = ROOT / ".cache/gen2-build" / ("pokecrystal" if crystal else "pokegold")
+        repo = pinned_repo("pokecrystal" if crystal else "pokegold")
         prelude = f'INCLUDE "{repo.as_posix()}/includes.asm"\n'
     source = tmp_path / "probe.asm"
     source.write_text(
@@ -830,7 +840,7 @@ def test_compiled_reset_keeps_admission_prefix_and_hooks_only_wait(tmp_path, tit
     from tools import build_gen2_companion as builder
 
     repo_name = "pokecrystal" if title == "crystal" else "pokegold"
-    pinned = ROOT / ".cache/gen2-build" / repo_name
+    pinned = pinned_repo(repo_name)
     original = (pinned / "home/init.asm").read_text()
     checkout = tmp_path / "source"
     (checkout / "home").mkdir(parents=True)
@@ -1020,7 +1030,7 @@ def test_phone_only_build_advertises_only_phone(tmp_path, title):
 def test_phone_table_preserves_all_native_rows_and_banked_script(compiled_phone):
     title, _, symbols = compiled_phone
     row = native_symbols(title, ROOT / "data/gen2" / f"poke{title}.sym")
-    repo = ROOT / ".cache/gen2-build" / ("pokecrystal" if title == "crystal" else "pokegold")
+    repo = pinned_repo("pokecrystal" if title == "crystal" else "pokegold")
     native = (repo / f"poke{title}.gbc").read_bytes()
     bank, address = row["SpecialPhoneCallList"]
     offset = bank * 0x4000 + address - 0x4000
