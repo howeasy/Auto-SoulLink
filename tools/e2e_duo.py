@@ -404,6 +404,12 @@ SCENARIOS = {
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
                            "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
                            "oracle": "assert_native_absent_gen3_saved"},
+    # G5 two-player evidence for the retired old-client infopanel row, rebuilt on the new client:
+    # the SOULLINK START-row panel on rr_town{,_b} (pre-Pokedex: the patch splices the row only
+    # into the 6-row menu); the oracle decodes the drawn bytes with the Python charmap.
+    "infopanel_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr",), "target": "town",
+                       "frames": 900000, "no_save": ("a", "b"),
+                       "oracle": "assert_infopanel_gen3_saved"},
     # RR rows R2/R3/R5 of rr_active_faint_parity_scope §5.5 (R1 = linked_faint_active_gen3 and
     # R4 = linked_faint_active_whiteout_gen3 on gen3_rr). R1/R2/R3 boot rr_battle2{,_b}.sav
     # (a second mon for the send-out, balls for R3's L-throw) and SKIP by name until it is built
@@ -2037,6 +2043,56 @@ def gen3_boxed(key):
 def gen3_returned(key):
     """The driver's cartridge read-back: `key` back in the party AND in no box."""
     return rf"(?m)^RETURNED_OBSERVED {re.escape(key)} slot=\d+"
+
+
+def gen3_panel_text(raw: bytes) -> str:
+    """One SlinkInfo line (FR-encoded, 0xFE = newline, 0xFF-terminated) through the Python
+    codec's own charmap (gen3_codec._FR_DECODE via decode_name), independent of the Lua encoder."""
+    codec = gen3_codec()
+    body = raw.split(b"\xff", 1)[0]
+    return "\n".join(codec.decode_name(part + b"\xff") for part in body.split(b"\xfe"))
+
+
+def gen3_panel_problems(text, alive_pairs):
+    """infopanel_gen3: the server's rows (PANEL_ROWS, the link_panel it sent) are what the
+    cartridge staged and drew: page 1 = rows[0:6] ("|" -> newline), the header slot reads
+    PAGE 1/<pages>, the START row opened it (opened +1, drawn caught up, the field locked, VRAM
+    changed), and A and B each closed it (the field released). `alive_pairs` comes from
+    links.json, so the rows' "Pairs alive" claim is checked against the server's own record."""
+    problems = []
+    first_open = re.search(r"(?m)^PANEL_OPEN ", text or "")
+    sent = re.findall(r"(?m)^PANEL_ROWS (.+)$", (text or "")[:first_open.start() if first_open else None])
+    if not sent:
+        return ["no PANEL_ROWS before the panel opened (the server never sent link_panel)"]
+    rows = json.loads(sent[-1])          # the payload the client held when the player opened it
+    per_page = 6
+    pages = max(1, -(-len(rows) // per_page))
+    if f"Pairs alive|{alive_pairs}/{alive_pairs}" not in rows:
+        problems.append(f"rows {rows} do not say Pairs alive|{alive_pairs}/{alive_pairs}")
+    opens = re.findall(r"(?m)^PANEL_OPEN (\d+) opened=(\d+)->(\d+) drawn=(\d+) sc2=(\d+) lines=(\d+) "
+                       r"page=(\d+) pages=(\d+) vram=(\w+)->(\w+)$", text or "")
+    if len(opens) != 2:
+        problems.append(f"expected 2 PANEL_OPEN lines, got {len(opens)}")
+    for n, o0, o1, drawn, sc2, lines, page, npages, v0, v1 in opens:
+        if int(o1) != (int(o0) + 1) % 256 or drawn != o1:
+            problems.append(f"open {n}: opened {o0}->{o1} drawn {drawn} (one START-row bump, drawn)")
+        if sc2 == "0" or v0 == v1:
+            problems.append(f"open {n}: field not locked (sc2={sc2}) or nothing drawn (vram {v0}->{v1})")
+        if int(lines) != min(per_page, len(rows)) or page != "0" or int(npages) != pages:
+            problems.append(f"open {n}: lines={lines} page={page} pages={npages}, expected "
+                            f"{min(per_page, len(rows))}/0/{pages}")
+        staged = dict(re.findall(rf"(?m)^PANEL_LINE {n} (\d+) ([0-9A-F]+)$", text or ""))
+        for i, row in enumerate(rows[:per_page]):
+            got = gen3_panel_text(bytes.fromhex(staged.get(str(i), "")))
+            if got != row.replace("|", "\n"):
+                problems.append(f"open {n} line {i}: drawn {got!r}, server sent {row!r}")
+        slot = re.search(rf"(?m)^PANEL_SLOT7 {n} ([0-9A-F]+)$", text or "")
+        if not slot or gen3_panel_text(bytes.fromhex(slot.group(1))) != f"PAGE 1/{pages}":
+            problems.append(f"open {n}: the header does not read PAGE 1/{pages}")
+    closes = re.findall(r"(?m)^PANEL_CLOSED (\d+) button=(\w) sc2=(\d+)$", text or "")
+    if [(b, s) for _, b, s in closes] != [("A", "0"), ("B", "0")]:
+        problems.append(f"closes {closes}, expected A then B, each releasing the field")
+    return problems
 
 
 # ── Games ────────────────────────────────────────────────────────────────────
@@ -6700,6 +6756,24 @@ class DuoRun:
         self._gen3_mark("b", rf"^MIRROR_WITHDRAWN {re.escape(kb)}\b", "mirrored party_mon withdraw")
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
+
+    def orchestrate_infopanel_gen3(self):
+        """Every slot pair both fixtures hold (up to two), linked only after A's receipt shows the
+        RX tee is in place, so the link_panel the server sends next is the one A records and draws."""
+        ka, kb = self._gen3_prelude()
+        self._gen3_mark("a", r"^PANEL_TEE\b", "A's link_panel tee")
+        pairs = min(2, len(ka), len(kb))
+        for slot in range(pairs):
+            self.inject_link(ka[slot], kb[slot], area_id=f"duo{slot}")
+        self._link_keys = {"a": ka[pairs - 1], "b": kb[pairs - 1]}
+        self.go()
+
+    def assert_infopanel_gen3_saved(self, results):
+        alive = sum(1 for e in self._links_json() if e.get("status") == "alive")
+        problems = [f"a: {p}" for p in gen3_panel_problems(results["a"], alive)]
+        problems += gen3_receipt_problems("b", results["b"], required=[r"(?m)^WRITES "])
+        self._gen3_raise(problems, f"infopanel_gen3: START -> SOULLINK drew the server's "
+                                   f"link_panel rows ({alive} pair(s)), A and B each close it")
 
     def _gen3_identity(self) -> str:
         """G4 item 2a (1) + Codex REV-center-receipt-2: what this receipt ran on -- each side's ROM
