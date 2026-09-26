@@ -2,10 +2,10 @@
 ========== scenario: deadzone_gen3 ==========
 [duo] deadzone_gen3: attempt 1 of 3
 [duo] JITTER requested=0 attempt=1
-[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=d60f99e98a34db62eef184ad171eedd40d52f7f7643d81ae9bc99dd023a789a1 profile.json=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c source=fba2f186141e3a9ddf4e226cfaeb46c69cda321c
-[duo] server up: tcp=58133 http=58134 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3__awa4w5g
-[duo] timing server 1.2s
-[duo] cleared 7 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_2_witness.bin, e2e_deadzone_gen3_a_attempt2_result.txt, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_2_witness.bin, e2e_deadzone_gen3_b_attempt2_result.txt, e2e_deadzone_gen3_b_result.txt, e2e_deadzone_gen3_pydec_attempt2_result.txt
+[duo] IDENTITY a=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=7e5b552051be9b41400b67679e2693c7cdc6e9d4590989dccb25e11a135d46d1:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=d60f99e98a34db62eef184ad171eedd40d52f7f7643d81ae9bc99dd023a789a1 profile.json=9b7b9d029d5253ab5f883a1f0c33c8bc21f6ca4c3e3892dde7f5716d8727317c source=80a4c155a3e6987da2799e71bb0dff488dfd0a41
+[duo] server up: tcp=58807 http=58808 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_nxvsvdd_
+[duo] timing server 0.6s
+[duo] cleared 7 stale artifact(s) for deadzone_gen3: e2e_deadzone_gen3_a_1_witness.bin, e2e_deadzone_gen3_a_attempt1_result.txt, e2e_deadzone_gen3_a_result.txt, e2e_deadzone_gen3_b_1_witness.bin, e2e_deadzone_gen3_b_attempt1_result.txt, e2e_deadzone_gen3_b_result.txt, e2e_deadzone_gen3_pydec_attempt1_result.txt
 [duo] launched a phase=initial seed=True
 [duo] timing launch_a 0.0s
 [duo] launched b phase=initial seed=True
@@ -16,19 +16,19 @@
 [duo] go-file written for a
 [duo] DEAD ZONE FROM REAL PLAY (new client): route_1
 [duo] go-file written for b
-[duo] B caught 005C3CCD:D4223740 in the dead zone; force-fainted, memorialized
-[duo] links.json: 1 dead_zone entry for route_1; B's 005C3CCD:D4223740 retired
-[duo] timing orchestrate 16.0s
-[duo] timing results 4.0s
+[duo] B caught EE851108:D4223740 in the dead zone; force-fainted, memorialized
+[duo] links.json: 1 dead_zone entry for route_1; B's EE851108:D4223740 retired
+[duo] timing orchestrate 14.6s
+[duo] timing results 3.6s
 [duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
-[duo] RESULT_LINE b: RESULT: PASS (dead-zone capture 005C3CCD:D4223740 retired)
-[duo] SAVE_WITNESS_SHA256 inst=a site=30385939a3845e1c48e6f8294dd1c6745508011f7f02d40129609a0f6e648638 file=30385939a3845e1c48e6f8294dd1c6745508011f7f02d40129609a0f6e648638 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
-[duo] SAVE_WITNESS_SHA256 inst=b site=3331345bcec244e03b48563187d1a941df495d4a4137cc0132b6e52bc99a888b file=3331345bcec244e03b48563187d1a941df495d4a4137cc0132b6e52bc99a888b match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
-[duo] deadzone: route_1 locked by A's no_catch (species 452); B's 005C3CCD:D4223740 saved only in the memorial box
-[duo] MARKER b: FAINTED 005C3CCD:D4223740 frame=3480 in_battle=0 battler=0
-[duo] MARKER b: RX memorialize key=005C3CCD:D4223740
-[duo] MARKER b: TX memorialize_done 005C3CCD:D4223740 {"box":24,"event":"memorialize_done","key":"005C3CCD:D4223740","player":"b","seq":100}
-[duo] timing oracle 0.4s
+[duo] RESULT_LINE b: RESULT: PASS (dead-zone capture EE851108:D4223740 retired)
+[duo] SAVE_WITNESS_SHA256 inst=a site=ff4453ddda915685f71199f0783c56c9e1dce258fcb84ede668c5b7f8a841731 file=ff4453ddda915685f71199f0783c56c9e1dce258fcb84ede668c5b7f8a841731 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=44b246a73826777d6713dcebbf85f0aa849ada3ded42206e129cb8f639660708 file=44b246a73826777d6713dcebbf85f0aa849ada3ded42206e129cb8f639660708 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] deadzone: route_1 locked by A's no_catch (species 52); B's EE851108:D4223740 saved only in the memorial box
+[duo] MARKER b: FAINTED EE851108:D4223740 frame=3580 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=EE851108:D4223740
+[duo] MARKER b: TX memorialize_done EE851108:D4223740 {"box":24,"event":"memorialize_done","key":"EE851108:D4223740","player":"b","seq":103}
+[duo] timing oracle 0.3s
 [duo] PYDEC: PASS asserted scenario facts
 [duo] deadzone_gen3: a=PASS b=PASS
 

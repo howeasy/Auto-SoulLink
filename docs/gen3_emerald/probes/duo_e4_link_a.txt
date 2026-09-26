@@ -1,11 +1,11 @@
 duo instance a scenario=link_gen3 phase=initial title=emerald attempt=1
 SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
-[client] [SLink] TCP connecting to 127.0.0.1:55030 (non-blocking)…
+[client] [SLink] TCP connecting to 127.0.0.1:58739 (non-blocking)…
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
-[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:55030 (rom f3ae0881)
-client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:55030
-[client] [SLink] TCP connected to 127.0.0.1:55030
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:58739 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:58739
+[client] [SLink] TCP connected to 127.0.0.1:58739
 [client] [SLink-gen3] writes ENABLED
 TX hello - {"area_id":"route_102","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"route102"
 RX resolved_areas
@@ -17,40 +17,38 @@ MYKEY 0 4D55444B:20250925
 PARTY slot=0 key=4D55444B:20250925 species=283 level=5 hp=20/20
 booted frame=580 map=map=17 at=(21,16) balls=5
 JITTER requested=0 applied=0 attempt=1
-[client] [gen3] phase ball-thrown frame=1438 gLastUsedItem 0 -> 0, balls 5 -> 4
+[client] [gen3] phase ball-thrown frame=1543 gLastUsedItem 0 -> 0, balls 5 -> 4
 THREW 1
-[client] [gen3] phase ball-thrown frame=2725 gLastUsedItem 0 -> 0, balls 4 -> 3
+[client] [gen3] phase ball-thrown frame=2479 gLastUsedItem 0 -> 0, balls 4 -> 3
 THREW 2
-[client] [gen3] phase ball-thrown frame=4069 gLastUsedItem 0 -> 0, balls 3 -> 2
+RX hud_show text=Partner caught WURMPLE in Route 102
+[client] [gen3] phase ball-thrown frame=3562 gLastUsedItem 0 -> 0, balls 3 -> 2
 THREW 3
-RX hud_show text=Partner caught LOTAD in Route 102
-[client] [gen3] phase ball-thrown frame=5356 gLastUsedItem 0 -> 0, balls 2 -> 1
-THREW 4
-TX capture 6C905417:20250925 {"area_id":"route_102","event":"capture","held_item_id":0,"hp":18,"is_egg":false,"key":"6C905417:20250925","level":4,"maxHP":18,"nickname":"WURMPLE","player":"a","seq":205,"species_id":290}
+TX capture B8A7E5A1:20250925 {"area_id":"route_102","event":"capture","held_item_id":0,"hp":15,"is_egg":false,"key":"B8A7E5A1:20250925","level":3,"maxHP":15,"nickname":"LOTAD","player":"a","seq":144,"species_id":295}
 RX play_sound
-[client] [SLink-gen3] write sound 0x030075F0 +4 frame 6608
-[client] [SLink-gen3] write sound 0x030075F8 +1 frame 6608
-[client] [SLink-gen3] write sound 0x030075F9 +1 frame 6608
-[client] [SLink-gen3] write sound 0x030075FC +4 frame 6608
-[client] [SLink-gen3] write sound 0x03001660 +4 frame 6608
-[client] [SLink-gen3] write sound 0x03001660 +1 frame 6608
-[client] [SLink-gen3] write sound 0x0300166F +1 frame 6608
-[client] [SLink-gen3] write sound 0x03001673 +1 frame 6608
-[client] [SLink-gen3] write sound 0x03001679 +1 frame 6608
-[client] [SLink-gen3] write sound 0x03001680 +4 frame 6608
-[client] [SLink-gen3] write sound 0x030016A0 +4 frame 6608
-[client] [SLink-gen3] write sound 0x030075F4 +4 frame 6608
-RX msgbox text=WURMPLE and LOTAD linked!
-RX party_mon key=6C905417:20250925
-TX safe - {"event":"safe","player":"a","seq":207}
-TX sync_retrieve_done 6C905417:20250925 {"event":"sync_retrieve_done","key":"6C905417:20250925","player":"a","seq":209}
-CAUGHT 6C905417:20250925
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 4783
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 4783
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 4783
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 4783
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 4783
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 4783
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 4783
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 4783
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 4783
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 4783
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 4783
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 4783
+RX msgbox text=LOTAD and WURMPLE linked!
+RX party_mon key=B8A7E5A1:20250925
+TX safe - {"event":"safe","player":"a","seq":146}
+TX sync_retrieve_done B8A7E5A1:20250925 {"event":"sync_retrieve_done","key":"B8A7E5A1:20250925","player":"a","seq":148}
+CAUGHT B8A7E5A1:20250925
 PARTY slot=0 key=4D55444B:20250925 species=283
-PARTY slot=1 key=6C905417:20250925 species=290
-[client] [gen3] phase save-menu frame=6863 counter=2
-[client] [gen3] phase save-dialog frame=6923 row=3/6
-[client] [gen3] phase saved frame=7323 counter=2->3
-SAVE_WITNESS_DUMP path=patch/build/e2e_link_gen3_a_1_witness.bin bytes=131072 saves=1 frame=7545 counter=3
+PARTY slot=1 key=B8A7E5A1:20250925 species=295
+[client] [gen3] phase save-menu frame=5037 counter=2
+[client] [gen3] phase save-dialog frame=5097 row=3/6
+[client] [gen3] phase saved frame=5497 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_link_gen3_a_1_witness.bin bytes=131072 saves=1 frame=5719 counter=3
 SAVE_WITNESS link counter=2->3
 WRITES 12
-RESULT: PASS (caught 6C905417:20250925)
+RESULT: PASS (caught B8A7E5A1:20250925)

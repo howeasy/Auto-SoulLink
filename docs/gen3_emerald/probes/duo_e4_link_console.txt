@@ -2,9 +2,9 @@
 ========== scenario: link_gen3 ==========
 [duo] link_gen3: attempt 1 of 3
 [duo] JITTER requested=0 attempt=1
-[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=fba2f186141e3a9ddf4e226cfaeb46c69cda321c
-[duo] server up: tcp=55030 http=55031 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_9c3w_yjh
-[duo] timing server 1.2s
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=80a4c155a3e6987da2799e71bb0dff488dfd0a41
+[duo] server up: tcp=58739 http=58740 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_mb1692jc
+[duo] timing server 0.6s
 [duo] cleared 7 stale artifact(s) for link_gen3: e2e_link_gen3_a_1_witness.bin, e2e_link_gen3_a_attempt1_result.txt, e2e_link_gen3_a_result.txt, e2e_link_gen3_b_1_witness.bin, e2e_link_gen3_b_attempt1_result.txt, e2e_link_gen3_b_result.txt, e2e_link_gen3_pydec_attempt1_result.txt
 [duo] launched a phase=initial seed=True
 [duo] timing launch_a 0.0s
@@ -15,17 +15,17 @@
 [duo] both players connected
 [duo] go-file written for a
 [duo] go-file written for b
-[duo] real captures: a=6C905417:20250925 b=AA092C1C:DFDAF6DA
-[duo] ENCOUNTER LINK FROM REAL PLAY (new client): 6C905417:20250925 <-> AA092C1C:DFDAF6DA on route_102, alive
-[duo] timing orchestrate 28.7s
-[duo] timing results 3.4s
-[duo] RESULT_LINE a: RESULT: PASS (caught 6C905417:20250925)
-[duo] RESULT_LINE b: RESULT: PASS (caught AA092C1C:DFDAF6DA)
-[duo] SAVE_WITNESS_SHA256 inst=a site=df92fa0aa60b312bfeab94ea36a7ed06e86f1ef48aade8afc36ffd4890c03b82 file=df92fa0aa60b312bfeab94ea36a7ed06e86f1ef48aade8afc36ffd4890c03b82 match=true saves=1 counter=2->3 rtc=normalized
-[duo] SAVE_WITNESS_SHA256 inst=b site=976001f2ce2535781b62ec3c40ac06e217c40fe75ad29507090d709c941e45d0 file=976001f2ce2535781b62ec3c40ac06e217c40fe75ad29507090d709c941e45d0 match=true saves=1 counter=2->3 rtc=normalized
-[duo] BAG_BALLS baseline=5 final=1 throws=4 inst=a
-[duo] BAG_BALLS baseline=5 final=3 throws=2 inst=b
-[duo] link: 6C905417:20250925 <-> AA092C1C:DFDAF6DA alive on route_102 and saved once in each party
+[duo] real captures: a=B8A7E5A1:20250925 b=A09DD804:DFDAF6DA
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): B8A7E5A1:20250925 <-> A09DD804:DFDAF6DA on route_102, alive
+[duo] timing orchestrate 20.2s
+[duo] timing results 3.2s
+[duo] RESULT_LINE a: RESULT: PASS (caught B8A7E5A1:20250925)
+[duo] RESULT_LINE b: RESULT: PASS (caught A09DD804:DFDAF6DA)
+[duo] SAVE_WITNESS_SHA256 inst=a site=04c71a30b3f712c2cb6193559ae8bc4a2343456a91401fbb9a03eb6e3f29a179 file=04c71a30b3f712c2cb6193559ae8bc4a2343456a91401fbb9a03eb6e3f29a179 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=aa049f94f113bc0cd86d0296e04a5d1e3a62587dca06a65b749deb758265e207 file=aa049f94f113bc0cd86d0296e04a5d1e3a62587dca06a65b749deb758265e207 match=true saves=1 counter=2->3 rtc=normalized
+[duo] BAG_BALLS baseline=5 final=2 throws=3 inst=a
+[duo] BAG_BALLS baseline=5 final=4 throws=1 inst=b
+[duo] link: B8A7E5A1:20250925 <-> A09DD804:DFDAF6DA alive on route_102 and saved once in each party
 [duo] timing oracle 0.3s
 [duo] PYDEC: PASS asserted scenario facts
 [duo] link_gen3: a=PASS b=PASS

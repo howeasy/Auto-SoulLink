@@ -1,11 +1,11 @@
-duo instance b scenario=deadzone_gen3 phase=initial title=emerald attempt=2
+duo instance b scenario=deadzone_gen3 phase=initial title=emerald attempt=1
 SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
-[client] [SLink] TCP connecting to 127.0.0.1:54888 (non-blocking)…
+[client] [SLink] TCP connecting to 127.0.0.1:58500 (non-blocking)…
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
 TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)
-[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:54888 (rom f3ae0881)
-client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:54888
-[client] [SLink] TCP connected to 127.0.0.1:54888
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:58500 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:58500
+[client] [SLink] TCP connected to 127.0.0.1:58500
 [client] [SLink-gen3] writes ENABLED
 TX hello - {"area_id":"route_102","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"route102"
 RX resolved_areas
@@ -17,54 +17,60 @@ MYKEY 0 4D55444B:DFDAF6DA
 PARTY slot=0 key=4D55444B:DFDAF6DA species=283 level=5 hp=20/20
 booted frame=580 map=map=17 at=(21,16) balls=5
 RX play_sound
-[client] [SLink-gen3] write sound 0x030075F0 +4 frame 1592
-[client] [SLink-gen3] write sound 0x030075F8 +1 frame 1592
-[client] [SLink-gen3] write sound 0x030075F9 +1 frame 1592
-[client] [SLink-gen3] write sound 0x030075FC +4 frame 1592
-[client] [SLink-gen3] write sound 0x03001660 +4 frame 1592
-[client] [SLink-gen3] write sound 0x03001660 +1 frame 1592
-[client] [SLink-gen3] write sound 0x0300166F +1 frame 1592
-[client] [SLink-gen3] write sound 0x03001673 +1 frame 1592
-[client] [SLink-gen3] write sound 0x03001679 +1 frame 1592
-[client] [SLink-gen3] write sound 0x03001680 +4 frame 1592
-[client] [SLink-gen3] write sound 0x030016A0 +4 frame 1592
-[client] [SLink-gen3] write sound 0x030075F4 +4 frame 1592
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 1742
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 1742
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 1742
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 1742
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 1742
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 1742
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 1742
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 1742
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 1742
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 1742
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 1742
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 1742
 RX msgbox text=Route 102 is a dead zone!
-JITTER requested=37 applied=37 attempt=2
-[client] [gen3] phase ball-thrown frame=2822 gLastUsedItem 0 -> 0, balls 5 -> 4
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase ball-thrown frame=2763 gLastUsedItem 0 -> 0, balls 5 -> 4
 THREW 1
-[client] [gen3] phase ball-thrown frame=4074 gLastUsedItem 0 -> 0, balls 4 -> 3
+[client] [gen3] phase ball-thrown frame=3743 gLastUsedItem 0 -> 0, balls 4 -> 3
 THREW 2
-TX capture 1250D5D6:DFDAF6DA {"area_id":"route_102","event":"capture","held_item_id":0,"hp":17,"is_egg":false,"key":"1250D5D6:DFDAF6DA","level":4,"maxHP":17,"nickname":"LOTAD","player":"b","seq":161,"species_id":295}
-RX force_faint key=1250D5D6:DFDAF6DA
-RX memorialize key=1250D5D6:DFDAF6DA
+[client] [gen3] phase ball-thrown frame=4722 gLastUsedItem 0 -> 0, balls 3 -> 2
+THREW 3
+[client] [gen3] phase ball-thrown frame=5721 gLastUsedItem 0 -> 0, balls 2 -> 1
+THREW 4
+[client] [gen3] phase ball-thrown frame=6700 gLastUsedItem 0 -> 0, balls 1 -> 0
+THREW 5
+TX capture EF239FCE:DFDAF6DA {"area_id":"route_102","event":"capture","held_item_id":0,"hp":17,"is_egg":false,"key":"EF239FCE:DFDAF6DA","level":4,"maxHP":17,"nickname":"POOCHYENA","player":"b","seq":249,"species_id":286}
+RX force_faint key=EF239FCE:DFDAF6DA
+RX memorialize key=EF239FCE:DFDAF6DA
 RX play_sound
-[client] [SLink-gen3] write sound 0x030075F0 +4 frame 5294
-[client] [SLink-gen3] write sound 0x030075F8 +1 frame 5294
-[client] [SLink-gen3] write sound 0x030075F9 +1 frame 5294
-[client] [SLink-gen3] write sound 0x030075FC +4 frame 5294
-[client] [SLink-gen3] write sound 0x03001660 +4 frame 5294
-[client] [SLink-gen3] write sound 0x03001660 +1 frame 5294
-[client] [SLink-gen3] write sound 0x0300166F +1 frame 5294
-[client] [SLink-gen3] write sound 0x03001673 +1 frame 5294
-[client] [SLink-gen3] write sound 0x03001679 +1 frame 5294
-[client] [SLink-gen3] write sound 0x03001680 +4 frame 5294
-[client] [SLink-gen3] write sound 0x030016A0 +4 frame 5294
-[client] [SLink-gen3] write sound 0x030075F4 +4 frame 5294
-RX hud_show text=[x] DZ: LOTAD
-TX safe - {"event":"safe","player":"b","seq":163}
-[client] [SLink-gen3] write overworld 0x020245A6 +2 frame 5368
-FAINTED 1250D5D6:DFDAF6DA frame=5368 in_battle=0 battler=0
-[client] [SLink-gen3] write overworld 0x02031248 +80 frame 5369
-[client] [SLink-gen3] write overworld 0x02024550 +100 frame 5369
-[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 5369
-TX memorialize_done 1250D5D6:DFDAF6DA {"box":13,"event":"memorialize_done","key":"1250D5D6:DFDAF6DA","player":"b","seq":165}
-CAUGHT 1250D5D6:DFDAF6DA
-RETIRED 1250D5D6:DFDAF6DA
-[client] [gen3] phase save-menu frame=5429 counter=2
-[client] [gen3] phase save-dialog frame=5489 row=3/6
-[client] [gen3] phase saved frame=5889 counter=2->3
-SAVE_WITNESS_DUMP path=patch/build/e2e_deadzone_gen3_b_2_witness.bin bytes=131072 saves=1 frame=6109 counter=3
+[client] [SLink-gen3] write sound 0x030075F0 +4 frame 7952
+[client] [SLink-gen3] write sound 0x030075F8 +1 frame 7952
+[client] [SLink-gen3] write sound 0x030075F9 +1 frame 7952
+[client] [SLink-gen3] write sound 0x030075FC +4 frame 7952
+[client] [SLink-gen3] write sound 0x03001660 +4 frame 7952
+[client] [SLink-gen3] write sound 0x03001660 +1 frame 7952
+[client] [SLink-gen3] write sound 0x0300166F +1 frame 7952
+[client] [SLink-gen3] write sound 0x03001673 +1 frame 7952
+[client] [SLink-gen3] write sound 0x03001679 +1 frame 7952
+[client] [SLink-gen3] write sound 0x03001680 +4 frame 7952
+[client] [SLink-gen3] write sound 0x030016A0 +4 frame 7952
+[client] [SLink-gen3] write sound 0x030075F4 +4 frame 7952
+RX hud_show text=[x] DZ: POOCHYENA
+TX safe - {"event":"safe","player":"b","seq":252}
+[client] [SLink-gen3] write overworld 0x020245A6 +2 frame 8026
+FAINTED EF239FCE:DFDAF6DA frame=8026 in_battle=0 battler=0
+[client] [SLink-gen3] write overworld 0x02031210 +80 frame 8027
+[client] [SLink-gen3] write overworld 0x02024550 +100 frame 8027
+[client] [SLink-gen3] write overworld 0x020244E9 +1 frame 8027
+TX memorialize_done EF239FCE:DFDAF6DA {"box":13,"event":"memorialize_done","key":"EF239FCE:DFDAF6DA","player":"b","seq":254}
+CAUGHT EF239FCE:DFDAF6DA
+RETIRED EF239FCE:DFDAF6DA
+[client] [gen3] phase save-menu frame=8087 counter=2
+[client] [gen3] phase save-dialog frame=8147 row=3/6
+[client] [gen3] phase saved frame=8547 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_deadzone_gen3_b_1_witness.bin bytes=131072 saves=1 frame=8767 counter=3
 SAVE_WITNESS deadzone counter=2->3
 WRITES 28
-RESULT: PASS (dead-zone capture 1250D5D6:DFDAF6DA retired)
+RESULT: PASS (dead-zone capture EF239FCE:DFDAF6DA retired)

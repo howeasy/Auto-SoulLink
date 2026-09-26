@@ -1,8 +1,8 @@
 duo instance b scenario=faint_cmd_gen3 phase=initial title=leafgreen attempt=1
-[client] [SLink] TCP connecting to 127.0.0.1:58004 (non-blocking)…
-[client] [SLink-gen3] gen3_frlg/leafgreen (clean by hash) player b -> 127.0.0.1:58004 (rom 574fa542)
-client built by lua/gen3/run.lua: title=leafgreen player=b -> 127.0.0.1:58004
-[client] [SLink] TCP connected to 127.0.0.1:58004
+[client] [SLink] TCP connecting to 127.0.0.1:58788 (non-blocking)…
+[client] [SLink-gen3] gen3_frlg/leafgreen (clean by hash) player b -> 127.0.0.1:58788 (rom 574fa542)
+client built by lua/gen3/run.lua: title=leafgreen player=b -> 127.0.0.1:58788
+[client] [SLink] TCP connected to 127.0.0.1:58788
 [client] [SLink-gen3] box scan stopped at box 0: gPokemonStoragePtr is null
 [client] [SLink-gen3] writes ENABLED
 TX hello - {"area_id":"viridian_city","artifact_kind":"clean","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_frlg","has_pokeballs":false,"in_battle":false,"loc_name":"viridia
@@ -23,18 +23,18 @@ JITTER requested=0 applied=0 attempt=1
 READY F6B6A64D:1C600D89
 RX force_faint key=F6B6A64D:1C600D89
 RX play_sound
-[client] [SLink-gen3] write sound 0x03007340 +4 frame 872
-[client] [SLink-gen3] write sound 0x03007348 +1 frame 872
-[client] [SLink-gen3] write sound 0x03007349 +1 frame 872
-[client] [SLink-gen3] write sound 0x0300734C +4 frame 872
-[client] [SLink-gen3] write sound 0x030023E8 +4 frame 872
-[client] [SLink-gen3] write sound 0x030023E8 +1 frame 872
-[client] [SLink-gen3] write sound 0x030023F7 +1 frame 872
-[client] [SLink-gen3] write sound 0x030023FB +1 frame 872
-[client] [SLink-gen3] write sound 0x03002401 +1 frame 872
-[client] [SLink-gen3] write sound 0x03002408 +4 frame 872
-[client] [SLink-gen3] write sound 0x03002428 +4 frame 872
-[client] [SLink-gen3] write sound 0x03007344 +4 frame 872
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 902
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 902
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 902
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 902
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 902
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 902
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 902
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 902
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 902
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 902
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 902
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 902
 RX memorialize key=F6B6A64D:1C600D89
 RX game_over
 [client] [SLink-gen3] write overworld 0x0202433E +2 frame 908

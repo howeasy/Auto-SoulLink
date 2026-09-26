@@ -2,8 +2,8 @@
 ========== scenario: faint_cmd_gen3 ==========
 [duo] faint_cmd_gen3: attempt 1 of 1
 [duo] JITTER requested=0 attempt=1
-[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65 source=fba2f186141e3a9ddf4e226cfaeb46c69cda321c
-[duo] server up: tcp=58004 http=58005 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_mkr6ddt6
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65 source=80a4c155a3e6987da2799e71bb0dff488dfd0a41
+[duo] server up: tcp=58788 http=58789 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_2av61bd_
 [duo] timing server 0.6s
 [duo] cleared 7 stale artifact(s) for faint_cmd_gen3: e2e_faint_cmd_gen3_a_1_witness.bin, e2e_faint_cmd_gen3_a_attempt1_result.txt, e2e_faint_cmd_gen3_a_result.txt, e2e_faint_cmd_gen3_b_1_witness.bin, e2e_faint_cmd_gen3_b_attempt1_result.txt, e2e_faint_cmd_gen3_b_result.txt, e2e_faint_cmd_gen3_pydec_attempt1_result.txt
 [duo] launched a phase=initial seed=True
@@ -20,21 +20,21 @@
 [duo] queued for a: {'cmd': 'memorialize', 'key': '263620B6:99DE0D8A'}
 [duo] queued for a: {'cmd': 'game_over'}
 [duo] injected A faint 263620B6:99DE0D8A -> force_faint B F6B6A64D:1C600D89; re-queued to A: ['memorialize', 'game_over']
-[duo] timing orchestrate 6.9s
-[duo] timing results 4.6s
+[duo] timing orchestrate 6.5s
+[duo] timing results 4.0s
 [duo] RESULT_LINE a: RESULT: PASS (memorialized 263620B6:99DE0D8A)
 [duo] RESULT_LINE b: RESULT: PASS (memorialized F6B6A64D:1C600D89)
-[duo] SAVE_WITNESS_SHA256 inst=a site=792d6765fc6e2306683a26bb65cbdac19be9d4662bde0858fe928df2c68280d4 file=792d6765fc6e2306683a26bb65cbdac19be9d4662bde0858fe928df2c68280d4 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=a site=2651b17c97a8ae38ba81567a15b050f4a2a4e6b2756513af6a82aefa823c3fc2 file=2651b17c97a8ae38ba81567a15b050f4a2a4e6b2756513af6a82aefa823c3fc2 match=true saves=1 counter=4->5 rtc=normalized
 [duo] SAVE_WITNESS_SHA256 inst=b site=325c9aaf6429f0f1927b0af90ece5c8cacb3409af948d5ccdc08292a6e18a8eb file=325c9aaf6429f0f1927b0af90ece5c8cacb3409af948d5ccdc08292a6e18a8eb match=true saves=1 counter=3->4 rtc=normalized
 [duo] faint_cmd: 263620B6:99DE0D8A and F6B6A64D:1C600D89 saved once each in box 14; B's HP 0 came from an overworld-armed write
 [duo] MARKER a: RX memorialize key=263620B6:99DE0D8A
-[duo] MARKER a: TX memorialize_done 263620B6:99DE0D8A {"box":13,"event":"memorialize_done","key":"263620B6:99DE0D8A","player":"a","seq":17}
+[duo] MARKER a: TX memorialize_done 263620B6:99DE0D8A {"box":13,"event":"memorialize_done","key":"263620B6:99DE0D8A","player":"a","seq":18}
 [duo] MARKER b: RX force_faint key=F6B6A64D:1C600D89
 [duo] MARKER b: FORCED_HP0 F6B6A64D:1C600D89 frame=908 in_battle=0 battler=0
 [duo] MARKER b: RX memorialize key=F6B6A64D:1C600D89
 [duo] MARKER b: TX memorialize_done F6B6A64D:1C600D89 {"box":13,"event":"memorialize_done","key":"F6B6A64D:1C600D89","player":"b","seq":17}
 [duo] MARKER b: [client] [SLink-gen3] write overworld 0x0202433E +2 frame 908
-[duo] timing oracle 0.4s
+[duo] timing oracle 0.3s
 [duo] PYDEC: PASS asserted scenario facts
 [duo] faint_cmd_gen3: a=PASS b=PASS
 
