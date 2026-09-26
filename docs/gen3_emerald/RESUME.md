@@ -5,7 +5,7 @@ Read this first after a pause or compaction. The plan is `docs/gen3_emerald/PLAN
 `E:/Google Drive/SLink/.claude/worktrees/gen3-emerald`. It is local only: not pushed or merged. Its
 base is Gen 3 `5f050857`.
 
-## CHECKPOINT 5 (2026-09-26 ~16:30Z, E4 nearly done; owner pause after 3 h): resume here
+## CHECKPOINT 5 (2026-09-26 ~16:45Z, E4 done; owner pause after 3 h): resume here
 
 - **EG3 SIGNED** by the owner ("Signed. Lets go.", `20f1be76`). Master `e41f1c93` merged in at
   `3784b376` (docs/protocol.md: master's file + our 8.2 block + path-aware citation remap;
@@ -21,17 +21,22 @@ base is Gen 3 `5f050857`.
   rows incl. checkpoint_emerald via the now title-aware `tools/gen3_probe_receipt.py`);
   `gen_area_map.py --check`; zip_boot_emerald = BLOCKED-EG4 (allowed skip) until the cut carries
   the flip, ZIP-DEFECT otherwise. FR/LG and RR plans byte-identical (re-diffed).
-- **In flight at pause (check first):** card E4c on `claude/gen3-emerald-legs`
-  (C:/slink-wt/em-legs): an Emerald whiteout_gen3 receipt (outdoor respawn at Oldale 0.10 (6,17),
-  healed in C, rebuild writes in the Emerald write window) + title-aware `sb1_ptr`. If it landed,
-  merge it and add whiteout back to Emerald's final-cut rows; if not, its report holds the design.
+- **E4c merged `599cac3e`:** whiteout_gen3 on Emerald with Emerald's own receipt (healed landing
+  at 0.10 (6,17), rebuild write at the landing: the write gate opens outdoors, START-menu control)
+  -> ALL SEVEN Emerald duos PASS at cut `cf371bc1`; FR whiteout/faint_cmd + RR deadzone
+  regressions PASS there. Title-aware `sb1_ptr`. Final-cut Emerald plan now 24 rows.
+  Independent review OMP cx-e53ff0ba of the replaced whiteout assertions was in flight at the
+  pause: read its outcome (`omp_peer kind=recall` / the transcript) and verify every finding.
+- **Risk:** deadzone_gen3 on Emerald used all three RNG retries (B out of balls twice; the
+  battle fixture carries 5 balls). Before the final cut, give the deadzone hunters more balls
+  (emerald_catch has 20; a new fixture kind or a derived variant) or the row can go red on luck.
 - **EG4 prep branch `claude/gen3-emerald-eg4` (C:/slink-wt/em-eg4, UNMERGED until the owner
   signs EG4):** `842e1c0c` four barriers removed (slink.lua BPEE refusal, Entry.ROUTED,
   profile admitted, Manager gen3_e) + `0d9b2376` observer-seam guards on a tmp unadmitted pack +
   `e7966019` real-pack production coverage (17 tests red if the flag reverts) and current-state
   docs + `b6c97878` doc tense. Review OMP cx-136573c0. Rebase/merge it onto the lane before the
   EG4 request; then drop the duo driver's TEST-ONLY seam (a no-op once admitted).
-- **NEXT:** finish E4c -> run the Emerald final cut on a cut that carries the EG4 branch
+- **NEXT:** deadzone ball risk -> run the Emerald final cut on a cut that carries the EG4 branch
   (`python tools/gen3_final_cut.py --cut <sha> --title emerald`) -> write
   `docs/gen3_emerald/EG4_request.md` (T3 template) -> owner plays a live E<->E duo from the
   Manager (plan EG4 row) -> owner signs EG4.

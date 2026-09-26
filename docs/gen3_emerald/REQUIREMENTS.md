@@ -120,19 +120,22 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 
 ### E4 / E4b evidence (2026-09-26; receipts `docs/gen3_emerald/probes/duo_e4_*`)
 
-- **ED-1 ◐:** six of seven scenarios PASS E↔E at cut `cd93382b` with save witness + oracle +
-  PYDEC: faint_cmd, reconnect, deadzone, link (RNG retry 2/3), boxsync, linked_faint_active (twice:
-  once with an A-side whiteout to Oldale 0.10 (6,17)). whiteout_gen3 is not yet an Emerald row:
-  Emerald respawns outdoors (pokeemerald `src/overworld.c:357-366`), so FR's Center receipt has
-  nothing to check; card E4c designs the Emerald receipt. Pre-EG4 the duo driver admits Emerald
-  through a TEST-ONLY seam logged in every receipt (production refusals unchanged).
+- **ED-1 ✓ (pre-EG4 admission seam):** all seven scenarios PASS E↔E at cut `cf371bc1` with save
+  witness + oracle + PYDEC: faint_cmd, reconnect, deadzone (RNG retry 3/3), link, boxsync,
+  linked_faint_active, whiteout. `duo_e4_linked_faint_active_cd93382b_PASS_whiteout_*` also shows
+  an A-side whiteout inside linked_faint_active. whiteout_gen3 on Emerald uses Emerald's own
+  receipt (DoWhiteOut heals in C and warps outdoors, pokeemerald `src/overworld.c:357-366`):
+  LANDING_STATE healed at 0.10 (6,17), WRITE_AT_LANDING (the write gate opens outdoors in Oldale),
+  START-menu control; every server/save assertion of the FR oracle kept (commit `cf371bc1`).
+  Pre-EG4 the duo driver admits Emerald through a TEST-ONLY seam logged in every receipt
+  (production refusals unchanged). Risk: deadzone's 5-ball fixture used all three RNG retries.
 - **EW-2 ◐:** P+H PHYSICAL on Emerald singles (`duo_e4_linked_faint_active_cd93382b_PASS_*`: five
   `battle_commit` writes on one frame, HANDOFF, `ACTIVE_KO battle_hp=0 inputs=0 hp_writes=0`,
   ENGINE_FAINT_SITE). Doubles / Steven multi hold: not exercised.
 - **ED-2 ◐:** wrong-save refusal PASS inside reconnect_gen3 (C-1). Zip boot and the Emerald
   final-cut summary wait for EG4 (the final-cut plan `tools/gen3_final_cut.py --title emerald`
   exists; its zip_boot_emerald reports BLOCKED-EG4 until the cut carries the admission flip).
-- Regression at `cd93382b`: FR faint_cmd and RR deadzone PASS.
+- Regression at `cf371bc1`: FR whiteout, FR faint_cmd and RR deadzone PASS.
 
 ### E3 evidence (2026-09-26; see `docs/gen3_emerald/EG3_request.md`)
 
@@ -145,7 +148,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| ED-1 | faint_cmd, linked_faint_active, boxsync, whiteout, link, deadzone, reconnect on E↔E with witness + oracle | GAME + SERVER | — | ✓ | ◐ |
+| ED-1 | faint_cmd, linked_faint_active, boxsync, whiteout, link, deadzone, reconnect on E↔E with witness + oracle | GAME + SERVER | — | ✓ | ✓ |
 | ED-2 | Wrong-save refusal; zip boot `emerald`; `fc_SUMMARY_<cut>_emerald.txt` all PASS | GAME | — | ✓ | ◐ |
 | ED-3 | Vanilla trade duo FR↔FR and E↔E (E5, shared Gen 3) | GAME | · | · | · |
 | XD-1 | Seven duos on the expansion reference build | GAME + SERVER | — | · | · |
