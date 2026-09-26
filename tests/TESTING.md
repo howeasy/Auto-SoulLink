@@ -235,6 +235,39 @@ Run `python -m server.server --explode-mode` with both BizHawks connected (the F
 skips with a specific reason (missing EmuHawk, missing ROM, stale savestate) rather than hanging.
 Markers `live` / `e2e` / `slow` are registered in `pytest.ini`, which also sets `--strict-markers`.
 
+### Absent input skips; present-but-wrong input fails
+
+One rule governs every test that needs an artifact this repo does not commit — a cartridge dump, a
+decomp clone, a built ROM, a randomizer jar, a savestate:
+
+- **The artifact is ABSENT** → `pytest.skip` with a reason that NAMES the artifact and its path.
+  Never raise, and never raise at import: an exception while a module is being imported aborts
+  collection for the WHOLE suite, so one unprovisioned input takes every other generation's tests
+  down with it.
+- **The artifact is PRESENT but wrong** — wrong commit, dirty tree, unpinned build, hash mismatch
+  → **FAIL**. Loudly, by name. This is the half that matters: "absent" means this box cannot run
+  the check, while "wrong" means the check ran against something nobody verified, and collapsing
+  the two is how a tampered or stale artifact reads as green.
+
+Consequences worth knowing before you write the skip:
+
+- **Reason strings are load-bearing.** `tools/verify_gen1_release.py` (and its Gen 2/Gen 3
+  siblings) treat a skip as a lane failure unless its reason matches an `ALLOWED_SKIPS` fragment.
+  Reuse an existing fragment — `"<repo> not cloned: <path>"` — rather than inventing wording; a new
+  fragment silently reds another generation's gate until its owner adds it.
+- **Gen 1's own inputs stay unexcused** in the Gen 1 gate, by design: a missing Gen 1 dump or
+  fixture IS a gate failure, because the gate's job is to refuse to certify from a box that cannot
+  verify. Other generations' inputs are excused there, since they are out of that gate's scope.
+- **A skip guard needs a revert-check.** Widen the caught exception and the test must go red. The
+  Gen 2 lane found its first version of exactly such a test passing with a deliberately-broken
+  handler, because the verifier called the loader more than once and a swallowed skip was masked by
+  a fresh one from the next call.
+
+Learned the hard way on 2026-09-26, when Gen 1, Gen 2 and Gen 3 first shared one unit suite: an
+import-time raise on an uncloned decomp aborted all 14k tests, and stale local artifacts produced
+27 failures that looked like a merge regression and were not. Re-verify every local artifact
+against its pin file after any cross-lane merge — pins move when another lane rebuilds an overlay.
+
 ## Unit + integration tests (pytest — no emulator required)
 
 ```bash

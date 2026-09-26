@@ -87,10 +87,13 @@ ALLOWED_SKIPS = [
     # each fragment below names its generation so it cannot silently excuse a Gen 1 skip. Every
     # Gen 1 input reason ("cartridge dump not present", "SaveRAM not present", "EmuHawk not
     # found") stays unexcused, which is the line this list exists to hold.
-    ("pinned decomps not built",
-     "Gen 2 decomp build outputs (.cache/gen2-build); not required for a Gen 1 release"),
-    ("pinned pokecrystal source not present",
-     "a file inside the Gen 2 decomp clone; not required for a Gen 1 release"),
+    #
+    # Two Gen 2 fragments briefly lived here and are deliberately gone: "pinned decomps not
+    # built" and "pinned pokecrystal source not present" were older ad-hoc skips that could not
+    # tell an absent clone from a present-but-incomplete one. The Gen 2 lane rewrote both to skip
+    # only on an absent clone, under the shared "<repo> not cloned" wording the entries above
+    # already cover, so a present clone missing a file now FAILS. Prefer that outcome to a new
+    # fragment: this list should shrink when a lane sharpens its own reasons.
     ("no staged FR ROM",
      "Gen 3 FireRed staging; not required for a Gen 1 release"),
     ("local copyrighted ROMs absent",
