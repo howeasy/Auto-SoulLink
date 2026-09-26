@@ -1877,6 +1877,9 @@ def test_patch_build_verdict_is_the_builders_check(monkeypatch, returncode, ok):
         return SimpleNamespace(returncode=returncode, stdout="", stderr="")
 
     monkeypatch.setattr(gate.release_lanes.subprocess, "run", run)
+    # the verdict mapping only: the clean-build prerequisites (.cache/gen2-build ROMs) are the lane's
+    # own gate, tested above, and absent on an unprovisioned checkout
+    monkeypatch.setitem(gate.PREREQUISITES, "patch-build", ())
     assert gate.run_lane(_lane("patch-build"), quiet=True)[0] is ok
     assert seen[0][1:4] == ["tools/build_gen2_companion.py", "--check", "--version"]
 

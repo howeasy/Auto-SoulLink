@@ -23,6 +23,9 @@ from tools.gen_gen2_area_map import (
 @pytest.mark.parametrize("script", ["area_map", "statics", "gifts"])
 def test_direct_generator_cli_check_without_pythonpath(script):
     root = Path(__file__).resolve().parents[2]
+    for repo in ("pokecrystal", "pokegold"):   # the generator needs both clones (tests/conftest.py)
+        if not (root / ".cache/gen2-build" / repo).is_dir():
+            pytest.skip(f"{repo} not cloned: {root / '.cache/gen2-build' / repo}")
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)
     result = subprocess.run(
@@ -34,7 +37,8 @@ def test_direct_generator_cli_check_without_pythonpath(script):
 
 @pytest.fixture(scope="module", params=("crystal", "gold", "silver"))
 def context(request):
-    # Required build inputs: absence is a failure, never a skipped qualification.
+    # Required build inputs. Absent clone -> the named skip (tests/conftest.py); the Gen 2 release gate
+    # allows no skips (verify_gen2_release.ALLOWED_SKIPS == ()), so qualification still fails without it.
     return gen2_source_data.load_context(request.param)
 
 
