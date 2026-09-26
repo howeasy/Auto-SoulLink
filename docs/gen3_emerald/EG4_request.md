@@ -26,6 +26,14 @@ production admission only); the ball-hunt duos use a 20-ball fixture (`emerald_c
 the Emerald calc trainer sets are checked against pokeemerald (E6: 178 corrections; 654 vendored
 mons identity-checked, 343 ambiguous labels left unchecked and counted).
 
+**RC-mandatory, NOT yet built (owner ruling 2026-09-26: "trainer names, Upcoming Key Trainers, the
+calc's Prep tab are mandatory for RC"):** Emerald trainer names/classes, the Upcoming Key Trainers
+panel and the calc Prep tab. Today these are RR-only: the Emerald adapter returns no trainer data,
+and the UI gates the panels to RR. Work: trainer data from pret pokeemerald (trainers.h /
+trainer_parties.h, key trainers per area) behind the adapter's trainer surface, the client
+reporting the opponent trainer in battle, and a capability-driven UI gate (UI lane). Until these
+land, Emerald is not RC-complete; see decision 0 in §5.
+
 **EG4 does NOT sign:** trade (E5, patched-ROM only, built with Gen 3's FR/LG trade, own gate);
 doubles / Steven multi-battle hold on hardware; writes inside Pokémon Centers (EW-3);
 Frontier/Pyramid/Trainer Hill/Contests/Secret Bases (writes refused); the expansion track (XG*);
@@ -65,6 +73,7 @@ in cut-sha cache keys).
 
 ## 5 Owner decisions requested
 
+0. Given the RC-mandatory trainer items above: sign EG4 now for admission + the evidence in §2, with the RC label waiting on the trainer items (recommended), or hold EG4 until they land.
 1. Keep anchors admission for unknown-hash BPEE (as FR/LG/RR), or make Emerald hash-only (OMP cx-136573c0 F3)? Recommendation: keep anchors (same policy as the signed Gen 3 titles; header-only still refused).
 2. Play a live Emerald↔Emerald duo from the Manager on the cut (plan EG4 row).
 3. Sign EG4. The candidate then merges into `claude/gen3-emerald`. Before master (separate authority): batch with Gen 2 (server/** changed), tell Gen 3 the pack hashes moved, and have the Gen 1 owner review the two new Gen 1 allow-list fragments (`5d0b8504`) and run the full Gen 1 unit lane.
