@@ -30,10 +30,17 @@ CODE_SCOPE = ("lua/*.lua", "lua/gen2/**", "lua/core/**", "server/**/*.py",
               "data/games/gen2_crystal/**", "data/games/gen2_gold/**", "data/games/gen2_silver/**")
 
 
+# Prose that can sit inside a data pack (the pack README) is not what the game executes. Only these
+# suffixes are dropped -- fail-safe: any other file type under the packs stays in the digest, and
+# tests/unit/test_gen2_receipt_code_digest.py fails on a new one so it gets a deliberate decision.
+# (Before this, the comment above claimed docs were excluded while the packs' README was counted.)
+DOC_SUFFIXES = (".md", ".txt", ".rst")
+
+
 def is_production(path: str) -> bool:
     if path.startswith(("lua/gen2/", "lua/core/", "data/games/gen2_crystal/", "data/games/gen2_gold/",
                         "data/games/gen2_silver/")):
-        return True
+        return not path.endswith(DOC_SUFFIXES)
     if path.startswith("lua/") and path.count("/") == 1:
         return path.endswith(".lua")
     return path.startswith("server/") and path.endswith(".py")
