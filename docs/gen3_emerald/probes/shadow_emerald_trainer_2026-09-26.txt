@@ -1,0 +1,28 @@
+# Shadow observer beside lua/tests/gen3_scripted_play.lua on BPEE (sha1 f3ae0881...), 2026-09-26
+# lane HEAD=d5208074 tracked-clean=True; fixture tests/fixtures/gen3/emerald_trainer.sav sha256=1fe754336ddba75b...
+# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=1 (observer-only seam b00a475e) SLINK_GEN3_PLAY_FROM=emerald_calvin_trainer_battle SLINK_GEN3_PLAY_STOP_AFTER=emerald_calvin_trainer_battle
+# runner: C:/slink-wt/emerald-e2/run_play.py (gen3_fixtures._prepare_run/_launch), EmuHawk 2.11.1
+## driver phases
+phase start frame=1 title=emerald
+phase resume frame=1 from=emerald_calvin_trainer_battle
+phase shadow frame=583 observer started admitted_by=hash
+phase leg-start frame=583 emerald_calvin_trainer_battle
+phase emerald_calvin_trainer_battle-start frame=583 at (32,16)
+phase battle-begin frame=1159 emerald_calvin_trainer_battle
+phase battle-end frame=5431 emerald_calvin_trainer_battle
+phase leg-state-saved frame=5431 emerald_calvin_trainer_battle -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_calvin_trainer_battle.State
+phase leg-done frame=5431 emerald_calvin_trainer_battle
+RESULT: PASS reached: emerald_calvin_trainer_battle | open (skipped):
+## shadow log
+NOTE observer building unadmitted gen3_emerald/emerald
+STATUS frame=583 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=1139 kind=battle_begin key= address=134440800 callback_address=134440800 cpsr=536870975 mode=thumb raw_r15=134440802 sp=50363932 thumb=1
+STATUS frame=1183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=587
+STATUS frame=1783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1185
+STATUS frame=2383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1776
+STATUS frame=2983 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil frame_control=2368
+STATUS frame=3583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2960
+STATUS frame=4183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3544
+STATUS frame=4783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4136
+STATUS frame=5383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4736
+SHADOW t=2 frame=5428 kind=battle_end key= address=134471656 callback_address=134471656 cpsr=-2147483585 mode=thumb raw_r15=134471658 sp=50363904 thumb=1

@@ -1,0 +1,78 @@
+# Shadow observer beside lua/tests/gen3_scripted_play.lua on BPEE (sha1 f3ae0881...), 2026-09-26
+# lane HEAD=d5208074 tracked-clean=True; fixture tests/fixtures/gen3/emerald_pc.sav sha256=ef2facb5d390b87e...
+# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=1 (observer-only seam b00a475e) SLINK_GEN3_PLAY_FROM=emerald_enter_pc SLINK_GEN3_PLAY_STOP_AFTER=emerald_save_town
+# runner: C:/slink-wt/emerald-e2/run_play.py (gen3_fixtures._prepare_run/_launch), EmuHawk 2.11.1
+## driver phases
+phase start frame=1 title=emerald
+phase resume frame=1 from=emerald_enter_pc
+phase shadow frame=583 observer started admitted_by=hash
+phase leg-start frame=583 emerald_enter_pc
+phase emerald_enter_pc-start frame=583 at (6,17)
+phase in-pc frame=705 map=514 at=(7,8)
+phase leg-state-saved frame=705 emerald_enter_pc -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_enter_pc.State
+phase leg-done frame=705 emerald_enter_pc
+phase leg-start frame=705 emerald_pc_deposit
+phase pc-exit frame=1511 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=1617 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=1723 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=1829 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase pc-exit frame=1861 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase deposited frame=1861 party 2 -> 1, 504F4F4D:20250925 now box 0 slot 2
+phase leg-state-saved frame=1861 emerald_pc_deposit -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_pc_deposit.State
+phase leg-done frame=1861 emerald_pc_deposit
+phase leg-start frame=1861 emerald_pc_withdraw
+phase pc-exit frame=2464 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2570 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2676 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=2782 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=0
+phase pc-exit frame=2814 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase withdrawn frame=2814 party 1 -> 2, 5A49476A:20250925 left box 0 slot 0
+phase leg-state-saved frame=2814 emerald_pc_withdraw -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_pc_withdraw.State
+phase leg-done frame=2814 emerald_pc_withdraw
+phase leg-start frame=2814 emerald_pc_box_place
+phase pc-exit frame=3469 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=3575 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=3681 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=2
+phase pc-exit frame=3787 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=2
+phase pc-exit frame=3819 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase placed frame=3819 57555251:20250925 box 0 slot 1 -> slot 0, bytes identical
+phase leg-state-saved frame=3819 emerald_pc_box_place -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_pc_box_place.State
+phase leg-done frame=3819 emerald_pc_box_place
+phase leg-start frame=3819 emerald_pc_release
+phase pc-exit frame=4634 step=1 tasks=[080C82AD] storage_state=0 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=4740 step=2 tasks=[080C9D1D] storage_state=2 script_status=1 result=0 menu_cursor=0
+phase pc-exit frame=4846 step=3 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,080C7269] storage_state=-1 script_status=1 result=0 menu_cursor=1
+phase pc-exit frame=4952 step=4 tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1,08098155] storage_state=-1 script_status=0 result=0 menu_cursor=1
+phase pc-exit frame=4984 owner list closed cancel_seen=true tasks=[080AB1B1,0809D88D,0809E639,0809D909,0801697D,0800EB45,08016CA1] storage_state=-1 script_status=2 result=127 menu_cursor=0
+phase released frame=4984 party 2 -> 1, 5A49476A:20250925 gone from party and all 14 boxes
+phase leg-state-saved frame=4984 emerald_pc_release -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_pc_release.State
+phase leg-done frame=4984 emerald_pc_release
+phase leg-start frame=4984 emerald_save_town
+phase emerald_save_town-start frame=4984 at (10,2)
+phase save-menu frame=4984 counter=2
+phase save-dialog frame=5044 row=3/6
+phase saved frame=5444 counter=2->3
+phase flushed frame=5812 map=514 at=(10,2)
+phase leg-state-saved frame=5812 emerald_save_town -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_save_town.State
+phase leg-done frame=5812 emerald_save_town
+RESULT: PASS reached: emerald_enter_pc,emerald_pc_deposit,emerald_pc_withdraw,emerald_pc_box_place,emerald_pc_release,emerald_save_town | open (skipped):
+## shadow log
+NOTE observer building unadmitted gen3_emerald/emerald
+STATUS frame=583 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=686 kind=map_load key= address=134766608 callback_address=134766608 cpsr=536870975 mode=thumb raw_r15=134766610 sp=50363928 thumb=1
+STATUS frame=1183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=555
+SHADOW t=2 frame=1496 kind=pc_box_place key= address=135061720 callback_address=135061720 cpsr=63 mode=thumb raw_r15=135061722 sp=50363868 thumb=1
+SHADOW t=3 frame=1496 kind=pc_deposit key= address=135062042 callback_address=135062042 cpsr=63 mode=thumb raw_r15=135062044 sp=50363888 thumb=1
+STATUS frame=1783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1098
+STATUS frame=2383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1680
+SHADOW t=4 frame=2425 kind=pc_withdraw key= address=135061680 callback_address=135061680 cpsr=63 mode=thumb raw_r15=135061682 sp=50363864 thumb=1
+SHADOW t=5 frame=2425 kind=pc_box_place key= address=135061720 callback_address=135061720 cpsr=63 mode=thumb raw_r15=135061722 sp=50363864 thumb=1
+STATUS frame=2983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2232
+SHADOW t=6 frame=3459 kind=pc_box_place key= address=135061720 callback_address=135061720 cpsr=63 mode=thumb raw_r15=135061722 sp=50363860 thumb=1
+STATUS frame=3583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2817
+STATUS frame=4183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3368
+SHADOW t=7 frame=4601 kind=pc_release_begin key= address=135062232 callback_address=135062232 cpsr=63 mode=thumb raw_r15=135062234 sp=50363912 thumb=1
+SHADOW t=8 frame=4601 kind=pc_release key= address=135062294 callback_address=135062294 cpsr=63 mode=thumb raw_r15=135062296 sp=50363908 thumb=1
+STATUS frame=4783 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil frame_control=3933
+STATUS frame=5383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4508
+SHADOW t=9 frame=5671 kind=save key= address=135607158 callback_address=135607158 cpsr=536870975 mode=thumb raw_r15=135607160 sp=50363868 thumb=1
