@@ -175,4 +175,6 @@ def test_day_clock_minute_lands_on_a_different_frame_alignment_not_just_the_hour
     # the default (every existing caller) is unchanged: still exactly hour:00:00
     default_out, default_disclosure = synth.day_clock(raw, hour=11, now=now, title="silver")
     assert default_out == synth.day_clock(raw, hour=11, now=now, title="silver", minute=0, second=0)[0]
-    assert default_disclosure["game_minute"] == 0 and default_disclosure["game_second"] == 0
+    # ... and so is its disclosure: no game_minute/game_second keys, so every clock_setup recorded before
+    # the minute option still equals verify_gen2_release's re-derivation (the W6 Silver u1 leg did not)
+    assert "game_minute" not in default_disclosure and "game_second" not in default_disclosure

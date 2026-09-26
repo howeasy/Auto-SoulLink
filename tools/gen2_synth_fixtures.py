@@ -456,8 +456,11 @@ def day_clock(raw, *, hour, now, title, minute=0, second=0):
     tail[8:13] = bytes(regs)
     tail[17:22] = bytes(regs)   # the latched copies
     out = bytes(raw[:CART]) + bytes(tail)
+    # game_minute/game_second appear only when set, so a default (hour:00:00) disclosure is byte-for-byte the
+    # pre-option one and every committed clock_setup still equals its re-derivation
+    exact = {"game_minute": minute, "game_second": second} if (minute or second) else {}
     return out, {"schema": CLOCK_SCHEMA, "builder": BUILDER, "title": title, "field": "BizHawk gambatte RTC trailer",
-                 "game_hour": hour, "game_minute": minute, "game_second": second, "host_time": int(now),
+                 "game_hour": hour, **exact, "host_time": int(now),
                  "start_time": [start_h, start_m, start_s],
                  "base_sha256": hashlib.sha256(bytes(raw)).hexdigest(),
                  "old_hex": bytes(raw[CART:]).hex(), "new_hex": bytes(tail).hex(),
