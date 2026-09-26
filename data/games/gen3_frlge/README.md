@@ -38,5 +38,5 @@ and Radical Red 4.1 (CFRU). All other gens model their patterns on this one.
 - Shiny: `(otid_lo ^ otid_hi ^ pid_lo ^ pid_hi) < 8`.
 - Platform: Game Boy Advance — mGBA core in BizHawk. Memory domain: "System Bus" / "EWRAM" depending on read.
 - Variants: `firered` / `leafgreen` (vanilla), `firered_ap` / `leafgreen_ap` (Archipelago), `firered_rr` (Radical Red CFRU). Emerald is its own pack (`data/games/gen3_emerald/`), not a variant here.
-- Memorial box: configurable per profile; Emerald's own memorial-box setting lives in `data/games/gen3_emerald/`.
+- Memorial box: the last box, derived per profile as `BOXES_PER_STORE - 1` (`lua/gen3/boxes.lua`): Box 14 on FR/LG and Emerald, Box 25 on Radical Red.
 - CFRU box format: compressed BoxPokemon with no encryption — distinct from vanilla's 80-byte struct.

@@ -313,6 +313,9 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "write_checkpoint.json",
         "area_map.json",
         "gen3_emerald_locations.lua",
+        # server/adapters/gen3_frlge.py _load_emerald() reads it; a missing file silently empties
+        # the fixed-gift clause bypasses (Beldum/Wynaut/Castform/Mew/Deoxys) -- OMP cx-9f0eacae F1.
+        "statics.json",
     ],
     "gen4_hgsspt": [
         "gen4_hgsspt_areas.lua",
