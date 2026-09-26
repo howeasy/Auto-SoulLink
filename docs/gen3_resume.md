@@ -4,7 +4,13 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 
 ## CURRENT STATE (2026-09-26, after checkpoint 20)
 
-- **RR companion fix batch (owner 2026-09-26 "Fix all three now"), on the BRANCH only, not on master:**
+- **LANDED 2026-09-26: the RR fix batch is on LOCAL master 7c14386a (not pushed).**
+  - Duos green ×2 on companion c372c428:
+    - trade_gen3 and trade_decline_gen3 at 5418c725 (the earlier _RED at 539e0aea was a stale oracle ordering pair, fixed);
+    - infopanel_gen3 and infopanel_dex_gen3 at 539e0aea.
+  - Pinged Gen 2 (it re-sweeps) and Emerald (it merges master, then starts T2/T3). The Emerald lane now owns every trade file.
+  - Open for G5: RR durable trade (T2–T5), then ONE RR frozen-cut re-run.
+- (History) RR companion fix batch (owner 2026-09-26 "Fix all three now"):
   - The new RR duos found three companion bugs. `infopanel_gen3` is green ×2 (f78b533a).
   - Fixes:
     - 03b19b71: the SOULLINK START row is placed by menu shape (with Pokédex, Exit-R, page-switch trampoline).
