@@ -794,6 +794,9 @@ class SLinkServer:
         an error condition, it is a run that has not started for them yet.
         """
         if not self._rom_contract:
+            refused = msg.get("rom_content") and self.adapter.refused_rom_content(msg["rom_content"])
+            if refused:
+                return {"state": "rejected", "reason": refused}
             return {"state": "admitted", "reason": "no randomized-ROM contract for this run"}
         if self._rom_contract.get("unreadable"):
             return {"state": "rejected", "reason": "this run's rom_contract.json could not be read"}

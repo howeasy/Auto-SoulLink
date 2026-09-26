@@ -828,6 +828,18 @@ class Gen3Adapter(GameAdapter):
         out.trainers = self._rom_trainer_table(tables)
         return out
 
+    def refused_rom_content(self, payload: dict) -> str:
+        if self._is_rr:
+            return ""
+        try:
+            rom = parse_rom_content(payload)
+            decode_verified(rom, rom_title(rom))
+        except ForbiddenRomTables as exc:
+            return str(exc)
+        except Exception:                             # noqa: BLE001 - malformed: ingest's job
+            return ""
+        return ""
+
     def use_rom_encounters(self, tables: dict | None) -> None:
         # The server adopts {} (a plain dict) when the report was unreadable: no trainers either.
         self._rom_encounters = tables

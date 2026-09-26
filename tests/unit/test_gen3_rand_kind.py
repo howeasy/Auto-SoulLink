@@ -17,7 +17,7 @@ BROCK = 414
 
 
 async def _session(srv):
-    tcp = await asyncio.start_server(srv.handle_client, "127.0.0.1", 0)
+    tcp = await asyncio.start_server(srv.handle_client, "127.0.0.1", 0, limit=4 * 1024 * 1024)  # as main()
     port = tcp.sockets[0].getsockname()[1]
     r, w = await asyncio.open_connection("127.0.0.1", port)
 

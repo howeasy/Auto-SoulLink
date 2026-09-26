@@ -455,6 +455,15 @@ class GamePresentationAdapter(ABC):
         """
         return None
 
+    def refused_rom_content(self, payload: dict) -> str:
+        """Why a player's cartridge must be refused even when no contract binds the run, or "".
+
+        For a READABLE cartridge the server cannot rule on (its rule tables were randomized):
+        admitting it would apply the shipped rules to a game that no longer has them. A
+        malformed report is not a refusal -- ingest marks that player's data unavailable.
+        """
+        return ""
+
     def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
         """Return wild encounter data for an area, or None if unavailable.
 

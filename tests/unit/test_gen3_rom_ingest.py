@@ -275,3 +275,31 @@ def test_the_client_report_matches_the_managers_contract(tmp_path):
             "state": "admitted", "reason": "cartridge matches the contract"}
         wrong = srv._decide_admission(other, msg)
         assert wrong["state"] == "rejected" and "not the cartridge built for player" in wrong["reason"]
+
+
+# ── no contract: a forbidden cartridge is still refused at hello, by name (real socket) ──────
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("title", TITLES)
+async def test_a_forbidden_cartridge_is_refused_at_hello_without_a_contract(title, tmp_path):
+    from tests.unit.test_gen3_rand_kind import _hello, _session
+    carts = {"clean": ("clean", _clean(title)), "allowed": ("rand", _randomized(title, "allowed")),
+             "widest": ("rand", _randomized(title, "widest"))}
+    for name, (kind, rom) in carts.items():
+        srv = SLinkServer(data_dir=str(tmp_path / name))
+        assert not srv._rom_contract
+        send, close = await _session(srv)
+        try:
+            reply = await send(_hello("a", {"rom_type": title, "artifact_kind": kind,
+                                            "rom_content": _payload(rom, title)}))
+        finally:
+            await close()
+        verdict = srv.admission["a"]
+        if name == "widest":
+            assert verdict["state"] == "rejected", verdict
+            assert "randomized evolutions and types/abilities/base stats" in verdict["reason"]
+            assert reply["commands"] == [{"cmd": "noop", "refused": "admission"}]
+            assert srv.adapter_for("a").trainer_brief(BROCK) is None, "nothing adopted"
+        else:
+            assert verdict["state"] == "admitted", (name, verdict)
+            assert srv.adapter_for("a").trainer_brief(BROCK)["party"], name
