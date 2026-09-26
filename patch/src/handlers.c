@@ -2300,6 +2300,51 @@ void slink_hook(void)
 typedef void (*ProbeFirstHeader)(void *, uint32_t);
 typedef void *(*ProbeAllocate)(void *, uint32_t);
 typedef void (*ProbeFree)(void *, void *);
+#include "trade_targets/abi.h"
+
+/* Scene census only, not the v2 trade protocol. Host stages an O-33 incoming
+ * record at arena+0x400 and request=1 at +0x40; no ACK/DONE or SLNK beacon.
+ * The three states at +0x44 mean script queued, scene entered, field returned.
+ * Reimplements the original CallCallbacks guards verbatim (main.c:241-250).
+ */
+__attribute__((used))
+void slink_frame_probe(void)
+{
+    typedef uint8_t (*Check)(void);
+    typedef void (*Callback)(void);
+    typedef void (*Setup)(const uint8_t *);
+    if (((Check)(SLINK_TARGET_SAVE_FAILED_SCREEN | 1u))()
+        || ((Check)(SLINK_TARGET_HELP_CALLBACK | 1u))()) return;
+    volatile uint32_t *request = (volatile uint32_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x40u);
+    volatile uint32_t *phase = request + 1;
+    volatile uint32_t *callbacks = (volatile uint32_t *)SLINK_TARGET_GMAIN;
+    volatile uint8_t *incoming = (volatile uint8_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x400u);
+    if (*request == 1 && callbacks[1] == SLINK_TARGET_FIELD_CALLBACK
+        && !*(volatile uint8_t *)SLINK_TARGET_FIELD_LOCK) {
+        volatile uint8_t *enemy = (volatile uint8_t *)SLINK_TARGET_ENEMY_PARTY;
+        for (unsigned i=0;i<100;i++) enemy[i]=incoming[i];
+        *(volatile uint8_t *)SLINK_TARGET_ENEMY_COUNT = 1;
+        *(volatile uint16_t *)SLINK_TARGET_TRADE_SLOT_VAR = 0;
+        *(volatile uint16_t *)SLINK_TARGET_TRADE_TABLE_VAR = 0;
+        volatile uint8_t *script = (volatile uint8_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x300u);
+        uint32_t function = SLINK_TARGET_TRADE_SCENE | 1u;
+        script[0]=0x23; /* callnative, then waitstate/end */
+        for (unsigned i=0;i<4;i++) script[1+i]=(uint8_t)(function>>(8*i));
+        script[5]=0x27; script[6]=0x02;
+        *request=0; *phase=1;
+        ((Setup)(SLINK_TARGET_SCRIPT_SETUP | 1u))((const uint8_t *)script);
+    }
+    if (*phase == 1 && callbacks[1] != SLINK_TARGET_FIELD_CALLBACK) *phase=2;
+    if (*phase == 2) {
+        slink_copy_name_bounded((volatile uint8_t *)SLINK_TARGET_STR_VAR1,
+            SLINK_TARGET_STR_VAR1_SIZE, incoming+0x14, 7);
+        slink_copy_name_bounded((volatile uint8_t *)SLINK_TARGET_STR_VAR3,
+            SLINK_TARGET_STR_VAR3_SIZE, incoming+0x08, 10);
+        if (callbacks[1] == SLINK_TARGET_FIELD_CALLBACK) *phase=3;
+    }
+    if (callbacks[0]) ((Callback)callbacks[0])();
+    if (callbacks[1]) ((Callback)callbacks[1])();
+}
 
 __attribute__((section(".text.entry"), used))
 void slink_heap_probe(void *heap, uint32_t size)
@@ -2322,7 +2367,11 @@ void slink_heap_probe(void *heap, uint32_t size)
          * largest fitting block in each mode, fill it and observe the boundary.
          * Unclamped mode reaches the candidate arena; clamped mode must not. */
         uint32_t wanted = (SLINK_ARENA_PROBE == 3 ? requested : size) - 32u;
-        void *allocation = ((ProbeAllocate)(SLINK_TARGET_ALLOC_INTERNAL | 1u))(heap, wanted);
+        /* Mode4 is the actual scene census: do not taint free heap contents
+         * with the allocator stress pattern used by the isolated controls. */
+        void *allocation = 0;
+        if (SLINK_ARENA_PROBE != 4)
+            allocation = ((ProbeAllocate)(SLINK_TARGET_ALLOC_INTERNAL | 1u))(heap, wanted);
         if (allocation) {
             volatile uint8_t *bytes = allocation;
             for (uint32_t i = 0; i < size - 32u; i++) bytes[i] = 0xA5u;

@@ -1,8 +1,21 @@
 """Opt-in T2 heap diagnostic runner. Never launched by pytest collection.
 
-python tests/unit/test_patch_arena_probe.py positive|negative|exhaustion
-This proves only the native allocator boundary and a boot canary, NOT trade,
-panel, save, battle, or complete EWRAM ownership. All output stays in patch/build.
+python tests/unit/test_patch_arena_probe.py positive|negative|exhaustion|census
+The isolated controls exercise allocation/overwrite/exhaustion. Census uses a
+non-stress reservation ROM and disclosed full-party/full-box O-33 seed, observes
+named native scenes, then verifies a LATER MANUAL save. It does not implement or
+qualify the production save-before-DONE trade protocol or any companion feature.
+
+Build the corresponding ROM first:
+python patch/tools/build.py --target firered --arena-probe census --rom <clean-FR>
+Set SLINK_ARMGCC to the existing compiler bin directory. No UPS is published.
+Run/state/save/config/ROM receipts live in patch/build/arena-firered-<mode>/.
+SLINK_STATE_DIR is forced there, checked before launch and guarded in Lua.
+
+Last measured full-party census (2026-09-26): battle-party 0x185C4 used of
+0x1B000; level evolution 0x147BC; trade/evolution 0x12590; full-box PC 0x10018.
+These are observed managed-heap peaks, not universal upper bounds. The source
+inventory of direct gHeap users and future producer allocations remains a gate.
 """
 import argparse
 import hashlib
@@ -131,16 +144,21 @@ CENSUS_LUA = r'''
   SP.follow(cp,"pokecenter_door_to_route1_edge","T2 battle census")
   SP.warp_to(cp,"Down",30,SP.DEST.route1_north,"T2 Route1")
   SP.follow(cp,"route1_north_to_south_edge","T2 battle census")
+  SP.follow(cp,"route1_south_to_grass_spot","T2 battle census")
   SP.hunt_encounter(cp,"T2 battle census",80)
   assert(SP.in_battle(cp),"no native encounter reached")
-  wait_for(function() return rd(S.BATTLER_CTRL_ADDR)==S.HANDLE_INPUT_CHOOSE_ACTION end)
+  assert(G.mash(2400,function() return rd(S.BATTLER_CTRL_ADDR)==S.HANDLE_INPUT_CHOOSE_ACTION end),"battle action menu unavailable")
   G.tap("Down")
   assert(memory.read_u8(S.ACTION_CURSOR_ADDR,"System Bus")==2,"not Pokemon action")
   G.tap("A")
   wait_for(function() return rd(S.GMAIN_CALLBACK2_ADDR)==S.CB2_UPDATE_PARTY_MENU end)
   log("NATIVE_BATTLE_PARTY_MENU entered")
-  G.idle(120);G.tap("B")
-  wait_for(function() return rd(S.BATTLER_CTRL_ADDR)==S.HANDLE_INPUT_CHOOSE_ACTION end)
+  G.idle(120)
+  for attempt=1,6 do
+    G.tap("B");G.idle(30)
+    if rd(S.GMAIN_CALLBACK2_ADDR)~=S.CB2_UPDATE_PARTY_MENU then break end
+  end
+  assert(G.mash(2400,function() return rd(S.BATTLER_CTRL_ADDR)==S.HANDLE_INPUT_CHOOSE_ACTION end),"battle action menu did not return")
   for i=1,4 do
     local cursor=memory.read_u8(S.ACTION_CURSOR_ADDR,"System Bus")
     if cursor==3 then break end
@@ -148,12 +166,29 @@ CENSUS_LUA = r'''
   end
   assert(memory.read_u8(S.ACTION_CURSOR_ADDR,"System Bus")==3,"not Run action")
   G.tap("A")
-  wait_for(function() return not SP.in_battle(cp) and G.pred_ok(cp,"callback2") end)
+  assert(G.mash(2400,function() return not SP.in_battle(cp) and G.pred_ok(cp,"callback2") end),"battle escape did not return to field")
+  phase="trade_evolution"
+  local trade_evo=false
+  assert(event.on_bus_exec(function()
+    assert(emu.getregister("R1")==68,"wrong trade evolution species")
+    trade_evo=true;log("NATIVE_TRADE_EVOLUTION target=Machamp")
+  end,0x080CE540,"T2-owned-trade-evolution"),"trade evolution hook unavailable")
+  local file=assert(io.open(os.getenv("T2_INCOMING"),"rb"));local bytes=file:read("a");file:close()
+  assert(#bytes==100,"incoming record size")
+  for i=1,100 do memory.write_u8(0x0201B400+i-1,bytes:byte(i),"System Bus") end
+  memory.write_u32_le(0x0201B040,1,"System Bus") -- diagnostic request, NOT protocol APPLY
+  for frame=1,9000 do
+    if rd(0x0201B044)==3 and G.pred_ok(cp,"field_controls_locked") then break end
+    if frame%16==0 then joypad.set({A=true}) else joypad.set({}) end
+    G.advance()
+  end
+  assert(rd(0x0201B044)==3 and trade_evo,"native scene/evolution did not complete")
+  log("DIAGNOSTIC_TRADE_SCENE_RETURNED (not durable DONE)")
   phase="save"
   local domain = assert(G.flash_domain())
   local saved, before, after, reason = G.save_via_menu(cp,domain)
   assert(saved,reason);log(string.format("NATIVE_SAVE before=%d after=%d",before,after))
-  for _,name in ipairs({"boot","pokedex","bag","summary","pc_full_boxes","level_evolution","battle_party","save"}) do
+  for _,name in ipairs({"boot","pokedex","bag","summary","pc_full_boxes","level_evolution","battle_party","trade_evolution","save"}) do
     local p=assert(peaks[name],"no allocation evidence for "..name)
     log(string.format("PEAK scene=%s used=%X bound=1B000 min_largest_free=%X samples=%d",name,p.used,p.largest,p.samples))
     if 0x1B000-p.used <= 1024 then log("NEAR_BOUND: report before choosing reservation size") end
@@ -198,6 +233,14 @@ def full_box_seed():
                     value = value*90//100
             lead[name] = value
     sb1[0x38:0x38+100] = codec.encode_party_mon(lead)
+    # Full party stresses the native in-battle chooser, not merely two icons.
+    # Additional mons are disclosed clones with distinct PIDs/species; native
+    # party/evolution behaviour is still exercised by the lead only.
+    rest = codec.party_from_save(original)[1]
+    sb1[0x34] = 6
+    for slot, species in enumerate((16,19,1,4,25),1):
+        member = {**rest,"personality":0x200000+slot,"species":species}
+        sb1[0x38+slot*100:0x38+(slot+1)*100] = codec.encode_party_mon(member)
     key = int.from_bytes(parsed["sb2"][0xF20:0xF24],"little") & 0xFFFF
     struct.pack_into("<HH",sb1,0x310,68,1 ^ key)
     layout = codec.slot_layout()
@@ -221,13 +264,23 @@ def run_probe(mode, census=False):
 
     base = ROOT / "patch/build" / f"arena-firered-{mode}"
     assert base.resolve().is_relative_to(ROOT.resolve())
+    state_dir = (base / "states").resolve()
+    if not state_dir.is_relative_to(ROOT.resolve()):
+        raise ValueError(f"state directory outside owned worktree refused: {state_dir}")
+    state_dir.mkdir(parents=True, exist_ok=True)
     emulator = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
     config_source = Path(os.environ.get("SLINK_BIZHAWK_CONFIG", "E:/Howard/Bizhawk/config.ini"))
     config = json.loads(config_source.read_text(encoding="utf-8-sig"))
     seed = full_box_seed() if census else None
     if seed:
         (base / "seed.sav").write_bytes(seed)
-        print(f"O-33 seed: 14 full boxes + level15 Squirtle/Rare Candy; sha256={hashlib.sha256(seed).hexdigest()}", flush=True)
+        print(f"O-33 seed: full party/boxes + level15 Squirtle/Rare Candy; sha256={hashlib.sha256(seed).hexdigest()}", flush=True)
+        from server.adapters import gen3_codec as codec
+        incoming = codec.party_from_save(seed)[0]
+        incoming.update(species=67, personality=0x13572468, ot_id=0x78563412,
+                        nickname_raw=codec.encode_name("AAAAAAAAAA",10),
+                        ot_name_raw=codec.encode_name("PEER",7), held_item=0)
+        (base / "incoming.bin").write_bytes(codec.encode_party_mon(incoming))
     frontend = base / "frontend"
     frontend.mkdir(parents=True, exist_ok=True)
     for entry in config["PathEntries"]["Paths"]:
@@ -248,6 +301,14 @@ def run_probe(mode, census=False):
     script = base / "probe.lua"
     script.write_text('''local out = assert(io.open("''' + result.as_posix() + '''", "w"))
 local function log(s) out:write(s .. "\\n"); out:flush() end
+local original_save = savestate.save
+savestate.save = function(path)
+  local prefix = assert(os.getenv("SLINK_STATE_DIR")):gsub("\\\\","/"):lower() .. "/"
+  local normalized = path:gsub("\\\\","/"):lower()
+  assert(normalized:sub(1,#prefix)==prefix and not normalized:find("..",1,true),
+         "savestate outside owned state directory refused")
+  return original_save(path)
+end
 local original_print = print
 print = function(s) log("HELPER: " .. tostring(s)); original_print(s) end
 local original_log = console.log
@@ -277,9 +338,10 @@ local ok, why = pcall(function()
       local allocated, intact = rd(0x0201B010), rd(0x0201B014)
       log(string.format("NATIVE_ALLOCATOR frame=%d mode=%d requested=%X actual=%X allocated=%d canary=%d", frame, mode, requested, actual, allocated, intact))
       assert(requested == 0x1C000, "wrong original heap size")
-      if mode == 1 then
-        assert(actual == 0x1B000 and allocated == 1 and intact == 1, "reservation failed")
-        assert(rd(0x0201B018) + rd(0x0201B01C) <= 0x0201B000, "allocation reached reservation")
+      if mode == 1 or mode == 4 then
+        assert(actual == 0x1B000 and intact == 1, "reservation failed")
+        assert(allocated == (mode==1 and 1 or 0), "wrong diagnostic allocation mode")
+        if mode==1 then assert(rd(0x0201B018) + rd(0x0201B01C) <= 0x0201B000, "allocation reached reservation") end
         for tick = 1, 600 do
           emu.frameadvance()
           for i = 0, 15 do assert(rd(0x0201BF00 + 4*i) == 0xC0DEC0DE, "boot canary clobbered") end
@@ -309,10 +371,19 @@ client.exit()
            f"--lua={script.relative_to(ROOT).as_posix()}", (base / "probe.gba").relative_to(ROOT).as_posix()]
     started = time.monotonic()
     env = {**os.environ, "SLINK_ROOT": ROOT.as_posix(), "SLINK_GEN3_TITLE": "firered",
-           "SLINK_GEN3_CHECKPOINT": str(ROOT / "data/games/gen3_frlg/write_checkpoint.json")}
+           "SLINK_GEN3_CHECKPOINT": str(ROOT / "data/games/gen3_frlg/write_checkpoint.json"),
+           "T2_INCOMING": str(base / "incoming.bin"),
+           "SLINK_STATE_DIR": state_dir.as_posix(),
+           "SLINK_GEN3_PLAY_STATES_DIR": state_dir.as_posix()}
     proc = subprocess.Popen(cmd, cwd=ROOT, env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    print(f"owned EmuHawk PID={proc.pid}, mode={mode}", flush=True)
+    print(f"owned EmuHawk PID={proc.pid}, mode={mode}, state_dir={state_dir}", flush=True)
+    (base / "run_receipt.json").write_text(json.dumps({
+        "pid":proc.pid,"mode":mode,"state_dir":str(state_dir),"config":str(config_path),
+        "script_sha256":hashlib.sha256(script.read_bytes()).hexdigest(),
+        "rom_sha1":hashlib.sha1((base/"probe.gba").read_bytes()).hexdigest(),
+        "seed_sha256":hashlib.sha256(seed).hexdigest() if seed else None,
+    },indent=2)+"\n",encoding="utf-8")
     try:
         while proc.poll() is None and time.monotonic() - started < 120:
             if result.exists() and "RESULT:" in result.read_text():
@@ -332,13 +403,15 @@ client.exit()
         before = qualify_one((base / "seed.sav").read_bytes(), rr=False)
         saved = frontend / "GBA/Save RAM/probe.SaveRAM"
         after = qualify_one(saved.read_bytes(), rr=False)
-        # Named native change: Rare Candy -> level16 -> Wartortle, evolution.h:7.
-        before["party"][0] = {**before["party"][0], "species": 8, "level": 16}
+        # Named native trade receipt after the earlier level-up evolution.
+        before["party"][0] = {**before["party"][0], "species": 68, "level": 15,
+                              "key": "13572468:78563412"}
         passed, problems = boot_check_verdict(before, after)
         (base / "census_receipt.json").write_text(json.dumps({
-            "scope": "FR Pokedex/bag/summary/full-box-PC/level-evolution/battle-party/save; trade OPEN",
+            "scope": "FR listed diagnostic scenes only; production trade lifecycle remains OPEN",
             "before_counter": before["counter"], "after_counter": after["counter"],
             "pydec_pass": passed, "problems": problems, "native_output": text,
+            "state_dir": str(state_dir),
         }, indent=2) + "\n", encoding="utf-8")
         print(f"PYDEC save/party verification: {passed}, problems={problems}")
         if not passed:
@@ -348,9 +421,9 @@ client.exit()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("mode", choices=("positive", "negative", "exhaustion"))
+    parser.add_argument("mode", choices=("positive", "negative", "exhaustion", "census"))
     parser.add_argument("--census", action="store_true", help="cold-boot fixture; Pokedex/bag/summary/save heap sample")
     args = parser.parse_args()
-    if args.census and args.mode != "positive":
-        parser.error("--census requires positive diagnostic ROM")
-    raise SystemExit(run_probe(args.mode, args.census))
+    if args.census and args.mode != "census":
+        parser.error("--census requires non-stress census ROM, never allocator-control ROM")
+    raise SystemExit(run_probe(args.mode, args.census or args.mode == "census"))
