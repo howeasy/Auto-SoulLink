@@ -66,17 +66,6 @@ body.stream {
 }
 body.stream::before { display: none; }
 
-/* Pixel-perfect glyph rendering for the Press Start 2P accents used by
- * existing overlay widget titles. Disables subpixel AA so the pixel font
- * stays crisp regardless of the active theme. */
-.wtitle,
-.d-num, .d-lbl,
-.kpi-value,
-.gbc-ticker {
-  -webkit-font-smoothing: none;
-  -moz-osx-font-smoothing: none;
-}
-
 /* Sprite rendering — overlays already set image-rendering: pixelated on
  * .mon-sprite and .enc-sprite. Reassert it globally under Funtastic so
  * the dashboard's <img> sprites stay sharp too. */

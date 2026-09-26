@@ -533,28 +533,40 @@ body.stream {
    * clamp(.875rem, 4.5vmin, 1.375rem) === clamp(14px, 4.5vmin, 22px) when
    * the root font-size is the default 16px. */
   font-size: var(--scale-step);
-  /* Body font inherits --font-ui (Pixelify Sans) from `body:not(.dark-theme)`
-   * above — no override needed. Pre-HTMX the body chain was
-   * `system-ui, 'Segoe UI', sans-serif`; what made the overlay's overall
-   * voice "pixel" was --font-pixel (Press Start 2P) being applied to the
-   * accent elements (.wtitle, .d-num, .e-ts, .et-method-hdr, etc.). Press
-   * Start 2P is now actually vendored above, so those accents finally
-   * paint as real pixel art instead of Courier New fallback. */
+  /* The board's face (board.css body.board): Jersey 20 for the body AND the old Press
+   * Start accents, so --font-pixel follows it here. Press Start's caps are 1.7x
+   * Jersey's at the same px, so the fixed-px accent sizes below are ~1.6x what they
+   * were; Jersey is ~60% narrower, so nothing grows sideways in a fixed OBS source.
+   * Jersey ships one weight: no synthesised bold (the board's names are 500 too). */
+  --font-ui: 'Jersey 20', 'Pixelify Sans', monospace;
+  --font-pixel: var(--font-ui);
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 body.stream, body.stream *, body.stream *::before, body.stream *::after {
   box-sizing: border-box;
+}
+body.stream img.mon-sprite { image-rendering: pixelated; }
+/* The board's card: a hairline edge and a softer corner. The coloured left accent
+ * each card sets (alive / dead / box) stays -- only the other three sides change. */
+body.stream :is(.mc, .lk-row, .lk-card, .lp-card, .bl-card, .enc-last, .ae-pair, .t-pill) {
+  border-top: 1px solid var(--c-edge);
+  border-right: 1px solid var(--c-edge);
+  border-bottom: 1px solid var(--c-edge);
+  border-radius: 8px;
 }
 
 /* Widget title — fixed 10 px Press Start 2P, regardless of OBS
  * browser-source dimensions. Titles must stay legible at small sizes and
  * not eat the layout at large ones. */
 .wtitle {
-  font-family: var(--font-pixel);
-  font-size: 10px;
-  -webkit-font-smoothing: none;
-  -moz-osx-font-smoothing: none;
-  color: var(--c-gold);
-  letter-spacing: .06em;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 500;
+  text-transform: uppercase;
+  color: var(--c-txt);
+  letter-spacing: .12em;
   padding-bottom: clamp(4px, .7vmin, 9px);
   border-bottom: 1px solid var(--c-sep);
   flex-shrink: 0;
@@ -611,11 +623,11 @@ body.stream, body.stream *, body.stream *::before, body.stream *::after {
   flex: 1;
   min-width: clamp(24px, 4vw, 70px);
   height: clamp(5px, .75vmin, 8px);
-  background: rgba(128, 128, 128, .18);
-  border-radius: 99px;
+  background: color-mix(in srgb, var(--c-txt) 12%, transparent);
+  border-radius: 3px;
   overflow: hidden;
 }
-.hp-fill { height: 100%; border-radius: 99px; transition: width .4s ease; }
+.hp-fill { height: 100%; transition: width .4s ease; }
 .hp-fill.hp-h { background: var(--c-alive); }
 .hp-fill.hp-m { background: var(--c-hp-mid); }
 .hp-fill.hp-l { background: var(--c-dead); box-shadow: 0 0 4px var(--c-dead); }
@@ -634,7 +646,7 @@ body.lth .p-list { flex-direction: row; gap: clamp(5px, .9vmin, 12px); }
 body.lth .wtitle { display: none; }
 body.ltv #root { padding: clamp(4px, .8vmin, 10px) clamp(6px, 1.1vmin, 12px); }
 body.ltv .p-list { flex-direction: column; gap: clamp(3px, .5vmin, 6px); }
-body.ltv .wtitle { font-size: 8px; }
+body.ltv .wtitle { font-size: 13px; }
 
 /* ── Counter overlays — deaths / attempts / areas ────────────────────
  * Big-number + small-label widgets shown in OBS corners. Tokenized so
@@ -651,15 +663,13 @@ body.ltv .wtitle { font-size: 8px; }
 .d-box  { text-align: center; line-height: 1; }
 .d-num  {
   font-family: var(--font-pixel);
-  font-size: clamp(1.8em, 8vmin, 4.5em);
+  font-size: clamp(2.9em, 13vmin, 7.2em);
   line-height: 1;
   display: block;
-  -webkit-font-smoothing: none;
 }
 .d-lbl {
   font-family: var(--font-pixel);
-  font-size: clamp(8px, 1.6vmin, 14px);
-  -webkit-font-smoothing: none;
+  font-size: clamp(13px, 2.6vmin, 22px);
   opacity: .5;
   letter-spacing: .07em;
   display: block;
@@ -685,8 +695,7 @@ body.ltv .wtitle { font-size: 8px; }
 .lk-pair { display: flex; align-items: center; gap: clamp(4px, .7vmin, 8px); }
 .lk-dead-hdr {
   font-family: var(--font-pixel);
-  font-size: clamp(7px, 1.3vmin, 10px);
-  -webkit-font-smoothing: none;
+  font-size: clamp(11px, 2.1vmin, 16px);
   color: var(--c-dead);
   opacity: .45;
   text-align: center;
@@ -756,7 +765,7 @@ body.ltv .wtitle { font-size: 8px; }
 .bl-side .mon-sprite { width: clamp(28px, 5vmin, 44px); }
 .bl-tag {
   display: inline-block; font-family: var(--font-pixel);
-  font-size: clamp(5px, .9vmin, 8px); -webkit-font-smoothing: none;
+  font-size: clamp(8px, 1.45vmin, 13px);
   color: var(--c-gold); opacity: .6; letter-spacing: .06em; line-height: 1.4;
 }
 
@@ -778,11 +787,11 @@ body.ltv .wtitle { font-size: 8px; }
   border-bottom: 1px solid var(--c-sep);
   overflow: hidden; flex-shrink: 0;
 }
-.e-ts  { font-family: var(--font-pixel); font-size: clamp(7px, 1.3vmin, 11px);
-         -webkit-font-smoothing: none; opacity: .36; flex-shrink: 0;
+.e-ts  { font-family: var(--font-pixel); font-size: clamp(11px, 2.1vmin, 18px);
+         opacity: .36; flex-shrink: 0;
          white-space: nowrap; padding-top: 1px; min-width: 4.5em; }
-.e-who { font-family: var(--font-pixel); font-size: clamp(7px, 1.3vmin, 11px);
-         -webkit-font-smoothing: none; font-weight: bold; flex-shrink: 0;
+.e-who { font-family: var(--font-pixel); font-size: clamp(11px, 2.1vmin, 18px);
+         font-weight: bold; flex-shrink: 0;
          white-space: nowrap; padding-top: 1px; }
 .e-msg { flex: 1; min-width: 0; font-size: .93em; white-space: nowrap;
          overflow: hidden; text-overflow: ellipsis; }
@@ -833,14 +842,14 @@ body.ltv .wtitle { font-size: 8px; }
                           rgba(var(--mt, 145,145,145), .92) 42%,
                           rgba(var(--mt, 145,145,145), .42) 76%,
                           rgba(255,255,255,.05) 100%); }
-.move-name  { font-family: var(--font-pixel); font-size: clamp(9px, 1.5vmin, 12px);
-              -webkit-font-smoothing: none; line-height: 1.1;
+.move-name  { font-family: var(--font-pixel); font-size: clamp(14px, 2.4vmin, 19px);
+              line-height: 1.1;
               display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2;
               overflow: hidden; overflow-wrap: anywhere; flex: 1; min-width: 0;
               text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000,
                            -1px -1px 0 #000, 0 0 5px rgba(0,0,0,.7); }
-.pp-num     { font-family: var(--font-pixel); -webkit-font-smoothing: none;
-              font-size: clamp(8px, 1.3vmin, 11px); opacity: .9;
+.pp-num     { font-family: var(--font-pixel);
+              font-size: clamp(13px, 2.1vmin, 18px); opacity: .9;
               flex-shrink: 0; white-space: nowrap; margin-left: auto;
               text-shadow: 1px 1px 0 #000, -1px 1px 0 #000, 1px -1px 0 #000,
                            -1px -1px 0 #000, 0 0 4px rgba(0,0,0,.6); }
@@ -892,10 +901,10 @@ body.ov-focus .move-tile { flex: 1 1 0; container-type: size;
 body.ov-focus .focus-mons .focus-mon { overflow: hidden; }
 /* Move text scales with each row's height (cqh) so stretched rows get bigger
    text; vmin line is the fallback for engines without container queries. */
-body.ov-focus .move-name { font-size: clamp(11px, 2.4vmin, 16px);
-                           font-size: clamp(12px, 16cqh, 28px); }
-body.ov-focus .pp-num { font-size: clamp(10px, 1.8vmin, 13px);
-                        font-size: clamp(11px, 13cqh, 22px); opacity: .85; }
+body.ov-focus .move-name { font-size: clamp(18px, 3.8vmin, 26px);
+                           font-size: clamp(19px, 26cqh, 45px); }
+body.ov-focus .pp-num { font-size: clamp(16px, 2.9vmin, 21px);
+                        font-size: clamp(18px, 21cqh, 35px); opacity: .85; }
 body.ov-focus .focus-mons { display: flex; flex-direction: column; gap: clamp(3px, .6vmin, 8px); flex: 1; min-height: 0; }
 body.ov-focus .focus-mons .focus-mon { display: flex; flex-direction: column; gap: clamp(3px, .6vmin, 8px); flex: 1; min-height: 0; min-width: 0; }
 body.ov-focus .focus-mons.doubles { flex-direction: row; gap: clamp(4px, .8vmin, 10px); }
@@ -935,7 +944,7 @@ body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
 
 /* ── Area Encounter overlay ─────────────────────── */
 .ae-badge   { display: inline-block; font-family: var(--font-pixel);
-              font-size: clamp(7px, 1.2vmin, 10px); -webkit-font-smoothing: none;
+              font-size: clamp(11px, 1.9vmin, 16px);
               padding: clamp(2px, .4vmin, 4px) clamp(6px, 1vmin, 11px);
               border-radius: 3px; letter-spacing: .05em;
               margin-bottom: clamp(3px, .5vmin, 7px); flex-shrink: 0; }
@@ -964,8 +973,8 @@ body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
 .ae-name    { font-size: .9em; font-weight: 700; white-space: nowrap;
               overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 .ae-lv      { font-size: .75em; opacity: .55; white-space: nowrap; }
-.ae-tag     { font-family: var(--font-pixel); font-size: clamp(7px, 1.1vmin, 9px);
-              -webkit-font-smoothing: none; padding: 1px 5px; border-radius: 3px;
+.ae-tag     { font-family: var(--font-pixel); font-size: clamp(11px, 1.8vmin, 14px);
+              padding: 1px 5px; border-radius: 3px;
               white-space: nowrap; flex-shrink: 0; }
 .ae-tag-caught  { background: color-mix(in srgb, var(--c-alive) 15%, transparent); color: var(--c-alive); }
 .ae-tag-dead    { background: color-mix(in srgb, var(--c-dead)  15%, transparent); color: var(--c-dead);  }
@@ -974,16 +983,16 @@ body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
 
 /* ── Encounter table overlay ────────────────────── */
 @keyframes enc-scroll { from { transform: translateY(0); } to { transform: translateY(-50%); } }
-.et-area   { font-family: var(--font-pixel); font-size: clamp(11px, 2vmin, 15px);
-             -webkit-font-smoothing: none; color: var(--c-gold); opacity: .75;
+.et-area   { font-family: var(--font-pixel); font-size: clamp(18px, 3.2vmin, 24px);
+             color: var(--c-gold); opacity: .75;
              letter-spacing: .04em; margin-bottom: clamp(3px, .5vmin, 6px);
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
              flex-shrink: 0; }
 .et-scroll  { flex: 1; min-height: 0; overflow: hidden; }
 .et-methods { display: flex; flex-direction: column; gap: clamp(7px, 1.2vmin, 13px); }
 .et-method-hdr {
-  font-family: var(--font-pixel); font-size: clamp(11px, 2vmin, 15px);
-  -webkit-font-smoothing: none; color: var(--c-pend); letter-spacing: .05em;
+  font-family: var(--font-pixel); font-size: clamp(18px, 3.2vmin, 24px);
+  color: var(--c-pend); letter-spacing: .05em;
   padding-bottom: clamp(2px, .4vmin, 5px);
   border-bottom: 1px solid var(--c-sep);
   margin-bottom: clamp(2px, .4vmin, 5px); flex-shrink: 0;
@@ -993,8 +1002,8 @@ body.ov-focus .focus-mons.doubles .move-name { line-height: 1.15; }
              padding: clamp(2px, .3vmin, 4px) 0; }
 .et-name   { flex: 1; min-width: 0; font-size: clamp(13px, 2.4vmin, 18px);
              white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.et-rate   { font-family: var(--font-pixel); font-size: clamp(11px, 1.9vmin, 14px);
-             -webkit-font-smoothing: none; white-space: nowrap;
+.et-rate   { font-family: var(--font-pixel); font-size: clamp(18px, 3vmin, 22px);
+             white-space: nowrap;
              min-width: 2.8em; text-align: right; flex-shrink: 0; }
 .et-lv     { font-size: clamp(11px, 1.9vmin, 14px); opacity: .42;
              white-space: nowrap; flex-shrink: 0; }

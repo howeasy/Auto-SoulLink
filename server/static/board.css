@@ -12,9 +12,8 @@
  */
 
 /* Jersey 20 as the board's whole UI face, not only its figures (the face itself is
- * declared in slink.css beside --font-num). Scoped to the board until the overlays are
- * checked at their catalogue sizes -- Jersey is condensed and moves widths inside fixed
- * OBS sources. */
+ * declared in slink.css beside --font-num). The overlays wear it too (slink.css
+ * body.stream), checked at their catalogue sizes. */
 /* ── Type scale ──────────────────────────────────────────────────────────
  * One scale for every Manager page, in rem, so a size never depends on how deep an
  * element sits. xs captions · sm secondary · md controls and body copy · base · lg
