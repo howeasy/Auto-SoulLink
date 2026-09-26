@@ -37,7 +37,9 @@ The coordinator re-checked the load-bearing citations in each card. The spot che
 | pret/pokeheartgold `xmap` branch | commit `40eab3c65e0e4f46f6edd90540709aa9950ca07e` (built from master `9d8b7591f09b65804da2fb2dfd56f320633e0d36`) |
 | `heartgoldus.xMAP` | sha256 `39397e4c16f4fe907870ab8dac450a469a8ce9ce225eb98852771ff59fe877df` (11646615 B) |
 | `soulsilverus.xMAP` | sha256 `4ce745d56b34762300025279748b3ea3626bc2e87c0540e0a649388b758d07b2` (11646721 B) |
-| pret/pokeplatinum `xmap` branch | commit `a2a62d3d8966ffe5953a5ffca1cd4f8a45e79e61` (`platinumus.xMAP`) |
+| pret/pokeplatinum `xmap` branch | commit `a2a62d3d8966ffe5953a5ffca1cd4f8a45e79e61`; `platinumus.xMAP` sha256 `c3b3451b4815a646514bf9d456062e644d83010f996eaff17abf8d2fe667e72a` (12107496 B) |
+| pokeplatinum source clone (shallow, `.cache/gen4/pokeplatinum`) | `c248fb3f8cc9934ded800e489567c5c0eeee92eb` |
+| hg-engine build symbol exports (`.cache/gen4/hge/`) | `offsets.ini`, `build/rom_gen.ld` and `arm-none-eabi-nm` of 21 `build/*linked.o`, pulled read-only from `hgbox:~/git/hg-engine`, whose `test.nds` sha1 == `cb2dc435…` (the pinned build) |
 | pokeheartgold source clone used for citations | `E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold` @ `ad7a3afa` (older than the xmap build; line numbers refer to this clone) |
 
 Local copies of the two HGSS xMAPs are in `.cache/gen4/xmap/` (gitignored).
@@ -50,4 +52,5 @@ Local copies of the two HGSS xMAPs are in `.cache/gen4/xmap/` (gitignored).
 - [acquisition.md](acquisition.md): gifts, statics, roamers, trades, contest/safari/Pal Park, data sources
 - [hg_engine.md](hg_engine.md): hg-engine record/save/battle deltas and site survival
 - [checkpoint.md](checkpoint.md): write checkpoint facts (battle copy-back, overworld idle, CPU park)
+- [platform.md](platform.md): BizHawk/melonDS configuration facts and live probe results
 - [prior_art.md](prior_art.md): legacy Gen 4 code audit, archived melonDS probe (and its error), the owner's AP HGSS injection
