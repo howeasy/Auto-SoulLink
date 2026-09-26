@@ -1,0 +1,59 @@
+# receipt: python tools/e2e_duo.py --game gen3_rr --scenario trade_gen3   (cwd=C:/slink-wt/rrduo)
+# lane=C:/slink-wt/rrduo sha=539e0aea46a05787a76cffdf761dce18ec765c7f tracked_clean=True runner=subagent RR-duo-receipts 2026-09-26 run=1/2
+# companion=patch/build/slink_RR.gba md5=c372c428c8f41cbbde5c71d6408233dd (verified before run)
+# verdict: RED -- attempt aborted by the PYDEC oracle, NOT a retriable RNG/out-of-balls cause. Note: both
+#   instances actually completed the native trade scene cleanly this run ("native scene complete", RESULT:
+#   PASS on both sides, SAVE_WITNESS_SHA256 match=true both sides, counter 4->5) -- the FAIL is the oracle's
+#   own ordering assertion below, not an unresolved/stomped trade like the prior RED_product report. Per
+#   the no-retry-on-non-RNG rule, this scenario was run once and stopped; not retried.
+# failure line: [duo] PYDEC: FAIL a: /(?m)^TALKED / must precede /(?m)^TX trade_request - .*/
+--- runner output ---
+
+========== scenario: trade_gen3 ==========
+[duo] trade_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=d8a0e23df0cf43af8f5c3367995f9b3ff453871884b4cb7c74af090ae5f87d4d profile.json=a5e8fd7008b55fb810e404ec52b68b3b9b7ab661cb6543a5cc869a585e124e41 source=539e0aea46a05787a76cffdf761dce18ec765c7f
+[duo] server up: tcp=51043 http=51044 data=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_sgy9sm6u
+[duo] timing server 1.2s
+[duo] cleared 4 stale artifact(s) for trade_gen3: duo_go_trade_gen3_a.txt, duo_go_trade_gen3_b.txt, e2e_trade_gen3_a_result.txt, e2e_trade_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 26.4s
+[duo] timing results 4.2s
+[duo] RESULT_LINE a: RESULT: PASS (traded F56D8C1D:2BDDC8BF for F56D8C1D:D4223740)
+[duo] RESULT_LINE b: RESULT: PASS (traded F56D8C1D:D4223740 for F56D8C1D:2BDDC8BF)
+[duo] SAVE_WITNESS_SHA256 inst=a site=f88af498d6fba23e2e2cd5ecd9cc28d5a7668b22863f3db3b5e47aacbba7fa17 file=f88af498d6fba23e2e2cd5ecd9cc28d5a7668b22863f3db3b5e47aacbba7fa17 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=0332faf8a44c6427a0c21e7bfd9f81f6a0e28e5016ec2129c5a49904efaea431 file=0332faf8a44c6427a0c21e7bfd9f81f6a0e28e5016ec2129c5a49904efaea431 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] MARKER a: TALKED npc=(3,3) player=(3,4) facing=Up pi_count=0->1
+[duo] MARKER a: TX trade_request - {"event":"trade_request","player":"a","seq":172}
+[duo] MARKER a: RX show_choices text=OAK: Took you long enough.
+[duo] MARKER a: TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":175,"token":"t1"}
+[duo] MARKER a: RX choose_mon
+[duo] MARKER a: TX mon_chosen - {"event":"mon_chosen","player":"a","seq":180,"slot":1,"token":"t1"}
+[duo] MARKER a: RX apply_trade
+[duo] MARKER a: TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:D4223740","new_species":1324,"player":"a","seq":245,"slot":1,"token":"t1"}
+[duo] MARKER a: TRADED gave=F56D8C1D:2BDDC8BF got=F56D8C1D:D4223740 slot=1 species=1324 level=4
+[duo] MARKER a: [client] [SLink-gen3] trade: native scene complete; trade_done F56D8C1D:2BDDC8BF -> F56D8C1D:D4223740
+[duo] MARKER b: RX show_menu text=Trade your Aaaaaaaaaa for Aaaaaaaaaa?
+[duo] MARKER b: TX menu_result - {"choice":1,"event":"menu_result","player":"b","seq":201,"token":"t1"}
+[duo] MARKER b: RX apply_trade
+[duo] MARKER b: TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:2BDDC8BF","new_species":1324,"player":"b","seq":263,"slot":1,"token":"t1"}
+[duo] MARKER b: TRADED gave=F56D8C1D:D4223740 got=F56D8C1D:2BDDC8BF slot=1 species=1324 level=4
+[duo] MARKER b: [client] [SLink-gen3] trade: native scene complete; trade_done F56D8C1D:D4223740 -> F56D8C1D:2BDDC8BF
+[duo] timing oracle 0.2s
+[duo] PYDEC: FAIL a: /(?m)^TALKED / must precede /(?m)^TX trade_request - .*/
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_trade_gen3_sgy9sm6u
+[duo] trade_gen3: attempt 1 aborted — RuntimeError: a: /(?m)^TALKED / must precede /(?m)^TX trade_request - .*/
+
+========== summary ==========
+  trade_gen3: FAIL (attempt 1 of 1) — RuntimeError: a: /(?m)^TALKED / must precede /(?m)^TX trade_request - .*/
+EXIT:1

@@ -1,0 +1,33 @@
+# receipt: python tools/run_gate.py lua/tests/test_live_startmenu_shapes.lua (single instance, slink_overworld.State + SYNTH flags)
+# RED on the shipped companion md5 6cf77ba4 (dex rows; page-switch row); GREEN on md5 c03be33e (this commit)
+# revert checks: build without the 0x090BDD54 redirect -> 'SOULLINK is back after the page round trip' FAIL [0 1 2 3 4 5 11];
+#                build without the GetSafariZoneFlag guard -> 'no SOULLINK row in the Safari menu' FAIL [7 0 1 2 3 5 8 6]
+--- RED (6cf77ba4, first 3 shapes; the tools-page block was added after) ---
+dex, disabled: count=7 order=[0 1 2 3 4 5 6]
+dex, enabled:  count=7 order=[0 1 2 3 4 5 6]
+  [FAIL] 8 rows with the Pokedex and the feature enabled  — count=7
+  [FAIL] SOULLINK sits right before EXIT, which stays last  — [0 1 2 3 4 5 6]
+  [FAIL] row 6 of the with-Pokedex menu fires slink_startmenu_cb  — opened=0
+safari, enabled: count=7 order=[7 0 1 2 3 5 6]
+RESULT: FAIL startmenu_shapes (3 checks failed)
+--- GREEN (c03be33e) ---
+dex, disabled: count=7 order=[0 1 2 3 4 5 6]
+  [ok] the synth Pokedex flag gives RR's 7-row menu with POKEDEX first  — [0 1 2 3 4 5 6]
+  [ok] enable=0 adds no row
+dex, enabled:  count=8 order=[0 1 2 3 4 5 8 6]
+  [ok] 8 rows with the Pokedex and the feature enabled  — count=8
+  [ok] SOULLINK sits right before EXIT, which stays last  — [0 1 2 3 4 5 8 6]
+  [ok] row 6 of the with-Pokedex menu fires slink_startmenu_cb  — opened=1
+safari, enabled: count=7 order=[7 0 1 2 3 5 6]
+  [ok] the synth Safari flag gives RR's Safari menu (RETIRE first)  — [7 0 1 2 3 5 6]
+  [ok] no SOULLINK row in the Safari menu  — [7 0 1 2 3 5 6]
+tools, enabled: count=8 order=[0 1 2 3 4 5 8 11]
+  [ok] the synth tools flag gives the main page's EXIT id 11  — [0 1 2 3 4 5 8 11]
+  [ok] SOULLINK sits right before EXIT id 11  — [0 1 2 3 4 5 8 11]
+tools page:      page=1 count=3 order=[9 10 12]
+  [ok] RIGHT flips to the tools page  — page=1
+  [ok] no SOULLINK row on the tools page  — [9 10 12]
+back, main page: page=0 count=8 order=[0 1 2 3 4 5 8 11]
+  [ok] LEFT flips back to the main page  — page=0
+  [ok] SOULLINK is back after the page round trip  — [0 1 2 3 4 5 8 11]
+RESULT: PASS startmenu_shapes (0 checks failed)

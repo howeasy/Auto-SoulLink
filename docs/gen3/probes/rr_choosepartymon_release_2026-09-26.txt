@@ -1,0 +1,18 @@
+# receipt: python tools/run_gate.py lua/tests/test_live_choosepartymon.lua (single instance, slink_overworld.State)
+# RED on companion md5 377b8dab (bugs 1+2 fixed, chooser still InitPartyMenu direct):
+#   after the pick: ctx_status=1 sc2=0 cb2=080565B5 released_after=nil
+#   [FAIL] the field script ended after the pick (context status 2 within 600 frames)  - status=1
+# GREEN on md5 c372c428 (this commit):
+  [ok] native:choose_mon queued the op
+  [ok] op posted to the mailbox (dispatch receipt)
+cb2 before=080565B5 after=0811EBA1 changed=true v8004=0
+  [ok] party menu opened (gMain.callback2 changed)
+  [ok] chooser acked  — why=nil result=0 reason=nil
+  [ok] ack is ST_OK  — why=nil result=0 reason=nil
+  [ok] a valid slot came back (0-5 chosen, or 7=cancel)  — slot=0
+  [ok] selected a party mon (slot 0-5, not the 0xFF sentinel)  — slot=0
+  [ok] native sent mon_chosen{token=9, slot}  — slot=0
+after the pick: ctx_status=2 sc2=0 cb2=080565B5 released_after=51
+  [ok] the field script ended after the pick (context status 2 within 600 frames)  — status=2
+  [ok] beacon still present (no crash)
+RESULT: PASS choosepartymon (0 checks failed)

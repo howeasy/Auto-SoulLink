@@ -28,13 +28,18 @@ def test_the_no_patch_generations_are_allowed_and_say_so(key):
     assert "no patch" in s["why"].lower(), s
 
 
-@pytest.mark.parametrize("key", ["overworld_presence",
-                                 "battle_calc", "pc_trade_npc"])
+@pytest.mark.parametrize("key", ["battle_calc", "pc_trade_npc"])
 def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     """The other half of the same honesty: a Gen 1 player switching these on gets nothing,
     so they cannot be switched on."""
     assert not option_support(key, GEN1)["ok"]
     assert option_support(key, RR)["ok"]
+
+
+def test_overworld_presence_is_greyed_everywhere_while_deferred():
+    """The peer ghost is deferred post-RC; presence ON would also disable RR's trade NPC."""
+    for pair in (GEN1, RR):
+        assert not option_support("overworld_presence", pair)["ok"]
 
 
 def test_the_pc_trade_npc_row_says_gen1_trades_at_the_receptionist():

@@ -1,0 +1,102 @@
+# receipt: python tools/run_gate.py lua/tests/test_live_tradescene.lua (single instance, slink_overworld.State)
+# RED on companion md5 c03be33e (03b19b71, before the name fix); GREEN on md5 c372c428 (this commit).
+# The expanded-species case alone (1324) is GREEN on both: the species is not the cause. The 'fullname' case
+# (1324 + a 10-glyph nickname, as the duo fixtures' 'Aaaaaaaaaa') reproduces the duo in one run.
+# Diagnostic run (bus-write watch on gPlayerPartyCount 0x02024029, first hit):
+#   pc=080090AA lr=08009015 r1=02021D04 r4=02024029 (dest) r5=0202400A (src)
+#   stack returns: 08009015 08053599 08050F2B 0805094F  (StringExpandPlaceholders <- trade-scene text 0x08053594 <- AnimateTradeSequence <- CB2_InGameTrade)
+--- RED ---
+[vanilla] partner pid=EBEF11C2 otid=2BDDC8A7 species=277 | slot0 pid before=EBEF11DA | count=1
+  [ok] vanilla: partner mon is valid (non-zero identity)
+  [ok] vanilla: native:transfer(enemy) queued the staging op
+  [ok] vanilla: staging op posted (dispatch receipt)
+  [ok] vanilla: partner mon staged in gEnemyParty[0] (ST_OK)  — why=nil result=0 reason=nil
+  [ok] vanilla: gEnemyParty[0] holds the partner identity  — pid=EBEF11C2 otid=2BDDC8A7
+  [ok] vanilla: native:transfer(scene) queued the op
+  [ok] vanilla: scene op posted (dispatch receipt)
+  [ok] vanilla: trade scene ran and returned to the overworld (acked)  — why=nil result=0 reason=nil
+  [ok] vanilla: ack is ST_OK  — why=nil result=0 reason=nil
+  [ok] vanilla: gPlayerPartyCount unchanged by the scene  — count 1 -> 1
+  [ok] vanilla: gPlayerParty[0] is now the traded-in partner mon  — got pid=EBEF11C2 otid=2BDDC8A7 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] vanilla: slot 0 actually changed (a real trade, not a no-op)  — before=EBEF11DA after=EBEF11C2
+  [ok] vanilla: the received species is intact  — species=277
+  [ok] vanilla: beacon still present (no crash)
+[expanded] partner pid=EBEF11C2 otid=2BDDC8A7 species=1324 | slot0 pid before=EBEF11DA | count=1
+  [ok] expanded: partner mon is valid (non-zero identity)
+  [ok] expanded: native:transfer(enemy) queued the staging op
+  [ok] expanded: staging op posted (dispatch receipt)
+  [ok] expanded: partner mon staged in gEnemyParty[0] (ST_OK)  — why=nil result=0 reason=nil
+  [ok] expanded: gEnemyParty[0] holds the partner identity  — pid=EBEF11C2 otid=2BDDC8A7
+  [ok] expanded: native:transfer(scene) queued the op
+  [ok] expanded: scene op posted (dispatch receipt)
+  [ok] expanded: trade scene ran and returned to the overworld (acked)  — why=nil result=0 reason=nil
+  [ok] expanded: ack is ST_OK  — why=nil result=0 reason=nil
+  [ok] expanded: gPlayerPartyCount unchanged by the scene  — count 1 -> 1
+  [ok] expanded: gPlayerParty[0] is now the traded-in partner mon  — got pid=EBEF11C2 otid=2BDDC8A7 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] expanded: slot 0 actually changed (a real trade, not a no-op)  — before=EBEF11DA after=EBEF11C2
+  [ok] expanded: the received species is intact  — species=1324
+  [ok] expanded: beacon still present (no crash)
+[fullname] partner pid=EBEF11C2 otid=2BDDC8A7 species=1324 | slot0 pid before=EBEF11DA | count=1
+  [ok] fullname: partner mon is valid (non-zero identity)
+  [ok] fullname: native:transfer(enemy) queued the staging op
+  [ok] fullname: staging op posted (dispatch receipt)
+  [ok] fullname: partner mon staged in gEnemyParty[0] (ST_OK)  — why=nil result=0 reason=nil
+  [ok] fullname: gEnemyParty[0] holds the partner identity  — pid=EBEF11C2 otid=2BDDC8A7
+  [ok] fullname: native:transfer(scene) queued the op
+  [ok] fullname: scene op posted (dispatch receipt)
+  [fullname] gPlayerPartyCount write: f5003 pc=080090AA lr=08009015 val=1
+  [ok] fullname: trade scene ran and returned to the overworld (acked)  — why=native reset result=nil reason=nil
+  [FAIL] fullname: ack is ST_OK  — why=native reset result=nil reason=nil
+  [FAIL] fullname: gPlayerPartyCount unchanged by the scene  — count 1 -> 213
+  [FAIL] fullname: gPlayerParty[0] is now the traded-in partner mon  — got pid=D5D5D5BB otid=D5D5D5D5 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] fullname: slot 0 actually changed (a real trade, not a no-op)  — before=EBEF11DA after=D5D5D5BB
+  [FAIL] fullname: the received species is intact  — species=54715
+  [FAIL] fullname: beacon still present (no crash)
+RESULT: FAIL tradescene (5 checks failed)
+--- GREEN ---
+[vanilla] partner pid=EBEF11C2 otid=2BDDC8A7 species=277 | slot0 pid before=EBEF11DA | count=1
+  [ok] vanilla: partner mon is valid (non-zero identity)
+  [ok] vanilla: native:transfer(enemy) queued the staging op
+  [ok] vanilla: staging op posted (dispatch receipt)
+  [ok] vanilla: partner mon staged in gEnemyParty[0] (ST_OK)  — why=nil result=0 reason=nil
+  [ok] vanilla: gEnemyParty[0] holds the partner identity  — pid=EBEF11C2 otid=2BDDC8A7
+  [ok] vanilla: native:transfer(scene) queued the op
+  [ok] vanilla: scene op posted (dispatch receipt)
+  [ok] vanilla: trade scene ran and returned to the overworld (acked)  — why=nil result=0 reason=nil
+  [ok] vanilla: ack is ST_OK  — why=nil result=0 reason=nil
+  [ok] vanilla: gPlayerPartyCount unchanged by the scene  — count 1 -> 1
+  [ok] vanilla: gPlayerParty[0] is now the traded-in partner mon  — got pid=EBEF11C2 otid=2BDDC8A7 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] vanilla: slot 0 actually changed (a real trade, not a no-op)  — before=EBEF11DA after=EBEF11C2
+  [ok] vanilla: the received species is intact  — species=277
+  [ok] vanilla: beacon still present (no crash)
+[expanded] partner pid=EBEF11C2 otid=2BDDC8A7 species=1324 | slot0 pid before=EBEF11DA | count=1
+  [ok] expanded: partner mon is valid (non-zero identity)
+  [ok] expanded: native:transfer(enemy) queued the staging op
+  [ok] expanded: staging op posted (dispatch receipt)
+  [ok] expanded: partner mon staged in gEnemyParty[0] (ST_OK)  — why=nil result=0 reason=nil
+  [ok] expanded: gEnemyParty[0] holds the partner identity  — pid=EBEF11C2 otid=2BDDC8A7
+  [ok] expanded: native:transfer(scene) queued the op
+  [ok] expanded: scene op posted (dispatch receipt)
+  [ok] expanded: trade scene ran and returned to the overworld (acked)  — why=nil result=0 reason=nil
+  [ok] expanded: ack is ST_OK  — why=nil result=0 reason=nil
+  [ok] expanded: gPlayerPartyCount unchanged by the scene  — count 1 -> 1
+  [ok] expanded: gPlayerParty[0] is now the traded-in partner mon  — got pid=EBEF11C2 otid=2BDDC8A7 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] expanded: slot 0 actually changed (a real trade, not a no-op)  — before=EBEF11DA after=EBEF11C2
+  [ok] expanded: the received species is intact  — species=1324
+  [ok] expanded: beacon still present (no crash)
+[fullname] partner pid=EBEF11C2 otid=2BDDC8A7 species=1324 | slot0 pid before=EBEF11DA | count=1
+  [ok] fullname: partner mon is valid (non-zero identity)
+  [ok] fullname: native:transfer(enemy) queued the staging op
+  [ok] fullname: staging op posted (dispatch receipt)
+  [ok] fullname: partner mon staged in gEnemyParty[0] (ST_OK)  — why=nil result=0 reason=nil
+  [ok] fullname: gEnemyParty[0] holds the partner identity  — pid=EBEF11C2 otid=2BDDC8A7
+  [ok] fullname: native:transfer(scene) queued the op
+  [ok] fullname: scene op posted (dispatch receipt)
+  [ok] fullname: trade scene ran and returned to the overworld (acked)  — why=nil result=0 reason=nil
+  [ok] fullname: ack is ST_OK  — why=nil result=0 reason=nil
+  [ok] fullname: gPlayerPartyCount unchanged by the scene  — count 1 -> 1
+  [ok] fullname: gPlayerParty[0] is now the traded-in partner mon  — got pid=EBEF11C2 otid=2BDDC8A7 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] fullname: slot 0 actually changed (a real trade, not a no-op)  — before=EBEF11DA after=EBEF11C2
+  [ok] fullname: the received species is intact  — species=1324
+  [ok] fullname: beacon still present (no crash)
+RESULT: PASS tradescene (0 checks failed)

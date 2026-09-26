@@ -17,6 +17,7 @@ Three things this file pins:
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -130,7 +131,18 @@ def test_purergb_calc_profile_uses_the_purergb_dex():
 
 # ── 3. tools/gen_purergb_setdex.py output ────────────────────────────────────────────────────
 
+def _need_purergb_source():
+    """Absent input skips (tests/TESTING.md); a present checkout at the wrong commit still
+    fails inside gen1_foundation.source_root."""
+    from tools import gen1_foundation
+    f = gen1_foundation.foundation("purergb")
+    root = Path(os.environ.get(f["source_env"]) or (REPO / f["source_default"]))
+    if not root.is_dir():
+        pytest.skip(f"purergb source checkout absent: {root} (set {f['source_env']})")
+
+
 def test_setdex_generator_check_passes():
+    _need_purergb_source()
     result = subprocess.run(
         [sys.executable, str(REPO / "tools" / "gen_purergb_setdex.py"), "--check"],
         cwd=REPO, capture_output=True, text=True,
@@ -170,6 +182,7 @@ def test_setdex_missingno_slot_is_the_only_species_gap():
     """Documented in tools/gen_purergb_setdex.py's module docstring: GYM_GUIDE's MISSINGNO
     party slot is the only species trainers.json references that purergb.ts can't model (that
     classification is dropped outright), so it should be the only skipped mon."""
+    _need_purergb_source()
     sys.path.insert(0, str(REPO / "tools"))
     from gen_purergb_setdex import generate  # noqa: E402
 
