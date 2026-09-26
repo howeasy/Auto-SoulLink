@@ -255,7 +255,7 @@ function randomizerFields(form) {
     },
     // A cartridge this run can take: clean, and of its family when it names one.
     usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
-    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : ''; },
+    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : ''; },
     // The option's words: the cartridge, and why it is greyed when it is.
     romNote(r) {
       if (this.usable(r)) return r.title;
@@ -275,6 +275,7 @@ function randomizerFields(form) {
       } else {
         add('pureRGB', function (r) { return r.clean && r.family === 'gen1_purergb'; });
         add('Red · Blue · Yellow', function (r) { return r.clean && r.family === 'gen1_rby'; });
+        add('Gold · Silver · Crystal', function (r) { return r.clean && r.family === 'gen2_gsc'; });
       }
       add('not usable', function (r) { return !r.clean; });
       return groups;
