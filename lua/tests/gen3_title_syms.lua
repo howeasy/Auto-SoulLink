@@ -348,8 +348,9 @@ M.entries = {
     -- All four emerald = nil: pret pokeemerald's start menu is a different architecture, not a
     -- rename. src/start_menu.c polls a `gMenuCallback` bool8(*)(void) FUNCTION-POINTER VARIABLE
     -- instead of a persistent gTasks entry -- HandleStartMenuInput (static) sets
-    -- gMenuCallback = StartMenuSaveCallback on the SAVE row, which itself sets
-    -- gMenuCallback = SaveCallback, which polls RunSaveCallback() and resets
+    -- gMenuCallback = StartMenuSaveCallback on the SAVE row (:616), which sets
+    -- gMenuCallback = SaveStartCallback (:726), which sets gMenuCallback = SaveCallback
+    -- (:812), which polls RunSaveCallback() and resets
     -- gMenuCallback = HandleStartMenuInput when done (:593-851). There is no Task_ func slot to
     -- wait on the FR/LG way, and no 1:1 StartCB_Save1/StartCB_Save2 split.
     TASK_START_MENU_HANDLE_INPUT = { symbol = "Task_StartMenuHandleInput", thumb = true,

@@ -263,3 +263,34 @@ def test_decode_party_mon_signature_and_frozen_keys():
     assert set(decoded["evs"]) == {"hp", "attack", "defense", "speed", "sp_attack", "sp_defense"}
     for key in ("max_hp", "attack", "defense", "speed", "sp_attack", "sp_defense"):
         assert key in decoded
+
+
+# -- review cx-73b96095 M5-M7: the title parameter refuses by name ------------------------
+
+def test_an_unknown_title_is_a_named_valueerror_and_qualify_reports_it():
+    import pytest
+    image = bytes(codec.FLASH_SIZE)
+    with pytest.raises(ValueError, match="unknown Gen 3 title 'typo'"):
+        codec.parse_flash(image, title="typo")
+    with pytest.raises(ValueError, match="unknown Gen 3 title"):
+        codec.slot_layout(title="typo")
+    ok, msg = codec.qualify_flash(image, title="typo")
+    assert ok is False and "unknown Gen 3 title" in msg
+
+
+def test_the_cfru_rr_layout_refuses_a_non_fr_title():
+    import pytest
+    image = bytes(codec.FLASH_SIZE)
+    with pytest.raises(ValueError, match="CFRU/RR save layout is FR-based"):
+        codec.parse_flash(image, cfru=True, title="emerald")
+    with pytest.raises(ValueError, match="CFRU/RR save layout is FR-based"):
+        codec.party_from_save(image, rr=True, title="emerald")
+    with pytest.raises(ValueError, match="CFRU/RR save layout is FR-based"):
+        codec.boxes_from_save(image, rr=True, title="emerald")
+
+
+def test_client_rom_types_name_the_same_layouts_as_the_codec_titles():
+    for rom_type in ("firered", "leafgreen"):
+        assert codec.slot_layout(title=rom_type) == codec.slot_layout(title=codec.TITLE_FRLG)
+    assert codec.slot_layout(title="emerald") == codec.slot_layout(title=codec.TITLE_EMERALD)
+

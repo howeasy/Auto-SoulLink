@@ -1,9 +1,11 @@
-"""Independent Gen 3 (FR/LG) record and flash-save oracle, derived from pret.
+"""Independent Gen 3 (FR/LG, Emerald) record and flash-save oracle, derived from pret.
 
 Hand-derived from pret/pokefirered at commit
 ``c75f352304d529f6ba92d4f74b9cf8b5c3810788`` (every citation below is a
-``file#Lstart-Lend`` range at that immutable commit) and, for the CFRU/RR
-divergence, from the SOURCE note ``docs/gen3/research/flash_save.md``.
+``file#Lstart-Lend`` range at that immutable commit unless it names another), for
+the Emerald save layout from pret/pokeemerald at ``c65e93f20a5275ab03b07d6f6411096a82a60ffd``
+(the TITLE_EMERALD block below), and, for the CFRU/RR divergence, from the SOURCE
+note ``docs/gen3/research/flash_save.md``.
 
 This module is deliberately independent of ``archive/gen3-old-client:lua/memory_gba.lua``: it is the
 Python side of the ``reads == PYDEC`` differential (PLAN §5.7), so it must
@@ -422,6 +424,21 @@ _TITLE_SAVE_SIZES = {
     TITLE_FRLG: (SAVEBLOCK2_SIZE, SAVEBLOCK1_SIZE),
     TITLE_EMERALD: (SAVEBLOCK2_SIZE_EMERALD, SAVEBLOCK1_SIZE_EMERALD),
 }
+# A codec title or a client rom_type (server/adapters/__init__.py) names the layout.
+_TITLE_ALIASES = {"frlg": TITLE_FRLG, "firered": TITLE_FRLG, "leafgreen": TITLE_FRLG,
+                  "emerald": TITLE_EMERALD}
+
+
+def _title(title: str, *, cfru: bool = False) -> str:
+    """The codec title for ``title``, refused by name when unknown or combined with the
+    CFRU/RR layout, which exists only on FR-based builds (review cx-73b96095 M5-M7): a
+    ValueError, so :func:`qualify_flash` reports it as ``(False, msg)``."""
+    canonical = _TITLE_ALIASES.get(title)
+    if canonical is None:
+        raise ValueError(f"unknown Gen 3 title {title!r}; expected one of {sorted(_TITLE_ALIASES)}")
+    if cfru and canonical != TITLE_FRLG:
+        raise ValueError(f"the CFRU/RR save layout is FR-based; title {title!r} cannot use it")
+    return canonical
 
 
 def slot_layout(chunk_size: int = CHUNK_SIZE_VANILLA,
@@ -432,7 +449,7 @@ def slot_layout(chunk_size: int = CHUNK_SIZE_VANILLA,
     chunk_size=0xFF0 reproduces CFRU's literal table (flash_save.md §3).
     ``title`` only changes the SaveBlock1/2 object sizes -- Storage is
     identical across titles (pokemon_storage_system.h)."""
-    sb2_size, sb1_size = _TITLE_SAVE_SIZES[title]
+    sb2_size, sb1_size = _TITLE_SAVE_SIZES[_title(title)]
     objects = (
         ("sb2", sb2_size, 0, 0),
         ("sb1", sb1_size, 1, 4),
@@ -555,6 +572,7 @@ def parse_flash(image: bytes, cfru: bool = False, title: str = TITLE_FRLG) -> di
     Like the game, this accepts a partially valid image and copies whatever
     sections check out.  Use :func:`qualify_flash` for the strict witness
     test.  ``title`` selects the SaveBlock1/2 sizes (default: FR/LG/RR)."""
+    title = _title(title, cfru=cfru)
     layout = slot_layout(CHUNK_SIZE_CFRU if cfru else CHUNK_SIZE_VANILLA, title=title)
     sb2_size, sb1_size = _TITLE_SAVE_SIZES[title]
     body, rtc = split_rtc(image)
@@ -647,6 +665,7 @@ _TITLE_PARTY_OFFSETS = {
 
 def party_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> list[dict]:
     """Decode party using the title's disk layout; qualify_flash is a separate gate."""
+    title = _title(title, cfru=rr)
     if rr:
         return rr_party_from_save(image)
     sb1 = parse_flash(image, title=title)["sb1"]
@@ -661,6 +680,7 @@ def party_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> 
 
 def boxes_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> list[list[dict]]:
     """Decode vanilla's 14 boxes or RR's 25 scattered compressed boxes."""
+    _title(title, cfru=rr)
     if rr:
         return rr_boxes_from_save(image)
     storage = parse_flash(image, title=title)["storage"]
