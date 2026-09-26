@@ -2107,6 +2107,19 @@ def bizhawk_path_problem(paths, limit=BIZHAWK_PATH_LIMIT):
 # U1_CLOCK's hour (tests/live/test_gen2_frame_align.py) -- inside Route 30's day/morn window
 # (data/wild/johto_grass.asm ROUTE_30: 10:00-17:59 is DAY) so a duo's route stays host-clock independent.
 DUO_CLOCK_HOUR = 11
+# gen2_ball_gate regression (fsw-sweep3/-rr1): a retry (scenario_attempt_limit's "one retry, only when a side
+# ran out of the aide's five natural Balls") assumed two attempts differ through real host-clock variance
+# feeding the RTC trailer -- true before DUO_CLOCK_HOUR pinned every boot to hour:00:00, which made a retry's
+# FixTime catch-up (and so its frame-based RNG) reproduce attempt 1 bit-for-bit (both attempts landed on the
+# exact same frame numbers, gen2_ball_gate/gen2_poison logs). Attempt 2+ (of any Gen 2 duo scenario that
+# retries: gen2_ball_gate, the clause scenarios) is instead pinned to hour:MINUTE:00, a different but still
+# fully deterministic and disclosed target -- never a hunt for a lucky seed, never host-clock-dependent -- so
+# a retry is a genuine second roll again. Attempt 1 always gets minute 0: bit-for-bit as before this fix.
+DUO_CLOCK_RETRY_MINUTE = 23
+
+
+def _duo_clock_minute(attempt):
+    return ((attempt - 1) * DUO_CLOCK_RETRY_MINUTE) % 60
 # Gold has no day POISON_STING foe south of the Route 30 battle demo: its poison A plays the
 # post-errand save (U1 ruling, tests/live/test_gen2_frame_align.py U1_FIXTURE); cc/cg keep the pairing.
 GEN2_POISON_FIXTURES = {"gen2_gold_silver": {"a": "gold_battle_errand"}}
@@ -2928,7 +2941,8 @@ class DuoRun:
 
             try:
                 raw, clock = gen2_synth_fixtures.day_clock(raw, hour=DUO_CLOCK_HOUR, now=int(time.time()),
-                                                           title=fixture["title"])
+                                                           title=fixture["title"],
+                                                           minute=_duo_clock_minute(getattr(self, "attempt", 1)))
                 self._pydec_note(f"{inst}: clock_setup {clock}")
             except Exception as exc:  # noqa: BLE001 -- disclosed, not raised: see comment above
                 self._pydec_note(f"{inst}: clock_setup skipped (not a played save): {exc!r}")

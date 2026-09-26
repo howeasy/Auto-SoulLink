@@ -46,6 +46,9 @@ The Gen 2 duo boot RTC is pinned to 11:00 (`67c5161a`).
 
 ## PARKED for the next forced Gen 2 re-sweep: DIGEST-DOCS + CRYSTAL-PACK-README
 
+**DONE 2026-09-26** with the owner-authorized re-sweep ("Do whatever resweep you need"): the digest drops
+`DOC_SUFFIXES` under the packs with a guard test, and the README below is in place.
+
 Both change the Gen 2 CODE_DIGEST, so they land together with the next re-sweep that a shared-code
 change forces anyway (the owner can choose to pay the ~2 h now instead). Agreed with Gen1-Collab2 on
 2026-09-26.
