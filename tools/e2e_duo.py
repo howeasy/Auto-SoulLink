@@ -7357,7 +7357,7 @@ class DuoRun:
                 problems.append(f"{inst}: saved {after} Poke Balls; the fixture had {before} and "
                                 f"the driver logged {throws} throw(s)")
         self._gen3_raise(problems, f"link: {self._link_keys['a']} <-> {self._link_keys['b']} "
-                                   f"alive on route_1 and saved once in each party")
+                                   f"alive on {area} and saved once in each party")
 
     def assert_deadzone_gen3_saved(self, results):
         """D-3 persisted on FRLG: route_1 is a dead zone with exactly one dead_zone event and no
@@ -7365,10 +7365,10 @@ class DuoRun:
         foe's species); B's catch there was force-fainted and memorialized, saved in the memorial
         box and nowhere else."""
         self._gen3_flush_boundary()
-        b_key = self._deadzone_b_key
+        b_key, area = self._deadzone_b_key, self._hunt_area
         problems = []
-        if ((self._status() or {}).get("area_states") or {}).get("route_1") != "dead_zone":
-            problems.append("route_1 is not a dead zone after the run")
+        if ((self._status() or {}).get("area_states") or {}).get(area) != "dead_zone":
+            problems.append(f"{area} is not a dead zone after the run")
         # the server logs dead_zone for the player AND the partner (server/server.py:2217-2220):
         # exactly one row each, never one in total (live deadzone_gen3 attempt 2 on 684bbb7a)
         rows = {}
@@ -7382,8 +7382,8 @@ class DuoRun:
             if b_key in keys and entry.get("status") == "alive":
                 problems.append(f"B's dead-zone catch {b_key} is in an alive link")
         species = self._gen3_sent_field(results["a"], "no_catch", "-", "species_id")
-        if not species or self._gen3_sent_field(results["a"], "no_catch", "-", "area_id") != "route_1":
-            problems.append("A sent no species-bearing no_catch for route_1")
+        if not species or self._gen3_sent_field(results["a"], "no_catch", "-", "area_id") != area:
+            problems.append(f"A sent no species-bearing no_catch for {area}")
         a_party, a_boxes = self._gen3_saved("a")
         f_party, f_boxes = self._gen3_fixture_saved("a")
         if [gen3_key(m) for m in a_party] != [gen3_key(m) for m in f_party] or {
@@ -7398,7 +7398,7 @@ class DuoRun:
             "b", results["b"], required=[rf"(?m)^FAINTED {re.escape(b_key)}\b",
                                          gen3_rx("memorialize", b_key),
                                          gen3_tx("memorialize_done", b_key)])
-        self._gen3_raise(problems, f"deadzone: route_1 locked by A's no_catch (species {species}); "
+        self._gen3_raise(problems, f"deadzone: {area} locked by A's no_catch (species {species}); "
                                    f"B's {b_key} saved only in the memorial box")
 
     def assert_reconnect_gen3_saved(self, results):
