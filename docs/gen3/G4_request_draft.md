@@ -493,6 +493,10 @@ All five owner scope decisions (a)–(e) are settled and recorded above.
     - **(c) Opcode gates:** the 12 deferred gates are a signed limit; the 26 ported live gates cover the opcodes in use.
     - **(d) Per-item evidence:** the P2 anchor/md5/deleted-file/write-guard/native-control items are satisfied by the existing unit/model evidence (the pin tests, test_gen3_write_ownership, the test_gen3_native control tests). No separate live receipts are needed.
     G5. **S**
+32. **Randomized refusal and pairing** (owner, 2026-09-26, given in the Emerald session and relayed to the Gen 3 lane):
+    - (a) Rule-changing randomizations (evolutions, types, abilities, base stats) stay REFUSED by name for the RC, with support post-RC ("Keep the refusal for RC").
+    - (b) "Pair if tables equal pret": an unknown-hash FR/LG admitted as `rand` whose own rom_content tables equal pret's clean tables pairs as CLEAN, so it can join a hash-pinned clean partner. Only a rand cart with real randomized content keeps the `rand` pairing kind. This is a server-side rule in `gen3_frlge.py` `pairing_kind`; `lua/gen3/entry.lua` still reports `rand` for any unknown-hash FR/LG whose clean anchors match (Emerald T3 637bcd17). **S**
+
 31. **Randomized Gen 3 envelope** (owner, 2026-09-26, answering the design's seven questions: "Accept, but open Gen 3-only options"; `docs/gen3/research/randomized_gen3_design.md` §7):
     - Gen 1's forbidden set stays forbidden: types, evolutions, movesets, base stats, abilities, the type-chart tweak. So the species, dupes and type clauses read the pret rule tables, and a ROM whose rule tables differ is refused by name.
     - The Gen 3-only UPR options are OPEN: wild and trainer held items, move tutors, in-game trades, shops, pickup.
