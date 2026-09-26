@@ -92,7 +92,7 @@ def test_emerald_b_side_has_a_distinct_trainer_at_the_same_place(kind):
     ra, rb = (fx.qualify_one(x, rr=False, title=EM) for x in (a, b))
     assert (ra["trainer_name"], rb["trainer_name"]) == ("EMER", "EMERB")
     assert rb["trainer_id"] == ra["trainer_id"] ^ 0xFFFFFFFF
-    (ma,), (mb,) = (codec.party_from_save(x, title=EM) for x in (a, b))
+    ma, mb = (codec.party_from_save(x, title=EM)[0] for x in (a, b))   # lead; pc/poison hold two
     assert (ma["ot_id"], mb["ot_id"]) == (ra["trainer_id"], rb["trainer_id"])
     assert {k: ma[k] for k in ("species", "level", "hp", "personality")} == \
         {k: mb[k] for k in ("species", "level", "hp", "personality")}

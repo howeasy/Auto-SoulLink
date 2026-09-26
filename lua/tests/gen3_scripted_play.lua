@@ -3106,9 +3106,9 @@ local function em_save_dialog()
         or c == em_thumb(ES.SaveCallback)
 end
 local EM_MENU_ACTION_SAVE = 5  -- src/start_menu.c:51-58 (Emerald's own numbering; FR/LG's is 4)
-local function emerald_save_via_menu(cp)
-    local domain = select(1, G.flash_domain())
-    if not domain then G.finish(false, "emerald_save: no flash memory domain"); return end
+--- Emerald's START-menu SAVE as a library call (E4: duo_gen3_main.lua ctx.save reuses it):
+--- (ok, before_counter, after_counter, why) -- `why` names the failed step, nothing finishes.
+function EMH.save_via_menu(cp, domain)
     local before = G.save_counter(domain)
     G.phase("save-menu", "counter=" .. before)
     local opened = false
@@ -3124,31 +3124,20 @@ local function emerald_save_via_menu(cp)
         end
         if opened then break end
     end
-    if not opened then
-        G.shot("stuck")
-        G.finish(false, "emerald_save: the START menu never took input")
-        return
-    end
+    if not opened then return false, before, before, "the START menu never took input" end
     local n = memory.read_u8(ES.sNumStartMenuActions)
     local row = nil
     for i = 0, n - 1 do
         if memory.read_u8(ES.sCurrentStartMenuActions + i) == EM_MENU_ACTION_SAVE then row = i; break end
     end
-    if not row then
-        G.finish(false, string.format("emerald_save: no SAVE row among %d START items", n))
-        return
-    end
+    if not row then return false, before, before, string.format("no SAVE row among %d START items", n) end
     for _ = 1, n + 8 do
         if memory.read_u8(ES.sStartMenuCursorPos) == row then break end
-        if not em_menu_ready() then
-            G.finish(false, "emerald_save: the START menu closed during the row walk")
-            return
-        end
+        if not em_menu_ready() then return false, before, before, "the START menu closed during the row walk" end
         G.tap("Down", 3, 13)
     end
     if memory.read_u8(ES.sStartMenuCursorPos) ~= row then
-        G.finish(false, "emerald_save: cursor never reached the SAVE row " .. row)
-        return
+        return false, before, before, "cursor never reached the SAVE row " .. row
     end
     G.tap("A", 3, 0)
     local opened_dialog = false
@@ -3156,23 +3145,16 @@ local function emerald_save_via_menu(cp)
         if em_save_dialog() then opened_dialog = true; break end
         G.advance()
     end
-    if not opened_dialog then
-        G.shot("stuck")
-        G.finish(false, "emerald_save: the save dialog never opened")
-        return
-    end
+    if not opened_dialog then return false, before, before, "the save dialog never opened" end
     G.phase("save-dialog", "row=" .. row .. "/" .. n)
     -- YES is the default on the save prompt; the flash counter, not the presses, is the verdict.
     local after, moved = before, false
-    for i = 1, 300 do
+    for _ = 1, 300 do
         G.tap("A", 3, 13)
         after = G.save_counter(domain)
         if after > before then moved = true; break end
     end
-    if not moved then
-        G.finish(false, "emerald_save: the save counter never advanced")
-        return
-    end
+    if not moved then return false, before, after, "the save counter never advanced" end
     G.phase("saved", string.format("counter=%d->%d", before, after))
     -- SaveCallback's own success exit is the only one that frees the field controls again.
     local closed = false
@@ -3180,13 +3162,44 @@ local function emerald_save_via_menu(cp)
         G.tap("A", 3, 13)
         if G.pred_ok(cp, "field_controls_locked") then closed = true; break end  -- free again
     end
-    if not closed then
-        G.finish(false, "emerald_save: the save dialog never closed")
+    if not closed then return false, before, after, "the save dialog never closed" end
+    if not pcall(client.saveram) then return false, before, after, "SaveRAM flush failed" end
+    return true, before, after
+end
+local function emerald_save_via_menu(cp)
+    local domain = select(1, G.flash_domain())
+    if not domain then G.finish(false, "emerald_save: no flash memory domain"); return end
+    local ok, _, _, why = EMH.save_via_menu(cp, domain)
+    if not ok then
+        G.shot("stuck")
+        G.finish(false, "emerald_save: " .. why)
         return
     end
-    local ok = pcall(client.saveram)
-    if not ok then G.finish(false, "emerald_save: SaveRAM flush failed"); return end
     G.phase("flushed", play.where(cp))
+end
+
+--- Title screen -> CONTINUE -> the field (E4: duo_gen3_main.lua's Emerald boot). A only, never
+--- Start -- in the field Start opens the menu (gen3_emerald_boot_check.lua boot_to_field); the
+--- field is the pack's callback2 + palette_fade_active predicates held 60 frames, as
+--- gen3_boot_check.lua M.boot_to_field judges it.
+function EMH.boot_to_field(cp, frames)
+    local held = 0
+    for i = 1, (frames or 9000) do
+        if G.pred_ok(cp, "callback2") and G.pred_ok(cp, "palette_fade_active") then
+            joypad.set({})
+            held = held + 1
+            if held >= 60 then
+                G.phase("field", string.format("map=(%d,%d)", G.map(cp)))
+                return true
+            end
+        else
+            held = 0
+            joypad.set(i % 16 == 8 and { A = true } or {})
+        end
+        G.advance()
+    end
+    joypad.set({})
+    return false
 end
 
 -- ── TOWN group (emerald_town.sav, Oldale Town 0.10 (6,17)) ─────────────────────────────────

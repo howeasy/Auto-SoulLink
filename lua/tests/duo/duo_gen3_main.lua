@@ -26,8 +26,10 @@ assert(D and D.wt and D.player and D.scenario and D.result, "SLINK_DUO not confi
 -- P5 (card C5-5): "gen3_rr" is the battery-boot RR row (tools/e2e_duo.py GAMES), sharing
 -- this driver with "gen3_frlg" -- everything below that reads a per-title pack/checkpoint path
 -- or symbol table branches on D.title ("radical_red" vs firered/leafgreen), not on D.game.
-assert(D.game == "gen3_frlg" or D.game == "gen3_rr",
-       "duo_gen3_main only serves game gen3_frlg/gen3_rr, got " .. tostring(D.game))
+-- E4: "gen3_emerald" is the battery-boot Emerald row (E<->E); its pack, .sym and START/save
+-- flows are selected by D.title == "emerald" below.
+assert(D.game == "gen3_frlg" or D.game == "gen3_rr" or D.game == "gen3_emerald",
+       "duo_gen3_main only serves game gen3_frlg/gen3_rr/gen3_emerald, got " .. tostring(D.game))
 assert(D.title, "SLINK_DUO.title missing (the GAMES row's sides)")
 
 local ROOT = D.wt
@@ -141,7 +143,8 @@ local title = D.title
 -- predicate and RAM/derived offsets -- RR's 25-box layout in particular, gen3_codec commit
 -- 62887460). Every OTHER read in this file goes through `cp`/`profile`, so this one branch is
 -- the whole of the pack selection.
-local pack = title == "radical_red" and "gen3_rr" or "gen3_frlg"
+-- E4: the one title -> pack table, shared with the scripted helpers (emerald -> gen3_emerald).
+local pack = assert(SP.PROFILE_PACK_BY_TITLE[title], "no profile pack for title " .. tostring(title))
 local cp_rel = "data/games/" .. pack .. "/write_checkpoint.json"
 local cp = guard("checkpoint for title '" .. title .. "' in " .. cp_rel, function()
     local doc = read_json(cp_rel)
@@ -266,6 +269,17 @@ else
         end
         local missing = {}
         for _, n in ipairs(SYMS) do if not S[n] then missing[#missing + 1] = n end end
+        if title == "emerald" and #missing > 0 then
+            -- E4: FR/LG-only START-menu/save-dialog/bag names (pokeemerald rebuilt those menus,
+            -- src/start_menu.c, src/item_menu.c) are ABSENT, not guessed: reading one raises by
+            -- name at the point of use (fail closed), the rr_symbols rule. Emerald's own START/
+            -- save flow is gen3_scripted_play.lua EMH.save_via_menu (pokeemerald.sym names).
+            log("SYMS_ABSENT emerald " .. table.concat(missing, ","))
+            setmetatable(S, { __index = function(_, k)
+                error("symbol " .. tostring(k) .. " is absent from pokeemerald.sym (FR/LG-only name)", 2)
+            end })
+            missing = {}
+        end
         assert(#missing == 0,
                "pret symbol(s) missing from " .. path .. ": " .. table.concat(missing, ", "))
     end)
@@ -396,11 +410,33 @@ SLINK_GEN3_CLIENT = nil
 -- Entry.build's second return. Restore dofile even if startup fails. No production code changed.
 -- Always captured: ctx.center_state asks the client's own safety instance for its CPU verdict.
 local battle_parts
+--- TEST-ONLY admission of gen3_emerald/emerald (E4, coordinator ruling 24): the profile's
+--- admitted=false, the lua/slink.lua BPEE refusal and Entry.ROUTED all stay until EG4. On the
+--- gen3_emerald duo row ONLY, json_codec's decode is wrapped so a decoded document whose
+--- titles.emerald.admitted is false reads true, letting Entry.build's production assert boot
+--- run.lua; any other game gets `json` back untouched. Self-contained (no upvalues) so
+--- tests/unit/test_e2e_duo_gen3.py runs this exact body.
+local function test_admission_codec(game, json, logf)
+    if game ~= "gen3_emerald" or type(json) ~= "table" then return json end
+    local decode = json.decode
+    return setmetatable({ decode = function(...)
+        local doc = decode(...)
+        local em = type(doc) == "table" and type(doc.titles) == "table" and doc.titles.emerald
+        if type(em) == "table" and em.admitted == false then
+            em.admitted = true
+            logf("TEST-ONLY admission of gen3_emerald/emerald (pre-EG4; production refuses)")
+        end
+        return doc
+    end }, { __index = json })
+end
 local original_dofile = dofile
 local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
 do
     dofile = function(path)
         local value = original_dofile(path)
+        if tostring(path):gsub("\\", "/"):match("/lua/json_codec%.lua$") then
+            value = test_admission_codec(D.game, value, log)
+        end
         if path == ROOT .. "/lua/gen3/entry.lua" then
             local build = value.build
             value.build = function(...)
@@ -1509,7 +1545,8 @@ function ctx.save(tag)
     end
     local dom = G.flash_domain()
     if not dom then return false, "no flash memory domain" end
-    local ok, before, after, why = G.save_via_menu(cp, dom)
+    -- E4: Emerald's gMenuCallback START menu (gen3_scripted_play.lua EMH, proven at E2)
+    local ok, before, after, why = (title == "emerald" and SP.EMH.save_via_menu or G.save_via_menu)(cp, dom)
     if not ok then return false, "SAVE failed: " .. tostring(why) end
     log(fmt("SAVE_WITNESS %s counter=%d->%d", tag, before, after))
     ctx.frames(30)
@@ -1519,8 +1556,10 @@ end
 -- ── boot: battery -> CONTINUE -> field, then the production hello ───────────────────────
 -- Guarded too (card C4-GUARD): a raise inside the boot is the same silent hang as a load-time
 -- one -- the driver never reaches MYKEY, so a bare raise here writes no RESULT either.
-local reached_field = guard("boot to field from the battery save",
-                            function() return G.boot_to_field(cp, 9000) end)
+local reached_field = guard("boot to field from the battery save", function()
+    -- E4: Emerald boots A-only (EMH.boot_to_field, the gen3_emerald_boot_check.lua rule)
+    return (title == "emerald" and SP.EMH.boot_to_field or G.boot_to_field)(cp, 9000)
+end)
 if not reached_field then
     G.shot(D.scenario .. "_" .. D.player .. "_bootfail")
     finish(false, "never reached the field from the battery save")
