@@ -1106,15 +1106,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_gs_a_result.txt",
-              "sha256": "f53b46bcccb0ed2ab93dc93818bb8e00af49296eb9125bdb1d432c02a6ab647f"
+              "sha256": "cd378fe95aafeebdafb4ebf9dc1e5b43c3b4beb3d769c9fac2c20df25e44ae98"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_gs_b_result.txt",
-              "sha256": "10a5bc993e6a355fcc91ef64406148276884201e1d1e5e02db5d05beb576ec3e"
+              "sha256": "10d9437e006d10cb87eb1abcc9856645bf1c340a1697e28ec434582452fc9536"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_ball_gate_gs_pydec_result.txt",
-              "sha256": "360a36d21d5de829c403cb72479ab6570ef67ab66a6d9851b9c226cc4a6e6646"
+              "sha256": "d707af119050d860650f45ff73c2031e788562ca52db3b09dce3f53ac6ad31ef"
             }
           }
         },
