@@ -47,3 +47,5 @@ docs/gen2/gen2_coverage_map.md text eol=lf
 "); index is LF too.
 # Without this, core.autocrlf=true reports the LF working copy as modified with no content diff.
 data/games/gen1_purergb/write_checkpoint_overlay.json text eol=lf
+# generated harness table: its --check compares bytes, so a CRLF checkout must not rewrite it
+lua/tests/gen3_title_syms_exp_28877d73.lua text eol=lf
