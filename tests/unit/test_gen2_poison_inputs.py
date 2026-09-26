@@ -693,13 +693,22 @@ def test_a_target_takes_the_stings_itself():
     assert step(rt, d, ui=ui("battle_menu", MENU, 2, 2), **done)[0] == ["Down"]                     # RUN, never back in
 
 
-def test_a_poisoned_target_sits_out_a_trainer_fight():
+def test_a_poisoned_target_keeps_fighting_while_the_stinger_is_still_up():
+    """gen2_gold_silver duo regression (fsw-sweep3/fsw-sweep3-rr1, gen2_poison): Wade fields a Weedle mid-team
+    (his only Poison Sting source) among three Caterpies. Handing the still-live Weedle to a clean party mate
+    (the old "sits out" contract below) exposed that mate to more Poison Sting turns, so BOTH mons ended up PSN
+    and the engine's overworld poison faint named the wrong one (not the linked catch). opts.target must take
+    every sting itself: once poisoned, it stays in and fights while the foe in front of it still knows Poison
+    Sting; only once that foe is gone (foe_sting turns false, e.g. the next Caterpie) is handing over to a
+    clean, unpoisoned mate safe again."""
     rt = lua()
     d = target_driver(rt, load(rt), TRAINER_FACTS)
     d.step(pt(rt, map_number=2, x=1, y=0))
     psn = {"battle_mode": 2, "active_slot": 1, "active_hp": 12, "active_psn": True, "foe_sting": True,
            "overworld_ready": False, "party": {0: {"hp": 20, "status": 0}, 1: {"hp": 12, "status": PSN}}}
-    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **psn)[0] == ["Right"]                     # PKMN
-    assert step(rt, d, ui=ui("battle_party"), party_cursor=1, **psn)[0] == ["Up"]                   # the lead
-    lead = dict(psn, active_slot=0, active_hp=20, active_psn=False)
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **psn)[0] == ["A"]                         # FIGHT: Weedle's still up, no switch
+    done = dict(psn, foe_sting=False)                                                              # Weedle's dead; a Caterpie is up next
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **done)[0] == ["Right"]                    # now safe: PKMN
+    assert step(rt, d, ui=ui("battle_party"), party_cursor=1, **done)[0] == ["Up"]                  # the clean lead
+    lead = dict(done, active_slot=0, active_hp=20, active_psn=False)
     assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **lead)[0] == ["A"]                        # it fights

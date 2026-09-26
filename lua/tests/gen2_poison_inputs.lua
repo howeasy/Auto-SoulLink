@@ -318,8 +318,14 @@ function PI.driver(F, facts, opts)
             if sting and target ~= nil and not mine then return choose(ui, trainer and "FIGHT" or "RUN", 2) end
             if sting and relief(point, low) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
             -- a trainer fight keeps every party mon standing: a worn or poisoned active mon hands over to a fit,
-            -- unpoisoned mate; a wild battle's at-risk mon does too unless the RUN is sure
-            if not sting and relief(point, low) ~= nil then
+            -- unpoisoned mate; a wild battle's at-risk mon does too unless the RUN is sure. But never while the
+            -- mon in front of us still knows Poison Sting (point.foe_sting, independent of "done"): DUO-WAVE-C's
+            -- gen2_poison regression (fsw-sweep3/-rr1) handed Wade's still-live Weedle to a clean mate once the
+            -- target was already PSN, and that mate then picked up a sting of its own -- two PSN party mons, and
+            -- the overworld poison faint named the wrong one. A poisoned mon has nothing left to lose from more
+            -- stings, so it stays in and finishes this foe; only once foe_sting is false (the next mon fielded)
+            -- is handing over to an unexposed mate safe again.
+            if not sting and point.foe_sting ~= true and relief(point, low) ~= nil then
                 if trainer and (not healthy or point.active_psn == true) then return choose(ui, PI.PKMN_CELL, 2) end
                 if not trainer and not healthy and point.flee_sure ~= true then return choose(ui, PI.PKMN_CELL, 2) end
             end

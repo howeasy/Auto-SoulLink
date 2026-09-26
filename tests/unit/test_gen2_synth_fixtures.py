@@ -153,3 +153,26 @@ def test_day_clock_moves_the_game_hour_forward_and_keeps_the_cartram():
     assert disclosure["old_hex"] == raw[synth.CART:].hex() and disclosure["new_hex"] == out[synth.CART:].hex()
     with pytest.raises(ValueError):
         synth.day_clock(raw[:-1], hour=11, now=now, title="silver")
+
+
+def test_day_clock_minute_lands_on_a_different_frame_alignment_not_just_the_hour():
+    """gen2_ball_gate duo regression (fsw-sweep3/-rr1): the retry-on-out-of-Balls mechanism (e2e_duo.py
+    scenario_attempt_limit) assumed two attempts differ through real host-clock variance feeding the RTC
+    trailer. Pinning every boot to hour:00:00 (day_clock's default minute=0, second=0) removed that variance,
+    so a genuinely unlucky (~13%) 5-Ball miss streak now reproduces identically on every retry (fsw-sweep3
+    logs: attempt 1 and attempt 2 land on the exact same frame numbers). An explicit, disclosed minute/second
+    still pins a deterministic target (never host-clock-dependent) but gives a retry a different FixTime
+    catch-up length -- and so a different frame-based RNG seed -- while minute=0/second=0 (every non-retrying
+    scenario, and attempt 1 of every scenario) stays bit-for-bit as before."""
+    raw = (ROOT / "tests/fixtures/gen2/silver_battle.SaveRAM").read_bytes()
+    base = int.from_bytes(raw[synth.CART:synth.CART + 8], "big")
+    now = base + 33 * 3600 + 41
+    h, m, s = synth.start_time(raw, "silver")
+    out, disclosure = synth.day_clock(raw, hour=11, now=now, title="silver", minute=23, second=7)
+    after = _rtc_seconds(out, now)
+    assert (h * 3600 + m * 60 + s + after) % 86400 == 11 * 3600 + 23 * 60 + 7   # game 11:23:07 at `now`
+    assert disclosure["game_minute"] == 23 and disclosure["game_second"] == 7
+    # the default (every existing caller) is unchanged: still exactly hour:00:00
+    default_out, default_disclosure = synth.day_clock(raw, hour=11, now=now, title="silver")
+    assert default_out == synth.day_clock(raw, hour=11, now=now, title="silver", minute=0, second=0)[0]
+    assert default_disclosure["game_minute"] == 0 and default_disclosure["game_second"] == 0
