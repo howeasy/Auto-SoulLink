@@ -26,6 +26,7 @@ The coordinator re-checked the load-bearing citations in each card. The spot che
 | G4-R6 `cx-8f1d0eff` | OMP headless | checkpoint / battle copy-back | [checkpoint.md](checkpoint.md) (13 / 0) |
 | G4-R7 `cx-2fe25ca0` | OMP headless | battle struct offsets, idle clauses, save driver | [engine_sites.md](engine_sites.md), [checkpoint.md](checkpoint.md) (corrections) |
 | G4-R9 `cx-d11ad936` | OMP headless | hge battle layout vs vanilla | [hg_engine.md](hg_engine.md) §4b |
+| G4-R10 `cx-0cff1364` | OMP headless | in-battle faint (C1-7) | [battle_faint.md](battle_faint.md) |
 | G4-R8 `cx-5e4819dc` | OMP headless | Platinum bind falsifiers | [platinum_bind.md](platinum_bind.md) |
 | Plan agents (2) | Claude Plan | architecture; phasing/gates | [../PLAN.md](../PLAN.md) |
 
@@ -59,4 +60,5 @@ Local copies of the two HGSS xMAPs are in `.cache/gen4/xmap/` (gitignored).
 - [platinum_bind.md](platinum_bind.md): D3 bind check at SOURCE level (what the profile schema must express)
 - [wire_contract.md](wire_contract.md): the message contract a Gen 4 client on `lua/core/session.lua` must meet
 - [offline_measurements.md](offline_measurements.md): FILE measurements (site bytes HG/SS, hge survival, acquisition manifest, NPC trades, player profile, encounters, hge save) + [data/](data/)
+- [battle_faint.md](battle_faint.md): in-battle active faint (D7/D12) design research and write recipe
 - [prior_art.md](prior_art.md): legacy Gen 4 code audit, archived melonDS probe (and its error), the owner's AP HGSS injection
