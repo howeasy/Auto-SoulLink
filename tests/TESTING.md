@@ -15,7 +15,8 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 | Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 4 onward — Tests 1-3 were the old client's and are removed) |
 | Status page | `http://localhost:8080/` — flicker-free auto-refresh every 2 s (HTMX + idiomorph morph swap); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
 | Scripts in `lua/` | `slink.lua`, `gen3/`, `core/`, `connector.lua`, `socket.lua`, all files in `tests/` |
-| Save states | Make a BizHawk save state before Test 2 (it writes RAM) |
+| Save states | Make a BizHawk save state before Tests 5 and 6 (they write RAM) |
+| Missing inputs | The automated tests skip by name when a ROM, build or pret clone is absent, and fail when one is present but wrong — see [Absent input skips; present-but-wrong input fails](#absent-input-skips-present-but-wrong-input-fails) |
 
 ---
 
