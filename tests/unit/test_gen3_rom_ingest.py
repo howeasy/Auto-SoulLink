@@ -303,3 +303,60 @@ async def test_a_forbidden_cartridge_is_refused_at_hello_without_a_contract(titl
         else:
             assert verdict["state"] == "admitted", (name, verdict)
             assert srv.adapter_for("a").trainer_brief(BROCK)["party"], name
+
+
+# ── owner ruling 32: a rand cartridge whose tables equal pret's pairs as clean ────────────────
+
+@pytest.mark.parametrize("title", TITLES)
+def test_the_pinned_clean_content_fingerprints(title):
+    assert upr_pipeline.gen3_fingerprint_rom(_clean(title)) == gen3_frlge.CLEAN_CONTENT_SHA256[title]
+
+
+def test_pairing_kind_for_fails_closed_to_rand():
+    for content in (None, {}, {"tables": []}, {"tables": [{"addr": 0x08000000, "hex": "zz"}]}):
+        assert Gen3Adapter.pairing_kind_for("rand", content) == "rand"
+    assert Gen3Adapter.pairing_kind_for("companion", None) == "clean"   # unchanged mapping
+
+
+async def _pair(tmp_path, first, second):
+    """Two hellos on one real socket; returns (server, the second slot's mixed-kinds error)."""
+    from tests.unit.test_gen3_rand_kind import _hello, _session
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(_hello("a", first))
+        assert not srv.state.identity_error.get("a"), srv.state.identity_error
+        await send(_hello("b", second))
+    finally:
+        await close()
+    return srv, srv.state.identity_error.get("b") or ""
+
+
+def _cart(title, kind, rom=None):
+    cart = {"rom_type": title, "artifact_kind": kind}
+    if rom is not None:
+        cart["rom_content"] = _payload(rom, title)
+    return cart
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("rand_first", (True, False))
+async def test_clean_bytes_shipped_as_rand_pair_with_a_clean_partner(rand_first, tmp_path):
+    rand = _cart("firered", "rand", _clean("firered"))
+    clean = _cart("leafgreen", "clean")
+    srv, err = await _pair(tmp_path, *((rand, clean) if rand_first else (clean, rand)))
+    assert err == "" and srv.state.artifact_kind == "clean"
+
+
+@pytest.mark.asyncio
+async def test_randomized_rand_and_clean_are_mixed(tmp_path):
+    srv, err = await _pair(tmp_path, _cart("firered", "rand", _randomized("firered", "allowed")),
+                           _cart("firered", "clean"))
+    assert srv.state.artifact_kind == "rand" and "Mixed artifact kinds" in err
+
+
+@pytest.mark.asyncio
+async def test_randomized_fr_and_lg_pair(tmp_path):
+    srv, err = await _pair(tmp_path, _cart("firered", "rand", _randomized("firered", "allowed")),
+                           _cart("leafgreen", "rand", _randomized("leafgreen", "allowed")))
+    assert err == "" and srv.state.artifact_kind == "rand"

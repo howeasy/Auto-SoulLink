@@ -328,6 +328,14 @@ class GameRulesAdapter(ABC):
         """
         return {"named": "clean"}.get(kind, kind)
 
+    @classmethod
+    def pairing_kind_for(cls, kind: str, rom_content: object) -> str:
+        """`pairing_kind`, given the hello's own ROM report (None when it sent none). Still a
+        class lookup, for the same reason. A foundation may pair a declared kind by what the
+        cartridge holds (Gen 3: a `rand` ROM whose tables equal pret's pairs as clean); the
+        server then commits that effective kind. Default: the declared kind alone."""
+        return cls.pairing_kind(kind)
+
     def native_trade_ui(self) -> bool:
         """Whether the cartridge itself drives the trade menus.
 

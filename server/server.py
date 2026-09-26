@@ -726,7 +726,7 @@ class SLinkServer:
             self._rom_contract_mtime = mtime
 
     def _mixed_games_error(self, player_id: str, rom_type: str, artifact_kind: str,
-                           foundation: object = _FOUNDATION_ABSENT) -> str:
+                           foundation: object = _FOUNDATION_ABSENT, rom_content: object = None) -> str:
         """Why this hello cannot join the committed run, or "" when it can.
 
         The run is locked to one FOUNDATION and to one pairing kind. A foundation is a
@@ -776,11 +776,11 @@ class SLinkServer:
         # patch, a randomized vanilla dump) is a clean-layout artifact -- the patch is per
         # cartridge and announced per player (`panel`), so a clean Red beside a patched Blue is
         # the ordinary vanilla pairing, not a mixed one (review: Fable 2026-09-20 #1).
-        def _kind(rt: str, kind: str) -> str:
+        def _kind(rt: str, kind: str, content: object = None) -> str:
             cls = adapter_class_for_rom_type(rt) if rt else None
-            return (cls or GameRulesAdapter).pairing_kind(kind)
+            return (cls or GameRulesAdapter).pairing_kind_for(kind, content)
 
-        got_kind = _kind(rom_type, artifact_kind)
+        got_kind = _kind(rom_type, artifact_kind, rom_content)
         want_kind = _kind(self.state.rom_type or "", self.state.artifact_kind or "")
         if want_kind and got_kind != want_kind:
             return (f"Mixed artifact kinds: slot {player_id.upper()} runs a "
@@ -1660,7 +1660,7 @@ class SLinkServer:
                     # passed through, never a falsey-coerced value.
                     _mixed = self._mixed_games_error(
                         player_id, _rt, msg.get("artifact_kind", "clean"),
-                        msg.get("foundation", _FOUNDATION_ABSENT))
+                        msg.get("foundation", _FOUNDATION_ABSENT), msg.get("rom_content"))
                     if _mixed:
                         log.warning(f"[{player_id}] REJECTED: {_mixed}")
                         self.state.identity_error[player_id] = _mixed
@@ -2175,9 +2175,15 @@ class SLinkServer:
                 _dirty = True
                 log.info(f"Committed ROM type '{rom}' for this run")
             if not self.state.artifact_kind:
-                # "named" (a vanilla cartridge admitted by header) is a clean-layout artifact
-                self.state.artifact_kind = {"named": "clean"}.get(
-                    msg.get("artifact_kind", "clean"), msg.get("artifact_kind", "clean"))
+                # "named" (a vanilla cartridge admitted by header) is a clean-layout artifact; a
+                # kind the cartridge's content pairs differently (pairing_kind_for) commits that
+                # effective kind, so the partner is paired against what the ROM holds.
+                from server.adapters import GameRulesAdapter, adapter_class_for_rom_type
+                _declared = msg.get("artifact_kind", "clean")
+                _cls = adapter_class_for_rom_type(rom) or GameRulesAdapter
+                _by_content = _cls.pairing_kind_for(_declared, msg.get("rom_content"))
+                self.state.artifact_kind = (_by_content if _by_content != _cls.pairing_kind(_declared)
+                                            else {"named": "clean"}.get(_declared, _declared))
                 _dirty = True
                 # Per-run capability: the adapter's native_trade_ui()/supports_info_panel()
                 # follow the committed kind from here on (base adapter: no-op). Every

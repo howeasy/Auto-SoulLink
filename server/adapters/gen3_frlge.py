@@ -356,6 +356,22 @@ class Gen3Adapter(GameAdapter):
         # committed kind stays "companion" -- only this comparison maps it.
         return {"named": "clean", "companion": "clean"}.get(kind, kind)
 
+    @classmethod
+    def pairing_kind_for(cls, kind: str, rom_content: object) -> str:
+        """Owner ruling 32: a `rand` cartridge whose trainers, wild tables and evolutions equal
+        pret's (the Manager's contract fingerprint of the clean title) pairs as clean. Anything
+        undecodable keeps `rand`, the stricter kind."""
+        if kind == "rand" and rom_content:
+            try:
+                rom = parse_rom_content(rom_content)
+                title = rom_title(rom)
+                tables = decode_verified(rom, title)
+                if gen3_rom_tables.gen3_content_fingerprint(tables) == CLEAN_CONTENT_SHA256[title]:
+                    return "clean"
+            except Exception:                         # noqa: BLE001 - fail closed to rand
+                pass
+        return cls.pairing_kind(kind)
+
     def set_artifact_kind(self, kind: str) -> None:
         # "rand" (a UPR-randomized FR/LG, docs/gen3/research/randomized_gen3_design.md R1) makes
         # every trainer read come from this player's own cartridge, never the retail table.
@@ -950,6 +966,12 @@ _WILD_METHODS = (
                  ("Super Rod", (40, 40, 15, 4, 1)))),
 )
 
+# gen3_content_fingerprint of the pinned clean dumps (the value the Manager would record for
+# them); tests/unit/test_gen3_rom_ingest.py recomputes both.
+CLEAN_CONTENT_SHA256 = {
+    "firered": "70693903debc1465942e4f1d5c9fba8cce7e9d03421f978dd359347a49d277ee",
+    "leafgreen": "7ef4b95991a71ff59b86bcfa0685d274ed95b8d23929d18e0146ccdb2a53c2d0",
+}
 # sha256 of the clean FR and LG (identical) evolution table and of the rule fields of
 # gSpeciesInfo, as projected by _evolutions_digest/_species_rules_digest.
 # tests/unit/test_gen3_rom_ingest.py re-derives both from the pinned clean dumps.
