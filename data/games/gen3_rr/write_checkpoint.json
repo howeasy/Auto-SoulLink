@@ -284,6 +284,19 @@
       "pc_min": 0,
       "thumb": 0
     },
+    "gift_areas": {
+      "ids": [
+        "celadon_condominiums",
+        "cinnabar_lab",
+        "gift",
+        "intro",
+        "oaks_lab",
+        "route_4_pokecenter",
+        "saffron_dojo",
+        "silph_co_7f"
+      ],
+      "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"
+    },
     "native": {
       "abi": 1,
       "abi_off": 4,
@@ -547,6 +560,18 @@
       "iwram_min": 50331648,
       "player_head_off": 36,
       "player_next_off": 60,
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "193": 193,
+        "2": 2,
+        "22": 22,
+        "25": 25,
+        "26": 26,
+        "268": 268,
+        "79": 79,
+        "95": 95
+      },
       "source": "old client archive/gen3-old-client:lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)",
       "track0_off": 0,
       "tracks_off": 44,

@@ -739,6 +739,8 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         if native is not None:
             out["native"] = native
     out["sound"] = sound_block(syms, is_rr, title)
+    out["sound"]["se_ids"] = se_ids(title, profile["titles"][title]["rom"]["SE_SONG_HEADERS"])
+    out["gift_areas"] = gift_areas(pack, title)
 
     if is_rr:
         ram = profile["titles"][title]["ram"]
@@ -918,6 +920,51 @@ SOUND_CONSTANTS = {"sound_info_ptr": "SOUND_INFO_PTR", "sound_info": "gSoundInfo
                    "iwram_min": 0x03000000, "iwram_max": 0x03008000}
 SOUND_SOURCE_FRLG = "pokefirered.sym/pokeleafgreen.sym; pret include/gba/m4a_internal.h"
 SOUND_SOURCE_RR = "old client archive/gen3-old-client:lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)"
+
+
+# E3-CLIENT: play_sound ids on the wire keep FR/LG numbering (a protocol constant: server/state.py
+# and lua/core/session.lua:301; docs/protocol.md "play_sound ids"). se_ids maps a wire id to THIS
+# title's song id before the SE_SONG_HEADERS lookup; the client refuses an id the map lacks.
+# FR/LG/RR: the identity over the title's own SE_SONG_HEADERS keys (today's behaviour).
+# Emerald: SE_FAINT 16, SE_FLEE 17, SE_BOO 22, SE_SUCCESS 31, SE_FAILURE 32, SE_SHINY 102
+# (pret pokeemerald c65e93f2 include/constants/songs.h:22,23,28,37,38,108) against FR's
+# 16/17/22/25/26/95 (pret pokefirered c75f3523 include/constants/songs.h:20,21,26,29,30,99).
+SE_WIRE_IDS = {"emerald": {16: 16, 17: 17, 22: 22, 25: 31, 26: 32, 95: 102}}
+
+
+def se_ids(title: str, headers: dict) -> dict:
+    wire = SE_WIRE_IDS.get(title) or {int(k): int(k) for k in headers}
+    for w, t in wire.items():
+        if str(t) not in headers:
+            raise SystemExit(f"{title}: wire SE {w} maps to {t}, which has no SE_SONG_HEADERS entry")
+    return {str(w): t for w, t in sorted(wire.items())}
+
+
+# E3-CLIENT: area ids where a mon is handed over rather than caught, so the client shows no NEW
+# ENCOUNTER banner and sends no no_catch there. FR/LG/RR emit area ids from the shared FRLG area map
+# and keep server/adapters/gen3_frlge.py _GIFT_AREAS verbatim (today's client literal).
+# Emerald: [] -- the client emits area_map[group:num] or "" (and "" is already inert). Of the
+# statics.json gift rows, only the starter's map is in area_map.json, as route_101, which is a wild
+# route: the starter is chosen before the player has balls, so neither the banner nor no_catch can
+# fire there, and listing it would exempt Route 101 from no_catch for good. Agreed with E3-SERVER
+# 2026-09-26. The check below fails the build if area_map ever maps another gift row.
+GIFT_AREAS_FRLG = ["celadon_condominiums", "cinnabar_lab", "gift", "intro", "oaks_lab",
+                   "route_4_pokecenter", "saffron_dojo", "silph_co_7f"]
+GIFT_KINDS = ("choice_gift", "fixed_gift")
+GIFT_WILD_ROUTES = {"emerald": {"route_101"}}
+
+
+def gift_areas(pack: str, title: str) -> dict:
+    if pack != "gen3_emerald":
+        return {"ids": GIFT_AREAS_FRLG, "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"}
+    base = ROOT / "data" / "games" / pack
+    area_map = json.loads((base / "area_map.json").read_text("utf-8"))
+    rows = json.loads((base / "statics.json").read_text("utf-8"))["entries"]
+    mapped = {area_map[r["map"]] for r in rows if r["kind"] in GIFT_KINDS and r["map"] in area_map}
+    if mapped != GIFT_WILD_ROUTES[title]:
+        raise SystemExit(f"{title}: gift rows now map to {sorted(mapped)}; re-derive gift_areas")
+    return {"ids": [], "source": f"{pack}/statics.json gift rows x area_map.json: only the starter's "
+                                 "route_101 maps, a wild route before any ball, so none"}
 
 
 def ldr_literal(rom: bytes, site: int) -> int | None:

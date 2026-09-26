@@ -172,6 +172,10 @@
       "symbol": "WaitForVBlank",
       "thumb": 1
     },
+    "gift_areas": {
+      "ids": [],
+      "source": "gen3_emerald/statics.json gift rows x area_map.json: only the starter's route_101 maps, a wild route before any ball, so none"
+    },
     "pointers": {
       "gPokemonStoragePtr": {
         "address": 50355604,
@@ -356,6 +360,14 @@
         "address": 50361840,
         "source": "sym",
         "symbol": "gMPlayInfo_SE1"
+      },
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "22": 22,
+        "25": 31,
+        "26": 32,
+        "95": 102
       },
       "sound_info": {
         "address": 50357120,

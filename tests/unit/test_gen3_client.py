@@ -2773,3 +2773,18 @@ def test_a_pc_withdraw_is_box_to_party_while_the_party_count_is_stale():
     w.fire("map_load")
     w.step()
     assert [e["key"] for e in w.events("box_to_party")] == [KB]   # no duplicate
+
+
+@pytest.mark.parametrize("pack,title", [("gen3_frlg", "firered"), ("gen3_frlg", "leafgreen"),
+                                        ("gen3_rr", "radical_red")])
+def test_e3_frlg_rr_packs_carry_todays_client_values_explicitly(pack, title):
+    """E3-CLIENT (a): the facts the client used to hard-code are explicit pack fields holding
+    today's values -- committed state 3, identity wire->title SE ids, the server's gift areas."""
+    from server.adapters.gen3_frlge import _GIFT_AREAS
+    wc = json.loads((REPO / "data" / "games" / pack / "write_checkpoint.json")
+                    .read_text(encoding="utf-8"))[title]
+    headers = json.loads((REPO / "data" / "games" / pack / "profile.json")
+                         .read_text(encoding="utf-8"))["titles"][title]["rom"]["SE_SONG_HEADERS"]
+    assert wc["battle"]["commit_guard"]["value"] == 3
+    assert wc["sound"]["se_ids"] == {k: int(k) for k in headers}
+    assert set(wc["gift_areas"]["ids"]) == set(_GIFT_AREAS)

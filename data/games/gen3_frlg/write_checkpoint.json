@@ -172,6 +172,19 @@
       "symbol": "WaitForVBlank",
       "thumb": 1
     },
+    "gift_areas": {
+      "ids": [
+        "celadon_condominiums",
+        "cinnabar_lab",
+        "gift",
+        "intro",
+        "oaks_lab",
+        "route_4_pokecenter",
+        "saffron_dojo",
+        "silph_co_7f"
+      ],
+      "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"
+    },
     "pointers": {
       "gPokemonStoragePtr": {
         "address": 50352144,
@@ -356,6 +369,14 @@
         "address": 50361152,
         "source": "sym",
         "symbol": "gMPlayInfo_SE1"
+      },
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "22": 22,
+        "25": 25,
+        "26": 26,
+        "95": 95
       },
       "sound_info": {
         "address": 50356048,
@@ -576,6 +597,19 @@
       "symbol": "WaitForVBlank",
       "thumb": 1
     },
+    "gift_areas": {
+      "ids": [
+        "celadon_condominiums",
+        "cinnabar_lab",
+        "gift",
+        "intro",
+        "oaks_lab",
+        "route_4_pokecenter",
+        "saffron_dojo",
+        "silph_co_7f"
+      ],
+      "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"
+    },
     "pointers": {
       "gPokemonStoragePtr": {
         "address": 50352144,
@@ -760,6 +794,14 @@
         "address": 50361152,
         "source": "sym",
         "symbol": "gMPlayInfo_SE1"
+      },
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "22": 22,
+        "25": 25,
+        "26": 26,
+        "95": 95
       },
       "sound_info": {
         "address": 50356048,

@@ -365,6 +365,9 @@ local function build_production(deps, c)
         -- the m4a fact (SE1 player / gSoundInfo pointer, field offsets) lives in the checkpoint
         -- pack's sound block, the same block safety's sound clauses judge: one source of truth
         sound = wc.sound,
+        -- title facts the client must not hard-code (E3-CLIENT): the committed battle state
+        -- (safety's own commit_guard) and the gift areas; the client fails closed without them
+        commit_guard = wc.battle and wc.battle.commit_guard, gift_areas = wc.gift_areas,
     })
     local parts = c.parts
     parts.writes, parts.boxes, parts.safety, parts.policy, parts.native = writes, boxes, safety, policy, native
