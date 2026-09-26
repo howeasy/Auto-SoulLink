@@ -16,11 +16,14 @@ Usage: python patch/tools/build.py [--rom <Radical Red.gba>]
 import argparse
 import glob
 import hashlib
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH = os.path.dirname(HERE)
@@ -28,6 +31,58 @@ BUILD = os.path.join(PATCH, "build")
 DIST = os.path.join(PATCH, "dist")
 SRC = os.path.join(PATCH, "src")
 EXE = ".exe" if os.name == "nt" else ""
+TARGET_NAMES = ("firered", "leafgreen", "emerald", "radical_red")
+
+
+def target_spec(title):
+    """Read the per-title C header shared with the payload, never another target's facts."""
+    if title not in TARGET_NAMES:
+        raise ValueError(f"unknown companion target: {title}")
+    path = Path(SRC) / "trade_targets" / f"{title}.h"
+    fields = {}
+    for key, value in re.findall(r'^#define SLINK_TARGET_(\w+) (.+)$', path.read_text(), re.M):
+        fields[key] = json.loads(value) if value.startswith('"') else int(value.rstrip("uU"), 0)
+    return fields
+
+
+def validate_detour(data, address, expected):
+    offset = address - 0x08000000
+    if offset < 0 or offset + len(expected) > len(data) or data[offset:offset + len(expected)] != expected:
+        raise ValueError(f"detour bytes mismatch at {address:#010x}")
+
+
+def validate_base(title, data):
+    spec = target_spec(title)
+    if (len(data) != spec["ROM_SIZE"] or hashlib.sha1(data).hexdigest() != spec["ROM_SHA1"]
+            or data[0xAC:0xB0] != spec["HEADER"].encode("ascii") or data[0xBC] != 0):
+        raise ValueError(f"base ROM identity mismatch for {title}")
+    validate_detour(data, spec["DETOUR_CANDIDATE"], bytes.fromhex(spec["DETOUR_BYTES"]))
+    return spec
+
+
+def validate_arena(title, start, size):
+    """Static exclusion, NOT physical qualification. Reservation proofs are separate."""
+    if size <= 0 or start < 0x02000000 or start + size > 0x02040000:
+        raise ValueError("arena outside EWRAM")
+    spec = target_spec(title)
+    if not spec["SYMBOLS"]:
+        raise ValueError("RR has no matching source symbols; its arena needs a binary/physical proof")
+    path = Path(PATCH).parent / "data/gen3/pret" / spec["SYMBOLS"]
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if len(fields) != 4:
+            continue
+        address, extent = int(fields[0], 16), int(fields[2], 16)
+        if extent and max(start, address) < min(start + size, address + extent):
+            raise ValueError(f"arena overlap with {fields[3]} [{address:#x}, {address + extent:#x})")
+
+
+def require_ready(title):
+    spec = target_spec(title)
+    if not spec["READY"]:
+        raise ValueError(f"{title} ABI v2 not qualified: arena, detour and payload evidence required")
+    validate_arena(title, spec["ARENA_BASE"], spec["ARENA_SIZE"])
+    return spec
 
 
 def _toolchain_dir():
@@ -133,6 +188,9 @@ def thumb_bl(src, dst):
 def main():
     global BUILD, DIST
     ap = argparse.ArgumentParser()
+    ap.add_argument("--target", choices=TARGET_NAMES, default="radical_red")
+    ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
+    ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")
     ap.add_argument("--no-battle-calc", action="store_true",
@@ -143,6 +201,22 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    if args.describe:
+        print(json.dumps(target_spec(args.target), indent=2))
+        return 0
+    if args.target != "radical_red" or args.abi_version == 2:
+        try:
+            require_ready(args.target)
+        except ValueError as error:
+            ap.error(str(error))
+        # This early T2 cut intentionally cannot compile RR addresses into another title.
+        ap.error("ABI v2 target producer not implemented")
+    if args.no_verify_md5:
+        ap.error("base verification bypass is not supported for pinned companion targets")
+    try:
+        validate_base(args.target, Path(args.rom).read_bytes())
+    except (ValueError, OSError) as error:
+        ap.error(str(error))
     committed_ups = os.path.join(DIST, "SLink-RR.ups")
     tmp = tempfile.mkdtemp(prefix="slink-build-") if args.check else None
     if args.check:
