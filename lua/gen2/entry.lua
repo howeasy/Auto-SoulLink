@@ -116,13 +116,16 @@ Entry.RECEIPT_FILES = {
     },
 }
 -- Permit operation (lua/gen2/writes.lua) -> the U2 write kind that authorizes it. Anything
--- else (write_party_bytes, explode) has no receipt kind and is refused. The box
+-- else (write_party_bytes) has no receipt kind and is refused. The box
 -- executor's CartRAM spans carry their own kinds (lua/gen2/boxes.lua B.kind_of).
 -- battle_faint (O-30): the active faint and a bench faint inside the battle hold; its kind is checked
 -- at that hold (gen2_write_safety BATTLE_KINDS), never at the overworld checkpoint.
 -- battle_bench (O-32): a bench faint on receipt, at a battle frame end (gen2_write_safety BENCH_KINDS).
+-- W-3/W-4 (owner 2026-09-26, Gen 1 parity) reuse the WINDOW proofs of the moment they write at, not new
+-- kinds: explode lands at the battle hold (battle_faint's held evaluation), the rival party at a battle
+-- frame end (battle_bench's evaluate_frame). Their effect is proved by the live gates, not the receipt.
 Entry.WRITE_KIND = {party_faint="party_hp", party_collection="party_collection", battle_faint="battle_faint",
-                    battle_bench="battle_bench"}
+                    battle_bench="battle_bench", battle_explode="battle_faint", enemy_party="battle_bench"}
 local titles = {"crystal", "gold", "silver"}
 local order = {"profile", "admission", "sites", "checkpoint", "area_map", "statics", "encounters",
                "species", "evolutions", "gifts", "moves", "trainers", "map_names", "items", "charmap"}
@@ -411,6 +414,8 @@ local function compose(deps, title, production)
                 -- O-32: bench deaths land on receipt; only with the hold (which settles the switch-in race)
                 -- and, in production, a receipt covering battle_bench
                 battle_bench=(not production or (checkpoint:covers("battle_faint") and checkpoint:covers("battle_bench"))),
+                -- W-4: the rival swap writes at a battle frame end, so it needs the battle_bench proof too
+                rival_swap=(not production or checkpoint:covers("battle_bench")),
                 contest_mask=hold_facts.contest_mask,
                 net=deps.net, json=json, hud=assert(deps.hud, "explicit hud required"), io=io_,
                 profile=profile, sites=data.sites.titles[title].sites, area_map=data.area_map,
