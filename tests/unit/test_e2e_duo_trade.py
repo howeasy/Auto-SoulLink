@@ -168,6 +168,7 @@ def test_server_launch_uses_private_trade_bootstrap(monkeypatch, tmp_path):
 
 
 def test_trade_rom_tamper_is_refused_before_popen(monkeypatch, tmp_path):
+    import tools.gen2_synth_fixtures as gen2_synth_fixtures
     import run_gb_gate
 
     run = _run(monkeypatch, tmp_path)
@@ -176,6 +177,10 @@ def test_trade_rom_tamper_is_refused_before_popen(monkeypatch, tmp_path):
     run._gen2_env = {"a": {}, "b": {}}
     run._apply_lane_window = lambda _path: None
     monkeypatch.setitem(run_gb_gate.GENS["gen2"], "config", lambda _plan, path: path.write_text("{}"))
+    # DUO-CLOCK's day_clock (_seed_instance_save) would otherwise try to load the real ROM/pret
+    # build context for this fixture's filler bytes, itself a real subprocess call unrelated to
+    # what this test is checking (that NOTHING launches before the ROM-tamper refusal below).
+    monkeypatch.setattr(gen2_synth_fixtures, "day_clock", lambda raw, **_kw: (raw, {}))
     monkeypatch.setattr(duo.subprocess, "Popen", lambda *a, **kw: pytest.fail("tampered ROM launched"))
     run._gen2_plans["a"]["rom"].write_bytes(b"tampered after preflight")
     with pytest.raises(RuntimeError, match="changed before launch"):
