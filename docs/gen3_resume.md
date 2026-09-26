@@ -4,12 +4,22 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 
 ## CURRENT STATE (2026-09-26, after checkpoint 20)
 
-- Local master is **1d02702f** (Gen 1+2+3, NOT pushed). This branch = master + Gen 3 docs.
+- Local master is **615ea688** (Gen 1+2+3 + the docs sweep, NOT pushed).
 - Gen 2's evidence is re-pinned 98/98 at CODE_DIGEST e8ca0067. Gen 1 is clean.
 - The Gen 3 frozen cut is a2985d5a: FR/LG 43/43, RR 19/19. Post-merge passes are green at a20cd945.
 - Since then, test-only changes: f87e007e (a present ROM must be the pinned build) and the item-table fix. No new cut is needed.
 - G4/G5 requests: `docs/gen3/G4_request_draft.md`, `docs/gen3/G5_request_draft.md`. Both are **unsigned**, waiting on the owner's RR play session.
-- Docs accuracy sweep (owner 2026-09-26): protocol.md is re-anchored to `lua/gen3/*`. The user-facing and internal Gen 3 docs are swept for accuracy.
+- **Docs accuracy sweep DONE (owner 2026-09-26), on master 615ea688:**
+  - protocol.md is re-anchored to `lua/gen3/*`. The citation test checks that every cited file exists, that the line is in range, and that no bare `gen3:N` remains.
+  - README and REFERENCE: Gen 3 is a RELEASE CANDIDATE, not "Stable". Only pinned carts are admitted; randomized builds are refused. The Gen 2 blocks are Gen 2's own.
+  - The requirements ledger is filled: 14 rows DONE, G4/G5 unsigned.
+  - TESTING.md's Gen 3 walkthrough is rewritten for the new client.
+  - Dated research, reviews and probes carry folder READMEs.
+  - Split with Gen1-Collab2: they own shared-*.md, shared_runtime.md and copilot-instructions.md.
+- **Owner-facing gaps found by the sweep:**
+  - (1) RR native trade and the info panel have no automated duo on the new client. The owner's play session is the only end-to-end evidence (flagged in the G5 request).
+  - (2) Overworld Presence ON disables the PC trade NPC, and no ghost exists. The fix is a `server/manager.py` toggle, held for the owner's decision and a Gen 2 batch (`docs/gen3/TODO.md`).
+  - (3) Ledger open rows: S-8/9/11/12, W-2 (RR checkpoint re-qualification after C4-SAVE), W-6, C-3, C-6, F-6/F-7, R-1/R-2 box-slot decode.
 - Then P6: the requirements rows, 2 reviews, then G6 (the owner tags and ships).
 
 ## CHECKPOINT 20 (2026-09-26): Gen 3 landed on LOCAL master (not pushed); resume here
