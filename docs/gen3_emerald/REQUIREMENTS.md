@@ -24,8 +24,8 @@ Rows stay `·` until their phase in `PLAN.md` §3 lands a receipt.
 | pret/pokeemerald source | master `5eff78649e7170a877b961ef0b3da13b81a16038` (2026-09-01); the `symbols` branch is `dba968c67d85caf9595abe12a51ff739d4dc5937` (2026-08-26): its published `pokeemerald.sym` IS the pinned symbol source (EG0 decision 2; no `.map`, the player-controller span is derived from the `.sym`) — **SIGNED EG0: `c65e93f2`** |
 | agbcc | pret/agbcc `da598c1d918402c42c0c0d7128ba14567f3175e9` (the FRLG pin, `data/gen3_sources.lock.json`); reuse for pokeemerald is to be proven by the E1-SYM build sha1 |
 | BizHawk | 2.11.1 + installed hashes as `docs/gen3_requirements.md` Pins (unchanged) |
-| pokeemerald-expansion | tag `expansion/1.17.0` (published 2026-08-31T18:12:55Z); commit sha to record at XG0 |
-| Expansion compiler | modern `arm-none-eabi-gcc` only (agbcc removed at 1.9). Choose at XG0: vendored xPack 15.2.1 (`patch/vendor/armgcc/xpack-arm-none-eabi-gcc-15.2.1-1.1`) or CI apt `gcc-arm-none-eabi`; double-build sha1 receipt |
+| pokeemerald-expansion | tag `expansion/1.17.0` = commit `e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7`, 23 config headers sha256-pinned in `data/gen3_exp_sources.lock.json`; reference ROM sha1 `28877d733492299599f2b8fff50493109d72653c` — **SIGNED XG0 2026-09-26** |
+| Expansion compiler | Linux reference host (owner VM, Linux Mint 22.3 / Ubuntu noble), package `gcc-arm-none-eabi` `15:13.2.rel1-2` (13.2.1), binary sha256 in the lock; native Windows builds unsupported (preproc `%ld` LLP64 + mapjson CreateProcess limit, `probes/x0_*`); double-build receipt `probes/x0_build_repro_2026-09-26.txt` — **SIGNED XG0 2026-09-26** |
 | Wire contract | `docs/protocol.md` (unchanged) |
 
 ## Oracles
@@ -48,19 +48,30 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 
 | id | Requirement | SOURCE | Oracle | S | M | P |
 |---|---|---|---|---|---|---|
-| EF-1 | `pokeemerald.{sym,map}` built from the pinned commit; the build ROM sha1 == the owner's BPEE | `tools/build_pret_gba_syms.py --lock data/gen3_emerald_sources.lock.json` | CONTROL (sha1) | · | — | — |
-| EF-2 | FRLG and RR generator outputs are byte-identical after every shared-tool edit (Gen 3 grant condition) | `--check` on each generator | CONTROL | · | · | — |
-| EF-3 | Every `gen3_emerald` profile address names a `pokeemerald.sym` symbol; generated-vs-sym diff 0; generated profile agrees with every stub address (cross-check) | `tools/gen_gen3_profile.py` Emerald row | HEADER | · | · | — |
-| EF-4 | Each engine site's `expected_hex` is at its `rom_offset` in BPEE (21 kinds; `CopyMonToPC` rename; re-derived `battle_begin`/`faint`/`capture_wild`/`whiteout`/`map_load`/evolution) | `tools/pin_gen3_site.py` + `gen_gen3_engine_signals.py` | ENGINE (at E2) | · | · | · |
-| EF-5 | Writer inventory + `allowed_overworld_tasks` (FR set minus `Task_RunPokemonLeagueLightingEffect`) + Emerald forbidden-task census (contests, secret bases, record mixing, blender/crush, Frontier/Pyramid/Trainer Hill, multi-partner battle, Union Room battle) | `tools/gen_gen3_write_checkpoint.py` | frame-end census | · | · | · |
-| EF-6 | Save layout: SB2 0xF2C, SB1 0x3D88, party SB1+0x234/+0x238, 14 sections/slot chunk table, sectors 30/31 Trainer Hill/Recorded Battle | `server/adapters/gen3_codec.py` Emerald constants | HEADER + CONTROL | · | · | — |
-| EF-7 | Area map: every `wild_encounters.json` map keyed `mapGroup:mapNum`, merged per the §0 defaults; Hoenn names; never a Kanto name on BPEE | `tools/gen_area_map.py` Emerald mode | CONTROL | · | · | · |
-| EF-8 | Statics/gifts/daycare: starters, Castform per form, Beldum, Lavaridge Wynaut egg vs Route 117 daycare, fossils, legendaries, scripted Voltorb/Electrode/Kecleon/Unown | `data/games/gen3_emerald/statics.json` from pret scripts/flags | SERVER | · | · | · |
-| EF-9 | Items: common 0–374 table (Gen 3 `5f050857`) + Emerald overlay {375 Magma Emblem, 376 Old Sea Map}; move stats FR == E (two-source assertion) | generator + tests | CONTROL | · | · | — |
+| EF-1 | `pokeemerald.sym` = pret's published symbols branch `dba968c6` (source `c65e93f2`), sha256-pinned; every consumed symbol re-proven by ROM anchors on the owner's BPEE (EG0 decision 2 replaced the local build) | `data/gen3/pret/pokeemerald_provenance.json` | CONTROL (sha256 + anchors) | ✓ | — | — |
+| EF-2 | FRLG and RR generator outputs are byte-identical after every shared-tool edit (Gen 3 grant condition) | `--check` on each generator | CONTROL | ✓ | · | — |
+| EF-3 | Every `gen3_emerald` profile address names a `pokeemerald.sym` symbol; generated-vs-sym diff 0; generated profile agrees with every stub address (cross-check) | `tools/gen_gen3_profile.py` Emerald row | HEADER | ✓ | ✓ | — |
+| EF-4 | Each engine site's `expected_hex` is at its `rom_offset` in BPEE (21 kinds; `CopyMonToPC` rename; re-derived `battle_begin`/`faint`/`capture_wild`/`whiteout`/`map_load`/evolution) | `tools/pin_gen3_site.py` + `gen_gen3_engine_signals.py` | ENGINE (at E2) | ✓ | · | ◐ |
+| EF-5 | Writer inventory + `allowed_overworld_tasks` (FR set minus `Task_RunPokemonLeagueLightingEffect`) + Emerald forbidden-task census (contests, secret bases, record mixing, blender/crush, Frontier/Pyramid/Trainer Hill, multi-partner battle, Union Room battle) | `tools/gen_gen3_write_checkpoint.py` | frame-end census | ✓ | · | ◐ |
+| EF-6 | Save layout: SB2 0xF2C, SB1 0x3D88, party SB1+0x234/+0x238, 14 sections/slot chunk table, sectors 30/31 Trainer Hill/Recorded Battle | `server/adapters/gen3_codec.py` Emerald constants | HEADER + CONTROL | ✓ | ✓ | — |
+| EF-7 | Area map: every `wild_encounters.json` map keyed `mapGroup:mapNum`, merged per the §0 defaults; Hoenn names; never a Kanto name on BPEE | `tools/gen_area_map.py` Emerald mode | CONTROL | ✓ | ✓ | · |
+| EF-8 | Statics/gifts/daycare: starters, Castform per form, Beldum, Lavaridge Wynaut egg vs Route 117 daycare, fossils, legendaries, scripted Voltorb/Electrode/Kecleon/Unown | `data/games/gen3_emerald/statics.json` from pret scripts/flags | SERVER | ✓ | · | · |
+| EF-9 | Items: common 0–374 table (Gen 3 `5f050857`) + Emerald overlay {375 Magma Emblem, 376 Old Sea Map}; move stats FR == E (two-source assertion) | generator + tests | CONTROL | ✓ | · | — |
 | EF-10 | Fixtures `emerald_{town,battle,trainer}{,_b}.sav` pass `--qualify` and `--boot-check` | `tools/gen3_fixtures.py` | GAME + PYDEC | — | ✓ | ✓ |
-| XF-1 | Reference build reproducible (two builds, same sha1); `.elf/.map/.sym` kept, ROM never published | `tools/build_expansion.py` | CONTROL | · | — | — |
+| XF-1 | Reference build reproducible (two builds, same sha1); `.elf/.map/.sym` kept, ROM never published | `tools/build_expansion.py` | CONTROL | ✓ | — | — |
 | XF-2 | Struct offsets (BattlePokemon, SaveBlock1/2, SpeciesInfo, MoveInfo, ItemInfo) from the offsetof probe; consistent with `.map` sizes | `tools/gen_expansion_facts.py` | CONTROL | · | · | — |
 | XF-3 | Per-build data pack: species count == RHH `numSpecies`; names/types/abilities/natDex/evolution families; moves; items. The extractor run on vanilla Emerald reproduces pret | `tools/extract_expansion_data.py` | HEADER + CONTROL | · | · | — |
+
+### E1 evidence (signed at EG1, 2026-09-25; per-row detail in `docs/gen3_emerald/EG1_request.md` §2)
+
+- **EF-1..EF-9 S** (and M for EF-3/6/7) as signed at EG1: profile `5acd99b1`+`bd62bf93`, sites 21/21
+  PINNED, checkpoint `1401df8d`+`5d0a4bd7`, codec `60d207a9`+`f7e2d52f`, areas `81bb74e3`+`9538d3a4`,
+  statics 21 entries, moves/items `f3f56f54` (Nature Power accuracy 95 vs FRLG 0 pinned). The rows
+  above were left `·` after EG1 and written back on 2026-09-26 (OMP ledger audit cx-a1a7cdbd).
+- **EF-4 P ◐:** every site kind fired on hardware except `trade_begin`/`trade_done` (need a link
+  partner, E5). **EF-5 P ◐:** the overworld census is PHYSICAL
+  (`probes/census_emerald_overworld_2026-09-25.txt`); the Emerald-only forbidden states are
+  SOURCE-only (`write_checkpoint.md` §8).
 
 ## R: Reads
 
@@ -75,7 +86,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| ES-1 | Probe matrix rows a–g on BPEE (exec at `CallCallbacks`, write hooks, host-write silence, unregister, negative control, flash domain) | ENGINE | ✓ | ✓ | ✓ |
+| ES-1 | Probe matrix rows a–g on BPEE (exec at `CallCallbacks`, write hooks, host-write silence, unregister, negative control, flash domain) | ENGINE | ✓ | ✓ | ◐ |
 | ES-2 | One positive + one negative receipt per exercised site kind (observer, scripted play) | ENGINE | ✓ | ✓ | ◐ |
 
 ## W: Writes / checkpoint
@@ -98,13 +109,13 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 - **ER-3:** badges at 0 and at 4 (`probes/reads_pydec_emerald_badges_2026-09-26.txt`, straddle
   0x10C/0x10D) and balls are PHYSICAL. Badges 5-8, battle reads and trainer reads are
   SOURCE/MODEL only.
-- **ES-1:** `probes/hooks_emerald_2026-09-26.txt`, tracked-clean at `c891455d`. Rows a-return, b-interior and f are OPEN, as on FR.
+- **ES-1 P ◐:** `probes/hooks_emerald_2026-09-26.txt`, tracked-clean at `c891455d`. Rows a-return, b-interior and f are OPEN, as on FR.
 - **ES-2:** there are eight observer receipts (`probes/shadow_emerald_*_2026-09-26.*`) and the
   negatives manifest (`negatives_manifest.json`, 75/75, the complete matrix). 11 of the 12 coverage kinds are
   PHYSICAL; `trade_done` needs a link partner (E5).
 - **EW-1 ◐:** `probes/checkpoint_emerald_battle_2026-09-26.txt` (21/21, tracked-clean) covers
   every probed row. NOT run on Emerald: `pc_menu` (the PC write window), `battle_faint_prompt`,
-  `battle_link` and the companion/RR rows. The probe constructs no writer, so an empty write
+  `battle_link`, the companion/RR rows, and the nine FR-only `bw_*` tutorial rows (`SKIP not selected for emerald/clean`). The probe constructs no writer, so an empty write
   log is not evidence here. The Emerald-only forbidden states are SOURCE-only
   (`write_checkpoint.md` §8).
 
@@ -117,6 +128,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 | EC-2 | `Gen3Adapter` keeps `rom_type`; title data (statics, items overlay, sprites `generation-iii/emerald`, label "Emerald", title-aware area catalog) | SERVER | ✓ | ✓ | ◐ |
 | EC-3 | By-name refusal (`lua/slink.lua`) and `UNADMITTED_GAMES` flip only with EG4 (ruling 24) | CONTROL | · | · | · |
 | EC-4 | Conformance World rows + capabilities fixture regenerated | MODEL | ✓ | ✓ | — |
+| XC-1 | `gen3_expansion.py` adapter contract (full `base.py` surface; empty trainer/encounter = recorded limit); `pokemon_data.py` untouched | SERVER | · | · | · |
 
 ### E4 / E4b evidence (2026-09-26; receipts `docs/gen3_emerald/probes/duo_e4_*`)
 
@@ -142,7 +154,6 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 - **EC-1:** `test_mixed_foundations.py` covers the FR/RR↔E refusal in 4 arrival orders, with the `links.json` bytes unchanged, and E↔E admission.
 - **EC-2 ◐:** the title data plus restart/rollback are in `test_gen3_emerald_server.py`. PHYSICAL only on FR/LG/RR (regression duos); the Emerald client runs only in tests until EG4.
 - **EC-4:** `test_protocol_conformance.py::test_world_rows_on_emerald` (test-only admitted pack copy) and `test_mockup_fixtures.py`.
-| XC-1 | `gen3_expansion.py` adapter contract (full `base.py` surface; empty trainer/encounter = recorded limit); `pokemon_data.py` untouched | SERVER | · | · | · |
 
 ## D: Duos (E4 / X3)
 
@@ -167,4 +178,6 @@ serves no trainer/encounter-table panels (adapter returns empty).
 
 ## Receipts
 
-(none yet)
+All under `docs/gen3_emerald/probes/` (fixtures, hooks, census, checkpoint, reads/PYDEC, observer
+`shadow_emerald_*`, negatives manifest, duos `duo_e4_*`); each evidence block above names its files.
+The Emerald final-cut summary `fc_SUMMARY_<cut>_emerald.txt` is pending (EG4).
