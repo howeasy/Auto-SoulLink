@@ -10,7 +10,7 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.11+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, or Radical Red 4.1); `lua/slink.lua` refuses an older BizHawk on the Gen 3 route |
+| BizHawk 2.11+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, or Radical Red 4.1), or both with an Emerald (US) save loaded (Emerald pairs only with Emerald, never with FRLG/RR); `lua/slink.lua` refuses an older BizHawk on the Gen 3 route |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
 | Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 4 onward — Tests 1-3 were the old client's and are removed) |
 | Status page | `http://localhost:8080/` — flicker-free auto-refresh every 2 s (HTMX + idiomorph morph swap); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
@@ -155,7 +155,7 @@ Let all of Player A's party mons faint at once. Expect: B's **party** linked mon
 
 ### Trade (Radical Red / companion patch only)
 
-Vanilla and AP FireRed/LeafGreen have no native trade scene — server-driven trade prompts are cancelled outright on those foundations (`docs/gen3/PLAN.md`). On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. There is **no** automated trade duo on the rewritten client (the old client's `trade`/`infopanel` scenarios were retired and not rebuilt — `tools/e2e_duo.py` RR-only block comment); automated coverage is the native opcode gates (`tradescene`) and `native_absent_gen3`. This manual walkthrough is therefore the only end-to-end trade check.
+Vanilla and AP FireRed/LeafGreen have no native trade scene — server-driven trade prompts are cancelled outright on those foundations (`docs/gen3/PLAN.md`). Emerald has no companion patch either, so it cancels trade prompts the same way today; a vanilla trade duo (FR<->FR and E<->E) is planned but not yet built (`docs/gen3_emerald/REQUIREMENTS.md` ED-3). On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. There is **no** automated trade duo on the rewritten client (the old client's `trade`/`infopanel` scenarios were retired and not rebuilt — `tools/e2e_duo.py` RR-only block comment); automated coverage is the native opcode gates (`tradescene`) and `native_absent_gen3`. This manual walkthrough is therefore the only end-to-end trade check.
 
 ---
 

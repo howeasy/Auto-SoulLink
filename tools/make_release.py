@@ -49,6 +49,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 GENERATORS: list[tuple[str, str]] = [
     ("tools/gen_gen2_area_map.py", "Gen 2 Crystal area tables"),
     ("tools/gen_area_map.py",      "Gen 3 FRLGE area tables"),
+    # Note: gen_area_map.py --game emerald regenerates the separate gen3_emerald area tables;
+    # it is not run by this generator loop (Emerald's tables ship as static manifest entries).
     ("tools/gen_gen4_area_map.py", "Gen 4 HGSS/Platinum area tables"),
     ("tools/gen_gen5_area_map.py", "Gen 5 BW/BW2 area tables"),
 ]
@@ -108,7 +110,7 @@ _LUA_GEN1 = [
     "panel.lua",
 ]
 
-# lua/gen3/ — the rewritten Gen 3 (FRLG) client. run.lua is what lua/slink.lua's Gen 3 route
+# lua/gen3/ — the rewritten Gen 3 (FRLG/RR/Emerald) client. run.lua is what lua/slink.lua's Gen 3 route
 # dofiles; everything else is pulled in by entry.lua's composition root (mirrors _LUA_GEN1).
 # shadow_run.lua is P3's observer-only bootstrap (not reachable from a production launcher)
 # and deliberately excluded, same as the Gen 1 manifest excludes nothing analogous to it.
@@ -282,8 +284,9 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
     "gen3_frlge": [
         "gen3_frlge_areas.lua",
         "gen3_frlge_locations.lua",
-        # Read by lua/gen3/entry.lua Entry.PACK_FILES[*].area_map for BOTH gen3 packs (RR is a
-        # FireRed map hack sharing this table): "group:num" -> area id.
+        # Read by lua/gen3/entry.lua Entry.PACK_FILES[*].area_map for the gen3_frlg and gen3_rr
+        # packs (RR is a FireRed map hack sharing this table): "group:num" -> area id.
+        # gen3_emerald does NOT use this file; it has its own area_map.json (see "gen3_emerald" below).
         "area_map.json",
     ],
     "gen3_frlg": [
@@ -310,6 +313,9 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         "write_checkpoint.json",
         "area_map.json",
         "gen3_emerald_locations.lua",
+        # server/adapters/gen3_frlge.py _load_emerald() reads it; a missing file silently empties
+        # the fixed-gift clause bypasses (Beldum/Wynaut/Castform/Mew/Deoxys) -- OMP cx-9f0eacae F1.
+        "statics.json",
     ],
     "gen4_hgsspt": [
         "gen4_hgsspt_areas.lua",
@@ -379,7 +385,7 @@ SLink in BizHawk. You do **not** need Python — the host handles the server.
 |---|---|
 | BizHawk | BIZHAWK_REQ (older versions refuse to start). https://github.com/TASEmulators/BizHawk/releases |
 | A writable folder | Unzip somewhere you can write (not Program Files): Gen 3 keeps a small session file next to `lua/`. |
-| Your ROM | Gen 1 (Red/Blue/Yellow), Gen 2 (Crystal), Gen 3 (FireRed/LeafGreen/Radical Red) |
+| Your ROM | Gen 1 (Red/Blue/Yellow), Gen 2 (Crystal), Gen 3 (FireRed/LeafGreen/Radical Red/Emerald — Emerald pairs only with Emerald) |
 | LuaSocket DLL | Already in `lua/x64/`. If missing, see the note below. |
 """
 

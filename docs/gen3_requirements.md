@@ -1,6 +1,8 @@
 # Gen 3 release requirements
 
-This is the release contract for Pokémon FireRed/LeafGreen (US 1.0) and Radical Red 4.1. A row
+This is the release contract for Pokémon FireRed/LeafGreen (US 1.0) and Radical Red 4.1. Emerald
+(pack `gen3_emerald`) has its own contract at `docs/gen3_emerald/REQUIREMENTS.md`; it is not
+covered by this file. A row
 is **done** only when it carries a SOURCE proof (pret/RR-binary citation or generated-from-source
 data) **and** a PHYSICAL proof (real cartridge in BizHawk, judged by an oracle that is not the
 code under test). MODEL evidence (lupa/pytest against fakes) is recorded but never closes a row
@@ -73,7 +75,7 @@ in this tree.
 | F-5 | Flash layout spec: sector map (14 sectors × 2 slots + Hall of Fame), sector footer (id/checksum/security/counter), slot-selection algorithm incl. counter wrap and partial/full write states; RR extensions cross-checked against the RR binary (§5.5) | upstream `save.c` algorithm + RR binary | CONTROL (torn/mixed/duplicate/missing sector controls) | ✓ `docs/gen3/research/flash_save.md`, `docs/gen3/research/rr_save_layout.md` (RR chunk table read from ROM `0x09148BF0`) | ✓ `test_gen3_flash_layout.py` (torn/mixed/duplicate/missing sector controls), `test_gen3_rr_save_layout.py`, `test_gen3_codec.py` (unit@cut) | — |
 | F-6 | Fixtures re-qualified: each `tests/fixtures/gen3/*.sav` (+ `_b` variants) passes the codec's own qualify (`--qualify`) and a real cold boot → CONTINUE → re-save → reload (`--boot-check`) (§5.5) | derivation documented in `tools/gen3_fixtures.py` | GAME + PYDEC | — | ✓ `test_gen3_fixture_qualify.py::test_committed_fixtures_qualify` (unit@cut) | ◐ boot-checked: the FR/LG party fixtures, 8/8 at the cut (`fc_bootcheck_{firered,leafgreen}_party_{town,battle}{,_b}`); `firered_town`, `rr_town`, `rr_town_b` (`bootcheck_*_2026-09-21.txt`); `rr_battle{,_b}` (`fixture_rr_battle_2026-09-24.txt`, on the pre-rebuild companion `b7d1e075`). No boot-check receipt was found for `{firered,leafgreen}_party_trainer{,_b}`, `leafgreen_town`, `rr_battle2{,_b}` or `rr_rival` |
 | F-7 | RR species/types/sprites/natdex facts generated at pinned tool revisions (`tools/gen_rr_{species,types,sprites,natdex}.py`), output paths fixed (§6 P2) | pinned tool revisions | n/a | · (see note below) | · | — |
-| F-8 | Admission profiles: `gen3_frlg` kind `clean` (FR/LG US 1.0 sha1); `gen3_rr` kinds `clean` (RR 4.1 base md5) and `companion` (SLink-RR.ups applied). Admission is by hash, then by anchors. `Entry.admit` still computes a BPRE/BPGE header-only (`named`) fallback, but since C5-6 the launcher refuses it by name (`lua/slink.lua:160,174`, ruling 24) (`R7`, §5.1) | per-artifact `rom_sha1`/`rom_md5` + sites in each pack's `engine_signals.json` (`Entry.admission_table`, `lua/gen3/entry.lua:120`). There is no separate `admission.json` | ENGINE + SERVER | ✓ `engine_signals.json` artifact rows (G2 §2-3; companion re-pinned at `82f707c3`) | ✓ `test_gen3_entry.py` (hash, anchors and header-fallback admission; ambiguous, unknown and duplicate-digest refusals) (unit@cut) | ◐ admitted by hash live: FR (`fc_zip_boot_firered`: "gen3_frlg/firered (clean by hash)"), LG (`duo_frlg_faint_cmd_gen3_clean_2026-09-23.txt`: "leafgreen (clean by hash)"), RR companion + clean (`fc_faint_cmd_clean_gen3_rr_as_a`). No live receipt for anchors-only admission or for the launcher's header refusal |
+| F-8 | Admission profiles: `gen3_frlg` kind `clean` (FR/LG US 1.0 sha1); `gen3_rr` kinds `clean` (RR 4.1 base md5) and `companion` (SLink-RR.ups applied). A third pack, `gen3_emerald` (BPEE), is admitted on this release candidate and documented separately (`docs/gen3_emerald/REQUIREMENTS.md`); it is out of scope for this row. Admission is by hash, then by anchors. `Entry.admit` still computes a BPRE/BPGE header-only (`named`) fallback, but since C5-6 the launcher refuses it by name (`lua/slink.lua:160,174`, ruling 24) (`R7`, §5.1) | per-artifact `rom_sha1`/`rom_md5` + sites in each pack's `engine_signals.json` (`Entry.admission_table`, `lua/gen3/entry.lua:120`). There is no separate `admission.json` | ENGINE + SERVER | ✓ `engine_signals.json` artifact rows (G2 §2-3; companion re-pinned at `82f707c3`) | ✓ `test_gen3_entry.py` (hash, anchors and header-fallback admission; ambiguous, unknown and duplicate-digest refusals) (unit@cut) | ◐ admitted by hash live: FR (`fc_zip_boot_firered`: "gen3_frlg/firered (clean by hash)"), LG (`duo_frlg_faint_cmd_gen3_clean_2026-09-23.txt`: "leafgreen (clean by hash)"), RR companion + clean (`fc_faint_cmd_clean_gen3_rr_as_a`). No live receipt for anchors-only admission or for the launcher's header refusal |
 
 F-7 note: the four generators fetch their upstream sources from unpinned locations (`tools/gen_rr_natdex.py` reads `funnotbun.github.io` at `main`; `tools/gen_rr_sprites.py` records that the funnotbun source no longer exists and now vendors from `JwowSquared/Radical-Red-Pokedex`). Their outputs still live under `data/games/gen3_frlge/` (the move to `gen3_rr/` is listed under "Not in this release"), and no unit test drives them. The row's "pinned tool revisions" claim therefore has no receipt.
 
@@ -213,9 +215,9 @@ same reachability context), never bytes alone.
 
 Archipelago FRLG (title `firered_ap` kept unadmitted, `†UNVERIFIED` "TODO VERIFY" fields carried
 from `lua/games/gen3_frlge.lua:154-170`; since C5-6 an AP build is refused by name at the launcher as
-a header-only admission, `lua/slink.lua:174-176`, ruling 24); Emerald (title `emerald` kept
-unadmitted, needs its own `gen3_emerald` pack — since C5-6 the launcher refuses it by name,
-`lua/slink.lua:172-173`, instead of the old client silently resolving FireRed area ids); vanilla
+a header-only admission, `lua/slink.lua:174-176`, ruling 24); Emerald is admitted on this release
+candidate on its own `gen3_emerald` pack (EG4 owner signature pending; see `docs/gen3_emerald/`)
+and pairs only E<->E, never with FRLG/RR; vanilla
 FRLG trade (no native trade scene exists today either; the new client cancels server-driven
 prompts outside the receptionist flow exactly as Gen 1's client does for Yellow,
 `docs/gen1_requirements.md:155`, its "Not in this release" Yellow-trade entry); randomized FRLG admission / UPR for Gen 3; moving
