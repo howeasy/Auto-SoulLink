@@ -64,14 +64,14 @@ P.REASON_ROWS = {
         .. "gBattleCommunication[0]==1", expectation="positive", min_samples=60,
         reason="battle_faint", witness="battle_input",
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true,
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true,
                    ["radical_red/companion"]=true},
         note="wild encounter parked at the action menu; no input"},
     {name="battle_input_trainer", terminal="battle_main_func==HandleTurnActionSelectionState and "
         .. "gBattleCommunication[0]==1", expectation="positive", min_samples=60,
         reason="battle_commit", args={battler=0}, witness="battle_input_trainer",
         state_env="SLINK_CHECKPOINT_TRAINER_BATTLE_STATE", state="slink_pretrainer.State",
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true},
         note="trainer battle parked at the action menu (gBattleTypeFlags & BATTLE_TYPE_TRAINER); "
             .. "battler 0 is uncommitted so the guard holds. RR holds battle_commit: see "
             .. "battle_commit_held_rr"},
@@ -80,7 +80,7 @@ P.REASON_ROWS = {
         reason="battle_faint", witness="battle_comm_eq", witness_value=2,
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{idle=120}},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
         note="A on FIGHT opens the move submenu (STATE_WAIT_ACTION_CASE_CHOSEN)"},
     {name="battle_animation", terminal="gBattleControllerExecFlags~=0 and "
         .. "gBattlerControllerFuncs[0]~=HandleInputChooseAction",
@@ -89,7 +89,7 @@ P.REASON_ROWS = {
         reason="battle_faint", witness="battle_exec_busy",
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{idle=30}},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true},
         note="two A presses commit a move; the animation holds the exec flags. FR/LG only: the "
             .. "RR pack has no gBattleControllerExecFlags address (reported UNVERIFIED)"},
     {name="battle_faint_prompt", terminal="gBattleMainFunc ~= HandleTurnActionSelectionState",
@@ -107,7 +107,7 @@ P.REASON_ROWS = {
         reason="battle_faint", witness="battle_not_input",
         state_env="SLINK_CHECKPOINT_INTRO_STATE", state="slink_preintro.State",
         inputs={},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true},
         note="battle intro parked before the first action menu"},
     {name="battle_link", terminal="gBattleTypeFlags & 2",
         expectation="negative", expect_clauses={battle_not_link=true},
@@ -119,7 +119,7 @@ P.REASON_ROWS = {
         expectation="negative", expect_clauses={battle_outcome_open=true, battle_engine_loaded=true},
         reason="battle_faint", witness="battle_resolved",
         state_env="SLINK_CHECKPOINT_POSTBATTLE_STATE", state="slink_postbattle.State",
-        inputs={}, artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true,
+        inputs={}, artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true,
                               ["radical_red/companion"]=true},
         note="the state saved after a resolved battle"},
     {name="battle_commit_state3", terminal="gBattleCommunication[0]>=3",
@@ -128,7 +128,7 @@ P.REASON_ROWS = {
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},
                 {idle=240}},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
         note="the commit guard: a committed battler (3/4) must refuse the Variant-3 pre-fill"},
     {name="native_idle_field", terminal="companion beacon present and mailbox idle",
         expectation="positive", min_samples=60, reason="native", witness="native_idle",
@@ -144,12 +144,12 @@ P.REASON_ROWS = {
         expectation="negative", expect_clauses={native_present=true},
         reason="native", witness="always",
         state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
         note="the reason must refuse on a build with no companion"},
     {name="sound_driver", terminal="m4a SE1 ident == ID_NUMBER",
         expectation="positive", min_samples=60, reason="sound", witness="sound_driver",
         state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
-        artifacts={["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
+        artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/clean"]=true},
         note="the sound reason on a live driver; native_busy is model-only (the probe posts no op)"},
 }
 
@@ -324,7 +324,11 @@ function P.witnesses(cp, r8, r32)
             end
         end
     end
-    local comm_a = clause_of("battle_comm_0")
+    local comm_a, _, comm_c = clause_of("battle_comm_0")
+    -- witness_value is FR-numbered (STATE_WAIT_ACTION_CHOSEN == 1). Emerald's enum starts with
+    -- STATE_TURN_START_RECORD (pret pokeemerald battle_main.c:4118-4121), so every state is the
+    -- pack's battle_comm_0 expect minus 1 further on (E2-FIX-AB F-B).
+    local comm_shift = comm_c and comm_c.expect - 1 or 0
     local main_a, _, main_c = clause_of("battle_main_func")
     -- FR/LG name the input-wait flags clause battle_exec_flags_input (C4-BW); RR keeps _idle
     local flags_a = clause_of("battle_exec_flags_input") or clause_of("battle_exec_flags_idle")
@@ -343,7 +347,7 @@ function P.witnesses(cp, r8, r32)
         return ib ~= nil and (r8(ib.address + (ib.offset or 0)) & (ib.mask or 0xFF)) ~= ib.expect
     end
     WIT.battle_input = function()
-        return main_c ~= nil and w32(main_a) == main_c.expect and w8(comm_a) == 1
+        return main_c ~= nil and w32(main_a) == main_c.expect and w8(comm_a) == comm_c.expect
     end
     WIT.battle_input_trainer = function()
         return WIT.battle_input() and w32(type_a) & P.BATTLE_TYPE_TRAINER ~= 0
@@ -351,8 +355,8 @@ function P.witnesses(cp, r8, r32)
     WIT.battle_not_input = function()
         return main_c ~= nil and w32(main_a) ~= main_c.expect
     end
-    WIT.battle_comm_eq = function(spec) return function() return w8(comm_a) == spec.witness_value end end
-    WIT.battle_comm_ge = function(spec) return function() return w8(comm_a) >= spec.witness_value end end
+    WIT.battle_comm_eq = function(spec) return function() return w8(comm_a) == spec.witness_value + comm_shift end end
+    WIT.battle_comm_ge = function(spec) return function() return w8(comm_a) >= spec.witness_value + comm_shift end end
     -- flags ~= 0 alone also holds at the parked action menu (bit 0 pends on the input,
     -- C4-BW), which the battle_faint window admits; busy = not battler 0's action input
     WIT.battle_exec_busy = function()

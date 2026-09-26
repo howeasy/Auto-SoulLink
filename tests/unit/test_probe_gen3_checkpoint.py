@@ -521,7 +521,7 @@ def parked_menu(pack, type_flags):
 
     def addr(n):
         return cl[n]["address"] + cl[n].get("offset", 0)
-    return {addr("battle_main_func"): cl["battle_main_func"]["expect"], addr("battle_comm_0"): 1,
+    return {addr("battle_main_func"): cl["battle_main_func"]["expect"], addr("battle_comm_0"): cl["battle_comm_0"]["expect"],
             addr("battle_not_link"): type_flags}
 
 
@@ -545,6 +545,27 @@ def run_reason_row(lua, probe, WIT, name, frames=180):
             probe.tally(row, True, "ok", None, 0x1F)
     row.reached = held > 0
     return row
+
+
+EMERALD_PACK = json.loads((ROOT / "data/games/gen3_emerald/write_checkpoint.json").read_text(encoding="utf-8"))["emerald"]
+
+
+def test_emerald_battle_witnesses_follow_the_pack_comm_numbering(module):
+    """E2 F-B: Emerald parks the action menu at gBattleCommunication[0] == 2, not FR's 1."""
+    lua, probe = module
+    comm = next(c for c in EMERALD_PACK["battle"]["clauses"] if c["name"] == "battle_comm_0")
+    assert comm["expect"] == 2
+    mem = parked_menu(EMERALD_PACK, 0xC)
+    W = witness_table(lua, probe, EMERALD_PACK, mem)
+    assert W.battle_input() is True and W.battle_input_trainer() is True
+
+    def holds(name, value):
+        mem[comm["address"] + comm.get("offset", 0)] = value
+        spec = next(r for r in probe.STATES.values() if r.name == name)
+        return probe.row_witness(W, spec)[0]()
+    assert holds("battle_input_wild", 1) is False       # FR's number is not Emerald's menu
+    assert holds("battle_move_menu", 3) is True and holds("battle_move_menu", 2) is False
+    assert holds("battle_commit_state3", 4) is True and holds("battle_commit_state3", 3) is False
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
@@ -1110,7 +1131,7 @@ def test_rr_parked_trainer_commit_is_a_held_refusal_row(module, kind):
     from tests.unit.test_gen3_safety import rr_battle_world
     lua, probe = module
     rows = {r.name: r for r in probe.STATES.values()}
-    assert set(rows["battle_input_trainer"].artifacts.keys()) == {"firered/clean", "leafgreen/clean"}
+    assert set(rows["battle_input_trainer"].artifacts.keys()) == {"firered/clean", "leafgreen/clean", "emerald/clean"}
     held = rows["battle_commit_held_rr"]
     assert set(held.artifacts.keys()) == {"radical_red/companion"}
     assert (held.reason, held.args.battler, held.witness, held.state) == (
