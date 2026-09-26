@@ -10,6 +10,7 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 - **Post-merge fixes:**
   - 280c1af7: test_gen3_routes/tutorial_states no longer count parents[2] (IndexError on the main checkout; Gen1-Collab2 found it). A repo-wide grep found no other instance.
   - a20cd945: check_release_zip now expects lua/gen2 members (Gen 2's _LUA_GEN2), plus a coverage test.
+  - 794b789c: the LG fixture_qualify test stubs its ROM lookup; rr_harness_syms.load accepts only a pin-matching RR build. A class check ran every Gen 3 unit test in an unprovisioned worktree: no Gen 3 failures. Master = 794b789c.
 - **Post-merge passes on master:**
   - FR/LG: a9ad03d3 shards 1 (13/13) and 2 (29/30, zip_check), then the zip rows at a20cd945 3/3. **All green.**
   - RR: a9ad03d3 18/19 (rr_zip_check), then the zip rows at a20cd945 3/3. **All green.**
