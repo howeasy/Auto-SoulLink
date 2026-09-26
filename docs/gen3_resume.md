@@ -4,6 +4,13 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 
 ## CURRENT STATE (2026-09-26, after checkpoint 20)
 
+- **OWNER RULE (2026-09-26, late): all work stays on this branch. NOTHING goes to master (not even a local ff) until the owner approves that specific landing.**
+  - Master = 5313d94e. The branch is ahead with rulings 28-30 docs plus whatever lands after.
+  - Open cards on the branch:
+    - FR/LG trainers (ruling 28): Opus worker.
+    - Randomized Gen 3 design (ruling 29): Opus, writes docs/gen3/research/randomized_gen3_design.md.
+  - With the Emerald lane: FR/LG + RR trade (27) and FR/LG parity (30: info panel, native sounds, Explode + Rival Swap).
+
 - **LANDED 2026-09-26: the RR fix batch is on LOCAL master 7c14386a (not pushed).**
   - Duos green ×2 on companion c372c428:
     - trade_gen3 and trade_decline_gen3 at 5418c725 (the earlier _RED at 539e0aea was a stale oracle ordering pair, fixed);
