@@ -2,7 +2,7 @@
 
 - **Branch:** `claude/gen3-emerald`, local only: not pushed, not on master. It contains master
   `1d02702f` (Gen 3 landed).
-- **Cut for this request:** `ef99d9b8`.
+- **Cut for this request:** `ef99d9b8`, plus the review follow-ups in `7cf4a3c9`: the rebuild refusal is logged (state.py, guard CLEAN), derive-b uses the codec title normaliser, and a test that every pack maps every wire SE id.
 - **Plan:** `docs/gen3_emerald/PLAN.md` (E3 row). **Ledger:** `docs/gen3_emerald/REQUIREMENTS.md`
   (EC-1..EC-4).
 
@@ -38,7 +38,7 @@ Emerald cartridge reach the production client: the by-name refusal in `lua/slink
 | Conformance World green on Emerald | ✓ M | `test_protocol_conformance.py::test_world_rows_on_emerald`: the per-artifact bodies on the Emerald cartridge, using a test-only admitted copy of the pack (Emerald stays unadmitted in the tree) |
 | Capabilities fixture | ✓ M | `test_mockup_fixtures.py`; the Emerald row equals the generator's output |
 | Manifest closure | ✓ M | `test_make_release_manifest.py::test_every_entry_pack_file_is_in_the_release_manifest` |
-| slink-adapter-guard clean + independent review | ✓ | The guard was CLEAN on each shared diff: `bc2b6967` (server.py `_area_pack`), and `3b3ac9b5` (the state.py rebuild hunk; the verdict found no game literals, a getattr default that makes it opt-in, and no Gen 1/2/4/5 adapter with a public `rom_type`). OMP reviews, every finding verified: cx-daf0f544, cx-361cd02b, cx-7f5a9609, cx-15773cbb, cx-f0b9e13b (audit), and cx-6ecf4fc8 (final diff; reply pending at the time of writing; see RESUME) |
+| slink-adapter-guard clean + independent review | ✓ | The guard was CLEAN on each shared diff: `bc2b6967` (server.py `_area_pack`), and `3b3ac9b5` (the state.py rebuild hunk; the verdict found no game literals, a getattr default that makes it opt-in, and no Gen 1/2/4/5 adapter with a public `rom_type`). OMP reviews, every finding verified: cx-daf0f544, cx-361cd02b, cx-7f5a9609, cx-15773cbb, cx-f0b9e13b (audit), and cx-6ecf4fc8 (the final diff: NO BLOCKER; it recommends signing the runtime diff; its three small items landed in `7cf4a3c9`) |
 | EC-2 title data, incl. restart/rollback | ✓ M | `test_gen3_emerald_server.py`: restart and rollback keep the title adapter (emerald/firered/firered_rr), plus the items, sprites, Nature Power and area-catalog tests |
 | EC-3 refusal/unadmitted until EG4 | ✓ (unchanged) | `test_gen3_emerald_entry.py`, `test_slink_route.py` |
 | Gifts/statics link | ✓ M | The producer-coverage test (`test_gen3_emerald_areas.py`) and SoulLinkState end-to-end pairs (`test_gen3_emerald_server.py::test_a_fixed_gift_pairs_under_the_species_clause`: Beldum, Deoxys, FR Lapras), with the fossil control |
@@ -76,6 +76,9 @@ Reviews and workers found each of these before they could ship:
   Emerald.
 - **Emerald client coverage.** The Emerald client runs only in tests (a test-only admitted pack
   copy) until EG4.
+- **docs/protocol.md staleness, pre-existing on master and not ours:** 18 citations name the
+  deleted `gen3_frlge_client.lua`, and the section-7 `state.py` rows were already off at
+  `056f248f`. The remap carried them faithfully. Routed to the Gen 3 lane.
 
 ## 6 Owner decisions requested
 
