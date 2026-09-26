@@ -1171,7 +1171,9 @@ def test_the_scripted_play_exports_and_paths_the_driver_uses_exist():
     paths = scripted[scripted.index("local PATHS = {"):scripted.index("local H = {")]
     used = set(re.findall(r'(?:follow\(cp, |reversed\()"(\w+)"', text)) - {"pc_to_pokecenter_entrance"}
     for name in used:
-        assert re.search(rf"^\s+{name} = \{{", paths, re.M), f"no PATHS entry {name}"
+        # E4: the Emerald paths are assigned in the Emerald block (PATHS.em_... = {)
+        assert (re.search(rf"^\s+{name} = \{{", paths, re.M)
+                or re.search(rf"^PATHS\.{name} = \{{", scripted, re.M)), f"no PATHS entry {name}"
     for dest in set(re.findall(r"SP\.DEST\.(\w+)", text)):
         assert re.search(rf"\b{dest} = \{{", scripted), f"no DEST {dest}"
 

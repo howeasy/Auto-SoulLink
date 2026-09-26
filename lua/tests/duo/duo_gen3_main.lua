@@ -1495,6 +1495,16 @@ reversed("pokecenter_entrance_to_pc", "pc_to_pokecenter_entrance")   -- the same
 
 --- Route 1 grass origin -> facing the Viridian Pokemon Center PC (the viridian_pc leg's walk).
 function ctx.walk_to_pc(label)
+    if title == "emerald" then
+        -- E4: from the pc fixture's own Oldale tile (6,17) into the Center (emerald_enter_pc's
+        -- door, (6,16) -> 2.2 (7,8)), then gen3_scripted_play.lua's em_oldale_center_to_pc path
+        local ok, why = play.enter_warp(cp, "Up", 20)
+        if not ok then error(label .. ": the Oldale Center door never fired a warp: " .. tostring(why)) end
+        SP.verify_destination(cp, label, { group = 2, num = 2, x = 7, y = 8 })
+        play.follow(cp, "em_oldale_center_to_pc", label)
+        G.tap("Up", 2, 13)
+        return
+    end
     SP.return_to_grass_origin(cp, label)
     play.follow(cp, "route1_grass_to_north_edge", label)
     SP.warp_to(cp, "Up", 30, SP.DEST.viridian_south, label .. " Route1->Viridian")
@@ -1528,7 +1538,15 @@ function ctx.pc_deposit(label)
     if #after ~= #before - 1 then return nil, fmt("party %d -> %d after the deposit", #before, #after) end
     local left = {}
     for _, m in ipairs(after) do left[m.key] = true end
-    for _, m in ipairs(before) do if not left[m.key] then return m.key end end
+    for _, m in ipairs(before) do
+        if not left[m.key] then
+            -- E4: where it landed (the Emerald pc fixture's box 0 already holds two mons), so the
+            -- withdraw takes that slot back; FR/LG/RR's empty box 0 gives slot 0 as before
+            local at = ctx.locate(m.key)
+            ctx.deposited_slot = at and at.box and tonumber(at.box:match("^0:(%d+)$")) or 0
+            return m.key
+        end
+    end
     return nil, "no key left the party"
 end
 
@@ -1537,7 +1555,10 @@ function ctx.pc_withdraw(label)
     local before = ctx.party() or {}
     local PC = SP.PC
     G.tap("Up", 2, 13)
-    PC.open(cp, label); PC.mode(label, 0); PC.popup(label, 0, 0, 0)
+    local slot = ctx.deposited_slot or 0
+    PC.open(cp, label); PC.mode(label, 0)
+    if slot > 0 then SP.EMH.box_cursor(label, slot) end
+    PC.popup(label, 0, slot, 0)
     PC.select(label, S.Task_WithdrawMon | 1); PC.withdraw(label); PC.leave(cp, label)
     local after = ctx.party() or {}
     local had = {}

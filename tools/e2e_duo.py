@@ -331,7 +331,7 @@ SCENARIOS = {
                                          "active_faint_case": "trainer",
                                          "oracle": "assert_linked_faint_active_trainer_gen3_saved"},
     "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-                     "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
+                     "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
     "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                       "target_by_game": {"gen3_rr": "battle2"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
@@ -4458,20 +4458,21 @@ class DuoRun:
         link = self.wait_for("the SERVER to pair the two real captures", linked, 180)
         st = self._status() or {}
         links = st.get("links") or []
-        area_state = (st.get("area_states") or {}).get("route_1")
+        area = self._hunt_area
+        area_state = (st.get("area_states") or {}).get(area)
         problems = []
         if len(links) != 1:
             problems.append(f"expected exactly one link, got {len(links)}: {links}")
         if link.get("status") != "alive":
             problems.append(f"link status is {link.get('status')!r}, not alive")
-        if link.get("area_id") != "route_1":
-            problems.append(f"link area is {link.get('area_id')!r}, not route_1")
+        if link.get("area_id") != area:
+            problems.append(f"link area is {link.get('area_id')!r}, not {area}")
         if area_state != "linked":
-            problems.append(f"area_states.route_1 is {area_state!r}, not linked")
+            problems.append(f"area_states.{area} is {area_state!r}, not linked")
         if problems:
             raise RuntimeError("; ".join(problems))
         print(f"[duo] ENCOUNTER LINK FROM REAL PLAY (new client): {a_key} <-> {b_key} "
-              f"on route_1, alive")
+              f"on {area}, alive")
         self._link_keys = {"a": a_key, "b": b_key}
         return a_key, b_key
 

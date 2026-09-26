@@ -3292,6 +3292,7 @@ local function em_box_cursor(label, pos)
     end
     return pc_fail(label, "box_cursor_stalled")
 end
+EMH.box_cursor = em_box_cursor   -- E4: duo_gen3_main.lua ctx.pc_withdraw past occupied slots
 
 --- MOVE POKeMON mode's popup row 0 (MOVE on a mon, PLACE on an empty slot while carrying one):
 --- AddMenu starts the cursor on row 0 (:8001-8014), so A opens the popup and A takes row 0.
