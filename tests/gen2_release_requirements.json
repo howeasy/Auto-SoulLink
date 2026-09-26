@@ -1052,15 +1052,15 @@
           "receipts": {
             "a": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_gs_a_result.txt",
-              "sha256": "c2f49170d7bf97030d4e0a112e8b20d52d8bc84567ecad8407455473c58f534f"
+              "sha256": "25b94c9639232a8711e8c3a4e87e04942e6ed507b9c7c824b5b9d22067e4fb1b"
             },
             "b": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_gs_b_result.txt",
-              "sha256": "c96facfc3073bdb5fb0d2f5f0959002d304e7dc0e875efa8cf624cab9d45bb8f"
+              "sha256": "9efb9569468205f9f41e97433d67192bba04be544439e7a46a6aadd42407d350"
             },
             "pydec": {
               "path": "tests/fixtures/gen2/receipts/duo_whiteout_gs_pydec_result.txt",
-              "sha256": "f5c25555a342674db1927dceb13a517655c7552f0a9d2b90c1f8a21917b527ab"
+              "sha256": "9ba0cb84158db187c0fed68e3e8d1a2b8241440ef9ff3c29f2faa3d6e8b9f605"
             }
           }
         },
