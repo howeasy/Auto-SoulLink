@@ -29,16 +29,16 @@ python -m server.server --reset   # wipe all state and start a fresh run
 #   --verbose            Enable structured DEBUG logging to <data-dir>/slink.log
 
 # Unit tests — no emulator or server required
-# (~1450 and growing — the hand-maintained per-file sum that used to live here drifted
-#  constantly; run the suite for the real number)
+# (14215 collected as of this writing and growing — the hand-maintained per-file sum that
+#  used to live here drifted constantly; run the suite for the real number)
 pytest tests/unit/test_state.py -v
 pytest tests/unit/test_gen3_adapter.py -v
 pytest tests/unit/test_gen4_adapter.py -v
-pytest tests/unit/test_gen1_adapter.py -v
+pytest tests/unit/test_gen1_adapter_contract.py -v
 pytest tests/unit/test_gen2_adapter.py -v
 pytest tests/unit/test_gen5_adapter.py -v
 pytest tests/unit/test_stat_stages.py -v
-pytest tests/unit/test_phase1_comms.py -v
+pytest tests/integration/test_phase1_comms.py -v
 pytest tests/unit/test_obs_priority.py -v
 pytest tests/unit/test_manager_launcher.py -v
 # 0.2.6 — Rival Team Swap / Explode Mode / Upcoming Key Trainers:
@@ -46,10 +46,10 @@ pytest tests/unit/test_trainer_panel.py -v
 pytest tests/unit/test_state_rival_battle_start.py -v
 pytest tests/unit/test_state_party_blob_cache.py -v
 pytest tests/unit/test_gen3_adapter_rival_ids.py -v
-pytest tests/unit/test_cli_rival_team_swap.py -v
+pytest tests/integration/test_cli_rival_team_swap.py -v
 # Companion patch + per-run toggles:
-pytest tests/unit/test_cli_native_toggles.py -v
-pytest tests/unit/test_cli_overworld_presence.py -v
+pytest tests/integration/test_cli_native_toggles.py -v
+pytest tests/integration/test_cli_overworld_presence.py -v
 pytest tests/unit/test_patcher_routes.py -v
 
 # Single test
@@ -58,7 +58,7 @@ pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
 # Regenerate data/games/gen3_frlge/gen3_frlge_areas.lua from area_map.json (184 entries)
 python tools/gen_area_map.py
 
-# Regenerate data/games/gen2_<title>/area_map.json (124 entries) per title
+# Regenerate data/games/gen2_<title>/area_map.json per title (388 Crystal, 368 Gold, 368 Silver)
 python tools/gen_gen2_area_map.py
 
 # Regenerate Gen 5 BW area maps and location tables
@@ -81,7 +81,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 ### Game Maturity
 
-**Gen 1, Gen 2 and Gen 3 have live coverage; Gen 4 and 5 do not.** Gen 1 runs headless gates on all three cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`) plus nine two-instance Soul Link scenarios across two cartridge pairings, Red/Blue and Yellow/Red (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py`). Gens 4 and 5 have Python unit tests and Lua clients but have never executed against a running game — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
+**Gen 1, Gen 2 and Gen 3 have live coverage; Gen 4 and 5 do not.** Gen 1 runs the original headless gates (`SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`, 11 cases) plus the rewritten client's own gates (`tests/live/test_gen1_new_gates.py`, 29 cases) and two-instance Soul Link scenarios across the Red/Blue and Yellow/Red pairings (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen1_new.py`, 20 cases) — and, for the second Gen 1 foundation, `tests/e2e/test_duo_gen1_pure.py` (37 cases: PureRed↔PureBlue, PureRed↔PureGreen, and the companion-overlay pairing). The pre-rewrite `tests/e2e/test_duo_gen1.py` no longer exists. Gens 4 and 5 have Python unit tests and Lua clients but have never executed against a running game — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
 
 **Gen 2 is partially verified — mechanisms proven, no playthrough.** Inspect, frame-alignment and write-window gates run against real Crystal/Gold cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py tests/live/test_gen2_frame_align.py tests/live/test_gen2_write_windows.py`), and two-instance link scenarios run against a real server (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py`) across the Crystal, Gold and Silver pairings. What has *never* happened on Gen 2 is unscripted play: no wild encounter, no area change, no ball thrown, so encounter linking, the dead zone and the species clause have no live Gen 2 evidence. Those three rules are enforced server-side and are generation-independent, and Gen 1's `playthrough` / `deadzone` / `dupes` scenarios cover them. Gen 2's blocker is the fixture: New Bark Town's west exit is script-locked until Elm hands over a starter, so the qualified fixtures can only park indoors and there is no grass fixture to walk.
 
@@ -238,12 +238,13 @@ SLink-RR/
 │   ├── state.py                 # SoulLinkState FSM (game-agnostic)
 │   ├── obs_controller.py        # OBS WebSocket controller (simpleobsws, per-player queues)
 │   ├── pokemon_data.py          # Species names, evo families, types, abilities
-│   ├── move_data.py             # Move names and properties (Gen 3 RR + vanilla)
+│   ├── data/moves/             # Move names and properties (gen3_rr.py, gen3_vanilla.py)
 │   ├── manager.py               # Run Manager (multi-run orchestration)
 │   └── adapters/                # Per-game server adapters
 │       ├── base.py              # Abstract base adapter
-│       ├── gen1_rby.py          # Gen 1 adapter
-│       ├── gen2_gsc.py          # Gen 2 adapter
+│       ├── gen1_rby.py          # Gen 1 adapter (Red/Blue/Yellow + Archipelago)
+│       ├── gen1_purergb.py      # Gen 1 pureRGB adapter (PureRed/PureBlue/PureGreen)
+│       ├── gen2_gsc.py          # Gen 2 adapter (Crystal/Gold/Silver)
 │       ├── gen3_frlge.py        # Gen 3 adapter
 │       ├── gen4_hgsspt.py       # Gen 4 adapter
 │       └── gen5_bw.py           # Gen 5 adapter
@@ -257,8 +258,10 @@ SLink-RR/
 │       ├── gen3_rr/             # Radical Red profile, sites and checkpoint
 │       ├── gen4_hgsspt/         # HGSS/Pt area maps + gen4_hgsspt_areas.lua
 │       ├── gen2_crystal/        # Crystal species, types, items, area maps
-│       ├── gen1_rby/            # Placeholder
-│       ├── gen2_gsc/            # Placeholder
+│       ├── gen2_gold/, gen2_silver/  # Same shape as gen2_crystal/, per title
+│       ├── gen1_rby/            # Profile, area map, engine signals, trainers, species/moves/evolutions (pret-derived)
+│       ├── gen1_purergb/        # pureRGB's own species/types/area map + trade-overlay variants (pinned build v2.7.6)
+│       ├── gen2_gsc/            # calc_names.json only — per-title Gen 2 data still lives in gen2_crystal/gold/silver
 │       └── gen5_bw/             # Gen 5 area maps and location data
 ├── tools/                       # Code generation scripts (run manually)
 │   ├── gen_pokemon_data.py      # Generates pokemon_data.py tables
@@ -345,7 +348,7 @@ SLink-RR/
 - **`data/obs_config.json`** — OBS WebSocket config (host, port, password per player, enabled flag, trigger rules list). Written by `OBSController.save_config()`. Not per-run — shared across all server instances. Passwords stored in plaintext locally; never returned in HTTP responses.
 - **`data/games/gen3_frlge/rr_items.json`** — 746 RR item ID → name mappings (generated by `lua/tests/test_item_discovery.lua`). Loaded at server startup; used when `_is_rr` is True.
 - **`tools/gen_area_map.py`** — Generates `data/games/gen3_frlge/gen3_frlge_areas.lua` and `data/games/gen3_frlge/gen3_frlge_locations.lua` from `data/games/gen3_frlge/area_map.json`.
-- **`tools/gen_gen2_area_map.py`** — Generates each title's `data/games/gen2_<title>/area_map.json` (124 entries).
+- **`tools/gen_gen2_area_map.py`** — Generates each title's `data/games/gen2_<title>/area_map.json` (388 Crystal, 368 Gold, 368 Silver). It writes the JSON pack only; there is no generated `*_areas.lua` for Gen 2.
 - **`tools/gen_gen5_area_map.py`** — Generates `data/games/gen5_bw/gen5_bw_areas.lua` and `data/games/gen5_bw/gen5_bw_locations.lua` from the Gen 5 BW/BW2 area maps.
 
 *Tests:*
@@ -355,21 +358,21 @@ SLink-RR/
 - **`lua/tests/test_ability_diag.lua`** — Diagnostic script: auto-detects ROM profile, validates gBaseStats address, shows party ability data per slot.
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
 - **`tests/unit/test_state.py`** — 318 pytest unit tests for the state machine.
-- **`tests/unit/test_gen1_adapter.py`** — Gen 1 adapter unit tests. Live coverage lives in `tests/live/test_gen1_gates.py` (18 cases: 4 gate scripts × red/blue/yellow, plus the companion-patch and Archipelago gates) and `tests/e2e/test_duo_gen1.py` (18 cases: 9 scenarios × the Red/Blue and Yellow/Red pairings).
-- **`tests/unit/test_gen2_adapter.py`** — tests for `Gen2GSCAdapter`. Live coverage lives in `tests/live/test_gen2_new_gates.py` / `test_gen2_frame_align.py` / `test_gen2_write_windows.py` (inspect, frame-align, write windows; Crystal + Gold, Silver shares Gold's receipt) and `tests/e2e/test_duo_gen2_new.py` (two-instance link scenarios, one real server).
-- **`tests/unit/test_gen3_adapter.py`** — 216 tests for the Gen 3 adapter.
-- **`tests/unit/test_gen4_adapter.py`** — 100 tests for the Gen 4 adapter.
+- **`tests/unit/test_gen1_adapter_contract.py`** — 10 tests checking the Gen 1 adapter against pret source directly, independently of the shipped JSON data (supersedes the old `test_gen1_adapter.py`, which no longer exists). Live coverage lives in `tests/live/test_gen1_gates.py` (11 cases, the original gates) and `tests/live/test_gen1_new_gates.py` (29 cases, the rewritten client), plus `tests/e2e/test_duo_gen1_new.py` (20 cases, Red/Blue and Yellow/Red pairings) and `tests/e2e/test_duo_gen1_pure.py` (37 cases, the pureRGB pairings). The pre-rewrite `tests/e2e/test_duo_gen1.py` no longer exists.
+- **`tests/unit/test_gen2_adapter.py`** — 59 tests for `Gen2GSCAdapter`. Live coverage lives in `tests/live/test_gen2_new_gates.py` / `test_gen2_frame_align.py` / `test_gen2_write_windows.py` (inspect, frame-align, write windows; Crystal + Gold, Silver shares Gold's receipt) and `tests/e2e/test_duo_gen2_new.py` (two-instance link scenarios, one real server).
+- **`tests/unit/test_gen3_adapter.py`** — 218 tests for the Gen 3 adapter.
+- **`tests/unit/test_gen4_adapter.py`** — 101 tests for the Gen 4 adapter.
 - **`tests/unit/test_gen5_adapter.py`** — 140 tests for the Gen 5 adapter.
-- **`tests/unit/test_stat_stages.py`** — 46 tests for stat stage calculations.
+- **`tests/unit/test_stat_stages.py`** — 48 tests for stat stage calculations.
 - **`tests/unit/test_obs_priority.py`** — 7 tests for OBS priority-based trigger resolution (`submit_fired` — first-match-wins, per-player independence, exact area + area-group filters).
-- **`tests/unit/test_phase1_comms.py`** — 6 TCP integration tests.
+- **`tests/integration/test_phase1_comms.py`** — 6 TCP integration tests.
 - **`tests/unit/test_trainer_panel.py`** — 14 tests for the Upcoming Key Trainers panel (`trainers_for_area` / `trainer_party` / `trainer_brief`, base no-op defaults).
-- **`tests/unit/test_state_rival_battle_start.py`** — 15 tests for the Rival Team Swap auto-trigger (adapter gate, toggle matrix, `queue_rival_team_swap`, `rival_team_replaced` ack).
+- **`tests/unit/test_state_rival_battle_start.py`** — 34 tests for the Rival Team Swap auto-trigger (adapter gate, toggle matrix, `queue_rival_team_swap`, `rival_team_replaced` ack).
 - **`tests/unit/test_state_party_blob_cache.py`** — 10 tests for the `blob_hex` party-blob cache (ingest, length/hex validation, per-player isolation).
 - **`tests/unit/test_gen3_adapter_rival_ids.py`** — 8 tests for `rival_trainer_ids()` (set size 27, known-ID anchors, vanilla empty, mutation safety).
-- **`tests/unit/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
-- **`tests/integration/test_cli_native_toggles.py`** — tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`).
-- **`tests/unit/test_cli_overworld_presence.py`** — 4 tests for the `--overworld-presence` CLI flag.
+- **`tests/integration/test_cli_rival_team_swap.py`** — 4 tests for the `--rival-team-swap` CLI flag (help, store_true, default false, explicit true).
+- **`tests/integration/test_cli_native_toggles.py`** — 9 tests for the companion-patch per-run toggles (`--native-messages`, `--native-sounds`, `--no-battle-calc`, `--no-pc-trade-npc`).
+- **`tests/integration/test_cli_overworld_presence.py`** — 4 tests for the `--overworld-presence` CLI flag.
 - **`tests/unit/test_patcher_routes.py`** — the `/patcher` page + a `/companion/{name}` route per target. `server/patcher.py` holds a TARGETS registry (Radical Red, Pokemon Red, Pokemon Blue), because a UPS embeds the CRC32 of the exact dump it was diffed against and one shared file would refuse every user but one. Includes a real apply path: each shipped patch reproduces its recorded md5, the result carries the `SLNK` beacon, and applying Red's patch to a Blue dump raises. Asserts NO Yellow artifact is shipped — Yellow has no free WRAM for the mailbox, so no build exists.
 
 ---
@@ -382,7 +385,8 @@ The server uses a pluggable adapter pattern for game-specific behavior. All game
 - **`GamePresentationAdapter`** — sprite HTML generation, species/ability/item/move/area names, trainer info, type names, and the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief`).
 
 Each game family has its own adapter module:
-- **`server/adapters/gen1_rby.py`** — Gen 1 (Red, Blue, Yellow)
+- **`server/adapters/gen1_rby.py`** — Gen 1 (Red, Blue, Yellow, + Archipelago Red/Blue)
+- **`server/adapters/gen1_purergb.py`** — Gen 1 pureRGB (PureRed, PureBlue, PureGreen — a second Gen 1 foundation, not a vanilla variant)
 - **`server/adapters/gen2_gsc.py`** — Gen 2 (Crystal, Gold, Silver)
 - **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. The Lua launcher admits FireRed, LeafGreen, and Radical Red only; Emerald and Archipelago-FRLG are refused before the adapter is used.
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 (HeartGold, SoulSilver, Platinum)
@@ -432,7 +436,7 @@ The Gen 4 adapter is the **cleanest implementation** — use it as the template 
 
 ### Known Technical Debt (DO NOT Extend)
 
-**server.py is now fully game-agnostic.** All game-specific data and logic routes through the adapter pattern. The only `pokemon_data` import remaining is `GENDER_SYMBOL` (a universal `{0: "♂", 1: "♀", 2: "—"}` mapping).
+**server.py is now fully game-agnostic.** All game-specific data and logic routes through the adapter pattern — `server.py` imports nothing from `pokemon_data` at all. `GENDER_SYMBOL` still lives there (`server/pokemon_data.py:353`), keyed by name rather than index — `{"male": "♂", "female": "♀", "genderless": ""}` — and is imported by the Gen 3/4/5 adapters, not by the server.
 
 Remaining back-compat shims (leave them, don't extend them): the `"frlg"` rom_type alias in `adapters/__init__.py`, the accepted-but-ignored `is_rr` parameter on three `pokemon_data.py` functions, and the legacy theme-name aliases in `templating.py`.
 
@@ -1125,23 +1129,23 @@ Below the cards:
 ### Unit tests — no emulator or server required
 
 ```bash
-pytest tests/unit/ -v   # ~1450 tests
-pytest tests/unit/test_state.py -v          # 318 tests (incl. tick reconciliation + Explode Mode)
-pytest tests/unit/test_gen1_adapter.py -v   # 103 tests
-pytest tests/unit/test_gen2_adapter.py -v   # 50 tests (Gen2GSCAdapter)
-pytest tests/unit/test_gen3_adapter.py -v   # 216 tests
-pytest tests/unit/test_gen4_adapter.py -v   # 100 tests
+pytest tests/unit/ -v   # 14215 tests collected
+pytest tests/unit/test_state.py -v          # 319 tests (incl. tick reconciliation + Explode Mode)
+pytest tests/unit/test_gen1_adapter_contract.py -v  # 10 tests (checked against pret source, not shipped JSON)
+pytest tests/unit/test_gen2_adapter.py -v   # 59 tests (Gen2GSCAdapter)
+pytest tests/unit/test_gen3_adapter.py -v   # 218 tests
+pytest tests/unit/test_gen4_adapter.py -v   # 101 tests
 pytest tests/unit/test_gen5_adapter.py -v   # 140 tests
-pytest tests/unit/test_stat_stages.py -v    # 46 tests
-pytest tests/unit/test_phase1_comms.py -v   # 6 tests
+pytest tests/unit/test_stat_stages.py -v    # 48 tests
+pytest tests/integration/test_phase1_comms.py -v   # 6 tests
 pytest tests/unit/test_obs_priority.py -v   # 7 tests (priority + area-group filters)
 pytest tests/unit/test_manager_launcher.py -v   # 4 tests (BizHawk launcher Lua syntax)
 # 0.2.6 — Rival Team Swap / Upcoming Key Trainers:
 pytest tests/unit/test_trainer_panel.py -v             # 14 tests (Upcoming Key Trainers panel)
-pytest tests/unit/test_state_rival_battle_start.py -v  # 15 tests (rival-swap auto-trigger)
+pytest tests/unit/test_state_rival_battle_start.py -v  # 34 tests (rival-swap auto-trigger)
 pytest tests/unit/test_state_party_blob_cache.py -v    # 10 tests (blob_hex cache)
 pytest tests/unit/test_gen3_adapter_rival_ids.py -v    # 8 tests (rival trainer IDs)
-pytest tests/unit/test_cli_rival_team_swap.py -v       # 4 tests (--rival-team-swap CLI)
+pytest tests/integration/test_cli_rival_team_swap.py -v       # 4 tests (--rival-team-swap CLI)
 ```
 
 Feed event dicts directly to `SoulLinkState.handle_event()`. Use `monkeypatch` to redirect `LINKS_PATH` to `tmp_path`. Helper `make_state_with_link()` creates a pre-linked pair with `pokeballs_obtained = {"a": True, "b": True}`.
@@ -1161,7 +1165,7 @@ Test coverage includes: faint propagation, encounter linking, dead zones, whiteo
 
 ### Lua tests (manual, in BizHawk)
 
-Run `lua/tests/test_1_memory.lua` through `lua/tests/test_5_soullink.lua` in order. See `tests/TESTING.md` for pass criteria and controls (F1–F7 keys) for each test script.
+The numbered `lua/tests/test_1_memory.lua` … `test_5_soullink.lua` scripts are gone — they belonged to the removed Gen 3 client, and `tests/TESTING.md` records Tests 1–3 as removed for that reason. See `tests/TESTING.md` for the current walkthrough and its pass criteria; the per-generation gate scripts now live in `lua/tests/` under their own names (`gen1_gate.lua`, `gen2_*`, `gen3_*`).
 
 ---
 

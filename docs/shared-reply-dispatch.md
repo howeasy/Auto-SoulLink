@@ -37,3 +37,14 @@ and `budget` is a positive integer or `math.huge`.
 envelope check, `handle_command`, the existing log lines, and `budget = math.huge`
 (the drain-all-per-frame policy it had before the extraction).
 `lua/gen1/entry.lua` loads this module and injects it as `reply_dispatch`.
+
+## Gen 2 binding
+
+`lua/gen2/client.lua` also binds this module (`:1318-1332`), not just Gen 1.
+It uses the same `budget = math.huge` drain-all policy, marked "Gen 1 parity"
+in the source (`:1319`). `receive()` additionally reports each pulled line to
+its owed-reports tracker (`self.owed:line_received()`, `:1322`) before handing
+the line to `decode`; `validate()` checks the same `{commands=[...]}` envelope
+and retires the owed report for that line through `self.owed:answer(...)`
+(`:1328`). `lua/gen2/entry.lua:420` loads this module and injects it as
+`reply_dispatch`.
