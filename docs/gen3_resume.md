@@ -1,6 +1,16 @@
 # Gen 3 migration — resume note (updated 2026-09-26, checkpoint 20: GEN 3 LANDED ON LOCAL MASTER; post-merge passes green)
 
-Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in the sweep worktree's `docs/gen1_reference/RC_MASTER_GUIDE.md` (`E:/Google Drive/SLink/.claude/worktrees/gen1-rby-code-sweep-8d06e2`). Requirements ledger: `docs/gen3_requirements.md`.
+Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.
+
+## CURRENT STATE (2026-09-26, after checkpoint 20)
+
+- Local master is **1d02702f** (Gen 1+2+3, NOT pushed). This branch = master + Gen 3 docs.
+- Gen 2's evidence is re-pinned 98/98 at CODE_DIGEST e8ca0067. Gen 1 is clean.
+- The Gen 3 frozen cut is a2985d5a: FR/LG 43/43, RR 19/19. Post-merge passes are green at a20cd945.
+- Since then, test-only changes: f87e007e (a present ROM must be the pinned build) and the item-table fix. No new cut is needed.
+- G4/G5 requests: `docs/gen3/G4_request_draft.md`, `docs/gen3/G5_request_draft.md`. Both are **unsigned**, waiting on the owner's RR play session.
+- Docs accuracy sweep (owner 2026-09-26): protocol.md is re-anchored to `lua/gen3/*`. The user-facing and internal Gen 3 docs are swept for accuracy.
+- Then P6: the requirements rows, 2 reviews, then G6 (the owner tags and ships).
 
 ## CHECKPOINT 20 (2026-09-26): Gen 3 landed on LOCAL master (not pushed); resume here
 
@@ -402,7 +412,7 @@ NEXT: slink-adapter-guard + Codex REV3, then commit, patch rebuild, md5, lane ga
 
 ## Where things are
 
-- Worktree `E:/Google Drive/SLink/.claude/worktrees/gen3-migration-planning-5d8e45`, branch `claude/gen3-migration-planning-5d8e45`, pushed to origin on owner authority (2026-09-21) so CI could build the pret symbols. Not merged to master. Base: master `4749a2c`.
+- Worktree `E:/Google Drive/SLink/.claude/worktrees/gen3-migration-planning-5d8e45`, branch `claude/gen3-migration-planning-5d8e45`, pushed to origin once on owner authority (2026-09-21) so CI could build the pret symbols. It was merged to LOCAL master on 2026-09-26 (owner ruling 26) and has tracked master since. Nothing is pushed after 2026-09-21.
 - Coordinator: Claude session `30c21a7a-9a9b-44db-b573-10e09226bcc8` (Opus 5.5; earlier sessions 92be0738, f4121ed4). Peers (2026-09-23): Codex live thread **"Review Gen 3 Part 2"** (id 01a0cba4-88cf-7a51-9616-2e0eb582bc87, workingDirectory `E:\Google Drive\SLink`). Its live REQUESTS return NO_LIVE_PEER, so cards go as `delivery: steer` NOTES with a `queueKey`, and replies come back as notes or via `magi exchange <id>`. OMP session **"Gen3-2"** (case-sensitive) takes live requests, one card at a time. Subagents: Haiku/Sonnet/Opus with `model` set, at most 3 at a time. The Stop hook `~/.claude/hooks/orchestration.py` tracks note cards (`done note:<queueKey>`); never `clear` to silence it. magi refuses new requests until old replies get `kind: outcome` (RECONCILE_FIRST).
 - Owner rulings (G0 signed 2026-09-21): FRLG vanilla + Radical Red only; strangler; battery fixtures; agbcc git pin; admitted companion = what the shipped `SLink-RR.ups` produces (md5 `bf8e94a0…`, patcher pin corrected at `72dffad`); LeafGreen dump placed and verified; keep the two-reviewer G6 precedent; `codex/rr-foundation` tagged `archive/codex/rr-foundation` (local); vanilla FRLG trade NOT in this release; no `sync_pending`/`trade_failed`.
 
@@ -415,6 +425,9 @@ NEXT: slink-adapter-guard + Codex REV3, then commit, patch rebuild, md5, lane ga
 | G2 | **SIGNED 2026-09-21** as pinned facts only (PLAN §14.1; report `docs/gen3/G2_report_2026-09-21.md`, §9 = G3 carry-forward list). |
 | G3a | SIGNED (P3a pairing; see P3/P3a section). |
 | G3 | **SIGNED 2026-09-23** (PLAN §14.1) on `docs/gen3/G3_request_draft.md` as written; OPEN/PARTIAL/LG+RR-clean carried as limits. P4 started. |
+| G4 | NOT SIGNED. Request `docs/gen3/G4_request_draft.md` (frozen cut a2985d5a, FR/LG 43/43; rulings 25/26). Owner plays and signs. |
+| G5 | NOT SIGNED. Request `docs/gen3/G5_request_draft.md` (RR 19/19). Owner plays and signs. |
+| G6 | Not started (P6 docs + 2 reviews first; the owner tags and ships). |
 
 ## Landed this session (planning branch, in order)
 

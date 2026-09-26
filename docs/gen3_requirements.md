@@ -65,7 +65,7 @@ in this tree.
 | R-2 | RR fixed-order party decode (`CFRU_NO_ENCRYPT`, unencrypted) + compressed 0x3A box decode == PYDEC, checksum field left zero per CFRU's own behaviour (§5.6) | PYDEC | · | · | · |
 | R-3 | SaveBlock pointer deref with snapshot-at-arm-time/revalidate-before-each-write rules (RR relocation) (§5.3) | GAME (no corruption after a relocating event) | · | · | · |
 | R-4 | Bag/badges/map/battle/trainer reads decode correctly; FR charmap is the one glyph table (`R4`) | PYDEC | · | · | · |
-| R-5 | No leaked addresses under `lua/gen3/`: every address used by `reads.lua`/`native.lua`/`ghost.lua` comes from the profile, none hardcoded (leak guard extending `test_gen1_no_hardcoded_addresses.py`'s pattern; `R4`) | static scan | ✓ (design) | · | — |
+| R-5 | No leaked addresses under `lua/gen3/`: every address used by `reads.lua`/`native.lua` comes from the profile, none hardcoded (leak guard extending `test_gen1_no_hardcoded_addresses.py`'s pattern; `R4`) | static scan | ✓ (design) | · | — |
 
 ## S — Signals (`lua/gen3/signals.lua`)
 
@@ -125,7 +125,7 @@ per §6 P5. Post-conditions read by PYDEC + SERVER, per §5.5's scenario matrix 
 | D-6 | `whiteout` | Whiteout ⇒ rebuild via shared `_handle_whiteout` (unchanged `server/state.py` path, S-6's completion signal) | SERVER + PYDEC | · | · | · |
 | D-7 | `reconnect` (`--wrong-save`) | Session reconnect mid-duo under the rules engine (C-2 under rules) | SERVER | · | · | · |
 
-## N — Native companion (RR only; `lua/gen3/native.lua`, `lua/gen3/ghost.lua`, `patch/`)
+## N — Native companion (RR only; `lua/gen3/native.lua`, `patch/`; N-2's `ghost.lua` deferred post-RC, see "Not in this release")
 
 | id | Scenario | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|---|
