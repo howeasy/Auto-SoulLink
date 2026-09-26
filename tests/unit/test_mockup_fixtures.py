@@ -182,3 +182,17 @@ def test_capabilities_distinguish_cartridges_within_one_generation():
     # mockups make, and the one most likely to be quietly wrong.
     assert caps["red"]["explode_mode"] is True
     assert caps["red"]["abilities"] is False
+
+
+def test_capabilities_fixture_is_what_the_generator_emits():
+    """The fixture is generated (tools/gen_ui_capabilities.py), never hand-edited, so it must BE
+    the generator's output. The other checks only compare it with the status mockups, which went
+    stale alongside it: the gen2_gsc rename left game_id gen2_crystal, 30 mons/box and gym-order
+    Johto badges in here, and nothing noticed (Emerald lane, 2026-09-26)."""
+    import subprocess
+    import sys
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    out = subprocess.run([sys.executable, os.path.join(root, "tools", "gen_ui_capabilities.py")], cwd=root,
+                         capture_output=True, text=True, check=True).stdout
+    assert json.loads(out) == _load("capabilities.json"), \
+        "tests/fixtures/ui/capabilities.json drifted: python tools/gen_ui_capabilities.py > it"
