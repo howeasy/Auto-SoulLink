@@ -6,7 +6,8 @@
   time of writing). **Not pushed**: `origin/master` is `d13d2b6e`. This worktree's branch,
   `codex/gen2-foundation`, tracks master; nothing Gen 2 is unmerged except these notes.
 - **Evidence:** 98/98 Gen 2 sweep cells are pinned at CODE_DIGEST `e8ca0067` (`tools/gen2_code_digest.py`),
-  which is master's. The fixtures, duo-pairs, live-gates, live-trade-gates and live-new-gates lanes pass.
+  which is master's. The fixtures, duo-pairs, live-gates and live-trade-gates lanes pass on the merged tree;
+  live-new-gates last ran PASS 13/13 at `593616e6` (before the Gen 3 merge) and was not re-run after it.
   `release-evidence` is red only on the owner items below. The RC milestone tag
   `gen2-rc-evidence-2026-09-25` records the earlier RC evidence (digest `ccd62421`).
 - **Owner items, all that's left:** the G4 ruling (play the overlay build; the quoted ruling goes in
