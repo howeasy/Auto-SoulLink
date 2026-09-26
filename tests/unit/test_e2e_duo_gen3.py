@@ -5126,6 +5126,24 @@ def _scripted_machine(title):
     return lua, lua.execute(f'return dofile("{SCRIPTED.as_posix()}")')
 
 
+def test_sb1_pointer_bound_follows_the_title_saveblock1_size():
+    """sb1_ptr's upper bound is 0x02040000 - sizeof(SaveBlock1): FR/LG 0x3D68, Emerald 0x3D88
+    (gen3_codec SAVEBLOCK1_SIZE_EMERALD). 0x0203C290 fits FR's block but not Emerald's."""
+    from lupa import LuaError
+
+    assert codec.SAVEBLOCK1_SIZE_EMERALD == 0x3D88
+    at = 0x0203C290
+    assert 0x02040000 - 0x3D88 < at <= 0x02040000 - 0x3D68
+    lua, mod = _scripted_machine("emerald")
+    lua.globals().F.w32(0x03005008, at)
+    with pytest.raises(LuaError, match="whiteout_heal_pointer"):
+        mod.whiteout_destination(lua.globals().F.cp)
+    lua, mod = _scripted_machine("firered")
+    lua.globals().F.w32(0x03005008, at)
+    with pytest.raises(LuaError, match="whiteout_heal_unsupported"):   # the pointer passed
+        mod.whiteout_destination(lua.globals().F.cp)
+
+
 def test_emerald_whiteout_lands_on_the_raw_heal_tile_and_fr_still_projects():
     from lupa import LuaError
 

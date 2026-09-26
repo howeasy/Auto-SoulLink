@@ -260,5 +260,6 @@ return function(ctx)
         ok, why = nurse_control(ctx, linked, dest)
         if not ok then return false, why end
     end
-    return true, "pair " .. linked .. " rebuilt after the whiteout" .. (dest and "; the write landed in the Center" or "")
+    return true, "pair " .. linked .. " rebuilt after the whiteout" .. (dest and (ctx.title == "emerald" and "; the write landed at the healed Oldale landing"
+                                                or "; the write landed in the Center") or "")
 end
