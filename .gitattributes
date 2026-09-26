@@ -15,6 +15,12 @@ data/pret/*.sym text eol=lf
 data/purergb/*.sym text eol=lf
 data/purergb/*.map text eol=lf
 
+# Card X3-FIX: the expansion harness slices are hash-pinned byte-for-byte (SYM_SLICE_SHA256/
+# MAP_SLICE_SHA256 in tools/gen_gen3_title_syms_exp.py) against their committed LF bytes -- same
+# CRLF-corruption risk as the data/*.sym/*.map rules above.
+data/games/gen3_exp/28877d73/harness_rows.sym text eol=lf
+data/games/gen3_exp/28877d73/harness_map_slice.txt text eol=lf
+
 # Gen 3: the generated packs/profiles are asserted LF-deterministic (tests/unit/test_gen3_profile.py
 # test_json_is_deterministic) and the pret symbol files are sha-pinned (test_gen3_syms_build.py
 # published provenance). A fresh Windows lane checkout (core.autocrlf=true) turned both CRLF and
