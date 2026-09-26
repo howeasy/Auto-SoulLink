@@ -5,6 +5,96 @@ Read this first after a pause or compaction. The plan is `docs/gen3_emerald/PLAN
 `E:/Google Drive/SLink/.claude/worktrees/gen3-emerald`. It is local only: not pushed or merged. Its
 base is Gen 3 `5f050857`.
 
+## CHECKPOINT 2 (2026-09-26 ~06:25Z, owner pause after 3 h): resume here
+
+**Owner rules this block:**
+- Haiku, Sonnet and Opus workers, at most 3 at once, `model` set explicitly.
+- Headless OMP is NON-BLOCKING (owner 2026-09-26): call `omp_peer` headless with `wait=false`, as
+  many as useful, no Sonnet relay. Never trust it implicitly: verify every finding and record
+  `kind=outcome`.
+- "Synth hard to create tests if needed": disclosed O-33 SYNTH fixtures are fine; the behaviour
+  under test runs native.
+- One emulator lane: run dirs in `C:/slink-wt/emerald-e2`; kill only our own PIDs.
+
+**Where things are:**
+- Branch `claude/gen3-emerald` @ `the commit adding this checkpoint (after `c7fcbe50`)`, local only.
+- **Gen 3 is on master** (ruling 26; master `a20cd945` merged in as `90cf2a04`). The branch is
+  now master + Emerald, and future syncs are merges of master.
+- Worker worktrees `C:/slink-wt/em-fx` and `C:/slink-wt/em-legs` are synced to the lane; both
+  workers are done.
+
+**Gates:**
+- EG0 and EG1 are SIGNED.
+- **The EG2 request is written** (`docs/gen3_emerald/EG2_request.md`) and waits for the owner.
+  The owner decides whether to sign it; do not self-sign.
+
+**E2 done in this block** (commits since `f9b3277b`):
+
+| Commit | What it did |
+|---|---|
+| `3c17af21` | Battle checkpoint rows admitted; witnesses follow the pack's comm numbering. 21/21 live. |
+| `b00a475e` + `65177074` | Observer-only seam `SLINK_SHADOW_UNADMITTED=gen3_emerald/emerald` (Gen 3 grant with four guard tests; now scoped to the exact pack/title). |
+| `a5e3dcaf`, `d5208074`, `8ae455a0` | SYNTH fixtures `pc`, `lowhp`, `badges`, `catch`, `evolve`, `poison`, `gift`, built on the lane by `make-emerald`. |
+| `611913a2`, `cc710007`, `d27090d9`, `414afb92` | Emerald legs: PC ×4, faint, whiteout, catch, evolve, poison_faint, mon_given; Emerald STOP_AFTER; the fixes found live (details below). |
+| `5ea14b1f`, `68936b8b`, `96ec3c77` | OMP review fixes. |
+| `d27b1721`, `c7fcbe50` | Observer receipts + `docs/gen3_emerald/negatives_manifest.json`. |
+
+Defects fixed in `611913a2`–`414afb92`, each found live:
+- boot/save predicate polarity;
+- grass legs not chaining;
+- `PC.mode` target wait;
+- the catch nickname prompt;
+- the reader io missing `read_u16`;
+- the gift arriving only after the fanfare.
+
+**Observer kinds PHYSICAL on BPEE:** battle_begin/end, faint (battle + field), whiteout, map_load, save, pc_move (deposit/withdraw/box_place/release), capture_wild, mon_given, evolve_species_store, poison_faint: 11 of 12; negatives manifest 70/70.
+- `reads == PYDEC` holds at 0 and at 4 badges; the badge limit is retired.
+- OPEN, carried to E4/E5: `trade_done` (needs link/E5).
+
+**NEXT (in order):**
+1. The owner reviews and signs `docs/gen3_emerald/EG2_request.md`. Nothing on the E3 track starts
+   before that.
+2. E3, after EG2. The Gen 3 coordinator has approved the direction, with these conditions:
+   - the FR/LG/RR packs gain explicit fields for today's values;
+   - FR/LG/RR client behaviour stays byte-identical;
+   - a missing field fails closed.
+
+   The work:
+   - `client.lua:52` STATE_ACTION_CONFIRMED_STANDBY comes from `battle.commit_guard.value`;
+     the explode rows use the pack value too.
+   - SE ids: the wire keeps the FR ids, the client maps them to title SE ids through a pack
+     table, and `docs/protocol.md` documents it.
+   - `GIFT_AREAS` becomes a pack field.
+
+   Plus the items carried from EG1:
+   - the Nature Power overlay;
+   - codec API refusals;
+   - server foundation `emerald -> gen3_emerald`;
+   - ROUTED at EG4.
+3. Gen 3 lane card: the shared `PC.mode` should wait for progress (`~= current`), not the
+   target (OMP cx-6559e6e9). Emerald uses `EMH.pc_top_row` meanwhile.
+
+**Open review items (not blocking):**
+- cx-fe784f21:
+  - F6/F7/F8: the play-leg tests are mostly source-text assertions; a behavioural fake-RAM test
+    for `EMH.poison_party` and `EMH.lead_is` would be stronger.
+  - F3: `read_balls` sums the whole pocket.
+- cx-39602c02 #5: the fake-host globals share a LuaRuntime.
+- cx-b47da8b1 F5: badges 5-8 are not proven physically.
+
+**Lane tooling (scratch, `C:/slink-wt/emerald-e2`):**
+- `run_play.py <run> <fixture> [FROM] [STOP] [--noshadow]` (env `STATE_OVERRIDE`, `PLAY_SCRIPT`);
+  note that run_gate's exit code is wrong for Emerald play, so read `g_*_result.txt`.
+- `run_groups8.sh` runs the eight groups.
+- `mk_shadow_receipts.py` writes the receipts and the manifest at a clean tree.
+- `run_probe.py` for the checkpoint probe; `run_reads_pydec.py <state|BOOT>` (env `FIXTURE`).
+- `guide_update.py <json>` updates the guide checkpoint.
+
+**Environment-only test failures in this worktree:**
+- Gen 2 tests: no `.cache/gen2-build`.
+- Gen 1 pure lanes and trade-patch tests: no built `patch/build/gen1_red.gb` or pokered cache.
+- The RR harness sha.
+
 ## CHECKPOINT 1 (2026-09-25, owner pause after 1.5 h): resume here
 
 Owner rules this block:
@@ -57,7 +147,7 @@ Owner rules this block:
 
 **Recorded limits / carried items:**
 - Emerald-only forbidden states are SOURCE-only; see §8 of `docs/gen3_emerald/write_checkpoint.md`.
-- The badge receipt only proves agreement on 0 badges; it needs a fixture that has badges.
+- ~~The badge receipt only proves agreement on 0 badges~~ retired at checkpoint 2 (`d5208074`: 4 badges across the byte straddle).
 - F-C: the `gen3_boot_check.lua` SIZES table has no Emerald section sizes.
 - F-D: `probe_gen3_reads_dump.lua` and `gen3_reads_pydec.py main()` have no Emerald rows.
 - Carried from EG1 to E3: per-title SE ids, the Nature Power move overlay, codec API refusals, and the

@@ -602,7 +602,7 @@ Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
 | `emerald_trainer_b.sav` | same | same | `derive-b` | `ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6` |
 | `emerald_pc.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; party Mudkip Lv5 + Poochyena Lv3, box 1 slots 0/1 Zigzagoon Lv3 / Wurmple Lv3 (E2-FIX-VARIANTS; rebuilt 2026-09-26 with ability_num 0 for single-ability species) | `c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab` |
 | `emerald_lowhp.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv5 at 1 HP (E2-FIX-VARIANTS) | `c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b` |
-| `emerald_badges.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; badge flags 0x867-0x86A (FLAG_BADGE01..04_GET, flags.h:1359-1362) set in the SYNTH seed, straddling flag bytes 0x10C/0x10D (E2-BADGES) | `04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f` |
+| `emerald_badges.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; badge flags 0x867-0x86A (FLAG_BADGE01..04_GET, flags.h:1359-1362) set in the SYNTH seed, straddling flag bytes 0x10C/0x10D (E2-BADGES); a save the game cannot produce (4 badges, no story progress) that exists only to prove the badge read | `04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f` |
 | `emerald_catch.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; 20 Poké Balls (E2-FIX-VARIANTS r3) | `592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0` |
 | `emerald_evolve.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv15 at EXP 2534 (one short of Lv16), moves Tackle/Growl/Water Gun + a free slot (E2-FIX-VARIANTS r3) | `244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd` |
 | `emerald_poison.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; Mudkip Lv5 poisoned at 1 HP + Poochyena Lv3 (E2-FIX-VARIANTS r3) | `c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0` |
@@ -669,12 +669,12 @@ the E2-LEGS scripted-play worker.
   reasoned from `src/load_save.c` and `src/pokemon_storage_system.c`, not from a physical run —
   the coordinator's `boot-check --title emerald` on the flushed save is the actual signer.
 
-### emerald_evolve.sav / emerald_poison.sav / emerald_gift.sav / emerald_catch.sav (card E2-FIX-VARIANTS round 3) — not yet built
+### emerald_evolve.sav / emerald_poison.sav / emerald_gift.sav / emerald_catch.sav (card E2-FIX-VARIANTS round 3)
 
 Same `make-emerald` machinery and provenance as above; additive to `EMERALD_KINDS`, and
 town/battle/trainer/pc/lowhp/badges stay byte-identical (pinned in
-`tests/unit/test_gen3_emerald_fixture_qualify.py`'s `UNCHANGED_SEED_SHA256`). Not committed yet
--- the coordinator's emulator lane still needs to run `make-emerald` for each (commands below).
+`tests/unit/test_gen3_emerald_fixture_qualify.py`'s `UNCHANGED_SEED_SHA256`). Built on the
+coordinator's lane 2026-09-26 (`8ae455a0`); the game's own re-save keeps HP 1 / PSN / EXP / 20 balls.
 
 - **`evolve`** -- same map/tile as `battle` (Route 102 grass 0.17, (21,16)). Party count 1: a
   **SYNTH Mudkip stored at Lv15**, EXP = `EXP_MEDIUM_SLOW(16) - 1` = 2534 (one short of

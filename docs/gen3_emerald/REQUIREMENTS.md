@@ -57,7 +57,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 | EF-7 | Area map: every `wild_encounters.json` map keyed `mapGroup:mapNum`, merged per the §0 defaults; Hoenn names; never a Kanto name on BPEE | `tools/gen_area_map.py` Emerald mode | CONTROL | · | · | · |
 | EF-8 | Statics/gifts/daycare: starters, Castform per form, Beldum, Lavaridge Wynaut egg vs Route 117 daycare, fossils, legendaries, scripted Voltorb/Electrode/Kecleon/Unown | `data/games/gen3_emerald/statics.json` from pret scripts/flags | SERVER | · | · | · |
 | EF-9 | Items: common 0–374 table (Gen 3 `5f050857`) + Emerald overlay {375 Magma Emblem, 376 Old Sea Map}; move stats FR == E (two-source assertion) | generator + tests | CONTROL | · | · | — |
-| EF-10 | Fixtures `emerald_{town,battle,trainer}{,_b}.sav` pass `--qualify` and `--boot-check` | `tools/gen3_fixtures.py` | GAME + PYDEC | — | · | · |
+| EF-10 | Fixtures `emerald_{town,battle,trainer}{,_b}.sav` pass `--qualify` and `--boot-check` | `tools/gen3_fixtures.py` | GAME + PYDEC | — | ✓ | ✓ |
 | XF-1 | Reference build reproducible (two builds, same sha1); `.elf/.map/.sym` kept, ROM never published | `tools/build_expansion.py` | CONTROL | · | — | — |
 | XF-2 | Struct offsets (BattlePokemon, SaveBlock1/2, SpeciesInfo, MoveInfo, ItemInfo) from the offsetof probe; consistent with `.map` sizes | `tools/gen_expansion_facts.py` | CONTROL | · | · | — |
 | XF-3 | Per-build data pack: species count == RHH `numSpecies`; names/types/abilities/natDex/evolution families; moves; items. The extractor run on vanilla Emerald reproduces pret | `tools/extract_expansion_data.py` | HEADER + CONTROL | · | · | — |
@@ -66,25 +66,46 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| ER-1 | Party/box decode on BPEE == PYDEC (vanilla crypto path, no code change) | PYDEC | · | · | · |
-| ER-2 | SaveBlock pointer deref + map location (`SB1+4/+5`) on BPEE | PYDEC + GAME | · | · | · |
-| ER-3 | Bag/badges/battle/trainer reads correct on BPEE | PYDEC | · | · | · |
+| ER-1 | Party/box decode on BPEE == PYDEC (vanilla crypto path, no code change) | PYDEC | ✓ | ✓ | ✓ |
+| ER-2 | SaveBlock pointer deref + map location (`SB1+4/+5`) on BPEE | PYDEC + GAME | ✓ | ✓ | ✓ |
+| ER-3 | Bag/badges/battle/trainer reads correct on BPEE | PYDEC | ✓ | ✓ | ◐ |
 | XR-1 | Profile-driven masks (species 11, item 10, move 11 bits) and 12-char nicknames (Substruct0 extra bytes); FR/LG/RR/E suites unchanged | PYDEC + CONTROL | · | · | · |
 
 ## S: Signals
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| ES-1 | Probe matrix rows a–g on BPEE (exec at `CallCallbacks`, write hooks, host-write silence, unregister, negative control, flash domain) | ENGINE | · | · | · |
-| ES-2 | One positive + one negative receipt per exercised site kind (observer, scripted play) | ENGINE | · | · | · |
+| ES-1 | Probe matrix rows a–g on BPEE (exec at `CallCallbacks`, write hooks, host-write silence, unregister, negative control, flash domain) | ENGINE | ✓ | ✓ | ✓ |
+| ES-2 | One positive + one negative receipt per exercised site kind (observer, scripted play) | ENGINE | ✓ | ✓ | ◐ |
 
 ## W: Writes / checkpoint
 
 | id | Requirement | Oracle | S | M | P |
 |---|---|---|---|---|---|
-| EW-1 | Checkpoint true in Littleroot/Oldale overworld; false with an empty write log in every reachable forbidden state; unreachable states recorded as SOURCE-only limits | ENGINE + CONTROL | · | · | · |
+| EW-1 | Checkpoint true in Littleroot/Oldale overworld; false with an empty write log in every reachable forbidden state; unreachable states recorded as SOURCE-only limits | ENGINE + CONTROL | ✓ | ✓ | ✓ |
 | EW-2 | P+H active in-battle faint on Emerald singles (re-pinned list in `PLAN.md` §3 E4); doubles/Steven multi hold | GAME | · | · | · |
 | EW-3 | Writes inside Emerald Pokémon Centers (Union Room tasks allowed, as FRLG ruling) | GAME | · | · | · |
+
+### E2 evidence (2026-09-26, `claude/gen3-emerald`; see `docs/gen3_emerald/EG2_request.md`)
+
+`◐` = PHYSICAL in part, with the uncovered part named here.
+
+- **EF-10:** the fixtures now also include the SYNTH kinds pc, lowhp, badges, catch, evolve,
+  poison and gift. Every one was built by `make-emerald` on the lane (boot-check PASS) and
+  sha-pinned in `tests/fixtures/gen3/README.md`.
+- **ER-1, ER-2:** `probes/reads_pydec_emerald_2026-09-26.txt` shows two states: 0 party/box
+  differences, planted-offender control 2, location, and balls.
+- **ER-3:** badges at 0 and at 4 (`probes/reads_pydec_emerald_badges_2026-09-26.txt`, straddle
+  0x10C/0x10D) and balls are PHYSICAL. Badges 5-8, battle reads and trainer reads are
+  SOURCE/MODEL only.
+- **ES-1:** `probes/hooks_emerald_2026-09-25.txt`; the live gate passes at the clean cut ddff9b81.
+- **ES-2:** there are eight observer receipts (`probes/shadow_emerald_*_2026-09-26.*`) and the
+  negatives manifest (`negatives_manifest.json`, 70/70). 11 of the 12 coverage kinds are
+  PHYSICAL; `trade_done` needs a link partner (E5).
+- **EW-1:** `probes/checkpoint_emerald_2026-09-25.txt` (core + Oldale Center + map popup) and
+  `probes/checkpoint_emerald_battle_2026-09-26.txt` (21/21) establish it. The Emerald-only
+  forbidden states are SOURCE-only (`write_checkpoint.md` §8).
+
 
 ## C: Client / server / pairing
 

@@ -168,7 +168,7 @@ Battle Frontier/Pyramid/Trainer Hill/Contests/Secret Bases rule support (writes 
 |---|---|---|
 | EG0 | SIGNED 2026-09-25 (delegated) | `docs/gen3_emerald/EG1_request.md` §6.1-6.2 |
 | EG1 | SIGNED 2026-09-25 (delegated) | `docs/gen3_emerald/EG1_request.md` (E1 complete at `8ee5869f`) |
-| EG2 | in progress (E2) | resume `docs/gen3_emerald/RESUME.md` checkpoint 1 |
+| EG2 | REQUESTED 2026-09-26, awaiting the owner | `docs/gen3_emerald/EG2_request.md` (cut `c7fcbe50`) |
 | EG3 | · | |
 | EG4 | · | |
 | EG5 | · | |
