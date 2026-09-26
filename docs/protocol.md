@@ -169,7 +169,7 @@ The existing keyed responses are `sync_retrieve_done` / `sync_retrieve_failed` f
 | Uniqueness | not guaranteed for Gen 1; the server refuses (force-faints) a capture whose key already indexes a live link, and both halves of a pair MUST have distinct keys | `state.py:3316-3339` |
 | Stability | MUST be stable across party↔box moves and across reconnects; MUST change only via `key_change` (or a trade, §6) | `state.py:3223-3236` |
 
-`species_id` on the wire is the **game-internal** species id (CFRU id for RR, internal index for Gen 1). The adapter converts with `to_national_dex`/`species_name` (`base.py:399-401`, `gen3_frlge.py:748-749`, `gen1_rby.py:504-506`). `level` is the displayed level (int). Slots are 0-based (`lua/gen3/reads.lua:347-352`).
+`species_id` on the wire is the **game-internal** species id (CFRU id for RR, internal index for Gen 1). The adapter converts with `to_national_dex`/`species_name` (`base.py:407-409`, `gen3_frlge.py:842-843`, `gen1_rby.py:504-506`). `level` is the displayed level (int). Slots are 0-based (`lua/gen3/reads.lua:347-352`).
 
 ### 3.2 Event table
 
@@ -237,19 +237,19 @@ Built by `party_wire`/`party_entry` (`lua/gen3/client.lua:251-270`, fields at `:
 | `key` | key | **MUST** | `party_keys` (`m["key"]` — a missing key raises `KeyError` in `_handle_hello` and kills the connection coroutine), `_reconcile_party_keys`, blobs, `party_details` (skipped if falsy) | `state.py:1659`, `state.py:3165`, `server.py:3197` |
 | `maxHP` | int | MUST | hello: only `maxHP > 0` entries count as party members; HP bars | `state.py:1759`, `server.py:3296-3312` |
 | `hp` | int | MUST | hello offline-faint detection (`hp == 0`), alive set for re-quarantine; HP bars | `state.py:1772`, `state.py:1797-1808` |
-| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:4032`, `server.py:5150` |
+| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:4032`, `server.py:5159` |
 | `slot` | int 0-5 | SHOULD | `partner_blobs.slot` (trade `apply_trade.slot`), party ordering (`999` fallback) | `state.py:4030`, `server.py:5148` |
 | `species_id` | int (game-internal) | SHOULD | display back-fill into MonInfo, blobs, sprites, names, types | `state.py:1872`, `server.py:2734-2737` |
 | `nickname` | str | SHOULD | MonInfo back-fill, HUD labels, dashboard | `state.py:1866-1883` |
-| `active` | bool | SHOULD (battle) | active-battler marker, `stat_stages` shown only when true, doubles inference on foes | `server.py:3317-3318`, `server.py:3237`, `server.py:2388-2390` |
-| `status_cond` | int (Gen 3 `status1` layout) | SHOULD | `status_pill` macro (dashboard) and `adapter.status_token` (`link_panel`) | `server.py:3316`, `server.py:1813`, `server/templates/_macros.html:43-53` |
-| `stat_stages` | list[7] of int 0-12, 6 = neutral, order ATK,DEF,SPD,SATK,SDEF,ACC,EVA; `nil`/absent when not active | optional | `stat_stages_row(stages, labels)` macro — `(raw\|int)-6` | `server/templates/_macros.html:64-83`, `server.py:3317`, `lua/gen3/reads.lua:515-521` |
+| `active` | bool | SHOULD (battle) | active-battler marker, `stat_stages` shown only when true, doubles inference on foes | `server.py:3326-3327`, `server.py:3237`, `server.py:2388-2390` |
+| `status_cond` | int (Gen 3 `status1` layout) | SHOULD | `status_pill` macro (dashboard) and `adapter.status_token` (`link_panel`) | `server.py:3325`, `server.py:1813`, `server/templates/_macros.html:43-53` |
+| `stat_stages` | list[7] of int 0-12, 6 = neutral, order ATK,DEF,SPD,SATK,SDEF,ACC,EVA; `nil`/absent when not active | optional | `stat_stages_row(stages, labels)` macro — `(raw\|int)-6` | `server/templates/_macros.html:64-83`, `server.py:3326`, `lua/gen3/reads.lua:515-521` |
 | `moves` | list[4] int move ids | optional | `move_details` via `adapter.move_data` | `server.py:2689-2721` |
-| `pp` | list[4] int | optional | `current_pp` | `server.py:2713-2720` |
+| `pp` | list[4] int | optional | `current_pp` | `server.py:2710-2717` |
 | `pp_bonuses` | int (2 bits/move, Gen 3) **or** `pp_ups: list[4]` (Gen 4) | optional | max PP scaling `base + base*ups//5` | `server.py:2702-2718` |
 | `held_item_id` (legacy alias `held_item`) | int | optional | `adapter.item_name` | `server.py:3188`, `server.py:4128-4129` |
 | `ability_id` (legacy alias `ability`) | int | optional | `adapter.ability_name` (hidden when `!supports_abilities()`) | `server.py:3189`, `server.py:3705-3706` |
-| `form` | int | optional (Gen 4+) | sprite form | `server.py:2735-2737` |
+| `form` | int | optional (Gen 4+) | sprite form | `server.py:2743-2745` |
 | `blob_hex` | hex, **exactly `adapter.party_blob_size()*2` chars** | MUST for trade / rival swap | `_ingest_party_blobs` — wrong length or non-hex ⇒ entry silently dropped from `partner_blobs` ⇒ that mon is never trade-eligible and rival swap says "no cached party blobs" | `state.py:3979-4038`, `base.py:204-218` |
 
 Gen 3 does **not** send `ot`, `nature`, `gender` or `pp_ups` in the party entry; `gender` is derived server-side from `adapter.gender_from_key(key, species_id)` (`server.py:3199`).
@@ -296,8 +296,8 @@ Built by `rescan_boxes` (`lua/gen3/client.lua:289-304`, entry at `:275-277`): th
 
 | Field | Type | Consumer | Cite |
 |---|---|---|---|
-| `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:5078`, `4652`, `4701` |
-| `slot` | int, 0-based | display `slot+1`, logs | `server.py:5099`, `4702` |
+| `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:5087`, `4652`, `4701` |
+| `slot` | int, 0-based | display `slot+1`, logs | `server.py:4467`, `4702` |
 | `key` | key | `_cache_mon_info`, dead-in-regular-box re-memorialize, level fallbacks | `server.py:1895-1941`, `8066-8079` |
 | `species_id`, `nickname` | int, str | display | `server.py:2746-2755` (`_enrich_box`, wire-through to the template) |
 | `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:5150-5169` |
@@ -309,13 +309,13 @@ There is **no** "active box index" on the wire.
 
 | Builder | Reads | Adapter calls |
 |---|---|---|
-| `_build_status_dict` `server.py:2670-2952` | `connected_players`, `player_area(_id)`, `ball_count`, `badges`, `kanto_badges`, `trainer_name`, `pc_boxes`, `party_details` (ordered by `slot`), `battle_state`, `identity_error`, `admission`, links/killfeed/pending/bonus | `species_name`, `sprite_html(sid, form)`, `ability_name(aid, sid)`, `move_data`, `area_display_name`, `gym_badge_slugs(rom_type)`, `encounter_table` + `sprite_src` via `adapter_for(pid)` |
-| `_handle_dashboard_template` `server.py:2972-2989` | the dict above; per mon: `nickname, species_id, gender, sprite_html, active, level, held_item_id, ability_name/id, move_details, hp, maxHP, status_cond, stat_stages` | `supports_abilities`, `stat_stage_labels` (`server/ui_capabilities.py:26-30`), `gender_from_key`, `item_name`, `ability_description`, `species_types`/`type_name`, `memorial_box_index`, `trainer_info` |
+| `_build_status_dict` `server.py:2679-2961` | `connected_players`, `player_area(_id)`, `ball_count`, `badges`, `kanto_badges`, `trainer_name`, `pc_boxes`, `party_details` (ordered by `slot`), `battle_state`, `identity_error`, `admission`, links/killfeed/pending/bonus | `species_name`, `sprite_html(sid, form)`, `ability_name(aid, sid)`, `move_data`, `area_display_name`, `gym_badge_slugs(rom_type)`, `encounter_table` + `sprite_src` via `adapter_for(pid)` |
+| `_handle_dashboard_template` `server.py:2981-2998` | the dict above; per mon: `nickname, species_id, gender, sprite_html, active, level, held_item_id, ability_name/id, move_details, hp, maxHP, status_cond, stat_stages` | `supports_abilities`, `stat_stage_labels` (`server/ui_capabilities.py:26-30`), `gender_from_key`, `item_name`, `ability_description`, `species_types`/`type_name`, `memorial_box_index`, `trainer_info` |
 | `_build_link_panel` `server.py:1774-1882` | links, `party_details` (`species_id, nickname, level, hp, maxHP, status_cond`), `_mon_cache`, `area_states`, `SoulLinkState.player_badges` (count) or `SLinkServer.player_badges` (bitmask) | `area_display_name`, `species_name`, `status_token`, `info_panel_width`, `supports_info_panel` |
-| `_build_party_overlay_context` `server.py:3152-3200` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
-| `_build_badges_overlay_context` `server.py:3583-3603` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
-| `_check_memorial_box_contamination` `server.py:5039-5138` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
-| `_memorial_box_indices` `server.py:4941-4960` | dead count | `memorial_box_index`, `mons_per_box` |
+| `_build_party_overlay_context` `server.py:3161-3209` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
+| `_build_badges_overlay_context` `server.py:3592-3612` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
+| `_check_memorial_box_contamination` `server.py:5048-5147` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
+| `_memorial_box_indices` `server.py:4950-4969` | dead count | `memorial_box_index`, `mons_per_box` |
 
 `status_pill` (`server/templates/_macros.html:43-53`) decodes `status_cond` with the Gen 3 bit layout directly (SLP bits 0-2, TOX 0x80, PSN 0x08, BRN 0x10, FRZ 0x20, PAR 0x40). A client for a generation with a different layout MUST translate to this layout on the wire (see §8).
 
@@ -485,31 +485,31 @@ Accepts only in phase `applying`; ignores a mismatching non-empty `token`; buffe
 
 | Member | Signature | Default | Used at | Cite |
 |---|---|---|---|---|
-| `sprite_html` | `(species_id, form=0) -> str` | abstract | `server.py:633` → everywhere sprites render | `base.py:356-363` |
-| `ability_name` | `(ability_id, species_id=0) -> str` | abstract | `server.py:157`, `2739` | `base.py:366-372` |
-| `ability_description` | `(ability_id) -> str` | abstract | not currently called from server.py (`html_render.py`, its former caller, is gone) | `base.py:375-377` |
-| `trainer_info` | `(trainer_id) -> (name, class)`; `("","")` if unknown | abstract | `server.py:2370` (tick `trainer_id`) | `base.py:380-386` |
-| `item_name` | `(item_id) -> str` | abstract | `server.py:160`, `2741`, `2753` | `base.py:389-391` |
-| `area_display_name` | `(area_id) -> str` | abstract | dead-zone text `state.py:2481`, `2748`; panel, dashboard `server.py:1823`, `4114` | `base.py:394-396` |
-| `to_national_dex` | `(species_id) -> int` | abstract | `sprite_src` default | `base.py:399-401` |
-| `gender_symbol` | `(gender) -> str` | abstract | dashboard | `base.py:404-406` |
-| `form_sprite_id` | `(species_id) -> int\|None` | abstract | forms | `base.py:409-411` |
-| `form_sprite_url` | `(species_id, form=0) -> str\|None` | `None` | Gen 4+ forms | `base.py:413-424` |
-| `rom_content_fingerprint` | `(payload) -> str\|None`; MUST raise on malformed | `None` | admission `server.py:813` | `base.py:426-438` |
-| `ingest_rom_content` | `(payload) -> tables\|None`; MUST raise on malformed | `None` | `server.py:656`; adapter also needs `use_rom_encounters(tables)` for per-player adoption `server.py:668-679` | `base.py:440-456` |
-| `encounter_table` | `(area_id) -> {method: [ {name, species_id, rate, min_level, max_level} ]}\|None` | `None` | encounter panel `server.py:1357` | `base.py:458-469` |
-| `trainers_for_area` / `trainer_party` / `trainer_brief` | see file | `[]` / `[]` / synthesised | Upcoming Trainers panel: `trainers_for_area` `server.py:965`, `trainer_brief` `server.py:974`, `3087`; `trainer_party` not currently called | `base.py:471-500` |
-| `sprite_src` | `(species_id) -> url` | PokeAPI by national dex | encounter panel | `base.py:553-564` |
-| `move_name` / `move_data` | `(move_id) -> str` / `-> {name,type_id,type_name,power,accuracy,pp,split}\|None` | `""` / `None` | move tables `server.py:164`, `2708` | `base.py:566-579` |
-| `stat_stage_labels` | `() -> list[str]` (7 slots; `""` blanks a slot) | `["ATK","DEF","SPD","SATK","SDEF","ACC","EVA"]` | `server/ui_capabilities.py:30` | `base.py:581-589` |
-| `mons_per_box` | property → int | `30` | memorial overflow box count `server.py:4954` | `base.py:592-600` |
-| `memorial_box_index` | property → int (0-based; `-1` = none) | `-1` | contamination scan, memorial contents | `base.py:603-610` |
-| `gym_badge_slugs` | `(rom_type) -> [(pokeapi_id, name)]` | Kanto 1-8 | badges overlay | `base.py:612-630` |
-| `calc_name` | `(kind, name) -> str`; kind is species/ability/item/move | identity | calc payload names (`_build_mon_entry`) `server.py:156`, `160`, `166` | `base.py:502-508` |
-| `calc_species` | `(species_id) -> str` | `calc_name("species", species_name(id))` | calc species key; lets calc naming diverge from HUD naming (pureRGB's alternate forms share a base `species_name`) `server.py:151` | `base.py:510-523` |
-| `calc_profile` | `() -> {"gen": int, "dex": str}\|None` | `None` | `None` hides the Calc tab and dashboard calc preview for that game `server.py:927-929`, `1284`; `manager.py:264` | `base.py:525-532` |
-| `calc_nature` | `(key) -> str\|None` | `None` (no natures, Gen 1/2) | calc nature `server.py:154` | `base.py:534-539` |
-| `calc_stats` | `(detail) -> {ivs, evs, stats}\|{dvs, stat_exp, stats}\|None` | `None` | decoded IV/EV/stats (Gen 3+) or DV/stat-exp (Gen 1/2) for the calc `server.py:231` (`_foe_detail`, both calc paths), `2019` | `base.py:541-551` |
+| `sprite_html` | `(species_id, form=0) -> str` | abstract | `server.py:633` → everywhere sprites render | `base.py:364-371` |
+| `ability_name` | `(ability_id, species_id=0) -> str` | abstract | `server.py:157`, `2739` | `base.py:374-380` |
+| `ability_description` | `(ability_id) -> str` | abstract | not currently called from server.py (`html_render.py`, its former caller, is gone) | `base.py:383-385` |
+| `trainer_info` | `(trainer_id) -> (name, class)`; `("","")` if unknown | abstract | `server.py:2370` (tick `trainer_id`) | `base.py:388-394` |
+| `item_name` | `(item_id) -> str` | abstract | `server.py:160`, `2741`, `2753` | `base.py:397-399` |
+| `area_display_name` | `(area_id) -> str` | abstract | dead-zone text `state.py:2481`, `2748`; panel, dashboard `server.py:1823`, `4114` | `base.py:402-404` |
+| `to_national_dex` | `(species_id) -> int` | abstract | `sprite_src` default | `base.py:407-409` |
+| `gender_symbol` | `(gender) -> str` | abstract | dashboard | `base.py:412-414` |
+| `form_sprite_id` | `(species_id) -> int\|None` | abstract | forms | `base.py:417-419` |
+| `form_sprite_url` | `(species_id, form=0) -> str\|None` | `None` | Gen 4+ forms | `base.py:421-432` |
+| `rom_content_fingerprint` | `(payload) -> str\|None`; MUST raise on malformed | `None` | admission `server.py:813` | `base.py:434-446` |
+| `ingest_rom_content` | `(payload) -> tables\|None`; MUST raise on malformed | `None` | `server.py:656`; adapter also needs `use_rom_encounters(tables)` for per-player adoption `server.py:668-679` | `base.py:448-464` |
+| `encounter_table` | `(area_id) -> {method: [ {name, species_id, rate, min_level, max_level} ]}\|None` | `None` | encounter panel `server.py:1357` | `base.py:475-486` |
+| `trainers_for_area` / `trainer_party` / `trainer_brief` | see file | `[]` / `[]` / synthesised | Upcoming Trainers panel: `trainers_for_area` `server.py:965`, `trainer_brief` `server.py:974`, `3087`; `trainer_party` not currently called | `base.py:488-517` |
+| `sprite_src` | `(species_id) -> url` | PokeAPI by national dex | encounter panel | `base.py:570-581` |
+| `move_name` / `move_data` | `(move_id) -> str` / `-> {name,type_id,type_name,power,accuracy,pp,split}\|None` | `""` / `None` | move tables `server.py:164`, `2708` | `base.py:583-596` |
+| `stat_stage_labels` | `() -> list[str]` (7 slots; `""` blanks a slot) | `["ATK","DEF","SPD","SATK","SDEF","ACC","EVA"]` | `server/ui_capabilities.py:30` | `base.py:598-606` |
+| `mons_per_box` | property → int | `30` | memorial overflow box count `server.py:4954` | `base.py:609-617` |
+| `memorial_box_index` | property → int (0-based; `-1` = none) | `-1` | contamination scan, memorial contents | `base.py:620-627` |
+| `gym_badge_slugs` | `(rom_type) -> [(pokeapi_id, name)]` | Kanto 1-8 | badges overlay | `base.py:629-647` |
+| `calc_name` | `(kind, name) -> str`; kind is species/ability/item/move | identity | calc payload names (`_build_mon_entry`) `server.py:156`, `160`, `166` | `base.py:519-525` |
+| `calc_species` | `(species_id) -> str` | `calc_name("species", species_name(id))` | calc species key; lets calc naming diverge from HUD naming (pureRGB's alternate forms share a base `species_name`) `server.py:151` | `base.py:527-540` |
+| `calc_profile` | `() -> {"gen": int, "dex": str}\|None` | `None` | `None` hides the Calc tab and dashboard calc preview for that game `server.py:927-929`, `1284`; `manager.py:264` | `base.py:542-549` |
+| `calc_nature` | `(key) -> str\|None` | `None` (no natures, Gen 1/2) | calc nature `server.py:154` | `base.py:551-556` |
+| `calc_stats` | `(detail) -> {ivs, evs, stats}\|{dvs, stat_exp, stats}\|None` | `None` | decoded IV/EV/stats (Gen 3+) or DV/stat-exp (Gen 1/2) for the calc `server.py:231` (`_foe_detail`, both calc paths), `2019` | `base.py:558-568` |
 
 ### 7.3 Routing (`server/adapters/__init__.py`)
 
@@ -536,13 +536,13 @@ Things a non-Gen-3 client/adapter must neutralise on the wire, or that should be
 | 5 | `server/templates/_macros.html:43-53` | `status_pill` decodes `status_cond` with the Gen 3 `status1` layout (dashboard); only `link_panel` uses `adapter.status_token` | a client whose RAM layout differs MUST send `status_cond` re-encoded to: SLP = bits 0-2 counter, PSN 0x08, BRN 0x10, FRZ 0x20, PAR 0x40, TOX 0x80 (GB layout already matches for SLP/PSN/BRN/FRZ/PAR, `base.py:573-584`) | encode on the wire |
 | 6 | `server/templates/_macros.html:64-83` | `stat_stages` are 7 slots, raw 0-12 with **6 = neutral** | Gen 1 stat mods are 1-13 with 7 neutral; client MUST subtract 1 and blank/omit slots per `adapter.stat_stage_labels()` | encode on the wire; adapter blanks labels |
 | 7 | `server.py:3708-3726` | PP-Up encoding accepts `pp_bonuses` (packed u8) or `pp_ups` (list) | Gen 1 stores PP-Ups in the PP byte's top 2 bits — client must split into `pp` and `pp_ups` | send `pp_ups` |
-| 8 | `state.py:1517-1520`, `base.py:667-679` | identity fallback parses OT from `party[0].key` with the 2-part default | a 3-part key MUST override `parse_ot_id`; better: send `ot_id` in hello | Gen 1 adapter overrides `gen1_rby.py:327-328` |
+| 8 | `state.py:1517-1520`, `base.py:684-696` | identity fallback parses OT from `party[0].key` with the 2-part default | a 3-part key MUST override `parse_ot_id`; better: send `ot_id` in hello | Gen 1 adapter overrides `gen1_rby.py:327-328` |
 | 9 | `state.py:3599-3677` | blob validation by `party_blob_size()` | default 0 disables trade + rival swap entirely | adapter override (Gen 1: 66) |
 | 10 | `server.py:2908` vs `2678-2683` | wide `link_panel` "Badges" row reads the `status` event count; compact rows popcount the hello/tick bitmask | a client without `status` shows 0/8 in the wide layout | send `status{badges:count}` or use width ≤ 20 |
 | 11 | `server.py:1963` | absent `panel` capability ⇒ panel sent iff `info_panel_width()==0` | a Gen with width > 0 gets **no** panel unless hello carries `panel:true` | send `panel`/`panel_abi` |
 | 12 | RESOLVED | dashboard `ROM_LABEL` (formerly `server.py:4044-4058`) is gone | — | header now calls `variant_label` directly (`server/adapters/__init__.py:216-218`) |
 | 13 | `state.py:2294-2295`, `2131`, `2318-2320` | party capacity hardcoded 6 | correct for every supported generation | — |
-| 14 | `state.py` `MonInfo.species` vs wire `species_id`; `_build_status_dict` links expose `a_species` while `_lp_mon_cell` looks up `lnk["a_species_id"]` (`server.py:2670`) | server-internal naming drift; the fallback never hits | none needed on the wire: **always** `species_id` |
+| 14 | `state.py` `MonInfo.species` vs wire `species_id`; `_build_status_dict` links expose `a_species` while `_lp_mon_cell` looks up `lnk["a_species_id"]` (`server.py:2854`) | server-internal naming drift; the fallback never hits | none needed on the wire: **always** `species_id` |
 | 15 | `state.py:3370-3375` | gender clause via `gender_from_key`; a `genderless` result never violates | Gen 1 adapter returns `genderless` — clause inert, no wire impact | — |
 | 16 | `state.py:1852-1911` | shiny clause via `adapter.is_shiny(key)` | Gen 1 adapter returns `False` — inert | — |
 | 17 | `lua/gen3/reads.lua:19` | client hardcodes 100-byte blobs (`R.PARTY_MON_SIZE = 100`, `sizeof(struct Pokemon)`) | client-side only; a new client checks its own adapter size | — |
