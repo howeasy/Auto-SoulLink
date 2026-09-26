@@ -50,10 +50,14 @@ A Gen 2 binder uses its own generated `charmap.lua` and selected title profile:
 
 ```lua
 local decode = Scanner.new({glyphs = charmap.glyphs,
-    terminator = charmap.terminator, max_length = profile.constants.NAME_LENGTH,
+    terminator = charmap.terminator, max_length = profile.derived.name_length,
     unknown = function(byte) return string.format("<$%02X>", byte) end})
--- Pass decode as the existing third argument to Gen2Reads.new(profile, io, decode).
+-- Pass decode as the existing third argument to Reads.new(profile, io, decode).
 ```
+
+(`lua/gen2/entry.lua:292-296` is the actual call site: `max_length` reads
+`profile.derived.name_length`, not `profile.constants.NAME_LENGTH`, and the
+Gen 2 reads module is named `Reads`, not `Gen2Reads`.)
 
 That binder contract is exercised with all three generated Gen 2 charmaps; the
 Gen 2 decoder is not edited by this extraction. Font/language alias interpretation
