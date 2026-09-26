@@ -69,6 +69,21 @@ end
 function M.bind(H, opts)
     opts = opts or {}
     local P = { H = H, opts = opts }
+    -- Mark a finish, so a leg that raises is told apart from H.finish's own abort (which ends the
+    -- script: client.exit() live, a raise under test). Only a raise with NO finish before it is a
+    -- real Lua error, and that one is finished here by name instead of dying on the gate timeout
+    -- with no RESULT, screenshot or phase trail (Emerald lost a 1500 s run; OMP cx-7ebf0d0f #8).
+    if H.finish and not H.finish_marked then
+        local real_finish = H.finish
+        H.finish = function(...) P.finished = true; return real_finish(...) end
+        H.finish_marked = true
+    end
+    local function raised(leg, where, err)
+        if P.finished then error(err, 0) end          -- H.finish's abort: pass it through untouched
+        if H.shot then H.shot("stuck") end
+        H.finish(false, string.format("%s: %s raised: %s", leg.name, where, tostring(err)))
+        error(err, 0)                                 -- only reached if the binding's finish returns
+    end
 
     local function need(name)
         return assert(H[name], "playlib: the binding supplies no H." .. name)
@@ -561,7 +576,7 @@ function M.bind(H, opts)
             if ok then return end
             -- Anything that is not our own whiteout signal — above all H.finish's abort —
             -- belongs to the caller, untouched.
-            if type(err) ~= "table" or not err.whiteout then error(err, 0) end
+            if type(err) ~= "table" or not err.whiteout then raised(leg, "run", err) end
             if not leg.recover then
                 H.shot("stuck")
                 H.finish(false, string.format(
@@ -707,7 +722,12 @@ function M.bind(H, opts)
                     H.idle(30)
                     H.phase("leg-state", string.format("%s <- %s", leg.name, state))
                 end
-                local why = leg.check and leg.check(cp)
+                local why
+                if leg.check then
+                    local ok, res = pcall(leg.check, cp)
+                    if not ok then raised(leg, "check", res) end
+                    why = res
+                end
                 if why then
                     H.shot("stuck")
                     H.finish(false, string.format("%s: precondition failed: %s", leg.name, why))

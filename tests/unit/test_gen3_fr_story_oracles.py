@@ -1871,3 +1871,26 @@ def test_pc_popup_requires_the_option_its_cursor_area_implies(machine, area, opt
     else:
         with pytest.raises(LuaError, match="pc_storage_popup_wrong_mode"):
             mod.PC.popup("mismatched", area, 1, 0)
+
+
+def test_pc_mode_reaches_a_row_two_downs_away(machine):
+    """Each Down moves ONE row, so the wait after a press is for the cursor to LEAVE its row, not to
+    land on the target: waiting for `== row` stalled any target >= 2 (Emerald's MOVE POKeMON is row
+    2; OMP cx-6559e6e9, PHYSICAL on BPEE)."""
+    lua, mod, fake = machine
+    lua.execute("""
+        F.pcstore=0x0202A000
+        F.w32(0x020397B0,F.pcstore)
+        F.w32(0x03005090,0x0808C39D); F.w8(0x03005090+4,1)
+        F.w16(0x03005090+8,2); F.w16(0x03005090+10,0)
+        F.w8(0x0203ADE4+4,4)
+        F.on_tap=function(button)
+            if button=='Down' then
+                F.w16(0x03005090+10, F.r8(0x03005090+10)+1)
+            elseif button=='A' then
+                F.w32(0x03005090,0x0808D2BD); F.w8(F.pcstore,0); F.w8(F.pcstore+1,2)
+            end
+        end
+    """)
+    assert mod.PC.mode("move", 2) is True
+    assert fake.r8(0x03005090 + 10) == 2
