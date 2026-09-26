@@ -1,198 +1,132 @@
-# Handoff: make the damage calc work for every supported game
+# Damage calc for every game: status record
 
-You are taking over one piece of work on SLink: make the bundled damage calculator give correct
-numbers for every supported game, not only Radical Red. Read this whole file before you start.
-Everything here was checked at source on master `96ae536d` (2026-09-25) unless marked *inferred*.
+This file started as the handoff for making the bundled damage calculator correct for every
+supported game, not only Radical Red. That work is **on local master (not pushed, not released)**.
+This file now records what was done, where it lives, and what is still open. The task numbers
+below keep their original meaning because code cites them (`server/adapters/gen1_rby.py`
+`calc_profile`, `tests/unit/test_calc_profile.py`).
 
-## What SLink is (30 seconds)
+Status as of master `1d02702f` (2026-09-26).
 
-SLink automates a Pokémon Soul Link Nuzlocke across two BizHawk emulators. Lua clients read game
-RAM and send JSON over TCP to a Python server (`server/server.py`), which enforces the rules and
-serves a web UI (aiohttp + Jinja2 + HTMX). Game-specific behaviour lives in adapters
-(`server/adapters/`). A fork of the Smogon damage calculator lives in `calc/`; the run server
-serves it at `/calc/normal.html`, and `calc/src/js/slink_bridge.js` pulls live party and enemy data
-into it from `GET /api/calc/mons`.
+## Per game
 
-Read `CLAUDE.md` (repo root, gitignored, local only) first. Its adapter rules are hard rules.
+| Game | Adapter | Calc | Rules / data | Enemy trainer sets | Verified |
+|---|---|---|---|---|---|
+| Radical Red | `gen3_frlge.py` (RR mode) | On | Gen 9 + `RR_PATCH` | RR's own (`normal.js`, `hardcore.js`, `slink_priority.js`) | Browser regression pass after the multi-gen changes |
+| FireRed / LeafGreen | `gen3_frlge.py` | On | Gen 3 tables | `FRLG.js` (vendored, pret-checked) | Browser, one hand-worked case (below) |
+| Emerald | `gen3_frlge.py` (`rom_type == "emerald"`) | Wired, unreachable | Gen 3 tables | `Emerald.js` (vendored, **not** pret-checked) | None. Live runs refuse Emerald for now; the Emerald lane owns its check |
+| Red / Blue / Yellow | `gen1_rby.py` | On | Gen 1 tables | `RedBlue.js` / `Yellow.js` (vendored, pret-reconciled) | Browser, hand-worked cases (below) |
+| pureRGB | `gen1_purergb.py` | On | Gen 1 rules on pureRGB's own dex (`calc.useDex('purergb')`) | `PureRGB.js` (generated) | Browser, one hand-worked case; limits in [PURERGB_MECHANICS.md](PURERGB_MECHANICS.md) |
+| Crystal / Gold / Silver | `gen2_gsc.py` (Gen 2 lane) | On | Gen 2 tables | Crystal only: `Crystal.js` (vendored, pret-checked) | Browser, one hand-worked case (below) |
 
-## The goal
+"Verified" means checked in the browser against numbers worked by hand from the pret formulas,
+using constructed `/api/calc/mons` payloads. None of it has been exercised in a live two-emulator
+run yet.
 
-| Game | Adapter | Calc today | Target |
-|---|---|---|---|
-| Radical Red (RR) | `gen3_frlge.py` (RR mode) | Works | Close the four gaps (task 9) |
-| FireRed/LeafGreen/Emerald vanilla | `gen3_frlge.py` | Loads, wrong numbers | Correct under Gen 3 rules |
-| Crystal | `gen2_crystal.py` | Loads, wrong numbers | Correct under Gen 2 rules |
-| Red/Blue/Yellow | `gen1_rby.py` | Loads, wrong numbers | Correct under Gen 1 rules |
-| pureRGB (Red/Blue hack) | `gen1_purergb.py` | Loads, wrong numbers | Correct, including its custom data (owner decides scope; see task 7) |
+Hand-worked cases that matched the calc exactly:
 
-Gen 4/5 adapters exist but have never worked and are hidden from the UI. Ignore them.
+- Gen 1: Bulbasaur L20 (DVs 10/12/8/9, no stat exp) vs Brock's Onix L14. Stats 48/28/29/34/26 and
+  36/20/52/15/26; Vine Whip 85-100. Brock's Geodude filled in from `RedBlue.js` (Tackle, Defense
+  Curl, DVs 9/8/8/8, stat exp 0).
+- Gen 3: Brock's FRLG Onix enriched from `FRLG.js` as Careful, IVs 0 (HP 33, Def 49, SpD 18).
+- Gen 2: Whitney's Miltank L20 from `Crystal.js` (Rollout/Stomp/Milk Drink/Attract, DVs 8/8/8/8,
+  stat exp 0) gives 68/40/50/24/36/48.
+- pureRGB: Porygon Tri Attack vs Chansey, both L50: 57-67 (Tri → Normal alternate STAB).
 
-## Why it is wrong today (verified)
+## How it works now
 
-1. **Generation is locked to 9.** `calc/src/normal.template.html:50` has a single gen radio,
-   `value="9" id="gen9"`. The upstream gen selector code is still there
-   (`calc/src/js/shared_controls.js:1246-1292` change handler, `:1600-1602` reads `?gen=`), but
-   `?gen=1` looks for `#gen1`, which doesn't exist. `server/static/calc-preview.js:116` hard-codes
-   `Generations.get(9)`. The engine (`calc/calc/src/mechanics`, `calc/calc/src/data`) still has
-   Gen 1-3 rules and data (a node check confirmed the Generations data loads).
-2. **RR data lives in the Gen 9 tables.** `RR_PATCH` is merged into Gen 9 in
-   `calc/calc/src/data/species.ts:~10650`, `moves.ts:~5109`, `abilities.ts:~342,363`, and
-   `items.ts:~516`. Vanilla FRLG on Gen 9 therefore gets RR typings and stats (Arbok Poison/Dark,
-   Clefairy Fairy) and the per-move physical/special split.
-3. **No generation in the payload.** `_build_mon_entry` (`server/server.py:~158-204`) and the
-   enemy path (`server.py:~2560-2636`) send no game or generation field. The bridge never reads
-   one.
-4. **Nature invented from DVs.** `_nature_from_key` (`server.py:127`) takes the key's first hex
-   field mod 25. That is the personality value on Gen 3, but DVs on Gen 1 (key `DVs:OT:species`,
-   `lua/gen1/reads.lua:218`) and Gen 2 (`DV1DV2:OTID:species`, `lua/memory_gb.lua:324`). The paste
-   always carries a nature and an ability line (`server.py:~183-184`).
-5. **Names only mapped for RR.** `calc_name` (`server/adapters/base.py:479`) is a passthrough;
-   only `gen3_frlge.py:549` overrides it (via `data/games/gen3_frlge/calc_names.json`). Moves the
-   calc doesn't know become "(No Move)" silently (`slink_bridge.js:~846-852`). Missing move counts
-   against the calc's own tables for the right generation: Gen 1 13/165 (ThunderShock,
-   Sand-Attack, Hi Jump Kick, SolarBeam…), Crystal 18 (DynamicPunch, ExtremeSpeed, Faint
-   Attack…), vanilla Gen 3 20 (Thunderpunch, Vicegrip, Smellingsalt, Featherdance…), pureRGB 19.
-   Items too: BrightPowder, TwistedSpoon, BlackBelt vs the calc's spaced names (`items.ts:11,13,66`).
-6. **No real stats.** No IVs/EVs, DVs, stat experience or computed stats are sent. The Gen 1 Lua
-   reads DVs and stat exp (`lua/gen1/reads.lua:~100-114`) and the Gen 1 codec's
-   `decode_party_mon` (`server/adapters/gen1_codec.py`) returns them, but `_build_mon_entry`
-   drops them. Gen 3 IVs/EVs are only inside the encrypted `blob_hex`.
-7. **Gen 1 stat stages land in the wrong row.** Gen 1 sends `[atk,def,spd,spc,6,acc,eva]`
-   (`lua/gen1/client.lua:~132`); the bridge maps index 3 to `.sa` (`slink_bridge.js:~1750`), but in
-   Gen 1 mode Special is `.sl` (`normal.template.html:~336`).
-8. **RR-only bridge features.**
-   - Matched trainer sets are injected into `window.SETDEX_SV` (`slink_bridge.js:~784`), but
-     outside Gen 9 the calc reads `SETDEX[gen]` (`shared_controls.js:~1270`).
-   - `normal.js`, `hardcore.js` and `slink_priority.js` are all RR trainer sets. "Normal" and
-     "Hardcore" are RR difficulty modes.
-   - The Prep tab (`slink_bridge.js:~1115`) and the HC badge show RR trainers for every game.
-   - `_enrichEnemyMons` (`slink_bridge.js:~323-420`) overwrites enemy moves, nature, ability and
-     item with RR sets whenever the trainer label, or its species+level fallback, matches.
-9. **Gen 1 enemy is thin.** The Gen 1 client sends only species, level, hp and stages for the
-   active foe (`lua/gen1/client.lua:~249-255`). The server defaults `maxHP` to 1, so HP% clamps to
-   100 (`server.py:~2611,2623`).
-10. **Wrong adapter in a two-adapter run.** `handle_calc_mons` uses the run-wide `self.adapter`
-    (`server.py:~2563/2590/2619`), not `self.adapter_for(pid)`.
-11. **Ungated.** The Calc link shows for every game: `server/templates/dashboard.html:31`,
-    `_rail.html:67`, `server.py:~1082`, `manager.py:~1857`. The dashboard battle preview is
-    RR-only via `if not self.state.is_rr: return None` at `server.py:978`. That line also breaks
-    the no-`is_rr`-in-shared-code rule.
+- **Gate and profile.** `GameAdapter.calc_profile()` (`server/adapters/base.py`, inert default
+  `None`) returns `{"gen", "dex", "sets"?}` per game. `None` hides the Calc tab/links and the
+  dashboard preview. `SLinkServer._calc_profile()` requires both players' adapters to agree; the
+  Manager derives it the same way in `_calc_profile_for_run` (`server/manager.py`).
+- **Payload.** `GET /api/calc/mons` carries `calc` (the profile). Each mon entry carries
+  `calc_stats` from `adapter.calc_stats(detail)`: Gen 3 IVs/EVs/stats, Gen 1/2 DVs/raw stat
+  exp/stats (contract in `base.py`). Nature comes from `adapter.calc_nature(key)` (`None` for
+  Gen 1/2 and for enemy `foe-N` keys). Ability is sent only when `supports_abilities()`. Species
+  name comes from `adapter.calc_species(sid)`. The foe-entry wire fields are in
+  [docs/protocol.md](../protocol.md) §4.3.
+- **Bridge** (`calc/src/js/slink_bridge.js`):
+  - switches the calc to `calc.gen` before loading mons;
+  - calls `calc.useDex('purergb' | 'vanilla')`;
+  - loads `calc/src/js/data/sets/games/<sets.file>`, matches the enemy party (trainer label
+    first, then species and level), and fills moves/DVs/IVs/nature/ability/item without
+    overriding live data;
+  - fills the DV/IV/EV/`.statexp` fields from `calc_stats`, and `console.warn`s when the calc's
+    computed stat differs from the in-game one.
+  The HC badge and the Normal/Hardcore toggle stay RR-only.
+- **Engine** (`calc/calc/src`):
+  - Gen 1/2 `evs` are raw stat exp (0-65535, default max), in both `Pokemon` and the public
+    `Stats.calcStat`.
+  - pureRGB swaps the Gen 1 tables in place (`data/purergb.ts`, generated by
+    `tools/gen_purergb_calc_patch.py --check`).
+- **Page loading.** The calc page runs each compiled module as a classic script in one global
+  scope behind a small shim (`calc/src/normal.template.html`), not `production.min.js`.
+  `tests/unit/test_calc_bundle.py` loads that exact script list.
 
-A previous reviewer claimed the Crystal held item never reaches the calc. That is **wrong**: the
-server maps the client's `held_item` to `held_item_id` (`server.py:1659`, `:1824`). Don't "fix" it.
+## Original problems (numbered as in the handoff) and where each was fixed
 
-The `battle_calc` Manager option is unrelated: it toggles the in-game calc in RR's companion
-patch (`state.py:~1178`), not the web calc.
+1. Generation locked to 9 → gen radios restored, the bridge switches gen from the payload
+   (6490e889).
+2. RR data in the Gen 9 tables → other games run on their own generation's tables (6490e889).
+3. No generation in the payload → `calc` profile (6490e889).
+4. Nature invented from DVs → `calc_nature` adapter method (61e41429). Enemy `foe-N` keys give
+   `None` (3233ff37).
+5. Names only mapped for RR → Gen 1 / vanilla Gen 3 tables (61e41429), Gen 2 table (Gen 2 lane).
+   Unknown moves warn in the console.
+6. No real stats → `calc_stats` from the party blob (ec9179cd); engine stat exp (6490e889,
+   0372d501, 5705d557).
+7. Gen 1 stat stages in the wrong row → `.sl` for Gen 1 (6490e889).
+8. RR-only bridge features → gated on `dex === 'rr'`. Non-RR games get their own trainer sets
+   (3233ff37).
+9. Gen 1 enemy thin → the client sends moves/status/DVs (+ the party record in trainer battles)
+   (de157d7f, 9129774b); maxHP from the Gen 2 lane's plausibility-gated read; the server no
+   longer defaults maxHP to 1 (a02739f8).
+10. Wrong adapter in two-adapter runs → `adapter_for(pid)` in `handle_calc_mons` (6490e889).
+11. Ungated calc → `calc_profile` gates the tab, links and preview (6490e889, 677e5b55).
 
-## Tasks
+## Tasks (original numbering)
 
-Do them in this order. Each ends with the unit suite green and the calc rebuilt where it changed.
+1. Gate per game: done (`calc_profile`, replacing the suggested `supports_web_calc`).
+2. Send the generation: done (`calc_profile()["gen"]`, replacing the suggested `calc_gen`).
+3. Name tables: done for Gen 1, vanilla Gen 3 and Gen 2.
+4. Real stats: done. Gen 1 via `gen1_codec`, Gen 3 via `gen3_codec`, Gen 2 via `gen2_codec`
+   (the Gen 2 adapter returns the stored in-game stats).
+5. Generation-aware bridge: done.
+6. Gen 1 enemy data: done, on master. **Not live-verified** (see open items).
+7. pureRGB: done as a full patch (owner's choice). Known limits in
+   [PURERGB_MECHANICS.md](PURERGB_MECHANICS.md).
+8. Trainer teams outside RR: done by vendoring
+   [KinglerChamp/VanillaNuzlockeCalc](https://github.com/KinglerChamp/VanillaNuzlockeCalc)
+   (MIT, 54ed9713) with a pret check (`tests/unit/test_calc_trainer_sets.py`); pureRGB's are
+   generated (`tools/gen_purergb_setdex.py --check`).
+9. RR gaps: As One resolved by ability id (56f14b75); enemy natures fixed (3233ff37). Primal
+   Palkia, Leech Fang and Metal Bash stay on the `UNRESOLVABLE` allowlist in
+   `tests/unit/test_rr_calc_names.py`: the repo has no stats/types for RR species 920, and no
+   drain/bite flags for the two moves.
 
-1. **Gate the calc per game (S).** Add an adapter method, e.g. `supports_web_calc()` (base default
-   False; `gen3_frlge` True for RR; later tasks flip the others to True as each becomes correct).
-   Use it for the Calc tab/links and the dashboard preview. Replace the `is_rr` check at
-   `server.py:978` with it.
-2. **Send the generation (M).** Add a `calc_gen()` adapter method (base None; Gen 1 → 1, Crystal
-   → 2, vanilla Gen 3 → 3, RR → 9). Put `gen` in the `/api/calc/mons` payload and in the
-   calc-preview data. Restore the gen radios in `normal.template.html` (and `hardcore` if it has
-   its own template). The bridge sets the calc's generation from the payload on load, and
-   `calc-preview.js` uses it instead of `Generations.get(9)`.
-3. **Name tables (S each).** Give `gen1_rby`, `gen2_crystal` and vanilla-Gen-3 `gen3_frlge` a
-   `calc_name` override backed by small JSON tables in each `data/games/<gen>/`. Put the Gen 3 table
-   beside RR's, keyed by variant. Copy the shape of `tests/unit/test_rr_calc_names.py`: parse the
-   calc's tables for the matching generation and assert every name the adapter can emit resolves.
-   Also make the bridge log a console warning when a move falls back to "(No Move)".
-4. **Real stats for Gen 1/2 (M).** Nature and ability become adapter facts:
-   - Gen 1/2 send no nature and no ability.
-   - Gen 3 keeps the personality nature.
-   - Move `_nature_from_key` behind an adapter method.
+## Open
 
-   For stats, send DVs and stat experience for Gen 1/2, decoded from what the client already
-   sends (the Gen 1 codec has it; Crystal needs a decoder). The bridge fills the calc's DV/stat
-   fields in Gen 1/2 mode. For Gen 3 vanilla, decode IVs/EVs from the blob if that stays small;
-   otherwise send the in-game computed stats and have the bridge override. Pick whichever the
-   calc supports cleanly and say which you chose.
-5. **Generation-aware bridge (M).**
-   - Map Gen 1 Special stages to `.sl`.
-   - Inject matched sets into `SETDEX[gen]`, not always `SETDEX_SV`.
-   - Hide the Prep tab and the HC badge, and skip `_enrichEnemyMons` RR matching, when the game
-     isn't RR (read a flag from the payload; don't sniff species).
-6. **Gen 1 enemy data (M).** Send enemy max HP, moves and status from `lua/gen1/client.lua`, and
-   stop the server defaulting `maxHP` to 1 when it's missing. Also use `adapter_for(pid)` in
-   `handle_calc_mons` (item 10 above).
-7. **pureRGB custom data (L, confirm scope with the owner first).**
-   - pureRGB adds 6 types (Crystal, Bonemerang, Tri, Floating, Magma, Typeless), 5 custom moves
-     (Filthy Slam, Heat Rush, Siphon Snag, Firewall, Dust Claw), 5 spirit species and alternate
-     forms (see `data/games/gen1_purergb/`).
-   - The RR approach is a patch compiled into the TypeScript tables. A `PURERGB_PATCH` on the Gen 1
-     tables, with its own generation id, is the likely route.
-   - The engine's type code may not accept new types without surgery (*inferred*). Prototype that
-     first and report before building the rest.
-8. **Trainer teams outside RR (L, optional, ask first).** Trainer parties from the pret
-   disassembly data feeding `trainer_party`/`trainer_brief` and a per-game setdex. Until this
-   exists, task 5 keeps RR sets out of other games.
-9. **RR gaps (S).**
-   - These have no calc entry: Leech Fang, Metal Bash, the As One ability, Primal Palkia (see
-     `UNRESOLVABLE` in `tests/unit/test_rr_calc_names.py:~39-105`).
-   - Add them to the RR patch in the calc tables if the calc can model them, else keep them on the
-     allowlist with a reason.
-   - Enemy natures are always Hardy; send the real one if the client has it.
+- **Live check of the Gen 1 foe path.** On the next live Gen 1 trainer battle, confirm the foe's
+  `blob_hex` decodes to the right species via `gen1_codec` and `dvs_raw` matches the game. Nobody
+  has done this yet.
+- **Emerald.** `Emerald.js` isn't pret-checked, and Emerald is refused in live runs. The Emerald
+  lane has this queued.
+- **RR data gaps** above need an authoritative source before they can be added.
+- **pureRGB limits:**
+  - Defense Curl's super-effective block isn't modelled.
+  - The four optional type-chart toggles aren't modelled; the calc uses the default chart.
+  - Move side effects aren't modelled.
+  Details in [PURERGB_MECHANICS.md](PURERGB_MECHANICS.md).
+- **Mocks carry no party blobs** (`tools/inject_full_mocks.py`), so real-stat inputs can't be
+  browser-checked from mocks.
 
-Flip each game's `supports_web_calc()` to True only once its numbers are right. Check that by
-comparing a few hand-worked damage rolls, e.g. a Gen 1 critical hit, a Gen 3 special-by-type
-move.
+## Working on it
 
-## Rules
-
-- **Adapter isolation (CLAUDE.md).**
-  - Never add `is_rr` or a `game_id` branch to `server.py`, `state.py`, `adapters/base.py` or
-    `pokemon_data.py`.
-  - Add a base-class method with an inert default and override it per game.
-  - Adapters never import `server.server`.
-  - After a shared-code change, run the Gen 3 tests first (`/slink-test 3`), then the rest.
-- **Git.**
-  - Work in your own worktree on a `claude/calc-*` branch outside Google Drive, e.g. under
-    `C:/Users/howar/AppData/Local/Temp/`. Use `git -c maintenance.auto=false -c gc.auto=0` for
-    every command.
-  - Commit with pathspecs only, never `git add -A`. Never stash: the stash stack is shared and a
-    hook blocks it.
-  - Keep each file's line endings; most are CRLF.
-  - End commit messages with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
-  - No push. Merging to local master is fine once the suite is green and it merges cleanly.
-- **Other lanes are active.**
-  - The Gen 2 session owns `lua/gen2/**`, `lua/clients/gen2_*`, `server/adapters/gen2_crystal.py`,
-    and has a freeze on `server/**/*.py` and `lua/*.lua` for its branch. Tell it before you land
-    changes to those.
-  - The Gen 3 session ("Gen3 migration planning") owns the Gen 3 Lua client and
-    `rival_trainer_ids`. It will merge master into its branch, so keep your server edits small and
-    separate.
-  - The pureRGB lane owns `lua/gen1/*`. Tell it before touching those (task 6).
-  - Message the other sessions with SendMessage; `ListAgents` shows who is live.
-- **Emulators.** Don't start BizHawk unless a task needs it, and never kill EmuHawk by image
-  name; other lanes run emulators on this machine. Kill only PIDs you started.
-- **Testing.**
-  - One sensible test per feature (owner preference); no review ceremony for small changes.
-  - Full suite: `python -m pytest tests/unit -q -p no:cacheprovider`. In a worktree add
-    `--ignore=tests/unit/test_gen1_trade_patch.py`, which fails there for an unrelated toolchain
-    warning.
-  - Lint: `ruff check server tests tools`.
-  - Lua syntax: use `lupa` (Lua 5.5), not the system `luac` 5.1.
-- **Calc build.** `calc/dist` is not in git. After changing `calc/src` or `calc/calc/src`, run
-  `npm run build` in `calc/`. That runs `subpkg run build` (tsc + bundle) then `node build view`.
-  The engine has jest tests (`npm test` in `calc/calc`).
-- **Verifying in the browser.** Run a server with `python -m server.server`, then
-  `python tools/inject_full_mocks.py` for realistic mock state, and open `/calc/normal.html`.
-  Mocks are Gen 3; for other games, construct a payload or use a fixture from `tests/`.
-
-## Done when
-
-- Each supported game opens the calc in its own generation, with its party's names, moves, items
-  and stats correct.
-- Unknown names warn instead of vanishing.
-- RR-only features don't appear in other games, and the Calc tab only shows where the numbers are
-  right.
-- The unit suite and lint are green.
-- Report back to the owner with:
-  - a per-game table;
-  - what you verified by hand;
-  - what's left (pureRGB and non-RR trainer teams are expected to be decisions, not surprises).
+- Adapter isolation (root `CLAUDE.md`): no `is_rr` or `game_id` branches in `server.py`,
+  `state.py`, `adapters/base.py` or `pokemon_data.py`. Add an inert base method and override it
+  per game.
+- `calc/dist` isn't in git. After changing `calc/src` or `calc/calc/src`, run `npm run build` in
+  `calc/`. Engine tests: `npx jest src/test` in `calc/calc`. Their baseline has
+  description-string and Gen 7-9 RR failures that predate this work.
+- Browser checks: run `python -m server.server`, then `python tools/inject_full_mocks.py` (RR).
+  For other games, serve a constructed `/api/calc/mons` payload in the page.
