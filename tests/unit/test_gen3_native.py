@@ -151,6 +151,23 @@ def test_a_published_job_carries_its_own_dispatch_receipt():
     assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]   # the publish the receipt names
 
 
+def test_partial_opcode_publication_is_distinct_from_no_dispatch():
+    class InterruptedWorld(World):
+        def write(self, address, value, *_):
+            if address == self.n["BASE"] + 7:
+                raise RuntimeError("high opcode byte failed")
+            super().write(address, value)
+
+    w = InterruptedWorld()
+    results = []
+    handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *args: results.append(args))
+    w.service()
+    assert handle["posted"] is None
+    assert handle["publish_attempted"] is True
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]
+    assert results[0][0] == "native dispatch interrupted"
+
+
 def test_a_job_queued_behind_another_carries_no_receipt_yet():
     w = World()
     first = w.native.play_sound(w.native, 25)

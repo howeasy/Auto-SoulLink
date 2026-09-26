@@ -81,10 +81,24 @@ function N.new(profile, deps)
     end
     function self:trade_active() return false end -- apply_trade belongs to the trade card
     function self:hello_fields() return {} end -- no invented wire capability fields
-
+    -- V1 has no epoch/visit-bound save witness and must not advertise durable trade.
+    -- The v2 binding replaces this only when all witness checks are implemented.
+    function self:trade_capable() return false end
     local function finish(job, why, result, reason)
         if job.done then job.done(why, result, reason) end
     end
+    function self:cancel(handle)
+        for i, job in ipairs(queue) do
+            if job == handle then
+                table.remove(queue, i)
+                job.cancelled = true
+                finish(job, "guard:stale")
+                return true
+            end
+        end
+        return false -- published operations belong to the cartridge; never erase one
+    end
+
     local function abort(why)
         local active, waiting = pending, queue
         pending, queue = nil, {}
@@ -157,6 +171,7 @@ function N.new(profile, deps)
                 -- native_idle clause (status ~= busy) refuse the rest of the post.
                 writes:write_u16(p.BASE + O.ack, (seq + 65535) % 65536)
                 writes:write_u16(p.BASE + O.seq, seq)
+                job.publish_attempted = true -- a sink failure can leave a valid low-byte opcode
                 writes:write_u16(p.BASE + O.opcode, job.op) -- publish last
                 -- ... and the receipt is the publish's own witness: nothing after it can fail
                 job.posted = true
@@ -426,11 +441,8 @@ function N.new(profile, deps)
             elseif frame - job.started >= timeout_for(job.op) then
                 -- Never reuse a timed-out slot: opcode==0 can mean an async handler
                 -- still owns it. A reset/absent beacon is the recovery boundary.
-                -- RECORDED LIMIT (C5-6a): the poison also blocks any recovery post, so a trade
-                -- whose OP_SET_ENEMY_PARTY stage timed out cannot post its OP_SET_PARTY_MON
-                -- silent-swap fallback; the trade FSM reads the slot back and reports it as it is.
-                -- A safe recovery post would need to know whether the patch still owns the timed-
-                -- out op, and nothing in the ABI says so, so none is attempted.
+                -- Poison blocks further posts. Durable trade treats a possibly committed
+                -- operation as uncertain; neither raw replacement nor RAM readback repairs it.
                 poisoned = "native timeout"; abort(poisoned)
             end
         end

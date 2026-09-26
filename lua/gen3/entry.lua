@@ -374,6 +374,7 @@ local function build_production(deps, c)
         })
     end
     session = L("lua/gen3/client.lua").new({
+        Trade = L("lua/gen3/trade.lua"), owed_reports = L("lua/owed_reports.lua"),
         reads = reads, R = c.Reads, profile = c.profile, sites = c.sites, Signals = c.Signals,
         writes = writes, boxes = boxes, policy = policy, net = assert(deps.net, "deps.net required"),
         hud = assert(deps.hud, "deps.hud required"), json = c.json, io = io_, ev = c.ev,
