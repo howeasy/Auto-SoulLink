@@ -39,6 +39,7 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     "firered": "gen3_frlge", "leafgreen": "gen3_frlge", "emerald": "gen3_frlge",
     "firered_ap": "gen3_frlge", "leafgreen_ap": "gen3_frlge",
     "firered_rr": "gen3_frlge",
+    "emerald_expansion_28877d73": "gen3_exp",
     "heartgold": "gen4_hgsspt", "soulsilver": "gen4_hgsspt",
     "platinum": "gen4_hgsspt", "hgss": "gen4_hgsspt",
     "renegade_platinum": "gen4_hgsspt",  # Drayano60 difficulty hack on Platinum
@@ -86,6 +87,7 @@ _VARIANT_LABEL: dict[str, str] = {
     "firered": "FireRed", "leafgreen": "LeafGreen",
     "firered_ap": "FireRed (AP)", "leafgreen_ap": "LeafGreen (AP)",
     "firered_rr": "Radical Red", "emerald": "Emerald",
+    "emerald_expansion_28877d73": "Emerald Expansion 1.17.0 (28877d73)",
     "heartgold": "HeartGold", "soulsilver": "SoulSilver",
     "platinum": "Platinum", "hgss": "HGSS",
     "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
@@ -182,6 +184,7 @@ _ROM_TYPE_TO_FOUNDATION: dict[str, str] = {
     # Emerald shares Gen3Adapter (game_id gen3_frlge) but not FR/LG's layout or maps: its own
     # pack, so it pairs only with Emerald (docs/gen3_emerald/PLAN.md §2 decision 5).
     "emerald": "gen3_emerald",
+    "emerald_expansion_28877d73": "gen3_exp",
     # Gen 2 (docs/gen2/PLAN.md §5.9, owner O-16): ONE foundation for Gold, Silver and
     # Crystal, so every Gen 2 pairing is admitted with no title relation in shared code.
     # EVERY spelling has a row: the title-cased ones are what both clients send and what
@@ -227,6 +230,10 @@ from .gen3_frlge import Gen3Adapter  # noqa: E402
 register_adapter("gen3_frlge", Gen3Adapter)
 # Backward compat: "frlg" was the old game_id; alias to gen3_frlge
 register_adapter("frlg", Gen3Adapter)
+
+from .gen3_expansion import Gen3ExpansionAdapter  # noqa: E402
+
+register_adapter("gen3_exp", Gen3ExpansionAdapter)
 
 from .gen4_hgsspt import Gen4Adapter  # noqa: E402
 

@@ -4361,17 +4361,10 @@ class SLinkServer:
                     seen_keys.add(cap.key)
             result[f"{pid}_options"] = opts
 
-        # Build area list
-        try:
-            _base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            # Try adapter-specific area map first, fall back to gen3_frlge
-            _map_path = os.path.join(_base_dir, "data", "games", self._area_pack(), "area_map.json")
-            if not os.path.exists(_map_path):
-                _map_path = os.path.join(_base_dir, "data", "games", "gen3_frlge", "area_map.json")
-            with open(_map_path) as _mf:
-                _all_area_ids = sorted({v for v in json.load(_mf).values() if v})
-        except Exception:
-            _all_area_ids = []
+        # Build area list: the active game's own area maps, via the shared loader.
+        # It has no cross-game fallback -- a game that ships no map (gen3_exp) gets []
+        # and then only the areas its own run has entered, never another game's catalog.
+        _all_area_ids = self._load_known_area_ids()
         all_area_set = set(_all_area_ids)
         for extra_src in [s.area_states.keys(), s.pending_captures.keys()]:
             for extra in extra_src:

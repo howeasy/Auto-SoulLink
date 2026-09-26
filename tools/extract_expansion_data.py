@@ -553,15 +553,24 @@ def main():
     parser.add_argument("--symbols", type=Path, default=ROOT / "data/gen3/pret/pokeemerald.sym")
     parser.add_argument("--layout", type=Path, help="ROM-bound layout JSON, required for expansion")
     parser.add_argument("--output", type=Path)
-    parser.add_argument("--check", action="store_true", help="vanilla source CONTROL + server cross-check; fails any source difference")
+    parser.add_argument("--check", action="store_true", help="vanilla source CONTROL; with expansion --layout, compare existing --output without writing")
     args = parser.parse_args()
     data = args.rom.read_bytes()
     _, rhh = parse_headers(Rom(data))
-    require(not args.check or rhh is None, "--check only supports vanilla CONTROL; expansion requires a build-specific oracle")
+    require(not args.check or rhh is None or args.layout is not None,
+            "--check only supports vanilla CONTROL unless expansion --layout is supplied")
     require(rhh is None or args.layout is not None, "--layout is required for an expansion ROM")
     require(args.output is not None, "--output is required")
     layout = json.loads(args.layout.read_text()) if args.layout else vanilla_layout(args.source, args.symbols)
     pack = extract(data, layout, charmap(args.source))
+    if args.check and rhh is not None:
+        # X2: regeneration integrity, NOT an independent source/runtime oracle.
+        expected = json.dumps(pack, indent=2, ensure_ascii=False) + "\n"
+        require(args.output.is_file(), f"expansion data pack missing: {args.output}")
+        require(args.output.read_text(encoding="utf-8") == expected,
+                f"expansion data pack differs: {args.output}")
+        print("PASS: expansion data pack matches ROM/layout regeneration (no files written)")
+        return
     if args.check:
         require(pack["kind"] == "vanilla", "--check is the vanilla CONTROL; expansion needs a build-specific oracle")
         clean_source(args.source)
