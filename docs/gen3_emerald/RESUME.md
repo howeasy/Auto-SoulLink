@@ -5,6 +5,42 @@ Read this first after a pause or compaction. The plan is `docs/gen3_emerald/PLAN
 `E:/Google Drive/SLink/.claude/worktrees/gen3-emerald`. It is local only: not pushed or merged. Its
 base is Gen 3 `5f050857`.
 
+## CHECKPOINT 3 (2026-09-26 ~11:20Z, after 2 more hours; E3 in progress): resume here
+
+- **EG2 SIGNED** by the owner (confirmed in chat). E3 started. Master `1d02702f` is merged in
+  (`056f248f`), and the shared `PC.mode` fix let `EMH.pc_top_row` go. The pc group re-ran live
+  and PASSES (`2270df20`).
+- **E3 committed:**
+  - `752cf2e5` E3-CLIENT: STANDBY, SE ids and gift areas come from the pack, with explicit
+    FR/LG/RR fields. A missing field fails closed.
+  - `bc2b6967` E3-SERVER: foundation `emerald -> gen3_emerald` (FR/RR↔E refused, E↔E admitted);
+    Emerald title data in Gen3Adapter (fixed gifts, item overlay, sprites, gift names, Nature
+    Power 95); `server.py` `_area_pack()` (slink-adapter-guard CLEAN).
+- **Reviews pending:** OMP cx-daf0f544 (752cf2e5) and cx-361cd02b (bc2b6967) were dispatched at
+  the pause. If their replies arrived in the transcript, verify each finding; if not, re-run them.
+
+**NEXT (in order):**
+1. **Gift/static linking gap** (found by both E3 workers). The client's `area_now` emits `""` for
+   maps not in `data/games/gen3_emerald/area_map.json` (`client.lua` ~175-180), and
+   `server/state.py` `_handle_capture` drops an empty area id. So the fossil (11:1), Beldum
+   (14:7), the Wynaut egg (0:12), Castform (32:1) and statics in unmapped maps (Kyogre 24:103,
+   Groudon 24:105, Rayquaza 24:85, Regis 24:6/67/68, Mew, Deoxys, Lugia, Ho-Oh) never link.
+   - Fix on the Emerald area-map side (`tools/gen_area_map.py` Emerald mode): gift maps map to
+     `gift_<g>_<n>`, which the server sets already accept.
+   - Static maps get their MAPSEC area, or a static id (decide with the server side).
+   - The client's `gift_area()` gains the `gift_` prefix rule (as `lua/games/gen3_frlge.lua:41`).
+   - Also: `statics.json` `route_117_daycare_egg` names map 22:0, but the receive script is
+     outdoors on 0:32 (pret `Route117/map.json:65`).
+2. Minor carries:
+   - `tests/unit/test_gen3_emerald_client.py` waives the protocol_schema foundation problem;
+     since `bc2b6967` the derivation is `gen3_emerald`, so check whether the waiver can go.
+   - `adapters/base.py` could declare `area_pack` (it returns game_id) so `server.py` drops its
+     getattr.
+   - The FR/LG/RR `write_checkpoint.json` hashes changed (additive fields): tell the Gen 3 lane
+     that the bw-hash receipts move.
+3. Then E4 (duos; the P+H re-pin on Emerald) and E4b (final-cut runner). Admission and ROUTED
+   flip at EG4 (ruling 24).
+
 ## CHECKPOINT 2 (2026-09-26 ~06:25Z, owner pause after 3 h): resume here
 
 **Owner rules this block:**
