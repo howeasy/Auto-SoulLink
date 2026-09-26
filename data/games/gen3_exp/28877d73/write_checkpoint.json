@@ -365,7 +365,7 @@
       "version": "gen3-sound-v1"
     },
     "source": {
-      "facts_sha256": "2dd2a6a0d7735ec003f8406d953512b364a39908f02836be229bd5419a1bd1b2",
+      "facts_sha256": "51e6bd19accdde52703a655f91bbe5af181c1aa9bf7784ad0386dea9dd5b03c2",
       "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
       "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
       "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"

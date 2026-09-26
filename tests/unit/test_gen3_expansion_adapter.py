@@ -248,6 +248,9 @@ def test_sentinel_names_never_surface_through_the_adapter():
 
 @pytest.mark.asyncio
 async def test_expansion_debug_area_catalog_never_borrows_frlges(tmp_path):
+    import json
+    from pathlib import Path
+
     from aiohttp.test_utils import TestClient, TestServer
 
     from server.server import SLinkServer, build_app
@@ -260,9 +263,42 @@ async def test_expansion_debug_area_catalog_never_borrows_frlges(tmp_path):
         body = await (await client.get("/api/debug/manual_link_data")).json()
     finally:
         await client.close()
-    # No area_map shipped for gen3_exp: only the always-appended "gift" entry, never
-    # a Kanto (FR/LG) area silently borrowed from gen3_frlge's catalog.
-    assert body["area_ids"] == ["gift"]
+    # gen3_exp ships its own area_map.json (data/games/gen3_exp/28877d73/area_map.json):
+    # the catalog is that pack's own Hoenn-first id set, plus the always-appended "gift".
+    own_map = json.loads(
+        (Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/area_map.json")
+        .read_text(encoding="utf-8")
+    )
+    expected = sorted({v for v in own_map.values() if isinstance(v, str)} | {"gift"})
+    assert body["area_ids"] == expected
+    # Never a FR/LG-only (Kanto/Sevii) id silently borrowed from gen3_frlge's catalog.
+    for kanto_only in ("cinnabar_lab", "saffron_dojo", "digletts_cave"):
+        assert kanto_only not in body["area_ids"]
+
+
+@pytest.mark.asyncio
+async def test_expansion_debug_area_catalog_is_empty_without_a_shipped_map(tmp_path, monkeypatch):
+    from aiohttp.test_utils import TestClient, TestServer
+
+    from server.adapters.gen3_expansion import Gen3ExpansionAdapter
+    from server.server import SLinkServer, build_app
+    from server.state import AreaStatus
+
+    # data/games/gen3_exp/ (the parent of the 28877d73 build dir) exists but ships no
+    # area_map*.json of its own: a real "no map" directory, not a nonexistent one (which
+    # would trip _load_known_area_ids' gen3_frlge fallback instead of testing the [] path).
+    monkeypatch.setattr(Gen3ExpansionAdapter, "area_pack", property(lambda self: "gen3_exp"))
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv.adapter = get_adapter("gen3_exp")
+    srv.state.area_states["some_visited_area"] = AreaStatus.LINKED
+    client = TestClient(TestServer(build_app(srv)))
+    await client.start_server()
+    try:
+        body = await (await client.get("/api/debug/manual_link_data")).json()
+    finally:
+        await client.close()
+    # No shipped catalog: only "gift" (always appended) plus areas the run itself entered.
+    assert body["area_ids"] == ["gift", "some_visited_area"]
     assert "pallet_town" not in body["area_ids"]
 
 

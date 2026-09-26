@@ -186,7 +186,7 @@
       "include/config/text.h": "2c4f70e37f708c2d718a88331d3423e5c510805c0093213264a4788e88f91ee6",
       "include/config/wild_encounter.h": "026ea3f8608fc61c847df71d4042cd841a5523929a9eb3bc3e0c894fd7f6eaab"
     },
-    "extractor_sha256": "a41dff77dd62c71419f8caf0db0b122ff94c0b7082993e2593d217c5a224f453",
+    "extractor_sha256": "4aad52334caa7f7fb94ae5b64016d624d336f8e48a309fcb546992ec9104e8ab",
     "generator_sha256": "bca6e97a3761fb0e352f9fe78756e29d6a560be62dd1e049b34674dac1efe8bd",
     "layout_headers_sha256": {
       "include/battle.h": "1d62757d9a475c6d4ea9ae97ad2450c3b49d61198644f63d183c309d068acddc",
