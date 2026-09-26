@@ -3,17 +3,17 @@
  "cases": {
   "battle": {
    "extra": {
-    "battle_from": 3628,
-    "battle_to": 4610,
+    "battle_from": 3600,
+    "battle_to": 4589,
     "rings_in_battle": 0
    },
    "id": 2,
    "result": "PASS",
    "ring": {
     "caller": 0,
-    "frame": 4928
+    "frame": 4907
    },
-   "step_at": 4844,
+   "step_at": 4823,
    "via": "permit"
   },
   "named_fallback": {
@@ -28,14 +28,14 @@
    "result": "PASS",
    "ring": {
     "caller": 0,
-    "frame": 13992
+    "frame": 13989
    },
-   "step_at": 13908,
+   "step_at": 13905,
    "via": "binder"
   },
   "named_map_change": {
    "extra": {
-    "crossed": 12875,
+    "crossed": 12872,
     "restaged": true,
     "staged_before_crossing": true,
     "wipes": 1
@@ -44,9 +44,9 @@
    "result": "PASS",
    "ring": {
     "caller": 0,
-    "frame": 12964
+    "frame": 12961
    },
-   "step_at": 12873,
+   "step_at": 12870,
    "via": "binder"
   },
   "native": {
@@ -54,7 +54,7 @@
     "native_ring": {
      "armed": 1,
      "caller": 4,
-     "frame": 10795,
+     "frame": 10792,
      "id": 2,
      "stage": [
       0,
@@ -88,26 +88,26 @@
    "result": "PASS",
    "ring": {
     "caller": 0,
-    "frame": 11938
+    "frame": 11935
    },
-   "step_at": 11854,
+   "step_at": 11851,
    "via": "permit"
   },
   "save": {
    "extra": {
     "armed_at_save": 2,
-    "save_site_frame": 9182,
+    "save_site_frame": 9179,
     "sram_backup": 0,
-    "sram_changed_bytes": 250,
+    "sram_changed_bytes": 252,
     "sram_primary": 0
    },
    "id": 2,
    "result": "PASS",
    "ring": {
     "caller": 0,
-    "frame": 9664
+    "frame": 9661
    },
-   "step_at": 9580,
+   "step_at": 9577,
    "via": "permit"
   },
   "start_menu": {
@@ -119,9 +119,9 @@
    "result": "PASS",
    "ring": {
     "caller": 0,
-    "frame": 7703
+    "frame": 7700
    },
-   "step_at": 7619,
+   "step_at": 7616,
    "via": "permit"
   },
   "town": {
@@ -134,16 +134,16 @@
    "result": "PASS",
    "ring": {
     "caller": 0,
-    "frame": 6269
+    "frame": 6265
    },
-   "step_at": 6185,
+   "step_at": 6181,
    "via": "binder"
   }
  },
  "client_write_scope": "phone (lua/gen2/panel.lua permit reason phone, mailbox +32, the wUnusedMapBuffer stage)",
  "code_digest": {
-  "commit": "7ba4d552240a8cd120043877d4b849ac4abcf1fa",
-  "digest": "e8ca0067c9db0f863e39e45a21a096d45102b5e576320a37f26cd481c0913795",
+  "commit": "1d9dbf86f7e12d201f8d258c29b39dfc6bef7551",
+  "digest": "9f8e2cb3d727c6876a1ea2b96437874aa086bf12a940046cf5558f8efbc9198c",
   "dirty": [],
   "schema": "gen2-code-digest-v1",
   "scope": [
@@ -162,7 +162,7 @@
  "fixture_sha256": "f4a9c35db272089ec77e83cfa6772fb245ff29077dedef1cd462fc632d7852f6",
  "harness_write_scopes": [
   {
-   "frame": 10507,
+   "frame": 10504,
    "value": 2,
    "what": "wSpecialPhoneCallID = SPECIALCALL_ROBBED"
   }

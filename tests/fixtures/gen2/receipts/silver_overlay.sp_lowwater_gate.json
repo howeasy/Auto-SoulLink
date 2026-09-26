@@ -8,8 +8,8 @@
  },
  "client_write_scope": "sfx + phone (lua/gen2/panel.lua permit, mailbox +7 and +32)",
  "code_digest": {
-  "commit": "7ba4d552240a8cd120043877d4b849ac4abcf1fa",
-  "digest": "e8ca0067c9db0f863e39e45a21a096d45102b5e576320a37f26cd481c0913795",
+  "commit": "1d9dbf86f7e12d201f8d258c29b39dfc6bef7551",
+  "digest": "9f8e2cb3d727c6876a1ea2b96437874aa086bf12a940046cf5558f8efbc9198c",
   "dirty": [],
   "schema": "gen2-code-digest-v1",
   "scope": [
@@ -36,31 +36,31 @@
  "runs": {
   "A_held": {
    "battle": {
-    "from": 3726,
-    "to": 4435
+    "from": 3641,
+    "to": 4379
    },
    "composition": {
     "composed_margin": 116,
     "note": "nested VBlank bounded by composition (service depth + handler depth), not required to be observed",
-    "service_deepest_frame": 3895,
+    "service_deepest_frame": 3833,
     "service_min_margin": 146,
     "service_min_sp": 57237,
     "service_windows": 290,
     "vblank_deepest": {
      "entry_sp": 57291,
-     "frame": 4097,
+     "frame": 4043,
      "min_sp": 57263
     },
     "vblank_max_depth": 30,
-    "vblank_samples": 728
+    "vblank_samples": 757
    },
-   "delay_path": 3895,
+   "delay_path": 3833,
    "excursions": [],
    "guards": {
     "PlaySFX": {
      "hits": 5,
      "low": {
-      "frame": 3895,
+      "frame": 3833,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -77,9 +77,9 @@
      }
     },
     "SlinkDelayFrameBridge": {
-     "hits": 621,
+     "hits": 544,
      "low": {
-      "frame": 4094,
+      "frame": 4038,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -96,9 +96,9 @@
      }
     },
     "SlinkPhoneService": {
-     "hits": 621,
+     "hits": 544,
      "low": {
-      "frame": 4094,
+      "frame": 4038,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -115,9 +115,9 @@
      }
     },
     "SlinkService": {
-     "hits": 621,
+     "hits": 544,
      "low": {
-      "frame": 4094,
+      "frame": 4038,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -134,9 +134,9 @@
      }
     },
     "SlinkSfxService": {
-     "hits": 621,
+     "hits": 544,
      "low": {
-      "frame": 4094,
+      "frame": 4038,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -153,9 +153,9 @@
      }
     },
     "VBlank": {
-     "hits": 1081,
+     "hits": 1025,
      "low": {
-      "frame": 4204,
+      "frame": 4148,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -174,7 +174,7 @@
     "_PlaySFX": {
      "hits": 5,
      "low": {
-      "frame": 3895,
+      "frame": 3833,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -201,16 +201,16 @@
    },
    "phone": {
     "accepted": true,
-    "acked": 3896,
+    "acked": 3834,
     "armed_id": 2,
     "id": 2,
-    "posted": 3895,
+    "posted": 3833,
     "rings_in_battle": 0
    },
    "problems": [],
-   "resumed": 3896,
+   "resumed": 3834,
    "service_irq": {
-    "frame": 3895,
+    "frame": 3833,
     "hvblank": 0,
     "mailbox": {
      "phone_armed": 0,
@@ -228,10 +228,10 @@
    "sfx": {
     "accepted": true,
     "code": 1,
-    "consumed": 3896,
+    "consumed": 3834,
     "id": 1,
-    "played": 3896,
-    "posted": 3895,
+    "played": 3834,
+    "posted": 3833,
     "pre_playing": false
    },
    "stack": {
@@ -253,7 +253,7 @@
    },
    "trigger": {
     "battle_mode": 1,
-    "frame": 3895,
+    "frame": 3833,
     "hvblank": 0,
     "joy_down": 1,
     "mailbox": {
@@ -273,31 +273,31 @@
   },
   "B_held": {
    "battle": {
-    "from": 3726,
-    "to": 4435
+    "from": 3641,
+    "to": 4379
    },
    "composition": {
     "composed_margin": 116,
     "note": "nested VBlank bounded by composition (service depth + handler depth), not required to be observed",
-    "service_deepest_frame": 3895,
+    "service_deepest_frame": 3833,
     "service_min_margin": 146,
     "service_min_sp": 57237,
     "service_windows": 290,
     "vblank_deepest": {
      "entry_sp": 57291,
-     "frame": 4097,
+     "frame": 4043,
      "min_sp": 57263
     },
     "vblank_max_depth": 30,
-    "vblank_samples": 728
+    "vblank_samples": 757
    },
-   "delay_path": 3895,
+   "delay_path": 3833,
    "excursions": [],
    "guards": {
     "PlaySFX": {
      "hits": 5,
      "low": {
-      "frame": 3895,
+      "frame": 3833,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -314,9 +314,9 @@
      }
     },
     "SlinkDelayFrameBridge": {
-     "hits": 621,
+     "hits": 544,
      "low": {
-      "frame": 4094,
+      "frame": 4038,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -333,9 +333,9 @@
      }
     },
     "SlinkPhoneService": {
-     "hits": 621,
+     "hits": 544,
      "low": {
-      "frame": 4094,
+      "frame": 4038,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -352,9 +352,9 @@
      }
     },
     "SlinkService": {
-     "hits": 621,
+     "hits": 544,
      "low": {
-      "frame": 4094,
+      "frame": 4038,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -371,9 +371,9 @@
      }
     },
     "SlinkSfxService": {
-     "hits": 621,
+     "hits": 544,
      "low": {
-      "frame": 4094,
+      "frame": 4038,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -390,9 +390,9 @@
      }
     },
     "VBlank": {
-     "hits": 1081,
+     "hits": 1025,
      "low": {
-      "frame": 4204,
+      "frame": 4148,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -411,7 +411,7 @@
     "_PlaySFX": {
      "hits": 5,
      "low": {
-      "frame": 3895,
+      "frame": 3833,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -438,16 +438,16 @@
    },
    "phone": {
     "accepted": true,
-    "acked": 3896,
+    "acked": 3834,
     "armed_id": 2,
     "id": 2,
-    "posted": 3895,
+    "posted": 3833,
     "rings_in_battle": 0
    },
    "problems": [],
-   "resumed": 3896,
+   "resumed": 3834,
    "service_irq": {
-    "frame": 3895,
+    "frame": 3833,
     "hvblank": 0,
     "mailbox": {
      "phone_armed": 0,
@@ -465,10 +465,10 @@
    "sfx": {
     "accepted": true,
     "code": 1,
-    "consumed": 3896,
+    "consumed": 3834,
     "id": 1,
-    "played": 3896,
-    "posted": 3895,
+    "played": 3834,
+    "posted": 3833,
     "pre_playing": false
    },
    "stack": {
@@ -490,7 +490,7 @@
    },
    "trigger": {
     "battle_mode": 1,
-    "frame": 3895,
+    "frame": 3833,
     "hvblank": 0,
     "joy_down": 2,
     "mailbox": {
@@ -510,30 +510,30 @@
   },
   "released": {
    "battle": {
-    "from": 3726,
-    "to": 4460
+    "from": 3641,
+    "to": 4405
    },
    "composition": {
-    "composed_margin": 118,
+    "composed_margin": 116,
     "note": "nested VBlank bounded by composition (service depth + handler depth), not required to be observed",
-    "service_deepest_frame": 3954,
-    "service_min_margin": 148,
-    "service_min_sp": 57239,
+    "service_deepest_frame": 3898,
+    "service_min_margin": 146,
+    "service_min_sp": 57237,
     "service_windows": 287,
     "vblank_deepest": {
      "entry_sp": 57291,
-     "frame": 4138,
+     "frame": 4066,
      "min_sp": 57263
     },
     "vblank_max_depth": 30,
-    "vblank_samples": 753
+    "vblank_samples": 783
    },
    "excursions": [],
    "guards": {
     "PlaySFX": {
      "hits": 5,
      "low": {
-      "frame": 3954,
+      "frame": 3898,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -550,9 +550,9 @@
      }
     },
     "SlinkDelayFrameBridge": {
-     "hits": 618,
+     "hits": 541,
      "low": {
-      "frame": 4119,
+      "frame": 4063,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -569,9 +569,9 @@
      }
     },
     "SlinkPhoneService": {
-     "hits": 618,
+     "hits": 541,
      "low": {
-      "frame": 4119,
+      "frame": 4063,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -588,9 +588,9 @@
      }
     },
     "SlinkService": {
-     "hits": 618,
+     "hits": 541,
      "low": {
-      "frame": 4119,
+      "frame": 4063,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -607,9 +607,9 @@
      }
     },
     "SlinkSfxService": {
-     "hits": 618,
+     "hits": 541,
      "low": {
-      "frame": 4119,
+      "frame": 4063,
       "hvblank": 1,
       "mailbox": {
        "phone_armed": 2,
@@ -626,9 +626,9 @@
      }
     },
     "VBlank": {
-     "hits": 1106,
+     "hits": 1051,
      "low": {
-      "frame": 4235,
+      "frame": 4173,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -637,9 +637,9 @@
       },
       "pc": 336,
       "rie": 31,
-      "rom_bank": 20,
+      "rom_bank": 1,
       "site": "VBlank",
-      "sp": 57255,
+      "sp": 57249,
       "text_delay": 0,
       "vblank_occurred": 0
      }
@@ -647,7 +647,7 @@
     "_PlaySFX": {
      "hits": 5,
      "low": {
-      "frame": 3954,
+      "frame": 3898,
       "hvblank": 0,
       "mailbox": {
        "phone_armed": 2,
@@ -674,16 +674,16 @@
    },
    "phone": {
     "accepted": true,
-    "acked": 3955,
+    "acked": 3899,
     "armed_id": 2,
     "id": 2,
-    "posted": 3894,
+    "posted": 3832,
     "rings_in_battle": 0
    },
    "problems": [],
-   "resumed": 3897,
+   "resumed": 3835,
    "service_irq": {
-    "frame": 3954,
+    "frame": 3898,
     "hvblank": 0,
     "mailbox": {
      "phone_armed": 0,
@@ -701,10 +701,10 @@
    "sfx": {
     "accepted": true,
     "code": 1,
-    "consumed": 3955,
+    "consumed": 3899,
     "id": 1,
-    "played": 3955,
-    "posted": 3894,
+    "played": 3899,
+    "posted": 3832,
     "pre_playing": false
    },
    "stack": {
@@ -726,7 +726,7 @@
    },
    "trigger": {
     "battle_mode": 1,
-    "frame": 3894,
+    "frame": 3832,
     "hvblank": 0,
     "joy_down": 0,
     "mailbox": {
