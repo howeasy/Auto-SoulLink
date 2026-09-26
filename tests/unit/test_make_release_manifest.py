@@ -197,6 +197,12 @@ def test_the_shipped_socket_dll_is_packaged(archive):
     )
 
 
+def test_the_licence_and_notices_ship_with_the_code(archive):
+    """Review cx-66e7600f F3: MIT (ours, Alpine's, LuaSocket's for the DLL above) requires the
+    copyright and permission notice to travel with the copies."""
+    assert {"LICENSE", "NOTICE.md"} <= archive
+
+
 def test_the_old_gen1_client_is_not_shipped(archive):
     """The old client's files are out of the manifest (tooling half of the cutover); the files
     themselves stay on disk until their unit consumers are migrated."""
