@@ -2,7 +2,8 @@
 -- Re-run: cd SLink && python tools/gen_area_map.py --game emerald
 --
 -- Maps (mapGroup .. ":" .. mapNum) -> canonical area_id.
--- Covers wild-encounter zones only (gifts never consume the host area, PLAN.md section 0).
+-- Covers wild-encounter zones plus every statics.json map: static battles take their MAPSEC area,
+--   gift maps a named gift area (the map's location name, never a wild area id).
 -- Source: pret/pokeemerald data/maps/map_groups.json, src/data/region_map/region_map_sections.json,
 --   src/data/wild_encounters.json (gWildMonHeaders); area_id = the Hoenn MAPSEC display name.
 -- Merges (PLAN.md section 0 defaults): one slot per route/area (grass/surf/fish/rock smash already
@@ -17,6 +18,7 @@ return {
   ["0:7"] = "sootopolis_city",
   ["0:8"] = "ever_grande_city",
   ["0:11"] = "dewford_town",
+  ["0:12"] = "lavaridge_town",
   ["0:15"] = "pacifidlog_town",
   ["0:16"] = "route_101",
   ["0:17"] = "route_102",
@@ -54,11 +56,14 @@ return {
   ["0:49"] = "route_134",
   ["0:50"] = "route_124",
   ["0:51"] = "route_126",
+  ["11:1"] = "rustboro_city_devon_corp_2f",
+  ["14:7"] = "mossdeep_city_stevens_house",
   ["24:0"] = "meteor_falls",
   ["24:1"] = "meteor_falls",
   ["24:2"] = "meteor_falls",
   ["24:3"] = "meteor_falls",
   ["24:4"] = "rusturf_tunnel",
+  ["24:6"] = "desert_ruins",
   ["24:7"] = "granite_cave",
   ["24:8"] = "granite_cave",
   ["24:9"] = "granite_cave",
@@ -99,10 +104,13 @@ return {
   ["24:53"] = "new_mauville",
   ["24:58"] = "abandoned_ship",
   ["24:65"] = "abandoned_ship",
+  ["24:67"] = "island_cave",
+  ["24:68"] = "ancient_tomb",
   ["24:79"] = "sky_pillar",
   ["24:81"] = "sky_pillar",
   ["24:83"] = "shoal_cave",
   ["24:84"] = "sky_pillar",
+  ["24:85"] = "sky_pillar",
   ["24:86"] = "magma_hideout",
   ["24:87"] = "magma_hideout",
   ["24:88"] = "magma_hideout",
@@ -118,6 +126,8 @@ return {
   ["24:98"] = "desert_underpass",
   ["24:99"] = "artisan_cave",
   ["24:100"] = "artisan_cave",
+  ["24:103"] = "marine_cave",
+  ["24:105"] = "terra_cave",
   ["24:106"] = "altering_cave",
   ["24:107"] = "meteor_falls",
   ["26:0"] = "safari_zone_northwest",
@@ -126,4 +136,9 @@ return {
   ["26:3"] = "safari_zone_south",
   ["26:12"] = "safari_zone_northeast",
   ["26:13"] = "safari_zone_southeast",
+  ["26:57"] = "faraway_island",
+  ["26:58"] = "birth_island",
+  ["26:75"] = "navel_rock",
+  ["26:87"] = "navel_rock",
+  ["32:1"] = "route119_weather_institute_2f",
 }

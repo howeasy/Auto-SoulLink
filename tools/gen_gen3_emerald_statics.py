@@ -151,14 +151,18 @@ def generate_statics():
         {
             "id": "route_117_daycare_egg",
             "species": None,
-            "map": m("Route117_PokemonDayCare"),
+            # the egg is handed over OUTDOORS: the script runs from the Day-Care Man's object on
+            # Route 117 itself, not inside Route117_PokemonDayCare (whose only object is the
+            # Day-Care Woman, Route117_PokemonDayCare/map.json:28)
+            "map": m("Route117"),
             "flag": "FLAG_PENDING_DAYCARE_EGG",
             "kind": "daycare",
             "bypass_clauses": False,
             "level": "egg",
-            "source": "data/scripts/day_care.inc:1-36 (Route117_EventScript_DaycareReceiveEgg, "
-                      "`special GiveEggFromDaycare`); species depends on the two parents left at "
-                      "the Route 117 Day Care, not fixed",
+            "source": "data/scripts/day_care.inc:1-37 (Route117_EventScript_DaycareMan -> "
+                      "Route117_EventScript_DaycareReceiveEgg, `special GiveEggFromDaycare`), run "
+                      "from the Day-Care Man object at data/maps/Route117/map.json:65; species "
+                      "depends on the two parents left at the Route 117 Day Care, not fixed",
         },
 
         # -- Static legendary / rare encounters (not in the bypass list) --------

@@ -82,12 +82,12 @@
     {
       "id": "route_117_daycare_egg",
       "species": null,
-      "map": "22:0",
+      "map": "0:32",
       "flag": "FLAG_PENDING_DAYCARE_EGG",
       "kind": "daycare",
       "bypass_clauses": false,
       "level": "egg",
-      "source": "data/scripts/day_care.inc:1-36 (Route117_EventScript_DaycareReceiveEgg, `special GiveEggFromDaycare`); species depends on the two parents left at the Route 117 Day Care, not fixed"
+      "source": "data/scripts/day_care.inc:1-37 (Route117_EventScript_DaycareMan -> Route117_EventScript_DaycareReceiveEgg, `special GiveEggFromDaycare`), run from the Day-Care Man object at data/maps/Route117/map.json:65; species depends on the two parents left at the Route 117 Day Care, not fixed"
     },
     {
       "id": "kyogre",

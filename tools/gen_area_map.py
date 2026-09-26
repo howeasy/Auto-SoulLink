@@ -648,6 +648,34 @@ def generate_emerald():
             )
         area_map[key] = area_id
 
+    # E3-GIFTLINK: every statics.json map gets a NAMED area, as FR/LG's gift and legendary maps
+    # do (route_4_pokecenter / navel_rock), else the client sends "" and the server drops it.
+    #   static  -> its MAPSEC area (the wild rule above; a Sky Pillar floor joins sky_pillar)
+    #   gift    -> the map's own location name (FR/LG's oaks_lab shape), never a wild id: the
+    #              client's gift_areas list exempts it from no_catch, so it must not cover a route
+    #   a gift or daycare row already on a wild map keeps that area (the starter on route_101,
+    #   the Route 117 egg); the server links those itself.
+    statics_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                "data", "games", "gen3_emerald", "statics.json")
+    with open(statics_path, encoding="utf-8") as f:
+        statics = json.load(f)["entries"]
+    for row in statics:
+        key = row["map"]
+        if not key or key in area_map:
+            continue
+        folder = folder_at_key[key]
+        if row["kind"] == "static":
+            area_id, identity = area_id_for(id_of_folder[folder]), mapsec_of_folder[folder]
+        elif row["kind"] in ("gift", "fixed_gift", "choice_gift"):
+            area_id, identity = to_snake(folder), folder
+        else:
+            raise ValueError(f"statics row {row['id']!r} ({row['kind']}) is on unmapped {key}")
+        prior = _area_identity.setdefault(area_id, identity)
+        if prior != identity:
+            raise ValueError(f"statics row {row['id']!r}: area_id {area_id!r} ({identity}) "
+                             f"collides with {prior!r}")
+        area_map[key] = area_id
+
     os.makedirs(os.path.join("data", "games", "gen3_emerald"), exist_ok=True)
 
     with open(os.path.join("data", "games", "gen3_emerald", "area_map.json"), "w") as f:
@@ -659,7 +687,8 @@ def generate_emerald():
         "-- Re-run: cd SLink && python tools/gen_area_map.py --game emerald",
         "--",
         "-- Maps (mapGroup .. \":\" .. mapNum) -> canonical area_id.",
-        "-- Covers wild-encounter zones only (gifts never consume the host area, PLAN.md section 0).",
+        "-- Covers wild-encounter zones plus every statics.json map: static battles take their MAPSEC area,",
+        "--   gift maps a named gift area (the map's location name, never a wild area id).",
         "-- Source: pret/pokeemerald data/maps/map_groups.json, src/data/region_map/region_map_sections.json,",
         "--   src/data/wild_encounters.json (gWildMonHeaders); area_id = the Hoenn MAPSEC display name.",
         "-- Merges (PLAN.md section 0 defaults): one slot per route/area (grass/surf/fish/rock smash already",

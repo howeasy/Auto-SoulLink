@@ -232,6 +232,21 @@ def test_a_failed_wild_encounter_sends_one_no_catch():
     assert len(w.events("safe")) == 1
 
 
+def test_frlg_a_failed_wild_battle_in_a_gift_area_sends_no_no_catch():
+    """OMP cx-daf0f544 #4: oaks_lab (FR 4:3) is in the pack's gift_areas.ids, so the same failed
+    battle that dead-zones route_1 above never dead-zones it."""
+    w = live()
+    assert "oaks_lab" in w.wc["gift_areas"]["ids"]
+    w.set_location(4, 3)
+    w.set_balls(3)
+    w.step(30)
+    w.enter_battle([FOE])
+    w.step(30)
+    w.leave_battle(outcome=4)
+    w.step()
+    assert w.events("no_catch") == []
+
+
 def test_a_trainer_battle_sends_trainer_battle_start_once_and_no_no_catch():
     w = live()
     w.set_balls(3)
@@ -2788,3 +2803,32 @@ def test_e3_frlg_rr_packs_carry_todays_client_values_explicitly(pack, title):
     assert wc["battle"]["commit_guard"]["value"] == 3
     assert wc["sound"]["se_ids"] == {k: int(k) for k in headers}
     assert set(wc["gift_areas"]["ids"]) == set(_GIFT_AREAS)
+
+
+def test_every_write_checkpoint_title_carries_se_ids_and_gift_areas_ids():
+    """OMP cx-daf0f544 #7: the client fails closed without either field, so every generated
+    title (admitted or not) must ship both, as a JSON object and a list of non-empty strings."""
+    import sys
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_gen3_write_checkpoint as G
+    seen = []
+    for pack, titles in G.ALL_PACKS.items():
+        wc = json.loads((REPO / "data" / "games" / pack / "write_checkpoint.json")
+                        .read_text(encoding="utf-8"))
+        assert set(wc) == set(titles), pack
+        for title, t in wc.items():
+            assert isinstance(t["sound"]["se_ids"], dict) and t["sound"]["se_ids"], title
+            ids = t["gift_areas"]["ids"]
+            assert isinstance(ids, list) and all(isinstance(i, str) and i for i in ids), title
+            seen.append(title)
+    assert sorted(seen) == ["emerald", "firered", "leafgreen", "radical_red"]
+
+
+def test_gift_areas_has_no_default_for_an_unknown_pack():
+    """OMP cx-daf0f544 #6: only the allowlisted packs get the Kanto list; any other is fatal."""
+    import sys
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_gen3_write_checkpoint as G
+    assert G.gift_areas("gen3_rr", "radical_red")["ids"] == G.GIFT_AREAS_FRLG
+    with pytest.raises(SystemExit, match="no gift_areas rule"):
+        G.gift_areas("gen3_sapphire", "sapphire")

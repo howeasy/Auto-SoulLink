@@ -62,29 +62,38 @@ _DAYCARE_AREAS = frozenset({
 })
 
 # ── Emerald title data (docs/gen3_emerald/PLAN.md E3) ─────────────────────────────────
-# The client sends area_map[group:num] (data/games/gen3_emerald/area_map.json, wild maps only);
-# a gift map outside it is named gift_<group>_<num>, which every is_gift_area already accepts.
-# So Emerald has no bare gift ids (its starter map is wild Route 101: the starter links as
-# gift_route_101 through gift_link_area, a choice gift) and no daycare id (the egg is handed
-# over on wild Route 117, pret data/maps/Route117/map.json:65; a daycare id there would let an
-# egg consume that route). Fixed-species gifts are statics.json's bypass_clauses rows.
+# The client sends area_map[group:num] (data/games/gen3_emerald/area_map.json): wild maps, plus a
+# NAMED id for every statics.json map (FR/LG's precedent: gift areas like silph_co_7f, statics
+# like navel_rock). The gift set is the pack's own gift_areas.ids, the list the client consumes,
+# so the two cannot drift; the starter's wild route_101 is not in it (the starter links as
+# gift_route_101 through gift_link_area, a choice gift). Fixed-species areas are statics.json's
+# bypass_clauses rows: the Beldum/Wynaut/Castform gift areas and the Mew/Deoxys static areas
+# (faraway_island, birth_island: no wild table, so the whole area is that one mon). No daycare
+# id: the egg is handed over on wild Route 117 (pret data/maps/Route117/map.json:65), and a
+# daycare id there would let an egg consume that route. A missing pack file leaves the sets empty rather than breaking the
+# import for every game.
 _EMERALD_DIR = os.path.join(os.path.dirname(_DATA_DIR), "gen3_emerald")
 
 
-def _load_emerald() -> tuple[frozenset[str], dict[str, str]]:
-    with open(os.path.join(_EMERALD_DIR, "area_map.json"), encoding="utf-8") as f:
-        wild = json.load(f)
-    with open(os.path.join(_EMERALD_DIR, "statics.json"), encoding="utf-8") as f:
-        statics = json.load(f)["entries"]
-    fixed = frozenset("gift_" + e["map"].replace(":", "_") for e in statics
-                      if e["bypass_clauses"] and e["map"] and e["map"] not in wild)
-    # map display names for gift_<g>_<n> (the FR/RR _ROM_MAP_NAMES ids are Kanto maps)
-    with open(os.path.join(_EMERALD_DIR, "gen3_emerald_locations.lua"), encoding="utf-8") as f:
-        names = dict(re.findall(r'\["(\d+:\d+)"\] = "([a-z0-9_]+)"', f.read()))
-    return fixed, names
+def _emerald_json(name: str) -> dict:
+    path = os.path.join(_EMERALD_DIR, name)
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
 
 
-_EMERALD_FIXED_SPECIES_GIFTS, _EMERALD_MAP_NAMES = _load_emerald()
+def _load_emerald() -> tuple[frozenset[str], frozenset[str]]:
+    area_map = _emerald_json("area_map.json")
+    statics = _emerald_json("statics.json").get("entries", [])
+    gifts = frozenset(_emerald_json("write_checkpoint.json").get("emerald", {})
+                      .get("gift_areas", {}).get("ids", []))
+    fixed = frozenset(area_map[e["map"]] for e in statics
+                      if e["bypass_clauses"] and e["map"] in area_map)
+    return gifts, fixed
+
+
+_EMERALD_GIFT_AREAS, _EMERALD_FIXED_SPECIES_GIFTS = _load_emerald()
 # The one Gen 3 move-table difference (EF-9): Nature Power's accuracy, pret pokeemerald
 # src/data/battle_moves.h:3479 (.accuracy = 95) vs pokefirered's 0. Shown on the board.
 _EMERALD_MOVE_ACCURACY = {267: 95}
@@ -184,8 +193,6 @@ if os.path.exists(_rom_map_names_path):
 _AREA_DISPLAY_OVERRIDES: dict[str, str] = {
     "mt_moon":           "Mt. Moon",
     "mt_ember":          "Mt. Ember",
-    "mt_pyre":           "Mt. Pyre",
-    "cave_of_origin":    "Cave of Origin",
     "digletts_cave":     "Diglett's Cave",
     "oaks_lab":          "Oak's Lab",
     "silph_co_7f":       "Silph Co. 7F",
@@ -236,6 +243,15 @@ _AREA_DISPLAY_OVERRIDES: dict[str, str] = {
 # Radical Red repurposes some vanilla map slots
 _AREA_DISPLAY_RR_OVERRIDES: dict[str, str] = {
     "monean_chamber":    "Oak's Lab",
+}
+
+# Emerald's own display overrides (Hoenn ids; the table above is Kanto's)
+_AREA_DISPLAY_EMERALD_OVERRIDES: dict[str, str] = {
+    "mt_pyre":           "Mt. Pyre",
+    "cave_of_origin":    "Cave of Origin",
+    "rustboro_city_devon_corp_2f":   "Devon Corp. 2F",
+    "mossdeep_city_stevens_house":   "Steven's House",
+    "route119_weather_institute_2f": "Weather Institute 2F",
 }
 
 # RR item names (loaded if available)
@@ -361,6 +377,12 @@ class Gen3Adapter(GameAdapter):
     def game_id(self) -> str:
         return "gen3_frlge"
 
+    @property
+    def rom_type(self) -> str:
+        """The rom_type this adapter was built for: a restored run whose saved rom_type differs
+        is rebuilt (state.py load), since the title data hangs off it and not off game_id."""
+        return self._rom_type
+
     @staticmethod
     def pairing_kind(kind: str) -> str:
         # The SLink-RR companion patch is applied per cartridge, exactly like Gen 1's
@@ -371,10 +393,15 @@ class Gen3Adapter(GameAdapter):
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
     def is_gift_area(self, area_id: str) -> bool:
-        return (not self._emerald and area_id in _GIFT_AREAS) or area_id.startswith("gift_")
+        return (area_id in (_EMERALD_GIFT_AREAS if self._emerald else _GIFT_AREAS)
+                or area_id.startswith("gift_"))
 
     def is_fixed_species_gift(self, area_id: str) -> bool:
-        return area_id in (_EMERALD_FIXED_SPECIES_GIFTS if self._emerald else _FIXED_SPECIES_GIFTS)
+        # state.py runs gift_link_area first, so a gift received outside a gift area arrives as
+        # gift_<area> (e.g. a Deoxys flagged gift on birth_island); strip it, as gen2_gsc does.
+        # FR/RR's fixed ids are all gift areas, which gift_link_area never prefixes.
+        return (area_id.removeprefix("gift_")
+                in (_EMERALD_FIXED_SPECIES_GIFTS if self._emerald else _FIXED_SPECIES_GIFTS))
 
     def is_daycare_area(self, area_id: str) -> bool:
         return not self._emerald and area_id in _DAYCARE_AREAS
@@ -696,6 +723,8 @@ class Gen3Adapter(GameAdapter):
         # RR overrides take highest priority
         if self._is_rr and area_id in _AREA_DISPLAY_RR_OVERRIDES:
             return _AREA_DISPLAY_RR_OVERRIDES[area_id]
+        if self._emerald and area_id in _AREA_DISPLAY_EMERALD_OVERRIDES:
+            return _AREA_DISPLAY_EMERALD_OVERRIDES[area_id]
         # Manual overrides (apostrophes, accents, abbreviations)
         if area_id in _AREA_DISPLAY_OVERRIDES:
             return _AREA_DISPLAY_OVERRIDES[area_id]
@@ -703,10 +732,8 @@ class Gen3Adapter(GameAdapter):
         if area_id.startswith("gift_"):
             parts = area_id[5:].split("_", 1)  # "10_11" → ["10", "11"]
             if len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-                if self._emerald:
-                    loc = _EMERALD_MAP_NAMES.get(f"{parts[0]}:{parts[1]}")
-                    return f"Gift \u2013 {humanize_area_id(loc)}" if loc else "Gift"
-                entry = _ROM_MAP_NAMES.get(f"{parts[0]}:{parts[1]}")
+                # Kanto map names (RR ROM scrape); no Emerald producer emits gift_<g>_<n>
+                entry = None if self._emerald else _ROM_MAP_NAMES.get(f"{parts[0]}:{parts[1]}")
                 if entry and entry.get("name"):
                     return f"Gift \u2013 {entry['name']}"
                 return "Gift"

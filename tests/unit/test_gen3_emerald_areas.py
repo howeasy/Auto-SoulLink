@@ -397,3 +397,72 @@ def test_pret_map_groups_has_the_shape_this_generator_assumes():
         groups_data = json.load(f)
     assert len(groups_data["group_order"]) == 34
     assert groups_data["group_order"][24] == "gMapGroup_Dungeons"
+
+
+# --- E3-GIFTLINK: every statics.json map is a NAMED area (the FR/LG oaks_lab / navel_rock shape) ---
+
+_STATICS = _REPO / "data/games/gen3_emerald/statics.json"
+_GIFT_KINDS = ("gift", "choice_gift", "fixed_gift")
+
+
+def _emerald_area_map():
+    return json.loads((_REPO / "data/games/gen3_emerald/area_map.json").read_text())
+
+
+def _statics_rows():
+    return json.loads(_STATICS.read_text())["entries"]
+
+
+def test_producer_coverage_every_statics_map_is_in_the_area_map():
+    """The client sends area_map[group:num] or "" and the server drops "": a statics.json map
+    missing here is a gift/static that can never link (the NEXT-1 gap)."""
+    area = _emerald_area_map()
+    missing = [(r["id"], r["map"]) for r in _statics_rows() if r["map"] and r["map"] not in area]
+    assert missing == []
+
+
+def test_gift_maps_are_named_gift_areas_owned_by_no_wild_map_and_equal_the_packs_list():
+    area = _emerald_area_map()
+    gift_keys = {r["map"] for r in _statics_rows() if r["kind"] in _GIFT_KINDS}
+    ids = {area[k] for k in gift_keys} - {"route_101"}          # the starter's wild route
+    for gid in ids:                                              # a gift id covers only gift maps
+        assert {k for k, v in area.items() if v == gid} <= gift_keys, gid
+    wc = json.loads((_REPO / "data/games/gen3_emerald/write_checkpoint.json").read_text())
+    assert wc["emerald"]["gift_areas"]["ids"] == sorted(ids)
+    assert sorted(ids) == ["lavaridge_town", "mossdeep_city_stevens_house",
+                           "route119_weather_institute_2f", "rustboro_city_devon_corp_2f"]
+
+
+def test_static_battles_take_their_mapsec_area_like_navel_rock():
+    area = _emerald_area_map()
+    assert {k: area[k] for k in ("26:75", "26:87", "24:85", "24:103", "24:105", "24:6",
+                                 "24:67", "24:68", "26:57", "26:58")} == {
+        "26:75": "navel_rock", "26:87": "navel_rock", "24:85": "sky_pillar",
+        "24:103": "marine_cave", "24:105": "terra_cave", "24:6": "desert_ruins",
+        "24:67": "island_cave", "24:68": "ancient_tomb", "26:57": "faraway_island",
+        "26:58": "birth_island"}
+
+
+def test_the_daycare_egg_row_is_route_117_outdoors():
+    (row,) = [r for r in _statics_rows() if r["id"] == "route_117_daycare_egg"]
+    assert row["map"] == "0:32" and _emerald_area_map()["0:32"] == "route_117"
+    assert "data/maps/Route117/map.json:65" in row["source"]
+
+
+@needs_pret
+def test_the_daycare_man_who_hands_the_egg_over_stands_on_route_117():
+    pret = Path(gam._find_pret_checkout("pokeemerald"))
+    lines = (pret / "data/maps/Route117/map.json").read_text(encoding="utf-8").splitlines()
+    assert '"script": "Route117_EventScript_DaycareMan"' in lines[64]
+    inc = (pret / "data/scripts/day_care.inc").read_text(encoding="utf-8").splitlines()
+    assert inc[0].startswith("Route117_EventScript_DaycareMan::")
+    assert "special GiveEggFromDaycare" in inc[36]
+
+
+@needs_pret
+def test_emerald_area_tables_are_reproducible(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    gam.generate_emerald()
+    for name in ("area_map.json", "gen3_emerald_areas.lua", "gen3_emerald_locations.lua"):
+        committed = _REPO / "data/games/gen3_emerald" / name
+        assert _lf(tmp_path / "data/games/gen3_emerald" / name) == _lf(committed), name

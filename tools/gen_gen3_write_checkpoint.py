@@ -943,28 +943,35 @@ def se_ids(title: str, headers: dict) -> dict:
 # E3-CLIENT: area ids where a mon is handed over rather than caught, so the client shows no NEW
 # ENCOUNTER banner and sends no no_catch there. FR/LG/RR emit area ids from the shared FRLG area map
 # and keep server/adapters/gen3_frlge.py _GIFT_AREAS verbatim (today's client literal).
-# Emerald: [] -- the client emits area_map[group:num] or "" (and "" is already inert). Of the
-# statics.json gift rows, only the starter's map is in area_map.json, as route_101, which is a wild
-# route: the starter is chosen before the player has balls, so neither the banner nor no_catch can
-# fire there, and listing it would exempt Route 101 from no_catch for good. Agreed with E3-SERVER
-# 2026-09-26. The check below fails the build if area_map ever maps another gift row.
+# Emerald (E3-GIFTLINK): gen_area_map.py names every statics.json gift map (its location name,
+# never a wild id), so the ids are the gift rows' areas. The exception is the starter: it is chosen
+# on wild route_101 before the player has balls, and listing that route would exempt it from no_catch
+# for good. A gift row off the area map, or a stale wild exception, fails the build.
+# Any other pack has no rule: SystemExit, never a Kanto default.
 GIFT_AREAS_FRLG = ["celadon_condominiums", "cinnabar_lab", "gift", "intro", "oaks_lab",
                    "route_4_pokecenter", "saffron_dojo", "silph_co_7f"]
-GIFT_KINDS = ("choice_gift", "fixed_gift")
+KANTO_GIFT_PACKS = ("gen3_frlg", "gen3_rr")
+GIFT_KINDS = ("gift", "choice_gift", "fixed_gift")
 GIFT_WILD_ROUTES = {"emerald": {"route_101"}}
 
 
 def gift_areas(pack: str, title: str) -> dict:
-    if pack != "gen3_emerald":
+    if pack in KANTO_GIFT_PACKS:
         return {"ids": GIFT_AREAS_FRLG, "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"}
+    if pack != "gen3_emerald":
+        raise SystemExit(f"{pack}/{title}: no gift_areas rule; add the pack to gift_areas()")
     base = ROOT / "data" / "games" / pack
     area_map = json.loads((base / "area_map.json").read_text("utf-8"))
-    rows = json.loads((base / "statics.json").read_text("utf-8"))["entries"]
-    mapped = {area_map[r["map"]] for r in rows if r["kind"] in GIFT_KINDS and r["map"] in area_map}
-    if mapped != GIFT_WILD_ROUTES[title]:
-        raise SystemExit(f"{title}: gift rows now map to {sorted(mapped)}; re-derive gift_areas")
-    return {"ids": [], "source": f"{pack}/statics.json gift rows x area_map.json: only the starter's "
-                                 "route_101 maps, a wild route before any ball, so none"}
+    rows = [r for r in json.loads((base / "statics.json").read_text("utf-8"))["entries"]
+            if r["kind"] in GIFT_KINDS]
+    unmapped = [r["id"] for r in rows if r["map"] not in area_map]
+    if unmapped:
+        raise SystemExit(f"{title}: gift rows {unmapped} have no area; run gen_area_map.py --game emerald")
+    mapped, wild = {area_map[r["map"]] for r in rows}, GIFT_WILD_ROUTES[title]
+    if not wild <= mapped:
+        raise SystemExit(f"{title}: no gift row maps to {sorted(wild - mapped)}; update GIFT_WILD_ROUTES")
+    return {"ids": sorted(mapped - wild),
+            "source": f"{pack}/statics.json gift rows x area_map.json, less the starter's wild route_101"}
 
 
 def ldr_literal(rom: bytes, site: int) -> int | None:

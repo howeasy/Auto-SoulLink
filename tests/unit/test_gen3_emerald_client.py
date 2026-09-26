@@ -53,13 +53,13 @@ def emerald(tmp_path, monkeypatch):
     monkeypatch.setattr(gw.ps, "validate_event",
                         lambda msg: [p for p in real_validate(msg) if not p.endswith(waived)])
 
-    def make(doctor=None):
+    def make(doctor=None, native=None):
         if doctor:
             path = pack_dir / "write_checkpoint.json"
             wc = json.loads(path.read_text("utf-8"))
             doctor(wc["emerald"])
             path.write_text(json.dumps(wc), "utf-8")
-        w = World(PACK, "emerald")
+        w = World(PACK, "emerald", native=native)
         w.set_party([mon_record(p, OT, species=4 + i, nickname=f"MON{i}") for i, p in enumerate((A, B))])
         w.step_to(60)
         assert w.client.writes_enabled is True
@@ -137,6 +137,32 @@ def test_emerald_a_title_song_id_is_not_a_wire_id(emerald):
     assert any("sound refused: pack maps no title SE for wire id 31" in line for line in w.logs)
 
 
+def _recording_native(L):
+    return L.eval("""function()
+        local t = { ids = {} }
+        function t:play_sound(id) self.ids[#self.ids + 1] = id; return true end
+        return t
+    end""")()
+
+
+def test_emerald_native_play_sound_gets_the_title_se_not_the_wire_id(emerald):
+    """OMP cx-daf0f544 #1: the companion's OP_PLAY_SE plays a song number of the running ROM,
+    so the native path takes the same wire->title translation as the m4a poke (26 -> 32)."""
+    w = emerald(native=_recording_native)
+    w.command(cmd="play_sound", sound=26)
+    w.step()
+    assert list(_seq(w.parts.native.ids)) == [32]
+    assert w.writes == []
+
+
+def test_emerald_native_never_plays_an_unmapped_wire_id(emerald):
+    w = emerald(native=_recording_native)
+    w.command(cmd="play_sound", sound=31)
+    w.step()
+    assert list(_seq(w.parts.native.ids)) == []
+    assert any("sound refused: pack maps no title SE for wire id 31" in line for line in w.logs)
+
+
 def test_emerald_without_se_ids_refuses_every_sound(emerald):
     w = emerald(lambda wc: wc["sound"].pop("se_ids"))
     _m4a(w, 32)
@@ -148,8 +174,8 @@ def test_emerald_without_se_ids_refuses_every_sound(emerald):
 
 # ── 3. gift areas ───────────────────────────────────────────────────────────────────────────
 
-def _failed_wild_encounter(w):
-    w.set_location(0, 17)                                      # route_102 (area_map 0:17)
+def _failed_wild_encounter(w, where=(0, 17)):
+    w.set_location(*where)                                     # default route_102 (area_map 0:17)
     w.set_balls(3)
     w.step(30)
     w.enter_battle([FOE])
@@ -158,12 +184,29 @@ def _failed_wild_encounter(w):
     w.step()
 
 
-def test_emerald_gift_areas_is_empty_so_a_route_still_dead_zones(emerald):
+def test_emerald_a_route_still_dead_zones(emerald):
     w = emerald()
-    assert w.wc["gift_areas"]["ids"] == []
     _failed_wild_encounter(w)
     (nc,) = w.events("no_catch")
     assert nc["area_id"] == "route_102"
+
+
+def test_emerald_a_failed_battle_in_a_gift_area_sends_no_no_catch(emerald):
+    """E3-GIFTLINK: Steven's house (14:7, Beldum) is the named gift area
+    mossdeep_city_stevens_house, listed in the pack's gift_areas.ids: never dead-zoned."""
+    w = emerald()
+    assert "mossdeep_city_stevens_house" in w.wc["gift_areas"]["ids"]
+    _failed_wild_encounter(w, (14, 7))
+    assert w.events("no_catch") == []
+
+
+@pytest.mark.parametrize("bad", [[7], [""], ["route_102", False]])
+def test_emerald_a_non_string_or_empty_gift_id_takes_the_missing_list_fallback(emerald, bad):
+    """OMP cx-daf0f544 #2: a malformed list must not build a set nothing matches (fail OPEN)."""
+    w = emerald(lambda wc: wc["gift_areas"].update(ids=bad))
+    _failed_wild_encounter(w)
+    assert w.events("no_catch") == []
+    assert sum("gift_areas.ids" in line for line in w.logs) == 1
 
 
 def test_emerald_without_gift_areas_treats_every_area_as_a_gift_area(emerald):
@@ -171,4 +214,4 @@ def test_emerald_without_gift_areas_treats_every_area_as_a_gift_area(emerald):
     w = emerald(lambda wc: wc.pop("gift_areas"))
     _failed_wild_encounter(w)
     assert w.events("no_catch") == []
-    assert sum("pack has no gift_areas.ids" in line for line in w.logs) == 1
+    assert sum("pack has no valid gift_areas.ids" in line for line in w.logs) == 1

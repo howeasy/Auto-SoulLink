@@ -39,9 +39,11 @@
 -- settle -> one capture; SendMonToPC (pc_move) is acquisition to storage, not a user deposit.
 local Client = {}
 
--- Record geometry and game constants the packs do not ship yet (requested from C4-2a).
--- pret/pokefirered@c75f352 include/pokemon.h struct Pokemon / struct BattlePokemon, and the
--- old client's production values (archive/gen3-old-client:lua/memory_gba.lua:395-416); CFRU keeps the same layout.
+-- Record geometry and game constants the packs do not ship yet (requested from C4-2a), the same
+-- on every admitted title: pret/pokefirered@c75f352 include/pokemon.h struct Pokemon / struct
+-- BattlePokemon and the old client's production values (archive/gen3-old-client:lua/memory_gba.lua:395-416);
+-- CFRU keeps the same layout, and so does pret/pokeemerald@c65e93f2 (include/pokemon.h:219-231 hp
+-- at 0x56, :268 moves, :281 pp; include/constants/moves.h:157; include/battle.h:27).
 local PARTY_HP_OFF = 0x56            -- struct Pokemon.hp (u16)
 local BATTLE_MON_MOVES_OFF = 0x0C    -- BattlePokemon.moves[4] (u16 each)
 local BATTLE_MON_PP_OFF = 0x24       -- BattlePokemon.pp[4] (u8 each)
@@ -52,7 +54,7 @@ local B_ACTION_USE_MOVE = 0
 local TARGET_FOE_PRIMARY = 1
 -- (the committed state, STATE_WAIT_ACTION_CONFIRMED_STANDBY, is per title: p.commit_guard.value)
 -- The m4a SE1 poke (the old client's M.playSE, archive/gen3-old-client:lua/memory_gba.lua:2021-2066, production-tested
--- on FR/LG and RR). Every address and field offset comes from the checkpoint pack's sound block
+-- on FR/LG and RR). Every address, field offset and title SE id (se_ids) comes from the checkpoint pack's sound block
 -- (p.sound: player_se1 / sound_info_ptr, player_head_off / player_next_off / tracks_off, and
 -- `fields`, the exact m4a fields a sound write may touch); only the VALUES the old client
 -- stores are here.
@@ -91,12 +93,17 @@ function Client.new(p)
     local gift_area
     do
         local ids = type(p.gift_areas) == "table" and p.gift_areas.ids
-        if ids and json.kind(ids) == "array" then
-            local set = {}
-            for _, id in ipairs(ids) do set[id] = true end
+        local set = ids and json.kind(ids) == "array" and {} or nil
+        for _, id in ipairs(set and ids or {}) do
+            -- a non-string or empty id would build a set nothing matches (fail OPEN): the whole
+            -- list is untrusted then, and takes the missing-list fallback
+            if type(id) ~= "string" or id == "" then set = nil; break end
+            set[id] = true
+        end
+        if set then
             gift_area = function(id) return set[id] == true end
         else
-            log("pack has no gift_areas.ids: every area treated as a gift area (no banner, no no_catch)")
+            log("pack has no valid gift_areas.ids: every area treated as a gift area (no banner, no no_catch)")
             gift_area = function() return true end
         end
     end
@@ -675,7 +682,7 @@ function Client.new(p)
             end
         end
         -- the committing state is itself the battle_commit guard (gBattleCommunication[battler]
-        -- < 3) and writes.lua re-validates before every write, so only the hand-off may follow it
+        -- < STANDBY, the pack's commit_guard.value) and writes.lua re-validates before every write, so only the hand-off may follow it
         plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STANDBY }
         -- G5-EXPLODE-HANDOFF (owner ruling 19): where the pack proves the Explode+H shape (RR,
         -- whose parked CFRU menu outlives the commit), the same hand-off as P ends the menu, so
@@ -768,9 +775,9 @@ function Client.new(p)
 
     -- commit -> held until gBattleMons[b].hp == 0 (done: the engine's faint, or a foe KO first).
     -- The battler leaving (Roar) takes battle_write's bench path; the battle ending first (flee,
-    -- catch) takes its overworld path. A reset commit (comm < 3) with the mon alive is re-armed;
+    -- catch) takes its overworld path. A reset commit (comm < STANDBY) with the mon alive is re-armed;
     -- mid-turn the permit refuses that, so it can only land at a parked menu.
-    -- Review follow-up 2: the commit's comm[b] = 3 fails every later battle_faint (battle_comm_0)
+    -- Review follow-up 2: the commit's comm[b] = STANDBY fails every later battle_faint (battle_comm_0)
     -- until the next parked menu, which comes AFTER the Perish KO's party screen, where a bench
     -- mon still alive could be sent in. So the commit waits while another pending entry resolves
     -- to a bench slot: that entry lands later in this same flush (same permit, minus the guard)
@@ -1578,16 +1585,12 @@ function Client.new(p)
         if #nodes < 2 then return nil, "m4a player list not initialised" end
         return nodes[#nodes - 1]
     end
+    -- id: the TITLE's song id (drv.play_sound translates the wire id once, for both paths)
     local function m4a_plan(id)
         local snd = p.sound
         if type(snd) ~= "table" or type(snd.fields) ~= "table" then
             return nil, "no sound block in the checkpoint pack"
         end
-        -- the wire id keeps FR numbering (docs/protocol.md "play_sound ids"); the pack's se_ids
-        -- maps it to this title's song id, and an id it does not map is refused
-        local wire = id
-        id = type(snd.se_ids) == "table" and num(snd.se_ids[tostring(wire)]) or nil
-        if not id then return nil, "pack maps no title SE for wire id " .. tostring(wire) end
         local headers = profile.rom and profile.rom.SE_SONG_HEADERS
         local hdr = type(headers) == "table" and num(headers[tostring(id)]) or nil
         if not hdr then return nil, "pack has no song header for SE " .. tostring(id) end
@@ -1645,8 +1648,16 @@ function Client.new(p)
         local f = io.framecount()
         if st.sound_frame == f then return end              -- one cue per frame
         st.sound_frame = f
-        if native and native.play_sound and native:play_sound(id) then return end
-        local plan, args = m4a_plan(id)
+        -- the wire id keeps FR numbering (docs/protocol.md "play_sound ids"); the pack's se_ids
+        -- maps it to this title's song id, and an id it does not map is refused. Translated ONCE,
+        -- before either path: the companion's OP_PLAY_SE plays a song number of the running ROM
+        -- (native.lua play_sound), exactly what the m4a poke needs, so both take the title id.
+        -- (RR's map is identity today; asserting identity would only refuse a future native title.)
+        local snd = type(p.sound) == "table" and p.sound or {}
+        local sid = type(snd.se_ids) == "table" and num(snd.se_ids[tostring(id)]) or nil
+        if not sid then return sound_refused("pack maps no title SE for wire id " .. tostring(id)) end
+        if native and native.play_sound and native:play_sound(sid) then return end
+        local plan, args = m4a_plan(sid)
         if not plan then return sound_refused(args) end
         local ok, awhy = armed_write("sound", plan, args)
         if not ok then sound_refused(tostring(awhy)) end

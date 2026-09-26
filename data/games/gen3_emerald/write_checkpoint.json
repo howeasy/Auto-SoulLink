@@ -173,8 +173,13 @@
       "thumb": 1
     },
     "gift_areas": {
-      "ids": [],
-      "source": "gen3_emerald/statics.json gift rows x area_map.json: only the starter's route_101 maps, a wild route before any ball, so none"
+      "ids": [
+        "lavaridge_town",
+        "mossdeep_city_stevens_house",
+        "route119_weather_institute_2f",
+        "rustboro_city_devon_corp_2f"
+      ],
+      "source": "gen3_emerald/statics.json gift rows x area_map.json, less the starter's wild route_101"
     },
     "pointers": {
       "gPokemonStoragePtr": {

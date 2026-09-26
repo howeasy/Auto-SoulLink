@@ -1234,3 +1234,34 @@ def test_world_a_repeated_key_change_ack_is_idempotent_and_does_not_crash():
     w.command(cmd="key_change_ack", old_key=kc["old_key"], new_key=kc["new_key"], migrated=False)
     w.step(5)                                       # no crash, nothing re-sent
     assert len(w.events("key_change")) == 1
+
+
+# ── Emerald rows of the per-artifact World items (docs/gen3_emerald/PLAN.md E3, EG3 exit) ──────
+# The production Entry refuses Emerald until EG4 (ruling 24), so these rows run the REAL
+# production client over a tmp copy of lua/ + the Emerald pack whose profile says admitted=true
+# (test_gen3_emerald_client.py's pattern); nothing else in the copy changes. They replay the
+# per-artifact bodies above with ARTIFACTS narrowed to the Emerald cartridge.
+
+@pytest.fixture
+def _emerald_admitted(tmp_path, monkeypatch):
+    import shutil
+
+    from tests.unit import gen3_world as gw
+    shutil.copytree(gw.REPO / "lua", tmp_path / "lua")
+    pack_dir = tmp_path / "data" / "games" / "gen3_emerald"
+    shutil.copytree(gw.REPO / "data" / "games" / "gen3_emerald", pack_dir)
+    prof = json.loads((pack_dir / "profile.json").read_text("utf-8"))
+    prof["titles"]["emerald"]["admitted"] = True          # test-only: see the block comment
+    (pack_dir / "profile.json").write_text(json.dumps(prof), "utf-8")
+    monkeypatch.setattr(gw, "REPO", tmp_path)
+    monkeypatch.setattr(gw, "ENTRY", (tmp_path / "lua" / "gen3" / "entry.lua").as_posix())
+    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", pack_dir)
+    monkeypatch.setitem(globals(), "ARTIFACTS", [("gen3_emerald", "emerald", "clean")])
+
+
+@pytest.mark.parametrize("body", [test_world_hello_carries_the_required_fields_on_every_artifact,
+                                  test_world_ot_id_is_present_or_derivable_from_the_party_key,
+                                  test_world_tick_is_periodic_every_30_frames_with_required_fields],
+                         ids=["8-9_hello", "10_ot_id", "14_tick"])
+def test_world_rows_on_emerald(_emerald_admitted, body):
+    body()
