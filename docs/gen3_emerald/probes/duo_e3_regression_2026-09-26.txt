@@ -1,0 +1,32 @@
+# E3 regression duos after 752cf2e5 (pack-driven STANDBY / SE ids / gift areas), 2026-09-26 11:31-11:33Z
+# lane HEAD=e5dbc29f tracked-clean; python tools/e2e_duo.py --game <g> --scenario <s> --lane em3<s>
+# covers: commit state 3 via the pack (linked_faint_active_gen3 P+H, explode_gen3 on RR), gift_areas via no_catch (deadzone_gen3), faint path (faint_cmd_gen3).
+# limit: the SE-id map is not visible in duo logs; the FR sfx unit tests (test_sound_on_frlg_arms_sound_and_writes_exactly_the_pack_fields) pass unchanged.
+## duo_gen3_frlg_deadzone_gen3.log
+[duo] MARKER b: RX memorialize key=FC3F7057:1C600D89
+[duo] MARKER b: TX memorialize_done FC3F7057:1C600D89 {"box":13,"event":"memorialize_done","key":"FC3F7057:1C600D89","player":"b","seq":130}
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+  deadzone_gen3: PASS (attempt 1 of 3)
+## duo_gen3_frlg_faint_cmd_gen3.log
+[duo] MARKER b: TX memorialize_done F6B6A64D:1C600D89 {"box":13,"event":"memorialize_done","key":"F6B6A64D:1C600D89","player":"b","seq":19}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x0202433E +2 frame 963
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_gen3: a=PASS b=PASS
+  faint_cmd_gen3: PASS (attempt 1 of 1)
+## duo_gen3_frlg_linked_faint_active_gen3.log
+[duo] MARKER b: FORCED_HP0 BC73F9B0:1C600D89 frame=14306 in_battle=1 battler=1
+[duo] MARKER b: TX memorialize_done BC73F9B0:1C600D89 {"box":13,"event":"memorialize_done","key":"BC73F9B0:1C600D89","player":"b","seq":491}
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_gen3: a=PASS b=PASS
+  linked_faint_active_gen3: PASS (attempt 1 of 1)
+## duo_gen3_rr_explode_gen3.log
+[duo] MARKER b: [client] [SLink-gen3] memorialize dropped: last mon after game over EBEF11DA:D4223740
+[duo] MARKER b: LAST_MON_KEPT EBEF11DA:D4223740
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] explode_gen3: a=PASS b=PASS
+  explode_gen3: PASS (attempt 1 of 1)
