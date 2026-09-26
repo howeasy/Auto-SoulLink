@@ -36,6 +36,10 @@ base is Gen 3 `5f050857`.
 - **Before master:**
   - batch with the Gen 2 lane (server/** makes their receipts stale);
   - tell Gen 3 that the FR/LG/RR write_checkpoint hashes moved.
+- **Next master merge:** the Gen 3 lane is re-anchoring docs/protocol.md citations on master (and
+  adding an exists/in-range test). Expect a protocol.md conflict with our remaps (939dae5c, 7cf4a3c9).
+  Take master's file, then rerun the scratch `remap_citations.py` (BASE = the merge base) for our
+  moved state.py/server.py/gen3_frlge.py lines, until test_protocol_citations passes.
 - **pret in scratch worktrees:** pret tests skip silently under `C:/slink-wt/*`. Workers there
   need the junction `.cache/pret -> E:/Google Drive/SLink/.cache/pret` (em-legs and em-fx have
   it).
