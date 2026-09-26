@@ -31,6 +31,8 @@ P5 row: G5 is the gate at which the **owner plays RR themselves** — the SOULLI
 trade NPC, the ghost walk, Explode, rival swap — and signs the companion build md5
 (`docs/gen3/PLAN.md:207`). **S**
 
+> **Read before playing (docs accuracy sweep, 2026-09-26): native trade and the SOULLINK info panel have no automated duo on the new client.** The old client's `trade` and `infopanel` scenarios (and the `trade_abort` control) were retired at C5-5 and never rebuilt (`tools/e2e_duo.py`, RR-only block comment); `scenarios_for("gen3_rr")` has neither. Their automated coverage is the native opcode gates (`tradescene`, `infoscreen`) and `native_absent_gen3` only, and ruling 25 did not address them. **Your play session is the only end-to-end evidence for a real RR trade and the info panel.** Also leave Overworld Presence OFF: with it on, the Pokémon Center trade NPC is disabled and no ghost exists (`docs/gen3/TODO.md`).
+
 The gate-check cell for P5 (`docs/gen3/PLAN.md:306`) lists: nine RR receipts, **RR clean coverage
 rows**, the write-sink guard over `native.lua`/`ghost.lua`, the md5 pins, and the **extracted-zip
 boot on RR**. **The peer ghost is deferred post-RC** (owner ruling, `docs/gen3_resume.md` checkpoint

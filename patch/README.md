@@ -79,25 +79,19 @@ for unpatched ROMs only).
   a bonus pair links, an area becomes a dead zone. The client routes these to the native box
   when patched + in the overworld, else to the HUD/center-prompt (so unpatched/in-battle is
   unchanged).
-- **Peer ghost** — your partner (another real player playing their own game) appears as a real
-  engine object-event (NPC) walking your overworld in real time, rendered as **their own trainer
-  avatar + colours**, moving and animating **exactly as they move**. The client broadcasts its
-  player's sub-pixel WORLD-PIXEL position + facing + live animNum + avatar (live sprite
-  images/anims ROM ptrs + true 16-colour palette) ~20 Hz (server relays it ephemeral+coalesced);
-  the partner's patch spawns a real NPC, neutralizes its callback, and drives `pos1` by LERPing
-  toward that position (continuous + speed-agnostic — no tile-quantized "walk-stop" stutter),
-  plays their animNum, and paints their avatar onto a dedicated OBJ palette slot (15) so the
-  player's own slot 0 is never touched. Talk to the ghost (face it + A) for a dismissable message.
-  RR + patch only; both players must be patched.
-  - **Bike / surf / fishing** are handled: the ghost spawns with the PARTNER's own `graphicsId`,
-    so the engine allocates the OAM size and tile count their sprite needs, and `drive_ghost`
-    re-spawns on a gfx change when they mount or dismount.
-  - **Day/night tint** is applied natively (`apply_tint`): the patch measures the ratio the engine
-    is applying to the player's own palette slot and applies it to the partner's colours, so the
-    ghost darkens with the world. The Lua tint writer is gone — one owner, no off-tick flicker.
-  - The two-instance visual run remains the final gate for how it all *feels* on screen.
-- **Talk to your partner → action menu (Trade / Say hey).** Face the partner ghost + press A to open a
-  native **multichoice list** (`Trade` / `Say hey`, extensible). **Say hey** pings the partner
+- **Peer ghost (Overworld Presence) — deferred post-RC, not currently driven.** The native opcodes
+  below (`OP_SPAWN_PEER_NPC` / `OP_DESPAWN_PEER_NPC` / `OP_ARM_PEER_INTERACT`) are built into the
+  patch and were live-validated against the old, now-archived Gen 3 client (`archive/gen3-old-client`,
+  its `peer_ghost_npc.lua`). The rewritten Gen 3 client (`lua/gen3/`) never sends the opcodes that
+  arm it — `lua/gen3/client.lua`'s `ghost_pos` handler is a no-op — so no NPC spawns yet (owner
+  ruling 2026-09-22, deferred post-RC). What the ROM side does when driven: spawns a real engine
+  object-event rendered as the partner's own trainer avatar + colours, LERPs it toward broadcast
+  sub-pixel positions (continuous, speed-agnostic), matches bike/surf/fishing graphics via the
+  partner's own `graphicsId`, and applies native day/night tint measured from the player's own
+  palette slot.
+- **Talk to your partner → action menu (Trade / Say hey).** Face the Pokémon Center's trade NPC
+  (`pc_trade_npc`, on by default while Overworld Presence is off — the peer-ghost interact path
+  above is deferred) and press A to open a native **multichoice list** (`Trade` / `Say hey`, extensible). **Say hey** pings the partner
   (the in-game nuzlocke status helper). **Trade** opens the native **"Choose a
   POKéMON" party menu**; only a *linked* mon is accepted (anything else re-prompts). Your **partner**
   then gets a single confirm (showing your badge count); on accept, the **real in-game trade animation

@@ -1,6 +1,19 @@
 # SLink — Gen 1 rewrite release notes
 
-**Owner draft — not a release verdict.** This note describes the release-preparation tree and its recorded evidence, not a completed tag; the version is not stated here because it comes from the git tag at publication (`.github/workflows/release.yml:3-5,21-34`). It was drafted against a `471529b`/`c2605ae` snapshot whose identity was †UNVERIFIED at drafting time; this pass re-verified citations against the branch tip at the time of this card (172 commits ahead of the merge-base `d2c30fb` with `master`). Pending integration and reruns remain explicitly listed in `docs/gen1_resume.md:73-91`.
+> **HISTORICAL SNAPSHOT — superseded 2026-09-26, still nothing released.** Everything below was
+> drafted against the pre-merge `gen1-master-release-plan-6b4279` branch (2026-09-17 through
+> 2026-09-20). That branch has since merged to LOCAL master in three steps — `24fdb06`
+> (2026-09-18, "test a run first"), `5c97aa4` (2026-09-20, final-review fixes), `0937f3d`
+> (2026-09-20, pureRGB integration) — and Gen 2 and Gen 3 have since landed on master as well
+> (2026-09-26), none of it pushed, tagged or `gh release create`d. The "12 configured lanes"
+> figures and the branch-vs-`master` diff-stats below describe that old branch's state, not the
+> current tree (`tools/verify_gen1_release.py --list` now reports 18 lanes; see
+> `docs/gen1_gen2_runtime_checks.md`). Treat the verification-count table and "recorded limits"
+> below as a record of what was true at that point in the effort, not as today's numbers — rerun
+> the runner for a current verdict before citing one. **Owner draft — not a release verdict**, and
+> still is not: master remains local-only as of this pass.
+
+This note describes the release-preparation tree and its recorded evidence, not a completed tag; the version is not stated here because it comes from the git tag at publication (`.github/workflows/release.yml:3-5,21-34`). It was drafted against a `471529b`/`c2605ae` snapshot whose identity was †UNVERIFIED at drafting time; this pass re-verified citations against the branch tip at the time of this card (172 commits ahead of the merge-base `d2c30fb` with `master`). Pending integration and reruns remain explicitly listed in `docs/gen1_resume.md:73-91`.
 
 Citations below point into the repository tree; `prep/PLAN_v3.9.md` is the owner plan. Re-check citations and replace the verification status with final-tree receipts before publication. The existing docs directory contains no prior release-note file; this draft uses the repository's Markdown heading/bullet/table style rather than claiming an established release-note template. No CHANGELOG or source-version bump is proposed; the packager accepts an explicit version and otherwise uses `dev` (`tools/make_release.py:416-418`).
 

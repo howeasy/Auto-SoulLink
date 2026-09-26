@@ -1,27 +1,89 @@
-# Auto-SoulLink
+<h1 align="center">Auto-SoulLink</h1>
 
-Automates a **Pokémon Soul Link Nuzlocke** across two simultaneous games in [BizHawk](https://github.com/TASEmulators/BizHawk). Lua clients in each emulator read game RAM every frame, send events over TCP to a Python server, and the server enforces all Soul Link rules automatically — encounter linking, faint propagation, party/box sync, memorial box, and optional clause restrictions.
+<p align="center">
+  <b>A Pokémon Soul Link Nuzlocke that referees itself — across five generations, on real cartridges.</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/howeasy/Auto-SoulLink/actions/workflows/test.yml"><img alt="tests" src="https://github.com/howeasy/Auto-SoulLink/actions/workflows/test.yml/badge.svg"></a>
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/python-3.11%2B-blue">
+  <img alt="BizHawk 2.11+" src="https://img.shields.io/badge/BizHawk-2.11%2B-orange">
+  <img alt="unit tests" src="https://img.shields.io/badge/unit%20tests-14%2C215-brightgreen">
+  <img alt="generations" src="https://img.shields.io/badge/generations-1--5-informational">
+</p>
+
+Two people play two Pokémon games at once under Soul Link rules: your partners are paired by where
+you caught them, and when one dies its partner dies too. Enforcing that by hand means pausing
+constantly to check each other's parties. **Auto-SoulLink does it for you, live.**
+
+A Lua client in each [BizHawk](https://github.com/TASEmulators/BizHawk) instance reads game RAM
+every frame and streams events over TCP to a Python server. The server holds the rules — encounter
+linking, the dead zone, faint propagation, party/box sync, the memorial box, the Nuzlocke ball gate
+and the optional clauses — and writes commands straight back into the other player's game. Nobody
+has to remember anything, and nobody has to trust anybody.
+
+```
+   Player A                        Player B
+  ┌──────────┐                   ┌──────────┐
+  │ BizHawk  │  events  ┌──────┐  events  │ BizHawk  │
+  │  + Lua   │─────────▶│ SLink│◀─────────│  + Lua   │
+  │  client  │◀─────────│server│─────────▶│  client  │
+  └──────────┘ commands └──┬───┘ commands └──────────┘
+                           │
+                  board · OBS overlays · damage calc
+```
+
+**Contents** — [Supported games](#supported-games) · [Before you start](#before-you-start) ·
+[Which server](#which-server-am-i-running) · [Quick start](#quick-start) ·
+[How it works](#how-it-works) · [Rules](#soul-link-rules) · [Web pages](#web-pages) ·
+[OBS](#obs-scene-triggers) · [Twitch bot](#twitch-bot) · [Run Manager](#run-manager) ·
+[Tests](#tests) · [Docs](#documentation)
 
 ## Supported Games
 
 | Gen | Games | ROM Variants | Status |
 |-----|-------|-------------|--------|
-| 3 | FireRed, LeafGreen | Vanilla, randomized, Radical Red 4.1 (CFRU) | **✅ Stable** |
+| 3 | FireRed, LeafGreen | The pinned US 1.0 dumps and Radical Red 4.1 (CFRU, clean or with the SLink companion patch), admitted by ROM hash; randomized carts and other unpinned builds are refused by name | ✅ **Verified** — the frozen-cut gate passes FR/LG 43/43 and Radical Red 19/19 on real cartridges |
 | 3 | Emerald, Archipelago FireRed/LeafGreen | — | ❌ Not supported — they ran only on the old Gen 3 client, archived at tag `archive/gen3-old-client`; the launcher refuses them by name until they are ported to `lua/gen3/` |
-| 1 | Red, Blue, Yellow | US English | ⚠️ Partially verified — mechanisms proven on real cartridges, no full playthrough |
-| 1 | PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6) | The pinned build only (admitted by ROM sha1); optional SLink companion overlay; randomized pairs via the SLink fork of UPR ZX | ⚠️ Same evidence bar as Red/Blue — the same duo harness runs on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing (`docs/purergb/PLAN.md` §13.1) |
-| 2 | Gold, Silver, Crystal (1.0/1.1) | GBC; clean cartridges + SLink companion overlay | ⚠️ Partially verified — mechanisms proven on real dumps of all three titles (98 live duo/gate cells: C↔C, G↔S, C↔G); overlay not yet admitted (owner G4 pending); no full playthrough |
+| 1 | Red, Blue, Yellow | US English | ✅ **Verified** — rules proven end to end on real cartridges by the 20-scenario duo harness |
+| 1 | PureRed, PureBlue, PureGreen ([pureRGB](https://github.com/Vortyne/pureRGB) v2.7.6) | The pinned build only (admitted by ROM sha1); optional SLink companion overlay; randomized pairs via the SLink fork of UPR ZX | ✅ **Verified** — the same duo harness on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing (`docs/purergb/PLAN.md` §13.1) |
+| 2 | Gold, Silver, Crystal (1.0/1.1) | GBC; clean cartridges + SLink companion overlay | ✅ **Verified** — 98 live duo/gate cells on real dumps of all three titles (C↔C, G↔S, C↔G) |
 | 4 | HeartGold, SoulSilver, Platinum | Vanilla, Renegade Platinum | ⚠️ Experimental — never run against a real game |
 | 5 | Black, White, Black 2, White 2 | US | ⚠️ Experimental — never run against a real game |
 
-> **Note:** Only Gen 3 has been extensively tested in live gameplay. **Gen 1 is verified end to end for the rules, on Route 1:** the rewritten client's duo harness (`tools/e2e_duo.py`, game `gen1_new`) runs eighteen scenarios — `link_new`, `deadzone_new`, `linked_faint_bench_new`, `linked_faint_active_new`, `reconnect_new`, `ball_gate_new`, `trade_new`, `soft_reset_new`, `trade_decline_new`, `explode_new`, `pc_ops_new`, `changebox_new`, `whiteout_new`, `type_clause_new`, `species_clause_new`, `poison_new`, `rival_swap_new`, `admit_randomized_new` — of which four (`link_new`, `ball_gate_new`, `deadzone_new`, `species_clause_new`) inject nothing: both cartridges walk real grass, meet real wild Pokémon and throw real Poké Balls, and the server pairs the captures by area — so encounter linking, the Poké Ball gate, the dead zone and the species clause all have live PASS evidence (`docs/gen1_requirements.md` D-1..D-4). What Gen 1 has NOT done is play more than one area: the scripted warp is undrivable from Lua, so the other 38 encounter areas rest on a generated oracle cross-checked against the ROM by a second independent path. `python tools/verify_gen1_release.py` runs the whole Gen 1 lane set fail-closed, where a skipped test counts as a failure. **Gen 2 is partially verified:** faint propagation, party/box sync and memorialize execute against a real Crystal cartridge, but it has never been played through a run — New Bark Town's west exit is script-locked until Elm hands over a starter, so there is no grass fixture to walk. Gen 2 coverage is Crystal only — Gold, Silver and Archipelago Crystal have no ROM dump to gate against. Gens 4 and 5 have full feature parity with Gen 3 (moves/PP, stat stages, doubles, forms, egg detection, stream overlays) and pass their unit-test suites, but have **never run against a real game** — treat them as experimental. Gen 4 doubles + stat-stage battle-struct addresses are read-only-scannable via `lua/tests/test_gen4_battlers_count.lua` + `test_gen4_stat_stages.lua` and need a one-time live capture to populate the profile. Gen 5 has the same shape via `lua/tests/test_gen5_block_b.lua` and `lua/tests/test_gen5_doubles.lua`. Gen 1/2 runtime checks live in `docs/gen1_gen2_runtime_checks.md`.
+### What "verified" means here
+
+Each generation's evidence is a different shape, so the word is worth unpacking.
+
+- **Gen 1 (Red/Blue/Yellow) and pureRGB** — the duo harness (`tools/e2e_duo.py`, game `gen1_new`)
+  runs **20 scenarios** on two real cartridges through a real server. Four of them inject nothing
+  at all: both players walk real grass, meet real wild Pokémon and throw real Poké Balls, and the
+  server pairs the captures by area. `python tools/verify_gen1_release.py` runs all 18 lanes
+  fail-closed — **a skipped test counts as a failure**, so a missing ROM cannot read as green.
+  The honest limit: live play is proven in one encounter area; the other 38 rest on a generated
+  oracle cross-checked against the ROM by a second independent path.
+- **Gen 2 (Crystal/Gold/Silver)** — 98 live duo and gate cells on real dumps of **all three**
+  titles, covering linking, the clauses, the ball gate, faint/whiteout/poison, PC and box ops,
+  NPC and native trades, evolution, gifts and egg hatching. No title has a full playthrough: New
+  Bark Town's west exit is script-locked until Elm hands over a starter, so there is no grass to
+  walk. Archipelago Crystal is **refused**, not experimental.
+- **Gen 3 (FR/LG and Radical Red)** — the largest live suite: FR/LG 43/43 and RR 19/19 at the
+  frozen cut. Only pinned cartridges are admitted; header-only and randomized builds are refused
+  by name.
+- **Gens 4 and 5** — feature parity with Gen 3 on paper (moves/PP, stat stages, doubles, forms,
+  egg detection, stream overlays) and their unit suites pass, but they have **never run against a
+  real game**. Treat them as experimental. Their battle-struct addresses are scannable with
+  `lua/tests/test_gen4_battlers_count.lua`, `test_gen4_stat_stages.lua`,
+  `test_gen5_block_b.lua` and `test_gen5_doubles.lua`, and need a one-time live capture.
+
+Per-generation detail: **[docs/gen1_gen2_runtime_checks.md](docs/gen1_gen2_runtime_checks.md)**.
 
 ## Before you start
 
 | You need | Notes |
 |---|---|
 | **Python 3.11+** | `pip install -r requirements.txt` |
-| **BizHawk 2.11+ (Gen 1), 2.9+ (Gen 2/3)** | Two instances, one per player. Savestates are version-locked — a state written by a different BizHawk stops the emulator on a modal dialog. |
+| **BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2)** | Two instances, one per player. Savestates are version-locked — a state written by a different BizHawk stops the emulator on a modal dialog. |
 | **Two ROMs** | One per player. Both players must run the same **game family** — Red and Blue link, FireRed and LeafGreen link; a Radical Red run needs Radical Red on both sides. |
 | **A full checkout, on both machines** | The launcher scripts are small stubs that `dofile` the real client out of this repo, so a remote friend needs the repo too — sending them just the `.lua` will not work. |
 
@@ -107,7 +169,7 @@ Opt-in per-run rules — passed as CLI flags (or toggled in the Run Manager's ne
 |------|--------|
 | `--explode-mode` | On a linked partner's death, the surviving mon is coerced into using **Explosion** mid-battle (server emits a `force_explode` command) instead of a silent force-faint |
 | `--rival-team-swap` | On a rival battle, the rival's team is replaced live with the **partner run's current party** (server emits `replace_rival_team`; requires the companion patch) |
-| `--overworld-presence` | **Peer ghost** — your partner walks your overworld as a live NPC with their own avatar and 1:1 movement (requires the companion patch) |
+| `--overworld-presence` | **Peer ghost** — not in this release (planned after the RC). Leave it off: while it is on, the Pokémon Center trade NPC is disabled too, so there is no trade entry point |
 
 Per-run **native UI & audio toggles** (also in the Run Manager's new-run form; all require the companion patch, none change Soul Link rules): `--native-messages` (notifications as native in-game text boxes instead of the Lua HUD), `--native-sounds` (notification sounds via the game's own audio engine), `--no-battle-calc` (hide the bundled in-battle damage calculator, shown by default), `--no-pc-trade-npc` (disable Radical Red's Pokémon-Center trade NPC, on by default and only active while Overworld Presence is off; Gen 1 trades at the Cable Club receptionist — the cartridge's own counter on the companion patch / pureRGB overlay, the Lua HUD otherwise — which has no switch).
 
@@ -136,7 +198,7 @@ Everything lives on the **Manager** (`python -m server.manager`, port 8090): the
 | `/stream/ticker` | Scrolling event ticker |
 | `/stream/badges` | Badge display |
 | `/stream/stream-memorial` | Memorial wall for stream |
-| `/calc/` | Radical Red damage calculator with live party bridge |
+| `/calc/` | Damage calculator with live party bridge — Gen 1/2/3, each adapter choosing its own dex (`vanilla`, `purergb`, `rr`) via `calc_profile()` |
 | `/patcher` | In-browser companion-ROM patcher — applies `SLink-RR.ups` to a clean Radical Red ROM client-side (nothing uploaded). Also served on the Manager port (8090). |
 
 ## pureRGB (Gen 1)
@@ -151,7 +213,7 @@ Everything lives on the **Manager** (`python -m server.manager`, port 8090): the
 
 ## Companion Patch (Radical Red)
 
-An optional UPS patch (`patch/`) injects native SLink support into the Radical Red ROM. It enables the **peer ghost** (Overworld Presence), **native trade** (talk-to-partner / PC trade NPC), **in-battle notifications**, **native message boxes and sounds**, the bundled **Battle Calc** damage display, the native Rival Team Swap path, and a **Soul Link entry in the game's own START menu** that opens a native run summary — linked pairs with both halves' HP, status and level, dead zones and badges — so you can check the run without leaving the game. Build it with `patch/tools/build.py`; apply it in the browser at `/patcher` (or download the `.ups` from `/companion/SLink-RR.ups`). See [patch/README.md](patch/README.md) for the full feature list and opcode reference.
+An optional UPS patch (`patch/`) injects native SLink support into the Radical Red ROM. It enables **native trade** (talk-to-partner / PC trade NPC), **in-battle notifications**, **native message boxes and sounds**, the bundled **Battle Calc** damage display, the native Rival Team Swap path, and a **Soul Link entry in the game's own START menu** that opens a native run summary (the peer ghost/Overworld Presence NPC opcodes are built into the patch but not yet driven by the rewritten Gen 3 client — deferred post-RC) — linked pairs with both halves' HP, status and level, dead zones and badges — so you can check the run without leaving the game. Build it with `patch/tools/build.py`; apply it in the browser at `/patcher` (or download the `.ups` from `/companion/SLink-RR.ups`). See [patch/README.md](patch/README.md) for the full feature list and opcode reference.
 
 ## OBS Scene Triggers
 
@@ -286,8 +348,8 @@ Downloads: `slink_<run>_a` / `_b` from the empty board, *Launchers ▾* or the C
 ## Tests
 
 ```bash
-pytest tests/unit/ -v                          # ~1600 tests, no emulator needed
-pytest tests/ -q                               # + integration (~1700)
+pytest tests/unit/ -v                          # ~14,200 tests, no emulator needed
+pytest tests/ -q                               # + integration, live and e2e collection (~14,500 total)
 
 # Headless BizHawk gates — drive a real emulator
 SLINK_LIVE=1 pytest tests/live/ -q             # headless gates for every generation
@@ -295,6 +357,7 @@ SLINK_LIVE=1 pytest tests/live/ -q             # headless gates for every genera
 # Two-instance end-to-end: two emulators + a real server
 SLINK_E2E=1 SLINK_LIVE=1 pytest tests/e2e/ -q  # duo scenarios for Gen 1, Gen 2 and Gen 3
 python tools/verify_gen2_release.py --list    # Gen 2's release lanes and what each judges
+python tools/gen3_final_cut.py --cut <sha> --list  # Gen 3's final-cut rows
 ```
 
 The live gates and duo scenarios need BizHawk and the ROMs. Gen 3 also needs
@@ -308,9 +371,11 @@ upgrade. Everything skips cleanly when a ROM or fixture is missing. See
 ```
 lua/
   slink.lua              # Universal entry point (auto-detects game)
-  clients/               # Per-game Lua clients
-  games/                 # Per-game config (addresses, detection)
-  memory_*.lua           # Platform memory helpers (GB, GBA, NDS)
+  gen1/, gen2/, gen3/     # Composition roots — Gen 1-3 rewritten clients (each owns its own entry.lua)
+  core/                   # Shared runtime (session, identity, deferred) used by gen1-3
+  clients/               # Gen 4/5 Lua clients
+  games/                 # Gen 4/5 game config (addresses, detection)
+  memory_nds.lua          # NDS memory helpers (Gen 4/5)
   connector.lua          # Non-blocking TCP wrapper
 server/
   server.py              # TCP + HTTP server (aiohttp)
@@ -330,15 +395,24 @@ patch/                   # Companion ROM patch (C sources, mailbox handlers, bui
 data/
   games/                 # Per-game static data (area maps, items)
   obs_config.json        # OBS connection + trigger rule config
-calc/                    # Radical Red damage calculator + live bridge (rendered via Jinja shell)
-tests/                   # unit + integration (~1700), live BizHawk gates (tests/live/), two-instance E2E (tests/e2e/)
+calc/                    # Damage calculator, Gen 1/2/3 (per-adapter calc_profile) + live bridge
+tests/                   # unit (14,215) + integration, live BizHawk gates (tests/live/), two-instance E2E (tests/e2e/)
   fixtures/gen1, gen2    # committed battery saves the GB duo runs boot from
 tools/                   # Code generators (area maps, data tables)
 ```
 
 ## Documentation
 
-Full technical reference (memory maps, protocol details, adapter architecture): **[docs/REFERENCE.md](docs/REFERENCE.md)**
+| Document | What it covers |
+|---|---|
+| **[docs/REFERENCE.md](docs/REFERENCE.md)** | Full technical reference: every HTTP endpoint, per-generation memory maps, adapter architecture, area normalization |
+| **[docs/protocol.md](docs/protocol.md)** | The client/server wire protocol, event by event and field by field |
+| **[tests/TESTING.md](tests/TESTING.md)** | How to run every suite, and the rule that **absent input skips, present-but-wrong input fails** |
+| **[docs/gen1_gen2_runtime_checks.md](docs/gen1_gen2_runtime_checks.md)** | What live verification covers per generation, and what is still open |
+| **[docs/purergb/](docs/purergb/)** | The pureRGB foundation: plan, changelog and the research it rests on |
+| **[docs/gen2/](docs/gen2/)**, **[docs/gen3/](docs/gen3/)** | Per-generation plans, tickets and review records |
+| **[docs/historical/](docs/historical/)** | Finished, superseded or abandoned efforts — kept for the reasoning, never read as instructions |
+| **[.github/copilot-instructions.md](.github/copilot-instructions.md)** | Exhaustive developer notes: RAM addresses, struct layouts, and why the adapter isolation rules exist |
 
 ## References
 

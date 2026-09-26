@@ -46,6 +46,15 @@ says so):
   diffs the `.sym`/`.map` output against what's committed here — the CI-side half of the same gate.
 - `../../tools/apply_bps.py` applies a BPS v1 patch to a source ROM (the upstream release patch
   over a clean Red/Blue dump is the other way to obtain the pinned ROMs); see
-  `tests/unit/test_apply_bps.py` for the format details it implements.
+  `tests/unit/test_apply_bps.py` for the format details it implements. **Gotcha:** PureGreen's
+  `.bps` is built against a clean **Blue** dump, not Red (upstream ships Red-over-Red but
+  Blue-**and-Green**-over-Blue, PLAN.md §11.2 "Release artefacts") — applying it to a clean Red
+  dump produces a CRC mismatch, not PureGreen.
 - `../../tools/build_purergb_overlay.py` builds the companion overlay on top and emits the UPS
   files; `../../tools/build_upr_fork.py --bootstrap` builds the randomizer fork jar.
+- **Gotcha:** `build_purergb_syms.py` normalises `.sym`/`.map` to LF before hashing/publishing
+  (rgbds on Windows writes CRLF; the repo pins `.sym`/`.map` as LF per `.gitattributes`) — comparing
+  raw build output against the committed files without that normalisation reports spurious drift.
+- Live/duo gates that need the built ROMs read `SLINK_PURERGB_ROMS` (a directory holding
+  `pokered.gbc`/`pokeblue.gbc`/`pokegreen.gbc`; default `.cache/purergb`), e.g.
+  `SLINK_PURERGB_ROMS=.cache/purergb python tools/verify_gen1_release.py --lane <name>`.

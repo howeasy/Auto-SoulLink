@@ -6,7 +6,7 @@ G6 (tag + release) is the owner's. The version number comes from the git tag at 
 never from this file.
 
 Everything below cites the commit that landed it. `PLAN.md` §13.1 holds the gate ledger and
-§11.2 the research facts each change rests on; `docs/release_notes.md` carries the short form.
+§11.2 the research facts each change rests on; `docs/historical/release_notes.md` carries the short form.
 
 ---
 
@@ -37,8 +37,10 @@ Three deliverables sit on top of the rules:
   either way the sha1 must be `2e94d09c…` (PureRed), `d419fe24…` (PureBlue), `fe4c63a6…`
   (PureGreen) or the client refuses it. Built ROMs are never committed.
 - **Overlay patches.** `patch/dist/SLink-PureRed.ups`, `SLink-PureBlue.ups`, `SLink-PureGreen.ups`
-  over the corresponding pinned ROM (overlay sha1s `47cb0f81…`, `666d22ea…`, `e403edaa…`, as pinned in
-  `data/games/gen1_purergb/admission_overlay.json` — that file is the authority, not this line); shipped in
+  over the corresponding pinned ROM (overlay sha1s pinned in
+  `data/games/gen1_purergb/admission_overlay.json` — that file is the authority; the pins move
+  whenever a shared fix touches the overlay build, e.g. the Gen 2 trade-save fix in `6a4269d8`,
+  so no sha1 is restated here); shipped in
   the `--with-patch` release bundle (`tools/make_release.py`, `e933380`).
 - **Data pack.** `data/games/gen1_purergb/` — 23 files: `profile.json`, `engine_signals.json`
   (41 sites × 3 titles), `write_checkpoint.json`, `admission.json`, `area_map.json` (248 map ids →
@@ -346,7 +348,7 @@ the vanilla mailbox address `$DEE2` is inside pureRGB's box data), so the compan
 ### 3.10 Documentation — `3e9e69d`, `0ea9164`, `bbe7105`, `5e48fe5`, `81c7b88`, this sweep
 
 `README.md` (Supported Games row, a pureRGB section, randomizer note), `docs/REFERENCE.md`
-(Gen 1 pureRGB bullet, prerequisites), `docs/release_notes.md` (pureRGB section),
+(Gen 1 pureRGB bullet, prerequisites), `docs/historical/release_notes.md` (pureRGB section),
 `docs/protocol.md` (acknowledged `key_change`), `docs/gen1_requirements.md` (pureRGB section),
 `docs/gen1_engine_sites.md` and `docs/shared_runtime.md` (second-foundation notes),
 `patch/README.md`, `patch/gen1/README.md`, `patch/gen1/purergb/README.md`,

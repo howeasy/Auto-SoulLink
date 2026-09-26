@@ -109,6 +109,10 @@ final   in_battle=0 our=16/20 enemy=15 balls=58 party=2 result=0x02
 
 ## Rebuilding or extending the probe
 
+`lua/tests/probe_gen1_catchloop.lua` is gone (deleted in `9aa7989`, per the note at the top of
+this file) — the command below is the shape a rebuilt probe would use with today's
+`tools/run_gb_gate.py`, not a runnable command against the current tree:
+
 ```bash
 python tools/run_gb_gate.py lua/tests/probe_gen1_catchloop.lua --rom red --target battle
 ```

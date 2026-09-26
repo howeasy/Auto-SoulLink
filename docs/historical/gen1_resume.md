@@ -1,5 +1,18 @@
 # Gen 1 master release — resume note (2026-09-17 ~22:30Z, owner break)
 
+> **HISTORICAL — superseded 2026-09-26.** This is a point-in-time working log from the
+> `gen1-master-release-plan-6b4279` worktree/branch, which no longer exists: Gen 1 merged to
+> local master (`5c97aa4` final review, then `0937f3d` with pureRGB, per
+> `docs/gen1_resume.md`'s own "MERGED …" sections below), the worktree and its branch were
+> cleaned up (see "CLEANUP" below), and Gen 2 and Gen 3 have since landed on master as well
+> (2026-09-26). The OMP/Codex peer sessions, worker cards and `.claude/worktrees/...` paths
+> named throughout are gone; do not treat any command, path or "in flight" item below as
+> runnable today. It is kept for the facts it still carries — the native-sound mailbox design,
+> receipt paths, the space-free pureRGB toolchain requirement, and the sequence of fixes that
+> got Gen 1 to a green gate — not as a live resume point. For current status read
+> `docs/gen1_gen2_runtime_checks.md` and `docs/gen1_requirements.md`; for orientation read the
+> root `CLAUDE.md`.
+
 Read this first after a context reset or harness restart. The ledger `docs/gen1_requirements.md`
 is the authority on evidence; this note is the working state around it. Plan (owner-approved,
 v3.9): `C:\Users\howar\.claude\plans\system-reminder-you-are-operating-gleaming-pretzel.md`. The

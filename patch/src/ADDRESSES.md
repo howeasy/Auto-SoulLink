@@ -319,8 +319,12 @@ disabled, `[1 2 3 4 5 8 6]` when enabled, and the callback fires on row 5 **and 
 
   Consumers: EV_PLAYER_FAINT and EV_OUTCOME drive behaviour (faint fast-path, whiteout
   acceleration). EV_PARTY_ADD and EV_EVOLVE are a cross-check that asserts the ring agrees with the
-  Lua diff and counts disagreements — the soak instrument the §3 authority swap is waiting on. See
-  `ev_xcheck` in `lua/clients/gen3_frlge_client.lua`.
+  Lua diff and counts disagreements — the soak instrument the §3 authority swap is waiting on.
+  ⚠ That consumer (`ev_xcheck`) lived in `lua/clients/gen3_frlge_client.lua`, since deleted
+  (addc9225); no `ev_xcheck`/`events_drain`/`EV_PARTY_ADD` consumer exists in the current
+  `lua/gen3/*.lua` client — today the ring is exercised only by `lua/tests/test_live_events.lua`
+  and `test_live_partyevents.lua`, not consumed live. Flagged for the owning lane; not guessed at
+  here.
 
 ## Bundled RR4.1_Custom Battle Calc (in-battle damage calculator)
 
@@ -517,9 +521,11 @@ currentCoords x@0x10/y@0x12, facing@0x18); `gSprites = 0x0202063C` (stride 0x44;
 
 **Live-validated** (`test_live_spawnnpc.lua`): SPAWN creates an active object-event + allocated
 sprite at the target tile; DESPAWN clears it and frees the sprite. **Per-frame position/facing
-driving stays in Lua** (the existing `peer_ghost.lua` smooth-tracking logic, now driving the
-engine-spawned sprite — no clone, so no callback/palette/VRAM corruption). The NPC is spawned with
-`movementType=NONE` so its engine callback won't fight the Lua-driven position.
+driving stays in Lua** (at the time of writing, the smooth-tracking logic in `lua/peer_ghost_npc.lua`
+drove the engine-spawned sprite — no clone, so no callback/palette/VRAM corruption). That file is
+since deleted (addc9225); peer ghost is deferred post-RC for Gen 3 and `lua/gen3/client.lua`'s
+`ghost_pos` is currently a stub. The NPC-spawn opcode/patch mechanism itself is unaffected. The NPC
+is spawned with `movementType=NONE` so its engine callback won't fight the Lua-driven position.
 
 ## Phase-2 (CREATE_MON) — validated
 `gPlayerParty = 0x02024284` (BPRE.ld ↔ SLink RR profile), MON_SIZE 100; party struct
@@ -663,7 +669,7 @@ prologue (`push {..,lr}`). CFRU uses the "EventObject" naming = pokefirered "Obj
 | `EventObjectClearHeldMovementIfActive` | 0x8063D1C | push {lr} | stop active held movement |
 | `EventObjectClearHeldMovementIfFinished` | 0x8063D7C | push {r4,r5,lr} | poll: 0=finished 16=not-active else=busy; clears if done |
 | `GetFaceDirectionMovementAction` | 0x8063EB8 | push {r4,lr} | dir→FACE action (0x0-0x3, idle facing) |
-| `GetWalkNormalMovementAction` | 0x8063F2C | push {r4,lr} | dir→WALK_NORMAL action (0x10-0x13) |
+| `GetWalkNormalMovementAction` | 0x8063F2C ⚠ | push {r4,lr} | dir→WALK_NORMAL action (0x10-0x13) |
 | `GetWalkFastMovementAction` | 0x8063FB0 | push {r4,lr} | dir→WALK_FAST/run action (0x1D-0x20) |
 | `RemoveEventObject` | 0x805E4B4 | push {lr} | clean remove: destroys sprite + deactivates OE |
 | `MoveEventObjectToMapCoords` | 0x805F724 | push {r4-r7,lr} | hard re-place an OE at map coords (snap) |
@@ -678,15 +684,23 @@ overworld savestate it reads 0 (player IS slot 0), so player_oe() == slot 0 ther
 pass; the fix is reading this slot instead of a hardcoded 0, both in the patch (player_oe()) and Lua
 (MB.player_oe()).
 
+⚠ `GetWalkNormalMovementAction` at `0x8063F2C` does not match `data/gen3/pret/pokefirered.sym`:
+that address is `GetWalkSlowerMovementAction` there (the real `GetWalkNormalMovementAction` is
+`0x08063F84`, i.e. `0x8063F85` Thumb\|1). `patch/src/handlers.c` `#define`s the same `0x8063F2Du`
+value, but nothing in `patch/src` calls it (the `#define` is its only hit), so it has no
+runtime effect today. Correct the value, or delete the define, before anything uses it.
+
 Directions: DIR_SOUTH=1 NORTH=2 WEST=3 EAST=4. Model = CFRU `follow_me.c`: spawn OE with
 MOVEMENT_TYPE_NONE, then each step `EventObjectSetHeldMovement(oe, GetWalk*Action(dir))` and poll
 `EventObjectClearHeldMovementIfFinished`. The engine animates/positions/palettes/collides natively.
 `SpawnSpecialObjectEventParameterized`=0x805E831 and `ScriptContext1_SetupScript`=0x08069AE5 already
 validated above.
 
-## PC storage / box migration reference (forward-looking — for OP_DEPOSIT_MON/WITHDRAW/MEMORIALIZE)
-Groundwork for retiring the Lua `depositPartyMon`/`retrieveBoxMon`/`memorializeMon` RAM-pokes
-(`memory_gba.lua`). **The data layout is already fully mapped by SLink's Lua** (`lua/games/gen3_frlge.lua`):
+## PC storage / box migration reference (for OP_DEPOSIT_MON/WITHDRAW/MEMORIALIZE)
+`handlers.c` already implements the opcodes; `lua/gen3/boxes.lua` (`self:deposit/withdraw/
+memorialize`) calls the native opcode path when available and falls back to its own RAM-poke
+logic otherwise (`memory_gba.lua`, which carried this fallback before, is since deleted,
+addc9225). **The data layout is already fully mapped by SLink's Lua** (`lua/games/gen3_frlge.lua`):
 PC boxes use CFRU's **58-byte (0x3A) `CompressedPokemon`** (NOT the 80-byte BoxPokemon), unencrypted,
 fixed substruct order; `POKEMON_STORAGE_BASE = 0x02029314`, **25 boxes**, and the boxes are
 **non-contiguous in EWRAM** — see `CFRU_BOX_BASES` (the `sPokemonBoxPtrs[]` table; e.g. box0 @
@@ -729,4 +743,6 @@ bytes ARE a BoxPokemon*/, comp)`; then shift-compact the party + decrement count
 save's real lead mon: personality/OT/species preserved, level recomputed, box slot freed, no corruption).
 **Status:** DONE — `exec_box_mon`/`exec_party_mon` run through `MB.deposit_mon`/`MB.withdraw_mon`
 (async + patch-detect + Lua fallback), and `OP_MEMORIALIZE` (26) landed as the follow-up. The Lua
-RAM-poke path is kept deliberately: it is the fallback for unpatched ROMs.
+RAM-poke path is kept deliberately: it is the fallback for unpatched ROMs. (`MB` was `lua/mailbox.lua`,
+since deleted, addc9225; today the same native-then-fallback shape lives in `lua/gen3/boxes.lua`
+`self:deposit`/`self:withdraw`/`self:memorialize`.)

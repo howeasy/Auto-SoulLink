@@ -1,5 +1,15 @@
 # SLink UI migration — from two apps to one board, on master
 
+> **HISTORICAL RECORD (marked 2026-09-26).** This migration is DONE and merged to master:
+> one Manager chrome everywhere, the board, the randomizer OPTIONS table with the cartridge
+> picker/family rule/presets/`.rnqs`, the sprite-flicker fix and the scrolling rail all ship.
+> The document is kept as the record of how and why, not as a plan to work from. Everything
+> below is preserved as written and is therefore stale in the ways you would expect: the
+> branch `claude/soul-link-ui-mockups-40f67b` and worktree `dreamy-pike-09f3e3` are gone, and
+> the "suite 2 603 green" figure predates three more generations landing (the unit suite is
+> now ~14215 collected). For current UI facts read `server/templates/`, `server/static/` and
+> `docs/REFERENCE.md`.
+
 *Handoff document. Rewritten 2026-09-14 by the session that built the mockups. Assume the
 reader has none of that conversation.*
 

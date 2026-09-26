@@ -3,8 +3,11 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (vanilla, randomized, Radical Red/CFRU) — **✅ Stable**, on the rewritten
-  client under `lua/gen3/`.
+- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps) and Radical Red 4.1 (CFRU, clean or companion-patched)
+  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the frozen-cut gate passes FR/LG
+  43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`, `G5_request_draft.md`); the
+  owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM hash (`lua/slink.lua`);
+  randomized and other unpinned builds are refused by name.
 - **Gen 3** — Emerald and the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
   the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`
   refuses them by name until they are ported to `lua/gen3/`.
@@ -134,7 +137,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 | Requirement | Detail |
 |---|---|
 | BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen or Radical Red ROMs. **Gen 4:** Two instances with US HGSS ROMs |
-| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 2:** Crystal (US 1.0 or 1.1), Gold, Silver (US); the overlay is applied from `patch/dist/SLink-*.ups`. **Gen 3:** Vanilla, randomized (UPR), or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
+| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 2:** Crystal (US 1.0 or 1.1), Gold, Silver (US); the overlay is applied from `patch/dist/SLink-*.ups`. **Gen 3:** the pinned FireRed/LeafGreen US 1.0 dumps, or Radical Red 4.1 (clean or with the SLink companion patch), admitted by ROM hash — randomized builds are refused. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `gen3/`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
@@ -272,7 +275,7 @@ Lua clients and the server speak newline-delimited JSON over one persistent TCP 
 | `stats_cache` | Caches a boxed mon's party-only stat fields so `party_mon` can restore them. |
 | `memorialize_done` / `memorialize_failed` | Ack of a `memorialize` command. |
 | `status` | **Companion patch.** Reports patch presence/build info and per-feature availability. |
-| `ghost_pos` | **Companion patch, `--overworld-presence`.** The player's overworld position/facing, relayed to the partner's peer ghost. |
+| `ghost_pos` | **Companion patch, `--overworld-presence`.** The player's overworld position/facing; sent by the server, but the rewritten Gen 3 client's `ghost_pos` handler is a no-op (peer ghost is deferred post-RC). |
 | `peer_interact` | **Companion patch.** Player talked to the peer ghost / trade NPC — opens the trade flow. |
 | `trade_request` | **Companion patch.** Player initiated a trade with the partner. |
 | `menu_result` | **Companion patch.** Result of a native yes/no menu (`show_menu`) or multichoice (`show_choices`). |
@@ -300,7 +303,7 @@ Lua clients and the server speak newline-delimited JSON over one persistent TCP 
 | `show_menu` / `show_choices` | **Companion patch.** Native yes/no menu / multichoice list; answered by `menu_result`. |
 | `choose_mon` | **Companion patch.** Native "Choose a POKéMON" party menu; answered by `mon_chosen`. |
 | `apply_trade` | **Companion patch.** Write the partner's traded mon into the party and run the native trade scene; acked by `trade_done`. |
-| `ghost_pos` | **Companion patch, `--overworld-presence`.** The partner's overworld position — drives the peer-ghost NPC. |
+| `ghost_pos` | **Companion patch, `--overworld-presence`.** The partner's overworld position — would drive the peer-ghost NPC, but the client's handler is currently a no-op (deferred post-RC). |
 
 > The OBS-trigger event names in [OBS Scene Trigger Integration](#obs-scene-trigger-integration) are a *separate* concept (derived signals for scene switching) even where names overlap (e.g. `trainer_battle_start`).
 
@@ -803,7 +806,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 |---|---|
 | TCP transport (LuaSocket) | ✅ Working |
 | ROM validation (FireRed/LeafGreen US 1.0) | ✅ Working |
-| Archipelago (AP) patched ROM support | ✅ Working |
+| Archipelago (AP) patched ROM support | ❌ Not supported — AP FireRed/LeafGreen ran only on the old, now-archived Gen 3 client; `lua/slink.lua` refuses them by name until they are ported to `lua/gen3/` |
 | Radical Red 4.1 (CFRU) support | ✅ Working |
 | Area mapping (all FRLG routes/dungeons/locations) | ✅ Working |
 | Encounter linking | ✅ Working |
@@ -921,9 +924,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Companion patch build + distribution (`patch/tools/build.py`, UPS at `/companion/`, in-browser patcher) | ✅ Working |
 | Build reproducibility gate (`build.py --check` asserts the committed UPS rebuilds byte-identically) | ✅ Working |
 | Mailbox ABI v1 (`0x0203F800`) — opcode dispatch + seq/ack protocol | ✅ Working |
-| Peer ghost — partner rendered as a real engine NPC with their own avatar, sub-pixel motion, lead extrapolation | ✅ Working |
-| Peer ghost — native day/night tint on the partner's palette slot | ✅ Working |
-| Peer ghost — bike / surf / fishing avatars (spawns with the partner's own `graphicsId`) | ✅ Working — pending two-instance visual check |
+| Peer ghost (Overworld Presence) — partner rendered as a real engine NPC | ❌ Deferred post-RC on the rewritten Gen 3 client (owner ruling 2026-09-22) — the patch's NPC opcodes are built, but `lua/gen3/client.lua`'s `ghost_pos` handler is a no-op |
 | Talk to partner → native action menu (Trade / Say hey) | ✅ Working |
 | Native trade — real in-game trade animation + trade-evolution, linked halves only | ✅ Working |
 | Native PC box ⇄ party storage (`DEPOSIT_MON` / `WITHDRAW_MON`) | ✅ Working |
@@ -983,30 +984,30 @@ silently absent.
 ### Unit tests (no emulator required)
 
 ```bash
-pytest tests/unit/ -v          # 1595 passed, 5 skipped; no emulator needed
-pytest tests/unit/test_state.py -v             # 318 state machine tests (incl. tick reconciliation)
-pytest tests/unit/test_gen3_adapter.py -v      # 216 Gen 3 adapter tests
-pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
-pytest tests/unit/test_gen1_adapter_contract.py -v  # 9 Gen 1 adapter-contract tests (the rewrite's Gen 1 coverage is spread across tests/unit/test_gen1_*.py, ~40 files)
-pytest tests/unit/test_gen2_adapter.py -v      # 50 Gen2GSCAdapter tests
+pytest tests/unit/ -v          # ~14,200 tests collected; no emulator needed
+pytest tests/unit/test_state.py -v             # 319 state machine tests (incl. tick reconciliation)
+pytest tests/unit/test_gen3_adapter.py -v      # 218 Gen 3 adapter tests
+pytest tests/unit/test_gen4_adapter.py -v      # 101 Gen 4 adapter tests
+pytest tests/unit/test_gen1_adapter_contract.py -v  # 10 Gen 1 adapter-contract tests (the rewrite's Gen 1 coverage is spread across tests/unit/test_gen1_*.py, ~40 files)
+pytest tests/unit/test_gen2_adapter.py -v      # 59 Gen2GSCAdapter tests
 pytest tests/unit/test_gen5_adapter.py -v      # 140 Gen 5 adapter tests
-pytest tests/unit/test_stat_stages.py -v       # 46 stat stage tests
+pytest tests/unit/test_stat_stages.py -v       # 48 stat stage tests
 pytest tests/unit/test_obs_priority.py -v      # 7 OBS priority + area-group tests
 pytest tests/unit/test_manager_launcher.py -v  # 4 launcher Lua-syntax regression tests
-pytest tests/unit/test_phase1_comms.py -v      # 6 protocol tests
+pytest tests/integration/test_phase1_comms.py -v  # 6 protocol tests (moved from tests/unit/: spawns a real server)
 # Rival Team Swap + Explode Mode + Upcoming Key Trainers (0.2.6):
 pytest tests/unit/test_trainer_panel.py -v             # 14 Upcoming Key Trainers panel tests
-pytest tests/unit/test_state_rival_battle_start.py -v  # 15 rival-team-swap trigger tests
+pytest tests/unit/test_state_rival_battle_start.py -v  # 34 rival-team-swap trigger tests
 pytest tests/unit/test_state_party_blob_cache.py -v    # 10 party blob_hex cache tests
 pytest tests/unit/test_gen3_adapter_rival_ids.py -v    # 8 rival trainer-ID tests
-pytest tests/unit/test_cli_rival_team_swap.py -v       # 4 --rival-team-swap CLI tests
+pytest tests/integration/test_cli_rival_team_swap.py -v  # 4 --rival-team-swap CLI tests (tests/integration/: spawns a real server)
 # Companion patch + per-run toggles:
-pytest tests/unit/test_cli_native_toggles.py -v        # 9 native-toggle CLI tests
-pytest tests/unit/test_cli_overworld_presence.py -v    # 4 --overworld-presence CLI tests
-pytest tests/unit/test_patcher_routes.py -v            # 4 /patcher + /companion route tests
+pytest tests/integration/test_cli_native_toggles.py -v   # 9 native-toggle CLI tests
+pytest tests/integration/test_cli_overworld_presence.py -v  # 4 --overworld-presence CLI tests
+pytest tests/unit/test_patcher_routes.py -v            # 19 /patcher + /companion route tests
 ```
 
-318 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), dupes clause partner pending capture check, and **tick reconciliation** (server-side diff of Lua party snapshots against `party_keys[player_id]` to repair ghost-boxed and ghost-party drift, gated against in-flight box/party/memorialize commands and active whiteout rebuilds), and **Explode Mode** (default-off, save/load round-trip, off → `force_faint` vs on → `force_explode`). Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest, length/hex validation, per-player isolation).
+319 state machine tests covering: linking, dead zones, faint propagation, whiteout, party sync (including confirmation-based `sync_retrieve_done`/`sync_retrieve_failed`, PC swap event ordering), box capture stats caching, memorial box, reconnect re-queuing, illegal captures, encounter logging, AP ROM type handling, species clause (evo families), gender clause (genderless edge cases), type clause (shared types, partial overlap, monotypes), combined clauses, violation recovery, clause rule persistence, same-save species duplicate prevention, dynamic gift areas, hello resolved_areas, gift area no_catch protection, unlinked encounter quarantine, paired party sync enforcement, dead zone quarantined mon retirement, CFRU/RR species data validation (Gen 3 ID rekey, Gen 4+ cross-gen evolutions, gender ratios), battle HP cache writeback (CFRU), double-buffer party diff, frame ordering, player identity lock (OT ID per slot — first lock, wrong OT rejection, event blocking, persistence, empty party skip, per-player independence), persistent run metadata (rom_type, trainer_names), shiny bonus pairs (pending_bonus FIFO queue, pair formation, faint propagation both directions, party sync at formation, FIFO multi-bonus, lock clause violations with retry, area unresolve, persistence, key migration, no-wildcard-exemption), nature change (key_change migration), dupes clause partner pending capture check, and **tick reconciliation** (server-side diff of Lua party snapshots against `party_keys[player_id]` to repair ghost-boxed and ghost-party drift, gated against in-flight box/party/memorialize commands and active whiteout rebuilds), and **Explode Mode** (default-off, save/load round-trip, off → `force_faint` vs on → `force_explode`). Rival Team Swap state coverage lives in `test_state_rival_battle_start.py` (auto-trigger matrix, `queue_rival_team_swap`, `rival_team_replaced` ack) and `test_state_party_blob_cache.py` (`blob_hex` ingest, length/hex validation, per-player isolation).
 
 7 OBS priority tests covering: highest-priority rule wins when multiple events fire simultaneously, lower-priority fallback when high-priority event didn't fire, independent per-player resolution, exact `area_id` filter matching, and **area-group** filter matching (`group:routes`, etc.) against the active adapter's classified area map.
 
@@ -1019,12 +1020,12 @@ pytest tests/unit/test_patcher_routes.py -v            # 4 /patcher + /companion
 python -m server.server --host 127.0.0.1 --port 54321
 
 # Terminal 2
-pytest tests/unit/test_phase1_comms.py -v
+pytest tests/integration/test_phase1_comms.py -v
 ```
 
 ### BizHawk live tests
 
-**Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo.py` (six scenarios on the patched RR ROM).
+**Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo.py` (16 scenarios on the patched RR ROM) plus `SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py` (the `lua/gen3/` client on vanilla FRLG/LGFR and Radical Red).
 
 **Gen 1 and Gen 2** have no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
 
@@ -1110,7 +1111,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{cryst
 | `tools/gen_rr_priority_trainers.py` | Generator for `rr_priority_trainers.json` + the calc `slink_priority.js` setdex (RR priority/key trainers) |
 | `tools/lua_syntax_check.py` | Syntax-checks `lua/**/*.lua` with lupa (Lua 5.5) — catches `goto`/bitwise errors the system luac 5.1 rejects |
 | `tools/inject_full_mocks.py` | Injects full mock state (6 linked pairs, dead-zone, boxed pair, memorial, enemy battle w/ held items) into a running server for UI testing |
-| `tools/e2e_duo.py` | Two-instance headless E2E harness — throwaway server + two EmuHawk instances running scripted scenarios (faint, boxsync, trade, ghost, explode); pytest wrapper in `tests/e2e/test_duo.py` (gated behind `SLINK_E2E=1`) |
+| `tools/e2e_duo.py` | Two-instance headless E2E harness — throwaway server + two EmuHawk instances running scripted scenarios (faint, boxsync, trade, explode, rival swap; peer ghost's `ghost` scenario was dropped when Overworld Presence was deferred post-RC); pytest wrapper in `tests/e2e/test_duo.py` (gated behind `SLINK_E2E=1`) |
 | `ruff.toml` / `requirements-dev.txt` | Ruff lint config + pinned dev dependency (`pip install -r requirements-dev.txt`; `ruff check .`) |
 | `tests/TESTING.md` | Live BizHawk test guide |
 | **Damage Calculator** | |
@@ -1358,7 +1359,7 @@ python -m server.server --help
 # --type-clause         reject links where both mons share any type
 # --explode-mode        (RR only) on partner death, force the linked mon to auto-Explode (force_explode instead of force_faint)
 # --rival-team-swap     (RR only) on rival battles, replace the rival's team with the partner's current party (replace_rival_team)
-# --overworld-presence  peer ghost: render your partner walking your overworld as a live NPC (RR + companion patch required)
+# --overworld-presence  peer ghost (RR + companion patch): deferred post-RC on the rewritten Gen 3 client -- the flag is accepted but the client does not yet render the NPC
 # --native-messages     show SLink notifications via the patch's native message box / in-battle text instead of the Lua HUD (RR + patch; default off)
 # --native-sounds       play SLink notification sounds via the patch's native PlaySE (RR + patch; default off)
 # --no-battle-calc      hide the bundled Battle Calc damage display (RR + patch; shown by default)
@@ -1530,70 +1531,6 @@ Reorder rules by dragging the ⠿ handle. The new order saves automatically on d
 - **`submit_fired(fired_list)`** — priority resolver called once per dispatch cycle with all `(event_name, src_player, metadata)` tuples; iterates rules in list order, sets winners dict (first match per target player wins).
 - **`_emit_obs_triggers()`** in `server.py` collects all fired events for a dispatch cycle into a list and calls `obs.submit_fired(fired)` once at the end.
 - **Area-group resolution** — `area_id_filter` values starting with `group:` resolve against `_area_group_for(area_id)` (in `server/server.py`), which classifies the active adapter's areas into the 8 buckets above. The picker on `/obs` pulls the labeled buckets from `GET /api/obs/areas` and renders `<optgroup>` blocks so users don't have to remember slug names.
-
----
-
-## Run Manager
-
-The Run Manager provides multi-run orchestration from a single web interface on port 8090.
-
-```bash
-python -m server.manager --host 0.0.0.0
-```
-
-**Features:**
-- Create, start, stop, and archive named runs — each run is a separate `server.py` subprocess with its own TCP port, HTTP port, and data directory
-- Per-run rule configuration via UI checkboxes — **Link Clauses** (species / gender / type), **Run Augmentations** (Explode Mode / Rival Swap / Overworld Presence peer ghost, RR-only), and a **Native UI & audio** disclosure for the companion-patch toggles (Native Messages, Native Sounds — both off by default; Battle Calc, PC Trade NPC — both on by default)
-- Launcher script downloads — generates pre-configured `slink_<player>.lua` files with the correct host IP, TCP port, and player ID based on the URL used to access the manager
-- Direct links to each run's status page
-- Simplified per-run **Live Status** panel — connection, current area, party levels + HP, badges, in-battle banner, and link counts, pulled via the same-origin `/api/runs/<id>/live` proxy (no cross-port request, flicker-free reactive merge)
-
-**Endpoints:**
-
-| Endpoint | Description |
-|---|---|
-| `GET /` | Manager dashboard |
-| `GET /api/runs` | List all runs (JSON) |
-| `POST /api/runs/new` | Create a new run |
-| `POST /api/runs/<id>/start` | Start a run |
-| `POST /api/runs/<id>/stop` | Stop a run |
-| `POST /api/runs/<id>/archive` | Archive a run |
-| `POST /api/runs/<id>/delete` | Delete a run |
-| `GET /api/runs/<id>/launcher/<player>` | Download launcher script (`player` = `"a"` or `"b"`) |
-| `GET /api/runs/<id>/player-pack/<player>` | Download the player's setup ZIP (runtime + launcher) |
-| `GET /api/runs/<id>/live` | Same-origin proxy of a run's `/api/status` |
-| `GET\|POST /api/stream/pin` | Read / set which run the manager's stream overlays are pinned to |
-| `GET /stream` / `GET /stream/{name}` | Overlay gallery + per-overlay proxy relaying to the pinned/active run's HTTP port (stable OBS browser-source URLs; `/stream/{name}/fragment` serves the HTMX poll) |
-| `GET /api/status` | Proxy of the active (pinned or latest) run's `/api/status` |
-| `GET /api/events` | Proxy of the active run's SSE event stream |
-| `POST /api/attempts` | Proxy of the active run's attempts-counter setter |
-| `GET /patcher` | In-browser companion-ROM patcher (same page as the per-run server's) |
-| `GET /companion/SLink-RR.ups` | Download the built companion UPS patch |
-
-**Examples:**
-
-```bash
-# List all runs
-curl http://localhost:8090/api/runs
-# [{"id": "my-run", "name": "RR Season 3", "status": "running", "tcp_port": 54321, "http_port": 8080}, ...]
-
-# Create a new run (species clause + type clause enabled)
-curl -X POST http://localhost:8090/api/runs/new \
-  -H "Content-Type: application/json" \
-  -d '{"name": "RR Season 3", "species_clause": true, "gender_clause": false, "type_clause": true}'
-# {"ok": true, "id": "rr-season-3"}
-
-# Start a run
-curl -X POST http://localhost:8090/api/runs/rr-season-3/start
-# {"ok": true}
-
-# Stop a run
-curl -X POST http://localhost:8090/api/runs/rr-season-3/stop
-# {"ok": true}
-
-# Download Player A launcher script for a specific run
-curl http://localhost:8090/api/runs/rr-season-3/launcher/a -o slink_a.lua
-```
 
 ---
 
