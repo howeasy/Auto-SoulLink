@@ -58,6 +58,8 @@ TYPE_NAMES = ("None", "Normal", "Fighting", "Flying", "Poison", "Ground", "Rock"
 # include/config/general.h's GEN_1..GEN_9 enum is zero-indexed (GEN_9 == 8), so
 # GEN_LATEST's value 8 IS "Gen 9" here, not "Gen 8" -- confirmed by reading config.json.
 _CALC_CRITICAL_MACROS = ("B_CRIT_MULTIPLIER", "B_PHYSICAL_SPECIAL_SPLIT", "B_ABILITY_WEATHER")
+# include/config/general.h: GEN_1 0 .. GEN_9 8 -- the calc profile below is gen 9 only.
+_GEN_9 = 8
 
 # XR-1/XR-2 party-record bit layout for this build (server/adapters/gen3_codec.py
 # decode_party_mon_masked/validate_expansion_layout), verified against
@@ -248,6 +250,8 @@ class Gen3ExpansionAdapter(Gen3Adapter):
 
     def calc_profile(self):
         latest = self._config_macros.get("GEN_LATEST", {}).get("value")
+        if latest != _GEN_9:
+            return None  # a build targeting another generation is not gen 9 (OMP cx-7cb40977 M1)
         for macro in _CALC_CRITICAL_MACROS:
             if self._config_macros.get(macro, {}).get("value") != latest:
                 return None  # config targets a generation the calc can't express (XC1 doc)
@@ -274,13 +278,6 @@ class Gen3ExpansionAdapter(Gen3Adapter):
             "stats": {"hp": mon["max_hp"], "atk": mon["attack"], "def": mon["defense"],
                       "spa": mon["sp_attack"], "spd": mon["sp_defense"], "spe": mon["speed"]},
         }
-
-    def calc_nature(self, key):
-        try:
-            from .gen3_frlge import _NATURE_NAMES
-            return _NATURE_NAMES[int(key.split(":")[0], 16) % 25]
-        except (ValueError, AttributeError):
-            return None
 
     def gym_badge_slugs(self, rom_type):
         return super().gym_badge_slugs("emerald")

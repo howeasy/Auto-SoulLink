@@ -231,3 +231,11 @@ def test_server_calc_profile_crystal_with_gold(tmp_path):
     srv._player_adapters["a"] = Gen2GSCAdapter(rom_type="crystal")
     srv._player_adapters["b"] = Gen2GSCAdapter(rom_type="gold")
     assert srv._calc_profile() == {"gen": 2, "dex": "vanilla"}
+
+def test_gen3_expansion_calc_profile_refuses_a_build_that_is_not_gen9():
+    """OMP cx-7cb40977 M1: every mechanics macro at GEN_LATEST is not enough; GEN_LATEST must be GEN_9."""
+    from server.adapters import get_adapter
+    a = get_adapter("gen3_exp")
+    for macro in ("GEN_LATEST", "B_CRIT_MULTIPLIER", "B_PHYSICAL_SPECIAL_SPLIT", "B_ABILITY_WEATHER"):
+        a._config_macros[macro] = {"value": 3}
+    assert a.calc_profile() is None

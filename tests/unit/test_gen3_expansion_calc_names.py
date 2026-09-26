@@ -33,6 +33,8 @@ def test_every_emittable_name_resolves_or_is_documented_unresolved():
     for kind in ("species", "move", "ability", "item"):
         surprising = unresolved[kind] - EXPECTED_UNRESOLVED[kind]
         assert not surprising, f"{kind}: newly-unresolved names {sorted(surprising)}"
+        stale = EXPECTED_UNRESOLVED[kind] - unresolved[kind]
+        assert not stale, f"{kind}: documented-unresolved names now resolve {sorted(stale)}"
 
     # Spot-check the adapter's own calc_name() wiring (not just the generator's table).
     assert a.calc_name("species", "Farfetch'd") == "Farfetch’d"
