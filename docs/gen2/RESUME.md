@@ -21,7 +21,11 @@
   digest excluding `*.md`.
 - **Post-RC batch:** complete. See the status table at the top of `POST_RC_CARDS.md`.
 - **Queue:** the release verifier re-runs source verification on every `load_context` call (no
-  `shared_contexts()`); PER-PLAYER-TITLES-PERSISTED.
+  `shared_contexts()`); PER-PLAYER-TITLES-PERSISTED; `verify_gen2_release.py --lane coverage-map` errors
+  "coverage input pins are stale or incomplete" (gen2_requirements.md's S/M/P grid is still the skeleton;
+  code/data work, found by the doc sweep); this worktree's `.cache/gen2-build/pokecrystal/pokecrystal*.gbc`
+  (gitignored build outputs) disappeared on 2026-09-26 between ~03:00 and the doc sweep, cause unknown;
+  rebuild from the pinned source before the next Gen 2 sweep here.
 
 Everything below is the chronological coordinator log. Older entries describe states that have since changed.
 
