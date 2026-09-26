@@ -14,7 +14,7 @@ Status as of master `1d02702f` (2026-09-26).
 |---|---|---|---|---|---|
 | Radical Red | `gen3_frlge.py` (RR mode) | On | Gen 9 + `RR_PATCH` | RR's own (`normal.js`, `hardcore.js`, `slink_priority.js`) | Browser regression pass after the multi-gen changes |
 | FireRed / LeafGreen | `gen3_frlge.py` | On | Gen 3 tables | `FRLG.js` (vendored, pret-checked) | Browser, one hand-worked case (below) |
-| Emerald | `gen3_frlge.py` (`rom_type == "emerald"`) | Wired, unreachable | Gen 3 tables | `Emerald.js` (vendored, **not** pret-checked) | None. Live runs refuse Emerald for now; the Emerald lane owns its check |
+| Emerald | `gen3_frlge.py` (`rom_type == "emerald"`) | Wired, reachable since EG4 | Gen 3 tables | `Emerald.js` (vendored, **not** pret-checked) | None yet; `Emerald.js` pret-check is plan E6 |
 | Red / Blue / Yellow | `gen1_rby.py` | On | Gen 1 tables | `RedBlue.js` / `Yellow.js` (vendored, pret-reconciled) | Browser, hand-worked cases (below) |
 | pureRGB | `gen1_purergb.py` | On | Gen 1 rules on pureRGB's own dex (`calc.useDex('purergb')`) | `PureRGB.js` (generated) | Browser, one hand-worked case; limits in [PURERGB_MECHANICS.md](PURERGB_MECHANICS.md) |
 | Crystal / Gold / Silver | `gen2_gsc.py` (Gen 2 lane) | On | Gen 2 tables | Crystal only: `Crystal.js` (vendored, pret-checked) | Browser, one hand-worked case (below) |
@@ -109,8 +109,7 @@ Hand-worked cases that matched the calc exactly:
 - **Live check of the Gen 1 foe path.** On the next live Gen 1 trainer battle, confirm the foe's
   `blob_hex` decodes to the right species via `gen1_codec` and `dvs_raw` matches the game. Nobody
   has done this yet.
-- **Emerald.** `Emerald.js` isn't pret-checked, and Emerald is refused in live runs. The Emerald
-  lane has this queued.
+- **Emerald.** `Emerald.js` isn't pret-checked (plan E6); the calc is reachable since EG4.
 - **RR data gaps** above need an authoritative source before they can be added.
 - **pureRGB limits:**
   - Defense Curl's super-effective block isn't modelled.

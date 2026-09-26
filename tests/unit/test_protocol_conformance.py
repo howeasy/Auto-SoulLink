@@ -1237,10 +1237,11 @@ def test_world_a_repeated_key_change_ack_is_idempotent_and_does_not_crash():
 
 
 # ── Emerald rows of the per-artifact World items (docs/gen3_emerald/PLAN.md E3, EG3 exit) ──────
-# The production Entry refuses Emerald until EG4 (ruling 24), so these rows run the REAL
-# production client over a tmp copy of lua/ + the Emerald pack whose profile says admitted=true
-# (test_gen3_emerald_client.py's pattern); nothing else in the copy changes. They replay the
-# per-artifact bodies above with ARTIFACTS narrowed to the Emerald cartridge.
+# Since EG4 (ruling 24), the production Entry admits Emerald directly, so these rows run the
+# REAL production client over a tmp copy of lua/ + the Emerald pack (test_gen3_emerald_client.py's
+# pattern) -- a tmp copy only so PACK_DIRS/ENTRY can be redirected without touching the shipped
+# tree. They replay the per-artifact bodies above with ARTIFACTS narrowed to the Emerald
+# cartridge.
 
 @pytest.fixture
 def _emerald_admitted(tmp_path, monkeypatch):
@@ -1250,9 +1251,6 @@ def _emerald_admitted(tmp_path, monkeypatch):
     shutil.copytree(gw.REPO / "lua", tmp_path / "lua")
     pack_dir = tmp_path / "data" / "games" / "gen3_emerald"
     shutil.copytree(gw.REPO / "data" / "games" / "gen3_emerald", pack_dir)
-    prof = json.loads((pack_dir / "profile.json").read_text("utf-8"))
-    prof["titles"]["emerald"]["admitted"] = True          # test-only: see the block comment
-    (pack_dir / "profile.json").write_text(json.dumps(prof), "utf-8")
     monkeypatch.setattr(gw, "REPO", tmp_path)
     monkeypatch.setattr(gw, "ENTRY", (tmp_path / "lua" / "gen3" / "entry.lua").as_posix())
     monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", pack_dir)

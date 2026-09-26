@@ -3,12 +3,12 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps) and Radical Red 4.1 (CFRU, clean or companion-patched)
-  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the frozen-cut gate passes FR/LG
-  43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`, `G5_request_draft.md`); the
-  owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM hash (`lua/slink.lua`);
-  randomized and other unpinned builds are refused by name.
-- **Gen 3** — Emerald and the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
+- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, clean or companion-patched)
+  and Emerald (pinned US dump) — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the
+  frozen-cut gate passes FR/LG 43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`,
+  `G5_request_draft.md`); the owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM
+  hash (`lua/slink.lua`); randomized and other unpinned builds are refused by name.
+- **Gen 3** — the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
   the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`
   refuses them by name until they are ported to `lua/gen3/`.
 - **Gen 1** — Red, Blue, Yellow (US English) — 🟡 **Partially verified.** The Soul Link

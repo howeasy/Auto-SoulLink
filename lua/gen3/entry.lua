@@ -66,8 +66,7 @@ Entry.PACKS = {
         rom_type = { radical_red = "firered_rr" },
     },
     -- Registered so the packs/admission tables build and the hash is recognized (E2-ENTRY);
-    -- NOT in Entry.ROUTED -- an admitted Emerald cartridge still falls through to the BPEE
-    -- refusal in lua/slink.lua until EG4 (docs/gen3_emerald/PLAN.md §5 E3 row).
+    -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
     gen3_emerald = {
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },
@@ -103,9 +102,10 @@ Entry.PACK_FILES = {
     },
 }
 -- Which packs lua/slink.lua's Gen 3 route sends to the rewritten client. The route reads this
--- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6): every admitted pack
--- is routed, and anything else on a GBA core is refused by the launcher.
-Entry.ROUTED = { gen3_frlg = true, gen3_rr = true }
+-- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6), gen3_emerald at EG4
+-- (owner ruling 24): every admitted pack is routed, and anything else on a GBA core is
+-- refused by the launcher.
+Entry.ROUTED = { gen3_frlg = true, gen3_rr = true, gen3_emerald = true }
 
 Entry.ROM_TYPE = {}
 for _, pack in pairs(Entry.PACKS) do
