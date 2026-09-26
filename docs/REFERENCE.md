@@ -3,8 +3,11 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (vanilla, randomized, Radical Red/CFRU) — **✅ Stable**, on the rewritten
-  client under `lua/gen3/`.
+- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps) and Radical Red 4.1 (CFRU, clean or companion-patched)
+  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the frozen-cut gate passes FR/LG
+  43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`, `G5_request_draft.md`); the
+  owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM hash (`lua/slink.lua`);
+  randomized and other unpinned builds are refused by name.
 - **Gen 3** — Emerald and the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
   the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`
   refuses them by name until they are ported to `lua/gen3/`.
@@ -85,27 +88,25 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
     scenario set on PureRed↔PureBlue, PureRed↔PureGreen and the overlay pairing
     (`tests/e2e/test_duo_gen1_pure.py`, lane `duo-pairs-purergb`), including
     `admit_randomized_new` on the fork jar.
-- **Gen 2** — Crystal (GB/GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
-  *mechanisms* are proven against a running cartridge, a *playthrough* is not.
-  - **Proven live** — faint propagation, party→box sync and memorialize into Box 14
-    (`MEMORIAL_BOX_INDEX` 13, flat CartRAM `0x79E0`, outside Gen 2's save checksum), all three
-    across **two Crystal instances** through a real server. Plus the read gate, whose
-    assertions are deliberately Gen 2-specific — held item, map *group*, the Sp.Atk/Sp.Def
-    split, 14 boxes — because a Gen 1-shaped read of a Gen 2 cartridge still returns
-    plausible-looking bytes; and the writes gate: `force_faint`, deposit, withdraw, memorial
-    burial. Two instances share one dump via per-instance SaveRAM directories, which is why
-    Gen 2 needs no second cartridge the way Gen 1 needed Blue alongside Red.
-  - **NOT proven live** — anything needing tall grass: encounter linking from play, the dead
-    zone, the clauses. Gen 2's fixture parks indoors because New Bark Town's west exit is
-    script-locked until Elm hands over a starter, so there is no grass fixture. Those rules are
-    enforced server-side and are generation-independent, and Gen 1 runs all three — a Gen 2
-    grass fixture would buy a second copy of coverage that already exists.
-  - **Gold, Silver and Archipelago Crystal remain ⚠️ Experimental.** They are supported for
-    correctness — adapter routing, profile keys, per-variant addresses checked against pret via
-    [tools/build_pret_syms.py](../tools/build_pret_syms.py) — but there are no dumps here to run
-    them against, and a live matrix entry that silently skips reads exactly like one that
-    passes. The AP Crystal fork (gerbiljames) is auto-detected but has no public repo, so only
-    five of its addresses are provable and its profile stays flagged unverified.
+- **Gen 2** — Gold, Silver, Crystal (GBC) — 🟡 **Partially verified.** Same shape as Gen 1: the
+  *mechanisms* are proven against running cartridges, a *playthrough* is not. All three titles route
+  to one adapter, `gen2_gsc` (`server/adapters/gen2_gsc.py`); the legacy `gen2_crystal` adapter was
+  removed at the P3b.8 cutover (`_RETIRED_GAME_IDS`, `server/adapters/__init__.py`).
+  - **Proven live** — 98 PHYSICAL duo/gate cells on real dumps of all three titles (Crystal↔Crystal,
+    Gold↔Silver, Crystal↔Gold), receipts pinned in `tests/fixtures/gen2/receipts/`: link, the
+    species/gender/type clauses, the ball gate, faint / active faint / whiteout / poison, PC and box
+    ops, NPC trade, evolution, gift, egg hatch, native SLINK TRADE (including trade-evolve),
+    reconnect, soft reset and wrong-ROM admission. Battle fixtures exist for every title
+    (`tests/fixtures/gen2/{crystal,gold,silver}_battle*.SaveRAM`). The read gate's assertions are
+    deliberately Gen 2-specific — held item, map *group*, the Sp.Atk/Sp.Def split, 14 boxes —
+    because a Gen 1-shaped read of a Gen 2 cartridge still returns plausible-looking bytes. The
+    memorial box is the last box (`gen2_gsc.memorial_box_index` = `NUM_BOXES - 1`).
+  - **No Gen 2 dead-zone receipt.** The dead-zone rule is server-side and generation-independent;
+    it is proven live by Gen 1's `deadzone_new`.
+  - **Companion overlays are BUILT, not ADMITTED** — the owner's Gen 2 G4 is pending.
+  - **Archipelago Crystal is REFUSED**, not experimental: `data/games/gen2_crystal/admission.json`
+    `refused_kinds` = `archipelago`, `randomized`, `unknown` (owner rulings O-8/O-25).
+  - What the Gen 2 release gate runs: `python tools/verify_gen2_release.py --list`.
 - **Gen 4** — HeartGold, SoulSilver, Platinum — ⚠️ **Experimental**
 - **Gen 5** — Black, White, Black 2, White 2 — ⚠️ **Experimental**
 
@@ -135,7 +136,7 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 | Requirement | Detail |
 |---|---|
 | BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen or Radical Red ROMs. **Gen 4:** Two instances with US HGSS ROMs |
-| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 3:** Vanilla, randomized (UPR), or Radical Red 4.1. **Gen 4:** HeartGold/SoulSilver US |
+| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 3:** the pinned FireRed/LeafGreen US 1.0 dumps, or Radical Red 4.1 (clean or with the SLink companion patch), admitted by ROM hash — randomized builds are refused. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `gen3/`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
