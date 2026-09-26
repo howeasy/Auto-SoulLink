@@ -30,6 +30,12 @@ def test_wrong_base_and_detour_refused_before_compile():
         build.validate_detour(bytes(0x1000), 0x0800051A, bytes.fromhex("3bf1a9f9"))
 
 
+def test_far_heap_entry_is_a_full_thumb_veneer_not_out_of_range_bl():
+    assert build.thumb_entry_jump(0x08002B80, 0x08EB0B20) == bytes.fromhex("004b1847210beb08")
+    with pytest.raises(ValueError, match="aligned"):
+        build.thumb_entry_jump(0x08002B82, 0x08EB0B20)
+
+
 def test_unqualified_target_cannot_publish_a_payload():
     for target in ("firered", "leafgreen", "emerald"):
         with pytest.raises(ValueError, match="not qualified"):
