@@ -25,8 +25,10 @@ base is Gen 3 `5f050857`.
   at 0.10 (6,17), rebuild write at the landing: the write gate opens outdoors, START-menu control)
   -> ALL SEVEN Emerald duos PASS at cut `cf371bc1`; FR whiteout/faint_cmd + RR deadzone
   regressions PASS there. Title-aware `sb1_ptr`. Final-cut Emerald plan now 24 rows.
-  Independent review OMP cx-e53ff0ba of the replaced whiteout assertions was in flight at the
-  pause: read its outcome (`omp_peer kind=recall` / the transcript) and verify every finding.
+  Independent review OMP cx-e53ff0ba: mechanism sound, no FR assertion weakened; its F1-F4/F6
+  (the Emerald branch had no unit coverage; the landing tile unasserted; 0/0 HP counted as
+  healed) fixed in `6c524baa` (lupa + oracle-stub tests, revert-checked; the landing tile is read
+  from the row's fixture). That commit post-dates the `cf371bc1` receipts: the final cut reruns.
 - **Risk:** deadzone_gen3 on Emerald used all three RNG retries (B out of balls twice; the
   battle fixture carries 5 balls). Before the final cut, give the deadzone hunters more balls
   (emerald_catch has 20; a new fixture kind or a derived variant) or the row can go red on luck.
