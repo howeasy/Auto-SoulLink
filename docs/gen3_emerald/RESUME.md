@@ -59,8 +59,11 @@ base is Gen 3 `5f050857`.
   `"gen3_rr"` key (old-client row overridden; ruff F601, on master); the client logs
   `unhandled command dead_keys` on FR and Emerald; `tests/fixtures/gen3/README.md` says
   emerald_pc mons are in "box 1" (decode says box 0); UI capabilities fixture drift from the
-  Gen 2 rename (chip task_aaa2356a).
-- **Before master:** batch with the Gen 2 lane (server/** changed -> their receipts go stale) and
+  Gen 2 rename -- DONE by the Gen 2 lane on local master 7b91fd14 (new test
+  test_capabilities_fixture_is_what_the_generator_emits: at our next master merge, regenerate
+  tests/fixtures/ui/capabilities.json with tools/gen_ui_capabilities.py if the merge conflicts).
+- **Before master:** ping Gen 2 Boogaloo first (they asked; they batch their re-sweep with our
+  server/** change) and
   tell the Gen 3 lane the FR/LG/RR write_checkpoint hashes moved (E3).
 
 ## CHECKPOINT 4 (2026-09-26 ~12:20Z, at the EG3 gate): resume here
