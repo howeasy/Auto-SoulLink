@@ -18,10 +18,16 @@ include/constants/pokemon.h:107 pins SHINY_ODDS=8. is_shiny accepts that bit,
 but shared state.py currently calls is_shiny(key) with no record. That path
 can only evaluate the natural PID rule and cannot see modifier-forced shinies
 (or a modifier suppressing a natural shiny). Wire integration remains OPEN.
+
+Key contract: the same wire key Gen3Adapter uses -- two 8-hex-digit halves, "PID:OTID",
+where OTID is the FULL 32-bit OT id (TID in the low 16, SID in the high 16), never a
+16-bit trainer id. Any parse here, and the shiny split that reads both halves, must
+keep the SID.
 """
 from __future__ import annotations
 
 import json
+import re
 from html import escape
 from pathlib import Path
 
@@ -35,11 +41,28 @@ TYPE_NAMES = ("None", "Normal", "Fighting", "Flying", "Poison", "Ground", "Rock"
               "Ghost", "Steel", "???", "Fire", "Water", "Grass", "Electric", "Psychic",
               "Ice", "Dragon", "Dark", "Fairy", "Stellar")
 
+# data.json's id-0 rows carry sentinels, not names: SPECIES_NONE/MOVE_NONE/ITEM_NONE/
+# ABILITY_NONE are "??????????", "????????", "-" and "????????" in the shipped pack.
+_SENTINEL_NAME = re.compile(r"^[\s?\-]*$")
+
+
+def _name(row: dict, fallback: str) -> str:
+    """``row["name"]``, or `fallback` when it is missing or an id-0 sentinel.
+
+    A sentinel is not a display name: no board may print "??????????".
+    """
+    name = row.get("name")
+    return name if name and _SENTINEL_NAME.fullmatch(name) is None else fallback
+
 
 class Gen3ExpansionAdapter(Gen3Adapter):
     def __init__(self, **kwargs):
         if kwargs.get("rom_type", ROM_TYPE) != ROM_TYPE:
             raise ValueError("expansion reference build rom_type required")
+        # "emerald" here reaches only the Gen3Adapter surfaces this class overrides.
+        # Expansion numbers species nationally (0..1572, NUM_SPECIES=1573) and masks
+        # its record fields per layout.json, so no vanilla Emerald table is read:
+        # data.json is the only source.
         super().__init__(is_rr=False, rom_type="emerald")
         self._rom_type = ROM_TYPE
         data = json.loads(PACK.read_text(encoding="utf-8"))
@@ -55,7 +78,7 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         return "gen3_exp"
 
     def species_name(self, species_id):
-        return self._species.get(species_id, {}).get("name", f"Species #{species_id}")
+        return _name(self._species.get(species_id, {}), f"Species #{species_id}")
 
     def species_types(self, species_id):
         row = self._species.get(species_id)
@@ -68,7 +91,9 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         return self._species.get(species_id, {}).get("family", species_id)
 
     def move_name(self, move_id):
-        return self._moves.get(move_id, {}).get("name", f"Move #{move_id}") if move_id else ""
+        if not move_id:
+            return ""
+        return _name(self._moves.get(move_id, {}), f"Move #{move_id}")
 
     @staticmethod
     def pairing_kind(kind):
@@ -115,23 +140,31 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         return tuple(row["abilities"]) if row else ()
 
     def ability_name(self, ability_id, species_id=0):
-        return self._abilities.get(ability_id, {}).get("name", f"Ability #{ability_id}") if ability_id else ""
+        if not ability_id:
+            return ""
+        return _name(self._abilities.get(ability_id, {}), f"Ability #{ability_id}")
 
     def ability_description(self, ability_id):
         return ""  # The extractor supplies names, not description strings.
 
     def item_name(self, item_id):
-        return self._items.get(item_id, {}).get("name", f"Item #{item_id}") if item_id else ""
+        if not item_id:
+            return ""
+        return _name(self._items.get(item_id, {}), f"Item #{item_id}")
 
     def move_data(self, move_id):
         row = self._moves.get(move_id)
         if not move_id or not row:
             return None
         # include/constants/pokemon.h:236-242: none=0/physical=1/special=2/status=3.
-        # Display split is physical=0/special=1/status=2; never infer from type.
-        return {"name": row["name"], "type_id": row["type"], "type_name": self.type_name(row["type"]),
+        # Display split is physical=0/special=1/status=2; never infer from type. A
+        # missing or out-of-table category (0 = MOVE_STATUS_NONE is unused) takes 2:
+        # the pack proves no physical/special split there, so display must not invent
+        # one, and a table gap must not raise mid-page.
+        return {"name": _name(row, f"Move #{move_id}"),
+                "type_id": row["type"], "type_name": self.type_name(row["type"]),
                 "power": row["power"], "accuracy": row["accuracy"], "pp": row["pp"],
-                "split": {1: 0, 2: 1, 3: 2}[row["category"]]}
+                "split": {1: 0, 2: 1, 3: 2}.get(row.get("category"), 2)}
 
     def to_national_dex(self, species_id):
         return self._species.get(species_id, {}).get("national_dex", 0)

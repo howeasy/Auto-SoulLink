@@ -184,3 +184,101 @@ def test_expansion_data_check_compares_without_rewriting(tmp_path, monkeypatch):
     with pytest.raises(ex.ExtractionError, match="missing"):
         ex.main()
     assert not output.exists()
+
+
+# ── F1/F2 (review): OT keys carry the full 32-bit OTID (TID low16, SID high16) ──────────────
+
+def test_ot_key_parser_is_the_shared_one_gen3_frlge_uses():
+    # F1: no local reimplementation that could silently drop the SID half.
+    from server.adapters.gen3_expansion import _parse_pid_otid_key as exp_parse
+    from server.adapters.gen3_frlge import _parse_pid_otid_key as frlg_parse
+
+    assert exp_parse is frlg_parse
+    assert exp_parse("00000000:0008000C") == (0, 0x0008000C)
+
+
+def test_shiny_with_a_high_half_ot_matches_the_hand_computed_formula():
+    # F2: OT 0x0008000C -> TID=0x000C, SID=0x0008. personality=0 -> pid_hi=pid_lo=0.
+    # (tid ^ sid ^ pid_hi ^ pid_lo) = 0x000C ^ 0x0008 = 0x0004 < 8 -> shiny.
+    # A parser that dropped SID (treated ot_id as a bare 16-bit trainer id, sid=0)
+    # would compute 0x000C = 12, not < 8, and get this wrong.
+    tid, sid, pid_hi, pid_lo = 0x000C, 0x0008, 0, 0
+    expected = (tid ^ sid ^ pid_hi ^ pid_lo) < 8
+    assert expected is True
+    a = get_adapter("gen3_exp")
+    assert a.is_shiny("00000000:0008000C") is expected
+
+
+# ── F3: move_data must not KeyError on a missing/unknown move category ──────────────────────
+
+def test_move_data_defaults_split_to_status_when_category_is_missing_or_unknown():
+    a = get_adapter("gen3_exp")
+    a._moves[90001] = {"name": "No Category Move", "type": 0, "power": 40,
+                        "accuracy": 100, "pp": 15}  # no "category" key at all
+    a._moves[90002] = {"name": "Weird Category Move", "type": 0, "power": 40,
+                        "accuracy": 100, "pp": 15, "category": 99}  # not in {1, 2, 3}
+    assert a.move_data(90001)["split"] == 2
+    assert a.move_data(90002)["split"] == 2
+
+
+# ── F6: sentinel/placeholder pack names never surface as display names ──────────────────────
+
+def test_name_helper_falls_back_on_every_sentinel_spelling_in_the_pack():
+    # Literal id-0 sentinels shipped in data/games/gen3_exp/28877d73/data.json.
+    from server.adapters.gen3_expansion import _name
+
+    assert _name({"name": "??????????"}, "Species #0") == "Species #0"
+    assert _name({"name": "-"}, "Move #0") == "Move #0"
+    assert _name({"name": "????????"}, "Item #0") == "Item #0"
+    assert _name({"name": "-------"}, "Ability #0") == "Ability #0"
+    assert _name({}, "fallback") == "fallback"
+    assert _name({"name": "Bulbasaur"}, "Species #1") == "Bulbasaur"
+
+
+def test_sentinel_names_never_surface_through_the_adapter():
+    a = get_adapter("gen3_exp")
+    # species id 0 is the pack's "??????????" sentinel row.
+    assert a.species_name(0) == "Species #0"
+    # abilities 314 and 317 are "-------" sentinels at non-zero ids in the shipped pack.
+    assert a.ability_name(314) == "Ability #314"
+    assert a.ability_name(317) == "Ability #317"
+
+
+# ── F4: the debug area catalog has no cross-game fallback ───────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_expansion_debug_area_catalog_never_borrows_frlges(tmp_path):
+    from aiohttp.test_utils import TestClient, TestServer
+
+    from server.server import SLinkServer, build_app
+
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv.adapter = get_adapter("gen3_exp")
+    client = TestClient(TestServer(build_app(srv)))
+    await client.start_server()
+    try:
+        body = await (await client.get("/api/debug/manual_link_data")).json()
+    finally:
+        await client.close()
+    # No area_map shipped for gen3_exp: only the always-appended "gift" entry, never
+    # a Kanto (FR/LG) area silently borrowed from gen3_frlge's catalog.
+    assert body["area_ids"] == ["gift"]
+    assert "pallet_town" not in body["area_ids"]
+
+
+@pytest.mark.asyncio
+async def test_a_vanilla_game_still_gets_its_own_area_catalog(tmp_path):
+    from aiohttp.test_utils import TestClient, TestServer
+
+    from server.server import SLinkServer, build_app
+
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv.adapter = get_adapter("gen3_frlge", is_rr=False, rom_type="firered")
+    client = TestClient(TestServer(build_app(srv)))
+    await client.start_server()
+    try:
+        body = await (await client.get("/api/debug/manual_link_data")).json()
+    finally:
+        await client.close()
+    assert "pallet_town" in body["area_ids"]
+    assert "route_101" not in body["area_ids"]  # that's Emerald's own map, not FR/LG's
