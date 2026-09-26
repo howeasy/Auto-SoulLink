@@ -384,3 +384,34 @@ def test_boot_check_emerald_says_when_it_could_not_run_them(monkeypatch, tmp_pat
     seed = fx.build_emerald_seed("town", fx.emerald_new_game_flags(_pret()))
     assert _boot_check_on(monkeypatch, tmp_path, "mystery.sav", seed) == 0
     assert "emerald_fixture_problems NOT run" in capsys.readouterr().out
+
+# --- (d) E2-BADGES (OMP cx-b47da8b1 F2-F4) ------------------------------------
+
+def _badge_window(sb1: bytes) -> int:
+    """Badges 1-8 as bits 0-7, read the way reads.lua does (one flag id per badge)."""
+    return sum(((sb1[0x1270 + f // 8] >> (f % 8)) & 1) << i for i, f in enumerate(range(0x867, 0x86F)))
+
+
+def test_badges_seed_sets_exactly_badges_1_to_4():
+    seed = fx.build_emerald_seed("badges", fx.emerald_new_game_flags(_pret()))
+    sb1 = codec.parse_flash(seed, title=EM)["sb1"]
+    assert _badge_window(sb1) == 0b1111
+    assert fx.emerald_fixture_problems(seed, "badges") == [
+        "specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save"]
+    town = codec.parse_flash(fx.build_emerald_seed("town", fx.emerald_new_game_flags(_pret())),
+                             title=EM)["sb1"]
+    assert _badge_window(town) == 0          # the badge window is the seed's only difference
+    assert town[:0x1270 + 0x10C] == sb1[:0x1270 + 0x10C]
+
+
+def test_badges_fixture_carries_badges_1_to_4_and_5_to_8_clear():
+    sb1 = codec.parse_flash(_read("emerald_badges.sav"), title=EM)["sb1"]
+    assert _badge_window(sb1) == 0b1111
+
+
+def test_tool_badge_constants_are_the_profile_fields_the_client_reads():
+    with open(os.path.join(REPO, "data/games/gen3_emerald/profile.json"), encoding="utf-8") as f:
+        derived = json.load(f)["titles"]["emerald"]["derived"]
+    first = derived["BADGE_FIRST_FLAG"]
+    assert tuple(range(first, first + 4)) == fx.EMERALD_BADGE_FLAGS
+    assert derived["SB1_FLAGS_OFFSET"] == 0x1270   # the tool writes flags at SB1 + 0x1270
