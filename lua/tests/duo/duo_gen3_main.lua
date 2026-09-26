@@ -1329,7 +1329,11 @@ function ctx.run_away(label)
 end
 
 --- Grass hunt from the pinned Route 1 square (gen3_scripted_play hunt_encounter).
-function ctx.hunt(label) return SP.hunt_encounter(cp, label, 40) end
+--- E4: Emerald hunts Route 102's pinned grass loop (gen3_scripted_play.lua EMH, proven at E2).
+function ctx.hunt(label)
+    if title == "emerald" then return SP.EMH.hunt_grass(cp, 40) end
+    return SP.hunt_encounter(cp, label, 40)
+end
 
 local boot_keys = {}
 --- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
@@ -1355,14 +1359,19 @@ function ctx.catch(label)
         end
         local ok, why = ctx.choose_action(ACTION_BAG)
         if not ok then return nil, why end
-        -- Live link_gen3 FR, throw 2: the bag REMEMBERS the POKEBALLS pocket (gBagMenuState is
-        -- EWRAM, OPEN_BAG_LAST), so the helper's pocket steer -- whose Right + 40-frame idle hid
-        -- the open fade on throw 1 -- was skipped, its selecting A landed during the fade and was
-        -- dropped, and gSpecialVar_ItemId kept GoToBagMenu's ITEM_NONE (item_menu.c:340).
-        if not ctx.wait_until(ctx.bag_input_ready, 20, "the battle bag to take input") then
-            return nil, "the battle bag never took input"
+        if title == "emerald" then
+            -- E4: Emerald's heap gBagMenu/gBagPosition bag (EMH.throw_ball waits for input itself)
+            if not SP.EMH.throw_ball(cp, label) then return nil, "the Emerald ball throw failed" end
+        else
+            -- Live link_gen3 FR, throw 2: the bag REMEMBERS the POKEBALLS pocket (gBagMenuState is
+            -- EWRAM, OPEN_BAG_LAST), so the helper's pocket steer -- whose Right + 40-frame idle hid
+            -- the open fade on throw 1 -- was skipped, its selecting A landed during the fade and was
+            -- dropped, and gSpecialVar_ItemId kept GoToBagMenu's ITEM_NONE (item_menu.c:340).
+            if not ctx.wait_until(ctx.bag_input_ready, 20, "the battle bag to take input") then
+                return nil, "the battle bag never took input"
+            end
+            SP.throw_pokeball_from_bag(cp, label)
         end
-        SP.throw_pokeball_from_bag(cp, label)
         throws = throws + 1
         log("THREW " .. throws)
         local r = ctx.await_turn(180, "B")

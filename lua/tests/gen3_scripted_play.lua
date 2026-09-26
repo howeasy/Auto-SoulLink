@@ -3544,6 +3544,7 @@ local function emerald_hunt_grass(cp, max_cycles)
     end
     return play.in_battle(cp)
 end
+EMH.hunt_grass = emerald_hunt_grass   -- E4: duo_gen3_main.lua ctx.hunt on Emerald
 
 --- Fight an already-triggered battle to its end, same pinned shape as this file's own
 --- rival_battle leg: gActionSelectionCursor resets to FIGHT(0) on every new battle
@@ -3807,6 +3808,7 @@ local function emerald_throw_ball(cp, label)
                                          EMH.ball_count()))
     return true
 end
+EMH.throw_ball = emerald_throw_ball   -- E4: duo_gen3_main.lua ctx.catch on Emerald
 
 -- ── leg: emerald_route102_catch (capture_wild) ──────────────────────────────────────────────────
 -- Same "throw on the first action-menu turn, retry across ENCOUNTERS (bounded), never across
