@@ -16,8 +16,18 @@ base is Gen 3 `5f050857`.
   - `bc2b6967` E3-SERVER: foundation `emerald -> gen3_emerald` (FR/RR↔E refused, E↔E admitted);
     Emerald title data in Gen3Adapter (fixed gifts, item overlay, sprites, gift names, Nature
     Power 95); `server.py` `_area_pack()` (slink-adapter-guard CLEAN).
-- **Reviews pending:** OMP cx-daf0f544 (752cf2e5) and cx-361cd02b (bc2b6967) were dispatched at
-  the pause. If their replies arrived in the transcript, verify each finding; if not, re-run them.
+- **Review cx-daf0f544 (752cf2e5) replied after the pause:** no BLOCKER; STANDBY, the SE map and
+  `gift_areas: []` all hold. Queued fixes (not yet verified by me):
+  - the native companion path (`client.lua` ~1648) plays the wire id before `m4a_plan` maps it.
+    Translate once before the native call, or assert identity when a native exists.
+  - `gift_areas.ids` with non-string elements builds a never-matching set, i.e. fail OPEN.
+    Reject non-string/empty ids into the fallback.
+  - stale comments: `client.lua` ~677 (`< 3`) and the ~50 block header.
+  - the generator gives every non-Emerald pack the Kanto gift list by default
+    (`gen_gen3_write_checkpoint.py` ~957). Use an allowlist, else SystemExit.
+  - tests: FR gift suppression (a failed wild battle in oaks_lab sends no no_catch), and every
+    checkpoint title carries `sound.se_ids` and `gift_areas.ids`.
+- **Review cx-361cd02b (bc2b6967):** reply pending at the pause. If it is missing, re-run it.
 
 **NEXT (in order):**
 1. **Gift/static linking gap** (found by both E3 workers). The client's `area_now` emits `""` for
