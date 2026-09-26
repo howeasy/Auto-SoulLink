@@ -718,14 +718,19 @@ def summarize(spec: dict) -> str:
 
 
 def build_categories(enabled: set[str], fastest_text: bool = True,
-                     rom_name: str = "Pokemon Red (U) [!]") -> bytes:
-    """Build a file with exactly ``enabled`` randomized and everything else untouched."""
+                     rom_name: str | None = None, family: str = FAMILY_VANILLA) -> bytes:
+    """Build a file with exactly ``enabled`` randomized and everything else untouched.
+
+    ``rom_name`` defaults to the FAMILY's own ROM_NAME: the legacy
+    ``/api/randomizer/settings/categories`` path (manager.py) is the only caller for an FR/LG
+    run today, and its file should carry the FR/LG ROM name, not Red's.
+    """
     unknown = set(enabled) - set(_CATEGORY_MODES)
     if unknown:
         raise UprSettingsError(f"not an allowed category: {sorted(unknown)}")
     spec = {cat: "random" if cat in enabled else "unchanged" for cat in _CATEGORY_MODES}
     spec["fastest_text"] = fastest_text
-    return build_spec(spec, rom_name)
+    return build_spec(spec, rom_name, family=family)
 
 
 # ── reading ──────────────────────────────────────────────────────────────────────────────

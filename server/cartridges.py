@@ -102,6 +102,8 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
             raise CartridgeError(upr_pipeline.untrusted_jar_message(jar))
         if family == FAMILY_PURE and not upr_pipeline.jar_is_fork(jar):
             raise CartridgeError(upr_pipeline.PUREGB_RANDOMIZER_REFUSAL)
+        if family == FAMILY_FRLG and not upr_pipeline.jar_is_fork(jar):
+            raise CartridgeError(upr_pipeline.FRLG_RANDOMIZER_REFUSAL)
     if companion and (family == FAMILY_PURE or randomize is None):
         data = {pid: _companion(rom, family, infos[pid]) for pid, rom in data.items()}
 

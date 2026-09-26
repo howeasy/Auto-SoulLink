@@ -158,15 +158,42 @@ def test_changed_base_stats_or_abilities_are_refused(tmp_path, title):
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
 def test_upr_normalizations_are_not_refusals(tmp_path, title):
     """UPR fills an empty second ability with the first, and writes the title's hardcoded
-    Deoxys forme stats into its row, on EVERY save (Gen3RomHandler.java:1322-1324, 796-809)."""
+    Deoxys forme stats into its row, on EVERY save (Gen3RomHandler.java:1322-1324, 796-809).
+    The clean dump itself stores Deoxys's NORMAL stats (proven below), so this is the actual
+    src -> out delta a real UPR save produces, not an arbitrary edit."""
+    from server.adapters.gen3_frlge import _DEOXYS_FORME, _DEOXYS_NORMAL
     bulbasaur, deoxys = _species_row(title, 1), _species_row(title, upr_pipeline.DEOXYS)
 
     def edit(r):
         assert r[bulbasaur + 23] == 0
         r[bulbasaur + 23] = r[bulbasaur + 22]
-        r[deoxys + 1] ^= 0x40
+        assert bytes(r[deoxys:deoxys + 6]) == _DEOXYS_NORMAL, "clean dump stores the NORMAL stats"
+        r[deoxys:deoxys + 6] = _DEOXYS_FORME[title]
     src, out = _variant(tmp_path, title, edit)
     upr_pipeline._check_content_gen3(src, out)
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_changed_deoxys_stats_that_are_not_the_forme_are_refused(tmp_path, title):
+    """The Deoxys exemption in _gen3_species_rules only tolerates UPR's own hardcoded-forme
+    normalisation (Gen3RomHandler.java:796-809); a real edit to that row -- one that does not
+    land on the forme bytes -- must still be caught, or a base-stat randomizer on Deoxys would
+    pass silently (the bug fixed here: the old code zeroed the row unconditionally)."""
+    deoxys = _species_row(title, upr_pipeline.DEOXYS)
+    src, out = _variant(tmp_path, title, lambda r: r.__setitem__(deoxys, r[deoxys] ^ 0xFF))
+    with pytest.raises(UprPipelineError, match="base stats"):
+        upr_pipeline._check_content_gen3(src, out)
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_row_409_is_not_treated_as_deoxys(tmp_path, title):
+    """Pins the species-row index convention: DEOXYS = 410 is the exact row the exemption
+    applies to; its neighbour (409) must be refused like any other species."""
+    assert upr_pipeline.DEOXYS == 410
+    row = _species_row(title, upr_pipeline.DEOXYS - 1)
+    src, out = _variant(tmp_path, title, lambda r: r.__setitem__(row, r[row] ^ 0xFF))
+    with pytest.raises(UprPipelineError, match="base stats"):
+        upr_pipeline._check_content_gen3(src, out)
 
 
 def test_changed_evolutions_are_refused(tmp_path):
@@ -176,6 +203,65 @@ def test_changed_evolutions_are_refused(tmp_path):
     src, out = _variant(tmp_path, "firered", lambda r: r.__setitem__(bulbasaur_target, 7))
     with pytest.raises(UprPipelineError, match="evolution targets"):
         upr_pipeline._check_content_gen3(src, out)
+
+
+# ── malformed data/games/gen3_frlg packs refuse by name, not KeyError/StopIteration ────────
+def _deep_copy(obj):
+    return json.loads(json.dumps(obj))
+
+
+def test_a_site_missing_expected_hex_refuses_by_name(monkeypatch):
+    real = upr_pipeline._gen3_pack
+
+    def fake(name):
+        data = _deep_copy(real(name))
+        if name == "engine_signals.json":
+            site = next(iter(data["titles"]["firered"]["artifacts"]["clean"]["sites"].values()))
+            del site["expected_hex"]
+        return data
+    monkeypatch.setattr(upr_pipeline, "_gen3_pack", fake)
+    with pytest.raises(UprPipelineError, match="expected_hex"):
+        upr_pipeline.gen3_site_mismatches(bytes(64), "firered")
+
+
+def test_a_context_missing_expected_hex_refuses_by_name(monkeypatch):
+    real = upr_pipeline._gen3_pack
+
+    def fake(name):
+        data = _deep_copy(real(name))
+        if name == "engine_signals.json":
+            site = next(iter(data["titles"]["firered"]["artifacts"]["clean"]["sites"].values()))
+            del site["context"]["expected_hex"]
+        return data
+    monkeypatch.setattr(upr_pipeline, "_gen3_pack", fake)
+    with pytest.raises(UprPipelineError, match="expected_hex"):
+        upr_pipeline.gen3_site_mismatches(bytes(64), "firered")
+
+
+def test_an_anchor_missing_expected_hex_clean_refuses_by_name(monkeypatch):
+    real = upr_pipeline._gen3_pack
+
+    def fake(name):
+        data = _deep_copy(real(name))
+        if name == "write_checkpoint.json":
+            anchor = next(iter(data["firered"]["anchors"].values()))
+            del anchor["expected_hex"]["clean"]
+        return data
+    monkeypatch.setattr(upr_pipeline, "_gen3_pack", fake)
+    with pytest.raises(UprPipelineError, match="expected_hex"):
+        upr_pipeline.gen3_site_mismatches(bytes(64), "firered")
+
+
+def test_missing_gspeciesinfo_symbol_refuses_by_name(tmp_path, monkeypatch):
+    from server.adapters import gen3_rom_tables
+    real_symbol_dir = gen3_rom_tables.SYMBOL_DIR
+    src = real_symbol_dir / "pokefirered.sym"
+    stripped = "\n".join(line for line in src.read_text(encoding="utf-8").splitlines()
+                         if not line.endswith(" gSpeciesInfo"))
+    (tmp_path / "pokefirered.sym").write_text(stripped, encoding="utf-8")
+    monkeypatch.setattr(gen3_rom_tables, "SYMBOL_DIR", tmp_path)
+    with pytest.raises(UprPipelineError, match="gSpeciesInfo"):
+        upr_pipeline._gen3_species_rules(bytes(4), "firered")
 
 
 def test_the_design_widest_output_is_refused():
@@ -196,6 +282,36 @@ def test_prepare_pair_on_clean_frlg_with_widest_is_refused_by_name(tmp_path):
     with pytest.raises(UprPipelineError, match="abilities.*type chart.*types, evolutions, movesets, base_stats"):
         upr_pipeline.prepare_pair("unused.jar", str(settings), {"a": fr, "b": lg}, str(tmp_path / "out"))
     assert not (tmp_path / "out").exists(), "refused before Java or any output"
+
+
+def test_prepare_pair_refuses_a_stock_jar_for_frlg(tmp_path, monkeypatch):
+    """FAMILY_FRLG needs the SLink fork jar the same way FAMILY_PURE does: a trusted-but-not-
+    fork jar (e.g. the stock 4.6.1 release, if its hash were ever added to upr_jars.json) must
+    be refused by name rather than silently randomizing FR/LG on an unreviewed handler."""
+    fr, lg = str(_clean_path("firered")), str(_clean_path("leafgreen"))
+    jar = tmp_path / "stock.jar"
+    jar.write_bytes(b"not a real jar")
+    monkeypatch.setattr(shutil, "which", lambda prog: "/usr/bin/" + prog)
+    monkeypatch.setattr(upr_pipeline, "jar_is_trusted", lambda j: True)
+    monkeypatch.setattr(upr_pipeline, "jar_is_fork", lambda j: False)
+    settings = tmp_path / "default.rnqs"
+    settings.write_bytes(U.build_spec(U.default_spec(FRLG), family=FRLG))
+    with pytest.raises(UprPipelineError, match="fork jar"):
+        upr_pipeline.prepare_pair(str(jar), str(settings), {"a": fr, "b": lg}, str(tmp_path / "out"))
+    assert not (tmp_path / "out" / "a_randomized.gba").exists()
+
+
+def test_provision_refuses_a_stock_jar_for_frlg(tmp_path, monkeypatch):
+    fr, lg = str(_clean_path("firered")), str(_clean_path("leafgreen"))
+    jar = tmp_path / "stock.jar"
+    jar.write_bytes(b"not a real jar")
+    monkeypatch.setattr(upr_pipeline, "jar_is_trusted", lambda j: True)
+    monkeypatch.setattr(upr_pipeline, "jar_is_fork", lambda j: False)
+    settings = tmp_path / "default.rnqs"
+    settings.write_bytes(U.build_spec(U.default_spec(FRLG), family=FRLG))
+    with pytest.raises(cartridges.CartridgeError, match="fork jar"):
+        cartridges.provision(str(tmp_path), {"a": fr, "b": lg}, companion=False,
+                             randomize={"settings_path": str(settings)}, jar=str(jar))
 
 
 def test_companion_is_refused_for_frlg_until_it_exists(tmp_path):
@@ -274,6 +390,26 @@ def test_manager_names_the_frlg_family():
     assert rows["tutors"]["families"] == [FRLG]
     assert FRLG not in rows["update_type_effectiveness"]["families"]
     assert FRLG in rows["wild"]["families"]
+
+
+def test_radical_red_run_is_not_offered_the_randomizer():
+    """"gen3_rr" (Radical Red) is a DIFFERENT game key from "gen3": RR's map/data no longer
+    matches the vanilla FR/LG tables R2 verifies against, so an RR run must never be able to
+    pick the FR/LG randomizer family. If a future edit ever added "gen3_rr" to GAME_FAMILY,
+    this is the test that catches it."""
+    from server import manager
+    assert "gen3_rr" not in manager.GAME_FAMILY
+    assert "gen3_rr" not in manager.new_run_form()["randomizer_games"]
+
+
+def test_build_categories_carries_the_frlg_rom_name():
+    """The legacy /api/randomizer/settings/categories path (manager.py) builds an FR/LG run's
+    file with build_categories; without a family it always named the file "Pokemon Red (U)
+    [!]", even for a FireRed / LeafGreen run."""
+    parsed = U.load(U.build_categories({"wild"}, family=FRLG))
+    assert parsed["rom_name"] == U.ROM_NAME[FRLG] == "Fire Red (U)"
+    # the Gen 1 default is unchanged
+    assert U.load(U.build_categories({"wild"}))["rom_name"] == "Pokemon Red (U) [!]"
 
 
 @pytest.mark.asyncio

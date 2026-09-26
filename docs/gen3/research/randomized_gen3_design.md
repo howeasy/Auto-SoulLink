@@ -193,6 +193,24 @@ cached**. It lives in a new module, because the gen3 client is at the Lua 200-lo
 6. **Shared-file blast radius:** `server/**/*.py` and `lua/*.lua` stale the Gen 2 digest (~2 h
    re-sweep). R1, R2 and R3's server edits land as ONE batch, and Gen 2 is pinged first.
    `lua/gen3/**` does not stale Gen 2.
+7. **Limits on this pass's re-proof (owner review, 2026-09-26), queued rather than blocking R3:**
+   - (a) The FR/LG output re-proof covers the 21 engine sites + their context windows and the
+     5 write-checkpoint anchors, not a full write-domain audit like pureRGB's T6
+     (`_audit_write_domain`). The FASTEST_TEXT tweak (default on) is an unchecked CODE write;
+     a full write-domain audit for FR/LG is queued.
+   - (b) The rule-table checks (`_gen3_species_rules`, `gen3_rom_tables.decode_rom_tables`)
+     read the .sym table HEADS, not live pointers. This is safe only for as long as UPR
+     never repoints `gSpeciesInfo` / `gEvolutionTable`'s heads -- which is exactly what the
+     evolution and base-stat bans imply, but is not itself checked. Pointer-aware checks
+     (following the actual runtime pointer rather than the linked address) are queued.
+   - (c) Opening an in-game trade means a `key_change` (`state.py _handle_key_change`) can
+     move a link onto a UPR-chosen species with no species-clause re-check at that moment --
+     the clause is enforced when the pair is built, not on every later mutation. A rules
+     card for this is queued.
+   - (d) Admission needs the GBA hello's `rom_sha1` to equal the FILE's sha1
+     (`gameinfo.getromhash` on the mGBA/GBA core) the way risk 2 above already flags for the
+     hash digest generally; this is unproven for the GBA core specifically and needs a live
+     check before R3 ships to players.
 
 ## 6. Cards
 

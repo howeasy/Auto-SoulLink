@@ -114,7 +114,10 @@ function randomizerFields(form) {
     // The preflight in words: the tags and the status region say the same thing.
     jarWords() {
       var p = this.pre;
-      return !p ? '' : p.jar_found ? (p.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found';
+      if (!p) return '';
+      if (!p.jar_found) return 'jar not found';
+      if (p.jar_fork) return 'SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen)';
+      return this.family === 'gen3_frlg' ? 'stock jar (not accepted for FireRed / LeafGreen)' : 'stock jar (vanilla only)';
     },
     javaWords() { return !this.pre ? '' : this.pre.java_found ? 'java on PATH' : 'java not on PATH'; },
     setChoice(o, c) { this.rdraft.spec[o.key] = c.value; this.settleSpecForFamily(); },

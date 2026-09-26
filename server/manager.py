@@ -81,7 +81,11 @@ GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # The randomizer contract a game names (upr_settings.FAMILY_*): a pure run takes pure
 # cartridges only, a vanilla run vanilla ones, a FireRed / LeafGreen run FR/LG ones -- no two
-# families can link.
+# families can link. "gen3_rr" (Radical Red) is a DIFFERENT game key from "gen3" and is
+# deliberately absent here: RR is not randomizable by this pipeline (its map/data no longer
+# matches the vanilla FR/LG tables R2 verifies against), so a run named "gen3_rr" never lands
+# in randomizer_games and never offers the randomizer -- see
+# test_manager_names_the_frlg_family / the RR refusal test in test_upr_pipeline_gen3.py.
 GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb",
                "gen3": "gen3_frlg"}
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
@@ -1478,7 +1482,7 @@ class RunManager:
                     blob = build_spec(family_spec(spec, family), family=family)
                 else:
                     fastest = bool(body.get("fastest_text", True)) and family != FAMILY_PURE
-                    blob = build_categories(set(map(str, categories)), fastest_text=fastest)
+                    blob = build_categories(set(map(str, categories)), fastest_text=fastest, family=family)
             except UprSettingsError as exc:
                 return web.json_response({"ok": False, "error": str(exc)}, status=400)
             settings = os.path.join(MANAGER_DIR, run_id, "settings.rnqs")
@@ -1719,7 +1723,7 @@ class RunManager:
         name = os.path.basename(field.filename or "") if field is not None else ""
         ext = os.path.splitext(name)[1].lower()
         if not name or ext not in ROM_EXTS + (".jar",):
-            return web.json_response({"ok": False, "error": "send a .gb, .gbc or .jar as `file`"}, status=400)
+            return web.json_response({"ok": False, "error": "send a .gb, .gbc, .gba or .jar as `file`"}, status=400)
         name = re.sub(r"[^\w .()\[\]'&+,-]", "_", name)
         if ext == ".jar":
             dest_dir, name = PROJECT_ROOT, "PokeRandoZX.jar"

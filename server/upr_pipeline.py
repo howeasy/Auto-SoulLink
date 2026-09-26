@@ -96,6 +96,14 @@ PUREGB_RANDOMIZER_REFUSAL = (
     "pureRGB randomization needs SLink's UPR fork jar (4.6.1-slink3, fork revision 3; build it with "
     "tools/build_upr_fork.py) — this jar is the stock 4.6.1 and has no pureRGB entry."
 )
+# FireRed / LeafGreen needs the fork jar too (docs/gen3/research/randomized_gen3_design.md §6
+# R3): ACCEPTED_UPR_VERSIONS admits the stock 4.6.1 release, but only the fork's Gen 3 handler
+# is reviewed for this pipeline's write-domain assumptions -- the stock jar is refused by name
+# rather than merely by an absent entry (it does have Gen 3 entries; it is untested here).
+FRLG_RANDOMIZER_REFUSAL = (
+    "FireRed / LeafGreen randomization needs SLink's UPR fork jar (4.6.1-slink3, fork revision 3; "
+    "build it with tools/build_upr_fork.py) — the stock 4.6.1 jar is not accepted for this family."
+)
 FORK_JAR_MARKER = b"[PureRed (U)]"
 _SEED_RE = re.compile(r"^Random Seed:\s*(\d+)\s*$")
 _SETTINGS_RE = re.compile(r"^Settings String:\s*(\S+)\s*$")
@@ -328,15 +336,33 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
     bad = []
     sites = _gen3_pack("engine_signals.json")["titles"][title]["artifacts"]["clean"]["sites"]
     for kind, site in sites.items():
-        for label, rec in (("site", site), ("context", site.get("context") or {})):
-            if rec.get("expected_hex"):
-                want = bytes.fromhex(rec["expected_hex"])
-                off = rec["rom_offset"]
-                if rom[off:off + len(want)] != want:
-                    bad.append(f"{kind} {label} @0x{off:06X}")
+        # ("context", None) is legitimate -- most sites have none, so it is skipped; a "site"
+        # record missing its own expected_hex is a malformed pack and must refuse, not skip.
+        for label, rec, optional in (("site", site, False), ("context", site.get("context"), True)):
+            if rec is None:
+                if optional:
+                    continue
+                raise UprPipelineError(f"engine_signals.json: {kind} site for {title} is missing")
+            if "expected_hex" not in rec:
+                raise UprPipelineError(
+                    f"engine_signals.json: {kind} {label} for {title} has no expected_hex")
+            if "rom_offset" not in rec:
+                raise UprPipelineError(
+                    f"engine_signals.json: {kind} {label} for {title} has no rom_offset")
+            want = bytes.fromhex(rec["expected_hex"])
+            off = rec["rom_offset"]
+            if rom[off:off + len(want)] != want:
+                bad.append(f"{kind} {label} @0x{off:06X}")
     anchors = _gen3_pack("write_checkpoint.json")[title]["anchors"]
     for name, a in anchors.items():
-        want = bytes.fromhex(a["expected_hex"]["clean"])
+        clean = a.get("expected_hex", {}).get("clean") if isinstance(a.get("expected_hex"), dict) else None
+        if clean is None:
+            raise UprPipelineError(
+                f"write_checkpoint.json: anchor {name!r} for {title} has no expected_hex.clean")
+        if "rom_offset" not in a:
+            raise UprPipelineError(
+                f"write_checkpoint.json: anchor {name!r} for {title} has no rom_offset")
+        want = bytes.fromhex(clean)
         off = a["rom_offset"]
         if rom[off:off + len(want)] != want:
             bad.append(f"checkpoint anchor {name} @0x{off:06X}")
@@ -344,9 +370,12 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
 
 
 def _gen3_species_rules(rom: bytes, title: str) -> list[bytes]:
+    from server.adapters.gen3_frlge import _DEOXYS_FORME, _DEOXYS_NORMAL
     from server.adapters.gen3_rom_tables import ROM_BASE, SYMBOL_DIR
     with open(os.path.join(SYMBOL_DIR, f"poke{title}.sym"), encoding="utf-8") as f:
-        row = next(line.split() for line in f if line.rstrip().endswith(" gSpeciesInfo"))
+        row = next((line.split() for line in f if line.rstrip().endswith(" gSpeciesInfo")), None)
+    if row is None:
+        raise UprPipelineError(f"poke{title}.sym has no gSpeciesInfo symbol")
     base, size = int(row[0], 16) - ROM_BASE, int(row[2], 16)
     rows = []
     for species, i in enumerate(range(base, base + size, SPECIES_INFO_SIZE)):
@@ -355,11 +384,13 @@ def _gen3_species_rules(rom: bytes, title: str) -> list[bytes]:
         # the game reads a 0 second ability as the first (pret CreateBoxMon), so it is the same.
         if rec[-1] == 0:
             rec[-1] = rec[-2]
-        # ponytail: Deoxys's six stats are exempt. UPR copies the title's hardcoded forme stats
-        # into its row on every save (Gen3RomHandler.java:796-809; the battle reads those anyway).
-        # A base-stat randomizer is refused by settings and would change every other row too.
-        if species == DEOXYS:
-            rec[:6] = bytes(6)
+        # Deoxys's six stats are exempt ONLY when they are the title's hardcoded forme (UPR
+        # copies that into its row on every save, Gen3RomHandler.java:796-809; the battle reads
+        # those anyway) -- mirrors server/adapters/gen3_frlge.py's _species_rules_digest, the
+        # other reader of this same normalisation, so there is one definition of "the forme".
+        # Any OTHER change to this row (a real base-stat edit) must still be caught.
+        if species == DEOXYS and bytes(rec[:6]) == _DEOXYS_FORME[title]:
+            rec[:6] = _DEOXYS_NORMAL
         rows.append(bytes(rec))
     return rows
 
@@ -585,6 +616,8 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
     src_ident = {"kind": "clean"} if g3 else identify(src_bytes)
     if src_ident.get("foundation") == "gen1_purergb" and not jar_is_fork(jar):
         raise UprPipelineError(PUREGB_RANDOMIZER_REFUSAL)
+    if g3 and not jar_is_fork(jar):
+        raise UprPipelineError(FRLG_RANDOMIZER_REFUSAL)
     if not jar_supports(jar, src_ident):
         raise UprPipelineError(
             f"this jar has no entry for the {src_ident.get('kind')} build of "
