@@ -2,6 +2,8 @@
 
 Status: ready-for-agent
 
+**Current status (2026-09-26): DONE (built ahead of the gate).** `server/manager.py:73` already has the one `("gen2", "Gold · Silver · Crystal", [...])` family row. Formal G6 sign-off (owner tags/ships) has not happened -- G4 itself is still open (ticket 29) and this ticket's own blocker.
+
 **Readiness:** specification-ready only; execution is unclaimed and requires the stated gate plus a coordinator-recorded exact file grant and ACK. This ticket grants no permission to sign a gate.
 
 **Binding substep:** P6.1, [binding plan §5](../GEN2_BINDING_PLAN.md#5-binding-steps-in-order). Read [spec](../spec.md), [PLAN](../PLAN.md) and [requirements](../gen2_requirements.md) for the authoritative contract.

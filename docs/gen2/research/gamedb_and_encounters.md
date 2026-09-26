@@ -175,6 +175,12 @@ data (`data/wild/johto_grass.asm:1-30`, this pass): a `db 2 percent, 2 percent, 
 rate triple followed by three 7-entry `db level, SPECIES` blocks labeled `; morn`/`; day`/`; nite`
 in source comments.
 
+**Edit (docs sweep, 2026-09-26): the "no such reader exists yet" claim below (B.3/B.5) is now
+stale.** Both a Python ROM-byte decoder and a Lua ROM reader exist: `server/adapters/gen2_rom_scan.py`
+(reads `data/wild/*.asm`-derived tables straight from ROM bytes via a per-title profile, including
+`wild()`/grass/water tables) and `lua/gen2/rom.lua` (`self.wild()`, same table names/shapes). Both
+post-date this research pass; treat the "future work" framing in B.3/B.5 as historical.
+
 `fish.asm` uses a separate `FishGroups`/`fishgroup` table (rate + 3 rod-tier sub-pointers per
 group, keyed by `FISHGROUP_*` constant, not by map — a map's fishing spot points at a
 `FISHGROUP_*` via a per-map fish-encounter table elsewhere in the same file) with `time_group`

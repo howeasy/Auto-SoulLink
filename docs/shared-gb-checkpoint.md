@@ -49,12 +49,14 @@ Rollback restores the previous binder and Entry/bundle composition together.
 
 ## Gen 2 source candidate
 
-`gen2_write_safety.new(pack, title, io, GB, ownership)` consumes the generated
-`gen2-write-checkpoint-v1` pack. `io.domain_size("ROM")` is additionally required.
-The host supplies `capture()`, `valid(token)`, `admitted(title, rom_sha1)`,
-`no_conflicting_owner()`, `mapped_rom_bank()` and `effective_wram_bank()`.
-No-conflicting-owner covers save, box-load/staged writes, trade and serial leases;
-validity covers the same synchronous hold, session/reset epoch and source identity.
+`gen2_write_safety.new(pack, title, io, GB, ownership, receipt)` consumes the
+generated `gen2-write-checkpoint-v1` pack (`lua/gen2_write_safety.lua:627,709`).
+`io.domain_size("ROM")` is additionally required. The host supplies `capture()`,
+`valid(token)`, `admitted(title, rom_sha1)`, `no_conflicting_owner()`,
+`mapped_rom_bank()` and `effective_wram_bank()`. No-conflicting-owner covers
+save, box-load/staged writes, trade and serial leases; validity covers the
+same synchronous hold, session/reset epoch and source identity. `receipt` is
+optional (`:637`): omitted, the binder stays an unqualified SOURCE_CANDIDATE.
 
 `inspect_candidate()` returns a report containing `candidate_match`,
 `runtime_authorized=false`, `evidence_level="SOURCE_MODEL"` and
@@ -63,10 +65,20 @@ pre-CheckAPressOW PC, the pack's bounded caller word, actual mapped banks and
 shadow, serial control, and all fifteen proposed game predicates. Ownership is
 rechecked after observations. No Gen 1 IRQ, DelayFrame or two-word stack is inherited.
 
-`check()` always refuses this candidate implementation. Altering the source pack's
-authorization flag or passing MODEL tests cannot enable writes. Runtime enablement
-requires a separately reviewed qualified binder and physical evidence; it is not a
-configuration toggle supplied by this extraction.
+**This has shipped past the source-candidate stage.** With no `receipt`,
+`check(kind)` still always refuses (`:648`, `unqualified` reason). But a caller
+may now pass a PHYSICAL `gen2-write-window-receipt-v2` (`M.RECEIPT_SCHEMA`,
+`:16`), assembled by `tests/live/test_gen2_write_windows.py` from
+`lua/tests/gen2_write_windows.lua`'s run records; `M.qualified` (`:444-490`)
+recomputes every control from those raw records rather than trusting a stored
+verdict, and binds title, ROM, pack commit, fixture bytes, attempt ids, CGB
+mode and the harness write scopes before it trusts the receipt. `check(kind)`
+then authorizes writes for exactly the kinds that receipt proved
+(`M.WRITE_KINDS`: `party_hp`, `box_deposit`; `:22`, `:647-658`) — Crystal and
+Gold carry their own receipts, and Silver's identical pack rows may reuse
+Gold's (`:19-21`). Runtime enablement is therefore a receipt the binder
+verifies field-by-field, not a stored flag or a passed MODEL test; every
+other write kind, and every title/kind the receipt doesn't cover, still refuses.
 
 ## Evidence and limitations
 

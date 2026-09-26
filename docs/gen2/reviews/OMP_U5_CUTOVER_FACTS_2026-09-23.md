@@ -2,6 +2,13 @@
 
 READ-ONLY source card at HEAD c6706803, recorded by the coordinator as the U5 implementation input.
 
+> **Historical: this card is the Crystal-only step of the cutover.** Gold/Silver moved off the
+> legacy route too, later the same day — `server/adapters/__init__.py`'s current comment says
+> "Crystal, Gold and Silver all cut over here (U5, O-22/O-23, ...OMP_U5_CUTOVER_FACTS_2026-09-23.md)"
+> and lists `"Gold": "gen2_gsc", "Silver": "gen2_gsc"` alongside Crystal. Read "Gold/Silver (still
+> PENDING)" and "(Gold/Silver/AP) stay legacy" below as this card's Crystal-only scope, not the
+> final state.
+
 1. `lua/slink.lua`: after the Gen 1 block (`:58-82`; its game_detect bypass is the early `return` at `:79`),
    add a TITLE-scoped Gen 2 block: GB/GBC/SGB sys probe; `local Entry = dofile(_dir.."gen2/entry.lua")`;
    `Entry.detect_title(...)`; `if title == "crystal" then dofile(_dir.."gen2/run.lua") return end`. Gold/Silver

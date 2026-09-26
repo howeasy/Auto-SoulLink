@@ -1,7 +1,12 @@
 # Gen 2 Gold, Silver and Crystal rewrite specification
 
 Status: ready-for-agent
-Execution status: P0 specification prepared; implementation gate pending exact evidence and owner signature.
+Execution status: P0 specification prepared and substantially executed since. The Gen 2 overlays
+(native trade/panel/sound), engine sites and duo/live gates are BUILT with real live evidence
+(98/98 sweep cells pinned at CODE_DIGEST `e8ca0067`; RC milestone tag `gen2-rc-evidence-2026-09-25`),
+but no gate in `PLAN.md` §6.1 carries an owner signature yet, including G4 — see that ledger for
+the authoritative per-gate state. BUILT is not ADMITTED: `tools/gen_gen2_admission.py --promote-overlays`
+still gates the overlay rows on the owner's G4.
 Planning source: `9c7e7acfef1a5c2e1dc7111e8dfdb0c71610b043`, reviewed 2026-09-22.
 
 ## Problem Statement

@@ -1,9 +1,8 @@
 # Free WRAM/SRAM for a Gen 2 companion-patch mailbox
 
 Type: research
-Status: open
-Owner: unclaimed
-Blocked by: 11
+Status: resolved (2026-09-26; was open/unclaimed)
+Blocked by: 11 (closed)
 
 ## Question
 
@@ -36,3 +35,11 @@ without naming a current owner.
 2026-09-22 reconciliation: the prior coordinator closed all research lanes. The stale claim
 is released; only the existing linker-map/allocation dependency remains open and unclaimed.
 This preserves the research result and adds no research or implementation grant.
+
+2026-09-26 update: the dependency closed. Owner ruling O-27 (`docs/gen2/REVIEW_RECORD.md`)
+allocated the mailbox as unused WRAM0: Crystal `$CFD8-$CFFF` (40 B), Gold/Silver `$C1D9-$C1FF`
+(39 B), reserved as a fixed SECTION in the patched build, cleared by Init (not New Game), never
+saved, never touched by link code. Writer exclusion is proven by the `w6_gate` rows of
+`tools/verify_gen2_release.py --lane live-gates` (PASS for crystal/gold/silver, 2026-09-26).
+Implementation: [ticket 26](../../issues/26-p4-panel-mailbox.md), `data/gen2/linker_slack.json`,
+`patch/gen2/**`.

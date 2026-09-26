@@ -67,10 +67,15 @@ selected title as literal `PACK_FILES` paths. It preserves the shared flat area
 map format and validates each map row's source/identity and ROM header anchor.
 It consumes no legacy Crystal item-name, species-type or gender-ratio JSON.
 
-The current Gen 2 catalogs are P1 source inventories: selected rows are `BUILT`,
-G1 is `PENDING`, and Crystal 1.1 is `BUILD_ONLY`. `Entry.admit` refuses them.
-There is no invented future accepted-gate spelling or fabricated ADMITTED
-catalog. `Entry.build` therefore cannot return a production runtime.
+Crystal 1.0, Gold and Silver are `SELECTED`/`BUILT` with their G1 gate now
+`ADMITTED` (owner ruling O-22; `data/games/gen2_crystal/admission.json:9-13`,
+`data/games/gen2_gold/admission.json:9-13`). `Entry.admit` (`lua/gen2/entry.lua:220-268`)
+accepts a candidate only when the gate reads `ADMITTED` **and** its shipped
+PHYSICAL receipts re-validate now (`proofs()`, `:199`); the gate is the grant,
+never the proof. `Entry.build` (`:458-465`) therefore *can* return a production
+runtime (`production_admitted=true`, `qualification="PHYSICAL_RECEIPTED"`,
+`:424-429`) for those three titles. Crystal 1.1 remains `BUILD_ONLY` and stays
+refused.
 
 `Entry.build_candidate` is a separate explicit source/model composition method.
 It requires `candidate_only=true`, selected title/root, explicit ROM/read/write

@@ -1,5 +1,13 @@
 # P4.4 promotion gap audit (2026-09-24)
 
+> HISTORICAL — this audit's RED verdicts are resolved. Re-verified 2026-09-26:
+> `tools/verify_gen2_release.py`'s `UNIMPLEMENTED` dict is now empty (`tools/verify_gen2_release.py:220`,
+> was `{"patch-build": ..., "live-gates": ..., ...}` at audit time), `--lane duo-link` and
+> `--lane live-trade-gates` both PASS today (they were RED/placeholder here), and the post-RC sweep
+> (98/98 cells at CODE_DIGEST `e8ca0067`, RC tag `gen2-rc-evidence-2026-09-25`) supersedes the
+> panel/sfx/w6/phone staleness this card found. Kept for its audit trail (what TRADE-ASM/HARNESS/
+> TRADE-DRIVER/TRADE-HARDEN were closing); do not read any verdict below as current.
+
 Card P4.4-GAP. What stands between `codex/gen2-foundation` today and the owner's **G4** signature
 (`docs/gen2/PLAN.md:183` "G4 — first RC-eligible gate"; substep **P4.4** at
 `docs/gen2/GEN2_BINDING_PLAN.md:361`: "Reopened receipts + matrix promotion" — reopen build,
