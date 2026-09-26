@@ -81,7 +81,7 @@ MENU = ["FIGHT", "<PK><MN>", "PACK", "RUN"]
 
 
 def driver(rt, PI):
-    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    F = rt.eval("{walk_direction=function() return 'Left' end, TOWARD_BALLS={pack_items='Right', pack_key='Left', pack_tmhm='Right'}}")
     return PI.driver(F, table(rt, FACTS), table(rt, {"moves": lua_list(["GROWL", "LEER"])}))
 
 
@@ -197,7 +197,7 @@ def test_facts_start_phase_skips_travel_and_hunt_straight_into_tick():
     sets facts.start_phase="tick" so the driver never enters "travel"/"hunt" (Wade's fight) at all."""
     rt = lua()
     PI = load(rt)
-    d = PI.driver(rt.eval("{walk_direction=function() return 'Left' end}"),
+    d = PI.driver(rt.eval("{walk_direction=function() return 'Left' end, TOWARD_BALLS={pack_items='Right', pack_key='Left', pack_tmhm='Right'}}"),
                   table(rt, dict(FACTS, start_phase="tick")), table(rt, {"moves": lua_list(["GROWL", "LEER"])}))
     poisoned = {"party": {0: {"hp": 9, "status": PSN}, 1: {"hp": 12, "status": 0}}}
     buttons, phase = d.step(pt(rt, map_number=2, x=1, y=1, **poisoned))
@@ -352,7 +352,7 @@ TRAINER_FACTS = dict(FACTS, trainer={"tile": {"x": 3, "y": 1}, "avoid": lua_list
 
 
 def trainer_driver(rt, PI):
-    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    F = rt.eval("{walk_direction=function() return 'Left' end, TOWARD_BALLS={pack_items='Right', pack_key='Left', pack_tmhm='Right'}}")
     return PI.driver(F, table(rt, TRAINER_FACTS), table(rt, {"moves": lua_list(["GROWL", "LEER"])}))
 
 
@@ -483,7 +483,7 @@ def test_the_heal_leg_talks_to_the_nurse_then_leaves_by_the_carpet():
     facts = dict(FACTS, maps=dict(FACTS["maps"], C=center),
                  heal={"city": "A", "center": "C", "door": {"x": 0, "y": 0}, "stand": {"x": 3, "y": 1},
                        "exit": {"x": 1, "y": 2, "carpet": "Down"}})
-    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    F = rt.eval("{walk_direction=function() return 'Left' end, TOWARD_BALLS={pack_items='Right', pack_key='Left', pack_tmhm='Right'}}")
     d = PI.driver(F, table(rt, facts), table(rt, {"moves": lua_list(["LEER"])}))
     hurt = {0: {"hp": 5, "status": 0, "max_hp": 20}}
     buttons, phase = d.step(pt(rt, map_number=1, x=2, y=0, party=hurt))
@@ -554,7 +554,7 @@ def test_a_worn_party_on_the_way_north_goes_back_for_another_heal():
     facts = dict(FACTS, maps=dict(FACTS["maps"], C=center, K=a_map(4)),
                  heal={"city": "K", "center": "C", "door": {"x": 0, "y": 0}, "stand": {"x": 3, "y": 1},
                        "exit": {"x": 1, "y": 2, "carpet": "Down"}, "back": back})
-    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    F = rt.eval("{walk_direction=function() return 'Left' end, TOWARD_BALLS={pack_items='Right', pack_key='Left', pack_tmhm='Right'}}")
     d = PI.driver(F, table(rt, facts), table(rt, {"moves": lua_list(["LEER"])}))
     full = {0: {"hp": 20, "status": 0, "max_hp": 20}}
     # first heal: talk, full HP, leave
@@ -641,7 +641,7 @@ def test_a_worn_wild_hunt_goes_back_to_heal_and_retries():
     facts = dict(FACTS, maps=dict(FACTS["maps"], C=center, K=a_map(4)),
                  heal={"city": "K", "center": "C", "door": {"x": 0, "y": 0}, "stand": {"x": 3, "y": 1},
                        "exit": {"x": 1, "y": 2, "carpet": "Down"}, "back": back})
-    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    F = rt.eval("{walk_direction=function() return 'Left' end, TOWARD_BALLS={pack_items='Right', pack_key='Left', pack_tmhm='Right'}}")
     d = PI.driver(F, table(rt, facts), table(rt, {"moves": lua_list(["LEER"])}))
     full = {0: {"hp": 20, "status": 0, "max_hp": 20}, 1: {"hp": 13, "status": 0, "max_hp": 13}}
     assert step(rt, d, map_number=3, x=3, y=1, facing="Up", party=full)[0] == ["A"]       # the first heal
@@ -660,7 +660,8 @@ def test_a_worn_wild_hunt_goes_back_to_heal_and_retries():
 # --- DUO-WAVE-C: opts.target poisons ONE party slot (the linked catch) -------------------------------------------
 
 def target_driver(rt, PI, facts=FACTS):
-    F = rt.eval("{walk_direction=function() return 'Left' end}")
+    F = rt.eval("{walk_direction=function() return 'Left' end,"
+                " TOWARD_BALLS={pack_items='Right', pack_key='Left', pack_tmhm='Right'}}")
     return PI.driver(F, table(rt, facts), table(rt, {"moves": lua_list(["GROWL", "LEER"]), "target": 1}))
 
 
@@ -712,3 +713,33 @@ def test_a_poisoned_target_keeps_fighting_while_the_stinger_is_still_up():
     assert step(rt, d, ui=ui("battle_party"), party_cursor=1, **done)[0] == ["Up"]                  # the clean lead
     lead = dict(done, active_slot=0, active_hp=20, active_psn=False)
     assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **lead)[0] == ["A"]                        # it fights
+
+
+def test_a_passive_less_target_throws_a_ball_at_the_trainer_instead_of_fighting():
+    """gen2_gold_silver duo regression (fsw-sweep3-rr3/-rr4, gen2_poison): the linked catch was a low-level
+    PIDGEY in three fresh live reruns, whose only known move at that level is TACKLE (pokegold data/pokemon/
+    evos_attacks.asm PidgeyEvosAttacks: TACKLE at 1, SAND-ATTACK not until 5). With no passive move to stall Wade's
+    Weedle with, the old code forced TACKLE every turn and could (and did, reproducibly) kill the Weedle before
+    Poison Sting's ~30% secondary chance ever procs ("the trainer battle ended without a poisoned party mon").
+    A trainer fight can't RUN, but engine/items/item_effects.asm's UseBallInTrainerBattle always refuses a Ball
+    thrown at a trainer's Pokemon (BallBlockedText, BallDontBeAThiefText) while still spending the whole turn
+    without touching the foe's HP -- exactly like a passive move, using nothing the target needs to know. Once
+    move_menu shows no passive move exists, the driver backs out (no turn spent) and throws a Ball instead."""
+    rt = lua()
+    d = target_driver(rt, load(rt), TRAINER_FACTS)
+    d.step(pt(rt, map_number=2, x=1, y=0))
+    target = {"battle_mode": 2, "active_slot": 1, "active_hp": 12, "foe_sting": True, "overworld_ready": False,
+              "party": {0: {"hp": 20, "status": 0}, 1: {"hp": 12, "status": 0}}}
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **target)[0] == ["A"]                      # FIGHT: probe for a passive move
+    assert step(rt, d, ui=ui("move_menu", ["TACKLE"]), **target)[0] == ["B"]                        # none: back out, no turn spent
+    assert step(rt, d, ui=ui("battle_menu", MENU, 1, 2), **target)[0] == ["Down"]                   # PACK this time, not FIGHT
+    assert step(rt, d, ui=ui("battle_menu", MENU, 3, 2), **target)[0] == ["A"]                      # (cursor now on PACK)
+    assert step(rt, d, ui=ui("pack_items"), **target)[0] == ["Right"]                               # toward the Ball pocket
+    ball = dict(target, ball_cursor="ball")
+    assert step(rt, d, ui=ui("pack_balls"), **ball)[0] == ["A"]                                     # throw it: no damage, a real turn
+    # a wild hunt is unaffected: RUN is always available there, so the old TACKLE fallback still applies
+    d2 = target_driver(rt, load(rt))
+    d2.step(pt(rt, map_number=2, x=1, y=1))
+    wild = dict(target, battle_mode=1)
+    assert step(rt, d2, ui=ui("battle_menu", MENU, 1, 2), **wild)[0] == ["A"]                       # FIGHT
+    assert step(rt, d2, ui=ui("move_menu", ["TACKLE"]), **wild)[0] == ["A"]                         # no passive, no RUN restriction: TACKLE

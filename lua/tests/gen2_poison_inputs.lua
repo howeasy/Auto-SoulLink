@@ -309,7 +309,19 @@ function PI.driver(F, facts, opts)
         local fit = healthy and (mine or (target == nil and not no_passive[active]))
         if ui.kind == "battle_menu" then
             if point.battle_mode ~= 1 and not trainer then return nil, "battle menu outside a wild or trainer battle" end
-            if sting and fit then return choose(ui, "FIGHT", 2) end
+            if sting and fit then
+                -- POISON-NOPASSIVE (fsw-sweep3-rr3/-rr4: a linked catch with no passive move at all, e.g. a
+                -- low-level PIDGEY that only knows TACKLE, forced a real attack every turn and could kill
+                -- Wade's Weedle before Poison Sting's secondary chance ever procs -- "the trainer battle ended
+                -- without a poisoned party mon"). Once move_menu below has confirmed the target has no passive
+                -- move, a trainer fight (never RUN-able) throws a Ball at Wade's Pokemon instead of fighting:
+                -- engine/items/item_effects.asm UseBallInTrainerBattle always refuses the catch (BallBlockedText,
+                -- BallDontBeAThiefText) but still spends the whole turn without touching the foe's HP, exactly
+                -- like a passive move, using nothing the target needs to already know. Wild hunts (no RUN
+                -- restriction, and a Ball thrown at a WILD foe could catch it) are unaffected.
+                if trainer and mine and no_passive[active] then return choose(ui, "PACK", 2) end
+                return choose(ui, "FIGHT", 2)
+            end
             if sting and mine then   -- the worn target: RUN, or a trainer fight's mate takes over
                 if trainer and relief(point, low) ~= nil then return choose(ui, PI.PKMN_CELL, 2) end
                 return choose(ui, trainer and "FIGHT" or "RUN", 2)
@@ -349,6 +361,12 @@ function PI.driver(F, facts, opts)
                     end
                 end
                 if mine then
+                    if trainer then
+                        -- a trainer fight can't RUN: back out (no turn spent, standard menu-cancel) and throw
+                        -- a Ball at Wade's Pokemon next turn instead (battle_menu, above)
+                        no_passive[active] = true
+                        return press("B")
+                    end
                     local buttons, why = first_damaging()
                     if buttons then return buttons, why end
                     return choose(ui, tostring(ui.items[1]):upper(), 1)   -- nothing with PP: Struggle takes over
@@ -368,6 +386,17 @@ function PI.driver(F, facts, opts)
                 if type(label) == "string" and has_pp(ui, i) then return choose(ui, label:upper(), 1) end
             end
             return choose(ui, tostring(ui.items[1]):upper(), 1)   -- nothing with PP: Struggle takes over
+        end
+        -- the POISON-NOPASSIVE Ball throw (PACK, above): BattlePack pocket order, items <-> balls <-> key <->
+        -- tmhm <-> items (pack.asm), then the pocket's own cursor (F.ball_cursor, gen2_frame_align.lua)
+        if F.TOWARD_BALLS[ui.kind] then return press(F.TOWARD_BALLS[ui.kind]) end
+        if ui.kind == "pack_balls" then
+            if point.ball_cursor == "ball" then
+                if point.ball_toward then return press(point.ball_toward) end   -- a Master Ball first
+                return press("A")
+            end
+            if point.ball_cursor == "cancel" then return nil, "no Poke Ball left in the pocket" end
+            return {}, self.phase
         end
         if ui.kind == "yes_no" and ui.prompt == "switch" then return choose(ui, "NO", 1) end
         if ui.kind == "battle_party" then
@@ -587,6 +616,11 @@ function PI.new(ctx, SG, F, FI, opts)
             point.flee_sure = mine ~= nil and foe ~= nil and mine.stats.speed >= foe.stats.speed
         end
         if point.ui and point.ui.kind == "battle_party" then point.party_cursor = FI.party_cursor(SG.screen(ctx)) end
+        -- POISON-NOPASSIVE: the Ball-pocket cursor, read exactly as gen2_route29_inputs.lua's R.new does for
+        -- gen2_ball_gate's own weaken throw (F.ball_cursor, gen2_frame_align.lua)
+        if point.ui and point.ui.kind == "pack_balls" then
+            point.ball_cursor, point.ball_toward = F.ball_cursor(SG.screen(ctx))
+        end
         point.party = {}
         local party = ctx.reads.read_party()
         for _, m in ipairs(party and party.mons or {}) do
