@@ -90,8 +90,8 @@ P.REASON_ROWS = {
         state_env="SLINK_CHECKPOINT_BATTLE_STATE", state="slink_prebattle.State",
         inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{idle=30}},
         artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true},
-        note="two A presses commit a move; the animation holds the exec flags. FR/LG only: the "
-            .. "RR pack has no gBattleControllerExecFlags address (reported UNVERIFIED)"},
+        note="two A presses commit a move; the animation holds the exec flags. Not on RR: the RR "
+            .. "pack has no gBattleControllerExecFlags address (reported UNVERIFIED)"},
     {name="battle_faint_prompt", terminal="gBattleMainFunc ~= HandleTurnActionSelectionState",
         expectation="negative", expect_clauses={battle_main_func=true, battle_exec_flags_input=true,
                                                 battle_input_controller=true},
@@ -129,7 +129,7 @@ P.REASON_ROWS = {
         inputs={{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},{tap="A",frames=3,gap=13},
                 {idle=240}},
         artifacts={["emerald/clean"]=true, ["firered/clean"]=true, ["leafgreen/clean"]=true, ["radical_red/companion"]=true},
-        note="the commit guard: a committed battler (3/4) must refuse the Variant-3 pre-fill"},
+        note="the commit guard: a committed battler (FR/LG 3/4, Emerald 4/5) must refuse the Variant-3 pre-fill"},
     {name="native_idle_field", terminal="companion beacon present and mailbox idle",
         expectation="positive", min_samples=60, reason="native", witness="native_idle",
         state_env="SLINK_STATE", state="slink_overworld.State", inputs={},
@@ -328,7 +328,7 @@ function P.witnesses(cp, r8, r32)
     -- witness_value is FR-numbered (STATE_WAIT_ACTION_CHOSEN == 1). Emerald's enum starts with
     -- STATE_TURN_START_RECORD (pret pokeemerald battle_main.c:4118-4121), so every state is the
     -- pack's battle_comm_0 expect minus 1 further on (E2-FIX-AB F-B).
-    local comm_shift = comm_c and comm_c.expect - 1 or 0
+    local comm_shift = comm_c and type(comm_c.expect) == "number" and comm_c.expect - 1 or 0
     local main_a, _, main_c = clause_of("battle_main_func")
     -- FR/LG name the input-wait flags clause battle_exec_flags_input (C4-BW); RR keeps _idle
     local flags_a = clause_of("battle_exec_flags_input") or clause_of("battle_exec_flags_idle")
