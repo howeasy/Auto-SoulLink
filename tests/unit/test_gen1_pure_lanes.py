@@ -330,7 +330,11 @@ def test_entry_admits_each_pure_sha1_as_its_own_title(lua, key):
     pack is the pure one — which is what makes gen1_gate hand the driver the pure facts table."""
     entry = _dofile(lua, "lua/gen1/entry.lua")
     sha = _lock()[g1.PURERGB_KEYS[key]]["sha1"]
-    with open(g1.purergb_dump(key), "rb") as handle:
+    try:
+        dump = g1.purergb_dump(key)
+    except FileNotFoundError as exc:  # absent skips; a wrong build still raises ValueError
+        pytest.skip(str(exc))
+    with open(dump, "rb") as handle:
         rom = handle.read()
     admitted = entry.admit(lua.table(root=_REPO.replace("\\", "/"),
                                       json=_dofile(lua, "lua/json_codec.lua"), rom_sha1=sha,
@@ -346,7 +350,10 @@ def test_entry_still_admits_the_vanilla_sha1s(lua):
     entry = _dofile(lua, "lua/gen1/entry.lua")
     with open(os.path.join(_REPO, "data", "games", "gen1_rby", "profile.json"), encoding="utf-8") as handle:
         titles = json.load(handle)["titles"]
-    with open(os.path.join(_REPO, "patch", "build", "gen1_red.gb"), "rb") as handle:
+    red = os.path.join(_REPO, "patch", "build", "gen1_red.gb")
+    if not os.path.isfile(red):
+        pytest.skip(f"clean Gen 1 red dump absent: {red}")
+    with open(red, "rb") as handle:
         rom = handle.read()
     admitted = entry.admit(lua.table(root=_REPO.replace("\\", "/"),
                                       json=_dofile(lua, "lua/json_codec.lua"),
