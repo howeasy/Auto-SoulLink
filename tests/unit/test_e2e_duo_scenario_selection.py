@@ -846,8 +846,25 @@ GEN3_RR_SCENARIOS = GEN3_FRLG_SCENARIOS + GEN3_RR_ONLY_SCENARIOS
 # LeafGreen as A, so it selects exactly what gen3_frlg does.
 GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
                           "trainer_bench_gen3", "active_end_gen3",
-                          "linked_faint_active_trainer_gen3")
+                          "linked_faint_active_trainer_gen3", "admit_randomized_frlg",
+                          "link_gen3_rand", "trainer_panel_gen3_rand")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
+
+
+@pytest.mark.parametrize("name,module,target", (
+    ("admit_randomized_frlg", "rand_admit", "town"),
+    ("link_gen3_rand", "rand_link", "battle"),
+    ("trainer_panel_gen3_rand", "rand_trainer_panel", "trainer"),
+))
+def test_randomized_frlg_registration(name, module, target):
+    row = SCENARIOS[name]
+    assert row["gen3_rand"] and row["games"] == ("gen3_frlg",)
+    assert row["scenario_module"] == module and row["target"] == target
+    assert row["oracle"] == f"assert_{name}_saved"
+    assert callable(getattr(DuoRun, row["oracle"]))
+    assert callable(getattr(DuoRun, f"orchestrate_{name}"))
+    assert scenario_attempt_limit(name, "gen3_frlg") == 1
+    assert not scenario_applies(name, "gen3_rr")
 
 
 def test_gen3_frlg_selection_is_exactly_its_seven():
@@ -934,7 +951,10 @@ def test_the_gen3_wrapper_lists_exactly_the_gen3_frlg_scenarios():
     sys.path.insert(0, os.path.join(REPO, "tests", "e2e"))
     mod = __import__("test_duo_gen3")
     assert mod.GAME == "gen3_frlg"
-    assert sorted(mod.SCENARIOS) == sorted(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS)
+    # This legacy pytest wrapper selects *_gen3 names. R4's explicitly named
+    # randomized rows are registered/tested above and run directly via the CLI.
+    expected = set(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS) - duo_module.GEN3_RAND_SCENARIOS
+    assert sorted(mod.SCENARIOS) == sorted(expected)
     # C4-6m: the LG-as-A row runs the two G4 item 2a A-side receipts
     assert mod.GAME_LGFR == "gen3_lgfr" and all(scenario_applies(n, "gen3_lgfr") for n in mod.SCENARIOS_LGFR)
     assert mod.required_fixtures("whiteout_gen3", "gen3_lgfr") == ["leafgreen_party_battle", "firered_party_town"]
