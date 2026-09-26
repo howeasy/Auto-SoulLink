@@ -84,5 +84,10 @@
       }
     }
   },
-  "host_patches": []
+  "host_patches": [],
+  "expected_rom": {
+    "sha1": "28877d733492299599f2b8fff50493109d72653c",
+    "md5": "83bde8deeaa27453b12545b9cfffe3a6",
+    "size": 33554432
+  }
 }

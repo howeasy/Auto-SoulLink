@@ -4,6 +4,8 @@
 --host hgbox builds on the pinned Linux host and copies results into local .cache.
 Every build uses a clean dedicated clone; an output directory must be new.
 Native Windows builds are unsupported; see the X0 feasibility evidence.
+Owner sign-off in the lock is provenance, not build identity, and is excluded from
+the lock digest.
 """
 from __future__ import annotations
 
@@ -28,14 +30,34 @@ CACHE = ROOT / ".cache/expansion"
 OUTPUTS = ROOT / ".cache/expansion-output"
 ARTIFACTS = tuple(f"pokeemerald.{ext}" for ext in ("gba", "elf", "map", "sym"))
 SCHEMA = "gen3-expansion-build-v1"
+# Owner sign-off records a reviewer's opinion about a toolchain; it is not an input to
+# the build.  Hashing it made --check fail the moment anyone signed off, which
+# invalidated every receipt on disk.  `expected_rom` is likewise an assertion about the
+# build's output, so re-pinning it must not invalidate receipts either.
+SIGNOFF_COMPILER_FIELDS = ("status", "approved_by", "approved_at")
+UNHASHED_LOCK_KEYS = ("signoff", "expected_rom")
 
 
 def digest(path: Path, algorithm: str = "sha256") -> str:
     return hashlib.new(algorithm, path.read_bytes()).hexdigest()
 
 
+def _compiler_identity(compiler: dict) -> dict:
+    return {k: v for k, v in compiler.items() if k not in SIGNOFF_COMPILER_FIELDS}
+
+
+def _identity(lock: dict) -> dict:
+    return {**{k: v for k, v in lock.items() if k not in UNHASHED_LOCK_KEYS},
+            "compiler": _compiler_identity(lock["compiler"])}
+
+
 def lock_digest(lock: dict) -> str:
-    return hashlib.sha256(json.dumps(lock, sort_keys=True).encode()).hexdigest()
+    """Digest the build's inputs, not its provenance metadata or output assertions."""
+    return hashlib.sha256(json.dumps(_identity(lock), sort_keys=True).encode()).hexdigest()
+
+
+def _lock_digest_matches(lock: dict, record: dict) -> bool:
+    return record.get("lock_sha256") == lock_digest(lock)
 
 
 def load_lock(path: Path = LOCK_PATH) -> dict:
@@ -58,6 +80,12 @@ def load_lock(path: Path = LOCK_PATH) -> dict:
         if (not re.fullmatch(r"include/config/[A-Za-z0-9_]+\.h", name)
                 or not re.fullmatch(r"[0-9a-f]{64}", sha)):
             raise ValueError("invalid config header path/hash")
+    expected_rom = lock.get("expected_rom")
+    if (not isinstance(expected_rom, dict) or set(expected_rom) != {"sha1", "md5", "size"}
+            or not re.fullmatch(r"[0-9a-f]{40}", expected_rom["sha1"])
+            or not re.fullmatch(r"[0-9a-f]{32}", expected_rom["md5"])
+            or not isinstance(expected_rom["size"], int) or expected_rom["size"] < 1):
+        raise ValueError("invalid expected_rom")
     if (compiler["host"] != "Linux" or compiler["ssh_alias"] != "hgbox"
             or lock["host_patches"] != []
             or not lock["host_toolchain"]["packages"]):
@@ -198,16 +226,22 @@ def make_receipt(lock: dict, out: Path, versions: dict, elapsed: float) -> dict:
     }
 
 
-def check_output(lock: dict, out: Path) -> None:
+def check_output(lock: dict, out: Path, strict: bool = False) -> None:
     receipt = out / "receipt.json"
     if not receipt.is_file():
         raise ValueError("missing build receipt (UNVERIFIED)")
     record = json.loads(receipt.read_text(encoding="utf-8"))
-    if (record["schema"] != SCHEMA or record["lock_sha256"] != lock_digest(lock)
-            or any(record[key] != lock[key] for key in
-                   ("source", "compiler", "make_variables", "make_targets"))
-            or set(record["files"]) != set(ARTIFACTS)
-            or not record["tool_versions"] or not record["generated"] or not record["host"]):
+    recorded = record.get("compiler")
+    if (record.get("schema") != SCHEMA
+            or not _lock_digest_matches(lock, record)
+            or any(record.get(key) != lock[key]
+                   for key in ("source", "make_variables", "make_targets"))
+            or not isinstance(recorded, dict)
+            or _compiler_identity(recorded) != _identity(lock)["compiler"]
+            or set(record.get("files") or {}) != set(ARTIFACTS)
+            or not record.get("tool_versions") or not record.get("generated")
+            or not isinstance(record.get("files"), dict)
+            or not record.get("host")):
         raise ValueError("receipt does not match lock/schema")
     for name in ARTIFACTS:
         path = out / name
@@ -215,9 +249,17 @@ def check_output(lock: dict, out: Path) -> None:
                 or record["files"][name] != {"sha256": digest(path), "size": path.stat().st_size}):
             raise ValueError(f"missing/empty/changed artifact: {name}")
     rom = out / "pokeemerald.gba"
-    if record["rom"] != {"sha1": digest(rom, "sha1"), "md5": digest(rom, "md5"),
-                         "size": rom.stat().st_size}:
+    actual = {"sha1": digest(rom, "sha1"), "md5": digest(rom, "md5"), "size": rom.stat().st_size}
+    if record["rom"] != actual:
         raise ValueError("ROM receipt mismatch")
+    if lock["expected_rom"] != actual:
+        raise ValueError(f"ROM differs from the lock's expected_rom: {actual}")
+    builder = record["tool_versions"].get("builder_sha256")
+    if builder and builder != digest(Path(__file__)):
+        message = f"receipt was written by a different build_expansion.py: {builder}"
+        if strict:
+            raise ValueError(message)
+        print(f"WARNING: {message}", flush=True)
 
 
 def remote_build(lock: dict, args, out: Path) -> None:
@@ -248,7 +290,7 @@ def remote_build(lock: dict, args, out: Path) -> None:
     # Transfer receipt last. A failed transfer cannot leave a valid completion marker.
     run(["scp", "-q", f"{args.host}:{remote_out}/receipt.json", str(out / "receipt.json")],
         ROOT, env, deadline)
-    check_output(lock, out)
+    check_output(lock, out, strict=args.strict)
     print(f"PASS: copied and verified {out}", flush=True)
 
 
@@ -258,6 +300,8 @@ def main() -> int:
     parser.add_argument("--output", type=Path, default=OUTPUTS / "reference")
     parser.add_argument("--check", action="store_true")
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--strict", action="store_true",
+                        help="fail rather than warn when the receipt's builder_sha256 differs")
     parser.add_argument("--host", choices=["hgbox"])
     parser.add_argument("--linux-worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--jobs", type=int, default=12)
@@ -267,7 +311,7 @@ def main() -> int:
         lock = load_lock()
         out = output_path(args.output)
         if args.check:
-            check_output(lock, out)
+            check_output(lock, out, strict=args.strict)
             print("PASS: offline lock/receipt/artifact integrity; no rebuild performed")
             return 0
         if args.jobs < 1 or args.timeout_minutes <= 0:

@@ -52,3 +52,14 @@ The two builder script hashes differ ONLY because ruff moved import uuid into al
 
 Full per-build receipts: x0_linux_build1_2026-09-26.json and x0_linux_build2_2026-09-26.json. ROM/ELF/map/sym remain ignored local outputs; no ROM published.
 Limits: no independent second Linux-host reproduction or Windows-vs-Linux ROM cross-check; no runtime admission or emulator claim.
+
+REBUILD after review OMP cx-7bc99993 (2026-09-26): the lock digest now excludes owner sign-off
+(compiler.status/approved_by/approved_at) and the lock pins expected_rom; --check compares the ROM
+to expected_rom and (with --strict) the receipt's builder_sha256 to the running builder. The two
+earlier receipts carried the old digest, so both builds were re-run from fresh remote clones with
+the fixed builder instead of adding a digest migration. Old outputs kept locally as
+.cache/expansion-output/pre-signoff/ (byte-identical artifacts).
+- rebuild 1: sha1 28877d733492299599f2b8fff50493109d72653c md5 83bde8deeaa27453b12545b9cfffe3a6 size 33554432 (190.4 s)
+- rebuild 2: sha1 28877d733492299599f2b8fff50493109d72653c md5 83bde8deeaa27453b12545b9cfffe3a6 size 33554432 (161.0 s)
+- builder_sha256 (both): d075bcdc4bed3dfaadaefc311274ee96cf608c7df5846f1b1eac80e0b6be05ea; lock_sha256 (both): 53619f1787aaa46e3754e704e10b6f4a4aa2d88859f01221bd7b81ccab023b88
+- `python tools/build_expansion.py --check --strict --output .cache/expansion-output/linux{1,2}`: PASS, PASS
