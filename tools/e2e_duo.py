@@ -2398,9 +2398,11 @@ GAMES = {
         "game": "gen3_emerald",
         "play": "gen3_fixtures",
         "sides": {"a": ("emerald", "emerald_{target}"), "b": ("emerald", "emerald_{target}_b")},
-        # the grass the drivers hunt (EMH.hunt_grass, Route 102 (21..22,16..17)): the server's
-        # area id every route_1-bound oracle reads through DuoRun._hunt_area
-        "hunt_area": "route_102",
+        # the grass the drivers hunt, by fixture target (gen3_scripted_play.lua EMH.hunt): the
+        # battle fixtures stand in Route 102's loop (21..22,16..17); the two-mon pc fixture starts
+        # in Oldale and walks to Route 103's loop (14..15,14..15). The server area id every
+        # route_1-bound oracle reads through DuoRun._hunt_area.
+        "hunt_area": {"battle": "route_102", "pc": "route_103"},
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,
@@ -2577,12 +2579,19 @@ class DuoRun:
 
     @property
     def _hunt_area(self) -> str:
-        """The server area id of the row's hunting grass (GAMES[...]["hunt_area"]; gen3_emerald
-        hunts Route 102). Only the Kanto families (and a bare unit-stub run) default to Route 1: any
+        """The server area id of the row's hunting grass (GAMES[...]["hunt_area"], a string or a
+        {target: area} map read with A's fixture target -- gen3_emerald: battle -> route_102, pc ->
+        route_103). Only the Kanto families (and a bare unit-stub run) default to Route 1: any
         other row that reaches a hunt-area oracle without naming its grass fails loud."""
         row = getattr(self, "gcfg", None) or {}
         if "hunt_area" in row:
-            return row["hunt_area"]
+            area = row["hunt_area"]
+            if isinstance(area, dict):
+                target = self._target_for("a")
+                if target not in area:
+                    raise RuntimeError(f"GAMES row names no hunt_area for target {target!r}")
+                area = area[target]
+            return area
         if row and row.get("game") not in ("gen1_new", "gen3_frlg", "gen3_rr"):
             raise RuntimeError(f"GAMES row family {row.get('game')!r} names no hunt_area; only the "
                                f"Kanto rows default to route_1")

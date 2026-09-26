@@ -5087,7 +5087,7 @@ def test_emerald_row_resolves_pack_fixtures_and_layout():
         assert duo.scenario_applies(name, "gen3_emerald"), name
         run = duo.DuoRun.__new__(duo.DuoRun)
         run.gcfg, run.cfg, run.game = dict(row), dict(duo.SCENARIOS[name]), "gen3_emerald"
-        assert run._hunt_area == "route_102"
+        assert run._hunt_area == {"battle": "route_102", "pc": "route_103"}[run._target_for("a")], name
         for inst in ("a", "b"):
             assert run._gen3_title(inst) == "emerald"
             assert os.path.isfile(run._gen3_fixture_path(inst)), run._gen3_fixture_path(inst)

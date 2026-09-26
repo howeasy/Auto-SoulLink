@@ -3545,8 +3545,11 @@ local function emerald_hunt_grass(cp, max_cycles, loop)
         local d = loop[px .. "," .. py]
         if not d then
             G.shot("stuck")
-            G.finish(false, string.format("emerald_hunt_grass: (%d,%d) is not on the grass loop "
-                                          .. "(21..22,16..17)", px, py))
+            local tiles = {}
+            for k in pairs(loop) do tiles[#tiles + 1] = "(" .. k .. ")" end
+            table.sort(tiles)
+            G.finish(false, string.format("emerald_hunt_grass: (%d,%d) is not on the grass loop %s",
+                                          px, py, table.concat(tiles, " ")))
             return false
         end
         play.step(cp, d, start_map, nil, false)
@@ -3566,6 +3569,11 @@ end
 -- 0.18"; --map 0.10 --bfs 6,17 9,0 -> the first 20 dirs (the 21st Up crosses to (9,21));
 -- --map 0.18 --bfs 9,21 14,15 -> the second path; --find-behaviour 0x02 -> the 2x2 loop below
 -- is all MB_TALL_GRASS. Oldale's coord events (0,10) and (8..10,19) are off this path.
+-- `to` is Oldale's top row: the 21st Up crosses the map connection, and playlib's follow returns
+-- on that map change (playlib.lua P.follow), so the Route 103 landing (9,21) is the next path's
+-- pinned `from`, which follow checks. Both paths leave `battles` on (unlike the indoor
+-- em_oldale_center_to_pc): the second crosses grass (12..14,15), and with battles=false an
+-- encounter there ends the walk as a stall; with it on, playlib fights it through.
 PATHS.em_oldale_to_route103 = {
     map = "OldaleTown", from = { 6, 17 }, to = { 9, 0 },
     dirs = { "Right","Right","Right","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up","Up",
