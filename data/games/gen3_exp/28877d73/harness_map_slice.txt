@@ -1,0 +1,12 @@
+-- harness_map_slice.txt -- hash-bound slice of pokeemerald.map (card X3-FIX).
+-- Contains only the section rows tools/gen_gen3_title_syms_exp.py reads to verify a chosen
+-- multi-occurrence symbol's address against its cited .text/.sbss span.
+-- full sha256 c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08 size 4623407
+-- (data/games/gen3_exp/28877d73/facts.json provenance.artifacts["pokeemerald.map"]).
+-- Each "-- line N" comment records that row's line number in the FULL .map. DO NOT EDIT BY HAND:
+-- regenerate by re-extracting these exact section header rows from a pin-verified
+-- pokeemerald.map for this build (28877d73).
+-- line 6865
+ .text          0x08059620     0x3c3c src/battle_controller_player.o
+-- line 5265
+ .sbss          0x020310c8       0x9c src/menu.o

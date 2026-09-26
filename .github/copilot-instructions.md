@@ -70,6 +70,9 @@ python tools/gen_gen5_area_map.py    # Gen 5 BW
 # Regenerate the RR priority/key-trainer roster (Upcoming Key Trainers panel + calc setdex)
 python tools/gen_rr_priority_trainers.py
 
+# Regenerate lua/tests/gen3_title_syms_exp_28877d73.lua (pokeemerald-expansion harness addresses)
+python tools/gen_gen3_title_syms_exp.py --symbols <build>/pokeemerald.sym --map <build>/pokeemerald.map
+
 # Lint (dev only: pip install -r requirements-dev.txt; config ruff.toml)
 ruff check .
 ruff check . --fix
