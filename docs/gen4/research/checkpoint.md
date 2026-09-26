@@ -33,9 +33,9 @@ The coordinator re-checked `battle_setup.c:425-434`, `task.c:70-72`, `main.c:120
 | Field system | `sFieldSysPtr` @ **0x021D4158** (static, `src/field_system.c:42`) | xMAP |
 | Save pointer agrees | `fs+0x0C` (`saveData`) == `[sSaveDataPtr 0x021D2228]` | `include/field_system.h`; `src/overlay_124.c:26` |
 | No field task | `fs+0x10` (`taskman`) == NULL. Scripts (`src/fieldmap.c:70-91`), the start menu (`src/start_menu.c:233`), warps and the battle launch are all field tasks. `FieldSystem_TaskIsRunning` = 0x02050590. | `src/task.c:70-72` |
-| Player may act | `fs->unk0->isPaused == 0` and `fs+0x6C != 0`. **The writer that sets 0x6C TRUE is asm and unverified.** | `src/field_system.c:199-201` |
-| No overlay app | `fs->unk0->unk0 == NULL && fs->unk0->unk4 == NULL`. This is the *busy* predicate `FieldSystem_ApplicationIsRunning`, so require it to be false. | `src/field_system.c:117-125` |
-| No save in flight | `SysTask_GetData(fs+0xD8)[+1] != 2`. `asyncWriteMan.rollbackCounter` is **never cleared**, so it is useless as a flag. | `asm/overlay_01_021F6830.s:362-380`; `src/save.c:622` |
+| Player may act | `fs->unk0->isPaused == 0` and `fs+0x6C != 0`. `unk6C` is a latch set TRUE once the field is live (the only writer is `asm/overlay_01_021E5900.s:286-292`) and cleared on field reload and on every app launch (`src/field_system.c:95,101`). TRUE means "field live". | `src/field_system.c:199-201` (`FieldSystem_IsPlayerMovementAllowed` = `!isPaused && unk6C && !taskman`) |
+| No launched app | **`fs->unk0->unk4 == NULL`** (bag/party/battle/summary; `FieldSystem_LaunchApplication`, `src/field_system.c:127-133`). **Correction (G4-R7):** `fs->unk0->unk0` is the *field app itself*, non-NULL for the whole field session (`src/field_system.c:97`). So `FieldSystem_ApplicationIsRunning` is TRUE all through overworld play and is **not** an idle test. | `src/field_system.c:93-97, 117-133, 173-192` |
+| No save in flight | The save driver at `fs+0xD8` is a 16-byte `{u8 mode, u8 state, u8 reqMode, SysTask* sub, FieldSystem*, user}`. `state` byte +1: 0 init, **1 idle** (the only state that accepts a request, `ov01_021F6A9C`), 2 requested, 3-7 fade/run/finish. Require **`state == 1`**. `asyncWriteMan.rollbackCounter` is never cleared, so it is useless. `ov01_021F6830` only plays the jingle; it is not the request API. | `asm/overlay_01_021F6830.s:122-146, 248-378`; `src/save.c:622` |
 | CPU parked | end-of-frame `OS_WaitIrq(TRUE, OS_IE_VBLANK)` at `src/main.c:122` (`OS_WaitIrq` = 0x020D0E6C); `gSystem.vblankCounter` @ `gSystem(0x021D110C)+0x2C`, `frameCounter` +0x30 | `include/system.h:21-57` |
 
 `include/field_system.h` annotates only a few offsets (0x7A, 0x7C, 0x7E, 0xE4). The 0x0C/0x10/0x3C/0x40/0x6C/0xD8 offsets were cross-checked against asm loads (`asm/overlay_01_021E6880.s:375,393,483`; `asm/overlay_01_021F6830.s:365`). A G3 PHYSICAL receipt must confirm them.
@@ -53,9 +53,9 @@ Write only when **all** of these hold:
 1. The CPU is parked in `OS_WaitIrq` from the main loop (PC range from the xMAP; the G1 row m census confirms), and `gSystem.vblankCounter` advanced since the last check.
 2. `fs = [0x021D4158]` is non-NULL, `fs->unk0` is non-NULL, and `[fs+0x0C] == [0x021D2228]`.
 3. `[fs+0x10] == 0` (no field task: no script, menu, warp or battle launch).
-4. No overlay app is running (`unk0->unk0 == unk0->unk4 == NULL`).
-5. No save in flight (the `fs+0xD8` SysTask byte).
-6. (If confirmed live) `isPaused == 0` and `fs+0x6C != 0`.
+4. No launched app: `fs->unk0->unk4 == NULL`. `unk0->unk0` must be **non-NULL**, meaning the field app is alive.
+5. `fs+0x6C != 0` and `fs->unk0->isPaused == 0`. Together with clause 3 this is the game's own `FieldSystem_IsPlayerMovementAllowed`.
+6. The save driver at `[fs+0xD8]` has data byte +1 == 1 (idle).
 
 Then write through `SaveArray_Get(fs->saveData, …)` and, for box edits, OR the box bit into +0x12004.
 
@@ -63,5 +63,5 @@ Then write through `SaveArray_Get(fs->saveData, …)` and, for box edits, OR the
 
 ## Open
 
-- The asm writer of `fs+0x6C = TRUE`, and the `unk0->unk0` lifecycle during ordinary idle frames. Settle both with a G1/G3 live census.
+- Resolved by G4-R7 `cx-2fe25ca0`: the `unk6C` writer, the `unk0->unk0/unk4` lifecycle and the save-driver states. A live census at G1/G3 still confirms them PHYSICALLY.
 - Whether any other `HealParty`/`SetMonData` caller clobbers an idle-time write.

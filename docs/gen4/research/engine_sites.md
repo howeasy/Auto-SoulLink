@@ -24,7 +24,7 @@ The coordinator re-checked six citations: poison floor, `sOverlayRegions`, TryFa
 | Capture stored | `STATE_GET_POKEMON_STORE_MON_*` `src/battle/battle_command.c:6985-7046`: `Party_AddMon` `:7003`; if the party is full, `PCStorage_FindFirstBoxWithEmptySlot` + `SetActiveBox` `:7012-7014` then `PCStorage_PlaceMonInBoxFirstEmptySlot(pc, emptyBox, …)` `:7027` | OVY_12 | mon, box |
 | Faint in battle | `BtlCmd_TryFaintMon` `src/battle/battle_command.c:978`: `if (ctx->battleMons[battlerId].hp == 0)` `:983` → `battlerIdFainted`, FAINTED status bit, `totalTimesFainted++` | OVY_12 (0x0223E22C) | `BattleSystem*` r0, `BattleContext*` r1 |
 | Battler → party | **not identity**: MULTI or TAG(side) → `trainerParty[battlerId]`; DOUBLES → `trainerParty[battlerId & 1]`; stable handle `ctx->selectedMonIndex[battlerId]` | `src/battle/battle_system.c:92-98`; `battle_command.c:6975` | |
-| `BattleMon` offsets | **not annotated in source** (`include/battle/battle.h:207-266`); derive carefully | | |
+| `BattleMon` offsets (G4-R7, asm literal pools) | `BattleSystem+0x30` → `BattleContext`. `ctx+0x219C` = `selectedMonIndex[4]`; `ctx+0x2D40 + 0xC0*i` = `battleMons[i]`. BattleMon: species 0x00, moves 0x0C, form/shiny 0x26, level 0x34, nickname 0x36 (derived), **hp 0x4C**, maxHp 0x50, exp 0x64, personality 0x68, **status 0x6C**, status2 0x70, gender 0x7E, **size 0xC0** (not 0xBC: the 28-bit-field group takes 8 bytes). `ctx+0x312C` = party slot order. The header's `unk_3xxx` names are inconsistent by 0x38 bytes; don't use them. | ov12 | `asm/overlay_12_battle_controller.s:101, 516-592, 605-607, 662-680, 1289-1292, 1690-1746, 1832-1851, 2051-2058`; `asm/overlay_10_trainer_ai.s:756-760, 920-923` |
 | Field poison | **no faint**: `if (hp > 1) hp--` (`src/script_pokemon_util.c:179-183`); `SurvivePoisoning` cures at 1 HP (`:200-204`). The local `n_fainted` actually counts mons at 1 HP. | arm9 | |
 | Whiteout | `Task_Blackout` `src/blackout.c:189`; script `ScrCmd_WhiteOut` `src/scrcmd_battle.c:200`; **battle loss** `TaskManager_Jump(..., Task_Blackout)` `src/encounter.c:373-375` | arm9 (0x02052858) | |
 | Map change | `*fieldSystem->location = *location` `src/field_warp_tasks.c:147`; post-change `Field_InitMapEvents` `:149` | arm9 | `Location` |
@@ -47,6 +47,6 @@ The coordinator re-checked six citations: poison floor, `sOverlayRegions`, TryFa
 ## Open (not settled by source)
 
 - The WIN/LOSE/DRAW/FLED writer (asm; G3 research).
-- `BattleMon` / `BattleContext` byte offsets (derive from struct layout; verify live).
+- Resolved by G4-R7: `BattleMon`/`BattleContext` offsets (asm-anchored; nickname derived). They still need a live read at G1/G3.
 - PC UI action handlers (the model functions suffice for signals).
 - Evolution body (asm).
