@@ -83,12 +83,12 @@
             </section>
           </template>
 
-          <section class="mk-zone" x-show="form.gen1_games.includes(draft.game)">
+          <section class="mk-zone" x-show="form.randomizer_games.includes(draft.game)">
             <h2 class="mk-h2"><span>Cartridges</span><i></i><em>what each player plays — the run hands them out</em></h2>
             {% include "_cartridges.html" %}
           </section>
 
-          <section class="mk-zone" x-show="form.gen1_games.includes(draft.game)">
+          <section class="mk-zone" x-show="form.randomizer_games.includes(draft.game)">
             <h2 class="mk-h2"><span>Randomizer</span><i></i><em>same settings, different seeds</em></h2>
             {% include "_randomize.html" %}
           </section>
@@ -326,7 +326,7 @@
         this.setFamily(window.SLINK_RANDOMIZER.game_family[this.draft.game]);
         this.$watch('draft.game', function (g) { self.setFamily(window.SLINK_RANDOMIZER.game_family[g]); });
       },
-      gen1() { return form.gen1_games.includes(this.draft.game); },
+      gen1() { return form.randomizer_games.includes(this.draft.game); },
       createLabel() {
         if (!this.gen1() || !this.rdraft.rom_a) return 'Create run';
         return this.rdraft.randomize ? 'Create and randomize' : 'Create and prepare cartridges';

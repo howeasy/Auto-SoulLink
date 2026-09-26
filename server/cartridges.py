@@ -12,8 +12,8 @@ from pathlib import Path
 from patch.gen1.tools import inject
 from patch.tools.make_ups import ups_apply
 from server import patcher, upr_pipeline
-from server.adapters.gen1_rom_scan import RomScanError, fingerprint_rom, identify
-from server.upr_settings import FAMILY_PURE, FAMILY_VANILLA
+from server.adapters.gen1_rom_scan import RomScanError, identify
+from server.upr_settings import FAMILY_FRLG, FAMILY_PURE, FAMILY_VANILLA
 from tools.gen1_playthrough import REPO, _overlay_admission_row
 
 
@@ -84,6 +84,10 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
             raise CartridgeError(f"player {pid}: choose a pinned cartridge; "
                                  f"{info['title'] or 'source ROM not found'}")
     family = upr_pipeline.family_of(sources)
+    if companion and family == FAMILY_FRLG:
+        # The FR/LG companion (owner ruling 27) is being built in the Emerald lane; until it
+        # is admitted here a FireRed / LeafGreen pair is provisioned without one.
+        raise CartridgeError("no FireRed / LeafGreen companion yet; turn Companion off")
     data = {pid: Path(path).read_bytes() for pid, path in sources.items()}
     if companion and family == FAMILY_VANILLA:
         for rom in data.values():
@@ -107,7 +111,8 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     # Never replace the picked original, including through a symlink or hard link.
     destinations = list(outputs.values())
     if randomize is not None:
-        destinations.extend(roms / f"{pid}_randomized.gbc" for pid in sources)
+        ext = ".gba" if family == FAMILY_FRLG else ".gbc"
+        destinations.extend(roms / f"{pid}_randomized{ext}" for pid in sources)
         if companion and family == FAMILY_PURE:
             destinations.extend(roms / f"{pid}_companion.gbc" for pid in sources)
     for output in destinations:
@@ -139,7 +144,7 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
             kind = "companion" if has_companion else "clean"
         players[pid] = {"source": sources[pid], "source_title": infos[pid]["title"],
                         "output": str(outputs[pid]), "rom_sha1": hashlib.sha1(rom).hexdigest(),
-                        "fingerprint": fingerprint_rom(rom), "kind": kind}
+                        "fingerprint": upr_pipeline.fingerprint_any(rom), "kind": kind}
     # Finish both transforms and scans before publishing either final cartridge.
     for pid, rom in data.items():
         outputs[pid].write_bytes(rom)

@@ -86,7 +86,11 @@ function randomizerFields(form) {
       trainers_similar_strength: { on: 'trainers', when: 'distributed',
                                    why: 'not available with evenly distributed trainer teams' },
     },
+    // A row another family owns (option_form `families`: the FR/LG-only held items, tutors,
+    // trades, shops, pickup and tweaks; the Gen 1-only tweaks) is greyed like a pure one.
     optWhy(o) {
+      if (this.family && o.families && o.families.indexOf(this.family) < 0) return 'not available for ' + this.familyLabel(this.family);
+      if (!this.family && o.families && o.families.indexOf('gen1_rby') < 0) return 'FireRed / LeafGreen only';
       if (this.family === 'gen1_purergb' && o.pure === false) return this.PURE_WHY;
       var d = this.DEPENDS[o.key];
       if (d && !d.off && this.rdraft.spec[d.on] === d.when) return d.why;
@@ -197,7 +201,7 @@ function randomizerFields(form) {
     async exportSettings() {
       var name = this.presetName.trim() || 'slink';
       var res = await fetch('/api/randomizer/settings/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                                 body: JSON.stringify({ spec: this.rdraft.spec, name: name }) });
+                                                                 body: JSON.stringify({ spec: this.rdraft.spec, name: name, family: this.family }) });
       if (!res.ok) { var j = await res.json(); this.presetNote = j.error || 'Export failed'; return; }
       var a = document.createElement('a');
       a.href = URL.createObjectURL(await res.blob()); a.download = name.replace(/[^\w-]+/g, '_') + '.rnqs';
@@ -255,7 +259,7 @@ function randomizerFields(form) {
     },
     // A cartridge this run can take: clean, and of its family when it names one.
     usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
-    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : ''; },
+    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : ''; },
     // The option's words: the cartridge, and why it is greyed when it is.
     romNote(r) {
       if (this.usable(r)) return r.title;
@@ -275,6 +279,7 @@ function randomizerFields(form) {
       } else {
         add('pureRGB', function (r) { return r.clean && r.family === 'gen1_purergb'; });
         add('Red · Blue · Yellow', function (r) { return r.clean && r.family === 'gen1_rby'; });
+        add('FireRed · LeafGreen', function (r) { return r.clean && r.family === 'gen3_frlg'; });
       }
       add('not usable', function (r) { return !r.clean; });
       return groups;

@@ -119,6 +119,7 @@ FLAGS: dict[str, tuple[int, int]] = {
     "blockWildLegendaries": (16, 1),
     "wildRestriction_SIMILAR_STRENGTH": (16, 2),
     "randomizeWildPokemonHeldItems": (16, 3),
+    "banBadRandomWildPokemonHeldItems": (16, 4),
     # 17: statics
     "static_UNCHANGED": (17, 0),
     "static_RANDOM_MATCHING": (17, 1),
@@ -134,11 +135,21 @@ FLAGS: dict[str, tuple[int, int]] = {
     "keepFieldMoveTMs": (18, 6),
     "tmCompat_FULL": (18, 7),
     # 21: move tutors
+    "tutorCompat_COMPLETELY_RANDOM": (21, 0),
+    "tutorCompat_RANDOM_PREFER_TYPE": (21, 1),
     "tutorCompat_UNCHANGED": (21, 2),
+    "tutors_RANDOM": (21, 3),
     "tutors_UNCHANGED": (21, 4),
+    "tutorLevelUpMoveSanity": (21, 5),
+    "keepFieldMoveTutors": (21, 6),
+    "tutorCompat_FULL": (21, 7),
     # 23: in-game trades
     "trades_RANDOMIZE_GIVEN_AND_REQUESTED": (23, 0),
     "trades_RANDOMIZE_GIVEN": (23, 1),
+    "randomizeInGameTradesItems": (23, 2),
+    "randomizeInGameTradesIVs": (23, 3),
+    "randomizeInGameTradesNicknames": (23, 4),
+    "randomizeInGameTradesOTs": (23, 5),
     "trades_UNCHANGED": (23, 6),
     # 24: field items
     "fieldItems_RANDOM": (24, 0),
@@ -163,15 +174,31 @@ FLAGS: dict[str, tuple[int, int]] = {
     "trainersBlockLegendaries": (27, 3),
     "trainersBlockEarlyWonderGuard": (27, 4),
     # 37: shop items
+    "shopItems_RANDOM": (37, 0),
+    "shopItems_SHUFFLE": (37, 1),
     "shopItems_UNCHANGED": (37, 2),
+    "banBadRandomShopItems": (37, 3),
+    "banRegularShopItems": (37, 4),
+    "banOPShopItems": (37, 5),
+    "balanceShopPrices": (37, 6),
+    "guaranteeEvolutionItems": (37, 7),
     # 39: exp curve / broken moves
     "expCurve_LEGENDARIES": (39, 0),
     "blockBrokenTMMoves": (39, 4),
     # 42: totem / ally
     "totem_UNCHANGED": (42, 0),
     "ally_UNCHANGED": (42, 3),
+    # 48: trainer held items (+ ensureTwoAbilities at bit 6, an ability change: unmodelled)
+    "randomizeHeldItemsForBossTrainerPokemon": (48, 0),
+    "randomizeHeldItemsForImportantTrainerPokemon": (48, 1),
+    "randomizeHeldItemsForRegularTrainerPokemon": (48, 2),
+    "consumableItemsOnlyForTrainerPokemon": (48, 3),
+    "sensibleItemsOnlyForTrainerPokemon": (48, 4),
+    "highestLevelOnlyGetsItemsForTrainerPokemon": (48, 5),
     # 49: pickup items
+    "pickupItems_RANDOM": (49, 0),
     "pickupItems_UNCHANGED": (49, 1),
+    "banBadRandomPickupItems": (49, 2),
 }
 
 # MiscTweak bit values, in MiscTweak.java's declaration order (ZX 4.6.1; the fork keeps it).
@@ -194,6 +221,8 @@ MISC_TWEAKS = {
     "LOWER_CASE_POKEMON_NAMES": 1 << 10,
     "RANDOMIZE_CATCHING_TUTORIAL": 1 << 11,
     "BAN_LUCKY_EGG": 1 << 12,
+    "BALANCE_STATIC_LEVELS": 1 << 16,
+    "RUN_WITHOUT_RUNNING_SHOES": 1 << 18,
 }
 
 # A settings blob that changes nothing, byte by byte. Values are UPR's own field defaults
@@ -461,7 +490,91 @@ _CATEGORY_MODES = ("wild", "starters", "statics", "trainers", "tms", "field_item
 # for the pure family must not ask.
 FAMILY_VANILLA = "gen1_rby"
 FAMILY_PURE = "gen1_purergb"
-FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
+# FireRed / LeafGreen (docs/gen3/research/randomized_gen3_design.md, owner ruling 31 in
+# docs/gen3/G4_request_draft.md §6). Gen 1's forbidden set stays forbidden, plus abilities and
+# the type-chart tweak by name; the Gen 3-only options (wild / trainer held items, move tutors,
+# in-game trades, shops, pickup) are OPEN; the misc tweaks are the nine that were verified to
+# write nowhere near an engine site (the pipeline re-proves that on every output).
+FAMILY_FRLG = "gen3_frlg"
+FAMILIES = (FAMILY_VANILLA, FAMILY_PURE, FAMILY_FRLG)
+GEN1_FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
+# Gen 1 code tweaks with no FR/LG implementation (Gen3RomHandler.miscTweaksAvailable), so
+# tweakForRom would silently drop them; UPDATE_TYPE_EFFECTIVENESS is forbidden by ruling 31.
+GEN1_ONLY_OPTIONS = ("nerf_x_accuracy", "fix_crit_rate", "update_type_effectiveness")
+
+
+def _bool(group: str, label: str, flag: str | None = None, misc: str | None = None,
+          default: bool = False) -> dict:
+    return {"kind": "bool", "group": group, "label": label, "default": default,
+            **({"flag": flag} if flag else {"misc": misc})}
+
+
+GEN3_OPTIONS: dict[str, dict] = {
+    "wild_held_items": _bool("Wild encounters", "Random wild held items", "randomizeWildPokemonHeldItems"),
+    "wild_held_items_ban_bad": _bool("Wild encounters", "No junk wild held items", "banBadRandomWildPokemonHeldItems"),
+    "trainer_items_boss": _bool("Trainers", "Held items: bosses", "randomizeHeldItemsForBossTrainerPokemon"),
+    "trainer_items_important": _bool("Trainers", "Held items: important trainers", "randomizeHeldItemsForImportantTrainerPokemon"),
+    "trainer_items_regular": _bool("Trainers", "Held items: everyone else", "randomizeHeldItemsForRegularTrainerPokemon"),
+    "trainer_items_consumable": _bool("Trainers", "Held items: consumables only", "consumableItemsOnlyForTrainerPokemon"),
+    "trainer_items_sensible": _bool("Trainers", "Held items: sensible only", "sensibleItemsOnlyForTrainerPokemon"),
+    "trainer_items_highest_only": _bool("Trainers", "Held items: strongest Pokémon only", "highestLevelOnlyGetsItemsForTrainerPokemon"),
+    "tutors": {"kind": "choice", "group": "Move tutors", "label": "Tutor moves", "default": "unchanged",
+               "choices": {"unchanged": ("Unchanged", ["tutors_UNCHANGED"]),
+                           "random": ("Random", ["tutors_RANDOM"])}},
+    "tutor_compat": {"kind": "choice", "group": "Move tutors", "label": "Tutor compatibility", "default": "unchanged",
+                     "choices": {"unchanged": ("Unchanged", ["tutorCompat_UNCHANGED"]),
+                                 "random": ("Random", ["tutorCompat_COMPLETELY_RANDOM"]),
+                                 "prefer_type": ("Random, prefer same type", ["tutorCompat_RANDOM_PREFER_TYPE"]),
+                                 "full": ("Everyone learns every tutor move", ["tutorCompat_FULL"])}},
+    "tutor_sanity": _bool("Move tutors", "Level-up moves stay tutor-compatible", "tutorLevelUpMoveSanity"),
+    "tutor_keep_field": _bool("Move tutors", "Keep field-move tutors", "keepFieldMoveTutors"),
+    "trades": {"kind": "choice", "group": "In-game trades", "label": "In-game trades", "default": "unchanged",
+               "choices": {"unchanged": ("Unchanged", ["trades_UNCHANGED"]),
+                           "given": ("Random Pokémon given", ["trades_RANDOMIZE_GIVEN"]),
+                           "given_and_requested": ("Random given and requested", ["trades_RANDOMIZE_GIVEN_AND_REQUESTED"])}},
+    "trades_items": _bool("In-game trades", "Random held items", "randomizeInGameTradesItems"),
+    "trades_ivs": _bool("In-game trades", "Random IVs", "randomizeInGameTradesIVs"),
+    "trades_nicknames": _bool("In-game trades", "Random nicknames", "randomizeInGameTradesNicknames"),
+    "trades_ots": _bool("In-game trades", "Random trainer names", "randomizeInGameTradesOTs"),
+    "shops": {"kind": "choice", "group": "Shops", "label": "Shop items", "default": "unchanged",
+              "choices": {"unchanged": ("Unchanged", ["shopItems_UNCHANGED"]),
+                          "random": ("Random", ["shopItems_RANDOM"]),
+                          "shuffle": ("Shuffled", ["shopItems_SHUFFLE"])}},
+    "shops_ban_bad": _bool("Shops", "No junk items", "banBadRandomShopItems"),
+    "shops_ban_regular": _bool("Shops", "No regular shop items", "banRegularShopItems"),
+    "shops_ban_op": _bool("Shops", "No overpowered items", "banOPShopItems"),
+    "shops_balance_prices": _bool("Shops", "Balance prices", "balanceShopPrices"),
+    "shops_evolution_items": _bool("Shops", "Guarantee evolution items", "guaranteeEvolutionItems"),
+    "pickup": {"kind": "choice", "group": "Pickup", "label": "Pickup items", "default": "unchanged",
+               "choices": {"unchanged": ("Unchanged", ["pickupItems_UNCHANGED"]),
+                           "random": ("Random", ["pickupItems_RANDOM"])}},
+    "pickup_ban_bad": _bool("Pickup", "No junk items", "banBadRandomPickupItems"),
+    "running_shoes_indoors": _bool("Tweaks", "Running shoes indoors", misc="RUNNING_SHOES_INDOORS"),
+    "run_without_shoes": _bool("Tweaks", "Run without the running shoes", misc="RUN_WITHOUT_RUNNING_SHOES"),
+    "national_dex": _bool("Tweaks", "National Dex from the start", misc="NATIONAL_DEX_AT_START"),
+    "catching_tutorial": _bool("Tweaks", "Random catching-tutorial Pokémon", misc="RANDOMIZE_CATCHING_TUTORIAL"),
+    "ban_lucky_egg": _bool("Tweaks", "No Lucky Egg", misc="BAN_LUCKY_EGG"),
+    "balance_static_levels": _bool("Tweaks", "Balance static levels", misc="BALANCE_STATIC_LEVELS"),
+}
+ALL_OPTIONS: dict[str, dict] = {**OPTIONS, **GEN3_OPTIONS}
+
+
+def options_for(family: str = FAMILY_VANILLA) -> dict[str, dict]:
+    """The option table one family's files are built from and admitted against."""
+    if family not in FAMILIES:
+        raise UprSettingsError(f"unknown randomizer family {family!r}")
+    if family == FAMILY_FRLG:
+        return {k: o for k, o in ALL_OPTIONS.items() if k not in GEN1_ONLY_OPTIONS}
+    return OPTIONS
+
+
+def families_of_option(key: str) -> list[str]:
+    return [f for f in FAMILIES if key in options_for(f)]
+
+
+# The ROM name a family's file carries (informational: UPR matches the ROM itself).
+ROM_NAME = {FAMILY_VANILLA: "Pokemon Red (U) [!]", FAMILY_PURE: "Pokemon Red (U) [!]",
+            FAMILY_FRLG: "Fire Red (U)"}
 # The tweaks a lossless entry honours (fork patch 0008, revision 3): lower-case names is a
 # DATA write over the 190-row species-name table, which the fork re-cases byte-for-byte in
 # place (never through its string path), so nothing else in the cartridge moves.
@@ -482,9 +595,11 @@ def misc_options() -> list[str]:
 def family_spec(spec: dict, family: str = FAMILY_VANILLA) -> dict:
     """``spec`` with the family's allowlist applied: the pure family has every tweak off
     except PURE_ALLOWED_TWEAKS, which stay as given."""
-    if family not in FAMILIES:
-        raise UprSettingsError(f"unknown randomizer family {family!r}")
-    out = dict(spec)
+    opts = options_for(family)
+    # another family's option at its default is the form carrying every row; dropped. A
+    # non-default one stays and _spec_data refuses it by name, never coerced.
+    out = {k: v for k, v in spec.items()
+           if k in opts or k not in ALL_OPTIONS or v != ALL_OPTIONS[k]["default"]}
     if family == FAMILY_PURE:
         for key in misc_options():
             if key not in PURE_ALLOWED_TWEAKS:
@@ -493,17 +608,17 @@ def family_spec(spec: dict, family: str = FAMILY_VANILLA) -> dict:
 
 
 def default_spec(family: str = FAMILY_VANILLA) -> dict:
-    return family_spec({key: opt["default"] for key, opt in OPTIONS.items()}, family)
+    return family_spec({key: opt["default"] for key, opt in options_for(family).items()}, family)
 
 
-def option_form() -> list[dict]:
+def option_form(every_family: bool = False) -> list[dict]:
     """The table as the form renders it: JSON-safe, in display order, no encoders. `pure` on
     a row / a choice says whether the pure family can honour it (the form disables what it
     cannot; a selection that slips through is refused by name, never coerced -- review
     cx-758c671d #2)."""
     out = []
-    for key, opt in OPTIONS.items():
-        row = {"key": key, "kind": opt["kind"], "group": opt["group"], "label": opt["label"],
+    for key, opt in (ALL_OPTIONS if every_family else OPTIONS).items():
+        row = {"key": key, "families": families_of_option(key), "kind": opt["kind"], "group": opt["group"], "label": opt["label"],
                "default": opt["default"], "help": HELP.get(key, opt.get("help", "")),
                "note": opt.get("help", "") if key in HELP else "",
                "pure": key not in PURE_INERT_BOOLS and ("misc" not in opt or key in PURE_ALLOWED_TWEAKS)}
@@ -517,16 +632,18 @@ def option_form() -> list[dict]:
     return out
 
 
-def _spec_data(spec: dict) -> bytearray:
-    """Validate ``spec`` against OPTIONS and lay it over UPR's defaults. Every key must be
-    known; missing keys take their default. This is the trust boundary for the HTTP body."""
-    unknown = set(spec) - set(OPTIONS)
+def _spec_data(spec: dict, family: str = FAMILY_VANILLA) -> bytearray:
+    """Validate ``spec`` against the family's options and lay it over UPR's defaults. Every
+    key must be known; missing keys take their default. This is the trust boundary for the
+    HTTP body."""
+    opts = options_for(family)
+    unknown = set(spec) - set(opts)
     if unknown:
         raise UprSettingsError(f"unknown randomizer option: {sorted(unknown)}")
     flags: dict[str, bool] = {}
     misc = 0
     override: dict[int, int] = {}
-    for key, opt in OPTIONS.items():
+    for key, opt in opts.items():
         val = spec.get(key, opt["default"])
         kind = opt["kind"]
         if kind == "choice":
@@ -560,18 +677,18 @@ def _spec_data(spec: dict) -> bytearray:
     return data
 
 
-def build_spec(spec: dict, rom_name: str = "Pokemon Red (U) [!]") -> bytes:
+def build_spec(spec: dict, rom_name: str | None = None, family: str = FAMILY_VANILLA) -> bytes:
     """A file for exactly ``spec`` (see OPTIONS); anything not mentioned is at its default."""
-    return _encode(_spec_data(spec), rom_name)
+    return _encode(_spec_data(spec, family), rom_name or ROM_NAME[family])
 
 
-def spec_from_parsed(parsed: dict) -> dict:
+def spec_from_parsed(parsed: dict, family: str = FAMILY_VANILLA) -> dict:
     """The inverse of build_spec, read off a parsed file or log string. A choice with no
     recognised mode bit set reads as its default, so a foreign file still yields a spec --
     unexpected_settings is what refuses it, not this."""
     data, flags, tweaks = parsed["data"], parsed["flags"], parsed["misc_tweaks"]
     spec = {}
-    for key, opt in OPTIONS.items():
+    for key, opt in options_for(family).items():
         kind = opt["kind"]
         if kind == "choice":
             spec[key] = next((v for v, (_lbl, names) in opt["choices"].items()
@@ -586,7 +703,7 @@ def spec_from_parsed(parsed: dict) -> dict:
 def summarize(spec: dict) -> str:
     """One line for the run record: what differs from a run that randomizes nothing."""
     parts = []
-    for key, opt in OPTIONS.items():
+    for key, opt in ALL_OPTIONS.items():
         val = spec.get(key, opt["default"])
         if opt["kind"] == "choice":
             if val != next(iter(opt["choices"])):        # the first choice is the quiet one
@@ -671,9 +788,9 @@ def load(path_or_bytes) -> dict:
     return out
 
 
-def categories_enabled(parsed: dict) -> set[str]:
+def categories_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> set[str]:
     """Which of the six categories this settings file actually randomizes (any mode)."""
-    spec = spec_from_parsed(parsed)
+    spec = spec_from_parsed(parsed, family)
     return {cat for cat in _CATEGORY_MODES if spec[cat] != "unchanged"}
 
 
@@ -701,7 +818,7 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     """
     f = parsed["flags"]
     bad = []
-    spec = spec_from_parsed(parsed)
+    spec = spec_from_parsed(parsed, family)
     if spec.get("wild") == "global" and spec.get("wild_restriction") in GLOBAL_IGNORED_RESTRICTIONS:
         bad.append(f"wild=global with wild_restriction={spec['wild_restriction']} "
                    f"(UPR ignores that restriction under a global map)")
@@ -720,6 +837,19 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
         bad += [f"{key} (not implemented for pureRGB entries)" for key in PURE_INERT_BOOLS if spec.get(key)]
         if spec.get("trainers") in PURE_INERT_TRAINER_MODES:
             bad.append(f"trainers={spec['trainers']} (pure entries carry no gym/Elite tags)")
+    if family == FAMILY_FRLG:
+        # ruling 31: abilities and the type chart join Gen 1's set by name (Gen 1 has no
+        # abilities: there tweakForRom clears the flag). A Gen 1-only tweak would be dropped
+        # silently by tweakForRom, so it is refused rather than believed.
+        if not f.get("abilities_UNCHANGED"):
+            bad.append("abilities")
+        names = parsed.get("misc_tweak_names") or []
+        if "UPDATE_TYPE_EFFECTIVENESS" in names:
+            bad.append("UPDATE_TYPE_EFFECTIVENESS (the type chart)")
+        allowed = {o["misc"] for o in options_for(FAMILY_FRLG).values() if "misc" in o}
+        other = [n for n in names if n not in allowed and n != "UPDATE_TYPE_EFFECTIVENESS"]
+        if other or parsed.get("misc_tweaks", 0) & ~sum(MISC_TWEAKS.values()):
+            bad.append("tweaks (" + ", ".join(other or ["unknown"]) + ") not available on FR/LG")
     if not f.get("types_UNCHANGED"):
         bad.append("types")
     if not f.get("evolutions_UNCHANGED"):
@@ -757,40 +887,39 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
 # NOT apply to the effective settings echoed in UPR's log: tweakForRom legitimately rewrites
 # bytes there (the custom-starter slots become the ROM's own), so those are checked with
 # forbidden_enabled instead.
-_ENVELOPE_CACHE: list[set[int]] | None = None
+_ENVELOPE_CACHE: dict[str, list[set[int]]] = {}
 
 
-def permitted_byte_values() -> list[set[int]]:
+def permitted_byte_values(family: str = FAMILY_VANILLA) -> list[set[int]]:
     """For each of the 51 settings bytes, every value an allowed configuration can hold."""
-    global _ENVELOPE_CACHE
-    if _ENVELOPE_CACHE is None:
+    if family not in _ENVELOPE_CACHE:
         import itertools
 
-        base = _spec_data({})
+        base = _spec_data({}, family)
         values = {key: (list(opt["choices"]) if opt["kind"] == "choice"
                         else [False, True] if opt["kind"] == "bool"
                         else list(range(opt["min"], opt["max"] + 1)))
-                  for key, opt in OPTIONS.items()}
+                  for key, opt in options_for(family).items()}
         touches: dict[int, list[str]] = {}
         for key, vals in values.items():
             for v in vals:
-                data = _spec_data({key: v})
+                data = _spec_data({key: v}, family)
                 for i in range(LENGTH_OF_SETTINGS_DATA):
                     if data[i] != base[i] and key not in touches.setdefault(i, []):
                         touches[i].append(key)
         envelope: list[set[int]] = [{base[i]} for i in range(LENGTH_OF_SETTINGS_DATA)]
         for i, keys in touches.items():
             for combo in itertools.product(*(values[k] for k in keys)):
-                envelope[i].add(_spec_data(dict(zip(keys, combo, strict=True)))[i])
-        _ENVELOPE_CACHE = envelope
-    return _ENVELOPE_CACHE
+                envelope[i].add(_spec_data(dict(zip(keys, combo, strict=True)), family)[i])
+        _ENVELOPE_CACHE[family] = envelope
+    return _ENVELOPE_CACHE[family]
 
 
 def _flags_in_byte(index: int) -> list[str]:
     return sorted(name for name, (i, _bit) in FLAGS.items() if i == index)
 
 
-def unexpected_settings(parsed: dict) -> list[str]:
+def unexpected_settings(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
     """Everything in this file that no allowed configuration would produce.
 
     Empty means the file is one SLink could have generated itself. A non-empty result is a
@@ -798,7 +927,7 @@ def unexpected_settings(parsed: dict) -> list[str]:
     players' files are drawn from the same known set, and a file carrying an option we have
     never reasoned about is outside it whether or not that option turns out to matter.
     """
-    envelope = permitted_byte_values()
+    envelope = permitted_byte_values(family)
     data = parsed.get("data") or b""
     if len(data) < LENGTH_OF_SETTINGS_DATA:
         return [f"settings block is only {len(data)} bytes"]
