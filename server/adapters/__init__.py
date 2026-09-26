@@ -85,7 +85,7 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
 _VARIANT_LABEL: dict[str, str] = {
     "firered": "FireRed", "leafgreen": "LeafGreen",
     "firered_ap": "FireRed (AP)", "leafgreen_ap": "LeafGreen (AP)",
-    "firered_rr": "Radical Red",
+    "firered_rr": "Radical Red", "emerald": "Emerald",
     "heartgold": "HeartGold", "soulsilver": "SoulSilver",
     "platinum": "Platinum", "hgss": "HGSS",
     "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
@@ -163,9 +163,12 @@ def persisted_migration_refusal(old_game_id: str, new_game_id: str | None) -> st
 # already fine-grained enough (the Gen 1 packs differ by game_id: gen1_rby vs
 # gen1_purergb). Adding a Gen 3 ROM variant: add it here too (docs/gen3/PLAN.md §5.1).
 _ROM_TYPE_TO_FOUNDATION: dict[str, str] = {
-    "firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_frlg",
+    "firered": "gen3_frlg", "leafgreen": "gen3_frlg",
     "firered_ap": "gen3_frlg", "leafgreen_ap": "gen3_frlg",
     "firered_rr": "gen3_rr",
+    # Emerald shares Gen3Adapter (game_id gen3_frlge) but not FR/LG's layout or maps: its own
+    # pack, so it pairs only with Emerald (docs/gen3_emerald/PLAN.md §2 decision 5).
+    "emerald": "gen3_emerald",
     # Gen 2 (docs/gen2/PLAN.md §5.9, owner O-16): ONE foundation for Gold, Silver and
     # Crystal, so every Gen 2 pairing is admitted with no title relation in shared code.
     # EVERY spelling has a row: the title-cased ones are what both clients send and what

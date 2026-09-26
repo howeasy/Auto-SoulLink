@@ -4049,8 +4049,7 @@ class SLinkServer:
         Falls back to gen3_frlge if the adapter's game dir doesn't exist.
         """
         base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        game_id = self.adapter.game_id if self.adapter else "gen3_frlge"
-        game_dir = os.path.join(base_dir, "data", "games", game_id)
+        game_dir = os.path.join(base_dir, "data", "games", self._area_pack())
         if not os.path.isdir(game_dir):
             game_dir = os.path.join(base_dir, "data", "games", "gen3_frlge")
         area_ids: set[str] = set()
@@ -4086,6 +4085,13 @@ class SLinkServer:
                     if isinstance(entry, dict) and entry.get("area_id"):
                         area_ids.add(entry["area_id"])
         return sorted(area_ids)
+
+    def _area_pack(self) -> str:
+        """The data/games/<dir> of the active game's area maps: the adapter's `area_pack` when
+        it names one (titles sharing an adapter can have their own maps), else its game_id."""
+        if not self.adapter:
+            return "gen3_frlge"
+        return getattr(self.adapter, "area_pack", None) or self.adapter.game_id
 
     async def handle_obs_areas(self, request):
         """GET /api/obs/areas — grouped area list for the active game.
@@ -4352,8 +4358,7 @@ class SLinkServer:
         try:
             _base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
             # Try adapter-specific area map first, fall back to gen3_frlge
-            _game_id = self.adapter.game_id if self.adapter else "gen3_frlge"
-            _map_path = os.path.join(_base_dir, "data", "games", _game_id, "area_map.json")
+            _map_path = os.path.join(_base_dir, "data", "games", self._area_pack(), "area_map.json")
             if not os.path.exists(_map_path):
                 _map_path = os.path.join(_base_dir, "data", "games", "gen3_frlge", "area_map.json")
             with open(_map_path) as _mf:
