@@ -3749,6 +3749,7 @@ local function emerald_throw_ball(cp, label)
     -- HANDLE_INPUT) check just above (no frame advanced since, on the "already correct pocket"
     -- path; the settle check on the "steered" path).
     local last_used_before = memory.read_u16_le(LAST_USED_ITEM_ADDR)
+    local balls_before = EMH.ball_count()
     G.tap("A", 3, 20)
 
     -- step 6 (context menu): Task_ItemContext_SingleRow (asserted before this A, hard rule)
@@ -3789,12 +3790,14 @@ local function emerald_throw_ball(cp, label)
     -- step 8 (throw committed): pair "bag gone" with "no bag task" (hard rule) -- callback2 back
     -- to BattleMainCB2, no bag input/context task left active, and gLastUsedItem is the ball just
     -- thrown (battle_main.c:4413; battle_util.c:318-322).
+    -- The per-press witness is the pocket losing exactly one ball (OMP cx-39602c02 #1:
+    -- ItemUseInBattle_PokeBall's RemoveBagItem, item_use.c:938-947), not gLastUsedItem == 4.
     local committed = false
     for _ = 1, 600 do
         if memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == BATTLE_MAIN_CB2
            and not task_active(TASK_BAG_MENU_HANDLE_INPUT)
            and not task_active(TASK_ITEM_CONTEXT_SINGLE_ROW)
-           and memory.read_u16_le(LAST_USED_ITEM_ADDR) == ITEM_POKE_BALL then
+           and EMH.ball_count() == balls_before - 1 then
             committed = true; break
         end
         G.advance()
@@ -3802,12 +3805,13 @@ local function emerald_throw_ball(cp, label)
     if not committed then
         G.shot("stuck")
         G.finish(false, string.format(
-            "%s: the throw never committed (callback2 BattleMainCB2, no bag task, "
-            .. "gLastUsedItem==ITEM_POKE_BALL) within 600 frames", label))
+            "%s: the throw never committed (callback2 BattleMainCB2, no bag task, pocket %d -> "
+            .. "%d, want one fewer) within 600 frames", label, balls_before, EMH.ball_count()))
         return false
     end
-    G.phase("ball-thrown", string.format("gLastUsedItem %d -> %d", last_used_before,
-                                         memory.read_u16_le(LAST_USED_ITEM_ADDR)))
+    G.phase("ball-thrown", string.format("gLastUsedItem %d -> %d, balls %d -> %d", last_used_before,
+                                         memory.read_u16_le(LAST_USED_ITEM_ADDR), balls_before,
+                                         EMH.ball_count()))
     return true
 end
 
@@ -3854,12 +3858,34 @@ function EMH.resolve_throw(cp, label)
              .. EMH.battle_dump())
 end
 
--- EMH.POKE_BALLS: tests/fixtures/gen3/README.md (emerald_battle.sav: 5 Poke Balls) -- one throw
--- per ball, across turns AND encounters (OMP review cx-6903a836 #6: a 6th try has no ball).
-EMH.POKE_BALLS = 5
+-- EMH.CATCH_BALLS: emerald_catch.sav carries 20 Poke Balls (card E2-LEGS round 3: five misses at
+-- full HP on emerald_battle.sav's 5 balls were bad luck, not a mechanics fault -- every throw
+-- committed and the action menu came back). One throw per ball, across turns AND encounters
+-- (OMP cx-6903a836 #6); the group guard below checks the count.
+EMH.CATCH_BALLS = 20
+--- The Poke Ball pocket's total, through reads.lua's own decoder (SaveBlock1 +0x650, quantities
+--- XOR the low half of SaveBlock2.encryptionKey -- pret include/global.h:532,1008).
+function EMH.ball_count()
+    local b = reader.read_balls()
+    return b and b.ball_count or -1
+end
+function EMH.balls_are(n)
+    return function()
+        local got = EMH.ball_count()
+        if got ~= n then
+            return string.format("expected %d Poke Balls in the pocket, read %d -- wrong fixture "
+                                 .. "loaded for this leg", n, got)
+        end
+    end
+end
 local function emerald_route102_catch_loop(cp)
     local L = "emerald_route102_catch"
-    for throw = 1, EMH.POKE_BALLS do
+    -- Driven by the pocket (OMP cx-39602c02 #1/#6): read once, loop while a ball is left, the
+    -- fixture's count as the hard cap. Each committed throw takes one (emerald_throw_ball).
+    local balls = EMH.ball_count()
+    G.phase("balls", string.format("pocket holds %d Poke Balls (cap %d)", balls, EMH.CATCH_BALLS))
+    for throw = 1, EMH.CATCH_BALLS do
+        if EMH.ball_count() <= 0 then break end
         if not play.in_battle(cp) then
             if not emerald_hunt_grass(cp, 40) then
                 G.shot("stuck")
@@ -3875,6 +3901,13 @@ local function emerald_route102_catch_loop(cp)
                 return
             end
         else
+            -- Round 3 probe: gLastUsedItem read 0 before every throw of live run 2 although each
+            -- throw set it to 4 (battle_util.c:318). No per-turn clear is in pret; the only
+            -- unconditional rewrite is BufferStringBattle's copy from the printed message's own
+            -- snapshot (battle_message.c:1965, taken at emit time by battle_controllers.c:1149,1181).
+            -- Logging it here, on the action menu, localizes the reset on the next live run.
+            G.phase("throw-start", string.format("throw %d on the action menu: gLastUsedItem=%d balls=%d",
+                    throw, memory.read_u16_le(LAST_USED_ITEM_ADDR), EMH.ball_count()))
             G.tap("Right", 3, 20)  -- FIGHT(0) -> BAG(1), pinned bit toggle
             if action_cursor() ~= ACTION_BAG then
                 G.shot("stuck")
@@ -3902,13 +3935,13 @@ local function emerald_route102_catch_loop(cp)
     end
     G.shot("stuck")
     G.finish(false, string.format("%s: never reached B_OUTCOME_CAUGHT after %d balls (last "
-             .. "outcome=%d) %s", L, EMH.POKE_BALLS, battle_outcome(), EMH.battle_dump()))
+             .. "outcome=%d) %s", L, EMH.CATCH_BALLS, battle_outcome(), EMH.battle_dump()))
 end
 
 EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     name = "emerald_route102_catch",
     exercises = { "capture_wild" },
-    check = emerald_at(0, 17, 21, 16),
+    check = emerald_at(0, 17, 21, 16, EMH.balls_are(EMH.CATCH_BALLS)),  -- emerald_catch.sav
     source = {
         "docs/gen3_emerald/research/battle_bag_ball_throw_2026-09-25.md (spot-checked predicate "
         .. "sequence this leg implements steps 0-9 of)",
@@ -4085,17 +4118,230 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     end,
 }
 
--- ── leg: emerald_mon_given (OPEN) ───────────────────────────────────────────────────────────
+-- ── EVOLVE group (emerald_evolve.sav, Route 102 0.17 (21,16), card E2-LEGS round 3) ─────────
+-- SYNTH setup, native behaviour: the fixture's Mudkip is Lv15 with EXP one short of Lv16 and
+-- fewer than four moves; the level-up, the evolution scene and the species store all run native.
+EMH.SPECIES_MUDKIP, EMH.SPECIES_MARSHTOMP = 283, 284   -- include/constants/species.h:289-290
+EMH.OFF_STATUS, EMH.OFF_LEVEL = 0x50, 0x54             -- struct Pokemon party tail (include/pokemon.h)
+
+--- Party guard: count, the lead's (decrypted) species, its plaintext level, and an open move
+--- slot. With a free slot, MonTryLearningNewMove gives MUD_SHOT (Marshtomp's Lv16 move) without
+--- the "delete a move?" yes/no (src/evolution_scene.c:775,791-792: EVOSTATE_TRY_LEARN_MOVE ->
+--- REPLACE_MOVE only on MON_HAS_MAX_MOVES), so no move prompt can meet the A-only presses below.
+function EMH.lead_is(n, species, level)
+    return function()
+        local count = memory.read_u8(PARTY_COUNT_ADDR)
+        local mons = reader.read_party()
+        local mon = mons and mons[1]
+        local lvl = memory.read_u8(PARTY_BASE + EMH.OFF_LEVEL)
+        local free = 0
+        if mon then for i = 1, 4 do if (mon.moves[i] or 0) == 0 then free = free + 1 end end end
+        if count ~= n or not mon or mon.species ~= species or lvl ~= level or free == 0 then
+            return string.format("expected a %d-mon party led by species %d Lv%d with a free move "
+                                 .. "slot, read party=%d species=%s Lv%d free_slots=%d -- wrong "
+                                 .. "fixture loaded for this leg", n, species, level, count,
+                                 tostring(mon and mon.species), lvl, free)
+        end
+    end
+end
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_evolve",
+    exercises = { "evolve_species_store" },
+    check = emerald_at(0, 17, 21, 16, EMH.lead_is(1, EMH.SPECIES_MUDKIP, 15)),  -- emerald_evolve.sav
+    source = {
+        "src/evolution_scene.c:637-647 (Task_EvolutionScene: B HELD during "
+        .. "EVOSTATE_WAIT_CYCLE_MON_SPRITE cancels the evolution) -- so this leg presses ONLY A",
+        "src/evolution_scene.c:757-771 (EVOSTATE_SET_MON_EVOLVED: SetMonData(MON_DATA_SPECIES), the "
+        .. "evolve_species_store site, docs/gen3_emerald/engine_sites.md)",
+        "src/evolution_scene.c:930-946 (the learn-move yes/no; B == NO) -- unreachable here: the guard "
+        .. "requires a free move slot",
+        "src/data/pokemon/evolution.h:129 (SPECIES_MUDKIP: EVO_LEVEL 16 -> SPECIES_MARSHTOMP)",
+        "src/battle_controller_player.c (gActionSelectionCursor resets to FIGHT(0) each battle: A,A = move 0)",
+    },
+    run = function(cp)
+        local L = "emerald_evolve"
+        if not emerald_hunt_grass(cp, 40) then
+            G.shot("stuck")
+            G.finish(false, L .. ": 40 cycles of the grass loop produced no encounter")
+            return
+        end
+        G.phase("battle-begin", L)
+        -- A only, from the battle through the level-up and the whole evolution scene, until the
+        -- overworld callback is back. play.mash_a never presses anything but A.
+        if not play.mash_a(3000, function() return play.on_field(cp) end) then
+            G.shot("stuck")
+            G.finish(false, L .. ": the field never came back after the battle/evolution "
+                     .. EMH.battle_dump())
+            return
+        end
+        play.wait_scene_settled(cp, 1800)
+        local mons = reader.read_party()
+        local mon = mons and mons[1]
+        local lvl = memory.read_u8(PARTY_BASE + EMH.OFF_LEVEL)
+        if not mon or mon.species ~= EMH.SPECIES_MARSHTOMP or lvl ~= 16 then
+            G.shot("stuck")
+            G.finish(false, string.format("%s: party[0] is species %s Lv%d, want MARSHTOMP(%d) Lv16",
+                                          L, tostring(mon and mon.species), lvl, EMH.SPECIES_MARSHTOMP))
+            return
+        end
+        G.phase("evolved", string.format("party[0] species %d Lv%d", mon.species, lvl))
+    end,
+}
+
+-- ── POISON group (emerald_poison.sav, Oldale Town 0.10 (6,17), card E2-LEGS round 3) ────────
+-- party = [Mudkip PSN at 1 HP, Poochyena]. Every 4th step UpdatePoisonStepCounter
+-- (field_control_avatar.c:637-660, VAR_POISON_STEP_COUNTER %4) runs DoPoisonFieldEffect
+-- (field_poison.c:120-154): 1 HP -> 0, FLDPSN_FNT -> EventScript_FieldPoison
+-- (data/scripts/field_poison.inc:1-7) -> TryFieldPoisonWhiteOut: FaintFromFieldPoison clears the
+-- status (field_poison.c:42-51), prints the faint message, and with Poochyena standing it is
+-- FLDPSN_NO_WHITEOUT (:101-104) -- releaseall, no warp.
+-- tools/gba_map.py --game emerald --map 0.10: (6,17) and (7,17) collision 0, behaviour 0x00, no
+-- object (objects (16,11) (13,7) (8,9) (11,19)) and no coord event (coords (0,10) (8,19) (9,19)
+-- (10,19)). The walk only ever presses Right/Left between them: never Up into the PC door (6,16).
+EMH.POISON_TILES = { { 6, 17 }, { 7, 17 } }
+EMH.STATUS1_PSN_ANY = 0x88                             -- include/constants/battle.h:117-124
+function EMH.poison_party()
+    return function()
+        local count = memory.read_u8(PARTY_COUNT_ADDR)
+        local hp, maxhp = slot0_hp()
+        local status = memory.read_u32_le(PARTY_BASE + EMH.OFF_STATUS)
+        if count ~= 2 or hp ~= 1 or maxhp <= 1 or status & EMH.STATUS1_PSN_ANY == 0 then
+            return string.format("expected [poisoned lead at 1 HP, second mon], read party=%d HP "
+                                 .. "%d/%d status=0x%X -- wrong fixture loaded for this leg",
+                                 count, hp, maxhp, status)
+        end
+    end
+end
+
+EMERALD_LEGS[#EMERALD_LEGS + 1] = {
+    name = "emerald_poison_faint",
+    exercises = { "poison_hp_before", "poison_faint" },
+    check = emerald_at(0, 10, 6, 17, EMH.poison_party()),  -- emerald_poison.sav
+    source = {
+        "src/field_control_avatar.c:549-552,637-660 (UpdatePoisonStepCounter: every 4th step)",
+        "src/field_poison.c:120-154 (DoPoisonFieldEffect: poison_hp_before +0x34, poison_faint +0x4E)",
+        "src/field_poison.c:42-51,65-109 (FaintFromFieldPoison clears STATUS; FLDPSN_NO_WHITEOUT while "
+        .. "another mon stands); data/scripts/field_poison.inc:1-7",
+        "tools/gba_map.py --game emerald --map 0.10 ((6,17)/(7,17) free, no object, no coord event)",
+    },
+    run = function(cp)
+        local L = "emerald_poison_faint"
+        local map0 = play.map(cp)
+        -- Right/Left between the two tiles; the counter fires within 4 steps, 12 is the bound.
+        for _ = 1, 12 do
+            if slot0_hp() == 0 then break end
+            local px = G.pos(cp)
+            play.step(cp, px == EMH.POISON_TILES[1][1] and "Right" or "Left", map0, true, false)
+        end
+        if slot0_hp() ~= 0 then
+            G.shot("stuck")
+            G.finish(false, L .. ": 12 steps and the lead never reached 0 HP from field poison")
+            return
+        end
+        G.phase("poison-hp-zero", play.at(cp))
+        -- A through the faint message. The status word clears when the message is printed
+        -- (FaintFromFieldPoison), the script releases after it closes: both are the stop.
+        if not play.mash_a(60, function()
+            return memory.read_u32_le(PARTY_BASE + EMH.OFF_STATUS) == 0 and play.on_field(cp)
+               and G.pred_ok(cp, "script_context_status") and G.pred_ok(cp, "field_controls_locked")
+        end) then
+            G.shot("stuck")
+            G.finish(false, L .. ": the field-poison faint message never closed")
+            return
+        end
+        local g, n = G.map(cp)
+        local hp = slot0_hp()
+        local status = memory.read_u32_le(PARTY_BASE + EMH.OFF_STATUS)
+        local count = memory.read_u8(PARTY_COUNT_ADDR)
+        if hp ~= 0 or status ~= 0 or count ~= 2 or play.map(cp) ~= map0 then
+            G.shot("stuck")
+            G.finish(false, string.format("%s: want HP 0, status 0, party 2, still on 0.10; read HP %d "
+                     .. "status 0x%X party %d map %d.%d", L, hp, status, count, g, n))
+            return
+        end
+        G.phase("poison-fainted", string.format("lead HP 0, status cleared, party 2, still at %s",
+                                                play.at(cp)))
+    end,
+}
+
+-- ── GIFT group (emerald_gift.sav, card E2-LEGS round 3) ─────────────────────────────────────
+-- The input policy is witness-driven, not counted: A until gPlayerPartyCount rises (talk, the
+-- accept yes/no -- every MSGBOX_YESNO defaults to YES, script_menu.c ScriptMenu_YesNo -- and the
+-- text before the give), then ONLY B until the script is quiet. After the give, B closes every
+-- field message (text.c:875,893 accept A|B) and answers NO to a nickname yes/no (B ==
+-- MENU_B_PRESSED == NO in Task_HandleYesNoInput), the round-2 lesson from the caught-mon prompt.
+EMH.GIFT = {
+    -- emerald_gift.sav (tools/gen3_fixtures.py kind "gift"): LavaridgeTown = group 0 num 12
+    -- (data/maps/map_groups.json), the egg woman OBJ_EVENT_GFX_EXPERT_F at (4,7) FACE_DOWN
+    -- (data/maps/LavaridgeTown/map.json), the player one tile south at (4,8) (gba_map: collision
+    -- 0, MB_MOUNTAIN_TOP 0x0C) turning Up. Fixture state: party [Mudkip], FLAG_RECEIVED_LAVARIDGE_EGG
+    -- clear, VAR_LAVARIDGE_TOWN_STATE ~= 1 (1 runs the rival's Go-Goggles ON_FRAME scene,
+    -- scripts.inc:40-42).
+    group = 0, num = 12, x = 4, y = 8, face = "Up", party_before = 1,
+    species = 360, is_egg = 1,          -- SPECIES_WYNAUT, include/constants/species.h:366
+    source = {
+        "data/maps/LavaridgeTown/scripts.inc:232-247 (EggWoman: MSGBOX_YESNO, giveegg SPECIES_WYNAUT)",
+        "src/script_pokemon_util.c:87-97 (ScriptGiveEgg: CreateEgg, MON_DATA_IS_EGG, GiveMonToPlayer)",
+        "src/pokemon.c:4425-4445 (GiveMonToPlayer: the mon_given site, docs/gen3_emerald/engine_sites.md)",
+        "src/text.c:875,893 (field text closes on A or B); script_menu.c yes/no: B == NO",
+    },
+}
+
+function EMH.gift_party()
+    return function()
+        local count = memory.read_u8(PARTY_COUNT_ADDR)
+        if count ~= EMH.GIFT.party_before then
+            return string.format("expected a %d-mon party before the gift, read %d -- wrong fixture "
+                                 .. "loaded for this leg", EMH.GIFT.party_before, count)
+        end
+    end
+end
+
 EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     name = "emerald_mon_given",
     exercises = { "mon_given" },
-    source = { "src/data/wild_encounters.json / the Oldale-Route102 scripts carry no `givemon`; "
-            .. "Emerald's own starter givemon (Littleroot) is already applied by every emerald_* "
-            .. "fixture (tests/fixtures/gen3/README.md 'Party: Mudkip Lv5 ...')" },
-    open = true,
-    open_reason = "no reachable Emerald givemon event exists from these three fixtures' tiles "
-               .. "(Oldale Town / Route 102); the earliest post-starter gift is well beyond them "
-               .. "and no pret citation for an in-reach one was found",
+    check = emerald_at(EMH.GIFT.group, EMH.GIFT.num, EMH.GIFT.x, EMH.GIFT.y, EMH.gift_party()),
+    source = EMH.GIFT.source,
+    run = function(cp)
+        local L = "emerald_mon_given"
+        local want = EMH.GIFT.party_before + 1
+        G.tap(EMH.GIFT.face, 2, 13)               -- turn toward the NPC (its tile is blocked)
+        for _ = 1, 80 do
+            if memory.read_u8(PARTY_COUNT_ADDR) == want then break end
+            G.tap("A", 3, 13)
+        end
+        if memory.read_u8(PARTY_COUNT_ADDR) ~= want then
+            G.shot("stuck")
+            G.finish(false, string.format("%s: the party never grew to %d (read %d)", L, want,
+                                          memory.read_u8(PARTY_COUNT_ADDR)))
+            return
+        end
+        G.phase("given", string.format("party %d -> %d", EMH.GIFT.party_before, want))
+        local quiet = false
+        for _ = 1, 60 do
+            if play.on_field(cp) and G.pred_ok(cp, "script_context_status")
+               and G.pred_ok(cp, "field_controls_locked") then quiet = true; break end
+            G.tap("B", 3, 13)
+        end
+        if not quiet then
+            G.shot("stuck")
+            G.finish(false, L .. ": the gift script never went quiet under B")
+            return
+        end
+        local mons = reader.read_party()
+        local mon = mons and mons[want]
+        if not mon or mon.species ~= EMH.GIFT.species or mon.is_egg ~= EMH.GIFT.is_egg
+           or memory.read_u8(PARTY_COUNT_ADDR) ~= want then
+            G.shot("stuck")
+            G.finish(false, string.format("%s: party[%d] is species %s egg %s, want %d egg %d", L,
+                     want - 1, tostring(mon and mon.species), tostring(mon and mon.is_egg),
+                     EMH.GIFT.species, EMH.GIFT.is_egg))
+            return
+        end
+        G.phase("gift-verified", string.format("party[%d] species %d egg %d", want - 1, mon.species,
+                                               mon.is_egg))
+    end,
 }
 
 end -- if TITLE == "emerald"

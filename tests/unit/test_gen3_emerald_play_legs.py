@@ -153,13 +153,11 @@ def test_the_12_target_kinds_are_covered_somewhere_in_the_union(legs):
 
 
 def test_open_legs_carry_a_reason(legs):
-    saw_open = False
+    """Round 3 closed the last OPEN leg (emerald_mon_given); any future open leg needs a reason."""
     for i in range(1, len(legs) + 1):
         leg = legs[i]
         if leg["open"]:
-            saw_open = True
             assert leg["open_reason"], f"leg {leg['name']!r} is open with no reason"
-    assert saw_open
 
 
 def test_pinned_legs_are_not_open(legs):
@@ -193,6 +191,9 @@ def test_group_start_checks_match_the_committed_fixture_tiles():
         "emerald_route102_wild_battle": _FIXTURE_TILES["battle"],
         "emerald_calvin_trainer_battle": _FIXTURE_TILES["trainer"],
         "emerald_route102_faint": _FIXTURE_TILES["battle"],  # emerald_lowhp.sav: same tile
+        "emerald_route102_catch": _FIXTURE_TILES["battle"],  # emerald_catch.sav: same tile
+        "emerald_evolve": _FIXTURE_TILES["battle"],          # emerald_evolve.sav: same tile
+        "emerald_poison_faint": _FIXTURE_TILES["town"],      # emerald_poison.sav: Oldale heal tile
     }
     for name, want in expected.items():
         assert name in found, f"leg {name!r} carries no check = emerald_at(...)"
@@ -473,14 +474,16 @@ _FAKE_MENU_HOST = """
 DOWNS, EXITED = 0, nil
 local joy, prev = {}, {}
 joypad = { set = function(t) joy = t end }
-console = { log = function() end }
+LOG = {}
+console = { log = function(s) LOG[#LOG + 1] = s end }
 client = { exit = function() error("EXIT", 0) end, screenshot = function() end }
 emu = { framecount = function() return 0 end,
         frameadvance = function()
           if joy.Down and not prev.Down then
             DOWNS = DOWNS + 1
             local row = (read16(TASK + 10) + 1) % 5
-            poke(TASK + 10, row, 2); poke(MENU + 2, row, 1)
+            poke(TASK + 10, row, 2)
+            if not CURSOR_LAGS then poke(MENU + 2, row, 1) end
           end
           prev = joy
         end }
@@ -528,11 +531,26 @@ def test_catch_resolves_a_committed_throw_with_b_never_a():
     assert "mash_a(" not in after and 'G.tap("A"' not in after
 
 
-def test_catch_attempts_are_bounded_by_the_five_balls():
+def test_catch_attempts_are_bounded_by_the_catch_fixtures_twenty_balls():
+    """Round 3: the catch leg is its own group on emerald_catch.sav (20 balls); the guard reads
+    the pocket and the loop is bounded by the same constant."""
     loop = _function_body("emerald_route102_catch_loop")
-    assert "for throw = 1, EMH.POKE_BALLS do" in loop
-    assert "EMH.POKE_BALLS = 5" in _SCRIPT_SRC
+    assert "for throw = 1, EMH.CATCH_BALLS do" in loop
+    assert "EMH.CATCH_BALLS = 20" in _SCRIPT_SRC
     assert not re.search(r"for encounter = 1, 6", loop)
+    chunk = next(c for c in _leg_chunks(_SCRIPT_SRC) if 'name = "emerald_route102_catch"' in c)
+    assert "check = emerald_at(0, 17, 21, 16, EMH.balls_are(EMH.CATCH_BALLS))" in chunk
+
+
+def test_each_throw_commits_only_on_one_ball_leaving_the_pocket():
+    """OMP cx-39602c02 #1: the commit witness is the pocket decrement, not gLastUsedItem == 4."""
+    body = _function_body("emerald_throw_ball")
+    assert "local balls_before = EMH.ball_count()" in body
+    m = re.search(r'local committed = false(?P<tail>.*?)if not committed then', body, re.S)
+    assert "EMH.ball_count() == balls_before - 1" in m.group("tail")
+    assert "LAST_USED_ITEM_ADDR) == ITEM_POKE_BALL" not in m.group("tail")
+    loop = _function_body("emerald_route102_catch_loop")
+    assert "if EMH.ball_count() <= 0 then break end" in loop
 
 
 def test_throw_ball_returns_a_verdict_and_the_caller_stops_on_false():
@@ -549,3 +567,115 @@ def test_throw_ball_checks_the_selected_item_and_snapshots_last_used_item():
     item_check = body.index("memory.read_u16_le(SPECIAL_VAR_ITEM_ID_ADDR) ~= ITEM_POKE_BALL")
     use_a = body.index('G.tap("A", 3, 30)')
     assert select_a < body.index('G.tap("A", 3, 20)') < item_check < use_a
+
+
+# -- 9. card E2-LEGS round 3: evolve, field-poison faint, gift -------------------------------------
+
+@pytest.mark.parametrize("name,kinds", [
+    ("emerald_evolve", {"evolve_species_store"}),
+    ("emerald_poison_faint", {"poison_hp_before", "poison_faint"}),
+])
+def test_round3_legs_are_real_group_starts(legs, name, kinds):
+    leg = _leg(legs, name)
+    assert not leg["open"], f"{name}: still OPEN"
+    assert leg["check"] is not None, f"{name}: a group start needs a check(cp)"
+    assert set(_py_list(leg["exercises"])) == kinds
+    assert _py_list(leg["source"])
+
+
+def _chunk(name):
+    return next(c for c in _leg_chunks(_SCRIPT_SRC) if f'name = "{name}"' in c)
+
+
+def test_evolve_presses_only_a_because_b_cancels_the_evolution():
+    """src/evolution_scene.c:637-647: B held during EVOSTATE_WAIT_CYCLE_MON_SPRITE cancels."""
+    run = _chunk("emerald_evolve")
+    assert "play.mash_a(" in run
+    assert not re.search(r'G\.tap\("(B|Start|Select)"', run)
+    assert "joypad.set" not in run
+    assert "EMH.SPECIES_MARSHTOMP" in run and "~= 16" in run
+    assert "EMH.lead_is(1, EMH.SPECIES_MUDKIP, 15)" in run
+
+
+def test_poison_walk_only_steps_between_the_two_free_tiles():
+    run = _chunk("emerald_poison_faint")
+    dirs = set(re.findall(r'"(Up|Down|Left|Right)"', run))
+    assert dirs == {"Left", "Right"}, dirs
+    assert "EMH.POISON_TILES = { { 6, 17 }, { 7, 17 } }" in _SCRIPT_SRC
+    for want in ("slot0_hp() ~= 0", "OFF_STATUS", "count ~= 2", "play.map(cp) ~= map0"):
+        assert want in run, want
+
+
+def test_poison_tiles_are_free_and_clear_of_objects_and_coord_events():
+    _require_rom()
+    rom = gba_map.load(_ROM, groups_addr=_EMERALD_GROUPS_ADDR, game="emerald")
+    town = rom.map(0, 10)
+    blocked = {(o.x, o.y) for o in town.objects} | {(c.x, c.y) for c in town.coords}
+    for x, y in [(6, 17), (7, 17)]:
+        assert town.collision[y][x] == 0 and (x, y) not in blocked, (x, y)
+
+
+def test_every_group_has_a_play_from_stop_after_pair(module, legs):
+    groups = {
+        "emerald_enter_pc": "emerald_save_town",
+        "emerald_route102_wild_battle": "emerald_route102_wild_battle",
+        "emerald_route102_catch": "emerald_route102_catch",
+        "emerald_route102_faint": "emerald_route102_whiteout",
+        "emerald_calvin_trainer_battle": "emerald_calvin_trainer_battle",
+        "emerald_evolve": "emerald_evolve",
+        "emerald_poison_faint": "emerald_poison_faint",
+        "emerald_mon_given": "emerald_mon_given",
+    }
+    names = [legs[i]["name"] for i in range(1, len(legs) + 1)]
+    for first, last in groups.items():
+        assert names.index(first) <= names.index(last)
+        assert len(module.emerald_stopped_legs(last)) == names.index(last) + 1
+
+
+def _fake_top_menu(lua, row, lags=False):
+    lua.execute(_FAKE_RAM)
+    lua.execute(_FAKE_MENU_HOST)
+    g = lua.globals()
+    g.TASK, g.MENU, g.CURSOR_LAGS = _TASKS, _SMENU, lags
+    g.poke(_TASKS, _PC_MAIN_MENU, 4)
+    g.poke(_TASKS + 4, 1, 1)
+    g.poke(_TASKS + 8, 2, 2)
+    g.poke(_TASKS + 10, row, 2)
+    g.poke(_SMENU + 2, row, 1)
+    return g
+
+
+def test_pc_top_row_wraps_from_row_3_through_4_to_0(lua, module):
+    g = _fake_top_menu(lua, 3)
+    assert module.EMH.pc_top_row("t", 0) is True
+    assert g.read16(_TASKS + 10) == 0 and g.DOWNS == 2
+
+
+def test_pc_top_row_refuses_a_menu_whose_cursor_does_not_follow(lua, module):
+    """OMP cx-39602c02 #3: tSelectedOption advancing alone is not progress; sMenu.cursorPos must
+    follow, else storage_top_cursor_stalled."""
+    g = _fake_top_menu(lua, 0, lags=True)
+    with pytest.raises(Exception, match="EXIT"):
+        module.EMH.pc_top_row("t", 2)
+    log = [g.LOG[i] for i in range(1, len(g.LOG) + 1)]
+    assert any("pc_storage_top_cursor_stalled" in line for line in log), log
+
+
+def test_gift_leg_is_real_and_accepts_with_a_then_only_b():
+    run = _chunk("emerald_mon_given")
+    assert "open = true" not in run
+    assert 'exercises = { "mon_given" }' in run
+    before, after = run.split('G.phase("given"', 1)
+    assert 'G.tap("A"' in before and 'G.tap("B"' not in before
+    assert 'G.tap("B"' in after and 'G.tap("A"' not in after
+    assert "check = emerald_at(EMH.GIFT.group, EMH.GIFT.num, EMH.GIFT.x, EMH.GIFT.y, EMH.gift_party())" in run
+    assert "group = 0, num = 12, x = 4, y = 8" in _SCRIPT_SRC
+    assert "species = 360, is_egg = 1" in _SCRIPT_SRC
+
+
+def test_gift_npc_and_tile_are_where_the_leg_expects():
+    _require_rom()
+    rom = gba_map.load(_ROM, groups_addr=_EMERALD_GROUPS_ADDR, game="emerald")
+    lav = rom.map(0, 12)
+    assert lav.collision[8][4] == 0
+    assert (4, 7) in {(o.x, o.y) for o in lav.objects}
