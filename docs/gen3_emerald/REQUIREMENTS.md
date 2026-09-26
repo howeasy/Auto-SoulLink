@@ -175,10 +175,17 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 
 ## Not in this release
 
+Each item cites its owner ruling (PLAN §0); an exclusion without one is a proposal, not scope.
+
 Battle Frontier / Battle Pyramid / Trainer Hill / Contests / Secret Bases rule support (writes are
-refused there; negative controls only). Expansion battle calc. Binary-only expansion hacks.
-Emerald companion/native patch. Non-US Emerald (BPEF/D/S/I/J). Peer ghost on Emerald.
-Archipelago Emerald. Rival Team Swap on Emerald (RR-companion only).
+refused there; negative controls only; §0 Scope, 2026-09-25). Binary-only expansion hacks (§0
+Expansion target). Non-US/EU-English Emerald (BPEF/D/S/I/J refused by name; owner 2026-09-26).
+Peer ghost on Emerald and Archipelago Emerald: post-RC (owner 2026-09-26, as for FR/RR).
+
+IN scope since 2026-09-26 (these were agent-written exclusions, reversed by the owner): the Emerald
+companion (patched trade, SOULLINK info panel, native sounds, Explode Mode, Rival Team Swap),
+randomized Emerald (Gen 3 ruling 29), trainer names / Upcoming Key Trainers / calc Prep tab
+(ruling 28), and the expansion battle calc (in the expansion RC).
 
 ## Recorded limits
 
