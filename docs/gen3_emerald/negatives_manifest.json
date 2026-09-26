@@ -1,6 +1,6 @@
 {
  "schema": 1,
- "source_head": "d5208074",
+ "source_head": "414afb92",
  "receipts": [
   {
    "file": "docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log",
@@ -39,6 +39,10 @@
     {
      "kind": "trade_done",
      "why": "docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.txt runs only the legs emerald_enter_pc..emerald_save_town from emerald_pc.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "poison_faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.txt runs only the legs emerald_enter_pc..emerald_save_town from emerald_pc.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     }
    ]
   },
@@ -46,35 +50,79 @@
    "file": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log",
    "artifact": "emerald_clean",
    "scope": "observer",
-   "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_catch from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log.",
+   "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log.",
    "must_not": [
     {
      "kind": "pc_move",
-     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_catch from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     },
     {
      "kind": "whiteout",
-     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_catch from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     },
     {
      "kind": "save",
-     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_catch from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "capture_wild",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     },
     {
      "kind": "mon_given",
-     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_catch from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     },
     {
      "kind": "evolve_species_store",
-     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_catch from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     },
     {
      "kind": "trade_done",
-     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_catch from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "poison_faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     },
     {
      "kind": "map_load",
-     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_catch from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+     "why": "docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.txt runs only the legs emerald_route102_wild_battle..emerald_route102_wild_battle from emerald_battle.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+    }
+   ]
+  },
+  {
+   "file": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log",
+   "artifact": "emerald_clean",
+   "scope": "observer",
+   "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log.",
+   "must_not": [
+    {
+     "kind": "pc_move",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "whiteout",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "save",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "evolve_species_store",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "trade_done",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "poison_faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "map_load",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.txt runs only the legs emerald_route102_catch..emerald_route102_catch from emerald_catch.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
     }
    ]
   },
@@ -106,6 +154,10 @@
     },
     {
      "kind": "trade_done",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.txt runs only the legs emerald_route102_faint..emerald_route102_whiteout from emerald_lowhp.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "poison_faint",
      "why": "docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.txt runs only the legs emerald_route102_faint..emerald_route102_whiteout from emerald_lowhp.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     },
     {
@@ -149,8 +201,148 @@
      "why": "docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.txt runs only the legs emerald_calvin_trainer_battle..emerald_calvin_trainer_battle from emerald_trainer.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     },
     {
+     "kind": "poison_faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.txt runs only the legs emerald_calvin_trainer_battle..emerald_calvin_trainer_battle from emerald_trainer.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
      "kind": "map_load",
      "why": "docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.txt runs only the legs emerald_calvin_trainer_battle..emerald_calvin_trainer_battle from emerald_trainer.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+    }
+   ]
+  },
+  {
+   "file": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log",
+   "artifact": "emerald_clean",
+   "scope": "observer",
+   "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log.",
+   "must_not": [
+    {
+     "kind": "pc_move",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "capture_wild",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "whiteout",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "save",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "mon_given",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "trade_done",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "poison_faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "map_load",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.txt runs only the legs emerald_evolve..emerald_evolve from emerald_evolve.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+    }
+   ]
+  },
+  {
+   "file": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log",
+   "artifact": "emerald_clean",
+   "scope": "observer",
+   "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log.",
+   "must_not": [
+    {
+     "kind": "pc_move",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "capture_wild",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "whiteout",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "save",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "battle_begin",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "battle_end",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "mon_given",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "evolve_species_store",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "trade_done",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "map_load",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.txt runs only the legs emerald_poison_faint..emerald_poison_faint from emerald_poison.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log. Structural: map_load hooks CB2_LoadMap2+0x14, reached only after CB2_LoadMap (pret pokeemerald overworld.c:1579, the sole writer of savedCallback = CB2_LoadMap2); whiteout loads inline in CB2_WhiteOut (overworld.c:1559-1568) and battles return via CB2_ReturnToFieldLocal (overworld.c:1638-1645). OMP cx-45a36733, coordinator-verified."
+    }
+   ]
+  },
+  {
+   "file": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log",
+   "artifact": "emerald_clean",
+   "scope": "observer",
+   "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log.",
+   "must_not": [
+    {
+     "kind": "pc_move",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "capture_wild",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "whiteout",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "save",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "battle_begin",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "battle_end",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "evolve_species_store",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "trade_done",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
+    },
+    {
+     "kind": "poison_faint",
+     "why": "docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.txt runs only the legs emerald_mon_given..emerald_mon_given from emerald_gift.sav; the kind below has no event on that path. Observer registration: the NOTE/STATUS lines of the matching .shadow.log."
     }
    ]
   }

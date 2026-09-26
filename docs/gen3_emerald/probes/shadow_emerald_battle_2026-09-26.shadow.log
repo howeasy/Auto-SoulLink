@@ -8,13 +8,3 @@ STATUS frame=2983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handle
 STATUS frame=3583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2947
 SHADOW t=2 frame=4140 kind=battle_end key= address=134471656 callback_address=134471656 cpsr=-2147483585 mode=thumb raw_r15=134471658 sp=50363904 thumb=1
 STATUS frame=4183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3539
-SHADOW t=3 frame=4553 kind=battle_begin key= address=134440800 callback_address=134440800 cpsr=536870975 mode=thumb raw_r15=134440802 sp=50363932 thumb=1
-STATUS frame=4783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4124
-STATUS frame=5383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4703
-STATUS frame=5983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5298
-STATUS frame=6583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5883
-STATUS frame=7183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=6462
-STATUS frame=7783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7060
-STATUS frame=8383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7642
-STATUS frame=8983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8222
-STATUS frame=9583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8817

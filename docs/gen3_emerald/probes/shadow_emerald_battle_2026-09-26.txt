@@ -1,6 +1,6 @@
 # Shadow observer beside lua/tests/gen3_scripted_play.lua on BPEE (sha1 f3ae0881...), 2026-09-26
-# lane HEAD=d5208074 tracked-clean=True; fixture tests/fixtures/gen3/emerald_battle.sav sha256=4080d499a0ca51a6...
-# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=1 (observer-only seam b00a475e) SLINK_GEN3_PLAY_FROM=emerald_route102_wild_battle SLINK_GEN3_PLAY_STOP_AFTER=emerald_route102_catch
+# lane HEAD=414afb92 tracked-clean=True; fixture tests/fixtures/gen3/emerald_battle.sav sha256=4080d499a0ca51a6...
+# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=gen3_emerald/emerald (observer-only seam b00a475e, scoped) SLINK_GEN3_PLAY_FROM=emerald_route102_wild_battle SLINK_GEN3_PLAY_STOP_AFTER=emerald_route102_wild_battle
 # runner: C:/slink-wt/emerald-e2/run_play.py (gen3_fixtures._prepare_run/_launch), EmuHawk 2.11.1
 ## driver phases
 phase start frame=1 title=emerald
@@ -12,19 +12,7 @@ phase battle-begin frame=839 emerald_route102_wild_battle
 phase battle-end frame=4151 emerald_route102_wild_battle
 phase leg-state-saved frame=4309 emerald_route102_wild_battle -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_route102_wild_battle.State
 phase leg-done frame=4309 emerald_route102_wild_battle
-phase leg-start frame=4309 emerald_route102_catch
-phase emerald_route102_catch-start frame=4309 hunting from (21,16)
-phase ball-thrown frame=5235 gLastUsedItem 0 -> 4
-phase throw-resolved frame=5971 throw 1: missed, outcome=0
-phase ball-thrown frame=6171 gLastUsedItem 0 -> 4
-phase throw-resolved frame=6875 throw 2: missed, outcome=0
-phase ball-thrown frame=7076 gLastUsedItem 0 -> 4
-phase throw-resolved frame=7812 throw 3: missed, outcome=0
-phase ball-thrown frame=8012 gLastUsedItem 0 -> 4
-phase throw-resolved frame=8652 throw 4: missed, outcome=0
-phase ball-thrown frame=8852 gLastUsedItem 0 -> 4
-phase throw-resolved frame=9588 throw 5: missed, outcome=0
-RESULT: FAIL emerald_route102_catch: never reached B_OUTCOME_CAUGHT after 5 balls (last outcome=0) callback2=08038421 instr=082D8A57 op=3D comm=[2,5] action_menu=true outcome=0 item=4 last_used=0
+RESULT: PASS reached: emerald_route102_wild_battle | open (skipped):
 ## shadow log
 NOTE observer building unadmitted gen3_emerald/emerald
 STATUS frame=583 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
@@ -36,13 +24,3 @@ STATUS frame=2983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handle
 STATUS frame=3583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2947
 SHADOW t=2 frame=4140 kind=battle_end key= address=134471656 callback_address=134471656 cpsr=-2147483585 mode=thumb raw_r15=134471658 sp=50363904 thumb=1
 STATUS frame=4183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3539
-SHADOW t=3 frame=4553 kind=battle_begin key= address=134440800 callback_address=134440800 cpsr=536870975 mode=thumb raw_r15=134440802 sp=50363932 thumb=1
-STATUS frame=4783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4124
-STATUS frame=5383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=4703
-STATUS frame=5983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5298
-STATUS frame=6583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=5883
-STATUS frame=7183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=6462
-STATUS frame=7783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7060
-STATUS frame=8383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=7642
-STATUS frame=8983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8222
-STATUS frame=9583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=8817

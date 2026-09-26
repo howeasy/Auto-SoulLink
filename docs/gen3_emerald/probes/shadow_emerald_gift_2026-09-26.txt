@@ -1,0 +1,20 @@
+# Shadow observer beside lua/tests/gen3_scripted_play.lua on BPEE (sha1 f3ae0881...), 2026-09-26
+# lane HEAD=414afb92 tracked-clean=True; fixture tests/fixtures/gen3/emerald_gift.sav sha256=7a6a712d87e33979...
+# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=gen3_emerald/emerald (observer-only seam b00a475e, scoped) SLINK_GEN3_PLAY_FROM=emerald_mon_given SLINK_GEN3_PLAY_STOP_AFTER=emerald_mon_given
+# runner: C:/slink-wt/emerald-e2/run_play.py (gen3_fixtures._prepare_run/_launch), EmuHawk 2.11.1
+## driver phases
+phase start frame=1 title=emerald
+phase resume frame=1 from=emerald_mon_given
+phase shadow frame=583 observer started admitted_by=hash
+phase leg-start frame=583 emerald_mon_given
+phase given frame=1938 party 1 -> 2
+phase gift-verified frame=1938 party[1] species 360 egg 1
+phase leg-state-saved frame=1938 emerald_mon_given -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_mon_given.State
+phase leg-done frame=1938 emerald_mon_given
+RESULT: PASS reached: emerald_mon_given | open (skipped):
+## shadow log
+NOTE observer building unadmitted gen3_emerald/emerald
+STATUS frame=583 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+STATUS frame=1183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=599
+STATUS frame=1783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1199
+SHADOW t=1 frame=1932 kind=mon_given key= address=134657162 callback_address=134657162 cpsr=1073741887 mode=thumb raw_r15=134657164 sp=50363772 thumb=1

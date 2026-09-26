@@ -1,6 +1,6 @@
 # Shadow observer beside lua/tests/gen3_scripted_play.lua on BPEE (sha1 f3ae0881...), 2026-09-26
-# lane HEAD=d5208074 tracked-clean=True; fixture tests/fixtures/gen3/emerald_trainer.sav sha256=1fe754336ddba75b...
-# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=1 (observer-only seam b00a475e) SLINK_GEN3_PLAY_FROM=emerald_calvin_trainer_battle SLINK_GEN3_PLAY_STOP_AFTER=emerald_calvin_trainer_battle
+# lane HEAD=414afb92 tracked-clean=True; fixture tests/fixtures/gen3/emerald_trainer.sav sha256=1fe754336ddba75b...
+# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=gen3_emerald/emerald (observer-only seam b00a475e, scoped) SLINK_GEN3_PLAY_FROM=emerald_calvin_trainer_battle SLINK_GEN3_PLAY_STOP_AFTER=emerald_calvin_trainer_battle
 # runner: C:/slink-wt/emerald-e2/run_play.py (gen3_fixtures._prepare_run/_launch), EmuHawk 2.11.1
 ## driver phases
 phase start frame=1 title=emerald

@@ -1,0 +1,37 @@
+# Shadow observer beside lua/tests/gen3_scripted_play.lua on BPEE (sha1 f3ae0881...), 2026-09-26
+# lane HEAD=414afb92 tracked-clean=True; fixture tests/fixtures/gen3/emerald_catch.sav sha256=592d9986b28e24f9...
+# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=gen3_emerald/emerald (observer-only seam b00a475e, scoped) SLINK_GEN3_PLAY_FROM=emerald_route102_catch SLINK_GEN3_PLAY_STOP_AFTER=emerald_route102_catch
+# runner: C:/slink-wt/emerald-e2/run_play.py (gen3_fixtures._prepare_run/_launch), EmuHawk 2.11.1
+## driver phases
+phase start frame=1 title=emerald
+phase resume frame=1 from=emerald_route102_catch
+phase shadow frame=583 observer started admitted_by=hash
+phase leg-start frame=583 emerald_route102_catch
+phase emerald_route102_catch-start frame=583 hunting from (21,16)
+phase balls frame=583 pocket holds 20 Poke Balls (cap 20)
+phase throw-start frame=1245 throw 1 on the action menu: gLastUsedItem=0 balls=20
+phase ball-thrown frame=1423 gLastUsedItem 0 -> 0, balls 20 -> 19
+phase throw-resolved frame=2143 throw 1: missed, outcome=0
+phase throw-start frame=2166 throw 2 on the action menu: gLastUsedItem=0 balls=19
+phase ball-thrown frame=2324 gLastUsedItem 0 -> 0, balls 19 -> 18
+phase throw-resolved frame=3156 throw 2: missed, outcome=0
+phase throw-start frame=3179 throw 3 on the action menu: gLastUsedItem=0 balls=18
+phase ball-thrown frame=3337 gLastUsedItem 0 -> 0, balls 18 -> 17
+phase throw-resolved frame=4537 throw 3: ended, outcome=7
+phase caught frame=4632 outcome=7
+phase leg-state-saved frame=4766 emerald_route102_catch -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_route102_catch.State
+phase leg-done frame=4766 emerald_route102_catch
+RESULT: PASS reached: emerald_route102_catch | open (skipped):
+## shadow log
+NOTE observer building unadmitted gen3_emerald/emerald
+STATUS frame=583 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=764 kind=battle_begin key= address=134440800 callback_address=134440800 cpsr=536870975 mode=thumb raw_r15=134440802 sp=50363932 thumb=1
+STATUS frame=1183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=584
+STATUS frame=1783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1164
+STATUS frame=2383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1744
+STATUS frame=2983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2344
+STATUS frame=3583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2924
+STATUS frame=4183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3524
+SHADOW t=2 frame=4492 kind=mon_given key= address=134657162 callback_address=134657162 cpsr=1073741887 mode=thumb raw_r15=134657164 sp=50363852 thumb=1
+SHADOW t=3 frame=4492 kind=capture_wild key= address=134571730 callback_address=134571730 cpsr=1073741887 mode=thumb raw_r15=134571732 sp=50363868 thumb=1
+SHADOW t=4 frame=4534 kind=battle_end key= address=134471656 callback_address=134471656 cpsr=-2147483585 mode=thumb raw_r15=134471658 sp=50363904 thumb=1
