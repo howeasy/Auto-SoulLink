@@ -82,9 +82,13 @@ SlinkPartnerPrompt::
     nativecall YesNoChoice
     ld a, [wCurrentMenuItem]
     and a
-    ld d, 0
-    jr z, .restore
-    inc d
+    ld d, 1
+    jr nz, .restore
+    ; YES still needs vanilla's must-save consent; NO/B there is a decline.
+    call SlinkTradeUIMustSave
+    ld d, 1
+    jr c, .restore
+    dec d
 .restore
     push de
     nativecall ClearScreen
@@ -96,6 +100,13 @@ SlinkPartnerPrompt::
     push de
     nativecall UpdateSprites
     pop de
+    ld a, d
+    and a
+    ret nz
+    ; Saved only now: SaveMainData records hTileAnimations and wOptions,
+    ; which the prompt borrowed until the restore above.
+    call SlinkTradeUISave
+    ld d, 0
     ret
 .unavailable
     ld d, 3

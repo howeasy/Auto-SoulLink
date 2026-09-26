@@ -128,11 +128,16 @@ async def test_a_stopped_run_with_no_pairs_offers_no_setup_steps(manager_client,
 
 @pytest.mark.asyncio
 async def test_the_board_fragment_stands_alone(manager_client, manager_dir):
+    """The Manager's poll target: `#content` (what htmx's `hx-select` pulls out) plus the
+    live-announcer markup that must sit outside it (`_board.html`, siblings of `#content` so
+    the 2s poll swap never reaches them) -- never the page shell (rail, `<html>`) that
+    `/runs/{id}` wraps the fragment in for a first load."""
     run = _stopped_run(manager_dir)
     resp = await manager_client.get(f"/runs/{run['run_id']}/board")
     assert resp.status == 200
     body = await resp.text()
-    assert body.lstrip().startswith("<div id=\"content\"")
+    assert '<div id="content"' in body
+    assert "mk-rail" not in body and "<html" not in body.lower(), "the /board route must not carry the page shell"
     assert "SPARKY" in body
 
 
@@ -411,8 +416,12 @@ def test_run_flags_follow_one_table():
 @pytest.mark.parametrize("path,panel", [("/runs/run_1/debug", "debug"), ("/runs/run_1/calc/normal.html", "calc")])
 async def test_debug_and_calc_are_manager_pages(manager_client, manager_dir, path, panel):
     """Both wear the rail and the run header; a stopped run gets the empty state instead of
-    a panel whose JS would fail against a dead server."""
-    _stopped_run(manager_dir)
+    a panel whose JS would fail against a dead server. The Calc tab only shows for a game
+    whose adapter has a calc profile (RR), so the calc case runs on a Radical Red run. The
+    debug case runs on Gen 4 (HG/SS), which still has no calc_profile() override -- Gen 1
+    and Gen 2 (GEN2-CALC) flipped to verified, so they no longer prove the "unverified game
+    hides the calc" half of this contract."""
+    _stopped_run(manager_dir, game="gen3_rr" if panel == "calc" else "gen4_hgss")
     resp = await manager_client.get(path)
     assert resp.status == 200
     body = await resp.text()
@@ -420,6 +429,8 @@ async def test_debug_and_calc_are_manager_pages(manager_client, manager_dir, pat
     assert f"/runs/run_1/{'calc/normal.html' if panel == 'calc' else 'debug'}" in body
     assert "window.SLINK_API_BASE = \"/runs/run_1\"" in body
     assert "not running" in body
+    if panel == "debug":
+        assert "/runs/run_1/calc/normal.html" not in body, "Gen 4 has no verified calc yet"
 
 
 @pytest.mark.asyncio

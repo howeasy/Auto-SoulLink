@@ -93,3 +93,68 @@ def test_the_host_hands_the_title_to_the_drivers_it_builds(lua):
     play = _host(lua, "yellow")
     assert play.expected["title"] == "yellow"
     assert play.expected["player"] == "a" and play.expected["run_id"] == "scripted"
+
+
+def stubbed_steps(lua):
+    lua.execute('''
+        local real_dofile=dofile
+        model_ram={}; model_frame=0; model_steps=0; model_phases={}
+        emu={framecount=function() return model_frame end}
+        dofile=function(path)
+            if path:match("/lua/gen1/entry.lua$") then
+                return {harness_bus_u8=function() return function(address) return model_ram[address] or 0 end end}
+            elseif path:match("/gen1_rb_ball_gate_inputs.lua$") then
+                return {new=function(expected)
+                    assert(expected.title=="red")
+                    return {step=function(handshake,status,point,frame)
+                        assert(handshake.ready and status.observation_loop)
+                        return {A=true},point.tick==3 and "lab-loss-complete" or "model-walk"
+                    end}
+                end}
+            end
+            return real_dofile(path)
+        end
+        model_step=function(buttons)
+            model_steps=model_steps+1; model_frame=model_frame+1; model_last_buttons=buttons
+        end
+    ''')
+    play = _host(lua, "red")
+    lua.globals().play = play
+    return play
+
+
+def test_boot_preserves_gen1_thirty_frame_predicate_and_frame_return(lua):
+    play = stubbed_steps(lua)
+    lua.globals().model_ram[play.symbols["wCurMap"]] = play.expected["facts"]["MAP"]["REDS_HOUSE_2F"]
+    result = lua.execute('return play.boot(model_step,function() return true end,40)')
+    assert result == 30 and lua.globals().model_steps == 29
+
+
+def test_boot_does_not_accept_map_bytes_without_game_checkpoint(lua):
+    play = stubbed_steps(lua)
+    lua.globals().model_ram[play.symbols["wCurMap"]] = play.expected["facts"]["MAP"]["REDS_HOUSE_2F"]
+    with pytest.raises(Exception, match="bounded progress"):
+        lua.execute('play.boot(model_step,function() return false end,40)')
+    assert lua.globals().model_steps == 40
+
+
+def test_route_rebind_preserves_receipts_callbacks_and_terminal_idle(lua):
+    stubbed_steps(lua)
+    receipt = lua.execute('''
+        play.point=function() return {tick=model_frame+1} end
+        return play.run(model_step,{"lab"},function(name,phase,frame,point)
+            model_phases[#model_phases+1]={name,phase,frame,point.tick}
+        end,10)
+    ''')
+    assert receipt["lab"] == 3 and lua.globals().model_steps == 3
+    assert lua.globals().model_last_buttons["A"] is False
+    assert len(lua.globals().model_phases) == 2
+    assert lua.globals().model_phases[2][2] == "lab-loss-complete"
+
+
+def test_unknown_or_empty_chain_refuses_before_any_input(lua):
+    stubbed_steps(lua)
+    for chain in ('{}', '{"lab","unknown"}', '{"lab","lab"}'):
+        with pytest.raises(Exception):
+            lua.execute('play.run(model_step,' + chain + ',nil,10)')
+    assert lua.globals().model_steps == 0

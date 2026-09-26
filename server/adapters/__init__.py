@@ -51,19 +51,30 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     # adapter, its own data/games/gen1_purergb/ pack (docs/purergb/PLAN.md §4 row 2).
     "PureRed": "gen1_purergb", "PureBlue": "gen1_purergb", "PureGreen": "gen1_purergb",
     "purered": "gen1_purergb", "pureblue": "gen1_purergb", "puregreen": "gen1_purergb",
-    # Gen 2. `lua/games/gen2_crystal.lua:rom_type_for_variant` returns the title-cased forms;
+    # Gen 2. lua/gen2/entry.lua sends the title-cased forms (as the legacy client did);
     # the lowercase ones mirror the Gen 1 convention above and are what new code should send.
     # Registering BOTH is deliberate: a rom_type is persisted into the run directory
     # (server/state.py), so dropping the title-cased spellings would orphan existing runs.
     #
-    # Gold, Silver and Crystal (AP) were MISSING here, and the failure was silent rather than
-    # loud: game_id_for_rom_type() returned None, the guard in server.py never switched the
+    # Gold, Silver (and the since-refused Crystal (AP)) were once MISSING here, and the
+    # failure was silent rather than loud: game_id_for_rom_type() returned None, the guard in server.py never switched the
     # adapter, and the run continued under whichever adapter was already loaded — the Gen 3
     # default. Every Gen 2 claim that did not come from a Crystal run rested on that.
-    "Crystal": "gen2_crystal", "crystal": "gen2_crystal",
-    "Gold": "gen2_crystal", "gold": "gen2_crystal",
-    "Silver": "gen2_crystal", "silver": "gen2_crystal",
-    "Crystal (AP)": "gen2_crystal", "crystal_ap": "gen2_crystal",
+    #
+    # RUNTIME ROUTE. Crystal, Gold and Silver all cut over here (U5, O-22/O-23,
+    # docs/gen2/reviews/OMP_U5_CUTOVER_FACTS_2026-09-23.md): the launcher (lua/slink.lua) now
+    # runs the new client for every recognised Gen 2 title, so their rows point at the
+    # already-registered `gen2_gsc` (bottom of this file), whose constructor binds its title
+    # from the `rom_type` the generic factory forwards. Per-title admission (whether a given
+    # build actually gets a client) is Entry.admit's job at runtime, not this table's --
+    # a PENDING revision or an unknown hash is refused by run.lua itself, with no fallback.
+    # Archipelago Crystal (`crystal_ap` / "Crystal (AP)") has NO row: owner ruling O-25
+    # refuses it (see `_REFUSED_ROM_TYPES`), and the legacy adapter it ran on is gone (P3b.8).
+    # Pairing does NOT read these rows: every Gen 2 spelling has its own row in
+    # `_ROM_TYPE_TO_FOUNDATION` below.
+    "Crystal": "gen2_gsc", "crystal": "gen2_gsc",
+    "Gold": "gen2_gsc", "gold": "gen2_gsc",
+    "Silver": "gen2_gsc", "silver": "gen2_gsc",
     "pokemon_black": "gen5_bw",
     "pokemon_white": "gen5_bw",
     "pokemon_black_2": "gen5_bw",
@@ -85,7 +96,6 @@ _VARIANT_LABEL: dict[str, str] = {
     "Crystal": "Crystal", "crystal": "Crystal",
     "Gold": "Gold", "gold": "Gold",
     "Silver": "Silver", "silver": "Silver",
-    "Crystal (AP)": "Crystal (AP)", "crystal_ap": "Crystal (AP)",
     "pokemon_black": "Pokémon Black",
     "pokemon_white": "Pokémon White",
     "pokemon_black_2": "Pokémon Black 2",
@@ -101,6 +111,51 @@ def game_id_for_rom_type(rom_type: str) -> str | None:
     return _ROM_TYPE_TO_GAME_ID.get(rom_type)
 
 
+# ROM types an owner ruling REFUSES (never routed), with the reason a refused hello names.
+_ARCHIPELAGO_CRYSTAL = "Archipelago Crystal is not supported (O-25)"
+_REFUSED_ROM_TYPES: dict[str, str] = {
+    "crystal_ap": _ARCHIPELAGO_CRYSTAL, "Crystal (AP)": _ARCHIPELAGO_CRYSTAL,
+}
+
+
+def unrouted_rom_type_reason(rom_type) -> str:
+    """Why a rom_type with no route is refused: its ruling when one refuses it by name."""
+    reason = _REFUSED_ROM_TYPES.get(rom_type) if isinstance(rom_type, str) else None
+    return reason or "not a game this server routes"
+
+
+# game_ids whose adapter is GONE: a run persisted under one is refused at load
+# (server/state.py load(), via persisted_migration_refusal), whatever its rom_type resolves to
+# today -- including nothing -- rather than reopened under the default adapter.
+#
+# `gen2_crystal` is the legacy Gen 2 adapter, removed by P3b.8. Crystal/Gold/Silver moved to
+# `gen2_gsc` at U5, but the two adapters put the SAME physical gift event under DIFFERENT
+# area_id keys (a starter pickup was bare "new_bark_town" under the old adapter,
+# "gift_new_bark_town" under gen2_gsc; the daycare was bare "route_34" vs "gift_daycare"), so
+# reinterpreting old keys would silently orphan a pending gift/daycare capture or mis-track
+# area cooldowns. Archipelago Crystal, its last route, is refused outright (O-25).
+_RETIRED_GAME_IDS: dict[str, str] = {
+    "gen2_crystal": "the legacy Gen 2 adapter, removed at the P3b.8 cutover",
+}
+
+
+def persisted_migration_refusal(old_game_id: str, new_game_id: str | None) -> str | None:
+    """None if a run persisted under old_game_id may reload under new_game_id.
+
+    Otherwise, the operator-facing reason it must not (see _RETIRED_GAME_IDS). new_game_id
+    is what the run's rom_type resolves to today, or None when it no longer routes.
+    """
+    retired = _RETIRED_GAME_IDS.get(old_game_id)
+    if not retired:
+        return None
+    now = (f"its rom_type now resolves to {new_game_id!r}, and the two adapters use "
+           f"incompatible area_id/state formats -- reopening it there would silently "
+           f"corrupt or orphan persisted gift/daycare state"
+           if new_game_id else "its rom_type no longer routes to any adapter")
+    return (f"this run was saved under adapter {old_game_id!r} ({retired}); {now}. Archive "
+            f"or delete this run's links.json to start a fresh run.")
+
+
 # ROM-type string → PAIRING FOUNDATION, where a game_id is too coarse to pair on.
 # A foundation is a data pack + memory layout, not a class: Radical Red and vanilla
 # FireRed share `Gen3Adapter` but share no layout, so a clean FR must not pair with a
@@ -111,6 +166,14 @@ _ROM_TYPE_TO_FOUNDATION: dict[str, str] = {
     "firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_frlg",
     "firered_ap": "gen3_frlg", "leafgreen_ap": "gen3_frlg",
     "firered_rr": "gen3_rr",
+    # Gen 2 (docs/gen2/PLAN.md §5.9, owner O-16): ONE foundation for Gold, Silver and
+    # Crystal, so every Gen 2 pairing is admitted with no title relation in shared code.
+    # EVERY spelling has a row: the title-cased ones are what both clients send and what
+    # existing run directories persist, and a missing row would silently fall back to the
+    # legacy game_id. `crystal_ap` has no row: it is refused (O-25), so it has no foundation.
+    "Crystal": "gen2_gsc", "crystal": "gen2_gsc",
+    "Gold": "gen2_gsc", "gold": "gen2_gsc",
+    "Silver": "gen2_gsc", "silver": "gen2_gsc",
 }
 
 
@@ -171,6 +234,7 @@ from .gen1_purergb import Gen1PureRGBAdapter  # noqa: E402
 
 register_adapter("gen1_purergb", Gen1PureRGBAdapter)
 
-from .gen2_crystal import Gen2CrystalAdapter  # noqa: E402
+# Routed for Crystal, Gold and Silver (U5 cutover, above).
+from .gen2_gsc import Gen2GSCAdapter  # noqa: E402
 
-register_adapter("gen2_crystal", Gen2CrystalAdapter)
+register_adapter("gen2_gsc", Gen2GSCAdapter)

@@ -864,6 +864,8 @@ body.ltv .wtitle { font-size: 8px; }
 .mt-Ice      { --mt: 96,220,230; }
 .mt-Dragon   { --mt: 120,76,253; }
 .mt-Dark     { --mt: 126,100,114; }
+.mt-Fairy    { --mt: 238,153,172; }
+.mt-\?\?\?   { --mt: 104,160,144; }
 .mt-unknown,
 .mt-         { --mt: 145,145,145; }
 .focus-not-active { display: flex; flex: 1; align-items: center;

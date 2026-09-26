@@ -1,0 +1,50 @@
+{
+ "base_fixture": "crystal_battle_errand",
+ "base_sha256": "f6a2bd95e1a3f4de2b981ed2f728e9846eb26330d8a70f1e81416e054ee8f7c3",
+ "builder": "tools/gen2_synth_fixtures.py",
+ "checksums": "restored (primary + backup)",
+ "edits": {
+  "balls": [
+   [
+    "MASTER_BALL",
+    5
+   ]
+  ]
+ },
+ "fields": [
+  {
+   "backup": 5734,
+   "new_hex": "0105ff00000000000000000000000000000000000000000000",
+   "offset": 0,
+   "old_hex": "050fff00000000000000000000000000000000000000000000",
+   "primary": 9318,
+   "size": 25,
+   "symbol": "wBalls",
+   "wram": 55512
+  },
+  {
+   "cart": 11533,
+   "new_hex": "54ee",
+   "offset": 0,
+   "old_hex": "62ee",
+   "size": 2,
+   "symbol": "sChecksum",
+   "wram": null
+  },
+  {
+   "cart": 7949,
+   "new_hex": "54ee",
+   "offset": 0,
+   "old_hex": "62ee",
+   "size": 2,
+   "symbol": "sBackupChecksum",
+   "wram": null
+  }
+ ],
+ "schema": "gen2-synth-disclosure-v1",
+ "sha256": "526043c4e531bbc4dbf926722cef54a986f7359874829302624ba31628207bf7",
+ "source_facts": [
+  "data/games/gen2_<title>/items.json ids; engine/items/items.asm pocket layout"
+ ],
+ "title": "crystal"
+}

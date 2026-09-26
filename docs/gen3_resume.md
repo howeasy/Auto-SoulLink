@@ -58,9 +58,27 @@ Owner rules this block: at most 3 subagents (Sonnet preferred, Opus as needed); 
 - **FROZEN CUT a2985d5a: FR/LG (G4) 43/43 PASS** (`fc_SUMMARY_a2985d5a.txt`) **and RR (G5) 19/19 PASS** (`fc_SUMMARY_a2985d5a_rr.txt`), receipts 622aa7f5. Lane 2's first release_gate_quick FAIL was stale CRLF on LF-pinned files (a lane defect; kept as `fc_release_gate_quick_a2985d5a_LANE2_CRLF.txt`). QUEUE: make the runner's lane provisioning rewrite eol-pinned files whose working copy is `w/crlf`.
 - **Gen 1 non-regression: PASS** (accepted by Gen1-Collab2). `verify_gen1_release.py --quick` at a2985d5a in gen3-lane-clean reported 0 test failures (7177 passed). The pure/overlay/yellow artifacts copied from root are sha1-identical to the pins. Every remaining skip is a missing local input: clean Blue/Yellow dumps, arm-gcc, pokegold, .cache/purergb{,-overlay} poke*.gbc, and test_gen1_trade_patch, which master already fixed. After the Gen 3 merge to master, ping Gen1-Collab2 to re-run the gate on master.
 - **PRE-RELEASE FIX QUEUE** (after G4/G5 are signed, before G6; not done now, so the frozen cut doesn't move):
-  1. server/data/items/gen3_vanilla.py names non-Gen-3 items (52/53, 60-62, 622-631) and omits 259-288 and 349-374, so FR/LG item names are wrong or missing (display only; RR uses rr_items). Reported by Emerald planning, verified. Regenerate ids 0-374 from pinned pret pokefirered c75f3523 (items.h + src/data/items.h; data/gen3_sources.lock.json). Red test: 52-62 and 347/348 absent, no id >= 377, anchors 1/4/13. Tell the Emerald lane the sha.
+  1. DONE 5f050857 (owner 2026-09-25: "Just fix it. No re run."): the vanilla FR/LG item table now names exactly the Gen 3 ids from pret. This display-only fix sits on top of the frozen cut a2985d5a without a re-run. Emerald lane told.
   2. The runner's lane provisioning should rewrite eol-pinned files whose working copy is w/crlf.
 - **Emerald lane** (session "Emerald support planning", branch claude/gen3-emerald off a2985d5a): approved to make additive title rows in the gen3 generators/codec/fixtures/title_syms, keeping FRLG/RR --check byte-identical. Ruling 24 stands until the port is signed.
+- **Gen 2 is merged into LOCAL master** (062977a9, not pushed). `git merge-tree` of this branch against it shows about 20 conflicted files (server.py, adapters/__init__.py, slink.lua, game_detect.lua, memory_gba/nds.lua, e2e_duo.py, protocol.md, .gitattributes, gen1 sfx receipts, several tests). Sequence (agreed with Gen 2):
+  1. The owner plays and signs G4/G5 on a2985d5a (+5f050857).
+  2. Merge master into this branch in a scratch worktree (Opus, by intent), then 2 independent reviews.
+  3. Re-run the FR/LG and RR passes plus the Gen 1 gate on the merged tree.
+  4. Merge Gen 3 → master with the owner's say-so.
+  - **Gen 2 hunks that must WIN in step 2** (Gen 2 Boogaloo, each test-pinned):
+    - server.py:
+      (1) the hello transaction in _dispatch: stage, apply, then _rollback_hello on a refusal, `_rejected`, or any exception (test_server_hello_transaction.py);
+      (2) the adapter is rebuilt from the FULL rom_type while it is uncommitted, and committed only on an accepted hello;
+      (3) _reset_connection_and_display_state() is shared by /api/reset and handle_debug_rollback, and /api/reset clears connected_players;
+      (4) adapter_for(pid) on every per-player read (test_gen2_cross_title.py);
+      (5) _bind_player_adapter runs after the artifact_kind commit, and set_artifact_kind is applied to the bound adapters.
+    - state.py: KEY-SCOPE-5 (test_state_key_scope, test_state_key_change_ack).
+    - protocol.md: the Gen 2 rows.
+    - .gitattributes: Gen 2's eol=lf rules.
+    - gen1 sfx receipts: take master's (f5001c5e).
+    - Gen 3's intent wins on slink.lua's GBA branch.
+  - **Cross-lane cost:** Gen 2's CODE_DIGEST covers lua/*.lua, lua/core/**, server/**/*.py and data/games/gen2_*/**. The Gen 3 merge will change it, so run `python tools/verify_gen2_release.py --lane release-evidence` afterwards. If it's stale, Gen 2 re-sweeps (about 2 hours). Also run the full tests/unit and Gen 2's no-emulator lanes (fixtures, duo-pairs, live-gates, live-trade-gates, live-new-gates).
 - **Cross-lane merge plan** (settled with Gen1-Collab2 and Gen 2 Boogaloo, 2026-09-25):
   - Order: Gen 1 → Gen 2 → Gen 3. Gen 3 merges only after G4+G5 are signed (ruling 22).
   - pairing_kind (Gen 2 644b3b8f = Gen 3 80261f39) is identical on both sides.

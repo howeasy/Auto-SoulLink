@@ -5,17 +5,17 @@
   "pureblue_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "4ecca508901d939926ce8ebc9ac507ca82d33bb8876ede6ee904a6d380eb6511"
+   "sha256": "c4f96d86a634f2d284d8ab1ae8c690acbe21ae76d3e4034f6ed1e54c8f8cbbec"
   },
   "puregreen_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "ca0c1244aa44f490c8d5e49e9a9a1f94ecc7b12c539a9b26679f296336389e8d"
+   "sha256": "74be3701dcfa6dff8f735c2134ebd5faa6226b1781cd8ee51c22f1e4932a14bb"
   },
   "purered_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "d79a02f50aa1a6e6ca6e893a772bec92cecd1d49091411630158bc90578c7adc"
+   "sha256": "26b262c9f38158a42607a4490f8ff4701ceda8aad4f0651ed745eb0e7e94c709"
   }
  },
  "titles": {
@@ -136,6 +136,7 @@
     "wEnemyMonEvasionMod": 52531,
     "wEnemyMonHP": 53220,
     "wEnemyMonLevel": 53233,
+    "wEnemyMonMaxHP": 53234,
     "wEnemyMonMoves": 53227,
     "wEnemyMonNicks": 55798,
     "wEnemyMonOT": 55732,
@@ -600,7 +601,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "666d22eada8d0fc93e3b1aea52947ced1cf50fbd",
+   "rom_sha1": "134aed7fc5f86e3aa9833cffd2b4fdf22b650916",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -629,7 +630,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F215A4DC738",
+      "expected_hex": "545D063F21174EC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -653,7 +654,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "214A45063FC7C9",
+      "expected_hex": "217F45063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -669,11 +670,11 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "214A45063FC7C9",
+    "dispatch_hex": "217F45063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
-     "addr": 16801,
+     "addr": 16843,
      "bank": 63
     }
    },
@@ -796,6 +797,7 @@
     "wEnemyMonEvasionMod": 52531,
     "wEnemyMonHP": 53220,
     "wEnemyMonLevel": 53233,
+    "wEnemyMonMaxHP": 53234,
     "wEnemyMonMoves": 53227,
     "wEnemyMonNicks": 55798,
     "wEnemyMonOT": 55732,
@@ -1260,7 +1262,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "e403edaaf951b1240ec34cf3763a5f97f1433003",
+   "rom_sha1": "df651ddccf82d73c212b6f5400d240a2f9994ad0",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1289,7 +1291,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F215A4DC738",
+      "expected_hex": "545D063F21174EC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -1313,7 +1315,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "214A45063FC7C9",
+      "expected_hex": "217F45063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -1329,11 +1331,11 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "214A45063FC7C9",
+    "dispatch_hex": "217F45063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
-     "addr": 16801,
+     "addr": 16843,
      "bank": 63
     }
    },
@@ -1456,6 +1458,7 @@
     "wEnemyMonEvasionMod": 52531,
     "wEnemyMonHP": 53220,
     "wEnemyMonLevel": 53233,
+    "wEnemyMonMaxHP": 53234,
     "wEnemyMonMoves": 53227,
     "wEnemyMonNicks": 55798,
     "wEnemyMonOT": 55732,
@@ -1920,7 +1923,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "47cb0f81f1d0186cf12093992957a61daf67fcfe",
+   "rom_sha1": "c7ee0bd985a59fab7bd8f02b4574886d5af323bd",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1949,7 +1952,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F215A4DC738",
+      "expected_hex": "545D063F21174EC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -1973,7 +1976,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "214A45063FC7C9",
+      "expected_hex": "217F45063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -1989,11 +1992,11 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "214A45063FC7C9",
+    "dispatch_hex": "217F45063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
-     "addr": 16801,
+     "addr": 16843,
      "bank": 63
     }
    },

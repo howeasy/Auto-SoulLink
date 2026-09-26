@@ -116,22 +116,6 @@ def _configure_logging(data_dir: str | None, verbose: bool) -> None:
 
 # The calc's files (dist / src resolution) live in server/calc_files.py, shared with the Manager.
 
-_NATURE_NAMES = (
-    "Hardy","Lonely","Brave","Adamant","Naughty",
-    "Bold","Docile","Relaxed","Impish","Lax",
-    "Timid","Hasty","Serious","Jolly","Naive",
-    "Modest","Mild","Quiet","Bashful","Rash",
-    "Calm","Gentle","Sassy","Careful","Quirky",
-)
-
-def _nature_from_key(key: str) -> str:
-    """Derive nature name from a monKey ('PERS_HEX:OTID_HEX...')."""
-    try:
-        return _NATURE_NAMES[int(key.split(":")[0], 16) % 25]
-    except Exception:
-        return "Hardy"
-
-
 def _format_killed_at(raw: str | None) -> str:
     """Render an ISO-8601 killed_at timestamp via the browser-locale format
     (matches ``new Date(raw).toLocaleString()``). Falls back to the raw
@@ -160,11 +144,18 @@ def _build_mon_entry(key, detail, adapter):
     sid = detail.get("species_id", 0)
     if not sid:
         return None
-    # Every name leaves in the calc's spelling (adapter.calc_name) — the calc matches exactly.
-    species = adapter.calc_name("species", adapter.species_name(sid))
-    nature   = _nature_from_key(key)
+    # Every name leaves in the calc's spelling. calc_species (not the species_name+calc_name
+    # pair directly) so an adapter whose display name and calc name diverge for the same id
+    # (pureRGB's 7 alternate forms, which display in-game with their base species' name) can
+    # override just the calc-facing lookup — see base.GamePresentationAdapter.calc_species.
+    species = adapter.calc_species(sid)
+    # Nature/ability are adapter facts: Gen 1/2 have no personality-value nature
+    # (calc_nature() returns None) and no abilities at all (supports_abilities() False).
+    nature = adapter.calc_nature(key)
+    has_ability = adapter.supports_abilities()
     abl_name = adapter.calc_name("ability", detail.get("ability_name", "")
-                                 or adapter.ability_name(detail.get("ability_id", 0), sid))
+                                 or adapter.ability_name(detail.get("ability_id", 0), sid)
+                                 ) if has_ability else ""
     item_id  = detail.get("held_item_id", 0)
     item     = adapter.calc_name("item", adapter.item_name(item_id)) if item_id else ""
     raw_moves = [m for m in (detail.get("moves") or []) if m][:4]
@@ -176,12 +167,18 @@ def _build_mon_entry(key, detail, adapter):
     level    = detail.get("level", 0)
     nick     = detail.get("nickname", "")
     hp       = detail.get("hp", 0)
-    maxhp    = max(detail.get("maxHP", 1), 1)
-    hp_pct   = max(0, min(100, int(hp / maxhp * 100)))
+    # maxHP is only absent for a Gen 1 enemy the client hasn't decoded yet (docs/protocol.md
+    # §4.3 maxHP); null it through rather than the old max(..., 1) that forced hp_pct to 100.
+    raw_maxhp = detail.get("maxHP")
+    maxhp    = max(raw_maxhp, 1) if raw_maxhp else None
+    hp_pct   = max(0, min(100, int(hp / maxhp * 100))) if maxhp else None
     disp     = f"{species} ({nick})" if nick and nick != species else species
     lines    = [disp + (f" @ {item}" if item else "")]
-    lines   += [f"Ability: {abl_name}" if abl_name else "Ability: None"]
-    lines   += [f"Level: {level}", f"{nature} Nature"]
+    if has_ability:
+        lines += [f"Ability: {abl_name}" if abl_name else "Ability: None"]
+    lines += [f"Level: {level}"]
+    if nature:
+        lines += [f"{nature} Nature"]
     for m in moves:
         lines.append(f"- {m}")
     return {
@@ -201,6 +198,7 @@ def _build_mon_entry(key, detail, adapter):
         "slot":          detail.get("slot", 999),
         "active":        detail.get("active", False),
         "showdown_paste": "\n".join(lines),
+        "calc_stats":    detail.get("calc_stats"),
     }
 
 
@@ -450,6 +448,27 @@ class _WireTap:
 # a class attribute: `_mixed_games_error` is also called unbound on a stub self.
 _FOUNDATION_ABSENT = object()
 
+# Every artifact_kind a hello may declare (docs/protocol.md §2.2). A non-empty string outside
+# this set used to be admitted at face value and committed for the run's lifetime (gen2-N16,
+# carried from N15's ca0888b): _kind()/pairing_kind() would silently pass it through instead
+# of catching a typo'd or made-up kind. Pinned to tests/unit/protocol_schema.py's ARTIFACT_KINDS
+# by test_the_servers_known_artifact_kinds_match_the_wire_schema so the two lists cannot drift.
+_KNOWN_ARTIFACT_KINDS = frozenset({"clean", "overlay", "rand", "rand_overlay", "named", "companion"})
+
+
+def prompt_event_type(text: str) -> str | None:
+    """The events-log row a capture reply's gui_prompt stands for: "violation", "reroll" or None.
+
+    Rejections are state.py's clause prompts ("[x] <X> clause: ...", bonus pair "... - retry") and the
+    species-clause "[x] Dup <name>"; the pre-f1d79c72 texts ended "-- catch again!".
+    """
+    lower = text.lower()
+    if "reroll" in lower:
+        return "reroll"
+    if "catch again" in lower or " clause: " in lower or text.startswith("[x] Dup "):
+        return "violation"
+    return None
+
 
 class SLinkServer:
     def __init__(self, data_dir: str = None, run_id: str = None,
@@ -482,6 +501,7 @@ class SLinkServer:
                                         battle_calc=battle_calc,
                                         pc_trade_npc=pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
+        self.state.on_trade_outcome = self._journal_trade
         # Game adapter — shared with state machine for consistent behavior.
         # Provides both rules and presentation methods.
         self.adapter = self.state.adapter
@@ -493,6 +513,7 @@ class SLinkServer:
         # get_adapter() is not a singleton, so one adapter per player is cheap; absent an
         # entry here a player simply uses the run-global adapter and the shipped tables.
         self._player_adapters: dict[str, object] = {}
+        self.state.player_adapter_for = self.adapter_for
 
         # ── Admission ─────────────────────────────────────────────────────────
         # A run built from randomized ROMs records, per player, the fingerprint of the
@@ -510,6 +531,8 @@ class SLinkServer:
         self._rom_type_rejected: set[str] = set()
         # Track live connections: player_id → {rom_type, last_event, connected}
         self.connected_players: dict[str, dict] = {}
+        self._client_connections: set[asyncio.StreamWriter] = set()
+        self._client_writers: dict[str, set[asyncio.StreamWriter]] = {}
         # Per-player display data (updated from events, used only for status page)
         self.player_area: dict[str, str] = {"a": "", "b": ""}
         self.player_area_id: dict[str, str] = {"a": "", "b": ""}  # raw area_id for state lookups
@@ -521,6 +544,13 @@ class SLinkServer:
             "b": self.state.trainer_names.get("b", ""),
         }
         self.pc_boxes: dict[str, list] = {"a": [], "b": []}
+        # KEY-SCOPE-5: the key_change collision check's box census, per player. `capable`: this
+        # client session advertises `pc_boxes_generation`; `boxes`: the entries of its newest complete
+        # census (None = missing or stale, which fails closed). Presence-based for other clients.
+        self.box_census: dict[str, dict] = {pid: {"capable": False, "gen": -1, "boxes": None}
+                                            for pid in ("a", "b")}
+        # KEY-SCOPE-5: server-owned connection generation per player; the newest hello wins.
+        self._conn_gen: dict[str, int] = {}
         # key → {level, hp, maxHP, nickname, species_id, gender} — best-effort party snapshot
         self.party_details: dict[str, dict[str, dict]] = {"a": {}, "b": {}}
         # Persistent per-monKey cache of display info (species_id, nickname, level, gender).
@@ -563,13 +593,14 @@ class SLinkServer:
         _obs_cfg = obs_config_path(data_dir)
         self.obs = OBSController(_obs_cfg)
 
-    def _get_sprite_html(self, species_id: int, form: int = 0) -> str:
-        """Get sprite HTML by delegating to the game adapter.
+    def _get_sprite_html(self, species_id: int, form: int = 0, player_id: str = "") -> str:
+        """Get sprite HTML by delegating to the game adapter -- `player_id`'s own when given
+        (Gen 2 titles draw from their own pack), else the run's.
 
         Optional `form` byte (default 0) is the alt-form discriminator from Block B
         (Gen 4+). Adapters that ignore it still produce correct base-form sprites.
         """
-        return self.adapter.sprite_html(species_id, form)
+        return (self.adapter_for(player_id) if player_id else self.adapter).sprite_html(species_id, form)
 
     _METHOD_ICON: dict[str, str] = {
         "Day":        "☀",
@@ -688,6 +719,7 @@ class SLinkServer:
             GameRulesAdapter,
             adapter_class_for_rom_type,
             foundation_for_rom_type,
+            unrouted_rom_type_reason,
         )
         if not isinstance(rom_type, str) or not rom_type:
             return (f"Missing rom_type for slot {player_id.upper()}: a hello must name the "
@@ -695,13 +727,16 @@ class SLinkServer:
         got = foundation_for_rom_type(rom_type)
         if not got:
             return (f"Unknown rom_type {rom_type!r} for slot {player_id.upper()}: "
-                    f"not a game this server routes")
+                    f"{unrouted_rom_type_reason(rom_type)}")
         if foundation is not _FOUNDATION_ABSENT and foundation != got:
             return (f"Foundation mismatch: slot {player_id.upper()} declares "
                     f"{foundation!r}, but its ROM type {rom_type!r} is {got!r}")
         if not isinstance(artifact_kind, str) or not artifact_kind:
             return (f"Bad artifact_kind for slot {player_id.upper()}: expected a string "
                     f"(got {artifact_kind!r})")
+        if artifact_kind not in _KNOWN_ARTIFACT_KINDS:
+            return (f"Bad artifact_kind for slot {player_id.upper()}: {artifact_kind!r} is not "
+                    f"a known kind (expected one of {sorted(_KNOWN_ARTIFACT_KINDS)})")
         want = foundation_for_rom_type(self.state.rom_type) if self.state.rom_type else ""
         if want and got != want:
             return (f"Mixed games: slot {player_id.upper()} runs {got}, "
@@ -810,17 +845,61 @@ class SLinkServer:
             return self.adapter.info_panel_width() == 0
         return bool(reported)
 
+    def _bind_player_adapter(self, player_id: str, rom_type: str) -> None:
+        """Give a player their own adapter when the run's adapter declares one.
+
+        A run's adapter may declare that the cartridges it admits bind DIFFERENT
+        per-player data: Gen 2's three titles share one pairing foundation but not one
+        pack, so the adapter locked to whichever title said hello first cannot answer for
+        a partner on another title. The declaration is ADAPTER data (`per_player_key` /
+        `per_player_bound_key`, resolved with getattr) -- never a game_id, title or
+        rom_type branch in this file. An adapter that declares neither -- every generation
+        but Gen 2 today -- keeps the one run-level adapter for both players, exactly as
+        before.
+
+        Called on every accepted hello: a reconnect re-declares its cartridge,
+        and a player whose key matches the run's again drops the adapter it had.
+        """
+        from server.adapters import game_id_for_rom_type, get_adapter
+        key_for = getattr(self.state.adapter, "per_player_key", None)
+        own_key = getattr(self.state.adapter, "per_player_bound_key", None)
+        if not (rom_type and callable(key_for) and callable(own_key)):
+            return
+        player_key = key_for(rom_type)
+        if player_key is None or player_key == own_key():
+            self._player_adapters.pop(player_id, None)
+            return
+        # F5 (Codex cx-2985fe38): pass the run's COMMITTED artifact kind, not a bare
+        # constructor default -- an overlay-committed run must build its partner's adapter
+        # with overlay capabilities too, not the "clean" a bare get_adapter() call defaults
+        # to. Called only after the artifact_kind commit point in `_dispatch`, so on the
+        # very first hello that commits it, this already sees the just-committed value.
+        self._player_adapters[player_id] = get_adapter(
+            game_id_for_rom_type(rom_type), is_rr=rom_type.endswith("_rr"), rom_type=rom_type,
+            artifact_kind=self.state.artifact_kind or "clean")
+        log.info(f"[{player_id}] per-player adapter bound to {player_key!r} "
+                 f"(run adapter is {own_key()!r})")
+
     def adapter_for(self, player_id: str):
         """The adapter that describes THIS player's cartridge.
 
-        Only content differs per player, never rules: the supported randomizer settings
-        deliberately exclude types, evolutions, movesets and base stats, so the species and
-        type clauses stay seed-independent and keep using the run-global adapter.
+        Content and title-sensitive acquisition sites may differ per player. Species,
+        evolution, gender/type and shiny rules retain the run adapter: admitted titles
+        and supported randomizer settings share those semantics.
         """
         # getattr, not a plain attribute read: some tests build an SLinkServer without
         # running __init__, and a lookup helper should answer for those rather than raise.
         # A class-level dict would be shared across instances, which is worse.
         return self._player_adapters.get(player_id) or self.adapter
+
+    def _calc_profile(self) -> dict | None:
+        """The damage-calc profile shared by both players' adapters, or None if either
+        game has no verified calc numbers yet, or the two players' games disagree."""
+        a = self.adapter_for("a").calc_profile()
+        b = self.adapter_for("b").calc_profile()
+        if a is None or b is None or a != b:
+            return None
+        return a
 
     def _trainer_panel_html(self, area_id: str, player_id: str = "",
                             key_prefix: str = "",
@@ -885,8 +964,8 @@ class SLinkServer:
             nm_key = brief.get("name", "").title() or f"#{rt_id}"
             cap = None
             fl = brief.get("fight_label") or ""
-            if hasattr(self.adapter, "milestone_cap_for_fight_label"):
-                cap = self.adapter.milestone_cap_for_fight_label(fl)
+            if hasattr(adapter, "milestone_cap_for_fight_label"):
+                cap = adapter.milestone_cap_for_fight_label(fl)
             if cap is None:
                 cap = brief.get("level_cap") or 0
             cap_bucket = (cap or 0) // _CAP_BUCKET
@@ -924,8 +1003,8 @@ class SLinkServer:
             _, b = group_list[0]
             fl = b.get("fight_label") or ""
             c = None
-            if hasattr(self.adapter, "milestone_cap_for_fight_label"):
-                c = self.adapter.milestone_cap_for_fight_label(fl)
+            if hasattr(adapter, "milestone_cap_for_fight_label"):
+                c = adapter.milestone_cap_for_fight_label(fl)
             return c if c is not None else (b.get("level_cap") or 0)
 
         if highest_party_level > 0:
@@ -976,8 +1055,8 @@ class SLinkServer:
         _CURRENT_WINDOW = 10
         def _classify_fight(fight_brief: dict) -> tuple[str, int | None]:
             fl = fight_brief.get("fight_label") or ""
-            cap = self.adapter.milestone_cap_for_fight_label(fl) \
-                  if hasattr(self.adapter, "milestone_cap_for_fight_label") else None
+            cap = adapter.milestone_cap_for_fight_label(fl) \
+                  if hasattr(adapter, "milestone_cap_for_fight_label") else None
             if cap is None or highest_party_level <= 0:
                 return ("unknown", cap)
             if highest_party_level >= cap + _CURRENT_WINDOW:
@@ -1172,16 +1251,17 @@ class SLinkServer:
 
     def _calc_preview(self, pid: str, enemy_party: list[dict]) -> dict | None:
         """What calc-preview.js needs to run the damage calculator for this player's
-        current matchup, or None. Radical Red only: the calculator is pinned to modern
-        mechanics and would misreport anything older."""
-        if not self.state.is_rr:
+        current matchup, or None when this player's game has no verified calc numbers
+        yet (calc_profile() is None)."""
+        adapter = self.adapter_for(pid)
+        profile = adapter.calc_profile()
+        if not profile:
             return None
         details = self.party_details.get(pid, {})
         atk_key = next((k for k, d in details.items() if d.get("active") and d.get("hp", 0) > 0),
                        next((k for k, d in details.items() if d.get("hp", 0) > 0), None))
         dfn = next((em for em in enemy_party if em.get("active")),
                    next((em for em in enemy_party if em.get("hp", 0) > 0), None))
-        adapter = self.adapter_for(pid)
         # The same names /api/calc/mons hands the full calc: the engine looks moves,
         # abilities and items up by name, never by the cartridge's numeric id.
         atk = _build_mon_entry(atk_key, details[atk_key], adapter) if atk_key else None
@@ -1206,7 +1286,14 @@ class SLinkServer:
                     out[stat] = raw - 6
             return out
 
+        # Same shape /api/calc/mons sends (base.calc_stats contract): None when the adapter
+        # can't decode it. The enemy's raw dvs_raw/blob_hex ride along on dfn already --
+        # _enrich_battle_state's enemy_party is a shallow copy of the client's own dict --
+        # so this is the same call handle_calc_mons makes, no reconstruction needed.
+        enemy_calc_stats = adapter.calc_stats(dfn)
         return {
+            "gen": profile.get("gen"),
+            "dex": profile.get("dex"),
             "trainer_key": f"{bs['opponent_class']} {bs['opponent_name']}" if is_trainer else "",
             "is_trainer": is_trainer,
             "is_doubles": bool(bs.get("is_doubles")),
@@ -1219,11 +1306,14 @@ class SLinkServer:
             "player_hp_pct": atk["hp_pct"],
             "player_status": status(atk),
             "player_boosts": boosts(atk["stat_stages"]),
+            "player_calc_stats": atk["calc_stats"],
             "enemy_species": dfn.get("species_name") or "",
             "enemy_level": dfn.get("level", 0),
-            "enemy_hp_pct": max(0, min(100, int(dfn.get("hp", 0) / max(dfn.get("maxHP", 1), 1) * 100))),
+            "enemy_hp_pct": (max(0, min(100, int(dfn.get("hp", 0) / dfn["maxHP"] * 100)))
+                              if dfn.get("maxHP") else None),
             "enemy_status": status(dfn),
             "enemy_boosts": boosts(dfn.get("stat_stages")),
+            "enemy_calc_stats": enemy_calc_stats,
         }
 
     def _enc_table_for_status(self, area_id: str, player_id: str = "") -> dict | None:
@@ -1259,6 +1349,7 @@ class SLinkServer:
             "standalone": True, "base": "", "tcp_port": self._tcp_port,
             "runs": [self._run_entry()], "run": self._run_entry(),
             "page": page, "panel": panel, "tab": tab, "pinned_run_id": None,
+            "show_calc": bool(self._calc_profile()),
         }
 
     def _rom_label(self) -> str:
@@ -1278,8 +1369,11 @@ class SLinkServer:
                    meta: str | None = None, tabs=None) -> dict:
         """panel_page.html on a standalone run server."""
         run = self._run_entry()
-        tabs = tabs or [("Board", "/", False), ("Calc", "/calc/normal.html", panel == "calc"),
-                        ("Debug", "/debug", panel == "debug")]
+        if tabs is None:
+            tabs = [("Board", "/", False)]
+            if self._calc_profile():
+                tabs.append(("Calc", "/calc/normal.html", panel == "calc"))
+            tabs.append(("Debug", "/debug", panel == "debug"))
         ctx = self._rail_ctx(page="run" if panel in ("calc", "debug") else "broadcast",
                              panel=panel if panel in ("calc", "debug") else "",
                              tab=panel if panel in ("twitch", "obs") else "")
@@ -1395,19 +1489,25 @@ class SLinkServer:
             self._sse_clients.discard(q)
         return resp
 
+    def _disconnect_clients(self):
+        """Make state replacement visible to clients through their reconnect/hello path."""
+        for writer in tuple(self._client_connections):
+            writer.close()
+
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         peer = writer.get_extra_info("peername")
         log.info(f"Client connected: {peer}")
         if self._wire_log:
             writer = _WireTap(writer, self._wire_log, self._wire_files)
-        player_id_for_conn: str | None = None
+        self._client_connections.add(writer)
         # Per-CONNECTION session state. The seq counter used to be per-slot
         # (`self._last_seq`), which outlived the socket it described — see the guards below.
         last_seq = -1
         hello_seen = False
+        conn_gen: dict[str, int] = {}   # player -> the generation this connection's hello was given
         no_hello_warned = False
         try:
-            while True:
+            while not writer.is_closing():
                 try:
                     raw = await reader.readuntil(b"\n")
                 except asyncio.IncompleteReadError:
@@ -1428,6 +1528,10 @@ class SLinkServer:
                     except (asyncio.IncompleteReadError, asyncio.LimitOverrunError):
                         break
                     continue
+                # A reset may close this socket while readuntil is suspended. Buffered
+                # events (including hello) must not enter the replacement run.
+                if writer.is_closing():
+                    break
                 line = raw.decode("utf-8", errors="replace").strip()
                 if not line:
                     continue
@@ -1451,9 +1555,9 @@ class SLinkServer:
                     await self._respond(writer, [{"cmd": "noop"}])
                     continue
 
-                # Track which player owns this connection.
-                if player_id_for_conn is None:
-                    player_id_for_conn = player_id
+                # Retain overlapping connections until each closes, including a socket
+                # carrying multiple player slots. Reset/rollback must disconnect all of them.
+                self._client_writers.setdefault(player_id, set()).add(writer)
 
                 # Update connection info
                 prev_conn = self.connected_players.get(player_id, {})
@@ -1478,7 +1582,6 @@ class SLinkServer:
                     if carried in prev_conn:
                         self.connected_players[player_id][carried] = prev_conn[carried]
                 if msg.get("event") == "hello":
-                    self.connected_players[player_id]["rom_type"] = msg.get("rom_type", "?")
                     # A rom_type the router does not know used to leave the server on
                     # whichever adapter it already had -- silently -- and the run carried on
                     # under the wrong generation (Gen 3 genders and abilities on Red/Blue
@@ -1491,14 +1594,15 @@ class SLinkServer:
                     # rom_type used to skip the lock entirely and be dispatched into the
                     # committed run. Every shipped client sends one; a hello without one is
                     # not an old client, it is a malformed one.
-                    from server.adapters import game_id_for_rom_type
+                    from server.adapters import game_id_for_rom_type, unrouted_rom_type_reason
                     _rt = msg.get("rom_type", "")
                     if not isinstance(_rt, str) or not _rt or not game_id_for_rom_type(_rt):
                         err = (f"Unknown rom_type {_rt!r} for slot {player_id.upper()}: "
-                               f"not a game this server routes")
+                               f"{unrouted_rom_type_reason(_rt)}")
                         log.warning(f"[{player_id}] REJECTED: {err}")
                         self.state.identity_error[player_id] = err
                         self._rom_type_rejected.add(player_id)
+                        self._record_hello_refusal(player_id, err, msg)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": f"[x] UNKNOWN ROM: {_rt}",
                             "r": 255, "g": 0, "b": 0, "frames": 600,
@@ -1521,61 +1625,32 @@ class SLinkServer:
                     # are present (Codex cx-a66ab55a F2), so the key's presence is what is
                     # passed through, never a falsey-coerced value.
                     _mixed = self._mixed_games_error(
-                        player_id, _rt, msg.get("artifact_kind") or "clean",
+                        player_id, _rt, msg.get("artifact_kind", "clean"),
                         msg.get("foundation", _FOUNDATION_ABSENT))
                     if _mixed:
                         log.warning(f"[{player_id}] REJECTED: {_mixed}")
                         self.state.identity_error[player_id] = _mixed
                         self._rom_type_rejected.add(player_id)
+                        self._record_hello_refusal(player_id, _mixed, msg)
                         await self._respond(writer, [{
                             "cmd": "hud_show", "text": "[x] MIXED GAMES",
-                            "r": 255, "g": 0, "b": 0, "frames": 600,
+                            "color": [255, 0, 0], "duration": 600,
                         }])
                         self._notify_sse()
                         continue
+                    # A hello that routes and pairs still has not been ADMITTED (ROM contract)
+                    # or ACCEPTED (save identity) — both are decided inside `_dispatch`, on the
+                    # committed run state, not on a candidate ROM report. Only the routing-level
+                    # rejection marker is ours to clear here (Codex cx-2985fe38 F2): the
+                    # rom_type/panel/panel_abi/sfx facts and the adapter are STAGED by
+                    # `_dispatch`'s "hello" branch and committed only on acceptance, so a
+                    # contract- or identity-rejected hello leaves connected_players and the
+                    # adapter exactly as they were.
                     if player_id in self._rom_type_rejected:
                         # The identity gate in state.py only clears its own errors; this one
                         # is ours to clear, and only a routable hello gets this far.
                         self._rom_type_rejected.discard(player_id)
                         self.state.identity_error.pop(player_id, None)
-                    # Panel capability is per CARTRIDGE: on Gen 1 it comes from the
-                    # companion ROM patch, so a patched and an unpatched cartridge can
-                    # sit in one run and the generation alone cannot answer.
-                    if "panel" in msg:
-                        self.connected_players[player_id]["panel"] = bool(msg.get("panel"))
-                        self.connected_players[player_id]["panel_abi"] = msg.get("panel_abi", 0)
-                    # Native SFX likewise: the caps bit of the same companion mailbox.
-                    if "sfx" in msg:
-                        self.connected_players[player_id]["sfx"] = bool(msg.get("sfx"))
-                    # A relaunched client holds no rows, so "unchanged since last time" would
-                    # leave its panel empty until the run's contents happened to move.
-                    self._last_panel_sig[player_id] = None
-                    # Resolve correct adapter from rom_type.
-                    # Once rom_type is committed (set-once), the adapter is locked — ignore
-                    # any later hello that carries a different rom_type (e.g. early-boot
-                    # detect_variant returning 'vanilla' before IWRAM is initialised).
-                    rom_type = msg.get("rom_type", "")
-                    if not self.state.rom_type:
-                        from server.adapters import game_id_for_rom_type, get_adapter
-                        new_game_id = game_id_for_rom_type(rom_type)
-                        new_is_rr = rom_type.endswith("_rr")
-                        if new_game_id and new_game_id != self.state.adapter.game_id:
-                            self.state.adapter = get_adapter(new_game_id, is_rr=new_is_rr, rom_type=rom_type)
-                            self.state.is_rr = new_is_rr
-                            self.adapter = self.state.adapter
-                            log.info(f"Adapter switched to {new_game_id} (rom_type={rom_type})")
-                            log.debug(f"[ADAPTER] player={player_id}  game_id={new_game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=game_id_changed")
-                        elif new_is_rr != self.state.is_rr:
-                            self.state.is_rr = new_is_rr
-                            from server.adapters import get_adapter
-                            self.state.adapter = get_adapter(
-                                self.state.adapter.game_id, is_rr=new_is_rr, rom_type=rom_type)
-                            self.adapter = self.state.adapter
-                            log.info(f"Adapter updated: is_rr={new_is_rr}")
-                            log.debug(f"[ADAPTER] player={player_id}  game_id={self.state.adapter.game_id}  is_rr={new_is_rr}  rom_type={rom_type!r}  reason=is_rr_changed")
-                    elif rom_type and rom_type != self.state.rom_type:
-                        log.warning(f"[{player_id}] hello rom_type={rom_type!r} ignored — "
-                                    f"run already locked to {self.state.rom_type!r}")
                 # Hello-first. A connection has proved nothing until it has said hello, so
                 # nothing else on it is listened to. Without this a cartridge whose hello was
                 # lost still had its ticks reconciled into whichever slot it named, and a
@@ -1586,7 +1661,7 @@ class SLinkServer:
                         no_hello_warned = True
                         log.warning(f"[{player_id}] {msg.get('event', '?')!r} before hello from "
                                     f"{peer} — dropping this connection's events until it says hello")
-                    await self._respond(writer, [{"cmd": "noop"}])
+                    await self._respond(writer, [{"cmd": "noop", "refused": "no_hello"}])
                     continue
 
                 # Duplicate-event guard, per CONNECTION: a seq counter belongs to a socket,
@@ -1597,12 +1672,18 @@ class SLinkServer:
                 if seq != -1:
                     if seq <= last_seq:
                         log.debug(f"[{player_id}] duplicate seq {seq}, skipping")
-                        await self._respond(writer, [{"cmd": "noop"}])
+                        await self._respond(writer, [{"cmd": "noop", "refused": "duplicate"}])
                         continue
                     log.debug(f"[TCP] player={player_id}  seq={seq}  last={last_seq}  outcome=accepted  event={msg.get('event','?')}")
                     last_seq = seq
                 if msg.get("event") == "hello":
                     hello_seen = True
+                    self._conn_gen[player_id] = conn_gen[player_id] = self._conn_gen.get(player_id, 0) + 1
+                elif conn_gen.get(player_id, self._conn_gen.get(player_id)) != self._conn_gen.get(player_id):
+                    # KEY-SCOPE-5: a newer connection helloed as this player; a delayed line from
+                    # this one would roll its party back.
+                    await self._respond(writer, [{"cmd": "noop", "refused": "superseded"}])
+                    continue
 
                 commands = self._dispatch(player_id, msg)
                 await self._respond(writer, commands)
@@ -1624,16 +1705,30 @@ class SLinkServer:
             pass
         finally:
             log.info(f"Client disconnected: {peer}")
-            if player_id_for_conn:
-                info = self.connected_players.get(player_id_for_conn, {})
-                info["connected"] = False
-                self.connected_players[player_id_for_conn] = info
-                self._notify_sse()  # Push disconnect status to browsers
+            self._client_connections.discard(writer)
+            for player_id, writers in list(self._client_writers.items()):
+                if writer not in writers:
+                    continue
+                writers.discard(writer)
+                if not writers:
+                    self._client_writers.pop(player_id)
+                    info = self.connected_players.get(player_id)
+                    if info is not None:
+                        info["connected"] = False
+                        self._notify_sse()
             try:
                 writer.close()
                 await writer.wait_closed()
             except Exception:
                 pass
+
+    def _record_hello_refusal(self, player_id: str, reason: str, msg: dict) -> None:
+        """A hello refused before admission (unknown rom_type, mixed games or kinds) is an
+        admission verdict like any other: /api/status and the board show it, and the event
+        journal keeps a durable "REJECTED —" line (ADMISSION-MIXED-KINDS-VERDICT)."""
+        self.admission[player_id] = {"state": "rejected", "reason": reason}
+        self._log_event(player_id, "hello", f"REJECTED — {reason}",
+                        msg.get("loc_name", "") or msg.get("area_id", ""))
 
     @staticmethod
     async def _respond(writer: asyncio.StreamWriter, commands: list):
@@ -1766,7 +1861,7 @@ class SLinkServer:
         name = (mon.nickname or "").strip() or self.adapter.species_name(mon.species) or "?"
         return name[:8]
 
-    def _cache_mon_info(self, key: str, detail: dict):
+    def _cache_mon_info(self, key: str, detail: dict, player_id: str | None = None):
         """Update the persistent per-monKey display cache from a detail dict.
 
         Also backfills level=0 and stale nicknames in any LinkEntry MonInfo
@@ -1782,19 +1877,25 @@ class SLinkServer:
         # Backfill mon_stats for PC box level display (covers shiny/bonus mons)
         lv = detail.get("level", 0)
         maxhp = detail.get("maxHP", 0)
-        if lv and key not in self.state.mon_stats:
-            self.state.mon_stats[key] = {"level": lv}
+        stats = self.state.mon_stats[player_id] if player_id else None   # KEY-SCOPE-2: per player
+        if stats is None:
+            pass
+        elif lv and key not in stats:
+            stats[key] = {"level": lv}
             if maxhp:
-                self.state.mon_stats[key]["maxHP"] = maxhp
-        elif lv and not self.state.mon_stats.get(key, {}).get("level"):
-            self.state.mon_stats[key]["level"] = lv
+                stats[key]["maxHP"] = maxhp
+        elif lv and not stats.get(key, {}).get("level"):
+            stats[key]["level"] = lv
         # Backfill level and nickname into link entries
         nick = detail.get("nickname", "")
         species_id = detail.get("species_id", 0)
-        if (lv or nick or species_id) and self.state._key_index.get(key):
-            link_entry = self.state._key_index[key]
+        link_entry = (self.state.entry_for(player_id, key) if player_id
+                      else self.state._key_index.get(key))
+        if (lv or nick or species_id) and link_entry:
             dirty = False
-            for mi in (link_entry.a, link_entry.b):
+            halves = ((link_entry.a if player_id == "a" else link_entry.b,) if player_id
+                      else (link_entry.a, link_entry.b))
+            for mi in halves:
                 if mi and mi.key == key:
                     if lv and not mi.level:
                         mi.level = lv
@@ -1820,11 +1921,10 @@ class SLinkServer:
         species_id = detail.get("species_id", 0) or cached.get("species_id", 0)
         if species_id:
             return self.adapter.species_name(species_id)
-        link_entry = self.state._key_index.get(key)
-        if link_entry:
-            for mon in (link_entry.a, link_entry.b):
-                if mon and mon.key == key:
-                    return mon.nickname or self.adapter.species_name(mon.species) or key[:8]
+        link_entry = self.state.entry_for(player_id, key)
+        mon = link_entry and (link_entry.a if player_id == "a" else link_entry.b)
+        if mon and mon.key == key:
+            return mon.nickname or self.adapter.species_name(mon.species) or key[:8]
         return key[:8]
 
     def _load_events(self):
@@ -1882,6 +1982,10 @@ class SLinkServer:
                 "active": mon.get("active", False),
                 "status_cond": mon.get("status_cond", 0),
                 "stat_stages": mon.get("stat_stages"),
+                # Small decoded dict (DVs/IVs/EVs/stat exp/computed stats), NOT the blob
+                # itself -- party_details goes out on every status push. None when the
+                # adapter can't decode it (box/linked mons, missing/bad blob_hex).
+                "calc_stats": adapter.calc_stats(mon),
             }
             for index, mon in enumerate(party) if mon.get("key")
         }
@@ -1897,14 +2001,16 @@ class SLinkServer:
         _pre_battle = self.battle_state[player_id]["in_battle"]
         _pre_memorial_status = None
         if event == "memorialize_done":
-            _pre_memorial_link = self.state._key_index.get(msg.get("key", ""))
+            _pre_memorial_link = self.state.entry_for(player_id, msg.get("key", ""))
             if _pre_memorial_link:
                 _pre_memorial_status = _pre_memorial_link.status.value
 
         # Block all events from a player whose identity was rejected.
         # Only a hello with correct identity can clear the error.
+        # `refused` (INV-CLIENT contract): the line was NOT processed, so the client must not
+        # retire an owed report on this reply. Older clients read a plain noop.
         if event != "hello" and self.state.identity_error.get(player_id):
-            return [{"cmd": "noop"}]
+            return [{"cmd": "noop", "refused": "identity"}]
 
         # Block everything but hello until the player's cartridge is admitted. Same shape as
         # the identity gate above and for the same reason: only a hello can change the
@@ -1912,43 +2018,117 @@ class SLinkServer:
         # have already decided not to trust. `tick` is NOT exempt -- it carries the party
         # snapshot that diff_party turns into captures, which is exactly a semantic event.
         if event != "hello" and not self.is_admitted(player_id):
-            return [{"cmd": "noop"}]
+            return [{"cmd": "noop", "refused": "admission"}]
 
         if event == "hello":
-            # Pick up a contract written after this server started, before deciding.
-            self._refresh_rom_contract()
-            verdict = self._decide_admission(player_id, msg)
-            if self.admission.get(player_id, {}).get("state") != verdict["state"]:
-                (log.info if verdict["state"] == "admitted" else log.warning)(
-                    "[%s] admission: %s — %s", player_id, verdict["state"], verdict["reason"])
-            self.admission[player_id] = verdict
-            if verdict["state"] != "admitted":
-                # STOP HERE. Recording the verdict was not enough: control used to fall
-                # straight into state.handle_event, which permanently locks
-                # player_identity, saves it, rebuilds party_keys from the rejected
-                # cartridge and QUEUES box_mon write commands back to the very client we
-                # just refused -- and then _ingest_rom_content adopted its encounter
-                # tables. Booting the wrong ROM once therefore did not merely fail to
-                # connect, it corrupted the run and wrote into the wrong save file.
-                self._log_event(player_id, "hello",
-                                f"REJECTED — {verdict['reason']}",
-                                msg.get("loc_name", "") or msg.get("area_id", ""))
-                return [{"cmd": "noop"}]
+            # ── Transactional hello (Codex cx-2985fe38 F1/F2) ──────────────────────────
+            # Stage the candidate rom_type/panel/panel_abi/sfx facts and the adapter they
+            # imply; commit them only once admission (_decide_admission) AND save-identity
+            # (state.handle_event) accept this hello. A rejected hello must leave
+            # connected_players and the adapter EXACTLY as they were (docs/protocol.md
+            # §2.2 steps 1/1': "rejected ⇒ state untouched") -- this used to be true only up
+            # to the point mixed_games_error passed, after which the capability fields and
+            # a same-generation-variant adapter swap were written unconditionally, before
+            # admission or identity had a say.
+            prev_conn = dict(self.connected_players.get(player_id, {}))
+            prev_adapter = self.state.adapter
+            prev_is_rr = self.state.is_rr
 
-            area    = msg.get("area_id", "")
-            loc     = msg.get("loc_name", "")
-            party_n = len(msg.get("party", []))
-            rom     = msg.get("rom_type", "unknown")
-            log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
+            rom = msg.get("rom_type", "") or "unknown"
+            staged_conn = dict(prev_conn)
+            staged_conn["rom_type"] = msg.get("rom_type", "")
+            # Panel capability is per CARTRIDGE: on Gen 1 it comes from the companion ROM
+            # patch, so a patched and an unpatched cartridge can sit in one run and the
+            # generation alone cannot answer.
+            if "panel" in msg:
+                staged_conn["panel"] = bool(msg.get("panel"))
+                staged_conn["panel_abi"] = msg.get("panel_abi", 0)
+            # Native SFX likewise: the caps bit of the same companion mailbox.
+            if "sfx" in msg:
+                staged_conn["sfx"] = bool(msg.get("sfx"))
 
-            # Run state machine first (handles identity lock check).
-            cmds = self.state.handle_event(player_id, msg)
+            # Resolve the adapter from the FULL rom_type, not only game_id/is_rr (F1): before
+            # the run commits a rom_type, every hello rebuilds a fresh adapter from its own
+            # cartridge string, so a same-generation variant swap (Red -> reset -> Yellow, or
+            # the reverse) gets ITS OWN adapter instead of silently keeping the last one,
+            # whose panel/trade/encounter-table capabilities are bound to the wrong variant.
+            staged_adapter, staged_is_rr = prev_adapter, prev_is_rr
+            if not self.state.rom_type:
+                from server.adapters import game_id_for_rom_type, get_adapter
+                _rt = msg.get("rom_type", "")
+                new_game_id = game_id_for_rom_type(_rt)
+                if new_game_id:
+                    staged_is_rr = _rt.endswith("_rr")
+                    staged_adapter = get_adapter(new_game_id, is_rr=staged_is_rr, rom_type=_rt)
+            elif rom != "unknown" and rom != self.state.rom_type:
+                log.warning(f"[{player_id}] hello rom_type={rom!r} ignored — "
+                            f"run already locked to {self.state.rom_type!r}")
+
+            def _rollback_hello():
+                self.connected_players[player_id] = prev_conn
+                self.state.adapter = prev_adapter
+                self.adapter = prev_adapter
+                self.state.is_rr = prev_is_rr
+
+            # Admission and identity are decided against the CANDIDATE adapter (a randomized
+            # cartridge's fingerprint check and an OT parse are both generation-specific), so
+            # the staged values are applied now and rolled back on any refusal below.
+            self.connected_players[player_id] = staged_conn
+            self.state.adapter = staged_adapter
+            self.adapter = staged_adapter
+            self.state.is_rr = staged_is_rr
+
+            # Exception-safe (review of 8418c931, P3): anything raising between staging and the
+            # accept/reject decision must not leave the candidate cartridge applied.
+            try:
+                # Pick up a contract written after this server started, before deciding.
+                self._refresh_rom_contract()
+                verdict = self._decide_admission(player_id, msg)
+                if self.admission.get(player_id, {}).get("state") != verdict["state"]:
+                    (log.info if verdict["state"] == "admitted" else log.warning)(
+                        "[%s] admission: %s — %s", player_id, verdict["state"], verdict["reason"])
+                self.admission[player_id] = verdict
+                if verdict["state"] != "admitted":
+                    # STOP HERE. Recording the verdict was not enough: control used to fall
+                    # straight into state.handle_event, which permanently locks
+                    # player_identity, saves it, rebuilds party_keys from the rejected
+                    # cartridge and QUEUES box_mon write commands back to the very client we
+                    # just refused -- and then _ingest_rom_content adopted its encounter
+                    # tables. Booting the wrong ROM once therefore did not merely fail to
+                    # connect, it corrupted the run and wrote into the wrong save file.
+                    _rollback_hello()
+                    self._log_event(player_id, "hello",
+                                    f"REJECTED — {verdict['reason']}",
+                                    msg.get("loc_name", "") or msg.get("area_id", ""))
+                    return [{"cmd": "noop", "refused": "admission"}]
+
+                area    = msg.get("area_id", "")
+                loc     = msg.get("loc_name", "")
+                party_n = len(msg.get("party", []))
+                log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
+                self._ingest_box_census(player_id, msg)
+
+                # Run state machine first (handles identity lock check).
+                cmds = self.state.handle_event(player_id, msg)
+            except Exception:
+                _rollback_hello()
+                raise
 
             if msg.get("_rejected"):
-                # Identity mismatch — log it, surface error, but don't update display data.
+                # Identity mismatch — log it, surface error, but don't update display data,
+                # and roll back the staged capabilities/adapter: a wrong-save hello must not
+                # leave the run's connected_players or adapter describing the wrong cartridge.
+                _rollback_hello()
                 self._log_event(player_id, "hello",
                                 "REJECTED — wrong save/slot", area or loc)
                 return cmds
+
+            # ACCEPTED. The staged rom_type/panel/panel_abi/sfx/adapter are already applied
+            # above; only the presentation follow-ups (panel re-send, adapter-switch log)
+            # remain.
+            self._last_panel_sig[player_id] = None
+            if staged_adapter is not prev_adapter:
+                log.info(f"Adapter switched to {staged_adapter.game_id} (rom_type={rom})")
 
             self._log_event(player_id, "hello",
                             f"Connected ({rom}, {party_n} mons)", loc or area)
@@ -1963,11 +2143,24 @@ class SLinkServer:
             if not self.state.artifact_kind:
                 # "named" (a vanilla cartridge admitted by header) is a clean-layout artifact
                 self.state.artifact_kind = {"named": "clean"}.get(
-                    msg.get("artifact_kind") or "clean", msg.get("artifact_kind") or "clean")
+                    msg.get("artifact_kind", "clean"), msg.get("artifact_kind", "clean"))
                 _dirty = True
                 # Per-run capability: the adapter's native_trade_ui()/supports_info_panel()
-                # follow the committed kind from here on (base adapter: no-op).
+                # follow the committed kind from here on (base adapter: no-op). Every
+                # per-player adapter already bound (F5: an earlier hello from the OTHER
+                # player, on the same still-uncommitted run) is stale at the default kind
+                # until now, so it is refreshed here too rather than only on its own next
+                # hello.
                 self.state.adapter.set_artifact_kind(self.state.artifact_kind)
+                for _pa in self._player_adapters.values():
+                    _pa.set_artifact_kind(self.state.artifact_kind)
+
+            # Publish only after admission and save identity accepted this hello. A refused
+            # cartridge must not replace the last accepted player's acquisition/display data.
+            # Bound AFTER the artifact_kind commit above (F5): the committed kind, not the
+            # per-player adapter's constructor default, is what a Gen 2 partner's own
+            # adapter must carry, including on the very first hello that commits it.
+            self._bind_player_adapter(player_id, msg.get("rom_type", ""))
             if "ball_count" in msg:
                 self.player_ball_count[player_id] = msg["ball_count"]
             if "badges" in msg:
@@ -1994,12 +2187,12 @@ class SLinkServer:
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
                     if bk:
-                        self._cache_mon_info(bk, bentry)
+                        self._cache_mon_info(bk, bentry, player_id)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
             # Seed party_details from snapshot
             self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
             for k, det in self.party_details[player_id].items():
-                self._cache_mon_info(k, det)
+                self._cache_mon_info(k, det, player_id)
             if _dirty or self.state.mon_stats != stats_before:
                 self.state._save()
             # Seed battle state from hello (so page reflects battle immediately)
@@ -2018,7 +2211,7 @@ class SLinkServer:
             if disp:
                 self.player_area[player_id] = disp
                 # Use area_id for display name resolution (has underscores for proper formatting)
-                disp_name = self.adapter.area_display_name(area or disp)
+                disp_name = self.adapter_for(player_id).area_display_name(area or disp)
                 self._log_event(player_id, "area_enter",
                                 f"Entered {disp_name}", disp)
             if area:
@@ -2028,7 +2221,7 @@ class SLinkServer:
             log.info(f"[{player_id}] capture key={key} lv={msg.get('level','?')} area='{msg.get('area_id','')}'")
             if key:
                 sid = msg.get("species_id", 0)
-                sp_name = self.adapter.species_name(sid) if sid else "?"
+                sp_name = self.adapter_for(player_id).species_name(sid) if sid else "?"
                 self._log_event(player_id, "capture",
                                 f"Caught {sp_name} Lv{msg.get('level','?')}",
                                 msg.get("area_id", ""), key)
@@ -2043,7 +2236,7 @@ class SLinkServer:
                     "gender":       self.adapter.gender_from_key(key, sid),
                 }
                 self.party_details[player_id][key] = detail
-                self._cache_mon_info(key, detail)
+                self._cache_mon_info(key, detail, player_id)
         elif event == "faint":
             key = msg.get("key", "")
             log.info(f"[{player_id}] faint key={key} area='{msg.get('area_id','')}'")
@@ -2071,7 +2264,7 @@ class SLinkServer:
         elif event == "no_catch":
             log.info(f"[{player_id}] no_catch area='{msg.get('area_id','')}'")
             self._log_event(player_id, "no_catch",
-                            f"Missed catch at {self.adapter.area_display_name(msg.get('area_id',''))}",
+                            f"Missed catch at {self.adapter_for(player_id).area_display_name(msg.get('area_id',''))}",
                             msg.get("area_id", ""))
         elif event == "whiteout":
             log.info(f"[{player_id}] whiteout")
@@ -2124,7 +2317,7 @@ class SLinkServer:
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
                     if bk:
-                        self._cache_mon_info(bk, bentry)
+                        self._cache_mon_info(bk, bentry, player_id)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
             if "in_battle" in msg:
                 was_in_battle = self.battle_state[player_id]["in_battle"]
@@ -2143,7 +2336,7 @@ class SLinkServer:
                 tid = msg["trainer_id"]
                 self.battle_state[player_id]["trainer_id"] = tid
                 # Resolve trainer name/class via adapter
-                tr_name, tr_class = self.adapter.trainer_info(tid)
+                tr_name, tr_class = self.adapter_for(player_id).trainer_info(tid)
                 if tr_class:
                     self.battle_state[player_id]["opponent_name"] = tr_name
                     self.battle_state[player_id]["opponent_class"] = tr_class
@@ -2201,7 +2394,7 @@ class SLinkServer:
             # Talk-to-ghost: handled in state.handle_event (_handle_peer_interact),
             # which notifies the partner. Low-frequency; no enrichment needed here.
             pass
-        elif event in ("trade_request", "mon_chosen", "menu_result", "trade_done", "status"):
+        elif event in ("trade_request", "mon_chosen", "menu_result", "trade_done", "apply_ready", "status"):
             # Talk-to-partner trade flow (request → pick → confirm → trade scene → done) + periodic
             # badge status: handled in state.handle_event. User-paced (or ~0.2 Hz for status); no
             # server-side enrichment or per-event logging needed.
@@ -2215,11 +2408,12 @@ class SLinkServer:
         if "party" in msg and event == "tick":
             self.party_details[player_id] = self._party_snapshot(player_id, msg["party"])
             for k, det in self.party_details[player_id].items():
-                self._cache_mon_info(k, det)
+                self._cache_mon_info(k, det, player_id)
 
+        self._ingest_box_census(player_id, msg)
         cmds = self.state.handle_event(player_id, msg)
 
-        if event == "key_change" and not msg.get("_rejected"):
+        if event == "key_change" and msg.get("_key_change_status") == "migrated":
             self._migrate_presentation_key(player_id, msg.get("old_key", ""), msg.get("new_key", ""))
 
         # Refresh the native in-game panel, but only when its content actually changed — this runs
@@ -2242,7 +2436,7 @@ class SLinkServer:
                 _sv = _new_state.value
                 if _sv == "linked":
                     _cap_key = msg.get("key", "")
-                    _link = self.state._key_index.get(_cap_key) if _cap_key else None
+                    _link = self.state.entry_for(player_id, _cap_key)
                     if _link:
                         _ma = _link.a if player_id == "a" else _link.b
                         _mb = _link.b if player_id == "a" else _link.a
@@ -2260,7 +2454,7 @@ class SLinkServer:
 
         if event == "faint" and msg.get("key"):
             _faint_key = msg["key"]
-            _link = self.state._key_index.get(_faint_key)
+            _link = self.state.entry_for(player_id, _faint_key)
             if _link:
                 _p_mon = _link.b if player_id == "a" else _link.a
                 _death = (self.state.queued_death_cmd(_partner, _p_mon.key)
@@ -2300,7 +2494,7 @@ class SLinkServer:
 
         if event == "memorialize_done":
             _mem_key = msg.get("key", "")
-            _link = self.state._key_index.get(_mem_key) if _mem_key else None
+            _link = self.state.entry_for(player_id, _mem_key)
             _post_status = getattr(getattr(_link, "status", None), "value", getattr(_link, "status", None))
             if _link and _post_status == "memorial" and _pre_memorial_status != "memorial":
                 _a_name = (_link.a.nickname or self.adapter.species_name(_link.a.species)) if _link.a else "?"
@@ -2315,6 +2509,8 @@ class SLinkServer:
             _reason = msg.get("reason", "")
             if msg.get("_rejected"):
                 _what = "key change REJECTED (identity lost)"
+            elif msg.get("_key_change_status") == "rejected":
+                _what = "key change refused"
             elif msg.get("new_species") is not None:
                 _what = "evolved"
             elif _reason == "trade_undo":
@@ -2330,12 +2526,10 @@ class SLinkServer:
             for c in cmds:
                 if c.get("cmd") == "gui_prompt":
                     _prompt_text = c.get("text", "")
-                    if "catch again" in _prompt_text.lower():
-                        self._log_event(player_id, "violation",
-                                        f"⚠ {_prompt_text}", _area_id)
-                    elif "reroll" in _prompt_text.lower():
-                        self._log_event(player_id, "reroll",
-                                        f"🔁 {_prompt_text}", _area_id)
+                    _kind = prompt_event_type(_prompt_text)
+                    if _kind:
+                        self._log_event(player_id, _kind,
+                                        f"{'⚠' if _kind == 'violation' else '🔁'} {_prompt_text}", _area_id)
 
         self._emit_obs_triggers(player_id, msg, cmds, _pre_area_state, _pre_battle)
         return cmds
@@ -2376,7 +2570,7 @@ class SLinkServer:
             # link_death — partner receives a death command (force_faint or force_explode)
             _faint_key = msg.get("key", "")
             if _faint_key:
-                _link = self.state._key_index.get(_faint_key)
+                _link = self.state.entry_for(player_id, _faint_key)
                 if _link:
                     _p_mon = _link.b if player_id == "a" else _link.a
                     if _p_mon and self.state.queued_death_cmd(_partner, _p_mon.key):
@@ -2446,22 +2640,33 @@ class SLinkServer:
         """Serialize current server state to a JSON-safe dict."""
         s = self.state
 
-        def _enrich_killer(killer):
-            """Add species_name to a killer dict for the memorial/killfeed."""
+        def _enrich_killer(killer, initiating_player=""):
+            """Add species_name to a killer dict for the memorial/killfeed.
+
+            The killer belongs to the INITIATING player's cartridge (Codex cx-2985fe38 F4):
+            on a randomized/Gen 2 pairing the run adapter may not be the side that fainted
+            this link's mon.
+            """
             if not killer:
                 return killer
             k = dict(killer)
             sp = k.get("species", 0)
             if sp:
-                k["species_name"] = self.adapter.species_name(sp)
+                k["species_name"] = self.adapter_for(initiating_player).species_name(sp)
             return k
 
-        def _move_details(mon: dict, *, boxed: bool = False) -> list[dict]:
+        def _move_details(mon: dict, *, boxed: bool = False, adapter=None) -> list[dict]:
             """Resolve a mon's raw move ids into full move dicts with PP applied.
 
             Gen 3 sends pp_bonuses as a packed bitfield (2 bits per move); Gen 4 sends
             pp_ups as a list[4]. Box mons carry no current PP, so they show the maximum.
+
+            `adapter` is the OWNING player's adapter (Codex cx-2985fe38 F4): move data is
+            cross-title content on a randomized/Gen 2 pairing, so a partner's move names
+            must come from their own cartridge, not the run's. Defaults to the run adapter
+            for the few call sites (none left) that have no player to ask.
             """
+            adapter = adapter or self.adapter
             raw_pp = mon.get("pp", [])
             pp_bonuses = mon.get("pp_bonuses", 0)
             pp_ups_list = mon.get("pp_ups") or []
@@ -2469,7 +2674,7 @@ class SLinkServer:
             for idx, mid in enumerate(mon.get("moves", [])):
                 if not mid or mid <= 0:
                     continue
-                md = self.adapter.move_data(mid)
+                md = adapter.move_data(mid)
                 if not md:
                     continue
                 md = dict(md)
@@ -2498,12 +2703,12 @@ class SLinkServer:
                 sid = d.get("species_id", 0)
                 form = d.get("form", 0)
                 d["species_name"] = adapter.species_name(sid) if sid else ""
-                d["sprite_html"] = self._get_sprite_html(sid, form) if sid else ""
+                d["sprite_html"] = self._get_sprite_html(sid, form, pid) if sid else ""
                 aid = d.get("ability_id", 0)
                 d["ability_name"] = adapter.ability_name(aid, sid) if aid else ""
                 iid = d.get("held_item_id", 0)
                 d["item_name"] = adapter.item_name(iid) if iid else ""
-                d["move_details"] = _move_details(d)
+                d["move_details"] = _move_details(d, adapter=adapter)
                 enriched[key] = d
             return enriched
 
@@ -2515,12 +2720,13 @@ class SLinkServer:
                 b = dict(bentry)
                 iid = b.get("held_item_id", 0)
                 b["item_name"] = adapter.item_name(iid) if iid else ""
-                b["move_details"] = _move_details(b, boxed=True)
+                b["move_details"] = _move_details(b, boxed=True, adapter=adapter)
                 enriched.append(b)
             return enriched
 
         def _enrich_battle_state(pid):
             """Add sprite_html, species_name, and move_details to each enemy_party entry."""
+            adapter = self.adapter_for(pid)
             bs = dict(self.battle_state.get(pid, {"in_battle": False, "enemy_party": []}))
             enriched = []
             for em in bs.get("enemy_party") or []:
@@ -2530,10 +2736,10 @@ class SLinkServer:
                 # Rendered |safe, so it is always ours: a client-sent sprite_html is dropped.
                 em2.pop("sprite_html", None)
                 if sid:
-                    em2["sprite_html"] = self._get_sprite_html(sid, form)
+                    em2["sprite_html"] = self._get_sprite_html(sid, form, pid)
                 if sid and not em2.get("species_name"):
-                    em2["species_name"] = self.adapter.species_name(sid)
-                em2["move_details"] = _move_details(em2)
+                    em2["species_name"] = adapter.species_name(sid)
+                em2["move_details"] = _move_details(em2, adapter=adapter)
                 enriched.append(em2)
             bs["enemy_party"] = enriched
             bs["calc_preview"] = self._calc_preview(pid, enriched) if bs.get("in_battle") else None
@@ -2557,7 +2763,7 @@ class SLinkServer:
                     "nuzlocke_active": s.pokeballs_obtained.get(pid, False),
                     "current_area":   self.player_area.get(pid, ""),
                     "current_area_id": self.player_area_id.get(pid, ""),
-                    "current_area_display": self.adapter.area_display_name(
+                    "current_area_display": self.adapter_for(pid).area_display_name(
                         self.player_area_id.get(pid, "") or self.player_area.get(pid, "")
                     ),
                     "ball_count":     self.player_ball_count.get(pid, 0),
@@ -2570,6 +2776,7 @@ class SLinkServer:
                     "queued":         len(s.queued_commands.get(pid, [])),
                     "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
+                    "awaiting_save": s.awaiting_save.get(pid, False),  # BURIAL-VISIBLE
                     # Surfaced rather than only logged: a player whose events are being
                     # dropped needs to be told which cartridge the run expects, otherwise
                     # the game simply appears not to be recording anything.
@@ -2605,15 +2812,15 @@ class SLinkServer:
                     "a_key":      e.a.key if e.a else None,
                     "a_nickname": e.a.nickname if e.a else "",
                     "a_species":  e.a.species if e.a else 0,
-                    "a_species_name": self.adapter.species_name(e.a.species) if e.a and e.a.species else "",
-                    "a_sprite_html": self._get_sprite_html(e.a.species) if e.a and e.a.species else "",
+                    "a_species_name": self.adapter_for("a").species_name(e.a.species) if e.a and e.a.species else "",
+                    "a_sprite_html": self._get_sprite_html(e.a.species, 0, "a") if e.a and e.a.species else "",
                     "a_level":    self._resolve_level("a", e.a),
                     "a_shiny":    e.a.is_shiny if e.a else False,
                     "b_key":      e.b.key if e.b else None,
                     "b_nickname": e.b.nickname if e.b else "",
                     "b_species":  e.b.species if e.b else 0,
-                    "b_species_name": self.adapter.species_name(e.b.species) if e.b and e.b.species else "",
-                    "b_sprite_html": self._get_sprite_html(e.b.species) if e.b and e.b.species else "",
+                    "b_species_name": self.adapter_for("b").species_name(e.b.species) if e.b and e.b.species else "",
+                    "b_sprite_html": self._get_sprite_html(e.b.species, 0, "b") if e.b and e.b.species else "",
                     "b_level":    self._resolve_level("b", e.b),
                     "b_shiny":    e.b.is_shiny if e.b else False,
                     "a_enc_species": e.encounter_a.species if e.encounter_a else 0,
@@ -2631,8 +2838,8 @@ class SLinkServer:
                     pid: {
                         "key": mon.key, "nickname": mon.nickname,
                         "species": mon.species, "level": mon.level,
-                        "species_name": self.adapter.species_name(mon.species) if mon.species else "",
-                        "sprite_html": self._get_sprite_html(mon.species) if mon.species else "",
+                        "species_name": self.adapter_for(pid).species_name(mon.species) if mon.species else "",
+                        "sprite_html": self._get_sprite_html(mon.species, 0, pid) if mon.species else "",
                     }
                     for pid, mon in players.items()
                 }
@@ -2658,25 +2865,25 @@ class SLinkServer:
                         "area_id":          e.area_id,
                         "area_display":     self._area_display(e.area_id),
                         "cause":            e.cause,
-                        "killer":           _enrich_killer(e.killer),
+                        "killer":           _enrich_killer(e.killer, e.initiating_player),
                         "initiating_player": e.initiating_player,
                         "a_key":      e.a.key      if e.a else None,
                         "a_nickname": e.a.nickname if e.a else "",
                         "a_species":  e.a.species  if e.a else 0,
-                        "a_species_name": self.adapter.species_name(e.a.species) if e.a and e.a.species else "",
-                        "a_sprite_html": self._get_sprite_html(e.a.species) if e.a and e.a.species else "",
+                        "a_species_name": self.adapter_for("a").species_name(e.a.species) if e.a and e.a.species else "",
+                        "a_sprite_html": self._get_sprite_html(e.a.species, 0, "a") if e.a and e.a.species else "",
                         "a_level":    self._resolve_level("a", e.a),
                         "b_key":      e.b.key      if e.b else None,
                         "b_nickname": e.b.nickname if e.b else "",
                         "b_species":  e.b.species  if e.b else 0,
-                        "b_species_name": self.adapter.species_name(e.b.species) if e.b and e.b.species else "",
-                        "b_sprite_html": self._get_sprite_html(e.b.species) if e.b and e.b.species else "",
+                        "b_species_name": self.adapter_for("b").species_name(e.b.species) if e.b and e.b.species else "",
+                        "b_sprite_html": self._get_sprite_html(e.b.species, 0, "b") if e.b and e.b.species else "",
                         "b_level":    self._resolve_level("b", e.b),
                         # The wild mon a side met but did not catch (dead zones only).
-                        "a_enc_species_name": self.adapter.species_name(e.encounter_a.species)
+                        "a_enc_species_name": self.adapter_for("a").species_name(e.encounter_a.species)
                                               if e.encounter_a and e.encounter_a.species else "",
                         "a_enc_level": e.encounter_a.level if e.encounter_a else 0,
-                        "b_enc_species_name": self.adapter.species_name(e.encounter_b.species)
+                        "b_enc_species_name": self.adapter_for("b").species_name(e.encounter_b.species)
                                               if e.encounter_b and e.encounter_b.species else "",
                         "b_enc_level": e.encounter_b.level if e.encounter_b else 0,
                         "status":     e.status.value,
@@ -2696,6 +2903,20 @@ class SLinkServer:
                 pid: list(s.pending_bonus.get(pid, []))
                 for pid in ["a", "b"]
             },
+            # O-24: dead keys still alive in party whose force_faint repair budget is spent.
+            "faint_repair_stalled": {
+                pid: sorted(s.faint_repair_stalled.get(pid, {}))
+                for pid in ["a", "b"]
+            },
+            # KEY-SCOPE-3: keys whose events are refused until an admin resolves the clash.
+            "ambiguous_keys": {
+                pid: dict(s.ambiguous_keys.get(pid, {}))
+                for pid in ["a", "b"]
+            },
+            # An uncertain / conflicted native trade awaiting party evidence or a human (None = none).
+            "trade_problem": s.trade_problem(),
+            "trade_held": s.trade_held(),
+            "trade_last": s.trade_last,
             "badge_slugs": self.adapter.gym_badge_slugs(s.rom_type or ""),
         }
 
@@ -2732,6 +2953,7 @@ class SLinkServer:
             "sidebar_html": self._build_sidebar_html(request, "run"),
             "tcp_port":     self._tcp_port,
             "game_label":   self._rom_label(),
+            "show_calc":    bool(self._calc_profile()),
         })
         return aiohttp_jinja2.render_template("dashboard.html", request, ctx)
 
@@ -2770,14 +2992,16 @@ class SLinkServer:
         """Return live party + linked mons for both players as Showdown pastes."""
         d = self._build_status_dict()
         s = self.state
-        result = {}
+        result = {"calc": self._calc_profile()}
         for pid in ("a", "b"):
+            adapter = self.adapter_for(pid)
             p = d["players"][pid]
+            adapter = self.adapter_for(pid)
             party, linked = [], []
             # Party mons
             for key in p.get("party_keys", []):
                 detail = p["party_details"].get(key, {})
-                entry = _build_mon_entry(key, detail, self.adapter)
+                entry = _build_mon_entry(key, detail, adapter)
                 if entry:
                     entry["loc"] = "party"
                     entry["hp_pct"] = (
@@ -2792,7 +3016,7 @@ class SLinkServer:
                 mi = lnk.a if pid == "a" else lnk.b
                 if not mi or not mi.key or mi.key in party_key_set:
                     continue
-                stats = s.mon_stats.get(mi.key, {})
+                stats = s.mon_stats[pid].get(mi.key, {})
                 detail = {
                     "species_id":   mi.species,
                     "level":        mi.level or stats.get("level", 0),
@@ -2804,7 +3028,7 @@ class SLinkServer:
                     "ability_name": "",
                     "moves":        stats.get("moves", []),
                 }
-                entry = _build_mon_entry(mi.key, detail, self.adapter)
+                entry = _build_mon_entry(mi.key, detail, adapter)
                 if entry:
                     entry["loc"] = "box"
                     linked.append(entry)
@@ -2825,24 +3049,35 @@ class SLinkServer:
                         "level":        em.get("level", 0),
                         "nickname":     "",
                         "hp":           em.get("hp", 0),
-                        "maxHP":        em.get("maxHP", 1),
+                        # No default: an enemy the client hasn't decoded a battle struct for
+                        # yet (or a generation that doesn't send one) stays maxHP=None, not a
+                        # fake maxHP=1 that used to force hp_pct to 100.
+                        "maxHP":        em.get("maxHP"),
                         "held_item_id": em.get("held_item_id", 0),
                         "ability_id":   em.get("ability_id", 0),
                         "ability_name": "",
                         "moves":        em.get("moves", []),
                         "status_cond":  em.get("status_cond", 0),
                         "stat_stages":  em.get("stat_stages"),
+                        # Gen 1 only (lua/gen1/client.lua enemy_party): dvs_raw from the live
+                        # wEnemyMon struct always; blob_hex (trainer battles only) additionally
+                        # carries stat exp. adapter.calc_stats() ignores both when absent.
+                        "dvs_raw":      em.get("dvs_raw"),
+                        "blob_hex":     em.get("blob_hex"),
+                        "pp":           em.get("pp"),
                     }
-                    entry = _build_mon_entry(f"foe-{ei}", detail, self.adapter)
+                    detail["calc_stats"] = adapter.calc_stats(detail)
+                    entry = _build_mon_entry(f"foe-{ei}", detail, adapter)
                     if entry:
                         entry["loc"]    = "enemy"
                         entry["active"] = em.get("active", False)
-                        entry["hp_pct"] = max(0, min(100, int(
-                            em.get("hp", 0) / max(em.get("maxHP", 1), 1) * 100)))
+                        entry["hp_pct"] = (
+                            max(0, min(100, int(em.get("hp", 0) / em["maxHP"] * 100)))
+                            if em.get("maxHP") else None)
                         entry["trainer_label"] = trainer_label
                         enemy.append(entry)
                 calc_label = _calc_trainer_label(
-                    self.adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
+                    adapter.trainer_brief(tid) if (is_trainer and tid) else None, enemy)
                 for entry in enemy if calc_label else ():
                     entry["trainer_label"] = calc_label
             result[pid] = {
@@ -3551,7 +3786,7 @@ class SLinkServer:
                     "species_name": e.get("name") or e.get("species_name") or "?",
                     "rate":         e.get("rate", 0),
                     "level_range":  lv_range if lo or hi else "",
-                    "sprite_html":  self._get_sprite_html(sid) if sid else "",
+                    "sprite_html":  self._get_sprite_html(sid, 0, player_id) if sid else "",
                 })
             if mlist:
                 methods.append({"name": method_name, "entries": mlist})
@@ -4069,7 +4304,7 @@ class SLinkServer:
                 sid = det.get("species_id", 0)
                 sp_name = self.adapter.species_name(sid) if sid else "?"
                 lv = det.get("level", 0)
-                linked = key in s._key_index
+                linked = s.entry_for(pid, key) is not None
                 label = f"{nick or sp_name} Lv{lv} [{key[:8]}]"
                 pend = pending_key_to_area.get((pid, key), "")
                 opts.append({"key": key, "label": label, "linked": linked,
@@ -4084,7 +4319,7 @@ class SLinkServer:
                 sid = bentry.get("species_id", 0)
                 sp_name = self.adapter.species_name(sid) if sid else "?"
                 box_num = bentry.get("box", 0) + 1
-                linked = key in s._key_index
+                linked = s.entry_for(pid, key) is not None
                 label = f"{nick or sp_name} [Box{box_num}] [{key[:8]}]"
                 pend = pending_key_to_area.get((pid, key), "")
                 opts.append({"key": key, "label": label, "linked": linked,
@@ -4253,6 +4488,7 @@ class SLinkServer:
         if "event" not in body:
             return aiohttp_web.json_response({"ok": False, "error": "event field required"}, status=400)
         try:
+            self._ingest_box_census(player, body)          # KEY-SCOPE-5: as a real snapshot would
             cmds = self.state.handle_event(player, body)
             self._notify_sse()
             return aiohttp_web.json_response({
@@ -4384,11 +4620,7 @@ class SLinkServer:
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"No link found for area {area_id}"}, status=404)
 
-        # Remove from _key_index
-        if entry.a and entry.a.key in s._key_index:
-            del s._key_index[entry.a.key]
-        if entry.b and entry.b.key in s._key_index:
-            del s._key_index[entry.b.key]
+        s.unindex_entry(entry)
 
         # Remove from links list
         s.links.remove(entry)
@@ -4415,6 +4647,43 @@ class SLinkServer:
             "ok": True,
             "message": f"Unlinked {a_name} <-> {b_name} on {self.adapter.area_display_name(area_id)}. Area reset.",
         })
+
+    async def handle_debug_resolve_trade(self, request):
+        """POST /api/debug/resolve_trade {"token": "t7", "action": "commit"|"rollback"|"adopt",
+        "sides"?: {"a"|"b": "traded"|"none"}} —
+        settle a conflicted or stuck native trade by hand (the board's trade banner names this);
+        see SoulLinkState.resolve_trade for how a side's known outcome binds."""
+        try:
+            body = await request.json()
+        except Exception:
+            return aiohttp_web.json_response({"ok": False, "error": "invalid JSON"}, status=400)
+        if (not isinstance(body, dict) or not isinstance(body.get("token"), str)
+                or not isinstance(body.get("action"), str)
+                or not isinstance(body.get("sides") or {}, dict)):
+            return aiohttp_web.json_response(
+                {"ok": False, "error": 'body must be {"token": str, "action": str, "sides"?: object}'}, status=400)
+        ok, error = self.state.resolve_trade(body["token"], body["action"], body.get("sides"))
+        if not ok:
+            return aiohttp_web.json_response({"ok": False, "error": error}, status=400)
+        self._notify_sse()
+        return aiohttp_web.json_response({"ok": True})
+
+    async def handle_debug_resolve_ambiguous_key(self, request):
+        """POST /api/debug/resolve_ambiguous_key {"player": "a"|"b", "key": str} — after checking
+        the cartridge, clear a KEY-SCOPE-3 latch (the key names one mon again)."""
+        try:
+            body = await request.json()
+        except Exception:
+            body = None
+        if not isinstance(body, dict) or not isinstance(body.get("player"), str) \
+                or not isinstance(body.get("key"), str):
+            return aiohttp_web.json_response(
+                {"ok": False, "error": 'body must be {"player": "a"|"b", "key": str}'}, status=400)
+        ok, error = self.state.resolve_ambiguous_key(body["player"], body["key"])
+        if not ok:
+            return aiohttp_web.json_response({"ok": False, "error": error}, status=400)
+        self._notify_sse()
+        return aiohttp_web.json_response({"ok": True})
 
     async def handle_debug_revive(self, request):
         """POST /api/debug/revive — revive a dead/memorial link back to alive.
@@ -4515,6 +4784,34 @@ class SLinkServer:
                     backups.append(entry)
         return aiohttp_web.json_response({"ok": True, "backups": backups})
 
+    def _reset_connection_and_display_state(self) -> None:
+        """Clear connected_players and every derived party/box/battle/display cache.
+
+        Shared by `/api/reset` and `/api/debug/rollback` (Codex cx-2985fe38 F3): both
+        replace `self.state` with a run the connected clients have not said hello to yet,
+        so both must leave the SAME blank slate behind -- a stale `connected_players` entry
+        (rom_type, panel/sfx caps) or a stale party/box/battle snapshot from the run just
+        replaced must not survive into the new one and be shown until the next hello.
+        """
+        self.connected_players.clear()
+        self.player_area = {"a": "", "b": ""}
+        self.player_area_id = {"a": "", "b": ""}
+        self.player_ball_count = {"a": 0, "b": 0}
+        self.player_badges = {"a": 0, "b": 0}
+        self.player_kanto_badges = {"a": 0, "b": 0}
+        self.trainer_name = {"a": "", "b": ""}
+        self.pc_boxes = {"a": [], "b": []}
+        self.box_census = {pid: {"capable": False, "gen": -1, "boxes": None} for pid in ("a", "b")}
+        self.party_details = {"a": {}, "b": {}}
+        self._mon_cache.clear()
+        self.battle_state = {
+            p: {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
+                "trainer_id": 0, "opponent_name": "", "opponent_class": "",
+                "is_doubles": False}
+            for p in ("a", "b")
+        }
+        self._last_panel_sig = {"a": None, "b": None}
+
     async def handle_debug_rollback(self, request):
         """POST /api/debug/rollback — restore links.json (and events.json) from a backup slot."""
         try:
@@ -4541,6 +4838,7 @@ class SLinkServer:
                          os.path.join(backup_dir, "events.pre_rollback.json"))
         # Restore links.json and reload state
         shutil.copy2(backup_links, self.state._links_path)
+        self._disconnect_clients()
         self.state = SoulLinkState.load(
             data_dir=self._data_dir,
             species_lock=self.state.species_lock,
@@ -4554,7 +4852,18 @@ class SLinkServer:
             battle_calc=self.state.battle_calc,
             pc_trade_npc=self.state.pc_trade_npc)
         self.state.presentation_key_in_use = self._presentation_key_in_use
+        self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
+        self._player_adapters = {}
+        self.state.player_adapter_for = self.adapter_for
+        # Closed clients reconnect and re-hello; no open socket can silently lose events
+        # behind this pending admission gate.
+        self.admission = {pid: {"state": "contract_pending", "reason": "run restored; awaiting hello"}
+                          for pid in VALID_PLAYERS}
+        # F3: rollback must leave the same blank connection/display slate as /api/reset —
+        # a patched client's stale panel/sfx caps, party/box snapshot or battle state must
+        # not survive into the restored run.
+        self._reset_connection_and_display_state()
         if self.state.artifact_kind:
             self.adapter.set_artifact_kind(self.state.artifact_kind)
         # Restore events.json and reload ring buffer
@@ -4574,16 +4883,15 @@ class SLinkServer:
 
     async def handle_reset_api(self, request):
         """POST /api/reset — wipe all Soul Link state and start a fresh run."""
+        self._disconnect_clients()
         links_path = self.state._links_path
         if os.path.exists(links_path):
             os.remove(links_path)
-        # The cartridges are unchanged and their sockets stay open, and a client does not
-        # re-hello on an open socket -- so the run keeps its adapter (a fresh state would
-        # default to Gen 3 and render a live Gen 1 run with Gen 3 names and sprites), and
-        # connected_players keeps each client's rom_type and cartridge facts. While a client is
-        # connected the committed rom_type/artifact_kind carry over too, or its partner's next
-        # hello would skip the Mixed-games check.
-        old = self.state
+        # Reset = a new run. Every socket was just closed, so each client reconnects and
+        # re-hellos; its cartridge facts (rom_type, panel/panel_abi/sfx) come back with that
+        # hello and nothing of the old cartridge carries over. The adapter is kept only so the
+        # page renders the right generation until the first hello re-resolves it.
+        self.connected_players.clear()
         self.state = SoulLinkState(data_dir=self._data_dir,
                                    adapter=self.state.adapter,
                                    is_rr=self.state.is_rr,
@@ -4597,27 +4905,16 @@ class SLinkServer:
                                    native_sounds=self.state.native_sounds,
                                    battle_calc=self.state.battle_calc,
                                    pc_trade_npc=self.state.pc_trade_npc)
-        # With nobody connected a reset is how a run switches games, so nothing is kept.
-        if any(p.get("connected") for p in self.connected_players.values()):
-            self.state.rom_type, self.state.artifact_kind = old.rom_type, old.artifact_kind
         self.state.presentation_key_in_use = self._presentation_key_in_use
+        self.state.on_trade_outcome = self._journal_trade
         self.adapter = self.state.adapter
-        # Clear derived display caches so SSE doesn't broadcast stale data.
-        self.player_area = {"a": "", "b": ""}
-        self.player_area_id = {"a": "", "b": ""}
-        self.player_ball_count = {"a": 0, "b": 0}
-        self.player_badges = {"a": 0, "b": 0}
-        self.player_kanto_badges = {"a": 0, "b": 0}
-        self.trainer_name = {"a": "", "b": ""}
-        self.pc_boxes = {"a": [], "b": []}
-        self.party_details = {"a": {}, "b": {}}
-        self._mon_cache.clear()
-        self.battle_state = {
-            p: {"in_battle": False, "is_trainer_battle": False, "enemy_party": [],
-                "trainer_id": 0, "opponent_name": "", "opponent_class": "",
-                "is_doubles": False}
-            for p in ("a", "b")
-        }
+        self._player_adapters = {}
+        self.state.player_adapter_for = self.adapter_for
+        self.admission = {pid: {"state": "contract_pending", "reason": "run reset; awaiting hello"}
+                          for pid in VALID_PLAYERS}
+        # Clear derived display caches so SSE doesn't broadcast stale data. Shared with
+        # /api/debug/rollback (F3) so both leave the same blank slate.
+        self._reset_connection_and_display_state()
         self._recent_events.clear()
         self._save_events()
         log.warning("⚠  State reset via API — all links, area states, and captures cleared.")
@@ -4636,12 +4933,13 @@ class SLinkServer:
                     return name
         return key[:8] if key else "?"
 
-    def _memorial_box_indices(self) -> set[int]:
+    def _memorial_box_indices(self, player_id: str | None = None) -> set[int]:
         """Return set of box indices used for memorial storage (primary + overflow).
 
-        The primary memorial box is always excluded. Overflow is calculated from
-        the number of dead/memorial links — each dead link contributes one mon per
-        player to the memorial boxes. Boxes fill at 30 mons each.
+        Each player's memorial storage is its own: its buried halves (DEAD/MEMORIAL links) and
+        its pending memorials, as one key set so a pending burial of a dead link counts once.
+        The primary box holds `mons_per_box`; each further mon spills into the box below it.
+        With `player_id`, that player's boxes only; otherwise the union of both players'.
         """
         from server.state import LinkStatus
         mem_idx = self.adapter.memorial_box_index if self.adapter else -1
@@ -4649,32 +4947,75 @@ class SLinkServer:
             return set()
         indices = {mem_idx}
         mons_per_box = self.adapter.mons_per_box if self.adapter else 30
-        # Count dead/memorial mons: each such link has one mon per player in memorial
-        dead_count = sum(1 for e in self.state.links
-                         if e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL))
-        # Add pending memorials (not yet moved but will be)
-        for pid in ("a", "b"):
-            dead_count += len(self.state.pending_memorials[pid])
-        # How many overflow boxes beyond the primary?
-        overflow_boxes = max(0, (dead_count - mons_per_box) // mons_per_box)
-        for i in range(1, overflow_boxes + 1):
-            if mem_idx - i >= 0:
-                indices.add(mem_idx - i)
+        for pid in ((player_id,) if player_id else ("a", "b")):
+            buried = {getattr(e, pid).key for e in self.state.links
+                      if e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL) and getattr(e, pid) is not None}
+            overflow_boxes = max(0, (len(buried | self.state.pending_memorials[pid]) - 1) // mons_per_box)
+            indices.update(mem_idx - i for i in range(1, overflow_boxes + 1) if mem_idx - i >= 0)
         return indices
 
-    def _presentation_key_in_use(self, key: str) -> bool:
+    def _ingest_box_census(self, player_id: str, msg: dict) -> None:
+        """KEY-SCOPE-5: keep the collision check's box census. A client advertises a complete
+        census by sending `pc_boxes_generation` (monotonic per client session, bumped after each
+        successful full box scan). A snapshot carrying a newer generation with `pc_boxes`
+        replaces the census; a snapshot without both (or with an older generation) makes it
+        stale until a newer generation arrives. A client that never sends a generation is
+        legacy: its (possibly empty) `pc_boxes` stays presence-based, as before -- unless its
+        foundation implements the generation (`reports_box_census`), where a missing one is no
+        census. Any box mutation makes the census stale until the next complete scan."""
+        event, bc = msg.get("event"), self.box_census[player_id]
+        if event == "hello":
+            bc.update(capable="pc_boxes_generation" in msg, gen=-1, boxes=None)
+        elif "pc_boxes_generation" in msg:
+            bc["capable"] = True
+        if event in ("party_to_box", "box_to_party", "stats_cache", "release", "memorialize_done"):
+            bc["boxes"] = None                    # a box mutation: stale until a newer generation
+            return
+        if event not in ("hello", "tick", "safe") or not self._census_capable(player_id):
+            return
+        gen, boxes = msg.get("pc_boxes_generation"), msg.get("pc_boxes")
+        complete = type(gen) is int and gen >= 0 and isinstance(boxes, list)
+        if complete and gen > bc["gen"]:
+            bc.update(gen=gen, boxes=[dict(e) for e in boxes if isinstance(e, dict)])
+        elif complete and gen == bc["gen"] and bc["boxes"] is not None:
+            pass                                  # the census we hold, resent
+        elif "party" in msg or event == "safe":   # a snapshot (or a post-battle safe) without one
+            bc["boxes"] = None
+
+    def _census_capable(self, player_id: str) -> bool:
+        """KEY-SCOPE-5: this player's census is generation-stamped -- by foundation (the client
+        implements it), or because this client session sent a generation."""
+        return self.box_census[player_id]["capable"] or self.adapter_for(player_id).reports_box_census()
+
+    def _journal_trade(self, rec: dict) -> None:
+        """events.json: one trade_<outcome> entry per native-trade outcome; key = the trade token."""
+        self._log_event("", f"trade_{rec['outcome']}",
+                        f"{rec['a_key']} <-> {rec['b_key']}: {rec['verdict']} {rec['problem']}".strip(),
+                        key=rec["token"])
+
+    def _presentation_key_in_use(self, key: str, player_id: str | None = None,
+                                 party: bool = True) -> bool | None:
         """Is `key` a live mon in the presentation caches?  The state's key_change collision
         preflight asks this (PLAN A1): a party mon or a mon in a non-memorial box of either
-        player is load-bearing; the memorial box holds buried keys, which are reusable, and
-        `_mon_cache` is never pruned, so neither counts."""
-        mem_idx = self.adapter.memorial_box_index if self.adapter else -1
-        for pid in ("a", "b"):
-            if key in self.party_details.get(pid, {}):
+        player is load-bearing; the memorial boxes (primary and overflow) hold buried keys,
+        which are reusable, and `_mon_cache` is never pruned, so neither counts. KEY-SCOPE: with
+        a player, only that player's caches count (the partner may hold an equal key).
+        `party=False` skips the party cache (the state already proved that party hit is the
+        key-changing mon itself). KEY-SCOPE-5: a client that advertises a box census is judged
+        on its newest complete census only; None = that census is missing or stale."""
+        pids = (player_id,) if player_id else ("a", "b")
+        if party and any(key in self.party_details.get(pid, {}) for pid in pids):
+            return True
+        unavailable = False
+        for pid in pids:
+            boxes = self.box_census[pid]["boxes"] if self._census_capable(pid) else self.pc_boxes.get(pid, [])
+            if boxes is None:
+                unavailable = True
+                continue
+            memorial = self._memorial_box_indices(pid)
+            if any(b.get("key") == key and b.get("box") not in memorial for b in boxes):
                 return True
-            for bentry in self.pc_boxes.get(pid, []):
-                if bentry.get("key") == key and bentry.get("box") != mem_idx:
-                    return True
-        return False
+        return None if unavailable else False
 
     def _migrate_presentation_key(self, player_id: str, old_key: str, new_key: str):
         """Move the presentation caches from old_key to new_key AFTER state accepted the
@@ -4760,7 +5101,7 @@ class SLinkServer:
                                 f"[{player_id}] Quarantined mon {key[:8]} found in memorial box! "
                                 f"Queueing party_mon + box_mon to relocate."
                             )
-                            stats = s.mon_stats.get(key, {})
+                            stats = s.mon_stats[player_id].get(key, {})
                             s.queued_commands[player_id].append({"cmd": "party_mon", "key": key, "stats": stats})
                             s.queued_commands[player_id].append({"cmd": "box_mon", "key": key})
                             break
@@ -4812,7 +5153,7 @@ class SLinkServer:
         if mi.level:
             return mi.level
         # Try mon_stats cache (set when mon was deposited to box)
-        cached = self.state.mon_stats.get(mi.key)
+        cached = self.state.mon_stats[player_id].get(mi.key)
         if cached and cached.get("level"):
             return cached["level"]
         # Try live party_details from either player
@@ -4844,7 +5185,7 @@ class SLinkServer:
                     return {"nickname": mon.nickname, "species_id": mon.species, "level": mon.level}
         # Enrich with level from mon_stats cache or existing link entry
         if result and not result.get("level"):
-            cached = self.state.mon_stats.get(key)
+            cached = self.state.mon_stats[player_id].get(key)
             if cached and cached.get("level"):
                 result["level"] = cached["level"]
             else:
@@ -4899,13 +5240,10 @@ class SLinkServer:
 
         # If override requested, unlink existing entries for these keys
         if override:
-            for key_to_free in [a_key, b_key]:
-                old_entry = s._key_index.get(key_to_free)
+            for pid, key_to_free in (("a", a_key), ("b", b_key)):
+                old_entry = s.entry_for(pid, key_to_free)
                 if old_entry:
-                    if old_entry.a and old_entry.a.key in s._key_index:
-                        del s._key_index[old_entry.a.key]
-                    if old_entry.b and old_entry.b.key in s._key_index:
-                        del s._key_index[old_entry.b.key]
+                    s.unindex_entry(old_entry)
                     if old_entry in s.links:
                         s.links.remove(old_entry)
                     old_area = old_entry.area_id
@@ -4914,10 +5252,10 @@ class SLinkServer:
                     log.info(f"[inject_link] override: removed old link on {old_area}")
 
         # Reject already-linked keys (unless override already cleared them)
-        if a_key in s._key_index:
+        if s.entry_for("a", a_key) is not None:
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"Player A mon {a_key[:8]} is already linked."}, status=400)
-        if b_key in s._key_index:
+        if s.entry_for("b", b_key) is not None:
             return aiohttp_web.json_response(
                 {"ok": False, "error": f"Player B mon {b_key[:8]} is already linked."}, status=400)
 
@@ -5099,6 +5437,8 @@ def build_app(srv):
     app.router.add_post("/api/debug/clear_pending",    srv.handle_debug_clear_pending)
     app.router.add_post("/api/debug/unlink",            srv.handle_debug_unlink)
     app.router.add_post("/api/debug/revive",            srv.handle_debug_revive)
+    app.router.add_post("/api/debug/resolve_trade",     srv.handle_debug_resolve_trade)
+    app.router.add_post("/api/debug/resolve_ambiguous_key", srv.handle_debug_resolve_ambiguous_key)
     app.router.add_get("/api/debug/backups",            srv.handle_debug_list_backups)
     app.router.add_post("/api/debug/rollback",          srv.handle_debug_rollback)
     # RR Damage Calculator routes

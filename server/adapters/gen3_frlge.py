@@ -26,6 +26,7 @@ from server.pokemon_data import (
     type_name as _type_name,
 )
 
+from . import gen3_codec
 from .base import GameAdapter, humanize_area_id
 
 log = logging.getLogger(__name__)
@@ -230,6 +231,30 @@ if os.path.exists(_calc_names_path):
     with open(_calc_names_path, encoding="utf-8") as _f:
         _RR_CALC_NAMES = {k: v for k, v in json.load(_f).items() if isinstance(v, dict)}
 
+# RR reuses ability id "As One" for two distinct Calyrex Rider combos; the raw name
+# alone can't tell them apart, so calc_name("ability", "As One") is ambiguous by the
+# time it sees a string. Disambiguate by ability id instead, straight to the calc's
+# own spelling (calc/calc/src/data/abilities.ts: 'As One (Glastrier)'/'As One (Spectrier)').
+# Source: server/pokemon_data.py ABILITY_DESCRIPTIONS — id 73 "Both Unnerve and Grim
+# Neigh" (Grim Neigh is Spectrier's own ability), id 77 "Both Unnerve and Moxie" (CFRU's
+# reused stat-boost-on-KO ability id, overridden to display "Chilling Neigh" for natdex
+# 896 Glastrier). Cross-checked against tools/gen_rr_priority_trainers.py's per-species
+# table (Calyrex-Ice -> "As One (Glastrier)", Calyrex-Shadow -> "As One (Spectrier)").
+_RR_AS_ONE_CALC_NAME: dict[int, str] = {
+    73: "As One (Spectrier)",
+    77: "As One (Glastrier)",
+}
+
+# Vanilla FRLG/Emerald display name → damage-calc Gen 3 name, per kind. Separate table
+# (and separate calc generation -- RR runs the calc at gen 9, vanilla at gen 3): a vanilla
+# ROM spelling can need a different calc name than RR's own patched dex uses for the same
+# concept. Pinned by tests/unit/test_calc_names_multigen.py against calc/calc/src/data/*.ts.
+_VANILLA_CALC_NAMES: dict[str, dict[str, str]] = {}
+_calc_names_vanilla_path = os.path.join(_DATA_DIR, "calc_names_vanilla.json")
+if os.path.exists(_calc_names_vanilla_path):
+    with open(_calc_names_vanilla_path, encoding="utf-8") as _f:
+        _VANILLA_CALC_NAMES = {k: v for k, v in json.load(_f).items() if isinstance(v, dict)}
+
 # RR front sprites, vendored by tools/gen_rr_sprites.py as server/static/sprites/rr/<id>.png
 # and served same-origin. Keyed by RR's own (CFRU) species ids, not the national dex.
 _RR_SPRITE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -264,6 +289,19 @@ def _frlg_url(nat: int) -> str:
             f"/sprites/pokemon/versions/generation-iii/firered-leafgreen/{nat}.png")
 
 
+# Personality-value → nature, by (personality mod 25). Same table/derivation for RR and
+# vanilla -- both keep the personality value in the same struct field. Moved here (was
+# server.py's module-level _nature_from_key) so nature is an adapter fact: Gen 1/2 have no
+# such struct field and the base class's calc_nature() default (None) covers them.
+_NATURE_NAMES = (
+    "Hardy", "Lonely", "Brave", "Adamant", "Naughty",
+    "Bold", "Docile", "Relaxed", "Impish", "Lax",
+    "Timid", "Hasty", "Serious", "Jolly", "Naive",
+    "Modest", "Mild", "Quiet", "Bashful", "Rash",
+    "Calm", "Gentle", "Sassy", "Careful", "Quirky",
+)
+
+
 class Gen3Adapter(GameAdapter):
     """Adapter for Gen 3: FireRed/LeafGreen, Emerald, Archipelago, and Radical Red.
 
@@ -279,6 +317,9 @@ class Gen3Adapter(GameAdapter):
             is_rr: True for Radical Red / CFRU ROMs, False for vanilla/AP/Emerald.
         """
         self._is_rr = is_rr
+        # The server passes the connecting client's rom_type (server.py get_adapter calls);
+        # only calc_profile reads it, to pick Emerald's trainer sets over FR/LG's.
+        self._rom_type = kwargs.get("rom_type") or ""
         profile = "Radical Red / CFRU" if is_rr else "vanilla / AP / Emerald"
         log.debug(f"[ADAPTER] Gen3Adapter initialized: profile={profile!r}")
 
@@ -444,6 +485,8 @@ class Gen3Adapter(GameAdapter):
         return ""
 
     def ability_name(self, ability_id: int, species_id: int = 0) -> str:
+        if self._is_rr and ability_id in _RR_AS_ONE_CALC_NAME:
+            return _RR_AS_ONE_CALC_NAME[ability_id]
         return _ability_name(ability_id, self._is_rr, species_id)
 
     def ability_description(self, ability_id: int) -> str:
@@ -558,10 +601,53 @@ class Gen3Adapter(GameAdapter):
         return _FRLG_ITEM_NAMES.get(item_id, f"Item #{item_id}")
 
     def calc_name(self, kind: str, name: str) -> str:
-        # ponytail: RR only; vanilla FRLG names go to the calc unchanged (the calc is RR's).
-        if not self._is_rr or not name:
+        if not name:
             return name
-        return _RR_CALC_NAMES.get(kind, {}).get(name, name)
+        table = _RR_CALC_NAMES if self._is_rr else _VANILLA_CALC_NAMES
+        return table.get(kind, {}).get(name, name)
+
+    def calc_profile(self) -> dict | None:
+        """RR runs the calc at gen 9 with its own sets; vanilla FR/LG and Emerald at gen 3
+        with their vendored, pret-checked trainer sets (calc/src/js/data/sets/games)."""
+        if self._is_rr:
+            return {"gen": 9, "dex": "rr"}
+        sets = ({"file": "Emerald.js", "var": "CUSTOMSETDEX_E"} if self._rom_type == "emerald"
+                else {"file": "FRLG.js", "var": "CUSTOMSETDEX_FRLG"})
+        return {"gen": 3, "dex": "vanilla", "sets": sets}
+
+    def calc_nature(self, key: str) -> str | None:
+        """Derive nature name from a monKey ('PERS_HEX:OTID_HEX...'). Same logic for RR
+        and vanilla -- both use the personality value here (unlike Gen 1/2's DVs)."""
+        try:
+            return _NATURE_NAMES[int(key.split(":")[0], 16) % 25]
+        except (ValueError, AttributeError):
+            # No personality in the key (a "foe-N" enemy entry): unknown, not Hardy, so the
+            # calc's trainer-set nature isn't masked by a made-up one.
+            return None
+
+    def calc_stats(self, detail: dict) -> dict | None:
+        """Decode IVs/EVs/computed stats from the 100-byte party blob (gen3_codec,
+        the same RR/vanilla substructure-order oracle the Rival Team Swap feature
+        already decodes blob_hex with)."""
+        blob_hex = detail.get("blob_hex")
+        if not blob_hex:
+            return None
+        try:
+            blob = bytes.fromhex(blob_hex) if isinstance(blob_hex, str) else blob_hex
+            mon = gen3_codec.decode_party_mon(bytes(blob), rr=self._is_rr)
+        except (ValueError, TypeError):
+            return None
+
+        def _short(d):
+            return {"hp": d["hp"], "atk": d["attack"], "def": d["defense"],
+                    "spa": d["sp_attack"], "spd": d["sp_defense"], "spe": d["speed"]}
+
+        return {
+            "ivs": _short(mon["ivs"]),
+            "evs": _short(mon["evs"]),
+            "stats": {"hp": mon["max_hp"], "atk": mon["attack"], "def": mon["defense"],
+                      "spa": mon["sp_attack"], "spd": mon["sp_defense"], "spe": mon["speed"]},
+        }
 
     def area_display_name(self, area_id: str) -> str:
         if not area_id:

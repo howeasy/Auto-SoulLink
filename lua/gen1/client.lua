@@ -106,6 +106,10 @@ local MOVE_BOX_TO_PARTY, MOVE_PARTY_TO_BOX, MOVE_DAYCARE_TO_PARTY, MOVE_PARTY_TO
 -- (:549-560), so it keeps both semantics.
 local DEMO_BATTLE_TYPES = { [1] = true, [4] = true }
 local TRANSFORMED_BIT = 8 -- bit 3 of wPlayerBattleStatus3 (battle_constants.asm:106)
+-- BURIAL-VISIBLE: a boxed burial waiting on an in-game SAVE (BOX-MEMORIAL-2) is shown, every this many
+-- frames while it waits (hud.show sanitizes; the tick's awaiting_save puts it on the pair board)
+Client.BURIAL_NAG_FRAMES = 1200
+local BURIAL_TEXT = "SAVE TO FINISH BURIAL"
 
 local function hex_of(bytes)
     local out = {}
@@ -132,7 +136,14 @@ local function wire_stages(raw)
     return { s(raw.attack), s(raw.defense), s(raw.speed), s(raw.special), 6, s(raw.accuracy), s(raw.evasion) }
 end
 
+-- KEY-SCOPE-5: key_change refusals that retire nothing. The alias stays, and the change goes out
+-- again after the next complete box census (send_tick). Every other reason is terminal (U5).
+Client.RETRYABLE_REJECTIONS = { ["box census unavailable"] = true, ["ambiguous key (trade clash)"] = true }
+
 function Client.new(p)
+    local HelloSession = assert(p.hello_session, "shared hello_session factory required")
+    local ReplyDispatch = assert(p.reply_dispatch, "shared reply_dispatch factory required")
+    local OwedReports = assert(p.owed_reports, "shared owed_reports factory required")
     local reads, signals_mod, writes, safety = p.reads, p.signals, p.writes, p.safety
     local net, json, hud, io = p.net, p.json, p.hud, p.io
     local profile, sites, ws_profile, area_map = p.profile, p.sites, p.write_checkpoint, p.area_map
@@ -153,19 +164,34 @@ function Client.new(p)
         seq = 0, frame = 0, hello_sent = false,
         writes_enabled = false, invalid_streak = 0, gate_revoked = false,
         known_keys = {}, box_cache = {}, resolved_areas = {}, config = {},
+        box_generation = 0, box_complete = false, -- KEY-SCOPE-5: bumped per complete rescan_boxes
         -- old_key -> the physical key the cartridge now holds, for a key_change the server
         -- REJECTED: its retirement commands (force_faint / memorialize) name the old key the
         -- server still knows, the mon's bytes carry the new one (review cx-6aacc4f1 #1)
         retired_alias = {},
-        deferred = {}, pending_battle_writes = {},
+        deferred = {}, pending_battle_writes = {}, arrivals = 0,
         pending_change = nil, pending_rival = nil, battle = nil, has_pokeballs = false,
         nuzlocke_announced = false,
         signals = nil, boxes = p.boxes, rom = p.rom, statics = p.statics, panel = p.panel,
+        -- deferred backing-box removals ({key, armed}) waiting for save_witness (gen1-box-durability)
+        box_settle = {},
         trade = p.trade, trade_enabled = false, trade_state = nil,
+        -- post-DONE trade reports and trade_uncertain: sent in order once the hello is ready and kept until
+        -- the server answers them (lua/owed_reports.lua; review 2026-09-24 MAJOR-1, mirror of Gen 2)
+        owed = OwedReports.new(),
         -- A1: server-seeded pending-capture keys (part of the APEX collision set) and the
         -- old->new alias held between a key_change and its ack
         pending_keys = {}, key_alias = nil, apex = nil, transforming = nil,
+        -- review 2026-09-24 MINOR-7 (mirror of lua/gen2/client.lua dead_keys): every key whose death landed
+        -- here, until its burial; a heal before the burial is re-zeroed at the checkpoint and the loop head,
+        -- quietly. Kept across a reset (the client outlives it).
+        dead_keys = {},
+        -- INV-CLIENT-2: the server's dead/memorial keys for this player, sent at every accepted hello
+        -- (`dead_keys`), REPLACE the set; after a reset/reload/identity change the sweep waits for that sync
+        -- (another save with the same OT must never get a stale write)
+        dead_synced = true,
     }
+    self.trade_owed = self.owed.list
 
     -- ── outbound ─────────────────────────────────────────────────────────────────────
     local function send(event, fields)
@@ -176,10 +202,19 @@ function Client.new(p)
         self.seq = self.seq + 1
         local msg = fields or {}
         msg.event, msg.player, msg.seq = event, self.player, self.seq
-        net.send(json.encode(msg))
+        -- connector.send queues successfully with no return value. Explicit false
+        -- from an injected transport is refusal, not a successful hello.
+        if net.send(json.encode(msg)) == false then return false end
+        self.owed:line_sent()
         return true
     end
     self.send = send
+
+    -- A report the server must receive (MAJOR-1): never dropped on a down socket, re-sent after a reconnect
+    local function owe(event, fields)
+        self.trade_owed[#self.trade_owed + 1] = { event = event, fields = fields }
+        self.owed:step(net.connected(), self.hello_session:status().ready == true, send)
+    end
 
     -- ── reads → wire shapes ──────────────────────────────────────────────────────────
     local function mon_key(m) return reads.key(m) end
@@ -250,8 +285,27 @@ function Client.new(p)
         if battle.in_battle == 0 then return arr({}) end
         local foe = { species_id = battle.enemy_species, level = battle.enemy_level,
                       hp = battle.enemy_hp, active = true }
+        -- maxHP only when plausible: LoadEnemyMonData's transition frame can pair a new HP with a
+        -- stale or zero max; without one the board shows the number alone
+        local max_hp = battle.enemy_max_hp
+        if math.type(max_hp) == "integer" and max_hp > 0 and max_hp <= 999 and battle.enemy_hp <= max_hp then
+            foe.maxHP = max_hp
+        end
         local stages = reads.read_stat_stages("enemy")
         if stages then foe.stat_stages = arr(wire_stages(stages)) end
+        -- The live wEnemyMon struct is populated in wild AND trainer battles: moves, status
+        -- and DVs always (maxHP stays the plausibility-gated read above). Only trainer battles have a party record to read stat exp
+        -- from (wild wEnemyMons is a union with wild-encounter data -- HANDOFF task 6/
+        -- reads.lua's read_enemy_battle_mon comment), so blob_hex is gated on is_trainer AND
+        -- a party_pos the send-out has actually settled (see RIVAL_* window comment above).
+        local bm = reads.read_enemy_battle_mon()
+        foe.moves = arr(bm.moves)
+        foe.status_cond, foe.dvs_raw, foe.pp = bm.status, bm.dvs.raw, arr(bm.pp)
+        if battle.is_trainer and bm.party_pos >= 0 and bm.party_pos < d.party_capacity then
+            local blob = io.read_range(profile.ram.wEnemyMons + bm.party_pos * d.party_struct_size,
+                                        d.party_struct_size, "System Bus")
+            foe.blob_hex = hex_of(blob)
+        end
         return arr({ foe })
     end
 
@@ -282,6 +336,13 @@ function Client.new(p)
         return out
     end
 
+    -- KEY-SCOPE-5: pc_boxes is a complete census only alongside a generation. Omitted before any
+    -- complete scan and whenever the latest scan was incomplete (box_cache still goes out for
+    -- display), so the server never takes a partial cache for a fresh census.
+    local function box_generation()
+        return self.box_complete and self.box_generation or nil
+    end
+
     -- Rescan every SRAM box (derived.sram_boxes_per_bank x banks) and the active box (WRAM
     -- mirror) into box_cache. The flat CartRAM image spans bank 0 through the last box bank.
     function self:rescan_boxes()
@@ -291,10 +352,13 @@ function Client.new(p)
         -- SRAM boxes are garbage until the game's first ChangeBox initialises them (bit 7 of
         -- wCurrentBoxNum; save.asm EmptyAllSRAMBoxes) — only the WRAM mirror is real before that
         local sram = (cur and cur.initialized) and io.read_range(0, sram_size, "CartRAM") or nil
+        -- KEY-SCOPE-5: complete = every box read. Never-initialised SRAM boxes count as read: they
+        -- really are empty (the game has never stored a mon there), so skipping them is not a gap.
+        local complete = cur ~= nil and active ~= nil and (sram ~= nil or not cur.initialized)
         for box = 0, box_count - 1 do
             local mons
             if cur and box == cur.index then mons = active
-            elseif sram then mons = reads.read_sram_box(sram, box) end
+            elseif sram then mons = reads.read_sram_box(sram, box); complete = complete and mons ~= nil end
             if mons then
                 for _, m in ipairs(mons) do
                     cache[#cache + 1] = { box = box, slot = m.slot, key = mon_key(m), species_id = m.species,
@@ -302,8 +366,19 @@ function Client.new(p)
                 end
             end
         end
-        self.box_cache = cache
+        self.box_cache, self.box_complete = cache, complete
+        if complete then self.box_generation = self.box_generation + 1 end
         return cache
+    end
+
+    -- KEY-SCOPE-5: a change refused for a non-terminal reason goes out again once a complete box
+    -- census NEWER than the refusal has gone out (this tick carried it)
+    local function resend_refused_change()
+        local a = self.key_alias
+        if a and a.retry_gen and self.box_complete and self.box_generation > a.retry_gen then
+            a.retry_gen = nil
+            send("key_change", a.msg)
+        end
     end
 
     -- ── the writes gate (R-4, W-6) ───────────────────────────────────────────────────
@@ -312,6 +387,18 @@ function Client.new(p)
         if not party then return false, "party unreadable" end
         if reads.read_player_id() == 0 and #party == 0 then return false, "pre-game (title/new game)" end
         return true
+    end
+
+    -- The scheduler sees only this opaque key. Save identity and the optional
+    -- pureRGB version stamp are Gen 1 facts, not neutral scheduling defaults.
+    local function hello_identity()
+        local id = reads.read_player_id()
+        if type(id) ~= "number" or id % 1 ~= 0 or id < 0 or id > 65535 then
+            return nil, "player identity unavailable"
+        end
+        local version = reads.read_game_internal_version()
+        return table.concat({tostring(self.player), self.foundation, self.artifact_kind,
+                             tostring(self.rom_sha1), tostring(id), tostring(version)}, "|")
     end
 
     function self:validate()
@@ -332,10 +419,10 @@ function Client.new(p)
             -- new session for the server — CONTINUE re-hellos the same save (a reconnect),
             -- NEW GAME hellos a fresh wPlayerID and is refused (C-1)
             if reads.read_player_id() == 0 then
-                self.hello_sent = false
+                self.hello_session:invalidate("save_reset")
+                self.dead_synced = false -- INV-CLIENT-2: the next save waits for the hello's dead_keys
+                self:trade_forget("save_reset") -- the lease went with the WRAM; DONE never comes
                 self.pending_change = nil -- an acquisition cannot outlive a reset/new save
-                -- WRAM clear: the held panel belongs to the session that just ended
-                if self.panel then self.panel:clear() end
                 -- ...and so does every identity alias: the record each pointed at is gone with
                 -- the WRAM, and a reloaded pre-change save holds the OLD key again, which the
                 -- server's re-queued retirement then names directly. The PENDING alias goes too,
@@ -477,20 +564,52 @@ function Client.new(p)
         end
     end
 
+    -- A battle-held write handed to `deferred` later keeps its ARRIVAL position: appended, it
+    -- fell behind a later memorialize for the same key, which buried the live mon and then
+    -- dropped the faint ("key not in party"). Gen 3 684bbb7a fixed the same shape.
+    -- ponytail: mirrors Gen 3's lua/core/deferred.lua Deferred:push; folds into it at the
+    -- post-G4 convergence card (owner ruling), not a third queue.
+    local function defer_held(entry)
+        entry.arrival = entry.arrival or self.arrivals   -- an unstamped entry counts as newest
+        for i, queued in ipairs(self.deferred) do
+            if queued.arrival and queued.arrival > entry.arrival then
+                table.insert(self.deferred, i, entry)
+                return
+            end
+        end
+        self.deferred[#self.deferred + 1] = entry
+    end
+
+    -- MINOR-7 (mirror of lua/gen2/client.lua)
+    local function mark_dead(key, mon)
+        self.dead_keys[key] = true
+        if mon then self.dead_keys[mon_key(mon)] = true end
+    end
+    local function revived_dead()
+        if not self.dead_synced then return nil end
+        for key in pairs(self.dead_keys) do
+            local slot, mon = find_party_slot(key)
+            if slot and mon.hp > 0 then return key end
+        end
+    end
+
     function self:handle_command(cmd)
         local c = cmd.cmd
         if c == "noop" then return end
+        self.arrivals = self.arrivals + 1
+        cmd.arrival = self.arrivals
         if c == "force_faint" or c == "force_explode" then
             local slot, mon, party, why = find_party_slot(cmd.key)
             if why then log("[SLink-gen1] " .. c .. ": " .. why .. " " .. tostring(cmd.key)) return end
-            if not party then
-                -- unreadable right now (AddPartyMon's AskName window): keep it; the checkpoint
-                -- re-finds the key (a server command is never resent)
-                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+            if not party or not slot then
+                -- unreadable right now (AddPartyMon's AskName window), or a key not in the party:
+                -- deferred, never dropped on receipt (Gen 2 parity, 4e6aea39 MINOR-3; review
+                -- 2026-09-24 MINOR-9). The checkpoint re-finds the key or drops it with a log
+                -- (a server command is never resent).
+                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
                 self.known_keys[cmd.key] = true
                 return
             end
-            if not slot then log("[SLink-gen1] " .. c .. ": key not in party " .. tostring(cmd.key)) return end
             local battle = reads.read_battle()
             if battle.in_battle ~= 0 then
                 -- in battle. The ACTIVE battler waits for the loop head (W-2: its HP lives in
@@ -499,9 +618,15 @@ function Client.new(p)
                 -- 2026-09-22): its party struct has no battle shadow, HasMonFainted refuses it
                 -- (core.asm:1473-1482, .notAlreadyOut :2402-2404) and GainExperience skips HP 0
                 -- (experience.asm:10-13). Explode = faint on the bench (EXPLOSION needs the field).
-                local w = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+                -- O-30: the old man tutorial / Safari (wBattleType ~= 0) never send a mon out and
+                -- never reach MainInBattleLoop (core.asm:164-207), so every slot is bench, slot 0
+                -- too (wPlayerMonNumber is InitBattleVariables' zero), and receipt is the only
+                -- in-battle landing. Link battles stay held (the other Game Boy would desync).
+                -- ponytail: a refused write in a special battle has no loop head to retry at; the
+                -- battle_end flush lands it at the checkpoint. Add a per-frame retry if that shows.
+                local w = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
                 if self.writes_enabled and (battle.in_battle == 1 or battle.in_battle == 2)
-                   and battle.type == 0 and battle.link_state ~= 4 and slot ~= battle.player_mon_number then
+                   and battle.link_state ~= 4 and (battle.type ~= 0 or slot ~= battle.player_mon_number) then
                     local ok, err = pcall(function()
                         writes:arm("battle_bench")
                         writes:faint_party_slot(slot)
@@ -510,7 +635,8 @@ function Client.new(p)
                     if ok then
                         w.landed = true
                         log("[SLink-gen1] bench write landed on receipt: slot " .. slot .. " " .. tostring(cmd.key))
-                        hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360)
+                        if not self.dead_keys[cmd.key] then hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360) end
+                        mark_dead(cmd.key, mon)
                     else
                         log("[SLink-gen1] bench write refused on receipt, the loop head retries: " .. tostring(err))
                     end
@@ -521,7 +647,7 @@ function Client.new(p)
                 -- at the loop head by the active-battler path
                 self.pending_battle_writes[#self.pending_battle_writes + 1] = w
             else
-                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname }
+                self.deferred[#self.deferred + 1] = { cmd = c, key = cmd.key, nickname = cmd.nickname, arrival = cmd.arrival }
             end
             self.known_keys[cmd.key] = true
             return
@@ -547,6 +673,9 @@ function Client.new(p)
             self.seeded = true
         elseif c == "unresolve_area" then
             self.resolved_areas[cmd.area_id] = nil
+        elseif c == "dead_keys" then
+            self.dead_keys, self.dead_synced = {}, true
+            for _, k in ipairs(cmd.keys or {}) do self.dead_keys[k] = true end
         elseif c == "key_change_ack" then
             -- A1: the rename is committed server-side; the old key stops being an alias
             local a = self.key_alias
@@ -554,9 +683,19 @@ function Client.new(p)
                 self.known_keys[a.old_key] = nil
                 self.key_alias = nil
             end
+            self.retired_alias[cmd.old_key] = nil
+        elseif c == "key_change_rejected" and Client.RETRYABLE_REJECTIONS[cmd.reason] then
+            -- KEY-SCOPE-5: nothing was retired; the alias stays and the change is re-sent after the
+            -- next complete box census (a census refusal asks for that census now)
+            local a = self.key_alias
+            if a and a.old_key == cmd.old_key then
+                a.retry_gen = self.box_generation
+                if cmd.reason == "box census unavailable" then self:rescan_boxes() end
+            end
+            log("[SLink-gen1] key_change refused (will retry): " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
         elseif c == "key_change_rejected" then
-            -- U5: the server kills the pair itself (force_faint/memorialize follow); here the
-            -- alias is dropped and the player is told why
+            -- U5 (a key collision): the server kills the pair itself (force_faint/memorialize
+            -- follow); here the alias is dropped and the player is told why
             local a = self.key_alias
             if a and a.old_key == cmd.old_key then
                 -- the cartridge cannot be rolled back (the DVs / species are already written), so
@@ -597,13 +736,23 @@ function Client.new(p)
             self:trade_prompt(cmd)
         elseif c == "show_choices" or c == "show_menu" or c == "choose_mon" then
             ack_cancel(cmd) -- no native picker outside the receptionist flow
+        elseif c == "withdraw_trade" then
+            self:trade_withdraw(cmd)
+        elseif c == "apply_prepare" then
+            -- MAJOR-1 prepare round (mirror of lua/gen2/client.lua trade_prepare_answer): the
+            -- service picks APPLY up anywhere, so ready = the mon is still here and no native
+            -- trade is in flight; nothing is staged
+            local st = self.trade_state
+            local ok = self.trade_enabled == true and find_party_slot(cmd.old_key) ~= nil
+                       and not (st and (st.kind == "apply" or st.kind == "prompt"))
+            send("apply_ready", { token = cmd.token, ok = ok })
         elseif c == "apply_trade" then
             if self.trade_enabled then self:trade_apply(cmd)
             else
                 -- no trade path on this cartridge: "nothing changed" with the pre-trade key (§5)
                 local slot, mon = find_party_slot(cmd.old_key)
-                send("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
-                                     new_species = mon and mon.species or 0 })
+                owe("trade_done", { token = cmd.token, slot = slot or cmd.slot, new_key = cmd.old_key,
+                                    new_species = mon and mon.species or 0 })
             end
         elseif c == "link_panel" then
             -- Held, not painted: the cartridge asks for the screen when the player opens the
@@ -737,11 +886,69 @@ function Client.new(p)
         end
     end
 
+    local function burial_waiting()
+        for _, s in ipairs(self.box_settle) do if s.memorial then return true end end
+        return false
+    end
+    local function show_burial() hud.show(BURIAL_TEXT, 255, 200, 64, 300) end
+    -- BURIAL-VISIBLE: true while a burial waits, false once when it clears, absent otherwise (an idle tick
+    -- stays byte-identical to master's); the server also resets it at every accepted hello
+    local function awaiting_save_field()
+        local waiting, flag = burial_waiting(), nil
+        if waiting then flag = true elseif self.burial_reported then flag = false end
+        self.burial_reported = waiting
+        return flag
+    end
+
+    local function memorial_done(key, phys, nickname)
+        send("memorialize_done", { key = key, box = box_count - 1 }); self:rescan_boxes()
+        self.retired_alias[key] = nil
+        self.dead_keys[key], self.dead_keys[phys] = nil, nil -- buried: MINOR-7 is done with it
+        hud.show("† " .. nick_label(key, nickname) .. " buried", 255, 140, 40, 300)
+    end
+
     -- Deferred queue: one command per frame, only at the verified overworld checkpoint.
     function self:run_deferred()
-        if #self.deferred == 0 or not self.writes_enabled or not net.connected() then return end
+        local armed
+        for i, s in ipairs(self.box_settle) do if s.armed then armed = armed or i end end
+        if (#self.deferred == 0 and not armed and not (self.dead_synced and next(self.dead_keys))) or not self.writes_enabled
+           or not net.connected() then return end
         local safe, why = safety.check(ws_profile, io)
         if not safe then return end
+        if armed then
+            -- the native save persisted the party: re-running party_mon is the interrupted-withdraw
+            -- replay (boxes.lua), which drops the box copy on a full-record match; a reset before the
+            -- save left the mon in the box only, and the replay is a no-op there. One op per checkpoint.
+            -- Mirror of lua/gen2/client.lua run_deferred's settle.
+            local s = table.remove(self.box_settle, armed)
+            local ok, done, reason = pcall(function()
+                writes:arm("overworld")
+                if s.memorial then return self.boxes:settle_memorial(s.key) end
+                return self.boxes:withdraw(s.key)
+            end)
+            writes:disarm()
+            if s.memorial then
+                -- BOX-MEMORIAL-2: a boxed memorial is acked only once a native save made it durable
+                if ok and done and reason then
+                    s.armed = false
+                    self.box_settle[#self.box_settle + 1] = s
+                    log("[SLink-gen1] memorial settle " .. s.key .. ": " .. tostring(reason))
+                elseif ok and done then
+                    memorial_done(s.memorial.key, s.key, s.memorial.nickname)
+                else
+                    log("[SLink-gen1] memorial settle refused: " .. tostring(ok and reason or done) .. " " .. s.memorial.key)
+                    send("memorialize_failed", { key = s.memorial.key, reason = tostring(ok and reason or done) })
+                end
+                self:rescan_boxes()
+                return
+            end
+            log("[SLink-gen1] box copy settle " .. s.key .. ": " .. (ok and done and "done" or tostring(reason or done)))
+            self:rescan_boxes()
+            return
+        end
+        local revived = revived_dead()
+        if revived then table.insert(self.deferred, 1, { cmd = "force_faint", key = revived, quiet = true }) end
+        if #self.deferred == 0 then return end
         local cmd = table.remove(self.deferred, 1)
         -- the key the cartridge holds for cmd.key and, for a retired alias, the validated slot:
         -- the box module takes both so a duplicate of the new key elsewhere cannot block the
@@ -761,9 +968,15 @@ function Client.new(p)
                 log("[SLink-gen1] " .. cmd.cmd .. " refused for the retired key: " .. refused .. " " .. tostring(cmd.key))
                 send(cmd.cmd .. "_failed", { key = cmd.key, reason = refused })
             elseif cmd.cmd == "force_faint" or cmd.cmd == "force_explode" then
-                local slot, _, _, why = find_party_slot(cmd.key)
-                if slot then
+                local slot, mon, _, why = find_party_slot(cmd.key)
+                -- MINOR-7: a death this client already landed (the server's O-24 re-issue) is quiet, and a
+                -- mon still at HP 0 needs nothing more
+                local quiet = cmd.quiet or self.dead_keys[cmd.key]
+                if slot and quiet and mon.hp == 0 then
+                    mark_dead(cmd.key, mon)
+                elseif slot then
                     writes:faint_party_slot(slot)
+                    mark_dead(cmd.key, mon)
                     -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:760-800): text only, never a local
                     -- SFX -- but not for one uniform reason (cx-6bedd222). A terminal/linked
                     -- battle faint's force_faint already carries a play_sound 26 to this player
@@ -772,7 +985,7 @@ function Client.new(p)
                     -- at all -- the whiteout case gets its own local cue from announce_whiteout
                     -- above instead, and the dead-key requeue is silent by design (a link
                     -- already resolved, not a new event). One banner rule covers all three.
-                    if not cmd.quiet then hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360) end
+                    if not quiet then hud.show("!! " .. nick_label(cmd.key, cmd.nickname) .. " KO'd", 255, 80, 80, 360) end
                 else
                     -- the mon left the party before the checkpoint (PC deposit), or a duplicate
                     -- arrived and the key no longer names one mon: no byte moves. The protocol
@@ -799,7 +1012,14 @@ function Client.new(p)
                 for _, e in ipairs(self.box_cache) do if e.key == cmd.key then species = e.species_id end end
                 local base = species and self.rom and self.rom.base_stats_for(species) or nil
                 local done, reason = nil, "no box module"
-                if self.boxes then done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname) end
+                if self.boxes then
+                    done, reason = self.boxes:withdraw(cmd.key, cmd.stats, base, cmd.nickname, { defer_backing = true })
+                end
+                if done and reason then
+                    -- F1: the non-current box copy stays until save_witness (never a loss on a reset)
+                    self.box_settle[#self.box_settle + 1] = { key = cmd.key, armed = false }
+                    log("[SLink-gen1] party_mon " .. tostring(cmd.key) .. ": " .. reason)
+                end
                 if done then
                     send("sync_retrieve_done", { key = cmd.key })
                     self:rescan_boxes()
@@ -823,10 +1043,20 @@ function Client.new(p)
                 local _, mem_mon = find_party_slot(cmd.key)
                 local done, reason = nil, "no box module"
                 if self.boxes then done, reason = self.boxes:memorialize(phys, hint) end
-                if done then
-                    send("memorialize_done", { key = cmd.key, box = box_count - 1 }); self:rescan_boxes()
-                    self.retired_alias[cmd.key] = nil
-                    hud.show("† " .. nick_label(cmd.key, mem_mon and mem_mon.nickname) .. " buried", 255, 140, 40, 300)
+                if done and reason then
+                    -- BOX-MEMORIAL-2: a boxed memorial touching the WRAM box waits for a native save; the ack
+                    -- goes out from the settle after the save witness (mirror of lua/gen2/client.lua)
+                    log("[SLink-gen1] memorialize " .. tostring(cmd.key) .. ": " .. tostring(reason))
+                    self:rescan_boxes()
+                    local queued = false
+                    for _, s in ipairs(self.box_settle) do queued = queued or (s.memorial ~= nil and s.key == phys) end
+                    if not queued then
+                        self.box_settle[#self.box_settle + 1] = { key = phys, armed = false,
+                                                                  memorial = { key = cmd.key, nickname = cmd.nickname } }
+                        show_burial()
+                    end
+                elseif done then
+                    memorial_done(cmd.key, phys, mem_mon and mem_mon.nickname)
                 elseif reason == "last party mon" and self.game_over then
                     log("[SLink-gen1] memorialize dropped: last mon after game over")
                 elseif reason == "last party mon" then
@@ -835,6 +1065,8 @@ function Client.new(p)
                     -- at the head starves it and the pair never recovers (A5)
                     self.deferred[#self.deferred + 1] = cmd
                 else
+                    -- INV-CLIENT-2: a key no longer in the party is forgotten; one still there stays dead
+                    if not mem_mon then self.dead_keys[cmd.key], self.dead_keys[phys] = nil, nil end
                     send("memorialize_failed", { key = cmd.key, reason = reason or "memorial refused" })
                     hud.show("X Mem fail: " .. nick_label(cmd.key, mem_mon and mem_mon.nickname), 255, 80, 80, 300)
                 end
@@ -1027,7 +1259,7 @@ function Client.new(p)
             -- owed: the checkpoint zeroes it, instead of it waiting for some later battle
             for _, w in ipairs(self.pending_battle_writes) do
                 -- a bench write that landed on receipt is re-zeroed as a backstop, silently
-                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname, quiet = w.landed }
+                defer_held({ cmd = "force_faint", key = w.key, nickname = w.nickname, quiet = w.landed, arrival = w.arrival })
             end
             self.pending_battle_writes = {}
             self.battle = nil
@@ -1118,6 +1350,10 @@ function Client.new(p)
             -- trade_service.asm:106-113): only the APPLY state spans that gap, which is why this
             -- is a state test and not an age window.
             local pc0 = self.pending_change
+            -- the commit boundary (mirror of Gen 2's SlinkTradeCommit latch, trade_overlay
+            -- commit_entered): this RemovePokemon is the apply's first mutation, after every
+            -- .refused check (native_trade.asm:156-158); from here a missing DONE is uncertain
+            if self.trade_state and self.trade_state.kind == "apply" then self.trade_state.committing = true end
             local trading = (self.trade_state and self.trade_state.kind == "apply")
                             -- an NPC trade owns this removal: vanilla's repinned npc_trade site
                             -- (before RemovePokemon) and pureRGB's npc_trade_remove alike (row 25)
@@ -1148,11 +1384,14 @@ function Client.new(p)
                 -- discriminator. At this hook (site offset 0, home/move_mon.asm:20-21 jpfar
                 -- _RemovePokemon -- nothing has been shifted yet) the key is still in the BOX
                 -- either way; what tells them apart is that the WITHDRAW's MoveMon has already
-                -- installed it in the PARTY and a RELEASE (bills_pc.asm:310-312) has not. The
-                -- shared protocol has no release event and a party_to_box for a mon that was
-                -- never in the party would be a lie, so this is a marker for the receipts.
+                -- installed it in the PARTY and a RELEASE (bills_pc.asm:310-312) has not. Owner
+                -- ruling O-35 (server 8f662994): the release loses the mon, so release{key} goes on
+                -- the wire; the server kills a linked partner and ignores an unlinked key. Gen 1's
+                -- PC releases from the box only. Mirrored by lua/gen2/client.lua pc_release.
                 if key and not holds_key(party, key) and not trading then
                     log(string.format("[SLink-gen1] RELEASE_SEEN key=%s box=%d", key, (pt.box_num or 0) % 128))
+                    self.dead_keys[key] = nil -- the mon is gone: a later mon under this key is another mon
+                    owe("release", { key = key }) -- INV-CLIENT-2: durable, like a trade report
                 end
             else
                 -- from the SNAPSHOT, like the sibling branches: _RemovePokemon has already shifted
@@ -1209,8 +1448,9 @@ function Client.new(p)
                     self.key_alias = { old_key = old, new_key = key, evidence = record_evidence(mon), since = sig.frame }
                     observe_alias(self.key_alias, party)
                     -- snapshot records carry name BYTES only (party_from_snapshot), so decode here
-                    send("key_change", { old_key = old, new_key = key, new_species = mon.species,
-                                         reason = "evolution", new_nickname = reads.decode_name(mon.nickname_bytes) })
+                    self.key_alias.msg = { old_key = old, new_key = key, new_species = mon.species,
+                                           reason = "evolution", new_nickname = reads.decode_name(mon.nickname_bytes) }
+                    send("key_change", self.key_alias.msg)
                 else
                     log("[SLink-gen1] evolution of slot " .. tostring(pt.which) .. " (" .. key .. "): " .. why)
                 end
@@ -1255,8 +1495,9 @@ function Client.new(p)
             self.known_keys[key] = true
             self.key_alias = { old_key = pc.old_key, new_key = key, evidence = record_evidence(mon), since = sig.frame }
             observe_alias(self.key_alias, party)
-            send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
-                                 reason = "npc_trade", new_nickname = reads.decode_name(mon.nickname_bytes) })
+            self.key_alias.msg = { old_key = pc.old_key, new_key = key, new_species = mon.species,
+                                   reason = "npc_trade", new_nickname = reads.decode_name(mon.nickname_bytes) }
+            send("key_change", self.key_alias.msg)
             self.pending_change = { kind = "rescan", frame = sig.frame }
         elseif k == "transform" then
             -- A2: recorded synchronously by on_transform; the key change settles after the
@@ -1268,6 +1509,7 @@ function Client.new(p)
             end
         elseif k == "save_witness" then
             if io.saveram then pcall(io.saveram) end
+            for _, s in ipairs(self.box_settle) do s.armed = true end  -- gen1-box-durability
         elseif k == "starter_begin" or k == "starter_end" or k == "battle_loop_head" then
             -- consumed inside the hook (battle_loop_head) or informational (starter)
         end
@@ -1366,8 +1608,9 @@ function Client.new(p)
                 self.known_keys[key] = true
                 self.key_alias = { old_key = pc.old_key, new_key = key, evidence = record_evidence(mon), since = self.frame }
                 observe_alias(self.key_alias, party)   -- a twin present now latches ambiguity for good
-                send("key_change", { old_key = pc.old_key, new_key = key, new_species = mon.species,
-                                     reason = KEY_CHANGE_REASON[pc.kind], new_nickname = mon.nickname })
+                self.key_alias.msg = { old_key = pc.old_key, new_key = key, new_species = mon.species,
+                                       reason = KEY_CHANGE_REASON[pc.kind], new_nickname = mon.nickname }
+                send("key_change", self.key_alias.msg)
                 if pc.kind == "transform" and pc.old_hp == 0 then
                     -- A2 backstop: the in-hook zero is unproven (T2 gate); the checkpoint
                     -- re-zero through the ordinary deferred path never revives a dead mon
@@ -1396,14 +1639,47 @@ function Client.new(p)
         end
     end
 
+    -- O-30 review MAJOR-1/2 (mirror of lua/gen2/client.lua lift_deferred_deaths): a death deferred
+    -- before the battle (a script window refused the checkpoint) and a quiet re-zero whose mon was
+    -- revived with no checkpoint in between land at this loop head, not at battle end. A quiet
+    -- entry rides as `landed` (no second banner, no explode); one still at HP 0 stays deferred.
+    local function lift_deferred_deaths()
+        local stay = {}
+        for _, e in ipairs(self.deferred) do
+            local slot, mon
+            if e.cmd == "force_faint" or e.cmd == "force_explode" then slot, mon = find_party_slot(e.key) end
+            if slot and not (e.quiet and mon.hp == 0) then
+                e.landed = e.quiet
+                self.pending_battle_writes[#self.pending_battle_writes + 1] = e
+            else
+                stay[#stay + 1] = e
+            end
+        end
+        self.deferred = stay
+        -- MINOR-7: a dead key revived since its death landed (a heal, then a battle) dies here too, as `landed`
+        for key in pairs(self.dead_synced and self.dead_keys or {}) do
+            local queued = false
+            for _, w in ipairs(self.pending_battle_writes) do queued = queued or w.key == key end
+            local slot, mon = find_party_slot(key)
+            if slot and mon.hp > 0 and not queued then
+                self.pending_battle_writes[#self.pending_battle_writes + 1] = { cmd = "force_faint", key = key, landed = true,
+                                                                               arrival = self.arrivals }
+            end
+        end
+    end
+
     -- Inside the MainInBattleLoop hook: apply the queued in-battle faints/explodes now (W-2).
     -- Returns true when a byte moved (the pureRGB no-move re-entry moves PC only then).
     function self:on_battle_loop_head(sig)
-        if #self.pending_battle_writes == 0 or not self.writes_enabled then return false end
+        if (#self.pending_battle_writes == 0 and #self.deferred == 0 and not (self.dead_synced and next(self.dead_keys)))
+           or not self.writes_enabled then return false end
         local pt = sig.point
         -- an unreadable party keeps the queue: find_party_slot could not tell "gone" from
         -- "not readable yet", and a dropped in-battle write never comes back
         if not current_party() then return false end
+        -- link battles never write in battle; a special battle never reaches this hook natively
+        if pt.link_state ~= 4 and pt.battle_type == 0 then lift_deferred_deaths() end
+        if #self.pending_battle_writes == 0 then return false end
         local keep, wrote = {}, false
         for _, w in ipairs(self.pending_battle_writes) do
             -- the same ambiguity-aware resolver the checkpoint uses: this one used to take the
@@ -1426,7 +1702,9 @@ function Client.new(p)
                     wrote = true
                     -- Gen 3 parity (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:760-800): same text-only banner as
                     -- the bench-mon write in run_deferred above.
-                    if not w.landed then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
+                    local quiet = w.landed or self.dead_keys[w.key]
+                    mark_dead(w.key, mon)
+                    if not quiet then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
                 else
                     keep[#keep + 1] = w
                 end
@@ -1439,11 +1717,14 @@ function Client.new(p)
                     writes:faint_party_slot(slot)
                     writes:disarm()
                     wrote = true
-                    if not w.landed then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
+                    local quiet = w.landed or self.dead_keys[w.key]
+                    mark_dead(w.key, mon)
+                    if not quiet then hud.show("!! " .. nick_label(w.key, w.nickname) .. " KO'd", 255, 80, 80, 360) end
                 end
             elseif slot then
-                -- special/link battle: leave the bench alone until the checkpoint
-                self.deferred[#self.deferred + 1] = { cmd = "force_faint", key = w.key, nickname = w.nickname }
+                -- link battle: leave the bench alone until the checkpoint (a special battle never
+                -- reaches this hook natively; its bench write landed on receipt, O-30)
+                defer_held({ cmd = "force_faint", key = w.key, nickname = w.nickname, arrival = w.arrival })
             end
         end
         self.pending_battle_writes = keep
@@ -1541,8 +1822,18 @@ function Client.new(p)
     end
 
     -- ── hello / tick ─────────────────────────────────────────────────────────────────
-    function self:send_hello()
+    function self:send_hello(expected_identity)
+        -- No argument = master's direct call (live gates): hello now, and the session counts it.
+        if expected_identity == nil then
+            local sent, why = self.hello_session:send_now(io.framecount())
+            if sent then self.hello_sent = true end
+            return sent, why
+        end
+        if hello_identity() ~= expected_identity then
+            return false, "hello identity changed or unavailable"
+        end
         local party, battle = snapshot_party()
+        if not party then return false, "hello party snapshot unavailable" end
         local map = reads.read_map()
         local area_id, loc = area_of(map.map)
         local had_balls = self.has_pokeballs
@@ -1572,20 +1863,89 @@ function Client.new(p)
                 self.rom_content_error_logged = true
             end
         end
-        send("hello", {
+        local payload = {
             rom_type = self.rom_type, foundation = self.foundation, artifact_kind = self.artifact_kind,
             party = party or arr({}), ot_id = reads.read_player_id(),
             trainer_name = reads.read_player_name(), has_pokeballs = self.has_pokeballs,
             ball_count = ball_count(), badges = reads.read_badges(), area_id = area_id, loc_name = loc,
-            pc_boxes = pc_boxes_wire(), writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
+            pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation(), writes_enabled = self.writes_enabled, rom_sha1 = self.rom_sha1,
             in_battle = battle and battle.in_battle ~= 0 or false, rom_content = rom_content,
             -- per CARTRIDGE, not per generation: only a patched one has the panel mailbox
             panel = self.panel and self.panel:present() or false,
             panel_abi = self.panel and self.panel:abi() or 0,
             sfx = self.panel and self.panel:sfx_present() or false,
-        })
-        self.hello_sent = true
+            -- MAJOR-1 (review e9d5e136): this client answers apply_prepare before any APPLY
+            trade_prepare = self.trade_enabled == true,
+        }
+        if hello_identity() ~= expected_identity then return false, "hello identity changed during snapshot" end
+        return send("hello", payload)
     end
+
+    self.hello_session = HelloSession.new({
+        connected = function() return net.connected() end,
+        identity = hello_identity,
+        ready = function(identity)
+            local live, why = game_is_live()
+            if not live then return false, why end
+            -- wIsInBattle $FF is the lost-battle/blackout state (pokered home/overworld.asm:355),
+            -- a battle like 1 and 2: any nonzero value skips the checkpoint, as on master.
+            local battle = reads.read_battle()
+            if not battle then return false, "battle state unavailable" end
+            -- MainMenu can already contain a save. A checkpoint or a running
+            -- battle is still required before this game sends its first hello.
+            if battle.in_battle == 0 and not safety.check(ws_profile, io) then
+                return false, "waiting for Gen 1 checkpoint or battle"
+            end
+            local want, have = d.game_internal_version, reads.read_game_internal_version()
+            if want ~= nil and have ~= want then
+                if not self.version_hold_logged then
+                    log("[SLink-gen1] hello held: wGameInternalVersion " .. tostring(have) .. " != " .. tostring(want))
+                    self.version_hold_logged = true
+                end
+                return false, "save version unavailable or mismatched"
+            end
+            return hello_identity() == identity, "identity changed while checking readiness"
+        end,
+        send = function(identity) return self:send_hello(identity) end,
+        retry_delay = function() return 1 end, -- existing Gen 1 next-frame retry policy
+        -- master: a savestate load keeps the session (one hello, panel kept), and a throwing
+        -- hello callback propagates out of frame_end (run.lua logs it) without ending it
+        clock_rewind = "keep", callback_error = "raise",
+        on_invalidate = function(reason)
+            self.hello_sent = false
+            if self.panel then self.panel:clear() end
+            if reason == "identity_changed" then
+                self.pending_change, self.key_alias, self.retired_alias, self.dead_keys = nil, nil, {}, {}
+                self.dead_synced = false
+            end
+        end,
+        on_error = function(stage, why) log("[SLink-gen1] hello " .. stage .. ": " .. tostring(why)) end,
+    })
+
+    self.replies = ReplyDispatch.new({
+        budget = math.huge, -- existing Gen 1 policy: drain every queued line each frame
+        receive = function()
+            local line = net.receive()
+            if line ~= nil then self.owed:line_received() end
+            return line
+        end,
+        decode = function(line) return json.decode(line) end,
+        validate = function(reply)
+            if type(reply) == "table" and type(reply.commands) == "table" then
+                self.owed:answer(reply.commands) -- retires the owed report on that line, unless refused
+                return reply.commands
+            end
+            return nil, "unreadable reply line"
+        end,
+        handle = function(cmd) return self:handle_command(cmd) end,
+        on_error = function(stage, why, subject)
+            if stage == "handle" then
+                log("[SLink-gen1] command " .. tostring(type(subject) == "table" and subject.cmd or nil) .. ": " .. why)
+            else
+                log("[SLink-gen1] unreadable reply line")
+            end
+        end,
+    })
 
     function self:send_tick(event)
         local party, battle = snapshot_party()
@@ -1618,9 +1978,11 @@ function Client.new(p)
             is_trainer_battle = in_battle and battle.is_trainer or false,
             trainer_id = in_battle and battle.is_trainer and battle.cur_opponent or nil,
             enemy_party = enemy_party(battle), badges = reads.read_badges(),
-            trainer_name = reads.read_player_name(), pc_boxes = pc_boxes_wire(),
+            trainer_name = reads.read_player_name(), pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation(),
             safari_type = battle.safari_type, -- pureRGB only (PLAN §3.5); nil elsewhere
+            awaiting_save = awaiting_save_field(), -- BURIAL-VISIBLE: the pair board's "awaiting save"
         })
+        resend_refused_change()
     end
 
     -- ── in-game SLINK TRADE (companion patch receptionist; T-rows) ───────────────────
@@ -1712,7 +2074,7 @@ function Client.new(p)
         local slot = find_party_slot(cmd.old_key)
         if slot == nil then
             log("[SLink-gen1] apply_trade: old_key not in party; nothing changed")
-            send("trade_done", { token = cmd.token, slot = cmd.slot, new_key = cmd.old_key, new_species = 0 })
+            owe("trade_done", { token = cmd.token, slot = cmd.slot, new_key = cmd.old_key, new_species = 0 })
             return
         end
         local blob = hex_bytes(cmd.blob_hex)
@@ -1722,11 +2084,58 @@ function Client.new(p)
         end)
         if not gen then
             log("[SLink-gen1] apply_trade arm refused: " .. tostring(why))
-            send("trade_done", { token = cmd.token, slot = slot, new_key = cmd.old_key, new_species = 0 })
+            owe("trade_done", { token = cmd.token, slot = slot, new_key = cmd.old_key, new_species = 0 })
             return
         end
         self.trade_state = { kind = "apply", gen = gen, token = cmd.token, old_key = cmd.old_key, slot = slot,
                              arm = { APPLY, slot, blob, name } }
+    end
+
+    -- An apply past its commit boundary with no usable DONE (a result 2, a reset) may have mutated or
+    -- saved: no release, no key claim. It is DECLARED, trade_done{token, uncertain = true}, once the
+    -- hello is ready (frame_end; after a reset, the post-reset hello); the server journals it and this
+    -- side's next party snapshot settles the link. Mirror of lua/gen2/client.lua trade_uncertain.
+    -- after_reset (MAJOR-5): result 2 holds the lease until a reset (trade_service.asm
+    -- .waitForReceipt), and its RAM party was never saved; the server then takes evidence only
+    -- from the reloaded save (the post-reset hello). Mirror of lua/gen2/client.lua.
+    local function trade_uncertain(st, why, after_reset)
+        hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
+        log("[SLink-gen1] apply_trade uncertain: " .. why .. "; no release, no key claim")
+        if st.declared then return end
+        st.declared = true
+        self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
+            fields = { token = st.token, uncertain = true, after_reset = after_reset or nil } }
+    end
+    -- Mirror of Gen 2's trade_forget: before the commit boundary nothing was mutated and nothing
+    -- is claimed; after it, uncertain.
+    function self:trade_forget(why)
+        local st = self.trade_state
+        if st and st.kind == "apply" and st.committing then trade_uncertain(st, tostring(why))
+        elseif st and st.kind == "apply" then
+            -- review m2: before the RemovePokemon nothing was mutated or saved: a certain none, owed
+            log("[SLink-gen1] apply_trade forgotten before the commit boundary (" .. tostring(why) .. "); nothing changed")
+            self.trade_owed[#self.trade_owed + 1] = { event = "trade_done",
+                fields = { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 } }
+        elseif st and st.kind == "prompt" then
+            self.trade_owed[#self.trade_owed + 1] = { event = "menu_result", fields = { token = st.token, choice = 0 } }
+        end
+        self.trade_state = nil
+    end
+
+    -- MAJOR-4 (review e9d5e136): the service picks APPLY up on any overworld frame, so an APPLY left
+    -- armed could commit after the server settled the trade. On the server's word: unpicked, give
+    -- the borrowed union back and report nothing changed (certain); past the commit boundary,
+    -- uncertain. Mirror of lua/gen2/client.lua trade_withdraw.
+    function self:trade_withdraw(cmd)
+        local st = self.trade_state
+        if not (self.trade and st and st.kind == "apply" and st.token == cmd.token) then return end
+        if self.trade.phase == "armed" and trade_arm(function() return self.trade:withdraw() end) then
+            self.trade_state = nil
+            log("[SLink-gen1] apply_trade withdrawn before pickup; nothing changed")
+            owe("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+        elseif st.committing then
+            trade_uncertain(st, "the server asked for a withdrawal")
+        end
     end
 
     -- Per-frame: watch the lease for the receptionist questions and the native completions.
@@ -1751,8 +2160,7 @@ function Client.new(p)
                     -- native append uncertain (T-5 limit): the cartridge keeps the lease; no release, no claim
                     if not st.warned then
                         st.warned = true
-                        hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600)
-                        log("[SLink-gen1] apply_trade: native result 2 (uncertain); holding, no release")
+                        trade_uncertain(st, "native result 2; holding until a reset", true)
                     end
                     return
                 end
@@ -1764,13 +2172,13 @@ function Client.new(p)
                         local key = mon_key(received)
                         self.known_keys[st.old_key] = nil
                         self.known_keys[key] = true
-                        send("trade_done", { token = st.token, slot = received.slot, new_key = key, new_species = received.species })
+                        owe("trade_done", { token = st.token, slot = received.slot, new_key = key, new_species = received.species })
                     else
-                        send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+                        owe("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
                     end
                 else
                     log("[SLink-gen1] apply_trade refused natively (result " .. tostring(done.result) .. "); nothing changed")
-                    send("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
+                    owe("trade_done", { token = st.token, slot = st.slot, new_key = st.old_key, new_species = 0 })
                 end
                 self.trade_state = nil
                 self.pending_change = { kind = "rescan", frame = self.frame }
@@ -1798,13 +2206,24 @@ function Client.new(p)
 
     -- ── per-frame driver ─────────────────────────────────────────────────────────────
     function self:start()
+        -- An in-hook handler fault is logged and re-raised: the registry records it as
+        -- handler_error and keeps queuing later signals (it is never a kill switch).
+        local function logged(kind, fn)
+            return function(sig)
+                local ok, err = pcall(fn, sig)
+                if not ok then
+                    log("[SLink-gen1] signal handler " .. kind .. ": " .. tostring(err))
+                    error(err, 0)
+                end
+            end
+        end
         local handlers = {
-            battle_loop_head = function(sig) self:on_battle_loop_head(sig) end,
-            battle_loop_no_move = function(sig) self:on_battle_loop_no_move(sig) end,
-            apex_preflight = function(sig) self:on_apex_preflight(sig) end,
-            apex_commit = function(sig) self:on_apex_commit(sig) end,
-            transform = function(sig) self:on_transform(sig) end,
-            transform_hp_lo = function(sig) self:on_transform_hp_lo(sig) end,
+            battle_loop_head = logged("battle_loop_head", function(sig) self:on_battle_loop_head(sig) end),
+            battle_loop_no_move = logged("battle_loop_no_move", function(sig) self:on_battle_loop_no_move(sig) end),
+            apex_preflight = logged("apex_preflight", function(sig) self:on_apex_preflight(sig) end),
+            apex_commit = logged("apex_commit", function(sig) self:on_apex_commit(sig) end),
+            transform = logged("transform", function(sig) self:on_transform(sig) end),
+            transform_hp_lo = logged("transform_hp_lo", function(sig) self:on_transform_hp_lo(sig) end),
         }
         local all_sites = sites
         if self.trade and self:trade_patch_present() then
@@ -1817,10 +2236,17 @@ function Client.new(p)
             for k, v in pairs(sites) do all_sites[k] = v end
             all_sites.trade_service = { bank = svc.bank, address = svc.addr, rom_offset = flat,
                                         capture_offset = 0, expected_hex = hex_of(bytes), symbol = "SlinkTradeService" }
-            handlers.trade_service = function() self.trade:picked_up() end
+            handlers.trade_service = logged("trade_service", function() self.trade:picked_up() end)
             self.trade_enabled = true
         end
+        -- Re-arming (e.g. against a newly patched ROM) releases the previous hook set first:
+        -- the shared registry owns one "SLink-gen1" namespace at a time.
+        if self.signals then
+            assert(self.signals:close(), "previous engine signals could not be released")
+            self.signals = nil
+        end
         self.signals = signals_mod.new(profile, all_sites, io, handlers)
+        self.filter_errors_logged = 0
     end
 
     function self:frame_end()
@@ -1831,48 +2257,38 @@ function Client.new(p)
             local pok, perr = self.panel:service()
             if not pok then log("[SLink-gen1] panel: " .. tostring(perr)) end
         end
+        -- master: a pump error propagates (run.lua logs "frame error"); the session stands
         net.pump()
-        local connected = net.connected()
-        -- hello only once the player is IN the game: the main menu already holds the save
-        -- (MainMenu -> TryLoadSaveFile before the CONTINUE/NEW GAME choice) and a cleared WRAM
-        -- holds nothing, so "party readable" is not enough — require the overworld checkpoint
-        -- or a running battle (a reconnect mid-battle must not wait for it to end)
-        if not connected then
-            self.hello_sent = false
-            if self.panel then self.panel:clear() end  -- rows outlive neither the link nor the save
-        end
-        if connected and not self.hello_sent and game_is_live()
-           and (reads.read_battle().in_battle ~= 0 or safety.check(ws_profile, io)) then
-            -- pureRGB: the updater saves BEFORE stamping wGameInternalVersion, so a save whose
-            -- stamp differs from the pack's pinned version is not live yet (hard hold, no hello)
-            local want, have = d.game_internal_version, reads.read_game_internal_version()
-            if want and have ~= nil and have ~= want then
-                if not self.version_hold_logged then
-                    log("[SLink-gen1] hello held: wGameInternalVersion " .. have .. " != " .. want)
-                    self.version_hold_logged = true
-                end
-            else
-                self:send_hello()
-            end
-        end
-        connected = connected and self.hello_sent
+        local connected = self.hello_session:step(self.frame)
+        self.hello_sent = connected == true
         if self.frame % Client.VALIDATE_EVERY == 0 then self:validate() end
+        connected = connected and self.hello_session:status().ready
+        self.owed:step(net.connected(), connected == true, send) -- never before the (post-reset) hello
         for _, sig in ipairs(self.signals and self.signals:drain() or {}) do
             local ok, err = pcall(self.on_signal, self, sig)
             if not ok then log("[SLink-gen1] signal " .. tostring(sig.kind) .. ": " .. tostring(err)) end
         end
-        -- signals.lua latches its first fire-time failure and drops every later hook: say so
-        -- once, loudly, instead of a run that silently stops seeing captures and battles
-        -- a synchronous hook handler (the in-battle faint/explode writes) that threw is caught
-        -- by signals.lua; log it, or a write that never lands leaves no trace at all
-        if self.signals and self.signals.handler_error then
-            log("[SLink-gen1] hook handler error: " .. tostring(self.signals.handler_error))
-            self.signals.handler_error = nil
+        -- A throwing hook filter dropped a hit (master: the error reached the console). Log
+        -- once per NEW error, never per frame.
+        if self.signals and self.signals.filter_status then
+            local fs = self.signals:filter_status()
+            if fs.accept_errors > (self.filter_errors_logged or 0) then
+                self.filter_errors_logged = fs.accept_errors
+                log("[SLink-gen1] signal filter " .. tostring(fs.accept_error) .. " (" .. fs.accept_errors .. " dropped)")
+            end
         end
-        local sf = self.signals and self.signals.failure
-        if sf and not self.signal_failure_shown then
+        -- The registry latches its first capture/queue failure and drops every later hook: say
+        -- so once, loudly, instead of a run that silently stops seeing captures and battles. A
+        -- synchronous hook handler (the in-battle faint/explode writes) that threw is contained
+        -- as handler_error; log each new one, or a write that never lands leaves no trace.
+        local st = self.signals and self.signals.status and self.signals:status()
+        if st and st.handler_error and st.handler_error ~= self.handler_error_logged then
+            self.handler_error_logged = st.handler_error
+            log("[SLink-gen1] hook handler error: " .. tostring(st.handler_error))
+        end
+        if st and st.failed and not self.signal_failure_shown then
             self.signal_failure_shown = true
-            log("[SLink-gen1] ENGINE SIGNALS STOPPED: " .. tostring(sf))
+            log("[SLink-gen1] ENGINE SIGNALS STOPPED: " .. tostring(st.failed))
             hud.show("SLINK: engine hooks stopped - restart Lua, send slink_lua.log", 255, 60, 60, 1800)
         end
         self:rival_window_tick()
@@ -1888,24 +2304,22 @@ function Client.new(p)
                 for _, r in pairs(self.retired_alias) do observe_alias(r, party) end
             end
         end
-        if connected and self.frame % Client.TICK_INTERVAL == 0 then self:send_tick("tick") end
+        if connected and self.frame % Client.TICK_INTERVAL == 0 then
+            -- KEY-SCOPE-5: an incomplete box scan is retried, at most once per tick
+            if self.hello_sent and not self.box_complete then self:rescan_boxes() end
+            self:send_tick("tick")
+        end
         if self.pending_safe and connected then
             local battle = reads.read_battle()
-            if battle.in_battle == 0 then self.pending_safe = false; send("safe", {}) end
-        end
-        while true do
-            local line = net.receive()
-            if not line then break end
-            local ok, reply = pcall(json.decode, line)
-            if ok and type(reply) == "table" and type(reply.commands) == "table" then
-                for _, cmd in ipairs(reply.commands) do
-                    local hok, herr = pcall(self.handle_command, self, cmd)
-                    if not hok then log("[SLink-gen1] command " .. tostring(cmd and cmd.cmd) .. ": " .. tostring(herr)) end
-                end
-            else
-                log("[SLink-gen1] unreadable reply line")
+            if battle.in_battle == 0 then
+                -- the battle may have boxed a catch: a fresh census rides the safe (KEY-SCOPE-5)
+                self.pending_safe = false
+                self:rescan_boxes()
+                send("safe", { pc_boxes = pc_boxes_wire(), pc_boxes_generation = box_generation() })
             end
         end
+        if self.frame % Client.BURIAL_NAG_FRAMES == 0 and burial_waiting() then show_burial() end
+        self.replies:step()
         local tok, terr = pcall(self.trade_tick, self)
         if not tok then log("[SLink-gen1] trade: " .. tostring(terr)) end
         self:run_deferred()

@@ -71,7 +71,6 @@ GAMES = [
     ("gen1_ap", "Red · Blue (Archipelago)", ["red_ap", "blue_ap"]),
     ("gen1_purergb", "PureRed · PureBlue · PureGreen", ["purered", "pureblue", "puregreen"]),
     ("gen2", "Gold · Silver · Crystal", ["gold", "silver", "crystal"]),
-    ("gen2_ap", "Crystal (Archipelago)", ["crystal_ap"]),
     ("gen3", "FireRed · LeafGreen", ["firered", "leafgreen"]),
     ("gen3_ap", "FireRed · LeafGreen (Archipelago) — not admitted by the SLink client yet", ["firered_ap", "leafgreen_ap"]),
     ("gen3_rr", "Radical Red", ["firered_rr"]),
@@ -232,6 +231,48 @@ def option_support(key: str, rom_types: list[str]) -> dict:
     return {"ok": ok, "why": why}
 
 
+def _calc_profile_for_run(run: dict, status: dict) -> dict | None:
+    """The web calc's profile for a run, or None when it should stay hidden.
+
+    The Manager has no live adapter instance of its own (each run is a separate process),
+    so this instantiates the same adapters `server.py` would and asks calc_profile(), the
+    way `SLinkServer._calc_profile` compares the two players' adapters. Prefers each
+    connected player's own rom_type (a status payload's `players[pid]['rom_type']`); a
+    player who has not said hello yet falls back to the run's declared game family
+    (`GAMES`/`GAME_MEMBERS` above) — a soul link only ever pairs cartridges from the same
+    family, so one representative rom_type stands for both. None when nothing is known
+    yet, either side's game is unverified, or the two disagree.
+    """
+    from server.adapters import game_id_for_rom_type, get_adapter
+    # A live server can answer anything; a bad status must hide the calc, not 500 the board.
+    players = (status.get("players") if isinstance(status, dict) else None) or {}
+    # Unrecognized rom_types ("" or a persisted "?") count as not-yet-known.
+    rom_types = [rt for rt in ((players.get(pid) or {}).get("rom_type") or "" for pid in ("a", "b"))
+                 if game_id_for_rom_type(rt)]
+    if not rom_types:
+        members = GAME_MEMBERS.get(run.get("game") or "", [])
+        if not members:
+            return None
+        rom_types = [members[0]]
+    profile = None
+    for rom_type in rom_types:
+        gid = game_id_for_rom_type(rom_type)
+        if not gid:
+            return None
+        try:
+            # rom_type picks the title for the per-title packs (Gen 2 refuses to guess one).
+            p = get_adapter(gid, is_rr=rom_type.endswith("_rr"), rom_type=rom_type).calc_profile()
+        except (KeyError, ValueError):  # an unregistered family (e.g. Gen 5 import) or a refused title
+            return None
+        if p is None:
+            return None
+        if profile is None:
+            profile = p
+        elif p != profile:
+            return None
+    return profile
+
+
 def new_run_form() -> dict:
     """Everything the New-run form needs, computed here so the reasons and the greying
     come from one table: per game family, per option, (ok, why)."""
@@ -285,6 +326,10 @@ def _cache_rom_dirs() -> list[str]:
 ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR, os.path.join(PROJECT_ROOT, "patch", "build"), *_cache_rom_dirs())
 ROM_EXTS = (".gb", ".gbc")
 UPLOAD_MAX = 64 << 20
+# path -> ((size, mtime_ns), describe_rom result): the ROM scan runs on every page load and
+# /api/roms call, over Google Drive; an unchanged file is not read again.
+# ponytail: never evicted -- a handful of ROM files; a deleted path just goes unreferenced.
+_ROM_INFO_CACHE: dict[str, tuple[tuple[int, int], dict]] = {}
 REGISTRY_PATH = os.path.join(MANAGER_DIR, "registry.json")
 
 # A freshly spawned server counts as up only once its HTTP port answers /api/status; imports
@@ -557,43 +602,6 @@ def _load_settings() -> dict:
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError):
         return {}
-
-
-# ── Per-player connection state (the run page's waiting screen) ─────────────
-# server.py's identity_error texts that mean "this is not this run's game" rather than
-# "this is not this slot's save" (test_player_pack pins them to server.py).
-_WRONG_GAME_ERRORS = ("Mixed games", "Mixed artifact kinds", "Unknown rom_type")
-
-
-def connection_state(p: dict, live: bool) -> dict:
-    """One player's state from the status payload alone: {slug, label, line}. Errors come
-    before connectivity: a rejected player stays rejected after they disconnect."""
-    def state(slug, label, line):
-        return {"slug": slug, "label": label, "line": line}
-    if not live:
-        return state("stopped", "Not started", "The run is stopped. Start it, then load the launcher in BizHawk.")
-    err = p.get("identity_error") or ""
-    if err.startswith(_WRONG_GAME_ERRORS):
-        return state("wrong_game", "Wrong game", f"{err}. Load the game this run is for, then reload the launcher.")
-    if p.get("admission", "admitted") != "admitted":
-        return state("wrong_game", "Wrong cartridge", f"Not admitted: {p.get('admission_reason') or 'unknown reason'}. "
-                     "Load the cartridge this run made for this player, then reload the launcher.")
-    if err:
-        return state("identity", "Wrong save", f"{err}. Load this slot's own save: SLink will not "
-                     "adopt a different trainer.")
-    seen = p.get("last_seen_age") is not None
-    if p.get("connected") and p.get("stale"):
-        return state("disconnected", "No data", f"Connected, but silent since {p.get('last_seen_label')}: "
-                     "BizHawk may be paused, closed or frozen.")
-    if p.get("connected") and (p.get("rom_type") or "?") != "?":
-        return state("ready", "Connected", "Connected and recording.")
-    if p.get("connected"):
-        return state("waiting", "Connecting", "BizHawk connected; waiting for the game to say hello.")
-    if seen:
-        return state("disconnected", "Disconnected", f"Last heard {p.get('last_seen_label')}. Reload the "
-                     "launcher in BizHawk's Lua Console to reconnect.")
-    return state("waiting", "Waiting for BizHawk", "Load the game in BizHawk, then this player's launcher "
-                 "in Tools → Lua Console.")
 
 
 # ── Subprocess management ───────────────────────────────────────────────────
@@ -1009,6 +1017,7 @@ class RunManager:
 
     async def _render_shell(self, request, runs, run, *, page, extra=None):
         status = await self._run_status(request, run) if run else None
+        show_calc = bool(_calc_profile_for_run(run, status)) if run else False
         ctx = {
             "page_title":   "Soul Link",
             "theme":        resolve_theme(request),
@@ -1018,11 +1027,13 @@ class RunManager:
             "page":         page,
             "runs":         [self._augment_for_template(r) for r in runs],
             "run":          self._augment_for_template(run) if run else None,
+            "show_calc":    show_calc,
             "pinned_run_id": self._stream_pin_id,
             "form_json":    _json_for_script(new_run_form()),
             # The creator randomizes as part of creating a Gen 1 run; it needs the same
             # categories / labels / jar the standalone page does, with no current pair.
-            "randomizer_json": _json_for_script(self._randomizer_form(None)),
+            # Off the event loop: the form scans (and may hash) every ROM file.
+            "randomizer_json": _json_for_script(await asyncio.to_thread(self._randomizer_form, None)),
             "next_ports":   _next_ports(runs),
             "manager_port": self.manager_port,
             # Links to a run's own port (calc, debug) use the host the browser used for us.
@@ -1040,7 +1051,7 @@ class RunManager:
         """board_context for a Manager run: it polls its own board route, its launchers and
         (once it has made them) its cartridges download from the Manager. On top of the
         shared board: each player's setup ZIP, the address players connect to, the BizHawk
-        minimum and each player's connection state."""
+        minimum."""
         from server.board import PIDS, board_context
         rid = run["run_id"]
         live = run.get("status") == "running"
@@ -1051,12 +1062,10 @@ class RunManager:
                             roms_pinned=bool(run.get("randomizer")),
                             rom_ext=_rom_ext(run))
         host, source = self._connect_host()
-        players = status.get("players") or {}
         ctx.update({
             "packs": {pid: f"/api/runs/{rid}/player-pack/{pid}" for pid in PIDS},
             "connect": {"host": host, "port": run["tcp_port"], "source": source},
             "bizhawk_min": make_release.bizhawk_requirement(),
-            "conn": {pid: connection_state(players.get(pid) or {}, live) for pid in PIDS},
         })
         return ctx
 
@@ -1138,16 +1147,29 @@ class RunManager:
                     continue
                 seen_paths.add(path)
                 try:
-                    if os.path.getsize(path) == 0:
-                        continue
-                    with open(path, "rb") as f:
-                        digest = hashlib.sha1(f.read()).hexdigest()
+                    st = os.stat(path)
                 except OSError:
                     continue
+                if st.st_size == 0:
+                    continue
+                # ponytail: size+mtime+ctime, not a re-hash. A cartridge swapped in place that
+                # keeps ALL THREE stamps still returns the cached sha1, so the picker would
+                # label it as the old ROM; ctime catches the replace-the-file case (the common
+                # one: a restore or a Drive sync writes a new file), mtime the ordinary
+                # overwrite. Re-hash every scan if a stale label ever actually bites.
+                key = (st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+                hit = _ROM_INFO_CACHE.get(path)
+                if hit and hit[0] == key:
+                    info = hit[1]
+                else:
+                    info = describe_rom(path, True)
+                    if info.get("sha1"):        # a failed read is retried next scan, not kept
+                        _ROM_INFO_CACHE[path] = (key, info)
+                digest = info.get("sha1") or path
                 if digest in seen_content:
                     continue
                 seen_content.add(digest)
-                roms.append({"name": name, **describe_rom(path, True)})
+                roms.append({"name": name, **info})
         return roms
 
     def _augment_for_template(self, run: dict) -> dict:
@@ -1657,7 +1679,8 @@ class RunManager:
         Nothing is uploaded to anywhere: the Manager and the ROMs share a machine."""
         from server.upr_pipeline import find_upr_jar
         jar = request.query.get("jar", "").strip() or find_upr_jar() or ""
-        return web.json_response({"ok": True, "roms": self._scan_roms(jar), "dir": PROJECT_ROOT})
+        roms = await asyncio.to_thread(self._scan_roms, jar)
+        return web.json_response({"ok": True, "roms": roms, "dir": PROJECT_ROOT})
 
     async def handle_rom_upload(self, request: web.Request) -> web.Response:
         """POST /api/roms (multipart `file`) — a ROM chosen with the browser's own file
@@ -1715,6 +1738,14 @@ class RunManager:
                     f"unknown randomizer build (sha256 {h256.hexdigest()}): only the SLink UPR "
                     f"jars in data/upr_jars.json are accepted. Build the fork with "
                     f"`python tools/build_upr_fork.py --pin`.")}, status=400)
+            if ext != ".jar":
+                # Bytes already in a ROM folder: answer with THAT file. A kept copy in roms/
+                # is deduped out of the next scan, and the picker's selection with it.
+                roms = await asyncio.to_thread(self._scan_roms, "")
+                same = next((r for r in roms if r.get("sha1") == h.hexdigest()), None)
+                if same is not None:
+                    return web.json_response({"ok": True, "path": same["path"], "kind": "rom",
+                                              "rom": same, "existing": True})
             stem, n = os.path.splitext(name)[0], 1
             dest = os.path.join(dest_dir, name)
             while os.path.exists(dest) and _sha1(dest) != h.hexdigest():
@@ -1825,7 +1856,7 @@ class RunManager:
         run = _find_run(runs, request.match_info["run_id"])
         if run is None:
             raise web.HTTPNotFound(text="Run not found")
-        form = self._randomizer_form(run)
+        form = await asyncio.to_thread(self._randomizer_form, run)
         if form is None:
             raise web.HTTPNotFound(text="Cartridges are prepared for Gen 1 runs only")
         ctx = self._rail_ctx(request, runs, page="run")
@@ -1846,10 +1877,15 @@ class RunManager:
             raise web.HTTPNotFound(text="Run not found")
         return runs, run
 
-    def _run_panel_ctx(self, request: web.Request, runs, run, *, panel: str, label: str) -> dict:
+    async def _run_panel_ctx(self, request: web.Request, runs, run, *, panel: str, label: str) -> dict:
         ctx = self._rail_ctx(request, runs, page="run")
         base = f"/runs/{run['run_id']}"
         running = run.get("status") == "running"
+        show_calc = bool(_calc_profile_for_run(run, await self._run_status(request, run)))
+        tabs = [("Board", base, False)]
+        if show_calc:
+            tabs.append(("Calc", f"{base}/calc/normal.html", panel == "calc"))
+        tabs.append(("Debug", f"{base}/debug", panel == "debug"))
         ctx.update({
             "page_title": f"{label} — {run.get('name', '')}",
             "theme": resolve_theme(request),
@@ -1858,8 +1894,8 @@ class RunManager:
             "run": self._augment_for_template(run),
             "panel": panel, "panel_label": label, "base": base, "api_base": base,
             "title": run.get("name", ""), "meta": label,
-            "tabs": [("Board", base, False), ("Calc", f"{base}/calc/normal.html", panel == "calc"),
-                     ("Debug", f"{base}/debug", panel == "debug")],
+            "tabs": tabs,
+            "show_calc": show_calc,
             "available": running,
             "unavailable_html": (f"This run is not running; {label.lower()} needs its server. "
                                  f"<a href=\"{base}\">Start it from the board</a>."),
@@ -1871,7 +1907,7 @@ class RunManager:
         panel is the run server's own (templates/_debug_panel.html); its calls go through
         handle_run_api, SSE included."""
         runs, run = self._run_or_404(request)
-        ctx = self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
+        ctx = await self._run_panel_ctx(request, runs, run, panel="debug", label="Debug")
         return aiohttp_jinja2.render_template("panel_page.html", request, ctx)
 
     async def handle_run_calc(self, request: web.Request) -> web.Response:
@@ -1883,7 +1919,7 @@ class RunManager:
         if not path.endswith(".html"):
             return calc_files.file_response(calc_files.resolve(path))
         runs, run = self._run_or_404(request)
-        ctx = self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
+        ctx = await self._run_panel_ctx(request, runs, run, panel="calc", label="Calc")
         try:
             abs_path = calc_files.resolve(path)
         except web.HTTPNotFound:

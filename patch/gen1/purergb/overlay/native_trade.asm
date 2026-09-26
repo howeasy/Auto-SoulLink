@@ -6,7 +6,7 @@
 ;
 ; Home-bank routines are plain `call`s; the four routines that live in other banks
 ; (InternalClockTradeAnim, TryEvolvingMon, InGameTrade_RestoreScreen, RedrawMapView,
-; SavePartyAndDexData) go through `farcall`, with the bank resolved by the linker
+; SaveGameData) go through `farcall`, with the bank resolved by the linker
 ; (TryEvolvingMon is bank $2C in pureRGB, not vanilla's $0E: the linker, not a constant).
 
 ; 191 entries: internal ids $00-$BE (pureRGB has 190 real records; index 0 is never a species).
@@ -189,7 +189,6 @@ SlinkTradeApply::
 	call UpdateSprites
 	call Delay3
 	call PlayDefaultMusic
-	farcall SavePartyAndDexData
 	ld d, 0
 	jr .restore
 .unreachableAppendFailure
@@ -213,6 +212,14 @@ SlinkTradeApply::
 	ld [wOptions], a
 	ld a, d
 	and a
+	ret nz
+	; Vanilla saves only party+dex after a Cable Club trade (engine/link/cable_club.asm,
+	; "this allows reset into Pokecenter") because its entry save left nothing else to
+	; change. This player roamed since consenting, so save everything, after the
+	; restores above (SaveMainData records wOptions and hTileAnimations).
+	farcall SaveGameData
+	xor a
+	ld d, a
 	ret
 .refused
 	ld d, 1

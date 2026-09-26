@@ -41,7 +41,6 @@ pytest tests/unit/test_stat_stages.py -v
 pytest tests/unit/test_phase1_comms.py -v
 pytest tests/unit/test_obs_priority.py -v
 pytest tests/unit/test_manager_launcher.py -v
-pytest tests/unit/test_profile_addresses.py -v
 # 0.2.6 — Rival Team Swap / Explode Mode / Upcoming Key Trainers:
 pytest tests/unit/test_trainer_panel.py -v
 pytest tests/unit/test_state_rival_battle_start.py -v
@@ -59,7 +58,7 @@ pytest tests/unit/test_state.py::test_faint_queues_force_faint_for_partner -v
 # Regenerate data/games/gen3_frlge/gen3_frlge_areas.lua from area_map.json (184 entries)
 python tools/gen_area_map.py
 
-# Regenerate lua/gen2_crystal_areas.lua from area_map.json (124 entries)
+# Regenerate data/games/gen2_<title>/area_map.json (124 entries) per title
 python tools/gen_gen2_area_map.py
 
 # Regenerate Gen 5 BW area maps and location tables
@@ -78,13 +77,13 @@ python tools/lua_syntax_check.py
 
 ## Project Overview
 
-SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Radical Red), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a generation-specific Lua client (`lua/gen1/client.lua`, `lua/clients/gen2_crystal_client.lua`, `lua/gen3/entry.lua` + `lua/gen3/run.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game state through its generation's read layer and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
+SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Supported games include **Gen 1** (Red, Blue, Yellow), **Gen 2** (Crystal), **Gen 3** (FireRed, LeafGreen, Radical Red), **Gen 4** (HeartGold, SoulSilver, Platinum), and **Gen 5** (Black, White, Black 2, White 2). Each BizHawk instance runs a generation-specific Lua client (`lua/gen1/client.lua`, `lua/gen2/client.lua`, `lua/gen3/entry.lua` + `lua/gen3/run.lua`, `lua/clients/gen4_hgsspt_client.lua`, or `lua/clients/gen5_bw_client.lua`), which reads game state through its generation's read layer and sends JSON events (area_enter, capture, faint, etc.) over a persistent **TCP connection** to a central Python server. The server uses a pluggable adapter framework (`server/adapters/`) to handle game-specific logic while enforcing Soul Link rules — pairing encounters by area, propagating faints, mirroring party presence — and returns commands (e.g., `force_faint`) in the TCP response. **No BizHawk CLI flags are required.**
 
 ### Game Maturity
 
 **Gen 1, Gen 2 and Gen 3 have live coverage; Gen 4 and 5 do not.** Gen 1 runs headless gates on all three cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py`) plus nine two-instance Soul Link scenarios across two cartridge pairings, Red/Blue and Yellow/Red (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen1.py`). Gens 4 and 5 have Python unit tests and Lua clients but have never executed against a running game — treat them as experimental. When making changes to shared code (`server.py`, `state.py`, `adapters/base.py`), always verify Gen 3 isn't broken first, then run the other gen tests as a secondary check.
 
-**Gen 2 is partially verified — mechanisms proven, no playthrough.** A read gate and a write gate run against a real Crystal cartridge (`SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py`), and `faint` / `boxsync` / `memorialize` run two Crystals against a real server (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen2.py`). What has *never* happened on Gen 2 is play: no wild encounter, no area change, no ball thrown, so encounter linking, the dead zone and the species clause have no live Gen 2 evidence. Those three rules are enforced server-side and are generation-independent, and Gen 1's `playthrough` / `deadzone` / `dupes` scenarios cover them. Gen 2's blocker is the fixture: New Bark Town's west exit is script-locked until Elm hands over a starter, so `tools/gen2_playthrough.py` can only park indoors and there is no grass fixture to walk.
+**Gen 2 is partially verified — mechanisms proven, no playthrough.** Inspect, frame-alignment and write-window gates run against real Crystal/Gold cartridges (`SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py tests/live/test_gen2_frame_align.py tests/live/test_gen2_write_windows.py`), and two-instance link scenarios run against a real server (`SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py`) across the Crystal, Gold and Silver pairings. What has *never* happened on Gen 2 is unscripted play: no wild encounter, no area change, no ball thrown, so encounter linking, the dead zone and the species clause have no live Gen 2 evidence. Those three rules are enforced server-side and are generation-independent, and Gen 1's `playthrough` / `deadzone` / `dupes` scenarios cover them. Gen 2's blocker is the fixture: New Bark Town's west exit is script-locked until Elm hands over a starter, so the qualified fixtures can only park indoors and there is no grass fixture to walk.
 
 Bringing Gen 1 to live coverage found four defects that the unit suite and the Lua syntax gate both passed: `pending_sync_cmds` declared *after* `dispatch_commands`, so every deferred `box_mon` / `party_mon` / `memorialize` bound to a nil global and killed the client on first use; a `party_to_box` debounce that could never reach its threshold, so party→box sync was silently dead (**this one was in Gen 2 as well**); a box level read from offset `+0x21`, which is past the end of the 33-byte Gen 1 box struct; and Archipelago detection probing HRAM at `0xFFDB` instead of the ROM. Static analysis cannot find any of these. If you add a generation, add gates.
 
@@ -154,9 +153,8 @@ If a player whiteouts (entire party faints), all remaining party mons are treate
 
 ```
 [BizHawk Instance A (Gen 2 GBC)]     [BizHawk Instance B (Gen 2 GBC)]
-  lua/clients/gen2_crystal_client.lua  lua/clients/gen2_crystal_client.lua
-  lua/memory_gb.lua                    lua/memory_gb.lua
-  lua/gen2_crystal_areas.lua           lua/gen2_crystal_areas.lua
+  lua/gen2/entry.lua + client.lua      lua/gen2/entry.lua + client.lua
+  lua/gen2/reads.lua, writes.lua       lua/gen2/reads.lua, writes.lua
 
 [BizHawk Instance A (Gen 3 GBA)]     [BizHawk Instance B (Gen 3 GBA)]
   lua/gen3/entry.lua + run.lua         lua/gen3/entry.lua + run.lua
@@ -175,7 +173,7 @@ If a player whiteouts (entire party faints), all remaining party mons are treate
                           ↓
                    [server/server.py]   ← asyncio TCP server on :54321
                    [server/state.py]    ← SoulLinkState FSM + adapters
-                   [server/adapters/]   ← gen2_crystal, gen3_frlge, gen4_hgsspt, gen5_bw
+                   [server/adapters/]   ← gen2_gsc, gen3_frlge, gen4_hgsspt, gen5_bw
                    [data/links.json]    ← persisted link table + area states
                    [data/games/]        ← game-specific data per generation
                           |
@@ -209,7 +207,6 @@ SLink-RR/
 │   ├── slink_gen4.lua           # Gen 4 loader (loads gen4_hgsspt_client)
 │   ├── slink_gen5.lua           # Gen 5 loader (loads gen5_bw_client)
 │   ├── clients/                 # Legacy single-file production clients
-│   │   ├── gen2_crystal_client.lua
 │   │   ├── gen4_hgsspt_client.lua
 │   │   └── gen5_bw_client.lua
 │   ├── gen3/                    # Gen 3 composition root and production client
@@ -224,19 +221,16 @@ SLink-RR/
 │   │   └── native.lua           # Optional RR companion ABI
 │   ├── gen1/                    # Gen 1 client (R/B/Y, + AP variants): entry.lua, client.lua,
 │   │   └── ...                  # reads.lua, writes.lua, signals.lua, boxes.lua, rom.lua, panel.lua
+│   ├── gen2/                    # Gen 2 client (Crystal/Gold/Silver): entry.lua, client.lua,
+│   │   └── ...                  # reads.lua, writes.lua, boxes.lua, signals.lua, rom.lua, run.lua
 │   ├── games/                   # Legacy Lua game modules
-│   │   ├── gen2_crystal.lua
 │   │   ├── gen4_hgsspt.lua
-│   │   ├── gen2_gsc.lua         # Gen 2 game module
 │   │   └── gen5_bw.lua          # Gen 5 game module
-│   ├── memory_gb.lua            # GB/GBC memory read/write helpers (Gen 1 & Gen 2)
 │   ├── memory_nds.lua           # NDS memory read/write helpers (Gen 4 & Gen 5)
 │   ├── hud.lua                  # Shared HUD overlay module
 │   ├── connector.lua            # LuaSocket TCP wrapper (non-blocking)
 │   ├── game_detect.lua          # ROM header game detection
 │   ├── socket.lua               # LuaSocket shim (loads DLL)
-│   ├── gen2_crystal_areas.lua   # Area lookup table (Gen 2, 124 entries)
-│   ├── gen2_crystal_locations.lua # Location name lookup (Gen 2, 81 areas)
 │   ├── tests/                   # BizHawk test scripts (run manually in emulator)
 │   └── x64/                     # LuaSocket binary DLL
 ├── server/                      # Python server (TCP + HTTP)
@@ -249,7 +243,7 @@ SLink-RR/
 │   └── adapters/                # Per-game server adapters
 │       ├── base.py              # Abstract base adapter
 │       ├── gen1_rby.py          # Gen 1 adapter
-│       ├── gen2_crystal.py      # Gen 2 adapter
+│       ├── gen2_gsc.py          # Gen 2 adapter
 │       ├── gen3_frlge.py        # Gen 3 adapter
 │       ├── gen4_hgsspt.py       # Gen 4 adapter
 │       └── gen5_bw.py           # Gen 5 adapter
@@ -270,7 +264,7 @@ SLink-RR/
 │   ├── gen_pokemon_data.py      # Generates pokemon_data.py tables
 │   ├── gen_ability_names.py     # Generates ability name table
 │   ├── gen_rr_types.py          # Generates RR type data
-│   ├── gen_gen2_area_map.py     # Generates gen2_crystal_areas.lua + gen2_crystal_locations.lua
+│   ├── gen_gen2_area_map.py     # Generates data/games/gen2_<title>/area_map.json
 │   ├── gen_gen5_area_map.py     # Generates Gen 5 BW/BW2 area maps
 │   └── ...                      # Other generators
 ├── tests/                       # Python test suite
@@ -309,12 +303,11 @@ SLink-RR/
 - **`data/games/gen3_frlg/`, `data/games/gen3_rr/`, and `data/games/gen3_frlge/`** — Per-pack profiles, engine signals, checkpoints, and the shared FRLG/RR area map and locations.
 
 *Gen 2 Lua (GBC — Crystal):*
-- **`lua/slink_gen2.lua`** — Gen 2 launcher script (configure host/port/player, loads gen2_crystal_client.lua).
-- **`lua/clients/gen2_crystal_client.lua`** — **Crystal production client**: 2-byte map addressing (mapGroup+mapNumber), 48-byte party / 32-byte box structs, held item tracking, Apricorn ball detection for nuzlocke gate, sequential NatDex species (no index lookup needed). DV-based gender and shiny detection.
-- **`lua/memory_gb.lua`** — GB/GBC memory read/write helpers (shared with Gen 1). Extended with Crystal profile: wPartyCount, wPartyMon1, wMapGroup/wMapNumber, wBattleMode, wPlayerID addresses. `M.hasPokeballs()` scans ball pocket for Poké/Great/Ultra/Master balls and Apricorn balls (Level, Lure, Moon, Friend, Fast, Heavy, Love).
-- **`lua/games/gen2_crystal.lua`** — Crystal game module: ROM detection via `PM_CRYSTAL` title at GB header `0x0134` + GBC flag `0x0143 == 0x80`, single memory profile (no ASLR), gift areas (new_bark_town, goldenrod_city, olivine_city, dragons_den, route_34), area resolution via `mapGroup*256+mapNumber`.
-- **`lua/gen2_crystal_areas.lua`** — Generated lookup: `mapGroup*256+mapNumber → area_id` (124 entries). Regenerate with `python tools/gen_gen2_area_map.py`.
-- **`lua/gen2_crystal_locations.lua`** — Area display names (81 unique areas).
+- **`lua/gen2/entry.lua`** — Gen 2 composition root (Crystal/Gold/Silver): builds the candidate and
+  production graphs the way `lua/gen1/entry.lua` does, over `lua/gen2/{client,reads,writes,boxes,
+  signals,rom,run}.lua`. 2-byte map addressing (mapGroup+mapNumber), 48-byte party / 32-byte box
+  structs, held item tracking, Apricorn ball detection for nuzlocke gate, sequential NatDex species
+  (no index lookup needed), DV-based gender and shiny detection.
 
 *Gen 4 Lua (NDS — HGSS / Platinum):*
 - **`lua/slink_gen4.lua`** — Gen 4 launcher script (configure host/port/player, loads gen4_hgsspt_client.lua).
@@ -341,7 +334,7 @@ SLink-RR/
 - **`server/pokemon_data.py`** — Shared Pokémon data module: `SPECIES_NAMES`, `GENDER_RATIO`, `gender_from_key_species()`, `EVO_FAMILY` (Gen I–IX evolution families including CFRU/RR extended IDs), `base_form()`.
 - **`server/adapters/base.py`** — GameAdapter ABC: GameRulesAdapter + GamePresentationAdapter. All game-specific server logic flows through adapter interfaces. 0.2.6 added `gift_link_area`, `rival_trainer_ids` (rules) and `trainers_for_area` / `trainer_party` / `trainer_brief` (presentation) as inert-default stubs.
 - **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. Legacy Emerald gift-area entries remain server-side compatibility data, but the current launcher admits only FireRed, LeafGreen, and Radical Red. RR overrides `rival_trainer_ids()` (27 "Terry" IDs), the Upcoming-Key-Trainers methods (`trainers_for_area` / `trainer_party` / `trainer_brief` / `milestone_cap_for_fight_label`) from `rr_priority_trainers.json`, and `gift_link_area`.
-- **`server/adapters/gen2_crystal.py`** — Gen 2 adapter: DV-based gender/shiny, 251 sequential species (NatDex 1-251), 17 types (Dark+Steel added), Crystal item names, PokeAPI sprites. Data from `data/games/gen2_crystal/`.
+- **`server/adapters/gen2_gsc.py`** — `Gen2GSCAdapter`, Gen 2 adapter: DV-based gender/shiny, 251 sequential species (NatDex 1-251), 17 types (Dark+Steel added), per-title item names, PokeAPI sprites. Data from `data/games/gen2_<title>/` (Crystal, Gold, Silver).
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 adapter: PID:OTID key format, HGSS gift areas, Gen 1-4 species (NatDex 1-493).
 - **`server/adapters/gen5_bw.py`** — Gen 5 adapter: PID:OTID key format, BW/BW2 gift areas, Gen 1-5 species (NatDex 1-649).
 - **`server/adapters/__init__.py`** — Adapter registry: get_adapter(game_id) with backward-compat aliases.
@@ -352,7 +345,7 @@ SLink-RR/
 - **`data/obs_config.json`** — OBS WebSocket config (host, port, password per player, enabled flag, trigger rules list). Written by `OBSController.save_config()`. Not per-run — shared across all server instances. Passwords stored in plaintext locally; never returned in HTTP responses.
 - **`data/games/gen3_frlge/rr_items.json`** — 746 RR item ID → name mappings (generated by `lua/tests/test_item_discovery.lua`). Loaded at server startup; used when `_is_rr` is True.
 - **`tools/gen_area_map.py`** — Generates `data/games/gen3_frlge/gen3_frlge_areas.lua` and `data/games/gen3_frlge/gen3_frlge_locations.lua` from `data/games/gen3_frlge/area_map.json`.
-- **`tools/gen_gen2_area_map.py`** — Generates `lua/gen2_crystal_areas.lua` and `lua/gen2_crystal_locations.lua` from `data/games/gen2_crystal/area_map.json`.
+- **`tools/gen_gen2_area_map.py`** — Generates each title's `data/games/gen2_<title>/area_map.json` (124 entries).
 - **`tools/gen_gen5_area_map.py`** — Generates `data/games/gen5_bw/gen5_bw_areas.lua` and `data/games/gen5_bw/gen5_bw_locations.lua` from the Gen 5 BW/BW2 area maps.
 
 *Tests:*
@@ -363,14 +356,13 @@ SLink-RR/
 - **`lua/tests/test_item_discovery.lua`** — ROM scanner for RR/CFRU gItems table. Uses CFRU probe scoring (IDs 52-62) and itemId field validation to find the correct table. Outputs JSON to `rr_items.json`.
 - **`tests/unit/test_state.py`** — 318 pytest unit tests for the state machine.
 - **`tests/unit/test_gen1_adapter.py`** — Gen 1 adapter unit tests. Live coverage lives in `tests/live/test_gen1_gates.py` (18 cases: 4 gate scripts × red/blue/yellow, plus the companion-patch and Archipelago gates) and `tests/e2e/test_duo_gen1.py` (18 cases: 9 scenarios × the Red/Blue and Yellow/Red pairings).
-- **`tests/unit/test_gen2_adapter.py`** — 179 tests for the Gen 2 adapter. Live coverage lives in `tests/live/test_gen2_gates.py` (a read gate and a write gate, Crystal only) and `tests/e2e/test_duo_gen2.py` (`faint`, `boxsync`, `memorialize` — two Crystals, one real server).
+- **`tests/unit/test_gen2_adapter.py`** — tests for `Gen2GSCAdapter`. Live coverage lives in `tests/live/test_gen2_new_gates.py` / `test_gen2_frame_align.py` / `test_gen2_write_windows.py` (inspect, frame-align, write windows; Crystal + Gold, Silver shares Gold's receipt) and `tests/e2e/test_duo_gen2_new.py` (two-instance link scenarios, one real server).
 - **`tests/unit/test_gen3_adapter.py`** — 216 tests for the Gen 3 adapter.
 - **`tests/unit/test_gen4_adapter.py`** — 100 tests for the Gen 4 adapter.
 - **`tests/unit/test_gen5_adapter.py`** — 140 tests for the Gen 5 adapter.
 - **`tests/unit/test_stat_stages.py`** — 46 tests for stat stage calculations.
 - **`tests/unit/test_obs_priority.py`** — 7 tests for OBS priority-based trigger resolution (`submit_fired` — first-match-wins, per-player independence, exact area + area-group filters).
 - **`tests/unit/test_phase1_comms.py`** — 6 TCP integration tests.
-- **`tests/unit/test_profile_addresses.py`** — 3 tests verifying every Gen 1/2 profile address matches the pret decomp .sym output (CI gate after `tools/build_pret_syms.py`).
 - **`tests/unit/test_trainer_panel.py`** — 14 tests for the Upcoming Key Trainers panel (`trainers_for_area` / `trainer_party` / `trainer_brief`, base no-op defaults).
 - **`tests/unit/test_state_rival_battle_start.py`** — 15 tests for the Rival Team Swap auto-trigger (adapter gate, toggle matrix, `queue_rival_team_swap`, `rival_team_replaced` ack).
 - **`tests/unit/test_state_party_blob_cache.py`** — 10 tests for the `blob_hex` party-blob cache (ingest, length/hex validation, per-player isolation).
@@ -391,7 +383,7 @@ The server uses a pluggable adapter pattern for game-specific behavior. All game
 
 Each game family has its own adapter module:
 - **`server/adapters/gen1_rby.py`** — Gen 1 (Red, Blue, Yellow)
-- **`server/adapters/gen2_crystal.py`** — Gen 2 (Crystal)
+- **`server/adapters/gen2_gsc.py`** — Gen 2 (Crystal, Gold, Silver)
 - **`server/adapters/gen3_frlge.py`** — Gen 3 server adapter: GBA PID:OTID key format, FRLG/RR presentation data, and RR trainer/rival metadata. The Lua launcher admits FireRed, LeafGreen, and Radical Red only; Emerald and Archipelago-FRLG are refused before the adapter is used.
 - **`server/adapters/gen4_hgsspt.py`** — Gen 4 (HeartGold, SoulSilver, Platinum)
 - **`server/adapters/gen5_bw.py`** — Gen 5 (Black, White, Black 2, White 2)
@@ -686,7 +678,8 @@ player first opened the box menu would lose it silently.
 ran the init itself and set the bit, so the game's wipe never fired; it also recomputed the
 box-bank checksums with `M.refreshSramBoxChecksums` (a red herring in the decomp — nothing ever
 reads them — but kept for self-consistency). Neither helper exists any more; `lua/memory_gb.lua`
-was trimmed to what the Gen 2 client still calls (`9969845`).
+was trimmed to what the Gen 2 client still called (`9969845`), then removed outright once that
+legacy client itself was replaced by `lua/gen2/` (P3b.8b).
 
 **The rewritten Gen 1 client takes the opposite approach.** `lua/gen1/boxes.lua` never forces the
 init: it refuses to write an SRAM box until the game's own `ChangeBox` has initialised it
@@ -721,19 +714,20 @@ Read the ROM title from GB header at `0x0134` (16 bytes ASCII). Value: `PM_CRYST
 | sBoxCount | 0xAD10 | Active box mon count. **SRAM**, not WRAM — the `s` prefix is pret's; `wBoxCount` is a *Gen 1* symbol. System Bus view, read through the **CartRAM** domain |
 | sBoxMons | 0xAD26 | Active box struct base (20 × 32 bytes), same SRAM/CartRAM caveat |
 
-`JOY_IGNORE_ADDR` in `lua/games/gen2_crystal.lua` is `wScriptRunning`, not a `wJoypadDisable`
-analogue — that was **measured** on real Crystal by `lua/tests/probe_gen2_safestate.lua`, not
-picked by name. `wJoypadDisable` reads `00` both in the overworld and with the START menu open;
+The safe-state predicate the Crystal profile uses is `wScriptRunning`, not a `wJoypadDisable`
+analogue — that was **measured** on real Crystal, not picked by name (the one-off discovery
+probe that measured it is retired; the finding lives here and in the profile data now).
+`wJoypadDisable` reads `00` both in the overworld and with the START menu open;
 `wTextboxFlags` is text-*speed* config. Gating writes on `not in_battle` alone is what this
 replaces: that is also true inside the PC box UI, the party menu and the naming screen, where
 the open UI holds its own copy of the data and writes it back over ours.
 
-Every address above is checked against pret by `tools/verify_profile_addresses.py` **and**
-exercised on a running cartridge by `lua/tests/test_gen2_memory_gate.lua` — the map pair
-resolves PLAYERS_HOUSE_2F to group 24 / number 7, `wBattleMode` reads out-of-battle in the town
-fixture, and the box reads return a real count and a sane 0–13 active index. A correct address
-read through the wrong *domain* still produces plausible-looking bytes, which is exactly why
-the pret check alone was not enough.
+Every address above is exercised on a running cartridge by `lua/tests/gen2_inspect_gate.lua`
+(`tests/live/test_gen2_new_gates.py`) — the map pair resolves PLAYERS_HOUSE_2F to group 24 /
+number 7, `wBattleMode` reads out-of-battle in the town fixture, and the box reads return a
+real count and a sane 0–13 active index. A correct address read through the wrong *domain*
+still produces plausible-looking bytes, which is exactly why a static check against pret alone
+would not be enough.
 
 ### Party struct (48 bytes)
 
@@ -801,23 +795,23 @@ These are what is *actually* open. The addresses and the memorial box are no lon
 — see the gate note above.
 
 - **No grass fixture, so nothing has ever been caught.** New Bark Town's west exit is
-  script-locked until Elm hands over a starter, so `tools/gen2_playthrough.py` parks indoors and
-  `tests/fixtures/gen2/crystal_town.SaveRAM` is the only target. That is why `playthrough`,
+  script-locked until Elm hands over a starter, so every title's `town` fixture parks indoors —
+  there is no `town` target with grass to walk. That is why `playthrough`,
   `deadzone` and `dupes` do not run on Gen 2. Those rules live server-side and are
   generation-independent, and Gen 1 runs all three — buying a Gen 2 grass fixture would buy a
   second copy of coverage that already exists.
-- **Gold, Silver and AP Crystal have no dumps to run against.** They are supported for
-  correctness — routing, profile keys, per-variant addresses, all checked against pret by
-  `tools/verify_profile_addresses.py` — but a live matrix entry that silently skips reads
-  exactly like one that passes, so the gates are Crystal-only and say so. AP Crystal is worse
-  off for a different reason: the fork has no public repo, only five of its addresses are
-  provable, and its profile stays flagged unverified.
+- **AP Crystal has no dump to run against, and is refused outright (O-25).** Gold and Silver
+  now have qualified fixtures and run the same three live gates as Crystal (Silver shares
+  Gold's engine-sites receipt, O-23). AP Crystal is worse off for a different reason: the fork
+  has no public repo, only five of its addresses are provable, and its profile stays flagged
+  unverified — moot now that it is refused rather than routed.
 - **`sram_box_layout` is deliberately absent for Gen 2.** That is correct, not a gap: Gen 2's box banks sit outside the save checksum
   (`SaveChecksum` / `VerifyChecksum` cover `sGameData..sGameDataEnd` only), and
   `ChangeBoxSaveGame` does `SaveBox`/`LoadBox` with no `EmptyAllSRAMBoxes` equivalent — there is
-  no one-time wipe to defend the memorial against. `test_gen2_writes_gate.lua` proves the burial
-  survives without it. Do not "fix" this by giving Gen 2 a layout; Gen 1's banks differ.
-- Gold/Silver ship as variant profiles in `gen2_crystal.lua` (Phase 11, pret-authoritative addresses via `tools/build_pret_syms.py`); `detect_variant()` returns them
+  no one-time wipe to defend the memorial against. `tests/live/test_gen2_write_windows.py`
+  (`lua/tests/gen2_write_windows.lua`) proves the burial survives without it. Do not "fix" this
+  by giving Gen 2 a layout; Gen 1's banks differ.
+- Gold/Silver ship as variant profiles (`lua/gen2/entry.PACKS`, pret-authoritative addresses via `tools/build_pret_syms.py`); title detection returns them
 
 ---
 
@@ -1134,7 +1128,7 @@ Below the cards:
 pytest tests/unit/ -v   # ~1450 tests
 pytest tests/unit/test_state.py -v          # 318 tests (incl. tick reconciliation + Explode Mode)
 pytest tests/unit/test_gen1_adapter.py -v   # 103 tests
-pytest tests/unit/test_gen2_adapter.py -v   # 179 tests
+pytest tests/unit/test_gen2_adapter.py -v   # 50 tests (Gen2GSCAdapter)
 pytest tests/unit/test_gen3_adapter.py -v   # 216 tests
 pytest tests/unit/test_gen4_adapter.py -v   # 100 tests
 pytest tests/unit/test_gen5_adapter.py -v   # 140 tests
@@ -1142,7 +1136,6 @@ pytest tests/unit/test_stat_stages.py -v    # 46 tests
 pytest tests/unit/test_phase1_comms.py -v   # 6 tests
 pytest tests/unit/test_obs_priority.py -v   # 7 tests (priority + area-group filters)
 pytest tests/unit/test_manager_launcher.py -v   # 4 tests (BizHawk launcher Lua syntax)
-pytest tests/unit/test_profile_addresses.py -v  # 3 tests (pret address verification)
 # 0.2.6 — Rival Team Swap / Upcoming Key Trainers:
 pytest tests/unit/test_trainer_panel.py -v             # 14 tests (Upcoming Key Trainers panel)
 pytest tests/unit/test_state_rival_battle_start.py -v  # 15 tests (rival-swap auto-trigger)

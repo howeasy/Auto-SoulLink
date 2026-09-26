@@ -207,6 +207,7 @@ blobs and refreshing the index; the lane was tracked-clean at `a2985d5a` before 
   make_release.py, REFERENCE.md and lua/gen1/client.lua across 33 commits. Both reported no dropped or
   garbled hunk (recorded in `docs/gen3_resume.md`, "Merge review"). The OMP attempts (`cx-cd3f4189`,
   `cx-4334eae0`, `cx-c36d9987`) timed out on the diff size and produced no verdict. **S**
+- **FR/LG item names fixed after the frozen cut** (`5f050857`, owner: "Just fix it. No re run."): the vanilla item table dropped 15 non-Gen-3 ids and gained the 55 FRLG key items, from pret pokefirered `c75f3523`. It is display-only (board held-item names) and is not covered by the a2985d5a pass; it has unit tests only. **S**
 - **HUD: the GBA screen draws notices in the fceux pixel font too** (`f1cc6038`) — Gen 3 now
   matches the Gen 1/2 HUD font instead of BizHawk's default. **S**
 - **HUD: held commands never reach the HUD** (`870e5e5d`) — console log only, once per hold; owner
@@ -492,6 +493,7 @@ All five owner scope decisions (a)–(e) are settled and recorded above.
     - **(c) Opcode gates:** the 12 deferred gates are a signed limit; the 26 ported live gates cover the opcodes in use.
     - **(d) Per-item evidence:** the P2 anchor/md5/deleted-file/write-guard/native-control items are satisfied by the existing unit/model evidence (the pin tests, test_gen3_write_ownership, the test_gen3_native control tests). No separate live receipts are needed.
     G5. **S**
+26. **Land Gen 3 on master now** (owner, 2026-09-25: "Lets just merge it"). The owner directed the Gen 3 → master merge after the frozen cut a2985d5a (FR/LG 43/43, RR 19/19) and before a formal G4/G5 signature. Master is fast-forwarded to a verified merge of master (with Gen 2) into the Gen 3 line; it is local and not pushed. Nothing is released or tagged (G6 is still the owner's). **S**
 
 ---
 

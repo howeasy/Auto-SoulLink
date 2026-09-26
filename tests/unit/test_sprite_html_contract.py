@@ -55,7 +55,11 @@ def test_the_enc_sprite_swap_actually_swaps(rom_type, adapter):
 
 # ── the status pill ──────────────────────────────────────────────────────────────────
 
-_GB_ADAPTERS = ["gen1_rby", "gen2_crystal"]
+_GB_ADAPTERS = ["gen1_rby", "gen2_gsc"]  # gen2_crystal was removed at P3b.8
+
+
+def _gb(game_id):
+    return get_adapter(game_id, title="crystal") if game_id == "gen2_gsc" else get_adapter(game_id)
 
 
 @pytest.mark.parametrize("rom_type", _GB_ADAPTERS)
@@ -72,7 +76,7 @@ def test_game_boy_status_bytes_decode_the_same_on_both_generations(rom_type, con
     bit, so one decoder serves both. Bit 7 is unused: neither generation has a persistent
     Toxic, so an empty string is correct rather than a missing branch.
     """
-    assert get_adapter(rom_type).status_token(cond) == expected
+    assert _gb(rom_type).status_token(cond) == expected
 
 
 @pytest.mark.parametrize("rom_type", _GB_ADAPTERS)
@@ -80,6 +84,6 @@ def test_the_status_token_is_actually_overridden(rom_type):
     """The base class returns "" for everything, so a generation that forgets to
     override looks exactly like a healthy party. Gen 2 did, and the partner column on
     the dashboard silently lost its status pill."""
-    assert get_adapter(rom_type).status_token(0x08) == "PSN", (
+    assert _gb(rom_type).status_token(0x08) == "PSN", (
         f"{rom_type} still inherits the base status_token, which returns '' for every "
         f"input — the partner's status pill will never render")

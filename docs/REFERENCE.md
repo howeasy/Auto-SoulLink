@@ -113,9 +113,8 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 > per-generation caveats above before trusting either. Gen 3 has extensive live-play coverage.
 > Gens 4 and 5 have full feature pipelines
 > (moves+PP, stat stages, enemy moves+PP, trainer names, encounter tables, AP detection) and pass
-> their unit-test suites; static profile addresses are verified by
-> [tools/verify_profile_addresses.py](../tools/verify_profile_addresses.py) against pret decomps.
-> They remain ⚠️ Experimental because nothing has run them against a cartridge.
+> their unit-test suites; static profile addresses are checked against pret decomps at review
+> time. They remain ⚠️ Experimental because nothing has run them against a cartridge.
 >
 > That distinction is not academic, and Gen 2 proved it twice. Bringing Gen 1 up found defects no
 > static check could reach — a deferred-command queue that bound to a nil global and crashed the
@@ -382,6 +381,8 @@ The status server (default port 8080) exposes these pages and endpoints.
 | `/api/debug/clear_pending` | POST | Clear pending captures |
 | `/api/debug/unlink` | POST | Remove a link entry |
 | `/api/debug/revive` | POST | Revive a dead/memorial link |
+| `/api/debug/resolve_trade` | POST | Settle a conflicted or stuck native trade (commit or rollback) |
+| `/api/debug/resolve_ambiguous_key` | POST | Clear an ambiguous-key latch after checking the cartridge (`{"player","key"}`) |
 | `/api/debug/rollback` | POST | Restore state from a backup slot |
 
 ### Pages
@@ -748,6 +749,17 @@ curl -X POST http://localhost:8080/api/debug/revive \
 
 ---
 
+**`POST /api/debug/resolve_trade`** — Settle a native trade the server cannot settle on its own (the board's "Trade conflict" / stuck "Trade uncertain" banner, which shows the token). Check both players' parties first. `commit` swaps the link, using each side's reported new key or else the other side's old key. `rollback` leaves the link as it is. Either action clears the trade, replays any held faint/box events and journals the outcome with `problem: "resolved by admin: <action>"`.
+
+```bash
+curl -X POST http://localhost:8080/api/debug/resolve_trade \
+  -H "Content-Type: application/json" \
+  -d '{"token": "t7", "action": "rollback"}'
+# {"ok": true}
+```
+
+---
+
 **`POST /api/debug/rollback`** — Restore `links.json` and `events.json` from a rolling backup slot (1–6). The current state is saved as `links.pre_rollback.json` and `events.pre_rollback.json` before restoring.
 
 ```bash
@@ -977,13 +989,12 @@ pytest tests/unit/test_state.py -v             # 318 state machine tests (incl. 
 pytest tests/unit/test_gen3_adapter.py -v      # 216 Gen 3 adapter tests
 pytest tests/unit/test_gen4_adapter.py -v      # 100 Gen 4 adapter tests
 pytest tests/unit/test_gen1_adapter_contract.py -v  # 9 Gen 1 adapter-contract tests (the rewrite's Gen 1 coverage is spread across tests/unit/test_gen1_*.py, ~40 files)
-pytest tests/unit/test_gen2_adapter.py -v      # 179 Gen 2 adapter tests
+pytest tests/unit/test_gen2_adapter.py -v      # 50 Gen2GSCAdapter tests
 pytest tests/unit/test_gen5_adapter.py -v      # 140 Gen 5 adapter tests
 pytest tests/unit/test_stat_stages.py -v       # 46 stat stage tests
 pytest tests/unit/test_obs_priority.py -v      # 7 OBS priority + area-group tests
 pytest tests/unit/test_manager_launcher.py -v  # 4 launcher Lua-syntax regression tests
 pytest tests/unit/test_phase1_comms.py -v      # 6 protocol tests
-pytest tests/unit/test_profile_addresses.py -v # 3 pret address verification tests
 # Rival Team Swap + Explode Mode + Upcoming Key Trainers (0.2.6):
 pytest tests/unit/test_trainer_panel.py -v             # 14 Upcoming Key Trainers panel tests
 pytest tests/unit/test_state_rival_battle_start.py -v  # 15 rival-team-swap trigger tests
@@ -1025,25 +1036,25 @@ SLINK_LIVE=1 pytest tests/live/test_gen1_trade_gates.py -q # SLINK TRADE recepti
 SLINK_E2E=1  pytest tests/e2e/test_duo_gen1_new.py -q      # 18 scenarios, Red/Blue (gen1_new)
 python tools/e2e_duo.py --game gen1_new --scenario all     # the same duo run, directly
 
-SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q   # 2 gates, Crystal only
-SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # 3 duo scenarios, two Crystal instances
+SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py tests/live/test_gen2_frame_align.py tests/live/test_gen2_write_windows.py -q   # inspect, frame-align, write windows
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen2_new.py -q  # two-instance link scenarios, Crystal/Gold/Silver pairings
 ```
 
 > `--scenario all` is **`gen1_new` / Gen 3 only** (the old `gen1`/`gen1_yellow` game ids were
 > retired with their scenario drivers in the harness deletion sweep, `2395145`/`832d499`; the
 > legacy client itself was deleted separately, `21ff0d7`). It expands to every entry
 > in the runner's `SCENARIOS` dict that names the given game via `scenarios_for()` — `--game
-> gen2 --scenario all` would otherwise launch Gen 3/Gen 1-only scenarios and fail for reasons
-> unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2 --scenario faint`
-> (likewise `boxsync`, `memorialize`).
+> gen2_new --scenario all` would otherwise launch Gen 3/Gen 1-only scenarios and fail for reasons
+> unrelated to Gen 2. Use the pytest wrapper, or name them: `--game gen2_new --scenario link`
+> (likewise `gen2_faint`).
 
 `tests/live/test_gen1_gates.py` is now the companion-patch half only: `test_gen1_patch_gate.lua` and `test_gen1_menu_row_gate.lua` on the two patched builds, plus the same panel gate on a randomized+injected cartridge. The pre-rewrite cartridge gates and the Archipelago gate were retired with their Lua and the other legacy Gen 1 probes/console diagnostics in commit `9aa7989`; the rewrite's own lanes (`test_gen1_new_gates.py`, `test_gen1_trade_gates.py`) carry those rows and run on **all three cartridges** — Yellow shifts nearly every WRAM address by −1, so a Red-only run would skip the profile most likely to be wrong. The `gen1_new` duo harness (`tools/e2e_duo.py`) pairs **Red as player A against Blue as player B only** — there is no Yellow pairing — and boots the companion-patched builds (`patch/build/gen1_red.gb` / `gen1_blue.gb`) by default for every `gen1_new` scenario; `trade_new` and `trade_decline_new` additionally override to the dedicated trade-carrying build (`patch/gen1/build/slink_red.gb` / `slink_blue.gb`) for the SLINK TRADE receptionist.
 
-The Gen 2 gates (`test_gen2_memory_gate.lua`, `test_gen2_writes_gate.lua`) run on **Crystal only** — see the Supported Games caveat above for why a silently-skipping Gold/Silver entry would be worse than none. Its three duo scenarios (`faint`, `boxsync`, `memorialize`) run **two instances of the same Crystal dump**. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
+The Gen 2 gates (`gen2_inspect_gate.lua`, `gen2_frame_align.lua`, `gen2_write_windows.lua`) run per title on Crystal and Gold (Silver shares Gold's engine-sites receipt, O-23) — see the Supported Games caveat above. Its duo link scenarios run **two instances of the same cartridge dump** for the same-title pairings. That is only possible because `write_run_config(saveram_dir=…)` gives each instance its own SaveRAM directory: BizHawk names the file from its gamedb entry (keyed on ROM hash, not the path launched), so without it two instances of one dump resolve to a single file and stamp on each other. Gen 1 sidestepped that by pairing Red with Blue — a constraint on what can be tested together, not a fix.
 
-Gen 2's duo scenarios go through the shared driver: `lua/tests/duo/duo_gb_main.lua` resolves each name as `scenario_gen2_<name>` and then falls back to `scenario_gb_<name>`, so `faint` / `boxsync` / `memorialize` come from files (`scenario_gb_*.lua`) any GB generation could share. **The rewritten Gen 1 client does not go through this file at all.** Its `gen1_new` duo scenarios run under a dedicated driver, `lua/tests/duo/duo_gen1_main.lua`, whose `scenarios.<name>()` functions (e.g. `scenarios.link_new`, `scenarios.ball_gate_new`) are implemented directly rather than looked up by prefix. The old `scenario_gen1_*.lua` prefix files and the `gen1`/`gen1_yellow` duo titles they drove were removed in the harness deletion sweep (`2395145`/`832d499`), separately from the legacy client's own deletion (`21ff0d7`).
+Gen 2's duo scenarios go through their own dedicated driver, `lua/tests/duo/duo_gen2_main.lua`, which resolves each name as `scenario_gen2_<name>.lua` (`link`, `gen2_faint`). It replaces the legacy `duo_gb_main.lua` / `scenario_gb_{faint,boxsync,memorialize}.lua` / `gatelib.lua` chain, retired with the legacy Gen 2 client (P3b.8b). **The rewritten Gen 1 client goes through a separate driver too**, `lua/tests/duo/duo_gen1_main.lua`, whose `scenarios.<name>()` functions (e.g. `scenarios.link_new`, `scenarios.ball_gate_new`) are implemented directly rather than looked up by prefix. The old `scenario_gen1_*.lua` prefix files and the `gen1`/`gen1_yellow` duo titles they drove were removed in the harness deletion sweep (`2395145`/`832d499`), separately from the legacy client's own deletion (`21ff0d7`).
 
-Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crystal_town.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates) or `python tools/gen2_playthrough.py`. Gen 2 has an **indoor `town` target only** — New Bark Town's west exit is script-locked until Elm hands over a starter, so there is no Gen 2 grass fixture and therefore no `playthrough`, `deadzone` or `dupes` on Gen 2.
+Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{crystal,gold,silver}_{town,battle}.SaveRAM` and are committed. They are battery saves, not savestates, so they are not BizHawk-version-locked and never go stale. Gen 1 fixtures rebuild from a cold boot with `python tools/gen1_playthrough.py --rom red --target town` (`town` = encounter-free ground for the overworld gates, `battle` = tall grass for the battle gates). Gen 2 has an **indoor `town` target only per title** — New Bark Town's west exit is script-locked until Elm hands over a starter, so there is no Gen 2 grass fixture and therefore no `playthrough`, `deadzone` or `dupes` on Gen 2.
 
 ---
 
@@ -1058,7 +1069,6 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/crysta
 | `lua/gen1/run.lua` | **Gen 1 production client entry point** — both launchers (`lua/slink.lua`'s GB/GBC route, `lua/slink_gen1.lua`) `dofile` this. BizHawk bootstrap: title detection via `entry.lua`'s `Entry.detect_title`, connector/HUD setup, guarded frame callback and shutdown (commit `ca17a26`). |
 | `lua/gen1/entry.lua` | Composition root over injected io/net/HUD — wires reads/writes/signals/boxes/rom/trade_overlay/panel; the same construction path serves production and the model test harness. |
 | `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` | The rewritten Gen 1 modules `entry.lua` composes: engine-signal dispatch, guarded write windows, party/box/PC decoding, cartridge dex/base-stat tables, the native trade overlay and the native info panel — Red, Blue and Yellow via profile, not per-title branches. |
-| `lua/memory_gb.lua` | GB/GBC RAM helpers — **Gen 2 only** since the rewrite (`9969845` trimmed the module to what the Gen 2 client still calls; the rewritten Gen 1 client uses `lua/gen1/{reads,writes,boxes}.lua` instead, not this file). Party/box read+write, PP-Up masking, `isInOverworld`, force-faint; offsets remain profile-keyed. |
 | `lua/gen3/run.lua`, `lua/gen3/entry.lua` | **Gen 3 production client** (FireRed/LeafGreen/Radical Red) — `lua/slink.lua`'s GBA route admits the cartridge (`Entry.admit`, hash then anchors) and dofiles `run.lua`; `entry.lua` wires `lua/gen3/{client,reads,signals,writes,safety,boxes,native}.lua` over `lua/core/` |
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
 | `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |

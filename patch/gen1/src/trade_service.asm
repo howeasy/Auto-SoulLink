@@ -88,6 +88,31 @@ SlinkForeground::
     ld a, [hl]
     cp HIGH(SlinkOverworldReturn)
     ret nz
+    ; Only on a frame where vanilla could open the START menu and SAVE (pret
+    ; home/overworld.asm:46-80): no step, ledge hop, scripted movement, START
+    ; ignore, pending battle, Safari end or warp. The prompt opens text and both
+    ; roles save, so mid-step pickup would misdraw the map and save a half step.
+    ld a, [wWalkCounter]
+    ld hl, wCurOpponent
+    or [hl]
+    ld hl, wSafariZoneGameOver
+    or [hl]
+    ret nz
+    ld a, [wJoyIgnore]
+    and 1 << 3 ; B_PAD_START, pret constants/hardware.inc:92
+    ret nz
+    ld a, [wMovementFlags]
+    and 1 << 6 ; BIT_LEDGE_OR_FISHING, pret constants/ram_constants.asm:145
+    ret nz
+    ld a, [wStatusFlags5]
+    and 1 << 7 ; BIT_SCRIPTED_MOVEMENT_STATE, ram_constants.asm:112
+    ret nz
+    ld a, [wStatusFlags3]
+    and 1 << 3 ; BIT_WARP_FROM_CUR_SCRIPT, ram_constants.asm:86
+    ret nz
+    ld a, [wStatusFlags6]
+    and (1 << 3) | (1 << 4) ; BIT_FLY_WARP, BIT_DUNGEON_WARP, ram_constants.asm:119-120
+    ret nz
     jp SlinkTradeService
 
 SlinkTradeService::
@@ -129,6 +154,10 @@ SlinkTradeService::
 .apply
     ; Existing physical engine owns all final guard/refusal and save behavior.
     call SlinkTradeApply
+    ld a, d
+    cp 2
+    jr nz, .publish
+    call SlinkTradeUIResetNotice ; the uncertain hold below never exits
 .publish
     ; Retain result in byte8 of the stack copy. Pairs were pushed in order, so
     ; byte8 is the high byte at SP+7; byte5 is the low byte at SP+10.

@@ -68,6 +68,10 @@ SlinkTradeService::
 .apply
 	; Existing physical engine owns all final guard/refusal and save behavior.
 	call SlinkTradeApply
+	ld a, d
+	cp 2
+	jr nz, .publish
+	call SlinkTradeUIResetNotice ; the uncertain hold below never exits
 .publish
 	; Retain result in byte8 of the stack copy. Pairs were pushed in order, so
 	; byte8 is the high byte at SP+7; byte5 is the low byte at SP+10.

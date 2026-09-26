@@ -17,10 +17,12 @@ this to give each run its own isolated data directory.
 """
 
 import json
+import time
 import logging
 import os
-from collections import deque
-from dataclasses import asdict, dataclass
+from collections import Counter, deque
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from enum import Enum
 
@@ -39,10 +41,22 @@ MEMORIAL_PATH = os.path.join(DATA_DIR, "memorial.json")
 # Explode Mode kills came to be invisible in the dashboard and to OBS.
 DEATH_COMMANDS = ("force_faint", "force_explode")
 
+
+class UnsafeGameMigration(RuntimeError):
+    """A persisted run's adapter cannot be safely carried over after a rom_type cutover.
+
+    Raised by SoulLinkState.load(); never caught by its own broad except-and-log so it
+    reaches the operator starting the server, not a connecting client.
+    """
+
 # The party/box sync commands whose effect the server cannot observe until the client
 # answers.  Tracked from delivery to answer in SoulLinkState.sync_inflight so the drift
 # reconciler never acts on a key whose command is still on the wire.
 SYNC_COMMANDS = ("party_mon", "box_mon", "memorialize")
+
+# KEY-SCOPE-5: accepted key migrations remembered per player (replay idempotence and stale-snapshot
+# canonicalization). The count, not a clock, is the guarantee window.
+KEY_MIGRATION_LEDGER_LIMIT = 256
 # The Nth reconciler pass after delivery is the first that may re-issue a command; passes 1..N-1
 # suppress it (adapter-guard review: the count is a re-issue window, not an ack deadline).
 # The unit is deliberately the reconciler's own passes, not wall-clock and not client
@@ -57,6 +71,24 @@ SYNC_COMMANDS = ("party_mon", "box_mon", "memorialize")
 # the duplicate.  The window ages out rather than latching so that a genuinely dropped
 # answer cannot disable drift repair for that key for the rest of the run.
 SYNC_INFLIGHT_RECONCILES = 6
+# Owner ruling O-24: DEATH_COMMANDS have no ack, so a lost one is repaired from the party
+# snapshot instead (_repair_lost_faints).  Unit: out-of-battle reconciler passes, one per
+# tick; every Gen 1/2/3 client ticks every 30 frames (~0.5 s).
+#
+# FAINT_REPAIR_RECONCILES is the re-issue window after a death command is delivered.  It is
+# long (~60 s) on purpose: Gen 1 and Gen 2 hold a delivered force_faint OUT of battle until
+# their overworld checkpoint passes, which a player in the PC, a menu or a script can keep
+# closed for a long time.  A short window would spend the budget on a client that is merely
+# waiting.  ~60 s is above any ordinary hold; a longer one costs at most one idempotent
+# duplicate per window, never a wrong kill.
+FAINT_REPAIR_RECONCILES = 120
+# Re-issues per incident before the repair stalls (logged as an error, and listed on the
+# status payload as faint_repair_stalled) ...
+FAINT_REPAIR_BUDGET = 3
+# ... and the stall is a pause, not a verdict: after this cool-down (~5 min) the budget is
+# refilled, so a genuine loss later on (a client that wiped its deferred queue) is still
+# repaired.  A key is never permanently disabled.
+FAINT_REPAIR_COOLDOWN = 600
 
 
 # Not StrEnum: these values are interpolated into JSON, templates and log lines,
@@ -98,6 +130,26 @@ class LinkEntry:
     cause: str = ""                          # "battle", "dead_zone", or "whiteout"
     killer: dict | None = None            # {species, level, is_trainer, trainer_name} (battle only)
     initiating_player: str = ""              # "a" or "b" — whose action triggered the pair death
+
+
+class _KeyIndexView(Mapping):
+    """Read-only any-player view of the per-player key index (A's entry first). For display
+    and diagnostics only: rules code uses SoulLinkState.entry_for(player_id, key)."""
+
+    def __init__(self, pidx):
+        self._p = pidx
+
+    def __getitem__(self, key):
+        for pid in ("a", "b"):
+            if key in self._p[pid]:
+                return self._p[pid][key]
+        raise KeyError(key)
+
+    def __iter__(self):
+        return iter(self._p["a"].keys() | self._p["b"].keys())
+
+    def __len__(self):
+        return len(self._p["a"].keys() | self._p["b"].keys())
 
 
 def _partner(player_id: str) -> str:
@@ -151,8 +203,10 @@ class SoulLinkState:
         self.area_states: dict[str, AreaStatus] = {}
         # area_id → {player_id → MonInfo} for captures not yet linked
         self.pending_captures: dict[str, dict[str, MonInfo]] = {}
-        # monKey → LinkEntry for O(1) faint lookup
-        self._key_index: dict[str, LinkEntry] = {}
+        # KEY-SCOPE: {player: {monKey: LinkEntry}}. A mon's identity is scoped per player: two
+        # players may hold equal keys (an in-game NPC-trade or fixed-DV gift mon), one may not.
+        # entry_for() is the lookup; _key_index is a read-only any-player view for display.
+        self._pidx: dict[str, dict[str, LinkEntry]] = {"a": {}, "b": {}}
         # commands queued for delivery to each player on their next request
         self.queued_commands: dict[str, list[dict]] = {"a": [], "b": []}
         # SYNC_COMMANDS that have been DELIVERED but not yet answered, as
@@ -163,13 +217,25 @@ class SoulLinkState:
         # carries one), counted down by the reconciler itself.  In-memory only: after a restart
         # nothing of ours is on the wire, and the hello path re-queues what is still outstanding.
         self.sync_inflight: dict[str, dict[tuple[str, str], int]] = {"a": {}, "b": {}}
+        # DEATH_COMMANDS delivered to each player, as {player: {monKey: reconciler_passes_remaining}}.
+        # Shaped like sync_inflight, but FAINT_REPAIR_RECONCILES long, there is no answer to clear
+        # it, and it does not count down during a battle (the client holds an active battler's
+        # faint until battle end).
+        self.death_inflight: dict[str, dict[str, int]] = {"a": {}, "b": {}}
+        # O-24 re-issues spent per key ({player: {monKey: n}}); cleared when the key reads HP 0.
+        self.faint_repairs: dict[str, dict[str, int]] = {"a": {}, "b": {}}
+        # Keys whose repair budget is spent, as {player: {monKey: cool-down passes remaining}}.
+        # On the status payload; the budget refills when the cool-down runs out.  All three are
+        # in-memory only: reset/rollback build a fresh state, and a restart re-helloes.
+        self.faint_repair_stalled: dict[str, dict[str, int]] = {"a": {}, "b": {}}
         # Last persistence error, or "" when the most recent save succeeded. Surfaced on the
         # dashboard: a run that has silently stopped saving looks identical to one that is fine.
         self.save_failed: str = ""
         # set of monKeys known to be in each player's party right now
         self.party_keys: dict[str, set[str]] = {"a": set(), "b": set()}
         # cached party stats per monKey (populated by party_to_box events, echoed in party_mon)
-        self.mon_stats: dict[str, dict] = {}
+        # KEY-SCOPE-2: {player: {monKey: stats}} -- two players may hold equal keys
+        self.mon_stats: dict[str, dict[str, dict]] = {"a": {}, "b": {}}
         # True once the player has entered a non-gift encounter area (Pokéballs guaranteed).
         # no_catch and area state transitions are suppressed until this activates.
         self.pokeballs_obtained: dict[str, bool] = {"a": False, "b": False}
@@ -182,6 +248,15 @@ class SoulLinkState:
         # party_details, _mon_cache) consulted by the key_change collision preflight.
         # Adapter-neutral: the rules layer never sees what the presentation layer stores.
         self.presentation_key_in_use = None
+        # The last native-trade outcome (uncertain | committed | rolled_back | conflict), token-bound,
+        # for the status page and oracles; on_trade_outcome(record) lets the server journal it.
+        self.trade_last: dict | None = None
+        self._trade_backlog: list[dict] = []   # a trade restored by load(), journaled once wired up
+        self.on_trade_outcome = None
+        # Title-sensitive acquisition policy; standalone states use their run adapter.
+        # Species/evolution, gender/type, shiny and capability rules stay run-global:
+        # admitted titles share those semantics, but their static map sites can differ.
+        self.player_adapter_for = None
         # Committed trainer names — set once per player on first hello, static for run.
         self.trainer_names: dict[str, str] = {"a": "", "b": ""}
         # monKeys awaiting memorialize_done confirmation from each player
@@ -208,6 +283,25 @@ class SoulLinkState:
         # Pending bonus encounters: when a player catches a shiny, the partner gets
         # a slot in this FIFO queue.  Their next non-shiny capture becomes the bonus pair partner.
         self.pending_bonus: dict[str, deque[str]] = {"a": deque(), "b": deque()}
+        # KEY-SCOPE-3: {player: {key: {"since", "refused"}}}. A trade-window clash left this
+        # player holding two mons with one key; events naming it are refused until an admin
+        # resolves it (resolve_ambiguous_key), because the server cannot tell which mon they mean.
+        self.ambiguous_keys: dict[str, dict[str, dict]] = {"a": {}, "b": {}}
+        # KEY-SCOPE-5: {player: {key: count}} of the latest party snapshot, taken BEFORE blob filtering;
+        # the key_change self-report proof. In-memory only: a stale observation must never waive a
+        # collision after a restart (every connection re-helloes).
+        self.party_key_census: dict[str, dict[str, int]] = {}
+        # KEY-SCOPE-5: {player: {key: slot}} of the latest and the previous party snapshot (in-memory)
+        self.party_slots: dict[str, dict[str, int]] = {}
+        self.prev_party_slots: dict[str, dict[str, int]] = {}
+        # KEY-SCOPE-5 (cx-06ec4e8e F3): per player, snapshot number, and per key the snapshot its
+        # current presence began in and the last snapshot it was seen in (in-memory)
+        self.snapshot_no: dict[str, int] = {}
+        self.key_streak: dict[str, dict[str, int]] = {}
+        self.key_last_seen: dict[str, dict[str, int]] = {}
+        # KEY-SCOPE-5: accepted {old_key, new_key} migrations per player, newest last. Persisted.
+        self.key_migration_ledger: dict[str, deque] = {
+            pid: deque(maxlen=KEY_MIGRATION_LEDGER_LIMIT) for pid in ("a", "b")}
         # True once the run is definitively over (no alive links, no pending captures).
         self.run_over: bool = False
         # Manual attempts counter (set by the user via the stream index page).
@@ -291,6 +385,14 @@ class SoulLinkState:
         # a native YES/NO menu before the faithful blob swap is applied.  None = no trade pending.
         self.pending_trade: dict | None = None
         self._trade_token: int = 0
+        # MAJOR-1: clients that answer apply_prepare (hello trade_prepare: true); a trade takes the
+        # prepare round only when BOTH declared it, so other clients keep the direct apply
+        self.trade_prepare: dict[str, bool] = {"a": False, "b": False}
+        # tick `trade_blocked`: the cartridge refuses any trade right now (Gen 2: the Bug-Catching
+        # Contest masks the party, 9805ac1c SlinkTradeCheckParty), so no pair is eligible either way
+        self.trade_blocked: dict[str, bool] = {"a": False, "b": False}
+        # tick `awaiting_save` (BURIAL-VISIBLE): a GB client's boxed burial waits on an in-game SAVE
+        self.awaiting_save: dict[str, bool] = {"a": False, "b": False}
         # Per-player tick countdown during which _reconcile_party_keys is suppressed after a trade
         # completes. A trade is a party↔party swap, so no box/party sync is ever legitimately needed
         # from it; but for a few ticks each client's party read is still settling, and the drift
@@ -316,8 +418,14 @@ class SoulLinkState:
 
         self._tick_pending_trade()    # free the single trade slot if a side abandoned it (link untouched)
 
-        if event == "hello":
-            self._handle_hello(player_id, msg)
+        if self._refuse_ambiguous(player_id, msg):
+            pass                                        # KEY-SCOPE-3: which of two mons? refused
+        elif self._hold_for_trade(player_id, msg):
+            pass                                        # replayed once the trade settles
+        elif event == "hello":
+            self._handle_hello(player_id, msg)           # runs this hello's trade evidence too
+            if not msg.get("_rejected"):
+                self.trade_prepare[player_id] = msg.get("trade_prepare") is True
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
         elif event == "ghost_pos":
@@ -336,12 +444,16 @@ class SoulLinkState:
             self._handle_menu_result(player_id, msg)
         elif event == "trade_done":
             self._handle_trade_done(player_id, msg)
+        elif event == "apply_ready":
+            self._handle_apply_ready(player_id, msg)
         elif event == "status":
             self._handle_status(player_id, msg)
         elif event == "capture":
             self._handle_capture(player_id, msg)
         elif event == "faint":
             self._handle_faint(player_id, msg)
+        elif event == "release":
+            self._handle_release(player_id, msg)
         elif event == "no_catch":
             self._handle_no_catch(player_id, msg)
         elif event == "whiteout":
@@ -362,7 +474,7 @@ class SoulLinkState:
             key = msg.get("key", "")
             stats = msg.get("stats")
             if key and stats:
-                self.mon_stats[key] = stats
+                self.mon_stats[player_id][key] = stats
                 if key in self.party_keys[player_id]:
                     self.party_size[player_id] = max(0, self.party_size.get(player_id, 0) - 1)
                 self.party_keys[player_id].discard(key)
@@ -390,7 +502,7 @@ class SoulLinkState:
                     rb["queued_keys"] = [k for k in rb["queued_keys"] if k != key]
                     self._maybe_finish_rebuild(player_id)
                 # Find the linked partner and re-box them to maintain sync
-                entry = self._key_index.get(key)
+                entry = self.entry_for(player_id, key)
                 if entry and entry.status == LinkStatus.ALIVE:
                     partner = _partner(player_id)
                     partner_mon = entry.a if player_id == "b" else entry.b
@@ -426,6 +538,10 @@ class SoulLinkState:
         elif event == "rival_team_replaced":
             self._handle_rival_team_replaced(player_id, msg)
         elif event in ("safe", "tick"):
+            if "trade_blocked" in msg:
+                self.trade_blocked[player_id] = msg["trade_blocked"] is True
+            if "awaiting_save" in msg:
+                self.awaiting_save[player_id] = msg["awaiting_save"] is True
             # Accept pokéballs activation update from tick events so the server learns
             # the nuzlocke became active mid-session (between hello events).
             if msg.get("has_pokeballs") is True:
@@ -440,12 +556,13 @@ class SoulLinkState:
                 # Rival Team Swap: refresh the per-player blob cache from the
                 # same snapshot.  See _ingest_party_blobs for the shape.
                 self._ingest_party_blobs(player_id, party)
+                self._trade_evidence(player_id, party)
                 # Reconcile party_keys against Lua's actual party snapshot.  Catches
                 # state drift from spurious party_to_box / missed box_to_party events
                 # in the Lua diff loop — without this, a phantom deposit propagates
                 # a real box_mon to the partner and the Soul Link party-sync rule
                 # silently breaks until something else forces correction.
-                self._reconcile_party_keys(player_id, party)
+                self._reconcile_party_keys(player_id, party, in_battle=bool(msg.get("in_battle")))
 
         cmds = self.queued_commands[player_id][:]
         self.queued_commands[player_id].clear()
@@ -532,11 +649,13 @@ class SoulLinkState:
         LIVE link whose partner half is in the partner's party (blobs cached for both) — i.e. the only
         mons that may be traded. Sorted by party slot. This is the linked-pair invariant's source set."""
         partner = _partner(player_id)
+        if self.trade_blocked[player_id] or self.trade_blocked[partner]:
+            return []
         par_blobs = self.partner_blobs.get(partner, [])
         out = []
         for be in sorted(self.partner_blobs.get(player_id, []), key=lambda e: e.get("slot", 99)):
             k = be.get("key", "")
-            entry = self._key_index.get(k)
+            entry = self.entry_for(player_id, k)
             if not entry or entry.status != LinkStatus.ALIVE:
                 continue
             my_mon  = entry.a if player_id == "a" else entry.b
@@ -544,10 +663,30 @@ class SoulLinkState:
             if not my_mon or not par_mon or my_mon.key != k:
                 continue
             par_be = next((e for e in par_blobs if e.get("key") == par_mon.key), None)
-            if par_be is None:
+            if par_be is None or not self._trade_sane(player_id, be, par_be):
+                continue
+            if self._trade_key_clash(player_id, par_mon.key, k):
                 continue
             out.append((int(be.get("slot", 0)), k, entry, par_be))
         return out
+
+    def _trade_sane(self, player_id: str, mine: dict, theirs: dict) -> bool:
+        """Vanilla trade sanity (CheckAnyOtherAliveMonsForTrade / ValidateOTTrademon), which the GB
+        overlays leave to the host (asm review 1b33bc31 MINOR-4): neither mon may be abnormal
+        (a species the adapter does not know, a level outside 1-100), and neither player may be
+        left with no living mon. A field the snapshot did not carry is not held against it."""
+        def normal(e):
+            return (("species_id" not in e or self.adapter.species_types(e["species_id"]) is not None)
+                    and ("level" not in e or 1 <= int(e["level"] or 0) <= 100))
+
+        def alive(e):
+            return e.get("hp") is None or e["hp"] > 0
+
+        def keeps_one(pid, gives, gets):
+            return alive(gets) or any(alive(e) for e in self.partner_blobs.get(pid, [])
+                                      if e.get("key") != gives.get("key"))
+        return (normal(mine) and normal(theirs)
+                and keeps_one(player_id, mine, theirs) and keeps_one(_partner(player_id), theirs, mine))
 
     # A trade holds the single `pending_trade` slot. If a side abandons it (walks away from a menu /
     # the scene, or disconnects) the slot would wedge every future trade. `age` counts events seen
@@ -563,16 +702,38 @@ class SoulLinkState:
         pt = self.pending_trade
         if pt is None:
             return
+        if pt.get("phase") in ("uncertain", "conflict"):
+            return                                     # already the watchdog's product: evidence or a human settles it
         pt["age"] = pt.get("age", 0) + 1
         if pt["age"] > self.TRADE_WATCHDOG_EVENTS:
             if pt.get("phase") == "applying":
-                # apply_trade was already dispatched: the clients WILL swap RAM (queued commands
-                # survive reconnects), so silently freeing the slot here would leave the server's
-                # keys pointing at mons the players no longer hold. Commit the swap instead,
-                # falling back to the known pre-trade keys for any side that never reported
-                # (no trade-evolution assumed for that side).
-                log.warning(f"trade watchdog: force-completing stuck 'applying' trade (token {pt.get('token')})")
-                self._commit_trade(pt)
+                pt.setdefault("verdict", {"a": None, "b": None})
+                # MAJOR-4 (review e9d5e136): an armed APPLY nobody picked up yet could still commit
+                # AFTER an evidence rollback. First ask each silent side that speaks the prepare
+                # round to withdraw it: an unpicked lease answers a certain "none", a commit past
+                # its latch answers uncertain. Only a side still silent after that awaits evidence.
+                ask = [pid for pid in ("a", "b") if pt["verdict"][pid] is None and self.trade_prepare[pid]]
+                if ask and not pt.get("withdraw_asked"):
+                    pt["withdraw_asked"], pt["age"] = True, 0
+                    for pid in ask:
+                        self.queued_commands[pid].append({"cmd": "withdraw_trade", "token": pt["token"]})
+                    log.warning(f"trade watchdog: asked {ask} to withdraw 'applying' trade {pt.get('token')}")
+                    self._save()
+                    return
+                # apply_trade was already dispatched, so freeing the slot could strand keys the
+                # players no longer hold -- and guessing an outcome is worse (evolution, a failed
+                # append). Every side that never reported is now UNCERTAIN: its next party
+                # snapshot settles it (_trade_evidence); one that never sends one stays surfaced.
+                log.warning(f"trade watchdog: 'applying' trade {pt.get('token')} is uncertain; "
+                            f"waiting for party evidence ({pt.get('verdict')})")
+                pt["phase"] = "uncertain"
+                pt.setdefault("verdict", {"a": None, "b": None})
+                silent = [pid for pid in ("a", "b") if pt["verdict"][pid] is None]
+                for pid in silent:
+                    pt["verdict"][pid] = "await"
+                if silent:                             # a side that declared itself was journaled then
+                    self._record_trade(pt, "uncertain")
+                self._save()
                 return
             log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
             self.pending_trade = None
@@ -580,6 +741,77 @@ class SoulLinkState:
                 self.queued_commands[pid].append({
                     "cmd": "msgbox", "text": "Trade canceled - no response.",
                     "fb": "prompt"})
+
+    # MAJOR-2 (review e9d5e136): the link is swapped only at _commit_trade, but a mon changes hands
+    # at the cartridge's commit. Until the trade settles, an event naming a trade key would be routed
+    # by the unswapped halves (a received mon's faint killing the wrong partner, an evolved key lost as
+    # unlinked); such events wait in pt["held_events"] and replay after commit or rollback.
+    TRADE_HELD_EVENTS = {"faint": "_handle_faint", "party_to_box": "_handle_party_to_box",
+                         "box_to_party": "_handle_box_to_party", "release": "_handle_release"}
+
+    AMBIGUITY_GATED = ("faint", "party_to_box", "box_to_party", "release", "key_change", "stats_cache",
+                       "sync_retrieve_done", "sync_retrieve_failed", "box_mon_failed",
+                       "memorialize_done", "memorialize_failed")
+
+    def _refuse_ambiguous(self, player_id: str, msg: dict) -> bool:
+        """KEY-SCOPE-3: an event naming a key this player holds twice (a trade-window clash) is
+        refused and counted in the persisted latch; routing it by the index would act on the
+        surviving twin's link."""
+        key = msg.get("key") or msg.get("old_key") or ""
+        named = {key, msg.get("new_key") or ""} if msg.get("event") == "key_change" else {key}
+        latches = [self.ambiguous_keys[player_id][k] for k in named if k in self.ambiguous_keys[player_id]]
+        if msg.get("event") not in self.AMBIGUITY_GATED or not latches:
+            return False
+        for latch in latches:                          # KEY-SCOPE-5: a latched new_key vetoes too
+            latch["refused"] = latch.get("refused", 0) + 1
+        log.error(f"[{player_id}] {msg.get('event')} {key} REFUSED: the key names two of this "
+                  f"player's mons (trade clash); resolve with POST /api/debug/resolve_ambiguous_key")
+        if msg.get("event") == "key_change":
+            self.queued_commands[player_id].append(
+                {"cmd": "key_change_rejected", "old_key": key, "new_key": msg.get("new_key", ""),
+                 "reason": "ambiguous key (trade clash)"})
+            msg["_key_change_status"] = "rejected"
+        self._save()
+        return True
+
+    def resolve_ambiguous_key(self, player_id: str, key: str) -> tuple[bool, str]:
+        """An admin checked the cartridge: `key` now names ONE mon again (the duplicate was
+        released, memorialized or traded away), so events naming it route normally."""
+        if player_id not in ("a", "b") or self.ambiguous_keys[player_id].pop(key, None) is None:
+            return False, "no ambiguous key for that player"
+        log.warning(f"[{player_id}] ambiguous key {key} resolved by admin")
+        self._save()
+        return True, ""
+
+    def _hold_for_trade(self, player_id: str, msg: dict) -> bool:
+        pt = self.pending_trade
+        key = msg.get("key") or ""
+        if (msg.get("event") not in self.TRADE_HELD_EVENTS or not key or not pt
+                or pt.get("phase") not in ("applying", "uncertain", "conflict")):
+            return False
+        new = [n[0] for n in (pt.get("new") or {}).values() if n]
+        gets = pt[f"{_partner(player_id)}_key"]
+        # a key the trade names, or an unindexed one with the incoming mon's OT (its evolution)
+        ours = (key in (pt["a_key"], pt["b_key"], *new)
+                or (self.entry_for(player_id, key) is None
+                    and self.adapter.parse_ot_id(key) == self.adapter.parse_ot_id(gets)))
+        if not ours:
+            return False
+        pt.setdefault("held_events", []).append([player_id, dict(msg)])
+        log.info(f"[{player_id}] {msg.get('event')} {key} held until trade {pt['token']} settles")
+        self._save()
+        return True
+
+    def _replay_trade_events(self, pt: dict):
+        """Run the events _hold_for_trade kept, now that the link says who holds which mon."""
+        for player_id, msg in pt.pop("held_events", []):
+            if msg.get("_cause") == "whiteout":
+                # the whited-out player's WHOLE party died: the kill is of whatever half of this
+                # link that player holds now (KEY-SCOPE: its key is looked up in its own index)
+                half = pt["link"].a if player_id == "a" else pt["link"].b
+                msg = {**msg, "key": half.key if half else msg.get("key")}
+            log.info(f"[{player_id}] replaying held {msg.get('event')} {msg.get('key')} (trade {pt['token']})")
+            getattr(self, self.TRADE_HELD_EVENTS[msg["event"]])(player_id, msg)
 
     def _handle_trade_request(self, player_id: str, msg: dict):
         """Talk-to-partner → show the native action menu (TRADE / SAY HEY). TRADE opens the party
@@ -642,7 +874,10 @@ class SoulLinkState:
                         self._handle_mon_chosen(player_id, {"token": pt["token"], "slot": slot})
                         accepted = bool(self.pending_trade and
                                         self.pending_trade.get("phase") == "confirming")
-        self.queued_commands[player_id].append({"cmd": "trade_offer_ack", "ok": accepted})
+        ack = {"cmd": "trade_offer_ack", "ok": accepted}
+        if accepted:
+            ack["token"] = self.pending_trade["token"]   # the initiator withdraws under it (_handle_menu_result)
+        self.queued_commands[player_id].append(ack)
 
     def _handle_mon_chosen(self, player_id: str, msg: dict):
         """The initiator picked a party slot. Enforce the linked-pair invariant: the slot MUST be one
@@ -734,11 +969,29 @@ class SoulLinkState:
             else:                                          # B-press / cancel (0x7F) → abort silently
                 self.pending_trade = None
             return
+        if player_id == pt["initiator"] and phase in ("confirming", "preparing", "applying"):
+            # The initiator's cartridge left its offer (timed out, B, a late ack): an explicit
+            # `withdraw` (never a bare choice 0, which a Gen 3 menu replay can carry) cancels it
+            # BEFORE anything is applied, or a later YES would apply the partner side alone.
+            if msg.get("withdraw") is not True:
+                return
+            log.info(f"[{player_id}] withdrew trade offer {pt['token']} ({phase})")
+            if phase == "applying":
+                # MINOR-7: it never armed its APPLY, so it certainly did not trade
+                if pt.get("verdict", {}).get(player_id) is None:
+                    pt["verdict"][player_id] = "none"
+                    self._settle_trade(pt)
+                return
+            self._cancel_trade("Trade did not go through.")
+            return
         if phase == "confirming":                          # partner accepted / declined the offer
             if player_id != _partner(pt["initiator"]):
                 return
             if choice == 1:
-                self._execute_trade(pt)
+                if all(self.trade_prepare.values()):
+                    self._prepare_trade(pt)
+                else:
+                    self._execute_trade(pt)
             else:
                 self.pending_trade = None
                 self.queued_commands[pt["initiator"]].append({
@@ -746,29 +999,69 @@ class SoulLinkState:
                 self.queued_commands[player_id].append({
                     "cmd": "msgbox", "text": "Trade declined.", "fb": "prompt"})
 
+    def _cancel_trade(self, text: str):
+        """Clear a trade nothing was applied for, telling both players."""
+        self.pending_trade = None
+        for pid in ("a", "b"):
+            self.queued_commands[pid].append({"cmd": "msgbox", "text": text, "fb": "prompt"})
+
+    def _prepare_trade(self, pt: dict):
+        """MAJOR-1 (review e9d5e136): the dual-apply race. Before either cartridge may commit, ask
+        each client whether it can still take its APPLY (visit accepted, same slot, cartridge still
+        waiting); apply_trade goes out only after both answer ok, otherwise both cancel with
+        nothing staged. What is left is one delivery latency inside the cartridge APPLY wait."""
+        if self._trade_unavailable(pt):
+            return
+        pt.update(phase="preparing", ready={"a": False, "b": False}, age=0)
+        for pid in ("a", "b"):
+            self.queued_commands[pid].append({"cmd": "apply_prepare", "token": pt["token"],
+                                              "slot": pt[f"{pid}_slot"], "old_key": pt[f"{pid}_key"]})
+        log.info(f"trade {pt['token']} preparing: waiting for apply_ready from both sides")
+
+    def _handle_apply_ready(self, player_id: str, msg: dict):
+        pt = self.pending_trade
+        if not pt or pt.get("phase") != "preparing" or str(msg.get("token", "")) != pt["token"]:
+            return
+        pt["age"] = 0
+        if msg.get("ok") is not True:
+            log.info(f"[{player_id}] cannot take trade {pt['token']}; canceled before any apply")
+            self._cancel_trade("Trade did not go through.")
+            return
+        pt["ready"][player_id] = True
+        if all(pt["ready"].values()):
+            self._execute_trade(pt)
+
+    def _trade_key_clash(self, player_id: str, gets: str, gives: str) -> bool:
+        """KEY-SCOPE-2: a recipient that already indexes the key it would receive (a boxed live
+        link, say) would hold two live links on one key; neither side may trade into that."""
+        return (self.entry_for(player_id, gets) is not None
+                or self.entry_for(_partner(player_id), gives) is not None)
+
+    def _trade_unavailable(self, pt: dict) -> bool:
+        """Re-validate at confirm: the players free-roam while the partner deliberates, so the offered
+        pair may have fainted/died or been boxed since mon_chosen. Cancels (and says so) if it has."""
+        entry = pt["link"]
+        if (entry.status != LinkStatus.ALIVE
+                or self._trade_key_clash("a", pt["b_key"], pt["a_key"])
+                or pt["a_key"] not in self.party_keys["a"]
+                or pt["b_key"] not in self.party_keys["b"]
+                or (self.adapter.native_trade_ui()
+                    and (pt["a_key"] in self.party_keys["b"]
+                         or pt["b_key"] in self.party_keys["a"]))):
+            self._cancel_trade("Trade canceled - a POKeMON is\nno longer available.")
+            log.info(f"trade aborted at confirm: pair no longer tradable (token {pt['token']})")
+            return True
+        return False
+
     def _execute_trade(self, pt: dict):
         """Both confirmed → tell each client to run the NATIVE trade (stage gEnemyParty[0] + the trade
         scene) for its half. We do NOT mutate the link here. The swap is applied ATOMICALLY in
         _handle_trade_done once BOTH sides report their post-trade mon, so a half-completed trade
         (one side's scene fails / the player waits forever / disconnects) can NEVER leave the link
         half-swapped with mismatched keys (the old 'pairs break if you wait too long' bug). The
-        watchdog (_tick_pending_trade) force-completes an 'applying' trade that never fully
-        reports (the clients WILL swap once the queued commands run)."""
-        # Re-validate: the offer was vetted at mon_chosen, but the players free-roam while the
-        # partner deliberates — the offered pair may have fainted/died or been boxed since.
-        entry = pt["link"]
-        if (entry.status != LinkStatus.ALIVE
-                or pt["a_key"] not in self.party_keys["a"]
-                or pt["b_key"] not in self.party_keys["b"]
-                or (self.adapter.native_trade_ui()
-                    and (pt["a_key"] in self.party_keys["b"]
-                         or pt["b_key"] in self.party_keys["a"]))):
-            self.pending_trade = None
-            for pid in ("a", "b"):
-                self.queued_commands[pid].append({
-                    "cmd": "msgbox", "text": "Trade canceled - a POKeMON is\nno longer available.",
-                    "fb": "prompt"})
-            log.info(f"trade aborted at confirm: pair no longer tradable (token {pt['token']})")
+        watchdog (_tick_pending_trade) moves a side that never reports to UNCERTAIN: its next
+        party snapshot settles it (_trade_evidence), nothing is guessed."""
+        if self._trade_unavailable(pt):
             return
         # old_key lets the client re-locate the mon if the party was reordered after mon_chosen
         # (the slot index is a snapshot); token lets trade_done reports be matched to THIS trade.
@@ -786,7 +1079,11 @@ class SoulLinkState:
         pt["phase"] = "applying"
         pt["done"] = {"a": False, "b": False}
         pt["new"]  = {"a": None, "b": None}   # (new_key, new_species) reported by each client post-scene
+        # Per side: None (scene running) | "await" (uncertain: next party snapshot decides) |
+        # "traded" | "none" | a conflict reason. _settle_trade acts once neither is None/"await".
+        pt["verdict"] = {"a": None, "b": None}
         pt["age"]  = 0
+        self._save()                                    # BLOCKER-1: a restart from here restores it
         log.info(f"trade applying: A slot {pt['a_slot']} <-> B slot {pt['b_slot']} (link {pt['link'].area_id})")
 
     def _handle_trade_done(self, player_id: str, msg: dict):
@@ -794,12 +1091,14 @@ class SoulLinkState:
         We BUFFER each side's result and apply the whole swap ATOMICALLY only once BOTH have reported,
         so the link is never observable in a half-swapped state. Then play the jingle + 'Traded!' box."""
         pt = self.pending_trade
-        if not pt or pt.get("phase") != "applying":
+        # NIT-11 (invariant review): an `uncertain` trade (watchdog, restore) still takes a side's
+        # report while that side awaits, so a later after_reset declaration is not lost
+        if not pt or pt.get("phase") not in ("applying", "uncertain"):
             return
-        # A stale report from an earlier aborted trade must not count toward this one. Clients
-        # that predate the token echo omit the field — accept those (empty token) for compat.
-        tok = str(msg.get("token", "") or "")
-        if tok and tok != pt["token"]:
+        # A stale report from an earlier aborted trade must not count toward this one. Every
+        # client echoes apply_trade's token (Gen 3 emit_trade_done, Gen 1/2 trade_*), so a report
+        # without it matches no trade (review e9d5e136 NIT: the empty-token compat path is gone).
+        if str(msg.get("token", "") or "") != pt["token"]:
             return
         pt["age"] = 0                                   # progress — reset the abandonment watchdog
         new_key = str(msg.get("new_key", "") or "")
@@ -807,29 +1106,341 @@ class SoulLinkState:
             new_species = int(msg.get("new_species", 0) or 0)
         except (TypeError, ValueError):
             new_species = 0
-        pt.setdefault("new", {"a": None, "b": None})[player_id] = (new_key, new_species)
+        pt.setdefault("new", {"a": None, "b": None})
         pt.setdefault("done", {"a": False, "b": False})[player_id] = True
-        if not all(pt["done"].values()):
-            return                                      # wait for the other side before touching the link
-        self._commit_trade(pt)
+        pt.setdefault("verdict", {"a": None, "b": None})
+        if pt["verdict"][player_id] not in (None, "await"):
+            return                                      # already decided (a replayed report)
+        if msg.get("uncertain") or not new_key:
+            # the side cannot vouch (a reset after its commit entry, a native result 2): party evidence
+            # decides. Journaled as the watchdog does, once, when the side first declares it.
+            if msg.get("after_reset") is True:
+                # MAJOR-5: a native result 2 holds a RAM party no save ever saw; only the
+                # reloaded save (the post-reset hello) is evidence for this side
+                pt.setdefault("hello_only", {})[player_id] = True
+            if pt["verdict"][player_id] is None:
+                pt["verdict"][player_id] = "await"
+                self._record_trade(pt, "uncertain")
+            self._save()
+            return
+        gets = pt[f"{_partner(player_id)}_key"]
+        if new_key == pt[f"{player_id}_key"]:
+            pt["verdict"][player_id] = "none"           # the client still holds its own mon: refused / never swapped
+        elif new_key == gets or self._is_trade_descendant(pt, player_id, new_key, new_species):
+            pt["verdict"][player_id] = "traded"
+            pt["new"][player_id] = (new_key, new_species)
+        else:
+            # MINOR-1 (review e9d5e136): never index a key the trade cannot have produced
+            pt["verdict"][player_id] = f"{player_id}: reported {new_key}, neither {gets} nor its evolution"
+        self._settle_trade(pt)
+
+    def _is_trade_descendant(self, pt: dict, player_id: str, key: str, species: int) -> bool:
+        """An unindexed key with the incoming mon's OT (per the adapter) and evolution family: the
+        received mon under a new key, e.g. a trade evolution. Never another live link's key."""
+        gets_half = pt["link"].b if player_id == "a" else pt["link"].a       # the link is not swapped yet
+        fam = self.adapter.evo_family
+        family = fam(gets_half.species) if gets_half and gets_half.species else None
+        return bool(family is not None and species and self.entry_for(player_id, key) is None
+                    and self.adapter.parse_ot_id(key) == self.adapter.parse_ot_id(pt[f"{_partner(player_id)}_key"])
+                    and fam(species) == family)
+
+    def _trade_evidence(self, player_id: str, party: list, from_hello: bool = False):
+        """A party snapshot from a side whose trade outcome is uncertain decides that side:
+        outgoing key gone + the incoming key (or ONE unindexed descendant: same OT per the
+        adapter, same evolution family, e.g. a trade evolution) present -> traded; outgoing
+        present + incoming absent -> none; anything else -> a conflict reason. Only the snapshot
+        AFTER the side became uncertain counts, so a mid-scene party is never evidence."""
+        pt = self.pending_trade
+        if not pt or pt.get("verdict", {}).get(player_id) != "await":
+            return
+        if (pt.get("hello_only") or {}).get(player_id) and not from_hello:
+            return                                      # MAJOR-5: wait for the reloaded save
+        keys = {m.get("key") for m in party if m.get("key")}
+        if not keys:
+            return   # ponytail: an unreadable/empty party is no evidence; a real party is never empty
+        partner = _partner(player_id)
+        gives, gets = pt[f"{player_id}_key"], pt[f"{partner}_key"]
+        entry = pt["link"]
+        gets_half = entry.b if player_id == "a" else entry.a    # the link is not swapped yet
+        if gets in keys:
+            got = [(gets, gets_half.species if gets_half else 0)]
+        else:
+            got = [(m["key"], int(m.get("species_id") or 0)) for m in party
+                   if m.get("key") and self._is_trade_descendant(pt, player_id, m["key"],
+                                                                  int(m.get("species_id") or 0))]
+        kept = gives in keys
+        if not kept and len(got) == 1:
+            pt["verdict"][player_id] = "traded"
+            pt["new"][player_id] = got[0]
+        elif kept and not got:
+            pt["verdict"][player_id] = "none"
+        elif kept:
+            pt["verdict"][player_id] = f"{player_id}: holds BOTH {gives} and {got[0][0]} (duplicated)"
+        elif not got:
+            pt["verdict"][player_id] = f"{player_id}: holds NEITHER {gives} nor {gets}"
+        else:
+            pt["verdict"][player_id] = f"{player_id}: several candidates for {gets}"
+        log.warning(f"[{player_id}] trade {pt['token']} evidence: {pt['verdict'][player_id]}")
+        self._settle_trade(pt)
+
+    def _settle_trade(self, pt: dict):
+        """Act once BOTH sides have a verdict: both traded -> commit; both none -> roll back
+        (the link was never touched); anything else -> a sticky 'conflict' surfaced through
+        trade_problem(), never guessed."""
+        v = pt["verdict"]
+        if any(x in (None, "await") for x in v.values()):
+            self._save()                                # keep the persisted verdicts current
+            return
+        if v["a"] == v["b"] == "traded":
+            self._commit_trade(pt)
+            return
+        if v["a"] == v["b"] == "none":
+            log.info(f"trade {pt['token']} did not happen on either side — rolled back")
+            self._record_trade(pt, "rolled_back")
+            self.pending_trade = None
+            self._replay_trade_events(pt)
+            self._save()
+            for pid in ("a", "b"):
+                self.queued_commands[pid].append({
+                    "cmd": "msgbox", "text": "Trade did not go through.", "fb": "prompt"})
+            return
+        pt["phase"] = "conflict"
+        pt["problem"] = "; ".join(f"{pid}: {v[pid]}" if v[pid] in ("traded", "none") else v[pid]
+                                  for pid in ("a", "b"))
+        log.error(f"trade {pt['token']} CONFLICT — link left as it was, needs a human: {pt['problem']}")
+        self._record_trade(pt, "conflict")
+        self._save()
+        for pid in ("a", "b"):
+            self.queued_commands[pid].append({
+                "cmd": "msgbox", "text": "TRADE ERROR - party mismatch.\nSee the status page.",
+                "fb": "prompt"})
+
+    @property
+    def on_trade_outcome(self):
+        return self._on_trade_outcome
+
+    @on_trade_outcome.setter
+    def on_trade_outcome(self, fn):
+        # load() restores a mid-apply trade before the server can wire its journal: flush it here
+        self._on_trade_outcome = fn
+        if fn:
+            backlog, self._trade_backlog = self._trade_backlog, []
+            for rec in backlog:
+                fn(rec)
+
+    def _trade_to_json(self) -> dict | None:
+        """The pending trade for links.json once apply_trade may have left (applying/uncertain/
+        conflict). Earlier phases applied nothing and may be dropped. The link is stored by index."""
+        pt = self.pending_trade
+        if not pt or pt.get("phase") not in ("applying", "uncertain", "conflict"):
+            return None
+        index = next((i for i, e in enumerate(self.links) if e is pt.get("link")), None)
+        if index is None:
+            return None
+        return {**{k: v for k, v in pt.items() if k != "link"}, "link_index": index}
+
+    def _restore_trade(self, saved: dict):
+        """BLOCKER-1 (review e9d5e136): a restart or rollback mid-trade may have lost reports and
+        commands, so an `applying` trade comes back UNCERTAIN: every undecided side awaits its next
+        party snapshot (_trade_evidence), and the outcome is journaled once the server wires it."""
+        index = saved.get("link_index")
+        if not isinstance(index, int) or not 0 <= index < len(self.links):
+            log.error(f"restored trade {saved.get('token')} names no link; dropped: {saved}")
+            return
+        pt = {k: v for k, v in saved.items() if k != "link_index"}
+        pt["link"] = self.links[index]
+        pt["new"] = {pid: tuple(v) if v else None for pid, v in (pt.get("new") or {}).items()}
+        pt.setdefault("verdict", {"a": None, "b": None})
+        self.pending_trade = pt
+        if pt.get("phase") == "applying":
+            pt["phase"] = "uncertain"
+            for pid in ("a", "b"):
+                if pt["verdict"].get(pid) is None:
+                    pt["verdict"][pid] = "await"
+            self._record_trade(pt, "uncertain")
+            self._trade_backlog.append(dict(self.trade_last))
+        log.warning(f"restored trade {pt['token']} as {pt['phase']}: {pt['verdict']}")
+
+    def _record_trade(self, pt: dict, outcome: str):
+        """Publish a trade outcome: trade_last (status) + on_trade_outcome (server journal)."""
+        new = pt.get("new") or {}
+        self.trade_last = {
+            "token": pt["token"], "outcome": outcome, "at": time.time(),
+            "a_key": pt["a_key"], "b_key": pt["b_key"],
+            "a_new": (new.get("a") or (None,))[0], "b_new": (new.get("b") or (None,))[0],
+            "verdict": dict(pt.get("verdict") or {}), "problem": pt.get("problem", "")}
+        if self.on_trade_outcome:
+            self.on_trade_outcome(dict(self.trade_last))
+
+    def trade_problem(self) -> dict | None:
+        """The uncertain/conflicted trade for the status page, or None."""
+        pt = self.pending_trade
+        if not pt or pt.get("phase") not in ("uncertain", "conflict"):
+            return None
+        return {"phase": pt["phase"], "token": pt["token"], "a_key": pt["a_key"], "b_key": pt["b_key"],
+                "verdict": dict(pt["verdict"]), "problem": pt.get("problem", "")}
+
+    def trade_held(self) -> list[dict]:
+        """Invariant review MAJOR-3: the events waiting on the pending trade, for the board banner
+        (kept out of trade_problem(), whose shape the Gen 2 reconciliation verifier pins)."""
+        pt = self.pending_trade or {}
+        return [{"player": pid, "event": m.get("event"), "key": m.get("key")}
+                for pid, m in pt.get("held_events", [])]
+
+    def resolve_trade(self, token: str, action: str, sides: dict | None = None) -> tuple[bool, str]:
+        """MAJOR-3 (review e9d5e136, invariant review MAJOR-3): an admin settles a conflicted or
+        stuck trade by hand. A side whose outcome is KNOWN (verdict traded/none, from its report or
+        its party) keeps it whatever the action, so every link half ends up naming the mon that side
+        holds; the action decides only the sides the server cannot: `commit` -> traded, `rollback`
+        -> none, `adopt` -> nothing (refused while a side is undecided). Contradictory evidence
+        (a conflict reason such as "holds NEITHER") is never filled: the admin names that side's
+        outcome in `sides` ({"a"|"b": "traded"|"none"}, which overrides any verdict). Refused while
+        a side has not answered its apply at all (verdict None): its APPLY may still land. Both
+        traded commits the swap, both none rolls back, one of each splits (_split_trade). Any
+        undelivered apply for the trade is dropped, the slot clears, held events replay against the
+        result and the outcome is journaled with "resolved by admin: <action>"."""
+        pt = self.pending_trade
+        if not pt or str(token) != pt.get("token") or pt.get("phase") not in ("applying", "uncertain", "conflict"):
+            return False, "no applied trade with that token"
+        fill = {"commit": "traded", "rollback": "none", "adopt": None}
+        if action not in fill:
+            return False, "action must be commit, rollback or adopt"
+        sides = sides or {}
+        if not isinstance(sides, dict) or any(pid not in ("a", "b") or o not in ("traded", "none")
+                                              for pid, o in sides.items()):
+            return False, 'sides must map "a"/"b" to "traded" or "none"'
+        v = pt.get("verdict") or {}
+        out = {}
+        for pid in ("a", "b"):
+            if pid in sides:
+                out[pid] = sides[pid]
+            elif v.get(pid) is None:
+                return False, f"{pid} has not answered its apply yet; wait for its report or the watchdog"
+            elif v[pid] in ("traded", "none"):
+                out[pid] = v[pid]
+            elif v[pid] != "await":
+                return False, f"{v[pid]}: contradictory evidence; name that side in sides"
+            elif fill[action] is None:
+                return False, "adopt needs both sides' outcome known; use commit or rollback"
+            else:
+                out[pid] = fill[action]
+        sides = out
+        for pid in ("a", "b"):                          # OMP review: an undelivered APPLY must never land
+            self.queued_commands[pid] = [c for c in self.queued_commands[pid]
+                                         if not (c.get("cmd") in ("apply_trade", "apply_prepare")
+                                                 and c.get("token") == pt["token"])]
+        pt["problem"] = f"resolved by admin: {action}"
+        log.warning(f"trade {pt['token']} {pt['problem']} (verdict {v}) -> {sides}")
+        if sides["a"] == sides["b"] == "traded":
+            self._commit_trade(pt)
+        elif sides["a"] == sides["b"] == "none":
+            self._record_trade(pt, "rolled_back")
+            self.pending_trade = None
+            self._replay_trade_events(pt)
+            self._save()
+        else:
+            self._split_trade(pt, "a" if sides["a"] == "traded" else "b")
+        return True, ""
+
+    def _split_trade(self, pt: dict, taker: str):
+        """Only `taker` traded: it holds a copy of the partner's mon (its reported key, else the
+        partner's), its own mon is gone; the partner still holds its own. Point the taker's half
+        at the copy and leave the partner's, so a death on either side reaches the other's mon."""
+        entry = pt["link"]
+        src = entry.b if taker == "a" else entry.a
+        nk, ns = pt["new"].get(taker) or (src.key, 0)
+        old = pt[f"{taker}_key"]
+        setattr(entry, taker, replace(src, key=nk, species=ns or src.species))
+        giver = _partner(taker)
+        other = self._pidx[taker].get(nk)
+        clashing = other is not None and other is not entry and other.status == LinkStatus.ALIVE
+        if src.key in self.mon_stats[giver] and not clashing:     # the partner still holds the original
+            self.mon_stats[taker][nk] = dict(self.mon_stats[giver][src.key])
+        for gone in self._trade_old_keys(pt, taker):
+            self._unindex(taker, gone, entry)
+            self.party_keys[taker].discard(gone)
+            self.bonus_keys[taker].discard(gone)
+            if gone != nk:
+                self.mon_stats[taker].pop(gone, None)
+        if not clashing:
+            self.party_keys[taker].add(nk)
+        clash = self._index_traded(pt, entry)
+        self.pending_trade = None
+        self._replay_trade_events(pt)
+        self._retire_traded_clash(entry, clash)
+        self._save()
+        log.warning(f"trade {pt['token']} split: {taker} holds a copy {nk}, its {old} is gone")
+        self._record_trade(pt, "split")
+        self._trade_settle_ticks[taker] = self.TRADE_SETTLE_TICKS
+
+    def _load_mon_stats(self, saved: dict) -> dict:
+        """KEY-SCOPE-2: links.json keeps mon_stats per player ({"a": {...}, "b": {...}}). An older
+        file has one flat {key: stats} map: each key goes to the player whose link, party or
+        pending capture names it (keys were unique across players then), else to both."""
+        if set(saved) <= {"a", "b"} and all(isinstance(v, dict) for v in saved.values()):
+            return {"a": dict(saved.get("a") or {}), "b": dict(saved.get("b") or {})}
+        out = {"a": {}, "b": {}}
+        for key, stats in saved.items():
+            owners = [pid for pid in ("a", "b")
+                      if self.entry_for(pid, key) is not None or key in self.party_keys[pid]
+                      or any(players.get(pid) and players[pid].key == key
+                             for players in self.pending_captures.values())] or ["a", "b"]
+            for pid in owners:
+                out[pid][key] = stats
+        return out
+
+    def _index_traded(self, pt: dict, entry: "LinkEntry") -> list:
+        """Index a swapped or split trade link. KEY-SCOPE-2: a half whose key already names
+        ANOTHER live link of the same player cannot be told apart from it; that link keeps the
+        index row, held events naming the key are dropped, and _retire_traded_clash retires
+        the traded pair (the U5 fail-closed rule of a colliding key_change)."""
+        clash = []
+        for pid, half in (("a", entry.a), ("b", entry.b)):
+            other = self._pidx[pid].get(half.key) if half else None
+            if other is not None and other is not entry and other.status == LinkStatus.ALIVE:
+                clash.append((pid, half.key, other))
+        self._index_entry(entry)
+        for pid, key, other in clash:
+            self._pidx[pid][key] = other
+            self.ambiguous_keys[pid][key] = {"since": datetime.now(UTC).isoformat(), "refused": 0}
+            self.party_keys[pid].discard(key)
+            log.error(f"[{pid}] trade {pt['token']}: {key} already identifies a live link in "
+                      f"{other.area_id}; the traded pair in {entry.area_id} is retired identity_lost")
+        dropped = {(pid, key) for pid, key, _ in clash}
+        if dropped:
+            pt["held_events"] = [e for e in pt.get("held_events", [])
+                                 if (e[0], e[1].get("key")) not in dropped]
+        return clash
+
+    def _retire_traded_clash(self, entry: "LinkEntry", clash: list):
+        if not clash or entry.status != LinkStatus.ALIVE:
+            return
+        pid, key, _other = clash[0]
+        self._propagate_faint(pid, entry, cause="identity_lost")
+        for cpid, ckey, _ in clash:            # the key names a live mon too: never bury by it
+            self.pending_memorials[cpid].discard(ckey)
+            self.queued_commands[cpid] = [c for c in self.queued_commands[cpid]
+                                          if not (c.get("cmd") in ("memorialize",) + DEATH_COMMANDS
+                                                  and c.get("key") == ckey)]
+
+    @staticmethod
+    def _trade_old_keys(pt: dict, pid: str) -> set[str]:
+        """The key pid gave in the trade: current, plus the original a mid-window key_change
+        migrated (invariant review MINOR-8)."""
+        return {k for k in (pt[f"{pid}_key"], pt.get(f"{pid}_key0")) if k}
 
     def _commit_trade(self, pt: dict):
-        """Apply the swap atomically. Called with both sides reported (normal path) or by the
-        watchdog force-completing a stuck 'applying' trade (missing sides fall back to the
-        pre-trade key of the mon that side RECEIVED — correct unless it trade-evolved)."""
-        pt.setdefault("new", {"a": None, "b": None})
-        if not (pt["new"].get("a") or [""])[0]:
-            pt["new"]["a"] = (pt["b_key"], 0)           # A received B's old mon
-        if not (pt["new"].get("b") or [""])[0]:
-            pt["new"]["b"] = (pt["a_key"], 0)
+        """Apply the swap atomically, once both sides are known to have traded; pt["new"] holds
+        each side's post-trade (key, species), including any trade-evolution."""
         # ── apply the swap atomically ─────────────────────────────────────────────
         # The mon DATA moves to the other player (entry.a now tracks the mon A holds, entry.b the mon B
         # holds); then each half's key/species is patched from that side's post-scene readback (captures
-        # trade-evolution). _key_index + party_keys are rebuilt from the two OLD keys to the two NEW keys.
+        # trade-evolution). The per-player index + party_keys are rebuilt from the two OLD keys to the two NEW keys.
         entry = pt["link"]
         entry.a, entry.b = entry.b, entry.a             # A now owns B's old mon and vice-versa
-        for old in (pt["a_key"], pt["b_key"]):
-            self._key_index.pop(old, None)
+        for pid in ("a", "b"):                          # KEY-SCOPE: each key leaves its giver's index
+            for old in self._trade_old_keys(pt, pid):
+                self._unindex(pid, old, entry)
         for pid, half in (("a", entry.a), ("b", entry.b)):
             nk, ns = (pt["new"].get(pid) or ("", 0))
             if half and nk:
@@ -837,12 +1448,23 @@ class SoulLinkState:
                 if ns:
                     half.species = ns
         # party_keys: A drops its traded-away key + gains the mon it now holds (entry.a's key); same for B.
-        self.party_keys["a"].discard(pt["a_key"])
+        self.party_keys["a"] -= self._trade_old_keys(pt, "a")
         self.party_keys["a"].add(entry.a.key)
-        self.party_keys["b"].discard(pt["b_key"])
+        self.party_keys["b"] -= self._trade_old_keys(pt, "b")
         self.party_keys["b"].add(entry.b.key)
-        self._key_index[entry.a.key] = entry
-        self._key_index[entry.b.key] = entry
+        clash = self._index_traded(pt, entry)           # KEY-SCOPE-2: a same-player clash fails closed
+        # MINOR-6: per-key bookkeeping follows each mon to its new holder (and trade-evolved key)
+        clashed = {(pid, key) for pid, key, _ in clash}
+        for giver, taker in (("a", "b"), ("b", "a")):
+            new = (pt["new"].get(taker) or ("", 0))[0] or pt[f"{giver}_key"]
+            if (taker, new) in clashed:
+                continue                                # KEY-SCOPE-3: never onto the surviving twin
+            for old in self._trade_old_keys(pt, giver):
+                if old in self.bonus_keys[giver]:
+                    self.bonus_keys[giver].discard(old)
+                    self.bonus_keys[taker].add(new)
+                if old in self.mon_stats[giver]:           # the stats move to the new holder
+                    self.mon_stats[taker][new] = self.mon_stats[giver].pop(old)
 
         for pid in ("a", "b"):
             gives = pt["a_label"] if pid == "a" else pt["b_label"]
@@ -851,9 +1473,12 @@ class SoulLinkState:
             self.queued_commands[pid].append({
                 "cmd": "msgbox", "text": f"Traded {gives} for {gets}!",
                 "r": 100, "g": 255, "b": 160, "frames": 300})
+        self.pending_trade = None
+        self._replay_trade_events(pt)                   # MAJOR-2: after the swap, against the real holders
+        self._retire_traded_clash(entry, clash)
         self._save()
         log.info(f"trade complete (token {pt['token']})")
-        self.pending_trade = None
+        self._record_trade(pt, "committed")
         # Arm the post-trade settle window on BOTH sides: the swap is party↔party, so suppress the
         # drift reconciler while each client's party read settles (no spurious "Unbox" party_mon).
         self._trade_settle_ticks = {"a": self.TRADE_SETTLE_TICKS, "b": self.TRADE_SETTLE_TICKS}
@@ -892,7 +1517,7 @@ class SoulLinkState:
                     pid: MonInfo(**mon_data)
                     for pid, mon_data in players.items()
                 }
-            state.mon_stats = data.get("mon_stats", {})
+            state.mon_stats = state._load_mon_stats(data.get("mon_stats") or {})
             # Restore Pokéball gate; default True for both if any links exist
             # (backwards-compat: old saves without this field).
             saved_pb = data.get("pokeballs_obtained", {})
@@ -931,6 +1556,15 @@ class SoulLinkState:
             saved_game_id = data.get("game_id", "")
             effective_rr = state.is_rr
             if saved_game_id and state.adapter.game_id != saved_game_id:
+                # A rom_type cutover (e.g. Gen 2's U5) may have moved this rom_type onto a
+                # different game_id since this run was saved. Refuse rather than silently
+                # reopening it under either the stale saved adapter or a mismatched new one
+                # when the registry says that specific migration is unsafe.
+                from server.adapters import game_id_for_rom_type, persisted_migration_refusal
+                current_game_id = game_id_for_rom_type(state.rom_type) if state.rom_type else None
+                refusal = persisted_migration_refusal(saved_game_id, current_game_id)
+                if refusal:
+                    raise UnsafeGameMigration(f"{state._links_path}: {refusal}")
                 log.warning(f"Saved game_id={saved_game_id!r} differs from adapter "
                             f"game_id={state.adapter.game_id!r}; using saved game_id")
                 # Re-resolve adapter from registry if available
@@ -968,6 +1602,14 @@ class SoulLinkState:
             saved_pending = data.get("pending_bonus", {})
             state.pending_bonus["a"] = deque(saved_pending.get("a", []))
             state.pending_bonus["b"] = deque(saved_pending.get("b", []))
+            saved_amb = data.get("ambiguous_keys") or {}
+            state.ambiguous_keys = {pid: dict(saved_amb.get(pid) or {}) for pid in ("a", "b")}
+            saved_ledger = data.get("key_migration_ledger") or {}
+            state.key_migration_ledger = {pid: deque(
+                ({"old_key": r["old_key"], "new_key": r["new_key"]} for r in saved_ledger.get(pid) or []
+                 if isinstance(r, dict) and isinstance(r.get("old_key"), str)
+                 and isinstance(r.get("new_key"), str)),
+                maxlen=KEY_MIGRATION_LEDGER_LIMIT) for pid in ("a", "b")}
             # Restore in-flight auto-rebuild context.
             saved_rebuild = data.get("rebuild_pending", {})
             for pid in ("a", "b"):
@@ -979,7 +1621,15 @@ class SoulLinkState:
                         "queued_partner_keys": list(rb.get("queued_partner_keys", [])),
                         "restored_keys":      set(rb.get("restored_keys", [])),
                     }
+            state._trade_token = int(data.get("trade_token", 0) or 0)
+            if data.get("pending_trade"):
+                state._restore_trade(data["pending_trade"])
             log.info(f"Loaded {len(state.links)} links from {state._links_path}")
+        except UnsafeGameMigration:
+            # Operator-facing and fatal: this run must not start under either adapter.
+            # Not caught below — a corrupt-file warning-and-continue would silently
+            # resume it under the stale adapter, exactly what this refusal prevents.
+            raise
         except Exception as e:
             log.error(f"Failed to load {state._links_path}: {e}")
         return state
@@ -1056,12 +1706,15 @@ class SoulLinkState:
                     # Update trainer name if it changed (e.g. first connect had no name)
                     if incoming_name:
                         self.player_identity[player_id]["trainer_name"] = incoming_name
+                        self.player_identity[player_id].pop("trainer_name_placeholder", None)
                         self._save()
             else:
                 # First hello with a party — lock identity
                 self.player_identity[player_id] = {
                     "ot_id": incoming_ot,
                     "trainer_name": incoming_name or player_id.upper(),
+                    # PHONE-NAMES F8: the slot letter is synthesized, never a name to show
+                    **({} if incoming_name else {"trainer_name_placeholder": True}),
                 }
                 self.identity_error.pop(player_id, None)
                 log.info(f"[{player_id}] Identity locked: {incoming_name or player_id.upper()} (OT {incoming_ot[:8]})")
@@ -1102,8 +1755,9 @@ class SoulLinkState:
         # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
         # slot when a reconnect happens before the Lua sends the faint event back).
         for _k in list(self.party_keys[player_id]):
-            _e = self._key_index.get(_k)
-            if _e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL):
+            _e = self.entry_for(player_id, _k)
+            if (_e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
+                    or _k in self.ambiguous_keys[player_id]):
                 self.party_keys[player_id].discard(_k)
 
         # Re-quarantine: if any pending (unlinked) captures are in the party,
@@ -1123,6 +1777,17 @@ class SoulLinkState:
                 self.queued_commands[player_id].append({"cmd": "box_mon", "key": cap.key})
                 log.info(f"[{player_id}] re-quarantine on hello: {cap.key[:8]} (pending in {area_id})")
 
+        # Invariant review MAJOR-2: a hello that settles a pending trade must do so BEFORE its
+        # own deaths are routed, so they follow the swapped link.
+        pt = self.pending_trade
+        if pt and pt.get("phase") == "applying" and pt.get("verdict", {}).get(player_id, "") is None:
+            # A fresh hello while this side never reported: a Lua reload lost its owed trade_done.
+            # The hello is sent only at the checkpoint, never inside the trade scene, so its party
+            # is evidence now rather than after the watchdog.
+            pt["verdict"][player_id] = "await"
+            self._record_trade(pt, "uncertain")
+        self._trade_evidence(player_id, party, from_hello=True)
+
         for m in party:
             key = m.get("key", "")
             hp  = m.get("hp", 1)
@@ -1130,7 +1795,7 @@ class SoulLinkState:
                 continue
             if hp > 0:
                 # Mon is alive — log confirmation if it's a known linked mon.
-                entry = self._key_index.get(key)
+                entry = self.entry_for(player_id, key)
                 if entry and entry.status == LinkStatus.ALIVE:
                     log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=alive_confirmed")
                 continue
@@ -1139,13 +1804,33 @@ class SoulLinkState:
             if not self.pokeballs_obtained[player_id]:
                 log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason=pre_nuzlocke")
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
+            if key in self.ambiguous_keys[player_id]:
+                log.error(f"[{player_id}] hello: {key} at hp 0 is ambiguous (trade clash) — not propagated")
+                continue
+            if self._hold_for_trade(player_id, {"event": "faint", "key": key, "_level": m.get("level", 0)}):
+                continue                                # a trade key: replayed once the trade settles
             if entry and entry.status == LinkStatus.ALIVE:
                 log.info(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=faint_detected  reason=hp=0_in_party")
                 self._propagate_faint(player_id, entry, level=m.get("level", 0))
             else:
                 reason = "not_linked" if not entry else f"status={entry.status.value}"
                 log.debug(f"[RECONCILE] player={player_id}  key={key[:8]}  decision=ignored  reason={reason}")
+
+        # Invariant review MINOR-6: a dead mon alive in the party (a restart lost its queued
+        # force_faint) is killed BEFORE the memorials below bury it -- the client runs commands in
+        # arrival order, and a memorialize first would bury it at full HP. Same guards as O-24.
+        if not self.run_over:
+            for m in party:
+                key, hp = m.get("key"), m.get("hp")
+                entry = self.entry_for(player_id, key) if key else None
+                half = entry and (entry.a if player_id == "a" else entry.b)
+                if (isinstance(hp, (int, float)) and hp > 0 and half and half.key == key
+                        and entry.status != LinkStatus.ALIVE and not self._is_quarantined(player_id, key)
+                        and not self._has_pending_command(player_id, key, *DEATH_COMMANDS)):
+                    self.queued_commands[player_id].append(
+                        {"cmd": "force_faint", "key": key, "nickname": half.nickname or ""})
+                    log.warning(f"[{player_id}] hello: dead {key[:8]} alive in party — force_faint before burial")
 
         # Re-queue any memorials that were not yet confirmed before disconnecting
         for key in list(self.pending_memorials[player_id]):
@@ -1160,7 +1845,7 @@ class SoulLinkState:
             key = m.get("key", "")
             if not key:
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
             if (entry and entry.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
                     and not any(c.get("cmd") == "memorialize" and c.get("key") == key
                                 for c in self.queued_commands[player_id])):
@@ -1181,10 +1866,12 @@ class SoulLinkState:
             sid  = m.get("species_id", 0)
             if not key or (not nick and not sid):
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
             if not entry:
                 continue
-            mon = entry.a if player_id == "a" else entry.b
+            # the half whose key this is: mid-trade a party holds the PARTNER's key, and writing
+            # its species onto this player's own half broke the trade-evolution family check
+            mon = next((h for h in (entry.a, entry.b) if h and h.key == key), None)
             if mon:
                 if nick and not mon.nickname:
                     mon.nickname = nick
@@ -1229,6 +1916,14 @@ class SoulLinkState:
             "pc_trade_npc": bool(self.pc_trade_npc),
         })
 
+        self.awaiting_save[player_id] = False   # BURIAL-VISIBLE: a waiting client re-asserts it on its ticks
+        # INV-CLIENT-2: this player's dead/memorial keys, authoritative. The GB clients REPLACE their
+        # re-zero set with it (a debug revive, an unlink, a rollback or another save with the same OT
+        # leaves no stale kill); a client that does not know the command ignores it.
+        self.queued_commands[player_id].append({"cmd": "dead_keys", "keys": sorted(
+            half.key for e in self.links if e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
+            for half in ((e.a if player_id == "a" else e.b),) if half and half.key)})
+
         # Re-arm an in-flight rebuild: reconcile restored_keys from the fresh
         # party snapshot (some party_mons may have executed before disconnect),
         # then re-queue party_mon + rebuild_start for any still-outstanding
@@ -1246,7 +1941,7 @@ class SoulLinkState:
             for k in queued_keys:
                 if k in restored:
                     continue
-                entry = self._key_index.get(k)
+                entry = self.entry_for(player_id, k)
                 if not entry:
                     continue
                 mon = entry.a if player_id == "a" else entry.b
@@ -1262,13 +1957,16 @@ class SoulLinkState:
         if self.run_over:
             self.queued_commands[player_id].append({"cmd": "game_over"})
 
+    def _adapter_for(self, player_id: str):
+        return self.player_adapter_for(player_id) if self.player_adapter_for else self.adapter
+
     def _handle_area_enter(self, player_id: str, msg: dict):
         area_id = msg.get("area_id", "")
         if not area_id:
             return
         # Gift areas (oaks_lab, intro, etc.) are not encounter areas — their captures
         # are handled directly via _handle_capture.  Don't create pending area state.
-        if self.adapter.is_gift_area(area_id):
+        if self._adapter_for(player_id).is_gift_area(area_id):
             return
         # Always track area state — Lua only sends area_enter events once it has confirmed
         # Pokéballs are available (M.hasPokeballs() gate on the client side).
@@ -1282,15 +1980,16 @@ class SoulLinkState:
             self._set_area_state(area_id, AreaStatus.PENDING_BOTH, player=player_id)
         self._save()
 
-    def _is_gift_capture(self, area_id: str, is_egg: bool) -> bool:
+    def _is_gift_capture(self, area_id: str, is_egg: bool, player_id: str) -> bool:
         """Effective gift status for a capture event.
 
         True if the area is a known gift area OR the capture is a definitive egg
         from outside the daycare (NPC egg-givers in encounter areas).
         """
-        if self.adapter.is_gift_area(area_id):
+        adapter = self._adapter_for(player_id)
+        if adapter.is_gift_area(area_id):
             return True
-        return bool(is_egg and not self.adapter.is_daycare_area(area_id))
+        return bool(is_egg and not adapter.is_daycare_area(area_id))
 
     def _handle_capture(self, player_id: str, msg: dict):
         area_id = msg.get("area_id", "")
@@ -1301,7 +2000,7 @@ class SoulLinkState:
         # `gift=true` is the Lua's authoritative signal for any new mon received
         # outside battle (gifts, starters, fossils, eggs) — independent of whether
         # the current area is a known gift area.
-        gift_capture = bool(msg.get("gift", False)) or self._is_gift_capture(area_id, is_egg)
+        gift_capture = bool(msg.get("gift", False)) or self._is_gift_capture(area_id, is_egg, player_id)
 
         # A catch in any non-gift area confirms Pokéballs are available.
         if not gift_capture:
@@ -1362,7 +2061,7 @@ class SoulLinkState:
             if stats is None:
                 stats = {}
             stats["species_id"] = species  # always store, even if 0
-            self.mon_stats[key] = stats
+            self.mon_stats[player_id][key] = stats
             self._save()
             return
 
@@ -1374,7 +2073,7 @@ class SoulLinkState:
             partner = _partner(player_id)
 
             # Reconstruct MonInfo for the shiny side using cached stats
-            shiny_stats = self.mon_stats.get(shiny_key, {})
+            shiny_stats = self.mon_stats[partner].get(shiny_key, {})
             shiny_species = shiny_stats.get("species_id", 0)
             shiny_mon_info = MonInfo(key=shiny_key, species=shiny_species,
                                      level=shiny_stats.get("level", 0),
@@ -1445,7 +2144,7 @@ class SoulLinkState:
                     stats_local = {"level": lv, "maxHP": mhp}
             if stats_local:
                 stats_local["species_id"] = cap_species_local
-                self.mon_stats[key] = stats_local
+                self.mon_stats[player_id][key] = stats_local
 
             # Party sync at formation: both mons should be in the same location.
             bonus_in_box = msg.get("in_box", False)
@@ -1494,7 +2193,7 @@ class SoulLinkState:
         # pair and never lock a real area's wild-encounter slot — and so they link
         # even if that real area is already LINKED/DEAD_ZONE.
         if gift_capture:
-            area_id = self.adapter.gift_link_area(area_id)
+            area_id = self._adapter_for(player_id).gift_link_area(area_id)
 
         status = self.area_states.get(area_id, AreaStatus.UNSEEN)
 
@@ -1657,7 +2356,7 @@ class SoulLinkState:
             if lv and mhp:
                 stats = {"level": lv, "maxHP": mhp}
         if stats:
-            self.mon_stats[key] = stats
+            self.mon_stats[player_id][key] = stats
 
         partner     = _partner(player_id)
         partner_cap = self.pending_captures[area_id].get(partner)
@@ -1723,16 +2422,21 @@ class SoulLinkState:
             # to the HUD overlay (so unpatched clients are unaffected). Text is kept clean
             # ASCII for the FR-charmap message box; r/g/b/frames style the HUD fallback.
             box_text = f"{a_label} and {b_label} linked!"
+            linked_box = {"cmd": "msgbox", "text": box_text, "r": 100, "g": 255, "b": 160, "frames": 300}
+            # O-29 tag: the run's first two-sided link (dead-zone entries have a missing or
+            # key="" side). Derived from the persisted links, so it fires once per run.
+            first_link = sum(1 for e in self.links if e.a and e.a.key and e.b and e.b.key) == 1
+            if first_link:
+                linked_box["phone"] = "first_link"
             self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 25})   # SE_SUCCESS
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 25})
-            self.queued_commands[player_id].append({
-                "cmd": "msgbox", "text": box_text,
-                "r": 100, "g": 255, "b": 160, "frames": 300,
-            })
-            self.queued_commands[partner].append({
-                "cmd": "msgbox", "text": box_text,
-                "r": 100, "g": 255, "b": 160, "frames": 300,
-            })
+            for pid in (player_id, partner):
+                box = dict(linked_box)   # PHONE-NAMES: a per-recipient phone_data, never shared
+                own, other = (a_mon, b_mon) if pid == "a" else (b_mon, a_mon)
+                data = self._phone_data(_partner(pid), other, own) if first_link else None
+                if data:
+                    box["phone_data"] = data
+                self.queued_commands[pid].append(box)
             # Un-quarantine: both mons were boxed while pending — retrieve to party
             # ONLY if both players have room. Both must stay in sync.
             a_has_room = self.party_size.get("a", 6) < 6
@@ -1742,7 +2446,7 @@ class SoulLinkState:
                     cmd: dict = {"cmd": "party_mon", "key": mon_obj.key}
                     if mon_obj.nickname:
                         cmd["nickname"] = mon_obj.nickname
-                    cached = self.mon_stats.get(mon_obj.key)
+                    cached = self.mon_stats[pid].get(mon_obj.key)
                     if cached:
                         cmd["stats"] = cached
                     # Cancel any pending box_mon for this key (quarantine command may still be queued)
@@ -1792,7 +2496,7 @@ class SoulLinkState:
         if not self.pokeballs_obtained[player_id]:
             log.debug(f"[FAINT GATE] player={player_id}  key={key[:8]}  suppressed=True  reason=nuzlocke_not_active")
             return
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry or entry.status != LinkStatus.ALIVE:
             log.debug(f"[{player_id}] faint {key[:8]}: no alive linked entry — ignored "
                       f"(status={entry.status.value if entry else 'not_found'})")
@@ -1809,7 +2513,28 @@ class SoulLinkState:
                 "trainer_class": msg.get("_trainer_class", ""),
             }
         self._propagate_faint(player_id, entry, killer=killer,
-                              level=msg.get("_level", 0))
+                              level=msg.get("_level", 0), cause="whiteout" if msg.get("_cause") == "whiteout" else "battle")
+
+    def _handle_release(self, player_id: str, msg: dict):
+        """Owner ruling O-35: a PC release of a linked mon loses it, so its partner dies and is
+        memorialized like a faint. Only the releaser's own half of an ALIVE link counts; the
+        released mon no longer exists, so it gets no memorialize of its own."""
+        key = msg.get("key", "")
+        if not key:
+            return
+        self.party_keys[player_id].discard(key)
+        entry = self.entry_for(player_id, key)
+        half = entry and (entry.a if player_id == "a" else entry.b)
+        if (not self.pokeballs_obtained[player_id] or not entry or entry.status != LinkStatus.ALIVE
+                or not half or half.key != key):
+            log.info(f"[{player_id}] release {key[:8]}: no alive linked half of this player — ignored")
+            return
+        log.info(f"[{player_id}] released linked {key[:8]} — the partner dies (O-35)")
+        self._propagate_faint(player_id, entry, cause="release")
+        self.pending_memorials[player_id].discard(key)
+        self.queued_commands[player_id] = [c for c in self.queued_commands[player_id]
+                                           if not (c.get("cmd") == "memorialize" and c.get("key") == key)]
+        self._save()
 
     def _dupes_reroll(self, player_id: str, area_id: str, text: str):
         """Send GUI prompt + unresolve_area so the player gets another encounter."""
@@ -1922,7 +2647,7 @@ class SoulLinkState:
             return
 
         # Gift areas can never become dead zones — wild encounters there are coincidental.
-        if self.adapter.is_gift_area(area_id):
+        if self._adapter_for(player_id).is_gift_area(area_id):
             log.debug(f"[{player_id}] no_catch ignored — {area_id} is a gift area")
             return
 
@@ -2023,15 +2748,17 @@ class SoulLinkState:
         area_disp = self.adapter.area_display_name(area_id) or area_id
         dz_text = f"{area_disp} is a dead zone!"
         self.queued_commands[player_id].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE
+        partner     = _partner(player_id)
         self.queued_commands[player_id].append({
             "cmd": "msgbox", "text": dz_text,
-            "r": 255, "g": 80, "b": 80, "frames": 480,
+            "r": 255, "g": 80, "b": 80, "frames": 480, "phone": "dead_zone",   # O-29 tag
+            **self._phone_extra(partner, None, None),
         })
-        partner     = _partner(player_id)
         self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})
         self.queued_commands[partner].append({
             "cmd": "msgbox", "text": dz_text,
-            "r": 255, "g": 80, "b": 80, "frames": 480,
+            "r": 255, "g": 80, "b": 80, "frames": 480, "phone": "dead_zone",
+            **self._phone_extra(player_id, None, None),
         })
         partner_cap = self.pending_captures.get(area_id, {}).get(partner)
 
@@ -2112,6 +2839,9 @@ class SoulLinkState:
             # Only act on mons we believe are in the whited-out player's party
             if player_mon.key not in self.party_keys[player_id]:
                 continue
+            # Invariant review MINOR-4: a link the pending trade names dies by the SWAPPED halves
+            if self._hold_for_trade(player_id, {"event": "faint", "key": player_mon.key, "_cause": "whiteout"}):
+                continue
             self.queued_commands[partner].append({"cmd": "force_faint", "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
             self.party_keys[partner].discard(partner_mon.key)
             entry.status = LinkStatus.DEAD
@@ -2162,7 +2892,7 @@ class SoulLinkState:
         # Cache stats so we can echo them back in the partner's party_mon command later.
         stats = msg.get("stats")
         if stats:
-            self.mon_stats[key] = stats
+            self.mon_stats[player_id][key] = stats
         # Decrement party_size immediately (same reason as stats_cache handler): avoids a
         # false "partner's party full" block if the partner tries to withdraw their linked mon
         # before the next tick arrives and corrects the count.
@@ -2172,7 +2902,7 @@ class SoulLinkState:
             log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {self.party_size[player_id]}  (party_to_box)")
         self.party_keys[player_id].discard(key)
         log.debug(f"[PARTY] player={player_id}  party_keys remove {key[:8]}  (party_to_box)")
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry or entry.status != LinkStatus.ALIVE:
             return
         partner     = _partner(player_id)
@@ -2236,7 +2966,7 @@ class SoulLinkState:
                 })
                 return
 
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry:
             self.party_keys[player_id].add(key)
             return
@@ -2293,7 +3023,7 @@ class SoulLinkState:
             cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
             if partner_mon.nickname:
                 cmd["nickname"] = partner_mon.nickname
-            cached = self.mon_stats.get(partner_mon.key)
+            cached = self.mon_stats[partner].get(partner_mon.key)
             if cached:
                 cmd["stats"] = cached
             # Cancel any pending box_mon for the same key before queuing party_mon.
@@ -2319,6 +3049,8 @@ class SoulLinkState:
         for c in delivered:
             if c.get("cmd") in SYNC_COMMANDS and c.get("key"):
                 self.sync_inflight[player_id][(c["key"], c["cmd"])] = SYNC_INFLIGHT_RECONCILES
+            elif c.get("cmd") in DEATH_COMMANDS and c.get("key"):
+                self.death_inflight[player_id][c["key"]] = FAINT_REPAIR_RECONCILES
 
     def _ack_inflight(self, player_id: str, key: str) -> None:
         """Forget every in-flight SYNC_COMMAND for key — the client has answered."""
@@ -2344,6 +3076,8 @@ class SoulLinkState:
         delivered and is still unanswered (in flight on the client — see sync_inflight)."""
         if any((key, c) in self.sync_inflight[player_id] for c in cmds):
             return True
+        if key in self.death_inflight[player_id] and any(c in DEATH_COMMANDS for c in cmds):
+            return True
         return any(
             c.get("key") == key and c.get("cmd") in cmds
             for c in self.queued_commands[player_id]
@@ -2357,7 +3091,72 @@ class SoulLinkState:
                 return True
         return False
 
-    def _reconcile_party_keys(self, player_id: str, party: list) -> None:
+    def _repair_lost_faints(self, player_id: str, party: list, in_battle: bool) -> None:
+        """Owner ruling O-24: re-issue a DEATH_COMMAND the client never applied.
+
+        On for every generation, as ruled -- there is no per-game switch.  The evidence is
+        the party snapshot every client sends, `key` and `hp` per mon.  A key there at
+        HP > 0 whose link is not ALIVE is a dead mon walking: either the force_faint was
+        lost, or the player revived it (or withdrew a memorialized one); dead stays dead.
+        Only the PARTY is visible: a dead mon in a box never qualifies, so a lost faint on a
+        mon that was then deposited is not repaired here.
+
+        The re-issue is always plain force_faint, even in Explode Mode: the Explosion is a
+        battle-time cue, and both commands leave the mon at zero HP.
+
+        Deduped by _has_pending_command: a death command still queued (the snapshot that
+        races the original) or delivered within death_inflight's FAINT_REPAIR_RECONCILES
+        window is not repeated.  Only out-of-battle passes count, so a faint held to battle
+        end is not re-sent mid-battle.  FAINT_REPAIR_BUDGET re-issues per incident, then
+        the key stalls (error log + faint_repair_stalled) for FAINT_REPAIR_COOLDOWN passes
+        and its budget refills.
+        """
+        inflight = self.death_inflight[player_id]
+        spent = self.faint_repairs[player_id]
+        stalled = self.faint_repair_stalled[player_id]
+        if not in_battle:
+            for key in list(inflight):
+                inflight[key] -= 1
+                if inflight[key] <= 0:
+                    del inflight[key]
+            for key in list(stalled):
+                stalled[key] -= 1
+                if stalled[key] <= 0:
+                    del stalled[key]
+                    spent.pop(key, None)
+                    log.warning(f"[{player_id}] {key} faint repair cool-down over — budget refilled")
+        if self.run_over:
+            return
+        for mon in party:
+            key, hp = mon.get("key"), mon.get("hp")
+            if not key or not isinstance(hp, (int, float)):
+                continue                      # no hp on the wire = no evidence
+            if hp <= 0:
+                spent.pop(key, None)          # the kill landed; a later revive is a new incident
+                stalled.pop(key, None)
+                continue
+            entry = self.entry_for(player_id, key)
+            if entry is None or entry.status == LinkStatus.ALIVE or key in stalled:
+                continue
+            half = entry.a if player_id == "a" else entry.b
+            if half is None or half.key != key or self._is_quarantined(player_id, key):
+                continue
+            if self._has_pending_command(player_id, key, *DEATH_COMMANDS):
+                continue
+            n = spent.get(key, 0)
+            if n >= FAINT_REPAIR_BUDGET:
+                stalled[key] = FAINT_REPAIR_COOLDOWN
+                log.error(f"[{player_id}] {key} is dead but still alive in party after "
+                          f"{FAINT_REPAIR_BUDGET} re-issued force_faint — stalled, budget "
+                          f"refills in {FAINT_REPAIR_COOLDOWN} passes")
+                continue
+            spent[key] = n + 1
+            self.queued_commands[player_id].append(
+                {"cmd": "force_faint", "key": key, "nickname": half.nickname or ""})
+            log.warning(f"[{player_id}] {key} is dead but alive in party (hp={hp}) — "
+                        f"re-issued force_faint ({n + 1}/{FAINT_REPAIR_BUDGET})")
+
+    def _reconcile_party_keys(self, player_id: str, party: list, in_battle: bool = False) -> None:
         """
         Repair `party_keys[player_id]` to match Lua's actual party snapshot.
 
@@ -2379,6 +3178,10 @@ class SoulLinkState:
           - Active rebuild (rebuild_pending owns party_keys bookkeeping for its
             duration; let it finish, then next tick reconciles cleanly).
         """
+        # O-24 is keyed by link status and death_inflight, not by the party bookkeeping the gates
+        # below protect, so it runs first (invariant review MINOR-5: a rebuild whose answer was
+        # lost, or an `applying` trade, used to switch it off for as long as they lasted).
+        self._repair_lost_faints(player_id, party, in_battle)
         if self.rebuild_pending.get(player_id):
             return
         # A trade owns party bookkeeping while the swap is in flight + a short settle window after.
@@ -2397,18 +3200,22 @@ class SoulLinkState:
         # This pass is a real chance for the client to have answered what we sent it.
         self._expire_inflight(player_id)
 
-        actual_keys = {mon.get("key", "") for mon in party if mon.get("key")}
+        actual_keys = self._canonical_party_keys(player_id, party)
+        # An uncertain/conflicted trade still owns its two keys: until it settles, either key may be
+        # on either side, so drift enforcement on them would issue a spurious Unbox/deposit.
+        frozen = ({self.pending_trade["a_key"], self.pending_trade["b_key"]}
+                  if self.trade_problem() else set()) | set(self.ambiguous_keys[player_id])
         tracked_keys = self.party_keys[player_id]
         partner = _partner(player_id)
 
         # Ghost-boxed: Lua reports key in party, server thinks it's deposited.
-        for key in actual_keys - tracked_keys:
+        for key in actual_keys - tracked_keys - frozen:
             if self._has_pending_command(player_id, key,
                                           "box_mon", "party_mon", "memorialize"):
                 continue
             if self._is_quarantined(player_id, key):
                 continue
-            entry = self._key_index.get(key)
+            entry = self.entry_for(player_id, key)
             if entry is None:
                 # Untracked mon (e.g. unlinked, never had a partner) — server
                 # has no opinion about box vs. party for it, so just sync.
@@ -2431,7 +3238,7 @@ class SoulLinkState:
                 cmd: dict = {"cmd": "party_mon", "key": partner_mon.key}
                 if partner_mon.nickname:
                     cmd["nickname"] = partner_mon.nickname
-                cached = self.mon_stats.get(partner_mon.key)
+                cached = self.mon_stats[partner].get(partner_mon.key)
                 if cached:
                     cmd["stats"] = cached
                 self.queued_commands[partner].append(cmd)
@@ -2440,7 +3247,7 @@ class SoulLinkState:
 
         # Ghost-party: server thinks key is in party, Lua doesn't see it.  Rarer,
         # but possible if a real party_to_box's emission was suppressed somewhere.
-        for key in tracked_keys - actual_keys:
+        for key in tracked_keys - actual_keys - frozen:
             if self._has_pending_command(player_id, key,
                                           "box_mon", "party_mon", "memorialize"):
                 continue
@@ -2499,7 +3306,7 @@ class SoulLinkState:
                 # Partner has no more room. Per Soul Link co-location, both
                 # halves must move together — skip this and any further pairs.
                 break
-            entry = self._key_index.get(my_key)
+            entry = self.entry_for(player_id, my_key)
             if not entry:
                 continue
             my_mon = entry.a if player_id == "a" else entry.b
@@ -2529,7 +3336,7 @@ class SoulLinkState:
             cmd: dict = {"cmd": "party_mon", "key": mon.key}
             if mon.nickname:
                 cmd["nickname"] = mon.nickname
-            cached = self.mon_stats.get(mon.key)
+            cached = self.mon_stats[pid].get(mon.key)
             if cached:
                 cmd["stats"] = cached
             self.queued_commands[pid].append(cmd)
@@ -2616,15 +3423,30 @@ class SoulLinkState:
 
         reason = msg.get("reason", "nature_change")
         log.info(f"[{player_id}] key_change ({reason}): {old_key[:8]} → {new_key[:8]}")
-        entry = self._key_index.get(old_key)
+        side = player_id
+        entry = self.entry_for(player_id, old_key)
+        pt = self.pending_trade
+        if (entry is None and pt and pt.get("phase") in ("applying", "uncertain", "conflict")
+                and old_key in (pt.get("a_key"), pt.get("b_key"))):
+            entry = pt["link"]            # mid-trade a player holds the partner's (unswapped) half
 
         def _ack(migrated: bool):
+            msg["_key_change_status"] = "migrated" if migrated else msg.get("_key_change_status", "unknown")
             self.queued_commands[player_id].append(
                 {"cmd": "key_change_ack", "old_key": old_key, "new_key": new_key,
                  "migrated": migrated})
 
-        if entry is None and not self._key_refs(old_key):
-            if self._key_index.get(new_key) is not None:
+        # KEY-SCOPE-5: the ledger answers a replay even after a reconnect re-reported old_key.
+        live_old = self.entry_for(player_id, old_key)
+        if ((live_old is None or live_old.status != LinkStatus.ALIVE)       # F4: a new live mon on old_key
+                and {"old_key": old_key, "new_key": new_key} in self.key_migration_ledger[player_id]):
+            log.info(f"[{player_id}] key_change replay for {new_key[:8]} (ledger) — already migrated")
+            msg["_key_change_status"] = "replayed"
+            _ack(False)
+            return
+
+        if entry is None and not self._key_refs(old_key, player_id):
+            if self.entry_for(player_id, new_key) is not None:
                 # Replay: the migration already happened (resent after a reconnect).
                 log.info(f"[{player_id}] key_change replay for {new_key[:8]} — already migrated")
             else:
@@ -2637,16 +3459,44 @@ class SoulLinkState:
             return
 
         # Collision check BEFORE any mutation.
-        hit = self._key_index.get(new_key)
+        # KEY-SCOPE: only THIS player's keys can collide; the partner may hold an equal key
+        hit = self.entry_for(player_id, new_key)
         collision = ""
         if hit is not None and hit is not entry and hit.status == LinkStatus.ALIVE:
             collision = f"live link in {hit.area_id}"
         else:
-            refs = self._key_refs(new_key)
+            refs = self._key_refs(new_key, player_id)
+            # KEY-SCOPE-4: this player's own tick can beat its key_change here.  When the latest
+            # party snapshot holds new_key exactly once and old_key nowhere, that party hit IS the
+            # changing mon; a real twin shows as a second copy, or old_key still in the party.
+            # KEY-SCOPE-5: counted on the RAW snapshot, before blob filtering drops entries.
+            # cx-06ec4e8e F3: and new_key first appeared only after old_key was last seen -- a
+            # new_key already present beside old_key is another mon.
+            raw = self.party_key_census.get(player_id)
+            last = self.key_last_seen.get(player_id, {})
+            self_report = (raw is not None and raw.get(new_key, 0) == 1 and old_key not in raw
+                           and old_key in last
+                           and self.key_streak[player_id].get(new_key, 0) > last[old_key])
+            if self_report:
+                refs -= {"party_keys", "partner_blobs"}
+            hook = self.presentation_key_in_use
+            used = (False if refs or not hook else
+                    hook(new_key, player_id, party=False) if self_report else hook(new_key, player_id))
             if refs:
                 collision = ", ".join(sorted(refs))
-            elif self.presentation_key_in_use and self.presentation_key_in_use(new_key):
+            elif used is None:               # KEY-SCOPE-5: an advertised box census is missing or stale
+                collision = "box census unavailable"
+            elif used:
                 collision = "presentation cache"
+        if collision == "box census unavailable":
+            # cx-8f3a6ce9 F2: uncertainty, not evidence of a collision -- refuse, retire nothing
+            log.warning(f"[{player_id}] key_change {old_key[:8]} → {new_key[:8]} refused: box census "
+                        f"unavailable; the pair keeps its identity")
+            self.queued_commands[player_id].append(
+                {"cmd": "key_change_rejected", "old_key": old_key, "new_key": new_key,
+                 "reason": collision})
+            msg["_key_change_status"] = "rejected"
+            return
         if collision:
             log.error(f"[{player_id}] key_change REJECTED: {new_key[:8]} is load-bearing "
                       f"({collision}); {old_key[:8]} keeps its identity")
@@ -2654,6 +3504,7 @@ class SoulLinkState:
                 {"cmd": "key_change_rejected", "old_key": old_key, "new_key": new_key,
                  "reason": f"key collision: {collision}"})
             msg["_rejected"] = True
+            msg["_key_change_status"] = "rejected"
             if entry is not None and entry.status == LinkStatus.ALIVE:
                 # U5: the pair dies -- the mon can no longer be told apart from the other one.
                 self._propagate_faint(player_id, entry, cause="identity_lost")
@@ -2662,11 +3513,15 @@ class SoulLinkState:
         # ── accepted: migrate ────────────────────────────────────────────────────────
         # 1. Links + key index
         if entry is not None:
-            self._key_index.pop(old_key, None)
-            for mon in (entry.a, entry.b, entry.encounter_a, entry.encounter_b):
-                if mon and mon.key == old_key:
-                    mon.key = new_key
-            side = "a" if player_id == "a" else "b"
+            # this player's half; mid-trade the half it holds is the partner's (unswapped) one
+            own = getattr(entry, side)
+            sides = ([side] if own and own.key == old_key else
+                     [pid for pid in ("a", "b") if getattr(entry, pid) and getattr(entry, pid).key == old_key])
+            for pid in sides:
+                self._unindex(pid, old_key, entry)
+                for mon in ((entry.a, entry.encounter_a) if pid == "a" else (entry.b, entry.encounter_b)):
+                    if mon and mon.key == old_key:
+                        mon.key = new_key
             mon = getattr(entry, side)
             if mon and mon.key == new_key:
                 # Update species/nickname if provided (Gen 1 evolution changes species)
@@ -2690,8 +3545,8 @@ class SoulLinkState:
             self.party_keys[player_id].add(new_key)
 
         # 4. Mon stats cache
-        if old_key in self.mon_stats:
-            self.mon_stats[new_key] = self.mon_stats.pop(old_key)
+        if old_key in self.mon_stats[player_id]:
+            self.mon_stats[player_id][new_key] = self.mon_stats[player_id].pop(old_key)
 
         # 5. Bonus keys (shiny clause)
         if old_key in self.bonus_keys[player_id]:
@@ -2714,10 +3569,10 @@ class SoulLinkState:
             inflight[(new_key, ident[1])] = inflight.pop(ident)
 
         # 8. Pending bonus queue (shiny keys in partner's pending_bonus)
-        for pid in ("a", "b"):
-            self.pending_bonus[pid] = deque(
-                new_key if k == old_key else k for k in self.pending_bonus[pid]
-            )
+        owner_q = _partner(player_id)                   # KEY-SCOPE: this player's shiny waits there
+        self.pending_bonus[owner_q] = deque(
+            new_key if k == old_key else k for k in self.pending_bonus[owner_q]
+        )
 
         # 9. Partner blobs (rival team swap cache) and an active whiteout rebuild
         for be in self.partner_blobs[player_id]:
@@ -2736,8 +3591,13 @@ class SoulLinkState:
         if pt:
             for field in ("a_key", "b_key"):
                 if pt.get(field) == old_key:
+                    pt.setdefault(f"{field}0", old_key)   # MINOR-8: the commit also retires the original
                     pt[field] = new_key
+            for pid, n in (pt.get("new") or {}).items():
+                if n and n[0] == old_key:
+                    pt["new"][pid] = (new_key, msg.get("new_species") or n[1])
 
+        self.key_migration_ledger[player_id].append({"old_key": old_key, "new_key": new_key})
         _ack(True)
 
         # A2: a transformation never revives.  The link was already buried under the old
@@ -2758,24 +3618,53 @@ class SoulLinkState:
 
         self._save()
 
-    def _key_refs(self, key: str) -> set[str]:
+    def _canonical_party_keys(self, player_id: str, party: list) -> set:
+        """KEY-SCOPE-5, the drift reconciler only (a hello is the cartridge's own word): a stale
+        tick's retired alias counts as its migration's terminal key, so it cannot roll the
+        migration back. Only the exact stale case aliases: the terminal key is tracked in the
+        party, absent from this snapshot, and (when the previous snapshot saw it) sat in the
+        alias's slot. Anything else is a live mon under its own key."""
+        newest: dict[str, dict] = {}
+        for rec in self.key_migration_ledger[player_id]:
+            newest[rec["old_key"]] = newest[rec["new_key"]] = rec
+        keys = {m.get("key") for m in party if isinstance(m, dict) and m.get("key")}
+        prev = self.prev_party_slots.get(player_id) or {}
+        out = set()
+        for m in party:
+            key = m.get("key") if isinstance(m, dict) else None
+            if not key:
+                continue
+            canon, seen = key, set()
+            while canon not in seen and canon in newest and newest[canon]["old_key"] == canon:
+                seen.add(canon)
+                canon = newest[canon]["new_key"]
+            stale = (canon != key and canon not in keys and canon in self.party_keys[player_id]
+                     and prev.get(canon, m.get("slot")) == m.get("slot"))
+            out.add(canon if stale else key)
+        return out
+
+    def _key_refs(self, key: str, player_id: str) -> set[str]:
         """Names of the live tracking structures that reference `key` (empty = unreferenced).
 
         The collision preflight for `_handle_key_change`.  `_key_index` is judged separately
         (a DEAD/MEMORIAL hit is not load-bearing) and `mon_stats` is deliberately absent: it
         is a never-pruned cache that still holds every buried key, and the migration
         overwrites it -- counting it would turn "buried keys are reusable" into a pair kill.
+
+        KEY-SCOPE: only player_id's structures count (the partner may hold an equal key). A
+        player's own shiny waits in the PARTNER's pending_bonus queue; the pending trade names
+        both players' keys and still counts for either.
         """
         refs: set[str] = set()
-        for pid in ("a", "b"):
+        if key in self.pending_bonus[_partner(player_id)]:
+            refs.add("pending_bonus")
+        for pid in (player_id,):
             if key in self.party_keys[pid]:
                 refs.add("party_keys")
             if key in self.bonus_keys[pid]:
                 refs.add("bonus_keys")
             if key in self.pending_memorials[pid]:
                 refs.add("pending_memorials")
-            if key in self.pending_bonus[pid]:
-                refs.add("pending_bonus")
             if any(be.get("key") == key for be in self.partner_blobs[pid]):
                 refs.add("partner_blobs")
             if any(c.get("key") == key or c.get("old_key") == key
@@ -2787,8 +3676,8 @@ class SoulLinkState:
             if rb and (key in rb.get("queued_keys", []) or key in rb.get("queued_partner_keys", [])
                        or key in rb.get("restored_keys", set())):
                 refs.add("rebuild_pending")
-        if any(cap.key == key for players in self.pending_captures.values()
-               for cap in players.values() if cap):
+        if any(players.get(player_id) and players[player_id].key == key
+               for players in self.pending_captures.values()):
             refs.add("pending_captures")
         pt = self.pending_trade
         if pt and key in (pt.get("a_key"), pt.get("b_key")):
@@ -2814,13 +3703,10 @@ class SoulLinkState:
         for mon, pid in ((a_mon, "a"), (b_mon, "b")):
             if not (mon and mon.key):
                 continue
-            existing = self._key_index.get(mon.key)
+            existing = self.entry_for(pid, mon.key)       # KEY-SCOPE: per player
             if existing is not None and existing.status == LinkStatus.ALIVE:
                 return (f"Key collision: {mon.key} already identifies a live link in "
                         f"{existing.area_id}", pid)
-        if a_mon and b_mon and a_mon.key and a_mon.key == b_mon.key:
-            # Both halves indexing one key would make the pair its own alias.
-            return (f"Key collision: both halves report the key {a_mon.key}", "")
 
         if self.species_lock and a_mon.species and b_mon.species:
             # Cross-player check: A and B can't be the same species/family
@@ -2902,6 +3788,25 @@ class SoulLinkState:
                 return c["cmd"]
         return None
 
+    def _phone_data(self, caller: str, caller_mon: MonInfo | None,
+                    receiver_mon: MonInfo | None) -> dict | None:
+        """PHONE-NAMES (docs/protocol.md section 5): an O-29 call as its receiver hears it. None
+        when the caller has no real trainer name, so the client keeps the fixed text."""
+        identity = self.player_identity.get(caller) or {}
+        name = self.trainer_names.get(caller) or (
+            "" if identity.get("trainer_name_placeholder") else identity.get("trainer_name") or "")
+        if not name:
+            return None
+        data: dict = {"trainer_name": name}
+        for field, mon in (("caller_mon", caller_mon), ("receiver_mon", receiver_mon)):
+            if mon is not None and mon.species:
+                data[field] = {"species_id": mon.species, "nickname": mon.nickname or ""}
+        return data
+
+    def _phone_extra(self, caller: str, caller_mon: MonInfo | None, receiver_mon: MonInfo | None) -> dict:
+        data = self._phone_data(caller, caller_mon, receiver_mon)
+        return {"phone_data": data} if data else {}
+
     def _propagate_faint(self, player_id: str, entry: LinkEntry, killer: dict | None = None,
                          level: int = 0, cause: str = "battle"):
         """Mark entry dead, queue force_faint (or force_explode if Explode Mode is on)
@@ -2922,7 +3827,13 @@ class SoulLinkState:
             explode = cause == "battle" and self.explode_mode and bool(
                 self.adapter and self.adapter.supports_explode_mode())
             cmd_name = "force_explode" if explode else "force_faint"
-            self.queued_commands[partner].append({"cmd": cmd_name, "key": partner_mon.key, "nickname": partner_mon.nickname or ""})
+            death = {"cmd": cmd_name, "key": partner_mon.key, "nickname": partner_mon.nickname or ""}
+            if cause == "battle":
+                # O-29: an optional, generation-neutral tag; a client that can ring a phone
+                # call for it does (Gen 2 phone.lua), every other client ignores the key.
+                death["phone"] = "fallen"
+                death.update(self._phone_extra(player_id, player_mon, partner_mon))
+            self.queued_commands[partner].append(death)
             self.queued_commands[partner].append({"cmd": "play_sound", "sound": 26})   # SE_FAILURE — the KO notification's noise (HUD convention)
             self.party_keys[partner].discard(partner_mon.key)
             log.debug(f"[PARTY] player={partner}  party_keys remove {partner_mon.key[:8]}  ({cmd_name} from {player_id})")
@@ -2934,11 +3845,11 @@ class SoulLinkState:
         entry.initiating_player = player_id
         # Update MonInfo levels to death-time values so memorial shows current level.
         if player_mon:
-            lv = level or self.mon_stats.get(player_mon.key, {}).get("level", 0)
+            lv = level or self.mon_stats[player_id].get(player_mon.key, {}).get("level", 0)
             if lv:
                 player_mon.level = lv
         if partner_mon:
-            lv = self.mon_stats.get(partner_mon.key, {}).get("level", 0)
+            lv = self.mon_stats[partner].get(partner_mon.key, {}).get("level", 0)
             if lv:
                 partner_mon.level = lv
         if player_mon:
@@ -2958,16 +3869,35 @@ class SoulLinkState:
         here is reported loudly even though the write still happens -- a half-indexed link
         would be worse than an aliased one.
         """
-        for half in (entry.a, entry.b):
+        for pid, half in (("a", entry.a), ("b", entry.b)):
             if not half:
                 continue
-            prev = self._key_index.get(half.key)
+            prev = self._pidx[pid].get(half.key)
             if prev is not None and prev is not entry:
-                log.error("KEY COLLISION: %s now indexes the link in %s, displacing the one "
-                          "in %s — two different mons share a key and lookups by it "
+                log.error("KEY COLLISION: %s:%s now indexes the link in %s, displacing the one "
+                          "in %s — two of one player's mons share a key and lookups by it "
                           "(faint propagation especially) will resolve to the wrong pair",
-                          half.key, entry.area_id, prev.area_id)
-            self._key_index[half.key] = entry
+                          pid, half.key, entry.area_id, prev.area_id)
+            self._pidx[pid][half.key] = entry
+
+    @property
+    def _key_index(self) -> Mapping:
+        return _KeyIndexView(self._pidx)
+
+    def entry_for(self, player_id: str, key: str) -> "LinkEntry | None":
+        """The link whose `player_id` half is `key` (KEY-SCOPE: identity is per player)."""
+        return self._pidx[player_id].get(key) if key else None
+
+    def _unindex(self, player_id: str, key: str, entry: "LinkEntry | None" = None):
+        """Drop player_id's index row for key (only if it names `entry`, when given)."""
+        if entry is None or self._pidx[player_id].get(key) is entry:
+            self._pidx[player_id].pop(key, None)
+
+    def unindex_entry(self, entry: "LinkEntry"):
+        """Drop both halves of `entry` from the per-player index (an admin unlink)."""
+        for pid, half in (("a", entry.a), ("b", entry.b)):
+            if half:
+                self._unindex(pid, half.key, entry)
 
     def _queue_memorialize(self, player_id: str, key: str):
         """
@@ -2999,7 +3929,7 @@ class SoulLinkState:
         self.pending_memorials[player_id].discard(key)
         self.party_keys[player_id].discard(key)
         log.info(f"[{player_id}] memorialize_done key={key[:8]}")
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry or entry.status != LinkStatus.DEAD:
             self._save()
             return
@@ -3026,7 +3956,7 @@ class SoulLinkState:
         self.pending_memorials[player_id].discard(key)
         log.warning(f"[{player_id}] memorialize_failed key={key[:8]} reason={reason}")
         # Check if the pair can now be finalized despite the failure
-        entry = self._key_index.get(key)
+        entry = self.entry_for(player_id, key)
         if not entry or entry.status != LinkStatus.DEAD:
             self._save()
             return
@@ -3058,6 +3988,19 @@ class SoulLinkState:
         """
         if not isinstance(party, list):
             return
+        # KEY-SCOPE-5: the raw key multiset, before any entry is dropped for its blob
+        self.party_key_census[player_id] = dict(Counter(
+            m["key"] for m in party if isinstance(m, dict) and isinstance(m.get("key"), str) and m["key"]))
+        self.prev_party_slots[player_id] = self.party_slots.get(player_id) or {}
+        n = self.snapshot_no[player_id] = self.snapshot_no.get(player_id, 0) + 1
+        streak = self.key_streak.setdefault(player_id, {})
+        last = self.key_last_seen.setdefault(player_id, {})
+        for k in self.party_key_census[player_id]:
+            if last.get(k) != n - 1:
+                streak[k] = n
+            last[k] = n
+        self.party_slots[player_id] = {m["key"]: m.get("slot") for m in party
+                                       if isinstance(m, dict) and isinstance(m.get("key"), str)}
         # Per-game blob size — see GameRulesAdapter.party_blob_size. 0 means this game
         # doesn't cache blobs at all, so there is nothing to ingest.
         expected = self.adapter.party_blob_size()
@@ -3083,6 +4026,8 @@ class SoulLinkState:
                 "level": int(s.get("level", 0) or 0),
                 "key": str(s.get("key", "") or ""),
                 "blob": blob,
+                # trade sanity (_trade_sane): only when the snapshot carries it
+                **({"hp": int(s["hp"])} if isinstance(s.get("hp"), int) else {}),
             })
         self.partner_blobs[player_id] = accepted
 
@@ -3391,8 +4336,13 @@ class SoulLinkState:
             "pending_bonus": {
                 pid: list(q) for pid, q in self.pending_bonus.items()
             },
+            "ambiguous_keys": self.ambiguous_keys,
+            "key_migration_ledger": {pid: list(q) for pid, q in self.key_migration_ledger.items()},
             "run_over": self.run_over,
             "attempts_count": self.attempts_count,
+            # BLOCKER-1: an applied-but-unsettled trade survives a restart; tokens never restart at t1
+            "pending_trade": self._trade_to_json(),
+            "trade_token": self._trade_token,
             "rebuild_pending": {
                 pid: (
                     {

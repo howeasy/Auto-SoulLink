@@ -3,7 +3,7 @@
 
     python tools/run_gb_gate.py lua/tests/test_gen1_inspect_gate.lua
     python tools/run_gb_gate.py lua/tests/test_gen1_inspect_gate.lua --rom yellow --target battle
-    python tools/run_gb_gate.py lua/tests/test_gen2_memory_gate.lua --rom crystal
+    python tools/run_gb_gate.py lua/tests/gen2_inspect_gate.lua --rom crystal
 
 The GB counterpart to tools/run_gate.py, which is bound to the GBA/Radical Red setup. The
 important difference is that these gates need NO SAVESTATE.
@@ -24,18 +24,21 @@ Launch rules match run_gate.py: cwd = repo root with RELATIVE EmuHawk arg paths,
 absolute paths containing the "Google Drive" space break BizHawk's CLI parser.
 """
 import argparse
+import hashlib
+import json
 import os
 import re
 import shutil
 import subprocess
 import sys
 import time
+from pathlib import Path
+from types import MappingProxyType
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "tools"))
 
 import gen1_playthrough as g1  # noqa: E402
-import gen2_playthrough as g2  # noqa: E402
 from gen1_playthrough import (  # noqa: E402
     BIZHAWK_CONFIG,
     BUILD,
@@ -43,14 +46,45 @@ from gen1_playthrough import (  # noqa: E402
     SAVERAM_DIR,
     write_run_config,
 )
+from gen2_source_data import load_context as load_gen2_context  # noqa: E402
 
 # The fixture builders, per generation. Gen 1's is tools/gen1_fixtures.py (the new client's
 # scripted pipeline); the old gen1_playthrough driver this message used to name is gone, and
 # naming a deleted command in a recovery message is worse than naming none.
 _FIXTURE_BUILDERS = {
     "gen1_playthrough": "python tools/gen1_fixtures.py {rom} {target}",
-    "gen2_playthrough": "python tools/gen2_playthrough.py --rom {rom} --target {target}",
 }
+
+# Exact clean title identities. Crystal 1.1 remains build-only. SaveRAM names are
+# verified against the configured emulator's SHA1 gamedb row before every launch.
+_GEN2_IDENTITIES = {
+    "crystal": ("pokecrystal", "f4cd194bdee0d04ca4eac29e09b8e4e9d818c133", "Pokemon - Crystal Version (USA, Europe).SaveRAM"),
+    "gold": ("pokegold", "d8b8a3600a465308c9953dfa04f0081c05bdcb94", "Pokemon - Gold Version (USA, Europe).SaveRAM"),
+    "silver": ("pokesilver", "49b163f7e57702bc939d642a18f591de55d92dae", "Pokemon - Silver Version (USA, Europe).SaveRAM"),
+}
+
+
+# P4.1g: `<title>_overlay` is the SLink companion overlay, the clean build + patch/dist UPS
+# (data/gen2/overlay_provenance.json). rom_sha1 stays the CLEAN base the facts/profile bind; the
+# plan stages the patched image and checks its own sha1. BizHawk's gamedb does not know the
+# patched hash, so its SaveRAM name derives from the staged FILENAME (g1.save_name_for).
+_GEN2_OVERLAY_STAGE = "patch/build/gen2_{title}_overlay.gbc"
+_GEN2_OVERLAY_PROVENANCE = "data/gen2/overlay_provenance.json"
+_PATCH_TOOLS = os.path.join(REPO, "patch", "tools")   # make_ups.ups_apply
+
+
+def describe_gen2(rom_key: str):
+    """Immutable metadata only; run_gate separately verifies every actual input."""
+    cold = isinstance(rom_key, str) and rom_key.endswith("_cold")
+    overlay = isinstance(rom_key, str) and rom_key.endswith("_overlay")
+    title = rom_key[:-5] if cold else rom_key[:-8] if overlay else rom_key
+    if title not in _GEN2_IDENTITIES:
+        raise ValueError(f"unregistered Gen 2 gate key: {rom_key!r}")
+    artifact, sha1, name = _GEN2_IDENTITIES[title]
+    if overlay:
+        name = g1.save_name_for(_GEN2_OVERLAY_STAGE.format(title=title))
+    return MappingProxyType({"title": title, "artifact": artifact, "rom_sha1": sha1,
+                             "core_mode": "CGB", "saveram_name": name, "cold": cold, "overlay": overlay})
 
 
 def _rebuild_command(play_name: str, rom_key: str, target: str) -> str:
@@ -73,8 +107,18 @@ def _rebuild_command(play_name: str, rom_key: str, target: str) -> str:
 # In `patched`, a base fixture of None means COLD BOOT: there is no battery save to seed, and
 # any stale one is removed so the ROM reaches NEW GAME — that is what the `*_cold` keys are.
 #   key -> (fixture to seed from, ROM path, SaveRAM filename BizHawk will use)
+#
+# Descriptor fields the shared harness reads instead of naming a generation:
+#   implicit_staging  seed_saveram may copy the committed fixture for this key
+#   plan              None, or plan(rom_key, saveram_dir, fixture_path, speed_percent) -> launch plan
+#   config            writes the plan's emulator config (only with a plan)
+#   protected_env     environment names a caller's env_overrides may never replace
 GENS = {
     "gen1": {
+        "implicit_staging": True,
+        "plan": None,
+        "config": None,
+        "protected_env": frozenset(),
         "play": g1,
         "saveram_names": {
             "red": "Pokemon - Red Version (USA, Europe).SaveRAM",
@@ -132,11 +176,14 @@ GENS = {
         },
     },
     "gen2": {
-        "play": g2,
-        "saveram_names": g2.SAVERAM_NAMES,
-        # No patched or Archipelago Crystal builds are gated yet: the AP fork has no public
-        # repo to build a symbol set from, so only five of its addresses are provable and the
-        # profile is still flagged unverified (tests/unit/test_gen2_ap_addresses.py).
+        "implicit_staging": False,
+        # plan/config are bound below, after their definitions.
+        "protected_env": frozenset({"SLINK_GEN2_TITLE", "SLINK_GEN2_ROM_SHA1", "SLINK_GEN2_CORE_MODE",
+                                    "SLINK_GEN2_COLD", "SLINK_GEN2_SAVERAM_DIR", "SLINK_GEN2_SAVERAM_NAME",
+                                    "SLINK_GEN2_OVERLAY_SHA1"}),
+        "descriptors": {key: describe_gen2(key) for title in _GEN2_IDENTITIES
+                        for key in (title, title + "_cold", title + "_overlay")},
+        "saveram_names": {title: describe_gen2(title)["saveram_name"] for title in _GEN2_IDENTITIES},
         "patched": {},
     },
 }
@@ -146,7 +193,8 @@ GENS = {
 # rather than a last-one-wins.
 ROM_TO_GEN = {}
 for _gen, _spec in GENS.items():
-    for _key in list(_spec["play"].ROMS) + list(_spec["patched"]):
+    _keys = list(_spec["descriptors"]) if "descriptors" in _spec else list(_spec["play"].ROMS) + list(_spec["patched"])
+    for _key in _keys:
         if _key in ROM_TO_GEN:
             raise RuntimeError(f"ROM key {_key!r} is claimed by both {ROM_TO_GEN[_key]} "
                                f"and {_gen} — --rom could not resolve it")
@@ -223,6 +271,9 @@ def seed_saveram(rom_key: str, target: str, dest_dir: str | None = None) -> str:
     filename, so they need separate directories rather than separate names.
     """
     spec = GENS[gen_for(rom_key)]
+    if not spec["implicit_staging"]:
+        raise ValueError(f"{rom_key!r} has no implicit fixture staging; "
+                         "run_gate requires an explicit isolated directory and candidate")
     play = spec["play"]
     # play.fixture_path, not a second copy of the naming rule: an overlay key resolves to the
     # CLEAN pure fixture (A4), which this inlined f-string would miss.
@@ -238,14 +289,125 @@ def seed_saveram(rom_key: str, target: str, dest_dir: str | None = None) -> str:
     return dst
 
 
-def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
+def _gen2_plan(rom_key, saveram_dir, fixture_path, speed_percent):
+    """Validate a Gen 2 launch plan without creating, copying or deleting files."""
+    descriptor = dict(GENS["gen2"]["descriptors"].get(rom_key, {}))
+    expected = dict(describe_gen2(rom_key))
+    if descriptor != expected or descriptor.get("core_mode") != "CGB" or type(descriptor.get("cold")) is not bool:
+        raise ValueError("missing or mismatched explicit Gen 2 descriptor")
+    if saveram_dir is None:
+        raise ValueError("Gen 2 requires an explicit isolated SaveRAM directory")
+    directory = Path(saveram_dir).resolve()
+    roots = (Path(REPO).resolve() / ".cache/gen2-fixtures", Path(BUILD).resolve())
+    if directory == Path(SAVERAM_DIR).resolve() or not any(directory.is_relative_to(base) and directory != base for base in roots):
+        raise ValueError("Gen 2 SaveRAM directory must be an isolated attempt directory under .cache/gen2-fixtures or BUILD")
+    # O-36: qualification (this module's CLI) stays 100/300; a duo may run faster, 0 = unthrottled
+    if type(speed_percent) is not int or not (speed_percent == 0 or 100 <= speed_percent <= 6400):
+        raise ValueError("Gen 2 speed must be explicitly 100..6400 percent, or 0 (unthrottled)")
+    if descriptor["cold"]:
+        if fixture_path is not None:
+            raise ValueError("cold Gen 2 gate cannot seed a fixture")
+        fixture = None
+    else:
+        if fixture_path is None or not Path(fixture_path).is_file():
+            raise ValueError("warm Gen 2 gate requires an explicit existing candidate fixture_path")
+        fixture = Path(fixture_path).resolve()
+        if fixture == directory / descriptor["saveram_name"]:
+            raise ValueError("candidate fixture and mutable emulator save must be separate")
+    ctx = load_gen2_context(descriptor["title"], root=Path(REPO))
+    if ctx.artifact != descriptor["artifact"] or hashlib.sha1(ctx.rom).hexdigest() != descriptor["rom_sha1"]:
+        raise ValueError("Gen 2 selected artifact/hash binding disagrees")
+    rom = (ctx.source_dir / ctx.lock["outputs"][ctx.artifact]["filename"]).resolve()
+    if not rom.is_relative_to(Path(REPO).resolve()) or hashlib.sha1(rom.read_bytes()).hexdigest() != descriptor["rom_sha1"]:
+        raise ValueError("Gen 2 actual ROM differs from the selected descriptor")
+    launch_sha1, stage, extra_env = descriptor["rom_sha1"], None, {}
+    if descriptor.get("overlay"):
+        # The published overlay: clean base + UPS, both hash-bound by the build receipt.
+        sys.path.insert(0, _PATCH_TOOLS)
+        from make_ups import ups_apply
+        out = json.loads((Path(REPO) / _GEN2_OVERLAY_PROVENANCE).read_text(encoding="utf-8"))["outputs"][ctx.artifact]
+        ups = (Path(REPO) / out["ups"]["file"]).read_bytes()
+        if out["base_sha1"] != descriptor["rom_sha1"] or hashlib.sha256(ups).hexdigest() != out["ups"]["sha256"]:
+            raise ValueError("Gen 2 overlay provenance disagrees with the clean base or its UPS")
+        stage = ups_apply(rom.read_bytes(), ups)
+        launch_sha1 = hashlib.sha1(stage).hexdigest()
+        if launch_sha1 != out["sha1"]:
+            raise ValueError("Gen 2 overlay image differs from its provenance sha1")
+        rom = (Path(REPO) / _GEN2_OVERLAY_STAGE.format(title=descriptor["title"])).resolve()
+        extra_env["SLINK_GEN2_OVERLAY_SHA1"] = launch_sha1
+    database = Path(EMUHAWK).resolve().parent / "gamedb/gamedb_gbc.txt"
+    rows = [line.split("\t") for line in database.read_text(encoding="utf-8-sig").splitlines()
+            if line.split("\t", 1)[0].lower() == launch_sha1]
+    if stage is not None:
+        # An unknown hash is what makes BizHawk take the filename-derived SaveRAM name.
+        if rows or descriptor["saveram_name"] != g1.save_name_for(str(rom)):
+            raise ValueError("Gen 2 overlay gamedb/SaveRAM name binding contradictory")
+    elif (len(rows) != 1 or len(rows[0]) < 4 or rows[0][1] != "G" or rows[0][3] != "GBC"
+            or rows[0][2] + ".SaveRAM" != descriptor["saveram_name"]):
+        raise ValueError("Gen 2 SHA1/name/CGB gamedb binding missing or contradictory")
+    config = json.loads(Path(BIZHAWK_CONFIG).read_text(encoding="utf-8-sig"))
+    if not isinstance(config, dict) or not any(row.get("Type") == "Save RAM" and row.get("System") in g1._GB_PATH_SYSTEMS
+        for row in (config.get("PathEntries") or {}).get("Paths", [])):
+        raise ValueError("Gen 2 requires a parseable config with an explicit GB Save RAM path entry")
+    env = {"SLINK_GEN2_TITLE": descriptor["title"], "SLINK_GEN2_ROM_SHA1": descriptor["rom_sha1"],
+           "SLINK_GEN2_CORE_MODE": descriptor["core_mode"], "SLINK_GEN2_COLD": "1" if descriptor["cold"] else "0",
+           "SLINK_GEN2_SAVERAM_DIR": str(directory), "SLINK_GEN2_SAVERAM_NAME": descriptor["saveram_name"],
+           **extra_env}
+    return {**descriptor, "rom": rom, "directory": directory, "fixture": fixture, "speed_percent": speed_percent,
+            "env": env, "launch_sha1": launch_sha1, "stage": stage}
+
+
+def _gen2_config(plan, path):
+    # Existing GB config machinery; its legacy keyword selects only the CGB pins.
+    write_run_config(BIZHAWK_CONFIG, str(path), saveram_dir=str(plan["directory"]), purergb=True)
+    config = json.loads(path.read_text(encoding="utf-8-sig"))
+    speed = plan["speed_percent"]
+    config.update(SpeedPercent=speed or 100, SpeedPercentAlternate=speed or 100,
+                  ClockThrottle=True, Unthrottled=speed == 0)
+    sync = config["CoreSyncSettings"]["BizHawk.Emulation.Cores.Nintendo.Gameboy.Gameboy"]
+    if sync.get("ConsoleMode") != 2 or config.get("GbAsSgb") is not False or sync.get("RealTimeRTC") is not False:
+        raise ValueError("Gen 2 generated config did not establish CGB/RTC settings")
+    paths = (config.get("PathEntries") or {}).get("Paths", [])
+    if not all(Path(row["Path"]).resolve() == plan["directory"] for row in paths
+               if row.get("Type") == "Save RAM" and row.get("System") in g1._GB_PATH_SYSTEMS):
+        raise ValueError("Gen 2 config SaveRAM redirection disagrees")
+    path.write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+
+
+GENS["gen2"].update(plan=_gen2_plan, config=_gen2_config)
+
+
+def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False, *,
+             saveram_dir=None, fixture_path=None, speed_percent=None, env_overrides=None):
     """Run one gate. Returns (passed, result_path, text)."""
+    if type(timeout) not in (int, float) or not 0 < timeout <= 86400:
+        raise ValueError("gate timeout must be positive and bounded")
+    protected = {"SLINK_ROOT", "SLINK_GATE_TITLE"}.union(*(entry["protected_env"] for entry in GENS.values()))
+    overrides = dict(env_overrides or {})
+    for key, value in overrides.items():
+        if (not isinstance(key, str) or re.fullmatch(r"SLINK_[A-Z0-9_]+", key) is None or key in protected
+                or not isinstance(value, str) or "\x00" in value):
+            raise ValueError("gate environment overrides must be textual SLINK_* values outside protected bindings")
     if not os.path.exists(EMUHAWK):
         raise FileNotFoundError(f"EmuHawk not found at {EMUHAWK} (set $SLINK_EMUHAWK)")
     spec = GENS[gen_for(rom_key)]
-    play = spec["play"]
+    plan = spec["plan"](rom_key, saveram_dir, fixture_path, speed_percent) if spec["plan"] else None
+    play = spec.get("play")
+    if plan and _result_path_for(script) is None:
+        raise ValueError("a planned gate must declare its exact terminal result path")
 
-    if rom_key in spec["patched"]:
+    if plan:
+        rom_rel = plan["rom"].relative_to(Path(REPO).resolve()).as_posix()
+        if plan.get("stage") is not None:
+            plan["rom"].parent.mkdir(parents=True, exist_ok=True)
+            plan["rom"].write_bytes(plan["stage"])
+        plan["directory"].mkdir(parents=True, exist_ok=True)
+        destination = plan["directory"] / plan["saveram_name"]
+        if plan["cold"]:
+            destination.unlink(missing_ok=True)
+        else:
+            shutil.copyfile(plan["fixture"], destination)
+    elif rom_key in spec["patched"]:
         base_key, rom_rel, saveram_name = spec["patched"][rom_key]
         if rom_rel is None:
             # An overlay key stages ITS OWN cartridge (g1.purergb_overlay_dump applies the UPS)
@@ -281,10 +443,18 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
 
     tag = os.path.splitext(os.path.basename(script))[0]
     cfg_rel = f"patch/build/gate_cfg_{tag}_{rom_key}.ini"
-    if os.path.exists(BIZHAWK_CONFIG):
+    if plan:
+        spec["config"](plan, Path(REPO) / cfg_rel)
+    elif os.path.exists(BIZHAWK_CONFIG):
         write_run_config(BIZHAWK_CONFIG, os.path.join(REPO, cfg_rel), purergb=g1.is_purergb(rom_key))
 
     env = gate_env(rom_key, named_title(rom_key))
+    env.update(overrides)
+    if plan:
+        env.pop("SLINK_GATE_TITLE", None)
+        env.update(plan["env"])
+        if hashlib.sha1(plan["rom"].read_bytes()).hexdigest() != plan.get("launch_sha1", plan["rom_sha1"]):
+            raise ValueError("planned ROM changed before launch")
     cmd = [EMUHAWK, f"--lua={script}"]
     if os.path.exists(os.path.join(REPO, cfg_rel)):
         cmd.append(f"--config={cfg_rel}")
@@ -293,11 +463,12 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
     if not quiet:
         print(f"[gate] {tag} on {rom_key}/{target} …", file=sys.stderr)
     proc = subprocess.Popen(cmd, cwd=REPO, env=env)
-    deadline = time.time() + timeout
-    while time.time() < deadline and proc.poll() is None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline and proc.poll() is None:
         time.sleep(1)
     if proc.poll() is None:
         proc.kill()
+        proc.wait(timeout=10)
         return False, result, f"timed out after {timeout}s"
 
     text = ""
@@ -306,7 +477,7 @@ def run_gate(script, rom_key="red", target="town", timeout=240, quiet=False):
             text = f.read()
     verdict = next((ln for ln in reversed(text.splitlines())
                     if ln.startswith("RESULT:")), "")
-    return verdict.startswith("RESULT: PASS"), result, text
+    return proc.poll() == 0 and re.match(r"^RESULT: PASS(?:\s|$)", verdict) is not None, result, text
 
 
 def main():
@@ -316,9 +487,14 @@ def main():
     ap.add_argument("--rom", choices=sorted(ROM_TO_GEN), default="red")
     ap.add_argument("--target", choices=("town", "battle"), default="town")
     ap.add_argument("--timeout", type=int, default=240)
+    ap.add_argument("--saveram-dir", help="explicit isolated Gen 2 attempt SaveRAM directory")
+    ap.add_argument("--fixture-path", help="explicit Gen 2 warm-boot candidate; forbidden for cold boot")
+    ap.add_argument("--speed-percent", type=int, choices=(100, 300), help="explicit Gen 2 route/qualification speed")
     args = ap.parse_args()
 
-    passed, path, text = run_gate(args.script, args.rom, args.target, args.timeout)
+    passed, path, text = run_gate(args.script, args.rom, args.target, args.timeout,
+                                saveram_dir=args.saveram_dir, fixture_path=args.fixture_path,
+                                speed_percent=args.speed_percent)
     print(text.rstrip())
     print(f"\n[gate] {'PASS' if passed else 'FAIL'}  ({path})", file=sys.stderr)
     return 0 if passed else 1

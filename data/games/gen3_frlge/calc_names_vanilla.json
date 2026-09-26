@@ -1,0 +1,36 @@
+{
+  "_note": "Vanilla FireRed/LeafGreen/Emerald display name -> damage-calc Gen 3 (ADV) name (calc/calc/src/data/*.ts). Applied by Gen3Adapter.calc_name() when the run is not Radical Red (RR's own table is calc_names.json beside this file). Keys are names the server emits for a non-RR Gen 3 run: server/pokemon_data.py species names, server/data/moves/gen3_vanilla.py, server/data/items/gen3_vanilla.py. Guarded by tests/unit/test_calc_names_multigen.py.",
+  "species": {
+    "Farfetch'd": "Farfetch’d",
+    "Nidoran♀": "Nidoran-F",
+    "Nidoran♂": "Nidoran-M"
+  },
+  "move": {
+    "Ancientpower": "Ancient Power",
+    "Bubblebeam": "Bubble Beam",
+    "Doubleslap": "Double Slap",
+    "Dragonbreath": "Dragon Breath",
+    "Dynamicpunch": "Dynamic Punch",
+    "Extremespeed": "Extreme Speed",
+    "Faint Attack": "Feint Attack",
+    "Featherdance": "Feather Dance",
+    "Grasswhistle": "Grass Whistle",
+    "Hi Jump Kick": "High Jump Kick",
+    "Poisonpowder": "Poison Powder",
+    "Sand-Attack": "Sand Attack",
+    "Selfdestruct": "Self-Destruct",
+    "Smellingsalt": "Smelling Salts",
+    "Softboiled": "Soft-Boiled",
+    "Solarbeam": "Solar Beam",
+    "Sonicboom": "Sonic Boom",
+    "Thunderpunch": "Thunder Punch",
+    "Thundershock": "Thunder Shock",
+    "Vicegrip": "Vise Grip"
+  },
+  "item": {
+    "BlackGlasses": "Black Glasses",
+    "BrightPowder": "Bright Powder",
+    "NeverMeltIce": "Never-Melt Ice",
+    "TwistedSpoon": "Twisted Spoon"
+  }
+}

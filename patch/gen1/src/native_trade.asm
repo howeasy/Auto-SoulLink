@@ -18,8 +18,10 @@ ENDM
 SECTION "SLink Native Trade", ROMX[$4800], BANK[SLINK_TRADE_BANK]
 SlinkTradeApply::
     ; Cheap last-moment geometry/ownership refusal. Full66-byte semantic checks,
-    ; save/ROM admission, exact prepared digest and key collision checks are the
-    ; caller's prerequisites; this entry alone must never grant admission.
+    ; ROM admission, exact prepared digest and key collision checks are the
+    ; caller's prerequisites; this entry alone must never grant admission. The
+    ; save consent is the receptionist's and the prompt's; the commit itself
+    ; ends in a full native save below.
     ld a, [wIsInBattle]
     and a
     jp nz, .refused
@@ -201,7 +203,6 @@ SlinkTradeApply::
     nativecall UpdateSprites
     nativecall Delay3
     nativecall PlayDefaultMusic
-    nativecall SavePartyAndDexData
     ld d, 0
     jr .restore
 .unreachableAppendFailure
@@ -225,6 +226,14 @@ SlinkTradeApply::
     ld [wOptions], a
     ld a, d
     and a
+    ret nz
+    ; Vanilla saves only party+dex after a Cable Club trade (pret engine/link/
+    ; cable_club.asm:864) because its entry save left nothing else to change.
+    ; This player roamed since consenting, so save everything, after the
+    ; restores above (SaveMainData records wOptions and hTileAnimations).
+    nativecall SaveGameData
+    xor a
+    ld d, a
     ret
 .refused
     ld d, 1

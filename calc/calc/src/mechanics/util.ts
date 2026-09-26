@@ -665,12 +665,31 @@ export function getStatDescriptionText(
   return desc;
 }
 
+// pureRGB is active for a Generation when it's Gen 1 and its type table carries pureRGB's own
+// Crystal type (data/purergb.ts's useDex('purergb') swaps Gen 1's species/moves/type chart in and
+// out at runtime; no module-scope flag needed since gen.types already reflects the live swap, and
+// mechanics/ imports nothing from data/purergb - the two compiled bundles don't share module scope).
+export function isPureRGB(gen: Generation): boolean {
+  return gen.num === 1 && !!gen.types.get('crystal' as ID);
+}
+
 export function handleFixedDamageMoves(attacker: Pokemon, move: Move) {
-  if (move.named('Seismic Toss', 'Night Shade')) {
+  // pureRGB (Gen 1 only) repurposed Night Shade, Dragon Rage and Sonic Boom into normal
+  // power-based moves - data/moves/moves.asm (pureRGB source): NIGHT_SHADE and DRAGON_RAGE both
+  // carry effect NO_ADDITIONAL_EFFECT (power 65/80) and SONICBOOM carries FLINCH_SIDE_EFFECT1
+  // (power 50); none of the three carry SPECIAL_DAMAGE_EFFECT any more. Only SEISMIC_TOSS still
+  // does (power 1, unchanged), so it stays fixed-damage in both vanilla and pureRGB. Sonic Boom's
+  // raw pureRGB name ("Sonicboom") only collides with this move.named() check once it's renamed to
+  // the calc's canonical "Sonic Boom" spelling (tools/gen_purergb_calc_patch.py's calc_names
+  // rename, docs/calc_multigen/PURERGB_MECHANICS.md) - Night Shade and Dragon Rage already share
+  // vanilla's exact spelling with no rename involved, so this gating is required for correctness,
+  // not just for the renamed case.
+  const pureRGBGen1 = isPureRGB(move.gen);
+  if (move.named('Seismic Toss') || (!pureRGBGen1 && move.named('Night Shade'))) {
     return attacker.level;
-  } else if (move.named('Dragon Rage')) {
+  } else if (!pureRGBGen1 && move.named('Dragon Rage')) {
     return 40;
-  } else if (move.named('Sonic Boom')) {
+  } else if (!pureRGBGen1 && move.named('Sonic Boom')) {
     return 20;
   }
   return 0;

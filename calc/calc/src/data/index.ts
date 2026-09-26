@@ -13,6 +13,7 @@ export const Generations: I.Generations = new (class {
   }
 })();
 
+
 class Generation implements I.Generation {
   num: I.GenerationNum;
 

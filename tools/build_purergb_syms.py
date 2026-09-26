@@ -108,6 +108,17 @@ def _sha256(path: pathlib.Path) -> str | None:
     return hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else None
 
 
+def _lf(data: bytes) -> bytes:
+    """rgbds on Windows writes CRLF; the repo pins .sym/.map as LF (.gitattributes).
+
+    The --check comparison, the published bytes and the provenance hashes must all be taken
+    on LF or a Windows rebuild reports drift against its own committed output and stamps
+    CRLF hashes into build_provenance.json — the bug c411b2f3 had to repair by hand.
+    build_purergb_overlay.py:135-138 normalises for the same reason.
+    """
+    return data.replace(b"\r\n", b"\n")
+
+
 def _toolchain_record(rgbds_bin: pathlib.Path, devkit_bin: pathlib.Path, lock: dict) -> dict:
     return {
         "rgbds": {
@@ -192,7 +203,8 @@ def build_rom_syms(
         drift = [
             name
             for name, src in sym_files.items()
-            if not (OUT_DIR / name).exists() or (OUT_DIR / name).read_bytes() != src.read_bytes()
+            if not (OUT_DIR / name).exists()
+            or _lf((OUT_DIR / name).read_bytes()) != _lf(src.read_bytes())
         ]
         if drift:
             print(f"[purergb] --check: drift from committed data/purergb/: {drift}", file=sys.stderr)
@@ -206,7 +218,7 @@ def build_rom_syms(
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     symbol_hashes: dict[str, str] = {}
     for name, src in sym_files.items():
-        data = src.read_bytes()
+        data = _lf(src.read_bytes())
         (OUT_DIR / name).write_bytes(data)
         symbol_hashes[name] = hashlib.sha256(data).hexdigest()
 

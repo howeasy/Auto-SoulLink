@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "purpose": "P1_ARTIFACT_MATRIX_ONLY",
+  "foundation": "gen2_gsc",
+  "title": "silver",
+  "pack": "gen2_silver",
+  "selected_revision": "US",
+  "source_lock_sha256": "113b41354f65a9859bf878cedb334de27e0c9e3ff0f2cc13693889dfd524a3ed",
+  "gate": {
+    "id": "G1",
+    "state": "ADMITTED",
+    "authority": "O-22+O-23"
+  },
+  "unknown_hash_policy": "REFUSE",
+  "refused_kinds": [
+    "archipelago",
+    "randomized",
+    "unknown"
+  ],
+  "authorized_title_pairings": [
+    [
+      "crystal",
+      "crystal"
+    ],
+    [
+      "crystal",
+      "gold"
+    ],
+    [
+      "crystal",
+      "silver"
+    ],
+    [
+      "gold",
+      "gold"
+    ],
+    [
+      "gold",
+      "silver"
+    ],
+    [
+      "silver",
+      "silver"
+    ]
+  ],
+  "artifact_kind_compatibility": {
+    "clean": {
+      "clean": "REQUIRES_G1",
+      "overlay": "REFUSED",
+      "ghost": "REFUSED"
+    },
+    "overlay": {
+      "clean": "REFUSED",
+      "overlay": "REQUIRES_G4",
+      "ghost": "REFUSED"
+    },
+    "ghost": {
+      "clean": "REFUSED",
+      "overlay": "REFUSED",
+      "ghost": "REFUSED"
+    }
+  },
+  "artifacts": [
+    {
+      "id": "pokesilver",
+      "kind": "clean",
+      "revision": "US",
+      "selection": "SELECTED",
+      "lock_output": "pokesilver",
+      "status": "BUILT",
+      "sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+      "build_provenance_sha256": "dbd9b672a001c50580fc6a318fa2a500b15987f371bb7f948a8af6eb9bb8462e"
+    },
+    {
+      "id": "silver_overlay",
+      "kind": "overlay",
+      "revision": "US",
+      "selection": "FUTURE",
+      "status": "BUILT",
+      "sha1": "583d8df4deb1831523521d20065504258cbaba28",
+      "md5": "f184ad59dbde870b2b358d808988fddc",
+      "base_sha1": "49b163f7e57702bc939d642a18f591de55d92dae",
+      "ups": {
+        "file": "patch/dist/SLink-Silver.ups",
+        "sha256": "c9ffe317f696b65a04c810809c9642d7a1c1a7ab1729a126c1d8ad1b91eb3809"
+      }
+    },
+    {
+      "id": "silver_ghost",
+      "kind": "ghost",
+      "revision": "US",
+      "selection": "FUTURE",
+      "status": "PLANNED"
+    }
+  ]
+}

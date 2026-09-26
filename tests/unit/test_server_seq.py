@@ -98,7 +98,7 @@ async def test_a_new_connection_starts_the_seq_counter_over(srv, port):
 async def test_a_tick_before_hello_never_reaches_dispatch(srv, port, caplog):
     caplog.set_level(logging.WARNING, logger="server.server")
     async with _Conn(port) as c:
-        assert (await c.send(_tick(1)))["commands"] == [{"cmd": "noop"}]
+        assert (await c.send(_tick(1)))["commands"] == [{"cmd": "noop", "refused": "no_hello"}]
         await c.send(_tick(2))
         # ...and hello still works afterwards, on the same connection.
         await c.send(dict(HELLO_A, seq=3))
@@ -116,11 +116,27 @@ async def test_a_repeated_seq_on_one_connection_is_still_a_duplicate(srv, port):
     async with _Conn(port) as c:
         await c.send(dict(HELLO_A, seq=1))
         await c.send(_tick(2))
-        assert (await c.send(_tick(2)))["commands"] == [{"cmd": "noop"}]
-        assert (await c.send(_tick(1)))["commands"] == [{"cmd": "noop"}]
+        assert (await c.send(_tick(2)))["commands"] == [{"cmd": "noop", "refused": "duplicate"}]
+        assert (await c.send(_tick(1)))["commands"] == [{"cmd": "noop", "refused": "duplicate"}]
 
     assert [d[2] for d in srv.dispatched] == [1, 2], srv.dispatched
 
+
+# ── INV-SERVER x INV-CLIENT: a line the server did not process says so (`refused`) ──────────────
+# The client retires an owed report only on a reply WITHOUT a `refused` command.
+
+@pytest.mark.asyncio
+async def test_every_unprocessed_line_is_answered_with_a_refused_noop(srv, port):
+    async with _Conn(port) as c:
+        assert (await c.send(_tick(1)))["commands"] == [{"cmd": "noop", "refused": "no_hello"}]
+        accepted = await c.send({**HELLO_A, "seq": 1})
+        assert not any(cmd.get("refused") for cmd in accepted["commands"])
+        assert (await c.send(_tick(1)))["commands"] == [{"cmd": "noop", "refused": "duplicate"}]
+        srv.state.identity_error["a"] = "wrong save"
+        assert (await c.send(_tick(2)))["commands"] == [{"cmd": "noop", "refused": "identity"}]
+        srv.state.identity_error.pop("a")
+        srv.is_admitted = lambda pid: False
+        assert (await c.send(_tick(3)))["commands"] == [{"cmd": "noop", "refused": "admission"}]
 
 @pytest.mark.asyncio
 async def test_ghost_positions_do_not_wake_sse_listeners(srv, port):
@@ -137,3 +153,15 @@ async def test_ghost_positions_do_not_wake_sse_listeners(srv, port):
         await c.send(_tick(7))
     assert len(pings) > after_hello, "a tick still notifies"
 
+
+
+@pytest.mark.asyncio
+async def test_a_newer_hello_supersedes_an_older_connection(srv, port):
+    """KEY-SCOPE-5: a delayed tick from a superseded socket must not roll the party back."""
+    async with _Conn(port) as first:
+        await first.send(dict(HELLO_A, seq=1))
+        async with _Conn(port) as second:
+            await second.send(dict(HELLO_A, seq=1))
+            assert (await first.send(_tick(2)))["commands"] == [{"cmd": "noop", "refused": "superseded"}]
+            assert not (await second.send(_tick(2)))["commands"][0].get("refused")
+    assert [d[1] for d in srv.dispatched] == ["hello", "hello", "tick"], srv.dispatched

@@ -14,7 +14,11 @@ const SV: StatID[] = GSC;
 export const STATS: Array<Array<StatID | 'spc'> | StatID[]> =
   [[], RBY, GSC, ADV, DPP, BW, XY, SM, SS, SV];
 
-type HPTypeName = Exclude<TypeName, 'Normal' | 'Fairy' | 'Stellar' | '???'>;
+// pureRGB's 6 extra Gen 1 types (docs/calc_multigen/PURERGB_MECHANICS.md) are excluded here too -
+// Hidden Power doesn't exist until Gen 2, and none of pureRGB's types apply there.
+type HPTypeName = Exclude<TypeName,
+  'Normal' | 'Fairy' | 'Stellar' | '???' |
+  'Crystal' | 'Bonemerang' | 'Tri' | 'Floating' | 'Magma' | 'Typeless'>;
 
 const HP_TYPES = [
   'Fighting', 'Flying', 'Poison', 'Ground', 'Rock', 'Bug', 'Ghost', 'Steel',
@@ -117,7 +121,9 @@ export const Stats = new (class {
     nature?: string
   ) {
     if (gen.num < 1 || gen.num > 9) throw new Error(`Invalid generation ${gen.num}`);
-    if (gen.num < 3) return this.calcStatRBY(stat, base, iv, level);
+    // SLink: in Gen 1/2 `ev` is raw stat experience (0-65535), the same meaning Pokemon uses, so
+    // the UI's stat totals (shared_controls calcStat) match the damage calc.
+    if (gen.num < 3) return this.calcStatRBY(stat, base, iv, level, ev);
     return this.calcStatADV(gen.natures, stat, base, iv, ev, level, nature);
   }
 
@@ -153,15 +159,25 @@ export const Stats = new (class {
     }
   }
 
-  calcStatRBY(stat: StatID, base: number, iv: number, level: number) {
-    return this.calcStatRBYFromDV(stat, base, this.IVToDV(iv), level);
+  // statExp defaults to 65535 (max), which reproduces the old hard-coded "+ 63" term below -
+  // every trainer/wild mon before this fix implicitly had max stat exp, so this keeps existing
+  // output unchanged unless a caller passes a real value (0-65535).
+  calcStatRBY(stat: StatID, base: number, iv: number, level: number, statExp = 65535) {
+    return this.calcStatRBYFromDV(stat, base, this.IVToDV(iv), level, statExp);
   }
 
-  calcStatRBYFromDV(stat: StatID, base: number, dv: number, level: number) {
+  // Formula + the 255 sqrt cap: pret/pokered home/move_mon.asm CalcStat (loop at lines 54-93,
+  // `srl b; srl b` divide-by-4 at line 163-164) and pret/pokecrystal engine/pokemon/move_mon.asm
+  // CalcMonStatC (line ~1424) + engine/math/get_square_root.asm GetSquareRoot (NUM_SQUARE_ROOTS
+  // = 255, line 1) - the game increments a root candidate up to 255 and stops even if 255^2 is
+  // still short of statExp, so true ceil(sqrt(65535)) = 256 is capped to 255 (floor(255/4) = 63,
+  // matching the old hard-coded constant).
+  calcStatRBYFromDV(stat: StatID, base: number, dv: number, level: number, statExp = 65535) {
+    const bonus = Math.floor(Math.min(255, Math.ceil(Math.sqrt(statExp))) / 4);
     if (stat === 'hp') {
-      return Math.floor((((base + dv) * 2 + 63) * level) / 100) + level + 10;
+      return Math.floor((((base + dv) * 2 + bonus) * level) / 100) + level + 10;
     } else {
-      return Math.floor((((base + dv) * 2 + 63) * level) / 100) + 5;
+      return Math.floor((((base + dv) * 2 + bonus) * level) / 100) + 5;
     }
   }
 

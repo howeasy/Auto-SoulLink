@@ -49,9 +49,11 @@ def test_clients_exist():
     """Self-check: a bad glob would make every test below pass vacuously.
 
     Four, not five: Gen 1 left lua/clients/ for lua/gen1/ (see the note above). Written as a
-    lower bound so this passes both before and after the old client's deletion.
+    lower bound so this passes both before and after the old client's deletion. P3b.8: three,
+    Gen 2's legacy client left the same way (lua/gen2/ replaces it). C5-6: two, the old Gen 3
+    client was deleted too (lua/gen3/ replaces it).
     """
-    assert len(CLIENTS) >= 3, f"expected at least 3 clients, found {CLIENTS}"
+    assert len(CLIENTS) >= 2, f"expected at least 2 clients, found {CLIENTS}"
 
 
 @pytest.mark.parametrize("path", CLIENTS, ids=lambda p: os.path.basename(p))
@@ -98,47 +100,10 @@ def test_frame_handler_is_wrapped_in_pcall(path):
 PAYLOAD_FIELDS = {"party_mon": ["stats"]}
 
 
-# ── Invariant 3: the withdraw must be handed its cached stats ────────────────
-
-GB_CLIENTS = [p for p in CLIENTS if "gen1" in os.path.basename(p) or "gen2" in os.path.basename(p)]
-
-
-@pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
-def test_retrieve_is_called_with_cached_stats(path):
-    """`M.retrieveBoxMon(key)` with no second argument cannot work.
-
-    A Game Boy box struct drops the party-only tail — Gen 1 loses maxHP and the computed
-    stats, Gen 2 loses those AND current HP. retrieveBoxMon refuses outright rather than
-    improvise (handing back a mon with zeroed Attack is silent, permanent save corruption
-    and the mon is already out of the box). So a one-argument call does not degrade party
-    sync, it disables it: every withdraw fails. Gen 2 shipped exactly that.
-    """
-    src = _strip_comments(_src(path))
-    calls = re.findall(r"M\.retrieveBoxMon\(([^)]*)\)", src)
-    assert calls, f"{os.path.basename(path)} never calls M.retrieveBoxMon"
-    for args in calls:
-        assert "," in args, (
-            f"{os.path.basename(path)} calls M.retrieveBoxMon({args.strip()}) with no stats "
-            f"block — the withdraw will refuse every time")
-
-
-@pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
-def test_deferred_writes_are_gated_on_the_overworld(path):
-    """`not in_battle` is not a safe-state gate.
-
-    It is also true in the PC box UI, the party menu and the naming screen, where the open
-    UI holds its own copy of the data and writes it back over ours. isInOverworld() adds the
-    per-generation "something else owns the game" address — wJoyIgnore/wFontLoaded in Gen 1,
-    wScriptRunning in Gen 2 (measured, not chosen by name: wJoypadDisable reads 0 with a
-    Crystal menu open, and wTextboxFlags is text-speed configuration).
-    """
-    src = _strip_comments(_src(path))
-    m = re.search(r"if\s+writes_enabled\s+and\s+([^\n]*?)#pending_sync_cmds\s*>\s*0", src)
-    assert m, f"{os.path.basename(path)}: could not find the pending_sync_cmds gate"
-    guard = m.group(1)
-    assert "isInOverworld" in guard, (
-        f"{os.path.basename(path)} gates deferred writes on `{guard.strip()}` rather than "
-        f"M.isInOverworld() — writes can land while a menu owns the data")
+# ── Invariants 3-6 (GB clients only) retired with their last subject ────────────
+# (retrieveBoxMon stats, overworld-gated deferred writes, fault-contained executor and
+# dispatcher) were asserted on lua/clients/gen2_crystal_client.lua, which P3b.8 removed; the
+# rewritten Gen 1/Gen 2 clients under lua/gen1/ and lua/gen2/ carry their own tests.
 
 
 @pytest.mark.parametrize("path", CLIENTS, ids=lambda p: os.path.basename(p))
@@ -157,41 +122,6 @@ def test_deferred_enqueue_carries_payload_fields(path):
                         f"  {os.path.basename(path)}:{line} enqueues {cmd_name!r} without "
                         f"{field!r}; the executor reads cmd.{field} and will always see nil")
     assert not problems, "\n".join(problems)
-
-
-@pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
-def test_deferred_sync_executor_is_fault_contained(path):
-    """A raise in the deferred executor does not lose one command — it wedges the client.
-
-    The executor writes real party/box/SRAM memory. Unwrapped, an error escapes
-    `on_frame`, so the `table.remove(pending_sync_cmds, 1)` at the bottom never runs,
-    the same command re-raises on the next frame, and every step after it —
-    trainer_battle_start, the `safe` event, send_tick, the F-keys, the HUD — stops
-    for the rest of the session. `on_frame_safe`'s pcall keeps the process alive,
-    which is precisely what makes it silent: the client stays connected and goes
-    quiet. Gen 1 shipped this way; Gen 2 did not.
-    """
-    src = _strip_comments(_src(path))
-    m = re.search(r"if\s+writes_enabled\s+and[^\n]*#pending_sync_cmds\s*>\s*0\s*then(.*?)"
-                  r"if\s+handled\s+then\s+table\.remove", src, flags=re.S)
-    assert m, f"{os.path.basename(path)}: could not find the deferred executor block"
-    assert "pcall(" in m.group(1), (
-        f"{os.path.basename(path)} runs the deferred sync executor without pcall — one "
-        f"raise wedges the command queue and silences the client for the session")
-
-
-@pytest.mark.parametrize("path", GB_CLIENTS, ids=lambda p: os.path.basename(p))
-def test_command_dispatcher_is_fault_contained(path):
-    """One malformed command must not abort the rest of the batch, or the frame.
-
-    `replace_rival_team` runs hexToBytes over a server-supplied string before writing
-    it into wEnemyMons, so the payload is not trusted input.
-    """
-    src = _strip_comments(_src(path))
-    m = re.search(r"local function dispatch_commands\(cmds\)(.*?)\nend\n", src, flags=re.S)
-    assert m, f"{os.path.basename(path)}: could not find dispatch_commands"
-    assert "pcall(" in m.group(1), (
-        f"{os.path.basename(path)} dispatches server commands without pcall")
 
 
 GEN1_CLIENT = os.path.join(REPO, "lua", "gen1", "client.lua")

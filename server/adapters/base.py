@@ -263,6 +263,12 @@ class GameRulesAdapter(ABC):
         """
         return 0
 
+    def reports_box_census(self) -> bool:
+        """KEY-SCOPE-5: whether this foundation's Lua client stamps each complete PC-box scan
+        with `pc_boxes_generation`. When True, a snapshot without one is NO census (a key_change
+        is refused, retiring nothing); when False the server keeps the legacy presence check."""
+        return False
+
     def supports_info_panel(self) -> bool:
         """Whether this game's Lua client can render the native in-game info panel.
 
@@ -500,6 +506,49 @@ class GamePresentationAdapter(ABC):
         adapters whose ROM text differs from the calc's names override it.
         """
         return name
+
+    def calc_species(self, species_id: int) -> str:
+        """Return the damage calc's species name for an internal species id.
+
+        Default is `calc_name("species", species_name(species_id))` -- the same expression
+        every caller used inline before this existed, so behaviour is unchanged for every
+        adapter that doesn't override it. An adapter overrides this instead of `species_name`
+        when the two need to diverge: pureRGB's 7 alternate forms (Hardened Onix, Volcanic
+        Magmar, ...) all display in-game with their BASE species' name (species_name(172) ==
+        species_name(34) == "Onix" -- that's the whole trick behind an alternate form), which
+        `species_name` must keep returning for HUD/log text, but the calc needs a name unique
+        per species (both a JS object key and a toID() lookup key in species.ts), so it can't
+        use that colliding text -- see docs/calc_multigen/PURERGB_MECHANICS.md §2.
+        """
+        return self.calc_name("species", self.species_name(species_id))
+
+    def calc_profile(self) -> dict | None:
+        """Return {"gen": int, "dex": str} for the bundled Smogon calc, or None.
+
+        gen is the calc generation to run (1/2/3/9). dex is which data set to use:
+        "rr" | "vanilla" | "purergb". None means this game's calc numbers are not
+        verified yet, so the Calc tab and dashboard calc preview are hidden.
+        """
+        return None
+
+    def calc_nature(self, key: str) -> str | None:
+        """Nature name for the calc, or None when the game has no natures (Gen 1/2).
+
+        Default None.
+        """
+        return None
+
+    def calc_stats(self, detail: dict) -> dict | None:
+        """Calc-ready stat inputs decoded from the party snapshot `detail` (keys include
+        "key", "level", "blob_hex" when the client sent one). Default None = unknown
+        (the calc keeps its defaults). Shape, stat ids as the calc uses them:
+          Gen 3+: {"ivs": {hp,atk,def,spa,spd,spe}, "evs": {hp,atk,def,spa,spd,spe},
+                   "stats": {hp,atk,def,spa,spd,spe}}
+          Gen 1/2: {"dvs": {atk,def,spe,spc}, "stat_exp": {hp,atk,def,spe,spc} (raw 0-65535),
+                    "stats": {hp,atk,def,spa,spd,spe}}  (Gen 1 spa == spd == Special)
+        "stats" are the in-game computed stats; the calc warns when its own result differs.
+        """
+        return None
 
     def sprite_src(self, species_id: int) -> str:
         """Return just the sprite image URL for a species (no HTML wrapping).

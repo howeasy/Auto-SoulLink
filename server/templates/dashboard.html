@@ -28,7 +28,7 @@
       <span class="mk-hdr-spacer"></span>
       <nav class="mk-tabs" aria-label="Run">
         <a class="mk-tab active" href="/" aria-current="page">Board</a>
-        <a class="mk-tab" href="/calc/normal.html">Calc</a>
+        {% if show_calc %}<a class="mk-tab" href="/calc/normal.html">Calc</a>{% endif %}
         <a class="mk-tab" href="/debug">Debug</a>
       </nav>
     </header>

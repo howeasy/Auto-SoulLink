@@ -1,6 +1,9 @@
 # The overlay sources are hashed raw by overlay_provenance.json; keep them LF on every checkout.
 patch/gen1/purergb/** text eol=lf
 patch/upr/*.patch text eol=lf
+# Gen 2 overlay sources, hashed into data/gen2/overlay_provenance.json (the builder also hashes them LF-normalized).
+patch/gen2/src/** text eol=lf
+patch/gb/slink_abi.inc text eol=lf
 
 # These are hashed byte-for-byte against sha256 pins in data/games/gen1_rby/profile.json,
 # data/games/gen1_purergb/profile.json, data/purergb/build_provenance.json and
@@ -18,3 +21,23 @@ data/purergb/*.map text eol=lf
 # failed the G4 release gate rehearsal (docs/gen3/probes/fc_release_gate_quick_d0a4bba5.txt).
 data/games/gen3_*/*.json text eol=lf
 data/gen3/pret/* text eol=lf
+# Gen 2 RGBDS snapshots are hashed as emitted (CRLF on the pinned Windows toolchain).
+# Preserve these bytes in Git; text normalization would invalidate the source lock.
+data/gen2/*.sym -text whitespace=cr-at-eol
+data/gen2/*.map -text whitespace=cr-at-eol
+data/gen2_sources.lock.json text eol=lf
+data/gen2/*.json text eol=lf
+data/games/gen2_*/*.json text eol=lf
+data/games/gen2_*/charmap.lua text eol=lf
+
+# Gen 2 coverage-map lane hashes these raw working-tree bytes against pins in
+# docs/gen2/gen2_coverage_map.md (tools/coverage_map.py --requirements/--protocol/--map).
+# Without eol=lf, a CRLF checkout (core.autocrlf=true) mismatches the LF-computed pins.
+docs/gen2/gen2_requirements.md text eol=lf
+docs/protocol.md text eol=lf
+docs/gen2/gen2_coverage_map.md text eol=lf
+
+# Written LF by tools/gen_gen1_write_checkpoint.py --kind overlay (write_text newline="
+"); index is LF too.
+# Without this, core.autocrlf=true reports the LF working copy as modified with no content diff.
+data/games/gen1_purergb/write_checkpoint_overlay.json text eol=lf

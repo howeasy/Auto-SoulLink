@@ -636,9 +636,9 @@ not — there is nothing to run by hand.
 ```bash
 SLINK_LIVE=1 pytest tests/live/test_gen1_gates.py -q   # 5 cases: patch + menu-row + the randomized panel
 python tools/verify_gen1_release.py                    # ALL of it, fail-closed (a skip is a failure)
-SLINK_LIVE=1 pytest tests/live/test_gen2_gates.py -q   # 2 gates, Crystal only
-SLINK_E2E=1  pytest tests/e2e/test_duo_gen1.py -q      # 18 cases: 9 scenarios × 2 pairings
-SLINK_E2E=1  pytest tests/e2e/test_duo_gen2.py -q      # faint, boxsync, memorialize
+SLINK_LIVE=1 pytest tests/live/test_gen2_new_gates.py tests/live/test_gen2_frame_align.py tests/live/test_gen2_write_windows.py -q   # inspect, frame-align, write windows
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen1_new.py -q  # 18 cases: 9 scenarios × 2 pairings
+SLINK_E2E=1  pytest tests/e2e/test_duo_gen2_new.py -q  # link scenarios, Crystal/Gold/Silver pairings
 ```
 
 The same runs can be driven directly. `--scenario all` is filtered by `--game`, so it will not
@@ -647,9 +647,9 @@ with `--list` first, and note that a single scenario that does not apply fails i
 the reason rather than after two emulators have booted:
 
 ```bash
-python tools/e2e_duo.py --game gen2 --list             # faint, boxsync, memorialize
-python tools/e2e_duo.py --game gen2 --scenario memorialize
-python tools/e2e_duo.py --game gen1_yellow --scenario all
+python tools/e2e_duo.py --game gen2_new --list          # link, gen2_faint
+python tools/e2e_duo.py --game gen2_new --scenario link
+python tools/e2e_duo.py --game gen1_new --scenario all
 ```
 
 ### Gen 1 gates
@@ -672,17 +672,16 @@ be wrong.
 
 ### Gen 2 gates
 
-`tests/live/test_gen2_gates.py` — same shape, **Crystal only**:
+Three files, one per concern, each parametrised over the titles with a qualified fixture
+(Crystal and Gold today; Silver shares Gold's receipt, O-23):
 
-| Gate | Runs on | Covers |
+| Gate | Runs | Covers |
 |---|---|---|
-| `test_gen2_memory_gate.lua` | crystal | reads only: mon key shape, the held-item byte Gen 1 does not have, the Sp.Atk/Sp.Def split (probed by writing one and re-reading, so an alias cannot pass), PP-Up masking, the ball pocket, the map **group + number** pair, 14 boxes, the memorial box count |
-| `test_gen2_writes_gate.lua` | crystal | everything that mutates a cartridge: `force_faint`, deposit, withdraw, memorial burial |
+| `tests/live/test_gen2_new_gates.py` (`lua/tests/gen2_inspect_gate.lua`) | per title, warm boot | party/box/name decode (R-1) cross-checked against `server/adapters/gen2_codec.py`, and an independent stat recomputation (R-2) |
+| `tests/live/test_gen2_frame_align.py` (`lua/tests/gen2_frame_align.lua`) | per title, battle fixture | the engine-hook sites in `engine_signals.json` and frame-alignment (route to a wild encounter, catch, native save) |
+| `tests/live/test_gen2_write_windows.py` (`lua/tests/gen2_write_windows.lua`) | per title, town + battle fixtures | write-window liveness and persistence: party write, box deposit, native save/reload, a refused mid-battle write |
 
-One cartridge, and stated rather than silently absent. Gold, Silver and AP Crystal are supported
-for correctness — routing, profile keys, per-variant addresses, all checked against pret by
-`tools/verify_profile_addresses.py` — but there are no dumps to run them against, and **a live
-matrix entry that silently skips reads exactly like one that passes.**
+Archipelago Crystal is refused outright (O-25, `docs/gen2/REVIEW_RECORD.md`), not gated.
 
 Every address in the Gen 2 profile had already been checked against pret. What that cannot see is
 whether the numbers mean anything on a running cartridge: a correct address read through the
@@ -700,13 +699,14 @@ by what is actually shared:
 
 | Files | Used by | Scenarios |
 |---|---|---|
-| `duo_gb_main.lua`, `scenario_gb_{faint,boxsync,memorialize}.lua` | Gen 2 only | `faint`, `boxsync`, `memorialize` |
+| `duo_gen2_main.lua`, `scenario_gen2_{link,faint}.lua` | Gen 2 (Crystal/Gold/Silver) | `link`, `gen2_faint` |
 | `duo_gen1_main.lua`, `scenarios.<name>()` (no prefix lookup) | Gen 1 (rewritten client) | 18 `gen1_new` scenarios — `link_new`, `deadzone_new`, `linked_faint_bench_new`, `linked_faint_active_new`, `reconnect_new`, `ball_gate_new`, `trade_new`, `soft_reset_new`, `trade_decline_new`, `explode_new`, `pc_ops_new`, `changebox_new`, `whiteout_new`, `type_clause_new`, `species_clause_new`, `poison_new`, `rival_swap_new`, `admit_randomized_new` |
 
 The old `scenario_gen1_{whiteout,playthrough,deadzone,dupes,rivalswap,explode_g1}.lua` prefix
 files and the `gen1`/`gen1_yellow` duo titles they drove no longer exist — deleted in the
 harness deletion sweep (`2395145`/`832d499`), separately from the legacy client's own deletion
-(`21ff0d7`); `duo_gb_main.lua` now serves Gen 2 only.
+(`21ff0d7`). The legacy Gen 2 duo chain (`duo_gb_main.lua`, `scenario_gb_{faint,boxsync,
+memorialize}.lua`, `gatelib.lua`) is likewise retired, replaced by `duo_gen2_main.lua` above.
 
 **Gen 1** runs all eighteen `gen1_new` scenarios, Red as player A against Blue as player B —
 there is no Yellow pairing in this harness (Yellow's −1 WRAM shift is instead exercised by the
@@ -744,7 +744,7 @@ Committed, both generations:
 | Fixture | Rebuild |
 |---|---|
 | `tests/fixtures/gen1/{red,blue,yellow}_{town,battle}.SaveRAM` | `python tools/gen1_playthrough.py --rom red --target town` |
-| `tests/fixtures/gen2/crystal_town.SaveRAM` | `python tools/gen2_playthrough.py` |
+| `tests/fixtures/gen2/{crystal,gold,silver}_{town,battle}.SaveRAM` | no one-shot CLI today. `tools/gen2_playthrough.py` (the old single-title, town-only builder) is retired along with the legacy duo chain; `tools/gen2_fixtures.py` is the read-only plan/qualification side (`fixture_manifest`, `run_play`, `qualify`) that a played-and-qualified rebuild is composed from, orchestrated per session through `tools/run_gb_gate.py` |
 
 These are **battery saves, not savestates**. A `.SaveRAM` is plain SRAM and is not
 version-locked, so unlike the Gen 3 `.State` files they never rot when BizHawk is upgraded —
@@ -781,7 +781,6 @@ fails and is printed.
 | `unit` | the source oracles, the rules, and every table generated from the decomps |
 | `rom-layout` | every flat ROM offset and companion-patch span, against the real dumps |
 | `lua-parse` | every Lua file parses under the runtime the clients actually use |
-| `profile-addresses` | WRAM/SRAM symbols against pret |
 | `patch-build` | the clean dumps still hold what the manifest expects to displace |
 | `live-gates` | real engine behaviour on real cartridges, including the panel on a randomized+injected ROM |
 | `duo-pairs` | every scenario on both pairings, through the real server |
@@ -795,11 +794,9 @@ finishes in 65 seconds idle has been observed timing out at its 1500-second budg
 unit-test run competing for the same cores. That is the emulator being starved, not a defect,
 and the gate cannot tell the two apart.
 
-There is a second verifier the gate calls: `tools/verify_gen1_rom_layout.py`.
-`verify_profile_addresses.py` checks WRAM/SRAM symbols against pret and structurally *cannot*
-check a flat file offset or a patch span — different claims need different evidence. It runs
-29 checks across all three dumps, and a ROM that is absent is reported rather than counted as
-a pass.
+There is a second verifier the gate calls directly: `tools/verify_gen1_rom_layout.py`. It
+runs 29 checks across all three dumps, and a ROM that is absent is reported rather than
+counted as a pass.
 
 ## State Reset
 

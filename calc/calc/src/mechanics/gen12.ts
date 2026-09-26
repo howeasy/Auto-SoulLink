@@ -1,11 +1,24 @@
-import {Generation} from '../data/interface';
+import {Generation, TypeName} from '../data/interface';
 import {getItemBoostType} from '../items';
 import {RawDesc} from '../desc';
 import {Field} from '../field';
 import {Move} from '../move';
 import {Pokemon} from '../pokemon';
 import {Result} from '../result';
-import {computeFinalStats, getMoveEffectiveness, handleFixedDamageMoves} from './util';
+import {computeFinalStats, getMoveEffectiveness, handleFixedDamageMoves, isPureRGB} from './util';
+
+// pureRGB (Gen 1 only) alternate-STAB rule: a move of the key type also gets STAB when the
+// attacker has the paired type, even though that type never matches the move's own type -
+// engine/battle/moved_battle_code.asm's ShouldMoveGetStabBoost (docs/calc_multigen/
+// PURERGB_MECHANICS.md §1.4): Ground-type moves on Magma-type attackers (Volcanic Magmar),
+// Rock-type moves on Crystal-type attackers (Hardened Onix), Bonemerang-type moves on
+// Ground-type attackers, Tri-type moves on Normal-type attackers (Porygon).
+const PURERGB_ALT_STAB: {[moveType: string]: TypeName} = {
+  Ground: 'Magma',
+  Rock: 'Crystal',
+  Bonemerang: 'Ground',
+  Tri: 'Normal',
+};
 
 export function calculateRBYGSC(
   gen: Generation,
@@ -119,7 +132,17 @@ export function calculateRBYGSC(
     return result;
   }
 
-  const isPhysical = move.category === 'Physical';
+  // pureRGB (Gen 1 only): Ghost is a "dynamic type" - a Ghost-type damaging move is Physical or
+  // Special per the ATTACKER's own base Attack vs base Special, not a fixed per-move category
+  // (constants/type_constants.asm: "physical if they're the same or attack is higher", implemented
+  // by DynamicTypeCheckPlayer/DynamicTypeCheckEnemy, engine/battle/core.asm - docs/calc_multigen/
+  // PURERGB_MECHANICS.md §1.3). moves.json's own `split` for the 8 Ghost-type moves reflects only
+  // the common case; this overrides it per-attacker. (move.category === 'Status' already returned
+  // above, so every move reaching here is guaranteed Physical or Special already.)
+  const category = (isPureRGB(gen) && move.type === 'Ghost')
+    ? (attacker.species.baseStats.spa > attacker.species.baseStats.atk ? 'Special' : 'Physical')
+    : move.category;
+  const isPhysical = category === 'Physical';
   const attackStat = isPhysical ? 'atk' : 'spa';
   const defenseStat = isPhysical ? 'def' : 'spd';
   let at = attacker.stats[attackStat]!;
@@ -232,7 +255,9 @@ export function calculateRBYGSC(
     desc.weather = field.weather;
   }
 
-  if (move.hasType(...attacker.types)) {
+  const altStabType = isPureRGB(gen) ? PURERGB_ALT_STAB[move.type] : undefined;
+  if (move.hasType(...attacker.types) ||
+      (altStabType && (attacker.types as TypeName[]).includes(altStabType))) {
     baseDamage = Math.floor(baseDamage * 1.5);
   }
 

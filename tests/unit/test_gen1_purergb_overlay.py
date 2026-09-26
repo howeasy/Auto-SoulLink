@@ -401,8 +401,13 @@ def test_an_overlay_cartridge_is_admitted_as_kind_overlay():
     json_mod = lua.eval(f'dofile("{(REPO / "lua" / "json_codec.lua").as_posix()}")')
     for title in TITLES:
         sha = PROVENANCE["outputs"][ROM_KEY[title]]["sha1"]
-        got = dict(E.admit(lua.table_from({"root": REPO.as_posix(), "json": json_mod, "rom_sha1": sha.upper(),
-                                           "header": "POKEMON RED"})).items())
+        rom = _overlay_rom(title)
+        admitted = E.admit(lua.table_from({"root": REPO.as_posix(), "json": json_mod, "rom_sha1": sha.upper(),
+                                           "header": "POKEMON RED", "rom_size": len(rom),
+                                           "read_rom_u8": lambda i, image=rom: image[int(i)]}))
+        assert not isinstance(admitted, tuple), admitted
+        copy_fields = lua.eval("function(value) local out={} for k,v in pairs(value) do out[k]=v end return out end")
+        got = dict(copy_fields(admitted).items())
         assert (got["pack"], got["title"], got["kind"]) == ("gen1_purergb", title, "overlay")
         assert got["rom_type"] == {"purered": "PureRed", "pureblue": "PureBlue", "puregreen": "PureGreen"}[title]
 

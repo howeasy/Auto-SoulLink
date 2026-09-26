@@ -34,8 +34,8 @@ local function finish(pass, msg)
 end
 -- A6 storage receipts, declared before the tees that fill them. `storage_tx` is every
 -- party_to_box/box_to_party the client SENDS, in order; `storage_rx` every box_mon/party_mon it
--- RECEIVES; `release_seen` every RELEASE_SEEN the client LOGS (lua/gen1/client.lua:571-592: a
--- standalone from_box RemovePokemon has no wire event, so the log line is the only receipt), each
+-- RECEIVES; `release_seen` every RELEASE_SEEN the client LOGS (lua/gen1/client.lua: a standalone
+-- from_box RemovePokemon logs it and then sends release{key}, owner ruling O-35), each
 -- stamped with how many storage sends preceded it — that stamp is what proves no release fired
 -- during the WITHDRAW.
 local storage_tx, storage_rx, release_seen = {}, {}, {}
@@ -111,7 +111,7 @@ local deps = Entry.bizhawk_deps()
 -- wrote. Reading later from the scenario coroutine would read it frames afterwards, once the
 -- engine is free to touch SRAM again, which proves nothing about the save itself.
 -- DOMAIN: "CartRAM" — BizHawk's flat 0x8000 image of the cartridge's four 0x2000 SRAM banks
--- (lua/memory_gb.lua:52-56; lua/gen1/entry.lua:54-64 reads the same image).
+-- (lua/gen1/client.lua:91 SRAM_BANK_SIZE; lua/gen1/entry.lua:54-64 reads the same image).
 -- SLICE: 0x498..0x7FFF = 0x7B68 bytes, the slice docs/gen1_requirements.md:72 pins for S-7.
 -- It starts past sSpriteBuffer0/1/2 (3 * SPRITEBUFFERSIZE = 3 * 7*7*8 = 3 * 0x188 = 0x498;
 -- pret ram/sram.asm:1-5, constants/gfx_constants.asm:14) — pic-decompression scratch the engine
@@ -147,26 +147,27 @@ deps.on_bus_exec = function(fn, addr, name, dom)
     if name == "SLink-gen1-save_witness" then
         local fire = fn
         fn = function()
-            -- GATE: "the callback ran" is NOT evidence the site validated. signals.lua's `fire`
-            -- returns nothing and swallows every rejection (lua/gen1/signals.lua:202-226: early
-            -- `return` when closed/failed, on the wrong hLoadedROMBank, or on a filter; the PC
-            -- and expected-bytes assertions are pcall'd into self.failure rather than raised).
-            -- The one observable that means "validated" is the queue: :219 appends to `pending`
-            -- only once every check has passed. So dump iff `pending` grew by exactly one
-            -- save_witness entry across this call. The signals instance is reached through
-            -- SLINK_GEN1_CLIENT (:182, the same global lua/gen1/run.lua:42 sets) because the
-            -- `gclient` local is declared below this tee (:157) and the instance itself only
-            -- exists after gclient:start() (lua/gen1/client.lua:1005).
+            -- GATE: "the callback ran" is NOT evidence the site validated. The registry's
+            -- callback returns nothing and swallows every rejection (closed/failed service,
+            -- wrong hLoadedROMBank, a filtered hit, PC/byte mismatch latched as `failed`).
+            -- The one observable that means "validated" is the queue, read through the
+            -- service's read-only peek() (a detached copy): dump iff it grew by exactly one
+            -- save_witness entry across this call. The service is reached through
+            -- SLINK_GEN1_CLIENT (the same global lua/gen1/run.lua sets) because `gclient` is
+            -- declared below this tee and the service only exists after gclient:start().
             local sigs = SLINK_GEN1_CLIENT and SLINK_GEN1_CLIENT.signals
-            local before = sigs and #sigs.pending or 0
+            local before = sigs and #sigs:peek() or 0
             fire()
             local why
             if not sigs then
                 why = "no-signals-instance"
-            elseif #sigs.pending ~= before + 1 then
-                why = fmt("pending-%d-to-%d", before, #sigs.pending)
-            elseif sigs.pending[#sigs.pending].kind ~= "save_witness" then
-                why = "kind-" .. tostring(sigs.pending[#sigs.pending].kind)
+            else
+                local after = sigs:peek()
+                if #after ~= before + 1 then
+                    why = fmt("pending-%d-to-%d", before, #after)
+                elseif after[#after].kind ~= "save_witness" then
+                    why = "kind-" .. tostring(after[#after].kind)
+                end
             end
             if why then
                 log("SAVE_WITNESS_DUMP_SKIPPED why=" .. why)
@@ -1033,6 +1034,24 @@ local function trade_scenario(decline)
         local text = file:read("*a");file:close()
         return text:find(mark, 1, true) ~= nil
     end
+    -- Both roles now answer vanilla's forced save before the host hears them (pret
+    -- engine/link/cable_club_npc.asm:56-67): SlinkTradeUIMustSave (patch/gen1/src/trade_ui.asm,
+    -- the overlay's trade_ui.asm) PrintTexts these two lines into the message box (text at
+    -- (1,14)/(1,16) = +281/+321), then YesNoChoice. The proposer meets it after SLINK TRADE
+    -- (trade_receptionist.asm:53-57), the partner after YES (trade_prompt.asm .choice).
+    local function must_save_drawn()
+        return tiles("We have to save", 281) and tiles("before trading.", 321) and tiles("YES") and tiles("NO")
+    end
+    local function answer_must_save(role)
+        if rd(ram.wCurrentMenuItem) ~= 0 then return false, role .. " must-save prompt did not default to YES" end
+        -- DisplayYesNoChoice restores Buffer1 on exit, which drops the YES/NO box: re-pulse A only
+        -- while the box is up, so no press leaks into the picker or the restored overworld.
+        for _ = 1, 120 do
+            if not must_save_drawn() then log(role .. "_MUST_SAVE_YES");return true end
+            yield_frame(frame % 16 < 2 and {A=true} or {})
+        end
+        return false, role .. " must-save YES was not taken"
+    end
 
     local first_done = seen.trade_done or 0
     local first_msgbox = seen.msgbox or 0
@@ -1076,8 +1095,14 @@ local function trade_scenario(decline)
         if not wait_tiles("NATIVE_MENU", function()
             return tiles("SLINK TRADE", 42) and tiles("CABLE CLUB", 82) and tiles("CANCEL", 122)
         end, 120) then return false, "SLINK TRADE native menu not drawn" end
-        if not wait_tiles("TRADE_WHICH", function() return tiles("TRADE WHICH?", 22) end, 180, "A") then
-            return false, "TRADE WHICH? picker not drawn"
+        if not wait_tiles("MUST_SAVE", must_save_drawn, 180, "A") then
+            return false, "proposer must-save YES/NO not drawn after SLINK TRADE"
+        end
+        local took, took_why = answer_must_save("PROPOSER")
+        if not took then return false, took_why end
+        -- SaveGameData plus the SFX_SAVE jingle run before the picker draws; no buttons meanwhile.
+        if not wait_tiles("TRADE_WHICH", function() return tiles("TRADE WHICH?", 22) end, 600) then
+            return false, "TRADE WHICH? picker not drawn after the must-save"
         end
         for _ = 1, 90 do
             if rd(ram.wCurrentMenuItem) == picker_row then break end
@@ -1126,10 +1151,21 @@ local function trade_scenario(decline)
                 yield_frame(frame % 16 < 2 and {Down=true} or {})
             end
             if rd(ram.wCurrentMenuItem) ~= 1 then return false, "native prompt cursor never reached NO" end
-        end
-        for _ = 1, 240 do
-            if (seen.menu_result or 0) > first_result then break end
-            yield_frame(frame % 16 < 2 and {A=true} or {})
+            for _ = 1, 240 do
+                if (seen.menu_result or 0) > first_result then break end
+                yield_frame(frame % 16 < 2 and {A=true} or {})
+            end
+        else
+            -- YES, then the must-save YES; menu_result follows the partner's own save.
+            if not wait_tiles("PARTNER_MUST_SAVE", must_save_drawn, 240, "A") then
+                return false, "partner must-save YES/NO not drawn after YES"
+            end
+            local took, took_why = answer_must_save("PARTNER")
+            if not took then return false, took_why end
+            for _ = 1, 600 do
+                if (seen.menu_result or 0) > first_result then break end
+                yield_frame({})
+            end
         end
         local want = decline and 0 or 1
         if (seen.menu_result or 0) ~= first_result + 1 or not sent_events.menu_result or
@@ -2287,14 +2323,14 @@ end
 -- The RELEASE half depends on the client contract in lua/gen1/client.lua:552-592: move_mon keys
 -- from the SIGNAL-TIME snapshot (signals.lua:141-166), and a standalone from_box RemovePokemon
 -- (not preceded by a move_mon in the same frame, so not Bill's WITHDRAW) logs RELEASE_SEEN and
--- sends NOTHING. Releasing a boxed linked mon is therefore invisible to the server -- the pair
--- stays ALIVE with a phantom boxed half. That is the documented shared-protocol gap this
--- scenario pins, not a defect of this run.
+-- sends release{key}. The server kills the pair with cause "release" (owner ruling O-35); the
+-- oracle (e2e_duo.assert_pc_ops_new_saved) checks links.json for it.
 --
 -- A re-enters the PC for the second DEPOSIT only after B has finished, so the second deposit's
 -- partner sync (state.py:2091-2109 would queue another box_mon once B's sync_retrieve_done has
 -- put the key back in party_keys) cannot land on a live B: B's receipt is exactly box_mon then
--- party_mon, in that order, and nothing after.
+-- party_mon, in that order, and nothing after. The release's force_faint + memorialize for B's
+-- partner therefore stay queued on the server; this scenario does not observe B's memorial.
 function scenarios.pc_ops_new()
     local linked, why = scenarios.link_new()
     if not linked then return false, link_prerequisite_failure(why) end

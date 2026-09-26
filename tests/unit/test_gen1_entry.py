@@ -17,6 +17,7 @@ comparison works but not that the cartridges in patch/build carry those titles.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 
 import pytest
@@ -106,3 +107,220 @@ def test_a_green_header_is_a_gen1_family_for_the_launcher_route(entry):
     """PureGreen's header is POKEMON GREEN; the header only narrows, admission is by sha1."""
     assert entry.detect_title(_reader(_header_image("POKEMON GREEN"))) == "green"
     assert entry.header_title(_reader(_header_image("POKEMON GREEN"))) == "POKEMON GREEN"
+
+
+@pytest.mark.parametrize("dependency", ["write_permit", "gb_checkpoint", "token_scanner",
+                                       "hook_registry", "gb_hook_binding", "hello_session", "reply_dispatch"])
+def test_entry_build_requires_shared_modules_in_its_real_loading_graph(dependency):
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    lua.globals().missing_dependency = dependency
+    lua.execute("""
+        local real_dofile = dofile
+        dofile = function(path)
+            if path:match('/lua/' .. missing_dependency .. '.lua$') then error('shared module unavailable') end
+            return real_dofile(path)
+        end
+    """)
+    with pytest.raises(lupa.LuaError, match="shared module unavailable"):
+        module.build(lua.table(root=_REPO.replace("\\", "/")))
+
+
+def test_entry_binds_one_persistent_permit_for_bus_and_cart_and_io_error_disarms():
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    emitted, frame, fail = [], [1], [False]
+
+    def write(address, value, domain):
+        if fail[0]:
+            raise RuntimeError("device unavailable")
+        emitted.append((int(address), int(value), str(domain)))
+
+    io = lua.table(read_u8=lambda *a: 0,
+                   read_range=lambda _a, n, _d=None: lua.table(*([0] * int(n))),
+                   write_u8=write, framecount=lambda: frame[0], register=lambda _n: 0,
+                   domains=lambda: lua.table("System Bus", "ROM", "CartRAM"),
+                   on_bus_exec=lambda *a: 1, unregister=lambda _id: None)
+    net = lua.table(init=lambda *a: None, connected=lambda: False, pump=lambda: None,
+                    send=lambda _line: None, receive=lambda: None)
+    hud = lua.table(show=lambda *a: None, prompt=lambda *a: None, set_game_over=lambda: None,
+                    set_rebuilding=lambda _t: None, clear_rebuilding=lambda: None)
+    _client, parts = module.build(lua.table(root=_REPO.replace("\\", "/"), io=io, net=net,
+                                           hud=hud, title="red", player="a", rom_sha1="model"))
+    writes = parts.writes
+    writes.arm(writes, "overworld")
+    writes.write_bytes(writes, parts.profile.ram.wPartyMons, lua.table(7))
+    frame[0] = 19
+    parts.box_io.write_cart_bytes(0x100, lua.table(8))
+    assert [event[2] for event in emitted] == ["System Bus", "CartRAM"]
+    assert writes.armed == "overworld" and writes.log[2].frame == 19
+    fail[0] = True
+    with pytest.raises((RuntimeError, lupa.LuaError), match="device unavailable"):
+        parts.box_io.write_cart_bytes(0x101, lua.table(9))
+    assert writes.armed is None
+    assert writes.log[3].status == "error" and writes.log[3].completed == 0
+
+
+def test_entry_passes_loaded_hello_and_reply_factories_to_client_without_owning_policy():
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    lua.execute("""
+        local original=dofile
+        local loaded={}
+        dofile=function(path)
+            if path:match('/lua/gen1/client.lua$') then
+                return {new=function(p)
+                    assert(p.hello_session==loaded.hello_session, 'hello factory not injected')
+                    assert(p.reply_dispatch==loaded.reply_dispatch, 'reply factory not injected')
+                    assert(type(p.hello_session.new)=='function', 'hello factory missing')
+                    assert(type(p.reply_dispatch.new)=='function', 'reply factory missing')
+                    return {injected=true}
+                end}
+            end
+            local value=original(path)
+            if path:match('/lua/hello_session.lua$') then loaded.hello_session=value end
+            if path:match('/lua/reply_dispatch.lua$') then loaded.reply_dispatch=value end
+            return value
+        end
+    """)
+    io = lua.table(read_u8=lambda *_args: 0,
+                   read_range=lambda _a, n, _d=None: lua.table(*([0] * int(n))),
+                   write_u8=lambda *_args: None, framecount=lambda: 0, register=lambda _n: 0,
+                   on_bus_exec=lambda *_args: 1, unregister=lambda _id: None)
+    client, _parts = module.build(lua.table(root=_REPO.replace("\\", "/"), io=io,
+                                            net=lua.table(), hud=lua.table(), title="red", player="a"))
+    assert client.injected is True
+
+
+def _admission_model():
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    entry = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    image = _header_image("POKEMON RED") + b"source-model"
+    digest = hashlib.sha1(image).hexdigest()
+    entry.PACKS = lua.table(gen1_rby=lua.table(rom_type=lua.table(red="Red")))
+    entry.PACK_FILES = lua.table(gen1_rby=lua.table(profile="data/games/gen1_rby/profile.json"))
+    catalog = lua.table(titles=lua.table(red=lua.table(rom_sha1=digest)))
+    decoder = lua.table(decode=lambda _text: catalog)
+    args = lua.table(root=_REPO.replace("\\", "/"), json=decoder, rom_sha1=digest,
+                     header="POKEMON RED", rom_size=len(image), read_rom_u8=lambda i: image[int(i)])
+    return lua, entry, args, image, digest
+
+
+def test_admission_rehashes_known_reported_hash_and_refuses_forged_identity():
+    _lua, entry, args, image, _digest = _admission_model()
+    changed = bytes([image[0] ^ 1]) + image[1:]
+    args.read_rom_u8 = lambda i: changed[int(i)]
+    got = entry.admit(args)
+    assert isinstance(got, tuple) and got[0] is None
+    assert hashlib.sha1(changed).hexdigest() in got[1]
+
+
+def test_actual_byte_admission_is_immutable_and_missing_acquisition_refuses():
+    lua, entry, args, _image, digest = _admission_model()
+    admitted = entry.admit(args)
+    assert admitted["title"] == "red" and admitted["rom_sha1"] == digest
+    assert admitted["rehashed"] is True and admitted["admitted_by"] == "sha1"
+    mutate = lua.eval("function(value) return pcall(function() value.kind='forged' end) end")
+    assert mutate(admitted)[0] is False
+    args.read_rom_u8 = None
+    refused = entry.admit(args)
+    assert isinstance(refused, tuple) and refused[0] is None
+
+
+def test_actual_artifact_change_during_admission_refuses():
+    _lua, entry, args, image, _digest = _admission_model()
+    reads = [0]
+
+    def changing_byte(index):
+        reads[0] += 1
+        value = image[int(index)]
+        return value ^ 1 if reads[0] > len(image) and index == 0 else value
+
+    args.read_rom_u8 = changing_byte
+    refused = entry.admit(args)
+    assert isinstance(refused, tuple) and refused[0] is None
+    assert "changed during admission" in refused[1]
+
+
+def test_duplicate_known_identity_refuses_in_shared_unique_match():
+    lua, entry, args, _image, digest = _admission_model()
+    entry.PACKS.gen1_rby.rom_type.blue = "Blue"
+    catalog = lua.table(titles=lua.table(red=lua.table(rom_sha1=digest), blue=lua.table(rom_sha1=digest)))
+    args.json.decode = lambda _text: catalog
+    refused = entry.admit(args)
+    assert isinstance(refused, tuple) and refused[0] is None and "ambiguous" in refused[1]
+
+
+def test_repeated_production_builds_share_hook_ownership_and_release_it_on_close():
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    entry = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    rom = _dump("red")
+    registrations, removals = [], []
+
+    def read(address, domain=None):
+        return rom[int(address)] if domain == "ROM" or address < 0x4000 else 0
+
+    def register(_callback, address, name, _domain=None):
+        registrations.append((int(address), str(name)))
+        return len(registrations)
+
+    io = lua.table(read_u8=read, read_range=lambda a, n, d=None: lua.table_from([read(a + i, d) for i in range(n)]),
+                   write_u8=lambda *_args: None, register=lambda _name: 0,
+                   domains=lambda: lua.table("ROM", "System Bus"), framecount=lambda: 0,
+                   on_bus_exec=register, unregister=lambda handle: removals.append(handle))
+    deps = lua.table(root=_REPO.replace("\\", "/"), title="red", player="a", io=io,
+                     net=lua.table(), hud=lua.table(), rom_sha1="MODEL")
+    first, _parts = entry.build(deps)
+    second, _parts = entry.build(deps)
+    first.start(first)
+    registered = len(registrations)
+    assert registered > 0 and all(name.startswith("SLink-gen1-") for _address, name in registrations)
+    with pytest.raises(lupa.LuaError, match="owner namespace already active"):
+        second.start(second)
+    assert len(registrations) == registered
+    first.signals.close(first.signals)
+    assert len(removals) == registered
+    second.start(second)
+    assert len(registrations) == 2 * registered
+    second.signals.close(second.signals)
+
+
+def test_a_retry_through_a_second_build_keeps_the_failed_cleanup_authority():
+    """Red control: a second Entry.build must not replace the failed service that still owns a handle."""
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    entry = lua.eval(f'dofile("{_ENTRY_PATH}")')
+    rom = _dump("red")
+    state = {"calls": 0, "can_remove": False, "removed": []}
+
+    def read(address, domain=None):
+        return rom[int(address)] if domain == "ROM" or address < 0x4000 else 0
+
+    def register(_callback, _address, _name, _domain=None):
+        state["calls"] += 1
+        return "00000000-0000-0000-0000-000000000000" if state["calls"] == 2 else f"owned-{state['calls']}"
+
+    def unregister(handle):
+        if not state["can_remove"]:
+            return False
+        state["removed"].append(str(handle))
+        return True
+
+    io = lua.table(read_u8=read, read_range=lambda a, n, d=None: lua.table_from([read(a + i, d) for i in range(n)]),
+                   write_u8=lambda *_args: None, register=lambda _name: 0,
+                   domains=lambda: lua.table("ROM", "System Bus"), framecount=lambda: 0,
+                   on_bus_exec=register, unregister=unregister)
+    deps = lua.table(root=_REPO.replace("\\", "/"), title="red", player="a", io=io,
+                     net=lua.table(), hud=lua.table(), rom_sha1="MODEL")
+    first, _first_parts = entry.build(deps)
+    with pytest.raises(lupa.LuaError, match="cleanup failed"):
+        first.start(first)
+    second, parts = entry.build(deps)
+    with pytest.raises(lupa.LuaError, match="outstanding failed hook cleanup"):
+        second.start(second)
+    failed = parts.signals.failed_service
+    assert failed.status(failed).registered == 1 and state["calls"] == 2
+    state["can_remove"] = True
+    assert failed.close(failed) is True and state["removed"] == ["owned-1"]
+    second.start(second)
+    assert parts.signals.failed_service is None
+    second.signals.close(second.signals)

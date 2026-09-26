@@ -140,29 +140,29 @@ def test_a_key_that_is_load_bearing_anywhere_rejects_with_structures_untouched(s
     _link(st)
     seen = {"presentation": False}
     if structure == "party_keys":
-        st.party_keys["b"].add(NEW)
+        st.party_keys["a"].add(NEW)
     elif structure == "pending_captures":
-        st.pending_captures["route_9"] = {"b": MonInfo(key=NEW, level=3)}
+        st.pending_captures["route_9"] = {"a": MonInfo(key=NEW, level=3)}
     elif structure == "bonus_keys":
-        st.bonus_keys["b"].add(NEW)
+        st.bonus_keys["a"].add(NEW)
     elif structure == "pending_bonus":
         st.pending_bonus["b"].append(NEW)
     elif structure == "partner_blobs":
-        st.partner_blobs["b"] = [{"slot": 0, "key": NEW, "blob": b"\0" * 66, "species_id": 1, "level": 1}]
+        st.partner_blobs["a"] = [{"slot": 0, "key": NEW, "blob": b"\0" * 66, "species_id": 1, "level": 1}]
     elif structure == "rebuild_pending":
-        st.rebuild_pending["b"] = {"queued_keys": [NEW], "queued_partner_keys": [], "restored_keys": set()}
+        st.rebuild_pending["a"] = {"queued_keys": [NEW], "queued_partner_keys": [], "restored_keys": set()}
     elif structure == "pending_trade":
         st.pending_trade = {"phase": "menu", "initiator": "b", "token": "t1", "reprompts": 0, "age": 0,
                             "a_key": "1111:2222:33", "b_key": NEW}
     elif structure == "queued_commands":
-        st.queued_commands["b"].append({"cmd": "box_mon", "key": NEW})
+        st.queued_commands["a"].append({"cmd": "box_mon", "key": NEW})
     elif structure == "sync_inflight":
-        st.sync_inflight["b"][(NEW, "party_mon")] = 3
+        st.sync_inflight["a"][(NEW, "party_mon")] = 3
     elif structure == "pending_memorials":
-        st.pending_memorials["b"].add(NEW)
+        st.pending_memorials["a"].add(NEW)
     elif structure == "presentation":
-        def hook(key):
-            seen["presentation"] = key == NEW
+        def hook(key, player_id=None):
+            seen["presentation"] = key == NEW and player_id == "a"
             return key == NEW
         st.presentation_key_in_use = hook
     before = _snapshot(st)
@@ -195,10 +195,10 @@ def test_mon_stats_alone_is_a_cache_not_a_collision(st):
     """mon_stats is never pruned, so every buried key lives there forever; treating it as
     load-bearing would turn the reusable-buried-key rule into a pair kill."""
     _link(st)
-    st.mon_stats[NEW] = {"level": 99}
-    st.mon_stats[OLD] = {"level": 5}
+    st.mon_stats["a"][NEW] = {"level": 99}
+    st.mon_stats["a"][OLD] = {"level": 5}
     assert _one(_change(st), "key_change_ack")["migrated"] is True
-    assert st.mon_stats[NEW] == {"level": 5}
+    assert st.mon_stats["a"][NEW] == {"level": 5}
 
 
 # ── every structure migrates ──────────────────────────────────────────────────────────────
@@ -206,7 +206,7 @@ def test_mon_stats_alone_is_a_cache_not_a_collision(st):
 def test_every_structure_in_the_census_migrates(st):
     entry = _link(st)
     entry.encounter_a = MonInfo(key=OLD, species=1)
-    st.mon_stats[OLD] = {"level": 5}
+    st.mon_stats["a"][OLD] = {"level": 5}
     st.bonus_keys["a"].add(OLD)
     st.pending_memorials["a"].add(OLD)
     st.pending_bonus["b"].append(OLD)
@@ -222,7 +222,7 @@ def test_every_structure_in_the_census_migrates(st):
     assert entry.encounter_a.key == NEW
     assert st._key_index[NEW] is entry and OLD not in st._key_index
     assert st.party_keys["a"] == {NEW}
-    assert st.mon_stats == {NEW: {"level": 5}}
+    assert st.mon_stats == {"a": {NEW: {"level": 5}}, "b": {}}
     assert st.bonus_keys["a"] == {NEW}
     assert st.pending_memorials["a"] == {NEW}
     assert list(st.pending_bonus["b"]) == [NEW]
@@ -263,6 +263,8 @@ def test_a_change_on_a_live_link_queues_no_death(st):
 def _server(tmp_path) -> SLinkServer:
     srv = SLinkServer(data_dir=str(tmp_path))
     srv.state.adapter = srv.adapter = Gen1Adapter(variant="red")
+    # Gen 1 stamps its box scans (KEY-SCOPE-5): start from a complete, empty census
+    srv.box_census = {pid: {"capable": True, "gen": 1, "boxes": []} for pid in ("a", "b")}
     return srv
 
 
@@ -294,15 +296,19 @@ def test_presentation_caches_stay_put_on_rejection(tmp_path):
 def test_a_live_presentation_key_is_a_collision_but_the_memorial_box_is_not(tmp_path):
     srv = _server(tmp_path)
     mem = srv.adapter.memorial_box_index
-    srv.pc_boxes["b"] = [{"box": mem, "slot": 0, "key": NEW}]
+    srv.box_census["b"]["boxes"] = [{"box": mem, "slot": 0, "key": NEW}]
     assert srv._presentation_key_in_use(NEW) is False, "a buried key in the memorial box is reusable"
-    srv.pc_boxes["b"] = [{"box": 0, "slot": 0, "key": NEW}]
+    srv.box_census["b"]["boxes"] = [{"box": 0, "slot": 0, "key": NEW}]
     assert srv._presentation_key_in_use(NEW) is True
-    srv.pc_boxes["b"] = []
+    srv.box_census["b"]["boxes"] = []
     srv._mon_cache[NEW] = {"level": 1}
     assert srv._presentation_key_in_use(NEW) is False, "_mon_cache is never pruned; a cache hit is not a collision"
     srv.party_details["b"][NEW] = {"level": 1}
     assert srv._presentation_key_in_use(NEW) is True
+    # KEY-SCOPE: only the key-changing player's caches count
+    assert srv._presentation_key_in_use(NEW, "a") is False
+    srv.party_details["a"][NEW] = {"level": 1}
+    assert srv._presentation_key_in_use(NEW, "a") is True
     # The state consults it through the adapter-neutral hook.
     _link(srv.state)
     cmds = srv._dispatch("a", {"event": "key_change", "old_key": OLD, "new_key": NEW})
@@ -461,3 +467,166 @@ async def test_a_companion_patched_vanilla_cartridge_pairs_with_a_clean_one(tmp_
     assert "Mixed artifact kinds" in SLinkServer._mixed_games_error(
         type("S", (), {"state": type("T", (), {"rom_type": "PureRed", "artifact_kind": "clean"})()})(),
         "b", "PureBlue", "overlay")
+
+
+# ── KEY-SCOPE-5 (OMP cx-ee316c45) ─────────────────────────────────────────────────────────
+
+def test_reconnect_old_key_replay_acks_false_without_rollback(tmp_path):
+    srv = _server(tmp_path)
+    _link(srv.state)
+    assert _one(srv._dispatch("a", {"event": "key_change", "old_key": OLD, "new_key": NEW}),
+                "key_change_ack")["migrated"] is True
+    # restart, then a reconnect whose hello still reports the old key (a reload onto an old save)
+    srv.state = SoulLinkState.load(data_dir=str(tmp_path), adapter=Gen1Adapter(variant="red"))
+    srv.state.presentation_key_in_use = srv._presentation_key_in_use
+    srv.state.handle_event("a", {"event": "hello", "party": [{"key": OLD, "hp": 10, "maxHP": 10}]})
+    srv.party_details["a"] = {OLD: {"nickname": "PIKA", "level": 5}}
+    ack = _one(srv._dispatch("a", {"event": "key_change", "old_key": OLD, "new_key": NEW}),
+               "key_change_ack")
+    assert ack["migrated"] is False
+    assert srv.state.links[0].a.key == NEW and srv.state.entry_for("a", NEW) is srv.state.links[0]
+    assert srv.state.party_keys["a"] == {OLD}, "a fresh hello is the cartridge's own word (cx-8f3a6ce9 F3)"
+    assert OLD in srv.party_details["a"], "a replay must not migrate the presentation caches again"
+
+
+def test_new_key_ambiguity_latch_rejects_key_change(st):
+    entry = _link(st)
+    st.ambiguous_keys["a"][NEW] = {"since": "t", "refused": 0}
+    _one(_change(st), "key_change_rejected")
+    assert st.ambiguous_keys["a"][NEW]["refused"] == 1
+    assert entry.status == LinkStatus.ALIVE and entry.a.key == OLD and st.entry_for("a", NEW) is None
+
+
+def test_overflow_memorial_box_key_is_reusable(tmp_path):
+    srv = _server(tmp_path)
+    mem, per_box = srv.adapter.memorial_box_index, srv.adapter.mons_per_box
+    for i in range(per_box):
+        _link(srv.state, a_key=f"{i:04X}:30B8:10", b_key=f"{i:04X}:7B0B:10",
+              status=LinkStatus.MEMORIAL, area=f"r{i}")
+    assert srv._memorial_box_indices() == {mem}, "one full memorial box needs no overflow"
+    _link(srv.state, a_key="DEAD:30B8:10", b_key="DEAD:7B0B:10", status=LinkStatus.DEAD, area="r_x")
+    assert srv._memorial_box_indices() == {mem, mem - 1}
+    srv.box_census["a"]["boxes"] = [{"box": mem - 1, "slot": 0, "key": NEW}]
+    assert srv._presentation_key_in_use(NEW, "a") is False
+    srv.box_census["a"]["boxes"] = [{"box": mem - 2, "slot": 0, "key": NEW}]
+    assert srv._presentation_key_in_use(NEW, "a") is True
+
+
+@pytest.mark.asyncio
+async def test_a_mixed_games_refusal_is_recorded_as_an_admission_verdict(tmp_path):
+    """ADMISSION-MIXED-KINDS-VERDICT: /api/status and the board read `admission`; a refused
+    mixed-games hello used to leave the player showing "admitted" with an empty reason."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send({"event": "hello", "player": "a", "rom_type": "red", "trainer_name": "Alice",
+                    "ot_id": "30B8", "has_pokeballs": True, "party": [], "artifact_kind": "overlay"})
+        reply = await send({"event": "hello", "player": "b", "rom_type": "blue", "trainer_name": "Bob",
+                            "ot_id": "7B0B", "has_pokeballs": True, "party": []})
+        assert _mixed(reply)
+        verdict = srv.admission["b"]
+        assert verdict["state"] == "rejected" and "artifact kinds" in verdict["reason"]
+        assert not srv.is_admitted("b")
+        assert any(e["player"] == "b" and e["type"] == "hello" and e["text"].startswith("REJECTED —")
+                   and "artifact kinds" in e["text"] for e in srv._recent_events)
+        # an unknown rom_type is the sibling refusal: same verdict and event
+        await send({"event": "hello", "player": "b", "rom_type": "nope", "party": []})
+        assert srv.admission["b"]["state"] == "rejected" and "nope" in srv.admission["b"]["reason"]
+        assert sum(e["text"].startswith("REJECTED —") for e in srv._recent_events if e["player"] == "b") == 2
+        # a conforming hello is admitted again
+        await send({"event": "hello", "player": "b", "rom_type": "blue", "trainer_name": "Bob",
+                    "ot_id": "7B0B", "has_pokeballs": True, "party": [], "artifact_kind": "overlay"})
+        assert srv.admission["b"]["state"] == "admitted"
+    finally:
+        await close()
+
+
+def test_a_replay_of_an_older_ledger_record_acks_false(st):
+    """cx-8f3a6ce9 F5: any ledgered {old,new} is a replay, not only the newest record for old."""
+    K1, K2, K3 = OLD, NEW, "EEEE:30B8:10"
+    entry = _link(st, a_key=K3)
+    st.key_migration_ledger["a"].extend([{"old_key": K1, "new_key": K2}, {"old_key": K1, "new_key": K3}])
+    st.party_keys["a"].add(K1)                      # a reconnect hello re-reported K1
+    assert _one(_change(st, old=K1, new=K2), "key_change_ack")["migrated"] is False
+    assert entry.a.key == K3 and st.entry_for("a", K2) is None
+
+
+def test_debug_inject_and_reset_keep_the_box_census_consistent(tmp_path):
+    """cx-8f3a6ce9 F6/F9: an injected snapshot feeds the census like a real one, a deposit without a
+    box index is not counted as a live box, and a reset forgets every census."""
+    from unittest.mock import AsyncMock
+    srv = _server(tmp_path)
+    call = lambda body: asyncio.run(srv.handle_debug_inject_event(AsyncMock(json=AsyncMock(return_value=body))))
+    call({"player": "a", "event": "tick", "party": [], "pc_boxes": [], "pc_boxes_generation": 3})
+    assert srv.box_census["a"] == {"capable": True, "gen": 3, "boxes": []}
+    call({"player": "a", "event": "party_to_box", "key": NEW})
+    assert srv.box_census["a"]["boxes"] is None, "a deposit makes the census stale (cx-06ec4e8e F2)"
+    asyncio.run(srv.handle_reset_api(None))
+    assert srv.box_census["a"] == {"capable": False, "gen": -1, "boxes": None}
+
+
+# ── reset lifecycle (OMP cx-7cb7a18b on merge 9afb3485) ────────────────────────────────────
+
+HELLO_RED_A = {"event": "hello", "player": "a", "rom_type": "red", "trainer_name": "Alice",
+               "ot_id": "30B8", "has_pokeballs": True, "party": []}
+
+
+@pytest.mark.asyncio
+async def test_a_reset_while_connected_starts_a_new_run_for_any_game(tmp_path):
+    """Reset = a new run: every client re-hellos, so nothing of the old game is kept."""
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    await send(HELLO_RED_A)
+    assert srv.state.rom_type == "red" and srv.connected_players["a"]["connected"]
+    await srv.handle_reset_api(None)
+    await close()
+    send, close = await _session(srv)
+    try:
+        reply = await send({"event": "hello", "player": "a", "rom_type": "firered", "trainer_name": "Al",
+                            "ot_id": "1", "has_pokeballs": True, "party": []})
+        assert not _mixed(reply) and srv.state.rom_type == "firered"
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+async def test_a_reset_forgets_the_old_cartridge_capabilities(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    await send({**HELLO_RED_A, "panel": True, "panel_abi": 1, "sfx": True})
+    assert srv._player_has_panel("a")
+    await srv.handle_reset_api(None)
+    await close()
+    send, close = await _session(srv)
+    try:
+        reply = await send({**HELLO_RED_A, "rom_type": "yellow"})      # a clean Yellow: no panel
+        assert not any(c.get("cmd") == "link_panel" for c in reply["commands"])
+        assert "panel" not in srv.connected_players["a"] and "sfx" not in srv.connected_players["a"]
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+async def test_a_refused_hello_does_not_record_its_rom_type(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        await send(HELLO_RED_A)
+        reply = await send({"event": "hello", "player": "b", "rom_type": "firered", "trainer_name": "Bob",
+                            "ot_id": "7B0B", "has_pokeballs": True, "party": []})
+        assert _mixed(reply)
+        assert srv.connected_players["b"]["rom_type"] != "firered"
+    finally:
+        await close()
+
+
+
+def test_a_ledgered_change_on_a_new_live_mon_is_not_a_replay(st):
+    """cx-06ec4e8e F4: O->N was accepted and that pair is buried; a new live mon now holds O."""
+    first = _link(st)
+    assert _one(_change(st), "key_change_ack")["migrated"] is True
+    first.status = LinkStatus.DEAD
+    st.party_keys["a"].discard(NEW)
+    second = _link(st, b_key="CCDD:7B0B:11", area="route_2")
+    assert _one(_change(st), "key_change_ack")["migrated"] is True
+    assert second.a.key == NEW and st.entry_for("a", NEW) is second

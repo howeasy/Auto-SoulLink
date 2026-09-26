@@ -1,0 +1,153 @@
+{
+ "attempt_id": "requal-gold-battle-errand-e1",
+ "errors": [],
+ "fixtures": [
+  {
+   "artifacts": {
+    "boot:game_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\boot-ecfe29af82e3aa94\\gold_battle_errand.boot.witness.json",
+     "sha256": "fa940f2db168fb43c6fdab25499ce5778483592003cf1efc14b2d4f3efd51af5",
+     "size": 1948
+    },
+    "fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\tests\\fixtures\\gen2\\gold_battle_errand.SaveRAM",
+     "sha256": "9ddbf7d9b3261805860a8116bfa3d7a3165f60c0d1fa47a5ab25e5ac822a7c70",
+     "size": 32790
+    },
+    "played_receipt": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\errand-gold-a2\\gold_battle_errand\\saveram\\gold_battle_errand.played.json",
+     "sha256": "3b70f94057e9f30db6d5fff7e69484231df3d21eb75bf12cb7737e54fde546c7",
+     "size": 1300
+    },
+    "profile": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\data\\games\\gen2_gold\\profile.json",
+     "sha256": "a42fc0637bf024f0df7d6fd1eca8d89684052cc68baa4f649a88afeb19c5eba6",
+     "size": 73801
+    },
+    "resave:fixture": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\resave-1a7baa6a1befbf70\\gold_battle_errand.resaved.SaveRAM",
+     "sha256": "1ac2a78c4e230fe89e729efac1addf50608fb459cc2bcc838bda4e5414d0ba07",
+     "size": 32790
+    },
+    "resave:reload_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\reload-1a7baa6a1befbf70\\gold_battle_errand.reload.witness.json",
+     "sha256": "503724d904afa743d191afaf9a98409b9a1b3a8de8b1540b25552a4625cb3252",
+     "size": 1950
+    },
+    "resave:save_witness": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\resave-1a7baa6a1befbf70\\gold_battle_errand.resave.witness.json",
+     "sha256": "21c3bd50d395b4fcb3a4ca475fffa6bd7cd65ea6f630320f3acdb42e04aa2ecc",
+     "size": 2072
+    },
+    "rom": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-build\\pokegold\\pokegold.gbc",
+     "sha256": "fb0016d27b1e5374e1ec9fcad60e6628d8646103b5313ca683417f52b97e7e4e",
+     "size": 2097152
+    },
+    "route_facts": {
+     "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\gold_route_facts.json",
+     "sha256": "c5e82bafb00e5b6b6a899cf98c1f9824d88f502126cba1191971913e8fc090bc",
+     "size": 22381
+    }
+   },
+   "name": "gold_battle_errand",
+   "passed": true,
+   "problems": [],
+   "provenance": {
+    "rom_sha1": "d8b8a3600a465308c9953dfa04f0081c05bdcb94",
+    "route_facts_sha256": "c9a9772a61a40a49a8ce99dbf6ce18ffa5a773d26e1a97e6a1d44e88910cc928",
+    "scope": "candidate fixture",
+    "title": "gold"
+   },
+   "stages": [
+    {
+     "evidence": {
+      "ball_origin": "O-10 harness injection",
+      "natural_ball_acquisition": "false",
+      "oracle": "independent Gen2 PYDEC",
+      "player_id": "50342"
+     },
+     "fingerprint": "6f6dce928a532c33f087948c01656b96f0e12e91a421a386bf22a25d167de296",
+     "notes": [
+      "Static bytes do not prove played origin, RTC or GAME qualification."
+     ],
+     "problems": [],
+     "stage": "qualify",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "cartram_sha256": "1122beaac8f5a825ed5751a58b3fcaa7c37d349f2f260ad7b85bfbe0389d8f44",
+      "location": "[24, 3]",
+      "observer": "independent_GAME CONTINUE",
+      "position": "[53, 12]"
+     },
+     "fingerprint": "ecfe29af82e3aa947b0f4db01cacb710a660207efd1f4645228be1ae1aac3f32",
+     "notes": [],
+     "outputs": {
+      "boot:game_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\boot-ecfe29af82e3aa94\\gold_battle_errand.boot.witness.json",
+       "sha256": "fa940f2db168fb43c6fdab25499ce5778483592003cf1efc14b2d4f3efd51af5",
+       "size": 1948
+      }
+     },
+     "problems": [],
+     "stage": "boot",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "observer": "independent_GAME re-save + reload",
+      "resave_cartram_sha256": "144e5f2146fbc9380815e292e31d51c3b3171da83406c290aaf22e5da7f03dda"
+     },
+     "fingerprint": "1a7baa6a1befbf70bd9c22670bce4d440f57c0b15b239cd3f13e0a1f4d420b55",
+     "notes": [],
+     "outputs": {
+      "resave:fixture": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\resave-1a7baa6a1befbf70\\gold_battle_errand.resaved.SaveRAM",
+       "sha256": "1ac2a78c4e230fe89e729efac1addf50608fb459cc2bcc838bda4e5414d0ba07",
+       "size": 32790
+      },
+      "resave:reload_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\reload-1a7baa6a1befbf70\\gold_battle_errand.reload.witness.json",
+       "sha256": "503724d904afa743d191afaf9a98409b9a1b3a8de8b1540b25552a4625cb3252",
+       "size": 1950
+      },
+      "resave:save_witness": {
+       "path": "E:\\Google Drive\\SLink\\.claude\\worktrees\\gen2-u1e-poison\\.cache\\gen2-fixtures\\requal-gold-battle-errand-e1\\gold_battle_errand\\qualify\\resave-1a7baa6a1befbf70\\gold_battle_errand.resave.witness.json",
+       "sha256": "21c3bd50d395b4fcb3a4ca475fffa6bd7cd65ea6f630320f3acdb42e04aa2ecc",
+       "size": 2072
+      }
+     },
+     "problems": [],
+     "stage": "resave",
+     "status": "PASS"
+    },
+    {
+     "evidence": {
+      "oracle": "independent re-save PYDEC + GAME raw-party witness"
+     },
+     "fingerprint": "e8291369d6e5d2b7cd8404dab929c3999b7059930d8511ef7ffeaf59303afca5",
+     "notes": [],
+     "problems": [],
+     "stage": "post_oracle",
+     "status": "PASS"
+    }
+   ]
+  }
+ ],
+ "open_obligations": [
+  "coordinator GAME/RTC/played-origin review",
+  "recorded source/physical gate sign-off"
+ ],
+ "passed": true,
+ "physical_qualification": false,
+ "required_stages": [
+  "qualify",
+  "boot",
+  "resave",
+  "post_oracle"
+ ],
+ "schema": "fixture-qualification-v1",
+ "scope": "full"
+}

@@ -1,4 +1,6 @@
-[test_gen1_menu_row_gate] title=purered rom=feb19385
+# lane HEAD=cfbc0c90cfeee979d68a7af756e3ced6cd757ac7 git-status=clean at=2026-09-24T09:51:17-04:00
+# cmd: tools/run_gb_gate.py lua/tests/test_gen1_menu_row_gate.lua --rom purered_overlay --target town --timeout 300
+[test_gen1_menu_row_gate] title=purered rom=c7ee0bd9
 [test_gen1_menu_row_gate] booted at frame 703 (party=1, map=40)
   [ok] the START menu opened  — no EXIT row on screen — every check below is meaningless if the menu is not up
 [menu] row  0 |····················|

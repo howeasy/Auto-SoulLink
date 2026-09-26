@@ -30,6 +30,9 @@
         <span class="title-text" style="margin-right: 18em;">Pok&eacute;mon Radical Red Damage Calculator</span>
         <span class="genSelection" aria-labelledby="selectGenInstruction" role="radiogroup" title="Select the generation.">
             <span class="visually-hidden" id="selectGenInstruction">Select the generation.</span>
+            <input class="gen visually-hidden" type="radio" name="gen" value="1" id="gen1" />
+            <input class="gen visually-hidden" type="radio" name="gen" value="2" id="gen2" />
+            <input class="gen visually-hidden" type="radio" name="gen" value="3" id="gen3" />
             <input class="gen visually-hidden" type="radio" name="gen" value="9" id="gen9" checked="checked" />
         </span>
         <span class="notationSelection" aria-labelledby="selectNotationInstruction" role="radiogroup" title="Select the output notation.">
@@ -147,6 +150,7 @@
                             <th class="gen-specific g3 g4 g5 g6 g7 g8 g9" scope="col">IVs</th>
                             <th class="gen-specific g3 g4 g5 g6 g7 g8 g9" scope="col">EVs</th>
                             <th class="gen-specific g1 g2 hide" scope="col">DVs</th>
+                            <th class="gen-specific g1 g2 hide" scope="col">Stat Exp</th>
                             <th></th>
                             <th></th>
                         </tr>
@@ -168,6 +172,9 @@
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" disabled="disabled" inputmode="decimal" />
                             </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
+                            </td>
                             <td><span class="total">341</span>
                             </td>
                             <td></td>
@@ -187,6 +194,9 @@
                             </td>
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
+                            </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
                             </td>
                             <td><span class="total">236</span>
                             </td>
@@ -224,6 +234,9 @@
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
                             </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
+                            </td>
                             <td><span class="total">236</span>
                             </td>
                             <td>
@@ -259,6 +272,9 @@
                             </td>
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
+                            </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
                             </td>
                             <td><span class="total">236</span>
                             </td>
@@ -296,6 +312,9 @@
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" disabled="disabled" inputmode="decimal" />
                             </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" disabled="disabled" inputmode="decimal" />
+                            </td>
                             <td><span class="total">236</span>
                             </td>
                             <td>
@@ -325,6 +344,9 @@
                             </td>
                             <td>
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
+                            </td>
+                            <td>
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
                             </td>
                             <td><span class="total">236</span>
                             </td>
@@ -361,6 +383,9 @@
                             </td>
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
+                            </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
                             </td>
                             <td><span class="total">236</span>
                             </td>
@@ -982,6 +1007,7 @@
                             <th class="gen-specific g3 g4 g5 g6 g7 g8 g9" scope="col">IVs</th>
                             <th class="gen-specific g3 g4 g5 g6 g7 g8 g9" scope="col">EVs</th>
                             <th class="gen-specific g1 g2 hide" scope="col">DVs</th>
+                            <th class="gen-specific g1 g2 hide" scope="col">Stat Exp</th>
                             <th></th>
                             <th></th>
                         </tr>
@@ -1003,6 +1029,9 @@
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" disabled="disabled" inputmode="decimal" />
                             </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
+                            </td>
                             <td><span class="total">341</span>
                             </td>
                             <td></td>
@@ -1022,6 +1051,9 @@
                             </td>
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
+                            </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
                             </td>
                             <td><span class="total">236</span>
                             </td>
@@ -1059,6 +1091,9 @@
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
                             </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
+                            </td>
                             <td><span class="total">236</span>
                             </td>
                             <td>
@@ -1094,6 +1129,9 @@
                             </td>
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
+                            </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
                             </td>
                             <td><span class="total">236</span>
                             </td>
@@ -1131,6 +1169,9 @@
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" disabled="disabled" inputmode="decimal" />
                             </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" disabled="disabled" inputmode="decimal" />
+                            </td>
                             <td><span class="total">236</span>
                             </td>
                             <td>
@@ -1160,6 +1201,9 @@
                             </td>
                             <td>
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
+                            </td>
+                            <td>
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
                             </td>
                             <td><span class="total">236</span>
                             </td>
@@ -1196,6 +1240,9 @@
                             </td>
                             <td class="gen-specific g1 g2 hide">
                                 <input class="dvs calc-trigger" value="15" inputmode="decimal" />
+                            </td>
+                            <td class="gen-specific g1 g2 hide">
+                                <input class="statexp calc-trigger" type="number" min="0" max="65535" value="65535" inputmode="decimal" />
                             </td>
                             <td><span class="total">236</span>
                             </td>
@@ -1498,6 +1545,7 @@
     <script type="text/javascript" src="./calc/data/moves.js?"></script>
     <script type="text/javascript" src="./calc/data/items.js?"></script>
     <script type="text/javascript" src="./calc/data/index.js?"></script>
+    <script type="text/javascript" src="./calc/data/purergb.js?"></script>
     <script type="text/javascript" src="./calc/move.js?"></script>
     <script type="text/javascript" src="./calc/pokemon.js?"></script>
     <script type="text/javascript" src="./calc/field.js?"></script>

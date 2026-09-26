@@ -74,8 +74,9 @@ describe('Pokemon', () => {
 
     // HP DV should be derived
     expect(p.ivs).toEqual({hp: 20, atk: 31, def: 16, spa: 20, spd: 20, spe: 31});
-    expect(p.evs).toEqual({hp: 252, atk: 200, def: 252, spa: 252, spd: 252, spe: 252});
-    expect(p.stats).toEqual({hp: 343, atk: 298, def: 274, spa: 228, spd: 228, spe: 318});
+    // SLink: Gen 1/2 EVs are raw stat exp (default max 65535); atk 200 -> ceil(sqrt) 15 -> +3.
+    expect(p.evs).toEqual({hp: 65535, atk: 200, def: 65535, spa: 65535, spd: 65535, spe: 65535});
+    expect(p.stats).toEqual({hp: 343, atk: 238, def: 274, spa: 228, spd: 228, spe: 318});
 
     // curHP() capped to maxHP
     expect(p.curHP()).toBe(p.maxHP());

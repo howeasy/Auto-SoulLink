@@ -14,18 +14,17 @@ explains a failure later:
     1. unit               — the source oracles and the rules, against the decomps
     2. rom-layout         — every flat ROM offset and patch span, against the dumps
     3. lua-parse          — every client and gate file parses
-    4. profile-addresses  — WRAM/SRAM symbols, against pret
-    5. profile-generated  — profile.json is what the pinned .sym files generate
-    6. statics-generated  — static_encounters.json is what pret's scripts/objects say
-    7. fixtures           — every committed battery save qualifies as a real game state
-    8. patch-build        — the clean dumps still hold what the manifest displaces
-    9. live-gates         — the companion patch on real cartridges: hook, mailbox, START-menu
+    4. profile-generated  — profile.json is what the pinned .sym files generate
+    5. statics-generated  — static_encounters.json is what pret's scripts/objects say
+    6. fixtures           — every committed battery save qualifies as a real game state
+    7. patch-build        — the clean dumps still hold what the manifest displaces
+    8. live-gates         — the companion patch on real cartridges: hook, mailbox, START-menu
                             row, and the panel on a randomized+injected ROM
-   10. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
-   11. inspect-purergb    — the same inspect gate on the three built pureRGB cartridges
-   12. apex-purergb       — the APEX CHIP identity contract on the real PureRed cartridge
-   13. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
-   14. duo-pairs          — every gen1_new scenario, Red (A) against Blue (B), through the real server
+    9. live-new-gates     — the rewritten Gen 1 modules on all three cartridges
+   10. inspect-purergb    — the same inspect gate on the three built pureRGB cartridges
+   11. apex-purergb       — the APEX CHIP identity contract on the real PureRed cartridge
+   12. live-trade-gates   — the SLINK TRADE receptionist on the patched cartridges
+   13. duo-pairs          — every gen1_new scenario, Red (A) against Blue (B), through the real server
 
 GIVE IT THE MACHINE. The emulator lanes are wall-clock sensitive: the duo scenarios drive
 two EmuHawk instances against a real server and wait on real frame counts. Running anything
@@ -94,8 +93,6 @@ LANES = [
          why="every flat ROM offset and companion-patch span, against the real dumps"),
     Lane("lua-parse", [_PY, "tools/lua_syntax_check.py"],
          why="every Lua file parses under the runtime the clients actually use"),
-    Lane("profile-addresses", [_PY, "tools/verify_profile_addresses.py"],
-         why="WRAM/SRAM symbols against pret"),
     Lane("profile-generated", [_PY, "tools/gen_gen1_profile.py", "--check"],
          why="data/games/gen1_rby/profile.json is exactly what the pinned pret .sym files "
              "generate"),
@@ -114,7 +111,13 @@ LANES = [
     Lane("live-gates",
          [_PY, "-m", "pytest", "tests/live/test_gen1_gates.py", "-q", "-p", "no:randomly",
           "-rs"],
-         env={"SLINK_LIVE": "1"},
+         # GEN1-GATE-REWRITES-RECEIPTS (post-RC): explicitly clears SLINK_GEN1_CAPTURE_RECEIPTS so an inherited
+         # "1" from the caller's shell can never turn this verify run into a capture over the committed
+         # receipts (the same trap as the Gen 2 attestation, 44f6fb97/SLINK_GEN2_NO_ATTEST). run_lane's
+         # env.update() only overlays keys onto the inherited environment, never deletes one, so "removing" the
+         # flag here means overwriting it to "": test_gen1_gates.py's capture gate checks `== "1"`, which
+         # treats "" identically to absent.
+         env={"SLINK_LIVE": "1", "SLINK_GEN1_CAPTURE_RECEIPTS": ""},
          why="the companion patch on real cartridges: VBlank hook, mailbox, START-menu row, "
              "and the panel on a randomized+injected ROM"),
     Lane("live-new-gates",
@@ -209,7 +212,6 @@ REQUIREMENTS = {
     "unit": ["F-1", "F-2", "F-4", "F-5", "R-1", "R-2", "C-0", "C-4", "W-7"],
     "rom-layout": ["F-2"],
     "lua-parse": ["C-4"],
-    "profile-addresses": ["F-1"],
     "profile-generated": ["F-1"],
     "profile-generated-purergb": ["F-1"],
     "statics-generated": ["F-5", "S-8"],
