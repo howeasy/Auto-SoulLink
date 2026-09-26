@@ -22,15 +22,19 @@ in the ALLOWLIST dicts below with a one-line reason each, rather than silently i
 entry that was flatly wrong versus pret was fixed in our copy under calc/src/js/data/sets/games/
 and the fix is noted in that file's header comment.
 
-Emerald has no local pokeemerald checkout to verify against (see _find_pret) so it is vendored
-but unchecked here -- its header says so.
+Emerald (calc/src/js/data/sets/games/Emerald.js) is checked against a local pokeemerald
+checkout (pinned at c65e93f2): species+level as a whole-file multiset like Crystal/FRLG, plus
+a per-trainer identity-aware check (item, explicit/derived moves, IV) for every trainer whose
+name uniquely identifies one gTrainers[] entry -- see the "Emerald" section below for why
+identity can't come from the vendored file's own "index" field, and what's left unchecked
+(ambiguous/generic-named trainers, nature, ability) and why.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
-from collections import Counter
+from collections import Counter, defaultdict
 
 import pytest
 
@@ -63,6 +67,7 @@ _PRET = {
     "pokeyellow": _find_pret("pokeyellow"),
     "pokecrystal": _find_pret("pokecrystal"),
     "pokefirered": _find_pret("pokefirered"),
+    "pokeemerald": _find_pret("pokeemerald"),
 }
 
 
@@ -379,6 +384,210 @@ def _pret_frlg_moves_multiset(path: str) -> Counter:
 
 
 # --------------------------------------------------------------------------------------
+# Emerald: trainers.h (identity: trainerClass + trainerName + which sParty_* array) plus
+# trainer_parties.h (struct TrainerMon{NoItem,Item}{Default,Custom}Moves -- .iv is a single
+# scalar shared by all six stats, see _emerald_expected_iv). Species/level is checked as a
+# whole-file multiset like Crystal/FRLG above; item/moves/IV are checked per named trainer,
+# because the vendored file's "index" field is just the vendor's own sequential row number
+# (verified by sorting every index in Emerald.js: 0..996, story order, not an encoded
+# trainer/species id) so identity has to come from the label text itself, matched against
+# pret by trainerClass+trainerName the same way test_crystal_dvs_match_pret_by_class already
+# does for Crystal's DVs.
+# --------------------------------------------------------------------------------------
+
+_EMERALD_CLASS_RE = re.compile(r"\[TRAINER_CLASS_(\w+)\]\s*=\s*_\(\"([^\"]*)\"\)")
+
+
+def _emerald_class_display(pret_dir: str) -> dict:
+    """trainerClass display strings (src/data/text/trainer_class_names.h), e.g.
+    TRAINER_CLASS_PKMN_TRAINER_1 -> "PKMN TRAINER" (the {PKMN} token expands to plain text;
+    _canon() strips the rest of the GBA-font punctuation, like the SWIMMER_M gender glyph)."""
+    with open(os.path.join(pret_dir, "src", "data", "text", "trainer_class_names.h"), encoding="utf-8") as fh:
+        text = fh.read()
+    return {const: disp.replace("{PKMN}", "PKMN") for const, disp in _EMERALD_CLASS_RE.findall(text)}
+
+
+_EMERALD_PARTY_ARRAY_RE = re.compile(r"static const struct TrainerMon(\w+) sParty_(\w+)\[\] = \{(.*?)\n\};", re.S)
+_EMERALD_MON_RE = re.compile(
+    r"\.iv\s*=\s*(\d+),\s*\.lvl\s*=\s*(\d+),\s*\.species\s*=\s*SPECIES_(\w+),"
+    r"(?:\s*\.heldItem\s*=\s*ITEM_(\w+),?)?"
+    r"(?:\s*\.moves\s*=\s*\{([^}]*)\},?)?",
+    re.S,
+)
+# Both optional trailing groups have a `,?` (not `,`): heldItem/moves is often the LAST field
+# in the struct literal (no trailing comma there), and an all-`,` pattern silently fails to
+# match at all in that case -- findall then reports the whole optional group as "", which
+# looks exactly like "field absent" instead of "field present but unparsed". Caught by
+# hand-checking TRAINER_SIDNEY's party (explicit ItemCustomMoves) against this regex.
+
+
+def _parse_emerald_parties(path: str) -> dict:
+    """Returns {arrname: [{"iv", "lvl", "species", "item", "moves"}, ...]}. `item` is the raw
+    ITEM_ constant tail (or None for a NoItem* variant); `moves` is the raw MOVE_ constant
+    tails (or None for a *DefaultMoves variant, meaning: derive from the level-up learnset --
+    see _emerald_derive_default_moves)."""
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    parties = {}
+    for variant, arrname, body in _EMERALD_PARTY_ARRAY_RE.findall(text):
+        mons = []
+        for iv, lvl, sp, item, moves_blob in _EMERALD_MON_RE.findall(body):
+            moves = None
+            if "CustomMoves" in variant:
+                moves = [m.strip().removeprefix("MOVE_") for m in moves_blob.split(",")
+                         if m.strip() and m.strip() != "MOVE_NONE"]
+            item_name = item if ("Item" in variant and not variant.startswith("NoItem")) else None
+            mons.append({"iv": int(iv), "lvl": int(lvl), "species": sp, "item": item_name, "moves": moves})
+        parties[arrname] = mons
+    return parties
+
+
+_EMERALD_TRAINER_BLOCK_RE = re.compile(r"\[TRAINER_(\w+)\]\s*=\s*\{(.*?)\n    \},", re.S)
+
+
+def _parse_emerald_trainers(trainers_path: str, parties: dict, class_display: dict) -> list:
+    """Returns [{"const", "name", "class", "party": [...]}, ...], one per gTrainers[] entry."""
+    with open(trainers_path, encoding="utf-8") as fh:
+        text = fh.read()
+    trainers = []
+    for const, body in _EMERALD_TRAINER_BLOCK_RE.findall(text):
+        name_m = re.search(r'\.trainerName\s*=\s*_\("([^"]*)"\)', body)
+        class_m = re.search(r"\.trainerClass\s*=\s*TRAINER_CLASS_(\w+)", body)
+        party_m = re.search(r"\.party\s*=\s*\w+\(sParty_(\w+)\)", body)
+        name = name_m.group(1) if name_m else ""
+        party = parties.get(party_m.group(1), []) if party_m else []
+        trainers.append({
+            "const": const, "name": name,
+            "class": class_display.get(class_m.group(1) if class_m else "", ""),
+            "party": party,
+        })
+    return trainers
+
+
+def _emerald_unique_by_name(trainers: list) -> dict:
+    """canon(trainerName) -> trainer record, restricted to names that identify exactly one
+    gTrainers[] entry (excludes "GRUNT"/"" and any name reused across several battles, e.g.
+    "WALLY" or the several distinct "NICOLAS"es -- those can't be told apart from the label
+    text alone and are left out of the identity-aware check entirely, not guessed at). A
+    length floor of 3 keeps a short name from accidentally matching inside an unrelated
+    trainer-class word (e.g. "PAT" inside "EXPERT" -- no; but "REED" inside "BREEDER",
+    "BEAU" inside "BEAUTY", "HERMAN" inside "FISHERMAN" are real near-misses this project hit
+    during development, which is why label matching below requires a whole-WORD match, not a
+    bare substring one)."""
+    counts = Counter(t["name"] for t in trainers if t["name"])
+    return {
+        _canon(t["name"]): t
+        for t in trainers
+        if t["name"] and counts[t["name"]] == 1 and len(_canon(t["name"])) >= 3
+    }
+
+
+_EMERALD_LEARNSET_PTR_RE = re.compile(r"\[SPECIES_(\w+)\]\s*=\s*(\w+),")
+_EMERALD_LEARNSET_ARR_RE = re.compile(r"static const u16 (s\w+LevelUpLearnset)\[\] = \{(.*?)\n\};", re.S)
+_EMERALD_LEARNSET_MOVE_RE = re.compile(r"LEVEL_UP_MOVE\(\s*(\d+)\s*,\s*MOVE_(\w+)\s*\)")
+
+
+def _parse_emerald_learnsets(pret_dir: str):
+    """Returns (species_to_array, arrays): gLevelUpLearnsets (level_up_learnset_pointers.h)
+    maps SPECIES_X to an sXLevelUpLearnset array (level_up_learnsets.h), each a [(level, move
+    constant tail), ...] list in level-up order."""
+    with open(os.path.join(pret_dir, "src", "data", "pokemon", "level_up_learnset_pointers.h"), encoding="utf-8") as fh:
+        species_to_arr = dict(_EMERALD_LEARNSET_PTR_RE.findall(fh.read()))
+    with open(os.path.join(pret_dir, "src", "data", "pokemon", "level_up_learnsets.h"), encoding="utf-8") as fh:
+        text = fh.read()
+    arrays = {name: [(int(lvl), mv) for lvl, mv in _EMERALD_LEARNSET_MOVE_RE.findall(body)]
+              for name, body in _EMERALD_LEARNSET_ARR_RE.findall(text)}
+    return species_to_arr, arrays
+
+
+def _emerald_derive_default_moves(species: str, level: int, species_to_arr: dict, learnset_arrays: dict) -> list:
+    """Replicates GiveBoxMonInitialMoveset (pret pokemon.c:2990-3011): walk the level-up
+    learnset in order, keeping a rolling last-4 window. A move already known is skipped
+    (GiveMoveToBoxMon, pokemon.c:2939-2954 returns MON_ALREADY_KNOWS_MOVE without re-adding
+    it); a 5th push drops the oldest (DeleteFirstMoveAndGiveMoveToBoxMon). This only applies
+    to the *DefaultMoves party variants -- CreateNPCTrainerParty (battle_main.c:1990 case 0)
+    calls it for those; *CustomMoves trainers set their four moves directly from the struct."""
+    learnset = learnset_arrays.get(species_to_arr.get(species, ""), [])
+    moves = []
+    for lvl, mv in learnset:
+        if lvl > level:
+            break
+        if mv in moves:
+            continue
+        if len(moves) < 4:
+            moves.append(mv)
+        else:
+            moves.pop(0)
+            moves.append(mv)
+    return moves
+
+
+def _pret_emerald_sl_multiset(trainers: list) -> Counter:
+    c = Counter()
+    for t in trainers:
+        for p in t["party"]:
+            c[(_canon(p["species"]), p["lvl"])] += 1
+    return c
+
+
+# Gen 3's per-mon "IV" byte is one scalar shared by every stat (CreateNPCTrainerParty,
+# battle_main.c: `fixedIV = partyData[i].iv * MAX_PER_STAT_IVS / 255;`, integer division,
+# MAX_PER_STAT_IVS == 31) -- not the 0-31 value directly.
+def _emerald_expected_iv(raw_iv: int) -> int:
+    return raw_iv * 31 // 255
+
+
+# MOVE_ constant tail vs. the vendor's own display spelling: these are the same move, just
+# spelled differently (Gen 3's real in-game text used "Faint Attack" and "Smelling Salts";
+# pret's own identifier happens not to match either exactly). Not a data bug -- normalizing
+# both sides here means a real Emerald.js content difference doesn't get masked by it.
+_EMERALD_MOVE_ALIASES = {"feintattack": "faintattack", "smellingsalts": "smellingsalt", "hijumpkick": "highjumpkick"}
+
+
+def _emerald_moves_canon(moves) -> frozenset:
+    out = set()
+    for m in moves:
+        c = _canon(m)
+        if c.startswith("hiddenpower"):
+            c = "hiddenpower"  # the actual type is derived from IVs at runtime, not stored
+        out.add(_EMERALD_MOVE_ALIASES.get(c, c))
+    return out - NO_MOVE_CANON
+
+
+def _emerald_group_by_trainer(vdex: dict, unique_by_name: dict):
+    """Resolves every vendored (species, label) entry to a pret trainer const, by finding the
+    longest run of consecutive words (up to 3) in the label's pre-'|' segment whose _canon()
+    exactly equals a name in `unique_by_name` -- e.g. "Young Couple Mel & Paul | ..." resolves
+    to "MEL & PAUL" (2-word phrase), not the unrelated, separately-real single trainer "PAUL"
+    a naive substring match would grab. Multiple vendored (N)-suffixed labels for one trainer
+    (used only so two identical (species, level) mons in the same party don't collide as
+    duplicate object keys within one species' dict -- see e.g. Picknicker Ashley's three
+    identical Swablu) are merged back into one reconstructed team here, keyed by trainer const.
+
+    Returns (by_const, unmatched_label_count).
+    """
+    by_const = defaultdict(list)
+    unmatched = 0
+    for species, sets in vdex.items():
+        for label, entry in sets.items():
+            words = [w for w in re.split(r"[^A-Za-z]+", label.split("|", 1)[0]) if w]
+            best = None
+            for n in range(min(3, len(words)), 0, -1):
+                for i in range(len(words) - n + 1):
+                    phrase = _canon("".join(words[i:i + n]))
+                    if phrase in unique_by_name:
+                        best = unique_by_name[phrase]
+                        break
+                if best:
+                    break
+            if best is None:
+                unmatched += 1
+                continue
+            by_const[best["const"]].append((species, entry))
+    return by_const, unmatched
+
+
+# --------------------------------------------------------------------------------------
 # allowlists -- real, understood differences. Each entry documents itself; anything not
 # listed here must match exactly.
 # --------------------------------------------------------------------------------------
@@ -625,6 +834,26 @@ FRLG_MOVES_ALLOWLIST = {
 }
 FRLG_MOVES_MAX_PRET_ONLY = 180
 
+# Emerald has no rematch system (unlike Crystal's Pokégear calls or FRLG's Vs Seeker), so its
+# pret_only gap is just "trainers the vendor didn't bother including" (the file's own header
+# says it's a curated subset of notable trainers, not full coverage) -- verified by a coarse
+# species+level multiset probe before this pass: 997 vendored entries vs. 1,825 pret party
+# slots, 828 pret-only, 0 vendor-only.
+EMERALD_SL_MAX_PRET_ONLY = 828
+
+# (pret trainer const): reason. Named trainers the identity-aware check below resolves
+# correctly but whose vendored team is missing a few of that trainer's own mons (not a wrong
+# value on the mons it does have -- see the module-level "Emerald has no rematch system"
+# note above; this is that same curation gap, just visible per-trainer instead of file-wide).
+# 654 vendored mons resolve to a uniquely named pret trainer; 343 labels are ambiguous or generic.
+EMERALD_CHECKED_MONS, EMERALD_UNMATCHED_LABELS = 654, 343
+EMERALD_PARTIAL_TEAM_ALLOWLIST = {
+    "PAT": "Pokemon Breeder Pat has 6 pret mons (poochyena/shroomish/electrike/marill/"
+           "sandshrew/gulpin, all lvl 25); the vendor only carries 3 of them",
+    "MYLES": "Pokemon Breeder Myles has 6 pret mons (makuhita/wingull/tropius/zigzagoon/"
+             "electrike/numel, all lvl 25); the vendor only carries 3 of them",
+}
+
 # Crystal DV mismatches: all 3 resolve to a pret class (via the trainer's own name, straight
 # from parties.asm -- see test_crystal_dvs_match_pret_by_class) whose dvs.asm row doesn't match
 # what the vendor recorded. Spot-checking "Picknicker Brent" shows pret's own comment calls the
@@ -772,6 +1001,94 @@ def test_frlg_explicit_moves_match_pret():
     vendor_m = _vendored_moves_multiset(vdex, pret_m)
     pret_only, vendor_only = _diff_multisets(pret_m, vendor_m)
     _assert_allowed(pret_only, vendor_only, FRLG_MOVES_ALLOWLIST, "FRLG moves", max_pret_only=FRLG_MOVES_MAX_PRET_ONLY)
+
+
+def test_emerald_species_levels_match_pret():
+    pret_dir = _need("pokeemerald")
+    vdex = _load_vendored(os.path.join(_GAMES_DIR, "Emerald.js"))
+    class_display = _emerald_class_display(pret_dir)
+    parties = _parse_emerald_parties(os.path.join(pret_dir, "src", "data", "trainer_parties.h"))
+    trainers = _parse_emerald_trainers(os.path.join(pret_dir, "src", "data", "trainers.h"), parties, class_display)
+    pret_c = _pret_emerald_sl_multiset(trainers)
+    vendor_c = _vendored_sl_multiset(vdex)
+    pret_only, vendor_only = _diff_multisets(pret_c, vendor_c)
+    _assert_allowed(pret_only, vendor_only, {}, "Emerald", max_pret_only=EMERALD_SL_MAX_PRET_ONLY)
+
+
+def test_emerald_named_trainer_details_match_pret():
+    """Identity-aware check (species, level, held item, explicit moves, IV) for every Emerald
+    trainer whose name uniquely identifies one gTrainers[] entry -- see _emerald_unique_by_name
+    and _emerald_group_by_trainer for how vendored labels resolve to a pret trainer, and the
+    module docstring above _EMERALD_CLASS_RE for why identity can't come from the vendored
+    "index" field. Ambiguous names (shared by several battles, e.g. "WALLY") and generic ones
+    ("GRUNT") are outside what this test can verify and are simply not resolved -- not silently
+    treated as passing, just not part of `checked`."""
+    pret_dir = _need("pokeemerald")
+    vdex = _load_vendored(os.path.join(_GAMES_DIR, "Emerald.js"))
+    class_display = _emerald_class_display(pret_dir)
+    parties = _parse_emerald_parties(os.path.join(pret_dir, "src", "data", "trainer_parties.h"))
+    trainers = _parse_emerald_trainers(os.path.join(pret_dir, "src", "data", "trainers.h"), parties, class_display)
+    unique_by_name = _emerald_unique_by_name(trainers)
+    species_to_arr, learnset_arrays = _parse_emerald_learnsets(pret_dir)
+    by_const, unmatched = _emerald_group_by_trainer(vdex, unique_by_name)
+    trainers_by_const = {t["const"]: t for t in trainers}
+
+    mismatches = []
+    partial_team = []
+    checked = 0
+    for const, vend_entries in by_const.items():
+        t = trainers_by_const[const]
+        pret_sl = Counter((_canon(p["species"]), p["lvl"]) for p in t["party"])
+        vend_sl = Counter((_canon(sp), e["level"]) for sp, e in vend_entries)
+        if pret_sl != vend_sl:
+            if const in EMERALD_PARTIAL_TEAM_ALLOWLIST and all(vend_sl[k] <= pret_sl[k] for k in vend_sl):
+                partial_team.append(const)  # the mons it does carry are still checked below
+            else:
+                mismatches.append({"trainer": t["name"], "const": const, "type": "species_level",
+                                    "pret": dict(pret_sl), "vendor": dict(vend_sl)})
+                continue
+
+        pret_by_key = defaultdict(list)
+        for p in t["party"]:
+            pret_by_key[(_canon(p["species"]), p["lvl"])].append(p)
+        for sp, e in vend_entries:
+            cands = pret_by_key[(_canon(sp), e["level"])]
+            if not cands:
+                continue
+            p = cands.pop(0)
+            checked += 1
+
+            expected_item = "None" if p["item"] is None else p["item"].replace("_", " ").title()
+            if _canon(e.get("item", "None")) != _canon(expected_item):
+                mismatches.append({"trainer": t["name"], "species": sp, "type": "item",
+                                    "pret": expected_item, "vendor": e.get("item")})
+
+            if p["moves"] is not None:
+                expected_moves = p["moves"]
+            else:
+                expected_moves = _emerald_derive_default_moves(p["species"], p["lvl"], species_to_arr, learnset_arrays)
+            if _emerald_moves_canon(expected_moves) != _emerald_moves_canon(e.get("moves", [])):
+                mismatches.append({"trainer": t["name"], "species": sp, "type": "moves",
+                                    "pret": expected_moves, "vendor": e.get("moves")})
+
+            expected_iv = _emerald_expected_iv(p["iv"])
+            vivs = list(e.get("ivs", {}).values())
+            if len(set(vivs)) == 1 and vivs[0] != expected_iv:
+                mismatches.append({"trainer": t["name"], "species": sp, "type": "iv",
+                                    "pret": expected_iv, "vendor": vivs[0]})
+            elif len(set(vivs)) != 1:
+                mismatches.append({"trainer": t["name"], "species": sp, "type": "iv(non-uniform)",
+                                    "pret": expected_iv, "vendor": vivs})
+
+    assert set(partial_team) == set(EMERALD_PARTIAL_TEAM_ALLOWLIST), (
+        f"EMERALD_PARTIAL_TEAM_ALLOWLIST is stale: saw {sorted(partial_team)}, "
+        f"allowlist has {sorted(EMERALD_PARTIAL_TEAM_ALLOWLIST)}"
+    )
+    # Exact counts (review OMP cx-1eea9acb): a pret rename or vendor relabel that breaks identity
+    # resolution must go red, not quietly shrink coverage.
+    assert (checked, unmatched) == (EMERALD_CHECKED_MONS, EMERALD_UNMATCHED_LABELS), (
+        f"Emerald identity coverage moved: checked {checked}, unmatched labels {unmatched}")
+    assert not mismatches, f"Emerald named-trainer mismatches vs pret (total {len(mismatches)}): {mismatches[:15]}"
 
 
 def _vendored_moves_multiset(vdex: dict, keys: Counter) -> Counter:
