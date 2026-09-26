@@ -4,6 +4,39 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 
 ## CURRENT STATE (2026-09-26, after checkpoint 20)
 
+- **2-HOUR BLOCK 16:03-18:03 (2026-09-26 evening) -- all on the BRANCH, master untouched (owner rule: no master without approval):**
+  - Rulings recorded (G4 §6):
+    - 28: FR/LG trainer panels.
+    - 29: randomized Gen 3 in the RC.
+    - 30: FR/LG companion parity (info panel, sounds, Explode + Rival Swap).
+    - 31: randomized envelope, Gen 1 defaults with the Gen 3-only UPR options OPEN.
+    - 32: rule randomization refused for the RC; rand with pret-equal tables pairs as clean.
+  - FR/LG trainers: 3c2a35c2. UI lane browser check PASS (Brock, rival 3 variants, 351 calc labels).
+  - Randomized:
+    - FRLG Codex: decoder 24caed3b, Lua collector 5a8033de, held items a24d88ac, R4 duos f9bcb991.
+    - Server R1/R2: 44615f4f, ce0258aa, box census a53f942a, default moves 87f3903b, refusal at hello b9cd1bb2, pairing 363782dc.
+    - R3 Manager: c7656cdb; review fixes c32a081b.
+    - R4 review blockers: 9a2af9e8.
+  - Evidence cards:
+    - F-6 boot-checks for every fixture: 5929a287.
+    - C-6 and R-1/R-2 tests: 6c28d08f.
+    - C-3 dashboard: cdf8758c.
+    - Ledger updated: c6deca8d.
+  - **Pairing with the Emerald lane's T3** (claude/gen3-emerald-t3: lifecycle e8f51695 being FIXED after its review, census f4ec8c85, R0 rom_tables a5469ea3, CR-R1 `rand` admission 637bcd17, CR-R2 hello rom_content e5f8da76):
+    - My a53f942a (reports_box_census) and all the randomized server work need T3 on master TOGETHER.
+    - Next: when Emerald sends the fixed lifecycle sha, scratch-merge both branches, run the unit suite + the R4 live rows (SLINK_GEN3_RAND_ROMS=<scratchpad>), then ask the owner for ONE landing and ping Gen 2 (server/**, base.py changed).
+  - **Queued:**
+    - R3 review F3: an FR/LG write-domain audit plus pointer-aware table checks.
+    - R3 review F4: in-game trades → key_change with no species-clause re-check (state.py).
+    - GBA hello rom_sha1 == file sha1: needs a live check.
+    - The contract fingerprint changes when the decoder changes.
+    - Altering Cave shows only its first set.
+    - R4 evidence-quality items (OMP cx-904adf25 findings 3-6).
+    - Gen 1's refused key_change retry, for parity (shared lua/core).
+    - test_calc_trainer_sets `_FRLG_ARRAY_RE` swallows arrays (calc lane).
+    - Shared slink_fr_battle.State was overwritten by the Emerald T2 lane at 17:27; regenerate before trusting it.
+    - A redundant stash entry `gen3-review-fix-redcheck-1790457729` is on the shared stack (content committed in c32a081b; the guard blocks drop).
+
 - **OWNER RULE (2026-09-26, late): all work stays on this branch. NOTHING goes to master (not even a local ff) until the owner approves that specific landing.**
   - Master = 5313d94e. The branch is ahead with rulings 28-30 docs plus whatever lands after.
   - Open cards on the branch:
