@@ -173,4 +173,5 @@ Battle Frontier/Pyramid/Trainer Hill/Contests/Secret Bases rule support (writes 
 | EG4 | · | |
 | EG5 | · | |
 | EG6 | · | |
-| XG0–XG4 | · | |
+| XG0 | SIGNED 2026-09-26 by the owner (in chat: "Signed"), Linux reference host `hgbox`, gcc-arm-none-eabi 13.2.1; native Windows unsupported; no second-host cross-check | `docs/gen3_emerald/XG0_request.md` (commit `ab270159`; two clean builds ROM sha1 `28877d73`) |
+| XG1–XG4 | · | |
