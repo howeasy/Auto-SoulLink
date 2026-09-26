@@ -4,6 +4,20 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 
 ## CURRENT STATE (2026-09-26, after checkpoint 20)
 
+- **RR companion fix batch (owner 2026-09-26 "Fix all three now"), on the BRANCH only, not on master:**
+  - The new RR duos found three companion bugs. `infopanel_gen3` is green ×2 (f78b533a).
+  - Fixes:
+    - 03b19b71: the SOULLINK START row is placed by menu shape (with Pokédex, Exit-R, page-switch trampoline).
+    - 2c553181: the trade-scene names are terminated (the unterminated 10-letter nickname made StringExpandPlaceholders overrun EWRAM); the party chooser goes through RR's ChoosePartyMonByMenuType.
+    - 570eb621 + dec5c45c: Overworld Presence is forced off.
+  - New companion md5 c372c428 / sha1 7a386749, re-pinned. An independent Opus review ACCEPT-WITH-NITS; nit 5 fixed in 51c2079d.
+  - **Next:**
+    1. Wait for Gen 2's re-sweep to finish (they asked for no heavy emulator use and no shared-code landing meanwhile).
+    2. Run trade_gen3 / trade_decline_gen3 / infopanel_gen3 / infopanel_dex_gen3 ×2 in lane C:/slink-wt/rrduo at the branch head, with the new slink_RR.gba in patch/build.
+    3. Land the whole shared-code batch on master in ONE ff and ping Gen 2 Boogaloo (they re-sweep once).
+    4. Re-run the RR frozen cut on the new companion.
+    5. Update G5 (the trade/panel note becomes real evidence).
+
 - Local master is **615ea688** (Gen 1+2+3 + the docs sweep, NOT pushed).
 - Gen 2's evidence is re-pinned 98/98 at CODE_DIGEST e8ca0067. Gen 1 is clean.
 - The Gen 3 frozen cut is a2985d5a: FR/LG 43/43, RR 19/19. Post-merge passes are green at a20cd945.
