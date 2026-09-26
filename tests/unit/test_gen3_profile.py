@@ -494,6 +494,14 @@ def test_c59_rr_bodies_are_byte_identical_to_fr(name, addr, size) -> None:
     fr_path = REPO / "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba"
     if not (rr_path.exists() and fr_path.exists()):
         pytest.skip("local copyrighted ROMs absent; the embedded anchors still pin the bytes")
+    import hashlib
+    import sys
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen3_final_cut
+    pins = gen3_final_cut.rom_pins(str(REPO))              # absent skips; present-but-wrong fails
+    for path, key in ((rr_path, "radical_red_companion"), (fr_path, "firered")):
+        got = hashlib.sha1(path.read_bytes()).hexdigest()
+        assert got == pins[key], f"{path} is present but not the pinned {key} ({got[:8]} != {pins[key][:8]})"
     rr, fr = rr_path.read_bytes(), fr_path.read_bytes()
     off = addr - 0x08000000
     assert rr[off:off + size] == fr[off:off + size], f"{name} differs between RR and FR"

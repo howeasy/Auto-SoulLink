@@ -3290,6 +3290,11 @@ def test_the_tutorial_var_and_its_path_are_pret_facts():
     rom = REPO / "patch" / "build" / "gen3_Pokemon_-_FireRed_Version_(USA).gba"
     if not rom.is_file():
         pytest.skip("no staged FR ROM")
+    import hashlib
+
+    import gen3_final_cut
+    want = gen3_final_cut.rom_pins(str(REPO))["firered"]   # absent skips; present-but-wrong fails
+    assert hashlib.sha1(rom.read_bytes()).hexdigest() == want, f"{rom} is not the pinned FR {want[:8]}"
     m = load(str(rom), sym_path=str(REPO / "data" / "gen3" / "pret" / "pokefirered.sym")).map(5, 5)
     assert m.bfs((2, 4), (10, 4)) == ["Right"] * 8
     text = (REPO / "lua" / "tests" / "duo" / "scenario_gen3_center_controls.lua").read_text(encoding="utf-8")
