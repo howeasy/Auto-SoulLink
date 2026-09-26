@@ -13,8 +13,8 @@ sys.path.insert(0, os.path.join(_REPO, "tools"))
 
 import verify_gen3_release as gate  # noqa: E402  (tools/ is not a package; the gate is a script)
 
-LANE_ORDER = ["unit", "lua-parse", "pins", "profile-generated", "probe-gates",
-              "duo-pairs-gen3"]
+LANE_ORDER = ["unit", "lua-parse", "pins", "profile-generated", "checkpoint-generated",
+              "shadow-negatives-emerald", "probe-gates", "duo-pairs-gen3"]
 
 
 def test_lane_order_is_the_gate_order():
@@ -121,3 +121,23 @@ def test_an_unexplained_skip_fails_the_lane(monkeypatch):
         monkeypatch, "3 passed, 1 skipped in 0.4s\nSKIPPED [1] tests/x.py:12: no jar\n")
     assert not ok
     assert "1 skipped" in detail
+
+
+# ---------------------------------------------------------------------------
+# card E4b-FINALCUT: the two lanes this card added
+# ---------------------------------------------------------------------------
+
+def test_checkpoint_generated_checks_all_three_packs_not_just_emerald():
+    """gen_gen3_write_checkpoint.py --check covers FRLG/RR/Emerald in one invocation (its own
+    ALL_PACKS loop), so this lane's argv names no --title/--pack flag."""
+    lane = next(ln for ln in gate.LANES if ln.name == "checkpoint-generated")
+    assert lane.argv == [sys.executable, "tools/gen_gen3_write_checkpoint.py", "--check"]
+    assert not lane.is_pytest
+
+
+def test_shadow_negatives_emerald_checks_the_committed_manifest_read_only():
+    lane = next(ln for ln in gate.LANES if ln.name == "shadow-negatives-emerald")
+    assert lane.argv == [sys.executable, "tools/gen3_shadow_negatives.py",
+                         "docs/gen3_emerald/negatives_manifest.json"]
+    assert lane.name not in gate._SLOW   # no emulator, no lane mutation -- a --quick lane
+    assert os.path.exists(os.path.join(_REPO, "docs/gen3_emerald/negatives_manifest.json"))

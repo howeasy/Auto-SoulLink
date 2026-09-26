@@ -449,3 +449,125 @@ rows above so each scenario gets its own receipt.
    PASS = `e2e_duo.py` exit 0 (`<scenario>: PASS` in the summary, `PYDEC: PASS asserted scenario facts`).
 7. **`--game` help text** in `tools/e2e_duo.py` names the battery-boot rows: `gen3_rr` (Radical Red),
    `gen3_frlg`, `gen3_lgfr`, the `gen1_*` rows, and `gen2`. The old savestate RR row is retired.
+
+---
+
+## 13. Emerald final cut (`--title emerald`, card E4b-FINALCUT)
+
+`python tools/gen3_final_cut.py --cut <sha> --title emerald` is a third, opt-in plan
+(docs/gen3_emerald/PLAN.md §5 E4b), separate from the default FR/LG plan and `--title rr`. It is a
+single-title plan (no orientation pair): Emerald plays only against itself, so every duo row id
+ends `_em_as_a`.
+
+### 13.1 Source lanes (no ROM, no emulator)
+
+Three checks that all three Gen 3 packs (FRLG, RR, Emerald) generate byte-identically from their
+pinned sources, plus the Emerald unit suite:
+
+    python tools/gen_gen3_profile.py --check              # row profile_generated_check
+    python tools/gen_gen3_write_checkpoint.py --check      # row write_checkpoint_generated_check
+    python tools/gen_area_map.py --game emerald            # row area_map_generated_emerald
+    python -m pytest tests/unit -q -k "gen3 and emerald" -p no:randomly -rs   # row unit_emerald
+
+`gen_area_map.py` (tools/gen_area_map.py:739-747) has no `--check` flag of its own; it rewrites
+data/games/gen3_emerald/{area_map.json,gen3_emerald_areas.lua,gen3_emerald_locations.lua} in
+place. Its row relies on the runner's own generic "the lane is tracked-dirty after the row" abort
+(run_row) as its staleness check: a stale committed file makes the lane dirty the moment this row
+runs.
+
+### 13.2 Probe-state builds
+
+Town/battle/trainer states for a future checkpoint row, on Emerald's own fixtures
+(tests/fixtures/gen3/emerald_town.sav, emerald_battle.sav, emerald_trainer.sav;
+tools/gen3_fixtures.py EMERALD_KINDS):
+
+    python tools/mkstates_gen3.py --title emerald --kind town    --out-dir <lane>/patch/build/gen3_probe_states_c4p2/emerald --rom <staged emerald ROM>
+    python tools/mkstates_gen3.py --title emerald --kind battle  --out-dir <lane>/patch/build/gen3_probe_states_c4p2/emerald --rom <staged emerald ROM>
+    python tools/mkstates_gen3.py --title emerald --kind trainer --out-dir <lane>/patch/build/gen3_probe_states_c4p2/emerald --rom <staged emerald ROM>
+
+No tutorials build: tools/mkstates_gen3_tutorials.py and tools/gen3_bw_hashes.py accept only
+`--title firered` / `leafgreen` (their own argparse choices), so Emerald has no bw_ row inputs and
+none are attempted.
+
+NOTE, no checkpoint_emerald row: tools/gen3_probe_receipt.py build_env() hardcodes
+SLINK_GEN3_CHECKPOINT at data/games/gen3_frlg/write_checkpoint.json regardless of --title
+(tools/gen3_probe_receipt.py:70-71), even though its own --title choices already accept emerald
+(gen3_fixtures.PARTY_TITLES). A --title emerald row through it would silently check Emerald's ROM
+against FR/LG's checkpoint pack, not Emerald's own -- wrong, not merely incomplete. This plan does
+not add that row. The tree's own committed Emerald checkpoint evidence
+(docs/gen3_emerald/probes/checkpoint_emerald_battle_2026-09-26.txt) was taken through an ad hoc
+per-lane script instead, for the same reason; making gen3_probe_receipt.py title-aware is outside
+this card's lease.
+
+### 13.3 The seven duo scenarios
+
+Every scenario E4 pinned for Emerald (docs/gen3_emerald/PLAN.md §5 E4 row), Emerald against itself:
+
+    python tools/e2e_duo.py --game gen3_emerald --scenario faint_cmd_gen3
+    python tools/e2e_duo.py --game gen3_emerald --scenario reconnect_gen3
+    python tools/e2e_duo.py --game gen3_emerald --scenario deadzone_gen3
+    python tools/e2e_duo.py --game gen3_emerald --scenario link_gen3
+    python tools/e2e_duo.py --game gen3_emerald --scenario boxsync_gen3
+    python tools/e2e_duo.py --game gen3_emerald --scenario linked_faint_active_gen3
+    python tools/e2e_duo.py --game gen3_emerald --scenario whiteout_gen3
+
+The gen3_emerald game and these scenario names are the parallel worktree em-legs's addition to
+tools/e2e_duo.py (card E4-DUO); this plan names them by string and does not import or edit that
+file.
+
+### 13.4 Cold-boot admission
+
+The same idea as §8's FR/LG matrix, on Emerald's own fixture names (no `_party_` infix, unlike
+FR/LG):
+
+    python tools/gen3_fixtures.py boot-check --rom "Pokemon - Emerald Version (USA, Europe).gba" --fixture tests/fixtures/gen3/emerald_town.sav      --title emerald --saveram-name "Pokemon - Emerald Version (USA, Europe).SaveRAM"
+    python tools/gen3_fixtures.py boot-check --rom "Pokemon - Emerald Version (USA, Europe).gba" --fixture tests/fixtures/gen3/emerald_town_b.sav    --title emerald --saveram-name "Pokemon - Emerald Version (USA, Europe).SaveRAM"
+    python tools/gen3_fixtures.py boot-check --rom "Pokemon - Emerald Version (USA, Europe).gba" --fixture tests/fixtures/gen3/emerald_battle.sav    --title emerald --saveram-name "Pokemon - Emerald Version (USA, Europe).SaveRAM"
+    python tools/gen3_fixtures.py boot-check --rom "Pokemon - Emerald Version (USA, Europe).gba" --fixture tests/fixtures/gen3/emerald_battle_b.sav  --title emerald --saveram-name "Pokemon - Emerald Version (USA, Europe).SaveRAM"
+
+### 13.5 Probe/observer evidence
+
+The Emerald-only slice of the live probe-gates suite (probe_hooks_emerald,
+test_gen3_emerald_frameend_census -- tests/live/test_gen3_probe_gates.py), and a read-only check
+of the committed observer receipts against the committed manifest:
+
+    SLINK_LIVE=1 python -m pytest tests/live/test_gen3_probe_gates.py -q -p no:randomly -rs -k emerald
+    python tools/gen3_shadow_negatives.py docs/gen3_emerald/negatives_manifest.json
+
+NOTE: tests/live/test_gen3_shadow_gates.py, named in docs/gen3_emerald/PLAN.md's E2 row, does not
+exist in this tree. No live pytest wrapper drives lua/gen3/shadow_run.lua yet -- the Emerald
+observer/shadow evidence under docs/gen3_emerald/probes/*.shadow.log was taken by an ad hoc
+per-lane script, not a committed, generically invocable tool. This plan's shadow_negatives_emerald
+row checks that already-committed evidence against the committed manifest; it does not re-run the
+observer.
+
+### 13.6 Release zip: build, check, boot (BLOCKED-EG4)
+
+    python tools/make_release.py --version g4-<cut8> --out <lane>/dist --skip-generators   # row emerald_zip_build
+    python tools/check_release_zip.py <zip> --rev <cut>                                     # row emerald_zip_check
+    python tools/gen3_final_cut.py zip-boot --zip <zip> --lane <lane> --title emerald        # row zip_boot_emerald
+
+Emerald is Manager-unadmitted until EG4 (owner ruling 24): lua/gen3/entry.lua:108's Entry.ROUTED
+has no gen3_emerald entry today, so the shipped lua/slink.lua refuses an Emerald cartridge by name
+before the client ever gets far enough to send the identity line this row's evidence depends on.
+zip_boot_emerald therefore checks this precondition itself, against the extracted zip's own
+lua/gen3/entry.lua (not the lane's checkout, so a hand-edited zip is judged on what it would really
+do): while Entry.ROUTED lacks gen3_emerald, it prints "BLOCKED-EG4: ..." and exits 3 (the e2e_duo
+SKIP convention) instead of attempting a boot the client would refuse anyway. ALLOWED_SKIPS names
+this row (zip_boot_emerald, reason substring "BLOCKED-EG4:", citing ruling 24), so the row's
+verdict reads "SKIP-ALLOWED ruling 24 (...)" -- visible in the summary table, not a silent skip,
+and not counted as a bare PASS either. Once EG4 lands and Entry.ROUTED.gen3_emerald is true, the
+precondition check no longer fires and the row attempts the real boot exactly like
+zip_boot_firered / zip_boot_radicalred.
+
+### 13.7 Row ids, in order
+
+    profile_generated_check, write_checkpoint_generated_check, area_map_generated_emerald, unit_emerald,
+    states_emerald_town, states_emerald_battle, states_emerald_trainer,
+    faint_cmd_gen3_em_as_a, reconnect_gen3_em_as_a, deadzone_gen3_em_as_a, link_gen3_em_as_a,
+    boxsync_gen3_em_as_a, linked_faint_active_gen3_em_as_a, whiteout_gen3_em_as_a,
+    bootcheck_emerald_town, bootcheck_emerald_town_b, bootcheck_emerald_battle, bootcheck_emerald_battle_b,
+    probe_gates_emerald, shadow_negatives_emerald,
+    emerald_zip_build, emerald_zip_check, zip_boot_emerald
+
+Its summary is fc_SUMMARY_<cut8>_emerald.txt, never overwriting FR/LG's or RR's.

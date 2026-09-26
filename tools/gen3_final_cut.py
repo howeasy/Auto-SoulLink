@@ -7,13 +7,22 @@
     python tools/gen3_final_cut.py --cut <sha> --rows 'item2b*,checkpoint_*' --stop-at 2026-09-25T06:00Z
     python tools/gen3_final_cut.py --cut <sha> --list              # the row ids
     python tools/gen3_final_cut.py --cut <sha> --title rr          # the G5 (Radical Red) plan
+    python tools/gen3_final_cut.py --cut <sha> --title emerald     # the E4b (Emerald) plan
 
 docs/gen3/G4_final_cut_runbook.md §0-§11 is the source of every row; §12 names the gaps this closes.
 --title rr (card G5-RUNNER-RR) is a separate, opt-in plan: the RR duo rows (every
 tools/e2e_duo.py SCENARIOS entry whose games includes gen3_rr, minus the owner-signed
 linked_faint_active_mega_gen3 limit), the RR opcode gates, and the release zip built, checked
 and booted on the RR companion (rr_zip_build, rr_zip_check, zip_boot_radicalred); its summary is
-fc_SUMMARY_<cut8>_rr.txt. --title defaults to "frlg", so the default plan and its row ids are
+fc_SUMMARY_<cut8>_rr.txt. --title emerald (card E4b-FINALCUT, docs/gen3_emerald/PLAN.md §5 E4b) is
+a third, opt-in plan: the SOURCE-lane generator checks, the Emerald states/duo/bootcheck rows, the
+Emerald-only slice of the probe-gates live suite, the shadow-negatives manifest check, and the
+release zip built, checked and booted on Emerald (emerald_zip_build, emerald_zip_check,
+zip_boot_emerald); its summary is fc_SUMMARY_<cut8>_emerald.txt. §13 of the runbook is its source.
+Emerald is Manager-unadmitted until EG4 (ruling 24: lua/gen3/entry.lua:108's Entry.ROUTED has no
+gen3_emerald entry yet), so zip_boot_emerald checks that precondition itself and reports
+SKIP-ALLOWED BLOCKED-EG4 (not a silent skip, not a PASS) instead of attempting a boot the shipped
+client would refuse by design. --title defaults to "frlg", so the default plan and its row ids are
 unchanged.
 Sequential, one emulator lane (docs/gen3/PLAN.md:23). Order: provision the lane at --cut (and the
 master tree when item 6 is selected), then every selected row in runbook order. Each row writes
@@ -65,10 +74,16 @@ REPO = os.path.dirname(_HERE)
 PROBES = os.path.join(REPO, "docs", "gen3", "probes")
 PY = sys.executable
 
+# "emerald" keys added for --title emerald (card E4b-FINALCUT); only ever looked up by explicit
+# key (never iterated as a whole), so this is inert for --title frlg/rr.
 STAGED = {"firered": "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba",
-          "leafgreen": "patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba"}
+          "leafgreen": "patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba",
+          "emerald": "patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba"}
 ROOT_DUMPS = {"firered": "Pokemon - FireRed Version (USA).gba",
-              "leafgreen": "Pokemon - LeafGreen Version (USA).gba"}
+              "leafgreen": "Pokemon - LeafGreen Version (USA).gba",
+              # tools/gen3_fixtures.py:452 PARTY_TITLES["emerald"]["rom"]
+              "emerald": "Pokemon - Emerald Version (USA, Europe).gba"}
+EMERALD_SAVERAM = "Pokemon - Emerald Version (USA, Europe).SaveRAM"   # tools/gen3_fixtures.py:918
 # The gitignored inputs a lane needs (runbook §0.3, item 6's inputs per
 # item6_route_diff_{branch,master}_2026-09-24.txt). PINNED ones are verified against the tree's
 # own pins (rom_pins) and taken from the first source whose content matches -- the lane itself,
@@ -85,6 +100,15 @@ PINNED_INPUTS = {   # lane path -> (pin key, relative paths a source may hold it
     STAGED["leafgreen"]: ("leafgreen", [STAGED["leafgreen"], ROOT_DUMPS["leafgreen"]]),
     # probe_gates and the unit gate's pinned-dump tests read the RR companion build
     "patch/build/slink_RR.gba": ("radical_red_companion", ["patch/build/slink_RR.gba"]),
+}
+# --title emerald (card E4b-FINALCUT): kept OUT of PINNED_INPUTS/GITIGNORED_INPUTS so frlg/rr's
+# printed provision-plan text (and every --title's copy_inputs() call that doesn't ask for it) is
+# untouched; provision_plan()/copy_inputs() merge this in only when the caller passes it (run_pass
+# does, only for --title emerald). Pin key "emerald" is rom_pins()'s own regex output for
+# ("gen3_emerald", "emerald", "clean") now that "emerald" is a STAGED title.
+EMERALD_PINNED_INPUTS = {
+    ROOT_DUMPS["emerald"]: ("emerald", [ROOT_DUMPS["emerald"], STAGED["emerald"]]),
+    STAGED["emerald"]: ("emerald", [STAGED["emerald"], ROOT_DUMPS["emerald"]]),
 }
 UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
                    "patch/build/gen1_red.gb", "patch/build/gen1_blue.gb",
@@ -103,9 +127,14 @@ ITEM6_INPUTS = [p for p in UNPINNED_INPUTS if not p.endswith("/")]   # the Gen 1
 ALLOWED_SKIPS = [
     ("linked_faint_active_mega_gen3_*", "R5 needs an RR trainer route",
      "owner ruling 20 (G4_request_draft.md §6): RR row R5 is a signed G5 limit, kept as a named SKIP"),
+    ("zip_boot_emerald", "BLOCKED-EG4:",
+     "ruling 24 (docs/gen3_emerald/PLAN.md; lua/gen3/entry.lua:69-70,108): Entry.ROUTED and the "
+     "Manager admission flag flip only at EG4, so a zip boot refuses Emerald by design before "
+     "that signature -- not a defect to chase, and not silently skipped (named here)"),
 ]
 
-ORIENT = {"gen3_frlg": "fr_as_a", "gen3_lgfr": "lg_as_a", "gen3_rr": "rr_as_a"}
+ORIENT = {"gen3_frlg": "fr_as_a", "gen3_lgfr": "lg_as_a", "gen3_rr": "rr_as_a",
+          "gen3_emerald": "em_as_a"}   # --title emerald (card E4b-FINALCUT)
 
 
 @dataclass
@@ -256,11 +285,15 @@ def zip_rows(cut, lane, title):
     """§9 item 5: the zip built FROM the cut, checked AT the cut, then booted on `title`."""
     cut8 = cut[:8]
     zip_path = f"{lane}/dist/SLink-player-g4-{cut8}.zip"
-    tag = "§9 item5" if title == "firered" else "§9 item5 RR"
+    # "" / "rr_" preserved exactly for firered/radical_red (byte-identical frlg/rr plans); a new
+    # title (emerald, card E4b-FINALCUT) gets its own prefix so its zip rows never collide with
+    # FR's or RR's receipts (OMP cx-f570e611's rule, generalised past the original two titles).
+    tag = "§9 item5" if title == "firered" else "§9 item5 RR" if title == "radical_red" else \
+        f"§9 item5 {title.upper()}"
     boot = [PY, "tools/gen3_final_cut.py", "zip-boot", "--zip", zip_path, "--lane", lane]
     if title != "firered":
         boot += ["--title", title]
-    pre = "" if title == "firered" else "rr_"   # RR receipts never share FR's names (OMP cx-f570e611)
+    pre = "" if title == "firered" else "rr_" if title == "radical_red" else f"{title}_"
     return [Row(f"{pre}zip_build", tag,
                 [PY, "tools/make_release.py", "--version", f"g4-{cut8}", "--out", f"{lane}/dist",
                  "--skip-generators"], lane, 600, emulator=False),
@@ -284,6 +317,100 @@ def build_plan_rr(cut, lane, master):
                     # gates never skip): 26 passed / 12 skipped is its PASS (OMP cx-42592031)
                     own_verdict=True))
     rows += zip_rows(cut, lane, "radical_red")
+    for r in rows:
+        r.deps = row_deps(r)
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# --title emerald: the E4b final-cut plan (card E4b-FINALCUT, docs/gen3_emerald/PLAN.md §5 E4b).
+# Opt-in and separate from build_plan/build_plan_rr's rows -- --title defaults to "frlg" so the
+# default plan is untouched. docs/gen3/G4_final_cut_runbook.md §13 is this plan's own source.
+# ---------------------------------------------------------------------------
+
+# The seven scenarios E4 pinned for Emerald (docs/gen3_emerald/PLAN.md §5 E4 row). Named here, not
+# derived from tools/e2e_duo.py (unlike rr_scenarios()): that file's gen3_emerald wiring is being
+# added concurrently by the parallel worktree em-legs (card E4-DUO), and this list must stay
+# stable regardless of when that lands. duo_budget() still reads e2e_duo lazily per row and falls
+# back to FALLBACK_DUO_BUDGET if the game isn't registered there yet.
+EMERALD_DUO_SCENARIOS = ("faint_cmd_gen3", "reconnect_gen3", "deadzone_gen3", "link_gen3",
+                         "boxsync_gen3", "linked_faint_active_gen3", "whiteout_gen3")
+
+
+def build_plan_emerald(cut, lane, master):
+    """The E4b final-cut pass: the SOURCE-lane generator checks (tools/gen_gen3_profile.py,
+    tools/gen_gen3_write_checkpoint.py, tools/gen_area_map.py --game emerald), the Emerald unit
+    suite, the §1-equivalent probe-state builds, the seven duo scenarios, the cold-boot admission
+    matrix, the Emerald slice of the live probe-gates suite, the shadow-negatives manifest check,
+    and the release zip built, checked and booted on Emerald (zip_rows, ZIP_BOOT["emerald"]).
+
+    NOT included: a checkpoint_emerald row through tools/gen3_probe_receipt.py. That tool's
+    build_env() hardcodes SLINK_GEN3_CHECKPOINT at data/games/gen3_frlg/write_checkpoint.json
+    regardless of --title (tools/gen3_probe_receipt.py:70-71), so a --title emerald run through it
+    would silently check Emerald's ROM against FRLG's checkpoint pack instead of Emerald's own --
+    wrong, not merely incomplete. The tree's own committed Emerald checkpoint evidence
+    (docs/gen3_emerald/probes/checkpoint_emerald_battle_2026-09-26.txt) was taken through an
+    ad hoc per-lane script instead, for the same reason; this plan does not paper over it with a
+    row that would give a false PASS. `master` is accepted for CLI-signature parity with
+    build_plan but unused (no item6 row)."""
+    del master
+    rows = [
+        Row("profile_generated_check", "§13.1 source",
+            [PY, "tools/gen_gen3_profile.py", "--check"], lane, 120, emulator=False),
+        Row("write_checkpoint_generated_check", "§13.1 source",
+            [PY, "tools/gen_gen3_write_checkpoint.py", "--check"], lane, 120, emulator=False),
+        # gen_area_map.py has no --check of its own (tools/gen_area_map.py:739-747); it rewrites
+        # data/games/gen3_emerald/{area_map.json,gen3_emerald_areas.lua,gen3_emerald_locations.lua}
+        # in place, so a stale committed file makes the LANE tracked-dirty after this row runs --
+        # the runner's own generic "the lane is tracked-dirty after the row" check (run_row) is
+        # this row's staleness check; nothing emerald-specific added to it.
+        Row("area_map_generated_emerald", "§13.1 source",
+            [PY, "tools/gen_area_map.py", "--game", "emerald"], lane, 120, emulator=False),
+        Row("unit_emerald", "§13.1 source",
+            [PY, "-m", "pytest", "tests/unit", "-q", "-k", "gen3 and emerald", "-p", "no:randomly",
+             "-rs"], lane, 900, emulator=False),
+    ]
+    # §13.2: the probe-state builds a future checkpoint row would need. town/battle/trainer are
+    # the only EMERALD_KINDS entries with both a committed *_party-equivalent fixture and scripted
+    # normal-input coverage in tools/mkstates_gen3.py; pc/lowhp/badges/evolve/poison/gift are E2's
+    # own SYNTH play-leg seeds (tools/gen3_fixtures.py EMERALD_KINDS), not this builder's inputs.
+    for kind in ("town", "battle", "trainer"):
+        out = f"{lane}/patch/build/gen3_probe_states_c4p2/emerald"
+        rows.append(Row(f"states_emerald_{kind}", "§13.2 build",
+                        [PY, "tools/mkstates_gen3.py", "--title", "emerald", "--kind", kind,
+                         "--out-dir", out, "--rom", STAGED["emerald"]], lane,
+                        1200 if kind == "trainer" else 600, outputs_dir=out))
+    # §13.3: the seven duo scenarios, Emerald vs itself (the parallel worktree em-legs owns
+    # tools/e2e_duo.py's gen3_emerald wiring -- named here by string, never imported from there).
+    for s in EMERALD_DUO_SCENARIOS:
+        rows.append(_duo(s, "gen3_emerald", "§13.3 duo", lane))
+    # §13.4: cold-boot admission, mirroring §8's FR/LG matrix on Emerald's own fixture names
+    # (tests/fixtures/gen3/emerald_{town,battle}[_b].sav -- no "_party_" infix, unlike FR/LG).
+    for scene in ("town", "battle"):
+        for side in ("", "_b"):
+            fx = f"emerald_{scene}{side}"
+            rows.append(Row(f"bootcheck_{fx}", "§13.4 item4",
+                            [PY, "tools/gen3_fixtures.py", "boot-check",
+                             "--rom", ROOT_DUMPS["emerald"],
+                             "--fixture", f"tests/fixtures/gen3/{fx}.sav", "--title", "emerald",
+                             "--saveram-name", EMERALD_SAVERAM],
+                            lane, 600))
+    # §13.5: the Emerald-only slice of the live probe-gates suite (probe_hooks_emerald,
+    # test_gen3_emerald_frameend_census -- tests/live/test_gen3_probe_gates.py) and the
+    # shadow-negatives manifest check against the committed observer receipts
+    # (docs/gen3_emerald/negatives_manifest.json, tools/gen3_shadow_negatives.py). NOTE:
+    # tests/live/test_gen3_shadow_gates.py, named in docs/gen3_emerald/PLAN.md's E2 row, does not
+    # exist in this tree -- no live pytest wrapper drives shadow_run.lua yet; only this manifest
+    # check against receipts already taken and committed under docs/gen3_emerald/probes/.
+    rows.append(Row("probe_gates_emerald", "§13.5 probe",
+                    [PY, "-m", "pytest", "tests/live/test_gen3_probe_gates.py", "-q", "-p",
+                     "no:randomly", "-rs", "-k", "emerald"], lane, 3600, env={"SLINK_LIVE": "1"}))
+    rows.append(Row("shadow_negatives_emerald", "§13.5 probe",
+                    [PY, "tools/gen3_shadow_negatives.py",
+                     "docs/gen3_emerald/negatives_manifest.json"], lane, 120, emulator=False))
+    # §13.6: the release zip built FROM the cut, checked AT the cut, then booted on Emerald
+    # (BLOCKED-EG4 today -- zip_boot()'s own precondition check, ALLOWED_SKIPS "zip_boot_emerald").
+    rows += zip_rows(cut, lane, "emerald")
     for r in rows:
         r.deps = row_deps(r)
     return rows
@@ -398,8 +525,11 @@ def main_checkout():
     return os.path.dirname(common)
 
 
-def provision_plan(tree, rev):
-    """The commands provision() may run, for --dry-run."""
+def provision_plan(tree, rev, extra_pinned=None):
+    """The commands provision() may run, for --dry-run. `extra_pinned` (--title emerald only:
+    EMERALD_PINNED_INPUTS) is appended so frlg/rr's printed plan is untouched at its default of
+    None -- every existing call site keeps calling this with two arguments."""
+    pinned = {**PINNED_INPUTS, **(extra_pinned or {})}
     return [f"git worktree add --detach {tree} {rev}   (only if {tree} does not exist)",
             f"git -C {tree} update-index -q --really-refresh && git -C {tree} status --porcelain "
             f"--untracked-files=no   (must be empty, else abort)",
@@ -407,7 +537,7 @@ def provision_plan(tree, rev):
             f"git -C {tree} update-ref --no-deref HEAD {rev}   (fallback: the broken shared ref)",
             f"git -C {tree} read-tree {rev} && git -C {tree} checkout-index -a -f   (fallback)",
             f"pinned inputs (sha1 vs the tree's own pins; lane, then this worktree, then the main "
-            f"checkout; no match aborts): {', '.join(PINNED_INPUTS)}",
+            f"checkout; no match aborts): {', '.join(pinned)}",
             f"unpinned inputs, copied only when missing: {', '.join(UNPINNED_INPUTS)}"]
 
 
@@ -490,13 +620,17 @@ def _matches_pin(path, key, pins):
         (f"{key}:md5" not in pins or file_digest(path, "md5") == pins[f"{key}:md5"])
 
 
-def copy_inputs(tree, root, repo=None, pins=None, only=None):
+def copy_inputs(tree, root, repo=None, pins=None, only=None, extra_pinned=None):
     """Bring the tree's gitignored inputs in line (see PINNED_INPUTS / UNPINNED_INPUTS).
     `only`: just these unpinned inputs, no pinned ones (item 6's master tree needs only the
-    Gen 1/2 inputs, and an older master may not carry the Gen 3 pin tables at all)."""
+    Gen 1/2 inputs, and an older master may not carry the Gen 3 pin tables at all).
+    `extra_pinned` (--title emerald only: EMERALD_PINNED_INPUTS): merged in on top of
+    PINNED_INPUTS; every other call site keeps its default of None, so frlg/rr's provisioning is
+    unchanged."""
     repo = repo or REPO
     pins = {} if only is not None else (pins or rom_pins(tree))
-    for dst_rel, (key, rels) in ({} if only is not None else PINNED_INPUTS).items():
+    for dst_rel, (key, rels) in ({} if only is not None else
+                                  {**PINNED_INPUTS, **(extra_pinned or {})}).items():
         dst = os.path.join(tree, dst_rel)
         if _matches_pin(dst, key, pins):
             continue
@@ -712,7 +846,29 @@ ZIP_BOOT = {
     "radical_red": ("patch/build/slink_RR.gba", "slink_RR.gba", "rr_town.sav", "slink RR.SaveRAM",
                     r"\[SLink-gen3\] gen3_rr/radical_red \(companion by hash\) player a ",
                     "hello rom=firered_rr "),
+    # emerald (card E4b-FINALCUT): a clean dump BizHawk's gamedb knows (like FR/LG, unlike RR's
+    # companion), so the launched filename is arbitrary and the battery files under the gamedb
+    # title (EMERALD_SAVERAM); rom_type "emerald" and pack "gen3_emerald" per
+    # lua/gen3/entry.lua:72 (rom_type), :98 (pack). Only reachable post-EG4 -- see zip_boot()'s
+    # own precondition check, ALLOWED_SKIPS "zip_boot_emerald".
+    "emerald": (STAGED["emerald"], "emerald.gba", "emerald_town.sav", EMERALD_SAVERAM,
+                r"\[SLink-gen3\] gen3_emerald/emerald \(clean by hash\) player a ",
+                "hello rom=emerald "),
 }
+
+
+def emerald_admission_blocker(lua_dir):
+    """None once the EXTRACTED zip's lua/gen3/entry.lua admits gen3_emerald (Entry.ROUTED, ruling
+    24); else the reason it does not. Checked against the artifact actually being booted, not the
+    lane's own checkout, so a hand-edited zip is judged on what it would really do."""
+    text = _read(os.path.join(lua_dir, "gen3", "entry.lua"))
+    if not text:
+        return "the extracted zip has no lua/gen3/entry.lua"
+    m = re.search(r"Entry\.ROUTED\s*=\s*\{([^}]*)\}", text)
+    if not (m and re.search(r"\bgen3_emerald\s*=\s*true\b", m.group(1))):
+        return ("lua/gen3/entry.lua Entry.ROUTED has no gen3_emerald entry in this zip "
+                "(ruling 24: it flips only at EG4)")
+    return None
 
 
 def zip_boot(zip_path, lane, timeout=300, title="firered"):
@@ -731,6 +887,15 @@ def zip_boot(zip_path, lane, timeout=300, title="firered"):
     if not entry:
         print("RESULT: FAIL the zip has no lua/slink.lua")
         return 1
+    if title == "emerald":
+        blocker = emerald_admission_blocker(os.path.dirname(entry))
+        if blocker:
+            # ruling 24: ROUTED/UNADMITTED_GAMES flip only at EG4, so a zip built before that
+            # signature refuses Emerald by design -- named as an ALLOWED_SKIPS entry (not a
+            # silent skip, not a PASS) rather than launching a boot the shipped client would
+            # itself refuse.
+            print(f"  zip_boot_emerald: SKIP (allowed: EG4 not yet signed) — BLOCKED-EG4: {blocker}")
+            return 3
     lua_log = os.path.join(os.path.dirname(os.path.dirname(entry)), "slink_lua.log")
     saveram = os.path.join(tmp, "saveram")
     os.makedirs(saveram)
@@ -1533,13 +1698,15 @@ def run_pass(args):
         if not args.dry_run:
             raise
         cut = args.cut
-    plan_fn = build_plan_rr if args.title == "rr" else build_plan
+    plan_fn = {"rr": build_plan_rr, "emerald": build_plan_emerald}.get(args.title, build_plan)
     rows = select_rows(plan_fn(cut, lane, master), args.rows)
     if args.list:
         for r in rows:
             print(f"{r.id:<48} {r.item}")
         return 0
-    title_sfx = "_rr" if args.title == "rr" else ""   # fc_SUMMARY_<cut8>_rr.txt: FR's stays put
+    # fc_SUMMARY_<cut8>_rr.txt / _emerald.txt: FR's stays put
+    title_sfx = {"rr": "_rr", "emerald": "_emerald"}.get(args.title, "")
+    emerald_pins = EMERALD_PINNED_INPUTS if args.title == "emerald" else None
     if args.merge_summary:
         return merge_summary(cut, rows, title_sfx)
     decisions, est = plan_decisions(rows, cut, args.carry, lane)
@@ -1558,7 +1725,7 @@ def run_pass(args):
     if args.dry_run:
         print(f"# G4 final cut {cut}  lane={lane}  master={master}  rows={len(rows)}"
               f"{f'  shard={args.shard}' if args.shard else ''}  carry={bool(args.carry)}")
-        for step in provision_plan(lane, cut):
+        for step in provision_plan(lane, cut, emerald_pins):
             print(f"# provision: {step}")
         if any(r.id == "item6_route_diff" for r in run_rows):
             print(f"# provision: the same for {master} at master")
@@ -1590,7 +1757,7 @@ def run_pass(args):
     try:
         if run_rows or cached_rows:
             provision(lane, cut, root)
-            copy_inputs(lane, root)
+            copy_inputs(lane, root, extra_pinned=emerald_pins)
         if any(r.id == "item6_route_diff" for r in run_rows):
             provision(master, "master", root)
             copy_inputs(master, root, only=ITEM6_INPUTS)
@@ -1663,10 +1830,14 @@ def main(argv=None):
     ap.add_argument("--lane", default=os.path.join(wt, "gen3-lane-clean"))
     ap.add_argument("--master", default=os.path.join(wt, "gen3-lane-master"),
                     help="item 6's baseline tree, provisioned at `master`")
-    ap.add_argument("--title", default="frlg", choices=("frlg", "rr"),
+    ap.add_argument("--title", default="frlg", choices=("frlg", "rr", "emerald"),
                     help="frlg (default): the G4 FR/LG plan, unchanged. rr: the G5 Radical Red "
                          "plan (card G5-RUNNER-RR) -- the RR duo rows, the RR opcode gates, and the "
-                         "zip build/check/boot on RR -- in place of it")
+                         "zip build/check/boot on RR -- in place of it. emerald: the E4b plan "
+                         "(docs/gen3_emerald/PLAN.md) -- SOURCE-lane generator checks, the "
+                         "Emerald states/duo/bootcheck rows, the Emerald slice of probe-gates, "
+                         "the shadow-negatives manifest check, and the zip build/check/boot on "
+                         "Emerald (BLOCKED-EG4 until ruling 24 flips ROUTED)")
     ap.add_argument("--rows", default=None, help="comma list of row-id globs or item tags")
     ap.add_argument("--dry-run", action="store_true", help="print the plan; launch nothing")
     ap.add_argument("--list", action="store_true", help="print the selected row ids")

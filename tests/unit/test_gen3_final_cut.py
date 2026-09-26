@@ -228,6 +228,179 @@ def test_title_invalid_choice_rejected():
 
 
 # ---------------------------------------------------------------------------
+# --title emerald (card E4b-FINALCUT): the E4b Emerald plan, opt-in via --title
+# ---------------------------------------------------------------------------
+
+EMERALD_EXPECTED_ROWS = [
+    "profile_generated_check", "write_checkpoint_generated_check", "area_map_generated_emerald",
+    "unit_emerald",
+    "states_emerald_town", "states_emerald_battle", "states_emerald_trainer",
+    "faint_cmd_gen3_em_as_a", "reconnect_gen3_em_as_a", "deadzone_gen3_em_as_a",
+    "link_gen3_em_as_a", "boxsync_gen3_em_as_a", "linked_faint_active_gen3_em_as_a",
+    "whiteout_gen3_em_as_a",
+    "bootcheck_emerald_town", "bootcheck_emerald_town_b",
+    "bootcheck_emerald_battle", "bootcheck_emerald_battle_b",
+    "probe_gates_emerald", "shadow_negatives_emerald",
+    "emerald_zip_build", "emerald_zip_check", "zip_boot_emerald",
+]
+
+
+def test_build_plan_emerald_row_ids_are_exactly_the_expected_rows():
+    assert [r.id for r in fc.build_plan_emerald("c" * 40, LANE, MASTER)] == EMERALD_EXPECTED_ROWS
+
+
+def test_dry_run_title_emerald_plan(capsys):
+    cut = _git(fc.REPO, "rev-parse", "HEAD")
+    assert fc.main(["--cut", cut, "--title", "emerald", "--dry-run", "--lane", LANE,
+                    "--master", MASTER]) == 0
+    out = capsys.readouterr().out
+    ids = [ln.split()[1] for ln in out.splitlines() if ln.startswith("[")]
+    assert ids == EMERALD_EXPECTED_ROWS
+    assert "$ python tools/e2e_duo.py --game gen3_emerald --scenario faint_cmd_gen3" in out
+    assert "$ python tools/gen_gen3_profile.py --check" in out
+    assert "$ python tools/gen_area_map.py --game emerald" in out
+    assert "-k 'gen3 and emerald'" in out
+    assert "-k emerald" in out
+    assert "zip-boot --zip" in out and "--title emerald" in out
+    assert "_emerald.txt" in out.split("summary ")[-1]   # its own summary, never FR's or RR's
+
+
+def test_title_emerald_pin_is_appended_only_to_emerald_provision_text(capsys):
+    # frlg's own provision preamble is untouched by --title emerald existing at all (the falsifier
+    # this card's brief asked for: capture frlg/rr --dry-run before vs after the edit).
+    cut = _git(fc.REPO, "rev-parse", "HEAD")
+    fc.main(["--cut", cut, "--dry-run", "--lane", LANE, "--master", MASTER])
+    frlg_provision = [ln for ln in capsys.readouterr().out.splitlines() if "pinned inputs" in ln]
+    fc.main(["--cut", cut, "--title", "emerald", "--dry-run", "--lane", LANE, "--master", MASTER])
+    emerald_provision = [ln for ln in capsys.readouterr().out.splitlines() if "pinned inputs" in ln]
+    assert "Emerald" not in frlg_provision[0] and "emerald" not in frlg_provision[0]
+    assert "emerald" in emerald_provision[0].lower()
+    assert emerald_provision[0].startswith(frlg_provision[0])   # strictly appended, nothing removed
+
+
+def test_build_plan_emerald_duo_rows_use_e2e_duo_with_the_emerald_game():
+    rows = fc.build_plan_emerald("c" * 40, LANE, MASTER)
+    faint = next(r for r in rows if r.id == "faint_cmd_gen3_em_as_a")
+    assert faint.command() == "python tools/e2e_duo.py --game gen3_emerald --scenario faint_cmd_gen3"
+    assert faint.cwd == LANE
+
+
+def test_build_plan_emerald_bootcheck_rows_reference_their_own_fixtures():
+    rows = fc.build_plan_emerald("c" * 40, LANE, MASTER)
+    town = next(r for r in rows if r.id == "bootcheck_emerald_town")
+    assert town.command() == (
+        "python tools/gen3_fixtures.py boot-check --rom 'Pokemon - Emerald Version (USA, Europe).gba' "
+        "--fixture tests/fixtures/gen3/emerald_town.sav --title emerald "
+        "--saveram-name 'Pokemon - Emerald Version (USA, Europe).SaveRAM'")
+    assert town.deps == fc.row_deps(town)
+    assert "tests/fixtures/gen3/emerald_town.sav" in town.deps
+
+
+def test_build_plan_emerald_boots_the_zip_on_emerald():
+    rows = fc.build_plan_emerald("c" * 40, LANE, MASTER)
+    boot = next(r for r in rows if r.id == "zip_boot_emerald")
+    assert boot.argv[-2:] == ["--title", "emerald"]
+    rom, name, fixture, saveram, client, hello = fc.ZIP_BOOT["emerald"]
+    assert (rom, fixture) == (fc.STAGED["emerald"], "emerald_town.sav")
+    line = "[SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:1 (rom ea5352f8)"
+    assert re.search(client, line) and hello == "hello rom=emerald "
+
+
+def test_the_fr_and_rr_zip_rows_stay_disjoint_from_emeralds():
+    fr = {r.id for r in fc.build_plan("c" * 40, LANE, MASTER) if "zip" in r.id}
+    rr = {r.id for r in fc.build_plan_rr("c" * 40, LANE, MASTER) if "zip" in r.id}
+    em = {r.id for r in fc.build_plan_emerald("c" * 40, LANE, MASTER) if "zip" in r.id}
+    assert not (fr & em) and not (rr & em)   # receipts fc_<row>_<cut8>.txt never collide
+
+
+def test_emerald_rows_are_never_carried_until_their_rom_and_state_inputs_are_hashed():
+    for r in fc.build_plan_emerald("c" * 40, LANE, MASTER):
+        assert r.deps is None or r.id.startswith("bootcheck_"), r.id
+
+
+def test_area_map_generator_has_no_check_flag_so_the_row_relies_on_tracked_dirty():
+    """Documents WHY area_map_generated_emerald has no --check counterpart (unlike the other two
+    §13.1 source rows): a regression here is caught by run_row's generic "lane went tracked-dirty
+    after the row" abort, not by this row's own exit code."""
+    with open(os.path.join(fc.REPO, "tools", "gen_area_map.py"), encoding="utf-8") as f:
+        assert "--check" not in f.read()
+
+
+def test_no_checkpoint_emerald_row_because_the_receipt_tool_hardcodes_frlg():
+    """gen3_probe_receipt.py's build_env() always points SLINK_GEN3_CHECKPOINT at
+    data/games/gen3_frlg/write_checkpoint.json, regardless of --title -- a --title emerald row
+    through it would silently check the wrong pack. Falsifier: this stays true (a fix would make
+    this test fail, which is the SIGNAL to add the row, not a report to route around)."""
+    env = receipts.build_env("emerald", LANE, ["script_running"], "clean")
+    assert env["SLINK_GEN3_CHECKPOINT"] == f"{LANE}/data/games/gen3_frlg/write_checkpoint.json"
+    assert not any(r.id == "checkpoint_emerald" for r in fc.build_plan_emerald("c" * 40, LANE, MASTER))
+
+
+# ---------------------------------------------------------------------------
+# zip_boot_emerald's EG4 precondition (ruling 24): BLOCKED-EG4, not PASS, not a silent skip
+# ---------------------------------------------------------------------------
+
+def _write_entry_lua(tmp_path, routed_emerald):
+    lua_dir = tmp_path / "lua"
+    (lua_dir / "gen3").mkdir(parents=True)
+    routed = "gen3_frlg = true, gen3_rr = true" + (", gen3_emerald = true" if routed_emerald else "")
+    (lua_dir / "gen3" / "entry.lua").write_text(f"Entry.ROUTED = {{ {routed} }}\n", encoding="utf-8")
+    return lua_dir
+
+
+def test_emerald_admission_blocker_true_before_eg4(tmp_path):
+    lua_dir = _write_entry_lua(tmp_path, routed_emerald=False)
+    assert "EG4" in fc.emerald_admission_blocker(str(lua_dir))
+
+
+def test_emerald_admission_blocker_none_once_routed(tmp_path):
+    lua_dir = _write_entry_lua(tmp_path, routed_emerald=True)
+    assert fc.emerald_admission_blocker(str(lua_dir)) is None
+
+
+def test_emerald_admission_blocker_missing_entry_lua(tmp_path):
+    assert fc.emerald_admission_blocker(str(tmp_path)) is not None
+
+
+def test_zip_boot_emerald_skips_blocked_before_launching_anything(tmp_path, monkeypatch, capsys):
+    """zip_boot() must refuse Emerald BEFORE touching the server/emulator when the extracted
+    zip's own entry.lua is not yet routed -- the whole point is never attempting a boot the
+    shipped client would refuse by design."""
+    zip_path = tmp_path / "z.zip"
+    lua_dir = tmp_path / "extract" / "lua"
+    (lua_dir / "gen3").mkdir(parents=True)
+    (lua_dir / "gen3" / "entry.lua").write_text("Entry.ROUTED = { gen3_frlg = true }\n",
+                                                encoding="utf-8")
+    (lua_dir / "slink.lua").write_text("-- stub\n", encoding="utf-8")
+    import zipfile
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for f in (lua_dir / "gen3" / "entry.lua", lua_dir / "slink.lua"):
+            zf.write(f, f.relative_to(tmp_path / "extract"))
+
+    def _boom(*a, **k):
+        raise AssertionError("zip_boot must not reach the server/emulator launch")
+    monkeypatch.setattr(fc.subprocess, "Popen", _boom)
+    rc = fc.zip_boot(str(zip_path), str(tmp_path), title="emerald")
+    out = capsys.readouterr().out
+    assert rc == 3
+    assert "BLOCKED-EG4" in out and "SKIP" in out
+
+
+def test_the_zip_boot_emerald_skip_is_allowed_by_ruling_24():
+    out = ("  zip_boot_emerald: SKIP (allowed: EG4 not yet signed) — BLOCKED-EG4: lua/gen3/"
+           "entry.lua Entry.ROUTED has no gen3_emerald entry in this zip (ruling 24: it flips "
+           "only at EG4)")
+    verdict, ok = fc.judge("zip_boot_emerald", 3, out)
+    assert ok and verdict.startswith("SKIP-ALLOWED")
+
+
+def test_an_unrelated_row_named_zip_boot_emerald_like_is_not_confused():
+    # allowed_skip() fnmatches the row id; a real skip on a DIFFERENT row must not borrow this
+    # ruling just because its output happens to mention BLOCKED-EG4.
+    assert fc.allowed_skip("zip_build", "... BLOCKED-EG4: ...") is None
+
+
+# ---------------------------------------------------------------------------
 # the retry classifier
 # ---------------------------------------------------------------------------
 
@@ -380,7 +553,7 @@ def pass_env(monkeypatch, tmp_path):
     ran = []
     monkeypatch.setattr(fc, "PROBES", str(tmp_path))
     monkeypatch.setattr(fc, "provision", lambda tree, rev, root: rev)
-    monkeypatch.setattr(fc, "copy_inputs", lambda tree, root: None)
+    monkeypatch.setattr(fc, "copy_inputs", lambda tree, root, **kw: None)
     monkeypatch.setattr(fc, "run_row",
                         lambda row, cut, lane, deadline: (ran.append(row.id), ("PASS", 1, True))[1])
     return cut, ran, tmp_path

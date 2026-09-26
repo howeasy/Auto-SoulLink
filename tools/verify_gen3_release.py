@@ -58,6 +58,20 @@ LANES = [
          why="data/games/gen3_frlg/profile.json and gen3_rr/profile.json are exactly what the "
              "pinned pret .sym files generate -- not yet written (P2 C2-2); the lane fails "
              "closed, not skips, until it lands"),
+    # card E4b-FINALCUT: gen_gen3_write_checkpoint.py --check covers all three committed
+    # write_checkpoint.json packs (FRLG, RR, and Emerald -- tools/gen_gen3_write_checkpoint.py's
+    # ALL_PACKS), so this one lane is not Emerald-only, but it is the generator-check the Emerald
+    # plan asked for and none of the three packs had a standing checked lane before.
+    Lane("checkpoint-generated", [_PY, "tools/gen_gen3_write_checkpoint.py", "--check"],
+         why="data/games/gen3_{frlg,rr,emerald}/write_checkpoint.json are exactly what the "
+             "pinned anchors generate"),
+    # card E4b-FINALCUT: read-only check of the committed Emerald observer receipts against the
+    # committed manifest (docs/gen3_emerald/negatives_manifest.json) -- no emulator, no lane
+    # mutation, so it belongs beside the other cheap SOURCE-facts lanes above, not in _SLOW.
+    Lane("shadow-negatives-emerald",
+         [_PY, "tools/gen3_shadow_negatives.py", "docs/gen3_emerald/negatives_manifest.json"],
+         why="the Emerald observer receipts' expected-zero controls (E2 negatives manifest) "
+             "still hold against what is committed under docs/gen3_emerald/probes/"),
     Lane("probe-gates",
          [_PY, "-m", "pytest", "tests/live/test_gen3_probe_gates.py", "-q", "-p", "no:randomly",
           "-rs"],
@@ -77,6 +91,8 @@ REQUIREMENTS = {
     "lua-parse": ["C-4"],
     "pins": ["F-1"],
     "profile-generated": ["F-1"],
+    "checkpoint-generated": ["F-1"],
+    "shadow-negatives-emerald": ["S-1"],
     "probe-gates": ["S-1", "S-13"],
     "duo-pairs-gen3": ["D-1", "D-3"],
 }
