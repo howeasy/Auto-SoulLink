@@ -1,0 +1,13 @@
+# gen3_final_cut row=write_checkpoint_generated_check item=§13.1_source cut=9c96e745b3439a240c08d787c3566858fbe3551f
+# lane=C:/slink-wt/emerald-fc
+# command: python tools/gen_gen3_write_checkpoint.py --check   (cwd=C:/slink-wt/emerald-fc)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T14:55:25 cpu=32% emuhawk=0 python=4
+start_utc=2026-09-26T18:55:24Z tracked_clean_before=True
+data\games\gen3_frlg\write_checkpoint.json is current
+data\games\gen3_rr\write_checkpoint.json is current
+data\games\gen3_emerald\write_checkpoint.json is current
+exit=0 end_utc=2026-09-26T18:55:26Z tracked_clean_after=True classification=pass
