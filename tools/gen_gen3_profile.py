@@ -25,9 +25,9 @@ Packs (PLAN §4, §5.1):
                                         scrape targets), each with its source file:line in the
                                         sibling `_src` map
 
-    data/games/gen3_emerald/profile.json  title emerald (unadmitted), NOT Lua-sourced: addresses
-                                        by name from data/gen3/pret/pokeemerald.sym, constants
-                                        from pinned pret/pokeemerald (build_emerald)
+    data/games/gen3_emerald/profile.json  title emerald (admitted at EG4), NOT Lua-sourced:
+                                        addresses by name from data/gen3/pret/pokeemerald.sym,
+                                        constants from pinned pret/pokeemerald (build_emerald)
 
     python tools/gen_gen3_profile.py            # rewrite all three profiles
     python tools/gen_gen3_profile.py --check    # exit 1 if either committed file is stale
@@ -1243,7 +1243,7 @@ def build_emerald() -> dict:
                    "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
         "titles": {"emerald": {
             "_src": src,
-            "admitted": False,  # ruling 24: admission flips at EG4
+            "admitted": True,  # ruling 24: EG4 flip prepared on claude/gen3-emerald-eg4
             "variant": "emerald",
             "rom_sha1": EMERALD_ROM_SHA1,
             "rom_thumb": _thumb_keys(sections["rom"]),

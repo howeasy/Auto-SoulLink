@@ -59,7 +59,7 @@ def test_profile_has_the_firered_key_set_and_provenance(emerald):
             field = f"{section}.{key}"  # SE_SONG_HEADERS cites per id: rom.SE_SONG_HEADERS.<id>
             assert any(s == field or s.startswith(field + ".") for s in emerald["_src"]), field
     assert emerald["rom_thumb"] == firered["rom_thumb"]
-    assert (emerald["admitted"], emerald["variant"], emerald["rom_sha1"]) == (False, "emerald", ROM_SHA1)
+    assert (emerald["admitted"], emerald["variant"], emerald["rom_sha1"]) == (True, "emerald", ROM_SHA1)
 
 
 def test_profile_regenerates_byte_identical():

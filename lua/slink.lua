@@ -113,13 +113,14 @@ do
 end
 
 -- ── Gen 3 route ──────────────────────────────────────────────────────────────
--- FireRed/LeafGreen (pack gen3_frlg) and Radical Red (pack gen3_rr) admitted by HASH or
--- ANCHORS run under lua/gen3/, the rewritten client. The old Gen 3 client was archived at
--- C5-6 (tag archive/gen3-old-client, owner ruling 24): every other GBA cartridge -- Emerald,
--- the Archipelago FireRed/LeafGreen builds, a header-only admission (an unpinned hack or a
--- bad dump that merely says BPRE/BPGE) -- is refused here by name, never handed to
--- game_detect. RR carries FireRed's header code, so a header-only admission is refused rather
--- than routed: the new client's site check would refuse it anyway, less legibly.
+-- FireRed/LeafGreen (pack gen3_frlg), Radical Red (pack gen3_rr) and Emerald (pack
+-- gen3_emerald, EG4) admitted by HASH or ANCHORS run under lua/gen3/, the rewritten client.
+-- The old Gen 3 client was archived at C5-6 (tag archive/gen3-old-client, owner ruling 24):
+-- every other GBA cartridge -- the Archipelago FireRed/LeafGreen builds, a header-only
+-- admission (an unpinned hack or a bad dump that merely says BPRE/BPGE/BPEE) -- is refused
+-- here by name, never handed to game_detect. RR carries FireRed's header code, so a
+-- header-only admission is refused rather than routed: the new client's site check would
+-- refuse it anyway, less legibly.
 --
 -- The routed set lives in entry.lua (Entry.ROUTED); the launcher keeps no copy of it.
 do
@@ -169,9 +170,7 @@ do
             return
         end
         local what
-        if header_code == "BPEE" then
-            what = "Pokemon Emerald is not supported yet"
-        elseif admit_ok and admitted and admitted.admitted_by == "header" then
+        if admit_ok and admitted and admitted.admitted_by == "header" then
             what = "this " .. tostring(admitted.title) .. " build (header " .. header_code
                    .. ") is not a pinned cartridge -- Archipelago builds and unknown hacks are not supported yet"
         elseif not admit_ok then
@@ -181,7 +180,7 @@ do
                    .. tostring(why) .. ")"
         end
         error("[SLink] Unsupported Gen 3 cartridge: " .. what
-              .. ". Supported: FireRed, LeafGreen and Radical Red.", 0)
+              .. ". Supported: FireRed, LeafGreen, Radical Red and Emerald.", 0)
     end
 end
 

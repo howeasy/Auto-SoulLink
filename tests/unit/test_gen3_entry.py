@@ -23,9 +23,10 @@ FIXTURES = REPO / "tests" / "fixtures" / "gen3"
 PACKS = {
     "gen3_frlg": REPO / "data" / "games" / "gen3_frlg",
     "gen3_rr": REPO / "data" / "games" / "gen3_rr",
-    # Registered in Entry.PACKS/Entry.PACK_FILES (E2-ENTRY) but not in Entry.ROUTED until EG4;
-    # Entry.artifacts()/admission_table() still open it unconditionally, so the anchor- and
-    # hash-coverage tests below must exercise it too (F4/F13).
+    # Registered in Entry.PACKS/Entry.PACK_FILES (E2-ENTRY) and, as of EG4, also in
+    # Entry.ROUTED (see test_gen3_emerald_entry.py); Entry.artifacts()/admission_table() open
+    # it unconditionally regardless, so the anchor- and hash-coverage tests below must
+    # exercise it too (F4/F13).
     "gen3_emerald": REPO / "data" / "games" / "gen3_emerald",
 }
 
@@ -186,9 +187,9 @@ def test_admission_by_anchors_when_the_hash_is_unknown():
 
 def test_admission_by_anchors_when_the_hash_is_unknown_for_emerald():
     """F4: mirrors test_admission_by_anchors_when_the_hash_is_unknown above -- a seeded Emerald
-    ROM with an unrecognized hash still admits by anchors alone (registered-not-routed, E2-ENTRY:
-    Entry.artifacts()/anchor_matches() open gen3_emerald unconditionally even though
-    Entry.ROUTED excludes it until EG4)."""
+    ROM with an unrecognized hash still admits by anchors alone (E2-ENTRY:
+    Entry.artifacts()/anchor_matches() open gen3_emerald unconditionally; since EG4 it is also
+    in Entry.ROUTED, same as gen3_frlg/gen3_rr)."""
     world = World(pack="gen3_emerald", title="emerald", build=False)
     got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
                            header_code="BPEE"))

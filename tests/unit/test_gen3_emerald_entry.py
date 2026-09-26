@@ -1,6 +1,6 @@
-"""E2-ENTRY+BADGE: `gen3_emerald` is registered in `lua/gen3/entry.lua` (Entry.PACKS /
-Entry.PACK_FILES) but deliberately absent from Entry.ROUTED (docs/gen3_emerald/PLAN.md §5 E2
-row; owner-lane grant: "gen3_emerald must NOT be added to Entry.ROUTED until EG4").
+"""E2-ENTRY+BADGE / EG4: `gen3_emerald` is registered in `lua/gen3/entry.lua` (Entry.PACKS /
+Entry.PACK_FILES) and, as of the EG4 flip (docs/gen3_emerald/PLAN.md §5 E3 row; owner ruling
+24), now also joins Entry.ROUTED alongside gen3_frlg and gen3_rr.
 
 Same harness as `test_gen3_entry.py` (lupa over the real `lua/gen3/entry.lua`) and
 `test_slink_route.py` (lupa over the real `lua/slink.lua`, BizHawk globals stubbed); both are
@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import re
 
-import lupa
 import pytest
 
 from tests.unit.test_gen3_entry import PACKS, REPO, World, _admit, lua_to_py
@@ -31,31 +30,22 @@ def test_the_pinned_emerald_sha1_matches_the_shipped_pack_data():
     assert _EMERALD_SHA1 == _PINNED_EMERALD_SHA1
 
 
-# ── (a) route: BPEE + the pinned hash is still refused, never dofile'd to gen3/run.lua ──────
-def test_a_clean_emerald_sha1_is_still_refused_by_name_not_routed():
-    """MUTATION-CHECK: this is the falsifier for 'gen3_emerald must never join Entry.ROUTED
-    before EG4'. If a future edit adds `gen3_emerald = true` to Entry.ROUTED, admission by
-    hash succeeds AND is routed, `lua/gen3/run.lua` gets dofile'd, and this test goes red
-    (both the exception-not-raised assertion and the explicit ROUTED guard below)."""
-    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge: Pokemon Emerald"):
-        _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_SHA1)
+# ── (a) route: BPEE + the pinned hash reaches gen3/run.lua, same as FR/LG/RR ────────────────
+def test_a_clean_emerald_sha1_reaches_the_new_gen3_client():
+    """MUTATION-CHECK: this is the falsifier for the EG4 flip. If a future edit drops
+    `gen3_emerald = true` from Entry.ROUTED (or reinstates the by-name BPEE refusal in
+    lua/slink.lua), admission by hash still succeeds but is no longer routed, `lua/gen3/run.lua`
+    never gets dofile'd, and this test goes red (both the positive assertion and the explicit
+    ROUTED guard below)."""
+    loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_SHA1)
+    assert _NEW_GEN3_CLIENT in loaded, loaded
 
 
-def test_a_clean_emerald_sha1_never_reaches_gen3_run_lua():
-    """The same call as above, but asserting on the positive side: whatever `_run_launcher`
-    dofile's, `gen3/run.lua` is never in it, however the refusal happens to be worded."""
-    loaded: list[str] = []
-    with pytest.raises(lupa.LuaError):
-        loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_SHA1)
-    assert _NEW_GEN3_CLIENT not in loaded, loaded
-
-
-def test_gen3_emerald_is_never_in_entry_routed():
+def test_gen3_emerald_is_in_entry_routed():
     world = World(pack="gen3_frlg", title="firered", build=False)
     routed = lua_to_py(world.Entry.ROUTED)
-    assert "gen3_emerald" not in routed, (
-        "gen3_emerald joined Entry.ROUTED -- forbidden before EG4 "
-        "(docs/gen3_emerald/PLAN.md owner-lane grant)")
+    assert "gen3_emerald" in routed, (
+        "gen3_emerald must join Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row)")
 
 
 # ── (b) Entry.admit on the Emerald hash ──────────────────────────────────────────────────
@@ -103,47 +93,28 @@ def test_admission_table_builds_with_gen3_emerald_registered_no_hash_collisions(
                 assert table[digest]["kind"] == kind
 
 
-# ── (d) the observer-only seam for the EG2 run (Gen 3 grant 2026-09-26, four guards) ──────
-_MSG = "emerald is a known but unadmitted Gen 3 title in gen3_emerald"
+# ── (d) EG4: the observer-only unadmitted-title seam no longer fires for Emerald ──────────
+# Before EG4, `data/games/gen3_emerald/profile.json`'s `titles.emerald.admitted` was `false`,
+# so `Entry.build` refused with "emerald is a known but unadmitted Gen 3 title in gen3_emerald"
+# unless the caller passed the exact `allow_unadmitted = "gen3_emerald/emerald"` observer flag
+# (four guards: write-free io, production still refuses even with the flag, only shadow_run.lua
+# reads the env var, an already-admitted title is unaffected by the flag). EG4 flips `admitted`
+# to `true` (tools/gen_gen3_profile.py), so `profile.admitted ~= false` now holds unconditionally
+# for Emerald and the assertion in lua/gen3/entry.lua:401 never fires for it -- Emerald builds
+# exactly like FR/LG/RR, flag or not (folded into test_the_flag_changes_nothing_for_admitted_titles
+# below). The seam itself (deps.allow_unadmitted, profile.admitted == false) stays in
+# lua/gen3/entry.lua for the next unadmitted title (e.g. gen3_ap); nothing here proves it
+# unreachable in general, only that Emerald no longer exercises it.
 
 
-def test_an_unadmitted_emerald_observer_build_needs_the_explicit_flag():
+def test_an_admitted_emerald_build_no_longer_needs_the_allow_unadmitted_flag():
+    """MUTATION-CHECK: the direct falsifier for barrier 3 (profile.json admitted flip). If a
+    future edit reverts `titles.emerald.admitted` to `false`, `Entry.build` refuses again and
+    this test goes red."""
     world = World(pack="gen3_emerald", title="emerald", build=False)
-    with pytest.raises(lupa.LuaError, match=_MSG):
-        world.Entry.build(world.deps())
-    for wrong in (True, "1", "gen3_frlg/emerald", "gen3_emerald/firered"):   # exact pack/title only
-        with pytest.raises(lupa.LuaError, match=_MSG):
-            world.Entry.build(world.deps(allow_unadmitted=wrong))
-    assert world.registered == []
-    # guard 1: write-free, over the observer's REAL io (shadow_run.build_io: every sink refuses)
-    shadow = world.lua.eval(f'dofile("{(REPO / "lua/gen3/shadow_run.lua").as_posix()}")')
-    mem = world.lua.table(
-        read_u8=lambda a, d=None: (world.rom if d == "ROM" else world.bus).get(int(a), 0),
-        read_u16_le=lambda a, d=None: world._read(int(a), 2),
-        read_u32_le=lambda a, d=None: world._read(int(a), 4),
-        framecount=lambda: world.frame)
-    world.io = shadow.build_io(mem, lambda name: 0)
-    client, parts = world.Entry.build(world.deps(allow_unadmitted="gen3_emerald/emerald"))
+    client, parts = world.Entry.build(world.deps())
     assert client is None and parts.mode == "observer"
-    assert parts.writes is None and parts.native is None and parts.signals is not None
-    for sink in ("write_u8", "write_u16", "write_u32", "write_bytes"):
-        with pytest.raises(lupa.LuaError):
-            world.io[sink](0x02000000, 0)
-    # guard 4: one log line names the unadmitted build
-    assert [line for line in world.logs if "OBSERVER building unadmitted" in line] == [
-        "[SLink-gen3] OBSERVER building unadmitted gen3_emerald/emerald"]
-
-
-def test_production_refuses_an_unadmitted_title_even_with_the_flag(monkeypatch):
-    """Guard 2: the same message in production, flag or not, env or not."""
-    from tests.unit.test_gen3_entry import _production
-    monkeypatch.setenv("SLINK_SHADOW_UNADMITTED", "gen3_emerald/emerald")
-    world = World(pack="gen3_emerald", title="emerald", build=False)
-    with pytest.raises(lupa.LuaError, match=_MSG):
-        _production(world, allow_unadmitted="gen3_emerald/emerald")
-    with pytest.raises(lupa.LuaError, match=_MSG):
-        _production(world)
-    assert world.registered == []
+    assert not any("unadmitted" in line for line in world.logs)
 
 
 def test_only_the_observer_reads_the_unadmitted_env_and_slink_never_loads_it():
@@ -163,6 +134,7 @@ def test_only_the_observer_reads_the_unadmitted_env_and_slink_never_loads_it():
 @pytest.mark.parametrize("pack,title,kind", [
     ("gen3_frlg", "firered", "clean"), ("gen3_frlg", "leafgreen", "clean"),
     ("gen3_rr", "radical_red", "clean"), ("gen3_rr", "radical_red", "companion"),
+    ("gen3_emerald", "emerald", "clean"),
 ])
 def test_the_flag_changes_nothing_for_admitted_titles(pack, title, kind):
     """Guard 3: an admitted title builds identically with or without the flag, and logs no
