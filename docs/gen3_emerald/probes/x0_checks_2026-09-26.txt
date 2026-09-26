@@ -1,0 +1,9 @@
+X0 MODEL checks, 2026-09-26. No network/build in unit tests.
+Initial red: collection failed with FileNotFoundError for tools/build_expansion.py before implementation.
+> python -m pytest tests/unit/test_build_expansion.py -q
+................                                                         [100%]
+16 passed in 0.51s
+exit=0
+> python -m ruff check tools/build_expansion.py tests/unit/test_build_expansion.py
+All checks passed!
+exit=0

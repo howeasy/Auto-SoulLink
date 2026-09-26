@@ -1,0 +1,110 @@
+{
+  "schema": "gen3-expansion-build-v1",
+  "lock_sha256": "1fbb8aae0f0f47a1f4fcbf08a61272cbe3f2e023bad518b29e11ebb22e6d1579",
+  "source": {
+    "url": "https://github.com/rh-hideout/pokeemerald-expansion.git",
+    "tag": "expansion/1.17.0",
+    "commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
+  },
+  "compiler": {
+    "path": "/usr/bin/arm-none-eabi-gcc",
+    "version": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "sha256": "38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59",
+    "status": "provisional",
+    "host": "Linux",
+    "ssh_alias": "hgbox",
+    "package": "gcc-arm-none-eabi",
+    "package_version": "15:13.2.rel1-2"
+  },
+  "make_variables": {
+    "BUILD": "emerald",
+    "DEBUG": "0",
+    "RELEASE": "0",
+    "LTO": "0",
+    "TEST": "0"
+  },
+  "make_targets": [
+    "all",
+    "syms"
+  ],
+  "tool_versions": {
+    "bash": "GNU bash, version 5.2.21(1)-release (x86_64-pc-linux-gnu)\nCopyright (C) 2022 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\n\nThis is free software; you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.",
+    "make": "GNU Make 4.3\nBuilt for x86_64-pc-linux-gnu\nCopyright (C) 1988-2020 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.",
+    "gcc": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "g++": "g++ (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "perl": "This is perl 5, version 38, subversion 2 (v5.38.2) built for x86_64-linux-gnu-thread-multi\n(with 67 registered patches, see perl -V for more detail)\n\nCopyright 1987-2023, Larry Wall\n\nPerl may be copied only under the terms of either the Artistic License or the\nGNU General Public License, which may be found in the Perl 5 source kit.\n\nComplete documentation for Perl, including FAQ lists, should be found on\nthis system using \"man perl\" or \"perldoc perl\".  If you have access to the\nInternet, point your browser at https://www.perl.org/, the Perl Home Page.",
+    "pkg-config": "1.8.1",
+    "git": "git version 2.43.0",
+    "arm-none-eabi-gcc": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "host_binaries": {
+      "bash": {
+        "path": "/usr/bin/bash",
+        "sha256": "bc5945feb8bd26203ebfafea5ce1878bb2e32cb8fb50ab7ae395cfb1e1aaaef1"
+      },
+      "make": {
+        "path": "/usr/bin/make",
+        "sha256": "d78b8f1d099fbcfb6f2f49ab87223b9b68fb3956642f92d6ec6de812e8afa965"
+      },
+      "gcc": {
+        "path": "/usr/bin/gcc",
+        "sha256": "1b99826121ae6682a634e5efe09bd3e3df58ce58e0b28f849114ab5b89139c26"
+      },
+      "g++": {
+        "path": "/usr/bin/g++",
+        "sha256": "1353e9bdd29a7295c7226bf6c63abccce056d8cac31f112e5cdbecc3f28c2769"
+      },
+      "perl": {
+        "path": "/usr/bin/perl",
+        "sha256": "47bdc8a342556c1d140084417ef6cacd79a3362e4b6cc1e4754df55bdf1e3683"
+      },
+      "pkg-config": {
+        "path": "/usr/bin/pkg-config",
+        "sha256": "7e8152db1b0c7e49d47b4b82a70dc9997b557951c5d4d938b0e7f208ce9eb10b"
+      },
+      "git": {
+        "path": "/usr/bin/git",
+        "sha256": "2a8c18fbf43da9f692d75474c72bea9dfd796c260b0f3dfe456376abc3bbd668"
+      }
+    },
+    "python3": "Python 3.12.3",
+    "make_argv": [
+      "make",
+      "-j12",
+      "BUILD=emerald",
+      "DEBUG=0",
+      "RELEASE=0",
+      "LTO=0",
+      "TEST=0",
+      "all",
+      "syms"
+    ],
+    "builder_sha256": "17a13cf6520004364d98bdf9231940c9f6090185309c6860c0383c09f5ed3e14",
+    "working_directory": "/home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/c7b390f98cc946498389f09dd79feb2d"
+  },
+  "generated": "2026-09-26T18:06:34.736093+00:00",
+  "host": "Linux-7.0.0-34-generic-x86_64-with-glibc2.39",
+  "elapsed_seconds": 148.24012702,
+  "files": {
+    "pokeemerald.gba": {
+      "sha256": "08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39",
+      "size": 33554432
+    },
+    "pokeemerald.elf": {
+      "sha256": "179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b",
+      "size": 35972280
+    },
+    "pokeemerald.map": {
+      "sha256": "c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08",
+      "size": 4623407
+    },
+    "pokeemerald.sym": {
+      "sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e",
+      "size": 4812449
+    }
+  },
+  "rom": {
+    "sha1": "28877d733492299599f2b8fff50493109d72653c",
+    "md5": "83bde8deeaa27453b12545b9cfffe3a6",
+    "size": 33554432
+  }
+}
