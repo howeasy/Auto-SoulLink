@@ -4,6 +4,8 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 
 ## CURRENT STATE (2026-09-26, after checkpoint 20)
 
+- **READ FIRST NEXT SESSION: owner decision "We will combine the next work"** (2026-09-26). ONE orchestrator runs all remaining Gen 3 work (FR/LG, RR, Emerald and the expansion sub-lane). Handoff docs: `docs/gen3/HANDOFF_combined_gen3_2026-09-26.md` (this branch, 7d3b8af0) plus `docs/gen3_emerald/HANDOFF_combined_gen3_2026-09-26.md` (claude/gen3-emerald).
+
 - **2-HOUR BLOCK 16:03-18:03 (2026-09-26 evening) -- all on the BRANCH, master untouched (owner rule: no master without approval):**
   - Rulings recorded (G4 §6):
     - 28: FR/LG trainer panels.
