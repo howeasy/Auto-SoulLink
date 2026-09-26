@@ -195,6 +195,14 @@ local function whiteout_destination(cp, checkpoint)
     local raw = checkpoint or last_heal_checkpoint(cp)
     if not raw then return nil end
     local group, num, warp, x, y = raw.group, raw.num, raw.warp, raw.x, raw.y
+    if TITLE == "emerald" and warp == 255 then
+        -- E4-DUO-2: Emerald has no interior projection. pret pokeemerald c65e93f2
+        -- src/overworld.c:357-366 DoWhiteOut -> SetWarpDestinationToLastHealLocation (:665-668)
+        -- warps straight to gSaveBlock1Ptr->lastHealLocation, which SetLastHealLocationWarp
+        -- (:670-676) stores as WARP_ID_NONE + the heal tile (heal_locations.json:82-85: Oldale
+        -- 0.10 (6,17), outdoors). SaveBlock1 +0x1C as on FR (include/global.h:990).
+        return {group = group, num = num, x = x, y = y}
+    end
     if group == 3 and num == 0 and warp == 255 and x == 6 and y == 8 then
         return {group = 4, num = 0, x = 8, y = 5}
     elseif group == 3 and num == 1 and warp == 255 and x == 26 and y == 27 then

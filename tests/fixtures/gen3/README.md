@@ -601,6 +601,7 @@ Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
 | `emerald_trainer.sav` | Route 102 (0.17) | (32,16) | one Right step onto (33,16), inside Youngster Calvin's sight line (he stands at (33,14) facing down, sight 3) | `1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6` |
 | `emerald_trainer_b.sav` | same | same | `derive-b` | `ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6` |
 | `emerald_pc.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; party Mudkip Lv5 + Poochyena Lv3, box 1 slots 0/1 Zigzagoon Lv3 / Wurmple Lv3 (E2-FIX-VARIANTS; rebuilt 2026-09-26 with ability_num 0 for single-ability species) | `c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab` |
+| `emerald_pc_b.sav` | same | same | `derive-b --title emerald` over `emerald_pc.sav` (card E4-DUO): `EMERB` #DFDAF6DA, both party mons and both boxed mons re-keyed; the B side of the E<->E duos that link the slot-1 mon (faint_cmd/reconnect/boxsync/linked_faint_active_gen3 on `gen3_emerald`). No separate `boot-check`: every one of those live duos booted it, saved in-game (counter 2->3) and passed its witness (`docs/gen3_emerald/probes/duo_e4_*`) | `75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6` |
 | `emerald_lowhp.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv5 at 1 HP (E2-FIX-VARIANTS) | `c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b` |
 | `emerald_badges.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; badge flags 0x867-0x86A (FLAG_BADGE01..04_GET, flags.h:1359-1362) set in the SYNTH seed, straddling flag bytes 0x10C/0x10D (E2-BADGES); a save the game cannot produce (4 badges, no story progress) that exists only to prove the badge read | `04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f` |
 | `emerald_catch.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; 20 Poké Balls (E2-FIX-VARIANTS r3) | `592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0` |
@@ -619,6 +620,7 @@ also pins the seed and fixture sha256s above.
 ```
 SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py make-emerald --kind town --out tests/fixtures/gen3/emerald_town.sav
 python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_town.sav tests/fixtures/gen3/emerald_town_b.sav
+python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_pc.sav tests/fixtures/gen3/emerald_pc_b.sav
 python tools/gen3_fixtures.py qualify --title emerald tests/fixtures/gen3/emerald_*.sav
 SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py boot-check --title emerald --rom "<path to Emerald.gba>" --fixture tests/fixtures/gen3/emerald_town.sav
 ```

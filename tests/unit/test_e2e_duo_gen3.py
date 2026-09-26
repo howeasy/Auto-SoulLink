@@ -5113,3 +5113,30 @@ def test_hunt_area_fails_loud_off_kanto():
     for game in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen1_new"):
         run.gcfg = dict(duo.GAMES[game])
         assert run._hunt_area == "route_1", game
+
+
+# ── E4-DUO-2: whiteout_destination on Emerald (raw lastHealLocation) vs FR (projection) ───
+def _scripted_machine(title):
+    from lupa import LuaRuntime
+    from test_gen3_fr_story_oracles import HARNESS
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SLINK_ROOT = REPO.as_posix()
+    lua.globals().SLINK_GEN3_TITLE = title
+    lua.execute(HARNESS)
+    return lua, lua.execute(f'return dofile("{SCRIPTED.as_posix()}")')
+
+
+def test_emerald_whiteout_lands_on_the_raw_heal_tile_and_fr_still_projects():
+    from lupa import LuaError
+
+    lua, mod = _scripted_machine("emerald")
+    oldale = lua.eval("{group=0, num=10, warp=255, x=6, y=17}")
+    dest = mod.whiteout_destination(lua.globals().F.cp, oldale)
+    assert (dest.group, dest.num, dest.x, dest.y) == (0, 10, 6, 17)
+    lua, mod = _scripted_machine("firered")
+    cp = lua.globals().F.cp
+    dest = mod.whiteout_destination(cp, lua.eval("{group=3, num=1, warp=255, x=26, y=27}"))
+    assert (dest.group, dest.num, dest.x, dest.y) == (5, 4, 7, 4)     # Viridian Center, unchanged
+    with pytest.raises(LuaError, match="whiteout_heal_unsupported"):
+        mod.whiteout_destination(cp, lua.eval("{group=0, num=10, warp=255, x=6, y=17}"))  # FR: no raw tile
