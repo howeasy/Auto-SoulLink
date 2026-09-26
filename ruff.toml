@@ -34,3 +34,7 @@ combine-as-imports = true
 # Intentional column-aligned rate ladder mirroring returnRarity() in the JS
 # source — the aligned `if cond: return N` form is more readable as a table.
 "tools/gen_rr_encounters.py" = ["E701"]
+# These import the `lua` pytest fixture from test_gen2_fixtures and take it as a test
+# parameter; pyflakes reads every such parameter as a redefinition of the import (F811).
+"tests/unit/test_gen2_scripted_play.py" = ["F811"]
+"tests/unit/test_gen2_scripted_gate.py" = ["F811"]
