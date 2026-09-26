@@ -1,6 +1,9 @@
 # Gen 4 plan: HeartGold / SoulSilver + hg-engine on the shared framework
 
-> **Status:** DRAFT rev 2, for the owner's G0 signature (2026-09-26). The owner decisions D1-D5 were taken in the planning session. Rev 2 folds in the verified findings of the adversarial plan review OMP G4-REV1 `cx-b646f457`.
+> **Status:** DRAFT rev 3, for the owner's G0 signature (2026-09-26).
+> - Owner decisions D1-D11 were taken in the planning session.
+> - Rev 2 folded in the adversarial review (OMP G4-REV1 `cx-b646f457`).
+> - Rev 3 folds in the research wave (live melonDS probe, offline measurements, R7-R9, wire contract) and decisions D6-D11.
 > - Research record: [research/README.md](research/README.md)
 > - Ledger: [`../gen4_requirements.md`](../gen4_requirements.md) (card C0-1)
 > - Coordinator: Claude (Opus 5.5), worktree `.claude/worktrees/gen4-support-framework-dfd5e2`, branch `claude/gen4-support-framework-dfd5e2`
@@ -25,7 +28,13 @@ The owner wants HGSS and hg-engine on the shared framework, with the Gen 4 found
 | D2 | **hg-engine = the owner's fork** (`E:/Howard/HGEngine_ROMHack/hg-engine`) at a pinned commit. Lanes build it with the fork's own `build-remote.sh` over the key-based `hgbox` ssh alias (never the plaintext passwords in the old AP notes) and pull the `build/*linked.o` symbols back. One generated pack per pinned build. |
 | D3 | **Platinum: an emulator-free bind check only.** Generate a Platinum profile from `platinumus.xMAP` and decode a Platinum battery save with the shared codec. The local Platinum save is blank. Until the owner supplies one, the codec half is an OPEN cell (named skip) and the profile half is SOURCE. |
 | D4 | **SoulSilver first save: the owner plays SS** to a first save after getting the starter. Until then, SS cells are OPEN (named skip). |
-| D5 | **No touch-screen support.** Button-only inputs; G1 row l proves CONTINUE is reachable on buttons. |
+| D5 | **No touch-screen support.** Button-only inputs; G1 row l proves CONTINUE is reachable on buttons. (Measured: HG/hge reach the overworld on A/Start only. An SS **new game** stalls at "Please touch any topic", which is why SS fixtures come from the owner's save, D4.) |
+| D6 | **Hooks only where needed** (phase-armed). Gen 1-3 register ~20 byte-pinned exec hooks, which is cheap on mGBA/Gambatte. On melonDS each registered hook costs ~5 ms, then +2 ms each, so more than 4 can't hold 60 fps. Gen 4 keeps the same byte-pinned hook design through the shared `hook_registry`, but arms hooks per game phase: 2-3 always-on (overlay loads when not patched, whiteout), battle hooks only while the battle overlay is resident, PC hooks only while the PC is open. Everything else is polled from state. |
+| D7 | **Active linked faint happens immediately, in battle** (parity with Gen 3's mechanism P). The partner's active battler is written in the live battle context (`BattleMon.hp`) so it faints mid-battle. Benched mons faint at the checkpoint. A research + probe card (§7 C1-7) must first show how an in-battle HP write is picked up and survives the copy-back. |
+| D8 | **hg-engine alongside HG/SS from the start.** Every gate carries an hge artifact column (pack, probes, fixtures, duo). There is no trailing sub-gate. |
+| D9 | **Pairings: HG↔SS only** for the first release; hge↔hge for the hge artifact. |
+| D10 | **Special modes:** the Bug Contest is its own zone (the kept bug is the catch, at the result); the Safari Zone counts as zone(s), per Safari area; roamers are extra catches; scripted statics/gifts follow the gift-namespace rules. |
+| D11 | **Doubles are scenario-tested**, not a recorded limit. **NPC trades** (13) are supported as `key_change{reason:"npc_trade"}`. |
 
 **Coordinator defaults** (recorded as §0 rows; the owner may overrule):
 
@@ -34,10 +43,7 @@ The owner wants HGSS and hg-engine on the shared framework, with the Gen 4 found
 | Companion ROM patch | None in the first release (FR/LG shipped without one) |
 | Notifications | HUD only |
 | Link trades | None |
-| Gen 2 rulings carried over | O-10 ball injection into fixtures; O-15 hatched egg = gift catch; O-17/18 roamers = extra catches, the Bug Contest is its own zone |
-| First duo pairing | **HG(A) ↔ SS(B)**; no `_b` re-keyer yet |
-| Doubles active faint | Decided at G3: a scenario or a recorded limit |
-| **Linked-faint timing** | A benched mon faints at the checkpoint. An active battler is applied after battle end, because the field copies the battle's party, profile and bag back over the save (`src/battle/battle_setup.c:425-434`, [research/checkpoint.md](research/checkpoint.md)). An in-battle prompt faint (like Gen 3's mechanism P) would be a post-G4 card. |
+| Gen 2 rulings carried over | O-10 ball injection into fixtures; O-15 hatched egg = gift catch (O-17/18 are now D10) |
 | hge `artifact_kind` | Chosen from the **existing** six kinds (`server/server.py:456`); isolation comes from the foundation row. No new identity mechanism. |
 
 ## 3. Verified research (summary; details and citations in `research/`)
@@ -75,7 +81,16 @@ The owner wants HGSS and hg-engine on the shared framework, with the Gen 4 found
   - Save changed: 30 boxes, general 0xFFA0, PC 0x1E4FC at +0x10000.
   - Its own battle C in ov130 @0x023C4000, auto-loaded with ov12.
   - **Shared vanilla sites:** `Party_AddMon`, `Encounter_GetResult`, `Task_Blackout`, `Get/SetMonData`, `Battle_GetClientPartyMon`, `sOverlayRegions`. Faint/PC/save/give/trade/evolve/`HandleLoadOverlay` are **replaced per build**.
-- **melonDS:** `on_bus_exec` is present, registers are `ARM9 rN`, and the domains are known. **Exec hooks on overlay code are unmeasured.**
+- **melonDS (live research probe, [research/platform.md](research/platform.md)):**
+  - Exec hooks work: the callback gets `(addr, val, flags)`, where `val` is the site word (a free byte check); PC = site+4 (Thumb) or +8 (ARM); scope `ARM9 System Bus` or none. Other scopes return a zero GUID and never fire.
+  - A live same-address collision between overlays was observed, so residency + `val` checks are both required.
+  - **Cost per registered hook: more than 4 can't hold 60 fps** (D6).
+  - The frame-end PC is the idle thread's `OS_Halt`, not `OS_WaitIrq`.
+  - `gameinfo.getromhash()` = MD5 for gamedb ROMs (HG/SS) and SHA1 for the hge build.
+  - SaveRAM files are named after the gamedb name.
+  - The RTC is deterministic with `UseRealTime=false`.
+- **Battle layout** is shared by HGSS and hge (`BattleSystem+0x30` → ctx, `ctx+0x2D40 + 0xC0*i`, `ctx+0x219C`); only the ability location differs (0x27 u8 vs 0x7A u16). hge keeps `ScrCmd_GiveMon`; its arm9 is bloated by the `hooks:632-636` misfile.
+- **Platinum** binds with a richer profile schema ([research/platinum_bind.md](research/platinum_bind.md)).
 
 ## 4. Architecture
 
@@ -97,20 +112,21 @@ The owner wants HGSS and hg-engine on the shared framework, with the Gen 4 found
 - `NDS.new(io,cfg)` returns `{validate, context(site,accept), register, unregister, valid_handle}`.
 - `NDS.resident(io,tbl,ovy)` is the one residency reader, also used by `in_battle` and the checkpoint.
 - At registration, static sites must match `expected_hex`. Overlay sites get a shape check (id, and the address inside that overlay's RAM range).
+- **Phase arming (D6):** the binding exposes `arm(phase)`/`disarm(phase)`. Sites carry a `phase` (`always`, `battle`, `pc`, …) and `gen4/client` arms a phase when its overlay becomes resident (read from the table each frame) and disarms it when the overlay leaves. The live budget is ≤4 registered hooks, asserted.
 - At fire time, in order:
   1. The overlay must be active in `sOverlayRegions[MAIN][0..7]`; otherwise drop with nil, because another overlay shares the RAM (the GB wrong-bank case).
   2. The PC must match (the relationship is measured at G1).
-  3. The bus bytes must equal the pin; a mismatch latches failure.
+  3. The callback's `val` word must equal the pin (no extra bus read); a mismatch latches failure.
 
 ### 4.3 New Gen 4 layer, shared across titles (`lua/gen4/*`; titles bind with packs only)
 
 | Module | Responsibility |
 |---|---|
-| `entry.lua` | The only file that names a foundation: `PACKS`, `admit{rom_hash, read_ram, header_code}` (hash first, then static-ARM9 anchors including the vanilla bytes at 0x02000CD0, so an hge ROM is never admitted as vanilla; hge by hash only), `build(deps)` |
+| `entry.lua` | The only file that names a foundation: `PACKS`, `admit{rom_hash, read_ram, header_code}` (hash first: packs pin **both** MD5 and SHA1, because `getromhash()` returns MD5 for gamedb ROMs and SHA1 otherwise; then static-ARM9 anchors including the vanilla bytes at 0x02000CD0, so an hge ROM is never admitted as vanilla; hge by hash only), `build(deps)` |
 | `run.lua` | BizHawk bootstrap: io/ev on `ARM9 System Bus`, HUD 256×192, connector, frame loop (copy of `gen3/run.lua` without the nonce block) |
 | `reads.lua` | Pure-Lua PK4 crypto (from `memory_nds.lua:35-441`) plus save-chain reads: `[sSaveDataPtr]` → array headers → party/PC/trainer/location/badges/balls; u16 text via the pack charmap; battle reads from pointers captured at hooks, range-checked. Mon key = **PID:OTID** (`server/adapters/base.py:687-691`). |
-| `safety.lua` | Read-only checkpoint predicate from pack clauses ([research/checkpoint.md](research/checkpoint.md) §5): CPU parked in `OS_WaitIrq`, `[sFieldSysPtr]` sane with `saveData` equal to `[sSaveDataPtr]`, `taskman == NULL`, no app, no save in flight, refuse from battle setup until the encounter task ends |
-| `storage.lua` | Deferred executors (deposit, withdraw, memorialize, faint_slot) over `write_permit`: re-encrypt + checksum; OR `1<<box` into `PCStorage+0x12004`; withdraw rebuilds the party tail from server-cached stats |
+| `safety.lua` | Read-only checkpoint predicate from pack clauses ([research/checkpoint.md](research/checkpoint.md) §5): a new frame by `gSystem.vblankCounter`; `[sFieldSysPtr]` sane with `saveData` equal to `[sSaveDataPtr]`; `unk6C != 0`; `!isPaused`; `taskman == NULL`; no launched app (`unk0->unk4 == NULL`); save driver idle; refuse from battle setup until the encounter task ends. The **in-battle write** for D7 is a separate, narrower gate on the live battle context. |
+| `storage.lua` | Deferred executors (deposit, withdraw, memorialize, faint_slot) over `write_permit`: re-encrypt + checksum; apply the pack's dirty clause (HGSS: OR `1<<box` into `PCStorage+0x12004`; Pt: `fullSaveRequired`); withdraw rebuilds the party tail from server-cached stats. `battle_faint` (D7) writes `BattleMon.hp` in the live context under the in-battle gate. |
 | `client.lua` | `core/session` driver: signals set flags, a settle pass diffs party/boxes, hello/tick fields (Gen 3 C-1 field set), `in_battle` = battle overlay resident. Reducer modelled on `gen3/client.lua:350-561`: lifted into `lua/core` if convergence lands first, else copied with a `ponytail:` note. |
 
 ### 4.4 Packs
@@ -177,15 +193,16 @@ The evidence classes SOURCE, MODEL and PHYSICAL stay distinct. Absent input → 
 | Gate | Exit evidence | Owner signs |
 |---|---|---|
 | **G0 Pins + plan** | This plan; the ledger skeleton (Oracles, Pins, X per-artifact table, F/R/S/W/C/D/N rows with S·M·P cells). `data/gen4_sources.lock.json`: ROM sha1s, xmap commits + xMAP sha256, EmuHawk.exe / `dll/melonDS.wbx.zst` / cores dll sha256 (file hashes; waterbox has no module identity). hge fork commit + `test.nds` sha1 recorded, **not admitted**. | Pins + rulings |
-| **G1 Platform + hook mechanism** | Probe rows a-m (§5.1), each with a positive and a negative control, PHYSICAL on HG (save copy). SS rows are OPEN until D4. hge rows a/b/g/h/j for information. MODEL: the codec decodes the HG save. | Mechanism works on this host (not semantics or write safety) |
+| **G1 Platform + hook mechanism** | Probe rows a-o (§5.1), each with a positive and a negative control, PHYSICAL on HG (save copy) **and hge** (D8). SS rows are OPEN until D4. MODEL: the codec decodes the HG and hge saves. The research probe ([research/platform.md](research/platform.md)) already answered most rows informally; G1 re-runs them as gate receipts from the committed probe script. | Mechanism works on this host (not semantics or write safety) |
 | **G2 SOURCE facts + codec + fixtures** | **Gating:** packs generated, with every `expected_hex` found in the ndspy images of HG **and** SS (both ROMs are present); the acquisition manifest and encounter/area/trainer data regenerated; codec + save-layout checks (newest slot by counter, CRC, torn/duplicate refused, hge geometry); HG fixtures qualified and boot-checked (CONTINUE → save → reload, counter +1, same party keys); the Platinum profile generated from `platinumus.xMAP` by the same generator with no Gen 4 code change. **OPEN until owner input (named skips):** SS fixture qualify/boot-check (D4); Platinum save decode (D3). Coverage map: every signal kind maps to a site **and** a PHYSICAL receipt plan; the oracle is the ledger, not the generator. | The packs as pinned facts |
 | **G3 Semantics + checkpoint** (observer mode) | `lua/gen4/*` in a lupa world (`tests/unit/gen4_world.py`, modelled on `gen3_world.py`, residency flippable). Protocol conformance (`test_protocol_conformance.py` on the Gen 4 driver, C-0). Scripted play on HG (+SS once available): one positive and one negative receipt per signal kind. Checkpoint: forbidden states (script, menu, battle setup, save in flight, app running) read false with an empty write log; a liveness bound. `reads == PYDEC` on dumped Main RAM. | Each exercised kind PHYSICAL; the rest listed OPEN |
 | **G3a Shared + integration card** (∥ G3) | The §4.6 changes + the `__init__.py` foundation rows + the `manager.py` re-admission, in **one** card with **one writer**. Gate: **full** `pytest tests/unit`, `tools/lua_syntax_check.py`, ruff, the Gen 1 unit lane (`tools/verify_gen1_release.py`; new Gen 4 skip reasons must match the fragments already allowed there, or fail), `slink-adapter-guard` + one independent review; the rejected-hello matrix leaves `links.json` byte-identical. | The shared diff |
-| **G4 HGSS RC candidate** | Writes live: benched faint at the checkpoint, the active battler after battle end, box/party/memorialize with the modified-flag bit. Duo rows HG↔SS / SS↔HG in `tools/e2e_duo.py`: an `OPT_IN_GAMES` tuple (so the rows don't silently run every non-opt-in scenario, `:452, :467-488`), `FAMILY_EVIDENCE["gen4_hgss"]` → `check_save_witness_gen4` (NDS SaveRAM, not the Gen 1 CartRAM range at `:991-998`), NDS paths. Scenarios: link, deadzone, linked_faint_active, faint_cmd, boxsync, whiteout, reconnect/wrong-save, clauses/shiny, gift/egg. Each has an oracle, save witness first. The release zip from `tools/make_release.py` boots HG and SS. | Owner plays a live HG↔SS duo from the Manager |
-| **G5 hg-engine sub-gate** | Pinned fork build via hgbox → `test.nds` sha1 + nm syms (`build/*linked.o`, `offsets.ini`). `gen4_hge` pack: shared vanilla sites plus per-build sites for the replaced ones ([research/hg_engine.md](research/hg_engine.md) §4). G1 rows a/b/g/h/j re-run on hge. hge fixtures (30-box geometry). hge↔hge duo set. `heartgold_hge` admitted in the Manager. Every rebuild reopens its F/S/W receipts. | Build sha1 + a play session |
+| **G4 HGSS + hge RC candidate** | Writes live: benched faint at the checkpoint, **the active battler in battle (D7)**, box/party/memorialize with the modified-flag bit. Duo rows HG↔SS / SS↔HG in `tools/e2e_duo.py`: an `OPT_IN_GAMES` tuple (so the rows don't silently run every non-opt-in scenario, `:452, :467-488`), `FAMILY_EVIDENCE["gen4_hgss"]` → `check_save_witness_gen4` (NDS SaveRAM, not the Gen 1 CartRAM range at `:991-998`), NDS paths. Scenarios: link, deadzone, linked_faint_active (in battle), faint_cmd, boxsync, whiteout, reconnect/wrong-save, clauses/shiny, gift/egg, **doubles (D11)**, **npc_trade key_change (D11)**, **bug contest / safari / roamer zone rules (D10)**. hge↔hge runs the same set. Each has an oracle, save witness first. The release zip from `tools/make_release.py` boots HG and SS. | Owner plays a live HG↔SS duo from the Manager |
+| **G5 (folded, D8)** | Not a separate gate: the hge artifact is a column in G1-G4 (pack from build symbols, fixtures with 30-box geometry, hge↔hge duo in G4). Every rebuild of the pinned fork reopens its F/S/W receipts. The row below is kept as the hge checklist. | — |
+| ~~G5 hg-engine sub-gate~~ | Pinned fork build via hgbox → `test.nds` sha1 + nm syms (`build/*linked.o`, `offsets.ini`). `gen4_hge` pack: shared vanilla sites plus per-build sites for the replaced ones ([research/hg_engine.md](research/hg_engine.md) §4). G1 rows a/b/g/h/j re-run on hge. hge fixtures (30-box geometry). hge↔hge duo set. `heartgold_hge` admitted in the Manager. Every rebuild reopens its F/S/W receipts. | Build sha1 + a play session |
 | **G6 Release** | `tools/verify_gen4_release.py` (on `release_lanes.py`) full run, zero unexplained skips. Gen 1/2/3 runners green on the shared core. Gen 4 lands on master once, with owner authority: that single landing stales the Gen 2 digest (`server/**/*.py`, `lua/*.lua`), so notify the Gen 2 coordinator and run one re-sweep. | Tag; hge ships only if G5 is signed |
 
-The critical path is G0 → G1 → G2 → G3 ∥ G3a → G4 → G6. G5 branches after G4; its no-emulator prep (build, syms, pack, codec geometry) runs in parallel from G2.
+The critical path is G0 → G1 → G2 → G3 ∥ G3a → G4 → G6, with HG, SS and hge columns in every gate (D8).
 
 ### 5.1 G1 probe rows
 
@@ -205,7 +222,9 @@ Files: `lua/tests/probe_gen4_hooks.lua`, `tests/live/test_gen4_probe_gates.py`. 
 | j identity | `gameinfo.getromhash()` vs file sha1 (HG/SS/hge) | A 1-byte-patched copy hashes differently |
 | k RTC | Two boots with the pinned config read the same RTC | An unpinned config differs (or the row records "RTC not configurable") |
 | l buttons only | HG/SS/hge reach CONTINUE with A/Start only (D5) | A run that presses nothing stays at the title |
-| m CPU census | ARM9 PC over overworld/menu/battle/save; the idle PC lies in `OS_WaitIrq` | During a save or script the PC is outside the park range |
+| m CPU census | ARM9 PC over overworld/menu/battle/save (research: the frame end is the idle thread's `OS_Halt` 0x020D3F64, not `OS_WaitIrq`) | During a save or script the frame-end PC distribution differs |
+| n phase arming | Arming/disarming battle hooks on ov12 residency costs < 1 frame, and fps returns to baseline after disarm; ≤4 hooks live at any time | Leaving battle hooks armed on the overworld shows the measured per-hook cost |
+| o in-battle write (D7) | Writing `BattleMon.hp=0` for the partner's active battler makes the game run its faint sequence, and the fainted state survives the battle-end copy-back | The same write outside the gate (e.g. mid-animation) is refused by the in-battle predicate |
 
 ## 6. Requirement ledger skeleton (`docs/gen4_requirements.md`)
 
@@ -236,7 +255,8 @@ Up to 3 subagents run at once, model explicit, plus headless OMP for checks. Exc
 | C1-1 probes | Opus | `lua/tests/probe_gen4_hooks.lua`, `tests/live/test_gen4_probe_gates.py` | Each negative control can go red (revert-tested) | Rows a-m receipts |
 | C1-2 pack generator (G1 subset) | Sonnet | `tools/gen_gen4_pack.py`, `data/games/gen4_hgss/profile.json`, `tests/unit/test_gen4_pack.py` | An HG/SS gameplay symbol mismatch → red; a site byte mismatch → red | Profile with probe addresses + provenance |
 | C1-3 codec | Sonnet | `server/adapters/gen4_codec.py`, `tests/unit/test_gen4_codec.py`, `tests/unit/test_gen4_save_layout.py` | A flipped byte → checksum refusal; a torn slot → refused | HG save decodes; hge geometry parses; Pt skip is named |
-| C1-4 fixture infra | Haiku | `tools/gen4_fixtures.py`, `tests/unit/test_gen4_fixtures.py` | A config with no NDS SaveRAM entry → raises | Per-run config + short lane path |
+| C1-4 fixture infra | Haiku | `tools/gen4_fixtures.py`, `tests/unit/test_gen4_fixtures.py` | A config with no NDS SaveRAM entry → raises | Per-run config + short lane path (SaveRAM named after the gamedb name for HG/SS, basename for hge) |
+| C1-7 in-battle faint (D7) | Opus (research, then probe row o) | `docs/gen4/research/battle_faint.md`, `lua/tests/probe_gen4_battle_faint.lua` | A write that looks right but never reaches the faint sequence is caught | pret-cited design: where to write (BattleMon.hp vs party copy), which battle state accepts it, how Gen 3 mechanism P maps over |
 | G2+ cards | Opus/Sonnet | `lua/nds/hook_binding.lua`, `lua/gen4/*`, `tests/unit/gen4_world.py`, `tests/unit/test_gen4_*.py`, `lua/tests/gen4_*.lua` (walk/scripted play), data tools, the G3a integration set (§4.6), `tools/e2e_duo.py` rows, `tools/verify_gen4_release.py`, `tools/gen4_hge_build.py` | Per card | Per gate |
 
 Wave 1 is C1-1 ∥ C1-2 ∥ C1-3; C0-1, C0-2 and C1-4 take the next slots. Emulator rows need C1-2's addresses.
