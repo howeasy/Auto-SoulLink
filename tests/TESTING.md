@@ -10,9 +10,9 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.9+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, or Radical Red 4.1) |
+| BizHawk 2.11+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, or Radical Red 4.1); `lua/slink.lua` refuses an older BizHawk on the Gen 3 route |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
-| Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 3 onward) |
+| Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 4 onward — Tests 1-3 were the old client's and are removed) |
 | Status page | `http://localhost:8080/` — flicker-free auto-refresh every 2 s (HTMX + idiomorph morph swap); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
 | Scripts in `lua/` | `slink.lua`, `gen3/`, `core/`, `connector.lua`, `socket.lua`, all files in `tests/` |
 | Save states | Make a BizHawk save state before Test 2 (it writes RAM) |
@@ -23,440 +23,138 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 
 `test_1_memory.lua`, `test_2_force_faint.lua` and `test_3_server.lua` drove the old Gen 3 client's `memory_gba.lua` and were deleted with it at C5-6 (they remain at tag `archive/gen3-old-client`). Their coverage is the headless `test_live_*` gates (`tests/live/test_lua_gates.py`) and the Gen 3 duo scenarios. Start at Test 4.
 
+C5-6 deleted the whole old Gen 3 closure (`lua/clients/gen3_frlge_client.lua`, `lua/memory_gba.lua`,
+`lua/mailbox.lua`, `lua/peer_ghost_npc.lua`). `lua/slink.lua` now routes every GBA cartridge through
+`lua/gen3/entry.lua` → `lua/gen3/run.lua`, which builds `lua/gen3/client.lua` plus the
+`lua/gen3/*.lua` modules over the shared `lua/core/session.lua` / `lua/core/deferred.lua` /
+`lua/core/identity.lua`. The new client logs far less than the old one — no per-event `AUTO ...`
+line, no `[T4]` tags — and almost all player-facing text goes through `lua/hud.lua`'s `hud.show()`/
+`hud.prompt()`, driven by `hud_show`/`msgbox` commands the server sends (`server/state.py`).
+
 ---
 
-## Test 4 — Full Event Detection (End-to-End)
+## Test 4 — Live Play (End-to-End)
 
 **Script:** `lua/slink.lua` (or `lua/slink_gen3.lua` for Gen 3 only)  
-**Emulators:** Either one.  
+**Emulators:** Either one; both for the partner-visible checks below.  
 **Server required:** `python -m server.server --host 127.0.0.1 --port 54321`
 
-All events are detected automatically and sent end-to-end to the server. Responses appear in the console. All event types are covered. Check the **status page** (`http://localhost:8080/`) in a browser alongside this test — it should update in real time.
+The BizHawk console prints one boot line on load: `[SLink-gen3] <pack>/<title> (<kind> by <admitted_by>) player a -> 127.0.0.1:54321 (rom <hash8>)`. After that it stays quiet — `lua/gen3/client.lua` over the shared `lua/core/session.lua` logs only on a state *change* (writes enabled/paused, a stuck hold, a refused write), never one line per event, and it makes no `console.*`/`print` calls at all for routine traffic. Watch the **status page** (`http://localhost:8080/`) alongside BizHawk — it is the primary way to see events land in real time.
 
-### Events Detected Automatically
+### Events sent automatically
 
-| Event | Trigger | Expected console |
-|---|---|---|
-| `hello` | TCP connect or reconnect | `AUTO hello → noop` — sends party snapshot, `has_pokeballs`, and `ball_count` |
-| `area_enter` | Walk to a new mapped route | `AUTO area_enter:route_N → noop` |
-| `capture (battle)` | Catch during battle (party not full) | `AUTO capture(battle):<key8> → noop` |
-| `capture (box)` | Catch with party=6 (goes to PC box) | `AUTO capture(box):<key8> → noop` |
-| `capture (gift)` | New party mon appears outside battle | `AUTO capture(gift):<key8> → noop` |
-| `faint` | Party mon HP transitions 1+ → 0 | `AUTO faint:<key8>` |
-| `no_catch` | Wild battle ends, no capture in 15-frame grace | `AUTO no_catch:route_N → noop` (includes wild mon's species_id and level) |
-| `whiteout` | All living party mons reach HP=0 | `AUTO whiteout → noop` |
-| `party_to_box` | Known party mon deposited to PC | `AUTO party_to_box:<key8> → noop` |
-| `box_to_party` | Known PC mon withdrawn to party | `AUTO box_to_party:<key8> → noop` |
-| `tick` | Every 60 frames — includes `ball_count` + party snapshot | `AUTO tick(auto) → noop` |
-| `memorialize_done` | After `memorialize` write confirmed | `✓ memorialize: <key> → box13 sN` |
-| `sync_retrieve_done` | After `party_mon` write confirmed (silent) | Silent — updates server's `party_keys` |
-| `sync_retrieve_failed` | After `party_mon` fails (party full, no stats) | HUD: "⚠ Make room & retrieve [name] from PC" — server discards from `party_keys` |
-| `stats_cache` | After `box_mon` write (silent) | Silent — caches stats for later `party_mon` restore |
-| `quarantine (auto box_mon)` | Pending capture auto-deposited to PC | `↳ box_mon queued (quarantine): <key8>` — mon boxed until partner captures |
-| `un-quarantine (party_mon)` | Link formed, pending capture returned to party | `↳ party_mon queued (un-quarantine): <key8>` — both mons retrieved |
+Every event carries `event`, `player`, `seq`. None of these print a console line on their own (`lua/gen3/client.lua` unless noted).
 
-### Nuzlocke Gate Behavior
-
-The `nuzlocke_active` flag activates when `M.hasPokeballs()` returns true (reads the actual Pokéball bag pocket from RAM — offset varies by profile: `SB1+0x0430` vanilla, `SB1+0x0680` AP, fixed EWRAM `0x0203C354` for RR/CFRU). **Until then:**
-- `no_catch` events are **not sent** to the server
-- `resolved_areas` is not updated
-
-**Verify:**
-- Before getting Pokéballs: walk routes, start and end wild battles → no `no_catch` in console
-- After Blue's sister gives Pokéballs on Route 1: `[T4] nuzlocke ACTIVE (pokeballs in bag)` appears in console
-- Subsequent `no_catch` events fire normally
-
-### Battle State Logging
-
-| Log line | Meaning |
+| Event | Trigger |
 |---|---|
-| `[battle] start  wild=true  area=route_N` | Wild battle started — box snapshotted if party=6 |
-| `[battle] start  wild=false  area=...` | Trainer battle started — `no_catch` will NOT fire |
-| `[battle] end  grace window started` | Battle ended — 15-frame window begins |
+| `hello` | First connect or reconnect — carries party, PC boxes, area, `has_pokeballs`, `ball_count`, `ot_id`/`trainer_name` |
+| `tick` | Every 30 frames (~0.5 s) while connected — area, `in_battle`, party, `ball_count`, badges |
+| `area_enter` | Map (route/town/building) changes |
+| `capture` | A new key appears in the party (wild catch or gift), or — if the party was full — exactly one new key appears in a PC box (`in_box=true`); more than one new boxed key in the same settle is ambiguous and reported as nothing |
+| `faint` | A tracked party mon's HP goes from >0 to 0 |
+| `no_catch` | A wild (non-trainer) battle ends with no new capture, the Pokéball gate is open, and the area isn't a gift area or already resolved |
+| `whiteout` | Every living party mon reads HP 0 in the same settle |
+| `party_to_box` | A tracked party key is later found in a PC box (a deposit) |
+| `box_to_party` | A previously-boxed known key reappears in the party (a withdrawal) |
+| `key_change` | An in-game NPC trade replaces a party record (`reason: "npc_trade"`) — never fired for the RR native link trade |
+| `trainer_battle_start` | A trainer battle begins — carries `trainer_id`, plus `battle_id`/`session` when the client minted a battle-request nonce (needed for rival-swap) |
+| `box_mon_failed`, `stats_cache`, `sync_retrieve_done`, `sync_retrieve_failed`, `memorialize_done`, `memorialize_failed` | Replies from the deferred command queue (`lua/core/deferred.lua`) after a server `box_mon`/`party_mon`/`memorialize` command runs at the next safe overworld checkpoint |
 
-**CFRU Battle HP Cache Logging:**
+There is no `capture(battle)`/`capture(box)`/`capture(gift)` split — it is one `capture` event with `in_box`/`gift` fields.
 
-| Log line | Meaning |
+### HUD text (`lua/hud.lua`: `hud.show` / `hud.prompt`)
+
+| Text | Shown when |
 |---|---|
-| `[battle] cache update: slot N hp=X→Y` | HP change detected in gBattleMons during battle |
-| `[battle] cache cleared` | Cache reset (battle start or borrowed-battle cleanup) |
+| `** NEW ENCOUNTER **  <location>` (yellow) | `area_enter` into an unresolved route, Pokéball gate open, not a gift area |
+| `WHITED OUT` (red) | `whiteout` |
+| `Nuzlocke Start!` | `has_pokeballs` first latches true (not on a reconnect resume) |
+| `!! <nickname> KO'd`, `!! <nickname> fainted`, `!! <nickname> BOOM!` (red) | The client wrote a battle faint, committed the Perish-Song active-battler faint, or committed Explode Mode's forced Explosion |
+| `TRADE UNRESOLVED: <why>` (orange) | The native link-trade FSM parked without resolving |
+| Any other `hud_show`/`msgbox` text | Server-driven (`server/state.py`) — wrong-save banner, dead-zone/linked/duplicate-capture notices, trade prompts, etc. Sent as plain text, not glyph-decorated |
 
-**CFRU Borrowed-Party Battle Logging:**
+A stuck command (a hold on the deferred queue or an in-battle write) is diagnosable **only from the BizHawk console** — one `held: ...` line when it first sticks or its reason changes (`lua/core/session.lua`), never on the HUD (owner ruling: no pending counters on-screen).
 
-| Log line | Meaning |
-|---|---|
-| `[battle] BORROWED battle detected — party tracking frozen` | Poké Dude or mock battle started — party diff suppressed |
-| `[battle] BORROWED ended — real party restored` | Borrowed battle ended — pre-battle party snapshot restored |
+### Pokéball gate
 
-### Status Page Checks (http://localhost:8080/)
+`has_pokeballs` latches true the first time the Pokéball bag pocket reads a non-zero count (`lua/gen3/reads.lua`). Before that, `no_catch` is never sent and areas don't resolve. After Blue's sister hands over Pokéballs on Route 1, the HUD shows `Nuzlocke Start!` once and `no_catch` starts firing normally.
 
-The status page uses **HTMX morph swaps** (`idiomorph-ext.min.js`) — sprites, HP bars, and table structure are preserved across the 2-second polled refresh. A `beforeAttributeUpdated` hook preserves the `open` attribute on `<details>` elements, scroll position survives, and table-search focus is reapplied via an `htmx:afterSwap` listener so the filter doesn't briefly show all rows mid-swap.
+### Status page (http://localhost:8080/)
+
+HTMX + idiomorph morph-swap auto-refresh — sprites and HP bars don't flicker or reload. Status markers are **inline SVG icons**, not emoji (`server/templates/_svg_icons.html`): crossed swords for "in battle", a skull for dead / dead-zone / whiteout / game-over, a check for linked/caught, an X for missing, a spark for shiny.
 
 | What to verify | Expected |
 |---|---|
-| Player card header | Shows in-game trainer name (e.g. "RED") next to connection status; page title shows "Soul Link Tracker — \<variant\> — \<run name\>" |
-| Gym badges | 8 badge icons per player — colored circle for earned badges, grey for unearned; supports out-of-order acquisition (AP bitmask) |
-| Nuzlocke active badge | "Waiting for Pokéballs" until Pokéballs obtained; then "Nuzlocke active" |
-| Current area | Updates to current route/map name on each `area_enter` |
-| Pokéball count | Updates every ~1 s from `tick` events |
-| Battle display | "⚔ IN BATTLE" panel with enemy party table appears **above** the player's party table (not below) — immediately visible without scrolling |
-| Party table | Shows each party mon's nickname and species (e.g. "CHAR (Charmander)"), level, HP bar, gender symbol (♂/♀), **ability name**, and linked partner key with link status |
-| Encounters table | Consolidated table showing all encounters with progress icons: ✅ (linked/alive), 💀 (dead/memorial), ⏳ (pending), ☠️ (dead zone). Each row: area name, Player A's mon (sprite/nickname/species/level), status icon, Player B's mon. Dead zones show the wild mon's species + level |
-| PC Box section | Shows occupied slot counts and nicknames/species/**abilities** for all 13 active boxes, updated every ~5 s |
-| Identity error | When wrong save connected: **red error banner** in player card with OT mismatch message |
-| Auto-refresh stability | Sprites and HP bars do NOT flicker or reload on 2-second refresh — HTMX morph swap preserves elements |
+| Player card | Trainer name once `hello` lands |
+| Gym badges | 8 per player, earned vs. unearned, out-of-order acquisition supported |
+| Nuzlocke badge | "Waiting for Pokéballs" until the gate latches, then "Nuzlocke active" (`server/board.py`) |
+| Current area | Follows each `area_enter` |
+| Pokéball count | Updates on `tick` |
+| Battle panel | Shown above the party table while `in_battle` |
+| Party table | Nickname, species, level, HP bar, gender, ability, link status |
+| Pairs table | Sections for pending / linked / boxed / dead / dead-zone (`server/board.py`) |
+| PC boxes | Occupied slots, nicknames/species/abilities |
+| Identity error | Red banner in the player's card on a wrong-save mismatch |
 
-### Negative Cases (events that must NOT fire)
+### Fail conditions
 
-| Scenario | Expected |
+| Symptom | Where to look |
 |---|---|
-| Trainer battle ends | No `no_catch` fired |
-| Second battle in same area (after capture or no_catch) | No second `no_catch` fired |
-| Same mon HP stays at 0 across frames | `faint` fires once, not repeatedly |
-| Whiteout while party is already all-zero | `whiteout` fires once |
-| Ambiguous box diff (>1 new key) | `no_catch` suppressed; logged as ambiguous |
-| `gBattleOutcome == CAUGHT` even if box scan failed | `no_catch` suppressed via outcome fallback |
-| Wild battle before Pokéballs obtained | No `no_catch` fired |
-| Faint before nuzlocke active | `faint` sent; server marks DEAD only if pair existed AND nuzlocke was active when the pair was created |
-| Whiteout before nuzlocke active | `whiteout` sent; no force_faint commands (no dead pairs) |
-| CFRU battle ends same frame as last faint | `faint` + `whiteout` both fire correctly — `battle_just_ended` gate captures final HP |
-| Borrowed-party battle (Poké Dude / mock) | No false captures, no false faints — party tracking frozen; real party restored after battle |
-| Tag battle with NPC partner | Normal tracking — NPC mons in separate battler slots; no party corruption |
-| Capture in already-linked area | `force_faint` + `memorialize` queued — mon cannot be used |
-| Capture in dead-zone area | `force_faint` + `memorialize` queued — mon cannot be used |
-| BizHawk window resize during gameplay | No false `box_to_party` or `party_to_box` — 3-frame debounce filters glitches |
-| Repel use (bag menu) | No false party events — `party_diff_ok` gate freezes detection during menus |
-| `party_mon` with partner's party full | `sync_retrieve_failed` sent; no infinite retry loop; HUD notice shown |
-| `party_mon` without cached stats | Fails closed — refuses to write; HUD notice shown; `sync_retrieve_failed` sent |
-| New encounter HUD on gift area (oaks_lab, intro, gift_*) | HUD does NOT appear |
-| Pre-save title screen / intro cutscene | No party/box data in tick/hello — only metadata sent |
-| Safari Zone encounter while sync pending | No crash — fresh `isInOverworld()` check at execution point |
-| Manual withdrawal of quarantined mon | `box_to_party` blocked — mon re-deposited with HUD warning |
-| Link forms but both parties full | Both mons stay in box — HUD notification "★ Linked! Both players need party room to retrieve" shown |
-| One player retrieves, partner fails | First player re-boxed to maintain sync (`sync_retrieve_failed` triggers re-box) |
-| Wrong save connected (identity lock) | All events return `noop`; red HUD and status page banner; run state unchanged |
-| Server down — BizHawk stutter | No stutter — non-blocking connect; reconnect backs off exponentially |
-
-### Manual F-Keys
-
-| Key | Action |
-|---|---|
-| F1 | `area_enter` — current area_id |
-| F2 | `capture` — party slot 0 |
-| F3 | `faint` — party slot 0 |
-| F4 | `no_catch` — current area_id |
-| F5 | `whiteout` |
-| F6 | `safe` |
-| F7 | `tick` (includes ball_count + party snapshot) |
-| F8 | `party_to_box` — party slot 0 |
-| F9 | Direct Lua write: move party slot 0 → Box 13 (no server) |
-
-**PASS:** All event types fire correctly; negative cases are silent; `force_faint`, `memorialize`, `box_mon`, and `party_mon` commands dispatched when received; illegal captures (dead zone or extra capture in linked area) are force-fainted and sent to Box 13; status page gender symbols, abilities, and dead zone encounter species display correctly; party_mon fails gracefully on party-full or missing stats (no infinite loop); identity lock rejects wrong saves cleanly; borrowed-party battles (CFRU) produce no false events.  
-**FAIL:** `NOT CONNECTED` in console → server not running or wrong host/port.  
-**FAIL:** `no_catch` after successful catch → `resolved_areas` handling in the Gen 3 client (`lua/gen3/client.lua`).  
-**FAIL:** `no_catch` fires on trainer battle → wild-vs-trainer detection in `lua/gen3/reads.lua`.  
-**FAIL:** `Writes: OFF` → ROM validation failed; load a save first.  
-**FAIL:** `no_catch` fires before Pokéballs obtained → the Poké Ball gate in the Gen 3 client (`lua/gen3/client.lua`).  
-**FAIL:** `party_mon failed: party full` loops endlessly → `exec_party_mon` retry bug.  
-**FAIL:** Ability shows "Unknown" or 0 → check `BASESTATS_ADDR` in the ROM profile; run `lua/tests/test_ability_diag.lua` to diagnose.  
-**FAIL:** Wrong-save connection modifies state → identity lock bug in `server/state.py`.
+| No `[SLink-gen3] .../... player ... -> host:port` boot line, or a `refused: ...` line instead | Server not running / wrong host:port, or `Entry.admit` refused the cartridge |
+| `no_catch` after a successful catch | `settle_acquisitions` / `resolved_areas` in `lua/gen3/client.lua` |
+| `no_catch` on a trainer battle | Wild/trainer detection in `lua/gen3/reads.lua` (`read_battle`) |
+| `no_catch` before Pokéballs obtained | The `has_pokeballs` gate in `lua/gen3/client.lua` |
+| A `party_mon`/`box_mon`/`memorialize` never lands | Console `held: ...` line for why; retry/failure rules in `lua/core/deferred.lua` |
+| Ability shows "Unknown" or 0 | `BASESTATS_ADDR` in the ROM profile; `lua/tests/test_ability_diag.lua` |
+| A wrong-save connection changes run state | Identity lock in `server/state.py` (`player_identity`) |
 
 ---
 
-## End-to-End (Steps 1–9)
+## Feature Checklist (End-to-End)
 
-**Script:** `lua/slink.lua` on **both** emulators.  
-Set `SLINK_PLAYER = "a"` on FireRed, `SLINK_PLAYER = "b"` on LeafGreen (via `lua/slink_gen3.lua` or the downloaded launcher).  
-**Server required:** `python -m server.server --host 127.0.0.1 --port 54321`  
-**Status page:** Open `http://localhost:8080/` in a browser.
+**Setup:** `lua/slink.lua` on **both** emulators, or `lua/slink_gen3.lua` with `SLINK_PLAYER` set to `"a"` / `"b"`. Start the server first. Keep `http://localhost:8080/` open alongside BizHawk.
 
-Run through the steps below **in order**. Each step depends on the previous.
+### Connect, identity lock, reconnect
 
-### Step 1 — Connection
-
-**Action:** Load both emulators with a save. Start the server.
-
-| Check | Expected |
+| Do | Expect |
 |---|---|
-| Both consoles show `TCP: connected to 127.0.0.1:54321` | ✓ |
-| Server console prints `[a] hello` and `[b] hello` | ✓ |
-| `Validation: OK` and `Writes: ON` on both | ✓ |
-| Status page shows both players "online" with trainer names | ✓ |
-
-**Identity lock — first connection:** After the first hello with a non-empty party, `links.json` contains a `player_identity` entry with the OT ID and trainer name for each slot. This is automatic.
-
-**Identity lock — wrong save test:**
+| Load both emulators with a save, start the server | Each BizHawk console shows `[SLink] TCP connected to 127.0.0.1:54321`; server console logs a `hello` line per player; status page shows both online with trainer names |
+| Stop Player A's emulator, load a **different** save, reload the script | A's console/HUD shows a red wrong-save banner; status page shows a red identity-error badge on A; every non-hello event from A is refused (server replies `noop`, `refused: "identity"`); run state (links, boxes) is untouched |
+| Reload the correct save, reload the script | The banner clears and A resumes normally |
+| Stop the Python server | BizHawk keeps running (connect is non-blocking); the connector retries with a backoff that starts near half a second and doubles up to a ~30 s cap |
+| Restart the server | Reconnects within the current backoff window; console logs `[SLink] Reconnected to 127.0.0.1:54321` |
 
-| Action | Expected |
-|---|---|
-| Stop Player A's emulator. Load a **different** save file. Reload the script | ✓ |
-| A console shows red HUD: "⚠ Wrong save! Expected [name] (OT: ...)" | ✓ |
-| Status page: red error banner in A's player card | ✓ |
-| All events from A return `noop` — no state changes | ✓ |
-| Reload the correct save. Reload the script | Error clears; normal operation resumes |
+### Area enter + encounter HUD
 
-**Reconnect stutter test:**
-
-| Action | Expected |
-|---|---|
-| Stop the Python server. Observe BizHawk console | ✓ — reconnect messages appear |
-| BizHawk emulation does NOT stutter or freeze | ✓ — non-blocking connect |
-| Wait 30+ seconds | Backoff increases: 2s → 4s → 8s → 16s → 30s cap |
-| Restart the server | Connection re-established within 1–2 seconds |
-
----
+Walk onto a new route on both emulators. Expect: both consoles' `tick`/`area_enter` reach the server (check `data/slink.log` or the status page's area field), the yellow `** NEW ENCOUNTER **` HUD banner fires once per player on a route not yet resolved (and never in a gift area, never before the Pokéball gate opens). Reload the script after a route resolves (capture or `no_catch`) — the `hello` reply seeds `resolved_areas`, and the banner does not re-fire for it.
 
-### Step 2 — Pokéball Gate
+### Link a capture
 
-**Action:** Start on a fresh save (no Pokéballs yet). Walk to Route 22 (reachable before Route 1 Pokéball gift). Have a wild battle and run away.
+Catch on the same route on both players. Expect: after A's catch the area is `pending`; A's new mon is quarantined (auto-boxed) until the link forms — verify it is missing from A's party menu; after B catches, the area becomes `linked` and both mons return to their owners' parties (if both have room) or stay boxed with a HUD notice if either party is full; `data/links.json` gets one entry with both keys and `status: "alive"`; the status page's pairs table shows the pair with nicknames, species, gender and ability; a second battle on the same route no longer fires `no_catch`.
 
-| Check | Expected |
-|---|---|
-| No `nuzlocke ACTIVE` message | ✓ — gate hasn't fired |
-| No `no_catch` sent | ✓ — gate suppresses it |
-| Status page: "Waiting for Pokéballs" badge on both players | ✓ |
+### Faint propagation
 
-**Action:** Walk to Route 1 and receive Pokéballs from Blue's sister.
+Force or take a faint on a linked mon. Expect: within one `tick` the partner's linked mon is force-fainted on the other machine (its HP is written to 0, or — where the pack supports it — the Perish-Song active-battler mechanism runs it out in-battle); `data/links.json` marks the pair `dead`; the status page shows the link and the fainted mon as dead.
 
-| Check | Expected |
-|---|---|
-| Console: `[T4] nuzlocke ACTIVE (pokeballs in bag)` | ✓ |
-| Status page: "Nuzlocke active" badge appears | ✓ |
+### Dead zone
 
----
+Have A run from/lose a wild battle on a **fresh** route (no capture) so `no_catch` fires and the area becomes a dead zone; then have B catch there. Expect: B's catch is immediately force-fainted and queued for the memorial box (it cannot be used); `data/links.json`'s `area_states` shows `dead_zone`; the pairs table shows the dead-zone row. Catching a **second** mon in an already-`linked` area behaves the same way — the extra catch is retired immediately.
 
-### Step 3 — Area Enter + Encounter HUD
+### Party/box sync
 
-**Action:** Walk onto a named route (e.g. Route 1) on both emulators.
+With a linked pair alive in both parties: deposit A's mon at the PC. Expect: the server queues a box deposit for B's linked partner (auto-deposited on B's next safe tick); withdrawing A's mon queues a restore for B's partner (correct level/HP/moves, not level 0). If B's party is full, B's partner cannot be restored and B gets a persistent HUD notice; the server does not mark B's key as "in party" until B confirms, and reactively re-boxes A's mon if B's retrieval fails. Both mons staying boxed at 6/6 shows a HUD notice on both sides instead of a silent drop.
 
-| Check | Expected |
-|---|---|
-| Console: `AUTO area_enter:route_1 → noop` on both | ✓ |
-| Server log: `[a] area_enter → 'route_1'` and `[b] area_enter → 'route_1'` | ✓ |
-| Status page area field shows `route_1` for both players | ✓ |
-| In-game HUD: "★ New encounter: Route 1" appears in green (~3 seconds) | ✓ |
-| HUD does NOT appear for gift areas (oaks_lab, intro, etc.) | ✓ |
-| HUD does NOT appear before `nuzlocke_active` (before Pokéballs obtained) | ✓ |
-| HUD does NOT appear for already-resolved areas (revisiting Route 1 after catch/no_catch) | ✓ |
+### Memorial box
 
-**Resolved areas on reconnect test:** After capturing on a route (so the area is resolved), close and reload the script in BizHawk (or disconnect/reconnect TCP). The `hello` response includes a `resolved_areas` command that seeds the Lua client's `resolved_areas` table. Verify:
+After a faint propagates and the battle ends, both sides move the dead mon to the last PC box (Box 13 internally, "Box 14" in the in-game UI) on the next safe overworld state. `data/memorial.json` gets an entry for both mons once both sides confirm; `data/links.json` marks the pair `memorial`.
 
-| Check | Expected |
-|---|---|
-| After script reload, the "★ New encounter" HUD does NOT re-fire for already-resolved areas | ✓ |
-| Console shows `resolved_areas` command received in hello response | ✓ |
+### Whiteout
 
----
+Let all of Player A's party mons faint at once. Expect: B's **party** linked mons are force-fainted; anything of B's that was already boxed is left alone; memorialize is queued for every affected pair.
 
-### Step 4 — Capture Linking (happy path)
+### Trade (Radical Red / companion patch only)
 
-**Action:** Catch any wild Pokémon on Route 1 on **Player A's** emulator, then catch any on the same route on **Player B's** emulator.
-
-| Check | Expected |
-|---|---|
-| After A catches: area state shows `pending_b` (waiting for B's trainer name) | ✓ |
-| After A catches: A's mon is **quarantined** — auto-deposited to PC via `box_mon` | ✓ |
-| A console: `↳ box_mon queued (quarantine): <key8>` | ✓ |
-| A's quarantined mon is NOT in A's party (verify in party menu) | ✓ |
-| After B catches: area state shows `linked` | ✓ |
-| After B catches: both mons are **un-quarantined** — `party_mon` queued for both (if both have party room) | ✓ |
-| `data/links.json` has one entry with `a.key`, `b.key`, `status: "alive"` | ✓ |
-| Status page Encounters table shows the new pair with **both mons' nicknames, species, and gender symbols** (e.g. "PIDGEY ♂ (Pidgey) ↔ RATTATA ♀ (Rattata)") with a ✅ status icon | ✓ |
-| Status page party table shows **ability names** for both mons (e.g. "Keen Eye", "Run Away") | ✓ |
-| A second battle on the same route fires no `no_catch` | ✓ |
-
-**Ability display checks:**
-
-| Check | Expected |
-|---|---|
-| Party mons in status page show ability names (not "Unknown" or blank) | ✓ |
-| PC box mons in status page show ability names | ✓ |
-| During battle: enemy party table shows enemy ability names | ✓ |
-| Ability names are correct for the species (verify against Bulbapedia or RR Pokédex) | ✓ |
-| For AP ROMs: abilities display correctly (gBaseStats at `0x0825634C`) | ✓ |
-| For RR/CFRU ROMs: abilities display correctly (gBaseStats via CFRU pointer) | ✓ |
-
-**Quarantine behavior — reconnect test:**
-
-| Action | Expected |
-|---|---|
-| A captures on a route (mon quarantined). Disconnect/reconnect A's client (`hello` sent with party snapshot) | If quarantined mon is in A's party snapshot, server re-quarantines it — `box_mon` queued again |
-| Verify A's quarantined mon is deposited to PC after reconnect | ✓ |
-
-**Quarantine behavior — manual withdrawal blocked:**
-
-| Action | Expected |
-|---|---|
-| A captures on a route (mon quarantined). A manually withdraws the quarantined mon from PC | `box_to_party` blocked — mon re-deposited with HUD warning "⚠ Cannot use [name] until linked" |
-| Verify mon returns to PC box | ✓ |
-
-**Quarantine behavior — dead zone retirement:**
-
-| Action | Expected |
-|---|---|
-| A captures on a route (mon quarantined). B sends `no_catch` for the same route (dead zone forms) | A's quarantined mon is force-fainted and memorialized directly from the box |
-| `memorializeMon` searches both party and boxes 0-12 to find the mon | ✓ |
-
-**Species clause — same-save duplicate test (requires `--species-clause`):**
-
-| Action | Expected |
-|---|---|
-| Player A has an alive linked Pidgey from Route 1. Player A catches another Pidgey (or Pidgeotto/Pidgeot) on Route 2. | Capture is rejected — force-fainted; area stays pending for retry |
-| Player A catches a non-duplicate species on Route 2 instead | Link forms normally |
-| Player A's original Pidgey pair is dead/memorial. Player A catches a new Pidgey on Route 3 | Link forms — dead pairs don't block |
-
----
-
-### Step 5 — Faint Propagation
-
-**Action:** Let Player A's linked mon faint in battle. (Use Test 2's F1 to force-faint if needed.)
-
-| Check | Expected |
-|---|---|
-| A console: `AUTO faint:<key>` | ✓ |
-| Within ~100 ms (next tick): B's partner mon HP drops to 0 | ✓ |
-| B console: `↳ DISPATCHED force_faint slot=N key=...` | ✓ |
-| `data/links.json` shows `status: "dead"` for that pair | ✓ |
-| Status page: link shows as dead (red); party table shows fainted mon in red | ✓ |
-
----
-
-### Step 6 — Dead Zone
-
-**Action:** On a **fresh route**, have Player A enter a wild battle and run away or KO. Then have Player B catch on that route.
-
-| Check | Expected |
-|---|---|
-| After A's battle grace window: server log `no_catch → dead zone for <route>` | ✓ |
-| Status page Encounters table: A's side shows the wild Pokémon's species + "(fled/KO)" (e.g. "Rattata *(fled/KO)*") with a ☠️ status icon | ✓ |
-| When B catches: B's newly-caught mon immediately receives `force_faint` **and** `memorialize` | ✓ |
-| B console: `↳ DISPATCHED force_faint` then `↳ memorialize queued` for that mon | ✓ |
-| After safe state: `✓ memorialize: <key> → box13 sN` | B's illegal catch moved to memorial box |
-| `data/links.json` area_states shows `"dead_zone"` for that route | ✓ |
-| Status page Area States shows "dead zone" in red | ✓ |
-| Status page Encounters table: both sides shown — A shows species (fled/KO), B shows "— no catch" (the display is NOT updated by B's illegal catch) | ✓ |
-
-**Also verify — capture in already-linked area:**
-
-| Action | Expected |
-|---|---|
-| On a route that already has a `linked` area state, catch a second mon | Console: `[T4] extra capture in already-linked area … retiring immediately` |
-| `force_faint` + `memorialize` queued for the illegal catch | Mon is fainted and moved to Box 13 — it cannot be used |
-
----
-
-### Step 7 — Party/Box Sync
-
-**Prerequisites:** Steps 3–4 completed; at least one linked pair is alive and in both parties.
-
-**How it works:** When Player A deposits a linked mon at the PC, the server automatically queues a `box_mon` command for Player B. On B's next tick, B's linked partner is deposited to B's box. The client sends a silent `stats_cache` event so the server records the stats. When A withdraws, the server queues `party_mon` for B — B's partner is restored with the correct stats (level, HP, moves). After retrieval, B's client sends a silent `sync_retrieve_done` event so the server keeps its `party_keys` accurate. The server does NOT add the partner's key to `party_keys` until `sync_retrieve_done` is confirmed — if retrieval fails (party full, no cached stats), the client sends `sync_retrieve_failed` instead, and the server removes the key. Conflicting commands (a `box_mon` that arrives while a `party_mon` is already pending for the same mon, or vice versa) are automatically cancelled — the most recent command wins.
-
-**Quarantine and paired sync:** Unlinked captures are quarantined (auto-boxed) until the link forms. When a link forms, both mons are un-quarantined — but only if **both** players have `party_size < 6`. If either party is full, both mons stay in the box with a HUD notification ("★ Linked! Both players need party room to retrieve"). Manual withdrawal of a linked mon is blocked if the partner's `party_size >= 6` — the mon is re-deposited with a HUD warning. If one player's retrieval succeeds but the partner's fails (`sync_retrieve_failed`), the server re-boxes the first player's mon to maintain the invariant that both linked mons are always in the same place. `party_size` is tracked from `hello` (`len(party)`) and `tick` events with ~1s update frequency.
-
-**Action:** Player A deposits their linked mon into the PC box.
-
-| Check | Expected |
-|---|---|
-| A console: `AUTO party_to_box:<key8> → ...` | Server received deposit |
-| B console: `↳ box_mon queued: <key8>` then `✓ box_mon: <key8> → box0 s0` | B's linked partner auto-deposited |
-| B console: `party_to_box(stats_cache)` sent (silent) | B's stats cached on server for retrieval |
-| Both mons absent from in-game party (verify in party menu) | ✓ |
-| Status page party tables: both mons removed from party display | ✓ |
-
-**Action:** Player A withdraws the linked mon back to the party.
-
-| Check | Expected |
-|---|---|
-| A console: `AUTO box_to_party:<key8>` | Server received retrieval |
-| B console: `↳ party_mon queued: <key8>` then `✓ party_mon: <key8> added to party (full heal)` | B's partner auto-retrieved at full HP |
-| B's partner has correct level and maxHP in party menu (not level 0) | Stats were cached correctly |
-| Status page party tables: both mons back in party | ✓ |
-
-**Action (party full scenario):** With B's party at 6/6, have Player A withdraw a linked mon.
-
-| Check | Expected |
-|---|---|
-| B console: `✗ party_mon: party full for <key8> — manual retrieval needed` | ✓ — does NOT loop endlessly |
-| B in-game HUD: "⚠ Make room & retrieve [name]" (persistent) | ✓ |
-| B console: `sync_retrieve_failed:<key8>` sent to server | ✓ |
-| Server does NOT mark B's mon as in-party | ✓ — `party_keys` stays accurate |
-| B manually withdraws from PC → `box_to_party` event fires normally | ✓ |
-
-**Action (paired sync — partner full on withdraw):** With B's party at 6/6, have Player A withdraw a linked mon that A successfully retrieves.
-
-| Check | Expected |
-|---|---|
-| A retrieves successfully; B's `sync_retrieve_failed` fires | ✓ |
-| Server queues `box_mon` for A to re-box A's linked mon | ✓ — maintains paired sync invariant |
-| A console: `↳ box_mon queued: <key8>` (re-box to maintain sync) | ✓ |
-| Both mons end up in the box (neither in party) | ✓ |
-
-**Action (paired sync — link forms, both parties full):** With both parties at 6/6, have A and B each capture on a new route (both captures go to box via quarantine or box capture).
-
-| Check | Expected |
-|---|---|
-| Link forms — both mons stay in box (no `party_mon` queued) | ✓ — both `party_size >= 6` |
-| HUD notification on both: "★ Linked! Both players need party room to retrieve" | ✓ |
-| Neither mon appears in either player's party | ✓ |
-
-**Action (paired sync — manual withdrawal blocked):** B's party is 6/6. A manually withdraws a linked mon from the PC.
-
-| Check | Expected |
-|---|---|
-| Server detects B's `party_size >= 6` | ✓ |
-| A's withdrawal is blocked — mon re-deposited with HUD warning | ✓ |
-| A console: HUD "⚠ Cannot withdraw — partner's party is full" | ✓ |
-
-**Action (box capture linking):** With both parties at 6/6, catch on the same route from both players.
-
-| Check | Expected |
-|---|---|
-| A console: `AUTO capture(box):<key8>` with `in_box=true` and stats | ✓ |
-| B console: `AUTO capture(box):<key8>` | Link forms |
-| Neither mon added to either player's party (both stay in box) | ✓ |
-| Status page: Encounters table shows the new pair with sprites and species | ✓ |
-| No `box_mon` sync commands issued (both already in box) | ✓ |
-
----
-
-### Step 8 — Whiteout
-
-**Action:** Let **all** of Player A's party mons faint (full whiteout).
-
-| Check | Expected |
-|---|---|
-| A console: `AUTO whiteout → ...` | ✓ |
-| All of B's linked **party** mons receive `force_faint` | ✓ |
-| Mons that were **boxed** on B's side are **not** force-fainted | ✓ |
-| `memorialize` commands queued for all affected pairs | ✓ |
-
----
-
-### Step 9 — Memorial Box
-
-**Prerequisites:** Step 5 completed (at least one dead linked pair).
-
-**How it works:** After a faint propagates, the server queues `memorialize` commands for both sides. On the next safe state (overworld, post-battle), each client moves the dead mon to Box 13 ("Box 14" in-game UI) using `M.memorializeMon()`, then sends a `memorialize_done` event. The server marks the pair `MEMORIAL` and writes `data/memorial.json` when both sides confirm.
-
-**Action:** Let a linked mon faint in battle and wait for the battle to end.
-
-| Check | Expected |
-|---|---|
-| A (faint side) console: `↳ memorialize queued: <key>` | ✓ |
-| A console: `✓ memorialize: <key> → box13 sN` after safe state flush | ✓ |
-| B (partner side) console: same queued line then confirm line | ✓ |
-| `data/memorial.json` written with both mons' personality+otId, species, area | ✓ |
-| `data/links.json` shows `status: "memorial"` for that pair | ✓ |
-| Box 13 ("Box 14") in-game: both fainted mons appear in sequential slots | ✓ |
-| Neither mon's source slot (party or box 0-12) remains | ✓ |
-
-**Manual F9 test (single instance, no server):**
-
-| Action | Expected |
-|---|---|
-| Press F9 with any mon in party slot 0 | `✓ memorialize: <key> → box13 s0` in console |
-| Party slot 0 is cleared and compacted | Slot removed; party count decremented |
-| Box 13 slot 0 contains the moved mon | Verify in BizHawk RAM watch |
+Vanilla and AP FireRed/LeafGreen have no native trade scene — server-driven trade prompts are cancelled outright on those foundations (`docs/gen3/PLAN.md`). On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. This is exercised automatically by `tools/e2e_duo.py --scenario trade`; treat that as the primary source of truth and use the manual walkthrough only to confirm the in-game feel.
 
 ---
 
@@ -496,21 +194,23 @@ SLINK_LIVE=1 pytest tests/live -q
 
 ### End-to-end with server + partner
 
-Run the full Test 4 setup (`lua/slink.lua` on both BizHawks, patched RR ROMs) with `python -m server.server --rival-team-swap`. Walk into any Rival (Terry) fight on either player (Oak's Lab onward — 27 IDs spanning early/mid/late game). The server sends `replace_rival_team` with the partner's cached party blobs; the client dispatches the native `OP_SET_ENEMY_PARTY`, refreshes the active foe's `gBattleMons` (`M.refreshEnemyPartyNative`), and acks `rival_team_replaced` with a species readback. Lua console: `trainer_battle_start trainer_id=... is_rival=true` then the swap dispatch. Server `data/slink.log` confirms: `[a] trainer_battle_start trainer_id=325 is_rival=True` / `queued replace_rival_team (..., source=auto)`.
+Run the Feature Checklist setup (`lua/slink.lua` on both BizHawks, patched RR ROMs) with `python -m server.server --rival-team-swap`. Walk into any Rival (Terry) fight on either player. On `trainer_battle_start` the server checks the trainer id against the adapter's rival set and, if it matches and the partner has cached party blobs, queues `replace_rival_team` with the partner's cached blobs. The client (`lua/gen3/client.lua` `C.replace_rival_team`) stages it through the companion mailbox (`lua/gen3/native.lua`, `OP_SET_ENEMY_PARTY`) and acks `rival_team_replaced` with a species-id readback (or an `error` field on refusal — no crash either way). Server `data/slink.log` shows `[a] trainer_battle_start trainer_id=<id> is_rival=True session=... battle_id=...` followed by a `rival_team_replaced ack trainer_id=<id> species=[...]` line.
 
 **Negative paths to verify:**
-- **Unpatched ROM** → client logs `replace_rival_team: companion patch ABSENT — required, skipping` and acks `rival_team_replaced` with `error="patch_required"`; no swap, no crash.
-- Out of battle when the command arrives → `not in battle, skipping` + `error="not_in_battle"` ack (out-of-battle writes would be harmless but the readback would be stale).
-- Partner offline (B disconnected) → A walks into a Rival fight → no swap; A fights the original rival. Server log: `auto-trigger skipped: partner 'b' has no cached party blobs`.
-- Non-rival trainer (e.g. Bug Catcher) → no swap.
-- Vanilla / AP ROM loaded → adapter returns empty rival set → never fires (Lua still emits the event; server logs `is_rival=False`).
-- BizHawk reset mid-battle after a swap → next battle init clobbers `gEnemyParty`; no save corruption.
+- **Unpatched ROM** → no `native` part is built at all (`pack=="gen3_rr"` with `artifact_kind=="companion"` is required), so the swap acks `rival_team_replaced` with `error="patch_required"`; no swap, no crash.
+- Out of battle when the command arrives → ack with `error="not_in_battle"`.
+- Stale/mismatched battle identity (a command queued for a battle that has since ended) → ack with `error="stale_battle_id"`.
+- A failed ack shows a red `Rival Swap failed: <error>` HUD banner and a `rival team swap FAILED: <error>` server log line.
+- Partner offline (B disconnected, no cached party blobs) → no swap; A fights the original rival. Server log: `auto-trigger skipped: partner 'b' has no cached party blobs`.
+- Non-rival trainer → `is_rival=False`; nothing queued.
+- Vanilla / AP ROM loaded → the adapter's rival-id set is empty, so it never matches (still logs `trainer_battle_start`, `is_rival=False`).
+- BizHawk reset mid-battle after a swap → next battle init overwrites `gEnemyParty` itself; no save corruption (the write only ever touches transient EWRAM).
 
 ---
 
 ## Test 6 — Explode Mode (Radical Red only, RAM Write)
 
-When `--explode-mode` is active, a linked partner's death sends `force_explode` instead of `force_faint`: the surviving mon's active battler is coerced into using Explosion (`M.forceExplodeBattler`) rather than being silently zeroed. Vanilla / AP / Emerald and bench (non-active) mons fall back to `force_faint`.
+When `--explode-mode` is active, a linked partner's death sends `force_explode` instead of `force_faint`: if the surviving mon is the active battler in a singles battle and the pack supports the mechanism (`lua/gen3/client.lua`'s `explode_step`), its next action is coerced into Explosion instead of being silently zeroed. A boxed/benched mon, a pack without the required addresses, or doubles all fall back to a plain `force_faint`.
 
 ### Phase 0 — archived
 
@@ -518,7 +218,7 @@ The single-instance harness `test_force_explosion.lua` drove the old client (tag
 
 ### Phase 1 — End-to-end with server + partner
 
-Run `python -m server.server --explode-mode` with both BizHawks connected (Test 4 setup) on Radical Red. Mid-battle, let one linked mon faint. Its partner's **active** battler is coerced into Explosion on the same TCP round-trip (Lua console: `force_explode` dispatched). A boxed/benched partner instead receives a plain `force_faint`. Omit `--explode-mode` → partner death falls back to the deferred `force_faint`.
+Run `python -m server.server --explode-mode` with both BizHawks connected (the Feature Checklist setup) on Radical Red. Mid-battle, let one linked mon faint. If its partner is the **active** battler in a singles fight, the client commits Explosion for it (HUD: `!! <nickname> BOOM!`, red) instead of writing HP 0 directly; a boxed/benched partner instead gets a plain `force_faint` (HUD: `!! <nickname> KO'd`). Omit `--explode-mode` → partner death always falls back to `force_faint`.
 
 ---
 
@@ -603,28 +303,20 @@ The pytest wrapper `tests/e2e/test_duo.py` parametrizes the same six scenarios (
 SLINK_E2E=1 pytest tests/e2e/test_duo.py -q   # Gen 3 only; `tests/e2e/` also picks up Gen 1 + Gen 2
 ```
 
-### Desync Audit Findings (Gen 3)
+### Desync safeguards (Gen 3)
 
-A comprehensive audit of the Gen 3 sync codebase verified that all high-risk desync scenarios are mitigated. Summary of findings:
+What the current client and server do about the same handful of failure modes the old client's audit covered. Mechanisms changed with the rewrite; the risks did not.
 
-#### Confirmed Mitigations (no action needed)
-
-| Risk | Mitigation |
+| Risk | Current mitigation |
 |---|---|
-| **HP resurrection during battle** | 5-layer defense: `force_fainted_keys` set, `pending_battle_faints` queue, `verify_party_fields` guard, battle HP cache writeback skip, battle-end clear |
-| **Double-buffer identity confusion** | Independent `_ip_entry_pool` per buffer in `index_party()` — slots are never shared across buffers |
-| **CFRU substruct corruption** | Snapshot-before + verify-after cycle with 8-frame retry window in `decryptSubstruct()` |
-| **`party_size` lag causing false full-party** | `_linked_party_size()` subtracts pending `box_mon` commands (`adjusted_party_size`); reactive `sync_retrieve_failed` catches remaining edge cases |
-| **Command loss on crash/disconnect** | Hello reconciliation re-queues memorials, re-quarantines pending captures, and re-propagates hp=0 faints from the party snapshot |
-| **Borrowed-party battle pollution** | Two-layer detection: `isBorrowedBattle()` flag check + rolling gift capture buffer (3+ gifts in 45 frames triggers freeze); all party events gated on `not party_frozen` |
-| **Nature change key split** | `otId+species+level+nickname` signature matching in Lua; server-side `_handle_key_change()` migrates key across all 7 state containers |
+| A battle write to HP being undone by the engine's own next `datahpupdate`, or read back as a fresh faint | `battle_write` (`lua/gen3/client.lua`) holds an active battler's write until it switches out or the battle ends rather than poking HP mid-turn; `mark_commanded`/`st.commanded` mark a key as "we just zeroed this" so the client's own write is never re-reported as an observed faint (`observe_hp`) |
+| A corrupt or mid-write party/box record being trusted | Non-RR (FR/LG) records carry a `BoxPokemon` checksum; `boxes.lua` refuses a deposit/withdraw/memorialize when `checksum_ok ~= true` rather than risk a wrong decode. RR/CFRU records skip that checksum by design (`reads.lua`) and are not checked this way |
+| `party_size` lag causing a false "party full" | The server subtracts commands it has already queued (pending `box_mon`) from the count it uses to decide party room; `sync_retrieve_failed` reactively catches whatever a stale count let through (re-boxes the partner's mon) |
+| Command loss on crash/disconnect | On `hello`, the server re-quarantines pending unlinked captures still sitting in the reported party and re-propagates any HP-0 mon it hadn't already marked dead (`server/state.py`) |
+| A borrowed party in RAM (RR multi/tag battles copy a partner's party in) polluting capture/faint/PC detection | `update_frozen` (`lua/gen3/client.lua`) checks whether the current party shares any key with the pre-battle snapshot; no overlap freezes all party-diff reducers (`st.frozen`) until the real party returns or the battle ends. Held battle writes are kept, not dropped, across the freeze |
+| A key split by an in-game NPC trade (nature/species changes but the record is "the same mon") | `lua/core/identity.lua` matches the new record against nickname bytes + move IDs frozen at the trade; an ambiguous or lost match is latched, never silently guessed. Server-side, `_handle_key_change` (`server/state.py`) migrates the key across every state container that references it |
 
-#### Known Residual Risks (extremely rare, accepted)
-
-| Risk | Likelihood | Impact |
-|---|---|---|
-| Nature change signature collision (two mons with identical otId:species:level:nickname) | Near-zero (requires same OT, same species, same level, same nickname in party simultaneously) | No migration occurs — old key orphaned, new key treated as unknown. Manual fix via debug page. |
-| `party_size` 1-tick stale window after a box action | Every box action (~1s window) | `sync_retrieve_failed` callback catches this reactively — partner's mon re-boxed if retrieval couldn't execute. No permanent desync. |
+**Known residual risk:** an in-game trade signature collision (two party mons with identical nickname bytes and move IDs at the moment of the trade) is not distinguishable — the identity module latches it as ambiguous, the old key is orphaned, and the new key is treated as unknown until fixed manually.
 
 ---
 
