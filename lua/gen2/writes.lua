@@ -10,9 +10,35 @@
 -- Active faint (W-2, O-30): only inside the battle hold, before `call DetermineMoveOrder` in
 -- BattleTurn (write_checkpoint.json battle_hold; docs/gen2/reviews/INBATTLE_FAINT_FACTS_2026-09-23.md).
 -- BattleTurn+0 is NOT the site: C core.asm:160-208 / G:146-184 parse and execute a move before any
--- HasPlayerFainted. Conditional explode remains disabled; this module grants no write timing,
--- checkpoint, fixture, storage, client or physical qualification.
+-- HasPlayerFainted. This module grants no write timing, checkpoint, fixture, storage, client or
+-- physical qualification.
+--
+-- W-3 Explode Mode (owner 2026-09-26, Gen 1 parity): at that same hold the player has committed
+-- (ParsePlayerAction C core.asm:606-647 / G:558-599 loads wCurPlayerMove + wCurMoveNum), so the
+-- move is replaced there: all four battle-struct and party-mirror move/PP slots become EXPLOSION
+-- with PP 1 (Gen 1 W-3), then wCurPlayerMove = EXPLOSION. DetermineMoveOrder reads the priority
+-- from wCurPlayerMove (CompareMovePriority C core.asm:815-819 / G:767-771) and DoTurn reloads
+-- wPlayerMoveStruct from it (UpdateMoveData, C effect_commands.asm:25-38 / G:1-19), so no move
+-- struct byte is written. PP is consumed at wCurMoveNum's slot (BattleCommand_DoTurn .consume_pp
+-- C effect_commands.asm:1021-1030 / G:1016-1025): every slot holds PP 1, so it never runs out.
+-- EXPLOSION = $99 (C/G constants/move_constants.asm:161); EFFECT_SELFDESTRUCT (C/G data/moves/moves.asm:169).
+--
+-- W-4 Rival Team Swap: the enemy party wOTPartyCount..wOTPartyDataEnd (C ram/wram.asm:2862-2885,
+-- G:2879-2900), which ReadTrainerParty fills (C engine/battle/read_trainer_party.asm:1-16, G:1-12)
+-- before InitEnemyTrainer sets wCurOTMon = -1 (C core.asm:8153-8154 / G:7851-7852). It is only
+-- read again by DoBattle's first-alive scan (C core.asm:3-19 / G:3-19) and the first send-out,
+-- which stores wCurOTMon (LoadEnemyMon .OpponentParty C core.asm:6306 / G:6103).
 local W = {}
+W.EXPLOSION = 0x99
+-- SYM facts the generated profile does not carry (data/gen2/<artifact>.sym; the *_slink.sym overlay
+-- builds agree byte for byte; tests/unit/test_gen2_explode_rival.py pins both). {bank, address}.
+local GOLD_SYM = {wCurPlayerMove = {0, 0xCBC1}, wCurOTMon = {0, 0xCB41}, wOTPartyCount = {1, 0xDD55},
+                  wOTPartyDataEnd = {1, 0xDF01}}
+W.SYM = {
+    crystal = {wCurPlayerMove = {0, 0xC6E3}, wCurOTMon = {0, 0xC663}, wOTPartyCount = {1, 0xD280},
+               wOTPartyDataEnd = {1, 0xD42C}},
+    gold = GOLD_SYM, silver = GOLD_SYM,
+}
 
 local function integer(value, low, high)
     return type(value) == "number" and value % 1 == 0 and value >= low and value <= high
@@ -57,6 +83,17 @@ function W.new(profile, io, Permit, policy, battle)
     end
     assert(type(profile.artifact) == "string" and type(profile.rom_sha1) == "string"
            and #profile.rom_sha1 == 40, "profile artifact provenance required")
+    assert(c.MON_MOVES == 2 and c.MON_PP == 23 and c.NUM_MOVES == 4 and c.NAME_LENGTH == 11
+           and c.MON_NAME_LENGTH == 11 and c.TRAINER_BATTLE == 2, "unsupported or missing Gen 2 move/name constants")
+    local sym = assert(W.SYM[profile.title], "no SYM facts for the selected title")
+    -- W-4: count + species list ($FF-terminated) + six records + six OT names + six nicknames
+    local ot_block, ot_bank = sym.wOTPartyCount[2], sym.wOTPartyCount[1]
+    local ot_length = 1 + (c.PARTY_LENGTH + 1) + c.PARTY_LENGTH * (c.PARTYMON_STRUCT_LENGTH + c.NAME_LENGTH + c.MON_NAME_LENGTH)
+    assert(ot_bank == 1 and sym.wOTPartyDataEnd[1] == 1 and sym.wOTPartyDataEnd[2] == ot_block + ot_length
+           and ot_block >= 0xD000 and ot_block + ot_length <= 0xE000, "enemy party block geometry disagrees")
+    local ot_species, ot_mons = ot_block + 1, ot_block + 1 + c.PARTY_LENGTH + 1
+    local ot_names = ot_mons + c.PARTY_LENGTH * c.PARTYMON_STRUCT_LENGTH
+    local ot_nicks = ot_names + c.PARTY_LENGTH * c.NAME_LENGTH
 
     -- O-30: the battle hold's exact targets (battle struct HP, the player action byte), each with its
     -- own WRAM bank; nothing else outside the party block is ever writable.
@@ -70,21 +107,29 @@ function W.new(profile, io, Permit, policy, battle)
                    "battle target coordinates required: " .. name)
             targets[name] = t
         end
+        -- W-3: the explode spans, written only at the same hold (profile SYM rows + the table above)
+        for name, width in pairs({wBattleMonMoves = c.NUM_MOVES, wBattleMonPP = c.NUM_MOVES}) do
+            assert(integer(ram[name], 0xC000, 0xDFFF) and integer(banks[name], 0, 7), "explode target missing: " .. name)
+            targets[name] = {address = ram[name], bank = banks[name], width = width}
+        end
+        targets.wCurPlayerMove = {address = sym.wCurPlayerMove[2], bank = sym.wCurPlayerMove[1], width = 1}
     end
     local function target_of(addr, n)
         for _, t in pairs(targets) do if addr == t.address and n == t.width then return t end end
     end
+    local function in_ot(addr, n) return addr >= ot_block and addr + n <= ot_block + ot_length end
     local function in_block(addr, n) return addr >= block and addr + n <= block + block_length end
     local gate = Permit.new({
         write_u8 = io.write_u8,
         domains = {
             ["System Bus"] = {
-                bounds = function(addr, n) return in_block(addr, n) or target_of(addr, n) ~= nil end,
+                bounds = function(addr, n) return in_block(addr, n) or in_ot(addr, n) or target_of(addr, n) ~= nil end,
                 -- Same explicit platform mapping seam as gen2/reads.lua. There is
                 -- no assumed DMG mode, selected WRAM bank or bank-switch fallback.
                 mapped = function(addr, n)
-                    local t = not in_block(addr, n) and target_of(addr, n)
-                    return io.bank_valid(t and t.bank or bank, addr, n) == true
+                    local t = not in_block(addr, n) and not in_ot(addr, n) and target_of(addr, n)
+                    local b = t and t.bank or in_ot(addr, n) and ot_bank or bank
+                    return io.bank_valid(b, addr, n) == true
                 end,
                 pointer_stable = function(addr, n, _reason, token)
                     return policy.pointer_stable(token, addr, n) == true
@@ -195,9 +240,72 @@ function W.new(profile, io, Permit, policy, battle)
             })
         end)
     end
-    function self:explode_active_battler()
-        return gate:guard(function() error("conditional explode action-selection path is not qualified", 0) end)
+    -- W-3 (header): only for a committed move (wBattlePlayerAction = USEMOVE, snapshot.player_action);
+    -- an item or a switch already spent the turn and gets W-2 instead (the client's choice).
+    -- wCurPlayerMove goes LAST: until it lands, the turn still runs the move the player chose.
+    function self:explode_active_battler(slot, snapshot)
+        return gate:guard(function()
+            assert(targets.wCurPlayerMove, "no in-battle write composed")
+            assert(gate.armed == "battle_hold", "explode only inside the battle hold")
+            local address = slot_base(slot)
+            assert(type(snapshot) == "table" and snapshot.link_mode == 0, "linked or unknown battle context refused")
+            assert(snapshot.active_slot == slot, "target is not the active battler")
+            assert(snapshot.player_action == 0, "explode needs a committed move (USEMOVE)")
+            authorized("battle_explode", {slot=slot, snapshot=snapshot})
+            local x, pp = W.EXPLOSION, 1
+            return gate:write_batch({
+                {domain="System Bus", addr=targets.wBattleMonMoves.address, bytes={x, x, x, x}},
+                {domain="System Bus", addr=targets.wBattleMonPP.address, bytes={pp, pp, pp, pp}},
+                {domain="System Bus", addr=address + c.MON_MOVES, bytes={x, x, x, x}},
+                {domain="System Bus", addr=address + c.MON_PP, bytes={pp, pp, pp, pp}},
+                {domain="System Bus", addr=targets.wCurPlayerMove.address, bytes={x}},
+            })
+        end)
     end
+
+    -- W-4: `mons` = list of {record = 48 bytes, ot = 11, nick = 11}; species comes from the record.
+    -- The whole payload is validated before the first byte; the write is count, species list + $FF,
+    -- records, OT names, nicknames: the shape ReadTrainerParty leaves. The FIRST mon must have HP:
+    -- DoBattle's first-alive loop is unbounded (C/G core.asm:12-19) and, should this frame end fall
+    -- after it, already chose slot 0 of the ROM party (every ROM trainer mon starts at full HP).
+    -- Only before the first send-out: snapshot.cur_ot_mon must still be InitEnemyTrainer's $FF.
+    function self:write_enemy_party(mons, snapshot)
+        return gate:guard(function()
+            assert(gate.armed == "rival_swap", "enemy party only inside the rival swap window")
+            assert(type(snapshot) == "table" and snapshot.link_mode == 0, "linked or unknown battle context refused")
+            assert(snapshot.mode == c.TRAINER_BATTLE, "not a trainer battle")
+            assert(snapshot.cur_ot_mon == 0xFF, "the enemy already sent a mon out")
+            local count = Permit.sequence_length(mons, "enemy party")
+            assert(count >= 1 and count <= c.PARTY_LENGTH, "enemy party count must be 1..6")
+            local species, records, names, nicks = {}, {}, {}, {}
+            for i, m in ipairs(mons) do
+                local what = "enemy mon " .. i
+                assert(type(m) == "table", what .. ": table required")
+                for field, n in pairs({record = c.PARTYMON_STRUCT_LENGTH, ot = c.NAME_LENGTH, nick = c.MON_NAME_LENGTH}) do
+                    assert(Permit.sequence_length(m[field], what .. " " .. field) == n, what .. ": " .. field .. " must be " .. n .. " bytes")
+                    for j = 1, n do assert(integer(m[field][j], 0, 255), what .. ": " .. field .. " byte " .. j .. " out of range") end
+                end
+                local r = m.record
+                assert(integer(r[c.MON_SPECIES + 1], 1, 251), what .. ": species outside 1..251")
+                assert(i > 1 or r[c.MON_HP + 1] * 256 + r[c.MON_HP + 2] > 0, "enemy mon 1 has no HP")
+                species[i] = r[c.MON_SPECIES + 1]
+                for j = 1, #r do records[#records + 1] = r[j] end
+                for j = 1, #m.ot do names[#names + 1] = m.ot[j] end
+                for j = 1, #m.nick do nicks[#nicks + 1] = m.nick[j] end
+            end
+            species[count + 1] = 0xFF
+            authorized("enemy_party", {count=count, snapshot=snapshot})
+            return gate:write_batch({
+                {domain="System Bus", addr=ot_block, bytes={count}},
+                {domain="System Bus", addr=ot_species, bytes=species},
+                {domain="System Bus", addr=ot_mons, bytes=records},
+                {domain="System Bus", addr=ot_names, bytes=names},
+                {domain="System Bus", addr=ot_nicks, bytes=nicks},
+            })
+        end)
+    end
+    -- read-only coordinates the client's rival window needs (wCurOTMon)
+    self.sym = sym
     return self
 end
 

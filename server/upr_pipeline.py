@@ -225,6 +225,30 @@ def jar_entry_crcs(jar: str) -> dict[str, int | None]:
     return out
 
 
+# Gen 2 (Gold/Silver/Crystal): not a Gen 1 cartridge at all, and gen1_rom_scan.identify()
+# assumes the Gen 1 layout, so it is never called on one -- recognised by sha1 instead,
+# against its own per-title admission tables (the same SELECTED clean rows server/
+# manager.py's OPTION_SUPPORT and server/cartridges.py's companion apply trust). Its own
+# family: it never pairs with a Gen 1 cartridge, and (no randomizer support yet) never
+# randomizes -- server/cartridges.py refuses that before any jar runs.
+FAMILY_GEN2 = "gen2_gsc"
+_GEN2_TITLES = ("crystal", "gold", "silver")
+
+
+def _gen2_clean_sha1s() -> dict[str, str]:
+    """sha1 -> title, for every SELECTED clean row across the three Gen 2 admission tables
+    (data/games/gen2_<title>/admission.json). Read fresh each call: three small files, and
+    an admission change (a new revision selected) must be picked up without a restart."""
+    out = {}
+    for title in _GEN2_TITLES:
+        path = os.path.join(_REPO, "data", "games", f"gen2_{title}", "admission.json")
+        with open(path, encoding="utf-8") as fh:
+            for row in json.load(fh)["artifacts"]:
+                if row["kind"] == "clean" and row["selection"] == "SELECTED":
+                    out[row["sha1"]] = title
+    return out
+
+
 def jar_entries(jar: str) -> set[str]:
     """The Gen 1 INI section names a jar carries -- what it can randomize. The stock jar has
     the vanilla four; the SLink fork adds the three clean pure titles and, since patch 0003,
@@ -257,17 +281,23 @@ def jar_supports(jar: str, ident: dict) -> bool:
 
 
 def family_of(sources: dict[str, str]) -> str:
-    """The randomizer family the pair belongs to (upr_settings.FAMILY_*); a pure/vanilla
-    mix is refused because the two would need different contracts and could not link."""
+    """The randomizer family the pair belongs to (upr_settings.FAMILY_* or FAMILY_GEN2); a
+    pure/vanilla/Gen2 mix is refused because the two would need different contracts and
+    could not link."""
+    gen2 = _gen2_clean_sha1s()
     families = {}
     for pid, path in sources.items():
         with open(path, "rb") as f:
-            ident = identify(f.read())
+            rom = f.read()
+        if hashlib.sha1(rom).hexdigest() in gen2:
+            families[pid] = FAMILY_GEN2
+            continue
+        ident = identify(rom)
         families[pid] = FAMILY_PURE if ident.get("foundation") == "gen1_purergb" else FAMILY_VANILLA
     if len(set(families.values())) != 1:
         raise UprPipelineError(
-            f"the two ROMs are different families ({families}); a pureRGB cartridge only pairs "
-            f"with another pureRGB cartridge")
+            f"the two ROMs are different families ({families}); a cartridge only pairs with "
+            f"another of its own family (vanilla Gen 1, pureRGB, Gen 2)")
     return next(iter(families.values()))
 
 
@@ -347,6 +377,12 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
             rom = f.read()
         # the Manager's ROM scan dedups on this, so it reads each file once, not twice
         info["sha1"] = hashlib.sha1(rom).hexdigest()
+        gen2_title = _gen2_clean_sha1s().get(info["sha1"])
+        if gen2_title:
+            info["family"], info["kind"], info["clean"] = FAMILY_GEN2, "clean", True
+            info["variant"] = variant_label(gen2_title)
+            info["title"] = f"{info['variant']} · {KIND_WORDS['clean']}"
+            return info
         if len(rom) != GEN1_ROM_SIZE:
             info["clean"], info["title"] = False, "not a Gen 1 cartridge"
             return info

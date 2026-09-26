@@ -88,6 +88,10 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     if companion and family == FAMILY_VANILLA:
         for rom in data.values():
             _vanilla_target(rom)  # Yellow must refuse before either randomizer starts.
+    if randomize is not None and family == upr_pipeline.FAMILY_GEN2:
+        raise CartridgeError(
+            "Gen 2 has no randomizer support; turn Randomize off to prepare companion "
+            "cartridges only")
     if randomize is not None:
         if not isinstance(randomize, dict) or not randomize.get("settings_path"):
             raise CartridgeError("randomize needs settings_path pointing to a .rnqs file")
@@ -137,9 +141,12 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
         kind = "rand_companion" if has_companion else "rand"
         if randomize is None:
             kind = "companion" if has_companion else "clean"
+        # fingerprint_rom is the Gen 1 scanner (wild/fishing tables); Gen 2 never randomizes,
+        # so there is no content_fingerprint to cross-check it against at hello either.
+        fingerprint = fingerprint_rom(rom) if family != upr_pipeline.FAMILY_GEN2 else ""
         players[pid] = {"source": sources[pid], "source_title": infos[pid]["title"],
                         "output": str(outputs[pid]), "rom_sha1": hashlib.sha1(rom).hexdigest(),
-                        "fingerprint": fingerprint_rom(rom), "kind": kind}
+                        "fingerprint": fingerprint, "kind": kind}
     # Finish both transforms and scans before publishing either final cartridge.
     for pid, rom in data.items():
         outputs[pid].write_bytes(rom)
