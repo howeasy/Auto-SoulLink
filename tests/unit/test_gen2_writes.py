@@ -189,11 +189,12 @@ def test_second_faint_span_policy_refusal_never_emits_status(policy):
     assert world.binder.armed is None and len(world.binder.log) == 0
 
 
-def test_unproved_explode_path_is_explicitly_disabled():
+def test_explode_without_battle_facts_is_refused():
+    """W-3 lands only at the composed battle hold (tests/unit/test_gen2_explode_rival.py has the rest)."""
     world = World()
     world.call("arm", "battle_hold")
-    with pytest.raises(LuaError, match="not qualified"):
-        world.call("explode_active_battler", 0)
+    with pytest.raises(LuaError, match="no in-battle write composed"):
+        world.call("explode_active_battler", 0, world.snapshot(mode=1, active=0))
     assert world.writes == [] and world.binder.armed is None
 
 

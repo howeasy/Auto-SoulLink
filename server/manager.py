@@ -79,16 +79,18 @@ GAMES = [
 UNADMITTED_GAMES = frozenset({"gen3_ap"})  # labelled "not admitted"; handle_new refuses them
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
-# The randomizer contract a game names (upr_settings.FAMILY_*): a pure run takes pure
-# cartridges only, a vanilla run vanilla ones, a FireRed / LeafGreen run FR/LG ones -- no two
-# families can link. "gen3_rr" (Radical Red) is a DIFFERENT game key from "gen3" and is
-# deliberately absent here: RR is not randomizable by this pipeline (its map/data no longer
-# matches the vanilla FR/LG tables R2 verifies against), so a run named "gen3_rr" never lands
-# in randomizer_games and never offers the randomizer -- see
-# test_manager_names_the_frlg_family / the RR refusal test in test_upr_pipeline_gen3.py.
+# The randomizer contract a run's game names (upr_settings.FAMILY_*): a pure run takes pure
+# cartridges only, a vanilla run vanilla ones, a FireRed / LeafGreen run FR/LG ones, a Gen 2 run
+# Gen 2 ones (companion only: Gen 2 never randomizes) -- no two families can link. "gen3_rr"
+# (Radical Red) is a DIFFERENT game key from "gen3" and is deliberately absent here: RR is not
+# randomizable by this pipeline (its map/data no longer matches the vanilla FR/LG tables R2
+# verifies against), so a run named "gen3_rr" never lands in randomizer_games and never offers
+# the randomizer -- see test_manager_names_the_frlg_family / the RR refusal test in
+# test_upr_pipeline_gen3.py.
 GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb",
-               "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
+               "gen2": "gen2_gsc", "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
+                "gen2_gsc": "Gold / Silver / Crystal",
                 "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald"}
 
 
@@ -134,7 +136,7 @@ def _legacy_cartridges(run: dict) -> dict | None:
 
 # The titles the SLink companion exists for (a UPS in patch/dist, a target in
 # server/patcher.py). Yellow is absent on purpose: it has no free WRAM for the mailbox.
-COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen")
+COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen", "Crystal", "Gold", "Silver")
 
 # Run options: what each does, in the form's own words, and which cartridges can honour
 # it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
@@ -166,26 +168,31 @@ OPTION_SUPPORT = {
                      "rom_types": {title: {"ok": True} for title in ("firered", "leafgreen", "emerald")},
                      "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
                      "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
+                     "gen2_gsc": {"ok": True},
                      "gen3_frlge_rr": {"ok": True}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
+                        "gen2_gsc": {"ok": True},
                         "gen3_frlge_rr": {"ok": True}},
     "overworld_presence": {"all": False, "why": "Deferred until after this release (docs/gen3/TODO.md)."},
     "native_messages": {"all": False, "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."},
-    "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB).",
+    "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB, Gen 2 Gold/Silver/Crystal).",
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},
+                      "gen2_gsc": {"ok": True},
                       "gen3_frlge_rr": {"ok": True}},
     "battle_calc": {"all": False, "why": "Radical Red only.",
                     "gen1_rby": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 1 damage."},
                     "gen1_purergb": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport pureRGB's retyped/rebalanced damage."},
+                    "gen2_gsc": {"ok": False, "why": "The calculator is pinned to modern mechanics and would misreport Gen 2 damage."},
                     "gen3_frlge_rr": {"ok": True}},
     # `always`: the cartridge trades this way whether or not the switch is on -- the form
     # shows the row greyed AND checked, so it does not read as "no trade NPC here".
     "pc_trade_npc": {"all": False, "why": "This switch turns off Radical Red's Pokémon-Center trade NPC — other games have no NPC it could turn off.",
                      "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
+                     "gen2_gsc": {"ok": False, "always": True, "why": "Gen 2 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen3_frlge_rr": {"ok": True}},
 }
 

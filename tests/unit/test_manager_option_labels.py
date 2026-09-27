@@ -44,12 +44,11 @@ def test_overworld_presence_is_greyed_everywhere_while_deferred():
 
 def test_the_pc_trade_npc_row_says_gen1_trades_at_the_receptionist():
     """Greyed is right (only the Gen 3 client reads the switch), "Radical Red only" was
-    not: Gen 1 trades at the Cable Club receptionist, always. The row says so and shows
-    as on, so it does not read as "no trade NPC here"."""
-    for pair in (GEN1, ["purered", "pureblue"]):
+    not: Gen 1 (and Gen 2) trade at the Cable Club receptionist, always. The row says so
+    and shows as on, so it does not read as "no trade NPC here"."""
+    for pair in (GEN1, ["purered", "pureblue"], ["crystal", "gold"]):
         s = option_support("pc_trade_npc", pair)
         assert not s["ok"] and s["always"] is True and "receptionist" in s["why"], s
-    assert option_support("pc_trade_npc", ["crystal", "crystal"])["always"] is False
     assert "Radical Red only" not in option_support("pc_trade_npc", GEN1)["why"]
 
 
@@ -62,6 +61,16 @@ def test_native_sounds_is_a_gen1_feature_now():
     # Yellow shares the family and has no patch: the toggle is allowed and the cartridge
     # decides at hello (`sfx` capability), exactly as the panel does. The label says so.
     assert "unpatched" in dict(OPTIONS)["native_sounds"][1].lower()
+
+
+def test_gen2_companion_features_are_allowed():
+    """Gen 2 shipped the companion patch (owner signs G4, 2026-09-26): Explode Mode, Rival
+    Swap and Native Sounds are allowed like Gen 1's, on the same patched-mailbox basis."""
+    GEN2 = ["crystal", "gold"]
+    for key in ("explode_mode", "rival_team_swap", "native_sounds"):
+        assert option_support(key, GEN2)["ok"], key
+    # No calc, same reasoning as Gen 1/pureRGB: the calculator is pinned to modern mechanics.
+    assert not option_support("battle_calc", GEN2)["ok"]
 
 
 def test_the_gender_clause_cannot_be_chosen_on_gen1():
