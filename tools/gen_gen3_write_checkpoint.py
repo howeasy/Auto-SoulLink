@@ -324,6 +324,19 @@ RR_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
           "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
           "irq_entry": RR_IRQ_ENTRY}
 
+# X3 (EXP-X23): the expansion reference build parks in the BIOS too, but in IntrWait's halt loop:
+# its inlined WaitForVBlank calls VBlankIntrWait (expansion e8bd1cd7 src/main.c:422-437). Census
+# (docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt, Oldale, no input): 1800/1800 frame
+# ends at R15 0x1F8 (the HALTCNT strb @0x1F0 + 8), System mode, ARM, all overworld-idle. With the
+# client's frame_control exec hook (docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt): 600/600
+# at the IRQ vector entry R15 0x1C, mode 0x12, ARM, R14_irq 0x1F8 -- the IRQ taken with the
+# instruction after that strb next. Same HLE BIOS bytes as RR's receipt; only R14 0x1F8 is admitted.
+EXP_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
+           "observed_pc": 0x000001F8,
+           "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
+           "irq_entry": {"mode": 0x12, "thumb": 0, "pc": [0x1C], "lr_min": 0x1F8, "lr_max": 0x1F8,
+                         "evidence": "docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt"}}
+
 
 def cpu_clause(title: str, syms, is_rr: bool) -> dict:
     if is_rr:
@@ -1343,15 +1356,15 @@ def build_expansion(context):
              "struct_size": types["Task"]["size"], "count": const["NUM_TASKS"],
              "func_offset": types["Task"]["fields"]["func"]["offset"],
              "is_active_offset": types["Task"]["fields"]["isActive"]["offset"],
-             # F2: name transfer only (no physical frame qualification), so the allow-list
-             "status": "OPEN",
-             # gets the same "OPEN" marker as cpu below -- a consumer keying off status
-             # (like cpu's own) refuses to treat this table as a qualified allow-list.
+             # X3: names transferred from Emerald, then qualified by the idle census (every
+             # sampled frame's active task set admitted); other states are the duo rows' evidence.
+             "status": "CENSUS",
+             "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
              "allowed_overworld_tasks": allowed, "forbidden_inventory": forbidden,
              "non_allowed_task_census": census,
              "transferred_emerald_task_names": list(allowed_names),
              "new_non_allowed_task_names": sorted(set(census) - vanilla_names),
-             "source": cite + ":src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c. Name transfer only; no physical qualification."}
+             "source": cite + ":src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c."}
     clauses = []
     for name, global_name, _, _, _, compare, expect in BATTLE_CLAUSES_FRLG:
         row = symbol(global_name)
@@ -1398,13 +1411,13 @@ def build_expansion(context):
         "version": VERSION, "title": EXPANSION_TITLE, "admitted": False, "source": context["source"],
         "anchors": anchors, "predicates": predicates, "witnesses": {"save_dialog_cb": scalar("sSaveDialogCallback")},
         "tasks": tasks,
-        "cpu": {"status": "OPEN", "reason": cite + ":src/main.c:422-437: WaitForVBlank inlined; non-wireless calls BIOS VBlankIntrWait. No parked-CPU census or BIOS range admitted. Missing mode/range intentionally refuses cpu clause."},
+        "cpu": json.loads(json.dumps(EXP_CPU)),
         "battle": {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard,
                    "commit_hold": "OPEN: argument-taking controller ABI, Volatiles Perish mechanism and last-ball shortcut are not qualified for a commit handoff; the vanilla head is not copied."},
         "pointers": {name: {"symbol": name, "address": symbol(name)["address"], "source": "build .sym"}
                      for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr")},
         "sound": sound, "gift_areas": [],
-        "open": {"cpu": "source branch and machine code known; frame-end parking unqualified", "battle_handoff": "new controller ABI and Volatiles mechanism",
+        "open": {"battle_handoff": "new controller ABI and Volatiles mechanism",
                  "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"},
     }}
 

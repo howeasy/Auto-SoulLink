@@ -127,8 +127,10 @@ def test_checkpoint_uses_expansion_geometry_and_keeps_unsupported_clauses_open()
     assert p["tasks"]["struct_size"] == facts["structs"]["Task"]["size"] == 40
     assert len(p["tasks"]["allowed_overworld_tasks"]) == 8
     assert not set(p["tasks"]["allowed_overworld_tasks"]) & set(p["tasks"]["non_allowed_task_census"])
-    assert p["cpu"]["status"] == "OPEN"
-    assert "mode" not in p["cpu"] and "pc_min" not in p["cpu"]
+    # X3: the BIOS park + IntrWait IRQ entry from the live census/IRQ receipts (test_gen3_exp_safety.py)
+    assert (p["cpu"]["mode"], p["cpu"]["thumb"], p["cpu"]["observed_pc"]) == (0x1F, 0, 0x1F8)
+    assert p["cpu"]["irq_entry"]["lr_min"] == p["cpu"]["irq_entry"]["lr_max"] == 0x1F8
+    assert "cpu" not in p["open"] and p["tasks"]["status"] == "CENSUS"
     assert p["battle"]["commit_hold"].startswith("OPEN")
     assert "handoff" not in p["battle"]
     assert p["battle"]["commit_guard"]["value"] == facts["constants"]["STATE_WAIT_ACTION_CONFIRMED_STANDBY"]
@@ -244,11 +246,12 @@ def test_item_row_matches_the_rom_for_potion(context):
     assert row["holdEffectParam"] == 20
 
 
-# ── F2: the overworld task allow-list is explicitly OPEN, like cpu ──────────────────────────
-def test_tasks_allow_list_carries_an_explicit_open_status():
+# ── F2 -> X3: the task allow-list names its qualification; cpu is a measured clause ──────────
+def test_tasks_allow_list_carries_its_census_and_cpu_is_measured():
     p = read("write_checkpoint.json")[TITLE]
-    assert p["tasks"]["status"] == "OPEN"
-    assert p["cpu"]["status"] == "OPEN"
+    assert p["tasks"]["status"] == "CENSUS" and (ROOT / p["tasks"]["census"]).is_file()
+    assert "status" not in p["cpu"] and (ROOT / p["cpu"]["census"]).is_file()
+    assert (ROOT / p["cpu"]["irq_entry"]["evidence"]).is_file()
 
 
 # ── F6: a ValueError from generate_emerald(check=...) is a message, not a traceback ─────────

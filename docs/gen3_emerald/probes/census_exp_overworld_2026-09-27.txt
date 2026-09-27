@@ -1,0 +1,21 @@
+# X3 (EXP-X23) frame-end CPU census, expansion reference build ROM sha1 28877d733492299599f2b8fff50493109d72653c,
+# battery tests/fixtures/gen3/exp_town.sav (Oldale 0.10 (6,17)), no input, BizHawk 2.11.1 mGBA HLE BIOS, 2026-09-27.
+# lua/tests/probe_gen3_frameend_census.lua with SLINK_GEN3_CHECKPOINT=data/games/gen3_exp/28877d73/write_checkpoint.json, SLINK_GEN3_TITLE=emerald_expansion_28877d73
+phase start frame=1 title=emerald_expansion_28877d73 hash=28877D733492299599F2B8FFF50493109D72653C
+phase field frame=612 map=(0,10) pos=(6,17)
+phase armed frame=671 sampling 1800 frame ends, no input
+---- [probe] interim at frame 600 (bios_seen=true) ----
+  overworld-idle: 600 frames
+    R15=0x000001F8 x600
+    CPSR mode/T=31/0 x600
+    tasks={0814B2DC,0814B30C,0814B36C,0814C1B4} x547
+    tasks={0814B2DC,0814B30C,0814B36C,0814C1B4,0817DFCC} x53
+    (2 distinct task-function sets total)
+---- [probe] final at frame 1800 (bios_seen=true) ----
+  overworld-idle: 1800 frames
+    R15=0x000001F8 x1800
+    CPSR mode/T=31/0 x1800
+    tasks={0814B2DC,0814B30C,0814B36C,0814C1B4} x1747
+    tasks={0814B2DC,0814B30C,0814B36C,0814C1B4,0817DFCC} x53
+    (2 distinct task-function sets total)
+RESULT: PASS overworld-idle=1800/1800
