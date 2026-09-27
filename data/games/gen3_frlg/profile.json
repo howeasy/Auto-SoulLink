@@ -8,43 +8,6 @@
     "sha256": "f1cdd07ace8cbd8d0de65b49ad38bc455f258906501e028a568bb43c4e9375fd"
   },
   "titles": {
-    "emerald": {
-      "admitted": false,
-      "derived": {
-        "BASESTATS_ENTRY_SIZE": 28,
-        "OUTCOME_CAUGHT": 7,
-        "OUTCOME_RAN": 4,
-        "OVERWORLD_MODE": "gmain_flags",
-        "SB1_BALL_POCKET_COUNT": 16,
-        "SB1_BALL_POCKET_OFFSET": 1616,
-        "SB1_FLAGS_OFFSET": 4720,
-        "SB2_ENC_KEY_OFFSET": 172
-      },
-      "ram": {
-        "BATTLERS_COUNT_ADDR": 33701996,
-        "BATTLER_PARTY_INDEXES_ADDR": 33701998,
-        "BATTLE_MAIN_FUNC_ADDR": 50355460,
-        "BATTLE_MONS_ADDR": 33702020,
-        "BATTLE_OUTCOME_ADDR": 33702714,
-        "BATTLE_TYPE_ADDR": 33697772,
-        "ENEMY_BASE": 33703748,
-        "ENEMY_COUNT_ADDR": 33703146,
-        "GMAIN_ADDR": 50340544,
-        "PARTY_BASE": 33703148,
-        "PARTY_COUNT_ADDR": 33703145,
-        "PSP_PTR_ADDR": 50355604,
-        "SB1_PTR_ADDR": 50355596,
-        "SB2_PTR_ADDR": 50355600,
-        "TRAINER_OPPONENT_ADDR": 33786826
-      },
-      "rom": {
-        "BASESTATS_ADDR": 137495500,
-        "RETURN_FROM_BATTLE_ADDR": null,
-        "SE_SONG_HEADERS": {}
-      },
-      "rom_thumb": [],
-      "variant": "emerald"
-    },
     "firered": {
       "_src": {
         "derived.BASESTATS_GROWTH_RATE_OFFSET": "pret/pokefirered@c75f352304d529f6ba92d4f74b9cf8b5c3810788:include/pokemon.h:230 (struct SpeciesInfo.growthRate)",

@@ -8,6 +8,7 @@ with FileNotFoundError instead of silently passing because the real checkout sti
 """
 from __future__ import annotations
 
+import json
 import pathlib
 
 import pytest
@@ -60,3 +61,45 @@ def test_native_block_matches_committed_profile() -> None:
     fresh = g.native_block()
     fresh.pop("_src")
     assert committed == fresh
+
+
+def test_v2_abi_is_read_from_shared_header():
+    abi = g.native_abi()
+    c = abi["constants"]
+    assert c["SLINK_ABI_VERSION"] == 2
+    assert c["SLINK_OP_TRADE_PREPARE"] == 29
+    assert c["SLINK_OP_MATCH_CALL"] == 32
+    assert c["SLINK_SUCCESS_MILESTONES"] == 31
+    fields = abi["structs"]["SlinkMailboxV2"]["fields"]
+    assert fields["capabilities"] == {"offset": 0x40, "width": 4, "count": 1}
+    assert fields["session_epoch"] == {"offset": 0x44, "width": 4, "count": 1}
+    assert abi["structs"]["SlinkMailboxV2"]["size"] == 0x50
+    assert abi["structs"]["SlinkTradeWitnessV2"]["fields"]["milestone_seq"] == {
+        "offset": 0x20, "width": 2, "count": 5}
+    assert abi["structs"]["SlinkCallRecordV2"]["size"] == 36
+    assert abi["structs"]["SlinkCallWitnessV2"]["size"] == 32
+    assert abi["structs"]["SlinkInfoV2"]["size"] == 288
+    assert abi["structs"]["SlinkInfoV2"]["fields"]["text"]["offset"] == 32
+    assert {name: c[name] for name in ("SLINK_REASON_UNCERTAIN", "SLINK_REASON_IDENTITY",
+                                     "SLINK_REASON_CLIENT_TOO_OLD")} == {
+        "SLINK_REASON_UNCERTAIN": 11, "SLINK_REASON_IDENTITY": 12, "SLINK_REASON_CLIENT_TOO_OLD": 13}
+
+
+def test_unqualified_v2_targets_emit_no_native_binding():
+    for title in ("firered", "leafgreen", "emerald", "radical_red"):
+        assert g.native_block(title) is None
+
+
+def test_v2_header_parser_refuses_unknown_field_types(monkeypatch, tmp_path):
+    path = tmp_path / "patch/src/trade_targets/abi.h"
+    path.parent.mkdir(parents=True)
+    source = (REPO / "patch/src/trade_targets/abi.h").read_text()
+    path.write_text(source.replace("uint32_t session_epoch;", "void *session_epoch;", 1))
+    monkeypatch.setattr(g, "REPO", tmp_path)
+    with pytest.raises(ValueError, match="unsupported ABI declaration"):
+        g.native_abi()
+
+
+def test_legacy_emerald_stub_is_absent_from_frlg_pack():
+    profile = json.loads((REPO / "data/games/gen3_frlg/profile.json").read_text())
+    assert "emerald" not in profile["titles"]
