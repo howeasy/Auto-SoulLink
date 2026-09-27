@@ -400,3 +400,63 @@ Primary host API sources used for the adapter:
 - [NLua CLR bridge](https://github.com/NLua/NLua)
 - [BizHawk Lua API](https://tasvideos.org/Bizhawk/LuaFunctions): `client.saveram` flushes save RAM;
   it is not evidence that a battery reload occurred.
+
+### T3-R5 verification receipt — 2026-09-27
+
+Source cut: `37c925dffb3e855372b3965ded1e2b6c3bb223c9` on `codex/t3-r5`, worktree `C:/slink-wt/em-t3`.
+It includes implementation `bc88810f552551e0a99a2f792d120e0064993036`, T4 base merge
+`10b7507132e9a97961ca941c1467aab804aa714b`, and T4-R3 merge
+`7f487ec8acbf6d045e56d418c7cd5dcc6207d214` (counterpart `2cf0c3b276cbf71015914c237cfb175f34de28b4`).
+Integration starting point was `76fd930a524c532a1831747d260964bb14043c51`.
+
+Focused final run: **121 passed, zero failures/errors/skips**. It covers the journal, native
+FSM, production-client/real-server recovery wire, real NLua host adapter, and protocol citations.
+Full `tests/unit` run on the source cut: **11,725 passed, 4,261 skipped, zero failures/errors**,
+exit 0, 535.69 seconds. Skips remain skips; this is no release or physical qualification.
+The journal, recovery wire, bootstrap and FSM controls executed without skips.
+
+The new controls caught two additional failures before the final source cut: accepting a
+terminal receipt before reconnecting to the correct run, and stale prepared processes arming
+different runs for the same cartridge/player. Both controls pass after their fixes. An older
+boot observation also cannot qualify a later intent; a new boot episode must reach the verifier.
+
+Raw receipts are under `.cache/` in that worktree; SHA256 pins:
+
+| Receipt | Result | SHA256 |
+| --- | --- | --- |
+| `.cache/t3-r5-trade-red.xml` | 0 passed / 4 failed | `5678f54a0c8a53e590dcb2eb5874f670fc89e8269fbd2b072e2e8dd4f1ac118f` |
+| `.cache/t3-r5-trade-first.xml` | 30 passed / 0 failed | `737a3983b021b64ea1195d592c7ac701b141a945bccf309cf92ec7828e8c1f7c` |
+| `.cache/t3-r5-observation-red.xml` | 0 passed / 1 failed | `c1e82ae3cf4abf0b0e04566187e639ee2e815625d0904b42be42c1b1116aa3c0` |
+| `.cache/t3-r5-observation-green.xml` | 38 passed / 0 failed | `070e61462b4f541d800d2935999d2dd76635c7d03e84d9e6d56cb8a49c90cdc0` |
+| `.cache/t3-r5-reconfirm-red.xml` | 13 passed / 1 failed | `ce1afb7c36eff4a203fb66603ae6e00146e193c9071af2fa87be057530f39625` |
+| `.cache/t3-r5-reconfirm-green.xml` | 111 passed / 0 failed | `8027624497d34727d44cad343f823a1fda096aa3ba19c84971aaebf36247bd81` |
+| `.cache/t3-r5-stale-writer-red.xml` | 50 passed / 1 failed | `eb3e4559b2abf11f3dffd2201aef7f10d28d9d247cab5b6c4e4781b387ee092d` |
+| `.cache/t3-r5-final-targeted.xml` | 121 passed / 0 failed | `a97403a27300153414f56c9c7ef42be8b9ef3358fa21e2e2229df1ad62cc3b05` |
+| `.cache/t3-r5-host-adapter.xml` | 1 passed / 0 failed | `d835c4feb14612a7318ce22237b42fe4779cd26cd263e091a305f0b10f19a79d` |
+| `.cache/t3-r5-full.xml` | 11,725 passed / 4,261 skipped | `62d743b70974e402846a00f3eebef2f782118bc40d9a15e9b49b2dc206c4fd52` |
+| `.cache/t3-r5-full.log` | exit 0 | `8541d645c831a72ddedc210add8c2f5a8e6467b4aadf55631fc062de6eb74dca` |
+
+Other final checks: scoped Python Ruff, five Lua chunk parses, and `git diff --check` pass.
+Production `lua/gen3/native.lua:146` still returns false from `trade_capable()`; the FR, LG,
+Emerald and RR target headers still contain `SLINK_TARGET_READY 0u`.
+
+Host adapter: installed BizHawk `2.11.1+bdddf4a58aa1a022afb11dc73294a81a5aa7bbd5` with NLua.
+Two separate PowerShell/NLua processes persisted epoch 1, recovered its intent, and allocated
+epoch 2; the actual configured Save RAM path builder was executed. EmuHawk was not launched.
+NLua DLL SHA256: `f413017bfc7a37dfcaeb6e6c24812fd12ceb2b4b107a066512ed28c13010b234`.
+
+No emulator/native-trade, physical battery-reload, power-loss, or frame-overhead qualification
+was performed. Reload equality covers the selected save counter, trainer OT and active party;
+it does not prove equality of every PC/storage byte. RR reload layout remains unqualified.
+Complete deletion of both durable journal artifacts remains the explicit operator-reset limit
+described above. None of these checks lifts a production readiness hold.
+
+Full command: `python -m pytest tests/unit -q -p no:randomly --tb=short --basetemp=.cache/t3-r5-full-tmp --junitxml=.cache/t3-r5-full.xml`
+
+The run used `SLINK_GEN3_ROMS=E:/Google Drive/SLink`,
+`SLINK_GEN3_RAND_ROMS=C:/slink-wt/rand_roms`,
+`SLINK_UPR_JAR=E:/Google Drive/SLink/.cache/slink-upr/PokeRandoZX.jar`,
+`SLINK_PRET_FIRERED_SRC=E:/Google Drive/SLink/.cache/pret/pokefirered`,
+`SLINK_PRET_EMERALD_SRC=E:/Google Drive/SLink/.cache/pret/pokeemerald`, and
+`SLINK_HOST_GCC=E:/Google Drive/SLink/.cache/build-tools/w64devkit-2.10.0/w64devkit/bin/gcc.exe`.
+The final receipt commit changes this document only; runtime and test source remain at the tested cut.
