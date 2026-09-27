@@ -39,7 +39,7 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 - Live PASS on gen3_rr at source 0c444561: trade_gen3, trade_decline_gen3, native_absent_gen3 (redesigned), plus the live gates test_live_tradescene/setpartymon/enemyparty_route. The branch suite was 12731/0.
 - New RR companion UPS: md5 70e7e746e573a2d00df5d3ef41d19d61, sha1 da579690db7d6933a0952a1f490312842793f71a. It must be staged as patch/build/slink_RR.gba in any checkout (g3-int is staged; the old build was kept as slink_RR.gba.old-7a386749).
 - On merge the coordinator re-pinned COMPANION_EXTRA_REFS for MOVE_CTRL_THUNK to 0x08379D84.
-- The full suite on the merged integration was STILL RUNNING at handoff: C:/slink-wt/suite-rrdur-int.log. Check its EXIT is 0.
+- The full suite on the merged integration PASSED: **13507 passed / 0 failed** (C:/slink-wt/suite-rrdur-int.log).
 - Still owed:
   - (a) an RR final-cut sweep on this head (`--title rr`); the other RR rows' receipts are from the old companion;
   - (b) physical RR reset-between-saves recovery (only unit-proven);
