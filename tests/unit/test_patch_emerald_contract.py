@@ -22,10 +22,20 @@ def test_emerald_requires_relocated_callback_prologue_and_own_save_call():
     assert facts["source_commit"]=="c65e93f20a5275ab03b07d6f6411096a82a60ffd"
     assert facts["symbols_sha256"]==hashlib.sha256((ROOT/"data/gen3/pret/pokeemerald.sym").read_bytes()).hexdigest()
     symbols={}
+    sizes={}
     for line in (ROOT/"data/gen3/pret/pokeemerald.sym").read_text().splitlines():
         p=line.split()
         if len(p)==4:
             symbols[p[3]]=int(p[0],16)
+            sizes[p[3]]=int(p[2],16)
     for item in facts["entries"]:
         assert item["address"]==symbols[item["symbol"]]
+    continuation=facts["continuations"][0]
+    assert continuation["symbol"]=="CallCallbacks"
+    assert continuation["symbol_address"]==symbols[continuation["symbol"]]
+    assert continuation["offset"]==8
+    assert continuation["address"]==continuation["symbol_address"]+continuation["offset"]
+    assert continuation["thumb_address"]==(continuation["address"]|1)==spec["FRAME_RESUME"]
+    assert continuation["offset"]+len(bytes.fromhex(continuation["bytes"]))<=sizes[continuation["symbol"]]
+    assert continuation["bytes"]=="01d0e6f2d3fd6068"
     assert facts["status"]=="SOURCE_ONLY_NOT_COMPOSED"

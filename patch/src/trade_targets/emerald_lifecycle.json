@@ -65,5 +65,15 @@
     "SaveGame is the native scripted consent/save entry; no FR SaveQuestLogData analogue assumed.",
     "ShowPokenavFieldMessage expands into gStringVar4 and owns field message state; StartMatchCallFromScript ignores its message argument.",
     "Task state4 follows window slide-in; native adapter must prove actual UI entry and text release, including allocation-failure paths."
+  ],
+  "continuations": [
+    {
+      "symbol": "CallCallbacks",
+      "symbol_address": 134219036,
+      "offset": 8,
+      "address": 134219044,
+      "thumb_address": 134219045,
+      "bytes": "01d0e6f2d3fd6068"
+    }
   ]
 }
