@@ -186,6 +186,25 @@ local function run_scene(ctx, N)
     return ctx.last_sent("trade_done")
 end
 
+--- Wait up to `secs` for the FIRST show_choices or msgbox that arrives strictly AFTER `rx0`
+--- (a ctx.rx_count() snapshot taken right after trade_request was sent). Returns the rx entry, or
+--- nil on timeout. PHYSICAL live trade_decline_gen3_rr_as_a (card RR-FC-FIX): the walk to the NPC
+--- crosses Route 1 grass, which can queue an unrelated msgbox first (server/state.py dz_text, "X
+--- is a dead zone!" -- a wild-encounter notice, nothing to do with trade); the first version of
+--- this fix checked ctx.received("msgbox") > 0 / ctx.rx_after(0, ...), counting from the start of
+--- the whole receipt, and reported that stale notice as the trade refusal. Scoped to `rx0` so only
+--- a real response to THIS request ever counts.
+local function wait_trade_answer(ctx, rx0, secs)
+    local function answered()
+        return ctx.rx_after(rx0, function(m) return m.cmd == "show_choices" or m.cmd == "msgbox" end)
+    end
+    if not ctx.wait_until(function() return answered() ~= nil end, secs,
+                          "show_choices or the unavailability msgbox") then
+        return nil
+    end
+    return answered()
+end
+
 local function a_side(ctx, N, linked, partner, decline)
     local ok, why = walk_to_npc(ctx, N)
     if not ok then return false, why end
@@ -194,6 +213,7 @@ local function a_side(ctx, N, linked, partner, decline)
     end
     ctx.log("AT_NPC npc_oe=" .. npc_slot(N))
     if not talk(ctx, N) then return false, "never talked to the trade NPC" end
+    local rx0 = ctx.rx_count()
     if not ctx.wait_sent("trade_request", nil, 60) then return false, "no trade_request after the talk" end
     -- RR trade is UNAVAILABLE until its durable-trade delta lands (docs/protocol.md: RR ABI1 has
     -- no recovery journal and never opts into server trade recovery). The server refuses at the
@@ -201,13 +221,10 @@ local function a_side(ctx, N, linked, partner, decline)
     -- show_choices (card RR-FC-FIX; PYDEC final cut d9a928d7 saw a bare "no show_choices" FAIL
     -- here because this driver only ever expected the old live flow). Wait for either, so the
     -- real flow below still runs once trade support lands.
-    if not ctx.wait_until(function() return ctx.received("show_choices") > 0 or ctx.received("msgbox") > 0 end,
-                          120, "show_choices or the unavailability msgbox") then
-        return false, "no show_choices"
-    end
-    if ctx.received("show_choices") == 0 then
-        local refusal = ctx.rx_after(0, function(m) return m.cmd == "msgbox" end)
-        ctx.log("REFUSED_UNAVAILABLE reason=" .. tostring(refusal and refusal.text))
+    local answer = wait_trade_answer(ctx, rx0, 120)
+    if not answer then return false, "no show_choices" end
+    if answer.cmd == "msgbox" then
+        ctx.log("REFUSED_UNAVAILABLE reason=" .. tostring(answer.text))
         return true
     end
     -- the list is up once the script owns the field; A on its first row (Trade)

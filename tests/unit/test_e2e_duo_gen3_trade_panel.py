@@ -3,6 +3,7 @@ control for every assertion (each negative flips exactly one fact the positive h
 import copy
 import json
 import os
+import re
 import sys
 
 import pytest
@@ -93,6 +94,59 @@ def _row(a, b, status="alive"):
 
 def _trade(saved, rows, traded=True):
     return duo.gen3_trade_problems(KA, KB, rows, saved, {"a": FA, "b": FB}, traded)
+
+
+SCENARIO_TRADE_LUA = os.path.join(REPO, "lua", "tests", "duo", "scenario_gen3_trade.lua")
+
+
+def test_wait_trade_answer_ignores_a_stale_msgbox_from_before_the_request():
+    """PHYSICAL live trade_decline_gen3_rr_as_a (card RR-FC-FIX): the walk to the NPC crosses
+    Route 1 grass, which can queue an unrelated dead-zone msgbox (server/state.py dz_text, "X is a
+    dead zone!") before trade_request is ever sent. The first version of the RR-unavailable fix
+    checked ctx.received("msgbox") > 0 / ctx.rx_after(0, ...) -- counting from the start of the
+    whole receipt -- and reported that stale notice as the trade refusal; a live rerun of
+    trade_decline_gen3 confirmed it: "RX msgbox text=Route 1 is a dead zone!" logged as the
+    REFUSED_UNAVAILABLE reason. lua/tests/duo/scenario_gen3_trade.lua's wait_trade_answer(ctx, rx0,
+    secs) must only see what arrives strictly after the rx0 snapshot."""
+    lupa = pytest.importorskip("lupa")
+    with open(SCENARIO_TRADE_LUA, encoding="utf-8") as handle:
+        text = handle.read()
+    body = re.search(r"^local function wait_trade_answer\(.*?^end$", text, re.M | re.S).group(0)
+
+    def world():
+        lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        lua.execute("""
+            rx = { {cmd="msgbox", text="Route 1 is a dead zone!"} }   -- stale, BEFORE trade_request
+            polls = 0
+            ctx = {}
+            function ctx.rx_after(index, pred)
+                for i = index + 1, #rx do if pred(rx[i]) then return rx[i], i end end
+            end
+            -- deterministic stand-in for the real frame-polled wait_until: the REAL answer lands
+            -- on the second poll, after the request would actually reach the server
+            function ctx.wait_until(pred, secs, what)
+                for _ = 1, 4 do
+                    if pred() then return true end
+                    polls = polls + 1
+                    if polls == 1 then
+                        rx[#rx + 1] = {cmd="msgbox", text="Trade unavailable for Radical Red in this build."}
+                    end
+                end
+                return pred()
+            end
+        """)
+        fn = lua.execute(body + "\nreturn wait_trade_answer")
+        return lua, fn
+
+    lua, fn = world()
+    rx0 = len(lua.globals().rx)      # snapshot taken right after trade_request was sent (1 stale entry)
+    answer, _idx = fn(lua.globals().ctx, rx0, 120)
+    assert (answer["cmd"], answer["text"]) == ("msgbox", "Trade unavailable for Radical Red in this build.")
+
+    # the bug reproduced: an unscoped rx0 (the pre-fix ctx.rx_after(0, ...)) picks the stale notice
+    lua2, fn2 = world()
+    stale, _idx2 = fn2(lua2.globals().ctx, 0, 120)
+    assert (stale["cmd"], stale["text"]) == ("msgbox", "Route 1 is a dead zone!")
 
 
 def test_trade_positive():
