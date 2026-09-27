@@ -8,7 +8,11 @@ with FileNotFoundError instead of silently passing because the real checkout sti
 """
 from __future__ import annotations
 
+import json
+import os
 import pathlib
+import shutil
+import subprocess
 
 import pytest
 
@@ -60,3 +64,145 @@ def test_native_block_matches_committed_profile() -> None:
     fresh = g.native_block()
     fresh.pop("_src")
     assert committed == fresh
+
+
+def test_v2_abi_is_read_from_shared_header():
+    abi = g.native_abi()
+    c = abi["constants"]
+    assert c["SLINK_ABI_VERSION"] == 2
+    assert c["SLINK_OP_TRADE_PREPARE"] == 29
+    assert c["SLINK_OP_MATCH_CALL"] == 32
+    assert c["SLINK_SUCCESS_MILESTONES"] == 31
+    fields = abi["structs"]["SlinkMailboxV2"]["fields"]
+    assert fields["ack_seq"] == {"offset": 0x0C, "width": 2, "count": 1}
+    assert fields["reason"] == {"offset": 0x0E, "width": 2, "count": 1}
+    assert fields["args"] == {"offset": 0x10, "width": 1, "count": 32}
+    assert fields["result"] == {"offset": 0x30, "width": 1, "count": 16}
+    assert fields["capabilities"] == {"offset": 0x40, "width": 4, "count": 1}
+    assert fields["session_epoch"] == {"offset": 0x44, "width": 4, "count": 1}
+    assert abi["structs"]["SlinkMailboxV2"]["size"] == 0x50
+    assert abi["structs"]["SlinkTradeWitnessV2"]["fields"]["milestone_seq"] == {
+        "offset": 0x20, "width": 2, "count": 5}
+    assert abi["structs"]["SlinkCallRecordV2"]["size"] == 36
+    assert abi["structs"]["SlinkCallWitnessV2"]["size"] == 32
+    assert abi["structs"]["SlinkInfoV2"]["size"] == 288
+    assert abi["structs"]["SlinkInfoV2"]["fields"]["text"]["offset"] == 32
+    assert {name: c[name] for name in ("SLINK_REASON_UNCERTAIN", "SLINK_REASON_IDENTITY",
+                                     "SLINK_REASON_CLIENT_TOO_OLD")} == {
+        "SLINK_REASON_UNCERTAIN": 11, "SLINK_REASON_IDENTITY": 12, "SLINK_REASON_CLIENT_TOO_OLD": 13}
+
+
+def test_unqualified_v2_targets_emit_no_native_binding():
+    for title in ("firered", "leafgreen", "emerald", "radical_red"):
+        assert g.native_block(title) is None
+
+
+def test_v2_header_parser_refuses_unknown_field_types(monkeypatch, tmp_path):
+    path = tmp_path / "patch/src/trade_targets/abi.h"
+    path.parent.mkdir(parents=True)
+    source = (REPO / "patch/src/trade_targets/abi.h").read_text()
+    path.write_text(source.replace("uint32_t session_epoch;", "void *session_epoch;", 1))
+    monkeypatch.setattr(g, "REPO", tmp_path)
+    with pytest.raises(ValueError, match="unsupported ABI declaration"):
+        g.native_abi()
+
+
+@pytest.mark.parametrize("declaration", ["SLINK_OP_PING = 1", "SLINK_REASON_IDENTITY = 12"])
+def test_v2_header_parser_refuses_implicit_enum_rows(monkeypatch, tmp_path, declaration):
+    path = tmp_path / g.ABI_SRC
+    path.parent.mkdir(parents=True)
+    source = (REPO / g.ABI_SRC).read_text()
+    path.write_text(source.replace(declaration, declaration.split(" = ")[0], 1))
+    monkeypatch.setattr(g, "REPO", tmp_path)
+    with pytest.raises(ValueError, match="unsupported ABI enum declaration"):
+        g.native_abi()
+
+
+@pytest.mark.parametrize("options", [[], ["--check"], ["--expansion", g.EXPANSION_BUILD]])
+def test_main_reports_missing_input_without_a_traceback_or_partial_profiles(monkeypatch, tmp_path, capsys, options):
+    monkeypatch.setattr(g, "REPO", tmp_path)
+    monkeypatch.setattr(g.sys, "argv", ["gen_gen3_profile.py", *options])
+    assert g.main() == 1
+    stderr = capsys.readouterr().err
+    assert stderr.strip() and "Traceback" not in stderr
+    assert list(tmp_path.rglob("profile.json")) == []
+
+
+@pytest.mark.parametrize("error", [subprocess.CalledProcessError(1, ["profile-input"]),
+                                  subprocess.TimeoutExpired(["profile-input"], 1)])
+def test_main_reports_subprocess_failures_without_a_traceback(monkeypatch, capsys, error):
+    def fail(_args):
+        raise error
+    monkeypatch.setattr(g, "_generate_profiles", fail)
+    monkeypatch.setattr(g.sys, "argv", ["gen_gen3_profile.py"])
+    assert g.main() == 1
+    assert "profile-input" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("phase", ["link", "exec"])
+def test_host_layout_probe_skips_when_the_toolchain_is_unusable(monkeypatch, tmp_path, phase):
+    monkeypatch.setenv("SLINK_HOST_GCC", "model-gcc")
+    calls = []
+
+    def run(command, **_kwargs):
+        calls.append(command)
+        if phase == "link" or len(calls) == 2:
+            raise subprocess.CalledProcessError(1, command)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(pytest.skip.Exception, match="host C toolchain unavailable"):
+        test_python_v2_layout_matches_host_c_sizeof_and_offsetof(tmp_path)
+
+
+def test_python_v2_layout_matches_host_c_sizeof_and_offsetof(tmp_path):
+    compiler = os.environ.get("SLINK_HOST_GCC") or shutil.which("gcc")
+    if not compiler:
+        pytest.skip("host C compiler unavailable")
+    probe, probe_exe = tmp_path / "compiler_probe.c", tmp_path / "compiler_probe.exe"
+    probe.write_text('#include <stdio.h>\nint main(void) { printf("ready\\n"); return 0; }\n')
+    try:
+        subprocess.run([compiler, "-std=c11", str(probe), "-o", str(probe_exe)],
+                       check=True, capture_output=True, text=True)
+        subprocess.run([str(probe_exe)], check=True, capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        pytest.skip(f"host C toolchain unavailable: {exc}")
+    abi = g.native_abi()
+    expected, statements = {}, []
+    for name, layout in abi["structs"].items():
+        expected[name] = layout["size"]
+        statements.append(f'printf("{name}=%zu\\n", sizeof({name}));')
+        for field, descriptor in layout["fields"].items():
+            expected[f"{name}.{field}"] = descriptor["offset"]
+            statements.append(f'printf("{name}.{field}=%zu\\n", offsetof({name}, {field}));')
+    source, executable = tmp_path / "abi_layout.c", tmp_path / "abi_layout.exe"
+    source.write_text('#include "abi.h"\n#include <stdio.h>\nint main(void) {\n'
+                      + "\n".join(statements) + "\nreturn 0;\n}\n")
+    subprocess.run([compiler, "-std=c11", "-I", str((REPO / g.ABI_SRC).parent),
+                    str(source), "-o", str(executable)], check=True, capture_output=True, text=True)
+    try:
+        run = subprocess.run([str(executable)], check=True, capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        pytest.skip(f"host C toolchain unavailable: {exc}")
+    actual = {name: int(value) for name, value in (line.split("=") for line in run.stdout.splitlines())}
+    assert actual == expected
+
+
+def test_real_abi_compilation_failure_is_not_hidden_as_a_toolchain_skip(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLINK_HOST_GCC", "model-gcc")
+    calls = []
+
+    def run(command, **_kwargs):
+        calls.append(command)
+        if len(calls) == 3:
+            raise subprocess.CalledProcessError(1, command, stderr="static assertion failed")
+        return subprocess.CompletedProcess(command, 0, stdout="ready\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(subprocess.CalledProcessError):
+        test_python_v2_layout_matches_host_c_sizeof_and_offsetof(tmp_path)
+
+
+def test_legacy_emerald_stub_is_absent_from_frlg_pack():
+    profile = json.loads((REPO / "data/games/gen3_frlg/profile.json").read_text())
+    assert "emerald" not in profile["titles"]

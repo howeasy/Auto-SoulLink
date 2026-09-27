@@ -73,7 +73,7 @@ def _hello(fact, kind="rand"):
 
 
 def _admission_case(phase, facts):
-    status = {"players": {}}
+    status = {"players": {}, "gen3_rand_effective_kind": "rand", "gen3_rand_identity_errors": {}}
     hellos = {}
     for side in (("a", "b") if phase == "pair" else ("a",) if phase == "wrong_rom" else ("b",)):
         fact = facts[side] if phase == "pair" else facts["b"] if phase == "wrong_rom" else facts["clean_b"]
@@ -81,8 +81,8 @@ def _admission_case(phase, facts):
         reason = "cartridge matches the contract"
         if phase == "wrong_rom":
             reason = ("this is not the cartridge built for player a (reported "
-                      + facts["b"]["payload"]["fingerprint"][:12] + ", expected "
-                      + facts["a"]["payload"]["fingerprint"][:12] + ")")
+                      + facts["b"]["content_fingerprint"][:12] + ", expected "
+                      + facts["a"]["content_fingerprint"][:12] + ")")
         if phase == "mixed_kind":
             reason = "Mixed artifact kinds: slot B runs a 'clean' ROM, this run is committed to 'rand'"
         status["players"][side] = {"connected": phase == "pair", "admission_reason": reason,
@@ -134,6 +134,36 @@ def test_pair_hello_table_swap_is_detected_and_reverted(facts):
                     lambda c: c["hellos"]["a"].update(rom_content=facts["b"]["payload"]), "table bytes")
 
 
+def test_contract_binds_semantic_fingerprint_not_transport_sha1(facts):
+    contract = duo.gen3_rand_contract(facts)
+    for side in ("a", "b"):
+        assert contract["players"][side]["fingerprint"] == facts[side]["content_fingerprint"]
+        assert len(contract["players"][side]["fingerprint"]) == 64
+        assert contract["players"][side]["fingerprint"] != facts[side]["payload"]["fingerprint"]
+
+
+def test_ruling32_oracle_requires_declared_rand_but_effective_clean(facts):
+    facts = copy.deepcopy(facts)
+    facts["clean_a"] = facts["a"]
+    facts["equivalent_a"] = {**facts["a"], "sha1": "f" * 40}
+    case = {"status": {"gen3_rand_effective_kind": "clean", "gen3_rand_identity_errors": {},
+                       "players": {side: {"connected": True, "admission": "admitted",
+                           "admission_reason": "no randomized-ROM contract for this run"} for side in ("a", "b")}},
+            "hellos": {"a": _hello(facts["equivalent_a"]), "b": _hello(facts["clean_b"], "clean")}}
+    _revert_checked(case, lambda c: duo.gen3_rand_admission_problems("equivalent_pair", facts=facts, **c),
+                    lambda c: c["status"].update(gen3_rand_effective_kind="rand"), "effective kind")
+
+
+def test_rule_changed_oracle_requires_the_named_rule_refusal(facts):
+    facts = {**facts, "forbidden_a": facts["a"]}
+    case = {"status": {"players": {"a": {"admission": "rejected",
+                "admission_reason": "firered cartridge has randomized evolutions and types/abilities/base stats"}}},
+            "hellos": {"a": _hello(facts["forbidden_a"])}}
+    _revert_checked(case, lambda c: duo.gen3_rand_admission_problems("rules_changed", facts=facts, **c),
+                    lambda c: c["status"]["players"]["a"].update(admission_reason="wrong cartridge"),
+                    "named rules_changed")
+
+
 @pytest.mark.parametrize("bad", ("", 'RAND_HELLO {}\nRAND_HELLO {}\n', 'RAND_HELLO {broken}\n'))
 def test_hello_marker_never_accepts_absent_duplicate_or_broken_json(bad):
     with pytest.raises(ValueError):
@@ -172,6 +202,38 @@ def test_panel_oracle_positive_negative_reverted(fault, facts):
     _revert_checked(case, lambda c: duo.gen3_rand_panel_problems(facts=facts, **c), mutate,
                     "OWN ROM" if fault in ("swapped", "retail", "level") else
                     "nearby" if fault in ("area", "missing") else "fallback")
+
+
+def test_panel_level_oracle_does_not_share_the_ingest_decoders_answer(facts):
+    expected = copy.deepcopy(facts)
+    for side in ("a", "b"):
+        expected[side]["trainer_parties"] = {
+            tid: copy.deepcopy(row["party"]) for tid, row in expected[side]["tables"]["trainers"].items()}
+    case = _panel_case(expected)
+    # A shared-decoder regression gives BOTH the server and tables decoder level 99.
+    # The separate ROM-byte read still says level 5 and must falsify that agreement.
+    case["probes"]["a"]["briefs"]["102"]["party"][0]["level"] = 99
+    expected["a"]["tables"]["trainers"][102]["party"][0]["level"] = 99
+    assert any("OWN ROM" in p for p in duo.gen3_rand_panel_problems(facts=expected, **case))
+
+
+def test_panel_probe_and_oracle_are_rom_free_and_do_not_filter_on_adopted_area():
+    retail = {"102": {"area": "viridian_forest", "party": [{"species": "Weedle", "level": 6}]}}
+    facts = {}
+    adapters = {}
+    for side, species, name in (("a", 1, "Bulbasaur"), ("b", 2, "Ivysaur")):
+        facts[side] = {"species_names": {species: name}, "trainer_parties": {
+            102: [{"species": species, "level": 5}]}}
+        brief = {"area": "viridian_forest", "party": [{"species": name, "level": 5}]}
+        adapters[side] = SimpleNamespace(_artifact_kind="rand", _rom_trainers={"trainers": {
+            102: {"area": "wrong-adopted-area"}}}, trainer_brief=lambda _tid, b=brief: copy.deepcopy(b))
+    server = SimpleNamespace(adapter_for=adapters.__getitem__, player_area_id={
+        "a": "viridian_forest", "b": "viridian_forest"}, state=SimpleNamespace(artifact_kind="rand",
+                                                                               identity_error={}))
+    probes = duo.gen3_rand_status_probe(server, {}, retail=retail)["gen3_rand_probe"]
+    case = {"probes": probes, "retail": retail}
+    _revert_checked(case, lambda c: duo.gen3_rand_panel_problems(facts=facts, **c),
+                    lambda c: c["probes"]["a"]["briefs"]["102"].update(area="wrong-area"), "not nearby")
 
 
 def test_saved_state_oracle_positive_negative_reverted():
@@ -265,6 +327,7 @@ def test_admission_driver_really_launches_other_rom_then_clean_then_correct_pair
     run._expected_exit = set()
     actions = []
     run._clear_attempt_artifacts = lambda: None
+    run._start_gen3_rand_rule_controls = lambda: actions.append(("rule_controls",))
     run.launch_instance = lambda side, phase="initial": actions.append(
         ("launch", side, phase, run._rand_current[side]["rom"]))
     run._observe_gen3_rand_admission = lambda phase: actions.append(("observe", phase))
@@ -273,10 +336,43 @@ def test_admission_driver_really_launches_other_rom_then_clean_then_correct_pair
     run.wait_for = lambda _label, predicate, _timeout: predicate()
     run._start_gen3_rand_admission()
     assert actions == [
+        ("rule_controls",),
         ("launch", "a", "wrong_rom", "rand_lg"), ("observe", "wrong_rom"), ("finish", "a", "wrong_rom"),
         ("launch", "a", "initial", "rand_fr"), ("launch", "b", "mixed_kind", "clean_lg"),
         ("observe", "mixed_kind"), ("finish", "b", "mixed_kind"), ("launch", "b", "initial", "rand_lg"),
     ]
+
+
+def test_ruling32_driver_uses_real_roms_and_a_fresh_server_before_the_rand_pair(tmp_path, facts):
+    run = object.__new__(duo.DuoRun)
+    run.data_dir = str(tmp_path)
+    Path(tmp_path, "rom_contract.json").write_text("{}")
+    run._rand_inputs = {key: {"rom": key} for key in ("a", "b", "forbidden_a", "equivalent_a", "clean_b")}
+    run._rand_facts = facts
+    run._rand_current = {side: run._rand_inputs[side] for side in ("a", "b")}
+    run._expected_exit = set()
+    actions = []
+    run.launch_instance = lambda side, phase: actions.append(("launch", side, phase, run._rand_current[side]["rom"]))
+
+    def observe(phase):
+        actions.append(("observe", phase))
+        assert Path(run.data_dir, "rom_contract.json").exists() == (phase == "rules_changed")
+
+    run._observe_gen3_rand_admission = observe
+    run._finish_gen3_rand_negative = lambda side, phase: actions.append(("passive_flash", side, phase))
+    run.server = SimpleNamespace(terminate=lambda: actions.append(("stop_owned_server",)),
+                                 wait=lambda **_: None)
+    run.start_server = lambda: actions.append(("fresh_server",))
+    run._start_gen3_rand_rule_controls()
+    assert actions == [
+        ("launch", "a", "rules_changed", "forbidden_a"), ("observe", "rules_changed"),
+        ("passive_flash", "a", "rules_changed"),
+        ("launch", "a", "equivalent", "equivalent_a"), ("launch", "b", "clean_partner", "clean_b"),
+        ("observe", "equivalent_pair"), ("passive_flash", "a", "equivalent_a"),
+        ("passive_flash", "b", "equivalent_b"), ("stop_owned_server",), ("fresh_server",),
+    ]
+    assert Path(run.data_dir).parent == tmp_path and run.data_dir != str(tmp_path)
+    assert json.loads(Path(run.data_dir, "rom_contract.json").read_text()) == duo.gen3_rand_contract(facts)
 
 
 @pytest.mark.parametrize("name", sorted(duo.GEN3_RAND_SCENARIOS))
@@ -399,7 +495,7 @@ def test_real_upr_tables_and_live_server_adapter_probe(title, label, tmp_path):
     probes = duo.gen3_rand_status_probe(srv, {})["gen3_rand_probe"]
     probe = probes["a"]
     assert probe["briefs"], "server did not expose the real nearby per-ROM briefs"
-    expected = fact["tables"]["trainers"][102]["party"]
+    expected = fact["trainer_parties"][102]
     assert [m["level"] for m in probe["briefs"]["102"]["party"]] == [m["level"] for m in expected]
     assert probe["calc_labels"]["102"] == ""
     retail = json.loads((ROOT / "data/games/gen3_frlge/frlg_trainers.json").read_text())["trainers"]

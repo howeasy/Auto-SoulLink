@@ -1,0 +1,83 @@
+# R4-DRIVER PHYSICAL PASS; cut d998cc6549178af73ad1550fd3bd0c84ce23fe7a
+# Invocation: python tools/e2e_duo.py --game gen3_frlg --scenario link_gen3_rand --lane r4 --keep-data
+# SLINK_GEN3_RAND_ROMS=C:/slink-wt/rand_roms
+# SLINK_STATE_DIR=C:/slink-wt/g3-rfix/.lane/r4/d998cc65/link_gen3_rand/state
+# One physical attempt only. No other row was rerun.
+# Same ROMs and disclosed 20-ball SYNTH fixture hashes as the failed 2bd0ee22 attempt.
+# Strict saved-ball consumption and native-save/PYDEC oracles retained.
+# Raw stdout SHA256=15dd0fac52c340ff904e15c8110c06898fb8ba534780bdd0958d827166369f9c
+
+========== scenario: link_gen3_rand ==========
+[duo] link_gen3_rand: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] RAND_SYNTH_FIXTURE a file=C:\slink-wt\g3-rfix\tests\fixtures\gen3\firered_party_catch_synth.sav sha256=3b50a0f353881c8952ee8998cc2052288307b7ce3fe4503a9266fc015ecbe409 PokeBalls=20 change=quantity_and_section_checksum_only
+[duo] RAND_INPUT a SYNTH=clean-derived-save title=firered sha1=c6598b7b0c4a1116d220905e56fd6f00fb1250b6 transport_sha1=d3829ee598aeb730b9e50d3b688665eb899bcebc content_fingerprint=630a4561a1eee5d667a93707ff6680730f8847af6326b05e0e404eb8fc2a5cee
+[duo] RAND_SYNTH_FIXTURE b file=C:\slink-wt\g3-rfix\tests\fixtures\gen3\leafgreen_party_catch_synth.sav sha256=a604eb2bf5f190562035d03fe356b7ff0771944f30a9f2e31e2570a470958a2b PokeBalls=20 change=quantity_and_section_checksum_only
+[duo] RAND_INPUT b SYNTH=clean-derived-save title=leafgreen sha1=ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba transport_sha1=61e5b04cf2d729c37a5b7a95c2165b471201feca content_fingerprint=2931bd90ec9091f7a058078d827512a0b07a1f380fd8f06d06b7bcbce141c938
+[duo] IDENTITY a=firered:rom=0364287fe73aaacc74b9026c27e5ac2d90828c99c77fbd611d71bff5d98f7561:fixture=3b50a0f353881c8952ee8998cc2052288307b7ce3fe4503a9266fc015ecbe409 b=leafgreen:rom=ae6d50136b5f2834b7ae8e3b30004f9651ab78832816eb0438705c33bb39acb0:fixture=a604eb2bf5f190562035d03fe356b7ff0771944f30a9f2e31e2570a470958a2b write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=90b97f77951b2eb64cfb4416c1b93395da6660d649819f9f984e0a1389be2bdc source=d998cc6549178af73ad1550fd3bd0c84ce23fe7a
+[duo] server up: tcp=58776 http=58777 data=C:\slink-wt\g3-rfix\.lane\r4\d998cc65\link_gen3_rand\state\slink_duo_link_gen3_rand_fw6ztuup
+[duo] timing server 0.6s
+[duo] cleared 7 stale artifact(s) for link_gen3_rand: e2e_link_gen3_rand_a_1_witness.bin, e2e_link_gen3_rand_a_attempt1_result.txt, e2e_link_gen3_rand_a_result.txt, e2e_link_gen3_rand_b_1_witness.bin, e2e_link_gen3_rand_b_attempt1_result.txt, e2e_link_gen3_rand_b_result.txt, e2e_link_gen3_rand_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] RAND_PROCESS side=a phase=initial pid=32620
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] RAND_PROCESS side=b phase=initial pid=46040
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] RAND_VERDICT phase=pair evidence=C:\slink-wt\g3-rfix\.lane\r4\d998cc65\link_gen3_rand\state\slink_duo_link_gen3_rand_fw6ztuup\rand_pair.json sha256=877561a77cd9ef4a9955765fff17b715d4b57d24c21618f7832296aec1266dc8
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=A4DC04E1:99DE0D8A b=5261BB42:1C600D89
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): A4DC04E1:99DE0D8A <-> 5261BB42:1C600D89 on route_1, alive
+[duo] timing orchestrate 26.2s
+[duo] timing results 1.9s
+[duo] RESULT_LINE a: RESULT: PASS (caught A4DC04E1:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (caught 5261BB42:1C600D89)
+[duo] SAVE_WITNESS_SHA256 inst=a site=ecff3f1b8bed3f838ecd2c044b25c39311c4a7a90076e69e2f63d63d1e3a2cf4 file=ecff3f1b8bed3f838ecd2c044b25c39311c4a7a90076e69e2f63d63d1e3a2cf4 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=b493492612704591ff21ae6e584f11794bfd95541a0a8f082a3a66098aca0bb2 file=b493492612704591ff21ae6e584f11794bfd95541a0a8f082a3a66098aca0bb2 match=true saves=1 counter=4->5 rtc=normalized
+[duo] BAG_BALLS baseline=20 final=19 throws=1 inst=a
+[duo] BAG_BALLS baseline=20 final=13 throws=7 inst=b
+[duo] link: A4DC04E1:99DE0D8A <-> 5261BB42:1C600D89 alive on route_1 and saved once in each party
+[duo] randomized catches saved and present in each OWN ROM encounter table
+[duo] timing oracle 0.6s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] link_gen3_rand: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-rfix\.lane\r4\d998cc65\link_gen3_rand\state\slink_duo_link_gen3_rand_fw6ztuup
+
+========== summary ==========
+  link_gen3_rand: PASS (attempt 1 of 1)
+
+# Frozen client evidence excerpts (complete hello table bytes retained privately):
+# client_a.txt SHA256=9e09ad8d1638695b079a8b310bf0fe34afd52e5b05d655897243798accf31607
+booted frame=778 map=map=787 at=(12,37) balls=20
+THREW 1
+TX capture A4DC04E1:99DE0D8A {"area_id":"route_1","event":"capture","held_item_id":136,"hp":15,"is_egg":false,"key":"A4DC04E1:99DE0D8A","level":3,"maxHP":15,"nickname":"VULPIX","player":"a","seq":73,"species_id":37}
+CAUGHT A4DC04E1:99DE0D8A
+SAVE_WITNESS_DUMP path=patch/build/e2e_link_gen3_rand_a_1_witness.bin bytes=131072 saves=1 frame=7780 counter=8
+SAVE_WITNESS link counter=7->8
+RESULT: PASS (caught A4DC04E1:99DE0D8A)
+# after_a.SaveRAM SHA256=2de7d2f5c57df4ec6fa47310056e8edf774a92fcccf1b233624b16bcf83e5ace
+# Independent saved catch / own ROM: {"key": "A4DC04E1:99DE0D8A", "level": 3, "name": "VULPIX", "problems": [], "remaining_balls": 19, "side": "a", "species": 37}
+# client_b.txt SHA256=0c025d73dcebed81e50c004218ec8beb1100d56648de263d3f10f0b71746608f
+booted frame=778 map=map=787 at=(12,37) balls=20
+THREW 1
+THREW 2
+THREW 3
+THREW 4
+THREW 5
+THREW 6
+THREW 7
+TX capture 5261BB42:1C600D89 {"area_id":"route_1","event":"capture","held_item_id":0,"hp":17,"is_egg":false,"key":"5261BB42:1C600D89","level":3,"maxHP":17,"nickname":"GOLBAT","player":"b","seq":238,"species_id":42}
+CAUGHT 5261BB42:1C600D89
+SAVE_WITNESS_DUMP path=patch/build/e2e_link_gen3_rand_b_1_witness.bin bytes=131072 saves=1 frame=8198 counter=5
+SAVE_WITNESS link counter=4->5
+RESULT: PASS (caught 5261BB42:1C600D89)
+# after_b.SaveRAM SHA256=1e20174a78d40b7fd1afb9d153b279884c4bbccfb94ce878bf563f14cd1fb1ef
+# Independent saved catch / own ROM: {"key": "5261BB42:1C600D89", "level": 3, "name": "GOLBAT", "problems": [], "remaining_balls": 13, "side": "b", "species": 42}
+# Limits: this attempt caught on throws 1 and 7; the ninth-throw and exhausted-budget branches have unit/model evidence.
+# Changed-path inventory: docs/gen3/research/r4_driver_scene_guard_2026-09-27.md
+# Pre-live verification: 654 passed, 1 skipped; 302 Lua files parsed. The skip is the existing local pret-cache berry comparison.
+# Old FAIL receipts fc_link_gen3_rand_r4_39da30fd.txt and fc_link_gen3_rand_r4_2bd0ee22.txt are preserved.

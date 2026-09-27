@@ -22,7 +22,15 @@ body with any optional 16-byte mGBA RTC suffix already stripped by
 
 | Fixture | Source | Date | sha256 |
 |---|---|---|---|
+| `firered_party_catch_synth.sav` | `make-frlg-synth --kind catch` from `firered_party_battle.sav` (`95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e`): SYNTH Poke Balls 4→20; only encrypted quantity and its section checksum change. R4-LINK, justified by the failed `fc_link_gen3_rand_r4_39da30fd.txt` receipt. | 2026-09-27 | `3b50a0f353881c8952ee8998cc2052288307b7ce3fe4503a9266fc015ecbe409` |
+| `leafgreen_party_catch_synth.sav` | `make-frlg-synth --kind catch` from `leafgreen_party_battle.sav` (`3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae`): SYNTH Poke Balls 2→20; only encrypted quantity and its section checksum change. R4-LINK, justified by the failed `fc_link_gen3_rand_r4_39da30fd.txt` receipt. | 2026-09-27 | `a604eb2bf5f190562035d03fe356b7ff0771944f30a9f2e31e2570a470958a2b` |
 | `rr_town.sav` | `E:/Howard/Bizhawk/GBA/SaveRAM/slink RR.SaveRAM` (source sha256 `bb0c514ba045d2710529b7e03b31d56d62e5aca8eaa29f89005b628166150edc`), built from `patch/build/slink_RR.gba` (the existing companion-patched RR battery save `tools/mkstates.py` also drives, `tools/mkstates.py:100-150`) | 2026-09-21 | `b4b991f623c969eeb5c3d06ef54ef2da73cda62b4759a2c730aece7c18def9a3` |
+| `firered_party_evolve_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind evolve` from `firered_party_battle.sav` (SYNTH: slot-0 Squirtle Lv15, EXP 2534 (one short of Lv16), Lv15 stats); NAT-LEGS a2fa1f94, receipts `docs/gen3/probes/fc_evolve_gen3_fr_as_a_a2fa1f94.txt` | 2026-09-26 | `c87d50de4613d5f50c2c8e30d177975882d5c821487a748345f746a65dc418b0` |
+| `firered_party_trade_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind trade` from `firered_party_town.sav` (SYNTH: slot 1 = player-owned Hardy-nature Lv10 ABRA (fresh PID); continue-game warp to Route2_House (7,3) below the NPC trader; trade flag clear); NAT-LEGS a2fa1f94, **regenerated** NAT-LEGS-2 (OMP cx-6821246e F3: the old build computed ABRA's stats from the pre-trade mon's personality, one Defense point off), receipts `docs/gen3/probes/fc_npc_trade_gen3_fr_as_a_bd2d191b.txt` (NAT-LEGS-3: the key_change is now accepted/migrated) | 2026-09-26 | `9d1d0ea46ddab394f92e727cbc43e20389528fecb212404ce706dccc983b080a` |
+| `firered_party_poison_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind poison` from `firered_party_town.sav` (SYNTH: slot-0 Squirtle at 1 HP, poisoned); NAT-LEGS a2fa1f94, receipts `docs/gen3/probes/fc_poison_faint_gen3_fr_as_a_a2fa1f94.txt` | 2026-09-26 | `1f50a04f0c812451f8b159582f4e03a7d1a1ce07de7ebd016a25fdd67a928833` |
+| `leafgreen_party_evolve_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind evolve` from `leafgreen_party_battle.sav` (SYNTH: slot-0 Squirtle Lv15, EXP 2534 (one short of Lv16), Lv15 stats); NAT-LEGS-2 (LG-as-A), receipts `docs/gen3/probes/fc_evolve_gen3_lg_as_a_95876c55.txt` | 2026-09-26 | `9750057a29a9e1d8e2c0c096a3bd2bb9ec4d268d2ccadfd6c7da37b015cd1d81` |
+| `leafgreen_party_trade_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind trade` from `leafgreen_party_town.sav` (SYNTH: slot 1 = player-owned Hardy-nature Lv10 ABRA (fresh PID); continue-game warp to Route2_House (7,3) below the NPC trader; trade flag clear); NAT-LEGS-2 (LG-as-A), receipts `docs/gen3/probes/fc_npc_trade_gen3_lg_as_a_2467b357.txt` (NAT-LEGS-3: the key_change is now accepted/migrated) | 2026-09-26 | `c8a0673feb51d7f73e6c21eb0be3626cfc45c444bd7321b49726a59e5f259dc7` |
+| `leafgreen_party_poison_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind poison` from `leafgreen_party_town.sav` (SYNTH: slot-0 Squirtle at 1 HP, poisoned); NAT-LEGS-2 (LG-as-A), receipts `docs/gen3/probes/fc_poison_faint_gen3_lg_as_a_95876c55.txt` | 2026-09-26 | `169ea72f231969c12d8c77fd0638e5156bb24538beda059446bbb4c4fdb0a300` |
 
 `rr_town_b.sav` was **attempted and refused**: `derive-b --rr` always
 refuses (see `tools/gen3_fixtures.py:RR_DERIVE_REFUSAL`) because the
@@ -39,6 +47,26 @@ for the same reason: `SB1_PARTY_BASE_OFFSET` (`data/games/gen3_rr/profile.json`
 `titles.radical_red.derived`) is a real RAM/profile offset, but its
 disk-chunk validity for RR 4.1 specifically is not established. Boxes are
 not read for RR at all (`qualify --rr` prints a note instead).
+
+## R4-LINK catch stock (2026-09-27)
+
+The [first randomized-link attempt](../../../docs/gen3/probes/fc_link_gen3_rand_r4_39da30fd.txt)
+failed after LeafGreen's two real Poke Ball throws missed. The owner's R4-LINK card authorizes
+20 Poke Balls on both capture sides, following the Emerald `catch` fixture precedent. These are
+**SYNTH input saves**, built without an emulator or RAM poke:
+
+```
+python tools/gen3_fixtures.py make-frlg-synth --kind catch --seed tests/fixtures/gen3/firered_party_battle.sav --out tests/fixtures/gen3/firered_party_catch_synth.sav
+python tools/gen3_fixtures.py make-frlg-synth --kind catch --seed tests/fixtures/gen3/leafgreen_party_battle.sav --out tests/fixtures/gen3/leafgreen_party_catch_synth.sav
+```
+
+The builder preserves the entire flash except the existing Poke Ball quantity word and that
+sector's checksum. It retains the current slot/counter, party, boxes, OT identity, location,
+other items, inactive slot and spare bytes. Tests re-derive both committed files and constrain
+the physical byte diff. Only `link_gen3_rand` selects `catch_synth`; its ROMs, capture driver,
+one-attempt budget and oracles are unchanged. The receipt prints each fixture path/hash and
+its SYNTH 20-ball stock. Structural qualification does not itself establish live usability;
+the subsequent R4-LINK receipt records the physical attempt.
 
 ## `boot-check` — the usability signature (emulator lane)
 
@@ -609,8 +637,9 @@ Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
 | `emerald_catch.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; 20 Poké Balls (E2-FIX-VARIANTS r3) | `592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0` |
 | `emerald_catch_b.sav` | same | same | `derive-b --title emerald` over `emerald_catch.sav` (EG4-RC ball risk): `EMERB` #DFDAF6DA, the party mon re-keyed -- the B side of the deadzone_gen3/link_gen3 ball hunts on `gen3_emerald`, so a real half never runs the fixture out of its 5-ball `battle` allotment | `cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b` |
 | `emerald_evolve.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv15 at EXP 2534 (one short of Lv16), moves Tackle/Growl/Water Gun + a free slot (E2-FIX-VARIANTS r3) | `244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd` |
-| `emerald_poison.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; Mudkip Lv5 poisoned at 1 HP + Poochyena Lv3 (E2-FIX-VARIANTS r3) | `c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0` |
+| `emerald_poison.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; Mudkip Lv5 poisoned at 1 HP + Poochyena Lv3 (E2-FIX-VARIANTS r3); `poison_faint_gen3` E<->E PASS (NAT-LEGS-3), receipts `docs/gen3/probes/fc_poison_faint_gen3_emerald_9ce65d28.txt` | `c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0` |
 | `emerald_gift.sav` | Lavaridge Town (0.12) | (4,8) | below the egg woman (LavaridgeTown_EventScript_EggWoman, giveegg WYNAUT); FLAG_RECEIVED_LAVARIDGE_EGG clear (E2-FIX-VARIANTS r3) | `7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552` |
+| `emerald_trade.sav` | RustboroCity_House1 (11.10) | (6,5) | one step S of the Trader NPC (6,4); party Mudkip Lv5 + a player-owned Ralts Lv7 (INGAME_TRADE_SEEDOT's requestedSpecies); NAT-LEGS-3 -- fixture/boot-check PASS, but the `npc_trade_gen3` duo leg is BLOCKED on a `lua/gen3/client.lua` key_change bug outside this card's lease, receipts `docs/gen3/probes/fc_npc_trade_gen3_emerald_BLOCKED_3a64fdbb.txt` | `9dff9cf03d160ff07d06ed98779e0713eeae0e8f091e0f0e29ac6d99a0edbba8` |
 
 The first six: slot 0, counter 2, one Mudkip Lv5 (the pc/lowhp variants: see their section; both built by `make-emerald --kind pc|lowhp`, 2026-09-26, the game's own re-save kept HP=1 and the two boxed mons); `a` side `EMER` #20250925, `_b` side `EMERB`
 #DFDAF6DA; 5 Poké Balls. Each passed `qualify --title emerald` and a physical `boot-check --title
@@ -733,4 +762,39 @@ python tools/gen3_fixtures.py make-emerald --kind evolve --out tests/fixtures/ge
 python tools/gen3_fixtures.py make-emerald --kind poison --out tests/fixtures/gen3/emerald_poison.sav
 python tools/gen3_fixtures.py make-emerald --kind gift --out tests/fixtures/gen3/emerald_gift.sav
 python tools/gen3_fixtures.py make-emerald --kind catch --out tests/fixtures/gen3/emerald_catch.sav
+```
+
+### emerald_trade.sav (card NAT-LEGS-3: Emerald's npc_trade_gen3 leg)
+
+Same `make-emerald` machinery and provenance as above; additive to `EMERALD_KINDS`, and every
+other kind's bytes are unchanged. Built and boot-checked 2026-09-27 (`RESULT: PASS counter 1 -> 2
+map=11.10 pos=(6,5)`). The fixture itself is proven (SYNTH -> CONTINUE -> native SAVE); the
+`npc_trade_gen3 --game gen3_emerald` DUO leg that boots it is BLOCKED on a `lua/gen3/client.lua`
+key_change bug found while exercising it (docs/gen3_emerald/REQUIREMENTS.md's NAT-LEGS-3 evidence
+section, `docs/gen3/probes/fc_npc_trade_gen3_emerald_BLOCKED_3a64fdbb.txt`) -- the trade itself
+completes correctly natively; only the client's own detection of it is broken, and that file is
+outside this card's lease.
+
+- **`trade`** -- RustboroCity_House1 (map group 11, num 10), player at (6,5), one step S of the
+  Trader NPC (`OBJ_EVENT_GFX_CAMPER` at (6,4), `MOVEMENT_TYPE_FACE_LEFT`,
+  `data/maps/RustboroCity_House1/map.json`). Talking to him runs
+  `RustboroCity_House1_EventScript_Trader` (`data/maps/RustboroCity_House1/scripts.inc`):
+  `INGAME_TRADE_SEEDOT` (pokeemerald c65e93f2 `src/data/trade.h:985-1001`) -- his SEEDOT for a
+  player-owned `SPECIES_RALTS` (392), the trade's `requestedSpecies`. Rustboro (the second city)
+  is the earliest of the four Emerald in-game trades reachable (RustboroCity_House1, FortreeCity_
+  House1, PacifidlogTown_House3 and the postgame BattleFrontier_Lounge6), and the leg needs the
+  fewest scripted inputs: face Up (turns/bumps toward the NPC), A (talk), A (YES), pick the party
+  Ralts, A/A through the trade scene. Party count 2: slot 0 the usual Mudkip Lv5 starter
+  (unchanged), slot 1 a **SYNTH Ralts Lv7** (species 392, Hardy, IVs 15, `GROWL`+`CONFUSION`,
+  `ability_num = pid & 1` since Ralts has two abilities unlike the other SYNTH mons here), full
+  HP, valid checksum, OT `EMER`, no held item, no mail.
+- `emerald_fixture_problems(body, "trade")` checks both party slots' species/level/checksum
+  (Mudkip Lv5 + Ralts Lv7); the trade itself is the native `npc_trade_gen3` leg's own action, not
+  something this seed or its re-save produces.
+- **†UNVERIFIED** (reasoned from pret source, not a physical run beyond the boot-check's own
+  re-save): the player's post-CONTINUE facing direction for the first scripted input, and that the
+  trade's Yes/No box default cursor lands on YES (same caveat as `gift`).
+
+```
+python tools/gen3_fixtures.py make-emerald --kind trade --out tests/fixtures/gen3/emerald_trade.sav
 ```

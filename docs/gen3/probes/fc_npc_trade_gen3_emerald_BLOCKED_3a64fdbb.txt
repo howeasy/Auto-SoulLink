@@ -1,0 +1,100 @@
+# gen3_final_cut row=npc_trade_gen3_emerald item=NAT-LEGS-3 cut=3a64fdbb6e60aa3c531935706a8c2d9ff424093c
+# lane=C:/slink-wt/g3-nat3
+# command: C:\Users\howar\AppData\Local\Programs\Python\Python312\python.exe tools/e2e_duo.py --game gen3_emerald --scenario npc_trade_gen3   (cwd=C:/slink-wt/g3-nat3)
+# env: SLINK_STATE_DIR=C:/slink-wt/g3-nat3/.lane/st3_npc_trade_gen3_emerald3
+# verdict: BLOCKED (not a fixture/oracle/wiring problem -- see finding below)
+#
+# FINDING (NAT-LEGS-3): the RustboroCity_House1 trade completes NATIVELY and correctly --
+# SIGNAL trade_begin / trade_done both fire at the pinned TradeMons site (data/games/gen3_emerald/
+# engine_signals.json), FLAG_RUSTBORO_NPC_TRADE_COMPLETED gets set, and an INDEPENDENT live memory
+# read (ctx.party(), not the client's own bookkeeping) taken at the exact instant trade_done fires
+# already shows party slot 1 as the received SEEDOT (key 00000084:00009746, species 298) -- see the
+# TRADE_DEBUG lines in the diagnostic run below. But lua/gen3/client.lua's own settle_trade/st.trade
+# bookkeeping never sends the npc_trade key_change: 240 frames of mashing A time out with the
+# in-game flag already true and key_change sent count still 0. This is a bug in shared client code
+# (lua/gen3/client.lua), which is OUTSIDE this card's lease (npc_trade_gen3 oracle + new Emerald
+# rows in tools/e2e_duo.py, lua/tests/duo/scenario_gen3_*.lua, tools/gen3_fixtures.py synth
+# builders) -- reported here, not patched. Whoever owns lua/gen3/client.lua should re-run this
+# exact command once fixed; the fixture (emerald_trade.sav), oracle (NPC_TRADE_FACTS.gen3_emerald)
+# and scenario wiring (target_by_game gen3_emerald: {"a": "trade", "b": "pc"}) are otherwise ready.
+#
+# --- diagnostic run (TRADE_DEBUG dump added temporarily to the scenario, then reverted; commits
+#     4d291faf..3a64fdbb) ---
+
+========== scenario: npc_trade_gen3 ==========
+[duo] npc_trade_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=9dff9cf03d160ff07d06ed98779e0713eeae0e8f091e0f0e29ac6d99a0edbba8 b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=61b438518f92c74833279f3e1f044b0c3d8ae909ef85aa9baed755e219b15b7f source=4d291faf05d086d6b8019e4879e3af0b70501df6
+[duo] server up: tcp=64830 http=64832 data=C:\Users\howar\AppData\Local\Temp\slink_duo_npc_trade_gen3_b4nkip2q
+[duo] timing server 0.6s
+[duo] cleared 5 stale artifact(s) for npc_trade_gen3: e2e_npc_trade_gen3_a_attempt1_result.txt, e2e_npc_trade_gen3_a_result.txt, e2e_npc_trade_gen3_b_attempt1_result.txt, e2e_npc_trade_gen3_b_result.txt, e2e_npc_trade_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 52414C5C:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 4.5s
+[duo] timing results 242.5s
+[duo] RESULT_LINE a: RESULT: FAIL (no npc_trade key_change + completion flag (key_change sent 0, flag true))
+[duo] RESULT_LINE b: RESULT: PASS (idled while A traded)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] npc_trade_gen3: a=FAIL b=PASS
+--- npc_trade_gen3 a result ---
+client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:64830
+[client] [SLink] TCP connected to 127.0.0.1:64830
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"rustboro_city_hous
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=580 map=(11,10)
+MYKEY 0 4D55444B:20250925
+PARTY slot=0 key=4D55444B:20250925 species=283 level=5 hp=20/20
+MYKEY 1 52414C5C:20250925
+PARTY slot=1 key=52414C5C:20250925 species=392 level=7 hp=21/21
+booted frame=580 map=map=2826 at=(6,5) balls=5
+JITTER requested=0 applied=0 attempt=1
+WHERE map=2826 at=(6,5)
+READY 52414C5C:20250925
+PICKED slot=1 52414C5C:20250925
+SIGNAL trade_begin frame=3175 address=0x0807B4D0
+SIGNAL trade_done frame=3175 address=0x0807B58E
+TRADE_DEBUG slot=0 key=4D55444B:20250925 species=283
+TRADE_DEBUG slot=1 key=00000084:00009746 species=298
+TIMEOUT waiting for mashing A [tasks=[080AB1B1,0809D88D,0809E639,0809D909,08098155] storage_state=-1 script_status=0 result=392 menu_cursor=0]
+WRITES 0
+RESULT: FAIL (no npc_trade key_change + completion flag (key_change sent 0, flag true))
+--- npc_trade_gen3 b result ---
+duo instance b scenario=npc_trade_gen3 phase=initial title=emerald attempt=1
+SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
+[client] [SLink] TCP connecting to 127.0.0.1:64830 (non-blocking)…
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:64830 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:64830
+[client] [SLink] TCP connected to 127.0.0.1:64830
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_id":3755669210,"party":[
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=580 map=(0,10)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=283 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=286 level=3 hp=15/15
+booted frame=580 map=map=10 at=(6,17) balls=5
+JITTER requested=0 applied=0 attempt=1
+READY 504F4F4D:DFDAF6DA
+WRITES 0
+RESULT: PASS (idled while A traded)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_npc_trade_gen3_b4nkip2q
+
+========== summary ==========
+  npc_trade_gen3: FAIL (attempt 1 of 1)

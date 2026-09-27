@@ -1,8 +1,24 @@
-# Gen 3 migration — resume note (updated 2026-09-26, checkpoint 20: GEN 3 LANDED ON LOCAL MASTER; post-merge passes green)
+# Gen 3 resume note (updated 2026-09-27, checkpoint 21: COMBINED Gen 3 orchestrator; integration branch green)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.
 
-## CURRENT STATE (2026-09-26, after checkpoint 20)
+## CURRENT STATE (2026-09-27, checkpoint 21, combined orchestrator)
+
+- ONE orchestrator (claude session 30c21a7a) runs FR/LG + RR + Emerald + expansion. Sole ledger: the AGENT_CHECKPOINT in C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md (workers gen3-*, emerald-*). Nothing on master (master 5b6f75eb is the Gen 2 landing; no Gen 3 branch is in it).
+- **Integration branch `claude/gen3-integration`, worktree `C:/slink-wt/g3-int`**: 17988de4 + claude/gen3-emerald + everything below. Full tests/unit with ROM+pret inputs (`source C:/slink-wt/g3-env.sh`) green at 876df6e1: 11857 passed, 0 failed. Randomized ROMs kept at C:/slink-wt/rand_roms.
+- Merged into integration (each independently reviewed; findings fixed or rejected with evidence):
+  - Emerald client T3: lifecycle R1-R4 (after_reset restored for possibly-unsaved results; two-client cross-wire; live scene gate), ABI v2 client (card A), packaging, Emerald NPC-trade fix (entry pre-image capture; PHYSICAL PASS docs/gen3/probes/fc_npc_trade_gen3_emerald_T3_R4_eca04eb1.txt).
+  - Refused key_change retry (Gen 1/2 parity) in lua/core + pending-alias resolution.
+  - Trainer generator: per-title FR/LG learnsets; Emerald trainer table (851 trainers); robustness fixes.
+  - Expansion XC4 trainer sets + review fixes.
+  - F-7 RR generator pins; RR priority roster regenerated from the pinned sheet (owner ruling 34) with every key fight reachable.
+  - FR/LG UPR write-domain audit (110-run isolation test; tutor-compat header-write claim disproved).
+  - Natural-play evidence: S-8/S-9/S-11 PASS FR-as-A and LG-as-A; NPC trade key_change ACCEPTED end-to-end on FR/LG; Emerald poison + NPC trade PASS.
+- **Not yet merged** (on their branches, in review/fix): randomized server `claude/gen3-rand-fix` (C:/slink-wt/g3-rfix; RF-1..RF-4 done, RF-5 = classify all 28 species bytes + project genderRatio 0x10); Emerald Match Call card C (C:/slink-wt/em-t3); T2 companion producer (C:/slink-wt/em-t2, FR trade producer physically passing at private probe, READY=0).
+- Owner rulings added: 33 (UPR fork obedience/evo-gate code patch allowed with wild/starter/static randomization), 34 (RR roster from the current pinned sheet).
+- Next: RF-5 -> merge rfix; card C; T2 FR producer -> LG -> Emerald -> RR; T4 server trade contract (from T3 reviews: resolve_trade must reach the client, party_hidden marker, uncertain-token journal on hello); T5 duos; Emerald randomized binding (docs/gen3/research/emerald_rom_tables_facts.md); owner live Emerald session; then ask the owner for ONE landing (merge master into integration first; ping Gen 2).
+
+## Earlier state (2026-09-26, checkpoint 20)
 
 - **READ FIRST NEXT SESSION: owner decision "We will combine the next work"** (2026-09-26). ONE orchestrator runs all remaining Gen 3 work (FR/LG, RR, Emerald and the expansion sub-lane). **Codex FRLG review cx-42eabc05 REJECTED the randomized server half: 2 verified BLOCKERS (refusal bypass on an unreadable or missing report; ability normalisation erases real changes). Fix these first; see the handoff §0a.** Handoff docs: `docs/gen3/HANDOFF_combined_gen3_2026-09-26.md` (this branch, 7d3b8af0) plus `docs/gen3_emerald/HANDOFF_combined_gen3_2026-09-26.md` (claude/gen3-emerald).
 

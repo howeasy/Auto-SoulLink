@@ -203,6 +203,45 @@
         }
       },
       "rom_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
+      "rom_tables": {
+        "gEvolutionTable": {
+          "address": 137515804,
+          "count": 412,
+          "size": 16480,
+          "stride": 40
+        },
+        "gSpeciesInfo": {
+          "address": 137495500,
+          "count": 412,
+          "size": 11536,
+          "stride": 28
+        },
+        "gTrainerClassNames": {
+          "address": 137428180,
+          "count": 66,
+          "size": 858,
+          "stride": 13
+        },
+        "gTrainers": {
+          "address": 137429040,
+          "count": 855,
+          "size": 34200,
+          "stride": 40
+        },
+        "gWildMonHeaders": {
+          "address": 139799880,
+          "count": 125,
+          "size": 2500,
+          "stride": 20
+        }
+      },
+      "rom_tables_provenance": {
+        "gEvolutionTable": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gEvolutionTable; data/gen3/pret/pokeemerald.sym:40912",
+        "gSpeciesInfo": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gSpeciesInfo; data/gen3/pret/pokeemerald.sym:40500",
+        "gTrainerClassNames": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gTrainerClassNames; data/gen3/pret/pokeemerald.sym:40250",
+        "gTrainers": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gTrainers; data/gen3/pret/pokeemerald.sym:40251",
+        "gWildMonHeaders": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gWildMonHeaders; data/gen3/pret/pokeemerald.sym:47941"
+      },
       "rom_thumb": [
         "BATTLE_INTRO_GET_MONS_DATA_ADDR",
         "BEGIN_BATTLE_INTRO_ADDR",

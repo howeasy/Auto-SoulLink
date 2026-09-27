@@ -30,9 +30,12 @@ def _vanilla() -> Gen3Adapter:
 
 
 def test_trainers_for_area_returns_known_pewter_city():
-    """Pewter City Gym (RR) hosts Brock. RR separates Pewter Museum
-    (Falkner) from the city's gym (Brock) so they show up at different
-    area_ids — the matchup here is just that pewter_city has Brock."""
+    """Pewter City Gym (RR) hosts Brock. Pewter Museum (Falkner) is a
+    building with no area_map.json entry of its own (RR-PT2): the client
+    keeps reporting the last coarse area it saw -- "pewter_city" -- the
+    whole time the player is inside the museum, same as it does for the
+    vanilla gym itself, so Falkner shows up under "pewter_city" too, not a
+    separate "pewter_museum" key that the client can never actually emit."""
     ids = _rr().trainers_for_area("pewter_city")
     assert isinstance(ids, list)
     assert ids, "pewter_city should have at least one trainer"
@@ -40,12 +43,19 @@ def test_trainers_for_area_returns_known_pewter_city():
     assert 56 in ids or 414 in ids
 
 
-def test_trainers_for_area_pewter_museum_has_falkner():
-    """Falkner specifically fights at Pewter Museum in RR."""
-    ids = _rr().trainers_for_area("pewter_museum")
-    assert ids, "pewter_museum should host Falkner"
-    # His rr_trainers.json id should be in the list (43 or 45).
-    assert 43 in ids or 45 in ids
+def test_trainers_for_area_pewter_city_has_falkner():
+    """Falkner has two RR fights, at two different (real) locations: id 45
+    at Pewter Museum -- which reports as "pewter_city" (RR-PT2 -- see
+    test_trainers_for_area_returns_known_pewter_city) -- and id 43 at Rock
+    Tunnel. Exact sets, not "or": rr_priority_trainers.json is the source of
+    truth, so a regen that moves either id must fail this test loudly rather
+    than pass on whichever id happened to still be present. The old
+    "pewter_museum" area_id is not one the client can ever emit."""
+    assert sorted(_rr().trainers_for_area("pewter_city")) == [45, 56, 414]
+    assert sorted(_rr().trainers_for_area("rock_tunnel")) == [43]
+    assert not _rr().trainers_for_area("pewter_museum"), (
+        "pewter_museum is not a client-emittable area_id any more (RR-PT2)"
+    )
 
 
 def test_trainers_for_area_route_25_has_bugsy():

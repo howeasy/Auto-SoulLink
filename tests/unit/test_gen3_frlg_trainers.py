@@ -129,7 +129,13 @@ def test_calc_labels_are_frlg_setdex_keys():
     keys = {full.split(" | ")[0].strip() for sets in setdex.values() for full in sets}
     labels = {v["calc_label"] for v in TRAINERS.values() if "calc_label" in v}
     assert labels <= keys
-    assert len(labels) == len(keys)        # every setdex trainer is joined to a pret trainer
+    # every setdex trainer is joined to a pret trainer, except "Biker Goon 2": OMP review
+    # cx-6b3b8309 finding 5 (calc_label's by_key fallback let a single-mon party take a label from
+    # a DIFFERENT fight whose species+level didn't match its own -- FRLG.js's "Biker Goon 2" is one
+    # setdex entry covering a combined Koffing+Grimer fight, but TRAINER_BIKER_GOON_2 (Koffing 38)
+    # and TRAINER_BIKER_GOON_3 (Grimer 38) are two separate single-mon trainers, neither an exact
+    # species+level match). A single-mon party now only takes an exact match, so it's unjoined.
+    assert len(keys) - len(labels) == 1 and "Biker Goon 2" in keys - labels
     key_trainers = [v for v in TRAINERS.values() if v.get("key")]
     # the two Sevii Rocket admins are not in FRLG.js: they fall back to species/level matching
     assert [v["const"] for v in key_trainers if "calc_label" not in v] == [
@@ -163,7 +169,7 @@ def test_adapter_vanilla_titles(title):
     assert a.trainer_party(414)[0]["species"] == "Geodude"
 
 
-@pytest.mark.parametrize("rom_type", ["", "emerald", "firered_ap", "leafgreen_ap"])
+@pytest.mark.parametrize("rom_type", ["", "firered_ap", "leafgreen_ap"])
 def test_adapter_other_titles_have_no_frlg_table(rom_type):
     a = Gen3Adapter(is_rr=False, rom_type=rom_type)
     assert a.trainer_info(102) == ("", "")
@@ -198,6 +204,23 @@ def test_board_panel_renders_fr_key_trainers():
     brock = srv._trainer_panel_html("pewter_city", "a")
     assert "Brock" in brock and "Onix" in brock and 'data-calc-label="Leader Brock"' in brock
     assert srv._trainer_panel_html("viridian_forest", "a") == ""
+
+
+@pytest.mark.parametrize("tid,area,name,levels", (
+    (265, "route_104", "Roxanne", [12, 12, 15]),
+    (272, "sootopolis_city", "Juan", [41, 41, 43, 43, 46]),
+))
+def test_emerald_trainers_and_panel_use_the_emerald_table(tid, area, name, levels):
+    adapter = Gen3Adapter(rom_type="emerald")
+    assert adapter.trainer_info(tid) == (name, "Leader")
+    assert tid in adapter.trainers_for_area(area)
+    brief = adapter.trainer_brief(tid)
+    assert brief["area"] == area and brief["calc_label"] == f"Leader {name}"
+    assert [m["level"] for m in brief["party"]] == levels
+    html = _server(adapter)._trainer_panel_html(area, "a")
+    assert name in html and f'data-calc-label="Leader {name}"' in html
+    assert adapter.trainers_for_area("pewter_city") == []
+    assert "Brock" not in html
 
 
 # ── PHYSICAL: the trainer the FR/LG trainer-battle duo receipts fought ─────────────────────────

@@ -112,6 +112,11 @@ end
 
 -- The one resolver: returns slot, mon, party, why. why = "ambiguous key" for a duplicated plain
 -- key, or an alias reason for a retired key; party == nil (unreadable) returns nothing at all.
+-- A key NO record answers to, with no reason of its own, is the OLD key of a change still in
+-- flight: the server names the mon by the old key until it answers, and the cartridge already
+-- holds the new one. So the pending alias resolves it on the same terms as a retired one (the
+-- branch above): without this every command the server sends under the old key is dropped as
+-- "key not in party" for the whole refusal window (review cx-876c8b77 MAJOR-1).
 function Identity:find_party_slot(key, party)
     if not party then return nil end
     local r = self.retired_alias[key]
@@ -124,6 +129,13 @@ function Identity:find_party_slot(key, party)
         if self.key(m) == key then
             if slot then return nil, nil, party, "ambiguous key" end
             slot, mon = m.slot, m
+        end
+    end
+    if not slot then
+        local a = self.pending
+        if a and a.old_key == key then
+            local aslot, amon, why = self:observe_one(a, party)
+            if aslot or why then return aslot, amon, party, why end
         end
     end
     return slot, mon, party, nil

@@ -136,20 +136,22 @@ if os.path.exists(_rr_priority_path):
         _RR_PRIORITY_PRE_CAPS  = {k: int(v) for k, v in (_ms.get("pre")  or {}).items()}
         _RR_PRIORITY_POST_CAPS = {k: int(v) for k, v in (_ms.get("post") or {}).items()}
 
-# Vanilla FireRed/LeafGreen trainer table, generated from pret pokefirered by
-# tools/gen_gen3_trainers.py (owner ruling 28). Keys are gTrainers indexes = the wire trainer_id
-# (no offset, unlike RR's rr_trainers.json). One table serves every title in its "titles" list.
-_FRLG_TRAINER_TABLE: dict = {}
-_frlg_trainers_path = os.path.join(_DATA_DIR, "frlg_trainers.json")
-if os.path.exists(_frlg_trainers_path):
-    with open(_frlg_trainers_path, encoding="utf-8") as _f:
-        _raw_ft = json.load(_f)
-        _FRLG_TRAINER_TABLE = {
-            "titles": frozenset(_raw_ft.get("titles") or ()),
-            "trainers": {int(k): v for k, v in (_raw_ft.get("trainers") or {}).items()},
-            "trainers_by_area": {k: list(v) for k, v in (_raw_ft.get("trainers_by_area") or {}).items()},
-            "learnsets": {int(k): [tuple(e) for e in v] for k, v in (_raw_ft.get("learnsets") or {}).items()},
-        }
+def _load_trainer_table(path: str) -> dict:
+    """Load the runtime trainer presentation from a pret-generated title pack."""
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    return {
+        "titles": frozenset(raw.get("titles") or ()),
+        "trainers": {int(k): v for k, v in (raw.get("trainers") or {}).items()},
+        "trainers_by_area": {k: list(v) for k, v in (raw.get("trainers_by_area") or {}).items()},
+    }
+
+
+# These tables use the wire's gTrainers indexes directly, unlike RR's rr_trainers.json.
+_FRLG_TRAINER_TABLE = _load_trainer_table(os.path.join(_DATA_DIR, "frlg_trainers.json"))
+_EMERALD_TRAINER_TABLE = _load_trainer_table(os.path.join(_EMERALD_DIR, "emerald_trainers.json"))
 
 # Rival trainer ID set for Radical Red (used by Rival Team Swap feature).
 # Built at import time by scanning _RR_TRAINERS for entries whose name is
@@ -413,6 +415,11 @@ class Gen3Adapter(GameAdapter):
         return {"named": "clean", "companion": "clean"}.get(kind, kind)
 
     @classmethod
+    def supports_randomized(cls, rom_type: str) -> bool:
+        # Expansion has its own layout and remains outside this binding.
+        return rom_type in ("firered", "leafgreen", "emerald")
+
+    @classmethod
     def pairing_kind_for(cls, kind: str, rom_content: object) -> str:
         """Owner ruling 32: a `rand` cartridge whose trainers, wild tables and evolutions equal
         pret's (the Manager's contract fingerprint of the clean title) pairs as clean. Anything
@@ -427,6 +434,18 @@ class Gen3Adapter(GameAdapter):
             except Exception:                         # noqa: BLE001 - fail closed to rand
                 pass
         return cls.pairing_kind(kind)
+
+    @classmethod
+    def pairing_kind_for_title(cls, rom_type: str, kind: str, rom_content: object) -> str:
+        """Do not normalize a rand declaration with another foundation's clean proof."""
+        if kind == "rand" and rom_content:
+            try:
+                title = rom_title(parse_rom_content(rom_content))
+                if (title == "emerald") != (rom_type == "emerald"):
+                    return cls.pairing_kind(kind)
+            except Exception:                         # noqa: BLE001 - unverified stays rand
+                return cls.pairing_kind(kind)
+        return cls.pairing_kind_for(kind, rom_content)
 
     def set_artifact_kind(self, kind: str) -> None:
         # "rand" (a UPR-randomized FR/LG, docs/gen3/research/randomized_gen3_design.md R1) makes
@@ -611,7 +630,7 @@ class Gen3Adapter(GameAdapter):
         return _ability_description(ability_id, self._is_rr)
 
     def _frlg_trainer_table(self) -> dict | None:
-        """The FR/LG trainer table for this cartridge, or None. Every FR/LG trainer lookup goes
+        """The vanilla trainer table for this cartridge, or None. Every vanilla trainer lookup goes
         through here. A randomized run (or any adapter that ingested its ROM) reads its own
         gTrainers (ingest_rom_content), and has NO table until then, or when that report was
         unreadable: retail parties beside a randomized cartridge are misinformation.
@@ -620,9 +639,10 @@ class Gen3Adapter(GameAdapter):
             return None
         if self._artifact_kind == "rand" or self._rom_trainers is not None:
             return self._rom_trainers or None
-        if self._rom_type not in _FRLG_TRAINER_TABLE.get("titles", ()):
+        table = _EMERALD_TRAINER_TABLE if self._rom_type == "emerald" else _FRLG_TRAINER_TABLE
+        if self._rom_type not in table.get("titles", ()):
             return None
-        return _FRLG_TRAINER_TABLE
+        return table
 
     def _frlg_trainer(self, trainer_id: int) -> dict | None:
         table = self._frlg_trainer_table()
@@ -650,7 +670,7 @@ class Gen3Adapter(GameAdapter):
         """Return runtime trainer IDs that appear in the given area.
 
         Source: data/games/gen3_frlge/rr_priority_trainers.json for RR, and
-        frlg_trainers.json's key trainers for vanilla FR/LG; Emerald returns [].
+        the pret-generated title table's key trainers for vanilla FR/LG and Emerald.
         The returned IDs are the runtime IDs `trainer_info` takes and the Lua
         client's TRAINER_OPPONENT_ADDR read reports.
         """
@@ -894,15 +914,23 @@ class Gen3Adapter(GameAdapter):
         # FireRed / LeafGreen / Radical Red → Kanto
         return super().gym_badge_slugs(rom_type)
 
-    # ── Per-ROM content (randomized FR/LG, design R2) ────────────────────
+    # ── Per-ROM content (randomized FR/LG/Emerald, design R2) ────────────
+
+    def _read_rom_content(self, payload: dict) -> dict:
+        rom = parse_rom_content(payload)
+        title = rom_title(rom)
+        if self._rom_type == "emerald" and title != "emerald":
+            raise ValueError(f"rom_content title {title} is not an Emerald cartridge report")
+        if self._rom_type in ("firered", "leafgreen") and title == "emerald":
+            raise ValueError("Emerald rom_content is not an FR/LG cartridge report")
+        return decode_verified(rom, title)
 
     def rom_content_fingerprint(self, payload: dict) -> str | None:
         if self._is_rr:
             return None
         # The Manager's contract value (server/upr_pipeline.py) over the same decode; a forbidden
         # cartridge is refused by name here too.
-        rom = parse_rom_content(payload)
-        return gen3_rom_tables.gen3_content_fingerprint(decode_verified(rom, rom_title(rom)))
+        return gen3_rom_tables.gen3_content_fingerprint(self._read_rom_content(payload))
 
     def ingest_rom_content(self, payload: dict) -> dict | None:
         """This cartridge's wild tables (area → method → entries), carrying its trainer table as
@@ -910,21 +938,29 @@ class Gen3Adapter(GameAdapter):
         malformed payload and on a forbidden rule-table change (ForbiddenRomTables)."""
         if self._is_rr:
             return None
-        rom = parse_rom_content(payload)
-        tables = decode_verified(rom, rom_title(rom))
-        out = _RomTables(self._rom_encounter_tables(tables["wild_encounters"]))
+        tables = self._read_rom_content(payload)
+        out = _RomTables(self._rom_encounter_tables(tables["wild_encounters"], tables["title"]))
         out.trainers = self._rom_trainer_table(tables)
         return out
 
-    def refused_rom_content(self, payload: dict) -> str:
+    def refused_rom_content(self, payload: object, *, artifact_kind: str | None = None) -> str:
+        kind = self._artifact_kind if artifact_kind is None else artifact_kind
+        randomized = kind in ("rand", "rand_overlay")
+        if randomized and not self.supports_randomized(self._rom_type):
+            return (f"randomized cartridges are not supported for {self._rom_type}: "
+                    "no randomized-ROM binding")
         if self._is_rr:
             return ""
+        label = "Emerald" if self._emerald else "FR/LG"
+        if randomized and not payload:
+            return f"randomized {label} hello is missing rom_content; cartridge rules cannot be verified"
         try:
-            rom = parse_rom_content(payload)
-            decode_verified(rom, rom_title(rom))
+            self._read_rom_content(payload)
         except ForbiddenRomTables as exc:
             return str(exc)
-        except Exception:                             # noqa: BLE001 - malformed: ingest's job
+        except Exception as exc:                      # noqa: BLE001 - failed proof must refuse rand
+            if randomized:
+                return f"randomized {label} rom_content could not be verified: {exc}"
             return ""
         return ""
 
@@ -933,12 +969,13 @@ class Gen3Adapter(GameAdapter):
         self._rom_encounters = tables
         self._rom_trainers = None if tables is None else getattr(tables, "trainers", {})
 
-    def _rom_encounter_tables(self, wild: dict) -> dict:
+    def _rom_encounter_tables(self, wild: dict, title: str | None = None) -> dict:
         """Gen 1's shape and rules (gen1_rom_scan.build_encounter_tables): first map wins per
         area and method, slots aggregated per species, most likely first."""
         out: dict = {}
+        area_map = _emerald_json("area_map.json") if (title or self._rom_type) == "emerald" else _frlg_area_map()
         for group_num in sorted(wild):
-            area_id = _frlg_area_map().get("{}:{}".format(*group_num))
+            area_id = area_map.get("{}:{}".format(*group_num))
             if not area_id:
                 continue
             # ponytail: first header only; Altering Cave's other 8 sets need VAR_ALTERING_CAVE_WILD_SET.
@@ -969,12 +1006,12 @@ class Gen3Adapter(GameAdapter):
         """frlg_trainers.json's shape, from the cartridge: party species, levels, held items and
         custom moves (ruling 31), trainer and class names (UPR can randomize both). Area, key,
         rival and fight_label stay pret's: they come from map scripts, which UPR does not move.
-        No calc_label: the FRLG.js setdex describes retail parties (design risk 4). A default-move
-        mon gets GiveBoxMonInitialMoveset's moves from pret's learnsets, which hold because
-        movesets may not be randomized (ruling 31).
+        No calc_label: the FRLG.js setdex describes retail parties (design risk 4). Sparse hello
+        reports do not contain level-up learnsets, so they must never infer default moves, even
+        when the report pairs as clean (RF-2 option B).
         """
-        pret = _FRLG_TRAINER_TABLE.get("trainers", {})
-        learnsets = _FRLG_TRAINER_TABLE.get("learnsets", {})
+        base_table = _EMERALD_TRAINER_TABLE if tables.get("title", self._rom_type) == "emerald" else _FRLG_TRAINER_TABLE
+        pret = base_table.get("trainers", {})
         classes = tables["class_names"]
         trainers = {}
         for tid, tr in tables["trainers"].items():
@@ -984,9 +1021,8 @@ class Gen3Adapter(GameAdapter):
                 entry = {"species": self.calc_species(mon["species"]), "level": mon["level"]}
                 if mon.get("held_item"):
                     entry["item"] = self.calc_name("item", self.item_name(mon["held_item"]))
-                moves = mon["moves"] if "moves" in mon else default_moves(
-                    learnsets.get(mon["species"], ()), mon["level"])
-                entry["moves"] = [self.calc_name("move", self.move_name(m)) for m in moves if m]
+                if "moves" in mon:
+                    entry["moves"] = [self.calc_name("move", self.move_name(m)) for m in mon["moves"] if m]
                 party.append(entry)
             t = {"name": "" if base.get("rival") else _pretty(tr["name"]),
                  "class": classes[tr["class"]] if tr["class"] < len(classes) else "",
@@ -995,8 +1031,8 @@ class Gen3Adapter(GameAdapter):
             if t.get("key") and party:
                 t["level_cap"] = max(m["level"] for m in party)
             trainers[tid] = t
-        return {"titles": _FRLG_TRAINER_TABLE.get("titles", frozenset()), "trainers": trainers,
-                "trainers_by_area": _FRLG_TRAINER_TABLE.get("trainers_by_area", {})}
+        return {"titles": base_table.get("titles", frozenset()), "trainers": trainers,
+                "trainers_by_area": base_table.get("trainers_by_area", {})}
 
 
 # ── Randomized FR/LG: ROM content (docs/gen3/research/randomized_gen3_design.md §3, R2) ──
@@ -1043,23 +1079,26 @@ _WILD_METHODS = (
 CLEAN_CONTENT_SHA256 = {
     "firered": "70693903debc1465942e4f1d5c9fba8cce7e9d03421f978dd359347a49d277ee",
     "leafgreen": "7ef4b95991a71ff59b86bcfa0685d274ed95b8d23929d18e0146ccdb2a53c2d0",
+    "emerald": gen3_rom_tables.EMERALD_SPECIES_RULES_FACTS["clean_content_sha256"],
 }
 # sha256 of the clean FR and LG (identical) evolution table and of the rule fields of
 # gSpeciesInfo, as projected by _evolutions_digest/_species_rules_digest.
 # tests/unit/test_gen3_rom_ingest.py re-derives both from the pinned clean dumps.
+# Emerald's independently extracted rule/evolution pins currently coincide by design:
+# the fixed fields agree after title-specific Deoxys normalization. Its own facts file
+# remains authoritative; equality is not permission to substitute these FR/LG constants.
 _EVOLUTIONS_SHA256 = "cdbbae339af1f2c071349d709d92abae6b5915702f44f51011abc0b472cc7c5d"
-_SPECIES_RULES_SHA256 = "9e78c6f703c9930971ea7eebccf9627d93470c6025c0c3b2d4705493a42c1801"
+_SPECIES_RULES_SHA256 = "bece12dddc1d36701f817930d8bb6effbd73213db94bec27ac4b96a70238287f"
 
-SPECIES_INFO_SIZE = 28   # struct SpeciesInfo, pret include/pokemon.h; gSpeciesInfo is 412 x 28
+SPECIES_INFO_SIZE = gen3_rom_tables.SPECIES_INFO_SIZE
 _CONTENT_HEADS = ("gTrainers", "gWildMonHeaders", "gEvolutionTable", "gSpeciesInfo",
                   "gTrainerClassNames")
 CLASS_NAME_SIZE = 13     # gTrainerClassNames[][TRAINER_CLASS_NAME_LENGTH + 1]
-_DEOXYS = 410
+_DEOXYS = gen3_rom_tables.DEOXYS
 # UPR writes FR's Attack / LG's Defense forme into Deoxys's row: the stats the game already uses
 # (pret src/pokemon.c:1640-1661 sDeoxysBaseStats), HP/Atk/Def/Spe/SpA/SpD. Not a rule change.
-_DEOXYS_NORMAL = bytes((50, 150, 50, 150, 150, 50))
-_DEOXYS_FORME = {"firered": bytes((50, 180, 20, 150, 180, 20)),
-                 "leafgreen": bytes((50, 70, 160, 90, 70, 160))}
+_DEOXYS_NORMAL = gen3_rom_tables.DEOXYS_NORMAL
+_DEOXYS_FORME = gen3_rom_tables.DEOXYS_FORME
 
 
 @cache
@@ -1071,8 +1110,8 @@ def _frlg_area_map() -> dict:
 @cache
 def _symbol(title: str, name: str) -> tuple[int, int]:
     """(address, size) of a pret symbol for this title (data/gen3/pret/poke<title>.sym)."""
-    if title not in ("firered", "leafgreen"):
-        raise ValueError(f"unsupported FR/LG title: {title!r}")
+    if title not in ("firered", "leafgreen", "emerald"):
+        raise ValueError(f"unsupported Gen 3 title: {title!r}")
     path = gen3_rom_tables.SYMBOL_DIR / f"poke{title}.sym"
     for line in path.read_text(encoding="utf-8").splitlines():
         fields = line.split()
@@ -1088,13 +1127,23 @@ def parse_rom_content(payload: dict) -> dict[int, bytes]:
     the SHA-1 of the bytes shipped (recomputed, never trusted). That SHA-1 is transport integrity
     only; admission compares gen3_content_fingerprint (rom_content_fingerprint)."""
     rom = {}
+    previous_end = None
     for row in payload["tables"]:
         addr, raw = row["addr"], bytes.fromhex(row["hex"])
         if not isinstance(addr, int) or isinstance(addr, bool) or not raw:
             raise ValueError("rom_content regions need an integer address and bytes")
-        rom[addr] = raw   # an overlap fails in the decoder; a repeated address, the fingerprint
+        if previous_end is not None and addr < previous_end:
+            raise ValueError("rom_content regions must be strictly ascending and non-overlapping")
+        previous_end = addr + len(raw)
+        rom[addr] = raw
     if not rom or _transport_sha1(rom) != payload["fingerprint"]:
         raise ValueError("rom_content fingerprint is not the SHA-1 of its bytes")
+    title = rom_title(rom)
+    referenced = gen3_rom_tables.rom_content_ranges(
+        rom, {name: _symbol(title, name) for name in _CONTENT_HEADS})
+    if any(not any(start <= addr and addr + len(raw) <= end for start, end in referenced)
+           for addr, raw in rom.items()):
+        raise ValueError("rom_content contains extra unreferenced ROM bytes")
     return rom
 
 
@@ -1104,14 +1153,14 @@ def _transport_sha1(rom: dict[int, bytes]) -> str:
 
 
 def rom_title(rom: dict[int, bytes]) -> str:
-    """firered or leafgreen: the one title whose five table heads the report covers. The payload
+    """The one title whose five table heads the report covers. The payload
     names no title and the run adapter may be the partner's title (an FR+LG pair)."""
     def covered(addr, size):
         return any(a <= addr and addr + size <= a + len(raw) for a, raw in rom.items())
-    titles = [t for t in ("firered", "leafgreen")
+    titles = [t for t in ("firered", "leafgreen", "emerald")
               if all(covered(*_symbol(t, name)) for name in _CONTENT_HEADS)]
     if len(titles) != 1:
-        raise ValueError(f"rom_content table heads match {titles or 'no'} FR/LG title")
+        raise ValueError(f"rom_content table heads match {titles or 'no'} FR/LG title or Emerald title")
     return titles[0]
 
 
@@ -1120,16 +1169,8 @@ def _evolutions_digest(evolutions: dict) -> str:
 
 
 def _species_rules_digest(raw: bytes, title: str) -> str:
-    """Base stats, types and abilities of every row. An empty second ability counts as the
-    first (UPR fills it so; the game's pick is the same), and Deoxys's forme row as normal."""
-    rows = []
-    for i in range(0, len(raw), SPECIES_INFO_SIZE):
-        row = raw[i:i + SPECIES_INFO_SIZE]
-        stats = row[0:6]
-        if i // SPECIES_INFO_SIZE == _DEOXYS and stats == _DEOXYS_FORME[title]:
-            stats = _DEOXYS_NORMAL
-        rows.append(stats + row[6:8] + bytes((row[22], row[23] or row[22])))
-    return hashlib.sha256(b"".join(rows)).hexdigest()
+    """Rule fields, permitting UPR to fill only PINNED originally-empty ability slots."""
+    return hashlib.sha256(gen3_rom_tables.normalised_species_rules(raw, title)).hexdigest()
 
 
 def _pretty(name: str) -> str:
@@ -1143,11 +1184,14 @@ def decode_verified(rom, title: str) -> dict:
     tables = gen3_rom_tables.decode_rom_tables(rom, title)
     reader = gen3_rom_tables._Rom(rom)
     bad = []
-    if _evolutions_digest(tables["evolutions"]) != _EVOLUTIONS_SHA256:
+    facts = gen3_rom_tables.EMERALD_SPECIES_RULES_FACTS if title == "emerald" else {}
+    evolutions_pin = facts["evolutions_sha256"] if title == "emerald" else _EVOLUTIONS_SHA256
+    rules_pin = facts["normalised_species_rules_sha256"] if title == "emerald" else _SPECIES_RULES_SHA256
+    if _evolutions_digest(tables["evolutions"]) != evolutions_pin:
         bad.append("evolutions")
     addr, size = _symbol(title, "gSpeciesInfo")
-    if _species_rules_digest(reader.read(addr, size, "gSpeciesInfo"), title) != _SPECIES_RULES_SHA256:
-        bad.append("types/abilities/base stats")
+    if _species_rules_digest(reader.read(addr, size, "gSpeciesInfo"), title) != rules_pin:
+        bad.append("types/abilities/base stats/growth rates/gender ratios")
     if bad:
         raise ForbiddenRomTables(f"{title} cartridge has randomized {' and '.join(bad)}, which "
                                  "SLink does not support (the server rules on pret's tables)")
@@ -1155,4 +1199,5 @@ def decode_verified(rom, title: str) -> dict:
     raw = reader.read(addr, size, "gTrainerClassNames")
     tables["class_names"] = [_pretty(gen3_codec.decode_name(raw[i:i + CLASS_NAME_SIZE]))
                              for i in range(0, size, CLASS_NAME_SIZE)]
+    tables["title"] = title
     return tables

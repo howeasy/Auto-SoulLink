@@ -128,6 +128,7 @@ def test_clean_ingest_reproduces_pret(title):
     rom = _clean(title)
     payload = _payload(rom, title)
     adapter = _ingested(payload, title)
+    decoded = gen3_rom_tables.decode_rom_tables(rom, title)["trainers"]
     table = adapter._rom_trainers
     assert table["trainers_by_area"] == PRET["trainers_by_area"]
     for tid, want in PRET["trainers"].items():
@@ -139,9 +140,13 @@ def test_clean_ingest_reproduces_pret(title):
             assert got.get(k) == want.get(k), (tid, k)
         assert "calc_label" not in got
         assert len(got["party"]) == len(want["party"]), tid
-        for g, w in zip(got["party"], want["party"], strict=True):
-            assert (g["species"], g["level"], g.get("item"), g["moves"]) == (
-                w["species"], w["level"], w.get("item"), w["moves"]), tid
+        for g, w, raw in zip(got["party"], want["party"], decoded[int(tid)]["party"], strict=True):
+            assert (g["species"], g["level"], g.get("item")) == (
+                w["species"], w["level"], w.get("item")), tid
+            if "moves" in raw:
+                assert g["moves"] == w["moves"], tid
+            else:
+                assert "moves" not in g, tid  # the sparse report does not prove learnsets
     assert adapter.encounter_table("route_1")["Grass"][0]["name"] in ("Pidgey", "Rattata")
     # the client report decodes like the whole file, and its fingerprint is recomputed alike
     assert gen3_frlge.decode_verified(rom, title)["trainers"] == gen3_frlge.decode_verified(
@@ -187,19 +192,18 @@ def test_allowed_shows_the_cartridge_parties(title):
 
 
 @pytest.mark.parametrize("title", TITLES)
-def test_allowed_default_move_parties_get_give_box_mon_initial_moveset(title):
+def test_allowed_default_move_parties_do_not_infer_unverified_moves(title):
     rom = _randomized(title, "allowed")
     adapter = _ingested(_payload(rom, title), title)
     decoded = gen3_rom_tables.decode_rom_tables(rom, title)["trainers"]
-    learnsets = gen3_frlge._FRLG_TRAINER_TABLE["learnsets"]
     checked = 0
     for tid, tr in decoded.items():
         for got, mon in zip(adapter.trainer_party(tid), tr["party"], strict=True):
             if "moves" in mon:
+                assert got["moves"] == [adapter.calc_name("move", adapter.move_name(m))
+                                        for m in mon["moves"] if m]
                 continue                                  # custom moves come from the cartridge
-            want = gen3_frlge.default_moves(learnsets[mon["species"]], mon["level"])
-            assert 1 <= len(want) <= 4
-            assert got["moves"] == [adapter.calc_name("move", adapter.move_name(m)) for m in want]
+            assert "moves" not in got
             checked += 1
     assert checked, "no default-move party on this cartridge: the falsifier would be vacuous"
 

@@ -1,6 +1,6 @@
-"""Decode the English revision-0 FR/LG cartridge tables, including repointed data.
+"""Decode English revision-0 FR/LG/Emerald cartridge tables, including repointed data.
 
-``decode_rom_tables(rom, "firered" | "leafgreen")`` obtains table heads and sizes
+``decode_rom_tables(rom, "firered" | "leafgreen" | "emerald")`` obtains table heads and sizes
 by symbol name from data/gen3/pret/poke<title>.sym. No party or encounter-data
 address is taken from a clean-ROM symbol: every child pointer is read from ROM.
 The lower-level decoders take an explicit head and count for extracted tables.
@@ -29,6 +29,8 @@ build pads the 6-byte Evolution and NoItemDefaultMoves structs to 8 bytes and
 the 14-byte NoItemCustomMoves struct to 16. The pinned .sym sizes and the clean
 ROM controls in test_gen3_rom_tables.py verify these strides independently.
 This is a decoder, not ROM admission or validation of a randomizer's patches.
+Emerald c65e93f2 uses the same fields/strides (include/data.h, include/pokemon.h);
+test_gen3_emerald_rand.py verifies all 854 nonempty trainer parties against their ROM spans.
 """
 
 from __future__ import annotations
@@ -38,6 +40,7 @@ import json
 import struct
 from bisect import bisect_right
 from collections.abc import Mapping
+from functools import cache
 from pathlib import Path
 
 from .gen3_codec import decode_name
@@ -50,13 +53,78 @@ EVOLUTION_SIZE = 8
 EVOS_PER_MON = 5
 PARTY_SIZES = (8, 16, 8, 16)  # flags: custom moves=1, held item=2
 WILD_COUNTS = {"land": 12, "water": 5, "rock_smash": 5, "fishing": 10}
+SPECIES_INFO_SIZE = 28
 TABLE_STRIDES = {
     "gTrainers": TRAINER_SIZE,
     "gWildMonHeaders": WILD_HEADER_SIZE,
     "gEvolutionTable": EVOLUTION_SIZE * EVOS_PER_MON,
+    "gSpeciesInfo": SPECIES_INFO_SIZE,
 }
 SYMBOL_DIR = Path(__file__).resolve().parents[2] / "data/gen3/pret"
 RomData = bytes | Mapping[int, bytes]
+DEOXYS = 410
+# pret pokemon.c sDeoxysBaseStats: UPR saves the title's already-used forme into its row.
+DEOXYS_NORMAL = bytes((50, 150, 50, 150, 150, 50))
+DEOXYS_FORME = {"firered": bytes((50, 180, 20, 150, 180, 20)),
+                "leafgreen": bytes((50, 70, 160, 90, 70, 160)),
+                # pokeemerald c65e93f2 src/pokemon.c:1885-1893 sDeoxysBaseStats.
+                "emerald": bytes((50, 95, 90, 180, 95, 90))}
+
+# Native species IDs whose ORIGINAL second ability is zero in BOTH SHA-1-pinned
+# FR/LG gSpeciesInfo tables (pret c75f3523 src/data/pokemon/species_info.h).
+# UPR may fill only these empty slots with ability 1. In particular, Vibrava's
+# two LEVITATE slots are both nonzero: erasing its second slot changes the ability
+# selected by pokemon.c:3791-3798 for an inherited abilityNum=1.
+_SPECIES_RULES_PATH = Path(__file__).resolve().parents[2] / "data/games/gen3_frlg/species_rules.json"
+with _SPECIES_RULES_PATH.open(encoding="utf-8") as _rules_file:
+    _species_rules_facts = json.load(_rules_file)
+FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset(_species_rules_facts["zero_second_ability_species"])
+SPECIES_RULE_BYTES = tuple(row["offset"] for row in _species_rules_facts["bytes"] if row["projected"])
+
+
+_EMERALD_SPECIES_RULES_PATH = Path(__file__).resolve().parents[2] / "data/games/gen3_emerald/species_rules.json"
+with _EMERALD_SPECIES_RULES_PATH.open(encoding="utf-8") as _rules_file:
+    EMERALD_SPECIES_RULES_FACTS = json.load(_rules_file)
+# These are required admission facts, not optional display data. Refuse a broken
+# installation at import instead of leaving a None pin to look like a changed ROM.
+for _pin_name in ("normalised_species_rules_sha256", "evolutions_sha256", "clean_content_sha256"):
+    _pin_value = EMERALD_SPECIES_RULES_FACTS[_pin_name]
+    if (not isinstance(_pin_value, str) or len(_pin_value) != 64
+            or any(c not in "0123456789abcdef" for c in _pin_value)):
+        raise ValueError(f"invalid Emerald species_rules.json {_pin_name}")
+
+
+def normalised_species_rules(raw: bytes, title: str) -> bytes:
+    """The shared Manager/server rule projection of gSpeciesInfo (pret SpeciesInfo).
+
+    Preserve the classified rule fields, including gender and growth rate. Only the fork's known
+    Deoxys forme write and ability-1 fill of a pinned originally-empty slot are equivalent
+    to retail. Other fields (e.g. held items and catch rate) are open randomizer options.
+    """
+    if title not in DEOXYS_FORME:
+        raise ValueError(f"unsupported Gen 3 title: {title!r}")
+    if title == "emerald":
+        facts = EMERALD_SPECIES_RULES_FACTS
+        zero_slots = frozenset(facts["zero_second_ability_species"])
+        rule_bytes = tuple(row["offset"] for row in facts["bytes"] if row["projected"])
+    else:
+        zero_slots, rule_bytes = FRLG_ZERO_SECOND_ABILITY_SPECIES, SPECIES_RULE_BYTES
+    return _normalised_species_rule_rows(raw, zero_slots, rule_bytes, DEOXYS_FORME[title])
+
+
+def _normalised_species_rule_rows(raw: bytes, zero_slots, rule_bytes, forme: bytes) -> bytes:
+    """Pure projection shared with the pinned-fact generator; no file reads."""
+    if not raw or len(raw) % SPECIES_INFO_SIZE:
+        raise ValueError("gSpeciesInfo must contain complete 28-byte records")
+    rows = []
+    for species, offset in enumerate(range(0, len(raw), SPECIES_INFO_SIZE)):
+        row = bytearray(raw[offset:offset + SPECIES_INFO_SIZE])
+        if species == DEOXYS and bytes(row[:6]) == forme:
+            row[:6] = DEOXYS_NORMAL
+        if species in zero_slots and row[23] in (0, row[22]):
+            row[23] = row[22]
+        rows.append(bytes(row[b] for b in rule_bytes))
+    return b"".join(rows)
 
 
 class _Rom:
@@ -103,15 +171,17 @@ class _Rom:
         return b"".join(chunks)
 
 
+@cache
 def table_symbols(title: str, *, symbol_dir: Path = SYMBOL_DIR) -> dict:
-    """Read this title's three table symbols and derive counts from their sizes.
+    """Read this title's table symbols and derive counts from their validated sizes.
 
     ``count`` includes TRAINER_NONE, species zero, and the wild-header sentinel.
     A caller with relocated table heads may use the lower-level decoders, passing
     the new address and count explicitly; this helper describes the pinned heads.
+    The pinned file is immutable; callers must not mutate the cached mapping.
     """
-    if title not in ("firered", "leafgreen"):
-        raise ValueError(f"unsupported FR/LG title: {title!r}")
+    if title not in ("firered", "leafgreen", "emerald"):
+        raise ValueError(f"unsupported Gen 3 title: {title!r}")
     result = {}
     path = Path(symbol_dir) / f"poke{title}.sym"
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -235,6 +305,61 @@ def decode_rom_tables(rom: RomData, title: str, *, symbol_dir: Path = SYMBOL_DIR
         "wild_encounters": decode_wild_encounters(rom, wild["address"], wild["count"]),
         "evolutions": decode_evolutions(rom, evolutions["address"], evolutions["count"]),
     }
+
+
+def rom_content_ranges(rom: RomData, heads: Mapping[str, tuple[int, int]]) -> list[tuple[int, int]]:
+    """Exact referenced byte intervals [start, end) for the client table report.
+
+    ``heads`` is the trusted title profile's {symbol: (address, size)} mapping,
+    including the species-info and trainer-class-name heads. Shared/overlapping
+    references are merged; gaps are not. Reads also prove every required byte is
+    present, so a consumer can reject any supplied bytes outside these intervals.
+    """
+    reader = _Rom(rom)
+    intervals = []
+
+    def capture(address, size, label):
+        if size <= 0:
+            raise ValueError(f"{label}: empty ROM table range")
+        raw = reader.read(address, size, label)
+        intervals.append((address, address + size))
+        return raw
+
+    tables = {name: capture(address, size, name) for name, (address, size) in heads.items()}
+    trainers = tables["gTrainers"]
+    if len(trainers) % TRAINER_SIZE:
+        raise ValueError("gTrainers: truncated record")
+    for at in range(0, len(trainers), TRAINER_SIZE):
+        flags, count = trainers[at], trainers[at + 32]
+        if flags >= len(PARTY_SIZES) or count > 6:
+            raise ValueError(f"trainer[{at // TRAINER_SIZE}]: invalid party flags/count")
+        pointer = struct.unpack_from("<I", trainers, at + 36)[0]
+        if count:
+            capture(pointer, count * PARTY_SIZES[flags], "trainer party")
+        elif pointer:
+            capture(pointer, 1, "empty trainer party pointer")
+
+    wild = tables["gWildMonHeaders"]
+    if len(wild) % WILD_HEADER_SIZE:
+        raise ValueError("gWildMonHeaders: truncated record")
+    for at in range(0, len(wild), WILD_HEADER_SIZE):
+        if wild[at] == 0xFF:
+            break
+        for index, (kind, count) in enumerate(WILD_COUNTS.items(), 1):
+            pointer = struct.unpack_from("<I", wild, at + index * 4)[0]
+            if pointer:
+                info = capture(pointer, 8, f"wild {kind} info")
+                capture(struct.unpack_from("<I", info, 4)[0], count * 4, f"wild {kind} slots")
+    else:
+        raise ValueError("gWildMonHeaders: missing 0xFF map-group sentinel")
+
+    merged = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    return merged
 
 
 def _canon(obj):

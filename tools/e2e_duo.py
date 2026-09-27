@@ -77,10 +77,13 @@ SCENARIOS = {
     "admit_randomized_frlg": {"flags": [], "timeout": 600, "games": ("gen3_frlg",),
         "target": "town", "frames": 1200000, "no_save": ("a", "b"), "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_admit", "oracle": "assert_admit_randomized_frlg_saved"},
+    "admit_randomized_emerald": {"flags": [], "timeout": 600, "games": ("gen3_emerald",),
+        "target": "town", "frames": 1200000, "no_save": ("a", "b"), "gen3_rand": True, "explicit_only": True,
+        "scenario_module": "rand_admit", "oracle": "assert_admit_randomized_frlg_saved"},
     "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg",),
-        "target": "battle", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
+        "target": "catch_synth", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
-    "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg",),
+    "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_trainer_panel", "oracle": "assert_trainer_panel_gen3_rand_saved"},
     # A boots {firered,leafgreen}_party_trainer.sav (6e85ddfc): CACHED-NATIVE at (41,45) on map
@@ -365,6 +368,49 @@ SCENARIOS = {
     "save_then_write_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",),
                              "target": "town", "frames": 2000000, "no_save": ("b",),
                              "oracle": "assert_save_then_write_gen3_saved"},
+    # NAT-LEGS: the three FR/LG natural legs (docs/gen3_requirements.md S-8, S-9, S-11). A boots
+    # a DISCLOSED O-33 SYNTH edit of a party fixture (tools/gen3_fixtures.py make-frlg-synth,
+    # {firered,leafgreen}_party_<kind>_synth.sav); only the behaviour under test runs natively,
+    # on ordinary buttons. explicit_only: never part of `--scenario all`. `games` names the
+    # gen3_frlg family only (scenario_applies resolves `gen3_lgfr` through its family, same as
+    # every other shared FR/LG row, e.g. center_controls_gen3): `--game gen3_lgfr` runs these
+    # too (card NAT-LEGS-2, LG-as-A), each game's own `sides` mapping formatting `target` against
+    # the right title's fixture stem. The three scenario_gen3_*.lua modules are title-agnostic
+    # (ctx.player, not ROM version). LeafGreen's Route 2 trade (INGAME_TRADE_MR_MIME) has no
+    # FIRERED/LEAFGREEN #if branch in pret pokefirered (src/data/ingame_trades.h, pin c75f3523):
+    # ABRA -> MR. MIME is the same on both titles, so the LG-as-A trade leg reuses MR_MIME/ABRA
+    # unchanged.
+    #   evolve       a Route 1 wild win levels the Lv15 Squirtle to 16 and evolves it; the tick
+    #                publishes WARTORTLE to the linked half (S-8 evolve_species_store)
+    #   npc_trade    Reyley's Route 2 house trade (ABRA -> MR. MIME); the client emits key_change
+    #                reason npc_trade (S-9 trade_done); the migration is judged (NAT-LEGS-3)
+    #   poison_faint a field poison step faints the 1-HP lead; B's linked mon is force-fainted
+    #                (S-11 poison_faint + the Soul Link rule)
+    "evolve_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",), "explicit_only": True,
+                    "target": {"a": "evolve_synth", "b": "town"}, "frames": 2000000, "no_save": ("b",),
+                    "oracle": "assert_evolve_gen3_saved"},
+    # NAT-LEGS-3: gen3_emerald joins as its own E<->E leg (RustboroCity_House1's INGAME_TRADE_SEEDOT,
+    # emerald_trade.sav; target_by_game overrides the FR/LG "_synth" fixture stem with Emerald's own
+    # naming, tests/fixtures/gen3/README.md). The oracle's NPC_TRADE_FACTS carries the per-game
+    # new_key/species; poison_faint_gen3's oracle is already game-agnostic (no species assertion).
+    # orchestrate_npc_trade_gen3 links party slot 1 on BOTH halves (_gen3_prelude(link_slot=1)):
+    # FR/LG's "town" fixture already carries 2 party mons (unlike Emerald's, which is a single
+    # Mudkip for that kind), so B's Emerald side boots "pc" instead (Mudkip + Poochyena, slot 1
+    # present) -- the same B-idle fixture boxsync_gen3/whiteout_gen3 already use for gen3_emerald.
+    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+                       "target": {"a": "trade_synth", "b": "town"},
+                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
+                       "frames": 2000000, "no_save": ("b",),
+                       "oracle": "assert_npc_trade_gen3_saved"},
+    # B's Emerald side boots "pc" (Mudkip + Poochyena), not "town" (single Mudkip): B's own linked
+    # lead is force_faint'ed by the server (Soul Link), and a single-mon party would white out
+    # (RESULT: FAIL "no memorialize_done" -- the game overs before the memorial can send), exactly
+    # the reason linked_faint_active_gen3 already substitutes "pc" for gen3_emerald.
+    "poison_faint_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+                          "target": {"a": "poison_synth", "b": "town"},
+                          "target_by_game": {"gen3_emerald": {"a": "poison", "b": "pc"}},
+                          "frames": 2000000,
+                          "oracle": "assert_poison_faint_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
     # gen3_emerald hunts "catch" (20 balls), not "battle" (5): deadzone_gen3 burned all three RNG
@@ -2588,10 +2634,45 @@ GAMES = {
 
 # FRLG-R4 helpers: independent ROM-file and saved-flash oracles. These are
 # exclusive to the three randomized rows; no trade or legacy scenario changes.
-GEN3_RAND_SCENARIOS = {"admit_randomized_frlg", "link_gen3_rand", "trainer_panel_gen3_rand"}
+GEN3_RAND_ADMISSION = {"admit_randomized_frlg", "admit_randomized_emerald"}
+GEN3_RAND_SCENARIOS = GEN3_RAND_ADMISSION | {"link_gen3_rand", "trainer_panel_gen3_rand"}
+GEN3_RAND_PHASES = {
+    "pair": {"a": ("a", "rand"), "b": ("b", "rand")},
+    "wrong_rom": {"a": ("b", "rand")},
+    "mixed_kind": {"b": ("clean_b", "clean")},
+    "rules_changed": {"a": ("forbidden_a", "rand")},
+    "equivalent_pair": {"a": ("equivalent_a", "rand"), "b": ("clean_b", "clean")},
+}
 # The randomized ROMs are never committed: point SLINK_GEN3_RAND_ROMS at a directory holding
-# {FireRed,LeafGreen}_allowed.gba. Unset = the rows BLOCK by name (no machine-specific default).
+# {FireRed,LeafGreen}_allowed.gba, or Emerald_allowed.gba and Emerald_allowed_b.gba.
+# Admission also needs the A title's *_widest.gba. Unset = BLOCK by name.
 GEN3_RAND_SCRATCH = Path(os.environ["SLINK_GEN3_RAND_ROMS"]) if os.environ.get("SLINK_GEN3_RAND_ROMS") else None
+
+
+def gen3_rand_retail(title):
+    path = ("data/games/gen3_emerald/emerald_trainers.json" if title == "emerald"
+            else "data/games/gen3_frlge/frlg_trainers.json")
+    return json.loads(Path(REPO, path).read_text())["trainers"]
+
+
+def gen3_rand_site_problems(raw, title, root=REPO):
+    """Test-cartridge preflight only; this does not enable Emerald in Manager."""
+    if title != "emerald":
+        from server.upr_pipeline import gen3_site_mismatches
+        return gen3_site_mismatches(raw, title)
+    pack = Path(root, "data/games/gen3_emerald")
+    sites = json.loads((pack / "engine_signals.json").read_text())["titles"][title]["artifacts"]["clean"]["sites"]
+    records = []
+    for kind, site in sites.items():
+        records.append((kind, site["rom_offset"], site["expected_hex"]))
+        if site.get("context"):
+            context = site["context"]
+            records.append((kind + " context", context["rom_offset"], context["expected_hex"]))
+    anchors = json.loads((pack / "write_checkpoint.json").read_text())[title]["anchors"]
+    records += [("checkpoint " + name, a["rom_offset"], a["expected_hex"]["clean"])
+                for name, a in anchors.items()]
+    return [f"{label} @0x{offset:06X}" for label, offset, expected in records
+            if not expected or raw[offset:offset + len(bytes.fromhex(expected))] != bytes.fromhex(expected)]
 
 
 def gen3_rand_dependencies(root=REPO):
@@ -2628,7 +2709,7 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
     import struct
 
     from server.adapters.gen3_codec import decode_name
-    from server.adapters.gen3_rom_tables import decode_rom_tables
+    from server.adapters.gen3_rom_tables import decode_rom_tables, gen3_content_fingerprint
 
     names = {"gTrainers", "gWildMonHeaders", "gEvolutionTable", "gSpeciesInfo",
              "gTrainerClassNames", "gSpeciesNames"}
@@ -2653,17 +2734,26 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
             read(address, size)
     address, size = symbols["gTrainers"]
     trainers = read(address, size)
+    trainer_parties = {}
     for offset in range(0, size, 40):
         flags, count = trainers[offset], trainers[offset + 32]
         if flags > 3 or count > 6:
             raise ValueError("randomized oracle: invalid trainer flags/count")
         pointer = struct.unpack_from("<I", trainers, offset + 36)[0]
+        trainer_parties[offset // 40] = []
         if count:
-            read(pointer, count * (16 if flags & 1 else 8))
+            stride = 16 if flags & 1 else 8
+            party = read(pointer, count * stride)
+            # Independent of decode_rom_tables/ingest: pret battle.h's lvl u8 at +2 and
+            # species u16 at +4. A shared-decoder level bug must not teach the oracle its answer.
+            trainer_parties[offset // 40] = [
+                {"level": party[i + 2], "species": struct.unpack_from("<H", party, i + 4)[0]}
+                for i in range(0, len(party), stride)]
         elif pointer:
             read(pointer, 1)
     address, size = symbols["gWildMonHeaders"]
     wild = read(address, size)
+    wild_slots = {}
     for offset in range(0, size, 20):
         if wild[offset] == 255:
             break
@@ -2671,7 +2761,11 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
             pointer = struct.unpack_from("<I", wild, offset + 4 * habitat)[0]
             if pointer:
                 info = read(pointer, 8)
-                read(struct.unpack_from("<I", info, 4)[0], count * 4)
+                slots = read(struct.unpack_from("<I", info, 4)[0], count * 4)
+                # Independent u8 min/max + u16 species reads, retaining the first set on
+                # multi-set maps. Do not obtain the expected slots from the ingest decoder.
+                wild_slots.setdefault((wild[offset], wild[offset + 1], habitat),
+                                      list(struct.iter_unpack("<BBH", slots)))
     else:
         raise ValueError("randomized oracle: wild sentinel missing")
     merged = []
@@ -2688,8 +2782,10 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
     name_bytes = raw[address - 0x08000000:address - 0x08000000 + size]
     if len(name_bytes) != size or size % 11:
         raise ValueError("randomized oracle: species names truncated")
+    tables = decode_rom_tables(raw, title)
     return {"title": title, "sha1": hashlib.sha1(raw).hexdigest(), "payload": payload,
-            "tables": decode_rom_tables(raw, title),
+            "tables": tables, "trainer_parties": trainer_parties, "wild_slots": wild_slots,
+            "content_fingerprint": gen3_content_fingerprint(tables),
             "species_names": {i // 11: decode_name(name_bytes[i:i + 11])
                               for i in range(0, size, 11)}}
 
@@ -2699,6 +2795,12 @@ def gen3_rand_hello(text):
     if len(rows) != 1:
         raise ValueError(f"expected one complete RAND_HELLO, got {len(rows)}")
     return json.loads(rows[0])
+
+
+def gen3_rand_contract(facts):
+    """Manager wire contract: the semantic SHA-256, not the transport SHA-1."""
+    return {"players": {side: {"rom_sha1": facts[side]["sha1"],
+                              "fingerprint": facts[side]["content_fingerprint"]} for side in ("a", "b")}}
 
 
 def gen3_rand_hello_problems(hello, facts, kind="rand"):
@@ -2717,23 +2819,23 @@ def gen3_rand_hello_problems(hello, facts, kind="rand"):
 def gen3_rand_admission_problems(phase, status, hellos, facts):
     """No connected/default-admitted shortcut: require actual contract verdicts."""
     problems = []
-    sides = ("a", "b") if phase == "pair" else ("a",) if phase == "wrong_rom" else ("b",)
-    for side in sides:
+    for side, (source, kind) in GEN3_RAND_PHASES[phase].items():
         player = (status.get("players") or {}).get(side, {})
-        expected = facts[side] if phase == "pair" else facts["b"] if phase == "wrong_rom" else facts["clean_b"]
         problems += [f"{side}: {p}" for p in gen3_rand_hello_problems(
-            hellos.get(side, {}), expected, "clean" if phase == "mixed_kind" else "rand")]
+            hellos.get(side, {}), facts[source], kind)]
         reason = player.get("admission_reason", "")
-        if phase == "pair":
+        if phase in ("pair", "equivalent_pair"):
+            expected_reason = ("cartridge matches the contract" if phase == "pair"
+                               else "no randomized-ROM contract for this run")
             if (not player.get("connected") or player.get("admission") != "admitted"
-                    or reason != "cartridge matches the contract"):
+                    or reason != expected_reason):
                 problems.append(f"{side}: no explicit accepted contract verdict")
         else:
             named = ("not the cartridge built for player a" if phase == "wrong_rom"
-                     else "Mixed artifact kinds:")
+                     else "randomized evolutions" if phase == "rules_changed" else "Mixed artifact kinds:")
             if player.get("admission") != "rejected" or named not in reason:
                 problems.append(f"{side}: missing named {phase} rejection")
-            if phase == "wrong_rom" and any(facts[p]["payload"]["fingerprint"][:12] not in reason
+            if phase == "wrong_rom" and any(facts[p]["content_fingerprint"][:12] not in reason
                                              for p in ("a", "b")):
                 problems.append("wrong-ROM rejection lacks expected/reported fingerprints")
             if phase == "mixed_kind" and not all(k in reason for k in ("'rand'", "'clean'")):
@@ -2742,6 +2844,47 @@ def gen3_rand_admission_problems(phase, status, hellos, facts):
                 problems.append(f"{side}: rejected cartridge adopted party/identity/area")
             if status.get("links"):
                 problems.append(f"{side}: admission-only negative leg created links")
+    if phase in ("pair", "equivalent_pair"):
+        effective = "clean" if phase == "equivalent_pair" else "rand"
+        if status.get("gen3_rand_effective_kind") != effective:
+            problems.append(f"{phase}: effective kind is not {effective}")
+        if status.get("gen3_rand_identity_errors") != {}:
+            problems.append(f"{phase}: identity/pairing error proof missing or nonempty")
+    if phase == "equivalent_pair" and (
+            facts["equivalent_a"]["sha1"] == facts["clean_a"]["sha1"]
+            or facts["equivalent_a"]["content_fingerprint"] != facts["clean_a"]["content_fingerprint"]):
+        problems.append("32(b): control is not an unknown hash with clean-equivalent tables")
+    if phase == "pair":
+        problems += gen3_rand_encounter_problems(status.get("gen3_rand_probe") or {}, facts)
+    return problems
+
+
+def gen3_rand_encounter_problems(probes, facts):
+    """Emerald Route 102 land projection versus independent cartridge slot reads.
+
+    pret pokeemerald src/wild_encounter.c: ChooseWildMonIndex_Land uses these
+    twelve slot weights. The map header is group 0, number 17, not FR/LG Route 1.
+    """
+    problems = []
+    for side in ("a", "b"):
+        if facts[side]["title"] != "emerald":
+            continue
+        probe = probes.get(side) or {}
+        if probe.get("encounter_area") != "route_102":
+            problems.append(f"{side}: Emerald encounter probe is not Route 102")
+        slots = facts[side]["wild_slots"].get((0, 17, 1), [])
+        if len(slots) != 12:
+            problems.append(f"{side}: independent Route 102 land slots missing")
+            continue
+        expected = {}
+        for (low, high, species), rate in zip(slots, (20, 20, 10, 10, 10, 10, 5, 5, 4, 4, 1, 1), strict=True):
+            row = expected.setdefault(species, [0, low, high])
+            row[0] += rate
+            row[1], row[2] = min(row[1], low), max(row[2], high)
+        land = (probe.get("encounters") or {}).get("Grass") or []
+        actual = [(e.get("species_id"), [e.get("rate"), e.get("min_level"), e.get("max_level")]) for e in land]
+        if len(actual) != len(expected) or dict(actual) != expected:
+            problems.append(f"{side}: Route 102 encounters differ from its OWN ROM")
     return problems
 
 
@@ -2753,30 +2896,35 @@ def _gen3_rand_species(name):
     return re.sub(r"[^A-Z0-9]", "", text.upper())
 
 
-def gen3_rand_panel_problems(probes, facts, retail):
+def gen3_rand_panel_problems(probes, facts, retail, expected_area="viridian_forest"):
     """Actual per-player trainer_brief + calc fallback versus independent ROM IDs."""
     problems, selected = [], {}
     for side in ("a", "b"):
         probe = probes.get(side) or {}
         if probe.get("kind") != "rand" or not probe.get("area"):
             problems.append(f"{side}: randomized per-player adapter/area missing")
+        if probe.get("area") != expected_area:
+            problems.append(f"{side}: nearby area is not the trainer fixture's {expected_area}")
         briefs = probe.get("briefs") or {}
+        requested = {str(tid) for tid, row in retail.items() if row.get("area") == expected_area and row.get("party")}
+        if set(briefs) != requested:
+            problems.append(f"{side}: nearby trainer brief IDs differ from the independent source roster")
         if not briefs:
             problems.append(f"{side}: no nearby trainer briefs")
         changed = False
         for tid, brief in briefs.items():
-            row = facts[side]["tables"]["trainers"].get(int(tid))
+            party = facts[side]["trainer_parties"].get(int(tid))
             base = retail.get(str(tid), {})
-            if not row or not row["party"] or base.get("area") != probe.get("area"):
+            if not party or base.get("area") != expected_area:
                 problems.append(f"{side}: trainer {tid} has no ROM party/nearby source area")
                 continue
             expected = [(_gen3_rand_species(facts[side]["species_names"][m["species"]]), m["level"])
-                        for m in row["party"]]
+                        for m in party]
             actual = [(_gen3_rand_species(m.get("species")), m.get("level"))
                       for m in (brief.get("party") or [])]
             if actual != expected:
                 problems.append(f"{side}: trainer {tid} party differs from its OWN ROM")
-            if brief.get("area") != probe.get("area"):
+            if brief.get("area") != expected_area:
                 problems.append(f"{side}: trainer {tid} is not nearby")
             if brief.get("calc_label") or (probe.get("calc_labels") or {}).get(str(tid)) != "":
                 problems.append(f"{side}: trainer {tid} did not use species/level calc fallback")
@@ -2816,7 +2964,7 @@ def gen3_rand_capture_problems(saved, key, facts):
     return problems
 
 
-def gen3_rand_status_probe(server, status):
+def gen3_rand_status_probe(server, status, retail=None):
     """Read-only harness instrumentation of the LIVE server's existing adapters.
 
     No substitute ingest/brief implementation or expected answers are installed.
@@ -2828,17 +2976,22 @@ def gen3_rand_status_probe(server, status):
     probes = {}
     for side in ("a", "b"):
         adapter = server.adapter_for(side)
-        table = getattr(adapter, "_rom_trainers", None) or {}
+        title = getattr(adapter, "_rom_type", "firered")
+        roster = retail if retail is not None else gen3_rand_retail(title)
         area = server.player_area_id.get(side, "")
-        briefs = {str(tid): adapter.trainer_brief(tid)
-                  for tid, row in table.get("trainers", {}).items() if row.get("area") == area}
+        # Select IDs from independent pret area metadata, never the adopted table being tested.
+        briefs = {str(tid): adapter.trainer_brief(int(tid))
+                  for tid, row in roster.items() if row.get("area") == area and row.get("party")}
         briefs = {tid: brief for tid, brief in briefs.items() if brief}
         probes[side] = {"kind": getattr(adapter, "_artifact_kind", None), "area": area,
                         "briefs": briefs, "calc_labels": {
                             tid: _calc_trainer_label(brief, [{"species_name": m["species"]}
                                                            for m in brief["party"]])
                             for tid, brief in briefs.items()}}
-    return {**status, "gen3_rand_probe": probes}
+        if title == "emerald":
+            probes[side].update(encounter_area="route_102", encounters=adapter.encounter_table("route_102"))
+    return {**status, "gen3_rand_probe": probes, "gen3_rand_effective_kind": server.state.artifact_kind,
+            "gen3_rand_identity_errors": dict(server.state.identity_error)}
 
 
 def gen3_rand_server_main():
@@ -2848,6 +3001,7 @@ def gen3_rand_server_main():
     from server import server as module
 
     original = module.SLinkServer._build_status_dict
+    # per-title retail roster is chosen inside the probe (gen3_rand_retail)
     module.SLinkServer._build_status_dict = lambda self: gen3_rand_status_probe(self, original(self))
     asyncio.run(module.main(host="127.0.0.1", port=int(sys.argv[1]), http_port=int(sys.argv[2]),
                             reset=True, data_dir=sys.argv[3]))
@@ -2870,8 +3024,14 @@ class DuoRun:
         self.http_port = free_port()
         if self.cfg.get("gen3_rand"):
             os.makedirs(BUILD, exist_ok=True)
+        data_parent = BUILD if self.cfg.get("gen3_rand") else None
+        if self.cfg.get("gen3_rand") and os.environ.get("SLINK_STATE_DIR"):
+            data_parent = Path(os.environ["SLINK_STATE_DIR"]).resolve()
+            if not data_parent.is_relative_to(Path(REPO).resolve()):
+                raise RuntimeError("randomized lane SLINK_STATE_DIR must be private to this worktree")
+            data_parent.mkdir(parents=True, exist_ok=True)
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_",
-                                         dir=BUILD if self.cfg.get("gen3_rand") else None)
+                                         dir=data_parent)
         # This run's lane: the stub, the config copy, the SaveRAM directory and the window
         # position are keyed by it (the `lane` property below). --lane names a lane for a wrapper
         # that wants stable names ("pure-a", "lane3"); the port is the default.
@@ -3617,6 +3777,8 @@ class DuoRun:
         self.emu_by_inst[inst] = p
         self._launch_times[inst] = time.time()
         print(f"[duo] launched {inst} phase={phase} seed={seed}")
+        if self.cfg.get("gen3_rand"):
+            self._pydec_note(f"RAND_PROCESS side={inst} phase={phase} pid={p.pid}")
         return p
 
     def terminate_instance(self, inst):
@@ -3652,7 +3814,7 @@ class DuoRun:
             print(f"[duo] timing {phase} {elapsed:.1f}s", flush=True)
 
     def start_instances(self):
-        if self.scenario == "admit_randomized_frlg":
+        if self.scenario in GEN3_RAND_ADMISSION:
             return self._start_gen3_rand_admission()
         if self.is_gen3_battery:
             for inst in ("a", "b"):
@@ -7198,6 +7360,21 @@ class DuoRun:
 
     orchestrate_faint_cmd_clean_gen3 = orchestrate_faint_cmd_gen3
 
+    # ── NAT-LEGS (S-8, S-9, S-11): link the leg's subject (server staging), GO; nothing else is
+    # injected -- the stimulus is A's own native play (scenario_gen3_{evolve,npc_trade,poison_faint}).
+    def orchestrate_evolve_gen3(self):
+        self._gen3_prelude(link_slot=0)
+        self._gen3_area_control()     # the wild KO's no_catch must not dead-zone route_1 mid-leg
+        self.go(self._gen3_linked_lines())
+
+    def orchestrate_npc_trade_gen3(self):
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+
+    def orchestrate_poison_faint_gen3(self):
+        self._gen3_prelude(link_slot=0)
+        self.go(self._gen3_linked_lines())
+
     def orchestrate_linked_faint_active_gen3(self):
         """The in-battle path, mechanism P+H (owner rulings 15-18). Link the two ACTIVE leads; B
         parks on its action menu with the linked mon out (READY_ACTIVE: a wild battle, or Rick
@@ -7422,50 +7599,89 @@ class DuoRun:
         pins = rom_pins(REPO)
         for side in ("a", "b"):
             title = self.gcfg["sides"][side][0]
-            label = "FireRed" if title == "firered" else "LeafGreen"
-            path = source / f"{label}_allowed.gba"
+            if self.scenario == "link_gen3_rand":
+                fixture = self._gen3_fixture_bytes(side)
+                balls = gen3_ball_count(fixture, title)
+                if balls != 20:
+                    raise RuntimeError(f"{side}: R4-LINK SYNTH fixture must have 20 Poke Balls, got {balls}")
+                self._pydec_note(f"RAND_SYNTH_FIXTURE {side} file={self._gen3_fixture_path(side)} "
+                                 f"sha256={hashlib.sha256(fixture).hexdigest()} PokeBalls={balls} "
+                                 "change=quantity_and_section_checksum_only")
+            label = {"firered": "FireRed", "leafgreen": "LeafGreen", "emerald": "Emerald"}[title]
+            suffix = "_b" if title == "emerald" and side == "b" else ""
+            path = source / f"{label}_allowed{suffix}.gba"
             if not path.is_file():
                 raise RuntimeError(f"BLOCKED: randomized ROM absent: {path}")
             raw = path.read_bytes()
-            code = b"BPRE" if title == "firered" else b"BPGE"
+            code = {"firered": b"BPRE", "leafgreen": b"BPGE", "emerald": b"BPEE"}[title]
             if raw[0xAC:0xB0] != code or hashlib.sha1(raw).hexdigest() == pins[title]:
                 raise RuntimeError(f"randomized input is wrong-title or clean: {path}")
+            if gen3_rand_site_problems(raw, title):
+                raise RuntimeError(f"randomized input changes engine sites: {path}")
             facts = gen3_rand_rom_facts(raw, title)
             dest = stage / f"{side}_{title}.gba"
             dest.write_bytes(raw)
             self._rand_inputs[side] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
             self._rand_facts[side] = facts
             self._pydec_note(f"RAND_INPUT {side} SYNTH=clean-derived-save title={title} "
-                             f"sha1={facts['sha1']} fingerprint={facts['payload']['fingerprint']}")
+                             f"sha1={facts['sha1']} transport_sha1={facts['payload']['fingerprint']} "
+                             f"content_fingerprint={facts['content_fingerprint']}")
         if self._rand_facts["a"]["payload"]["fingerprint"] == self._rand_facts["b"]["payload"]["fingerprint"]:
             raise RuntimeError("randomized pair has identical fingerprints; swap control invalid")
-        title = self._rand_inputs["b"]["title"]
-        clean = next((base / STAGED[title] for base in (Path(REPO), *Path(REPO).parents)
-                      if (base / STAGED[title]).is_file()), None)
-        if clean is None:
-            raise RuntimeError(f"BLOCKED: pinned clean {title} ROM absent for mixed-kind control")
-        raw = clean.read_bytes()
-        if hashlib.sha1(raw).hexdigest() != pins[title]:
-            raise RuntimeError(f"present-but-wrong clean {title} SHA-1")
-        clean_dest = stage / f"clean_{title}.gba"
-        clean_dest.write_bytes(raw)
-        self._rand_inputs["clean_b"] = {"title": title, "clean": True,
-                                         "rom": clean_dest.relative_to(REPO).as_posix()}
-        self._rand_facts["clean_b"] = gen3_rand_rom_facts(raw, title)
+        for side in ("a", "b"):
+            title = self._rand_inputs[side]["title"]
+            clean = next((base / STAGED[title] for base in (Path(REPO), *Path(REPO).parents)
+                          if (base / STAGED[title]).is_file()), None)
+            if clean is None:
+                raise RuntimeError(f"BLOCKED: pinned clean {title} ROM absent for clean-kind controls")
+            raw = clean.read_bytes()
+            if hashlib.sha1(raw).hexdigest() != pins[title]:
+                raise RuntimeError(f"present-but-wrong clean {title} SHA-1")
+            clean_dest = stage / f"clean_{title}.gba"
+            clean_dest.write_bytes(raw)
+            self._rand_inputs[f"clean_{side}"] = {"title": title, "clean": True,
+                                                 "rom": clean_dest.relative_to(REPO).as_posix()}
+            self._rand_facts[f"clean_{side}"] = gen3_rand_rom_facts(raw, title)
+            if side == "a" and self.scenario in GEN3_RAND_ADMISSION:
+                # SYNTH 32(b): one unused trailing padding byte changes the ROM hash, while
+                # every shipped table and every engine/site anchor stays byte-identical.
+                if raw[-1] != 255:
+                    raise RuntimeError("clean-equivalent control needs trailing 0xFF padding")
+                equivalent = raw[:-1] + b"\xFE"
+                dest = stage / f"equivalent_{title}.gba"
+                dest.write_bytes(equivalent)
+                self._rand_inputs["equivalent_a"] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
+                self._rand_facts["equivalent_a"] = gen3_rand_rom_facts(equivalent, title)
+                if self._rand_facts["equivalent_a"]["payload"] != self._rand_facts["clean_a"]["payload"]:
+                    raise RuntimeError("32(b) control changed shipped table bytes")
+                label = {"firered": "FireRed", "leafgreen": "LeafGreen", "emerald": "Emerald"}[title]
+                widest = source / f"{label}_widest.gba"
+                if not widest.is_file():
+                    raise RuntimeError(f"BLOCKED: rule-changed control absent: {widest}")
+                forbidden = widest.read_bytes()
+                dest = stage / f"forbidden_{title}.gba"
+                dest.write_bytes(forbidden)
+                self._rand_inputs["forbidden_a"] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
+                self._rand_facts["forbidden_a"] = gen3_rand_rom_facts(forbidden, title)
+                if self._rand_facts["forbidden_a"]["tables"]["evolutions"] == self._rand_facts["clean_a"]["tables"]["evolutions"]:
+                    raise RuntimeError("rule-changed control has no changed evolution table")
+                for control in (equivalent, forbidden):
+                    if gen3_rand_site_problems(control, title):
+                        raise RuntimeError("control changes engine sites, so cannot isolate table admission")
+                self._pydec_note(f"RAND_32B_INPUT equivalent_sha1={hashlib.sha1(equivalent).hexdigest()} "
+                                 f"clean_sha1={pins[title]} SYNTH=one_unused_tail_byte tables_identical=true "
+                                 f"forbidden_sha1={hashlib.sha1(forbidden).hexdigest()}")
         self._rand_current = {side: self._rand_inputs[side] for side in ("a", "b")}
-        contract = {"players": {side: {"rom_sha1": self._rand_facts[side]["sha1"],
-                     "fingerprint": self._rand_facts[side]["payload"]["fingerprint"]}
-                     for side in ("a", "b")}}
-        Path(self.data_dir, "rom_contract.json").write_text(json.dumps(contract), encoding="utf-8")
+        Path(self.data_dir, "rom_contract.json").write_text(json.dumps(gen3_rand_contract(self._rand_facts)), encoding="utf-8")
 
     def _observe_gen3_rand_admission(self, phase):
-        sides = ("a", "b") if phase == "pair" else ("a",) if phase == "wrong_rom" else ("b",)
+        sides = GEN3_RAND_PHASES[phase]
 
         def ready():
             status = self._status() or {}
             players = status.get("players") or {}
             if not all(players.get(side, {}).get("admission") == (
-                    "admitted" if phase == "pair" else "rejected") for side in sides):
+                    "admitted" if phase in ("pair", "equivalent_pair") else "rejected") for side in sides):
                 return None
             if phase == "pair" and not all(players[side].get("admission_reason") ==
                                              "cartridge matches the contract" for side in sides):
@@ -7517,6 +7733,7 @@ class DuoRun:
         # Rejected slots have never been accepted, so stale adopted state cannot
         # hide a rejection. Both controls use real cartridge launches, no forged hello.
         self._clear_attempt_artifacts()
+        self._start_gen3_rand_rule_controls()
         self._rand_current["a"] = self._rand_inputs["b"]
         self.launch_instance("a", phase="wrong_rom")
         self._observe_gen3_rand_admission("wrong_rom")
@@ -7535,11 +7752,38 @@ class DuoRun:
         self._expected_exit.discard("b")
         self.launch_instance("b")
 
+    def _start_gen3_rand_rule_controls(self):
+        """Physical rule refusal and 32(b), on a run with no accepted identity yet."""
+        self._rand_current["a"] = self._rand_inputs["forbidden_a"]
+        self.launch_instance("a", phase="rules_changed")
+        self._observe_gen3_rand_admission("rules_changed")
+        self._finish_gen3_rand_negative("a", "rules_changed")
+        Path(self.data_dir, "rom_contract.json").unlink()
+        for side, source, phase in (("a", "equivalent_a", "equivalent"), ("b", "clean_b", "clean_partner")):
+            self._rand_current[side] = self._rand_inputs[source]
+            self._expected_exit.discard(side)
+            self.launch_instance(side, phase=phase)
+        self._observe_gen3_rand_admission("equivalent_pair")
+        self._finish_gen3_rand_negative("a", "equivalent_a")
+        self._finish_gen3_rand_negative("b", "equivalent_b")
+        # A clean committed run cannot then accept the genuinely randomized pair. Keep its
+        # evidence and start a new private server, rather than changing a run's identity.
+        self.server.terminate()
+        self.server.wait(timeout=15)
+        self.data_dir = tempfile.mkdtemp(prefix="randomized_pair_", dir=self.data_dir)
+        Path(self.data_dir, "rom_contract.json").write_text(json.dumps(gen3_rand_contract(self._rand_facts)), encoding="utf-8")
+        self._expected_exit.clear()
+        self._rand_current = {side: self._rand_inputs[side] for side in ("a", "b")}
+        self.start_server()
+
     def orchestrate_admit_randomized_frlg(self):
         self._gen3_prelude()
         self._observe_gen3_rand_admission("pair")
         self._live_complete[self.scenario] = True
         self.go()
+
+    def orchestrate_admit_randomized_emerald(self):
+        self.orchestrate_admit_randomized_frlg()
 
     def orchestrate_link_gen3_rand(self):
         self._gen3_prelude()
@@ -7551,9 +7795,10 @@ class DuoRun:
     def orchestrate_trainer_panel_gen3_rand(self):
         self._gen3_prelude()
         evidence = self._observe_gen3_rand_admission("pair")
-        retail = json.loads(Path(REPO, "data/games/gen3_frlge/frlg_trainers.json").read_text())["trainers"]
+        retail = gen3_rand_retail(self._gen3_title("a"))
+        area = "route_102" if self.game == "gen3_emerald" else "viridian_forest"
         probes = evidence["status"].get("gen3_rand_probe") or {}
-        problems = gen3_rand_panel_problems(probes, self._rand_facts, retail)
+        problems = gen3_rand_panel_problems(probes, self._rand_facts, retail, expected_area=area)
         if problems:
             raise RuntimeError("; ".join(problems))
         self._live_complete[self.scenario] = True
@@ -7579,13 +7824,23 @@ class DuoRun:
             problems += gen3_rand_admission_problems(phase, **self._rand_evidence[phase], facts=self._rand_facts)
             side, path = self._rand_negative_saves[phase]
             problems += gen3_rand_saved_problems(path.read_bytes(), self._gen3_fixture_bytes(side), unchanged_bytes=True)
+        for phase in ("rules_changed", "equivalent_pair"):
+            if phase not in self._rand_evidence:
+                raise RuntimeError(f"ruling 32 live phase absent: {phase}")
+            problems += gen3_rand_admission_problems(phase, **self._rand_evidence[phase], facts=self._rand_facts)
+        for phase in ("rules_changed", "equivalent_a", "equivalent_b"):
+            if phase not in self._rand_negative_saves:
+                raise RuntimeError(f"ruling 32 passive flash proof absent: {phase}")
+            side, path = self._rand_negative_saves[phase]
+            problems += gen3_rand_saved_problems(path.read_bytes(), self._gen3_fixture_bytes(side), unchanged_bytes=True)
         self._gen3_flush_boundary()
         for side in ("a", "b"):
             if "RAND_PASSIVE writes=0" not in results[side]:
                 problems.append(f"{side}: final admission client did not remain passive")
             problems += gen3_rand_saved_problems(self._gen3_rand_fresh_flushed(side), self._gen3_fixture_bytes(side),
                                                  unchanged_bytes=True)
-        self._gen3_raise(problems, "rand pair admitted; actual other-player ROM and mixed-kind ROM refused; flash unchanged")
+        self._gen3_raise(problems, "rand pair admitted; other-player/mixed-kind/rule-changed ROMs refused; "
+                                  "32(b) declared-rand clean-equivalent pair effective=clean; flash unchanged")
 
     def assert_link_gen3_rand_saved(self, results):
         self._check_gen3_rand_pair()
@@ -7596,9 +7851,10 @@ class DuoRun:
 
     def assert_trainer_panel_gen3_rand_saved(self, results):
         self._check_gen3_rand_pair()
-        retail = json.loads(Path(REPO, "data/games/gen3_frlge/frlg_trainers.json").read_text())["trainers"]
+        retail = gen3_rand_retail(self._gen3_title("a"))
+        area = "route_102" if self.game == "gen3_emerald" else "viridian_forest"
         probes = self._rand_evidence["pair"]["status"].get("gen3_rand_probe") or {}
-        problems = gen3_rand_panel_problems(probes, self._rand_facts, retail)
+        problems = gen3_rand_panel_problems(probes, self._rand_facts, retail, expected_area=area)
         self._gen3_flush_boundary()
         for side in ("a", "b"):
             problems += gen3_rand_saved_problems(self._gen3_flushed(side), self._gen3_fixture_bytes(side))
@@ -7878,6 +8134,132 @@ class DuoRun:
         self._gen3_raise(self._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, results),
                          "faint_cmd_clean_gen3: ROM provenance confirmed (a=companion, b=clean, both by hash)")
         self.assert_faint_cmd_gen3_saved(results)
+
+    # ── NAT-LEGS oracles: the engine signal (the driver's SIGNAL tee), what the client sent, what
+    # the SERVER persisted, and A's saved battery against its SYNTH fixture.
+    def _gen3_nat_saved_party(self, inst):
+        party, boxes = self._gen3_saved(inst)
+        f_party, f_boxes = self._gen3_fixture_saved(inst)
+        problems = [] if boxes == f_boxes else [f"{inst}: the saved boxes differ from the fixture's"]
+        return party, f_party, problems
+
+    def assert_evolve_gen3_saved(self, results):
+        """S-8: the evolution scene's species store fired (SIGNAL evolve_species_store), no key
+        changed, the server's linked half now reads WARTORTLE (8) from A's tick, and A saved the
+        same key as a Lv16 WARTORTLE with the rest of the party untouched."""
+        self._gen3_flush_boundary()
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        row = self._gen3_one_link("alive")
+        half = {h.get("key"): h for h in (row.get("a") or {}, row.get("b") or {})}
+        problems = [] if (half.get(ka) or {}).get("species") == 8 else [
+            f"server: A's linked half {half.get(ka)} is not species 8 (WARTORTLE)"]
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=[r"(?m)^SIGNAL evolve_species_store ", rf"(?m)^EVOLVED {re.escape(ka)} species=8 level=16"],
+            forbidden=[r"(?m)^TX key_change "],
+            # the evolution runs INSIDE the battle's end (battle_main.c TryEvolvePokemon), so the
+            # pinned battle_end completion site follows it (live: 4310 < 4589)
+            ordered=[(r"(?m)^SIGNAL battle_begin ", r"(?m)^SIGNAL evolve_species_store "),
+                     (r"(?m)^SIGNAL evolve_species_store ", r"(?m)^EVOLVED ")])
+        party, f_party, more = self._gen3_nat_saved_party("a")
+        problems += more
+        keys = [gen3_key(m) for m in party]
+        if keys != [gen3_key(m) for m in f_party]:
+            problems.append(f"a: saved party keys {keys} are not the fixture's")
+        elif (party[0]["species"], party[0]["level"]) != (8, 16):
+            problems.append(f"a: saved slot 0 is species {party[0]['species']} Lv{party[0]['level']}, not WARTORTLE Lv16")
+        self._gen3_raise(problems, f"evolve: {ka} evolved to WARTORTLE Lv16 under the same key; "
+                                   f"links.json half species=8 (partner {kb} unchanged)")
+
+    # card NAT-LEGS-3 (Emerald parity): each game's npc_trade_gen3 target trades away a fixed mon
+    # for a fixed one, so the resulting key/species are game facts, not FR/LG constants. FR/LG:
+    # Reyley's Route 2 house, ABRA -> MR. MIME (pret pokefirered ingame_trades.h: personality
+    # 0x9CAE, OT id 1985 -> key 00009CAE:000007C1, species 122). Emerald: RustboroCity_House1's
+    # trader, a player Ralts -> his SEEDOT (pret pokeemerald c65e93f2 src/data/trade.h
+    # INGAME_TRADE_SEEDOT: personality 0x84, otId 38726 -> key 00000084:00009746, species 298).
+    NPC_TRADE_FACTS = {
+        "gen3_emerald": {"new_key": "00000084:00009746", "species": 298},
+    }
+    NPC_TRADE_DEFAULT = {"new_key": "00009CAE:000007C1", "species": 122}
+
+    def assert_npc_trade_gen3_saved(self, results):
+        """S-9: TradeMons fired (SIGNAL trade_begin -> trade_done) and THEN the client emitted
+        key_change reason npc_trade for the game's fixed NPC trade (NPC_TRADE_FACTS /
+        NPC_TRADE_DEFAULT); A saved the received mon in slot 1. Card NAT-LEGS-3: this cut carries
+        both the box-census stamp (lua/gen3/client.lua pc_boxes_generation) and the key_change
+        retry (lua/core/session.lua RETRYABLE_REJECTIONS), so the migration now LANDS -- either
+        accepted on the first try, or refused once for a RETRYABLE reason and resent after a fresh
+        census. Both paths are asserted explicitly (not just recorded), and so is the final
+        links.json: A's half moves to the NEW key, still alive, B unchanged."""
+        self._gen3_flush_boundary()
+        ka = self._link_keys["a"]
+        facts = self.NPC_TRADE_FACTS.get(self.game, self.NPC_TRADE_DEFAULT)
+        new, species = facts["new_key"], facts["species"]
+        kc = rf'(?m)^TX key_change - .*"new_key":"{new}".*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"'
+        problems = gen3_receipt_problems(
+            "a", results["a"], required=[r"(?m)^SIGNAL trade_begin ", r"(?m)^SIGNAL trade_done ", kc],
+            ordered=[(r"(?m)^SIGNAL trade_begin ", r"(?m)^SIGNAL trade_done "),
+                     (r"(?m)^SIGNAL trade_done ", kc)])
+        party, f_party, more = self._gen3_nat_saved_party("a")
+        problems += more
+        keys = [gen3_key(m) for m in party]
+        if keys != [gen3_key(f_party[0]), new] or party[1]["species"] != species:
+            problems.append(f"a: saved party {keys}, expected [{gen3_key(f_party[0])}, {new}] with species {species}")
+        # the reply sequence after the FIRST TX key_change: either an immediate ack (the generic
+        # RX logger in duo_gen3_main.lua prints "RX key_change_ack" with no key= field), or exactly
+        # one RETRYABLE refusal ("RX key_change_rejected") followed by exactly one resend of the
+        # SAME key_change and then the ack. Anything else is a problem, not a recorded curiosity.
+        tail = (results["a"] or "").split("TX key_change", 1)[-1]
+        seq = re.findall(r"(?m)^(?:RX key_change_(?:ack|rejected)|TX key_change - .*)$", tail)
+        settle = next((i for i, ln in enumerate(seq) if ln.startswith("RX key_change_ack")), None)
+        if settle is None:
+            problems.append(f"a: key_change never acked; observed reply sequence {seq}")
+        else:
+            pre = seq[:settle]
+            if pre and (len(pre) != 2 or not pre[0].startswith("RX key_change_rejected")
+                        or new not in pre[1] or ka not in pre[1]):
+                problems.append(f"a: expected an immediate ack, or ONE refusal + ONE resend of the "
+                                f"same key_change before the ack; observed {seq[:settle + 1]}")
+        reply = seq[:settle + 1] if settle is not None else seq
+        rows = [(e.get("status"), (e.get("a") or {}).get("key"), (e.get("b") or {}).get("key"))
+                for e in self._links_json()]
+        kb = self._link_keys["b"]
+        expected_rows = [("alive", new, kb)]
+        if rows != expected_rows:
+            problems.append(f"a: server links.json is {rows}, expected {expected_rows} "
+                            f"(the migrated npc_trade key_change should leave the pair alive under "
+                            f"A's NEW key, B unchanged)")
+        self._gen3_raise(problems, f"npc_trade: {ka} -> {new} key_change npc_trade emitted after "
+                                   f"trade_done; reply sequence {reply}; links.json {rows}")
+
+    def assert_poison_faint_gen3_saved(self, results):
+        """S-11 + the Soul Link rule: the field poison step's site fired (SIGNAL poison_faint), THEN
+        A sent faint for its linked lead; the server killed the pair; B's partner went to HP 0
+        through an OVERWORLD-armed write after its force_faint; both memorials saved. No
+        whiteout (the Pidgey stayed up), and A got no force_faint."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("memorial")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        box = self._gen3_memorial_box()
+        problems = []
+        for inst, key in (("a", ka), ("b", kb)):
+            problems += gen3_memorial_problems(inst, self._gen3_saved(inst), self._gen3_fixture_saved(inst),
+                                               key, box, rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                               battled=(inst == "a"))
+        problems += gen3_receipt_problems(
+            "a", results["a"],
+            required=[r"(?m)^SIGNAL poison_faint ", gen3_tx("faint", ka), gen3_rx("memorialize", ka),
+                      gen3_tx("memorialize_done", ka)],
+            forbidden=[r"(?m)^RX force_faint ", r"(?m)^TX whiteout ", r"(?m)^SIGNAL whiteout "],
+            ordered=[(r"(?m)^SIGNAL poison_faint ", gen3_tx("faint", ka))])
+        forced = rf"(?m)^FORCED_HP0 {re.escape(kb)} .*in_battle=0"
+        problems += gen3_receipt_problems(
+            "b", results["b"],
+            required=[gen3_rx("force_faint", kb), forced, gen3_tx("memorialize_done", kb)],
+            ordered=[(gen3_rx("force_faint", kb), r"(?m)^\[client\] \[SLink-gen3\] write overworld "),
+                     (r"(?m)^\[client\] \[SLink-gen3\] write overworld ", forced),
+                     (forced, gen3_tx("memorialize_done", kb))])
+        self._gen3_raise(problems, f"poison_faint: {ka} fainted from field poison, {kb} force-fainted "
+                                   f"at the overworld checkpoint; both saved in box {box + 1}")
 
     def assert_linked_faint_active_gen3_saved(self, results):
         """W-2 on FRLG/RR, the in-battle path under mechanism P+H. A: the engine's faint site
