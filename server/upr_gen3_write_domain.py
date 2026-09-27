@@ -66,10 +66,8 @@ def domains_for_spec(spec: dict) -> set[str]:
         on |= {"wild", "obedience_evo_code"}        # setEncounters -> attemptObedienceEvolutionPatches
     if g("wild_held_items"):
         on.add("wild_held_items")
-    if g("wild_min_catch_rate", 0):
-        on.add("catch_rate")
-        if g("wild_min_catch_rate") == 5:
-            on.add("guaranteed_catch")               # enableGuaranteedPokemonCatching
+    if g("wild_min_catch_rate", 0):                  # randomizeCatchRates: tier 5 ONLY patches the
+        on.add("guaranteed_catch" if g("wild_min_catch_rate") == 5 else "catch_rate")   # ball odds
     if changed("starters"):
         on |= {"starters", "obedience_evo_code"}
     if changed("statics") or g("static_levels", 0):
@@ -87,7 +85,11 @@ def domains_for_spec(spec: dict) -> set[str]:
     if changed("tm_compat") or g("tm_sanity"):
         on.add("tm_compat")
     if changed("tutors"):
-        on |= {"tutors", "free_space"}
+        on.add("tutors")
+        if changed("tms"):
+            # setMoveTutorMoves writes its texts only for sites preprocessMaps located, and the
+            # maps are first walked by setTMMoves (Randomizer: TMs, then tutors, then the rest)
+            on.add("tutor_text")
     if changed("tutor_compat") or g("tutor_sanity"):
         on.add("tutor_compat")
     if changed("trades"):
@@ -141,8 +143,8 @@ def _inside(merged, off: int) -> bool:
     return i >= 0 and off < ends[i]
 
 
-def load_model(path: Path = MODEL_PATH) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+def load_model(path: Path | None = None) -> dict:
+    return json.loads(Path(path or MODEL_PATH).read_text(encoding="utf-8"))
 
 
 def changed_offsets(clean: bytes, out: bytes, chunk: int = 4096) -> list[int]:
@@ -156,10 +158,28 @@ def changed_offsets(clean: bytes, out: bytes, chunk: int = 4096) -> list[int]:
     return changed
 
 
+# RomFunctions.freeSpaceFinder returns (first run of amount+5 0xFF at/after FreeSpace + 5) & ~3,
+# and every text the fork allocates ends in its 0xFF terminator, so each allocation starts 2..5
+# bytes past the previous one's terminator (the first one at FreeSpace + 4). Between two changed
+# bytes of the packed region there are therefore at most 5 unchanged bytes.
+PACKED_MAX_GAP = 5
+
+
+def _packed_end(changed: list[int], start: int, end: int) -> int:
+    """End of the run of `changed` bytes packed from `start` (gaps of <= PACKED_MAX_GAP)."""
+    pos = start
+    for c in changed[bisect.bisect_left(changed, start):bisect.bisect_left(changed, end)]:
+        if c - pos > PACKED_MAX_GAP:
+            break
+        pos = c + 1
+    return pos
+
+
 def audit(title: str, clean: bytes, out: bytes, enabled: set[str], model: dict | None = None) -> dict:
-    """Every changed byte must lie in a domain of `enabled`. A stray byte is NAMED by every
-    domain of the model that holds it (a disabled allowed setting or a forbidden table), or
-    'unattributed'."""
+    """Every changed byte must lie in a domain of `enabled`. A `packed` component (free space)
+    admits only the changes packed from its start the way freeSpaceFinder allocates. A stray
+    byte is NAMED by every domain of the model that holds it (a disabled allowed setting, a
+    forbidden table, or '<domain> (not packed ...)'), or 'unattributed'."""
     model = model or load_model()
     entry = model["titles"][title]
     if hashlib.sha1(clean).hexdigest() != entry["clean_sha1"]:
@@ -168,12 +188,23 @@ def audit(title: str, clean: bytes, out: bytes, enabled: set[str], model: dict |
     unknown = set(enabled) - set(domains)
     if unknown:
         raise ValueError(f"unknown write domain(s): {sorted(unknown)}")
-    allowed = _merge(s for d in enabled for s in _ranges(domains[d]))
     changed = changed_offsets(clean, out)
-    stray = [i for i in changed if not _inside(allowed, i)]
+    comps = [(d, c) for d in enabled for c in domains[d]]
+    fixed = _merge(s for _d, c in comps if not c.get("packed") for s in _ranges([c]))
+    loose = [i for i in changed if not _inside(fixed, i)]    # what the packed regions must explain
+    spans, unpacked = list(zip(*fixed, strict=True)), {}
+    for d, c in comps:
+        if c.get("packed"):
+            for s, e in _ranges([c]):
+                p = _packed_end(loose, s, e)
+                spans.append((s, p))
+                unpacked[f"{d} (not packed from 0x{s:06X})"] = [(p, e)]
+    allowed = _merge(spans)
+    stray = [i for i in loose if not _inside(allowed, i)]
     named: dict[str, int] = {}
     if stray:
         each = {d: _merge(_ranges(c)) for d, c in domains.items() if d not in enabled}
+        each.update((k, _merge(v)) for k, v in unpacked.items())
         for i in stray:
             hit = [d for d, m in each.items() if _inside(m, i)] or ["unattributed"]
             for d in hit:
@@ -182,15 +213,26 @@ def audit(title: str, clean: bytes, out: bytes, enabled: set[str], model: dict |
             "enabled": sorted(enabled)}
 
 
-def check_output(source_rom: str, output_rom: str, spec: dict) -> dict:
+def check_output(source_rom: str, output_rom: str, spec: dict, jar: str | None = None) -> dict:
     """The pipeline's one call (FR/LG branch of prepare_pair): refuse the output if the fork
-    wrote a byte outside the domains its spec enables."""
-    from server.upr_pipeline import UprPipelineError, gen3_title
-    clean, out = Path(source_rom).read_bytes(), Path(output_rom).read_bytes()
-    title = gen3_title(clean)
+    wrote a byte outside the domains its spec enables, or if `jar` (the jar that made it;
+    default: find_upr_jar()) is not the jar the model was built from."""
+    from server.upr_pipeline import UprPipelineError, find_upr_jar, gen3_title, jar_sha256
     try:
-        r = audit(title, clean, out, domains_for_spec(spec))
-    except (ValueError, KeyError) as exc:
+        clean, out = Path(source_rom).read_bytes(), Path(output_rom).read_bytes()
+        model = load_model()
+        title = gen3_title(clean)
+        if title not in model["titles"]:
+            raise ValueError(f"it covers only {sorted(model['titles'])} (1.0, USA), and {source_rom} "
+                             f"is not one of them")
+        jar = jar or find_upr_jar()
+        digest = jar_sha256(jar) if jar else None
+        if digest != model["jar_sha256"]:
+            raise ValueError(f"the randomizer jar {jar} (sha256 {digest}) is not the jar the write "
+                             f"domains were modelled from ({model['jar_sha256']}); regenerate "
+                             f"with `python -m server.upr_gen3_write_domain --write`")
+        r = audit(title, clean, out, domains_for_spec(spec), model)
+    except (OSError, ValueError, KeyError) as exc:
         raise UprPipelineError(f"write-domain audit could not run: {exc}") from exc
     if r["stray"]:
         shown = ", ".join(f"0x{i:06X}" for i in r["stray"][:8])
@@ -226,6 +268,15 @@ BASE_STATS_SIZE = 28
 SLOTS = (12, 5, 5, 10)                                 # grass, surf, rock smash, fishing
 SPECIES_DEOXYS_DEX = 386
 STARTER_SITE_OFFSETS = (0, 5, 515, 520, 461, 466)      # frlgStarter{2,3}Offset + RepeatOffset
+# Gen3Constants.setupAllowedItems: ItemList(Gen3Items.oldSeaMap = 376) minus machBike+30,
+# oaksParcel+28, the unknown ranges/singles and hm01+8; tm01+50 are the TMs (isTM). setFieldTMs
+# rewrites a site whose CURRENT item isTM, setRegularFieldItems one that isAllowed && !isTM;
+# any other site (a key item, an HM) is never written (the Gen 1 audit's field_items rule).
+FIELD_TMS = frozenset(range(TM_ITEM_OFFSET, TM_ITEM_OFFSET + 50))
+FIELD_REGULAR = frozenset(range(1, 377)) - FIELD_TMS - (
+    set(range(259, 289)) | set(range(349, 377)) | set(range(52, 63)) | set(range(87, 93))
+    | set(range(99, 103)) | set(range(112, 121)) | set(range(176, 179)) | set(range(226, 254))
+    | {347, 348, 72, 82, 105, 267} | set(range(339, 347)))
 
 
 def _int(v: str) -> int:
@@ -415,10 +466,10 @@ def _syms(title: str) -> list[tuple[int, int, str]]:
     return sorted(out)
 
 
-def _comp(what: str, source: str, spans) -> dict:
+def _comp(what: str, source: str, spans, **extra) -> dict:
     starts, ends = _merge(spans)
     return {"what": what, "source": source,
-            "ranges": " ".join(f"0x{s:06X}+{e - s}" for s, e in zip(starts, ends, strict=True))}
+            "ranges": " ".join(f"0x{s:06X}+{e - s}" for s, e in zip(starts, ends, strict=True)), **extra}
 
 
 def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> dict:
@@ -460,9 +511,10 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
               f"jar {e['tweaks']['RoamingPokemonTweak']}.ips; {H}.getRoamers", tweak("RoamingPokemonTweak")),
         _comp("ability 2 := ability 1 where ability 2 is 0 (saveBasicPokeStats, every record)",
               f"{H}.saveBasicPokeStats bsAbility2Offset=23",
-              [(r + 23, r + 24) for r in records if clean[r + 23] == 0]),
+              [(r + 23, r + 24) for r in records if clean[r + 23] == 0], id="ability2_normalisation"),
         _comp("Deoxys record stats := the hardcoded forme stats (load/savePokemonStats)",
-              f"{ini_src} DeoxysStatPrefix; {H}.loadPokemonStats/savePokemonStats", site(stats + deoxys * BASE_STATS_SIZE, 6)),
+              f"{ini_src} DeoxysStatPrefix; {H}.loadPokemonStats/savePokemonStats", site(stats + deoxys * BASE_STATS_SIZE, 6),
+              id="deoxys_stats"),
     ]
     wild = []
     start = rom.ptr(rom.find_all(WILD_PTR_PREFIX)[0] + 12)
@@ -544,16 +596,29 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
     D["tm_compat"] = [_comp("TM/HM compatibility table", f"{ini_src} PokemonTMHMCompat; {H}.setTMHMCompatibility",
                             site(V["PokemonTMHMCompat"], 8 * (count + 1)))]
     mtd, mtn = V["MoveTutorData"], V["MoveTutorMoves"]
-    D["tutors"] = [
-        _comp("tutor move words", f"{ini_src} MoveTutorData; {H}.setMoveTutorMoves", site(mtd, 2 * mtn)),
-        _comp("tutor text pointer sites (+copies within the search radius)", f"{ini_src} MoveTutorText[]; {H}.setMoveTutorMoves",
-              _text_sites(rom, tmmt, tutor=True))]
-    D["tutor_compat"] = [_comp("tutor compatibility table", f"{H}.setMoveTutorCompatibility (MoveTutorData + 2*MoveTutorMoves)",
-                               site(mtd + 2 * mtn, ((mtn + 7) // 8) * (count + 1)))]
+    D["tutors"] = [_comp("tutor move words", f"{ini_src} MoveTutorData; {H}.setMoveTutorMoves", site(mtd, 2 * mtn))]
+    D["tutor_text"] = [_comp("tutor text pointer sites (+copies within the search radius), written only once setTMMoves "
+                             "has walked the maps", f"{ini_src} MoveTutorText[]; {H}.preprocessMaps/setMoveTutorMoves",
+                             _text_sites(rom, tmmt, tutor=True))]
+    # MoveTutorCompatibility is no INI key for FR/LG: loadROMInfo derives it as MoveTutorData +
+    # 2*MoveTutorMoves. Cross-check it against the table the game itself reads: the literal pool
+    # of pret's CanLearnTutorMove (the pointer the fork's BPRE hack path reads at 0x120C30).
+    tc = mtd + 2 * mtn
+    syms = _syms(title)
+    lit, size = next((a, n) for a, n, name in syms if name == "CanLearnTutorMove")
+    assert any(rom.ptr(lit + i) == tc for i in range(0, size, 4)), "CanLearnTutorMove does not read the derived table"
+    D["tutor_compat"] = [_comp("tutor compatibility table (sTutorLearnsets)",
+                               f"{H}.loadROMInfo MoveTutorCompatibility = MoveTutorData + 2*MoveTutorMoves (no INI key), "
+                               f"= the table pret CanLearnTutorMove reads; {H}.setMoveTutorCompatibility",
+                               site(tc, ((mtn + 7) // 8) * (count + 1)))]
     D["trades"] = [_comp("in-game trade table", f"{ini_src} TradeTableOffset/TradeTableSize; {H}.setIngameTrades",
                          site(V["TradeTableOffset"], 60 * V["TradeTableSize"]))]
-    D["field_items"] = [_comp("item-ball script and hidden-item words", f"{H}.preprocessMaps/setRegularFieldItems/setFieldTMs",
-                              [(i, i + 2) for i in items])]
+    D["field_items"] = [
+        _comp("item-ball script and hidden-item words holding a TM", f"{H}.preprocessMaps/setFieldTMs (isTM)",
+              [(i, i + 2) for i in items if rom.u16(i) in FIELD_TMS], id="field_tms"),
+        _comp("item-ball script and hidden-item words holding an allowed non-TM item",
+              f"{H}.preprocessMaps/setRegularFieldItems (isAllowed && !isTM)",
+              [(i, i + 2) for i in items if rom.u16(i) in FIELD_REGULAR], id="field_regular")]
     shops = []
     for i, off in enumerate(A["ShopItemOffsets"]):
         if i in A["SkipShops"]:
@@ -587,14 +652,12 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
                                + (site(aide + len(OAK_AIDE_PREFIX) // 2 + 1, 1) if aide > 0 else []))]
     D["species_names"] = [_comp("species name table", f"{H}.savePokemonStats writeFixedLengthString (applyCamelCaseNames)",
                                 site(names + 11, 11 * count))]
-    syms = _syms(title)
     fs = V["FreeSpace"]
     gap_end = min(a for a, _s, _n in syms if a >= fs)
-    tail = max(a + s for a, s, _n in syms)
-    free = [(fs, gap_end), (tail, len(clean))]
-    assert all(clean[s:e] == b"\xff" * (e - s) for s, e in free), "free space is not 0xFF in the clean ROM"
-    D["free_space"] = [_comp("0xFF free space the fork repoints text/scripts into",
-                             f"{ini_src} FreeSpace up to the first pret symbol, and after the last one", free)]
+    assert clean[fs:gap_end] == b"\xff" * (gap_end - fs), "free space is not 0xFF in the clean ROM"
+    D["free_space"] = [_comp("0xFF free space the fork repoints text/scripts into, packed from FreeSpace",
+                             f"{ini_src} FreeSpace up to the first pret symbol; every RomFunctions.freeSpaceFinder call "
+                             f"scans forward from FreeSpace (audit: packed, PACKED_MAX_GAP)", [(fs, gap_end)], packed=True)]
     # naming only: the rule-bearing tables the family forbids
     learn = V["PokemonMovesets"]
     lsets = [(learn, learn + 4 * (count + 1))]
@@ -648,5 +711,5 @@ def dumps(model: dict) -> str:
 if __name__ == "__main__":
     import sys
     if "--write" in sys.argv:
-        MODEL_PATH.write_text(dumps(build_model()), encoding="utf-8")
+        MODEL_PATH.write_text(dumps(build_model()), encoding="utf-8", newline="\n")
         print(f"wrote {MODEL_PATH}")
