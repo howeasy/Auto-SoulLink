@@ -365,6 +365,49 @@ SCENARIOS = {
     "save_then_write_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",),
                              "target": "town", "frames": 2000000, "no_save": ("b",),
                              "oracle": "assert_save_then_write_gen3_saved"},
+    # NAT-LEGS: the three FR/LG natural legs (docs/gen3_requirements.md S-8, S-9, S-11). A boots
+    # a DISCLOSED O-33 SYNTH edit of a party fixture (tools/gen3_fixtures.py make-frlg-synth,
+    # {firered,leafgreen}_party_<kind>_synth.sav); only the behaviour under test runs natively,
+    # on ordinary buttons. explicit_only: never part of `--scenario all`. `games` names the
+    # gen3_frlg family only (scenario_applies resolves `gen3_lgfr` through its family, same as
+    # every other shared FR/LG row, e.g. center_controls_gen3): `--game gen3_lgfr` runs these
+    # too (card NAT-LEGS-2, LG-as-A), each game's own `sides` mapping formatting `target` against
+    # the right title's fixture stem. The three scenario_gen3_*.lua modules are title-agnostic
+    # (ctx.player, not ROM version). LeafGreen's Route 2 trade (INGAME_TRADE_MR_MIME) has no
+    # FIRERED/LEAFGREEN #if branch in pret pokefirered (src/data/ingame_trades.h, pin c75f3523):
+    # ABRA -> MR. MIME is the same on both titles, so the LG-as-A trade leg reuses MR_MIME/ABRA
+    # unchanged.
+    #   evolve       a Route 1 wild win levels the Lv15 Squirtle to 16 and evolves it; the tick
+    #                publishes WARTORTLE to the linked half (S-8 evolve_species_store)
+    #   npc_trade    Reyley's Route 2 house trade (ABRA -> MR. MIME); the client emits key_change
+    #                reason npc_trade (S-9 trade_done); the migration is judged (NAT-LEGS-3)
+    #   poison_faint a field poison step faints the 1-HP lead; B's linked mon is force-fainted
+    #                (S-11 poison_faint + the Soul Link rule)
+    "evolve_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",), "explicit_only": True,
+                    "target": {"a": "evolve_synth", "b": "town"}, "frames": 2000000, "no_save": ("b",),
+                    "oracle": "assert_evolve_gen3_saved"},
+    # NAT-LEGS-3: gen3_emerald joins as its own E<->E leg (RustboroCity_House1's INGAME_TRADE_SEEDOT,
+    # emerald_trade.sav; target_by_game overrides the FR/LG "_synth" fixture stem with Emerald's own
+    # naming, tests/fixtures/gen3/README.md). The oracle's NPC_TRADE_FACTS carries the per-game
+    # new_key/species; poison_faint_gen3's oracle is already game-agnostic (no species assertion).
+    # orchestrate_npc_trade_gen3 links party slot 1 on BOTH halves (_gen3_prelude(link_slot=1)):
+    # FR/LG's "town" fixture already carries 2 party mons (unlike Emerald's, which is a single
+    # Mudkip for that kind), so B's Emerald side boots "pc" instead (Mudkip + Poochyena, slot 1
+    # present) -- the same B-idle fixture boxsync_gen3/whiteout_gen3 already use for gen3_emerald.
+    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+                       "target": {"a": "trade_synth", "b": "town"},
+                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
+                       "frames": 2000000, "no_save": ("b",),
+                       "oracle": "assert_npc_trade_gen3_saved"},
+    # B's Emerald side boots "pc" (Mudkip + Poochyena), not "town" (single Mudkip): B's own linked
+    # lead is force_faint'ed by the server (Soul Link), and a single-mon party would white out
+    # (RESULT: FAIL "no memorialize_done" -- the game overs before the memorial can send), exactly
+    # the reason linked_faint_active_gen3 already substitutes "pc" for gen3_emerald.
+    "poison_faint_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+                          "target": {"a": "poison_synth", "b": "town"},
+                          "target_by_game": {"gen3_emerald": {"a": "poison", "b": "pc"}},
+                          "frames": 2000000,
+                          "oracle": "assert_poison_faint_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
     # gen3_emerald hunts "catch" (20 balls), not "battle" (5): deadzone_gen3 burned all three RNG
@@ -7198,6 +7241,21 @@ class DuoRun:
 
     orchestrate_faint_cmd_clean_gen3 = orchestrate_faint_cmd_gen3
 
+    # ── NAT-LEGS (S-8, S-9, S-11): link the leg's subject (server staging), GO; nothing else is
+    # injected -- the stimulus is A's own native play (scenario_gen3_{evolve,npc_trade,poison_faint}).
+    def orchestrate_evolve_gen3(self):
+        self._gen3_prelude(link_slot=0)
+        self._gen3_area_control()     # the wild KO's no_catch must not dead-zone route_1 mid-leg
+        self.go(self._gen3_linked_lines())
+
+    def orchestrate_npc_trade_gen3(self):
+        self._gen3_prelude(link_slot=1)
+        self.go(self._gen3_linked_lines())
+
+    def orchestrate_poison_faint_gen3(self):
+        self._gen3_prelude(link_slot=0)
+        self.go(self._gen3_linked_lines())
+
     def orchestrate_linked_faint_active_gen3(self):
         """The in-battle path, mechanism P+H (owner rulings 15-18). Link the two ACTIVE leads; B
         parks on its action menu with the linked mon out (READY_ACTIVE: a wild battle, or Rick
@@ -7878,6 +7936,132 @@ class DuoRun:
         self._gen3_raise(self._gen3_rom_provenance_problems({"a": "companion", "b": "clean"}, results),
                          "faint_cmd_clean_gen3: ROM provenance confirmed (a=companion, b=clean, both by hash)")
         self.assert_faint_cmd_gen3_saved(results)
+
+    # ── NAT-LEGS oracles: the engine signal (the driver's SIGNAL tee), what the client sent, what
+    # the SERVER persisted, and A's saved battery against its SYNTH fixture.
+    def _gen3_nat_saved_party(self, inst):
+        party, boxes = self._gen3_saved(inst)
+        f_party, f_boxes = self._gen3_fixture_saved(inst)
+        problems = [] if boxes == f_boxes else [f"{inst}: the saved boxes differ from the fixture's"]
+        return party, f_party, problems
+
+    def assert_evolve_gen3_saved(self, results):
+        """S-8: the evolution scene's species store fired (SIGNAL evolve_species_store), no key
+        changed, the server's linked half now reads WARTORTLE (8) from A's tick, and A saved the
+        same key as a Lv16 WARTORTLE with the rest of the party untouched."""
+        self._gen3_flush_boundary()
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        row = self._gen3_one_link("alive")
+        half = {h.get("key"): h for h in (row.get("a") or {}, row.get("b") or {})}
+        problems = [] if (half.get(ka) or {}).get("species") == 8 else [
+            f"server: A's linked half {half.get(ka)} is not species 8 (WARTORTLE)"]
+        problems += gen3_receipt_problems(
+            "a", results["a"], required=[r"(?m)^SIGNAL evolve_species_store ", rf"(?m)^EVOLVED {re.escape(ka)} species=8 level=16"],
+            forbidden=[r"(?m)^TX key_change "],
+            # the evolution runs INSIDE the battle's end (battle_main.c TryEvolvePokemon), so the
+            # pinned battle_end completion site follows it (live: 4310 < 4589)
+            ordered=[(r"(?m)^SIGNAL battle_begin ", r"(?m)^SIGNAL evolve_species_store "),
+                     (r"(?m)^SIGNAL evolve_species_store ", r"(?m)^EVOLVED ")])
+        party, f_party, more = self._gen3_nat_saved_party("a")
+        problems += more
+        keys = [gen3_key(m) for m in party]
+        if keys != [gen3_key(m) for m in f_party]:
+            problems.append(f"a: saved party keys {keys} are not the fixture's")
+        elif (party[0]["species"], party[0]["level"]) != (8, 16):
+            problems.append(f"a: saved slot 0 is species {party[0]['species']} Lv{party[0]['level']}, not WARTORTLE Lv16")
+        self._gen3_raise(problems, f"evolve: {ka} evolved to WARTORTLE Lv16 under the same key; "
+                                   f"links.json half species=8 (partner {kb} unchanged)")
+
+    # card NAT-LEGS-3 (Emerald parity): each game's npc_trade_gen3 target trades away a fixed mon
+    # for a fixed one, so the resulting key/species are game facts, not FR/LG constants. FR/LG:
+    # Reyley's Route 2 house, ABRA -> MR. MIME (pret pokefirered ingame_trades.h: personality
+    # 0x9CAE, OT id 1985 -> key 00009CAE:000007C1, species 122). Emerald: RustboroCity_House1's
+    # trader, a player Ralts -> his SEEDOT (pret pokeemerald c65e93f2 src/data/trade.h
+    # INGAME_TRADE_SEEDOT: personality 0x84, otId 38726 -> key 00000084:00009746, species 298).
+    NPC_TRADE_FACTS = {
+        "gen3_emerald": {"new_key": "00000084:00009746", "species": 298},
+    }
+    NPC_TRADE_DEFAULT = {"new_key": "00009CAE:000007C1", "species": 122}
+
+    def assert_npc_trade_gen3_saved(self, results):
+        """S-9: TradeMons fired (SIGNAL trade_begin -> trade_done) and THEN the client emitted
+        key_change reason npc_trade for the game's fixed NPC trade (NPC_TRADE_FACTS /
+        NPC_TRADE_DEFAULT); A saved the received mon in slot 1. Card NAT-LEGS-3: this cut carries
+        both the box-census stamp (lua/gen3/client.lua pc_boxes_generation) and the key_change
+        retry (lua/core/session.lua RETRYABLE_REJECTIONS), so the migration now LANDS -- either
+        accepted on the first try, or refused once for a RETRYABLE reason and resent after a fresh
+        census. Both paths are asserted explicitly (not just recorded), and so is the final
+        links.json: A's half moves to the NEW key, still alive, B unchanged."""
+        self._gen3_flush_boundary()
+        ka = self._link_keys["a"]
+        facts = self.NPC_TRADE_FACTS.get(self.game, self.NPC_TRADE_DEFAULT)
+        new, species = facts["new_key"], facts["species"]
+        kc = rf'(?m)^TX key_change - .*"new_key":"{new}".*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"'
+        problems = gen3_receipt_problems(
+            "a", results["a"], required=[r"(?m)^SIGNAL trade_begin ", r"(?m)^SIGNAL trade_done ", kc],
+            ordered=[(r"(?m)^SIGNAL trade_begin ", r"(?m)^SIGNAL trade_done "),
+                     (r"(?m)^SIGNAL trade_done ", kc)])
+        party, f_party, more = self._gen3_nat_saved_party("a")
+        problems += more
+        keys = [gen3_key(m) for m in party]
+        if keys != [gen3_key(f_party[0]), new] or party[1]["species"] != species:
+            problems.append(f"a: saved party {keys}, expected [{gen3_key(f_party[0])}, {new}] with species {species}")
+        # the reply sequence after the FIRST TX key_change: either an immediate ack (the generic
+        # RX logger in duo_gen3_main.lua prints "RX key_change_ack" with no key= field), or exactly
+        # one RETRYABLE refusal ("RX key_change_rejected") followed by exactly one resend of the
+        # SAME key_change and then the ack. Anything else is a problem, not a recorded curiosity.
+        tail = (results["a"] or "").split("TX key_change", 1)[-1]
+        seq = re.findall(r"(?m)^(?:RX key_change_(?:ack|rejected)|TX key_change - .*)$", tail)
+        settle = next((i for i, ln in enumerate(seq) if ln.startswith("RX key_change_ack")), None)
+        if settle is None:
+            problems.append(f"a: key_change never acked; observed reply sequence {seq}")
+        else:
+            pre = seq[:settle]
+            if pre and (len(pre) != 2 or not pre[0].startswith("RX key_change_rejected")
+                        or new not in pre[1] or ka not in pre[1]):
+                problems.append(f"a: expected an immediate ack, or ONE refusal + ONE resend of the "
+                                f"same key_change before the ack; observed {seq[:settle + 1]}")
+        reply = seq[:settle + 1] if settle is not None else seq
+        rows = [(e.get("status"), (e.get("a") or {}).get("key"), (e.get("b") or {}).get("key"))
+                for e in self._links_json()]
+        kb = self._link_keys["b"]
+        expected_rows = [("alive", new, kb)]
+        if rows != expected_rows:
+            problems.append(f"a: server links.json is {rows}, expected {expected_rows} "
+                            f"(the migrated npc_trade key_change should leave the pair alive under "
+                            f"A's NEW key, B unchanged)")
+        self._gen3_raise(problems, f"npc_trade: {ka} -> {new} key_change npc_trade emitted after "
+                                   f"trade_done; reply sequence {reply}; links.json {rows}")
+
+    def assert_poison_faint_gen3_saved(self, results):
+        """S-11 + the Soul Link rule: the field poison step's site fired (SIGNAL poison_faint), THEN
+        A sent faint for its linked lead; the server killed the pair; B's partner went to HP 0
+        through an OVERWORLD-armed write after its force_faint; both memorials saved. No
+        whiteout (the Pidgey stayed up), and A got no force_faint."""
+        self._gen3_flush_boundary()
+        self._gen3_one_link("memorial")
+        ka, kb = self._link_keys["a"], self._link_keys["b"]
+        box = self._gen3_memorial_box()
+        problems = []
+        for inst, key in (("a", ka), ("b", kb)):
+            problems += gen3_memorial_problems(inst, self._gen3_saved(inst), self._gen3_fixture_saved(inst),
+                                               key, box, rr=self._gen3_rr, limits=self._gen3_limits(inst),
+                                               battled=(inst == "a"))
+        problems += gen3_receipt_problems(
+            "a", results["a"],
+            required=[r"(?m)^SIGNAL poison_faint ", gen3_tx("faint", ka), gen3_rx("memorialize", ka),
+                      gen3_tx("memorialize_done", ka)],
+            forbidden=[r"(?m)^RX force_faint ", r"(?m)^TX whiteout ", r"(?m)^SIGNAL whiteout "],
+            ordered=[(r"(?m)^SIGNAL poison_faint ", gen3_tx("faint", ka))])
+        forced = rf"(?m)^FORCED_HP0 {re.escape(kb)} .*in_battle=0"
+        problems += gen3_receipt_problems(
+            "b", results["b"],
+            required=[gen3_rx("force_faint", kb), forced, gen3_tx("memorialize_done", kb)],
+            ordered=[(gen3_rx("force_faint", kb), r"(?m)^\[client\] \[SLink-gen3\] write overworld "),
+                     (r"(?m)^\[client\] \[SLink-gen3\] write overworld ", forced),
+                     (forced, gen3_tx("memorialize_done", kb))])
+        self._gen3_raise(problems, f"poison_faint: {ka} fainted from field poison, {kb} force-fainted "
+                                   f"at the overworld checkpoint; both saved in box {box + 1}")
 
     def assert_linked_faint_active_gen3_saved(self, results):
         """W-2 on FRLG/RR, the in-battle path under mechanism P+H. A: the engine's faint site

@@ -1,0 +1,52 @@
+# gen3_final_cut row=poison_faint_gen3_fr_as_a item=NAT-LEGS cut=a2fa1f944a06f4adf6b6d97c0ad793b032deba6c
+# lane=C:/slink-wt/g3-nat
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario poison_faint_gen3   (cwd=C:/slink-wt/g3-nat)
+# env: SLINK_STATE_DIR=C:/slink-wt/g3-nat/.lane/st_poison_a2fa1f94
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc fixture:a=1f50a04f0c812451f8b159582f4e03a7d1a1ce07de7ebd016a25fdd67a928833 fixture:b=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2
+# SYNTH (O-33, disclosed): A's party[0] Squirtle set to 1 HP + POISON on the Viridian town tile (make-frlg-synth --kind poison over firered_party_town.sav); the server link is inject_link staging. Native: walking Up/Down until the field poison step faints it, the fainted message, B's force_faint at the overworld checkpoint
+# SLINK_STATE_DIR=C:/slink-wt/g3-nat/.lane/st_poison_a2fa1f94 (private)
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T20:48:35 cpu=46% emuhawk=0 python=5
+start_utc=2026-09-27T00:48:35Z tracked_clean_before=True
+
+========== scenario: poison_faint_gen3 ==========
+[duo] poison_faint_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=1f50a04f0c812451f8b159582f4e03a7d1a1ce07de7ebd016a25fdd67a928833 b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65 source=a2fa1f944a06f4adf6b6d97c0ad793b032deba6c
+[duo] server up: tcp=50827 http=50828 data=C:\Users\howar\AppData\Local\Temp\slink_duo_poison_faint_gen3_hj03j5ju
+[duo] timing server 0.6s
+[duo] cleared 7 stale artifact(s) for poison_faint_gen3: e2e_poison_faint_gen3_a_1_witness.bin, e2e_poison_faint_gen3_a_attempt1_result.txt, e2e_poison_faint_gen3_a_result.txt, e2e_poison_faint_gen3_b_1_witness.bin, e2e_poison_faint_gen3_b_attempt1_result.txt, e2e_poison_faint_gen3_b_result.txt, e2e_poison_faint_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 2D356A90:99DE0D8A <-> BC73F9B0:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 5.3s
+[duo] timing results 4.2s
+[duo] RESULT_LINE a: RESULT: PASS (memorialized 2D356A90:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (memorialized BC73F9B0:1C600D89)
+[duo] SAVE_WITNESS_SHA256 inst=a site=f71f5ea8c0d04411e9f25013c85916ed2a5d62fefa1d8dd2384e05430f1c0d2c file=f71f5ea8c0d04411e9f25013c85916ed2a5d62fefa1d8dd2384e05430f1c0d2c match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=686f69d800518793e2f2b98dee6f3722aca0810e1e55eee067fa7901c8309932 file=686f69d800518793e2f2b98dee6f3722aca0810e1e55eee067fa7901c8309932 match=true saves=1 counter=3->4 rtc=normalized
+[duo] poison_faint: 2D356A90:99DE0D8A fainted from field poison, BC73F9B0:1C600D89 force-fainted at the overworld checkpoint; both saved in box 14
+[duo] MARKER a: SIGNAL poison_faint frame=929 address=0x080A0666
+[duo] MARKER a: TX faint 2D356A90:99DE0D8A {"area_id":"viridian_city","event":"faint","key":"2D356A90:99DE0D8A","player":"a","seq":17}
+[duo] MARKER a: RX memorialize key=2D356A90:99DE0D8A
+[duo] MARKER a: TX memorialize_done 2D356A90:99DE0D8A {"box":13,"event":"memorialize_done","key":"2D356A90:99DE0D8A","player":"a","seq":22}
+[duo] MARKER b: RX force_faint key=BC73F9B0:1C600D89
+[duo] MARKER b: FORCED_HP0 BC73F9B0:1C600D89 frame=963 in_battle=0 battler=0
+[duo] MARKER b: TX memorialize_done BC73F9B0:1C600D89 {"box":13,"event":"memorialize_done","key":"BC73F9B0:1C600D89","player":"b","seq":19}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x020242DA +2 frame 963
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] poison_faint_gen3: a=PASS b=PASS
+
+========== summary ==========
+  poison_faint_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-27T00:48:45Z tracked_clean_after=True classification=pass

@@ -38,3 +38,27 @@ def require(path, rev=head):
     if got != PIN:
         pytest.fail(f"{path} is at {got}, not the pinned pret/pokefirered {PIN} (data/gen3_sources.lock.json)")
     return path
+
+
+# ── pret/pokeemerald: the same pattern, its own env var and pin ──────────────────────────────
+# The pin is the commit data/gen3/pret/pokeemerald.sym was published from (docs/gen3_emerald/PLAN.md E0).
+EMERALD_PIN = json.loads((ROOT / "data/gen3/pret/pokeemerald_provenance.json")
+                         .read_text(encoding="utf-8"))["origin"]["source_commit"]
+EMERALD_REL = ".cache/pret/pokeemerald"
+
+
+def find_emerald(root=ROOT, env=os.environ):
+    if env.get("SLINK_PRET_EMERALD_SRC"):
+        return Path(env["SLINK_PRET_EMERALD_SRC"])
+    return next((d / EMERALD_REL for d in (root, *root.parents) if (d / EMERALD_REL).exists()), root / EMERALD_REL)
+
+
+def require_emerald(path, rev=head):
+    """`path` if it is a pret/pokeemerald clone at the pin; skip when absent, fail when wrong."""
+    if not path.exists():
+        pytest.skip(f"pret pokeemerald not cloned ({path}); set SLINK_PRET_EMERALD_SRC or clone it at {EMERALD_PIN[:8]}")
+    got = rev(path)
+    if got != EMERALD_PIN:
+        pytest.fail(f"{path} is at {got}, not the pinned pret/pokeemerald {EMERALD_PIN} "
+                    "(data/gen3/pret/pokeemerald_provenance.json)")
+    return path
