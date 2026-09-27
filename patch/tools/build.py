@@ -106,10 +106,21 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
     """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
     if trade_candidate and mode != "trade":
         raise ValueError("trade candidate requires trade composition")
-    if title != "firered":
-        raise ValueError("arena probe currently has only FireRed source bindings")
+    if title != "firered" and not (title == "leafgreen" and trade_candidate):
+        raise ValueError("diagnostics require FireRed; private candidates support FireRed/LeafGreen")
     clean = Path(rom_path).read_bytes()
     spec = validate_base(title, clean)
+    carrier_bindings, sound_bindings, rival_bindings = {}, {}, {}
+    if trade_candidate:
+        for key in ("CARRIER_SPAWN", "CARRIER_REMOVE", "CARRIER_CHOOSE"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            carrier_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
+        for key in ("SOUND_SE", "SOUND_FANFARE"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            sound_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
+        for key in ("RIVAL_START", "RIVAL_DUMMY"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            rival_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
     validate_detour(clean, spec["HEAP_INIT"], bytes.fromhex(spec["HEAP_INIT_BYTES"]))
     if mode in ("census", "trade"):
         validate_detour(clean, spec["FRAME_ENTRY"], bytes.fromhex(spec["FRAME_BYTES"]))
@@ -200,8 +211,11 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
                "target": title, "mode": mode, "ready": spec["READY"],
                "production": False,
                "arena_static_check": "skipped: heap clamp unqualified",
-               "capabilities": 3 if trade_candidate else 0,
+               "capabilities": 23 if trade_candidate else 0,
                "panel_detours": panel_detours, "panel_tables": panel_tables,
+               "carrier_bindings": carrier_bindings,
+               "sound_bindings": sound_bindings,
+               "rival_bindings": rival_bindings,
                "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
                "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),
                "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],
@@ -320,7 +334,7 @@ def main():
     ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
     ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
     ap.add_argument("--trade-candidate", action="store_true",
-                    help="private FR ABI v2 trade ROM, capability enabled; READY/UPS publication unchanged")
+                    help="private FR/LG ABI v2 candidate ROM; READY/UPS publication unchanged")
     ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census", "trade"),
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)

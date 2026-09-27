@@ -170,4 +170,3 @@ static void show_info_entry(void)
     ScheduleBgCopyTilemapToVram(0);
     NP_RUNTIME[0]=2;   /* this open is handled (step 3's frame-hook path reads the difference) */
 }
-

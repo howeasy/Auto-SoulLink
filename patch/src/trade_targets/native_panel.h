@@ -70,7 +70,7 @@ __attribute__((used)) void slink_panel_normal_menu(void)
 }
 static int np_safe(void *unused)
 {
-    return nt_safe(unused) && (NT_STATE->phase==TP_IDLE || NT_STATE->phase==TP_DONE)
+    return !nc_owned() && nt_safe(unused) && (NT_STATE->phase==TP_IDLE || NT_STATE->phase==TP_DONE)
         && np_task_available();
 }
 static int np_start(void *unused,const SlinkInfoV2 *snapshot)

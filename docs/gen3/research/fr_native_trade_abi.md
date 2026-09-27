@@ -293,3 +293,329 @@ readback was rejected by the oracle. No screenshot supplied game facts. Each
 opening used a distinct host request seq (1, then 2); this does not qualify
 same-request reopening or automatic pagination. No server/T3 adapter, duo,
 save-persistence or general heap safety claim follows from this run. READY is 0.
+
+## T2-FR-CARRIER candidate extension
+
+This adds the accepted RR carrier's existing opcodes and Pokemon-Center NPC
+entry to the private FR composition. It does not add a new offer UX, a raw swap,
+or another save path. The server still supplies menu/offer text and drives the
+selection protocol; native PREPARE consent/save and SCENE remain as above.
+The carrier's native UI/NPC lifecycle requires its own live check; the earlier
+panel receipt does not qualify it. READY remains 0, candidate capability mask 3.
+
+| Opcode | Staging/args | Native completion result[0] |
+| --- | --- | --- |
+| 13 ARM_PEER_INTERACT | args[0]=object-event slot 0..15, args[1]=armed | Immediate ACK; armed resets PI_COUNT to zero as RR does |
+| 17 SHOW_MENU | bounded EOS text in first 256 bytes of TEXT | 1=YES, 0=NO/B |
+| 20 CHOOSE_PARTY_MON | no payload | slot 0..5, 7=cancel |
+| 22 SHOW_CHOICES | MENU: count 1..8 followed by EOS strings, total <=112 bytes; args[0]=with-text; optional TEXT | option index, 127=cancel |
+
+13 requires CONTROL.session_epoch to match the nonzero mailbox epoch, and an
+active target when arming. The target local ID and map identity are captured,
+so a reused object-event slot cannot silently become a new interaction target.
+17/20/22 validate before taking field/script ownership, copy their text/options
+into private storage, set BUSY and clear opcode, and ACK only after native UI
+return to the safe field. Their result meanings match RR. New requests cannot
+replace an owned UI; a changed epoch/sequence cannot inherit its completion.
+Host timeout/poison handling remains required; native ownership is not discarded
+on a guessed UI deadline. Native allocation failure resumes/releases the field
+script before reporting failure. These are carrier results, never trade witnesses.
+
+For the presence-OFF PC-trade entry (PC means Pokemon Center here), stage
+CONTROL.session_epoch at arena+0x800 and TN_ENABLE=1 at arena+0x808. The producer
+spawns the same Oak graphic (0x47), wandering behavior (2), local ID 0xF1 and
+current-coordinate tile (10,9), with range +/-1. The 19 eligible Center 1F map
+IDs are checked against pinned vanilla FR `data/maps/map_groups.json`.
+Presence mode switching remains the host's responsibility; setting TN_ENABLE=0
+removes only this producer's still-matching NPC. Opcode 13 can arm an existing
+peer object, but does not implement the separate ghost spawn/movement opcodes.
+
+Read native PI_COUNT as **u32** at arena+0x804. It increments only for a newly
+pressed A while idle, facing the bound active object on the safe field; the
+producer consumes that A before the engine attempts a missing map-template
+script. It does not display an unsolicited local message. The client converts
+the counter edge into the existing server trade_request flow. No epoch/config
+match, unsafe field, moving player, stale slot or active trade/UI means no edge.
+
+Native calls use vanilla FR `SpawnSpecialObjectEventParameterized` 0x0805E830,
+`RemoveObjectEvent` 0x0805E4B4, and `ChoosePartyMonByMenuType` 0x081283A8 with
+type 3. The builder validates their entry bytes and emits `carrier_bindings`.
+Unlike RR's internal-removal binding, FR's RemoveObjectEvent clears active
+itself. The chooser preserves the engine's return/fade/script-resume callback.
+The owned NPC is removed before party chooser/trade-scene takeover and can
+respawn on safe field return. Private carrier state is arena+0xB40, NPC state
++0xCE0, runtime scratch +0x960; compile-time bounds keep panel and phone storage
+separate. Consumers must retain HARNESS_ONLY selection labeling until the native
+carrier is bound and independently exercised; enum IDs alone prove nothing.
+
+### FR carrier live receipt, 2026-09-27
+
+Producer `684ab4c8ec09c22c46f93c3c670e35026c6e895e` passed one single-cart
+normal-input run from the existing FR town save, walking into Viridian Center.
+Receipt: `patch/build/carrier-live-20260927/carrier_receipt.json`; native log,
+script, config, input save and flushed native SaveRAM are alongside it.
+Candidate ROM SHA256:
+`ddc2803b270f1ecbd42aefb2a1bb45308b122fee2131943625b71ab5fc74056d`.
+The private directory was `.cache/c`, with SLINK_STATE_DIR at its `states`
+child. Only owned EmuHawk PID 45424 ran; it exited and the lane was released.
+
+The native Center NPC produced counter edges 0->1 and 1->2 from ordinary facing
+A presses. Replayed server-format `Trade / Say hey` and offer text then drove
+22/20/17 to results 0/0/1. The party chooser entered CB2_InitPartyMenu
+(`0x0811EBD1`). PREPARE consent/pre-save produced the bound witness, exactly one
+native TrySavingData entry, and save counter 4->5; WITHDRAW returned UNCHANGED.
+The B paths returned 127/7/0. Every UI ACK followed safe-field return and owned=0;
+disabling TN removed the NPC. Python decoded the private text/options, party RAM
+and flushed SaveRAM independently: roster/checksums were intact and the save
+counter advanced once. Altered counter/result/epoch/callback/option receipts
+are rejected by the recorded oracle controls.
+
+This qualifies that bounded native carrier sequence only. It used replayed
+server payloads, not a live server/T3 carrier adapter. It did not run SCENE, a
+duo, cold save reload, every Center map, ghost interaction, or explicit opcode-13
+arming (the PC NPC arms itself). No screenshot supplied game facts. The earlier
+HARNESS_ONLY selection seam remains so labeled until replaced and independently
+exercised in T5. READY remains 0.
+
+## FR native sounds candidate extension
+
+Opcodes 19 PLAY_SE and 9 PLAY_FANFARE take a u16 little-endian song ID in
+args[0..1]. Candidate capability mask is now 7 (trade, panel, native sound).
+FR bindings are PlaySE `0x080722CC` and PlayFanfare `0x08071C60`; the builder
+pins both entry byte sequences in `sound_bindings`. The 347-entry native song
+table admits IDs 0..346; larger IDs are refused before an engine call. Source
+and symbol extent (`dummy_song_header - gSongTable`, eight bytes per entry)
+independently establish the bound. Calls require a nonzero session epoch matching
+CONTROL.session_epoch at arena+0x800. The consumer must stage that configuration
+binding alongside its mailbox epoch before posting sound; writing only the
+mailbox epoch is insufficient. A mismatch returns IDENTITY (12) without calling
+either native routine; epoch zero returns CLIENT_TOO_OLD (13). Calls
+refuse while a panel/carrier UI or PREPARE/SCENE owns the native lane.
+
+An OK ACK means the native routine was invoked, not that the requested sound
+was audible or finished. The engine's own PlaySE suppression during quest-log
+playback remains intact. PlayFanfare retains its native fallback to the first
+fanfare for in-range IDs absent from its fanfare list, and requires a free task
+slot. No direct sound-player RAM poke or new game option is introduced.
+
+The existing `native_sounds` client option suppresses posting when false and
+posts opcode 19 when true. The shared Lua option/queue behavior is tested on its
+established RR MODEL fixture; that is not separate FR/T3 client admission or
+physical audio evidence. The initial checkpoint had SOURCE/MODEL/build coverage; the bounded leased
+engine-playback evidence is recorded below. READY stays 0;
+no production patch is published by this extension.
+
+### FR native sound live receipt, 2026-09-27
+
+Epoch-bound producer `4df26e0ebb0200fb006e406e35dcaacf3ee35d14` passed the
+single-cart engine-state check. Receipt:
+`patch/build/sound-live-20260927/sound_receipt.json`, with native log and run/build
+identities alongside. ROM SHA256:
+`dc7841cacc36316ecc24611d3a292e7a25c56a093c1899964aa1c434bfc5d5ae`.
+Only owned PID 11748 ran under private `.cache/s` / `.cache/s/states`; it exited
+and the lane was released.
+
+Hooks witnessed PlaySE(25)->m4aSongNumStart(25) and
+PlayFanfare(257)->m4aSongNumStart(257). Python independently read the ROM song/
+player tables and matched live player/header pairs `03007340/086B5BB0` and
+`03007380/086BCD98`, active track masks and advancing clocks. The fanfare counter
+77->0, task removal and BGM pause 1->0 established native completion/resumption.
+IDs 347/65535, epoch zero, and request epoch 8 against configured epoch 7 were
+refused without extra sound calls (reasons 2/2/13/12). Altered call/header/clock/
+pause/refusal receipts are rejected by the oracle controls.
+
+This is native dispatch/m4a-state evidence, not audible-output, speaker/device,
+or physical FR client-toggle qualification. No screenshots supplied facts.
+The nonzero mismatch check requires CONTROL epoch staging described above;
+the old mailbox-only handshake does not supply that configuration. READY is 0.
+
+## FR Rival Team Swap W1 candidate extension
+
+Opcode 28 retains the RR request shape: args[0]=count 1..6, args[1..2]=trainer
+ID u16 little-endian, and count*100 party-record bytes staged at BLOB. Mailbox
+epoch must be nonzero and match CONTROL.session_epoch. Candidate mask becomes
+23 (trade, panel, sound, rival); no Explode bit is added by this producer.
+
+The native consumption gate is bound to **vanilla FR**:
+
+| Evidence | Required value |
+| --- | --- |
+| gMain.callback2 at `0x030030F4` | CB2_HandleStartBattle `0x08010509` |
+| gBattleMainFunc at `0x03004F84` | BeginBattleIntroDummy `0x080123BD` |
+| gBattleCommunication[0] at `0x02023E82` | less than 15 |
+| gBattleTypeFlags at `0x02022B4C` | TRAINER mask 0x08 set, LINK mask 0x02 clear |
+| gTrainerBattleOpponent_A at `0x020386AE` | requested trainer ID |
+| gMain.inBattle at `0x03003529` | mask 0x02 set |
+
+Source: pinned `battle_main.c:648-716,934-1066` creates the trainer party before
+returning with this callback/state; case 15 invokes InitBattleControllers, whose
+single-player path changes the dummy function and then calls SetBattlePartyIds
+(`battle_controllers.c`). Non-link FR normally passes states 0,1,15: this is a
+short early window, so the existing client pre-announcement/staging discipline
+is still required. RR's callback address is not reused. W2 is not implemented.
+
+All records are copied to aligned private stack storage before validation. The
+native wrapper is explicitly out-of-line so its 600-byte snapshot is released
+before the original game callbacks execute.
+Native GetMonData checks species/checksum-bad-egg state on the copy; eligibility
+uses HP (field 57), SPECIES_OR_EGG (65, egg=412), and IS_EGG (45), matching the
+engine selection predicate. Singles require at least one selectable slot;
+doubles (flag 1) require two distinct selectable slots. A fainted lead with a
+later live slot is valid in W1. The gate is read again before the first enemy
+write. Success replaces gEnemyParty records, zeroes unused slots, then publishes
+gEnemyPartyCount; it never writes gBattleMons or performs a late refresh.
+
+Refusal leaves the enemy party untouched: BAD_ARGS=2 for count/record refusal,
+WINDOW_CLOSED=8 for a closed/mismatched context, SLOTS_UNVIABLE=15 for insufficient
+selectable slots, IDENTITY=12 for a configuration epoch mismatch, and
+CLIENT_TOO_OLD=13 for zero epoch. There is no raw fallback.
+
+The client still owns server session/battle_id equality, queued-payload freshness
+and response correlation from `rival_swap_refresh_window.md`. Native W1+trainer
+matching is not proof of that per-battle request identity. No new battle_id ABI
+field is invented here. The initial extension had SOURCE/MODEL/build evidence;
+the bounded natural trainer-battle check is recorded below. READY stays 0.
+
+### FR Rival W1 live receipt, 2026-09-27
+
+Producer `c7c6bd46675320ea362c3320458e8608264068b4` passed the bounded real-trainer
+check. Receipt: `patch/build/rival-live-20260927/rival_receipt.json`; native log,
+script, config, input save and replacement/late payloads are alongside it.
+ROM SHA256: `421f72aa88f3eda47bbf316cde7a1aac8369aaabae3188987123f1bb7a990007`.
+One owned PID 42860 ran under `.cache/r` / `.cache/r/states`, exited, and the lane
+was released. An earlier driver trial never triggered a battle and is retained
+under `rival-live-20260927-failed-trigger`; the native handler was not exercised
+there. Waiting for a quiet field and completing a normal Right step reached
+Rick102's sight line from the existing FR trainer fixture.
+
+The replayed peer-fixture team deliberately had a fainted lead and live second
+slot. Native dispatch was observed at W1 stage 0 with the exact FR callback,
+dummy function, trainer102 and TRAINER flag. ACK preceded the engine's
+SetBattlePartyIds at stage15; its entry readback exactly matched the replacement
+and zeroed unused records. Native selection chose slot1, and Python independently
+matched BattlePokemon species/HP/level/maxHP/PID/OT to that live second record.
+The late request was consumed at callback `08011101`, main function `08014041`,
+stage1 (still less than15), and refused with reason8. All600 enemy-party bytes
+and count remained unchanged. Altered selection/ACK/window/late-write receipts
+are rejected by oracle controls.
+
+This is a real Rick trainer battle with replayed team data, not a live-server,
+duo, automatic story-rival, battle-finish or save-persistence qualification.
+Only normal inputs triggered/advanced gameplay; writes were confined to the
+owned request/config/staging ABI. No screenshots supplied facts. READY stays 0.
+
+## LeafGreen candidate binding extension
+
+The same producer composition now builds privately for LeafGreen using its own
+`patch/src/trade_targets/leafgreen.h` and linker script. Base identity is BPGE
+revision0, SHA1 `574fa542ffebb14be69902d1d36f1ec0a4afd71e`, as pinned in
+`data/gen3_sources.lock.json`. Payload candidate is `0x08EB0E14`; arena candidate
+is the same computed heap carve-out `0x0201B000`, still unqualified.
+
+`leafgreen_bindings.json` records 75 symbol+offset derivations and five menu-table
+references against the independently hashed `pokeleafgreen.sym`. Shared layout
+constants come from the same locked pret source, not an assumed address delta.
+Fourteen pointer values differ from FR. Examples:
+
+| Binding | FR | LG |
+| --- | --- | --- |
+| RunSaveFailedScreen | `080F5118` | `080F50F0` |
+| RunHelpSystemCallback | `0813B870` | `0813B848` |
+| TrySavingData | `080DA364` | `080DA338` |
+| SaveQuestLogData | `08112450` | `08112428` |
+| ChoosePartyMonByMenuType | `081283A8` | `08128380` |
+| Menu_InitCursor | `0810F7D8` | `0810F7B0` |
+| Start-menu action table | `083A7344` | `083A7324` |
+
+Every byte anchor is read from the exact LG ROM; replayed trade/evolution
+prologues are additionally required to match the audited instruction shape.
+The private builder verifies original detours, call anchors, relocated table
+references, linked entry and FF payload range, and emits its own receipt at
+`patch/build/candidate-leafgreen-trade/receipt.json`. It does not publish UPS.
+FR-only allocator probe modes remain FR-only; permitting an LG private candidate
+does not admit the heap carve-out or inherit FR physical receipts. LG READY=0,
+production=false, capability mask23 for the test composition. The initial native
+LG lifecycle checks were unrun; the bounded receipts follow below.
+
+### LG single-cart live receipts, 2026-09-27
+
+Producer `3583502459778bab4d61635e42cd3ec900112111` passed five sequential private
+LG runs. Aggregate: `patch/build/lg-live-20260927.json`; per-mode records:
+`patch/build/lg-{carrier,panel,sound,rival,trade}-live-20260927/leafgreen_receipt.json`.
+All share candidate SHA256
+`a0e5fe73b888f86abf8d9722703334a3afd1ee5f68d56ed7f8e6ef08eec48db0`.
+Each used a distinct `.cache/lg-<mode>` run/state directory and its LG fixture.
+Owned PIDs 27256/43796/29156/42760/15248 exited; the lane was released for T5.
+
+- Carrier: native NPC counter edges, choices/chooser/offer A/B results, LG chooser
+  callback `0811EBA9`, PREPARE save counter3->4 and unchanged withdrawal; independent
+  text/options/party/SaveRAM decode passed.
+- Panel: normal START/action9, decoded five rows plus PAGE1/1, VRAM/palette and
+  locked-field witnesses, A/B closure. One inherited raw PANEL_SCOPE line says
+  FR; the structured receipt annotates this label and retains the original log.
+  ROM/title/config/symbol identities establish that this was LG.
+- Sound: LG tables selected headers `086B548C` and `086BC674`; native clocks and
+  fanfare task/BGM release passed, as did invalid-ID/unarmed/stale-epoch refusals.
+  No audible-output or physical client-toggle claim.
+- Rival: a real Rick102 battle consumed W1 at stage0, selected the live second
+  slot (Rattata) from the replayed peer fixture with deliberately fainted lead,
+  and refused the late request without changing the enemy party.
+- Trade: the existing single-cart driver used a disclosed full-party/full420-box
+  SYNTH setup derived from the LG town fixture. Native PREPARE/commit/scene/
+  evolution/post-save completed, counter3->5, then a reset without an extra manual
+  SAVE retained Machamp68 / PID13572468 / OT78563412. Independent flash and
+  reloaded-party decoding passed.
+
+The harness translates only symbol-verified addresses (or explicit shared GBA
+palette/VRAM/private-arena locations) and records its translation audit per run.
+LG-specific sound-table oracle controls reject using the FR tables. These are
+bounded native single-cart checks with replayed payloads and the disclosed trade
+setup, not live server/T3 integration, duo, all-scene heap, or production admission.
+No screenshots supplied game facts. READY stays 0; no UPS is published.
+
+## Emerald source and Match Call MODEL checkpoint
+
+This is not an Emerald native composition or admission. The builder still
+rejects Emerald candidate builds and its READY remains0. Source pin:
+`pret/pokeemerald c65e93f20a5275ab03b07d6f6411096a82a60ffd`; exact BPEE revision0
+ROM SHA1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7` was checked. Entry addresses
+and short ROM anchors are recorded in `trade_targets/emerald_lifecycle.json`.
+
+Emerald CallCallbacks at `0800051C` has no FR save/help guards. Its first eight
+bytes include `ldr r4,[pc,#0x1C]`, reading gMain `030022C0` from literal `0800053C`.
+The header explicitly requires replay/relocation and continuation at `08000525`:
+save r4/LR, load the relocated gMain pointer, load callback1 and preserve its CMP
+flags into the original tail. That tail invokes both callbacks. A plain reuse
+of the FR body/guards is not an implementation of this contract.
+
+Native save consent is `SaveGame 0809FF80` and its SaveGameTask publishes result
+1 on success, 0 on cancel/error before resuming the script. Normal post-save
+entry points include SaveMapView `080883C4` and TrySavingData `08153338`; no FR
+quest-log call is assumed. Native integration and lifecycle tests are still open.
+
+For Match Call, `ShowPokenavFieldMessage 08098238` first checks the field message
+owner, expands its text into gStringVar4, creates a completion watcher and calls
+`StartMatchCallFromScript 08196080`. The latter ignores its message argument:
+calling it alone does not stage text. The native task progresses through graphics,
+window creation, slide-in, intro/message, slide-out and cleanup. A native adapter
+must prove visible entry and eventual release, including allocation-failure and
+script unlock paths; timer guesses or task creation alone are insufficient.
+
+`call_producer.h` is a standalone controller tested with engine callbacks, not
+yet connected to that native UI. It accepts the agreed event in args[0] with
+remaining args zero, validates/copies the 36-byte record, publishes coherent
+nonzero-even ARMED/REFUSED before ACK, and marks DELIVERED only from the engine's
+visible signal. COMPLETE retains event/delivered_frame until a subsequent job.
+Name fields require bounded EOS and reject text command bytes F7..FE; missing
+or out-of-range species remain generic-call metadata rather than rejection.
+Native rendering/contact/text parity with the Gen2 phone strings remains open.
+
+The model preserves an open UI's old-epoch record/witness. A fresh request while
+occupied receives prompt CALL_BUSY=16 without replacing the old witness. An
+epoch change drops only pending work that has not entered native UI. Cooldown
+10800 uses the native frame at actual delivery and survives host epoch changes.
+CALL_UNAVAILABLE=17 denotes refusal/unobserved delivery after UI release;
+CALL_COOLDOWN=18 denotes the native gap. Epoch/seq replay with a different event
+is refused as IDENTITY. These are v2 reason names; none changes the trade
+pre-commit refusal allow-list. No Match Call capability is published by this
+MODEL checkpoint.
