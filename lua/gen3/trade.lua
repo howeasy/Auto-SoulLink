@@ -107,6 +107,7 @@ function T.new(d)
         if t.journaled and journal and (not may_commit(t) or t.precommit_proved) then
             journal:precommit_unchanged(t.token,t.journal_epoch)
         end
+        if t.precommit_proved and native.trade_reconciled then native:trade_reconciled(t.token) end
         if native.withdraw_trade then native:withdraw_trade(t.token) end
         if d.completed then d.completed(t, false) end
     end
@@ -155,6 +156,7 @@ function T.new(d)
         if not journal or journal:native_saved(t.token,t.journal_epoch) ~= true then
             return uncertain(t, "durable journal result unavailable")
         end
+        if native.trade_reconciled then native:trade_reconciled(t.token) end
         local fields = {token=t.token, slot=got.slot, new_key=d.key(got), new_species=got.species}
         bucket(retired, t.epoch)[t.token], active = fields, nil
         emit("trade_done", fields, t.epoch)
@@ -198,12 +200,16 @@ function T.new(d)
                 end
             end
             if witness.final_result ~= nil then t.final_result = witness.final_result end
+            if witness.unchanged_proved == true and witness.final_result == "unchanged" and not t.commit_entered then
+                t.precommit_proved = true
+            end
         end
         t.scene_job = native:transfer("scene", {slot=t.slot, token=t.token, old_key=t.old_key, visit=t.visit},
             function(why, result_code, reason)
                 if active ~= t or t.scene_attempt ~= attempt or t.phase ~= "scene" then return end
                 if why == "guard:moved" then return post_scene(t) end
                 if why then
+                    if t.precommit_proved and t.final_result == "unchanged" and not t.commit_entered then return unchanged(t) end
                     local named_refusal = why == "native refused" and token(reason)
                     if named_refusal and precommit_refusals[reason] == true and not t.commit_entered then
                         t.precommit_proved = true
