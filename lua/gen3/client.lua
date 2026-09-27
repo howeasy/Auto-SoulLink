@@ -1058,8 +1058,11 @@ function Client.new(p)
                     trainer_id = b and b.is_trainer and num(b.trainer_id) or nil,
                     enemy_party = enemy_wire(b), ball_count = n, badges = badges() }
         if not st.frozen and not (trade and trade:hide_party()) then f.party = party_wire(party) end
-        if st.boxes_ok and not (trade and trade:hide_party()) then
-            f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), st.box_generation
+        -- the ONE box-generation accessor, the same one hello_fields reads (review F4): the tick
+        -- path can never publish a different verdict than the hello did
+        local gen, gen_ok = box_generation()
+        if gen_ok and not (trade and trade:hide_party()) then
+            f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), gen
         end
         local t = trainer()
         if t then f.trainer_name = t.name end
