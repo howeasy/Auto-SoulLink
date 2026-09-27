@@ -16,11 +16,14 @@ Usage: python patch/tools/build.py [--rom <Radical Red.gba>]
 import argparse
 import glob
 import hashlib
+import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 PATCH = os.path.dirname(HERE)
@@ -28,6 +31,115 @@ BUILD = os.path.join(PATCH, "build")
 DIST = os.path.join(PATCH, "dist")
 SRC = os.path.join(PATCH, "src")
 EXE = ".exe" if os.name == "nt" else ""
+TARGET_NAMES = ("firered", "leafgreen", "emerald", "radical_red")
+
+
+def target_spec(title):
+    """Read the per-title C header shared with the payload, never another target's facts."""
+    if title not in TARGET_NAMES:
+        raise ValueError(f"unknown companion target: {title}")
+    path = Path(SRC) / "trade_targets" / f"{title}.h"
+    fields = {}
+    for key, value in re.findall(r'^#define SLINK_TARGET_(\w+) (.+)$', path.read_text(), re.M):
+        fields[key] = json.loads(value) if value.startswith('"') else int(value.rstrip("uU"), 0)
+    return fields
+
+
+def validate_detour(data, address, expected):
+    offset = address - 0x08000000
+    if offset < 0 or offset + len(expected) > len(data) or data[offset:offset + len(expected)] != expected:
+        raise ValueError(f"detour bytes mismatch at {address:#010x}")
+
+
+def validate_base(title, data):
+    spec = target_spec(title)
+    if (len(data) != spec["ROM_SIZE"] or hashlib.sha1(data).hexdigest() != spec["ROM_SHA1"]
+            or data[0xAC:0xB0] != spec["HEADER"].encode("ascii") or data[0xBC] != 0):
+        raise ValueError(f"base ROM identity mismatch for {title}")
+    validate_detour(data, spec["DETOUR_CANDIDATE"], bytes.fromhex(spec["DETOUR_BYTES"]))
+    return spec
+
+
+def validate_arena(title, start, size):
+    """Static exclusion, NOT physical qualification. Reservation proofs are separate."""
+    if size <= 0 or start < 0x02000000 or start + size > 0x02040000:
+        raise ValueError("arena outside EWRAM")
+    spec = target_spec(title)
+    # FR/LG's linker emits gHeap with size zero in .sym. The reservation is
+    # nevertheless real: pret include/malloc.h:6 and src/main.c:154. A future
+    # carve-out needs explicit ROM mutation + runtime proof; zero symbol size
+    # cannot silently authorize it.
+    if max(start, spec["HEAP_BASE"]) < min(start + size, spec["HEAP_BASE"] + spec["HEAP_SIZE"]):
+        raise ValueError("arena overlap with gHeap reservation (heap clamp not qualified)")
+    if not spec["SYMBOLS"]:
+        raise ValueError("RR has no matching source symbols; its arena needs a binary/physical proof")
+    path = Path(PATCH).parent / "data/gen3/pret" / spec["SYMBOLS"]
+    for line in path.read_text().splitlines():
+        fields = line.split()
+        if len(fields) != 4:
+            continue
+        address, extent = int(fields[0], 16), int(fields[2], 16)
+        if extent and max(start, address) < min(start + size, address + extent):
+            raise ValueError(f"arena overlap with {fields[3]} [{address:#x}, {address + extent:#x})")
+
+
+def require_ready(title):
+    spec = target_spec(title)
+    if not spec["READY"]:
+        raise ValueError(f"{title} ABI v2 not qualified: arena, detour and payload evidence required")
+    validate_arena(title, spec["ARENA_BASE"], spec["ARENA_SIZE"])
+    return spec
+
+
+def thumb_entry_jump(address, destination):
+    """Aligned eight-byte Thumb-1 entry veneer: ldr r3,[pc]; bx r3; target|1.
+
+    Only valid when replacing the whole callee's behavior, not returning into
+    overwritten PC-relative instructions. Caller LR is preserved.
+    """
+    if address & 3 or destination & 1:
+        raise ValueError("entry/destination must be aligned")
+    return bytes.fromhex("004b1847") + (destination | 1).to_bytes(4, "little")
+
+
+def build_arena_probe(title, rom_path, mode):
+    """Private diagnostic ROM only. Never writes dist, UPS or a production beacon."""
+    if title != "firered":
+        raise ValueError("arena probe currently has only FireRed source bindings")
+    clean = Path(rom_path).read_bytes()
+    spec = validate_base(title, clean)
+    validate_detour(clean, spec["HEAP_INIT"], bytes.fromhex(spec["HEAP_INIT_BYTES"]))
+    out = Path(BUILD) / f"arena-{title}-{mode}"
+    out.mkdir(parents=True, exist_ok=True)
+    header = Path(SRC) / "trade_targets" / f"{title}.h"
+    obj, elf, binary = out / "probe.o", out / "probe.elf", out / "probe.bin"
+    run([GCC, *CFLAGS, f"-DSLINK_ARENA_PROBE={1 if mode == 'positive' else 2}",
+         "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
+    run([LD, "-T", str(header.with_suffix(".ld")), "-e", "slink_heap_probe",
+         "--no-warn-rwx-segments", str(obj), "-o", str(elf)])
+    found = [line.split()[0] for line in run([NM, str(elf)]).splitlines()
+             if line.split()[-1:] == ["slink_heap_probe"]]
+    if found != [f"{spec['CODE_CANDIDATE']:08x}"]:
+        raise ValueError("probe entry is not at the verified payload candidate")
+    run([OBJCOPY, "-O", "binary", str(elf), str(binary)])
+    blob = binary.read_bytes()
+    offset = spec["CODE_CANDIDATE"] - ROM_BASE
+    if not blob or len(blob) > 0x14000 or clean[offset:offset + len(blob)] != b"\xff" * len(blob):
+        raise ValueError("probe payload candidate not free/within linker bound")
+    data = bytearray(clean)
+    data[offset:offset + len(blob)] = blob
+    hook = spec["HEAP_INIT"] - ROM_BASE
+    data[hook:hook + 8] = thumb_entry_jump(spec["HEAP_INIT"], spec["CODE_CANDIDATE"])
+    rom = out / "probe.gba"
+    rom.write_bytes(data)
+    receipt = {"status": "UNQUALIFIED_DIAGNOSTIC_ONLY", "target": title, "mode": mode,
+               "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
+               "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),
+               "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],
+               "replacement": data[hook:hook + 8].hex(), "arena_candidate": spec["ARENA_CANDIDATE"],
+               "compiler": run([GCC, "--version"])}
+    (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+    print(f"DIAGNOSTIC ONLY: {rom} (no UPS, no qualification)")
 
 
 def _toolchain_dir():
@@ -133,6 +245,11 @@ def thumb_bl(src, dst):
 def main():
     global BUILD, DIST
     ap = argparse.ArgumentParser()
+    ap.add_argument("--target", choices=TARGET_NAMES, default="radical_red")
+    ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
+    ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
+    ap.add_argument("--arena-probe", choices=("positive", "negative"),
+                    help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")
     ap.add_argument("--no-battle-calc", action="store_true",
@@ -143,6 +260,28 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    if args.describe:
+        print(json.dumps(target_spec(args.target), indent=2))
+        return 0
+    if args.arena_probe:
+        try:
+            build_arena_probe(args.target, args.rom, args.arena_probe)
+        except (ValueError, OSError) as error:
+            ap.error(str(error))
+        return 0
+    if args.target != "radical_red" or args.abi_version == 2:
+        try:
+            require_ready(args.target)
+        except ValueError as error:
+            ap.error(str(error))
+        # This early T2 cut intentionally cannot compile RR addresses into another title.
+        ap.error("ABI v2 target producer not implemented")
+    if args.no_verify_md5:
+        ap.error("base verification bypass is not supported for pinned companion targets")
+    try:
+        validate_base(args.target, Path(args.rom).read_bytes())
+    except (ValueError, OSError) as error:
+        ap.error(str(error))
     committed_ups = os.path.join(DIST, "SLink-RR.ups")
     tmp = tempfile.mkdtemp(prefix="slink-build-") if args.check else None
     if args.check:

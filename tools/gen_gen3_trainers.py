@@ -107,6 +107,7 @@ GAMES = {
         "starters": ("BULBASAUR", "CHARMANDER", "SQUIRTLE"),
         "rematches": ("src/vs_seeker.c", "sRematches[]", r"\{\s*\{([^}]*)\}"),
         "rematch_label": _frlg_rematch,
+        "unused": set(),
     },
     "emerald": {
         "repo": "pret/pokeemerald", "clone": "pokeemerald", "env": "SLINK_PRET_EMERALD_SRC",
@@ -122,6 +123,11 @@ GAMES = {
         "starters": ("TREECKO", "TORCHIC", "MUDKIP"),
         "rematches": ("src/battle_setup.c", "gRematchTable[", r"REMATCH\(([^)]*)\)"),
         "rematch_label": _emerald_rematch,
+        # link-battle save-slot placeholders (RED/LEAF/BRENDAN_PLACEHOLDER/MAY_PLACEHOLDER carry
+        # Charmander/Bulbasaur/Groudon/Kyogre Lv5): no data/maps or data/scripts trainerbattle, nor
+        # any other reference, fights them (verified 2026-09-26 against pret pokeemerald
+        # c65e93f20a5275ab03b07d6f6411096a82a60ffd). Excluded so trainer_brief never surfaces one.
+        "unused": {"TRAINER_RED", "TRAINER_LEAF", "TRAINER_BRENDAN_PLACEHOLDER", "TRAINER_MAY_PLACEHOLDER"},
     },
 }
 KEY_CLASSES = GAMES["frlg"]["key_classes"]
@@ -169,32 +175,62 @@ def _title_cond(cond: str, title: str) -> bool:
 
 def title_branch(text: str, title: str) -> str:
     """`text` as the C preprocessor builds it for `title`, for the #if/#ifdef/#ifndef/#elif/#else
-    blocks that name FIRERED or LEAFGREEN (their directives dropped). Any other directive, an
-    include guard say, stays in place with its body."""
-    out, stack = [], []   # per open #if: [names a title, branch is live, a branch was taken]
-    for line in text.splitlines(keepends=True):
+    blocks that name FIRERED or LEAFGREEN (their directives dropped). A conditional that names
+    neither is kept whole (directives and body) ONLY when it is a proven top-of-file include
+    guard -- the file's very first non-blank line is `#ifndef NAME`, `NAME` a bare identifier,
+    and its matching #endif is the file's last non-blank line. Any other non-title conditional,
+    or a per-title #ifdef/#ifndef with anything past the bare macro name (e.g. `#ifdef
+    FIRERED && X`, which is not valid C but was silently evaluated False), is unresolvable and
+    raises (Codex review cx-6b3b8309 finding 1: both branches, or a wrong silent False, used to
+    ship instead)."""
+    lines = text.splitlines(keepends=True)
+    nonblank = [i for i, ln in enumerate(lines) if ln.strip()]
+    first_nb, last_nb = (nonblank[0], nonblank[-1]) if nonblank else (None, None)
+    out, stack = [], []   # per open block: [names a title, branch is live, a branch was taken, is guard]
+    for idx, line in enumerate(lines):
         m = re.match(r"\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)", line)
         kind, cond = (m[1], m[2]) if m else ("", "")
         titled = bool(re.search(r"\b(FIRERED|LEAFGREEN)\b", cond))
         if kind in ("if", "ifdef", "ifndef"):
             if titled:
-                live = (_title_cond(cond, title) if kind == "if"
-                        else (cond.strip() == title.upper()) != (kind == "ifndef"))
-                stack.append([True, live, live])
+                if kind == "if":
+                    live = _title_cond(cond, title)
+                else:
+                    name = cond.strip()
+                    if name not in ("FIRERED", "LEAFGREEN"):
+                        raise SystemExit(f"unsupported #{kind} condition: {cond.strip()!r}")
+                    live = (name == title.upper()) != (kind == "ifndef")
+                stack.append([True, live, live, False])
                 continue
-            stack.append([False, True, True])
+            is_guard = (kind == "ifndef" and not stack and idx == first_nb
+                        and re.fullmatch(r"\w+", cond.strip()))
+            if not is_guard:
+                raise SystemExit("unsupported conditional (names neither FIRERED nor LEAFGREEN, "
+                                  f"and isn't a top-of-file include guard): {line.strip()!r}")
+            stack.append([False, True, True, True])
         elif kind == "elif":
+            if not stack:
+                raise SystemExit(f"#elif with no open #if: {line.strip()!r}")
             if titled != stack[-1][0]:
                 raise SystemExit(f"#elif mixes per-title and other conditions: {line.strip()!r}")
             if titled:
                 live = not stack[-1][2] and _title_cond(cond, title)
-                stack[-1][1:] = [live, stack[-1][2] or live]
+                stack[-1][1:3] = [live, stack[-1][2] or live]
                 continue
-        elif kind == "else" and stack[-1][0]:
-            stack[-1][1] = not stack[-1][2]
-            continue
-        elif kind == "endif" and stack.pop()[0]:
-            continue
+        elif kind == "else":
+            if not stack:
+                raise SystemExit(f"#else with no open #if: {line.strip()!r}")
+            if stack[-1][0]:
+                stack[-1][1] = not stack[-1][2]
+                continue
+        elif kind == "endif":
+            if not stack:
+                raise SystemExit(f"#endif with no open #if: {line.strip()!r}")
+            frame = stack.pop()
+            if frame[3] and idx != last_nb:
+                raise SystemExit(f"include guard's #endif is not the file's last line: {line.strip()!r}")
+            if frame[0]:
+                continue
         if all(f[1] for f in stack):
             out.append(line)
     return "".join(out)
@@ -337,7 +373,15 @@ def names_trainer(key: str, who: str) -> bool:
 def calc_label(pairs: frozenset, who: str, exact: dict, by_key: dict) -> str | None:
     """Among the setdex keys that name `who` -- those fighting exactly `pairs` if any, else all --
     the one sharing the most pairs, and at least half: a fight the setdex split, or a setdex level
-    typo. Parties alone aren't enough: Black Belt Shea's set equals Takashi's once duplicates fold."""
+    typo. Parties alone aren't enough: Black Belt Shea's set equals Takashi's once duplicates fold.
+
+    A single-mon party has no partial-overlap signal to trust, so it never falls back to `by_key`:
+    only an EXACT species+level match counts (Codex review cx-6b3b8309 finding 5 -- the by_key
+    fallback let a lone Numel 20 take Mt Chimney's combined Numel+Zubat "Magma Grunt" fight, and a
+    lone Mightyena 32 take an unrelated "Magma Grunt 5" fight at the same level)."""
+    if len(pairs) == 1:
+        named = [k for k in (exact.get(pairs) or ()) if names_trainer(k, who)]
+        return named[0] if len(named) == 1 else None
     named = [k for k in (exact.get(pairs) or by_key) if names_trainer(k, who)]
     scored = sorted(((len(pairs & by_key[k]), k) for k in named), reverse=True)
     if scored and 2 * scored[0][0] >= len(pairs) and (len(scored) == 1 or scored[1][0] < scored[0][0]):
@@ -382,7 +426,7 @@ def build(root: Path, area_map_path: Path | None = None, setdex_path: Path | Non
             todo += evos.get(sp, set()) - line
         lines[s] = line
 
-    rows = parse_trainers(root)
+    rows = [r for r in parse_trainers(root) if r["const"] not in g["unused"]]
     area = {}
     for row in rows:
         hits = sorted({map_area[m] for m in tmaps.get(row["const"], ()) if m in map_area})
@@ -431,7 +475,11 @@ def build(root: Path, area_map_path: Path | None = None, setdex_path: Path | Non
             if any(row["const"].endswith("_" + s) for s in g["starters"]):
                 # FR/LG's suffix names the rival's starter, Emerald's the PLAYER's: read the party
                 mine = {m["species"] for m in parties[row["party"]]}
-                (label,) = [f"Rival has {s.title()}" for s in g["starters"] if lines[s] & mine]
+                hits = [f"Rival has {s.title()}" for s in g["starters"] if lines[s] & mine]
+                if len(hits) != 1:
+                    raise SystemExit(f"{row['const']}: party has {len(hits)} starter evolution "
+                                      f"lines, want exactly 1: {sorted(mine)}")
+                (label,) = hits
             label = " · ".join(filter(None, [g["rematch_label"](row["const"], row["class"]), label]))
             if label:
                 t["fight_label"] = label

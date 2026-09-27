@@ -69,15 +69,18 @@ def test_profile_regenerates_byte_identical():
 
 
 def test_profile_agrees_with_every_value_the_old_stub_carries(emerald):
-    """The frlg pack's unadmitted `emerald` stub is an independent second source (never copied)."""
-    stub = _json(ROOT / "data/games/gen3_frlg/profile.json")["titles"]["emerald"]
+    """The original Lua Emerald literals are an independent source, never copied."""
+    text = (ROOT / "lua/games/gen3_frlge.lua").read_text(encoding="utf-8")
+    body = re.search(r"^GEN3\.profiles\.emerald = \{(.*?)^\}", text, re.M | re.S).group(1)
+    literals = re.findall(r'^\s+([A-Z][A-Z0-9_]*)\s*=\s*(0x[0-9A-Fa-f]+|\d+|"[^"]*")\s*,',
+                          body, re.M)
     checked = 0
-    for section in ("ram", "rom", "derived"):
-        for key, value in stub[section].items():
-            if value is None or value == {}:
-                continue  # the stub left it blank; nothing to agree with
-            assert emerald[section][key] == value, (section, key)
-            checked += 1
+    for key, literal in literals:
+        value = literal[1:-1] if literal.startswith('"') else int(literal, 0)
+        sections = [s for s in ("ram", "rom", "derived") if key in emerald[s]]
+        assert len(sections) == 1, key
+        assert emerald[sections[0]][key] == value, (sections[0], key)
+        checked += 1
     assert checked == 15 + 1 + 8  # 15 RAM, BASESTATS_ADDR, 8 derived
 
 

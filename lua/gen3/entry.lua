@@ -57,17 +57,23 @@ end
 --   header_code  GBA header game code -> title, for the named-family fallback only. RR is a
 --                FireRed hack and carries FireRed's code, so it takes no part: an RR build
 --                with an unknown hash is admitted by anchors or not at all.
+-- trade_policy is host protocol policy, in frames. APPLY gets its own dispatch
+-- budget; native owns the timeout once a scene has actually been published.
 Entry.PACKS = {
     gen3_frlg = {
+        randomizable = true, -- R0; Emerald gets its own E-bind later, never inherited
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { firered = "firered", leafgreen = "leafgreen" },
         header_code = { BPRE = "firered", BPGE = "leafgreen" },
     },
     gen3_rr = {
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { radical_red = "firered_rr" },
     },
     -- Registered so the packs/admission tables build and the hash is recognized (E2-ENTRY);
     -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
     gen3_emerald = {
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },
     },
@@ -113,7 +119,7 @@ for _, pack in pairs(Entry.PACKS) do
 end
 -- A header-named vanilla family (an unknown-hash cartridge that still says BPRE/BPGE) reads
 -- the clean artifact's pack data; if its bytes really differ, the site check refuses it.
-Entry.BASE_KIND = { named = "clean" }
+Entry.BASE_KIND = { named = "clean", rand = "clean" }
 
 -- ── admission ────────────────────────────────────────────────────────────────────────
 
@@ -212,7 +218,9 @@ function Entry.admit(args)
         local matches = Entry.anchor_matches(args)
         if #matches == 1 then
             local m = matches[1]
-            return { pack = m.pack, title = m.title, kind = m.kind, rom_type = m.rom_type,
+            local kind = m.kind
+            if kind == "clean" and Entry.PACKS[m.pack].randomizable == true then kind = "rand" end
+            return { pack = m.pack, title = m.title, kind = kind, rom_type = m.rom_type,
                      rom_hash = hash, admitted_by = "anchors" }
         elseif #matches > 1 then
             local names = {}
@@ -374,13 +382,20 @@ local function build_production(deps, c)
         })
     end
     session = L("lua/gen3/client.lua").new({
+        Trade = L("lua/gen3/trade.lua"), owed_reports = L("lua/owed_reports.lua"),
         reads = reads, R = c.Reads, profile = c.profile, sites = c.sites, Signals = c.Signals,
         writes = writes, boxes = boxes, policy = policy, net = assert(deps.net, "deps.net required"),
         hud = assert(deps.hud, "deps.hud required"), json = c.json, io = io_, ev = c.ev,
         area_map = load_json(c.json, c.root .. "/" .. files.area_map),
         locations = dofile(c.root .. "/" .. files.locations),
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
-        foundation = pack, artifact_kind = c.artifact_kind, native = native, log = deps.log, core = core,
+        foundation = pack, artifact_kind = c.parts.kind == "rand" and "rand" or c.artifact_kind,
+        native = native, log = deps.log, core = core,
+        trade_policy = Entry.PACKS[pack].trade_policy,
+        rom_size = deps.rom_size,
+        rom_content_new = deps.rom_content_new or function(tbl, rom_io)
+            return L("lua/gen3/rom_content.lua").new(tbl, rom_io)
+        end,
         -- the battle request nonce seed (card C5-10b): the bootstrap's entropy, or the harness
         -- seam for determinism. Client.new validates it and mints NO identity without it.
         -- the env seam wins over the bootstrap so a harness can pin a session deterministically

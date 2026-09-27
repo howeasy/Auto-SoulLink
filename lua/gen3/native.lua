@@ -34,6 +34,30 @@ end
 
 function N.new(profile, deps)
     local p = assert(profile.native, "profile.native required")
+    assert(p.ABI == 1 or p.ABI == 2, "unsupported native ABI")
+    local v2 = p.ABI == 2 and assert(p.abi_v2, "generated v2 ABI required") or nil
+    local offsets, fail_reasons = clone(O), clone(FAIL_REASONS)
+    if v2 then
+        local c = assert(v2.constants, "v2 constants required")
+        assert(c.SLINK_ABI_VERSION == p.ABI and c.SLINK_SIGNATURE == p.SIG, "v2 identity mismatch")
+        local fields = assert(v2.structs.SlinkMailboxV2.fields, "v2 mailbox layout required")
+        for alias, spec in pairs({abi={"abi_version",2,1}, opcode={"opcode",2,1},
+            seq={"seq",2,1}, status={"status",2,1}, ack={"ack_seq",2,1}, reason={"reason",2,1},
+            args={"args",1,32}, result={"result",1,16},
+            capabilities={"capabilities",4,1}, session_epoch={"session_epoch",4,1}}) do
+            local field = assert(fields[spec[1]], "missing v2 mailbox field")
+            assert(integer(field.offset, v2.structs.SlinkMailboxV2.size - field.width * field.count)
+                   and field.width == spec[2] and field.count == spec[3], "invalid v2 mailbox field")
+            offsets[alias] = field.offset
+        end
+        -- These words have different legacy RR meanings. Name them only for v2.
+        for symbol, name in pairs({SLINK_REASON_UNCERTAIN="uncertain",
+            SLINK_REASON_IDENTITY="identity", SLINK_REASON_CLIENT_TOO_OLD="client_too_old"}) do
+            fail_reasons[assert(c[symbol], "missing v2 failure reason")] = name
+        end
+    end
+    local O = offsets
+    local session_epoch = 0
     local io, writes = assert(deps.io), assert(deps.writes)
     local send = assert(deps.send, "send(event, fields) required")
     local array = deps.array or function(t) return t end
@@ -63,11 +87,23 @@ function N.new(profile, deps)
     local self = {}
 
     local function present()
-        if profile.pack ~= "gen3_rr" or deps.artifact_kind ~= "companion" then return false end
+        if (not v2 and profile.pack ~= "gen3_rr") or deps.artifact_kind ~= "companion" then return false end
         local ok, value = pcall(function()
             return io.read_u32(p.BASE) == p.SIG and io.read_u16(p.BASE + O.abi) == p.ABI
         end)
         return ok and value == true
+    end
+    function self:mailbox()
+        if not present() then return nil, "native absent" end
+        local fields = {abi=p.ABI, opcode=io.read_u16(p.BASE + O.opcode),
+            seq=io.read_u16(p.BASE + O.seq), status=io.read_u16(p.BASE + O.status),
+            ack_seq=io.read_u16(p.BASE + O.ack), reason=io.read_u16(p.BASE + O.reason)}
+        fields.reason_name = fail_reasons[fields.reason]
+        if v2 then
+            fields.capabilities = io.read_u32(p.BASE + O.capabilities)
+            fields.session_epoch = io.read_u32(p.BASE + O.session_epoch)
+        end
+        return fields
     end
     function self:idle()
         if poisoned or pending or panel_showing then return false end
@@ -75,16 +111,39 @@ function N.new(profile, deps)
         local ok, value = pcall(function()
             return io.read_u16(p.BASE + O.opcode) == 0
                    and (posting or io.read_u16(p.BASE + O.status) ~= BUSY)
-                   and io.read_u8(p.INFO + 1) == io.read_u8(p.INFO + 2)
+                   and (v2 ~= nil or io.read_u8(p.INFO + 1) == io.read_u8(p.INFO + 2))
         end)
         return ok and value == true
     end
     function self:trade_active() return false end -- apply_trade belongs to the trade card
     function self:hello_fields() return {} end -- no invented wire capability fields
-
+    -- V1 has no epoch/visit-bound save witness and must not advertise durable trade.
+    -- The v2 binding replaces this only when all witness checks are implemented.
+    function self:trade_capable() return false end
+    -- Typed unavailable adapter until a qualified v2 binding supplies coherent witnesses.
+    function self:trade_visit() return nil, "durable_trade_unavailable" end
+    function self:trade_eligible(_mon) return false end
+    function self:trade_authorized(_token, _old_key) return false end
+    function self:prepare_trade(_cmd, done, _valid)
+        if done then done("durable_trade_unavailable") end
+        return nil, "durable_trade_unavailable"
+    end
+    function self:withdraw_trade(_token) return nil, "durable_trade_unavailable" end
     local function finish(job, why, result, reason)
         if job.done then job.done(why, result, reason) end
     end
+    function self:cancel(handle)
+        for i, job in ipairs(queue) do
+            if job == handle then
+                table.remove(queue, i)
+                job.cancelled = true
+                finish(job, "guard:stale")
+                return true
+            end
+        end
+        return false -- published operations belong to the cartridge; never erase one
+    end
+
     local function abort(why)
         local active, waiting = pending, queue
         pending, queue = nil, {}
@@ -94,10 +153,22 @@ function N.new(profile, deps)
     local function enqueue(job)
         if not present() then finish(job, "native absent"); return nil, "native absent" end
         if poisoned then finish(job, poisoned); return nil, poisoned end
+        if v2 and not job.handshake and session_epoch == 0 then
+            finish(job, "client_too_old"); return nil, "client_too_old"
+        end
         if #queue >= 64 then finish(job, "native queue full"); return nil, "native queue full" end
         queue[#queue + 1] = job
         -- the job IS the handle: `job.posted` is this job's dispatch receipt (see the header)
         return job
+    end
+    function self:set_session_epoch(value)
+        if not v2 then return nil, "unsupported native ABI" end
+        if not integer(value, 0xFFFFFFFF) or value == 0 then return nil, "invalid session epoch" end
+        if pending or #queue > 0 or not self:idle() then return nil, "native busy" end
+        local bytes = {}
+        for i=0,3 do bytes[i+1] = (value >> (8*i)) & 0xFF end
+        return enqueue({handshake=true, stages={{p.BASE + O.session_epoch, bytes}},
+            done=function(why) if not why then session_epoch=value end end})
     end
     local function encode(text, limit)
         local out = {}
@@ -157,6 +228,7 @@ function N.new(profile, deps)
                 -- native_idle clause (status ~= busy) refuse the rest of the post.
                 writes:write_u16(p.BASE + O.ack, (seq + 65535) % 65536)
                 writes:write_u16(p.BASE + O.seq, seq)
+                job.publish_attempted = true -- a sink failure can leave a valid low-byte opcode
                 writes:write_u16(p.BASE + O.opcode, job.op) -- publish last
                 -- ... and the receipt is the publish's own witness: nothing after it can fail
                 job.posted = true
@@ -223,7 +295,13 @@ function N.new(profile, deps)
     -- valid (optional): a dispatch-time guard, called by service() immediately before this job is
     -- dispatched (same frame-end callback, CPU stopped); false, why drops the job with done(why).
     -- The trade FSM uses it to re-locate the offered mon at the moment a slot op actually posts.
-    function self:transfer(step, cmd, done, valid)
+    function self:transfer(step, cmd, done, valid, progress)
+        -- Direct scene probes exercise the legacy transport without claiming
+        -- durable completion. The FSM's milestone path still requires capability.
+        if step == "scene" and progress ~= nil and not self:trade_capable() then
+            if done then done("durable_trade_unavailable") end
+            return nil, "durable_trade_unavailable"
+        end
         local op, args, stages = nil, {}, {}
         if step == "scene" or step == "party" then
             if not integer(cmd.slot, 5) then return nil, "invalid party slot" end
@@ -236,18 +314,20 @@ function N.new(profile, deps)
                 return nil, "invalid blobs"
             end
             local bytes = {}
+            local mon_size = reads.PARTY_MON_SIZE
+            if not integer(mon_size, 600) or mon_size == 0 then return nil, "invalid mon size" end
             for _, hex in ipairs(rows) do
-                if type(hex) ~= "string" or #hex ~= 200 or hex:find("[^%x]") then
+                if type(hex) ~= "string" or #hex ~= 2 * mon_size or hex:find("[^%x]") then
                     return nil, "invalid blobs"
                 end
-                for i = 1, 200, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
+                for i = 1, 2 * mon_size, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
             end
             stages = {{p.BLOB_BUF, bytes}}
             if step == "party" then
                 op, args = assert(p.OP_SET_PARTY_MON), {cmd.slot, cmd.bump and 1 or 0}
             else op, args = assert(p.OP_SET_ENEMY_PARTY), {#rows} end
         else return nil, "unsupported transfer step" end
-        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid})
+        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid, progress=progress})
     end
     -- G5-RR-RIVAL: the patch's rival-swap window W1 (docs/gen3/research/rival_swap_refresh_window.md
     -- §5), mirrored from patch/src/handlers.c's OP_RIVAL_SWAP check (OMP F4): gBattleCommunication[0]
@@ -383,11 +463,13 @@ function N.new(profile, deps)
             end}
     end
     function self:link_panel(cmd)
+        if v2 then return nil, "v2 panel binding unavailable" end
         panel_rows, panel_page = clone(cmd.rows or {}), 0
         return enqueue(panel_job(false))
     end
     function self:config(cmd)
         if cmd.native_sounds ~= nil then sounds_enabled = cmd.native_sounds == true end
+        if v2 then return nil, "v2 control binding unavailable" end
         local stages = {}
         if cmd.overworld_presence ~= nil or cmd.pc_trade_npc ~= nil then
             npc_enabled = cmd.overworld_presence ~= true and cmd.pc_trade_npc ~= false
@@ -406,9 +488,14 @@ function N.new(profile, deps)
         if (last_frame and frame < last_frame) or (was_present and not here) then
             abort("native reset")
             poisoned, npc_count, panel_drawn, panel_showing = nil, nil, nil, false
+            session_epoch = 0
         end
         last_frame, was_present = frame, here
         if not here then return nil, "native absent" end
+        if v2 and session_epoch ~= 0 and io.read_u32(p.BASE + O.session_epoch) ~= session_epoch then
+            poisoned = "native epoch changed"
+            abort(poisoned)
+        end
         if pending then
             local job = pending
             local opcode = io.read_u16(p.BASE + O.opcode)
@@ -422,15 +509,12 @@ function N.new(profile, deps)
                 local reason = status == FAIL and io.read_u16(p.BASE + O.reason) or nil
                 pending = nil -- consume receipt BEFORE any next post can rewrite it
                 finish(job, status == FAIL and "native refused" or nil, result,
-                       reason and FAIL_REASONS[reason] or nil)
+                       reason and fail_reasons[reason] or nil)
             elseif frame - job.started >= timeout_for(job.op) then
                 -- Never reuse a timed-out slot: opcode==0 can mean an async handler
                 -- still owns it. A reset/absent beacon is the recovery boundary.
-                -- RECORDED LIMIT (C5-6a): the poison also blocks any recovery post, so a trade
-                -- whose OP_SET_ENEMY_PARTY stage timed out cannot post its OP_SET_PARTY_MON
-                -- silent-swap fallback; the trade FSM reads the slot back and reports it as it is.
-                -- A safe recovery post would need to know whether the patch still owns the timed-
-                -- out op, and nothing in the ABI says so, so none is attempted.
+                -- Poison blocks further posts. Durable trade treats a possibly committed
+                -- operation as uncertain; neither raw replacement nor RAM readback repairs it.
                 poisoned = "native timeout"; abort(poisoned)
             end
         end
@@ -440,23 +524,25 @@ function N.new(profile, deps)
             if wt.check() then table.remove(watches, i); wt.ok()
             elseif io.framecount() >= wt.deadline then table.remove(watches, i); wt.fail() end
         end
-        local counter = io.read_u8(p.PI_COUNT)
-        if npc_count ~= nil and counter > npc_count and npc_enabled and not pending then
-            send("trade_request", {})
-        end
-        npc_count = counter -- backwards counters re-latch; never synthesize an interaction
-        local drawn = io.read_u8(p.INFO + 2)
-        if panel_drawn ~= nil and drawn ~= panel_drawn and not owned_panel then
-            panel_showing = true
-        end
-        panel_drawn = drawn
-        if panel_showing and deps.panel_closed then
-            local closed, result = deps.panel_closed()
-            if closed then
-                panel_showing = false
-                if not pending then
-                    panel_page = result == 0 and panel_page + 1 or 0
-                    enqueue(panel_job(result == 0 and #panel_rows > p.INFO_MAXLINES))
+        if not v2 then -- v1 NPC/panel offsets are never inherited by a v2 mailbox
+            local counter = io.read_u8(p.PI_COUNT)
+            if npc_count ~= nil and counter > npc_count and npc_enabled and not pending then
+                send("trade_request", {})
+            end
+            npc_count = counter -- backwards counters re-latch; never synthesize an interaction
+            local drawn = io.read_u8(p.INFO + 2)
+            if panel_drawn ~= nil and drawn ~= panel_drawn and not owned_panel then
+                panel_showing = true
+            end
+            panel_drawn = drawn
+            if panel_showing and deps.panel_closed then
+                local closed, result = deps.panel_closed()
+                if closed then
+                    panel_showing = false
+                    if not pending then
+                        panel_page = result == 0 and panel_page + 1 or 0
+                        enqueue(panel_job(result == 0 and #panel_rows > p.INFO_MAXLINES))
+                    end
                 end
             end
         end

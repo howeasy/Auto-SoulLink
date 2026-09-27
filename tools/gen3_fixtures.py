@@ -951,6 +951,13 @@ EMERALD_KINDS = {
     # coordinator add-on, round 3: same tile as "battle" -- 20 Poke Balls so five straight
     # native misses (~0.56 miss chance each at Mudkip's catchRate 255) can't false-fail the leg
     "catch": ("Route102", 0, 17, 18, 21, 16),
+    # card NAT-LEGS-3 (Emerald parity): one step S of RustboroCity_House1's Trader NPC
+    # (OBJ_EVENT_GFX_CAMPER at (6,4), data/maps/RustboroCity_House1/map.json), so the scripted leg
+    # is one Up (faces/bumps the NPC) + one A (talk, choose YES, pick the party RALTS) --
+    # INGAME_TRADE_SEEDOT: SEEDOT for a player-owned SPECIES_RALTS (pret pokeemerald c65e93f2
+    # src/data/trade.h:985-1001, data/maps/RustboroCity_House1/scripts.inc). Map group/num 11/10,
+    # LAYOUT_RUSTBORO_CITY_HOUSE1 = layout id 97 (data/maps/map_groups.json, data/layouts/layouts.json).
+    "trade": ("RustboroCity_House1", 11, 10, 97, 6, 5),
 }
 # FLAG_BADGE01_GET..FLAG_BADGE04_GET (pret include/constants/flags.h:1359-1362): 0x867 is byte
 # 0x10C bit 7 and 0x868..0x86A are byte 0x10D bits 0-2, so the set straddles a flag byte
@@ -1110,6 +1117,48 @@ def _evolve_mon(ot_name: str, tid: int) -> dict:
     }
 
 
+# card NAT-LEGS-3: the "trade" kind's second party mon -- SPECIES_RALTS, the mon
+# RustboroCity_House1's trader (INGAME_TRADE_SEEDOT) asks for (requestedSpecies, src/data/trade.h).
+# pokeemerald c65e93f2 src/data/pokemon/species_info.h:11069-11095: base 28/25/25/40/45/35,
+# genderRatio PERCENT_FEMALE(50) = 127, friendship 35, growthRate GROWTH_SLOW (EXP_SLOW(n) =
+# 5*n^3/4, experience_tables.h:4) -- NOT medium-fast/slow like `_synth_mon`/`_evolve_mon`, so it
+# gets its own builder. Two abilities (SYNCHRONIZE/TRACE, species_info.h:11093), so a real
+# CreateBoxMon randomizes ability_num on `pid & 1` (src/pokemon.c:2296-2300), unlike the
+# single-ability mons `_synth_mon` builds. Lv7 moves: GROWL (Lv1) + CONFUSION (Lv6)
+# (level_up_learnsets.h:5318-5321; battle_moves.h pp 40/25).
+RALTS = {"species": 392, "name": "RALTS", "gender_ratio": 127, "friendship": 35,
+         "base": {"hp": 28, "attack": 25, "defense": 25, "speed": 40,
+                  "sp_attack": 45, "sp_defense": 35},
+         "moves": [45, 93, 0, 0], "pp": [40, 25, 0, 0]}
+TRADE_LEVEL = 7
+TRADE_EXP = 5 * TRADE_LEVEL ** 3 // 4   # EXP_SLOW(7)
+
+
+def _trade_mon(ot_name: str, tid: int) -> dict:
+    """The "trade" kind's Lv7 Ralts: Hardy-nature (pid % 25 == 0), non-shiny, same PID-search
+    shape as `_evolve_mon`/`emerald_starter`."""
+    pid = next(p for p in itertools.count(0x52414C54)
+               if p % 25 == 0
+               and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+    lv = TRADE_LEVEL
+    stats = {k: (2 * b + STARTER_IV) * lv // 100 + 5 for k, b in RALTS["base"].items()}
+    stats["hp"] = (2 * RALTS["base"]["hp"] + STARTER_IV) * lv // 100 + lv + 10
+    return {
+        "personality": pid, "ot_id": tid, "nickname": RALTS["name"], "language": LANGUAGE_ENGLISH,
+        "is_bad_egg": 0, "has_species": 1, "is_egg_flag": 0, "block_box_rs": 0, "flags_unused": 0,
+        "ot_name": ot_name, "markings": 0, "unknown": 0,
+        "species": RALTS["species"], "held_item": 0, "experience": TRADE_EXP,
+        "pp_bonuses": 0, "friendship": RALTS["friendship"], "growth_filler": 0,
+        "moves": list(RALTS["moves"]), "pp": list(RALTS["pp"]),
+        "evs": dict.fromkeys(RALTS["base"], 0), "contest": [0] * 6,
+        "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": lv,
+        "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
+        "ivs": dict.fromkeys(RALTS["base"], STARTER_IV),
+        "is_egg": 0, "ability_num": pid & 1, "ribbons": 0,
+        "status": 0, "level": lv, "mail": 0xFF, "max_hp": stats["hp"], **stats,
+    }
+
+
 def pret_emerald() -> Path:
     """The pokeemerald checkout: $SLINK_PRET_EMERALD, else <root>/.cache/pret/pokeemerald for this
     repo root and the checkout a worktree belongs to (the _rom_candidates search)."""
@@ -1200,7 +1249,7 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     sb1[0x0C:0x14] = _warp(group, num, x, y)      # continueGameWarp, :988
     sb1[0x1C:0x24] = _warp(*EMERALD_HEAL)         # lastHealLocation, :990 (SetLastHealLocationWarp)
     sb1[0x32:0x34] = layout_id.to_bytes(2, "little")   # mapLayoutId, :997 (0 = a NULL layout)
-    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 2 if kind in ("pc", "poison") else 1
+    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 2 if kind in ("pc", "poison", "trade") else 1
     start = codec.SB1_PARTY_OFFSET_EMERALD
     if kind == "evolve":
         # card E2-FIX-VARIANTS round 3: a distinct Lv15 Mudkip, one EXP short of evolving
@@ -1224,6 +1273,10 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
         poochyena = _synth_mon(POOCHYENA, BOX1_LEVEL, 0x504F4F43, name, tid, party=True)
         at = start + codec.PARTY_MON_SIZE
         sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(poochyena)
+    elif kind == "trade":
+        # card NAT-LEGS-3: second party slot, the Lv7 Ralts RustboroCity_House1's trader asks for
+        at = start + codec.PARTY_MON_SIZE
+        sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(_trade_mon(name, tid))
     sb1[0x490:0x494] = EMERALD_MONEY.to_bytes(4, "little")   # money, :1002
     # bagPocket_PokeBalls[0]; SetBagItemQuantity stores `quantity ^ encryptionKey` (src/item.c:31-34)
     balls = EMERALD_CATCH_BALLS if kind == "catch" else EMERALD_BALLS
@@ -1344,6 +1397,12 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
             if party[1]["status"] != 0 or party[1]["hp"] != party[1]["max_hp"]:
                 problems.append(f"party[1] (Poochyena) is not healthy at full HP: "
                                 f"status={party[1]['status']:#x} hp={party[1]['hp']}/{party[1]['max_hp']}")
+    elif kind == "trade":
+        # card NAT-LEGS-3: still Mudkip + a healthy Lv7 Ralts -- the trade itself is the native leg
+        want = [(MUDKIP["species"], STARTER_LEVEL, True), (RALTS["species"], TRADE_LEVEL, True)]
+        got = [(m["species"], m["level"], m["checksum_ok"]) for m in party]
+        if got != want:
+            problems.append(f"party is not [Lv{STARTER_LEVEL} Mudkip, Lv{TRADE_LEVEL} Ralts]: {party}")
     else:
         if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
                                                                               STARTER_LEVEL, True)]:
@@ -1408,6 +1467,130 @@ def cmd_make_emerald(args: argparse.Namespace) -> int:
           f"counter={after['counter']} trainer={after['trainer_name']!r}"
           f"#{after['trainer_id']:08X} party={after['party']}")
     return 0
+
+
+# ---------------------------------------------------------------------------
+# FR/LG natural-leg seeds (card NAT-LEGS): DISCLOSED O-33 SYNTH edits of a committed party fixture
+#
+# `make-frlg-synth` rewrites the seed's CURRENT slot in place (derive-b's sector rewrite, same
+# counter) and nothing else: only the behaviour under test then runs natively in the duo row. What
+# each kind edits (pret pokefirered c75f3523 facts):
+#   evolve  party[0] Squirtle -> Lv15, EXP one short of Lv16 (GROWTH_MEDIUM_SLOW; evolution.h:7
+#           EVO_LEVEL 16 -> WARTORTLE), stats recomputed; neither Squirtle's (18) nor Wartortle's
+#           (19) learnset has a Lv16 move (level_up_learnsets.h:101-130), so no move prompt.
+#   trade   party[1] -> a Lv10 ABRA owned by the player (the Route 2 trader Reyley's requested
+#           species, ingame_trades.h INGAME_TRADE_MR_MIME), and a CONTINUE_GAME_WARP to
+#           Route2_House (map 15.1) (7,3), one tile south of Reyley's object at (7,2) facing
+#           down (data/maps/Route2_House/map.json); FLAG_DID_MIMIEN_TRADE (0x248) must be clear.
+#   poison  party[0] -> 1 HP + STATUS1_POISON on the Viridian town tile: FRLG's field poison has
+#           no 1-HP floor (field_poison.c DoPoisonFieldEffect), so the next 4-step tick faints it.
+# ---------------------------------------------------------------------------
+
+FRLG_SYNTH_KINDS = ("evolve", "trade", "poison")
+FRLG_SB1_FLAGS = 0x0EE0               # SaveBlock1.flags, include/global.h:790
+FLAG_DID_MIMIEN_TRADE = 0x248         # include/constants/flags.h:609
+ROUTE2_HOUSE_WARP = (15, 1, 7, 3)     # map_groups.json gMapGroup_IndoorRoute2[1]; below Reyley (7,2)
+SQUIRTLE_BASE = {"hp": 44, "attack": 48, "defense": 65, "speed": 43, "sp_attack": 50, "sp_defense": 64}
+ABRA_BASE = {"hp": 25, "attack": 20, "defense": 15, "speed": 90, "sp_attack": 105, "sp_defense": 55}
+SPECIES_ABRA, MOVE_TELEPORT, TELEPORT_PP = 63, 100, 20   # species.h:67, moves.h:104, battle_moves.h
+
+
+def _gen3_stats(base: dict, mon: dict, level: int) -> dict:
+    """CalculateMonStats (pret src/pokemon.c): HP and the five nature-scaled stats. Nature =
+    personality % 25; +10% on stat nature//5, -10% on nature%5, in atk/def/spe/spa/spd order."""
+    order = ("attack", "defense", "speed", "sp_attack", "sp_defense")
+    nature = mon["personality"] % 25
+    iv, ev = mon["ivs"], mon["evs"]
+    out = {"max_hp": (2 * base["hp"] + iv["hp"] + ev["hp"] // 4) * level // 100 + level + 10}
+    for i, k in enumerate(order):
+        n = (2 * base[k] + iv[k] + ev[k] // 4) * level // 100 + 5
+        if nature // 5 != nature % 5:
+            n = n * 110 // 100 if i == nature // 5 else n * 90 // 100 if i == nature % 5 else n
+        out[k] = n
+    return out
+
+
+def build_frlg_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
+    """The SYNTH edit of a vanilla FR/LG fixture for `kind` -> (body, manifest). Deterministic."""
+    if kind not in FRLG_SYNTH_KINDS:
+        raise ValueError(f"unknown synth kind {kind!r}")
+    ok, msg = codec.qualify_flash(seed)
+    if not ok:
+        raise ValueError(f"seed does not qualify: {msg}")
+    parsed = codec.parse_flash(seed)
+    sb1, sb2 = bytearray(parsed["sb1"]), bytearray(parsed["sb2"])
+    at = [codec.SB1_PARTY_OFFSET + i * codec.PARTY_MON_SIZE for i in range(2)]
+    party = [codec.decode_party_mon(bytes(sb1[a:a + codec.PARTY_MON_SIZE])) for a in at]
+    manifest = []
+    if kind == "evolve":
+        mon = party[0]
+        if mon["species"] != 7:
+            raise ValueError(f"party[0] is species {mon['species']}, not SQUIRTLE")
+        mon.update(experience=_exp_medium_slow(16) - 1, level=15, **_gen3_stats(SQUIRTLE_BASE, mon, 15))
+        mon["hp"] = mon["max_hp"]
+        slot = 0
+        manifest.append(f"party[0] SQUIRTLE Lv15 exp={mon['experience']} (Lv16 at {_exp_medium_slow(16)}) "
+                        f"stats recomputed, hp={mon['hp']}/{mon['max_hp']}")
+    elif kind == "poison":
+        mon, slot = dict(party[0], hp=1, status=STATUS1_POISON), 0
+        manifest.append(f"party[0] species {mon['species']} hp=1/{mon['max_hp']} status=POISON")
+    else:
+        flag = sb1[FRLG_SB1_FLAGS + FLAG_DID_MIMIEN_TRADE // 8] >> (FLAG_DID_MIMIEN_TRADE % 8) & 1
+        if flag:
+            raise ValueError("the seed has already done the MIMIEN trade")
+        # OMP cx-6821246e F5: refuse a seed that has no owned mon in the slot this kind trades away.
+        count = sb1[codec.SB1_PARTY_COUNT_OFFSET]
+        if count < 2 or not party[1]["species"]:
+            raise ValueError(f"seed's party slot 1 is empty (party_count={count}); "
+                             "trade needs an owned mon there")
+        own_tid = int.from_bytes(sb2[0xA:0xE], "little")
+        if party[1]["ot_id"] != own_tid:
+            raise ValueError("seed's party[1] is not the player's own mon (OT mismatch); "
+                             "the trade fixture needs a player-owned slot 1")
+        mon, slot = dict(party[1]), 1
+        # a fresh non-shiny, Hardy-nature (pid % 25 == 0, matching _synth_mon/_evolve_mon/
+        # emerald_starter's own convention) personality, distinct from the old slot-1 key. OMP
+        # cx-6821246e F3: personality is set FIRST and separately -- **_gen3_stats(ABRA_BASE, mon,
+        # 10) is a kwarg to mon.update(...), evaluated before that call runs, so folding
+        # `personality=pid` into the same .update() computed stats from the OLD (pre-trade)
+        # personality's nature instead of the new one. The Hardy pid also makes the nature branch
+        # a no-op either way, so this can never silently regress the same way again.
+        pid = next(p for p in itertools.count(0x41425241)
+                   if p % 25 == 0 and ((mon["ot_id"] & 0xFFFF) ^ (mon["ot_id"] >> 16)
+                                       ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+        mon["personality"] = pid
+        mon.update(species=SPECIES_ABRA, nickname="ABRA", experience=_exp_medium_slow(10),
+                   level=10, moves=[MOVE_TELEPORT, 0, 0, 0], pp=[TELEPORT_PP, 0, 0, 0], ability_num=0,
+                   **_gen3_stats(ABRA_BASE, mon, 10))
+        mon.pop("nickname_raw", None)
+        mon["hp"] = mon["max_hp"]
+        g, n, x, y = ROUTE2_HOUSE_WARP
+        sb1[0x0C:0x14] = _warp(g, n, x, y)           # continueGameWarp, include/global.h SaveBlock1
+        sb2[0x09] |= 1                               # specialSaveWarpFlags CONTINUE_GAME_WARP, save_location.h:5
+        manifest.append(f"party[1] -> ABRA Lv10 pid={pid:08X} (the player's OT); continueGameWarp "
+                        f"{g}.{n} ({x},{y}) + CONTINUE_GAME_WARP")
+    sb1[at[slot]:at[slot] + codec.PARTY_MON_SIZE] = codec.encode_party_mon(mon)
+    layout = codec.slot_layout()
+    objects = {"sb2": bytes(sb2), "sb1": bytes(sb1), "storage": bytes(parsed["storage"])}
+    base = codec.NUM_SECTORS_PER_SLOT * parsed["slot"]
+    body = bytearray(seed)
+    for entry in layout:
+        phys = next(s["index"] for s in parsed["sectors"][base:base + codec.NUM_SECTORS_PER_SLOT]
+                    if s["id"] == entry["id"])
+        chunk = objects[entry["object"]][entry["offset"]:entry["offset"] + entry["size"]]
+        body[phys * codec.SECTOR_SIZE:(phys + 1) * codec.SECTOR_SIZE] = \
+            codec.write_sector(chunk, entry["id"], parsed["counter"], layout)
+    return bytes(body), manifest
+
+
+def cmd_make_frlg_synth(args: argparse.Namespace) -> int:
+    body, manifest = build_frlg_synth(Path(args.seed).read_bytes(), args.kind)
+    Path(args.out).write_bytes(body)
+    for line in manifest:
+        print("SYNTH " + line)
+    r = qualify_one(body, rr=False)
+    print(f"wrote {args.out} sha256={sha256_hex(body)} ok={r['ok']} party={r['party']}")
+    return 0 if r["ok"] else 1
 
 
 # ---------------------------------------------------------------------------
@@ -1493,6 +1676,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_em.add_argument("--saveram-name", default=None)
     p_em.add_argument("--timeout", type=int, default=600)
     p_em.set_defaults(func=cmd_make_emerald)
+
+    p_syn = sub.add_parser("make-frlg-synth", help="NO EMULATOR: SYNTH edit of an FR/LG party "
+                                                  "fixture for a natural-leg row (NAT-LEGS)")
+    p_syn.add_argument("--kind", choices=FRLG_SYNTH_KINDS, required=True)
+    p_syn.add_argument("--seed", required=True)
+    p_syn.add_argument("--out", required=True)
+    p_syn.set_defaults(func=cmd_make_frlg_synth)
 
     return ap
 

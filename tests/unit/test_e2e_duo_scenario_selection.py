@@ -855,6 +855,8 @@ GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
                           "trainer_bench_gen3", "active_end_gen3",
                           "linked_faint_active_trainer_gen3")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
+# NAT-LEGS: the FR/LG natural legs (S-8, S-9, S-11), explicit_only (FR-as-A SYNTH fixtures)
+GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (
@@ -905,7 +907,8 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         if game not in GEN3_FRLG_ROWS + ("gen3_rr", "gen3_emerald"):
             assert not set(scenarios_for(game)) & set(GEN3_RR_SCENARIOS), game
     for name in SCENARIOS:
-        if name not in GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + tuple(duo_module.GEN3_RAND_SCENARIOS):
+        if name not in (GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + GEN3_NAT_SCENARIOS
+                        + tuple(duo_module.GEN3_RAND_SCENARIOS)):
             assert not scenario_applies(name, "gen3_frlg"), name
         if name not in GEN3_RR_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name
@@ -1128,3 +1131,125 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     run._gen2_plans["a"]["directory"] = "C:/" + "d" * 240
     with pytest.raises(RuntimeError, match="path too long for BizHawk"):
         run._check_bizhawk_paths()
+
+
+@pytest.mark.parametrize("name,kind,link_slot,games,emerald_b", (
+    ("evolve_gen3", "evolve", 0, ("gen3_frlg",), None),
+    # NAT-LEGS-3: npc_trade_gen3/poison_faint_gen3 also run E<->E on gen3_emerald, target_by_game
+    # swapping the FR/LG "_synth" fixture stem for Emerald's own naming (emerald_trade.sav,
+    # emerald_poison.sav); evolve_gen3 stays FR/LG-only (its oracle hardcodes WARTORTLE species 8,
+    # not Emerald's Mudkip -> Marshtomp -- out of this card's lease). npc_trade_gen3 links party
+    # slot 1 on BOTH halves; FR/LG's "town" fixture already carries a second party mon, but
+    # Emerald's is a single Mudkip, so its B side boots "pc" (Mudkip + Poochyena) instead --
+    # poison_faint_gen3 links slot 0, but B's linked lead is still force_faint'ed (Soul Link), so
+    # Emerald's B side needs "pc" too: a single-mon "town" party whites out instead of memorializing.
+    ("npc_trade_gen3", "trade", 1, ("gen3_frlg", "gen3_emerald"), "pc"),
+    ("poison_faint_gen3", "poison", 0, ("gen3_frlg", "gen3_emerald"), "pc")))
+def test_nat_legs_rows_are_wired(name, kind, link_slot, games, emerald_b, monkeypatch):
+    """NAT-LEGS: explicit_only (never in `--scenario all` on either FR-as-A `gen3_frlg` or
+    LG-as-A `gen3_lgfr`, card NAT-LEGS-2), A boots the committed SYNTH fixture, B idles on town,
+    and the orchestrator links `link_slot`. Fixture byte-reproduction is checked separately below
+    (once per title, since `orchestrate_*` doesn't care which title is behind "a")."""
+    row = SCENARIOS[name]
+    assert row["games"] == games and row["explicit_only"] is True
+    assert row["target"] == {"a": f"{kind}_synth", "b": "town"}
+    if "gen3_emerald" in games:
+        assert row["target_by_game"]["gen3_emerald"] == {"a": kind, "b": emerald_b}
+    assert row["oracle"] == f"assert_{name}_saved" and callable(getattr(DuoRun, row["oracle"]))
+    for game in ("gen3_frlg", "gen3_lgfr"):
+        assert name not in scenarios_for(game) and scenario_applies(name, game)
+    if "gen3_emerald" in games:
+        assert name not in scenarios_for("gen3_emerald") and scenario_applies(name, "gen3_emerald")
+    assert os.path.isfile(os.path.join(REPO, "lua", "tests", "duo", f"scenario_gen3_{name[:-5]}.lua"))
+    run = DuoRun.__new__(DuoRun)
+    calls = []
+    monkeypatch.setattr(run, "_gen3_prelude", lambda link_slot=None: calls.append(link_slot), raising=False)
+    monkeypatch.setattr(run, "_gen3_area_control", lambda: calls.append("area"), raising=False)
+    monkeypatch.setattr(run, "_gen3_linked_lines", lambda: {}, raising=False)
+    monkeypatch.setattr(run, "go", lambda lines=None: calls.append("go"), raising=False)
+    getattr(run, f"orchestrate_{name}")()
+    assert calls == [link_slot] + (["area"] if kind == "evolve" else []) + ["go"]
+
+
+@pytest.mark.parametrize("pack,seed_scene", (("firered", "battle"), ("leafgreen", "battle")))
+def test_nat_legs_evolve_synth_reproduces_from_its_seed(pack, seed_scene):
+    _assert_frlg_synth_reproduces(pack, "evolve", seed_scene)
+
+
+@pytest.mark.parametrize("pack", ("firered", "leafgreen"))
+def test_nat_legs_trade_synth_reproduces_from_its_seed(pack):
+    _assert_frlg_synth_reproduces(pack, "trade", "town")
+
+
+@pytest.mark.parametrize("pack", ("firered", "leafgreen"))
+def test_nat_legs_poison_synth_reproduces_from_its_seed(pack):
+    _assert_frlg_synth_reproduces(pack, "poison", "town")
+
+
+def _assert_frlg_synth_reproduces(pack, kind, seed_scene):
+    """Every committed `<pack>_party_<kind>_synth.sav` (NAT-LEGS FR-as-A, NAT-LEGS-2 LG-as-A) is
+    exactly what `make-frlg-synth` builds from its pinned party seed -- no hand edit, no drift."""
+    import gen3_fixtures as fx
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{pack}_party_{seed_scene}.sav"), "rb") as f:
+        built, _ = fx.build_frlg_synth(f.read(), kind)
+    with open(os.path.join(fixtures, f"{pack}_party_{kind}_synth.sav"), "rb") as f:
+        assert f.read() == built
+
+
+@pytest.mark.parametrize("pack", ("firered", "leafgreen"))
+def test_nat_legs_trade_synth_abra_stats_match_its_own_personality(pack):
+    """OMP cx-6821246e F3: build_frlg_synth's trade branch used to fold `personality=pid` into the
+    same `mon.update(..., **_gen3_stats(ABRA_BASE, mon, 10))` call that computes stats from `mon`
+    -- a kwarg is evaluated before the call it's passed to runs, so stats were computed from the
+    OLD (pre-trade) party[1] mon's personality, not the new ABRA's. Recomputing stats from the
+    SAVED record's own decoded personality must equal what's stored -- an independent check that
+    doesn't just compare two runs of the same (possibly still-buggy) builder."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    path = os.path.join(REPO, "tests", "fixtures", "gen3", f"{pack}_party_trade_synth.sav")
+    with open(path, "rb") as f:
+        parsed = codec.parse_flash(f.read())
+    at = codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE   # slot 1
+    mon = codec.decode_party_mon(bytes(parsed["sb1"][at:at + codec.PARTY_MON_SIZE]))
+    assert mon["species"] == fx.SPECIES_ABRA and mon["personality"] % 25 == 0   # Hardy, per F3
+    recomputed = fx._gen3_stats(fx.ABRA_BASE, mon, 10)
+    assert {k: mon[k] for k in recomputed} == recomputed
+
+
+@pytest.mark.parametrize("break_it", ("empty_slot1", "foreign_ot"))
+def test_nat_legs_trade_synth_refuses_a_seed_with_no_owned_slot1_mon(break_it):
+    """OMP cx-6821246e F5: the builder must assert its own seed for the `trade` kind, not just
+    trust it -- an empty party slot 1, or one owned by someone other than the save's own trainer,
+    is refused instead of silently building a trade fixture around garbage."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    seed_path = os.path.join(REPO, "tests", "fixtures", "gen3", "firered_party_town.sav")
+    with open(seed_path, "rb") as f:
+        seed = f.read()
+    parsed = codec.parse_flash(seed)
+    sb1 = bytearray(parsed["sb1"])
+    at = codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE   # slot 1
+    mon = codec.decode_party_mon(bytes(sb1[at:at + codec.PARTY_MON_SIZE]))
+    if break_it == "empty_slot1":
+        mon["species"] = 0
+    else:
+        mon["ot_id"] ^= 0xFFFFFFFF
+    sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(mon)
+    layout = codec.slot_layout()
+    base = codec.NUM_SECTORS_PER_SLOT * parsed["slot"]
+    objects = {"sb2": bytes(parsed["sb2"]), "sb1": bytes(sb1), "storage": bytes(parsed["storage"])}
+    tampered = bytearray(seed)
+    for entry in layout:
+        phys = next(s["index"] for s in parsed["sectors"][base:base + codec.NUM_SECTORS_PER_SLOT]
+                    if s["id"] == entry["id"])
+        chunk = objects[entry["object"]][entry["offset"]:entry["offset"] + entry["size"]]
+        tampered[phys * codec.SECTOR_SIZE:(phys + 1) * codec.SECTOR_SIZE] = \
+            codec.write_sector(chunk, entry["id"], parsed["counter"], layout)
+    with pytest.raises(ValueError, match="slot 1 is empty|OT mismatch"):
+        fx.build_frlg_synth(bytes(tampered), "trade")
