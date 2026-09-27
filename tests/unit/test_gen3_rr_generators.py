@@ -102,9 +102,10 @@ def test_generator_check_against_cache(script):
     )
     assert result.returncode == 0, (
         f"{script} --check drifted from its committed output (exit {result.returncode}). "
-        f"See docs/gen3_requirements.md F-7 -- for gen_rr_priority_trainers.py this is a "
-        f"known, currently-reproducible finding (the community Google Sheet has moved on "
-        f"from what produced the committed roster), not a broken pin.\n"
+        f"See docs/gen3_requirements.md F-7 -- gen_rr_priority_trainers.py's committed "
+        f"roster was last regenerated from the {LOCK_PATH.name} pin on 2026-09-27 (card "
+        f"RR-PT); a fresh drift here means the pin has moved again since, not a broken "
+        f"pin -- re-run `python tools/gen_rr_priority_trainers.py` and diff the result.\n"
         f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
 
@@ -241,3 +242,143 @@ def test_xlsx_content_sha256_covers_extracted_image_urls():
     a = rrfetch._xlsx_content_sha256(_make_xlsx_bytes("https://example.com/a.png"))
     b = rrfetch._xlsx_content_sha256(_make_xlsx_bytes("https://example.com/b.png"))
     assert a != b
+
+
+_GEN3_FRLGE_DIR = ROOT / "data" / "games" / "gen3_frlge"
+
+# card RR-PT2 (2026-09-27, tightened same day per a coordinator follow-up):
+# the 11 abbreviated building/room keys that used to live here
+# (celadon_hotel, cinnabar_gym, cinnabar_isl, dig_house, joyful, mansion_f4,
+# nugget_bridge, pewter_museum, rocket_hideout, ss_anne, treasure_bea), plus
+# celadon_city_game_corner found in the follow-up, all matched
+# gen3_frlge_locations.lua's FINE per-room table but not area_map.json's
+# COARSE one, so their trainers could never appear in the Upcoming Key
+# Trainers widget in practice: server.py's trainer-panel call
+# (`self.player_area_id.get(pid, "") or self.player_area.get(pid, "")`,
+# server.py ~:2843) only ever falls back to the fine `player_area` value
+# before the player's FIRST coarse area_enter this session -- every
+# area_enter/hello after that keeps player_area_id STICKY at the last
+# non-empty coarse reading (server.py's handlers only overwrite it
+# `if area:`), so a
+# fine-only id like "rocket_hideout_b1f" or "celadon_city_game_corner" is,
+# in real play, effectively unreachable. tools/gen_rr_priority_trainers.py's
+# _AREA_OVERRIDES now maps every one of these to the area_id the client
+# actually holds while standing there (the nearest area_map.json-mapped
+# ancestor over pret's warps/connections, same rule
+# tools/gen_gen3_trainers.py's area_of_map() uses for vanilla FR/LG) --
+# see docs/gen3/research/rr_priority_regen_2026-09-26.md for the per-key trace.
+# No allowlist needed any more; keep this test bare so a future regen that
+# reintroduces a dead key fails loudly instead of silently growing a list.
+
+
+def _coarse_area_ids() -> set[str]:
+    """Every area_id string the RR/FRLG client's trainer panel can actually
+    receive in play: area_map.json's coarse per-town/dungeon table only
+    (mirrored in gen3_frlge_areas.lua). Deliberately excludes
+    gen3_frlge_locations.lua's fine per-room table -- that only ever feeds
+    `player_area`, which the trainer panel's `player_area_id.get(pid, "")
+    or player_area.get(pid, "")` (server.py ~:2843) falls back to before the
+    player's first coarse area_enter this session; every reading after that
+    is the sticky coarse value (see the module comment above)."""
+    return set(json.loads((_GEN3_FRLGE_DIR / "area_map.json")
+                           .read_text(encoding="utf-8")).values())
+
+
+def test_priority_trainers_areas_are_client_emittable():
+    """F-7/RR-PT2: every trainers_by_area key in the committed
+    rr_priority_trainers.json must be a COARSE area_id (area_map.json) --
+    the only kind the trainer panel actually receives in play once the
+    player has ever reported one this session (see the module comment
+    above) -- otherwise that area's Upcoming Key Trainers widget silently
+    never fires. This is the regression guard for the vermillion_city/
+    vermilion_city bug (the community sheet spelled the city both ways;
+    only "vermilion_city", one L, is the id area_map.json/the client
+    emits) and every dead building/room key card RR-PT2 fixed (e.g.
+    "rocket_hideout", "pewter_museum", "celadon_city_game_corner" -- a bare
+    building/fine-per-room name is never reachable in the trainer panel;
+    see tools/gen_rr_priority_trainers.py's _AREA_OVERRIDES for the
+    area_of_map()-derived fix). No allowlist: a regen that reintroduces a
+    dead key must fail this test, not grow a grandfather list."""
+    valid = _coarse_area_ids()
+    roster = json.loads((_GEN3_FRLGE_DIR / "rr_priority_trainers.json")
+                         .read_text(encoding="utf-8"))
+    keys = set(roster["trainers_by_area"])
+    bad = sorted(keys - valid)
+    assert not bad, (
+        f"trainers_by_area key(s) {bad} aren't an area_id the RR/FRLG client "
+        f"ever emits (not in area_map.json or gen3_frlge_locations.lua) -- "
+        f"their trainers can never show. Fix the sheet-text -> area_id "
+        f"mapping in tools/gen_rr_priority_trainers.py's _AREA_OVERRIDES/"
+        f"_normalize_area_name, don't hand-edit the JSON."
+    )
+
+
+# Key-fight "families" the Upcoming Key Trainers widget must be able to show
+# somewhere at least once: gym leaders (incl. Johto/RR crossover leaders and
+# their post-game "*"-prefixed rematch tiers), Elite Four members, the final
+# Champion battle (RR labels this fighter "Rival" in some sets and the
+# vanilla rival's name, e.g. "Blue", in others -- same conceptual fight, one
+# family), the overworld Rival battles, and Giovanni's boss fights. Classes
+# in the same family are merged before checking reachability: a calc-only
+# alternate-moveset duplicate (e.g. "Champion Blue Set 2", sourced purely
+# from the setdex with no sheet header/Trainer-Order location at all) isn't
+# a separately-reachable encounter, only another set for a fight some sibling
+# id in the family already carries the area for.
+_KEY_FIGHT_FAMILIES = {
+    "leader": {"Gym Leader", "Leader", "*Leader"},
+    "elite_four": {"Elite Four", "*Elite Four"},
+    "champion": {"Champion"},
+    "rival": {"Rival", "*Rival"},
+    "giovanni": {"Giovanni", "Boss"},
+}
+_KEY_FIGHT_CLASSES = {c for classes in _KEY_FIGHT_FAMILIES.values() for c in classes}
+
+
+def test_priority_trainers_key_fight_families_have_reachable_area():
+    """RR-PT2 item 3: every key-fight category (gym leaders incl. rematches,
+    rival, Elite Four/Champion, Giovanni's sets) has at least one reachable
+    rt_id under trainers_by_area -- the literal bar the card asks to
+    confirm. Checked per FAMILY, not per individual name: within "rival"/
+    "champion" a good few rt_ids are calc-only alternate-moveset duplicates
+    with no sheet location at all (they were never going to resolve, and
+    fixing that is a naming/identity redesign outside this card's scope --
+    e.g. RR's own sheet gives the final battle two different display names,
+    "Rival" and the vanilla rival's name), so long as the category as a
+    whole is reachable somewhere the widget can still show that fight."""
+    roster = json.loads((_GEN3_FRLGE_DIR / "rr_priority_trainers.json")
+                         .read_text(encoding="utf-8"))
+    parties = roster["parties"]
+    placed = {rid for ids in roster["trainers_by_area"].values() for rid in ids}
+    class_to_family = {c: fam for fam, classes in _KEY_FIGHT_FAMILIES.items() for c in classes}
+    by_family: dict[str, list[int]] = {fam: [] for fam in _KEY_FIGHT_FAMILIES}
+    for rid_str, p in parties.items():
+        fam = class_to_family.get(p.get("class"))
+        if fam:
+            by_family[fam].append(int(rid_str))
+    missing = sorted(fam for fam, ids in by_family.items() if not any(i in placed for i in ids))
+    assert not missing, f"key fight famil(y/ies) with NO reachable area at all: {missing}"
+
+
+def test_priority_trainers_gym_leader_rematches_inherit_base_area():
+    """RR-PT2: a Gym Leader's post-E4 rematch tier (Kanto Rematch/Postgame
+    sheets -- the Trainer Order sheet is a single first-playthrough pass and
+    never lists these) fights at the SAME gym as the base leader, so it must
+    show up in the same trainers_by_area bucket rather than being stranded
+    with no area. Pins the exact (base, rematch, area) triples the
+    2026-09-26 regen dropped and RR-PT2 restored (see
+    docs/gen3/research/rr_priority_regen_2026-09-26.md)."""
+    roster = json.loads((_GEN3_FRLGE_DIR / "rr_priority_trainers.json")
+                         .read_text(encoding="utf-8"))
+    tba = roster["trainers_by_area"]
+    for base, rematch, area in [
+        (414, 56, "pewter_city"),      # Brock
+        (415, 48, "cerulean_city"),    # Misty (Kanto Rematch tier)
+        (415, 32, "cerulean_city"),    # Misty (Postgame tier)
+        (416, 51, "vermilion_city"),   # Lt. Surge
+        (417, 65, "celadon_city"),     # Erika
+        (74, 38, "viridian_city"),     # Clair (Johto crossover leader)
+    ]:
+        assert base in tba.get(area, []), f"base trainer {base} missing from {area}"
+        assert rematch in tba.get(area, []), (
+            f"rematch trainer {rematch} not placed alongside its base fight at {area}"
+        )
