@@ -134,6 +134,15 @@ function Entry.artifacts(root, json, pack)
     return out
 end
 
+-- Bootstrap storage is meaningful only for a companion with the durable
+-- witness ABI. RR's admitted ABI1 must not acquire an unbindable journal.
+function Entry.trade_journal_supported(root, json, artifact)
+    if artifact.kind ~= "companion" then return false end
+    local files = assert(Entry.PACK_FILES[artifact.pack], "unknown pack")
+    local full = load_json(json, root .. "/" .. files.profile)
+    return type(full.native) == "table" and full.native.ABI == 2
+end
+
 -- hash (lowercase sha1 or md5) -> { pack, title, kind, rom_type } over every pack's
 -- admission set. Both digests are indexed: they cannot collide (40 vs 32 hex digits) and
 -- BizHawk's gameinfo hash is not the same digest on every core. A digest repeated across two

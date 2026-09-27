@@ -396,3 +396,21 @@ def test_the_rival_opcode_is_file_scope_in_the_handler():
     body = src[hook_start:hook_start + hook_end]
     assert "static void stage_enemy_party" not in body, "stage_enemy_party must be at file scope"
     assert src.index("static void stage_enemy_party") < hook_start
+
+
+@OS
+def test_a_slow_holder_is_waited_out_not_failed_closed(windows):
+    """T5 native_trade_firered 2026-09-27 (OMP cx-6616a9f2): two EmuHawks launch 0.1 s apart on
+    one install; the holder took longer than the old 100 x 5 ms bound, so B got nil, never bound a
+    trade session and silently never advertised trade. A holder that publishes after 150 spins
+    (0.75 s at the default 5 ms) must still hand B the next value."""
+    fs = _FS(windows, {BORN: "first-run\n"})          # baton absent = held by A right now
+    spins = []
+
+    def slow_holder():
+        spins.append(1)
+        if len(spins) == 150:
+            fs.files[BATON] = _Inode("41")            # A publishes its n+1
+
+    open_, remove, rename = fs.api()
+    assert _counter()(ROOT, open_, remove, slow_holder, rename, fs.windows) == 42

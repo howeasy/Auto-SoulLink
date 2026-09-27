@@ -1633,8 +1633,7 @@ function Client.new(p)
         if trade then trade:tick(); sync_trade() end
         if owed then
             local refresh=false
-            owed:step(p.net.connected(), session.hello_sent == true and not awaiting_trade_run
-                       and (not journal or journal:ready()), function(event, fields)
+            owed:step(p.net.connected(), session.hello_sent == true, function(event, fields)
                 -- Uncertainty declarations deliberately precede the later
                 -- visible recovery HELLO; gating those would deadlock recovery.
                 if event == "trade_done" and not fields.uncertain
@@ -1646,6 +1645,9 @@ function Client.new(p)
                     refresh=true
                 end
                 return sent
+            end, function(event)
+                return (event ~= "trade_done" and event ~= "menu_result")
+                    or (not awaiting_trade_run and (not journal or journal:ready()))
             end)
             -- Server only consumes a hello AFTER the uncertainty declaration. This second
             -- hello is allowed only after the real reset boundary, never from unsaved RAM.
