@@ -496,7 +496,9 @@ FAMILY_PURE = "gen1_purergb"
 # in-game trades, shops, pickup) are OPEN; the misc tweaks are the nine that were verified to
 # write nowhere near an engine site (the pipeline re-proves that on every output).
 FAMILY_FRLG = "gen3_frlg"
-FAMILIES = (FAMILY_VANILLA, FAMILY_PURE, FAMILY_FRLG)
+FAMILY_EMERALD = "gen3_emerald"
+FAMILIES = (FAMILY_VANILLA, FAMILY_PURE, FAMILY_FRLG, FAMILY_EMERALD)
+GEN3_FAMILIES = (FAMILY_FRLG, FAMILY_EMERALD)
 GEN1_FAMILIES = (FAMILY_VANILLA, FAMILY_PURE)
 # Gen 1 code tweaks with no FR/LG implementation (Gen3RomHandler.miscTweaksAvailable), so
 # tweakForRom would silently drop them; UPDATE_TYPE_EFFECTIVENESS is forbidden by ruling 31.
@@ -563,8 +565,9 @@ def options_for(family: str = FAMILY_VANILLA) -> dict[str, dict]:
     """The option table one family's files are built from and admitted against."""
     if family not in FAMILIES:
         raise UprSettingsError(f"unknown randomizer family {family!r}")
-    if family == FAMILY_FRLG:
-        return {k: o for k, o in ALL_OPTIONS.items() if k not in GEN1_ONLY_OPTIONS}
+    if family in GEN3_FAMILIES:
+        unavailable = (*GEN1_ONLY_OPTIONS, "balance_static_levels") if family == FAMILY_EMERALD else GEN1_ONLY_OPTIONS
+        return {k: o for k, o in ALL_OPTIONS.items() if k not in unavailable}
     return OPTIONS
 
 
@@ -574,7 +577,7 @@ def families_of_option(key: str) -> list[str]:
 
 # The ROM name a family's file carries (informational: UPR matches the ROM itself).
 ROM_NAME = {FAMILY_VANILLA: "Pokemon Red (U) [!]", FAMILY_PURE: "Pokemon Red (U) [!]",
-            FAMILY_FRLG: "Fire Red (U)"}
+            FAMILY_FRLG: "Fire Red (U)", FAMILY_EMERALD: "Emerald (U)"}
 # The tweaks a lossless entry honours (fork patch 0008, revision 3): lower-case names is a
 # DATA write over the 190-row species-name table, which the fork re-cases byte-for-byte in
 # place (never through its string path), so nothing else in the cartridge moves.
@@ -842,7 +845,7 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
         bad += [f"{key} (not implemented for pureRGB entries)" for key in PURE_INERT_BOOLS if spec.get(key)]
         if spec.get("trainers") in PURE_INERT_TRAINER_MODES:
             bad.append(f"trainers={spec['trainers']} (pure entries carry no gym/Elite tags)")
-    if family == FAMILY_FRLG:
+    if family in GEN3_FAMILIES:
         # ruling 31: abilities and the type chart join Gen 1's set by name (Gen 1 has no
         # abilities: there tweakForRom clears the flag). A Gen 1-only tweak would be dropped
         # silently by tweakForRom, so it is refused rather than believed.
@@ -851,10 +854,11 @@ def forbidden_enabled(parsed: dict, family: str = FAMILY_VANILLA) -> list[str]:
         names = parsed.get("misc_tweak_names") or []
         if "UPDATE_TYPE_EFFECTIVENESS" in names:
             bad.append("UPDATE_TYPE_EFFECTIVENESS (the type chart)")
-        allowed = {o["misc"] for o in options_for(FAMILY_FRLG).values() if "misc" in o}
+        allowed = {o["misc"] for o in options_for(family).values() if "misc" in o}
         other = [n for n in names if n not in allowed and n != "UPDATE_TYPE_EFFECTIVENESS"]
         if other or parsed.get("misc_tweaks", 0) & ~sum(MISC_TWEAKS.values()):
-            bad.append("tweaks (" + ", ".join(other or ["unknown"]) + ") not available on FR/LG")
+            label = "Emerald" if family == FAMILY_EMERALD else "FR/LG"
+            bad.append("tweaks (" + ", ".join(other or ["unknown"]) + f") not available on {label}")
     if not f.get("types_UNCHANGED"):
         bad.append("types")
     if not f.get("evolutions_UNCHANGED"):

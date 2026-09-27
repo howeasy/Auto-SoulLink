@@ -1,4 +1,4 @@
-"""The write-domain audit for Manager-randomized FireRed / LeafGreen (card R3-F3) -- the Gen 3
+"""The write-domain audit for Manager-randomized FireRed / LeafGreen and Emerald -- the Gen 3
 counterpart of pureRGB's T6 (server/upr_pipeline.py `_audit_write_domain`,
 tools/upr_write_domain_diff.py, docs/purergb/PLAN.md A5 / G5).
 
@@ -8,8 +8,8 @@ context windows, the checkpoint anchors and the species rules -- not what ELSE a
 This module diffs the clean pinned ROM against the fork's output and requires every changed byte
 to lie inside a domain of an ENABLED setting (or the fork's unconditional `baseline`).
 
-The domains are FACTS, recorded in data/games/gen3_frlg/upr_write_domains.json with a source per
-component. `build_model` regenerates that file from:
+The domains are FACTS, recorded separately in data/games/gen3_{frlg,emerald}/upr_write_domains.json
+with a source per component. `build_model` regenerates those files from:
   * the pinned fork jar's own gen3_offsets.ini section and IPS code tweaks (read from the jar),
   * the clean ROM, walked exactly the way Gen3RomHandler walks it (the same locators, map-event
     scan, wild headers, trainer table, text-pointer search radius), and
@@ -29,12 +29,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 MODEL_PATH = REPO / "data" / "games" / "gen3_frlg" / "upr_write_domains.json"
+EMERALD_MODEL_PATH = REPO / "data/games/gen3_emerald/upr_write_domains.json"
 SYM_DIR = REPO / "data" / "gen3" / "pret"
 DEFAULT_JAR = REPO / ".cache" / "slink-upr" / "PokeRandoZX.jar"
 STAGED = {"firered": "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba",
-          "leafgreen": "patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba"}
-INI_SECTION = {"firered": "Fire Red (U) 1.0", "leafgreen": "Leaf Green (U) 1.0"}
-SYM_FILE = {"firered": "pokefirered.sym", "leafgreen": "pokeleafgreen.sym"}
+          "leafgreen": "patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba",
+          "emerald": "patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba"}
+INI_SECTION = {"firered": "Fire Red (U) 1.0", "leafgreen": "Leaf Green (U) 1.0", "emerald": "Emerald (U)"}
+SYM_FILE = {"firered": "pokefirered.sym", "leafgreen": "pokeleafgreen.sym", "emerald": "pokeemerald.sym"}
 SCHEMA = "slink-upr-gen3-write-domains-v1"
 
 # ── which domains a settings SPEC enables (upr_settings.options_for(FAMILY_FRLG) keys) ──────
@@ -53,6 +55,11 @@ NO_WRITE_OPTIONS = (
 # enabled by a spec: they exist so a stray byte is NAMED ("types", "evolutions", ...).
 FORBIDDEN_DOMAINS = ("base_stats", "types", "abilities", "exp_curves", "evolutions", "movesets",
                      "egg_moves", "move_data", "type_chart")
+EMERALD_FACILITIES = {
+    "frontier": ("Frontier", "BattleTower", "BattleFactory", "BattleArena", "BattleDome", "BattlePalace", "BattlePike"),
+    "pyramid": ("Pyramid",), "trainer_hill": ("TrainerHill",),
+    "contests": ("Contest",), "secret_bases": ("SecretBase",),
+}
 
 
 def domains_for_spec(spec: dict) -> set[str]:
@@ -143,8 +150,9 @@ def _inside(merged, off: int) -> bool:
     return i >= 0 and off < ends[i]
 
 
-def load_model(path: Path | None = None) -> dict:
-    return json.loads(Path(path or MODEL_PATH).read_text(encoding="utf-8"))
+def load_model(path: Path | None = None, *, title: str | None = None) -> dict:
+    default = EMERALD_MODEL_PATH if title == "emerald" else MODEL_PATH
+    return json.loads(Path(path or default).read_text(encoding="utf-8"))
 
 
 def changed_offsets(clean: bytes, out: bytes, chunk: int = 4096) -> list[int]:
@@ -180,7 +188,7 @@ def audit(title: str, clean: bytes, out: bytes, enabled: set[str], model: dict |
     admits only the changes packed from its start the way freeSpaceFinder allocates. A stray
     byte is NAMED by every domain of the model that holds it (a disabled allowed setting, a
     forbidden table, or '<domain> (not packed ...)'), or 'unattributed'."""
-    model = model or load_model()
+    model = model or load_model(title=title)
     entry = model["titles"][title]
     if hashlib.sha1(clean).hexdigest() != entry["clean_sha1"]:
         raise ValueError(f"the clean {title} ROM is not the pinned dump ({entry['clean_sha1']})")
@@ -214,23 +222,24 @@ def audit(title: str, clean: bytes, out: bytes, enabled: set[str], model: dict |
 
 
 def check_output(source_rom: str, output_rom: str, spec: dict, jar: str | None = None) -> dict:
-    """The pipeline's one call (FR/LG branch of prepare_pair): refuse the output if the fork
+    """The pipeline's one call (Gen 3 branch of prepare_pair): refuse the output if the fork
     wrote a byte outside the domains its spec enables, or if `jar` (the jar that made it;
     default: find_upr_jar()) is not the jar the model was built from."""
     from server.upr_pipeline import UprPipelineError, find_upr_jar, gen3_title, jar_sha256
     try:
         clean, out = Path(source_rom).read_bytes(), Path(output_rom).read_bytes()
-        model = load_model()
         title = gen3_title(clean)
+        model = load_model(title=title)
         if title not in model["titles"]:
             raise ValueError(f"it covers only {sorted(model['titles'])} (1.0, USA), and {source_rom} "
                              f"is not one of them")
         jar = jar or find_upr_jar()
         digest = jar_sha256(jar) if jar else None
         if digest != model["jar_sha256"]:
+            command = "python -m server.upr_gen3_write_domain --write" + (" --title emerald" if title == "emerald" else "")
             raise ValueError(f"the randomizer jar {jar} (sha256 {digest}) is not the jar the write "
                              f"domains were modelled from ({model['jar_sha256']}); regenerate "
-                             f"with `python -m server.upr_gen3_write_domain --write`")
+                             f"with `{command}`")
         r = audit(title, clean, out, domains_for_spec(spec), model)
     except (OSError, ValueError, KeyError) as exc:
         raise UprPipelineError(f"write-domain audit could not run: {exc}") from exc
@@ -426,9 +435,9 @@ def _map_scan(rom: _Rom, entry: dict) -> tuple[list[int], list[dict]]:
                     s = rom.ptr(people + (t["person"] - 1) * 24 + 16)
                     if s < 0:
                         continue
-                    if t["tutor"] and (t["number"] == 5 or 8 <= t["number"] <= 11):
+                    if entry["values"]["Type"] == "FRLG" and t["tutor"] and (t["number"] == 5 or 8 <= t["number"] <= 11):
                         s = rom.ptr(s + 1)
-                    elif t["tutor"] and t["number"] == 7:
+                    elif entry["values"]["Type"] == "FRLG" and t["tutor"] and t["number"] == 7:
                         s = rom.ptr(s + 0x1F)
                     look = s + t["offset"]
                     if 0 <= look < len(rom.b) - 2 and rom.b[look + 3] in (8, 9):
@@ -474,6 +483,7 @@ def _comp(what: str, source: str, spans, **extra) -> dict:
 
 def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> dict:
     rom = _Rom(clean)
+    emerald = title == "emerald"
     e = ini[INI_SECTION[title]]
     V, A = e["values"], e["arrays"]
     ini_src = f"gen3_offsets.ini [{INI_SECTION[title]}]"
@@ -501,7 +511,17 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
         hits = rom.find_all(hexstr) if multiple else [rom.find(hexstr)]
         return [(h + delta, h + delta + n) for h in hits if h > 0]
 
-    D["baseline"] = [
+    D["baseline"] = ([
+        _comp("intro Pokemon species words (randomizeIntroPokemon, unconditional)",
+              f"{ini_src} IntroCryOffset/IntroSpriteOffset; {H}.randomizeIntroPokemon (Emerald)",
+              site(V["IntroCryOffset"], 2) + site(V["IntroSpriteOffset"], 2)),
+        _comp("first-battle IPS (getStaticPokemon applies it on every clean run)",
+              f"jar {e['tweaks']['StaticFirstBattleTweak']}.ips; {H}.getStaticPokemon", tweak("StaticFirstBattleTweak")),
+        _comp("roamer code/constant rewrite (getRoamers applies it on every clean run)",
+              f"{ini_src} CreateInitialRoamerMonFunctionStartOffset; {H}.applyEmeraldRoamerPatch:2568-2594",
+              [(V["CreateInitialRoamerMonFunctionStartOffset"] + lo, V["CreateInitialRoamerMonFunctionStartOffset"] + hi)
+               for lo, hi in ((8, 12), (14, 15), (28, 32), (48, 52))]),
+    ] if emerald else [
         _comp("intro Pokemon cry/sprite operands (randomizeIntroPokemon, unconditional)",
               f"{ini_src} IntroCryOffset/IntroOtherOffset/IntroSpriteOffset; {H}.randomizeIntroPokemon",
               site(V["IntroCryOffset"], 1) + site(V["IntroOtherOffset"], 1) + site(V["IntroSpriteOffset"], 8)),
@@ -509,6 +529,7 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
               f"jar {e['tweaks']['GhostMarowakTweak']}.ips; {H}.getStaticPokemon", tweak("GhostMarowakTweak")),
         _comp("roamer IPS (getRoamers applies it on every run)",
               f"jar {e['tweaks']['RoamingPokemonTweak']}.ips; {H}.getRoamers", tweak("RoamingPokemonTweak")),
+    ]) + [
         _comp("ability 2 := ability 1 where ability 2 is 0 (saveBasicPokeStats, every record)",
               f"{H}.saveBasicPokeStats bsAbility2Offset=23",
               [(r + 23, r + 24) for r in records if clean[r + 23] == 0], id="ability2_normalisation"),
@@ -528,14 +549,14 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
         o += 20
     D["wild"] = [_comp("encounter slots (level, level, species) of every wild table",
                        f"{H}.setEncounters/writeWildArea via Gen3Constants.wildPokemonPointerPrefix", wild)]
-    evo = found(LEVEL_EVO_KANTO_CHECK, 4) + found(STONE_EVO_KANTO_CHECK, 4)
+    evo = [] if emerald else found(LEVEL_EVO_KANTO_CHECK, 4) + found(STONE_EVO_KANTO_CHECK, 4)
     obey = rom.find(DEOXYS_OBEY)
     if obey > 0:
         evo += site(obey, 4)
         if rom.u16(obey + MEW_OBEY_FROM_DEOXYS) == (0x28 << 8) | 151:
             evo += site(obey + MEW_OBEY_FROM_DEOXYS, 2)
     D["obedience_evo_code"] = [_comp(
-        "Deoxys/Mew obedience + Kanto-dex level/stone evolution checks (CODE)",
+        "Deoxys/Mew obedience (CODE)" if emerald else "Deoxys/Mew obedience + Kanto-dex level/stone evolution checks (CODE)",
         f"{H}.attemptObedienceEvolutionPatches (called by setStarters/setEncounters/setStaticPokemon)", evo)]
     D["wild_held_items"] = [_comp("common/rare held item words of every base-stats record",
                                   f"{H}.saveBasicPokeStats bsCommonHeldItemOffset=12/bsRareHeldItemOffset=14",
@@ -547,27 +568,32 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
                                    found(PERFECT_ODDS, 4))]
     sp = V["StarterPokemon"]
     starter_text = []
-    for dex in (1, 4, 7):                               # frlgBaseStarter1..3
+    for dex in (() if emerald else (1, 4, 7)):           # frlgBaseStarter1..3
         name = clean[names + dex * 11: clean.index(0xFF, names + dex * 11)]
         hit = clean.find(name)
         if hit >= 0:
             starter_text.append((hit, hit + rom.strlen(hit) + 1))
-    D["starters"] = [
+    D["starters"] = ([_comp("three contiguous starter species words", f"{ini_src} StarterPokemon; {H}.setStarters (RSE)",
+                            site(sp, 6))] if emerald else [
         _comp("the six starter species words", f"{ini_src} StarterPokemon; {H}.setStarters",
               [(sp + d, sp + d + 2) for d in STARTER_SITE_OFFSETS]),
-        _comp("Oak's three starter descriptions (rewritten in place)", f"{H}.writeFRLGStarterText", starter_text)]
+        _comp("Oak's three starter descriptions (rewritten in place)", f"{H}.writeFRLGStarterText", starter_text)])
     statics = [(s, s + 2) for rec in e["statics"] for s in rec[0]] + [(lv, lv + 1) for rec in e["statics"] for lv in rec[1]]
     roam = [(s, s + 2) for rec in e["roamers"] for s in rec[0]] + [(lv, lv + 1) for rec in e["roamers"] for lv in rec[1]]
-    marowak = ([(s, s + 2) for s in A["GhostMarowakSpeciesOffsets"]] + [(lv, lv + 1) for lv in A["GhostMarowakLevelOffsets"]]
-               + site(V["GhostMarowakGenderOffset"], 1))
+    hardcoded = (_comp("first-battle species word and level byte", f"{ini_src} StaticFirstBattleSpeciesOffset/LevelOffset; {H}.setStaticPokemon",
+                      site(V["StaticFirstBattleSpeciesOffset"], 2) + site(V["StaticFirstBattleLevelOffset"], 1)) if emerald else
+                 _comp("Ghost Marowak species/level/gender", f"{ini_src} GhostMarowak*; {H}.setStaticPokemon",
+                       [(s, s + 2) for s in A["GhostMarowakSpeciesOffsets"]]
+                       + [(lv, lv + 1) for lv in A["GhostMarowakLevelOffsets"]] + site(V["GhostMarowakGenderOffset"], 1)))
     D["statics"] = [
         _comp("StaticPokemon{} species words and level bytes", f"{ini_src} StaticPokemon{{}}; {H}.setStaticPokemon", statics),
         _comp("roamer species words and level bytes", f"{ini_src} RoamingPokemon{{}}; {H}.setRoamers", roam),
-        _comp("Ghost Marowak species/level/gender", f"{ini_src} GhostMarowak*; {H}.setStaticPokemon", marowak),
+        hardcoded,
         _comp("special-music fix IPS + its species pool", f"jar {e['tweaks']['NewIndexToMusicTweak']}.ips; {H}.applyCorrectStaticMusic",
               tweak("NewIndexToMusicTweak"))]
-    D["fossil_levels"] = [_comp("fossil level words", f"{ini_src} FossilLevelOffsets; {H}.applyMiscTweak BALANCE_STATIC_LEVELS",
-                                [(f, f + 2) for f in A["FossilLevelOffsets"]])]
+    if not emerald:
+        D["fossil_levels"] = [_comp("fossil level words", f"{ini_src} FossilLevelOffsets; {H}.applyMiscTweak BALANCE_STATIC_LEVELS",
+                                    [(f, f + 2) for f in A["FossilLevelOffsets"]])]
     td, tlen, tcount = V["TrainerData"], V["TrainerEntrySize"], V["TrainerCount"]
     party = []
     for i in range(1, tcount):
@@ -578,6 +604,11 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
     D["trainer_parties"] = [_comp("trainer party-type byte, party count and every party record",
                                   f"{ini_src} TrainerData/TrainerEntrySize/TrainerCount; {H}.setTrainers (no repoint: counts never grow)",
                                   party)]
+    if emerald:
+        steven = V["MossdeepStevenTeamOffset"]
+        D["trainer_parties"].append(_comp("Steven's three partner records: species, IVs, level and moves only",
+            f"{ini_src} MossdeepStevenTeamOffset; {H}.setTrainers Emerald branch",
+            [(steven + i * 20 + lo, steven + i * 20 + hi) for i in range(3) for lo, hi in ((0, 4), (12, 20))]))
     D["trainer_names"] = [_comp("trainer names", f"{H}.setTrainerNames TrainerNameLength",
                                 [(td + i * tlen + 4, td + i * tlen + 4 + V["TrainerNameLength"]) for i in range(1, tcount)])]
     D["trainer_class_names"] = [_comp("trainer class names", f"{ini_src} TrainerClassNames; {H}.setTrainerClassNames",
@@ -632,31 +663,45 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
                               [(item_data + i * V["ItemEntrySize"] + 16, item_data + i * V["ItemEntrySize"] + 18)
                                for i in range(1, V["ItemCount"])])]
     pk = rom.find(e["strings"]["PickupTableStartLocator"])
+    pickup_stride = 2 if emerald else 4
     D["pickup"] = [_comp("pickup item words", f"{ini_src} PickupTableStartLocator; {H}.setPickupItems",
-                         [(pk + 4 * i, pk + 4 * i + 2) for i in range(V["PickupItemCount"])] if pk > 0 else [])]
+                         [(pk + pickup_stride * i, pk + pickup_stride * i + 2) for i in range(V["PickupItemCount"])] if pk > 0 else [])]
     D["fastest_text"] = [_comp("instant-text IPS (CODE + sTextSpeedFrameDelays)", f"jar {e['tweaks']['InstantTextTweak']}.ips",
                                tweak("InstantTextTweak"))]
     D["pc_potion"] = [_comp("new-game PC item", f"{ini_src} PCPotionOffset; {H}.randomizePCPotion", site(V["PCPotionOffset"], 2))]
     D["running_shoes_indoors"] = [_comp("run-indoors check (CODE)", f"{ini_src} RunIndoorsTweakOffset",
                                         site(V["RunIndoorsTweakOffset"], 1))]
-    rs = rom.find(RUNNING_SHOES_PREFIX_FRLG)
+    rs = rom.find("0640002E1BD08C20" if emerald else RUNNING_SHOES_PREFIX_FRLG)
     D["run_without_shoes"] = [_comp("FLAG_SYS_B_DASH branch nop (CODE)", f"{H}.applyRunWithoutRunningShoesPatch",
                                     site(rs + 0x12, 2) if rs > 0 else [])]
     D["catching_tutorial"] = [_comp("catching-tutorial opponent operand (CODE)", f"{ini_src} CatchingTutorialOpponentMonOffset",
-                                    site(V["CatchingTutorialOpponentMonOffset"], 2))]
+                                    site(V["CatchingTutorialOpponentMonOffset"], 4 if emerald else 2))]
+    if emerald:
+        D["catching_tutorial"].append(_comp("catching-tutorial player operand (CODE)",
+            f"{ini_src} CatchingTutorialPlayerMonOffset; {H}.randomizeCatchingTutorial",
+            site(V["CatchingTutorialPlayerMonOffset"], 4)))
     aide = rom.find(OAK_AIDE_PREFIX)
     D["national_dex"] = [_comp("Pokedex script hook, national-dex flag checks, Oak/aide fixes (script + CODE)",
                                f"{H}.patchForNationalDex (FRLG)",
                                found(NATDEX_SCRIPT_ID, 6) + found(NATDEX_FLAG_CHECKER, 10, multiple=True)
                                + found(OAKS_LAB_CHECK, 8) + found(OAK_HOUSE_CHECK, 5)
                                + (site(aide + len(OAK_AIDE_PREFIX) // 2 + 1, 1) if aide > 0 else []))]
+    if emerald:
+        dex = rom.find("3229610825F00129E40816CD40010003")
+        assert dex >= 8, "Emerald Pokedex script signature missing or ambiguous"
+        dex_pointer = rom.find((ROM_BASE + dex - 8).to_bytes(4, "little").hex())
+        assert dex_pointer > 0, "Emerald Pokedex script pointer missing or ambiguous"
+        D["national_dex"] = [_comp("Pokedex acquisition script pointer (new script uses packed free space)",
+            f"{H}.patchForNationalDex (Emerald); Gen3Constants.ePokedexScriptIdentifier", site(dex_pointer, 4))]
     D["species_names"] = [_comp("species name table", f"{H}.savePokemonStats writeFixedLengthString (applyCamelCaseNames)",
                                 site(names + 11, 11 * count))]
     fs = V["FreeSpace"]
-    gap_end = min(a for a, _s, _n in syms if a >= fs)
+    later_symbols = [a for a, _s, _n in syms if a >= fs]
+    gap_end = min(later_symbols, default=len(clean))
     assert clean[fs:gap_end] == b"\xff" * (gap_end - fs), "free space is not 0xFF in the clean ROM"
+    limit = "up to the first pret symbol" if later_symbols else "to ROM end (no later pret symbol)"
     D["free_space"] = [_comp("0xFF free space the fork repoints text/scripts into, packed from FreeSpace",
-                             f"{ini_src} FreeSpace up to the first pret symbol; every RomFunctions.freeSpaceFinder call "
+                             f"{ini_src} FreeSpace {limit}; every RomFunctions.freeSpaceFinder call "
                              f"scans forward from FreeSpace (audit: packed, PACKED_MAX_GAP)", [(fs, gap_end)], packed=True)]
     # naming only: the rule-bearing tables the family forbids
     learn = V["PokemonMovesets"]
@@ -688,7 +733,17 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
     D["move_data"] = [_comp("battle move data", f"{H}.saveMoves (efrlgMoveDataPointer)", site(move_data, 12 * (V["MoveCount"] + 1)))]
     D["type_chart"] = [_comp("type effectiveness table", f"{ini_src} TypeEffectivenessOffset; {H}.writeTypeEffectivenessTable",
                              [(te, te_end + 1)])]
-    return {"ini_section": INI_SECTION[title], "clean_sha1": hashlib.sha1(clean).hexdigest(), "domains": D}
+    if emerald:
+        for domain, markers in EMERALD_FACILITIES.items():
+            named = [(a, size, name) for a, size, name in syms if size and any(mark in name for mark in markers)]
+            assert named, f"no pinned Emerald {domain} symbols"
+            D[domain] = [_comp("protected facility symbols (data and code)",
+                f"pokeemerald.sym; Emerald RC excludes {domain}; naming only, never enabled",
+                [(a, a + size) for a, size, _ in named], symbols=[name for _, _, name in named])]
+    result = {"ini_section": INI_SECTION[title], "clean_sha1": hashlib.sha1(clean).hexdigest(), "domains": D}
+    if emerald:
+        result["symbol_sha256"] = hashlib.sha256((SYM_DIR / SYM_FILE[title]).read_bytes()).hexdigest()
+    return result
 
 
 def build_model(jar: Path = DEFAULT_JAR, roms: dict[str, bytes] | None = None) -> dict:
@@ -696,11 +751,11 @@ def build_model(jar: Path = DEFAULT_JAR, roms: dict[str, bytes] | None = None) -
         ini = parse_ini(zf.read("com/dabomstew/pkrandom/config/gen3_offsets.ini").decode("utf-8"))
         ips = {n[len("com/dabomstew/pkrandom/patches/"):-4]: zf.read(n) for n in zf.namelist()
                if n.startswith("com/dabomstew/pkrandom/patches/") and n.endswith(".ips")}
-    roms = roms or {t: (REPO / p).read_bytes() for t, p in STAGED.items()}
+    roms = roms or {t: (REPO / STAGED[t]).read_bytes() for t in ("firered", "leafgreen")}
     return {"schema": SCHEMA,
-            "generated_by": "python -m server.upr_gen3_write_domain --write",
+            "generated_by": "python -m server.upr_gen3_write_domain --write" + (" --title emerald" if set(roms) == {"emerald"} else ""),
             "jar_sha256": hashlib.sha256(Path(jar).read_bytes()).hexdigest(),
-            "forbidden_domains": list(FORBIDDEN_DOMAINS),
+            "forbidden_domains": list(FORBIDDEN_DOMAINS) + (list(EMERALD_FACILITIES) if "emerald" in roms else []),
             "titles": {t: build_title(t, roms[t], ini, ips) for t in sorted(roms)}}
 
 
@@ -709,7 +764,16 @@ def dumps(model: dict) -> str:
 
 
 if __name__ == "__main__":
-    import sys
-    if "--write" in sys.argv:
-        MODEL_PATH.write_text(dumps(build_model()), encoding="utf-8", newline="\n")
-        print(f"wrote {MODEL_PATH}")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Generate pinned Gen 3 UPR write-domain models")
+    parser.add_argument("--write", action="store_true")
+    parser.add_argument("--title", choices=("frlg", "emerald"), default="frlg")
+    args = parser.parse_args()
+    if args.write:
+        emerald = args.title == "emerald"
+        target = EMERALD_MODEL_PATH if emerald else MODEL_PATH
+        inputs = {"emerald": (REPO / STAGED["emerald"]).read_bytes()} if emerald else None
+        from server.upr_pipeline import find_upr_jar
+        target.write_text(dumps(build_model(Path(find_upr_jar() or DEFAULT_JAR), inputs)), encoding="utf-8", newline="\n")
+        print(f"wrote {target}")

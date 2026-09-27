@@ -64,9 +64,11 @@ from server.adapters.gen3_rom_tables import (
     normalised_species_rules,
 )
 from server.upr_settings import (
+    FAMILY_EMERALD,
     FAMILY_FRLG,
     FAMILY_PURE,
     FAMILY_VANILLA,
+    GEN3_FAMILIES,
     UprSettingsError,
     categories_enabled,
     forbidden_enabled,
@@ -280,15 +282,15 @@ def family_of(sources: dict[str, str]) -> str:
     for pid, path in sources.items():
         with open(path, "rb") as f:
             rom = f.read()
-        if gen3_title(rom):
-            families[pid] = FAMILY_FRLG
+        if title := gen3_title(rom):
+            families[pid] = FAMILY_EMERALD if title == "emerald" else FAMILY_FRLG
             continue
         ident = identify(rom)
         families[pid] = FAMILY_PURE if ident.get("foundation") == "gen1_purergb" else FAMILY_VANILLA
     if len(set(families.values())) != 1:
         raise UprPipelineError(
             f"the two ROMs are different families ({families}); a cartridge only pairs with "
-            f"another of its own family (vanilla Gen 1, pureRGB, FireRed / LeafGreen)")
+            f"another of its own family (vanilla Gen 1, pureRGB, FireRed / LeafGreen, Emerald)")
     return next(iter(families.values()))
 
 
@@ -301,9 +303,9 @@ class UprPipelineError(Exception):
 # data, so a re-pinned site is re-asserted here with no edit. A GBA dump is 16 MiB; the
 # header game code at 0xAC names the title and 0xBC is the revision (the pins are rev 0).
 GEN3_ROM_SIZE = 16 << 20
-GEN3_CODES = {b"BPRE": "firered", b"BPGE": "leafgreen"}
-EMERALD_RANDOMIZER_REFUSAL = "Emerald randomization is not enabled in Manager: its UPR write-domain audit is pending"
-GEN3_TITLE_WORDS = {"firered": "FireRed", "leafgreen": "LeafGreen"}
+GEN3_CODES = {b"BPRE": "firered", b"BPGE": "leafgreen", b"BPEE": "emerald"}
+EMERALD_RANDOMIZER_REFUSAL = "Emerald randomization needs the current SLink fork jar (tools/build_upr_fork.py)"
+GEN3_TITLE_WORDS = {"firered": "FireRed", "leafgreen": "LeafGreen", "emerald": "Emerald"}
 _GEN3_PACK = os.path.join(_REPO, "data", "games", "gen3_frlg")
 # gSpeciesInfo row (pret include/pokemon.h SpeciesInfo, 28 bytes): the fields a Soul Link
 # rule or the calc reads -- base stats 0-5, types 6-7, growth rate 19, abilities 22-23. The
@@ -316,8 +318,15 @@ def _gen3_pack(name: str) -> dict:
         return json.load(f)
 
 
+def _gen3_pack_for_title(title: str, name: str) -> dict:
+    if title != "emerald":
+        return _gen3_pack(name)
+    with open(os.path.join(_REPO, "data/games/gen3_emerald", name), encoding="utf-8") as f:
+        return json.load(f)
+
+
 def gen3_title(rom: bytes) -> str | None:
-    """"firered"/"leafgreen" for a 16 MiB English rev-0 FR/LG header, else None."""
+    """A supported 16 MiB English rev-0 FR/LG/Emerald header, else None."""
     if len(rom) != GEN3_ROM_SIZE or rom[0xBC] != 0:
         return None
     return GEN3_CODES.get(bytes(rom[0xAC:0xB0]))
@@ -328,7 +337,7 @@ def gen3_identify(rom: bytes) -> dict | None:
     title = gen3_title(rom)
     if title is None:
         return None
-    pin = _gen3_pack("engine_signals.json")["titles"][title]["artifacts"]["clean"]["rom_sha1"]
+    pin = _gen3_pack_for_title(title, "engine_signals.json")["titles"][title]["artifacts"]["clean"]["rom_sha1"]
     pinned = hashlib.sha1(rom).hexdigest() == pin.lower()
     return {"title": title, "kind": "clean" if pinned else "rand", "pinned": pinned}
 
@@ -339,7 +348,7 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
     these very anchors and hooks these very sites (lua/gen3/entry.lua), so a UPR setting that
     touched one would break the write safety the whole Gen 3 lane rests on; empty = intact."""
     bad = []
-    sites = _gen3_pack("engine_signals.json")["titles"][title]["artifacts"]["clean"]["sites"]
+    sites = _gen3_pack_for_title(title, "engine_signals.json")["titles"][title]["artifacts"]["clean"]["sites"]
     for kind, site in sites.items():
         # ("context", None) is legitimate -- most sites have none, so it is skipped; a "site"
         # record missing its own expected_hex is a malformed pack and must refuse, not skip.
@@ -358,7 +367,7 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
             off = rec["rom_offset"]
             if rom[off:off + len(want)] != want:
                 bad.append(f"{kind} {label} @0x{off:06X}")
-    anchors = _gen3_pack("write_checkpoint.json")[title]["anchors"]
+    anchors = _gen3_pack_for_title(title, "write_checkpoint.json")[title]["anchors"]
     for name, a in anchors.items():
         clean = a.get("expected_hex", {}).get("clean") if isinstance(a.get("expected_hex"), dict) else None
         if clean is None:
@@ -412,7 +421,7 @@ def _check_content_gen3(source_rom: str, output_rom: str) -> dict:
         out = f.read()
     si, oi = gen3_identify(src), gen3_identify(out)
     if si is None or not si["pinned"]:
-        raise UprPipelineError("source ROM is not a pinned FireRed / LeafGreen dump; randomize "
+        raise UprPipelineError("source ROM is not a pinned FireRed / LeafGreen / Emerald dump; randomize "
                                "from a clean cartridge so the result is reproducible")
     if oi is None or oi["title"] != si["title"]:
         raise UprPipelineError(f"output is not {GEN3_TITLE_WORDS[si['title']]} any more")
@@ -508,11 +517,12 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
             rom = f.read()
         # the Manager's ROM scan dedups on this, so it reads each file once, not twice
         info["sha1"] = hashlib.sha1(rom).hexdigest()
-        if rom[0xAC:0xB0] == b"BPEE":
-            info.update(clean=False, title=EMERALD_RANDOMIZER_REFUSAL)
+        if rom[0xAC:0xB0] == b"BPEE" and gen3_title(rom) is None:
+            info.update(clean=False, title="Emerald header is not a supported 16 MiB revision-0 cartridge")
             return info
         if g3 := gen3_identify(rom):
-            info.update(family=FAMILY_FRLG, kind=g3["kind"], clean=g3["pinned"],
+            info.update(family=FAMILY_EMERALD if g3["title"] == "emerald" else FAMILY_FRLG,
+                        kind=g3["kind"], clean=g3["pinned"],
                         variant=GEN3_TITLE_WORDS[g3["title"]])
             info["title"] = f"{info['variant']} · {KIND_WORDS.get(g3['kind'], g3['kind'])}"
             return info
@@ -600,8 +610,6 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
                                "a ROM over itself, which would destroy the clean copy")
     with open(source_rom, "rb") as f:
         src_bytes = f.read()
-    if src_bytes[0xAC:0xB0] == b"BPEE":
-        raise UprPipelineError(EMERALD_RANDOMIZER_REFUSAL)
     g3 = gen3_title(src_bytes)
     ext = ".gba" if g3 else ".gbc"
     if not output_rom.lower().endswith(ext):
@@ -612,7 +620,7 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
     if src_ident.get("foundation") == "gen1_purergb" and not jar_is_fork(jar):
         raise UprPipelineError(PUREGB_RANDOMIZER_REFUSAL)
     if g3 and not jar_is_fork(jar):
-        raise UprPipelineError(FRLG_RANDOMIZER_REFUSAL)
+        raise UprPipelineError(EMERALD_RANDOMIZER_REFUSAL if g3 == "emerald" else FRLG_RANDOMIZER_REFUSAL)
     if not jar_supports(jar, src_ident):
         raise UprPipelineError(
             f"this jar has no entry for the {src_ident.get('kind')} build of "
@@ -795,7 +803,7 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
 
     os.makedirs(out_dir, exist_ok=True)
     results: dict[str, dict] = {}
-    ext = ".gba" if family == FAMILY_FRLG else ".gbc"
+    ext = ".gba" if family in GEN3_FAMILIES else ".gbc"
     for player in ("a", "b"):
         out = os.path.join(out_dir, f"{player}_randomized{ext}")
         info = randomize(jar, settings_path, sources[player], out, java=java)
@@ -809,10 +817,10 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         if bad := forbidden_enabled(effective, family):
             raise UprPipelineError(
                 f"player {player}: after tweakForRom the run would randomize {', '.join(bad)}")
-        fam = (family,) if family == FAMILY_FRLG else ()      # Gen 1 keeps its call shape
+        fam = (family,) if family in GEN3_FAMILIES else ()    # Gen 1 keeps its call shape
         info["categories"] = sorted(categories_enabled(effective, *fam))
         info["spec"] = spec_from_parsed(effective, *fam)
-        if family == FAMILY_FRLG:
+        if family in GEN3_FAMILIES:
             tables = _check_content_gen3(sources[player], info["output"])
             info["sites_intact"] = True        # _check_content_gen3 refuses otherwise
             info["write_domain"] = upr_gen3_write_domain.check_output(
@@ -835,7 +843,7 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
             f"{summarize(results['a']['spec'])} vs {summarize(results['b']['spec'])}")
 
     from server.adapters.gen1_rom_scan import fingerprint_rom, profile_hash
-    for player in ("a", "b") if family != FAMILY_FRLG else ():
+    for player in ("a", "b") if family not in GEN3_FAMILIES else ():
         results[player]["content_hash"] = profile_hash(results[player]["content_profile"])
         # The fingerprint is the CLIENT-reproducible one: it covers only the tables a
         # running client can read out of its own cartridge, which is what makes it usable
