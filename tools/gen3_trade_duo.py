@@ -21,8 +21,8 @@ from server.adapters.gen3_rom_tables import decode_rom_tables
 from tools.gen_gen3_profile import native_abi
 
 ENV = "SLINK_DUO_FR_TRADE_CANDIDATE"
-DISCLOSURE = "native NPC/party-chooser/offer carrier: UNTESTED (HARNESS_ONLY selection)"
-SCHEMA = "slink-fr-trade-duo-v2"
+DISCLOSURE = "candidate admission only; native NPC/chooser/offer evidence required"
+SCHEMA = "slink-frlg-native-carrier-v3"
 ROM_BASE = 0x08000000
 SOURCE_FILES = (
     "tools/gen3_trade_duo.py",
@@ -30,19 +30,30 @@ SOURCE_FILES = (
     "lua/gen3/run.lua",
     "lua/gen3/entry.lua",
     "lua/gen3/client.lua",
+    "lua/gen3/reads.lua",
+    "lua/core/session.lua",
+    "lua/owed_reports.lua",
     "lua/gen3/signals.lua",
     "lua/gen3/native.lua",
     "lua/gen3/safety.lua",
+    "lua/gen3/writes.lua",
     "lua/gen3/trade.lua",
     "lua/gen3/trade_journal.lua",
     "lua/gen3/rom_content.lua",
     "lua/tests/duo/gen3_trade_candidate.lua",
+    "lua/tests/duo/gen3_trade_driver.lua",
     "lua/tests/duo/duo_gen3_main.lua",
     "lua/tests/duo/scenario_gen3_native_trade.lua",
     "data/games/gen3_frlg/profile.json",
     "data/games/gen3_frlg/engine_signals.json",
     "data/games/gen3_frlg/write_checkpoint.json",
     "patch/src/trade_targets/abi.h",
+    "patch/src/trade_targets/native_carrier.h",
+    "patch/src/trade_targets/carrier_producer.h",
+    "patch/src/trade_targets/firered.h",
+    "patch/src/trade_targets/leafgreen.h",
+    "data/gen3/pret/pokefirered.sym",
+    "data/gen3/pret/pokeleafgreen.sym",
 )
 
 
@@ -82,21 +93,24 @@ def validate_prepared(root: Path, manifest: dict) -> None:
         raise ValueError("stale T5 source commit: regenerate private packs")
 
 
-def candidate_inputs(root: Path) -> tuple[bytes, dict]:
+def candidate_inputs(root: Path, title: str = "firered") -> tuple[bytes, dict]:
     """Verify the existing private build; never weaken build.py's clean-ROM gate."""
-    directory = root / "patch/build/candidate-firered-trade"
+    if title not in ("firered", "leafgreen"):
+        raise ValueError("unsupported native carrier title")
+    directory = root / f"patch/build/candidate-{title}-trade"
     receipt = read_json(directory / "receipt.json")
     rom = (directory / "probe.gba").read_bytes()
     if (
         receipt.get("status") != "UNQUALIFIED_TRADE_CANDIDATE"
-        or receipt.get("target") != "firered"
+        or receipt.get("target") != title
         or receipt.get("production") is not False
         or receipt.get("ready") != 0
         or receipt.get("mode") != "trade"
-        or not receipt.get("capabilities", 0) & 1
+        or receipt.get("capabilities") != 23
+        or not receipt.get("carrier_bindings")
     ):
-        raise ValueError("not a non-production READY0 FireRed trade candidate")
-    pin = read_json(root / "data/gen3_sources.lock.json")["outputs"]["pokefirered"]["sha1"]
+        raise ValueError(f"not a non-production READY0 {title} native carrier candidate")
+    pin = read_json(root / "data/gen3_sources.lock.json")["outputs"]["poke" + title]["sha1"]
     if receipt.get("base_sha1") != pin or receipt.get("sha1") != hashlib.sha1(rom).hexdigest():
         raise ValueError("candidate/base ROM hash mismatch")
     payload = (directory / "probe.bin").read_bytes()
@@ -125,11 +139,12 @@ def candidate_inputs(root: Path) -> tuple[bytes, dict]:
             or rom[address - ROM_BASE : address - ROM_BASE + len(replacement)] != replacement
         ):
             raise ValueError("candidate detour receipt differs from ROM")
-    if len(rom) != 0x1000000 or rom[0xAC:0xB0] != b"BPRE" or rom[0xBC] != 0:
-        raise ValueError("candidate is not the pinned FireRed format")
+    code = {"firered": b"BPRE", "leafgreen": b"BPGE"}[title]
+    if len(rom) != 0x1000000 or rom[0xAC:0xB0] != code or rom[0xBC] != 0:
+        raise ValueError(f"candidate is not the pinned {title} format")
     from patch.tools.build import target_spec
 
-    spec = target_spec("firered")
+    spec = target_spec(title)
     expected = {
         spec[name]: bytes.fromhex(spec[name + "_BYTES"])
         for name in ("HEAP_INIT", "TRADE_MON", "EVO_GETTER")
@@ -173,6 +188,7 @@ def private_pack(root: Path, rom: bytes, receipt: dict) -> dict[str, dict]:
     the duo-only loader validates its nonce and the cartridge digest. A fresh
     production Entry never reads these paths, even if ENV is set.
     """
+    title = receipt["target"]
     profile = read_json(root / "data/games/gen3_frlg/profile.json")
     abi = native_abi()
     c = abi["constants"]
@@ -199,7 +215,7 @@ def private_pack(root: Path, rom: bytes, receipt: dict) -> dict[str, dict]:
         native[name] = base + c[offset]
     profile["native"] = native
     sites = read_json(root / "data/games/gen3_frlg/engine_signals.json")
-    artifact = copy.deepcopy(sites["titles"]["firered"]["artifacts"]["clean"])
+    artifact = copy.deepcopy(sites["titles"][title]["artifacts"]["clean"])
     artifact.update(
         production=True,
         harness_only=True,
@@ -214,9 +230,9 @@ def private_pack(root: Path, rom: bytes, receipt: dict) -> dict[str, dict]:
         site["expected_hex"] = (
             rom[start : start + len(bytes.fromhex(site["expected_hex"]))].hex().upper()
         )
-    sites["titles"]["firered"]["artifacts"] = {"companion": artifact}
+    sites["titles"][title]["artifacts"] = {"companion": artifact}
     checkpoint = read_json(root / "data/games/gen3_frlg/write_checkpoint.json")
-    cp = checkpoint["firered"]
+    cp = checkpoint[title]
     for anchor in cp["anchors"].values():
         start = anchor["rom_offset"]
         anchor["expected_hex"]["companion"] = rom[start : start + anchor["length"]].hex().upper()
@@ -271,8 +287,8 @@ def trade_fixture(seed: bytes, *, species: int = 64) -> bytes:
     return bytes(body)
 
 
-def prepare(root: Path, directory: Path) -> dict:
-    rom, receipt = candidate_inputs(root)
+def prepare(root: Path, directory: Path, *, title="firered", player=None, nonce=None, journal_path=None) -> dict:
+    rom, receipt = candidate_inputs(root, title)
     directory = directory.resolve()
     if not directory.is_relative_to((root / "patch/build").resolve()):
         raise ValueError("private duo inputs must stay inside this lane's patch/build")
@@ -286,7 +302,7 @@ def prepare(root: Path, directory: Path) -> dict:
         area_map="data/games/gen3_frlge/area_map.json",
         locations="data/games/gen3_frlge/gen3_frlge_locations.lua",
     )
-    tables = decode_rom_tables(rom, "firered")
+    tables = decode_rom_tables(rom, title)
     evolution = [row for row in tables["evolutions"][64] if row[0] == 5]  # pret EVO_TRADE
     if len(evolution) != 1:
         raise ValueError("candidate lacks the unique Kadabra trade evolution")
@@ -294,20 +310,23 @@ def prepare(root: Path, directory: Path) -> dict:
         "schema": SCHEMA,
         "production": False,
         "ready": 0,
-        "nonce": uuid.uuid4().hex,
+        "title": title,
+        "player": player,
+        "carrier_mode": "native",
+        "nonce": nonce or uuid.uuid4().hex,
         "rom_sha1": receipt["sha1"],
         "rom_md5": hashlib.md5(rom).hexdigest(),
-        "rom": "patch/build/candidate-firered-trade/probe.gba",
+        "rom": f"patch/build/candidate-{title}-trade/probe.gba",
         "pack_files": pack_files,
         "receipt_sha256": sha256(
-            (root / "patch/build/candidate-firered-trade/receipt.json").read_bytes()
+            (root / f"patch/build/candidate-{title}-trade/receipt.json").read_bytes()
         ),
         "native": private_pack(root, rom, receipt)["profile"]["native"],
-        "fixture_disclosure": "SYNTH clean-derived FireRed saves; only slot 1 species/held item/mail/ability changed",
+        "fixture_disclosure": f"SYNTH clean-derived {title} saves; only slot 1 species/held item/mail/ability changed",
         "expected_species": evolution[0][2],
         "fixtures": {},
     }
-    manifest["journal_path"] = (
+    manifest["journal_path"] = journal_path or (
         (directory / ("slink_gen3_trade_" + manifest["nonce"])).relative_to(root).as_posix()
     )
     manifest["pack_sha1"] = {
@@ -318,13 +337,15 @@ def prepare(root: Path, directory: Path) -> dict:
         ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
     ).strip()
     symbols = {}
-    for line in (root / "data/gen3/pret/pokefirered.sym").read_text().splitlines():
+    for line in (root / f"data/gen3/pret/poke{title}.sym").read_text().splitlines():
         fields = line.split()
         if fields and fields[-1] in (
             "TradeMons",
             "TrySavingData",
             "DoInGameTradeScene",
             "TradeEvolutionScene",
+            "CB2_InitPartyMenu",
+            "gPartyMenu",
         ):
             symbols.setdefault(fields[-1], int(fields[0], 16))
     detour = next(
@@ -337,12 +358,31 @@ def prepare(root: Path, directory: Path) -> dict:
         "TrySavingData": symbols["TrySavingData"],
         "DoInGameTradeScene": symbols["DoInGameTradeScene"],
         "TradeEvolutionScene": symbols["TradeEvolutionScene"],
+        "CB2_InitPartyMenu": symbols["CB2_InitPartyMenu"],
     }
-    manifest["party_count"] = private_pack(root, rom, receipt)["profile"]["titles"]["firered"][
+    manifest["party_count"] = private_pack(root, rom, receipt)["profile"]["titles"][title][
         "ram"
     ]["PARTY_COUNT_ADDR"]
+    from patch.tools.build import target_spec
+
+    spec = target_spec(title)
+    carrier_source = (root / "patch/src/trade_targets/native_carrier.h").read_text()
+    state_offset = re.search(r"#define NC_STATE .*NT_BASE\+(0x[0-9A-Fa-f]+)u", carrier_source)
+    if not state_offset:
+        raise ValueError("native carrier state is not source-bound")
+    base = receipt["arena_candidate"]
+    manifest["carrier"] = {
+        "state": base + int(state_offset[1], 16), "size": 380,
+        "control": base + native_abi()["constants"]["SLINK_CONTROL_OFFSET"],
+        "objects": spec["CARRIER_OBJECTS"], "avatar": spec["CARRIER_AVATAR"],
+        "stride": spec["CARRIER_STRIDE"], "local_id": spec["CARRIER_LOCAL_ID"],
+        "callback": spec["GMAIN"] + 4, "field_callback": spec["FIELD_CALLBACK"],
+        "field_lock": spec["FIELD_LOCK"], "script_status": spec["SCRIPT_STATUS"],
+        "script_idle": spec["SCRIPT_IDLE"],
+        "party_cursor": symbols["gPartyMenu"] + 9,  # pinned pret include/party_menu.h:15
+    }
     for side, suffix in (("a", ""), ("b", "_b")):
-        source = root / f"tests/fixtures/gen3/firered_party_town{suffix}.sav"
+        source = root / f"tests/fixtures/gen3/{title}_party_town{suffix}.sav"
         data = trade_fixture(source.read_bytes())
         destination = directory / (side + ".sav")
         destination.write_bytes(data)
@@ -357,6 +397,24 @@ def prepare(root: Path, directory: Path) -> dict:
     manifest["manifest_sha1"] = _sha1_file(root, manifest["path"])
     validate_prepared(root, manifest)
     return manifest
+
+
+def prepare_pair(root: Path, directory: Path, titles: dict[str, str]) -> dict:
+    if set(titles) != {"a", "b"} or set(titles.values()) != {"firered", "leafgreen"}:
+        raise ValueError("native carrier duo requires both FR and LG")
+    nonce = uuid.uuid4().hex
+    journal = (directory.resolve() / ("slink_gen3_trade_" + nonce)).relative_to(root.resolve()).as_posix()
+    players = {
+        side: prepare(root, directory / side, title=title, player=side, nonce=nonce, journal_path=journal)
+        for side, title in titles.items()
+    }
+    return {"nonce": nonce, "players": players,
+            "fixtures": {side: manifest["fixtures"][side] for side, manifest in players.items()}}
+
+
+def player_manifest(manifest: dict, side: str) -> dict:
+    """A pair carries independently bound manifests; standalone fixtures keep one."""
+    return manifest["players"][side] if "players" in manifest else manifest
 
 
 def decode_witness(raw: bytes) -> dict:
@@ -538,6 +596,120 @@ def key(mon: dict) -> str:
     return f"{mon['personality']:08X}:{mon['ot_id']:08X}"
 
 
+def carrier_problems(rows: list[dict], manifest: dict, side: str, read, *, decline=False,
+                     trade_epoch=None, trade_token=None) -> list[str]:
+    """Decode native ownership/text/counter bytes and correlate actual server wire messages."""
+    problems = []
+    ops = (22, 20) if side == "a" else (17,)
+    c = manifest["carrier"]
+
+    def one(kind, op=None):
+        matches = [r for r in rows if r["kind"] == kind and (op is None or r.get("op") == op)]
+        if len(matches) != 1:
+            raise ValueError(f"expected one native carrier {kind}/{op}, got {len(matches)}")
+        return matches[0]
+
+    def ui(row):
+        raw = read(row)
+        if len(raw) != 547:
+            raise ValueError("native carrier snapshot extent differs")
+        native = decode_witness(raw[:160])
+        epoch, seq, opcode, active = struct.unpack_from("<IHHB", raw, 160)
+        return native, (epoch, seq, opcode, active), raw[170:426], raw[426:538], raw[540:]
+
+    try:
+        epochs = []
+        for kind in ("ui_post", "ui_enter", "ui_done"):
+            if len([r for r in rows if r["kind"] == kind]) != len(ops):
+                raise ValueError(f"native carrier {kind} count differs")
+        if len([r for r in rows if r["kind"] == "chooser_entry"]) != (1 if side == "a" else 0):
+            raise ValueError("native chooser engine entry count differs")
+        for op in ops:
+            posted, entered, finished = (one(kind, op) for kind in ("ui_post", "ui_enter", "ui_done"))
+            p, _, _, _, _ = ui(posted)
+            e, owner, text, choices, _ = ui(entered)
+            f, retired, _, _, field = ui(finished)
+            binding = (p["epoch"], p["seq"], op)
+            epochs.append(p["epoch"])
+            if any(v["signature"] != 0x4B4E4C53 or v["abi"] != 2 or v["capabilities"] != 23 for v in (p, e, f)):
+                raise ValueError(f"native carrier {op} cartridge ABI/capabilities differ")
+            if (not p["epoch"] or p["opcode"] != op or owner != (*binding, 1)
+                or retired != (*binding, 0) or e["epoch"] != p["epoch"] or f["epoch"] != p["epoch"]
+                or e["seq"] != p["seq"] or f["seq"] != p["seq"]
+                or e["status"] != 1 or e["opcode"] != 0 or f["status"] != 2
+                or f["opcode"] != 0 or f["ack"] != p["seq"]):
+                raise ValueError(f"native carrier {op} ownership/ACK binding differs")
+            if struct.unpack_from("<I", field)[0] != c["field_callback"] or field[4:6] != bytes([0, c["script_idle"]]):
+                raise ValueError(f"native carrier {op} ACK preceded safe field return")
+            command = {22: "show_choices", 20: "choose_mon", 17: "show_menu"}[op]
+            incoming = [r for r in rows if r["kind"] == "rx" and r.get("message", {}).get("cmd") == command]
+            if len(incoming) != 1:
+                raise ValueError(f"server {command} missing/duplicated")
+            msg = incoming[0]["message"]
+            if trade_token is not None and msg.get("token") != trade_token:
+                raise ValueError("native carrier belongs to another server trade token")
+            if op == 17 or (op == 22 and msg.get("text")):
+                expected = codec.decode_name(codec.encode_name(msg.get("text", ""), 256))
+                if b"\xff" not in text or codec.decode_name(text) != expected:
+                    raise ValueError(f"native carrier {op} text differs from server command")
+            if op == 22:
+                with_text = int(bool(msg.get("text")))
+                if p["args"][0] != with_text or read(entered)[169] != with_text:
+                    raise ValueError("native choices text-display flag differs")
+                options = msg.get("options", [])
+                if choices[0] != len(options) or not options:
+                    raise ValueError("native choices count differs")
+                strings = choices[1:].split(b"\xff")
+                if len(strings) <= len(options) or [codec.decode_name(part) for part in strings[:len(options)]] != options:
+                    raise ValueError("native choices differ from server command")
+            event, field_name = ("mon_chosen", "slot") if op == 20 else ("menu_result", "choice")
+            result = 1 if op == 20 else 0 if op == 22 or decline else 1
+            raw_done = read(finished)
+            outgoing = [r for r in rows if r["kind"] == "tx" and r["message"].get("event") == event
+                        and r["message"].get("token") == msg.get("token")]
+            if (raw_done[48] != result or len(outgoing) != 1 or not msg.get("token")
+                or outgoing[0]["message"].get(field_name) != result):
+                raise ValueError(f"native carrier {op} result/wire answer differs")
+            if not rows.index(incoming[0]) < rows.index(posted) < rows.index(entered) < rows.index(finished) < rows.index(outgoing[0]):
+                raise ValueError(f"native carrier {op} wire/ownership order differs")
+            if op == 20:
+                chooser = one("chooser_entry")
+                _, chosen_owner, _, _, chosen_field = ui(chooser)
+                if (chosen_owner != (*binding, 1)
+                    or struct.unpack_from("<I", chosen_field)[0] != manifest["hooks"]["CB2_InitPartyMenu"] | 1
+                    or not rows.index(posted) < rows.index(chooser) < rows.index(finished)):
+                    raise ValueError("native chooser engine entry missing or foreign")
+        if len(set(epochs)) != 1:
+            raise ValueError("native carrier epoch changed between UI operations")
+        if trade_epoch is not None and epochs[0] != trade_epoch:
+            raise ValueError("native carrier belongs to another native trade epoch")
+        if side == "a":
+            edge = one("npc_edge")
+            raw = read(edge)
+            if len(raw) != 614 or c["stride"] != 36:
+                raise ValueError("native NPC snapshot extent differs")
+            old_epoch, before, epoch, after = (*struct.unpack_from("<II", raw), *struct.unpack_from("<II", raw, 16))
+            if old_epoch != epoch or epoch != epochs[0] or ((after-before)&0xFFFFFFFF) != 1 or raw[24] != 1:
+                raise ValueError("native NPC counter/CONTROL epoch differs")
+            objects, player = raw[32:608], raw[613]
+            npcs = [i for i in range(16) if objects[i*36]&1 and objects[i*36+8] == c["local_id"]]
+            if player >= 16 or len(npcs) != 1:
+                raise ValueError("native NPC/player object missing")
+            p, n = objects[player*36:(player+1)*36], objects[npcs[0]*36:(npcs[0]+1)*36]
+            px, py = struct.unpack_from("<hh", p, 16)
+            nx, ny = struct.unpack_from("<hh", n, 16)
+            delta = {1: (0, 1), 2: (0, -1), 3: (-1, 0), 4: (1, 0)}.get(p[24]&15)
+            if not (p[0]&0x80 and p[0]&1 and p[9:11] == n[9:11] and delta == (nx-px, ny-py)):
+                raise ValueError("native NPC edge lacks idle player facing its active object")
+            requests = [r for r in rows if r["kind"] == "tx" and r["message"].get("event") == "trade_request"]
+            if len(requests) != 1 or not rows.index(edge) < rows.index(requests[0]) < rows.index(one("ui_post", 22)):
+                raise ValueError("trade_request did not follow the native NPC edge")
+        one("native_carrier_complete")
+    except (ValueError, KeyError, IndexError, TypeError, struct.error) as exc:
+        problems.append(str(exc))
+    return problems
+
+
 def completed_flushes(rows: list[dict], read, *, decline=False, before=None) -> list[tuple]:
     """Associate each host call with its own flash/native/file snapshots.
 
@@ -601,10 +773,15 @@ def physical_problems(
     ):
         problems.append("links.json did not retain/migrate exactly the traded pair")
     for side in "ab":
+        cart = player_manifest(manifest, side)
         peer = "b" if side == "a" else "a"
         try:
             initial = events(texts[side], side, "initial")
             after = events(reloads[side], side, "native_trade_reload")
+            if any(r["kind"] in {"npc_edge", "ui_post", "prepare", "scene", "commit", "save_entry"}
+                   or (r["kind"] == "tx" and r.get("message", {}).get("event") in {"trade_request", "trade_done"})
+                   for r in after):
+                problems.append(f"{side}: cold reload started another native interaction/save")
             for rows, text in ((initial, texts[side]), (after, reloads[side])):
                 override = [r for r in rows if r["kind"] == "override"]
                 if (
@@ -613,12 +790,12 @@ def physical_problems(
                     or override[0].get("ready") != 0
                     or override[0].get("environment") != ENV
                     or override[0].get("value") != manifest["nonce"]
-                    or override[0].get("rom_sha1") != manifest["rom_sha1"]
-                    or override[0].get("source_commit") != manifest["source_commit"]
-                    or override[0].get("manifest_sha1") != manifest["manifest_sha1"]
+                    or override[0].get("rom_sha1") != cart["rom_sha1"]
+                    or override[0].get("source_commit") != cart["source_commit"]
+                    or override[0].get("manifest_sha1") != cart["manifest_sha1"]
                     or override[0].get("run_lua_sha1")
-                    != manifest["source_sha1"]["lua/gen3/run.lua"]
-                    or override[0].get("sites_sha1") != manifest["pack_sha1"]["sites"]
+                    != cart["source_sha1"]["lua/gen3/run.lua"]
+                    or override[0].get("sites_sha1") != cart["pack_sha1"]["sites"]
                     or DISCLOSURE not in text
                 ):
                     problems.append(f"{side}: HARNESS_ONLY admission/carrier disclosure missing")
@@ -631,6 +808,16 @@ def physical_problems(
 
             def read(row, phase="initial", side_=side):
                 return evidence_file(root, row, manifest["nonce"], side_, phase)
+
+            terminal = [r for r in initial if r["kind"] == "tx" and r["message"].get("event") == "trade_done"]
+            carrier_epoch = None if decline else decode_witness(read(one("prepare")))["epoch"]
+            carrier_token = terminal[0]["message"].get("token") if len(terminal) == 1 else None
+            problems.extend(f"{side} carrier: {problem}"
+                            for problem in carrier_problems(initial, cart, side, read, decline=decline,
+                                                            trade_epoch=carrier_epoch, trade_token=carrier_token))
+            if not decline and any(initial.index(r) >= initial.index(one("prepare"))
+                                   for r in initial if r["kind"] == "ui_done"):
+                problems.append(f"{side}: native PREPARE preceded completion of carrier UI")
 
             baseline, before, reloaded = (
                 one("boot_party"),
@@ -710,7 +897,8 @@ def physical_problems(
                         f"{side}: decline changed party or entered native mutation/save"
                     )
                 if side == "a" and not any(
-                    r["kind"] == "omitted_ui" and "declined" in r.get("text", "") for r in initial
+                    r["kind"] == "rx" and r.get("message", {}).get("cmd") == "msgbox"
+                    and "declined" in r["message"].get("text", "") for r in initial
                 ):
                     problems.append("a: server decline/cancel acknowledgement absent")
             else:
@@ -777,7 +965,7 @@ def physical_problems(
                     for r in sealed["records"]
                     if r.get("token") == token
                     and r.get("binding", {}).get("player") == side
-                    and r.get("binding", {}).get("rom_sha1") == manifest["rom_sha1"]
+                    and r.get("binding", {}).get("rom_sha1") == cart["rom_sha1"]
                     and r.get("final") == ""
                     and type(r.get("epoch")) is int
                     and r["epoch"] > 0
@@ -829,7 +1017,7 @@ def physical_problems(
                     ("flush", disk_party),
                 ):
                     got = next((m for m in party if key(m) == expected[side]), {})
-                    if got.get("species") != manifest["expected_species"]:
+                    if got.get("species") != cart["expected_species"]:
                         problems.append(
                             f"{side}: {name} receipt did not evolve to the ROM's trade target"
                         )

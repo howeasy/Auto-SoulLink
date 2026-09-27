@@ -1,4 +1,4 @@
--- T5: HARNESS_ONLY offer/selection; real native PREPARE/scene/save path.
+-- T5: native NPC/selection/offer and native PREPARE/scene/save, with independent receipts.
 return function(ctx)
     local h = assert(ctx.native_candidate,"T5 candidate carrier not installed")
     h.start(ctx)
@@ -7,7 +7,7 @@ return function(ctx)
             return false,"trade identity absent after cold reload"
         end
         h.reloaded(ctx)
-        return true,"cold reload observed; native carrier UI remains UNTESTED"
+        return true,"cold reload observed; initial native-carrier receipts remain required"
     end
     if not ctx.wait_until(function() return h.ready end,120,"server acknowledged native trade capability") then
         h.diagnose("capability hello")
@@ -15,12 +15,13 @@ return function(ctx)
     end
     ctx.log("FR_TRADE_CAPABLE")
     if not ctx.wait_go() then return false,"T5 GO missing" end
-    h.start_selection()
+    local driver=dofile(ctx.D.wt.."/lua/tests/duo/gen3_trade_driver.lua")
+    driver.select(ctx,h)
     if ctx.D.native_decline then
         local done = ctx.wait_until(function()
             if ctx.player == "a" then return h.declined end
             return ctx.last_sent("menu_result") and ctx.last_sent("menu_result").choice == 0
-        end,120,"HARNESS_ONLY decline")
+        end,120,"native decline")
         if not done then return false,"decline was not acknowledged" end
         ctx.frames(120)
         h.flush_decline()

@@ -2685,7 +2685,13 @@ GAMES = {
     # method _run_oracle runs first.
     "gen3_fr_trade": {
         "main": "lua/tests/duo/duo_gen3_main.lua", "game": "gen3_fr_trade", "play": "gen3_fixtures",
-        "sides": {"a": ("firered", "firered_party_{target}"), "b": ("firered", "firered_party_{target}_b")},
+        "sides": {"a": ("firered", "firered_party_{target}"), "b": ("leafgreen", "leafgreen_party_{target}_b")},
+        "uses_savestate": False, "scenario_prefix": "gen3_", "oracle_required": True,
+        "save_witness": "check_native_trade_witness",
+    },
+    "gen3_lg_trade": {
+        "main": "lua/tests/duo/duo_gen3_main.lua", "game": "gen3_fr_trade", "play": "gen3_fixtures",
+        "sides": {"a": ("leafgreen", "leafgreen_party_{target}"), "b": ("firered", "firered_party_{target}_b")},
         "uses_savestate": False, "scenario_prefix": "gen3_", "oracle_required": True,
         "save_witness": "check_native_trade_witness",
     },
@@ -3278,10 +3284,10 @@ class DuoRun:
         """
         from pathlib import Path
 
-        import gen3_fixtures
-
         if self.cfg.get("gen3_native_trade"):
-            return self._native_candidate["rom"]
+            from tools.gen3_trade_duo import player_manifest
+            return player_manifest(self._native_candidate, inst)["rom"]
+        import gen3_fixtures
         if self.cfg.get("gen3_rand"):
             if not getattr(self, "_rand_current", None):
                 raise RuntimeError("randomized ROM preflight has not run")
@@ -3307,7 +3313,7 @@ class DuoRun:
         title = self._gen3_title(inst)
         row = GEN3_TITLES[title]
         if self.cfg.get("gen3_native_trade"):
-            import gen3_fixtures
+            from tools import gen3_fixtures
             return os.path.join(self._saveram_dir(inst), gen3_fixtures.saveram_name(self._gen3_rom(inst)))
         if self.cfg.get("gen3_rand"):
             import gen3_fixtures
@@ -3907,12 +3913,13 @@ class DuoRun:
                 codec = gen3_codec()
                 duo.update({"ext_addr": codec.RR_EXT_ADDR, "ext_size": codec.RR_EXT_SIZE})
             if self.cfg.get("gen3_native_trade"):
-                from tools.gen3_trade_duo import ENV, validate_prepared
-                validate_prepared(Path(REPO), self._native_candidate)
-                if hashlib.sha1((Path(REPO) / self._native_candidate["rom"]).read_bytes()).hexdigest() != self._native_candidate["rom_sha1"]:
+                from tools.gen3_trade_duo import ENV, player_manifest, validate_prepared
+                candidate = player_manifest(self._native_candidate, inst)
+                validate_prepared(Path(REPO), candidate)
+                if hashlib.sha1((Path(REPO) / candidate["rom"]).read_bytes()).hexdigest() != candidate["rom_sha1"]:
                     raise RuntimeError("T5 candidate changed before emulator launch")
-                duo.update(native_candidate_manifest=self._native_candidate["path"],
-                           native_manifest_sha1=self._native_candidate["manifest_sha1"],
+                duo.update(native_candidate_manifest=candidate["path"],
+                           native_manifest_sha1=candidate["manifest_sha1"],
                            native_battery=self._gen3_battery_path(inst).replace("\\", "/"),
                            native_decline=self.cfg.get("native_decline", False))
                 env = dict(os.environ, **{ENV: self._native_candidate["nonce"]})
@@ -6997,6 +7004,8 @@ class DuoRun:
                 if os.path.exists(path):
                     os.remove(path)
         self.collect_wire_logs()  # the source lives under the data dir; copy before it goes
+        if self.cfg.get("gen3_native_trade"):
+            self._archive_native_receipts()
         if (passed and not self.args.keep_data and self.scenario not in GEN2_TRADE_SCENARIOS
                 and not self.cfg.get("gen3_rand") and not self.cfg.get("gen3_native_trade")):
             shutil.rmtree(self.data_dir, ignore_errors=True)
@@ -7605,15 +7614,50 @@ class DuoRun:
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
 
+    def _archive_native_receipts(self):
+        """Keep nonce-bound raw receipts when another orientation reuses top-level filenames."""
+        candidate = getattr(self, "_native_candidate", None)
+        if not candidate:
+            return
+        directory = Path(self.data_dir) / "receipts"
+        saved = {}
+        for side in "ab":
+            for phase in ("initial", "native_trade_reload"):
+                source = Path(self._phase_result_path(side, phase))
+                if not source.exists():
+                    continue
+                body = source.read_bytes()
+                bound = False
+                for line in body.decode("utf-8", errors="replace").splitlines():
+                    if not line.startswith("T5 "):
+                        continue
+                    try:
+                        row = json.loads(line[3:])
+                    except ValueError:
+                        continue  # a killed process can leave its last line incomplete
+                    if (isinstance(row, dict) and row.get("kind") == "override" and row.get("value") == candidate["nonce"]
+                            and row.get("side") == side and row.get("phase") == phase):
+                        bound = True
+                        break
+                if bound:
+                    directory.mkdir(parents=True, exist_ok=True)
+                    name = f"{side}_{phase}.txt"
+                    (directory / name).write_bytes(body)
+                    saved[name] = hashlib.sha256(body).hexdigest()
+        if saved:
+            (directory / "sha256.json").write_text(json.dumps(saved, indent=2)+"\n", encoding="utf-8")
+
     def _prepare_native_trade(self):
         from tools import gen3_trade_duo as t5
-        self._native_candidate = t5.prepare(Path(REPO), Path(self.data_dir) / "candidate")
+        self._native_candidate = t5.prepare_pair(Path(REPO), Path(self.data_dir) / "candidate",
+                                                 {side: self._gen3_title(side) for side in "ab"})
         self._native_initial = {}
-        self._pydec_note(f"HARNESS_ONLY {t5.DISCLOSURE}")
-        self._pydec_note(f"T5_CANDIDATE rom_sha1={self._native_candidate['rom_sha1']} production=false READY=0")
-        self._pydec_note(f"T5_PACK source={self._native_candidate['source_commit']} manifest_sha1={self._native_candidate['manifest_sha1']} "
-                         f"run_lua_sha1={self._native_candidate['source_sha1']['lua/gen3/run.lua']} sites_sha1={self._native_candidate['pack_sha1']['sites']}")
-        self._pydec_note(self._native_candidate["fixture_disclosure"])
+        self._pydec_note(f"CANDIDATE_ONLY {t5.DISCLOSURE}")
+        for side, candidate in self._native_candidate["players"].items():
+            self._pydec_note(f"T5_CANDIDATE side={side} title={candidate['title']} rom_sha1={candidate['rom_sha1']} production=false READY=0")
+            self._pydec_note(f"T5_PACK side={side} source={candidate['source_commit']} manifest_sha1={candidate['manifest_sha1']} "
+                             f"run_lua_sha1={candidate['source_sha1']['lua/gen3/run.lua']} sites_sha1={candidate['pack_sha1']['sites']}")
+            self._pydec_note(candidate["fixture_disclosure"])
 
     def orchestrate_native_trade_firered(self):
         self._gen3_prelude(link_slot=1)
@@ -7660,7 +7704,7 @@ class DuoRun:
 
     def assert_native_trade_firered(self, results):
         self._gen3_raise(self._native_trade_problems(results),
-                        "T5 HARNESS_ONLY selection: native outcome, server settlement, pair migration and cold reload verified")
+                        "T5 native NPC/selection/offer, durable outcome, server settlement and cold reload verified")
 
     def orchestrate_species_clause_gen3(self):
         from gen3_clause_rows import orchestrate_clause

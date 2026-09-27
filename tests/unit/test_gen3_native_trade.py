@@ -27,7 +27,8 @@ class TradeNativeWorld(World):
         self.native = self.module.new(self.lua.table_from(self.profile, recursive=True), self.lua.table(
             io=self.native_io, writes=self.writes, reads=self.reads, title=title, player=player,
             production=production, artifact_kind="companion", initial_seq=initial_seq,
-            timeout_frames=8, send=lambda *_: None, log=self.logs.append, in_battle=lambda: self.battle,
+            timeout_frames=8, send=lambda event, fields: self.events.append((event, fields)),
+            log=self.logs.append, in_battle=lambda: self.battle,
             trade_recovery_clear=lambda: self.recovery_clear,
             trade_safe=lambda: self.safe and not self.battle))
         self.native.set_session_epoch(self.native, epoch)
@@ -127,7 +128,7 @@ def test_trade_witness_size_is_validated_before_native_io():
 @pytest.mark.parametrize("capability,production,title,capable", [
     (1, True, "firered", True), (0, True, "firered", False),
     (4, True, "firered", False), (1, False, "firered", False),
-    (1, None, "firered", False), (1, True, "leafgreen", False),
+    (1, None, "firered", False), (1, True, "leafgreen", True), (1, True, "emerald", False),
 ])
 def test_trade_capability_requires_advertised_bit_and_production_identity(capability, production, title, capable):
     world = TradeNativeWorld(capability=capability, production=production, title=title)

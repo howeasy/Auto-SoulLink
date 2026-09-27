@@ -42,6 +42,7 @@ class Carrier:
                 "TrySavingData": 0x080DA364,
                 "DoInGameTradeScene": 0x08054440,
                 "TradeEvolutionScene": 0x080CE540,
+                "CB2_InitPartyMenu": 0x0811EBD0,
             },
         )
         for path in (*manifest["source_sha1"], *manifest["pack_files"].values()):
@@ -64,7 +65,8 @@ class Carrier:
         g.gameinfo = self.lua.table(getromhash=lambda: manifest["rom_sha1"])
         g.emu = self.lua.table(framecount=lambda: 1)
         g.os.getenv = lambda name: manifest["nonce"] if name == t5.ENV else None
-        g.memory = self.lua.table(read_u8=self.read, read_u16_le=lambda at, *_: self.word(at, 2))
+        g.memory = self.lua.table(read_u8=self.read, read_u16_le=lambda at, *_: self.word(at, 2),
+                                  read_u32_le=lambda at, *_: self.word(at, 4))
 
         def register(fn, at, name):
             self.hooks[name] = (at, fn)
@@ -122,7 +124,7 @@ class Carrier:
             self.forwarded.append(json.loads(self.json.encode(value)))
             return True
 
-        return self.carrier.command(self.lua.table(cmd=cmd, **fields), forward)
+        return self.carrier.command(self.lua.table_from({"cmd": cmd, **fields}, recursive=True), forward)
 
 
 def test_observer_reads_hooks_and_publication_without_writing_native_evidence(tmp_path):
@@ -133,6 +135,7 @@ def test_observer_reads_hooks_and_publication_without_writing_native_evidence(tm
         "T5-TrySavingData",
         "T5-DoInGameTradeScene",
         "T5-TradeEvolutionScene",
+        "T5-CB2_InitPartyMenu",
     }
     w.io.write_u8(w.base + 6, 29)
     w.io.write_u8(w.base + 7, 0)
@@ -156,41 +159,17 @@ def test_flush_receipt_contains_actual_flash_and_file_bytes_from_the_lua_produce
     assert w.writes == []
 
 
-@pytest.mark.parametrize(
-    "side,decline,commands,expected",
-    [
-        (
-            "a",
-            False,
-            ["show_choices", "choose_mon"],
-            [
-                ("trade_request", {}),
-                ("menu_result", {"token": "t1", "choice": 0}),
-                ("mon_chosen", {"token": "t1", "slot": 1}),
-            ],
-        ),
-        ("b", False, ["show_menu"], [("menu_result", {"token": "t1", "choice": 1})]),
-        ("b", True, ["show_menu"], [("menu_result", {"token": "t1", "choice": 0})]),
-    ],
-)
-def test_selection_bridge_preserves_server_protocol_and_never_supplies_native_results(
-    tmp_path, side, decline, commands, expected
-):
+@pytest.mark.parametrize("side,decline", [("a", False), ("b", False), ("b", True)])
+def test_candidate_forwards_every_prompt_and_never_synthesizes_protocol_answers(tmp_path, side, decline):
     w = Carrier(tmp_path, side, decline)
-    w.carrier.start_selection()
+    commands = ["show_choices", "choose_mon", "show_menu", "msgbox", "link_panel",
+                "apply_prepare", "apply_trade", "withdraw_trade", "trade_final"]
     for command in commands:
         assert w.command(command, token="t1")
-    assert w.sent == expected
-    assert w.forwarded == [] and w.writes == []
-    for command in ("apply_prepare", "apply_trade", "withdraw_trade", "trade_final"):
-        assert w.command(command, token="t1")
-    assert [row["cmd"] for row in w.forwarded] == [
-        "apply_prepare",
-        "apply_trade",
-        "withdraw_trade",
-        "trade_final",
-    ]
-    assert w.sent == expected and w.writes == []
+    assert [row["cmd"] for row in w.forwarded] == commands
+    assert w.sent == [] and w.writes == []
+    assert w.carrier.start_selection is None
+
 
 
 def test_capability_ready_waits_for_a_server_config_after_the_advertised_hello(tmp_path):
@@ -215,3 +194,50 @@ def test_candidate_redirects_only_store_path_and_preserves_real_store_factory(tm
     assert got.real_store
     assert calls == [tmp_path.as_posix() + "/patch/build/private/slink_gen3_trade_" + "ab" * 16]
     assert supplied.fs == "real-host-adapter"
+
+
+@pytest.mark.parametrize("side,decline", [("a", False), ("b", False), ("b", True)])
+def test_actual_lua_observer_feeds_the_independent_carrier_byte_oracle(tmp_path, side, decline):
+    from tests.unit.test_gen3_native_carrier_duo import carrier_rows
+
+    w = Carrier(tmp_path, side, decline)
+    manifest = model_manifest()
+    c = manifest["carrier"]
+
+    def put(address, data):
+        w.bus.update({address+i: byte for i, byte in enumerate(data)})
+
+    for row in carrier_rows(manifest, side, decline):
+        kind, raw = row["kind"], row.get("raw")
+        if kind == "npc_edge":
+            put(c["control"], raw[:16])
+            put(c["objects"], raw[32:608])
+            put(c["avatar"], raw[608:])
+            w.carrier.observe_carrier()
+            put(c["control"], raw[16:32])
+            w.carrier.observe_carrier()
+        elif raw is not None:
+            put(w.base, raw[:160])
+            put(c["state"], raw[160:540])
+            put(c["callback"], raw[540:544])
+            put(c["field_lock"], raw[544:545])
+            put(c["script_status"], raw[545:546])
+            put(c["party_cursor"], raw[546:547])
+            if kind == "ui_post":
+                w.io.write_u8(w.base+7, 0)
+            elif kind == "chooser_entry":
+                w.hooks["T5-CB2_InitPartyMenu"][1]()
+                w.hooks["T5-CB2_InitPartyMenu"][1]()  # same command's multi-frame initialization
+            else:
+                w.carrier.observe_carrier()
+        elif kind == "rx":
+            message = row["message"]
+            w.command(**message)
+        elif kind == "tx":
+            w.carrier.tx(w.lua.table_from(row["message"]))
+        else:
+            assert w.carrier.carrier_complete()
+    rows = t5.events("\n".join(w.lines), side, "initial")
+    assert t5.carrier_problems(rows, manifest, side,
+        lambda row: t5.evidence_file(tmp_path, row, manifest["nonce"], side, "initial"), decline=decline) == []
+    assert w.sent == [], "the observer never manufactures server protocol answers"

@@ -33,7 +33,10 @@ def test_t5_rows_require_the_explicit_private_game_and_mandatory_oracles():
 
     names = ["native_trade_firered", "native_trade_decline_firered"]
     assert scenarios_for("gen3_fr_trade") == names
-    assert GAMES["gen3_fr_trade"]["sides"]["b"][0] == "firered"
+    assert GAMES["gen3_fr_trade"]["sides"]["b"][0] == "leafgreen"
+    assert GAMES["gen3_lg_trade"]["sides"]["a"][0] == "leafgreen"
+    assert GAMES["gen3_lg_trade"]["sides"]["b"][0] == "firered"
+    assert scenarios_for("gen3_lg_trade") == names
     for name in names:
         assert SCENARIOS[name]["gen3_native_trade"]
         for normal in ("gen3_frlg", "gen3_lgfr", "gen3_rr", "gen3_emerald"):
@@ -247,6 +250,12 @@ def model_manifest():
         "schema": t5.SCHEMA,
         "production": False,
         "ready": 0,
+        "title": "firered", "carrier_mode": "native",
+        "hooks": {"CB2_InitPartyMenu": 0x0811EBD0},
+        "carrier": {"state": 0x0201BB40, "size": 380, "control": 0x0201B800,
+                    "objects": 0x02036E38, "avatar": 0x02037078, "stride": 36, "local_id": 241,
+                    "callback": 0x030030F4, "field_callback": 0x080565B5, "field_lock": 0x03000F9C,
+                    "script_status": 0x03000EA8, "script_idle": 2, "party_cursor": 0x0203B0A9},
         "nonce": "ab" * 16,
         "journal_path": "patch/build/private/slink_gen3_trade_" + "ab" * 16,
         "rom_sha1": "cd" * 20,
@@ -273,13 +282,13 @@ def model_bound_file(path):
 
 
 @pytest.mark.parametrize(
-    "problem", [None, "env", "production", "ready", "game", "scenario", "hash", "path"]
+    "problem", [None, "env", "production", "ready", "game", "scenario", "hash", "path", "title", "player", "carrier"]
 )
 def test_only_explicit_runner_context_can_authorize_candidate(problem):
     lua = lua54.LuaRuntime(unpack_returned_tuples=True)
     mod = lua.execute((ROOT / "lua/tests/duo/gen3_trade_candidate.lua").read_text())
     manifest = model_manifest()
-    args = {"game": "gen3_fr_trade", "title": "firered", "scenario": "native_trade_firered"}
+    args = {"game": "gen3_fr_trade", "title": "firered", "player": "a", "scenario": "native_trade_firered"}
     env, digest = manifest["nonce"], manifest["rom_sha1"]
     if problem == "env":
         env = ""
@@ -295,6 +304,12 @@ def test_only_explicit_runner_context_can_authorize_candidate(problem):
         digest = "00" * 20
     elif problem == "path":
         manifest["pack_files"]["profile"] = "patch/build/../../data/profile.json"
+    elif problem == "title":
+        args["title"] = "leafgreen"
+    elif problem == "player":
+        manifest["player"] = "b"
+    elif problem == "carrier":
+        manifest["carrier_mode"] = "harness_selection"
 
     def call():
         return mod.authorize(
@@ -313,14 +328,15 @@ def test_only_explicit_runner_context_can_authorize_candidate(problem):
         assert call()
 
 
-def test_projection_does_not_change_the_production_pack_and_built_candidate_is_refused(monkeypatch):
-    directory = ROOT / "patch/build/candidate-firered-trade"
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_projection_does_not_change_the_production_pack_and_built_candidate_is_refused(monkeypatch, title):
+    directory = ROOT / f"patch/build/candidate-{title}-trade"
     if not (directory / "probe.gba").exists():
         pytest.skip("T5 private FR candidate build absent")
-    rom, receipt = t5.candidate_inputs(ROOT)
+    rom, receipt = t5.candidate_inputs(ROOT, title)
     projected = t5.private_pack(ROOT, rom, receipt)
     assert receipt["production"] is False
-    assert projected["sites"]["titles"]["firered"]["artifacts"]["companion"]["harness_only"] is True
+    assert projected["sites"]["titles"][title]["artifacts"]["companion"]["harness_only"] is True
     monkeypatch.setenv(t5.ENV, "ab" * 16)
     lua = lua54.LuaRuntime(unpack_returned_tuples=True)
     entry = lua.execute((ROOT / "lua/gen3/entry.lua").read_text())
@@ -330,24 +346,25 @@ def test_projection_does_not_change_the_production_pack_and_built_candidate_is_r
             root=ROOT.as_posix(),
             json=codec,
             rom_hash=receipt["sha1"],
-            header_code="BPRE",
+            header_code={"firered": "BPRE", "leafgreen": "BPGE"}[title],
             rom_read=lambda at, n: lua.table(*rom[at : at + n]),
         )
     )
     assert isinstance(result, tuple) and result[0] is None
     shipped = json.loads((ROOT / "data/games/gen3_frlg/engine_signals.json").read_text())
-    assert "companion" not in shipped["titles"]["firered"]["artifacts"]
+    assert "companion" not in shipped["titles"][title]["artifacts"]
 
 
-def test_test_only_projection_builds_the_real_client_and_native_binding(monkeypatch):
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
+def test_test_only_projection_builds_the_real_client_and_native_binding(monkeypatch, title):
     from tests.unit import test_gen3_entry as entry
 
-    if not (ROOT / "patch/build/candidate-firered-trade/probe.gba").exists():
+    if not (ROOT / f"patch/build/candidate-{title}-trade/probe.gba").exists():
         pytest.skip("T5 private FR candidate build absent")
     monkeypatch.setattr(entry, "lupa", lua54)
-    manifest = t5.prepare(ROOT, ROOT / ("patch/build/t5-unit-" + uuid.uuid4().hex))
+    manifest = t5.prepare(ROOT, ROOT / ("patch/build/t5-unit-" + uuid.uuid4().hex), title=title)
     rom = (ROOT / manifest["rom"]).read_bytes()
-    world = entry.World(pack="gen3_frlg", title="firered", build=False)
+    world = entry.World(pack="gen3_frlg", title=title, build=False)
     lua = world.lua
     lua.globals().gameinfo = lua.table(getromhash=lambda: manifest["rom_sha1"])
     lua.globals().emu = lua.table(framecount=lambda: 0)
@@ -358,7 +375,7 @@ def test_test_only_projection_builds_the_real_client_and_native_binding(monkeypa
         lua.table(
             wt=ROOT.as_posix(),
             game="gen3_fr_trade",
-            title="firered",
+            title=title,
             player="a",
             scenario="native_trade_firered",
             phase="initial",
@@ -376,7 +393,7 @@ def test_test_only_projection_builds_the_real_client_and_native_binding(monkeypa
             root=ROOT.as_posix(),
             json=json_codec,
             rom_hash=manifest["rom_sha1"],
-            header_code="BPRE",
+            header_code={"firered": "BPRE", "leafgreen": "BPGE"}[title],
             rom_read=world.io.rom_read,
         )
     )
@@ -604,6 +621,11 @@ def model_physical_evidence(tmp_path, decline=False):
         )
         append("boot", counter=count)
         append("rx", message={"cmd": "config", "run_id": "model-run"})
+        from tests.unit.test_gen3_native_carrier_duo import carrier_rows
+        for row in carrier_rows(manifest, side, decline):
+            row = dict(row)
+            kind, witness_bytes = row.pop("kind"), row.pop("raw", None)
+            append(kind, binary=witness_bytes, **row)
         if not decline:
             pre, scene, commit, final = snapshots()
             for data in (pre, scene, commit, final):
@@ -643,7 +665,7 @@ def model_physical_evidence(tmp_path, decline=False):
             append("evolution", binary=commit)
             append("save_entry", ordinal=2)
         else:
-            append("omitted_ui", text="Your partner declined.")
+            append("rx", message={"cmd": "msgbox", "text": "Your partner declined."})
         append("flash", binary=final_save, counter=count + (0 if decline else 2))
         append(
             "flush_native",
@@ -737,6 +759,7 @@ def test_save_site_and_trade_fsm_flushes_in_the_same_frame_are_both_legitimate(t
         "identity",
         "disclosure",
         "later_save",
+        "reload_interaction",
         "journal",
         "intent",
     ],
@@ -772,5 +795,7 @@ def test_each_physical_requirement_has_a_negative_and_revert_control(tmp_path, f
         initial["a"][0]["production"] = True
     elif fault == "later_save":
         next(r for r in reloads["b"] if r["kind"] == "reloaded")["counter"] += 1
+    elif fault == "reload_interaction":
+        reloads["a"].append({**reloads["a"][0], "kind": "tx", "message": {"event": "trade_request"}})
     assert check_model(broken)
     assert check_model(model) == []

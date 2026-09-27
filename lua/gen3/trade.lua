@@ -205,7 +205,8 @@ function T.new(d)
                 t.precommit_proved = true
             end
         end
-        t.scene_job = native:transfer("scene", {slot=t.slot, token=t.token, old_key=t.old_key, visit=t.visit},
+        t.scene_job = native:transfer("scene", {slot=t.slot, token=t.token, old_key=t.old_key,
+            visit=t.visit, dispatch_deadline=t.apply_deadline},
             function(why, result_code, reason)
                 if active ~= t or t.scene_attempt ~= attempt or t.phase ~= "scene" then return end
                 if why == "guard:moved" then return post_scene(t) end
@@ -266,7 +267,8 @@ function T.new(d)
             t.journal_epoch = journal:allocate()
             if not t.journal_epoch then emit("apply_ready", {token=cmd.token, ok=false}); flush(); return end
             prepared = t
-            t.prepare_job = native:prepare_trade({token=t.token, slot=t.slot, old_key=t.old_key}, function(why, w)
+            t.prepare_job = native:prepare_trade({token=t.token, slot=t.slot, old_key=t.old_key,
+                dispatch_deadline=d.frame()+d.prepare_frames}, function(why, w)
                 if prepared ~= t or t.phase ~= "preparing" then return end
                 if t.epoch ~= d.epoch() then unchanged(t); flush(); return end
                 if why or type(w) ~= "table" or w.accepted ~= true or w.pre_saved ~= true or w.apply_open ~= true
@@ -377,7 +379,7 @@ function T.new(d)
         if t.epoch ~= d.epoch() or d.frame() > t.apply_deadline then unchanged(t); flush(); return end
         if not d.eligible() or not d.clear() then return end
         t.phase = "stage"
-        t.stage_job = native:transfer("enemy", {blobs_hex={t.blob_hex}}, function(why)
+        t.stage_job = native:transfer("enemy", {blobs_hex={t.blob_hex}, dispatch_deadline=t.apply_deadline}, function(why)
             if active ~= t then return end
             t.stage_done = true
             if t.phase == "draining" then return unchanged(t) end

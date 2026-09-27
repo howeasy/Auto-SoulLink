@@ -3,23 +3,29 @@
 -- No native witness, party byte, or save byte is written by this carrier.
 local M = {}
 M.ENV = "SLINK_DUO_FR_TRADE_CANDIDATE"
-M.DISCLOSURE = "native NPC/party-chooser/offer carrier: UNTESTED (HARNESS_ONLY selection)"
+M.DISCLOSURE = "candidate admission only; native NPC/chooser/offer evidence required"
 local cases = {native_trade_firered=true, native_trade_decline_firered=true}
 local sources = {
     "tools/gen3_trade_duo.py", "tools/e2e_duo.py",
-    "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/client.lua", "lua/gen3/signals.lua",
-    "lua/gen3/native.lua", "lua/gen3/safety.lua", "lua/gen3/trade.lua", "lua/gen3/trade_journal.lua", "lua/gen3/rom_content.lua",
-    "lua/tests/duo/gen3_trade_candidate.lua", "lua/tests/duo/duo_gen3_main.lua",
+    "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/client.lua", "lua/gen3/reads.lua", "lua/core/session.lua", "lua/owed_reports.lua", "lua/gen3/signals.lua",
+    "lua/gen3/native.lua", "lua/gen3/safety.lua", "lua/gen3/writes.lua", "lua/gen3/trade.lua", "lua/gen3/trade_journal.lua", "lua/gen3/rom_content.lua",
+    "lua/tests/duo/gen3_trade_candidate.lua", "lua/tests/duo/gen3_trade_driver.lua", "lua/tests/duo/duo_gen3_main.lua",
     "lua/tests/duo/scenario_gen3_native_trade.lua",
     "data/games/gen3_frlg/profile.json", "data/games/gen3_frlg/engine_signals.json",
     "data/games/gen3_frlg/write_checkpoint.json", "patch/src/trade_targets/abi.h",
+    "patch/src/trade_targets/native_carrier.h", "patch/src/trade_targets/carrier_producer.h",
+    "patch/src/trade_targets/firered.h", "patch/src/trade_targets/leafgreen.h",
+    "data/gen3/pret/pokefirered.sym", "data/gen3/pret/pokeleafgreen.sym",
 }
 local function relative(path)
     return type(path) == "string" and path:match("^patch/build/[%w_/%-.]+$") and not path:find("..",1,true)
 end
 function M.authorize(manifest, d, env, hash, read, digest)
-    assert(d.game == "gen3_fr_trade" and d.title == "firered" and cases[d.scenario], "not a T5 duo row")
-    assert(manifest.schema == "slink-fr-trade-duo-v2", "stale T5 manifest: regenerate private packs")
+    assert(d.game == "gen3_fr_trade" and (d.title == "firered" or d.title == "leafgreen")
+           and cases[d.scenario], "not a T5 duo row")
+    assert(manifest.schema == "slink-frlg-native-carrier-v3", "stale T5 manifest: regenerate private packs")
+    assert(manifest.title == d.title and manifest.carrier_mode == "native"
+           and (not manifest.player or manifest.player == d.player), "wrong T5 player/title/carrier")
     assert(manifest.production == false and manifest.ready == 0, "not a private READY0 candidate manifest")
     assert(relative(manifest.journal_path) and manifest.journal_path:sub(-32)==manifest.nonce,
            "stale T5 manifest: isolated journal missing")
@@ -48,7 +54,7 @@ function M.new(d, json, manifest, log, manifest_raw)
         local bytes=file:read("a");file:close();return bytes
     end
     M.authorize(manifest,d,os.getenv(M.ENV),gameinfo.getromhash(),read,digest)
-    local self = {manifest=manifest, ready=false, finals={}, save_entries=0}
+    local self = {manifest=manifest, ready=false, finals={}, save_entries=0, ui_jobs={}, ui_done={}, npc_edges=0}
     local base = manifest.native.BASE
     local prefix = "patch/build/t5_" .. manifest.nonce .. "_" .. d.player .. "_" .. (d.phase or "initial")
     local ordinal, io_, session, parts, g = 0, nil, nil, nil, nil
@@ -101,6 +107,40 @@ function M.new(d, json, manifest, log, manifest_raw)
         fields.path, fields.counter = dump(kind,data),counter()
         emit(kind,fields)
     end
+    local function ui_snapshot(kind, fields)
+        local c = assert(manifest.carrier,"native carrier layout missing")
+        local bytes = raw(base,0xA0)..raw(c.state,c.size)..raw(c.callback,4)
+            ..raw(c.field_lock,1)..raw(c.script_status,1)..raw(c.party_cursor,1)
+        fields = fields or {}
+        fields.path = dump(kind,bytes)
+        emit(kind,fields)
+    end
+    local prior_control
+    function self.observe_carrier()
+        if not g then return end
+        local c = manifest.carrier
+        local control = raw(c.control,16)
+        local function word(bytes,at,n)
+            local value=0;for i=n,1,-1 do value=value*256+bytes:byte(at+i) end;return value
+        end
+        if prior_control and word(control,4,4) ~= word(prior_control,4,4) then
+            emit("npc_edge",{path=dump("npc_edge",prior_control..control
+                 ..raw(c.objects,c.stride*16)..raw(c.avatar,6))})
+            self.npc_edges=self.npc_edges+1
+        end
+        prior_control=control
+        local seq=memory.read_u16_le(base+8,"System Bus")
+        local job=self.ui_jobs[seq]
+        if not job then return end
+        if not job.entered and memory.read_u8(c.state+8,"System Bus")==1 then
+            job.entered=true;ui_snapshot("ui_enter",{op=job.op,seq=seq})
+        end
+        local status=memory.read_u16_le(base+10,"System Bus")
+        if not job.done and memory.read_u16_le(base+12,"System Bus")==seq and (status==2 or status==3) then
+            job.done=true;ui_snapshot("ui_done",{op=job.op,seq=seq})
+            if job.entered and status==2 then self.ui_done[job.op]=(self.ui_done[job.op] or 0)+1 end
+        end
+    end
     function self.bind_entry(entry)
         -- Only this validated harness module selects these private files. The
         -- ordinary Entry ignores both the nonce env and the files. Their
@@ -128,7 +168,11 @@ function M.new(d, json, manifest, log, manifest_raw)
                 local op = io_.read_u16(base+6)
                 if op == 29 then self.snapshot("prepare")
                 elseif op == 21 then self.snapshot("scene");journal_snapshot()
-                elseif op == 30 then self.snapshot("withdraw") end
+                elseif op == 30 then self.snapshot("withdraw")
+                elseif op == 17 or op == 20 or op == 22 then
+                    local seq=io_.read_u16(base+8)
+                    self.ui_jobs[seq]={op=op};ui_snapshot("ui_post",{op=op,seq=seq})
+                end
             end
             return result
         end
@@ -146,6 +190,15 @@ function M.new(d, json, manifest, log, manifest_raw)
     end
     function self.attach(the_session,the_parts)
         session,parts = the_session,the_parts
+        if parts.native.service then
+            local service=parts.native.service
+            parts.native.service=function(...)
+                self.observe_carrier()
+                local result=table.pack(service(...))
+                self.observe_carrier()
+                return table.unpack(result,1,result.n)
+            end
+        end
     end
     function self.tx(message)
         if message.event == "hello" then
@@ -158,24 +211,8 @@ function M.new(d, json, manifest, log, manifest_raw)
     end
     function self.command(cmd, handle)
         emit("rx",{message=cmd})
-        if cmd.cmd == "show_choices" then
-            assert(d.player == "a" and self.selection and type(cmd.token)=="string","T5 unexpected action menu")
-            session.send("menu_result",{token=cmd.token,choice=0})
-            return true
-        elseif cmd.cmd == "choose_mon" then
-            assert(d.player == "a" and self.selection and type(cmd.token)=="string","T5 unexpected chooser")
-            session.send("mon_chosen",{token=cmd.token,slot=1})
-            return true
-        elseif cmd.cmd == "show_menu" then
-            assert(d.player == "b" and self.selection and type(cmd.token)=="string","T5 unexpected offer")
-            session.send("menu_result",{token=cmd.token,choice=d.native_decline and 0 or 1})
-            return true
-        elseif cmd.cmd == "msgbox" or cmd.cmd == "link_panel" then
-            emit("omitted_ui",{command=cmd.cmd,text=cmd.text})
-            if cmd.cmd == "msgbox" and type(cmd.text)=="string" and cmd.text:find("declined",1,true) then
-                self.declined = true
-            end
-            return true
+        if cmd.cmd == "msgbox" and type(cmd.text)=="string" and cmd.text:find("declined",1,true) then
+            self.declined = true
         end
         local result = handle(cmd)
         if cmd.cmd == "trade_final" then self.finals[cmd.token] = cmd.verdict end
@@ -184,10 +221,6 @@ function M.new(d, json, manifest, log, manifest_raw)
             emit("ready",{production=false})
         end
         return result
-    end
-    function self.start_selection()
-        self.selection = true
-        if d.player == "a" then session.send("trade_request",{}) end
     end
     function self.start(ctx)
         g = ctx.G
@@ -199,6 +232,13 @@ function M.new(d, json, manifest, log, manifest_raw)
         hook("TradeMons_body",function() self.snapshot("commit") end)
         hook("DoInGameTradeScene",function() self.snapshot("scene_enter") end)
         hook("TradeEvolutionScene",function() self.snapshot("evolution") end)
+        local chooser_entries={}
+        hook("CB2_InitPartyMenu",function()
+            -- InitPartyMenu is a multi-frame callback. Keep its first engine
+            -- entry for each command, not an arbitrary count of initialization frames.
+            local seq=io_.read_u16(base+8)
+            if not chooser_entries[seq] then chooser_entries[seq]=true;ui_snapshot("chooser_entry") end
+        end)
         hook("TrySavingData",function()
             self.save_entries = self.save_entries + 1
             self.snapshot("save_entry",{ordinal=self.save_entries})
@@ -212,6 +252,12 @@ function M.new(d, json, manifest, log, manifest_raw)
         emit(kind,{path=dump(kind,raw(assert(ctx.reader.party_base()),count*100)),count=count,counter=counter()})
     end
     function self.flush_decline() return io_.saveram() end
+    function self.carrier_complete()
+        local done = d.player=="a" and self.npc_edges==1 and self.ui_done[22]==1 and self.ui_done[20]==1
+            or d.player=="b" and self.ui_done[17]==1
+        if done then emit("native_carrier_complete",{title=d.title});return true end
+        return false
+    end
     function self.capture_final(ctx)
         self.snapshot("final")
         self.capture_party("before_reload",ctx)
@@ -246,7 +292,7 @@ function M.new(d, json, manifest, log, manifest_raw)
     emit("override",{environment=M.ENV,value=manifest.nonce,production=false,ready=0,rom_sha1=manifest.rom_sha1,
         source_commit=manifest.source_commit,manifest_sha1=d.native_manifest_sha1,
         run_lua_sha1=manifest.source_sha1["lua/gen3/run.lua"],sites_sha1=manifest.pack_sha1.sites})
-    log("HARNESS_ONLY " .. M.DISCLOSURE)
+    log("CANDIDATE_ONLY " .. M.DISCLOSURE)
     return self
 end
 return M

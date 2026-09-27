@@ -29,10 +29,15 @@ def test_exact_live_pack_reproduces_refusal_and_is_rejected_before_boot():
     if not rom_path.exists():
         pytest.skip("T5 private FR candidate build absent")
     rom = rom_path.read_bytes()
-    assert hashlib.sha1(rom).hexdigest() == manifest["rom_sha1"]
     lua = lua54.LuaRuntime(unpack_returned_tuples=True)
     signals = lua.execute((ROOT / "lua/gen3/signals.lua").read_text())
     sites = data["sites.json"]["titles"]["firered"]["artifacts"]["companion"]["sites"]
+    # The carrier producer changed the whole-ROM hash. These exact 21 observed
+    # site byte ranges are unchanged; pin the consumer's actual read boundary.
+    assert len(sites) == 21
+    for row in sites.values():
+        expected = bytes.fromhex(row["expected_hex"])
+        assert rom[row["rom_offset"]:row["rom_offset"] + len(expected)] == expected
     io = lua.table(
         rom_read=lambda at, n: lua.table(*rom[at : at + n]),
         read_bytes=lambda at, n: lua.table(*rom[at - 0x8000000 : at - 0x8000000 + n]),
@@ -97,7 +102,7 @@ def test_prepare_overwrites_the_exact_existing_live_pack_and_starts_all_sites(pr
             on_bus_exec=lambda *args: hooks.append(args) or "hook", unregister=lambda *_: None
         ),
     )
-    assert len(hooks) == 21
+    assert len(hooks) == len(sites) == 22  # integration adds the native release-entry witness
 
 
 def test_each_preparation_has_an_isolated_journal_and_preserves_prior_evidence(prepared):

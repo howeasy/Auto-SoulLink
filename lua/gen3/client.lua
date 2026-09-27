@@ -1065,6 +1065,8 @@ function Client.new(p)
         -- a borrowed party is never published nor learned as ours (docs/protocol.md §9 item 11):
         -- hello.party stays present and empty, exactly like tick_fields' guard
         local hidden = st.frozen or (trade and trade:hide_party()) or recovery_hidden()
+        session.hello_visible = not hidden
+        if not hidden then st.trade_hello_pending = nil end
         local own = hidden and {} or party
         -- Once a baseline exists hello REPORTS and never learns: the session builds hello before
         -- this frame's signals drain, so a mon added since the last quiet frame (its acquisition
@@ -1583,9 +1585,12 @@ function Client.new(p)
                 end
                 -- The write-ahead interval withheld our party from the server.
                 -- Publish the now-durable (or proved unchanged) party before
-                -- releasing trade_done; a hidden tick is never cleared by the
-                -- terminal report itself. Core sends HELLO before owed reports.
+                -- releasing trade_done. Core gates this HELLO on its field
+                -- checkpoint and sends it before owed reports. Another hidden
+                -- party reason must not turn that ordering into a false proof.
                 if t.journaled and journal and journal:ready() and not journal:hidden() then
+                    st.trade_hello_pending, st.trade_hello_check = true, nil
+                    session.hello_visible = false
                     session.hello_sent = false
                 end
             end})
@@ -1599,6 +1604,10 @@ function Client.new(p)
         if trade and trade:capable() then trade:apply(cmd); sync_trade()
         else
             log("apply_trade refused: durable native trade unavailable")
+            -- A replay during journal recovery cannot truthfully report
+            -- "unchanged"; the earlier intent may already have committed.
+            -- Its qualified uncertainty declaration owns the next report.
+            if journal and journal:hidden() then return true end
             if type(cmd.token) == "string" and cmd.token ~= "" and type(cmd.old_key) == "string" and cmd.old_key ~= "" then
                 local fields = {token=cmd.token, slot=cmd.slot, new_key=cmd.old_key, new_species=0}
                 local cancel = {token=cmd.token, choice=0, withdraw=true}
@@ -1626,6 +1635,11 @@ function Client.new(p)
             local refresh=false
             owed:step(p.net.connected(), session.hello_sent == true and not awaiting_trade_run
                        and (not journal or journal:ready()), function(event, fields)
+                -- Uncertainty declarations deliberately precede the later
+                -- visible recovery HELLO; gating those would deadlock recovery.
+                if event == "trade_done" and not fields.uncertain
+                   and (not session.hello_visible or st.frozen
+                        or (trade and trade:hide_party()) or recovery_hidden()) then return false end
                 local sent=send(event,fields)
                 if sent and event == "trade_done" and fields.uncertain and fields.after_reset
                    and trade and trade:declaration_sent(fields.token) then
@@ -1817,6 +1831,15 @@ function Client.new(p)
         -- clean did). The rival authority above replaces it and never touches the lifecycle.
         native:service()
         sync_trade() -- each native job's own publication receipt, never inferred from sink bytes
+        if st.trade_hello_pending and session.hello_sent and not session.hello_visible
+           and (not st.trade_hello_check or io.framecount()-st.trade_hello_check >= 30)
+           and not in_battle() and overworld_ok() then
+            st.trade_hello_check = io.framecount()
+            update_frozen(party_read() or {})
+            if not st.frozen and not (trade and trade:hide_party()) and not recovery_hidden() then
+                session.hello_sent = false -- one refresh when visibility returns, no hidden-HELLO spin
+            end
+        end
     end
 
     local Id = core.Identity.new({ key = key })

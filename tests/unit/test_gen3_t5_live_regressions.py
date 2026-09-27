@@ -64,7 +64,8 @@ def test_captured_flushes_distinguish_presave_from_two_real_postsave_host_calls(
             assert all(flush["counter"] == 6 for flush, _, _ in result)
 
 
-def test_captured_a_success_announces_visible_hello_before_trade_done(monkeypatch):
+@pytest.mark.parametrize("hold", [None, "borrowed", "checkpoint"])
+def test_captured_a_success_announces_visible_hello_before_trade_done(monkeypatch, hold):
     monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "0000BEEF")
     data = trace()
     carrier = CartridgeModel()
@@ -96,6 +97,12 @@ def test_captured_a_success_announces_visible_hello_before_trade_done(monkeypatc
     )
     start = len(world.sent)
     world.set_party(received)
+    if hold == "borrowed":
+        # MODEL a battle baseline whose party has since been borrowed. The real
+        # hello_fields/update_frozen path decides whether the snapshot is hidden.
+        world.client.state.battle = world.lua.table(base_keys=world.lua.table(OTHER_PARTY=True))
+    elif hold == "checkpoint":
+        world.break_checkpoint()
     native = decode_witness(snapshot("a", "flush_native", last=True))
     assert (
         native["bits"] == 31
@@ -105,6 +112,16 @@ def test_captured_a_success_announces_visible_hello_before_trade_done(monkeypatc
     carrier.ack(commit_entered=True, scene_done=True, save_success=True, final_result="committed")
     world.step()
     messages = [m for m in world.sent[start:] if m["event"] in ("hello", "trade_done")]
+    if hold:
+        assert all(m["event"] == "hello" and m.get("party_hidden") for m in messages)
+        world.step(60)
+        assert not any(m["event"] == "trade_done" for m in world.sent[start:])
+        assert sum(m["event"] == "hello" for m in world.sent[start:]) <= 2
+        world.client.state.battle = None
+        world.overworld_safe()
+        world.step(31)
+        messages = [m for m in world.sent[start:] if m["event"] in ("hello", "trade_done")]
+        messages = [m for m in messages if not m.get("party_hidden")]
     assert [m["event"] for m in messages] == ["hello", "trade_done"]
     assert not messages[0].get("party_hidden") and not messages[0].get("trade_outstanding")
     assert incoming in {m["key"] for m in messages[0]["party"]}
