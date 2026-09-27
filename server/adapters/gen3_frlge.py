@@ -291,6 +291,23 @@ if os.path.exists(_rr_encounters_path):
     with open(_rr_encounters_path, encoding="utf-8") as _f:
         _RR_ENCOUNTERS = json.load(_f)
 
+# Vanilla wild encounter tables for clean FireRed/LeafGreen/Emerald cartridges, one committed
+# file per title (tools/gen_gen3_wild.py, from pinned pret source). Same shape as _RR_ENCOUNTERS
+# and a randomized cartridge's own ingested table -- area_id -> method -> [entries].
+_VANILLA_WILD: dict[str, dict[str, dict[str, list[dict]]]] = {}
+for _title, _dir, _fname in (
+    ("firered", _DATA_DIR, "firered_encounters.json"),
+    ("leafgreen", _DATA_DIR, "leafgreen_encounters.json"),
+    ("emerald", _EMERALD_DIR, "emerald_encounters.json"),
+):
+    _path = os.path.join(_dir, _fname)
+    if os.path.exists(_path):
+        with open(_path, encoding="utf-8") as _f:
+            _VANILLA_WILD[_title] = json.load(_f)["encounters"]
+
+# Archipelago carts (firered_ap/leafgreen_ap) are still clean FR/LG until ingested.
+_VANILLA_TITLE = {"firered_ap": "firered", "leafgreen_ap": "leafgreen"}
+
 # RR display name → damage-calc name, per kind (species/ability/item/move).
 # Pinned by tests/unit/test_rr_calc_names.py against calc/calc/src/data/*.ts.
 _RR_CALC_NAMES: dict[str, dict[str, str]] = {}
@@ -599,16 +616,23 @@ class Gen3Adapter(GameAdapter):
 
     def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
         """Return wild encounter data for this area: this cartridge's own tables once
-        ingested (randomized FR/LG), else RR's shipped file.
+        ingested (randomized FR/LG/Emerald), else RR's shipped file, else the clean
+        cartridge's own vanilla table (by title -- FireRed, LeafGreen and Emerald ship
+        different tables, tools/gen_gen3_wild.py).
 
-        Returns method → entries dict, or None for clean FR/LG or areas
+        Returns method → entries dict, or None for an unrecognized title or areas
         with no encounter data.
         """
         if self._rom_encounters is not None:
             return self._rom_encounters.get(area_id) or None
-        if not self._is_rr:
+        if self._is_rr:
+            return _RR_ENCOUNTERS.get(area_id) or None
+        # A randomized cart with no (yet) ingested report shows nothing rather than the retail
+        # table (same rule as _frlg_trainer_table: a randomized cartridge's tables are its own).
+        if self._artifact_kind == "rand":
             return None
-        return _RR_ENCOUNTERS.get(area_id) or None
+        title = _VANILLA_TITLE.get(self._rom_type, self._rom_type)
+        return _VANILLA_WILD.get(title, {}).get(area_id) or None
 
     def sprite_src(self, species_id: int) -> str:
         """Return the best sprite URL for this species.
