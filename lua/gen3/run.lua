@@ -165,7 +165,10 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
     end
 
     local birth_checked = false
-    for _ = 1, 100 do
+    -- 1000 spins = ~5 s at the default 5 ms: two emulators launched together on one install (a
+    -- duo, a player with two windows) must wait out a slow holder, not fail closed. 100 (0.5 s)
+    -- starved the second of a T5 duo on 2026-09-27, which then never advertised trade.
+    for _ = 1, 1000 do
         local took, _, errno = rename_file(baton, mine)
         if took then
             local s = get(mine)
@@ -197,6 +200,9 @@ end
 -- <<< session counter <<<
 
 local session_counter = next_session_counter(ROOT)
+if not session_counter then
+    console.log("[SLink-gen3] session counter unavailable (slink_gen3_session.baton held or unreadable at the install root); native trade is off this session")
+end
 local battle_nonce_seed = nil
 if session_counter then
     math.randomseed(os.time() + math.floor(os.clock() * 1000))
