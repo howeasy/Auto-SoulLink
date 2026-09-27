@@ -303,7 +303,10 @@ function Client.new(p)
         if ok then st.box_generation = st.box_generation + 1 end
         return cache
     end
-    local function box_generation() return st.boxes_ok and st.box_generation or nil end
+    -- the ONE box-generation accessor: (raw generation, whether the last scan was complete) for
+    -- the core (lua/core/session.lua); a wire field takes `ok and gen or nil` of it, so the two
+    -- can never disagree
+    local function box_generation() return st.box_generation, st.boxes_ok end
     local function pc_boxes_wire()
         if not st.boxes_ok then return nil end
         local out = arr({})
@@ -468,8 +471,11 @@ function Client.new(p)
                 st.known[k] = true
                 if m.hp and m.hp > 0 then st.alive[k] = true end
                 session.identity:begin_alias(old, k, m, party, io.framecount())
-                send("key_change", { old_key = old, new_key = k, reason = "npc_trade",
-                                     new_species = m.species, new_nickname = m.nickname })
+                -- KEY-SCOPE-5: kept on the alias so a retryable refusal can resend this exact
+                -- message once a newer complete box census has gone out (core/session.lua).
+                session.identity.pending.msg = { old_key = old, new_key = k, reason = "npc_trade",
+                                                 new_species = m.species, new_nickname = m.nickname }
+                send("key_change", session.identity.pending.msg)
             end
         end
     end
@@ -900,6 +906,11 @@ function Client.new(p)
     drv.read_party = party_read
     drv.in_battle = in_battle
     drv.battle_write = battle_write
+    -- KEY-SCOPE-5: the core's key_change retry hook. st.box_generation only bumps on a complete
+    -- rescan, so it IS the raw generation counter core/session.lua needs. This is the same
+    -- accessor the hello census field reads, not a second one that could drift away from it.
+    drv.box_generation = box_generation
+    drv.rescan_boxes = rescan_boxes
     function drv.party_borrowed()
         local party = party_read()
         if party then update_frozen(party) end
@@ -1000,9 +1011,10 @@ function Client.new(p)
         latch_balls(false)                                     -- a resume, not an acquisition
         local area_id, loc = area_now()
         st.last_area = area_id .. "|" .. loc
+        local gen, gen_ok = box_generation()                -- advertised only when the scan was complete
         local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind,
                     rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
-                    pc_boxes_generation = box_generation(),
+                    pc_boxes_generation = gen_ok and gen or nil,
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
                     in_battle = in_battle(), badges = badges(), ball_count = ball_count() }
         if session_nonce then
