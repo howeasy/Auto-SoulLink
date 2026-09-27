@@ -404,3 +404,27 @@ established RR MODEL fixture; that is not separate FR/T3 client admission or
 physical audio evidence. Native dispatch currently has SOURCE/MODEL/build
 coverage only and requires a leased live engine-playback check. READY stays 0;
 no production patch is published by this extension.
+
+### FR native sound live receipt, 2026-09-27
+
+Epoch-bound producer `4df26e0ebb0200fb006e406e35dcaacf3ee35d14` passed the
+single-cart engine-state check. Receipt:
+`patch/build/sound-live-20260927/sound_receipt.json`, with native log and run/build
+identities alongside. ROM SHA256:
+`dc7841cacc36316ecc24611d3a292e7a25c56a093c1899964aa1c434bfc5d5ae`.
+Only owned PID 11748 ran under private `.cache/s` / `.cache/s/states`; it exited
+and the lane was released.
+
+Hooks witnessed PlaySE(25)->m4aSongNumStart(25) and
+PlayFanfare(257)->m4aSongNumStart(257). Python independently read the ROM song/
+player tables and matched live player/header pairs `03007340/086B5BB0` and
+`03007380/086BCD98`, active track masks and advancing clocks. The fanfare counter
+77->0, task removal and BGM pause 1->0 established native completion/resumption.
+IDs 347/65535, epoch zero, and request epoch 8 against configured epoch 7 were
+refused without extra sound calls (reasons 2/2/13/12). Altered call/header/clock/
+pause/refusal receipts are rejected by the oracle controls.
+
+This is native dispatch/m4a-state evidence, not audible-output, speaker/device,
+or physical FR client-toggle qualification. No screenshots supplied facts.
+The nonzero mismatch check requires CONTROL epoch staging described above;
+the old mailbox-only handshake does not supply that configuration. READY is 0.

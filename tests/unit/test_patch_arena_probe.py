@@ -262,7 +262,8 @@ def run_probe(mode, census=False):
     sys.path.insert(0, str(ROOT))
     from tools.gen1_playthrough import disable_rewind
 
-    base = ROOT / (".cache/p" if mode == "panel" else ".cache/c") if mode in ("panel", "carrier") else ROOT / "patch/build" / f"arena-firered-{mode}"
+    private_dirs = {"panel":".cache/p", "carrier":".cache/c", "sound":".cache/s"}
+    base = ROOT / private_dirs[mode] if mode in private_dirs else ROOT / "patch/build" / f"arena-firered-{mode}"
     assert base.resolve().is_relative_to(ROOT.resolve())
     state_dir = (base / "states").resolve()
     if not state_dir.is_relative_to(ROOT.resolve()):
@@ -271,8 +272,8 @@ def run_probe(mode, census=False):
     emulator = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
     config_source = Path(os.environ.get("SLINK_BIZHAWK_CONFIG", "E:/Howard/Bizhawk/config.ini"))
     config = json.loads(config_source.read_text(encoding="utf-8-sig"))
-    seeded = census or mode in ("trade", "panel", "carrier")
-    seed = (ROOT / "tests/fixtures/gen3/firered_party_town.sav").read_bytes() if mode in ("panel", "carrier") else (full_box_seed() if seeded else None)
+    seeded = census or mode in ("trade", "panel", "carrier", "sound")
+    seed = (ROOT / "tests/fixtures/gen3/firered_party_town.sav").read_bytes() if mode in private_dirs else (full_box_seed() if seeded else None)
     if seed:
         (base / "seed.sav").write_bytes(seed)
         print(f"seed mode={mode}; sha256={hashlib.sha256(seed).hexdigest()}", flush=True)
@@ -368,21 +369,25 @@ log("RESULT: " .. (ok and "PASS" or "FAIL") .. " " .. tostring(why or ""))
 out:close()
 client.exit()
 ''', encoding="utf-8")
-    if mode in ("trade", "panel", "carrier"):
+    if mode in ("trade", "panel", "carrier", "sound"):
         from tests.unit.test_patch_carrier_live import CARRIER_LUA
         from tests.unit.test_patch_panel_live import PANEL_LUA
+        from tests.unit.test_patch_sound_live import SOUND_LUA
         from tests.unit.test_patch_trade_live import TRADE_LUA
 
         text = script.read_text(encoding="utf-8")
         begin = text.index("  local found = false")
         end = text.index("\nend)\nlog(\"SCOPE:",begin)
-        text = text[:begin] + ({"trade":TRADE_LUA,"panel":PANEL_LUA,"carrier":CARRIER_LUA}[mode]) + text[end:]
+        text = text[:begin] + ({"trade":TRADE_LUA,"panel":PANEL_LUA,"carrier":CARRIER_LUA,"sound":SOUND_LUA}[mode]) + text[end:]
         if mode == "panel":
             text = text.replace("SCOPE: allocator boundary; census when requested covers only named scenes; title lifecycle unqualified",
                                 "SCOPE: FR native START panel; replayed payload; no server/duo/save qualification")
         if mode == "carrier":
             text = text.replace("SCOPE: allocator boundary; census when requested covers only named scenes; title lifecycle unqualified",
                                 "SCOPE: FR native carrier; replayed server payload; no duo qualification")
+        if mode == "sound":
+            text = text.replace("SCOPE: allocator boundary; census when requested covers only named scenes; title lifecycle unqualified",
+                                "SCOPE: FR sound native calls/player state; no audible-output qualification")
         script.write_text(text,encoding="utf-8")
     cmd = [str(emulator), f"--config={config_path.relative_to(ROOT).as_posix()}",
            f"--lua={script.relative_to(ROOT).as_posix()}", (base / "probe.gba").relative_to(ROOT).as_posix()]
@@ -414,7 +419,7 @@ client.exit()
     text = result.read_text() if result.exists() else "FAIL: no result"
     print(text)
     passed = any(line.startswith("RESULT: PASS") for line in text.splitlines())
-    if seeded and passed and mode not in ("panel", "carrier"):
+    if seeded and passed and mode not in private_dirs:
         sys.path.insert(0, str(ROOT))
         from tools.gen3_fixtures import boot_check_verdict, qualify_one
 
