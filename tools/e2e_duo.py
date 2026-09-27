@@ -423,9 +423,12 @@ SCENARIOS = {
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
     # gen3_emerald hunts "catch" (20 balls), not "battle" (5): deadzone_gen3 burned all three RNG
     # retries on the 5-ball fixture (B ran out of balls twice) before the catch fixture existed.
+    # FR/LG link_gen3 hunts the SYNTH party_catch_synth saves (20 balls) for the same reason: the
+    # LeafGreen battle save holds 2 balls and gen3_lgfr failed out-of-balls 3/3.
     "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                   "ball_hunt": True,
-                  "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch"},
+                  "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch",
+                                     "gen3_frlg": "catch_synth", "gen3_lgfr": "catch_synth"},
                   "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
     "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                       "ball_hunt": True,

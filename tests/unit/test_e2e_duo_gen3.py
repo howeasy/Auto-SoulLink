@@ -4803,9 +4803,14 @@ def test_rr_rows_that_link_or_throw_boot_rr_battle2():
     for name in ("faint_cmd_gen3", "boxsync_gen3", "whiteout_gen3", "link_gen3", "deadzone_gen3",
                  "reconnect_gen3", "native_absent_gen3", "linked_faint_active_gen3"):
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == "battle2", name
-    fr = {"faint_cmd_gen3": "town", "link_gen3": "battle", "boxsync_gen3": {"a": "battle", "b": "town"}}
+    fr = {"faint_cmd_gen3": "town", "link_gen3": "catch_synth", "boxsync_gen3": {"a": "battle", "b": "town"}}
     for name, want in fr.items():
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_frlg") == want, name
+    # link_gen3 hunts 20-ball SYNTH saves on FR/LG (the LG battle save's 2 balls ran out 3/3)
+    assert duo.scenario_target(duo.SCENARIOS["link_gen3"], "gen3_lgfr") == "catch_synth"
+    for title in ("firered", "leafgreen"):
+        sav = (REPO / f"tests/fixtures/gen3/{title}_party_catch_synth.sav").read_bytes()
+        assert duo.gen3_ball_count(sav, title) >= 20, title
     fixture = duo.gen3_decode((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(), rr=True)[0]
     assert len(fixture) == 2 and duo.gen3_ball_count((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(),
                                                      "radical_red") == 9
