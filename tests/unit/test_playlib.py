@@ -431,6 +431,38 @@ def test_wait_scene_settled_honours_an_extra_ground_truth_predicate(lua, world):
     assert world.frame >= 100
 
 
+@pytest.mark.parametrize("quiet", (False, True))
+@pytest.mark.parametrize("battle", (True, None), ids=("active", "unreadable"))
+def test_scene_settler_refuses_active_battle_without_inputs(lua, world, quiet, battle):
+    play = _bind(lua)
+    world.in_battle = battle
+    world.preds.scene_quiet = quiet
+    result = play.wait_scene_settled(None, 10, None, 1)
+    assert isinstance(result, tuple) and result[0] is False and "battle" in result[1]
+    assert world.a == 0 and world.frame == 0
+
+
+def test_scene_settler_rechecks_battle_after_a_scene_predicate(lua, world):
+    play = _bind(lua)
+    lua.execute("""
+        H.scene_quiet = function() W.in_battle = true; return false end
+    """)
+    try:
+        result = play.wait_scene_settled(None, 10, None, 1)
+        assert isinstance(result, tuple) and result[0] is False and "battle" in result[1]
+        assert world.a == 0
+    finally:
+        lua.execute("H.scene_quiet = function() return W.preds.scene_quiet ~= false end")
+
+
+def test_scene_settler_stops_if_battle_begins_during_quiet_frames(lua, world):
+    play = _bind(lua)
+    lua.execute("W.on_frame = function() W.in_battle = true end")
+    result = play.wait_scene_settled(None, 10, None, 5)
+    assert result[0] is False and "battle" in result[1]
+    assert world.a == 0 and world.frame == 1
+
+
 # ── state paths ──────────────────────────────────────────────────────────────────────────────
 
 

@@ -502,8 +502,17 @@ function M.bind(H, opts)
         local want = stable_frames or 60
         local stable = 0
         for _ = 1, (budget or 6000) do
+            -- Scene advancement is a menu button policy, not a battle policy. Every caller
+            -- must finish its battle explicitly; unknown state cannot authorize a press.
+            if P.in_battle(cp) ~= false then
+                return false, "scene wait refused: battle active or unreadable"
+            end
             local quiet = quiet_fn(cp)
             if quiet and also then quiet = also() end
+            -- A binding's predicate may advance a frame. Recheck at the input/success edge.
+            if P.in_battle(cp) ~= false then
+                return false, "scene wait refused: battle active or unreadable"
+            end
             if quiet then
                 stable = stable + 1
                 if stable >= want then return true end
