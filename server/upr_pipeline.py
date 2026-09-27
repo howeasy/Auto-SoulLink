@@ -46,6 +46,7 @@ import re
 import shutil
 import subprocess
 
+from server import upr_gen3_write_domain
 from server.adapters import variant_label
 from server.adapters.gen1_rom_scan import (
     GEN1_ROM_SIZE,
@@ -824,6 +825,8 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         if family == FAMILY_FRLG:
             tables = _check_content_gen3(sources[player], info["output"])
             info["sites_intact"] = True        # _check_content_gen3 refuses otherwise
+            info["write_domain"] = upr_gen3_write_domain.check_output(
+                sources[player], info["output"], info["spec"])
             info["content_hash"] = info["fingerprint"] = gen3_content_fingerprint(tables)
             results[player] = info
             continue
