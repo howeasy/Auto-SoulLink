@@ -499,3 +499,46 @@ used the same managed NLua assembly. `SetDllDirectoryW` fixes that loader differ
 executes both discovered hosts, verifies the actual managed NLua and native Lua DLL paths and
 Lua 5.4, and still exercises two fresh processes against the actual file adapter. An installed
 runtime that fails to load remains a test failure, never a blanket skip.
+
+### T3-R6 verification receipt — 2026-09-27
+
+Tested source cut: `6cbff82bf116c42ec3f38b16e577215e326eefdf` on `codex/t3-r5`, based on
+`a92ad55c2d40a97c5d88c279597dea802e33009d`. The receipt commit changes this document only.
+Related suite: **509 passed, zero failures/errors/skips**, including both real PowerShell hosts.
+Full `tests/unit`: **11,809 passed, 4,205 skipped, zero failures/errors**, exit 0,
+798.52 seconds. All 140 direct trade/journal/recovery/host controls ran without skips;
+both PATH-selected and WindowsApps PowerShell hosts passed. Full-suite skips remain unexecuted evidence.
+
+Each implementation correction was observed failing before its fix:
+
+| Control | Red result | Receipt SHA256 |
+| --- | --- | --- |
+| WindowsApps NLua host | 1 failed / 1 passed | `56315aa4e5f11e6a1646c11961efebcd605eec8c9107dcd098ed0def4633db96` |
+| SaveRAM before retirement | 4 failed / 0 passed | `e83cff384cc13c19fb1ec603cff7f2de7373caebd489966d844e3616db414468` |
+| Permanent fault console logging | 2 failed / 0 passed | `b02ade3bbd04716ec12781c0cac0e0561058db3faadb375757a6e509af220103` |
+| Missing run / expired proof | 3 failed / 0 passed | `8a5b550f117431838cb6c3e07b8d79ba77d9328db7aec1eeef3b8e49d0d822c6` |
+| Printable ASCII identifiers | 14 failed / 1 passed | `da59b603bb0e450f3b7c8729c7574512abe65d3c04656c42da4226716e914647` |
+| Integer epoch round trip | 1 failed / 1 passed | `2676d175036b5fdc684f3a843c2cf53ca1f359603de3f9bb4099db84dd5af193` |
+
+All rows pass in the related and full suites. Item 6 is a documented detection limit,
+not a claimed rollback-detection implementation: `.cache/t3-r6-paired-rollback.json`
+reproduces acceptance of a mutually consistent older file pair and epoch reuse.
+
+Final raw receipts in `C:/slink-wt/em-t3/.cache/`:
+
+- `t3-r6-related.xml`: `f532a65043904f203a2aff28b903ec25a9bf768bccef657aa146c1a176258b5a`.
+- `t3-r6-full.xml`: `1f1311eaea3f528b0a436e0481a7d5d9fb1d5071c6ea593ed3c751a53e8c77ee`.
+- `t3-r6-full.log`: `00f9df09b24ca61ae11975b5f9aafdb995195bc9cb102ad3ccb42af7df33ba70`.
+
+The machine-readable ledger is `.cache/t3-r6-receipt.json`. Native loader evidence used
+`E:/Howard/Bizhawk/dll/NLua.dll` SHA256 `f413017bfc7a37dfcaeb6e6c24812fd12ceb2b4b107a066512ed28c13010b234`
+and `lua54.dll` SHA256 `4786e0df4caf120e3bedf0b6dda260525df2187c66ded220a21a53ace76b0501`.
+
+Full command: `python -m pytest tests/unit -q -p no:randomly --tb=short --basetemp=.cache/t3-r6-full-tmp --junitxml=.cache/t3-r6-full.xml`.
+Environment: every assignment in `C:/slink-wt/g3-env.sh`, plus
+`SLINK_EXPANSION_SRC=C:/slink-wt/g3-xc4/.cache/expansion/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7`
+and `SLINK_HOST_GCC=E:/Google Drive/SLink/.cache/build-tools/w64devkit-2.10.0/w64devkit/bin/gcc.exe`.
+
+Scoped Ruff, five Lua parses, and `git diff --check` pass. Production `trade_capable()`
+still returns false, all four `SLINK_TARGET_READY` values remain zero, and no emulator was launched.
+This is SOURCE/MODEL and host-runtime verification, not physical trade or power-loss qualification.
