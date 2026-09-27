@@ -197,7 +197,7 @@ CENSUS_LUA = r'''
 '''
 
 
-def full_box_seed():
+def full_box_seed(title="firered"):
     """O-33: full boxes + level-15 Squirtle/Rare Candy; unchanged location/identity.
 
     FR species_info Squirtle stats and medium-slow experience; evolution.h:7
@@ -205,7 +205,7 @@ def full_box_seed():
     """
     from server.adapters import gen3_codec as codec
 
-    original = (ROOT / "tests/fixtures/gen3/firered_party_town.sav").read_bytes()
+    original = (ROOT / f"tests/fixtures/gen3/{title}_party_town.sav").read_bytes()
     parsed = codec.parse_flash(original)
     mon = codec.party_from_save(original)[0]
     assert mon["species"] == 7
@@ -258,12 +258,16 @@ def full_box_seed():
     return result
 
 
-def run_probe(mode, census=False):
+def run_probe(mode, census=False, *, title="firered", base_dir=None, lua_transform=None):
     sys.path.insert(0, str(ROOT))
     from tools.gen1_playthrough import disable_rewind
 
     private_dirs = {"panel":".cache/p", "carrier":".cache/c", "sound":".cache/s", "rival":".cache/r"}
     base = ROOT / private_dirs[mode] if mode in private_dirs else ROOT / "patch/build" / f"arena-firered-{mode}"
+    if title not in ("firered", "leafgreen"):
+        raise ValueError("unbound probe title")
+    if base_dir is not None:
+        base = Path(base_dir)
     assert base.resolve().is_relative_to(ROOT.resolve())
     state_dir = (base / "states").resolve()
     if not state_dir.is_relative_to(ROOT.resolve()):
@@ -273,9 +277,9 @@ def run_probe(mode, census=False):
     config_source = Path(os.environ.get("SLINK_BIZHAWK_CONFIG", "E:/Howard/Bizhawk/config.ini"))
     config = json.loads(config_source.read_text(encoding="utf-8-sig"))
     seeded = census or mode in ("trade", "panel", "carrier", "sound", "rival")
-    seed = (ROOT / "tests/fixtures/gen3/firered_party_town.sav").read_bytes() if mode in private_dirs else (full_box_seed() if seeded else None)
+    seed = (ROOT / f"tests/fixtures/gen3/{title}_party_town.sav").read_bytes() if mode in private_dirs else (full_box_seed(title) if seeded else None)
     if mode == "rival":
-        seed = (ROOT / "tests/fixtures/gen3/firered_party_trainer.sav").read_bytes()
+        seed = (ROOT / f"tests/fixtures/gen3/{title}_party_trainer.sav").read_bytes()
     if seed:
         (base / "seed.sav").write_bytes(seed)
         print(f"seed mode={mode}; sha256={hashlib.sha256(seed).hexdigest()}", flush=True)
@@ -395,10 +399,12 @@ client.exit()
             text = text.replace("SCOPE: allocator boundary; census when requested covers only named scenes; title lifecycle unqualified",
                                 "SCOPE: FR native Rival W1/late refusal on real Rick102 battle; replayed team, no server/duo qualification")
         script.write_text(text,encoding="utf-8")
+    if lua_transform is not None:
+        script.write_text(lua_transform(script.read_text(encoding="utf-8")), encoding="utf-8")
     cmd = [str(emulator), f"--config={config_path.relative_to(ROOT).as_posix()}",
            f"--lua={script.relative_to(ROOT).as_posix()}", (base / "probe.gba").relative_to(ROOT).as_posix()]
     started = time.monotonic()
-    env = {**os.environ, "SLINK_ROOT": ROOT.as_posix(), "SLINK_GEN3_TITLE": "firered",
+    env = {**os.environ, "SLINK_ROOT": ROOT.as_posix(), "SLINK_GEN3_TITLE": title,
            "SLINK_GEN3_CHECKPOINT": str(ROOT / "data/games/gen3_frlg/write_checkpoint.json"),
            "T2_INCOMING": str(base / "incoming.bin"),
            "T2_RELOAD_PARTY": str(base / "reload_party.bin"),
@@ -408,7 +414,7 @@ client.exit()
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f"owned EmuHawk PID={proc.pid}, mode={mode}, state_dir={state_dir}", flush=True)
     (base / "run_receipt.json").write_text(json.dumps({
-        "pid":proc.pid,"mode":mode,"state_dir":str(state_dir),"config":str(config_path),
+        "pid":proc.pid,"mode":mode,"title":title,"state_dir":str(state_dir),"config":str(config_path),
         "script_sha256":hashlib.sha256(script.read_bytes()).hexdigest(),
         "rom_sha1":hashlib.sha1((base/"probe.gba").read_bytes()).hexdigest(),
         "seed_sha256":hashlib.sha256(seed).hexdigest() if seed else None,

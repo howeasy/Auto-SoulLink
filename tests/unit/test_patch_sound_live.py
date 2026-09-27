@@ -71,7 +71,7 @@ SOUND_LUA=r'''
 '''
 
 
-def sound_problems(text,rom):
+def sound_problems(text,rom,*,song_table=0x084A32CC,mplay_table=0x084A329C):
     problems=[]
     def word(address,size=4):
         start=address-0x08000000
@@ -81,12 +81,12 @@ def sound_problems(text,rom):
         problems.append(f"wrong native call trace: {calls}")
     for op,song,seq in ((19,25,1),(9,257,2)):
         match=re.search(rf"SOUND_ACTIVE op={op} id={song} seq={seq} player=([0-9A-F]+) header=([0-9A-F]+) status=([0-9A-F]+) clock=(\d+)->(\d+)",text)
-        entry=0x084A32CC+song*8
+        entry=song_table+song*8
         if not match:
             problems.append(f"missing active player {song}")
             continue
         player,header,status=(int(match[i],16) for i in (1,2,3))
-        if (player!=word(0x084A329C+12*word(entry+4,2)) or header!=word(entry)
+        if (player!=word(mplay_table+12*word(entry+4,2)) or header!=word(entry)
                 or not status&0xffff or status&0x80000000 or match[4]==match[5]):
             problems.append(f"player/song/clock differs from ROM table {song}")
     if not re.search(r"FANFARE_RELEASE counter=[1-9]\d*->0 paused=1->0 task=1->0",text):

@@ -536,3 +536,39 @@ FR-only allocator probe modes remain FR-only; permitting an LG private candidate
 does not admit the heap carve-out or inherit FR physical receipts. LG READY=0,
 production=false, capability mask23 for the test composition. Native LG trade,
 carrier/panel, sound and rival lifecycle checks remain to be leased and run.
+
+### LG single-cart live receipts, 2026-09-27
+
+Producer `3583502459778bab4d61635e42cd3ec900112111` passed five sequential private
+LG runs. Aggregate: `patch/build/lg-live-20260927.json`; per-mode records:
+`patch/build/lg-{carrier,panel,sound,rival,trade}-live-20260927/leafgreen_receipt.json`.
+All share candidate SHA256
+`a0e5fe73b888f86abf8d9722703334a3afd1ee5f68d56ed7f8e6ef08eec48db0`.
+Each used a distinct `.cache/lg-<mode>` run/state directory and its LG fixture.
+Owned PIDs 27256/43796/29156/42760/15248 exited; the lane was released for T5.
+
+- Carrier: native NPC counter edges, choices/chooser/offer A/B results, LG chooser
+  callback `0811EBA9`, PREPARE save counter3->4 and unchanged withdrawal; independent
+  text/options/party/SaveRAM decode passed.
+- Panel: normal START/action9, decoded five rows plus PAGE1/1, VRAM/palette and
+  locked-field witnesses, A/B closure. One inherited raw PANEL_SCOPE line says
+  FR; the structured receipt annotates this label and retains the original log.
+  ROM/title/config/symbol identities establish that this was LG.
+- Sound: LG tables selected headers `086B548C` and `086BC674`; native clocks and
+  fanfare task/BGM release passed, as did invalid-ID/unarmed/stale-epoch refusals.
+  No audible-output or physical client-toggle claim.
+- Rival: a real Rick102 battle consumed W1 at stage0, selected the live second
+  slot (Rattata) from the replayed peer fixture with deliberately fainted lead,
+  and refused the late request without changing the enemy party.
+- Trade: the existing single-cart driver used a disclosed full-party/full420-box
+  SYNTH setup derived from the LG town fixture. Native PREPARE/commit/scene/
+  evolution/post-save completed, counter3->5, then a reset without an extra manual
+  SAVE retained Machamp68 / PID13572468 / OT78563412. Independent flash and
+  reloaded-party decoding passed.
+
+The harness translates only symbol-verified addresses (or explicit shared GBA
+palette/VRAM/private-arena locations) and records its translation audit per run.
+LG-specific sound-table oracle controls reject using the FR tables. These are
+bounded native single-cart checks with replayed payloads and the disclosed trade
+setup, not live server/T3 integration, duo, all-scene heap, or production admission.
+No screenshots supplied game facts. READY stays 0; no UPS is published.
