@@ -377,7 +377,10 @@ def test_real_safety_frame_end_sampling_and_save_witness_are_wired():
     # C4-B2: the reason runner passes the row's reason/args through; core rows carry neither, so
     # this is a byte-identical `safety:check(nil, nil, nil)` for them.
     assert "safety:check(nil, active.write_reason, active.args)" in SOURCE
-    assert "counter > before and G.sectors_at(domain,counter) < 14" in SOURCE
+    # the row-5 latch goes through the shared torn-read guard (gen3_boot_check.lua
+    # M.counter_advanced), never a bare `counter > before` (0xFFFFFF05 torn read, 2026-09-27)
+    assert "G.counter_advanced(before, counter) and G.sectors_at(domain,counter) < 14" in SOURCE
+    assert "counter > before" not in SOURCE
     assert "G.sectors_at(domain,after) >= 14" in SOURCE
     assert 'FAIL not run' in SOURCE and "passed = false" in SOURCE
     assert "WRITE_SURFACE none (predicate-only probe)" in SOURCE and "WRITE_LOG" not in SOURCE
