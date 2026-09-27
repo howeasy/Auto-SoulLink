@@ -201,7 +201,7 @@ Run the Feature Checklist setup (`lua/slink.lua` on both BizHawks, patched RR RO
 - **Unpatched ROM** → no `native` part is built at all (`pack=="gen3_rr"` with `artifact_kind=="companion"` is required), so the swap acks `rival_team_replaced` with `error="patch_required"`; no swap, no crash.
 - Out of battle when the command arrives → ack with `error="not_in_battle"`.
 - Stale/mismatched battle identity (a command queued for a battle that has since ended) → ack with `error="stale_battle_id"`.
-- A failed ack shows a red `Rival Swap failed: <error>` HUD banner and a `rival team swap FAILED: <error>` server log line.
+- A failed ack shows a red `Rival Swap failed - see the SLink log` HUD banner and a `rival team swap FAILED: <error>` server log line. The banner is player-facing (HUD-PLAYER-FACING), so the `<error>` code stays in the log.
 - Partner offline (B disconnected, no cached party blobs) → no swap; A fights the original rival. Server log: `auto-trigger skipped: partner 'b' has no cached party blobs`.
 - Non-rival trainer → `is_rival=False`; nothing queued.
 - Vanilla / AP ROM loaded → the adapter's rival-id set is empty, so it never matches (still logs `trainer_battle_start`, `is_rival=False`).
