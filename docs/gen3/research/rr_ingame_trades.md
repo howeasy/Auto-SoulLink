@@ -225,14 +225,15 @@ Decoding entries 0..8 of THIS table (species at offset+4, requestedSpecies at of
 | 7 | TANGELA | 494 (Chatot) | 198 (Murkrow) | yes |
 | 8 | SEEL | 1356 (unassigned RR species id) | 1302 (Ursaluna) | **NO** |
 
-Index 0 (MR_MIME) and index 8 (SEEL) are garbage at this table -- neither species value is a
-valid RR species (`rr_species.json` has no entry for 1375 or 1356). Since `GetTradeSpecies`
-(the player's chosen mon) can never equal Furret(162), Reyley's own script ALWAYS takes the
-`goto_if 5, NotRequestedMon` branch once a mon is picked -- exactly the observed hang: the
-scenario's `PICKED slot=1` fires, the "that's not the right mon" message plays and the script
-`release`s back to the overworld, no `key_change`/flag ever fires, and `tasks=[]` at timeout is
-just the idle overworld after that message closed. **Route2_House/Reyley (MR_MIME) cannot
-complete an in-game trade on the shipped RR ROM**, independent of SLink.
+Index 0 (MR_MIME) and index 8 (SEEL) OFFER species ids with no entry in `rr_species.json`
+(1375, 1356): unverified -- they may be forms past the name table's range, not garbage. What the
+runtime table does settle: Reyley (index 0) REQUESTS FURRET (162), not Abra, so the SYNTH fixture
+that offered Abra took the script's `goto_if 5, NotRequestedMon` branch -- exactly the observed
+hang (`PICKED slot=1`, the refusal text, `release`, no `key_change`/flag, `tasks=[]` at timeout).
+Coordinator correction (2026-09-27): the earlier claim that Reyley's trade "cannot complete on the
+shipped ROM" was wrong -- the requested Furret is an ordinary species; only the offered species'
+name is unresolved. The duo row targets Dontae (index 1: requests Snom 1164, offers Carnivine 508)
+because both species resolve in the repo's RR tables.
 
 **`CreateInGameTradePokemonInternal` (the mon-creation half, vanilla 0x08053b48 -> CFRU
 0x090A4AFC) is detoured the same way, confirmed to read the SAME table** (`ldr r7,[pc,#0x1e0]` =
