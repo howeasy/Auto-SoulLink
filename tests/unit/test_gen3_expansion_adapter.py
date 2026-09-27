@@ -49,15 +49,16 @@ def test_reference_presentation_and_explicit_unsupported_surfaces():
     assert a.form_sprite_id(1572) is None
     assert a.gym_badge_slugs(ROM_TYPE)[0] == (17, "Stone Badge")
     assert a.gym_badge_slugs(ROM_TYPE)[-1] == (24, "Rain Badge")
-    assert a.calc_profile() == {"gen": 9, "dex": "expansion"}
+    assert a.calc_profile() == {"gen": 9, "dex": "expansion", "sets": {"file": "EmeraldExpansion.js", "var": "CUSTOMSETDEX_EE"}}
     assert a.calc_stats({}) is None
     assert a.calc_nature("00000000:00000000") == "Hardy"
     assert a.calc_name("species", "Mr. Mime") == "Mr. Mime"
     assert a.calc_name("species", "Aegislash") == "Aegislash-Shield"
     assert a.encounter_table("route_101") is None
     assert a.trainers_for_area("route_101") == []
-    assert a.trainer_party(1) == [] and a.trainer_brief(1) is None
-    assert a.trainer_info(1) == ("", "")
+    # XC4: trainer panels now come from the pinned build's gTrainers (Sawyer = TRAINER_SAWYER_1)
+    assert [m["species"] for m in a.trainer_party(1)] == ["Geodude"] and a.trainer_brief(1)["area"] == "jagged_pass"
+    assert a.trainer_info(1) == ("Sawyer", "Hiker")
     assert a.rival_trainer_ids() == set()
     assert not a.supports_info_panel() and not a.supports_explode_mode()
     assert not a.native_trade_ui()

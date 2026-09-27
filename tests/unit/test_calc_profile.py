@@ -20,7 +20,7 @@ def test_rr_adapter_calc_profile():
 
 def test_gen3_expansion_adapter_calc_profile():
     from server.adapters.gen3_expansion import Gen3ExpansionAdapter
-    assert Gen3ExpansionAdapter().calc_profile() == {"gen": 9, "dex": "expansion"}
+    assert Gen3ExpansionAdapter().calc_profile() == {"gen": 9, "dex": "expansion", "sets": {"file": "EmeraldExpansion.js", "var": "CUSTOMSETDEX_EE"}}
 
 
 def test_gen3_expansion_adapter_calc_profile_is_none_off_gen_latest(monkeypatch):
@@ -200,14 +200,14 @@ def test_calc_profile_for_run_expansion_vs_expansion_shows_the_calc():
     run = {"game": ""}
     status = {"players": {"a": {"rom_type": "emerald_expansion_28877d73"},
                            "b": {"rom_type": "emerald_expansion_28877d73"}}}
-    assert _calc_profile_for_run(run, status) == {"gen": 9, "dex": "expansion"}
+    assert _calc_profile_for_run(run, status) == {"gen": 9, "dex": "expansion", "sets": {"file": "EmeraldExpansion.js", "var": "CUSTOMSETDEX_EE"}}
 
 
 def test_shared_calc_profile_two_expansion_adapters_directly():
     from server.adapters import shared_calc_profile
     from server.adapters.gen3_expansion import Gen3ExpansionAdapter
     a, b = Gen3ExpansionAdapter(), Gen3ExpansionAdapter()
-    assert shared_calc_profile([a.calc_profile(), b.calc_profile()]) == {"gen": 9, "dex": "expansion"}
+    assert shared_calc_profile([a.calc_profile(), b.calc_profile()]) == {"gen": 9, "dex": "expansion", "sets": {"file": "EmeraldExpansion.js", "var": "CUSTOMSETDEX_EE"}}
 
 
 def test_emerald_adapter_uses_emerald_sets():
