@@ -131,3 +131,39 @@ data directory's `receipts/`, with SHA256s, before another orientation reuses th
 top-level names. Foreign/stale nonce files are not adopted. Initial PASS alone is insufficient: both cold reloads and the
 Python witness/save oracle must pass. READY stays 0, and this card publishes no
 production admission or release qualification.
+
+## Final full-unit receipt — 2026-09-27
+
+Implementation `5e823a73`; test-only compatibility follow-up
+`8fd5ce71eea256725108c014258cf4c93d8b19ed`. The latter was the source HEAD for
+the completed full gate. No implementation changed between those commits.
+
+```text
+source /c/slink-wt/g3-env.sh
+python -m pytest tests/unit -q -p no:randomly -n 2 --dist=loadfile --maxfail=1 -o tmp_path_retention_policy=failed
+15395 passed, 1519 skipped, 2 warnings in 1433.01s (0:23:53)
+Exit code: 0
+```
+
+Additional process-local bindings: `PYTHONPATH=C:/slink-wt/g3-t5-fr-duo/.cache/test-deps`
+(pytest-xdist 3.8.0/execnet 2.1.1), `SLINK_ARMGCC` as above, and
+TEMP/TMP/TMPDIR=`D:/slink-wt/g3-t5-fr-duo-test-temp`.
+Full output: `.cache/t5-native-carrier-full-unit-retry.txt`, SHA256
+`fdd8dc2f311b5d5a3fc12361bc941fa40d5721acab34ad80929ef0d4031c03c5`.
+The skips are not qualification passes. Both warnings are existing invalid
+`\c` string escapes observed by the legacy-runtime AST check; they are not failures.
+
+The first full run stopped at 11,606 passes/1,311 skips because
+`test_core_deferred.py` required an empty log after a sink throw. The requested
+partial-write logging intentionally changes that expectation. `8fd5ce71` checks
+the partial receipt (one completed byte/two attempted) and retains the same
+uncertain/no-retry outcome. Its 135 related controls passed before rerunning the
+entire suite. The first-run log remains `.cache/t5-native-carrier-full-unit.txt`,
+SHA256 `f8b433f5db28b67066f62d2db6dd407b1107b417509031e93223032c3672a068`.
+
+The final targeted carrier/oracle/observer gate passed 111 tests. Ruff passed;
+all 311 Lua files parsed, including all eight changed modules under Lua 5.4.
+Generated profiles are current. Both candidate identities still match the table
+above, with mask 23, READY 0 and `production:false`. The four coordinator-generated
+wire files remain untracked and untouched. No emulator, master merge, or push was
+performed by this card. All four new native-carrier live rows remain **UNRUN**.
