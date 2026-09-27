@@ -859,13 +859,13 @@ GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
                           "linked_faint_active_trainer_gen3")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 # NAT-LEGS: the FR/LG natural legs (S-8, S-9, S-11), explicit_only (FR-as-A SYNTH fixtures)
-GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3", "species_family_gen3")
+GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3")
 # card RR-SYNTH/RR-NPCTRADE/CLAUSE-ROWS-G3: evolve_gen3, npc_trade_gen3 and species_family_gen3
 # also name gen3_rr (rr_evolve_synth.sav, rr_trade_synth.sav + RR's runtime in-game trade table,
 # rr_family_synth.sav; docs/gen3/research/rr_ingame_trades.md). poison_faint_gen3 stays refused
 # (RR's DoPoisonFieldEffect is an unconditional no-op stub, no HP mutation to build a fixture
 # around) -- see its comment in tools/e2e_duo.py SCENARIOS.
-GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "species_family_gen3")
+GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (

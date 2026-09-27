@@ -71,6 +71,14 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
+    "gift_gen3": {"flags": ["--species-clause", "--gender-clause", "--type-clause"],
+        "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"),
+        "target": "gift_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "gift_egg", "acquisition_kind": "gift", "oracle": "assert_gift_egg_gen3_saved"},
+    "egg_hatch_gen3": {"flags": [], "timeout": 1800,
+        "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"), "target": "hatch_synth",
+        "frames": 2500000, "explicit_only": True, "scenario_module": "gift_egg",
+        "acquisition_kind": "hatch", "oracle": "assert_gift_egg_gen3_saved"},
     # FRLG-R4: clean-derived saves are disclosed SYNTH. Dependency preflight
     # refuses these rows before any server/emulator launch until CR-R1/CR-R2 and
     # server ingest are committed. Exactly one attempt; no borrowed vanilla PASS.
@@ -3866,6 +3874,9 @@ class DuoRun:
             if self.cfg.get("rule_kind"):
                 from gen3_clause_rows import own_facts
                 duo.update(rule_kind=self.cfg["rule_kind"], clause_facts=own_facts(self, inst))
+            if self.cfg.get("acquisition_kind"):
+                from gen3_gift_egg_rows import own_facts
+                duo.update(acquisition_kind=self.cfg["acquisition_kind"], acquisition_facts=own_facts(self, inst))
             if self._gen3_rr:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
@@ -7556,6 +7567,16 @@ class DuoRun:
     def orchestrate_species_clause_gen3(self):
         from gen3_clause_rows import orchestrate_clause
         return orchestrate_clause(self, helpers=sys.modules[__name__])
+
+    def orchestrate_gift_gen3(self):
+        from gen3_gift_egg_rows import orchestrate
+        return orchestrate(self)
+
+    orchestrate_egg_hatch_gen3 = orchestrate_gift_gen3
+
+    def assert_gift_egg_gen3_saved(self, results):
+        from gen3_gift_egg_rows import saved_oracle
+        return saved_oracle(self, results)
 
     orchestrate_gender_clause_gen3 = orchestrate_species_clause_gen3
     orchestrate_type_clause_gen3 = orchestrate_species_clause_gen3

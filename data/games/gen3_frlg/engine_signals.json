@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_frlg",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "56b91e318411ec3b18de7c6e2b30a87d20125f1987c69f066267fe0b298c155e",
+  "sha256": "a6b2b1b83c5df3badccf248373f7d06962798c96f98a56137f9b54ac46271b44",
   "titles": {
     "firered": {
       "artifacts": {
@@ -182,6 +182,33 @@
               "rom_offset": 1306,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
               "symbol": "CallCallbacks (control only)"
+            },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "function": {
+                "address": 134507872,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokefirered.sym:2583",
+                "symbols_sha256": "6f9d2929b78d0b723180653082c9a115b4b876657af8ab1c0493b4d14151f7b0"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 290302,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty"
             },
             "map_load": {
               "address": 134571884,
@@ -792,6 +819,33 @@
               "rom_offset": 1306,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
               "symbol": "CallCallbacks (control only)"
+            },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "function": {
+                "address": 134507872,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokeleafgreen.sym:2583",
+                "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 290302,
+              "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty"
             },
             "map_load": {
               "address": 134571884,

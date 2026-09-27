@@ -177,7 +177,8 @@ def test_rr_faint_and_capture_wild_repinned_off_the_replaced_opcode_table(name):
 def test_rr_kinds_count_and_old_faint_address_absent_from_pack(name):
     document = json.loads(gen.output_path(ROM_SPECS[name][0]).read_text())
     row = document["titles"][ROM_SPECS[name][1]]["artifacts"][ROM_SPECS[name][2]]
-    assert len(row["sites"]) == 19
+    assert len(row["sites"]) == 20
+    assert row["sites"]["hatch"]["address"] + row["sites"]["hatch"]["capture_offset"] == 0x08046E0A
     # compare EFFECTIVE hook addresses (address + capture_offset): the dead vanilla captures were
     # 0x080213C8 (tryfaintmon) and 0x0802D824 + 4 = 0x0802D828 (givecaughtmon) -- Codex cx-92870c43
     effective = {site["address"] + (site.get("capture_offset") or 0) for site in row["sites"].values()}
