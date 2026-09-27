@@ -1417,6 +1417,10 @@ function Client.new(p)
             intent_committed=function()
                 reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
             end,
+            saveram=function()
+                assert(io.saveram, "SaveRAM host API unavailable")
+                return io.saveram()
+            end,
             log=log, hud=hud,
             epoch=function() return trade_epoch end,
             prepare_frames=trade_policy.prepare_frames, apply_frames=trade_policy.apply_frames,
@@ -1529,7 +1533,7 @@ function Client.new(p)
         return true
     end
     C.config = function(cmd)                                   -- the session stores it too
-        if journal and cmd.run_id ~= nil then
+        if journal then
             local t = trainer()
             local ot = t and type(t.ot_id) == "number" and string.format("%08X",t.ot_id) or nil
             if type(cmd.run_id) ~= "string" or cmd.run_id == "" or not ot then
@@ -1543,7 +1547,11 @@ function Client.new(p)
                     trade_run_id, trade_run_ot = cmd.run_id, ot
                     awaiting_trade_run = false
                     session.hello_sent = false
-                else log("trade journal binding refused: " .. tostring(why)) end
+                else
+                    journal:unbind()
+                    trade_run_id, trade_run_ot, awaiting_trade_run = nil, nil, true
+                    log("trade journal binding refused: " .. tostring(why))
+                end
             end
         end
         if native and native.config then native:config(cmd) end

@@ -41,7 +41,10 @@ local io_ = {
     framecount = function() return emu.framecount() end,
     register   = function(name) return emu.getregister(name) end,
     write_u8   = function(addr, v) return memory.write_u8(addr, v, "System Bus") end,
-    saveram    = function() if client and client.saveram then return client.saveram() end end,
+    saveram    = function()
+        assert(client and client.saveram, "SaveRAM host API unavailable")
+        return client.saveram()
+    end,
 }
 
 -- Hook names prefixed "SLink-gen3-" (never "-shadow-": this instance mutates game state).
@@ -310,7 +313,7 @@ if admitted.kind == "companion" then
         store = {read=function() error(why) end, update=function() error(why) end}
     end
     io_.trade_journal = Journal.new({json=json, store=store, rom_sha1=admitted.rom_hash:lower(), player=player,
-                                    frame=io_.framecount})
+                                    frame=io_.framecount, log=function(message) console.log(message) end})
     io_.trade_reload_proof = function(title, profile, boot_seen)
         local layout = Journal.RELOAD_LAYOUTS[title]
         if not layout then return nil, "reload layout remains unqualified for " .. tostring(title) end

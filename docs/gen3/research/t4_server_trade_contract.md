@@ -346,7 +346,7 @@ matching `trade_outstanding` entries before any recovery evidence.
 Storage uses an append-only sequence of canonical, length/checksum-framed snapshots, plus a
 separate guard seal. An OS-exclusive guard handle serializes writers; the log and guard are each
 flushed with `FileStream.Flush(true)` before an allocation or intent returns. A missing member,
-partial append, bad frame, invalid/duplicate record, sequence rollback, or mismatched seal is a
+partial append, bad frame, invalid/duplicate record, mismatched rollback, or mismatched seal is a
 named failure, never an empty recovered journal. Initial provisioning is allowed only when a
 new guard is created and no log exists; the guard is permanent. Removing all journal artifacts
 is an operator reset outside automatic recovery. The counter never wraps past 0xFFFFFFFF.
@@ -460,3 +460,85 @@ The run used `SLINK_GEN3_ROMS=E:/Google Drive/SLink`,
 `SLINK_PRET_EMERALD_SRC=E:/Google Drive/SLink/.cache/pret/pokeemerald`, and
 `SLINK_HOST_GCC=E:/Google Drive/SLink/.cache/build-tools/w64devkit-2.10.0/w64devkit/bin/gcc.exe`.
 The final receipt commit changes this document only; runtime and test source remain at the tested cut.
+
+## T3-R6 review corrections — SOURCE / MODEL
+
+The native `save_success` milestone now calls the host SaveRAM API through `pcall` before it
+can release an intent via `native_saved`. An unavailable API, exception, or explicit false
+return keeps the journal entry and requires qualified reload, even if an authoritative final
+has already arrived. Duplicate native save milestones do not trigger another flush. The
+ordinary `f.save` observer is independent of this protocol callback; the client MODEL reproduced
+a complete native success with no observer flush before this correction. Player HUD text is
+unchanged. A permanent journal failure logs its original reason to the console once and remains
+fail-closed for that journal instance.
+
+A config without `run_id` now revokes the existing journal binding just like an empty ID;
+failed rebinding also leaves reports and finals withheld. Every bind invalidates previously
+qualified reload evidence. Server-supplied run IDs and tokens must be nonempty printable ASCII,
+with named bind/arm refusals before any journal write. Originating epochs are canonical JSON
+integers, including integral-float API inputs; the restart and wire round-trip tests cover the
+integer/string identity used by recovery declarations.
+
+The rollback claim is deliberately limited to **mismatched rollback**. A mutually consistent
+older log and guard pair passes local validation; no local seal can distinguish that pair from
+the latest state without an external freshness authority. The MODEL counterexample at
+`.cache/t3-r6-paired-rollback.json` restores both genesis files after an intent and observes an
+empty journal and reused epoch. This limitation applies to restore/sync rollback as well as
+deliberate rollback; the journal is not a freshness or anti-tampering guarantee.
+
+The journal remains at the existing install-root path for this correction. Silently switching
+to a battery-adjacent path would orphan existing pending intents and could provision a new empty
+journal. Co-location alone also does not make save/journal backup or sync atomic. A future path
+change needs explicit migration preserving existing records and a defined restore policy.
+
+The host test now mirrors the native DLL search setup in
+[pinned EmuHawk Program.cs](https://github.com/TASEmulators/BizHawk/blob/bdddf4a58aa1a022afb11dc73294a81a5aa7bbd5/src/BizHawk.Client.EmuHawk/Program.cs#L125-L160).
+The old PATH-only harness passed in Codex's PowerShell 7.6.5/.NET 10.0.11 but failed in the
+WindowsApps 7.6.6/.NET 10.0.12 host with `Could not load native lua methods`; both were x64 and
+used the same managed NLua assembly. `SetDllDirectoryW` fixes that loader difference. The test
+executes both discovered hosts, verifies the actual managed NLua and native Lua DLL paths and
+Lua 5.4, and still exercises two fresh processes against the actual file adapter. An installed
+runtime that fails to load remains a test failure, never a blanket skip.
+
+### T3-R6 verification receipt — 2026-09-27
+
+Tested source cut: `6cbff82bf116c42ec3f38b16e577215e326eefdf` on `codex/t3-r5`, based on
+`a92ad55c2d40a97c5d88c279597dea802e33009d`. The receipt commit changes this document only.
+Related suite: **509 passed, zero failures/errors/skips**, including both real PowerShell hosts.
+Full `tests/unit`: **11,809 passed, 4,205 skipped, zero failures/errors**, exit 0,
+798.52 seconds. All 140 direct trade/journal/recovery/host controls ran without skips;
+both PATH-selected and WindowsApps PowerShell hosts passed. Full-suite skips remain unexecuted evidence.
+
+Each implementation correction was observed failing before its fix:
+
+| Control | Red result | Receipt SHA256 |
+| --- | --- | --- |
+| WindowsApps NLua host | 1 failed / 1 passed | `56315aa4e5f11e6a1646c11961efebcd605eec8c9107dcd098ed0def4633db96` |
+| SaveRAM before retirement | 4 failed / 0 passed | `e83cff384cc13c19fb1ec603cff7f2de7373caebd489966d844e3616db414468` |
+| Permanent fault console logging | 2 failed / 0 passed | `b02ade3bbd04716ec12781c0cac0e0561058db3faadb375757a6e509af220103` |
+| Missing run / expired proof | 3 failed / 0 passed | `8a5b550f117431838cb6c3e07b8d79ba77d9328db7aec1eeef3b8e49d0d822c6` |
+| Printable ASCII identifiers | 14 failed / 1 passed | `da59b603bb0e450f3b7c8729c7574512abe65d3c04656c42da4226716e914647` |
+| Integer epoch round trip | 1 failed / 1 passed | `2676d175036b5fdc684f3a843c2cf53ca1f359603de3f9bb4099db84dd5af193` |
+
+All rows pass in the related and full suites. Item 6 is a documented detection limit,
+not a claimed rollback-detection implementation: `.cache/t3-r6-paired-rollback.json`
+reproduces acceptance of a mutually consistent older file pair and epoch reuse.
+
+Final raw receipts in `C:/slink-wt/em-t3/.cache/`:
+
+- `t3-r6-related.xml`: `f532a65043904f203a2aff28b903ec25a9bf768bccef657aa146c1a176258b5a`.
+- `t3-r6-full.xml`: `1f1311eaea3f528b0a436e0481a7d5d9fb1d5071c6ea593ed3c751a53e8c77ee`.
+- `t3-r6-full.log`: `00f9df09b24ca61ae11975b5f9aafdb995195bc9cb102ad3ccb42af7df33ba70`.
+
+The machine-readable ledger is `.cache/t3-r6-receipt.json`. Native loader evidence used
+`E:/Howard/Bizhawk/dll/NLua.dll` SHA256 `f413017bfc7a37dfcaeb6e6c24812fd12ceb2b4b107a066512ed28c13010b234`
+and `lua54.dll` SHA256 `4786e0df4caf120e3bedf0b6dda260525df2187c66ded220a21a53ace76b0501`.
+
+Full command: `python -m pytest tests/unit -q -p no:randomly --tb=short --basetemp=.cache/t3-r6-full-tmp --junitxml=.cache/t3-r6-full.xml`.
+Environment: every assignment in `C:/slink-wt/g3-env.sh`, plus
+`SLINK_EXPANSION_SRC=C:/slink-wt/g3-xc4/.cache/expansion/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7`
+and `SLINK_HOST_GCC=E:/Google Drive/SLink/.cache/build-tools/w64devkit-2.10.0/w64devkit/bin/gcc.exe`.
+
+Scoped Ruff, five Lua parses, and `git diff --check` pass. Production `trade_capable()`
+still returns false, all four `SLINK_TARGET_READY` values remain zero, and no emulator was launched.
+This is SOURCE/MODEL and host-runtime verification, not physical trade or power-loss qualification.

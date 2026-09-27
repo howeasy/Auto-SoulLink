@@ -52,6 +52,53 @@ def test_terminal_server_bookkeeping_does_not_unhide_unsaved_ram(monkeypatch):
     assert world.events("tick")[-1].get("party_hidden") is True
 
 
+@pytest.mark.parametrize("fault", (None, "raises", "false", "missing"))
+def test_native_save_flushes_host_before_a_final_can_retire_the_intent(monkeypatch, fault):
+    world, carrier, blob = durable_client(monkeypatch)
+    start_client_trade(world, carrier, blob)
+    journal = carrier.journal_model.journal
+    world.replies.append(json.dumps({"commands": [
+        {"cmd": "trade_final", "token": "t", "verdict": "resolved"}]}))
+    world.step()
+    assert journal.state.records[1].final == "resolved" and journal.hidden(journal)
+    flushed = []
+
+    def saveram():
+        assert journal.hidden(journal) and len(journal.state.records) == 1
+        flushed.append(True)
+        if fault == "raises":
+            raise OSError("MODEL host disk flush failed")
+        if fault == "false":
+            return False
+        world._saveram()
+
+    world.io.saveram = None if fault == "missing" else saveram
+    swap_in_partner(world)
+    carrier.ack(commit_entered=True, scene_done=True, save_success=True, final_result="committed")
+    world.step()
+    if fault is None:
+        assert flushed == [True] and world.saveram_calls == 1
+        assert len(journal.state.records) == 0
+        assert not world.events("trade_done")[-1].get("uncertain")
+    else:
+        assert journal.hidden(journal) and len(journal.state.records) == 1
+        assert world.events("trade_done")[-1]["uncertain"] is True
+        assert world.events("trade_done")[-1]["after_reset"] is True
+
+
+def test_repeated_native_save_milestones_flush_the_host_once(monkeypatch):
+    world, carrier, blob = durable_client(monkeypatch)
+    start_client_trade(world, carrier, blob)
+    swap_in_partner(world)
+    progress = carrier.jobs[-1]["progress"]
+    progress(carrier.lua.table(commit_entered=True, scene_done=True, save_success=True))
+    progress(carrier.lua.table(save_success=True))
+    carrier.ack(commit_entered=True, scene_done=True, save_success=True, final_result="committed")
+    world.step()
+    assert world.saveram_calls == 1
+    assert not world.events("trade_done")[-1].get("uncertain")
+
+
 def test_journal_without_a_server_run_identity_cannot_advertise_trade(monkeypatch):
     from tests.unit.gen3_trade_journal_model import JournalModel
     from tests.unit.gen3_world import World
@@ -223,6 +270,24 @@ def test_restart_redeclares_from_storage_and_never_uses_received_ram(tmp_path, m
     pump(35)
     assert restored.journal.hidden(restored.journal) is True
     assert server.state.pending_trade["verdict"]["a"] == "await"
+
+
+def test_config_without_run_id_revokes_an_existing_connection_binding(tmp_path, monkeypatch):
+    world, model, _, _, token, _, _ = recovering_pair(tmp_path, monkeypatch)
+    assert model.journal.ready(model.journal) is True
+    world.replies.append(json.dumps({"commands": [
+        {"cmd": "config"}, {"cmd": "trade_final", "token": token, "verdict": "resolved"}]}))
+    world.step(35)
+    assert model.journal.ready(model.journal) is False
+    assert model.journal.state.records[1].final == ""
+    assert model.journal.hidden(model.journal) is True
+    world.connected = False
+    world.step()
+    world.connected = True
+    world.step(35)
+    hello = world.events("hello")[-1]
+    assert hello["party_hidden"] and not hello["trade_prepare"]
+    assert not hello.get("trade_outstanding")
 
 
 def test_qualified_battery_reload_orders_declaration_then_visible_hello_and_settles(tmp_path, monkeypatch):

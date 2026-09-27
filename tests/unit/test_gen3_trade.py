@@ -77,6 +77,7 @@ class TradeWorld:
             prepare_frames=600, apply_frames=1800, epoch=lambda: self.epoch,
             report_pending=lambda epoch, value: (epoch, value) in self.pending_reports,
             decode_blob=lambda _: self.lua.table_from(self.incoming), log=self.logs.append,
+            saveram=lambda: None,  # successful void host flush, explicitly a MODEL seam
             hud=self.lua.table(show=lambda text, *_: self.hud_messages.append(str(text))),
             party=lambda: self.lua.table_from(self.rows, recursive=True), key=lambda m: m.key,
             send=send)
