@@ -975,13 +975,14 @@ class Gen3Adapter(GameAdapter):
                     block[method] = sorted(agg.values(), key=lambda e: (-e["rate"], e["species_id"]))
         return {area: block for area, block in out.items() if block}
 
-    def _rom_trainer_table(self, tables: dict, title: str) -> dict:
+    def _rom_trainer_table(self, tables: dict, title: str, *, default_moves_verified: bool = False) -> dict:
         """frlg_trainers.json's shape, from the cartridge: party species, levels, held items and
         custom moves (ruling 31), trainer and class names (UPR can randomize both). Area, key,
         rival and fight_label stay pret's: they come from map scripts, which UPR does not move.
-        No calc_label: the FRLG.js setdex describes retail parties (design risk 4). A default-move
-        mon gets GiveBoxMonInitialMoveset's moves from pret's learnsets, which hold because
-        movesets may not be randomized (ruling 31).
+        No calc_label: the FRLG.js setdex describes retail parties (design risk 4). Sparse hello
+        reports do not contain level-up learnsets, so they must never infer default moves, even
+        when the report pairs as clean. Only a caller that has separately verified the title's
+        learnsets can opt into the trusted pret projection (RF-2 F4/F5).
         """
         pret = _FRLG_TRAINER_TABLE.get("trainers", {})
         learnsets = {**_FRLG_TRAINER_TABLE.get("learnsets", {}),
@@ -995,9 +996,10 @@ class Gen3Adapter(GameAdapter):
                 entry = {"species": self.calc_species(mon["species"]), "level": mon["level"]}
                 if mon.get("held_item"):
                     entry["item"] = self.calc_name("item", self.item_name(mon["held_item"]))
-                moves = mon["moves"] if "moves" in mon else default_moves(
-                    learnsets.get(mon["species"], ()), mon["level"])
-                entry["moves"] = [self.calc_name("move", self.move_name(m)) for m in moves if m]
+                if "moves" in mon or default_moves_verified:
+                    moves = mon["moves"] if "moves" in mon else default_moves(
+                        learnsets.get(mon["species"], ()), mon["level"])
+                    entry["moves"] = [self.calc_name("move", self.move_name(m)) for m in moves if m]
                 party.append(entry)
             t = {"name": "" if base.get("rival") else _pretty(tr["name"]),
                  "class": classes[tr["class"]] if tr["class"] < len(classes) else "",
