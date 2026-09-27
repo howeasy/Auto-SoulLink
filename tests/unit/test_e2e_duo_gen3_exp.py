@@ -16,7 +16,18 @@ import e2e_duo as duo  # noqa: E402
 
 EXP = "emerald_expansion_28877d73"
 DRIVER = REPO / "lua" / "tests" / "duo" / "duo_gen3_main.lua"
-CORE = ("faint_cmd_gen3", "link_gen3", "whiteout_gen3", "boxsync_gen3", "linked_faint_active_gen3")
+CORE = ("faint_cmd_gen3", "link_gen3", "whiteout_gen3", "boxsync_gen3")
+
+
+def test_the_active_faint_row_is_not_claimed_without_a_perish_plan():
+    """Hold fallback until XG3: the pack carries none of the Perish+hand-off inputs the client's
+    active_faint_capable needs, so an active battler's force_faint is held, never committed."""
+    derived = json.loads((REPO / "data/games/gen3_exp/28877d73/profile.json").read_text())["titles"][EXP]
+    assert not {"STATUS3_ADDR", "DISABLE_STRUCTS_ADDR"} & set(derived["ram"])
+    assert not {"STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE"} & set(derived["derived"])
+    assert "gen3_exp" not in duo.SCENARIOS["linked_faint_active_gen3"]["games"]
+    cp = json.loads((REPO / "data/games/gen3_exp/28877d73/write_checkpoint.json").read_text())[EXP]
+    assert "handoff" not in cp["battle"] and cp["battle"]["commit_hold"].startswith("OPEN")
 
 
 def test_the_row_runs_the_core_loop_rows_on_its_own_fixtures():

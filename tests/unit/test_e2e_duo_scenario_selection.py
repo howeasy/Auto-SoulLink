@@ -939,7 +939,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
     assert set(scenarios_for("gen3_emerald")) == set(GEN3_FRLG_SCENARIOS) - {
         "linked_faint_active_whiteout_gen3"}
     assert set(scenarios_for("gen3_exp")) == {"faint_cmd_gen3", "link_gen3", "whiteout_gen3",
-                                              "boxsync_gen3", "linked_faint_active_gen3"}
+                                              "boxsync_gen3"}
     assert {n for n in GEN3_FRLG_SCENARIOS if SCENARIOS[n].get("ball_hunt")} == {
         "link_gen3", "deadzone_gen3", "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "ball_gate_gen3"}
     for name in GEN3_RR_ONLY_SCENARIOS:

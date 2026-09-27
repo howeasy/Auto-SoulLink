@@ -4306,7 +4306,7 @@ def test_active_faint_chain_is_red_on_the_old_hold_and_a_press(ph, mutate, probl
 
 
 def test_p_h_rows_are_registered_with_their_cases():
-    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp")),
+    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr", "gen3_emerald")),
              "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr")),
              "linked_faint_active_trainer_gen3": ("trainer", ("gen3_frlg",)),
              "active_end_gen3": ("command", ("gen3_frlg",)),
