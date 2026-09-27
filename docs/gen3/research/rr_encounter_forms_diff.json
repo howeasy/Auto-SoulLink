@@ -2,7 +2,7 @@
   "schema": "rr-encounter-form-audit-v1",
   "rom_sha1": "964f951a0fdaf209e4ea1344883ef0d557bb3a80",
   "base_commit": "d9a928d79a99aef33ac923cfbf589cda2715762d",
-  "catalog_sha256": "0476ff1ab896fae8ac7f05374efbd310f17900be3c940938a0b53e52e9b22c73",
+  "catalog_sha256": "eb732d17afa049b1c6f213f582bb124176b171d255b42668ecbb21fbc142da2d",
   "changes": [
     {
       "area": "berry_forest",
@@ -5752,5 +5752,6 @@
         "order_differs": false
       }
     ]
-  }
+  },
+  "catalog_hash_encoding": "UTF-8 with LF line endings"
 }

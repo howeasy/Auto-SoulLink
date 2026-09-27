@@ -80,3 +80,10 @@ def test_catalog_diff_retains_species_and_slot_order_discrepancies():
     assert diff["mismatched_methods"] == 1
     assert diff["mismatches"][0]["rom_only"][0]["species_id"] == 1222
     assert diff["mismatches"][0]["catalog_only"][0]["species_id"] == 288
+    headers[0]["habitats"]["land"]["slots"][0]["species_id"] = 19
+    catalog["route_1"]["Day"] = [
+        {"species_id": sid, "min_level": 2, "max_level": 4} for sid in [1222, 19] + [1222]*10
+    ]
+    reordered = rr.catalog_diff(decoded, areas, catalog)["mismatches"]
+    assert len(reordered) == 1 and reordered[0]["order_differs"]
+    assert reordered[0]["rom_only"] == reordered[0]["catalog_only"] == []
