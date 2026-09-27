@@ -1163,12 +1163,14 @@ static void drive_ui(void)
         return;
     }
 
-    /* kind == 3: native trade scene — the CB2 leaves the field, runs, then returns. */
+    /* kind == 3: native trade scene — the CB2 leaves the field, runs, then returns. It is the
+     * durable producer's scene (rt_scene_start), so this only FOLLOWS it: phase 2 = back on the
+     * field, 3 = never started / timed out. rt_scene_poll owns the mailbox answer. */
     {
         u32 cb = R32(gMain + 0x04);
         if (MENU->phase == 0) {                    /* waiting for the scene to take over the screen */
             if (MENU->fieldCb && cb != MENU->fieldCb) { MENU->phase = 1; MENU->frames = 0; }
-            else if (++MENU->frames > 180) ui_done(ST_FAIL, 0);   /* never started */
+            else if (++MENU->frames > 180) { MENU->phase = 3; MENU->pending = 0; }   /* never started */
             return;
         }
         /* The in-game-trade text reads the RECEIVED-mon name + OT from sInGameTrades[Var8004] (our stale
@@ -1184,8 +1186,8 @@ static void drive_ui(void)
          * in StringExpandPlaceholders, called from 0x08053594, src 0x0202400A -> dest 0x02024029). */
         copy_name((volatile u8 *)0x02021D04u, (volatile const u8 *)(gEnemyParty + 0x08), 10);
         copy_name((volatile u8 *)0x02021CD0u, (volatile const u8 *)(gEnemyParty + 0x14), 7);
-        if (cb == MENU->fieldCb) ui_done(ST_OK, 0);               /* back on the field -> done */
-        else if (++MENU->frames > 5400) ui_done(ST_FAIL, 0);      /* ~90 s safety */
+        if (cb == MENU->fieldCb) { MENU->phase = 2; MENU->pending = 0; }           /* back on the field */
+        else if (++MENU->frames > 5400) { MENU->phase = 3; MENU->pending = 0; }    /* ~90 s safety */
     }
 }
 
@@ -1937,6 +1939,144 @@ __attribute__((naked, used)) void slink_start_menu_redraw(void)
         ".ltorg                     \n");
 }
 
+/* ---- RR-DURABLE: durable native trade (the shared FR/LG producer via rr_trade_relay.h) -----
+ * PREPARE 29 runs the native "save the game?" dialog (pre-save), SCENE 21 the in-game trade
+ * scene and then a native post-save, WITHDRAW 30 / STATUS 31 as on FR/LG. The witness, the
+ * shadow mailbox and the producer state live in the free EWRAM tail after SlinkInfo
+ * (ADDRESSES.md; test_live_ewramtail). Every engine address below is FR's: the functions are
+ * byte-identical in RR and every RAM word is loaded by the same RR literal pools (verified
+ * against the ROM for this card). The old v1 raw trade-scene path (OP_TRADE_SCENE ack on field
+ * return) is gone: opcode 21 now always belongs to the producer. */
+#include "rr_trade_relay.h"
+#define RT_BASE          0x0203FE50u   /* shadow SlinkMailboxV2; +0x40 caps, +0x44 epoch, +0x48 phase */
+#define RT_WITNESS_ADDR  (RT_BASE + SLINK_WITNESS_OFFSET)
+#define RT_STATE_ADDR    (RT_BASE + 0xA0u)
+#define RT_PRESAVE       (*(volatile u8 *)(RT_BASE + 0x110u))   /* 1 while our save dialog runs */
+#define RT_SHADOW  ((volatile SlinkMailboxV2 *)RT_BASE)
+#define RT_WITNESS ((volatile SlinkTradeWitnessV2 *)RT_WITNESS_ADDR)
+#define RT_STATE   ((SlinkTradeProducer *)RT_STATE_ADDR)
+_Static_assert(0xA0u + sizeof(SlinkTradeProducer) <= 0x110u, "producer state/ui overlap");
+_Static_assert(RT_BASE + 0x111u <= 0x02040000u, "durable trade block past EWRAM end");
+#define sGlobalScriptContextStatus 0x03000EA8u   /* 2 = CONTEXT_SHUTDOWN (idle) */
+#define gReceivedRemoteLinkPlayers 0x03003F64u
+#define gLinkTransferringData      0x030030E4u
+#define sSaveDialogCB              0x03000FA4u
+#define SAVE_PRINTING_CB           0x0806F925u   /* SaveDialogCB_PrintSavingDontTurnOffPower|1 */
+#define SAVE_WRITING_CB            0x0806F941u   /* SaveDialogCB_DoSave|1 */
+#define Field_AskSaveTheGame       0x0806F67Cu
+#define SaveMapView                ((void (*)(void))0x080590D9u)
+#define SaveQuestLogData           ((void (*)(void))0x08112451u)
+#define TrySavingData              ((u8 (*)(u8))0x080DA365u)     /* CFRU-detoured body, FR entry */
+#define ItemIsMail                 ((u8 (*)(u16))0x080980F9u)
+
+static int rt_safe(void *unused)
+{
+    (void)unused;
+    return R32(gMain + 4) == CB2_OVERWORLD && !R8(sScriptContext2Enabled)
+        && R8(sGlobalScriptContextStatus) == 2u && !R8(gPlayerAvatar + 3)   /* tileTransitionState */
+        && !(R8(gPaletteFadeActive) & 0x80u)
+        && !R8(gReceivedRemoteLinkPlayers) && !R8(gLinkTransferringData)
+        && !(R8(gMain + 0x439u) & 2u)                                     /* gMain.inBattle */
+        && !MENU->pending;                                                /* no v1 native UI in flight */
+}
+static int rt_locate(void *unused, uint32_t pid, uint32_t ot)
+{
+    (void)unused;
+    u32 count = R8(gPlayerPartyCount);
+    if (!count || count > 6) return -1;
+    int found = -1;
+    for (u32 i = 0; i < count; i++) {
+        u32 mon = gPlayerParty + MON_SIZE * i;
+        if (R32(mon) == pid && R32(mon + 4) == ot) {
+            if (found != -1) return -1;
+            found = (int)i;
+        }
+    }
+    return found;
+}
+/* CFRU records are plaintext in fixed order: species/held item at +0x20/+0x22, the box flags
+ * byte (isBadEgg bit0, isEgg bit2) at +0x13, the party mail id at +0x55. */
+static int rt_incoming(void *unused, const uint8_t *r)
+{
+    (void)unused;
+    u16 species = (u16)(r[0x20] | (r[0x21] << 8)), item = (u16)(r[0x22] | (r[0x23] << 8));
+    if (!species || (r[0x13] & 0x05u) || r[0x55] != 0xFFu || ItemIsMail(item)) return 0;
+    u32 count = R8(gPlayerPartyCount);
+    if (!count || count > 6) return 0;
+    for (u32 i = 0; i < count; i++) {
+        u32 mon = gPlayerParty + MON_SIZE * i;
+        if (R32(mon) == tp_word(r) && R32(mon + 4) == tp_word(r + 4)) return 0;
+    }
+    return 1;
+}
+static void rt_callnative(u32 fn)
+{
+    volatile u8 *s = (volatile u8 *)SLINK_SCRIPT_BUF;
+    s[0] = 0x23;                                                 /* callnative */
+    s[1] = (u8)fn; s[2] = (u8)(fn >> 8); s[3] = (u8)(fn >> 16); s[4] = (u8)(fn >> 24);
+    s[5] = 0x27; s[6] = 0x02;                                    /* waitstate ; end */
+    ScriptContext1_SetupScript((const u8 *)SLINK_SCRIPT_BUF);
+}
+static int rt_pre_start(void *unused)
+{
+    if (!rt_safe(unused)) return 0;
+    R16(gSpecialVar_Result) = 0xFFFFu;
+    RT_PRESAVE = 1;
+    rt_callnative(Field_AskSaveTheGame | 1u);
+    return 1;
+}
+static int rt_pre_poll(void *unused)
+{
+    u32 cb = R32(sSaveDialogCB);
+    if (RT_PRESAVE && rt_safe(unused) && R16(gSpecialVar_Result) != 0xFFFFu) {
+        RT_PRESAVE = 0;
+        return R16(gSpecialVar_Result) == 1u ? 1 : -1;               /* SAVE_SUCCESS */
+    }
+    return (cb == SAVE_PRINTING_CB || cb == SAVE_WRITING_CB) ? 2 : 0;
+}
+static const SlinkTradeEngine rt_engine;
+/* The in-game scene cannot be cancelled once launched, so the mutation window opens at
+ * launch: COMMIT_ENTERED is published here, after the producer's slot/identity recheck. Any
+ * later failure is therefore UNCERTAIN, never UNCHANGED (no TradeMons detour on CFRU). */
+static int rt_scene_start(void *unused, unsigned slot, const uint8_t *record)
+{
+    if (!rt_safe(unused)) return 0;
+    if (!slink_trade_commit_entered(RT_STATE, RT_WITNESS, slot, &rt_engine)) return 0;
+    for (u32 i = 0; i < MON_SIZE; i++) R8(gEnemyParty + i) = record[i];
+    for (u8 s = 1; s < 6; s++) R16(gEnemyParty + (u32)s * MON_SIZE + 0x58) = 0;
+    R8(gEnemyPartyCount) = 1;
+    R16(gSpecialVar_0x8004) = 0;
+    if (!MENU->fieldCb) MENU->fieldCb = R32(gMain + 0x04);
+    MENU->kind = 3; MENU->phase = 0; MENU->frames = 0; MENU->pending = 1;
+    run_trade_scene((u8)slot);
+    return 1;
+}
+static int rt_scene_poll(void *unused)
+{
+    if (MENU->kind != 3) return -1;
+    if (MENU->pending) return 0;                      /* drive_ui is still following the scene */
+    if (MENU->phase != 2) return -1;                  /* never started, or the 90 s bound */
+    return rt_safe(unused) ? 1 : 0;
+}
+static int rt_post_save(void *unused)
+{
+    if (!rt_safe(unused)) return 0;
+    SaveMapView();
+    SaveQuestLogData();
+    return TrySavingData(0) == SLINK_SAVE_OK;         /* SAVE_NORMAL -> SAVE_STATUS_OK */
+}
+static int rt_received(void *unused, unsigned slot, uint32_t *pid, uint32_t *ot)
+{
+    (void)unused;
+    if (slot >= R8(gPlayerPartyCount)) return 0;
+    *pid = R32(gPlayerParty + MON_SIZE * slot);
+    *ot = R32(gPlayerParty + MON_SIZE * slot + 4);
+    return 1;
+}
+static uint32_t rt_frame(void *unused) { (void)unused; return R32(gMain + 0x24); }  /* vblankCounter2 */
+static const SlinkTradeEngine rt_engine = { 0, rt_safe, rt_locate, rt_incoming, rt_pre_start,
+    rt_pre_poll, rt_scene_start, rt_scene_poll, rt_post_save, rt_received, rt_frame };
+
 /* C5-11a: the shared gEnemyParty staging of OP_SET_ENEMY_PARTY/OP_RIVAL_SWAP. Faithful byte
  * copy from SLINK_BLOB_BUF (caller staged count*100 raw party-mon bytes), zeroing maxHP (+0x58)
  * on the unused trailing slots so CFRU's scan-until-maxHP==0 terminates, then the count. */
@@ -1986,6 +2126,9 @@ void slink_hook(void)
         }
     }
     drive_ui();                   /* async native UI (menu / party chooser / trade scene) publisher */
+    if (rr_trade_relay((volatile u32 *)MAILBOX_ADDR, RT_SHADOW, RT_STATE, RT_WITNESS,
+                       (const volatile u8 *)SLINK_BLOB_BUF, &rt_engine))
+        return;                   /* PREPARE/SCENE/WITHDRAW/STATUS: the durable trade producer's */
 
     u16 op = MB->opcode;
     if (op == 0) return;          /* idle */
@@ -2174,20 +2317,7 @@ void slink_hook(void)
         return;
     }
 
-    case OP_TRADE_SCENE: {        /* args[0]=slot. Run the NATIVE trade animation+evolution: trades
-                                     gPlayerParty[slot] with the mon staged in gEnemyParty[0] (caller
-                                     must OP_SET_ENEMY_PARTY count=1 first). ASYNC: ack ST_BUSY; drive_ui
-                                     acks ST_OK when the scene returns to the field. */
-        if (R8(sScriptContext2Enabled)) { ack(ST_FAIL, 1); return; }
-        if (MB->args[0] > 5) { ack(ST_FAIL, 2); return; }
-        if (!on_field()) { ack(ST_FAIL, 3); return; }            /* also keeps fieldCb from caching a
-                                                                  * transient menu CB2 (stale-cb hang) */
-        if (!MENU->fieldCb) MENU->fieldCb = R32(gMain + 0x04);   /* dispatched from the field */
-        run_trade_scene(MB->args[0]);
-        MENU->kind = 3; MENU->phase = 0; MENU->seq = MB->seq; MENU->frames = 0; MENU->pending = 1;
-        MB->status = ST_BUSY; MB->opcode = 0;
-        return;
-    }
+    /* OP_TRADE_SCENE (21) is the durable producer's (rr_trade_relay above), never reaches here. */
 
     /* opcodes 10 OP_APPLY_DAMAGE, 11 OP_CURE_STATUS, 12 OP_SET_RULES REMOVED — no case here, so
      * they fall through to default: ack(ST_FAIL, 1), the same as any unknown/older opcode. */

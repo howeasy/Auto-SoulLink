@@ -121,6 +121,8 @@ FRLG_DERIVED = {
     "B_ACTION_NOTHING_FAINTED": (13, f"{PRET_PIN}:include/battle.h:48 (B_ACTION_NOTHING_FAINTED)"),
     # C5-6: gBattleMons[b].statStages[STAT_ATK] -- ATK..EVA are the 7 bytes from here, in the
     # wire order; statStages[STAT_HP] at +0x18 is never shown (reads.lua read_stat_stages).
+    "SB2_NAME_OFFSET": (0x00, "archive/gen3-old-client:lua/memory_gba.lua:721-725 (old-client RR profile, "
+                        "production-tested: M.readTrainerName decodes playerName generically at SB2+0)"),
     "BATTLE_MON_STAT_STAGES_OFF": (0x19, f"{PRET_PIN}:include/pokemon.h:187 (BattlePokemon."
                                    "statStages at 0x18); include/constants/pokemon.h:166-175 "
                                    "(STAT_HP=0, STAT_ATK=1 .. STAT_EVASION=7)"),
@@ -196,6 +198,8 @@ RR_DERIVED = {
     # the same id as pret's SPECIES_SHEDINJA (FRLG_DERIVED above).
     "SHEDINJA_SPECIES_ID": (303, 'data/games/gen3_frlge/rr_species.json:"303"="Shedinja" '
                             "(RR species table; CFRU keeps this id unrenumbered)"),
+    "SB2_NAME_OFFSET": (0x00, "archive/gen3-old-client:lua/memory_gba.lua:721-725 (old-client RR profile, "
+                        "production-tested: M.readTrainerName decodes playerName generically at SB2+0)"),
     "BATTLE_MON_STAT_STAGES_OFF": (0x19, "archive/gen3-old-client:lua/memory_gba.lua:402-406 (old-client RR profile, "
                                    "production-tested: M.readStatStages; CFRU puts type3 at "
                                    "+0x18, so ATK..EVA start at +0x19)"),
@@ -635,7 +639,7 @@ MAILBOX_C_SYMBOL = {
     "BATTLE_NOTIF": "BN", "TN_ENABLE": "TN", "CALC_OFF": "SLINK_CALC_OFF", "INFO": "SI",
     "INFO_MAXLINES": "INFO_ROWS", "INFO_PAGESLOT": "INFO_PAGE_SLOT", "INFO_BAR_W": "BAR_W",
     "EVR": "EV", "GH": "GH", "GHOST_PAL_BUF": "GHOST_PAL_BUF", "GPLAYER_AVATAR": "gPlayerAvatar",
-    "SW": "SW", "EV_PLAYER_FAINT": "EV_PLAYER_FAINT", "EV_FOE_FAINT": "EV_FOE_FAINT",
+    "SW": "SW", "TRADE_BASE": "RT_BASE", "EV_PLAYER_FAINT": "EV_PLAYER_FAINT", "EV_FOE_FAINT": "EV_FOE_FAINT",
     "EV_OUTCOME": "EV_OUTCOME", "EV_PARTY_ADD": "EV_PARTY_ADD", "EV_EVOLVE": "EV_EVOLVE",
 }
 # ghost/object-event addresses (post-RC feature; kept for the same byte-identical reason as
@@ -1259,6 +1263,8 @@ EMERALD_DERIVED = {
     "BASESTATS_GROWTH_RATE_OFFSET": (0x13, "include/pokemon.h:319", "growthRate", "struct SpeciesInfo"),
     "BATTLE_MON_OT_ID_OFF": (0x54, "include/pokemon.h:294", "otId", "struct BattlePokemon"),
     "BATTLE_MON_PERSONALITY_OFF": (0x48, "include/pokemon.h:291", "personality", "struct BattlePokemon"),
+    "SB2_NAME_OFFSET": (0x00, "archive/gen3-old-client:lua/memory_gba.lua:721-725 (old-client RR profile, "
+                        "production-tested: M.readTrainerName decodes playerName generically at SB2+0)"),
     "BATTLE_MON_STAT_STAGES_OFF": (0x19, "include/pokemon.h:277", "statStages",
                                    "statStages at 0x18 + STAT_ATK 1, include/constants/pokemon.h:75-76"),
     "BATTLE_MOVE_PP_OFFSET": (4, "include/pokemon.h:327-333", "pp",
