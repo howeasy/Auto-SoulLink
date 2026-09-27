@@ -109,20 +109,25 @@ def build_arena_probe(title, rom_path, mode):
     clean = Path(rom_path).read_bytes()
     spec = validate_base(title, clean)
     validate_detour(clean, spec["HEAP_INIT"], bytes.fromhex(spec["HEAP_INIT_BYTES"]))
-    if mode == "census":
+    if mode in ("census", "trade"):
         validate_detour(clean, spec["FRAME_ENTRY"], bytes.fromhex(spec["FRAME_BYTES"]))
+    if mode == "trade":
+        for key in ("TRADE_MON", "EVO_GETTER"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
     out = Path(BUILD) / f"arena-{title}-{mode}"
     out.mkdir(parents=True, exist_ok=True)
     header = Path(SRC) / "trade_targets" / f"{title}.h"
     obj, elf, binary = out / "probe.o", out / "probe.elf", out / "probe.bin"
-    probe_mode = {"positive": 1, "negative": 2, "exhaustion": 3, "census": 4}[mode]
-    run([GCC, *CFLAGS, f"-DSLINK_ARENA_PROBE={probe_mode}",
+    flag = "-DSLINK_NATIVE_TRADE_PROBE=1" if mode == "trade" else (
+        f"-DSLINK_ARENA_PROBE={ {'positive':1,'negative':2,'exhaustion':3,'census':4}[mode]}")
+    entry = "slink_native_heap" if mode == "trade" else "slink_heap_probe"
+    run([GCC, *CFLAGS, flag,
          "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
-    run([LD, "-T", str(header.with_suffix(".ld")), "-e", "slink_heap_probe",
+    run([LD, "-T", str(header.with_suffix(".ld")), "-e", entry,
          "--no-warn-rwx-segments", str(obj), "-o", str(elf)])
     symbol_text = run([NM, str(elf)])
     found = [line.split()[0] for line in symbol_text.splitlines()
-             if line.split()[-1:] == ["slink_heap_probe"]]
+             if line.split()[-1:] == [entry]]
     if found != [f"{spec['CODE_CANDIDATE']:08x}"]:
         raise ValueError("probe entry is not at the verified payload candidate")
     run([OBJCOPY, "-O", "binary", str(elf), str(binary)])
@@ -135,13 +140,22 @@ def build_arena_probe(title, rom_path, mode):
     hook = spec["HEAP_INIT"] - ROM_BASE
     data[hook:hook + 8] = thumb_entry_jump(spec["HEAP_INIT"], spec["CODE_CANDIDATE"])
     frame_receipt = None
-    if mode == "census":
+    if mode in ("census", "trade"):
         frame = next(int(line.split()[0], 16) for line in symbol_text.splitlines()
-                     if line.split()[-1:] == ["slink_frame_probe"])
+                     if line.split()[-1:] == ["slink_native_frame" if mode=="trade" else "slink_frame_probe"])
         offset = spec["FRAME_ENTRY"] - ROM_BASE
         data[offset:offset+8] = thumb_entry_jump(spec["FRAME_ENTRY"], frame)
         frame_receipt = {"address": spec["FRAME_ENTRY"], "original": spec["FRAME_BYTES"],
                          "replacement": data[offset:offset+8].hex()}
+    trade_detours = []
+    if mode == "trade":
+        for key, symbol in (("TRADE_MON","slink_native_trade_gate"), ("EVO_GETTER","slink_native_evolution_gate")):
+            destination = next(int(line.split()[0],16) for line in symbol_text.splitlines()
+                               if line.split()[-1:] == [symbol])
+            offset = spec[key]-ROM_BASE
+            data[offset:offset+8] = thumb_entry_jump(spec[key],destination)
+            trade_detours.append({"address":spec[key],"original":spec[key+"_BYTES"],
+                                  "replacement":data[offset:offset+8].hex(),"symbol":symbol})
     rom = out / "probe.gba"
     rom.write_bytes(data)
     receipt = {"status": "UNQUALIFIED_DIAGNOSTIC_ONLY", "target": title, "mode": mode,
@@ -150,6 +164,7 @@ def build_arena_probe(title, rom_path, mode):
                "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],
                "replacement": data[hook:hook + 8].hex(), "arena_candidate": spec["ARENA_CANDIDATE"],
                "frame_detour": frame_receipt,
+               "trade_detours": trade_detours,
                "compiler": run([GCC, "--version"])}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     print(f"DIAGNOSTIC ONLY: {rom} (no UPS, no qualification)")
@@ -261,7 +276,7 @@ def main():
     ap.add_argument("--target", choices=TARGET_NAMES, default="radical_red")
     ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
     ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
-    ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census"),
+    ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census", "trade"),
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")

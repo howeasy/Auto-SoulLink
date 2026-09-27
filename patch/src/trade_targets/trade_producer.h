@@ -24,7 +24,7 @@ typedef struct {
     uint32_t phase;
     uint16_t prepare_seq, scene_seq;
     uint8_t slot, cancel_scene;
-    uint8_t incoming[100];
+    _Alignas(4) uint8_t incoming[100]; /* native GetMonData uses word loads */
 } SlinkTradeProducer;
 
 static inline uint32_t tp_word(const volatile uint8_t *p)
@@ -177,7 +177,8 @@ static inline void slink_trade_service(SlinkTradeProducer *s, volatile SlinkMail
         if (s->phase==TP_DONE && seq==s->scene_seq && w->final_result==SLINK_TRADE_COMMITTED) {
             tp_ack(m,seq,1,0); return;
         }
-        if (s->phase!=TP_READY || !e->safe_field(e->context)) { tp_ack(m,seq,0,12); return; }
+        if (s->phase!=TP_READY) { tp_ack(m,seq,0,12); return; }
+        if (!e->safe_field(e->context)) { tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e); return; }
         int slot=e->locate(e->context,w->old_pid,w->old_otid);
         if (slot<0 || slot>5 || (unsigned)slot!=m->args[0]) { tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e); return; }
         for (unsigned i=0;i<100;i++) s->incoming[i]=blob[i];

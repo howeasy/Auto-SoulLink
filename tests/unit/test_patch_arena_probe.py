@@ -271,7 +271,8 @@ def run_probe(mode, census=False):
     emulator = Path(os.environ.get("SLINK_EMUHAWK", "E:/Howard/Bizhawk/EmuHawk.exe"))
     config_source = Path(os.environ.get("SLINK_BIZHAWK_CONFIG", "E:/Howard/Bizhawk/config.ini"))
     config = json.loads(config_source.read_text(encoding="utf-8-sig"))
-    seed = full_box_seed() if census else None
+    seeded = census or mode == "trade"
+    seed = full_box_seed() if seeded else None
     if seed:
         (base / "seed.sav").write_bytes(seed)
         print(f"O-33 seed: full party/boxes + level15 Squirtle/Rare Candy; sha256={hashlib.sha256(seed).hexdigest()}", flush=True)
@@ -288,7 +289,7 @@ def run_probe(mode, census=False):
             entry["Path"] = str(config_source.parent / "Firmware")
         else:
             entry["Path"] = str(frontend / entry["System"] / entry["Type"].replace("/", "_"))
-            if census and entry["System"] == "GBA" and entry["Type"] == "Save RAM":
+            if seeded and entry["System"] == "GBA" and entry["Type"] == "Save RAM":
                 Path(entry["Path"]).mkdir(parents=True, exist_ok=True)
                 shutil.copyfile(base / "seed.sav", Path(entry["Path"]) / "probe.SaveRAM")
     disable_rewind(config)
@@ -367,12 +368,20 @@ log("RESULT: " .. (ok and "PASS" or "FAIL") .. " " .. tostring(why or ""))
 out:close()
 client.exit()
 ''', encoding="utf-8")
+    if mode == "trade":
+        from tests.unit.test_patch_trade_live import TRADE_LUA
+
+        text = script.read_text(encoding="utf-8")
+        begin = text.index("  local found = false")
+        end = text.index("\nend)\nlog(\"SCOPE:",begin)
+        script.write_text(text[:begin] + TRADE_LUA + text[end:],encoding="utf-8")
     cmd = [str(emulator), f"--config={config_path.relative_to(ROOT).as_posix()}",
            f"--lua={script.relative_to(ROOT).as_posix()}", (base / "probe.gba").relative_to(ROOT).as_posix()]
     started = time.monotonic()
     env = {**os.environ, "SLINK_ROOT": ROOT.as_posix(), "SLINK_GEN3_TITLE": "firered",
            "SLINK_GEN3_CHECKPOINT": str(ROOT / "data/games/gen3_frlg/write_checkpoint.json"),
            "T2_INCOMING": str(base / "incoming.bin"),
+           "T2_RELOAD_PARTY": str(base / "reload_party.bin"),
            "SLINK_STATE_DIR": state_dir.as_posix(),
            "SLINK_GEN3_PLAY_STATES_DIR": state_dir.as_posix()}
     proc = subprocess.Popen(cmd, cwd=ROOT, env=env,
@@ -396,24 +405,46 @@ client.exit()
     text = result.read_text() if result.exists() else "FAIL: no result"
     print(text)
     passed = any(line.startswith("RESULT: PASS") for line in text.splitlines())
-    if census and passed:
+    if seeded and passed:
         sys.path.insert(0, str(ROOT))
         from tools.gen3_fixtures import boot_check_verdict, qualify_one
 
         before = qualify_one((base / "seed.sav").read_bytes(), rr=False)
+        seed_counter = before["counter"]
         saved = frontend / "GBA/Save RAM/probe.SaveRAM"
         after = qualify_one(saved.read_bytes(), rr=False)
         # Named native trade receipt after the earlier level-up evolution.
-        before["party"][0] = {**before["party"][0], "species": 68, "level": 15,
-                              "key": "13572468:78563412"}
+        fail_save = mode=="trade" and os.environ.get("T2_FAIL_POST_SAVE")=="1"
+        if not fail_save:
+            before["party"][0] = {**before["party"][0], "species": 68, "level": 15,
+                                  "key": "13572468:78563412"}
+        if mode == "trade" and not fail_save:
+            # Native PREPARE and post-trade save, never a manual third save.
+            before["counter"] += 1
         passed, problems = boot_check_verdict(before, after)
+        if mode == "trade":
+            raw = (base/"reload_party.bin").read_bytes()
+            decoded = codec.decode_party_mon(raw[:100])
+            original=codec.party_from_save((base/"seed.sav").read_bytes())[0]
+            wanted=(original["species"],original["personality"],original["ot_id"]) if fail_save else (68,0x13572468,0x78563412)
+            if (decoded["species"],decoded["personality"],decoded["ot_id"]) != wanted:
+                problems.append("post-reset RAM decode differs from expected received evolution")
+                passed=False
         (base / "census_receipt.json").write_text(json.dumps({
-            "scope": "FR listed diagnostic scenes only; production trade lifecycle remains OPEN",
-            "before_counter": before["counter"], "after_counter": after["counter"],
+            "scope": "private FR native trade producer probe; title qualification OPEN" if mode=="trade"
+                     else "FR listed diagnostic scenes only; production trade lifecycle remains OPEN",
+            "before_counter": seed_counter, "after_counter": after["counter"],
             "pydec_pass": passed, "problems": problems, "native_output": text,
             "state_dir": str(state_dir),
         }, indent=2) + "\n", encoding="utf-8")
         print(f"PYDEC save/party verification: {passed}, problems={problems}")
+        if mode == "trade":
+            archive = base / "runs" / ("post-save-failure" if fail_save else "success")
+            archive.mkdir(parents=True,exist_ok=True)
+            for name in ("receipt.json","run_receipt.json","census_receipt.json","result.txt",
+                         "reload_party.bin","seed.sav","incoming.bin","probe.lua","config.ini"):
+                shutil.copyfile(base/name,archive/name)
+            shutil.copyfile(saved,archive/"native.SaveRAM")
         if not passed:
             return 1
     return 0 if passed else 1
