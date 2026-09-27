@@ -804,3 +804,29 @@ outside this card's lease.
 ```
 python tools/gen3_fixtures.py make-emerald --kind trade --out tests/fixtures/gen3/emerald_trade.sav
 ```
+
+## exp_{town,battle,pc,catch}{,_b}.sav (card X3, EXP-X23) — SYNTH seed, native re-save on the expansion reference build, built live 2026-09-27
+
+**Provenance: O-33 SYNTH setup, disclosed.** `tools/gen3_fixtures.py make-exp --kind <k>` takes the
+`make-emerald` seed of the same kind (maps, tiles and new-game flags are identical at the pin:
+`test_gen3_fixture_exp.py` re-derives them from `SLINK_EXPANSION_SRC` = rh-hideout/pokeemerald-expansion
+e8bd1cd7), transplants it into the build's own save layout (`gen3_codec.TITLE_EXPANSION`: SaveBlock1
+15568, PokemonStorage 34144) and record lanes (species by national id, BALL_POKE in the Growth
+pokeball lane, abilityNum in the Misc ribbons lane, teraType = type[pid & 1], hpLost = maxHP - hp,
+bag Poke Ball id 1), cold-boots it on the reference build (ROM sha1 `28877d73…`, never committed)
+-> CONTINUE -> in-game SAVE (`lua/tests/gen3_emerald_boot_check.lua` with `SLINK_BOOT_SYM` = the
+build's own `pokeemerald.sym`), and keeps the game's re-save only if `exp_fixture_problems` is empty.
+The `_b` side is `derive-b --title emerald_expansion_28877d73` over the `a` file (EMERB #DFDAF6DA, every
+owned record re-keyed, the SaveBlock3 sector chunks kept) then booted and re-saved the same way
+(`make-exp --seed`), so every file here is the game's own save (counter 2, `_b` counter 3).
+
+| file | map | tile | party / boxes | sha256 |
+|---|---|---|---|---|
+| `exp_town.sav` | Oldale Town (0.10) | (6,17) | Mudkip (258) Lv5; 5 Poke Balls | `f0d7fd36e7ea7f4eb3cd4edfc1e54414252df2db687069101b9c1a411f1fb412` |
+| `exp_town_b.sav` | same | same | same, EMERB | `0fccd28913f115f2f4b3fce0fa91b58f774408027462faba49ae34ff16e82a9c` |
+| `exp_battle.sav` | Route 102 (0.17) | (21,16) | Mudkip Lv5; 5 Poke Balls | `f684e8d176e96cf2d5c4d94f8ab29dede4c177e328989860f018638837712c48` |
+| `exp_battle_b.sav` | same | same | same, EMERB | `57b550d780256a34340bbec9a4e2c3758f6fc9640be8be680d24993caba7c75d` |
+| `exp_pc.sav` | Oldale Town (0.10) | (6,17) | Mudkip Lv5 + Poochyena (261) Lv3; box 1: Zigzagoon (263) / Wurmple (265) Lv3 | `28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a` |
+| `exp_pc_b.sav` | same | same | same, EMERB | `9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085` |
+| `exp_catch.sav` | Route 102 (0.17) | (21,16) | Mudkip Lv5; 20 Poke Balls | `e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a` |
+| `exp_catch_b.sav` | same | same | same, EMERB | `345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0` |

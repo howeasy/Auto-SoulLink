@@ -104,6 +104,15 @@ def _party_entry(mon: dict) -> dict:
             "level": mon["level"]}
 
 
+def _record_layout(title: str) -> dict | None:
+    """The masked-record layout a codec title's party/box decode needs: the expansion build's
+    own (profile.derived, X2) for TITLE_EXPANSION, none for the vanilla titles."""
+    if title != codec.TITLE_EXPANSION:
+        return None
+    from server.adapters.gen3_expansion import EXPANSION_PARTY_LAYOUT
+    return EXPANSION_PARTY_LAYOUT
+
+
 def qualify_one(data: bytes, *, rr: bool, title: str = codec.TITLE_FRLG) -> dict:
     """Everything `qualify` prints, as a dict, so the test suite can assert
     on it directly instead of parsing stdout. ``title`` is the codec's save-layout
@@ -131,9 +140,10 @@ def qualify_one(data: bytes, *, rr: bool, title: str = codec.TITLE_FRLG) -> dict
         result["boxes_note"] = ("RR layout pinned; extension sectors 30/31 have no checksum "
                                 "or generation counter (rr_save_layout.md §5, §7)")
     else:
-        party = codec.party_from_save(body, rr=False, title=title)
+        layout = _record_layout(title)
+        party = codec.party_from_save(body, rr=False, title=title, layout=layout)
         result["party"] = [_party_entry(m) for m in party]
-        boxes = codec.boxes_from_save(body, rr=False, title=title)
+        boxes = codec.boxes_from_save(body, rr=False, title=title, layout=layout)
         result["boxes"] = sum(1 for box in boxes for mon in box
                               if mon["personality"] or mon["ot_id"])
     return result
@@ -257,8 +267,13 @@ def derive_b(a_body: bytes, *, rr: bool = False,
         phys = next(s["index"] for s in parsed["sectors"][base:base + codec.NUM_SECTORS_PER_SLOT]
                     if s["id"] == sid)
         chunk = objects[entry["object"]][entry["offset"]:entry["offset"] + entry["size"]]
-        new_sector = codec.write_sector(chunk, sid, parsed["counter"], layout)
+        new_sector = bytearray(codec.write_sector(chunk, sid, parsed["counter"], layout))
         start = phys * codec.SECTOR_SIZE
+        if title == codec.TITLE_EXPANSION:
+            # SaveSector.saveBlock3Chunk (expansion include/save.h:71-79): 116 bytes between the
+            # data and the footer, outside the checksum; write_sector would zero them.
+            at = codec.SECTOR_DATA_SIZE
+            new_sector[at:at + EXP_SB3_CHUNK] = a_body[start + at:start + at + EXP_SB3_CHUNK]
         new_body[start:start + codec.SECTOR_SIZE] = new_sector
     return bytes(new_body), manifest
 
@@ -1508,6 +1523,232 @@ def cmd_make_emerald(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# make-exp (X3): the pokeemerald-expansion reference build (expansion/1.17.0 e8bd1cd7, ROM
+# 28877d73). DISCLOSED O-33 SYNTH, the make-emerald recipe: the Emerald seed of the same kind
+# (the maps, tiles and new-game flags are identical at the pin -- test_gen3_fixture_exp.py
+# re-derives them from SLINK_EXPANSION_SRC) is transplanted into this build's save layout and
+# record lanes, then the ROM itself CONTINUEs and saves; that re-save is the fixture.
+# What the transplant changes, and nothing else:
+#   * sizes: SaveBlock1 15568 (the Emerald seed's bytes past it are all zero, asserted),
+#     PokemonStorage 34144 (fusions[] tail, zero) -- gen3_codec TITLE_EXPANSION;
+#   * every owned record: species -> this build's id (EXP_SPECIES, data.json), BALL_POKE into
+#     the Growth pokeball lane, abilityNum into the Misc ribbons lane, teraType = the species'
+#     type[pid & 1] (expansion src/pokemon.c CreateBoxMon), hpLost = maxHP - hp; the vanilla
+#     pokeball/abilityNum bits (now dynamaxLevel/gigantamaxFactor) are 0;
+#   * the bag's Poke Ball item id 4 -> 1.
+# SaveBlock1/2 offsets the seed writes (pos 0, location 4, continueGameWarp 0xC,
+# lastHealLocation 0x1C, mapLayoutId 0x32, playerParty 0x234/0x238, money 0x490, bag 0x560,
+# flags 0x1270; SaveBlock2 name/gender/warp flags/trainer id/options/encryptionKey) are the
+# same at the pin: expansion include/global.h:588-613,1095-1133 and facts.json.
+# ---------------------------------------------------------------------------
+
+EXP_ARTIFACTS = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS")
+                     or Path(REPO) / ".cache/expansion-output/reference")
+EXP_ROM_SHA1 = "28877d733492299599f2b8fff50493109d72653c"
+EXP_PACK = Path(REPO) / "data/games/gen3_exp/28877d73"
+EXP_KINDS = {k: EMERALD_KINDS[k] for k in ("town", "battle", "pc", "catch")}
+# pret pokeemerald species id -> this build's (national-order) id; data.json names checked by test
+EXP_SPECIES = {283: 258, 286: 261, 288: 263, 290: 265}
+EXP_ITEM_POKE_BALL = 1     # include/constants/items.h:13 ITEM_POKE_BALL; pokeball.h:7 BALL_POKE = 1
+EXP_SB3_CHUNK = 116        # include/save.h:8 SAVE_BLOCK_3_CHUNK_SIZE
+
+
+def _exp_derived() -> dict:
+    return json.loads((EXP_PACK / "profile.json").read_text(encoding="utf-8"))[
+        "titles"][codec.TITLE_EXPANSION]["derived"]
+
+
+def _exp_types() -> dict[int, list[int]]:
+    data = json.loads((EXP_PACK / "data.json").read_text(encoding="utf-8"))
+    return {row["id"]: row["types"] for row in data["species"]}
+
+
+def _lane_shift(field: dict, word_off: int, word_size: int) -> int:
+    """Bit position of a profile bitfield inside the vanilla encoder's whole word at
+    `word_off` (growth_filler u16 at Growth+10, ribbons u32 at Misc+8)."""
+    if not (word_off <= field["word_off"]
+            and field["word_off"] + field["word_size"] <= word_off + word_size):
+        raise ValueError(f"expansion lane {field} is outside the vanilla word at +{word_off}")
+    return (field["word_off"] - word_off) * 8 + field["shift"]
+
+
+def _exp_record(raw: bytes, *, party: bool, types: dict, derived: dict) -> bytes:
+    """One Emerald seed record re-laid in this build's lanes (see the section header)."""
+    mon = (codec.decode_party_mon if party else codec.decode_box_mon)(raw)
+    if not mon["personality"] and not mon["ot_id"]:
+        return raw                                            # an empty slot stays zero
+    species = EXP_SPECIES[mon["species"]]
+    tera_shift = derived["MON_SPECIES_MASK"].bit_length()     # teraType sits right above species
+    mon.update(species=species | (types[species][mon["personality"] & 1] << tera_shift),
+               pokeball=0, ability_num=0,
+               growth_filler=EXP_ITEM_POKE_BALL << _lane_shift(derived["POKEBALL_FIELD"], 10, 2),
+               ribbons=mon["ability_num"] << _lane_shift(derived["ABILITY_NUM_FIELD"], 8, 4))
+    if party:
+        mon["unknown"] = mon["max_hp"] - mon["hp"]             # hpLost:14 (SetMonData MON_DATA_HP)
+    out = (codec.encode_party_mon if party else codec.encode_box_mon)(mon)
+    layout = _record_layout(codec.TITLE_EXPANSION)
+    decode = codec.decode_party_mon_masked if party else codec.decode_box_mon_masked
+    back = decode(out, layout=layout)
+    if (back["species"], back["pokeball"], back["checksum_ok"]) != (species, EXP_ITEM_POKE_BALL, True):
+        raise ValueError(f"expansion record does not round-trip: {back['species']}/{back['pokeball']}")
+    return out
+
+
+def exp_tera_type(raw: bytes) -> int:
+    """teraType of one party/box record: the Growth word0 bits above the species mask."""
+    mon = codec.decode_box_mon(raw[:codec.BOX_MON_SIZE])
+    return mon["species"] >> _exp_derived()["MON_SPECIES_MASK"].bit_length()
+
+
+def exp_write_slot(blocks: dict, *, counter: int) -> bytes:
+    """An erased flash with one expansion save slot (the slot `counter` selects)."""
+    layout = codec.slot_layout(title=codec.TITLE_EXPANSION)
+    image = bytearray(b"\xFF" * codec.FLASH_SIZE)
+    half = codec.NUM_SECTORS_PER_SLOT * (counter % codec.NUM_SAVE_SLOTS)
+    for entry in layout:
+        chunk = blocks[entry["object"]][entry["offset"]:entry["offset"] + entry["size"]]
+        at = (half + entry["id"]) * codec.SECTOR_SIZE
+        image[at:at + codec.SECTOR_SIZE] = codec.write_sector(chunk, entry["id"], counter, layout)
+    return bytes(image)
+
+
+def build_exp_seed(kind: str, flags: list[int]) -> bytes:
+    """The SYNTH flash image for `kind` on the reference build (section header)."""
+    parsed = codec.parse_flash(build_emerald_seed(kind, flags), title=codec.TITLE_EMERALD)
+    sb2_size, sb1_size = codec._TITLE_SAVE_SIZES[codec.TITLE_EXPANSION]
+    storage_size = codec._TITLE_STORAGE_SIZES[codec.TITLE_EXPANSION]
+    sb2, sb1 = bytearray(parsed["sb2"]), bytearray(parsed["sb1"])
+    if len(sb2) != sb2_size or any(sb1[sb1_size:]):
+        raise ValueError("the Emerald seed does not fit the expansion SaveBlocks")
+    sb1 = sb1[:sb1_size]
+    storage = bytearray(parsed["storage"]) + bytes(storage_size - len(parsed["storage"]))
+    types, derived = _exp_types(), _exp_derived()
+    if derived["SB1_BALL_POCKET_OFFSET"] != SB1_BALL_POCKET_EMERALD:
+        raise ValueError("expansion ball pocket moved")
+    count_off, party_off = codec._TITLE_PARTY_OFFSETS[codec.TITLE_EXPANSION]
+    for i in range(sb1[count_off]):
+        at = party_off + i * codec.PARTY_MON_SIZE
+        sb1[at:at + codec.PARTY_MON_SIZE] = _exp_record(bytes(sb1[at:at + codec.PARTY_MON_SIZE]),
+                                                        party=True, types=types, derived=derived)
+    for i in range(codec.BOXES_PER_STORE * codec.MONS_PER_BOX):
+        at = codec.BOX_DATA_OFFSET + i * codec.BOX_MON_SIZE
+        storage[at:at + codec.BOX_MON_SIZE] = _exp_record(bytes(storage[at:at + codec.BOX_MON_SIZE]),
+                                                          party=False, types=types, derived=derived)
+    for slot in range(BALL_POCKET_SLOTS):
+        at = SB1_BALL_POCKET_EMERALD + 4 * slot
+        if struct.unpack_from("<H", sb1, at)[0] == ITEM_POKE_BALL:
+            struct.pack_into("<H", sb1, at, EXP_ITEM_POKE_BALL)
+    return exp_write_slot({"sb2": bytes(sb2), "sb1": bytes(sb1), "storage": bytes(storage)},
+                          counter=EMERALD_SEED_COUNTER)
+
+
+def exp_ball_pocket(body: bytes) -> list[tuple[int, int]]:
+    """The non-empty (itemId, quantity) Poke Ball pocket slots, quantity decrypted with the low
+    16 bits of SaveBlock2.encryptionKey (expansion src/item.c:70)."""
+    parsed = codec.parse_flash(body, title=codec.TITLE_EXPANSION)
+    key = struct.unpack_from("<I", parsed["sb2"], SB2_ENCRYPTION_KEY)[0] & 0xFFFF
+    pocket = parsed["sb1"][SB1_BALL_POCKET_EMERALD:SB1_BALL_POCKET_EMERALD + 4 * BALL_POCKET_SLOTS]
+    return [(item, qty ^ key) for item, qty in struct.iter_unpack("<HH", pocket) if item]
+
+
+def exp_fixture_problems(body: bytes, kind: str) -> list[str]:
+    """What a NATIVE re-save of an expansion `kind` seed must show: it qualifies, the game cleared
+    the continue-game warp, the player is on the kind's tile, the party (and for "pc" box 1) is
+    the seed's, every record is a valid expansion record with BALL_POKE, and the ball pocket
+    still holds the seeded Poke Balls once decrypted with the game's re-rolled key."""
+    ok, msg = codec.qualify_flash(body, title=codec.TITLE_EXPANSION)
+    if not ok:
+        return [f"does not qualify as the expansion build: {msg}"]
+    parsed = codec.parse_flash(body, title=codec.TITLE_EXPANSION)
+    sb1, sb2 = parsed["sb1"], parsed["sb2"]
+    _map, group, num, layout_id, x, y = EXP_KINDS[kind]
+    problems = []
+    if sb2[0x09] & 1:
+        problems.append("specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save")
+    where = struct.unpack_from("<hhbb", sb1, 0)
+    if where != (x, y, group, num):
+        problems.append(f"player at (x,y,group,num)={where}, expected {(x, y, group, num)}")
+    if int.from_bytes(sb1[0x32:0x34], "little") != layout_id:
+        problems.append(f"mapLayoutId {int.from_bytes(sb1[0x32:0x34], 'little')} != {layout_id}")
+    layout = _record_layout(codec.TITLE_EXPANSION)
+    party = codec.party_from_save(body, title=codec.TITLE_EXPANSION, layout=layout)
+    want = [(258, STARTER_LEVEL), (261, BOX1_LEVEL)] if kind == "pc" else [(258, STARTER_LEVEL)]
+    if [(m["species"], m["level"]) for m in party] != want:
+        problems.append(f"party {[(m['species'], m['level']) for m in party]} != {want}")
+    boxes = codec.boxes_from_save(body, title=codec.TITLE_EXPANSION, layout=layout)
+    occupied = {(b, s): m["species"] for b, row in enumerate(boxes) for s, m in enumerate(row)
+                if m["personality"] or m["ot_id"]}
+    want_box = {(0, 0): 263, (0, 1): 265} if kind == "pc" else {}
+    if occupied != want_box:
+        problems.append(f"boxes {occupied} != {want_box}")
+    records = party + [boxes[b][s] for b, s in occupied]
+    if any(not m["checksum_ok"] or m["pokeball"] != EXP_ITEM_POKE_BALL for m in records):
+        problems.append("a record fails its checksum or lost BALL_POKE")
+    want_balls = EMERALD_CATCH_BALLS if kind == "catch" else EMERALD_BALLS
+    if exp_ball_pocket(body) != [(EXP_ITEM_POKE_BALL, want_balls)]:
+        problems.append(f"ball pocket {exp_ball_pocket(body)} != [({EXP_ITEM_POKE_BALL}, {want_balls})]")
+    return problems
+
+
+def exp_kind_of(fixture: Path) -> str | None:
+    """The EXP_KINDS key a fixture's filename names (exp_<kind>[_b].sav), else None."""
+    m = re.fullmatch(r"exp_(\w+?)(?:_b)?", fixture.stem)
+    return m.group(1) if m and m.group(1) in EXP_KINDS else None
+
+
+def expansion_src() -> Path:
+    src = os.environ.get("SLINK_EXPANSION_SRC")
+    if not src or not (Path(src) / "include/global.h").exists():
+        raise FileNotFoundError("SLINK_EXPANSION_SRC (the expansion checkout at the pin) is unset")
+    return Path(src)
+
+
+def cmd_make_exp(args: argparse.Namespace) -> int:
+    rom = Path(args.rom or EXP_ARTIFACTS / "pokeemerald.gba")
+    try:
+        if hashlib.sha1(rom.read_bytes()).hexdigest() != EXP_ROM_SHA1:
+            raise ValueError(f"{rom} is not the reference build {EXP_ROM_SHA1[:8]}")
+        seed = (codec.split_rtc(Path(args.seed).read_bytes())[0] if args.seed
+                else build_exp_seed(args.kind, emerald_new_game_flags(expansion_src())))
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"make-exp FAIL: {exc}", file=sys.stderr)
+        return 1
+    title = codec.TITLE_EXPANSION
+    before = qualify_one(seed, rr=False, title=title)
+    rom_rel, run_dir, battery = _prepare_run(f"make_exp_{Path(args.out).stem}", str(rom), seed=seed,
+                                             saveram_name_override=args.saveram_name)
+    print(f"SYNTH seed {args.kind}: {run_dir / battery} sha256={sha256_hex(seed)} "
+          f"counter={before['counter']} party={before['party']}")
+    passed, text = _launch(EMERALD_BOOT_LUA, rom_rel, run_dir, rr=False, timeout=args.timeout,
+                           title=title,
+                           extra_env={"SLINK_BOOT_SYM": str(EXP_ARTIFACTS / "pokeemerald.sym")})
+    print(text.rstrip())
+    flushed = _flushed_saveram(run_dir, battery)
+    if not passed or flushed is None:
+        print("make-exp FAIL: the driver did not report PASS or left no *.SaveRAM", file=sys.stderr)
+        return 1
+    try:
+        body = import_savedata(flushed.read_bytes(), rr=False, title=title)
+    except (ValueError, OSError) as exc:
+        print(f"make-exp FAIL: candidate refused: {exc}", file=sys.stderr)
+        return 1
+    after = qualify_one(body, rr=False, title=title)
+    problems = boot_check_verdict(before, after)[1] + exp_fixture_problems(body, args.kind)
+    if problems:
+        for problem in problems:
+            print(f"  {problem}", file=sys.stderr)
+        print("make-exp FAIL: the re-save is not the fixture asked for", file=sys.stderr)
+        return 1
+    out = Path(args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_bytes(body)
+    print(f"wrote {out} ({len(body)} bytes) sha256={sha256_hex(body)} slot={after['slot']} "
+          f"counter={after['counter']} trainer={after['trainer_name']!r}"
+          f"#{after['trainer_id']:08X} party={after['party']}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # FR/LG natural-leg seeds (card NAT-LEGS): DISCLOSED O-33 SYNTH edits of a committed party fixture
 #
 # `make-frlg-synth` rewrites the seed's CURRENT slot in place (derive-b's sector rewrite, same
@@ -1896,7 +2137,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_qualify = sub.add_parser("qualify", help="check fixtures with no emulator")
     p_qualify.add_argument("files", nargs="+")
     p_qualify.add_argument("--rr", action="store_true")
-    p_qualify.add_argument("--title", choices=[codec.TITLE_FRLG, codec.TITLE_EMERALD],
+    p_qualify.add_argument("--title", choices=[codec.TITLE_FRLG, codec.TITLE_EMERALD, codec.TITLE_EXPANSION],
                            default=codec.TITLE_FRLG, help="vanilla save layout (default frlg)")
     p_qualify.set_defaults(func=cmd_qualify)
 
@@ -1904,7 +2145,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_derive.add_argument("a")
     p_derive.add_argument("b")
     p_derive.add_argument("--rr", action="store_true")
-    p_derive.add_argument("--title", choices=[codec.TITLE_FRLG, codec.TITLE_EMERALD],
+    p_derive.add_argument("--title", choices=[codec.TITLE_FRLG, codec.TITLE_EMERALD, codec.TITLE_EXPANSION],
                           default=codec.TITLE_FRLG, help="vanilla save layout (default frlg)")
     p_derive.set_defaults(func=cmd_derive_b)
 
@@ -1963,6 +2204,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_em.add_argument("--saveram-name", default=None)
     p_em.add_argument("--timeout", type=int, default=600)
     p_em.set_defaults(func=cmd_make_emerald)
+
+    p_exp = sub.add_parser("make-exp", help="EMULATOR: SYNTH expansion reference-build seed -> "
+                                            "CONTINUE -> in-game SAVE; the re-save is the fixture")
+    p_exp.add_argument("--kind", choices=sorted(EXP_KINDS), required=True)
+    p_exp.add_argument("--out", required=True)
+    p_exp.add_argument("--rom", default=None, help=f"default: {EXP_ARTIFACTS / 'pokeemerald.gba'}")
+    p_exp.add_argument("--seed", default=None,
+                       help="boot this save instead of a fresh SYNTH seed (a derive-b _b side)")
+    p_exp.add_argument("--saveram-name", default=None)
+    p_exp.add_argument("--timeout", type=int, default=600)
+    p_exp.set_defaults(func=cmd_make_exp)
 
     p_syn = sub.add_parser("make-frlg-synth", help="NO EMULATOR: SYNTH edit of an FR/LG party "
                                                   "fixture for a natural-leg row (NAT-LEGS)")
