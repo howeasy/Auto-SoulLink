@@ -38,13 +38,13 @@ pytestmark = [
 
 GAME = "gen3_frlg"
 SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
-             "link_gen3", "deadzone_gen3", "reconnect_gen3", "center_controls_gen3",
+             "link_gen3", "deadzone_gen3", "reconnect_gen3", "explode_gen3", "center_controls_gen3",
              "save_then_write_gen3", "trainer_bench_gen3", "active_end_gen3",
              "linked_faint_active_whiteout_gen3", "linked_faint_active_trainer_gen3")
 # G4 item 2a on LeafGreen: the same family with LG as A (C4-6m), for the A-side Center receipts
 GAME_LGFR = "gen3_lgfr"
 SCENARIOS_LGFR = ("whiteout_gen3", "center_controls_gen3", "save_then_write_gen3",
-                  "trainer_bench_gen3", "active_end_gen3",
+                  "trainer_bench_gen3", "active_end_gen3", "explode_gen3",
                   # G4-PH: the P+H subject is B, so LG-as-A puts FireRed under the commit
                   "linked_faint_active_gen3", "linked_faint_active_whiteout_gen3",
                   "linked_faint_active_trainer_gen3")
@@ -73,9 +73,8 @@ def test_gen3_lgfr_duo(scenario):
     _run_duo(GAME_LGFR, scenario)
 
 
-@pytest.mark.parametrize("game", ("gen3_frlg", "gen3_lgfr", "gen3_emerald"))
-def test_gen3_vanilla_explode_duo(game):
-    _run_duo(game, "explode_gen3")
+def test_gen3_emerald_explode_duo():
+    _run_duo("gen3_emerald", "explode_gen3")
 
 
 def _run_duo(game, scenario):
