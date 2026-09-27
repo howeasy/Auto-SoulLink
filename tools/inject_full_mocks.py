@@ -175,12 +175,8 @@ BOXED_B = (54, "PSYD008", "Quack",   10, 183)
 # need entries in data/games/gen3_emerald/emerald_trainers.json's trainers_by_area so the
 # Upcoming Key Trainers widget renders (verified against that file, not invented).
 #
-# NOTE for the wild-encounters panel: server/adapters/gen3_frlge.py encounter_table()
-# returns None for any non-RR, non-ingested cartridge (`if not self._is_rr: return None`,
-# docstring: "None ... non-RR or unmapped area") -- a CLEAN Emerald or FR/LG cartridge has
-# NO wild-encounter data in this repo (no data/games/gen3_emerald/*encounters* file
-# exists) regardless of which area a player stands in. That panel stays empty for both
-# --title frlg and --title emerald; it is real per-cartridge behaviour, not a mock gap.
+# The wild-encounters panel reads each title's shipped pret-derived table (card WILD-VANILLA):
+# data/games/gen3_frlge/{firered,leafgreen}_encounters.json, data/games/gen3_emerald/emerald_encounters.json.
 GEN3_EMERALD_PAIRS = [
     ("route_101", (288, "ZIGZ101", "Ziggy",  6, 0),   (286, "POOC101", "Snarl",  6, 0)),
     ("route_102", (295, "LOTA102", "Lily",   8, 183), (298, "SEED102", "Nutty",  8, 0)),
@@ -421,13 +417,8 @@ def _final_areas() -> tuple[str, str]:
     to say pewter_museum "so the widget renders (Falkner @ Pewter Museum)", which has one
     priority trainer and no encounters at all; route_22 has seven and six.
 
-    That "wild encounter table" requirement only holds for --title firered_rr: RR ships
-    its own encounter file (rr_encounters.json) and is_rr gates Gen3Adapter.encounter_table
-    on it. Clean vanilla FR/LG and clean Emerald have NO shipped wild-encounter data at
-    all (server/adapters/gen3_frlge.py encounter_table(): "None for clean FR/LG or areas
-    with no encounter data") -- so for --title frlg / emerald the encounter panel is empty
-    on EVERY area, by real per-cartridge behaviour, and area choice there is driven only by
-    trainers_by_area (Upcoming Key Trainers).
+    Every Gen 3 title ships a wild table now (RR: rr_encounters.json; clean FR/LG and
+    Emerald: the pret-derived files, card WILD-VANILLA), so each title's picks need both.
     """
     if _is_gen3_emerald():
         return (GEN3_EMERALD_FINAL_A, GEN3_EMERALD_FINAL_B)

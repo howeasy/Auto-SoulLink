@@ -109,21 +109,17 @@ def test_emerald_cast_areas_are_real_hoenn_areas():
     assert not missing, f"emerald cast uses area ids not in area_map.json: {sorted(missing)}"
 
 
-def test_clean_vanilla_titles_have_no_wild_encounter_table():
-    """Pins the real system contract the final-area picks above rely on: a CLEAN
-    (non-RR, non-ingested) FR/LG or Emerald cartridge has no shipped wild-encounter data
-    anywhere in this repo -- only rr_encounters.json exists, gated on is_rr. If this ever
-    starts returning data, _final_areas' docstring in tools/inject_full_mocks.py (and this
-    test) need revisiting together."""
+def test_clean_vanilla_titles_show_wild_encounters_at_the_mock_standing_areas():
+    """Card WILD-VANILLA: clean FR/LG and Emerald now ship pret-derived wild tables, so the
+    mock's final standing areas render a real Wild panel on every Gen 3 title."""
     from server.adapters.gen3_frlge import Gen3Adapter
 
-    for rom_type in ("firered", "leafgreen", "emerald"):
+    for rom_type, areas in (("firered", ("route_22", "cerulean_city")),
+                            ("leafgreen", ("route_22", "cerulean_city")),
+                            ("emerald", ("route_103", "route_110"))):
         adapter = Gen3Adapter(is_rr=False, rom_type=rom_type)
-        for area in ("route_22", "cerulean_city", "route_103", "route_110"):
-            assert adapter.encounter_table(area) is None, (
-                f"{rom_type}/{area}: clean cartridges were assumed to never carry "
-                "wild-encounter data -- this changed, update the docstrings that assumed it"
-            )
+        for area in areas:
+            assert adapter.encounter_table(area), f"{rom_type}/{area}: no wild table"
 
 
 def test_firered_rr_default_title_is_unchanged():
