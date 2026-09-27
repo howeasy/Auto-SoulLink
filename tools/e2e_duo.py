@@ -420,18 +420,25 @@ SCENARIOS = {
     # FR/LG's "town" fixture already carries 2 party mons (unlike Emerald's, which is a single
     # Mudkip for that kind), so B's Emerald side boots "pc" instead (Mudkip + Poochyena, slot 1
     # present) -- the same B-idle fixture boxsync_gen3/whiteout_gen3 already use for gen3_emerald.
-    # card RR-SYNTH: gen3_rr does NOT join this row. The NPC trade needs RR's own in-game trade
-    # table (requested species + received mon) and the trader NPC's map/object-event position,
-    # neither of which is pinned anywhere in this repo (data/games/gen3_rr/profile.json has no
-    # trade-table address, and no map-header/object-event source is cached for RR's map bank).
-    # Guessing either risks shipping a fixture that boots into a wall or trades the wrong mon;
-    # per the card's own instruction this is refused and reported rather than guessed. Someone
-    # with ROM access to RR's relocated trade table (same CFRU-thunk technique used for the
-    # evolution/base-stat/learnset tables above) and a way to read RR's map/event data can pick
-    # this back up.
-    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+    # card RR-NPCTRADE: gen3_rr joins too, now that RR's own trade table + trader position are
+    # pinned (docs/gen3/research/rr_ingame_trades.md, tools/rr_ingame_trades.py). card
+    # RR-NPCTRADE-2: Route2_House/"Reyley" (MR_MIME slot) turned out DEAD on the real RR ROM (its
+    # CFRU-detoured species check reads a runtime table whose index-0 entry is garbage -- doc
+    # section "RR-NPCTRADE-2"), so the fixture targets JYNX/"Dontae" (CeruleanCity_House3)
+    # instead: no badge/checkflag gate either, same map/script relationship to vanilla.
+    # rr_trade_synth.sav (tools/gen3_fixtures.py make-rr-synth --kind trade over rr_battle2.sav,
+    # which build_rr_synth's module comment and the card doc source) makes party[1] a
+    # player-owned Lv10 SNOM (RR species 1164) and warps CONTINUE into CeruleanCity_House3 (7,2)
+    # (2,1), one tile above Dontae (2,2) facing up. B needs 2 party mons for the same link_slot=1
+    # reason as the FR/LG and Emerald legs
+    # above (rr_town.sav/rr_town_b.sav only carry one mon); rr_battle2_b.sav (already committed,
+    # 2 mons) is reused as-is -- the same B-idle substitution boxsync_gen3/whiteout_gen3 already
+    # make for gen3_rr via target_by_game "battle2".
+    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"),
+                       "explicit_only": True,
                        "target": {"a": "trade_synth", "b": "town"},
-                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
+                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"},
+                                          "gen3_rr": {"a": "trade_synth", "b": "battle2"}},
                        "frames": 2000000, "no_save": ("b",),
                        "oracle": "assert_npc_trade_gen3_saved"},
     # B's Emerald side boots "pc" (Mudkip + Poochyena), not "town" (single Mudkip): B's own linked
@@ -8273,8 +8280,22 @@ class DuoRun:
     # 0x9CAE, OT id 1985 -> key 00009CAE:000007C1, species 122). Emerald: RustboroCity_House1's
     # trader, a player Ralts -> his SEEDOT (pret pokeemerald c65e93f2 src/data/trade.h
     # INGAME_TRADE_SEEDOT: personality 0x84, otId 38726 -> key 00000084:00009746, species 298).
+    # card RR-NPCTRADE-2: Route2_House/Reyley (MR_MIME) is DEAD on the real RR ROM -- its
+    # CFRU-detoured species check reads a runtime table (ROM 0x09147C74) whose index-0 entry is
+    # garbage (species=1375, requested=162/Furret), so the trade's own species comparison can
+    # never pass (docs/gen3/research/rr_ingame_trades.md "RR-NPCTRADE-2"). The fixture now targets
+    # JYNX/"Dontae" (CeruleanCity_House3, runtime table idx1, which decodes cleanly). new_key is
+    # NOT vanilla's static sInGameTrades content -- CreateInGameTradePokemonInternal is ALSO
+    # detoured to read the same runtime table, and its personality/otId fields (offset 0x1C/0x10)
+    # were decoded directly from ROM: personality 0x498A2E1D, otId 36728 (0x00008F78), species
+    # Carnivine (RR id 508, offset+4).
     NPC_TRADE_FACTS = {
         "gen3_emerald": {"new_key": "00000084:00009746", "species": 298},
+        # Live 2026-09-27: the received mon's personality was 35DC164E, not the runtime table's
+        # 0x498A2E1D -- RR's detoured CreateInGameTradePokemonInternal generates it at trade time,
+        # so only the OT half of the key is fixed. The oracle takes the key from A's key_change
+        # and holds the saved party and links.json to that same key.
+        "gen3_rr": {"new_key": None, "new_otid": "00008F78", "species": 508},
     }
     NPC_TRADE_DEFAULT = {"new_key": "00009CAE:000007C1", "species": 122}
 
@@ -8291,6 +8312,10 @@ class DuoRun:
         ka = self._link_keys["a"]
         facts = self.NPC_TRADE_FACTS.get(self.game, self.NPC_TRADE_DEFAULT)
         new, species = facts["new_key"], facts["species"]
+        if new is None:
+            hit = re.search(rf'(?m)^TX key_change - .*"new_key":"([0-9A-F]{{8}}:{facts["new_otid"]})"'
+                            rf'.*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"', results["a"] or "")
+            new = hit.group(1) if hit else f"<no npc_trade key_change with OT {facts['new_otid']}>"
         kc = rf'(?m)^TX key_change - .*"new_key":"{new}".*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"'
         problems = gen3_receipt_problems(
             "a", results["a"], required=[r"(?m)^SIGNAL trade_begin ", r"(?m)^SIGNAL trade_done ", kc],
