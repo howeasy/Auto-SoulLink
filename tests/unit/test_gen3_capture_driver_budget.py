@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 def _capture_model(catch_on=0, stock=20):
     source = (ROOT / "lua/tests/duo/duo_gen3_main.lua").read_text(encoding="utf-8")
-    body = source[source.index("function ctx.catch(label)"):source.index("--- Keep choosing a no-damage move")]
+    body = source[source.index("function ctx.catch("):source.index("--- Keep choosing a no-damage move")]
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     lua.execute('''
         title="firered"; cp={}; S={gBattleOutcome=0}; ACTION_BAG=1; B_OUTCOME_CAUGHT=7
@@ -65,3 +65,9 @@ def test_capture_propagates_a_scene_settle_refusal():
     lua.globals().play.wait_scene_settled = lua.eval('function() return false, "unsettled" end')
     key, why = lua.globals().ctx.catch("settle failure")
     assert key is None and "unsettled" in why
+
+
+def test_capture_of_an_observed_encounter_does_not_hunt_again():
+    lua = _capture_model(catch_on=1)
+    lua.globals().ctx.hunt = lua.eval('function() error("a second hunt discarded the observed foe") end')
+    assert lua.globals().ctx.catch("already at the native battle menu", True) == "caught"

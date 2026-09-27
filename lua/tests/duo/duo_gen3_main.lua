@@ -179,7 +179,7 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "gActionSelectionCursor", "gMoveSelectionCursor", "gBattleMons", "gBattlerPartyIndexes",
                "gBattleOutcome", "gMain", "gTasks", "gPartyMenu", "CB2_UpdatePartyMenu",
                "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
-               "Task_ReturnToChooseMonAfterText", "Task_DepositMenu", "Task_WithdrawMon",
+               "Task_ReturnToChooseMonAfterText", "Task_DepositMenu", "Task_WithdrawMon", "Task_ReleaseMon",
                "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade",
                "Task_LinkupAwaitConnection", "sGlobalScriptContext",
                "CableClub_EventScript_WelcomeToCableClub", "CableClub_EventScript_UnusedWelcomeToCableClub",
@@ -438,8 +438,9 @@ session.handle_command = function(self, cmd)
     local text = type(cmd) == "table" and type(cmd.text) == "string" and cmd.text or nil
     seen_rx[c] = (seen_rx[c] or 0) + 1
     if c ~= "noop" then
-        rx[#rx + 1] = { cmd = c, key = key }
+        rx[#rx + 1] = { cmd = c, key = key, msg = cmd }
         log("RX " .. c .. (key and (" key=" .. key) or "") .. (text and (" text=" .. text) or ""))
+        if D.rule_kind then log("RULE_RX " .. JSON.encode(cmd)) end
     end
     if c == "hud_show" and text and text:find("WRONG SAVE", 1, true) then
         wrong_save_hud = true
@@ -454,6 +455,21 @@ log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, 
 local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G = G, SP = SP,
               play = play, cp = cp, reader = reader, sym = S, title = title, session = session,
               finished = FINISHED, emulator = emu }
+
+function ctx.jlog(tag, value) log(tag .. " " .. JSON.encode(value)) end
+function ctx.fail(why) finish(false, why) end
+function ctx.rx_after(index, pred)
+    for i = (index or 0) + 1, #rx do if pred(rx[i].msg) then return rx[i].msg, i end end
+end
+function ctx.rx_count() return #rx end
+function ctx.enemy_species()
+    local mons, why = reader.read_enemy_party()
+    if not mons or not mons[1] then return nil, why or "no wild enemy" end
+    return mons[1].species
+end
+function ctx.wild_ready(label)
+    return SP.verify_fight_cursor(cp, label) == "fight"
+end
 
 function ctx.frames(n) for _ = 1, n do emu.frameadvance() end end
 --- pred() each frame until truthy (its value) or `secs` of wall clock pass (nil, logged).
@@ -482,6 +498,11 @@ end
 function ctx.go_has(marker)
     for _, l in ipairs(go_lines() or {}) do if l == marker then return true end end
     return false
+end
+function ctx.go_value(prefix)
+    for _, line in ipairs(go_lines() or {}) do
+        if line:sub(1, #prefix + 1) == prefix .. " " then return JSON.decode(line:sub(#prefix + 2)) end
+    end
 end
 -- --idle-jitter, the Gen 1 standard's retry lever: BizHawk is deterministic, and FRLG's VBlank
 -- advances the RNG once per frame (pret src/main.c:412 Random() in VBlankIntr), so idle frames
@@ -1320,8 +1341,8 @@ end
 
 local boot_keys = {}
 --- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
-function ctx.catch(label)
-    if not ctx.hunt(label) then return nil, "no wild encounter" end
+function ctx.catch(label, already_hunted)
+    if not already_hunted and not ctx.hunt(label) then return nil, "no wild encounter" end
     -- R4-DRIVER: the 20-ball SYNTH fixtures must stay on this instrumented path after eight
     -- misses. The former fall-through let the scene settler throw an unlogged ninth ball.
     local throw_budget = 20
@@ -1575,6 +1596,27 @@ function ctx.pc_withdraw(label)
     for _, m in ipairs(before) do had[m.key] = true end
     for _, m in ipairs(after) do if not had[m.key] then return m.key end end
     return nil, fmt("party %d -> %d and no new key after the withdraw", #before, #after)
+end
+function ctx.game_flag(id)
+    local sb1 = reader.read_sb1()
+    if not sb1 then return nil end
+    return (memory.read_u8(sb1 + profile.derived.SB1_FLAGS_OFFSET + id // 8) & (1 << (id % 8))) ~= 0
+end
+
+--- RELEASE the just-deposited box-0 record, through the normal confirmation.
+function ctx.pc_release(label, key)
+    local at = ctx.locate(key)
+    local slot = ctx.deposited_slot or 0
+    if not at or at.party ~= false or at.box ~= "0:" .. slot then return false, "release key not in its deposited slot" end
+    local PC = SP.PC
+    G.tap("Up", 2, 13)
+    PC.open(cp, label); PC.mode(label, 0)
+    if slot > 0 then SP.EMH.box_cursor(label, slot) end
+    PC.popup(label, 0, slot, 3)
+    PC.select(label, S.Task_ReleaseMon | 1); PC.release(label); PC.leave(cp, label)
+    at = ctx.locate(key)
+    if not at or at.party ~= false or at.box ~= false then return false, "released key not proven absent" end
+    return true
 end
 
 --- In-game SAVE (row search + flash-counter proof, gen3_boot_check save_via_menu), then settle

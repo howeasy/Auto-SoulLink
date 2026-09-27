@@ -976,6 +976,12 @@ EMERALD_KINDS = {
     # LAYOUT_RUSTBORO_CITY_HOUSE1 = layout id 97 (data/maps/map_groups.json, data/layouts/layouts.json).
     "trade": ("RustboroCity_House1", 11, 10, 97, 6, 5),
 }
+# Builder-only additions: not yet native re-saved/committed fixtures. Existing
+# EMERALD_KINDS fixtures keep their mandatory qualification tests unchanged.
+EMERALD_RULE_KINDS = {
+    "ball_gate": ("RusturfTunnel", 24, 4, 129, 3, 2),
+    "family": ("Route102", 0, 17, 18, 21, 16),
+}
 # FLAG_BADGE01_GET..FLAG_BADGE04_GET (pret include/constants/flags.h:1359-1362): 0x867 is byte
 # 0x10C bit 7 and 0x868..0x86A are byte 0x10D bits 0-2, so the set straddles a flag byte
 EMERALD_BADGE_FLAGS = (0x867, 0x868, 0x869, 0x86A)
@@ -1248,7 +1254,14 @@ def _warp(group: int, num: int, x: int, y: int) -> bytes:
 
 def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     """The SYNTH flash image for `kind` (see the section header). `flags` = emerald_new_game_flags."""
-    _map, group, num, layout_id, x, y = EMERALD_KINDS[kind]
+    if kind == "ball_gate":
+        from gen3_clause_rows import ball_gate_seed, family_seed
+        prepared = family_seed(build_emerald_seed("pc", flags), "emerald", slot=1)[0]
+        return ball_gate_seed(prepared, "emerald")[0]
+    if kind == "family":
+        from gen3_clause_rows import family_seed
+        return family_seed(build_emerald_seed("battle", flags), "emerald")[0]
+    _map, group, num, layout_id, x, y = (EMERALD_KINDS | EMERALD_RULE_KINDS)[kind]
     name, tid = EMERALD_OT
     sb2 = bytearray(codec.SAVEBLOCK2_SIZE_EMERALD)
     sb2[0x00:0x08] = codec.encode_name(name, 8)   # playerName[PLAYER_NAME_LENGTH + 1], global.h:510
@@ -1359,7 +1372,7 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
         return [f"does not qualify as Emerald: {msg}"]
     parsed = codec.parse_flash(body, title=codec.TITLE_EMERALD)
     sb1, sb2 = parsed["sb1"], parsed["sb2"]
-    _map, group, num, layout_id, x, y = EMERALD_KINDS[kind]
+    _map, group, num, layout_id, x, y = (EMERALD_KINDS | EMERALD_RULE_KINDS)[kind]
     problems = []
     if sb2[0x09] & 1:
         problems.append("specialSaveWarpFlags still has CONTINUE_GAME_WARP: not a game re-save")
@@ -1392,6 +1405,14 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
                     if not (b == 0 and s in (0, 1)) and boxes[b][s]["species"]]
         if occupied:
             problems.append(f"unexpected occupied box slots: {occupied[:5]}")
+    elif kind == "ball_gate":
+        if (len(party) != 2 or party[0]["species"] != MUDKIP["species"] or party[0]["hp"] != 1
+                or party[0]["status"] != 0 or party[1]["species"] != 287 or party[1]["level"] != 25
+                or party[1]["hp"] != party[1]["max_hp"] or any(not m["checksum_ok"] for m in party)):
+            problems.append("ball gate seed must retain HP1 Mudkip and a healthy Lv25 Mightyena")
+    elif kind == "family":
+        if len(party) != 1 or party[0]["species"] != 287 or party[0]["level"] != 25 or not party[0]["checksum_ok"]:
+            problems.append("family seed must retain one valid Lv25 Mightyena")
     elif kind == "evolve":
         # round 3: still Mudkip at Lv15, one EXP short of the Lv16 threshold -- a native wild
         # win is what evolves it, not this fixture itself
@@ -1430,7 +1451,7 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
             problems.append(f"badge flags not set after the re-save: {[hex(f) for f in missing]}")
     want_balls = EMERALD_CATCH_BALLS if kind == "catch" else EMERALD_BALLS
     balls = emerald_ball_pocket(body)
-    if balls != [(ITEM_POKE_BALL, want_balls)]:
+    if balls != ([] if kind == "ball_gate" else [(ITEM_POKE_BALL, want_balls)]):
         problems.append(f"ball pocket {balls} != [(ITEM_POKE_BALL, {want_balls})]")
     return problems
 
@@ -1438,7 +1459,7 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
 def emerald_kind_of(fixture: Path) -> str | None:
     """The EMERALD_KINDS key a fixture's filename names (emerald_<kind>[_b].sav), else None."""
     m = re.fullmatch(r"emerald_(\w+?)(?:_b)?", fixture.stem)
-    return m.group(1) if m and m.group(1) in EMERALD_KINDS else None
+    return m.group(1) if m and m.group(1) in (EMERALD_KINDS | EMERALD_RULE_KINDS) else None
 
 
 def cmd_make_emerald(args: argparse.Namespace) -> int:
@@ -1505,7 +1526,7 @@ def cmd_make_emerald(args: argparse.Namespace) -> int:
 #           fc_link_gen3_rand_r4_39da30fd receipt exhausted LG's two balls; all other bytes stay.
 # ---------------------------------------------------------------------------
 
-FRLG_SYNTH_KINDS = ("evolve", "trade", "poison", "catch")
+FRLG_SYNTH_KINDS = ("evolve", "trade", "poison", "catch", "ball_gate", "family")
 FRLG_SB1_FLAGS = 0x0EE0               # SaveBlock1.flags, include/global.h:790
 FLAG_DID_MIMIEN_TRADE = 0x248         # include/constants/flags.h:609
 ROUTE2_HOUSE_WARP = (15, 1, 7, 3)     # map_groups.json gMapGroup_IndoorRoute2[1]; below Reyley (7,2)
@@ -1558,7 +1579,7 @@ def _gen3_stats(base: dict, mon: dict, level: int) -> dict:
     return out
 
 
-def build_frlg_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
+def build_frlg_synth(seed: bytes, kind: str, *, title="firered") -> tuple[bytes, list[str]]:
     """The SYNTH edit of a vanilla FR/LG fixture for `kind` -> (body, manifest). Deterministic."""
     if kind not in FRLG_SYNTH_KINDS:
         raise ValueError(f"unknown synth kind {kind!r}")
@@ -1566,6 +1587,14 @@ def build_frlg_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
     if not ok:
         raise ValueError(f"seed does not qualify: {msg}")
     parsed = codec.parse_flash(seed)
+    if kind == "ball_gate":
+        from gen3_clause_rows import ball_gate_seed, family_seed
+        prepared, manifest = family_seed(seed, title, slot=1)
+        result, gate_manifest = ball_gate_seed(prepared, title)
+        return result, manifest + gate_manifest
+    if kind == "family":
+        from gen3_clause_rows import family_seed
+        return family_seed(seed, title)
     if kind == "catch":
         return _frlg_catch_stock(seed, parsed)
     sb1, sb2 = bytearray(parsed["sb1"]), bytearray(parsed["sb2"])
@@ -1634,7 +1663,7 @@ def build_frlg_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
 
 
 def cmd_make_frlg_synth(args: argparse.Namespace) -> int:
-    body, manifest = build_frlg_synth(Path(args.seed).read_bytes(), args.kind)
+    body, manifest = build_frlg_synth(Path(args.seed).read_bytes(), args.kind, title=getattr(args, "title", "firered"))
     Path(args.out).write_bytes(body)
     for line in manifest:
         print("SYNTH " + line)
@@ -1714,7 +1743,7 @@ TREECKO_RR_GROWTH_RATE = 3                              # GROWTH_MEDIUM_SLOW; sa
 TREECKO_RR_EVOLVE_LEVEL = 16                            # RR_EVO_TABLE species 277 slot 0
 TREECKO_RR_EXP_LV15 = 2034                              # RR_EXP_TABLE[3*256 + 15]
 TREECKO_RR_EXP_LV16 = 2535                              # RR_EXP_TABLE[3*256 + 16]
-RR_SYNTH_KINDS = ("evolve",)
+RR_SYNTH_KINDS = ("evolve", "family", "ball_gate")
 
 
 def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
@@ -1722,6 +1751,12 @@ def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
     Surgical sector patch only (see the module note above); never write_sector."""
     if kind not in RR_SYNTH_KINDS:
         raise ValueError(f"unknown RR synth kind {kind!r}")
+    if kind == "family":
+        from gen3_clause_rows import family_seed
+        return family_seed(seed, "radical_red")
+    if kind == "ball_gate":
+        from gen3_clause_rows import rr_ball_gate_seed
+        return rr_ball_gate_seed(seed)
     report = qualify_one(seed, rr=True)
     if not report["ok"]:
         raise ValueError(f"seed does not qualify: {report['message']}")
@@ -1845,7 +1880,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_em = sub.add_parser("make-emerald", help="EMULATOR: SYNTH Emerald seed -> CONTINUE -> "
                                               "in-game SAVE; the re-save is the fixture")
-    p_em.add_argument("--kind", choices=sorted(EMERALD_KINDS), required=True)
+    p_em.add_argument("--kind", choices=sorted(EMERALD_KINDS | EMERALD_RULE_KINDS), required=True)
     p_em.add_argument("--out", required=True)
     p_em.add_argument("--rom", default=None, help=f"default: {EMERALD_ROM} at the checkout root")
     p_em.add_argument("--saveram-name", default=None)
@@ -1855,6 +1890,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_syn = sub.add_parser("make-frlg-synth", help="NO EMULATOR: SYNTH edit of an FR/LG party "
                                                   "fixture for a natural-leg row (NAT-LEGS)")
     p_syn.add_argument("--kind", choices=FRLG_SYNTH_KINDS, required=True)
+    p_syn.add_argument("--title", choices=("firered", "leafgreen"), default="firered")
     p_syn.add_argument("--seed", required=True)
     p_syn.add_argument("--out", required=True)
     p_syn.set_defaults(func=cmd_make_frlg_synth)
