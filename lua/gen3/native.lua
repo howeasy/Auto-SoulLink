@@ -108,7 +108,7 @@ function N.new(profile, deps)
     local array = deps.array or function(t) return t end
     local reads = assert(deps.reads, "Gen 3 read facade required")
     local queue, pending, poisoned, posting = {}, nil, nil, false
-    local trade_context, trade_blocked, trade_wanted_epoch
+    local trade_context, trade_blocked, trade_wanted_epoch, trade_dead_notice
     local trade_binding_job, trade_serial = nil, 0
     local fr_v2 = v2 and profile.pack == "gen3_frlg"
     local call_queued, call_active, call_wanted_epoch
@@ -207,7 +207,7 @@ function N.new(profile, deps)
         if value == 0 then
             if session_epoch ~= 0 or poisoned then
                 if fr_v2 and (trade_context or trade_blocked) then
-                    trade_blocked = true
+                    trade_blocked = "trade epoch cleared while owned"
                     poisoned = "trade epoch cleared while owned"
                     abort(poisoned)
                     return nil, poisoned
@@ -218,7 +218,7 @@ function N.new(profile, deps)
                 abort("native epoch cleared")
             end
         elseif session_epoch ~= 0 and value ~= session_epoch then
-            if fr_v2 then trade_blocked = true end
+            if fr_v2 then trade_blocked = "native epoch changed" end
             poisoned = "native epoch changed"
             abort(poisoned)
             return nil, poisoned
@@ -431,7 +431,8 @@ function N.new(profile, deps)
         local mb = self:mailbox()
         return mb ~= nil and mb.session_epoch == session_epoch
             and (not trade_wanted_epoch or trade_wanted_epoch == session_epoch)
-            and integer(mb.producer_phase, cc.SLINK_PHASE_DONE)
+            and integer(mb.producer_phase, cc.SLINK_PHASE_UNCERTAIN)
+            and mb.producer_phase ~= cc.SLINK_PHASE_UNCERTAIN
     end
     function self:trade_epoch_writable()
         if not trade_supported() or trade_blocked or trade_context then return false end
@@ -594,7 +595,7 @@ function N.new(profile, deps)
                     local visit = self:trade_visit()
                     if visit then if done then done(nil,visit) end; return end
                 end
-                if job.posted and not t.reconciled then trade_blocked = true end
+                if job.posted and not t.reconciled then trade_blocked = why or "native prepare lacks ready witness" end
                 if not job.posted and trade_context == t then trade_context = nil end
                 if done then done(why or "native prepare lacks ready witness") end
             end}
@@ -616,7 +617,7 @@ function N.new(profile, deps)
             done=function(why)
                 local w = job.posted and trade_witness(t,job.seq)
                 if w and w.result == 2 then t.terminal, t.reconciled = 2, true
-                elseif job.posted then trade_blocked = true end
+                elseif job.posted then trade_blocked = why or "native withdrawal lacks unchanged witness" end
                 if why and not t.reconciled then log("[SLink-gen3] trade withdrawal unproved: " .. why) end
             end}
         t.withdraw_job = enqueue(job)
@@ -673,8 +674,8 @@ function N.new(profile, deps)
                 -- success without delivering its save milestone to trade.lua.
                 local w = job.posted and job.observed
                 if job.posted and (not w or w.result == 0 or w.result == 3) then
-                    trade_blocked = true
                     why = why or "native trade terminal witness missing"
+                    trade_blocked = why .. (reason and (": " .. reason) or "")
                 elseif w then t.terminal = w.result end
                 if w and w.result == 2 then why = "native refused" end
                 if done then done(why,result,reason) end
@@ -683,7 +684,7 @@ function N.new(profile, deps)
     end
     local function service_trade_binding()
         if not trade_wanted_epoch or session_epoch == trade_wanted_epoch or trade_binding_job
-           or poisoned or trade_blocked or not trade_supported() then return end
+           or poisoned or trade_blocked or trade_context or not trade_supported() then return end
         trade_binding_job = self:set_session_epoch(trade_wanted_epoch)
     end
     local function call_witness()
@@ -1042,7 +1043,7 @@ function N.new(profile, deps)
         local frame, here = io.framecount(), present()
         local owned_panel = pending and pending.panel
         if (last_frame and frame < last_frame) or (was_present and not here) then
-            if fr_v2 and trade_context and not trade_context.reconciled then trade_blocked = true end
+            if fr_v2 and trade_context and not trade_context.reconciled then trade_blocked = "native reset during owned trade" end
             abort("native reset")
             poisoned, npc_count, panel_drawn, panel_showing = nil, nil, nil, false
             session_epoch = 0
@@ -1052,7 +1053,7 @@ function N.new(profile, deps)
         local epoch_ok, epoch_why = check_epoch()
         if not epoch_ok then return nil, epoch_why end
         if fr_v2 and trade_context and not trade_supported() then
-            trade_blocked, poisoned = true, "trade capability lost"
+            trade_blocked, poisoned = "trade capability lost", "trade capability lost"
             abort(poisoned)
         end
         if pending then
@@ -1132,6 +1133,10 @@ function N.new(profile, deps)
     local service, advertised_trade = self.service, false
     function self:service()
         local result = table.pack(service(self))
+        if fr_v2 and not trade_dead_notice and (trade_blocked or poisoned) then
+            trade_dead_notice = true
+            log("[SLink-gen3] durable trade unavailable for this session: " .. tostring(trade_blocked or poisoned))
+        end
         local capable = self:trade_capable()
         if capable ~= advertised_trade then
             advertised_trade = capable
