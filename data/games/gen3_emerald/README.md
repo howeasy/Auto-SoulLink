@@ -7,6 +7,7 @@ The JSON files are generated; do not hand-edit them. `admitted` is `true` since 
 |---|---|---|
 | `profile.json` | `python tools/gen_gen3_profile.py` (`build_emerald`) | `--check` |
 | `engine_signals.json` | `python tools/gen_gen3_engine_signals.py` (`EMERALD_BINDINGS`) | `--check` (needs the pinned ROMs) |
+| `emerald_encounters.json` | `python tools/gen_gen3_wild.py --game emerald` | `--check` |
 
 Pins: pret/pokeemerald `c65e93f20a5275ab03b07d6f6411096a82a60ffd`; its published symbols
 `data/gen3/pret/pokeemerald.sym` (symbols branch `dba968c6`, provenance
