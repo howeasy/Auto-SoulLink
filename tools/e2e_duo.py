@@ -619,7 +619,7 @@ SCENARIOS["species_family_gen3"] = {
     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "explicit_only": True,
     "rule_kind": "family", "target": {"a": "family_synth", "b": "catch_synth"},
     "target_by_game": {"gen3_emerald": {"a": "family", "b": "catch"},
-                       "gen3_rr": {"a": "family_synth", "b": "battle2"}},
+                       "gen3_rr": {"a": "family_synth", "b": "family_galar_synth"}},
     "oracle": "assert_species_family_gen3_saved",
 }
 
@@ -881,6 +881,8 @@ def scenario_attempt_limit(name, game):
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     entry = SCENARIOS.get(name, {})
+    if entry.get("rule_kind") == "family" and scenario_family(game) == "gen3_rr":
+        return 16
     if entry.get("rule_kind") == "gender" and scenario_family(game) == "gen3_rr":
         return 8
     if rng_retry_family(game) and entry.get("rng_attempts"):
@@ -3857,7 +3859,8 @@ class DuoRun:
             "game": self.gcfg.get("game", ""),
             "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
             "mutate_otid": inst == "b", "result": result.replace("\\", "/"),
-            "partner_result": self._result_path("b" if inst == "a" else "a").replace("\\", "/"),
+            "partner_result": self._phase_result_path("b" if inst == "a" else "a",
+                self._phase.get("b" if inst == "a" else "a", "initial")).replace("\\", "/"),
             "go_file": self.go_files[inst].replace("\\", "/"),
             "timeout_frames": (lambda f: f[inst] if isinstance(f, dict) else f)(
                 self.cfg.get("frames", self.cfg["timeout"] * 60)),
@@ -4543,7 +4546,7 @@ class DuoRun:
 
         Freshness is identity here: a rerun (or a crashed attempt re-entered) leaves results,
         phase receipts, attempt archives, witnesses and PYDEC copies from OLDER runs in the same
-        build directory. Gen 2 attempt 1 clears those; later Gen 2 retries retain numbered archives
+        build directory. Gen 2/3 attempt 1 clears those; later retries retain numbered archives
         from this invocation, while clearing all live paths. The current PYDEC file is opened before
         launch and retained. Removals are printed so the log records what was discarded.
         """
@@ -4553,7 +4556,7 @@ class DuoRun:
             if keep and os.path.basename(path) == keep:
                 continue
             archive = re.search(r"_attempt(\d+)_(?:result\.txt|witness\.SaveRAM|exit\.SaveRAM|manifest\.json)$", os.path.basename(path))
-            if (scenario_family(getattr(self, "game", "legacy")) == "gen2_new"
+            if (scenario_family(getattr(self, "game", "legacy")) in ("gen2_new", "gen3_frlg", "gen3_emerald", "gen3_rr")
                     and archive and 0 < int(archive[1]) < getattr(self, "attempt", 1)):
                 continue  # Earlier attempts of THIS invocation remain replayable; attempt 1 clears all.
             os.remove(path)
@@ -4570,8 +4573,8 @@ class DuoRun:
     def wait_keys(self):
         """Both wrappers log MYKEY lines right after savestate+mutation."""
         def both():
-            ka = extract_keys(read_result(self.scenario, "a"))
-            kb = extract_keys(read_result(self.scenario, "b"))
+            ka = extract_keys(self._read_receipt("a"))
+            kb = extract_keys(self._read_receipt("b"))
             return (ka, kb) if ka and kb else None
         ka, kb = self.wait_for("MYKEY lines from both instances", both, 120)
         if set(ka.values()) & set(kb.values()):
@@ -4673,7 +4676,7 @@ class DuoRun:
         `REFUSED <key> (<how>)` is the line the scenario does promise, and it carries the
         full key whenever one was recovered at all.
         """
-        text = read_result(self.scenario, inst) or ""
+        text = self._read_receipt(inst)
         for line in text.splitlines():
             if "CAUGHT " in line:
                 return line.split("CAUGHT ", 1)[1].split()[0]
@@ -5255,7 +5258,7 @@ class DuoRun:
             a, b = self._caught("a"), self._caught("b")
             if a and b:
                 return a, b
-            if any(_has_exact_rng_miss(read_result(self.scenario, inst)) for inst in ("a", "b")):
+            if any(_has_exact_rng_miss(self._read_receipt(inst)) for inst in ("a", "b")):
                 raise GameRngMiss("a cartridge missed its sole ball before the pair formed")
             return None
         a_key, b_key = self.wait_for("both instances to catch a wild mon", both_caught,
@@ -7448,7 +7451,7 @@ class DuoRun:
     def _gen3_mark(self, inst, pattern, what, timeout=None):
         """Wait for a driver marker (a regex over the receipt, multiline)."""
         return self.wait_for(f"{inst}: {what}", lambda: re.search(
-            pattern, read_result(self.scenario, inst) or "", re.M), timeout or self.cfg["timeout"])
+            pattern, self._read_receipt(inst), re.M), timeout or self.cfg["timeout"])
 
     # Per-game-family areas for _gen3_area_control: gen3_frlg's evolve leg walks Viridian's Route 1
     # grass (a defensive superset around it); gen3_emerald's evolve_gen3 leg stands directly on
@@ -7625,8 +7628,11 @@ class DuoRun:
         return orchestrate_release(self)
 
     def orchestrate_species_family_gen3(self):
+        from gen3_clause_rows import family_members
         self._gen3_prelude(link_slot=0)
-        self.go(self._gen3_linked_lines())
+        lines = self._gen3_linked_lines()
+        lines["a"].append("FAMILY_LINKS " + json.dumps(family_members(self), sort_keys=True))
+        self.go(lines)
         self._gen3_mark("a", r"^FAMILY_READY \S+$", "native family encounter and RUN")
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
