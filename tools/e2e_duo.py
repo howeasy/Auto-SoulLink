@@ -582,6 +582,39 @@ SCENARIOS = {
 }
 
 
+for _rule in ("species", "gender", "type"):
+    SCENARIOS[f"{_rule}_clause_gen3"] = {
+        "flags": [f"--{_rule}-clause"], "timeout": 2400, "frames": 3000000,
+        "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "ball_hunt": True,
+        "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch", "gen3_rr": "battle2"},
+        "scenario_module": "clause", "rule_kind": _rule, "oracle": f"assert_{_rule}_clause_gen3_saved",
+    }
+SCENARIOS["release_gen3"] = {
+    "flags": [], "timeout": 2400, "frames": 3000000,
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    "target": {"a": "battle", "b": "town"},
+    "target_by_game": {"gen3_emerald": "pc", "gen3_rr": "battle2"},
+    "oracle": "assert_release_gen3_saved",
+}
+SCENARIOS["ball_gate_gen3"] = {
+    "flags": [], "timeout": 2400, "frames": 3000000,
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    "ball_hunt": True,
+    "target": "ball_gate_synth", "target_by_game": {"gen3_emerald": "ball_gate"},
+    "hunt_area_by_game": {"gen3_frlg": "viridian_forest", "gen3_lgfr": "viridian_forest",
+                          "gen3_emerald": "rusturf_tunnel", "gen3_rr": "route_1"},
+    "oracle": "assert_ball_gate_gen3_saved",
+}
+SCENARIOS["species_family_gen3"] = {
+    "flags": ["--species-clause"], "timeout": 1800, "frames": 2500000,
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "explicit_only": True,
+    "rule_kind": "family", "target": {"a": "family_synth", "b": "catch_synth"},
+    "target_by_game": {"gen3_emerald": {"a": "family", "b": "catch"},
+                       "gen3_rr": {"a": "family_synth", "b": "battle2"}},
+    "oracle": "assert_species_family_gen3_saved",
+}
+
+
 # No families any more: the `gen1`/`gen1_yellow` pair was the only one, and both titles (and
 # their scenario drivers) were deleted in the same step. `games` matching is exact.
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
@@ -728,6 +761,8 @@ GEN1_RNG_REASON_CLASS = {
     # type_clause_new: the verdict wait saw the partner finish first -- its only ball missed
     # (duo_gen1_main.lua type-clause body). Only a retry when the partner's miss is CAUSE_RNG.
     "no type-clause verdict (partner-gone)": "CONSEQUENCE",
+    "no gender-clause verdict (partner-gone)": "CONSEQUENCE",
+    "no species-clause verdict (partner-gone)": "CONSEQUENCE",
     # species_clause_new's own budget phrase: B's battle cap (8) exhausted by duplicates. The
     # reroll observation and the hunt's RNG budget are the same attempts, so this one is
     # retryable on ANY attempt (see retryable_gen1_rng), unlike the ball miss.
@@ -830,6 +865,8 @@ def scenario_attempt_limit(name, game):
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     entry = SCENARIOS.get(name, {})
+    if entry.get("rule_kind") in ("species", "family"):
+        return 8
     if entry.get("battle_window_case"):
         return 2 if entry["battle_window_case"] == "trainer_bench" else 1
     # a cold boot replays one fixed NEW GAME: nothing to retry (ball_gate_new)
@@ -3282,6 +3319,9 @@ class DuoRun:
         {target: area} map read with A's fixture target -- gen3_emerald: battle -> route_102, pc ->
         route_103). Only the Kanto families (and a bare unit-stub run) default to Route 1: any
         other row that reaches a hunt-area oracle without naming its grass fails loud."""
+        override = (getattr(self, "cfg", None) or {}).get("hunt_area_by_game", {})
+        if override:
+            return override[self.game]
         row = getattr(self, "gcfg", None) or {}
         if "hunt_area" in row:
             area = row["hunt_area"]
@@ -3814,6 +3854,9 @@ class DuoRun:
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
+            if self.cfg.get("rule_kind"):
+                from gen3_clause_rows import own_facts
+                duo.update(rule_kind=self.cfg["rule_kind"], clause_facts=own_facts(self, inst))
             if self._gen3_rr:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
@@ -7506,6 +7549,48 @@ class DuoRun:
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
 
+    def orchestrate_species_clause_gen3(self):
+        from gen3_clause_rows import orchestrate_clause
+        return orchestrate_clause(self, helpers=sys.modules[__name__])
+
+    orchestrate_gender_clause_gen3 = orchestrate_species_clause_gen3
+    orchestrate_type_clause_gen3 = orchestrate_species_clause_gen3
+
+    def assert_clause_gen3_saved(self, results):
+        from gen3_clause_rows import clause_oracle
+        return clause_oracle(self, results)
+
+    assert_species_clause_gen3_saved = assert_clause_gen3_saved
+    assert_gender_clause_gen3_saved = assert_clause_gen3_saved
+    assert_type_clause_gen3_saved = assert_clause_gen3_saved
+
+    def orchestrate_ball_gate_gen3(self):
+        from gen3_clause_rows import orchestrate_ball_gate
+        return orchestrate_ball_gate(self)
+
+    def assert_ball_gate_gen3_saved(self, results):
+        from gen3_clause_rows import ball_gate_oracle
+        return ball_gate_oracle(self, results)
+
+    def orchestrate_release_gen3(self):
+        from gen3_clause_rows import orchestrate_release
+        return orchestrate_release(self)
+
+    def orchestrate_species_family_gen3(self):
+        self._gen3_prelude(link_slot=0)
+        self.go(self._gen3_linked_lines())
+        self._gen3_mark("a", r"^FAMILY_READY \S+$", "native family encounter and RUN")
+        for inst in ("a", "b"):
+            self._append_reconnect_marker(inst, "SAVE")
+
+    def assert_species_family_gen3_saved(self, results):
+        from gen3_clause_rows import family_oracle
+        return family_oracle(self, results)
+
+    def assert_release_gen3_saved(self, results):
+        from gen3_clause_rows import release_oracle
+        return release_oracle(self, results)
+
     def orchestrate_trade_gen3(self):
         """The RR PC trade NPC, driven only by the two cartridges: link the slot-1 mons (server
         staging), name each side's partner key, GO. A talks to the NPC and answers the server's
@@ -8647,7 +8732,7 @@ class DuoRun:
         match = re.search(gen3_tx(event, key) + r".*\"" + field + r"\":(\"[^\"]*\"|-?\d+)", text or "")
         return json.loads(match.group(1)) if match else None
 
-    def assert_link_gen3_saved(self, results):
+    def assert_link_gen3_saved(self, results, *, native_ball_grant=0):
         """D-1 persisted on FRLG: one ALIVE route_1 pair of the two real captures; each capture is
         in its saved party exactly once (appended, boxed nowhere, species as sent), and each
         saved POKe BALLS pocket is the fixture's minus the throws that half logged."""
@@ -8664,9 +8749,9 @@ class DuoRun:
                                               rr=self._gen3_rr, limits=self._gen3_limits(inst))
             throws = len(re.findall(r"(?m)^THREW \d+", text or ""))
             title = self._gen3_title(inst)
-            before = gen3_ball_count(self._gen3_fixture_bytes(inst), title)
+            before = gen3_ball_count(self._gen3_fixture_bytes(inst), title) + native_ball_grant
             after = gen3_ball_count(self._gen3_flushed(inst), title)
-            self._pydec_note(f"BAG_BALLS baseline={before} final={after} throws={throws} inst={inst}")
+            self._pydec_note(f"BAG_BALLS baseline={before} final={after} throws={throws} inst={inst} native_grant={native_ball_grant}")
             if throws < 1 or after != before - throws:
                 problems.append(f"{inst}: saved {after} Poke Balls; the fixture had {before} and "
                                 f"the driver logged {throws} throw(s)")
@@ -9168,6 +9253,11 @@ def run_scenario_with_rng_retry(name, args):
             receipts = {inst: read_result(artifact, inst) for inst in ("a", "b")}
             _archive_attempt(artifact, attempt, receipts)
             reason = f"{type(exc).__name__}: {exc}"
+            if SCENARIOS[name].get("rule_kind"):
+                from gen3_clause_rows import ClauseUnobserved
+                if isinstance(exc, ClauseUnobserved) and attempt < limit:
+                    print(f"[duo] {name}: {exc}; retrying fresh lane")
+                    continue
             if name in GEN2_CLAUSE_SCENARIOS and scenario_family(args.game) == "gen2_new":
                 oracle = importlib.import_module("gen2_duo_oracles")
                 if isinstance(exc, oracle.ClauseUnobserved) and attempt < limit:

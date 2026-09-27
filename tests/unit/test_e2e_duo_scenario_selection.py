@@ -655,7 +655,8 @@ def test_gen3_rr_selection_is_exactly_the_radical_red_set():
         "link_gen3", "deadzone_gen3", "reconnect_gen3", "linked_faint_active_whiteout_gen3",
         "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
         "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3", "linked_faint_active_lhammer_gen3",
-        "linked_faint_active_mega_gen3", "trade_gen3", "trade_decline_gen3", "infopanel_gen3", "infopanel_dex_gen3"])
+        "linked_faint_active_mega_gen3", "trade_gen3", "trade_decline_gen3", "infopanel_gen3", "infopanel_dex_gen3",
+        "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "release_gen3", "ball_gate_gen3"])
 
 
 def test_legacy_gen2_chain_is_not_selectable():
@@ -839,7 +840,8 @@ GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_ge
                        "whiteout_gen3", "link_gen3", "deadzone_gen3", "reconnect_gen3",
                        "explode_gen3",
                        # G4-PH: the P+H whiteout variant (A1 (i) on FR/LG, R4 on RR)
-                       "linked_faint_active_whiteout_gen3")
+                       "linked_faint_active_whiteout_gen3", "species_clause_gen3", "gender_clause_gen3",
+                       "type_clause_gen3", "release_gen3", "ball_gate_gen3")
 # P5 (card C5-5): gen3_rr runs the shared Gen 3 scenarios (their `games` tuples EXTENDED,
 # never renamed) plus the RR-only scenarios (docs/gen3/PLAN.md §14 P5, minus the retired old
 # client's trade/ghost/infopanel rows and trade_abort, a later card).
@@ -857,14 +859,13 @@ GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
                           "linked_faint_active_trainer_gen3")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 # NAT-LEGS: the FR/LG natural legs (S-8, S-9, S-11), explicit_only (FR-as-A SYNTH fixtures)
-GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3")
-# card RR-SYNTH/RR-NPCTRADE: of the three NAT_SCENARIOS, evolve_gen3 and npc_trade_gen3 also name
-# gen3_rr (RR-SYNTH built rr_evolve_synth.sav + the RR evolution/base-stat/learnset facts;
-# RR-NPCTRADE built rr_trade_synth.sav + RR's own in-game trade table/trader position,
-# docs/gen3/research/rr_ingame_trades.md). poison_faint_gen3 stays refused (RR's
-# DoPoisonFieldEffect is an unconditional no-op stub, no HP mutation to build a fixture
+GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3", "species_family_gen3")
+# card RR-SYNTH/RR-NPCTRADE/CLAUSE-ROWS-G3: evolve_gen3, npc_trade_gen3 and species_family_gen3
+# also name gen3_rr (rr_evolve_synth.sav, rr_trade_synth.sav + RR's runtime in-game trade table,
+# rr_family_synth.sav; docs/gen3/research/rr_ingame_trades.md). poison_faint_gen3 stays refused
+# (RR's DoPoisonFieldEffect is an unconditional no-op stub, no HP mutation to build a fixture
 # around) -- see its comment in tools/e2e_duo.py SCENARIOS.
-GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3")
+GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "species_family_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (
@@ -930,13 +931,13 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         assert SCENARIOS[name]["games"] in (("gen3_frlg", "gen3_rr"),
                                             ("gen3_frlg", "gen3_rr", "gen3_emerald")), name
         # the ball-RNG retry (card C4-6g): only the halves that throw Poke Balls retry
-        expected = 3 if SCENARIOS[name].get("ball_hunt") else 1
+        expected = 8 if name == "species_clause_gen3" else 3 if SCENARIOS[name].get("ball_hunt") else 1
         assert scenario_attempt_limit(name, "gen3_frlg") == expected, name
         assert scenario_attempt_limit(name, "gen3_rr") == expected, name
     assert set(scenarios_for("gen3_emerald")) == set(GEN3_FRLG_SCENARIOS) - {
         "linked_faint_active_whiteout_gen3"}
     assert {n for n in GEN3_FRLG_SCENARIOS if SCENARIOS[n].get("ball_hunt")} == {
-        "link_gen3", "deadzone_gen3"}
+        "link_gen3", "deadzone_gen3", "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "ball_gate_gen3"}
     for name in GEN3_RR_ONLY_SCENARIOS:
         assert SCENARIOS[name]["games"] == ("gen3_rr",), name
     for name in GEN3_FRLG_ONLY_SCENARIOS:

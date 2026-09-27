@@ -5180,6 +5180,14 @@ def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():
     assert ball_hunts, "no ball_hunt scenario lists gen3_emerald -- test is vacuous"
     for name, entry in ball_hunts:
         target = duo.scenario_target(entry, "gen3_emerald")
+        if name == "ball_gate_gen3":
+            # This row must START with zero balls: acquiring the first native
+            # reward is itself under test. Its full faint/reward/catch oracle
+            # checks the actual debit; every ordinary hunt keeps the >=20 rule.
+            assert target == "ball_gate"
+            assert entry["hunt_area_by_game"]["gen3_emerald"] == "rusturf_tunnel"
+            assert entry["oracle"] == "assert_ball_gate_gen3_saved"
+            continue
         assert target in row["hunt_area"], f"{name}: hunt_area names no {target!r} target"
         body = (REPO / f"tests/fixtures/gen3/emerald_{target}.sav").read_bytes()
         balls = sum(qty for item, qty in gen3_fixtures.emerald_ball_pocket(body)

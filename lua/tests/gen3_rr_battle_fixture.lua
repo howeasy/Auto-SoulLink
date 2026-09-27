@@ -156,10 +156,12 @@ local ACTION_MENU = { [0x0802E439] = true, [0x090A9EA1] = true }
 local BATTLE_OUTCOME_ADDR = 0x02023E8A   -- radical_red gBattleOutcome (gen3_rr_scripted_play.lua)
 
 local H, play
+local duo_route_battle -- caller's already proven catch driver after the native first-ball reward
 local function action_menu_up() return ACTION_MENU[memory.read_u32_le(CTRL_ADDR)] == true end
 
 --- RUN until the battle is over. Text is advanced with B (a no-op at a singles action menu).
 local function flee(cp, budget)
+    if duo_route_battle then return duo_route_battle(cp) end
     local runs = 0
     for _ = 1, (budget or 6000) do
         if not H.in_battle(cp) then break end
@@ -393,11 +395,14 @@ end
 -- read_party() already dereference), and the ball pocket via profile.ram.BALL_POCKET_ADDR --
 -- see docs/gen3/research/rr_fixture_route_2026-09-24.md for why this route exists and how each
 -- id was PROVEN against RR's own compiled scripts (not vanilla FireRed's).
-local function run_route2()
-    G.open("gen3_rr_battle_fixture")  -- same file as run(): run_gate.py watches the first result name in this source
+local function run_route2(existing_cp, duo_hooks)
+    duo_route_battle = nil
+    if not existing_cp then G.open("gen3_rr_battle_fixture") end -- the standalone receipt is unchanged
     pcall(client.speedmode, 6399)
     G.budget = 400000
-    local cp, title = G.checkpoint()
+    local cp, title
+    if existing_cp then cp, title, G.title = existing_cp, "radical_red", "radical_red"
+    else cp, title = G.checkpoint() end
     G.phase("start", "title=" .. tostring(title))
     if title ~= "radical_red" then G.finish(false, "title must be radical_red"); return end
 
@@ -406,7 +411,7 @@ local function run_route2()
     local seeded = G.save_counter(domain)
     if seeded < 0 then G.finish(false, "battery erased at boot: seed not found"); return end
     G.phase("seeded", "counter=" .. seeded)
-    if not G.boot_to_field(cp, 9000) then
+    if not existing_cp and not G.boot_to_field(cp, 9000) then
         G.shot("stuck"); G.finish(false, "never reached the field"); return
     end
 
@@ -420,8 +425,8 @@ local function run_route2()
         return
     end
     local line, _, n_before = party_line()
-    if not line or n_before ~= 1 then
-        G.finish(false, "party is not the expected 1 mon (must be seeded from rr_battle.sav): "
+    if not line or (n_before ~= 1 and not (duo_hooks and n_before == 2)) then
+        G.finish(false, "party is not the original one-mon fixture or disclosed two-mon duo setup: "
                      .. tostring(line))
         return
     end
@@ -533,6 +538,10 @@ local function run_route2()
         return
     end
     G.phase("parcel-delivered", string.format("VAR_MART=2 dex=1 balls=%d", ball_qty))
+    if duo_hooks then
+        duo_hooks.reward()
+        duo_route_battle = duo_hooks.battle
+    end
 
     -- ── leg: Oak's Lab -> grass origin ──────────────────────────────────────────────────────
     play.follow(cp, "oakslab_oak_to_entrance", "route2")
@@ -552,6 +561,7 @@ local function run_route2()
         G.shot("stuck"); G.finish(false, "route2: not back at the grass origin: " .. play.where(cp)); return
     end
     G.phase("back-at-grass-origin", play.where(cp))
+    if duo_hooks then duo_route_battle = nil; return true end
 
     -- ── leg: catch a second mon with a normal input (weaken not needed: 10 fresh balls) ─────
     if not H.in_battle(cp) then
@@ -674,3 +684,9 @@ if (debug.getinfo(1, "S").source or "") == "main" then
     local ok, err = pcall(target)
     if not ok then G.shot("stuck"); G.finish(false, "uncaught Lua error: " .. tostring(err)) end
 end
+
+-- The duo ball-gate row continues the same native, ROM-proven parcel route
+-- from an already-booted rr_battle save; no intro, shopping or memory writes.
+return { native_ball_gift = function(cp, reward, battle)
+    return run_route2(cp, {reward=reward, battle=battle})
+end }
