@@ -86,3 +86,26 @@ def test_production_still_refuses_the_expansion_build():
     entry = (REPO / "lua/gen3/entry.lua").read_text(encoding="utf-8")
     assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}", entry)
     assert "test_admission_codec" not in entry
+
+
+_SAVE_CONTRACT_FN = re.compile(r"local function save_contract_holds\(.*?\nend\n", re.S)
+
+
+@pytest.mark.parametrize("point,ok", [
+    ({"R0": 1, "R5": 0, "R13": 1}, True),            # the vanilla packs' point (R5 = saveType)
+    ({"R0": 1, "R4": 0, "R15": 1, "CPSR": 1}, True),  # the expansion site's point (R4 = saveType)
+    ({"R0": 1, "R4": 3, "R15": 1}, False),           # not SAVE_NORMAL
+    ({"R0": 0, "R5": 0}, False),                     # the save failed
+    ({"R0": 1}, False),                              # no save-type register captured
+])
+def test_the_save_witness_reads_the_sites_own_save_type_register(point, ok):
+    from lupa import LuaRuntime
+
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    body = _SAVE_CONTRACT_FN.search(DRIVER.read_text(encoding="utf-8"))
+    assert body, "duo_gen3_main.lua must define save_contract_holds"
+    fn = lua.execute(body.group(0) + "\nreturn save_contract_holds")
+    got = fn(lua.table_from(point))
+    assert (got[0] if isinstance(got, tuple) else got) is ok
+    sites = json.loads((REPO / "data/games/gen3_exp/28877d73/engine_signals.json").read_text())
+    assert "R4" in sites["titles"][EXP]["artifacts"]["clean"]["sites"]["save"]["point"]

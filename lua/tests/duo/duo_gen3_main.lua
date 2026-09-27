@@ -7,7 +7,7 @@
 -- driver only tees three seams before run.lua binds them:
 --   * event.on_bus_exec: the `save` site's hook also dumps the whole SRAM (flash) domain,
 --     INSIDE the callback, once the signal validated and the capture contract holds (R0 == 1,
---     R5 == SAVE_NORMAL); the `faint` site's hook logs ENGINE_FAINT_SITE when it validates;
+--     the site's save-type register == SAVE_NORMAL); the `faint` site's hook logs ENGINE_FAINT_SITE when it validates;
 --   * connector.send: every non-tick event as "TX <event> <key|-> <json>";
 --   * the session's handle_command: every command as "RX <cmd> key=<key> ...".
 -- The battery boots through CONTINUE (lua/tests/gen3_boot_check.lua), then the scenario runs
@@ -360,6 +360,17 @@ local function faint_site_now()
              party_hp = base and memory.read_u16_le(base + slot * 100 + 0x56, "System Bus") or -1,
              counter = memory.read_u8(S.gBattleResults, "System Bus") }
 end
+--- The save site's capture contract (engine_signals.json capture_contract): R0 == SAVE_STATUS_OK and
+--- the save type == SAVE_NORMAL (0). The type register is the site's own: R5 on the vanilla packs,
+--- R4 on the expansion reference build (its save site's point lists R4, not R5). Self-contained so a
+--- unit test runs this exact body.
+local function save_contract_holds(point)
+    if type(point) ~= "table" then return false, "no-point" end
+    local stype = point.R5
+    if stype == nil then stype = point.R4 end
+    if point.R0 == 1 and stype == 0 then return true end
+    return false, string.format("r0-%s-type-%s", tostring(point.R0), tostring(stype))
+end
 local raw_on_bus_exec = event.on_bus_exec
 event.on_bus_exec = function(fn, addr, name, ...)
     local tag, fire = tostring(name or ""), fn
@@ -369,9 +380,9 @@ event.on_bus_exec = function(fn, addr, name, ...)
             fire(...)
             local sig, why = validated(before, "save")
             -- the site's capture contract (engine_signals.json): a full save returned OK
-            if sig and not (sig.point and sig.point.R0 == 1 and sig.point.R5 == 0) then
-                sig, why = nil, fmt("r0-%s-r5-%s", tostring(sig.point and sig.point.R0),
-                                    tostring(sig.point and sig.point.R5))
+            if sig then
+                local held, broken = save_contract_holds(sig.point)
+                if not held then sig, why = nil, broken end
             end
             if not sig then log("SAVE_WITNESS_DUMP_SKIPPED why=" .. why) return end
             local ok, err = pcall(dump_witness)
