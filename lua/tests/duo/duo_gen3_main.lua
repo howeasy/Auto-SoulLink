@@ -814,6 +814,7 @@ end
 
 -- ── battle input (pret battle_controller_player.c / party_menu.c, symbols above) ─────────
 local B_OUTCOME_CAUGHT = 7        -- pret include/constants/battle.h
+local B_OUTCOME_LOST = 2          -- pret include/constants/battle.h
 local B_OUTCOME_WON = 1           -- pret include/constants/battle.h
 local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = 0, 1, 2, 3
 local function ctrl0() return memory.read_u32_le(S.gBattlerControllerFuncs) end
@@ -1376,6 +1377,10 @@ function ctx.catch(label)
     local settled, settle_why = play.wait_scene_settled(cp, 1800)
     if not settled then return nil, "capture scene did not settle: " .. tostring(settle_why) end
     local outcome = memory.read_u8(S.gBattleOutcome)
+    -- B_OUTCOME_LOST (2, pret include/constants/battle.h): the wild foe knocked the lead out
+    -- mid-catch and the player whited out -- the game's RNG, reported with the Gen 1 standard's
+    -- retryable "whiteout" phrase (tools/e2e_duo.py GEN1_RNG_REASON_CLASS "hunt ended whiteout").
+    if outcome == B_OUTCOME_LOST then return nil, "whiteout" end
     if outcome ~= B_OUTCOME_CAUGHT then return nil, "the battle ended with outcome " .. outcome end
     -- The client's own capture event names the key: by the time the field settles the server may
     -- already have quarantined (box_mon) or retired (dead zone) the record out of the party.

@@ -880,7 +880,8 @@ def test_randomized_frlg_registration(name, module, target):
     assert row["oracle"] == f"assert_{name}_saved"
     assert callable(getattr(DuoRun, row["oracle"]))
     assert callable(getattr(DuoRun, f"orchestrate_{name}"))
-    assert scenario_attempt_limit(name, "gen3_frlg") == 1
+    # link_gen3_rand throws Poke Balls: the Gen 1 ball_hunt retry (out-of-balls / lost catch battle)
+    assert scenario_attempt_limit(name, "gen3_frlg") == (3 if name == "link_gen3_rand" else 1)
     assert not scenario_applies(name, "gen3_rr")
 
 

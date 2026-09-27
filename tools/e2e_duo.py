@@ -85,7 +85,7 @@ SCENARIOS = {
     # needs the R4-LINK SYNTH catch_synth edit (2/4 Poke Balls in the battle save).
     "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch"},
-        "frames": 2000000, "gen3_rand": True, "explicit_only": True,
+        "frames": 2000000, "gen3_rand": True, "explicit_only": True, "ball_hunt": True,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,

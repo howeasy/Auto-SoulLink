@@ -40,4 +40,5 @@ def test_only_randomized_link_selects_the_amended_stock():
     assert duo.SCENARIOS["link_gen3"]["target"] == "battle"
     assert duo.SCENARIOS["admit_randomized_frlg"]["target"] == "town"
     assert duo.SCENARIOS["trainer_panel_gen3_rand"]["target"] == "trainer"
-    assert duo.scenario_attempt_limit("link_gen3_rand", "gen3_frlg") == 1
+    # the Gen 1 standard ball_hunt retry: out-of-balls or a lost catch battle ("hunt ended whiteout")
+    assert duo.scenario_attempt_limit("link_gen3_rand", "gen3_frlg") == 3
