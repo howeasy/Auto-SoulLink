@@ -9,6 +9,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import struct
 from pathlib import Path
 
 import pytest
@@ -156,6 +157,24 @@ def test_clean_ingest_reproduces_pret(title):
              "fingerprint": hashlib.sha1(rom).hexdigest()}
     with pytest.raises(ValueError, match="firered', 'leafgreen"):
         adapter.ingest_rom_content(whole)
+
+
+def _leafgreen_default_party() -> bytes:
+    """SYNTH: repurpose Ben's two default-move slots, retaining the pinned LG rule tables."""
+    raw = bytearray(_clean("leafgreen"))
+    head, _ = gen3_frlge._symbol("leafgreen", "gTrainers")
+    party = struct.unpack_from("<I", raw, head - gen3_rom_tables.ROM_BASE + 89 * 40 + 36)[0]
+    for slot, species in enumerate((410, 51)):  # pret Deoxys and Dugtrio native IDs
+        struct.pack_into("<HH", raw, party - gen3_rom_tables.ROM_BASE + slot * 8 + 2, 17, species)
+    return bytes(raw)
+
+
+def test_leafgreen_default_moves_use_the_payload_title_not_the_run_title():
+    adapter = Gen3Adapter(rom_type="firered", artifact_kind="rand")
+    adapter.use_rom_encounters(adapter.ingest_rom_content(_payload(_leafgreen_default_party(), "leafgreen")))
+    party = adapter.trainer_party(89)
+    assert party[0]["moves"] == ["Wrap", "Night Shade", "Teleport", "Knock Off"]
+    assert party[1]["moves"] == ["Scratch", "Growl", "Magnitude", "Dig"]
 
 
 @pytest.mark.parametrize("title", TITLES)

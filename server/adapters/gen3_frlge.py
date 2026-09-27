@@ -149,6 +149,10 @@ if os.path.exists(_frlg_trainers_path):
             "trainers": {int(k): v for k, v in (_raw_ft.get("trainers") or {}).items()},
             "trainers_by_area": {k: list(v) for k, v in (_raw_ft.get("trainers_by_area") or {}).items()},
             "learnsets": {int(k): [tuple(e) for e in v] for k, v in (_raw_ft.get("learnsets") or {}).items()},
+            "learnsets_by_title": {
+                title: {int(k): [tuple(e) for e in v] for k, v in rows.items()}
+                for title, rows in (_raw_ft.get("learnsets_by_title") or {}).items()
+            },
         }
 
 # Rival trainer ID set for Radical Red (used by Rival Team Swap feature).
@@ -911,9 +915,10 @@ class Gen3Adapter(GameAdapter):
         if self._is_rr:
             return None
         rom = parse_rom_content(payload)
-        tables = decode_verified(rom, rom_title(rom))
+        title = rom_title(rom)
+        tables = decode_verified(rom, title)
         out = _RomTables(self._rom_encounter_tables(tables["wild_encounters"]))
-        out.trainers = self._rom_trainer_table(tables)
+        out.trainers = self._rom_trainer_table(tables, title)
         return out
 
     def refused_rom_content(self, payload: object, *, artifact_kind: str | None = None) -> str:
@@ -970,7 +975,7 @@ class Gen3Adapter(GameAdapter):
                     block[method] = sorted(agg.values(), key=lambda e: (-e["rate"], e["species_id"]))
         return {area: block for area, block in out.items() if block}
 
-    def _rom_trainer_table(self, tables: dict) -> dict:
+    def _rom_trainer_table(self, tables: dict, title: str) -> dict:
         """frlg_trainers.json's shape, from the cartridge: party species, levels, held items and
         custom moves (ruling 31), trainer and class names (UPR can randomize both). Area, key,
         rival and fight_label stay pret's: they come from map scripts, which UPR does not move.
@@ -979,7 +984,8 @@ class Gen3Adapter(GameAdapter):
         movesets may not be randomized (ruling 31).
         """
         pret = _FRLG_TRAINER_TABLE.get("trainers", {})
-        learnsets = _FRLG_TRAINER_TABLE.get("learnsets", {})
+        learnsets = {**_FRLG_TRAINER_TABLE.get("learnsets", {}),
+                     **_FRLG_TRAINER_TABLE.get("learnsets_by_title", {}).get(title, {})}
         classes = tables["class_names"]
         trainers = {}
         for tid, tr in tables["trainers"].items():
