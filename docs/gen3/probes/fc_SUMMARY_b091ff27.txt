@@ -1,0 +1,8 @@
+# G4 final cut b091ff27cfd68103c521c2f84c3dc7bedda7d329 -- tools/gen3_final_cut.py summary (written 2026-09-27T23:26:01Z)
+# RUN 0 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | release_gate_quick | §11 gate | FAIL exit=1 | 1 | fc_release_gate_quick_b091ff27.txt |
+
+OVERALL: FAIL (0/1 rows)
