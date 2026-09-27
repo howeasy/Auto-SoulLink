@@ -1,8 +1,77 @@
-# Gen 3 migration — resume note (updated 2026-09-26, checkpoint 20: GEN 3 LANDED ON LOCAL MASTER; post-merge passes green)
+# Gen 3 resume note (updated 2026-09-27, checkpoint 22: COMBINED Gen 3 orchestrator; integration branch green)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.
 
-## CURRENT STATE (2026-09-26, after checkpoint 20)
+## CURRENT STATE (2026-09-27, checkpoint 22, combined orchestrator)
+
+- Integration `claude/gen3-integration` (C:/slink-wt/g3-int) head 66184e35: full suite 13013 passed / 0 failed. Env: `source C:/slink-wt/g3-env.sh` (now also SLINK_JDK_BIN, SLINK_UPR_JAR, SLINK_EXPANSION_SRC, SLINK_HOST_GCC, SLINK_PRET_EMERALD). pytest.ini keeps tmp_path only for failures (C: filled twice from ~7 GB/run retention).
+- Merged since checkpoint 21: T4 server trade contract (+R3/R4), ruling 35 NPC-trade clause retirement (all gens), T3-R5/R6 Emerald client recovery, E-MGR randomizer write domain (+fixes), TG-MULTI, RR-SYNTH + RR NPC trade, E-RAND-CATCH, UI mocks per title, WILD-VANILLA (pret wild tables for clean FR/LG/E), EXPLODE-BIND (FR/LG/E), EMERALD-RIVAL (per-player gender filter), CLAUSE-ROWS-G3 + CLAUSE-FIX, GIFT-EGG-ROWS-G3 (O-15 applied to Gen 3: hatch = gift_daycare capture), calc Prep deep-link race fix, T3-BIND-FR (FR native trade client).
+- PHYSICAL PASS today: RR evolve_gen3 + npc_trade_gen3; explode_gen3 FR/LG/E; link_gen3 FR/LG on catch_synth; link_gen3_rand E<->E; gift_gen3 + egg_hatch_gen3 on FR/LG/E/RR; clause rows 17/24; FR native trade DUO (T5, codex/gen3-t5-fr-duo d0fee98a, HARNESS_ONLY selection) trade + decline with cold reloads; companion single-cart (claude/gen3-emerald-t2): FR carrier/panel/sound/rival, LG all five.
+- Open: CLAUSE-FIX-2 (Emerald-2; 7 oracle/driver fixes + RR clean trade-unavailability: ABI1 RR companion cannot meet the durable-trade contract, so RR native trade is unavailable on this branch until the RR durable delta; release drains via per-report owed gate); T5-NATIVE-CARRIER (FRLG; bind the real native carrier, FR<->LG pairing, fold review F1 visible-hello latch / F6 queue ready-skip / F7 throttle) — T5 not yet merged into integration; T2 Emerald native adapters + Match Call producer (Codex Emerald); EMERALD-RIVAL-R1 + G3-REZERO parked (Emerald-2, r1-rezero); FR/LG final-cut regression on 66184e35 running (C:/slink-wt/fc-frlg.log).
+- Owner-facing notes: RR native trade status (unavailable on branch until delta, master unchanged); O-15 applied to Gen 3 eggs (flagged to owner); ruling 35 recorded.
+- Landing: master has the Gen 2 landing 5b6f75eb; scratch merge showed 4 conflicting files (cartridges/manager/randomizer.js/upr_pipeline). Ask the owner for ONE landing after merging master into integration; ping Gen 2 (they said no sweep needed now).
+
+## Earlier state (checkpoint 21)
+
+### CURRENT STATE was (2026-09-27, checkpoint 21, combined orchestrator)
+
+- ONE orchestrator (claude session 30c21a7a) runs FR/LG + RR + Emerald + expansion. Sole ledger: the AGENT_CHECKPOINT in C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md (workers gen3-*, emerald-*). Nothing on master (master 5b6f75eb is the Gen 2 landing; no Gen 3 branch is in it).
+- **Integration branch `claude/gen3-integration`, worktree `C:/slink-wt/g3-int`**: 17988de4 + claude/gen3-emerald + everything below. Full tests/unit with ROM+pret inputs (`source C:/slink-wt/g3-env.sh`) green at 876df6e1: 11857 passed, 0 failed. Randomized ROMs kept at C:/slink-wt/rand_roms.
+- Merged into integration (each independently reviewed; findings fixed or rejected with evidence):
+  - Emerald client T3: lifecycle R1-R4 (after_reset restored for possibly-unsaved results; two-client cross-wire; live scene gate), ABI v2 client (card A), packaging, Emerald NPC-trade fix (entry pre-image capture; PHYSICAL PASS docs/gen3/probes/fc_npc_trade_gen3_emerald_T3_R4_eca04eb1.txt).
+  - Refused key_change retry (Gen 1/2 parity) in lua/core + pending-alias resolution.
+  - Trainer generator: per-title FR/LG learnsets; Emerald trainer table (851 trainers); robustness fixes.
+  - Expansion XC4 trainer sets + review fixes.
+  - F-7 RR generator pins; RR priority roster regenerated from the pinned sheet (owner ruling 34) with every key fight reachable.
+  - FR/LG UPR write-domain audit (110-run isolation test; tutor-compat header-write claim disproved).
+  - Natural-play evidence: S-8/S-9/S-11 PASS FR-as-A and LG-as-A; NPC trade key_change ACCEPTED end-to-end on FR/LG; Emerald poison + NPC trade PASS.
+- **Not yet merged** (on their branches, in review/fix): randomized server `claude/gen3-rand-fix` (C:/slink-wt/g3-rfix; RF-1..RF-4 done, RF-5 = classify all 28 species bytes + project genderRatio 0x10); Emerald Match Call card C (C:/slink-wt/em-t3); T2 companion producer (C:/slink-wt/em-t2, FR trade producer physically passing at private probe, READY=0).
+- Owner rulings added: 33 (UPR fork obedience/evo-gate code patch allowed with wild/starter/static randomization), 34 (RR roster from the current pinned sheet).
+- Next: RF-5 -> merge rfix; card C; T2 FR producer -> LG -> Emerald -> RR; T4 server trade contract (from T3 reviews: resolve_trade must reach the client, party_hidden marker, uncertain-token journal on hello); T5 duos; Emerald randomized binding (docs/gen3/research/emerald_rom_tables_facts.md); owner live Emerald session; then ask the owner for ONE landing (merge master into integration first; ping Gen 2).
+
+## Earlier state (2026-09-26, checkpoint 20)
+
+- **READ FIRST NEXT SESSION: owner decision "We will combine the next work"** (2026-09-26). ONE orchestrator runs all remaining Gen 3 work (FR/LG, RR, Emerald and the expansion sub-lane). **Codex FRLG review cx-42eabc05 REJECTED the randomized server half: 2 verified BLOCKERS (refusal bypass on an unreadable or missing report; ability normalisation erases real changes). Fix these first; see the handoff §0a.** Handoff docs: `docs/gen3/HANDOFF_combined_gen3_2026-09-26.md` (this branch, 7d3b8af0) plus `docs/gen3_emerald/HANDOFF_combined_gen3_2026-09-26.md` (claude/gen3-emerald).
+
+- **2-HOUR BLOCK 16:03-18:03 (2026-09-26 evening) -- all on the BRANCH, master untouched (owner rule: no master without approval):**
+  - Rulings recorded (G4 §6):
+    - 28: FR/LG trainer panels.
+    - 29: randomized Gen 3 in the RC.
+    - 30: FR/LG companion parity (info panel, sounds, Explode + Rival Swap).
+    - 31: randomized envelope, Gen 1 defaults with the Gen 3-only UPR options OPEN.
+    - 32: rule randomization refused for the RC; rand with pret-equal tables pairs as clean.
+  - FR/LG trainers: 3c2a35c2. UI lane browser check PASS (Brock, rival 3 variants, 351 calc labels).
+  - Randomized:
+    - FRLG Codex: decoder 24caed3b, Lua collector 5a8033de, held items a24d88ac, R4 duos f9bcb991.
+    - Server R1/R2: 44615f4f, ce0258aa, box census a53f942a, default moves 87f3903b, refusal at hello b9cd1bb2, pairing 363782dc.
+    - R3 Manager: c7656cdb; review fixes c32a081b.
+    - R4 review blockers: 9a2af9e8.
+  - Evidence cards:
+    - F-6 boot-checks for every fixture: 5929a287.
+    - C-6 and R-1/R-2 tests: 6c28d08f.
+    - C-3 dashboard: cdf8758c.
+    - Ledger updated: c6deca8d.
+  - **Pairing with the Emerald lane's T3** (claude/gen3-emerald-t3: lifecycle e8f51695 being FIXED after its review, census f4ec8c85, R0 rom_tables a5469ea3, CR-R1 `rand` admission 637bcd17, CR-R2 hello rom_content e5f8da76):
+    - My a53f942a (reports_box_census) and all the randomized server work need T3 on master TOGETHER.
+    - Next: when Emerald sends the fixed lifecycle sha, scratch-merge both branches, run the unit suite + the R4 live rows (SLINK_GEN3_RAND_ROMS=<scratchpad>), then ask the owner for ONE landing and ping Gen 2 (server/**, base.py changed).
+  - **Queued:**
+    - R3 review F3: an FR/LG write-domain audit plus pointer-aware table checks.
+    - R3 review F4: in-game trades → key_change with no species-clause re-check (state.py).
+    - GBA hello rom_sha1 == file sha1: needs a live check.
+    - The contract fingerprint changes when the decoder changes.
+    - Altering Cave shows only its first set.
+    - R4 evidence-quality items (OMP cx-904adf25 findings 3-6).
+    - Gen 1's refused key_change retry, for parity (shared lua/core).
+    - test_calc_trainer_sets `_FRLG_ARRAY_RE` swallows arrays (calc lane).
+    - Shared slink_fr_battle.State was overwritten by the Emerald T2 lane at 17:27; regenerate before trusting it.
+    - A redundant stash entry `gen3-review-fix-redcheck-1790457729` is on the shared stack (content committed in c32a081b; the guard blocks drop).
+
+- **OWNER RULE (2026-09-26, late): all work stays on this branch. NOTHING goes to master (not even a local ff) until the owner approves that specific landing.**
+  - Master = 5313d94e. The branch is ahead with rulings 28-30 docs plus whatever lands after.
+  - Open cards on the branch:
+    - FR/LG trainers (ruling 28): Opus worker.
+    - Randomized Gen 3 design (ruling 29): Opus, writes docs/gen3/research/randomized_gen3_design.md.
+  - With the Emerald lane: FR/LG + RR trade (27) and FR/LG parity (30: info panel, native sounds, Explode + Rival Swap).
 
 - **LANDED 2026-09-26: the RR fix batch is on LOCAL master 7c14386a (not pushed).**
   - Duos green ×2 on companion c372c428:

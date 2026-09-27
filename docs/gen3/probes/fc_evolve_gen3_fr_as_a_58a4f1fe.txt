@@ -1,0 +1,42 @@
+# gen3_final_cut row=evolve_gen3_fr_as_a item=NAT-LEGS-4 regression check (FR/LG unchanged) cut=58a4f1fecdebbe4d4138da0df73518677aa5eaec
+# lane=C:/slink-wt/g3-nat4
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario evolve_gen3   (cwd=C:/slink-wt/g3-nat4)
+# env: SLINK_STATE_DIR=C:/slink-wt/g3-nat4/.lane/st4_evolve_gen3_frlg
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc fixture:a=c87d50de4613d5f50c2c8e30d177975882d5c821487a748345f746a65dc418b0 fixture:b=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2
+
+========== scenario: evolve_gen3 ==========
+[duo] evolve_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=c87d50de4613d5f50c2c8e30d177975882d5c821487a748345f746a65dc418b0 b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=90b97f77951b2eb64cfb4416c1b93395da6660d649819f9f984e0a1389be2bdc source=58a4f1fecdebbe4d4138da0df73518677aa5eaec
+[duo] server up: tcp=54858 http=54859 data=C:\Users\howar\AppData\Local\Temp\slink_duo_evolve_gen3_5lxksbme
+[duo] timing server 0.6s
+[duo] cleared 6 stale artifact(s) for evolve_gen3: e2e_evolve_gen3_a_1_witness.bin, e2e_evolve_gen3_a_attempt1_result.txt, e2e_evolve_gen3_a_result.txt, e2e_evolve_gen3_b_attempt1_result.txt, e2e_evolve_gen3_b_result.txt, e2e_evolve_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 2D356A90:99DE0D8A <-> BC73F9B0:1C600D89
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 4.9s
+[duo] timing results 13.9s
+[duo] RESULT_LINE a: RESULT: PASS (evolved 2D356A90:99DE0D8A to species 8)
+[duo] RESULT_LINE b: RESULT: PASS (idled while A evolved)
+[duo] SAVE_WITNESS_SHA256 inst=a site=3b634d777fd4a646d65d63e3772fc7515f264a5a9f855e8cbb8f6bcf64a344ac file=3b634d777fd4a646d65d63e3772fc7515f264a5a9f855e8cbb8f6bcf64a344ac match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] evolve: 2D356A90:99DE0D8A evolved to species 8 Lv16 under the same key; links.json half species=8 (partner BC73F9B0:1C600D89 unchanged)
+[duo] MARKER a: SIGNAL evolve_species_store frame=4171 address=0x080CED6E
+[duo] MARKER a: EVOLVED 2D356A90:99DE0D8A species=8 level=16 frame=4462
+[duo] MARKER a: SIGNAL battle_begin frame=1168 address=0x0800FD9C
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] evolve_gen3: a=PASS b=PASS
+
+========== summary ==========
+  evolve_gen3: PASS (attempt 1 of 1)

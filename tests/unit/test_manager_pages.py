@@ -300,7 +300,7 @@ async def test_uploaded_rom_lands_in_roms_and_a_same_named_different_file_is_kep
     assert (await upload("red.gb", b"b" * 16))["path"] == str(tmp_path / "roms" / "red (2).gb"), "never overwrite a different file"
     sneaky = (await upload("../red.gb", b"c" * 16))["path"]
     assert os.path.dirname(sneaky) == str(tmp_path / "roms") and os.sep not in os.path.basename(sneaky), "stays in roms/"
-    assert (await upload("x.exe", b"MZ")) == {"ok": False, "error": "send a .gb, .gbc or .jar as `file`"}
+    assert (await upload("x.exe", b"MZ")) == {"ok": False, "error": "send a .gb, .gbc, .gba or .jar as `file`"}
     assert (await manager_client.post("/api/roms", data=b"file=x")).status == 400, "not multipart"
     assert sorted(os.listdir(tmp_path / "roms")) == sorted(["red (2).gb", "red.gb", os.path.basename(sneaky)]), "no .part left behind"
 

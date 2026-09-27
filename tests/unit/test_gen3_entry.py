@@ -176,13 +176,32 @@ def _admit(world, **args):
     return world.Entry.admit(world.lua.table(**table))
 
 
-def test_admission_by_anchors_when_the_hash_is_unknown():
-    world = World(pack="gen3_frlg", title="firered", build=False)
+@pytest.mark.parametrize("title,code", [("firered", "BPRE"), ("leafgreen", "BPGE")])
+def test_admission_by_anchors_when_the_hash_is_unknown(title, code):
+    world = World(pack="gen3_frlg", title=title, build=False)
     got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
-                           header_code="BPRE"))
+                           header_code=code))
     assert got["admitted_by"] == "anchors"
-    assert (got["pack"], got["title"], got["kind"]) == ("gen3_frlg", "firered", "clean")
-    assert got["rom_type"] == "firered"
+    assert (got["pack"], got["title"], got["kind"]) == ("gen3_frlg", title, "rand")
+    assert got["rom_type"] == title
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_rr_anchor_admission_keeps_its_existing_kind(kind):
+    world = World(pack="gen3_rr", title="radical_red", kind=kind, build=False)
+    got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read))
+    assert got["kind"] == kind and got["admitted_by"] == "anchors"
+
+
+def test_rand_routes_through_the_single_gate_and_uses_clean_sites():
+    world = World(pack="gen3_frlg", title="firered", build=False)
+    codec = world.lua.eval(f'dofile("{(REPO / "lua/json_codec.lua").as_posix()}")')
+    got = world.Entry.admit_routed(world.lua.table(root=REPO.as_posix(), json=codec,
+        rom_hash="00" * 20, rom_read=world._rom_read, header_code="BPRE"))
+    assert got.kind == "rand"
+    world.kind = "rand"
+    _observer, parts = world.Entry.build(world.deps())
+    assert parts.kind == "rand" and parts.artifact_kind == "clean"
 
 
 def test_admission_by_anchors_when_the_hash_is_unknown_for_emerald():
@@ -194,7 +213,7 @@ def test_admission_by_anchors_when_the_hash_is_unknown_for_emerald():
     got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
                            header_code="BPEE"))
     assert got["admitted_by"] == "anchors"
-    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "clean")
+    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "rand")
     assert got["rom_type"] == "emerald"
 
 
@@ -258,7 +277,8 @@ def test_admission_table_has_no_duplicate_digest_in_the_shipped_packs():
     assert len(table) > 0
 
 
-def test_admission_refuses_an_ambiguous_rom(tmp_path):
+@pytest.mark.parametrize("other_pack,other_title", (("gen3_frlg", "leafgreen"), ("gen3_emerald", "emerald")))
+def test_admission_refuses_an_ambiguous_rom(tmp_path, other_pack, other_title):
     """Two artifacts that pin the same bytes cannot be told apart, so admission refuses
     instead of picking one. The shipped packs are not ambiguous (see the test above), so
     the branch is exercised against a doctored copy of the pack tree."""
@@ -267,10 +287,11 @@ def test_admission_refuses_an_ambiguous_rom(tmp_path):
     # already covers it (no separate copytree call for it).
     for pack, source in PACKS.items():
         shutil.copytree(source, tmp_path / "data" / "games" / pack)
-    doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
+    doctored = tmp_path / "data" / "games" / other_pack / "engine_signals.json"
     blob = json.loads(doctored.read_text(encoding="utf-8"))
-    blob["titles"]["leafgreen"]["artifacts"]["clean"]["sites"] = \
-        blob["titles"]["firered"]["artifacts"]["clean"]["sites"]
+    source = json.loads((PACKS["gen3_frlg"] / "engine_signals.json").read_text(encoding="utf-8"))
+    blob["titles"][other_title]["artifacts"]["clean"]["sites"] = \
+        source["titles"]["firered"]["artifacts"]["clean"]["sites"]
     doctored.write_text(json.dumps(blob), encoding="utf-8")
 
     world = World(pack="gen3_frlg", title="firered", build=False)
@@ -281,7 +302,7 @@ def test_admission_refuses_an_ambiguous_rom(tmp_path):
                           *[rom.get(int(o) + i, 0) for i in range(int(n))]))
     assert got is None
     assert "ambiguous" in why
-    assert "gen3_frlg/firered/clean" in why and "gen3_frlg/leafgreen/clean" in why
+    assert "gen3_frlg/firered/clean" in why and f"{other_pack}/{other_title}/clean" in why
 
 
 def test_named_family_fallback_by_header_code():
@@ -543,7 +564,7 @@ def test_a_native_reply_reaches_the_wire_through_the_production_build():
 
 
 def test_build_refuses_an_unadmitted_title():
-    world = World(pack="gen3_frlg", title="emerald", build=False)
+    world = World(pack="gen3_frlg", title="firered_ap", build=False)
     with pytest.raises(lupa.LuaError, match="unadmitted Gen 3 title"):
         world.Entry.build(world.deps())
 

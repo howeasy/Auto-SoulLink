@@ -6,7 +6,7 @@ test_protocol_schema.py pins this table to the server's own dispatch and command
 so the schema tracks server/state.py (the authority), not any one client.
 
 Field types: "str", "int", "bool", "list", "dict", "key" (DDDD:OOOO:SS or PPPPPPPP:OOOOOOOO),
-"hex" (even-length uppercase/lowercase hex), "num" (int or float), "battle_id" (a battle request
+"hex" (even-length uppercase/lowercase hex), "num" (int or float), "player_gender" (integer 0 or 1), "battle_id" (a battle request
 counter: int, never bool, never fractional, 1..2**32-1), "session" (a client-session nonce: hex
 string, 1..16 chars). The last two are validated strictly and never coerced (card C5-10): a
 boolean, fractional or out-of-range counter, or a malformed nonce, is a protocol violation.
@@ -31,19 +31,21 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
               {"game": "str", "player": "str", "ot_id": "int", "panel": "bool", "panel_abi": "int", "sfx": "bool",
                "patch": "bool",
                "version": "str", "client": "str", "badges": "int", "has_pokeballs": "bool",
-               "trainer_name": "str", "pc_boxes": "list", "pc_boxes_generation": "int",
+               "trainer_name": "str", "player_gender": "player_gender", "pc_boxes": "list", "pc_boxes_generation": "int",
                "area_id": "str", "loc_name": "str",
                "rom_sha1": "str", "caps": "dict", "rom_content": "dict",
                "artifact_kind": "str", "foundation": "str", "trade_prepare": "bool",
+               "party_hidden": "bool", "trade_outstanding": "list",
                # card C5-10b capability declaration
                "battle_identity": "bool"}),
     "tick": ({}, {"has_pokeballs": "bool", "party": "list", "area_id": "str", "loc_name": "str",
+                  "party_hidden": "bool",
                   "trade_blocked": "bool", "awaiting_save": "bool",
                   "in_battle": "bool", "is_trainer_battle": "bool", "trainer_id": "int",
                   "opponent_name": "str", "opponent_class": "str", "enemy_party": "list",
                   "is_doubles": "bool", "pc_boxes": "list", "pc_boxes_generation": "int",
                   "ball_count": "int", "badges": "int",
-                  "kanto_badges": "int", "trainer_name": "str"}),
+                  "kanto_badges": "int", "trainer_name": "str", "player_gender": "player_gender"}),
     "safe": ({}, {"pc_boxes": "list", "pc_boxes_generation": "int"}),  # Gen 1/2: the battle-end census; Gen 3 sends none
     "area_enter": ({"area_id": "str"}, {"loc_name": "str"}),
     "capture": ({"key": "key", "area_id": "str"},
@@ -107,7 +109,7 @@ KEY_CHANGE_REASONS = ("nature_change", "evolution", "npc_trade", "trade_undo", "
 # cmd -> (required fields, optional fields); docs/protocol.md §5
 COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "noop": ({}, {"refused": "str"}),   # refused: the line was not processed (identity|admission|no_hello|duplicate|superseded)
-    # "phone": the O-29 tag (docs/protocol.md §5); only the Gen 2 client acts on it
+    # "phone": the O-29 tag; Gen 2 phone and capability-gated Emerald v2 Match Call consume it.
     "force_faint": ({"key": "key"}, {"nickname": "str", "phone": "str", "phone_data": "dict"}),
     "force_explode": ({"key": "key"}, {"nickname": "str", "phone": "str", "phone_data": "dict"}),
     "box_mon": ({"key": "key"}, {}),
@@ -124,7 +126,7 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "unresolve_area": ({"area_id": "str"}, {}),
     "dead_keys": ({"keys": "list"}, {}),  # INV-CLIENT-2: every accepted hello; the GB clients REPLACE their re-zero set
     "config": ({}, {"overworld_presence": "bool", "native_messages": "bool", "native_sounds": "bool",
-                    "battle_calc": "bool", "pc_trade_npc": "bool"}),
+                    "battle_calc": "bool", "pc_trade_npc": "bool", "run_id": "str"}),
     "rebuild_start": ({"text": "str", "keys": "list"}, {}),
     "rebuild_done": ({}, {}),
     "replace_rival_team": ({"trainer_id": "int", "n": "int", "blobs_hex": "list"},
@@ -138,6 +140,7 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "apply_prepare": ({"token": "str", "slot": "int", "old_key": "key"}, {}),
     # MAJOR-4: the applying watchdog asks a silent prepared side to pull an unpicked APPLY
     "withdraw_trade": ({"token": "str"}, {}),
+    "trade_final": ({"token": "nonempty_str", "verdict": "trade_verdict"}, {"epoch": "epoch"}),
     "ghost_pos": ({}, {}),
     "link_panel": ({"rows": "list"}, {}),
     # one-way replies to key_change (docs/protocol.md §5): no ACKS row, nothing to answer
@@ -166,8 +169,14 @@ DEFERRED = {"box_mon", "party_mon", "memorialize", "apply_trade"}
 def _check_type(value, kind: str) -> bool:
     if kind == "str":
         return isinstance(value, str)
+    if kind == "nonempty_str":
+        return isinstance(value, str) and bool(value)
+    if kind == "trade_verdict":
+        return isinstance(value, str) and value in ("committed", "rolled_back", "split", "resolved")
     if kind == "int":
         return isinstance(value, int) and not isinstance(value, bool)
+    if kind == "player_gender":
+        return type(value) is int and value in (0, 1)
     if kind == "num":
         return isinstance(value, (int, float)) and not isinstance(value, bool)
     if kind == "bool":
@@ -180,7 +189,8 @@ def _check_type(value, kind: str) -> bool:
         return isinstance(value, str) and bool(KEY_RE.fullmatch(value))
     if kind == "hex":
         return isinstance(value, str) and bool(HEX_RE.fullmatch(value)) and len(value) > 0
-    if kind == "battle_id":
+    if kind in ("battle_id", "epoch"):
+        # Distinct domains: a trade epoch is an opaque originating lease, not a battle ID.
         return isinstance(value, int) and not isinstance(value, bool) and 0 < value < 2 ** 32
     if kind == "session":
         return isinstance(value, str) and 0 < len(value) <= 16 and bool(SESSION_RE.fullmatch(value))
@@ -198,7 +208,7 @@ def _validate(kind_word: str, name: str, table: dict, msg: dict, *, extra_ok: bo
         elif not _check_type(msg[field], ftype):
             problems.append(f"{name}: {field!r} should be {ftype}, got {msg[field]!r}")
     for field, ftype in optional.items():
-        if field in msg and msg[field] is not None and not _check_type(msg[field], ftype):
+        if field in msg and (msg[field] is not None or ftype == "epoch") and not _check_type(msg[field], ftype):
             problems.append(f"{name}: {field!r} should be {ftype}, got {msg[field]!r}")
     for left, right in PAIRED_FIELDS:
         if (left in msg) != (right in msg):

@@ -57,17 +57,24 @@ end
 --   header_code  GBA header game code -> title, for the named-family fallback only. RR is a
 --                FireRed hack and carries FireRed's code, so it takes no part: an RR build
 --                with an unknown hash is admitted by anchors or not at all.
+-- trade_policy is host protocol policy, in frames. APPLY gets its own dispatch
+-- budget; native owns the timeout once a scene has actually been published.
 Entry.PACKS = {
     gen3_frlg = {
+        randomizable = true,
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { firered = "firered", leafgreen = "leafgreen" },
         header_code = { BPRE = "firered", BPGE = "leafgreen" },
     },
     gen3_rr = {
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { radical_red = "firered_rr" },
     },
     -- Registered so the packs/admission tables build and the hash is recognized (E2-ENTRY);
     -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
     gen3_emerald = {
+        randomizable = true,
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },
     },
@@ -113,7 +120,7 @@ for _, pack in pairs(Entry.PACKS) do
 end
 -- A header-named vanilla family (an unknown-hash cartridge that still says BPRE/BPGE) reads
 -- the clean artifact's pack data; if its bytes really differ, the site check refuses it.
-Entry.BASE_KIND = { named = "clean" }
+Entry.BASE_KIND = { named = "clean", rand = "clean" }
 
 -- ── admission ────────────────────────────────────────────────────────────────────────
 
@@ -127,6 +134,15 @@ function Entry.artifacts(root, json, pack)
     return out
 end
 
+-- Bootstrap storage is meaningful only for a companion with the durable
+-- witness ABI. RR's admitted ABI1 must not acquire an unbindable journal.
+function Entry.trade_journal_supported(root, json, artifact)
+    if artifact.kind ~= "companion" then return false end
+    local files = assert(Entry.PACK_FILES[artifact.pack], "unknown pack")
+    local full = load_json(json, root .. "/" .. files.profile)
+    return type(full.native) == "table" and full.native.ABI == 2
+end
+
 -- hash (lowercase sha1 or md5) -> { pack, title, kind, rom_type } over every pack's
 -- admission set. Both digests are indexed: they cannot collide (40 vs 32 hex digits) and
 -- BizHawk's gameinfo hash is not the same digest on every core. A digest repeated across two
@@ -138,7 +154,7 @@ function Entry.admission_table(root, json)
         for title, artifacts in pairs(Entry.artifacts(root, json, pack)) do
             for kind, artifact in pairs(artifacts) do
                 local row = { pack = pack, title = title, kind = kind,
-                              rom_type = def.rom_type[title] }
+                              rom_type = def.rom_type[title], production = artifact.production }
                 for _, key in ipairs({ "rom_sha1", "rom_md5" }) do
                     local digest = artifact[key]
                     if digest then
@@ -182,7 +198,7 @@ function Entry.anchor_matches(args)
             for kind, artifact in pairs(artifacts) do
                 if anchors_hold(artifact, args.rom_read) then
                     matches[#matches + 1] = { pack = pack, title = title, kind = kind,
-                                              rom_type = def.rom_type[title] }
+                                              rom_type = def.rom_type[title], production = artifact.production }
                 end
             end
         end
@@ -204,6 +220,7 @@ function Entry.admit(args)
     local hash = tostring(args.rom_hash or ""):lower()
     local hit = Entry.admission_table(args.root, args.json)[hash]
     if hit then
+        if hit.production == false then return nil, "non-production cartridge is not admitted" end
         return { pack = hit.pack, title = hit.title, kind = hit.kind,
                  rom_type = hit.rom_type, rom_hash = hash, admitted_by = "hash" }
     end
@@ -212,7 +229,10 @@ function Entry.admit(args)
         local matches = Entry.anchor_matches(args)
         if #matches == 1 then
             local m = matches[1]
-            return { pack = m.pack, title = m.title, kind = m.kind, rom_type = m.rom_type,
+            if m.production == false then return nil, "non-production cartridge is not admitted" end
+            local kind = m.kind
+            if kind == "clean" and Entry.PACKS[m.pack].randomizable == true then kind = "rand" end
+            return { pack = m.pack, title = m.title, kind = kind, rom_type = m.rom_type,
                      rom_hash = hash, admitted_by = "anchors" }
         elseif #matches > 1 then
             local names = {}
@@ -337,10 +357,13 @@ local function build_production(deps, c)
     -- writes policy. Attaching late left deps.native nil, so native_idle could report idle while
     -- the real mailbox was busy (Codex REV2). The session does not exist yet, so send resolves it
     -- lazily. The FULL pack profile is read here: the arena lives at profile.native, outside
-    -- titles (Codex REV on C5-1). Clean artifacts, FRLG and packs with no native block get none.
+    -- titles (Codex REV on C5-1). FR's ABI2 binding additionally requires explicit
+    -- production metadata; no FR companion is currently shipped/admitted.
     local session   -- not `client`: that is a BizHawk global name (test_gen3_signals BizHawk-globals scan)
     local full_profile = load_json(c.json, c.root .. "/" .. files.profile)
-    if not native and pack == "gen3_rr" and c.artifact_kind == "companion"
+    local fr_native = pack == "gen3_frlg" and c.title == "firered" and c.production == true
+        and type(full_profile.native) == "table" and full_profile.native.ABI == 2
+    if not native and (pack == "gen3_rr" or fr_native) and c.artifact_kind == "companion"
        and type(full_profile.native) == "table" then
         local status = c.write_checkpoint and c.write_checkpoint.predicates
             and c.write_checkpoint.predicates.script_context_status
@@ -369,18 +392,47 @@ local function build_production(deps, c)
                 if session then return session.send(event, fields) end
             end,
             in_battle = function() return session and session.driver.in_battle() or false end,
+            trade_safe = function()
+                return session ~= nil and not session.driver.in_battle() and safety:check(nil,"overworld") == true
+            end,
+            trade_recovery_clear = function()
+                local journal = io_.trade_journal
+                return journal ~= nil and journal:ready() == true and journal:hidden() == false
+            end,
+            trade_capability_changed = function()
+                if session then session.hello_sent = false end
+            end,
+            title = c.title, player = deps.player, production = c.production,
             artifact_kind = c.artifact_kind, log = log,
             panel_closed = panel_closed,
         })
+        if fr_native then
+            -- Same persisted boot counter the client uses for its battle nonce.
+            -- The wire connection counter is not the native/journal epoch.
+            local seed = os.getenv("SLINK_GEN3_BATTLE_NONCE") or deps.battle_nonce_seed
+            local epoch
+            if type(seed) == "string" and not seed:find("[^%x]") then
+                if #seed == 16 then epoch = tonumber(seed:sub(1,8),16)
+                elseif #seed > 0 and #seed <= 8 then epoch = tonumber(seed,16) end
+            end
+            if epoch then native:bind_trade_session(epoch) end
+        end
     end
     session = L("lua/gen3/client.lua").new({
+        Trade = L("lua/gen3/trade.lua"), owed_reports = L("lua/owed_reports.lua"),
         reads = reads, R = c.Reads, profile = c.profile, sites = c.sites, Signals = c.Signals,
         writes = writes, boxes = boxes, policy = policy, net = assert(deps.net, "deps.net required"),
         hud = assert(deps.hud, "deps.hud required"), json = c.json, io = io_, ev = c.ev,
         area_map = load_json(c.json, c.root .. "/" .. files.area_map),
         locations = dofile(c.root .. "/" .. files.locations),
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
-        foundation = pack, artifact_kind = c.artifact_kind, native = native, log = deps.log, core = core,
+        foundation = pack, artifact_kind = c.parts.kind == "rand" and "rand" or c.artifact_kind,
+        native = native, log = deps.log, core = core,
+        trade_policy = Entry.PACKS[pack].trade_policy,
+        rom_size = deps.rom_size,
+        rom_content_new = deps.rom_content_new or function(tbl, rom_io)
+            return L("lua/gen3/rom_content.lua").new(tbl, rom_io)
+        end,
         -- the battle request nonce seed (card C5-10b): the bootstrap's entropy, or the harness
         -- seam for determinism. Client.new validates it and mints NO identity without it.
         -- the env seam wins over the bootstrap so a harness can pin a session deterministically
@@ -430,6 +482,13 @@ function Entry.build(deps)
                                "pack " .. pack .. " ships no engine sites for " .. title)
     local artifact = assert(title_sites.artifacts[artifact_kind],
                             pack .. "/" .. title .. " ships no artifact of kind " .. artifact_kind)
+    if mode == "production" then
+        assert(artifact.production ~= false, "non-production cartridge cannot build a production client")
+        if pack == "gen3_frlg" and artifact_kind == "companion" then
+            assert(title == "firered" and artifact.production == true,
+                   "FR companion requires explicit production cartridge metadata")
+        end
+    end
     local sites = assert(artifact.sites, "artifact " .. artifact_kind .. " ships no sites")
     local write_checkpoint = load_json(json, root .. "/" .. files.checkpoint)[title]
 
@@ -448,7 +507,7 @@ function Entry.build(deps)
             L = L, root = root, io = io_, ev = assert(deps.ev, "deps.ev required"), pack = pack,
             title = title, profile = profile, sites = sites, write_checkpoint = write_checkpoint,
             artifact_kind = artifact_kind, reads = reads, Reads = Reads, Signals = Signals,
-            json = json, parts = parts,
+            json = json, parts = parts, production = artifact.production,
         })
     end
     local signals = Signals.new(profile, sites, io_, assert(deps.ev, "deps.ev required"),

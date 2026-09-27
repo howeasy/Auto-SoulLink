@@ -106,9 +106,14 @@ M.entries = {
                               rr_source = "docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md "
                                   .. "§3.1 (CFRU action menu) + ROM LDR@0x090A9ED8 = 0x02023FF8",
                              emerald = 0x020244AC },
-    -- OBJ_EVENTS_ADDR (gObjectEvents): no RR citation found (no ROM anchor, no old-client use, not
-    -- in rr_pc_menu.md). ABSENT.
+    -- OBJ_EVENTS_ADDR (gObjectEvents) on RR: ROM byte anchor (card RR-SYNTH). The literal word
+    -- 0x02036E38 sits at 303 word-aligned offsets in FireRed (USA) and 378 in slink_RR.gba; 301 of
+    -- FireRed's 303 are at IDENTICAL offsets in RR (vanilla code CFRU kept), and the 77 RR-only
+    -- hits are CFRU's own code referencing the same base.
     OBJ_EVENTS_ADDR        = { symbol = "gObjectEvents",         firered = 0x02036E38, leafgreen = 0x02036E38,
+                             radical_red = 0x02036E38,
+                             rr_source = "ROM byte anchor: docs/gen3/research/rr_obj_events_anchor.md "
+                                 .. "(literal at 301/303 FireRed offsets unchanged in slink_RR.gba)",
                              emerald = 0x02037350 },
     GMAIN_CALLBACK2_ADDR   = { symbol = "gMain", offset = 0x04,  firered = 0x030030F4, leafgreen = 0x030030F4,
                                 radical_red = 0x030030F4, rr_source = RR_PC_MENU_MD .. "63 (\"gMain.callback2 "
@@ -370,6 +375,10 @@ M.entries = {
 }
 
 local TITLES = { firered = true, leafgreen = true, radical_red = true, emerald = true }
+-- Generated per-build harness facts; keep every hand-authored column above unchanged.
+local EXP_TITLE = "emerald_expansion_28877d73"
+local module_dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
+TITLES[EXP_TITLE] = true
 
 M.TITLES = TITLES
 
@@ -380,6 +389,15 @@ M.TITLES = TITLES
 --- never with a wrong number silently standing in (card C4-LG2: radical_red has several entries
 --- nobody has proven yet; see the ABSENT notes above each one).
 function M.for_title(title)
+    if title == EXP_TITLE then
+        local generated = dofile(module_dir .. "gen3_title_syms_exp_28877d73.lua")
+        assert(generated.title == title, "expansion harness title mismatch")
+        local out = {}
+        for name, entry in pairs(generated.entries) do
+            if entry.address then out[name] = entry.address end
+        end
+        return out
+    end
     if not TITLES[title] then
         error("gen3_title_syms: unknown title " .. tostring(title)
               .. " (want firered, leafgreen, radical_red or emerald)", 0)

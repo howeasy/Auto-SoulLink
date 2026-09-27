@@ -220,6 +220,9 @@ def connection_state(p: dict, live: bool) -> dict:
     if not live:
         return state("stopped", "Not started", "The run is stopped. Start it, then load the launcher in BizHawk.")
     err = p.get("identity_error") or ""
+    if err.startswith("Trade recovery extension unavailable"):
+        return state("wrong_game", "Unsupported recovery",
+                     f"{err}. Use a client/cartridge build with supported trade recovery.")
     if err.startswith(_WRONG_GAME_ERRORS):
         return state("wrong_game", "Wrong game", f"{err}. Load the game this run is for, then reload the launcher.")
     if p.get("admission", "admitted") != "admitted":

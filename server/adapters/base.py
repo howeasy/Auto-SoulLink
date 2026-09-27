@@ -328,6 +328,19 @@ class GameRulesAdapter(ABC):
         """
         return {"named": "clean"}.get(kind, kind)
 
+    @classmethod
+    def supports_randomized(cls, rom_type: str) -> bool:
+        """Opt in only when this title has a supported randomized-cartridge binding."""
+        return False
+
+    @classmethod
+    def pairing_kind_for(cls, kind: str, rom_content: object) -> str:
+        """`pairing_kind`, given the hello's own ROM report (None when it sent none). Still a
+        class lookup, for the same reason. A foundation may pair a declared kind by what the
+        cartridge holds (Gen 3: a `rand` ROM whose tables equal pret's pairs as clean); the
+        server then commits that effective kind. Default: the declared kind alone."""
+        return cls.pairing_kind(kind)
+
     def native_trade_ui(self) -> bool:
         """Whether the cartridge itself drives the trade menus.
 
@@ -343,6 +356,22 @@ class GameRulesAdapter(ABC):
         adapter opts in and no `game_id` branch appears in shared code.
         """
         return False
+
+    def supports_trade_recovery(self) -> bool:
+        """Accept withheld snapshots and outstanding trade leases on hello.
+
+        This opts into a wire protocol, not native trade capability. Other clients
+        retain their existing snapshot and reconciliation behavior.
+        """
+        return False
+
+    def trade_unavailable_reason(self) -> str:
+        """Named cartridge-level trade refusal; empty preserves existing behavior."""
+        return ""
+
+    def refused_trade_recovery(self) -> str:
+        """Named refusal when a foundation cannot interpret these optional fields."""
+        return ""
 
 
 class GamePresentationAdapter(ABC):
@@ -454,6 +483,17 @@ class GamePresentationAdapter(ABC):
         cartridge is precisely the misinformation this exists to remove.
         """
         return None
+
+    def refused_rom_content(self, payload: object, *, artifact_kind: str | None = None) -> str:
+        """Why a player's cartridge must be refused even when no contract binds the run, or "".
+
+        For a READABLE cartridge the server cannot rule on (its rule tables were randomized):
+        admitting it would apply the shipped rules to a game that no longer has them.
+        `artifact_kind` is the candidate hello's declared kind, before the run commits it.
+        Foundations may require a complete report for selected kinds. The base hook is
+        unchanged for foundations that do not impose a ROM-content admission requirement.
+        """
+        return ""
 
     def encounter_table(self, area_id: str) -> dict[str, list[dict]] | None:
         """Return wild encounter data for an area, or None if unavailable.

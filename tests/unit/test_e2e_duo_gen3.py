@@ -37,7 +37,7 @@ from server.adapters import gen3_codec as codec  # noqa: E402
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
 # P5 (card C5-5): RR-only, added on top of GEN3 above (which now also runs on gen3_rr).
-GEN3_RR_ONLY = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3")
+GEN3_RR_ONLY = ("rival_swap_gen3", "native_absent_gen3")
 OT_A = 0x99DE0D8A
 
 
@@ -892,7 +892,7 @@ def test_every_scenario_has_its_module_and_runner_half():
 
 
 def test_every_rr_only_scenario_has_its_module_oracle_and_runner_half():
-    """P5 (card C5-5): explode_gen3/rival_swap_gen3/native_absent_gen3, on gen3_rr."""
+    """The remaining RR-only carriers have real modules and oracles."""
     row = duo.GAMES["gen3_rr"]
     for name in GEN3_RR_ONLY:
         base = duo.SCENARIOS[name].get("scenario_module") or name[:-len("_gen3")]
@@ -2050,6 +2050,28 @@ def test_explode_runs_on_the_p_h_carrier_as_a_qualification_row():
     assert not (REPO / "lua" / "tests" / "duo" / "scenario_gen3_explode.lua").exists()
 
 
+@pytest.mark.parametrize("game", ("gen3_frlg", "gen3_lgfr", "gen3_emerald"))
+def test_explode_binds_the_vanilla_duo_orientation(game):
+    assert duo.scenario_applies("explode_gen3", game)
+    row = duo.SCENARIOS["explode_gen3"]
+    assert row["flags"] == ["--explode-mode"] and row["active_faint_case"] == "explode"
+    assert row["oracle"] == "assert_explode_gen3_saved" and "control" not in row
+
+
+def test_explode_carrier_requires_an_actual_pp_drop(ph):
+    _, passed, reason, _ = ph("explode", "b", "no_explosion_pp_drop")
+    assert passed is False and "PP" in reason
+
+
+def test_explode_receipt_cannot_omit_or_forge_the_pp_witness(ph):
+    _, passed, _, log = ph("explode", "b")
+    assert passed and "EXPLOSION_PP K0 committed=5/5/5/5 ko=4/5/5/5" in log
+    required, ordered, forbidden = duo.active_faint_chain("K0", "explode")
+    for bad in (re.sub(r"(?m)^EXPLOSION_PP.*\n", "", log),
+                log.replace("ko=4/5/5/5", "ko=5/5/5/5")):
+        assert duo.gen3_receipt_problems("b", bad, required=required, ordered=ordered, forbidden=forbidden)
+
+
 def test_no_driver_pokes_game_memory():
     """Scripted normal inputs only: no scenario module or the driver writes the cartridge."""
     texts = [DRIVER.read_text(encoding="utf-8")] + [
@@ -2732,13 +2754,17 @@ def test_an_own_sync_failure_never_retries_with_a_partner_ball_miss(lua):
 
 _CATCH_MODEL = r"""
 BALLS, THROWS, RAN = nil, 0, { true }
-S = { gBattleOutcome = 0x10 }
+S = { gBattleOutcome = 0x10, gActionSelectionCursor = 0x11 }
+ctrl0 = function() return 0x12345679 end
+fmt = string.format
 B_OUTCOME_CAUGHT, ACTION_BAG = 7, 1
 memory = { read_u8 = function() return 1 end }
 reader = { read_balls = function() if BALLS then return { ball_count = BALLS } end end }
 log = function() end
 boot_keys = {}
-play = { wait_scene_settled = function() return true end }
+-- in_battle defaults true: the realistic budget-exhaustion case (R4-DRIVER-2, OMP cx-d84db30c)
+-- is the LAST ball missing and the wild Pokemon still up, not the battle already having ended.
+play = { wait_scene_settled = function() return true end, in_battle = function() return true end }
 SP = { verify_fight_cursor = function() return "fight" end,
        throw_pokeball_from_bag = function() THROWS = THROWS + 1; BALLS = BALLS - 1 end }
 ctx = { hunt = function() return true end, choose_action = function() return true end,
@@ -2765,6 +2791,12 @@ def catch_model():
     ("0", "{ true }", "FINAL"),                             # a fixture that starts empty
     ("2", "{ false, 'no escape' }", "FINAL"),               # exhausted, then the escape failed
     ("2", "{ true }", "CAUSE_RNG"),                         # the real RNG: two thrown, both missed
+    # R4-DRIVER-2 (OMP cx-d84db30c): the 20th throw is also the LAST ball. The old exit branch
+    # reported the unconditional "capture throw budget exhausted (20)" before ever checking the
+    # pocket, and e2e_duo.py's classify_gen1_result only retries "hunt ended out-of-balls" --
+    # every other reason is FINAL, so this run was never retried though it is pure ball RNG.
+    ("20", "{ true }", "CAUSE_RNG"),                        # 20 stocked, 20 thrown, pocket empty
+    ("25", "{ true }", "FINAL"),                            # budget hit with balls still left
 ])
 def test_only_an_observed_ball_exhaustion_is_the_rng(catch_model, balls, ran, want):
     catch_model.execute(f"BALLS = {balls}; RAN = {ran}")
@@ -2773,6 +2805,22 @@ def test_only_an_observed_ball_exhaustion_is_the_rng(catch_model, balls, ran, wa
     assert key is None and duo.classify_gen1_result(text) == want, text
     assert duo.retryable_gen1_rng("gen3_frlg", {"a": text, "b": "RESULT: PASS (x)"}, 1, 3) == (
         want == "CAUSE_RNG")
+
+
+def test_the_loop_exiting_normally_still_reaches_the_settle_and_outcome_check(catch_model):
+    """R4-DRIVER-2 item 2: the model previously had no `play.in_battle`, so no case ever reached
+    the post-loop code a normal ("over") exit takes -- only the mid-loop early returns were
+    covered. A catch attempt that resolves before the budget must still settle and read the
+    battle outcome, not report a ball-budget/RNG reason."""
+    catch_model.execute("""
+        BALLS = 2
+        AWAIT_N = 0
+        ctx.await_turn = function() AWAIT_N = AWAIT_N + 1; if AWAIT_N == 1 then return "over" end
+                                     return "action" end
+        play.in_battle = function() return false end
+    """)
+    key, why = catch_model.globals().CATCH()
+    assert key is None and why == "the battle ended with outcome 1 (ctrl0=0x12345679 action_cursor=1)", why
 
 
 def test_the_attempt_jitter_lands_after_go(tmp_path):
@@ -3976,7 +4024,7 @@ function PH(case, player, fault)
             if fault == "hp_write" then lines[#lines + 1] = { reason = "battle_faint", address = PARTY_HP, len = 2, frame = frame } end
             if fault == "lost_ball" then balls = balls - 1 end
         elseif commit_at and frame == commit_at + 5 and explode and fault ~= "no_boom" then
-            e.last_move, e.pp[1] = 153, 4                         -- the Explosion action runs
+            e.last_move, e.pp[1] = 153, fault == "no_explosion_pp_drop" and 5 or 4
         elseif commit_at and frame == commit_at + 6 then        -- the engine KO
             e.keys, e.battle_hp = 0, 0
             if fault ~= "flag_kept" then e.status3 = e.status3 & ~0x20 end
@@ -4257,7 +4305,7 @@ def test_p_h_rows_are_registered_with_their_cases():
              "linked_faint_active_clean_gen3": ("wild", ("gen3_rr",)),
              "linked_faint_active_lhammer_gen3": ("lhammer", ("gen3_rr",)),
              "linked_faint_active_mega_gen3": ("mega", ("gen3_rr",)),
-             "explode_gen3": ("explode", ("gen3_rr",))}
+             "explode_gen3": ("explode", ("gen3_frlg", "gen3_rr", "gen3_emerald"))}
     for name, (case, games) in cases.items():
         row = duo.SCENARIOS[name]
         assert row.get("active_faint_case", "wild") == case and row["games"] == games, name
@@ -4450,6 +4498,34 @@ def test_a_throwing_watcher_is_reported_by_name_before_it_is_dropped():
     assert reports == [("observer", "boom")]
     assert len(watchers) == 1 and names[1] == "keeps"
     assert "WATCHER_ERROR scenario=%s watcher=%s" in text
+
+
+def test_linked_faint_active_gen3_masks_growth_for_the_natural_side_too(ph, monkeypatch, tmp_path):
+    """PYDEC FAIL on the RR final cut (d9a928d7): "a: the memorial ... differs from the fixture
+    record in [('experience', 228, 267)]". A is the side whose engine faint site fires -- it
+    fights NATURALLY in every case (wild/trainer/lhammer/...), so it can legitimately gain EXP
+    before it goes down. The call site only masked growth for B, and only when case=='trainer'."""
+    fixture = _fixture([STARTER, PIDGEY])
+    k = _key(STARTER)
+    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "linked_faint_active_gen3", {"a": saved, "b": saved},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "memorial",
+                                        "cause": "battle"}])
+    run._link_keys = {"a": k, "b": k}
+    calls = []
+    monkeypatch.setattr(duo, "gen3_memorial_problems",
+                        lambda inst, *a, **kw: calls.append((inst, kw.get("trained"))) or [])
+    (tmp_path / "slink.log").write_text(
+        f"[a] faint → force_faint b:{k}\nfully memorialized\n", encoding="utf-8")
+    _, _, _, log_b = ph("wild", "b")
+    receipts = {
+        "a": (f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n"
+              f"SAVE_WITNESS_DUMP path=p\n"),
+        "b": log_b.replace("K0", k) + f"TX memorialize_done {k} {{}}\n",
+    }
+    run.assert_linked_faint_active_gen3_saved(receipts)
+    assert ("a", True) in calls    # A fought naturally: growth is legitimate every case
+    assert ("b", False) in calls   # B's KO is engine-forced with no input in the wild case
 
 
 def test_linked_faint_active_oracle_keeps_the_last_mon_on_both_sides(ph, monkeypatch, tmp_path):
@@ -4779,9 +4855,14 @@ def test_rr_rows_that_link_or_throw_boot_rr_battle2():
     for name in ("faint_cmd_gen3", "boxsync_gen3", "whiteout_gen3", "link_gen3", "deadzone_gen3",
                  "reconnect_gen3", "native_absent_gen3", "linked_faint_active_gen3"):
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_rr") == "battle2", name
-    fr = {"faint_cmd_gen3": "town", "link_gen3": "battle", "boxsync_gen3": {"a": "battle", "b": "town"}}
+    fr = {"faint_cmd_gen3": "town", "link_gen3": "catch_synth", "boxsync_gen3": {"a": "battle", "b": "town"}}
     for name, want in fr.items():
         assert duo.scenario_target(duo.SCENARIOS[name], "gen3_frlg") == want, name
+    # link_gen3 hunts 20-ball SYNTH saves on FR/LG (the LG battle save's 2 balls ran out 3/3)
+    assert duo.scenario_target(duo.SCENARIOS["link_gen3"], "gen3_lgfr") == "catch_synth"
+    for title in ("firered", "leafgreen"):
+        sav = (REPO / f"tests/fixtures/gen3/{title}_party_catch_synth.sav").read_bytes()
+        assert duo.gen3_ball_count(sav, title) >= 20, title
     fixture = duo.gen3_decode((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(), rr=True)[0]
     assert len(fixture) == 2 and duo.gen3_ball_count((REPO / "tests/fixtures/gen3/rr_battle2.sav").read_bytes(),
                                                      "radical_red") == 9
@@ -5129,6 +5210,14 @@ def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():
     assert ball_hunts, "no ball_hunt scenario lists gen3_emerald -- test is vacuous"
     for name, entry in ball_hunts:
         target = duo.scenario_target(entry, "gen3_emerald")
+        if name == "ball_gate_gen3":
+            # This row must START with zero balls: acquiring the first native
+            # reward is itself under test. Its full faint/reward/catch oracle
+            # checks the actual debit; every ordinary hunt keeps the >=20 rule.
+            assert target == "ball_gate"
+            assert entry["hunt_area_by_game"]["gen3_emerald"] == "rusturf_tunnel"
+            assert entry["oracle"] == "assert_ball_gate_gen3_saved"
+            continue
         assert target in row["hunt_area"], f"{name}: hunt_area names no {target!r} target"
         body = (REPO / f"tests/fixtures/gen3/emerald_{target}.sav").read_bytes()
         balls = sum(qty for item, qty in gen3_fixtures.emerald_ball_pocket(body)

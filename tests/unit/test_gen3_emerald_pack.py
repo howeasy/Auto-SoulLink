@@ -16,11 +16,11 @@ PACK = ROOT / "data/games/gen3_emerald"
 ROM = Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba")
 ROM_SHA1 = "f3ae088181bf583e55daf962a92bb46f4f1d07b7"
 PRET = Path("E:/Google Drive/SLink/.cache/pret/pokeemerald")
-# the 21 FR site kinds (data/games/gen3_frlg/engine_signals.json firered clean)
+# the 22 FR site kinds, including native hatch (same vocabulary; own Emerald pins)
 KINDS = {"frame_control", "battle_begin", "battle_end", "faint", "capture_wild", "mon_given",
          "pc_move", "whiteout", "map_load", "evolve_species_store", "trade_evolve_species_store",
          "trade_begin", "trade_done", "save", "poison_hp_before", "poison_faint", "pc_deposit",
-         "pc_withdraw", "pc_box_place", "pc_release_begin", "pc_release"}
+         "pc_withdraw", "pc_box_place", "pc_release_begin", "pc_release", "hatch"}
 
 
 def _json(path: Path) -> dict:
@@ -46,7 +46,8 @@ def rom() -> bytes:
 # SB1_BADGE_BYTE_OFFSET byte cannot express; BADGE_FIRST_FLAG is the one derived field that
 # is genuinely Emerald-only, carrying the flag id lua/gen3/reads.lua and
 # tools/gen3_reads_pydec.py derive each badge bit from (SB1_BADGE_BYTE_OFFSET stays null).
-EMERALD_ONLY_DERIVED = {"BADGE_FIRST_FLAG"}
+# EMERALD-RIVAL also publishes playerGender here; other packs leave that optional fact absent.
+EMERALD_ONLY_DERIVED = {"BADGE_FIRST_FLAG", "SB2_PLAYER_GENDER_OFFSET"}
 
 
 def test_profile_has_the_firered_key_set_and_provenance(emerald):
@@ -69,15 +70,18 @@ def test_profile_regenerates_byte_identical():
 
 
 def test_profile_agrees_with_every_value_the_old_stub_carries(emerald):
-    """The frlg pack's unadmitted `emerald` stub is an independent second source (never copied)."""
-    stub = _json(ROOT / "data/games/gen3_frlg/profile.json")["titles"]["emerald"]
+    """The original Lua Emerald literals are an independent source, never copied."""
+    text = (ROOT / "lua/games/gen3_frlge.lua").read_text(encoding="utf-8")
+    body = re.search(r"^GEN3\.profiles\.emerald = \{(.*?)^\}", text, re.M | re.S).group(1)
+    literals = re.findall(r'^\s+([A-Z][A-Z0-9_]*)\s*=\s*(0x[0-9A-Fa-f]+|\d+|"[^"]*")\s*,',
+                          body, re.M)
     checked = 0
-    for section in ("ram", "rom", "derived"):
-        for key, value in stub[section].items():
-            if value is None or value == {}:
-                continue  # the stub left it blank; nothing to agree with
-            assert emerald[section][key] == value, (section, key)
-            checked += 1
+    for key, literal in literals:
+        value = literal[1:-1] if literal.startswith('"') else int(literal, 0)
+        sections = [s for s in ("ram", "rom", "derived") if key in emerald[s]]
+        assert len(sections) == 1, key
+        assert emerald[sections[0]][key] == value, (sections[0], key)
+        checked += 1
     assert checked == 15 + 1 + 8  # 15 RAM, BASESTATS_ADDR, 8 derived
 
 
@@ -175,6 +179,7 @@ def test_resolver_refuses_a_corrupted_entry(rom):
 # target is additionally cross-checked against the callee's own .sym address (pokeemerald.sym),
 # never a bare literal, so a pret symbol move repins this table instead of silently drifting.
 CAPTURE_INSTRUCTIONS = {
+    "hatch": ("add", "sp, #0x14", None),
     "frame_control": ("push", "{r4, lr}", None),
     "battle_begin": ("push", "{lr}", None),
     "battle_end": ("bl", "#0x8000540", "SetMainCallback2"),

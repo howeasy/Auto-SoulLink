@@ -101,10 +101,15 @@ def test_rows_selects_by_glob_or_item_keeping_order():
 
 def _rr_scenario_ids():
     """The expected RR duo row ids, derived from e2e_duo.SCENARIOS itself (never hard-coded
-    twice) -- every scenario whose games names gen3_rr, minus an owner-signed limit."""
+    twice) -- every scenario whose games names gen3_rr, minus an owner-signed limit or an
+    explicit_only row (card RR-SYNTH: evolve_gen3 names gen3_rr in its games but stays
+    explicit_only -- never part of the automatic RR final-cut sweep, same as scenarios_for/
+    rr_scenarios's own filter -- so this helper must apply the same exclusion or it drifts
+    from what rr_scenarios() actually returns)."""
     import e2e_duo
     return [f"{s}_rr_as_a" for s, cfg in e2e_duo.SCENARIOS.items()
-            if "gen3_rr" in cfg.get("games", ()) and not cfg.get("signed_limit")]
+            if "gen3_rr" in cfg.get("games", ()) and not cfg.get("signed_limit")
+            and not cfg.get("explicit_only")]
 
 
 def test_title_defaults_to_frlg_and_leaves_the_default_plan_unchanged():
@@ -284,17 +289,17 @@ def test_title_emerald_pin_is_appended_only_to_emerald_provision_text(capsys):
     assert emerald_provision[0].startswith(frlg_provision[0])   # strictly appended, nothing removed
 
 
-def test_title_emerald_unpinned_pret_clone_is_appended_only_to_emerald_provision_text(capsys):
-    """card E4b-CKPT review (OMP cx-6b619663 F1): .cache/pret/pokeemerald/ is an Emerald-only
-    UNPINNED input (unit_emerald's own tests need it), never added to the shared UNPINNED_INPUTS
-    frlg/rr's preamble prints."""
+def test_emerald_pret_clone_is_a_shared_unpinned_input(capsys):
+    """.cache/pret/pokeemerald/ was an Emerald-only UNPINNED input (card E4b-CKPT review, OMP
+    cx-6b619663 F1) until EXPLODE-BIND made the shared unit lane read it too (the FR/LG
+    release_gate_quick failed 3 tests in its lane without it); now every plan provisions it once."""
     cut = _git(fc.REPO, "rev-parse", "HEAD")
     fc.main(["--cut", cut, "--dry-run", "--lane", LANE, "--master", MASTER])
     frlg = next(ln for ln in capsys.readouterr().out.splitlines() if "unpinned inputs" in ln)
     fc.main(["--cut", cut, "--title", "emerald", "--dry-run", "--lane", LANE, "--master", MASTER])
     emerald = next(ln for ln in capsys.readouterr().out.splitlines() if "unpinned inputs" in ln)
-    assert ".cache/pret/pokeemerald/" not in frlg
-    assert emerald == frlg + ", .cache/pret/pokeemerald/"
+    assert ".cache/pret/pokeemerald/" in frlg
+    assert emerald == frlg
 
 
 def test_build_plan_emerald_duo_rows_use_e2e_duo_with_the_emerald_game():
@@ -1394,10 +1399,11 @@ def test_merge_summary_validates_every_row_receipt(pass_env):
 
 def test_the_pret_clones_the_unit_suite_reads_are_unpinned_inputs(tmp_path):
     """tests/unit/test_gen1_trade_patch.py (and the Gen 3 profile/route tests) read
-    .cache/pret/{pokered,pokefirered,pokecrystal}; a lane worktree has no .cache."""
+    .cache/pret/{pokered,pokefirered,pokecrystal,pokeemerald} (pokeemerald since EXPLODE-BIND's
+    Emerald checkpoint generator); a lane worktree has no .cache."""
     clones = [r for r in fc.UNPINNED_INPUTS if r.startswith(".cache/pret/")]
-    assert sorted(clones) == [".cache/pret/pokecrystal/", ".cache/pret/pokefirered/",
-                              ".cache/pret/pokered/"]
+    assert sorted(clones) == [".cache/pret/pokecrystal/", ".cache/pret/pokeemerald/",
+                              ".cache/pret/pokefirered/", ".cache/pret/pokered/"]
     root, repo, lane = (tmp_path / d for d in ("root", "repo", "lane"))
     _seed(root, unpinned=b"root copy")
     _seed(lane)

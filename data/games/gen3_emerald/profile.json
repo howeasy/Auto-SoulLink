@@ -21,6 +21,8 @@
         "derived.BATTLE_MOVE_PP_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/pokemon.h:327-333 (pp; struct BattleMove: effect, power, type, accuracy, then pp)",
         "derived.BATTLE_RESULTS_FOE_FAINTS_OFF": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/battle.h:237 (opponentFaintCounter)",
         "derived.BATTLE_RESULTS_PLAYER_FAINTS_OFF": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/battle.h:236 (playerFaintCounter)",
+        "derived.BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/battle.h:354-392 (chosenMovePositions; offsetof verified from BattleStruct prefix)",
+        "derived.BATTLE_STRUCT_MOVE_TARGET_OFF": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/battle.h:354-361 (moveTarget; BattleStruct u8 prefix + wrappedMove[8])",
         "derived.BATTLE_TYPE_DOUBLE_MASK": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/battle.h:59 (BATTLE_TYPE_DOUBLE)",
         "derived.BATTLE_TYPE_LINK_MASK": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/battle.h:60 (BATTLE_TYPE_LINK)",
         "derived.BATTLE_TYPE_TRAINER_MASK": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/battle.h:62 (BATTLE_TYPE_TRAINER)",
@@ -52,6 +54,7 @@
         "derived.SB2_ENC_KEY_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:532 (encryptionKey; struct SaveBlock2)",
         "derived.SB2_NAME_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:510 (playerName; struct SaveBlock2)",
         "derived.SB2_OT_ID_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:513 (playerTrainerId; struct SaveBlock2)",
+        "derived.SB2_PLAYER_GENDER_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:511 (playerGender; struct SaveBlock2; MALE=0/FEMALE=1, include/constants/global.h:113-114)",
         "derived.SHEDINJA_SPECIES_ID": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/species.h:309 (SPECIES_SHEDINJA)",
         "derived.STATUS3_PERISH_SONG": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/battle.h:162 (STATUS3_PERISH_SONG)",
         "derived.TASK_STRUCT_SIZE": "data/gen3/pret/pokeemerald.sym:980 gTasks 0x280 bytes / 16; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/task.h:8 (NUM_TASKS)",
@@ -62,8 +65,10 @@
         "ram.BATTLE_MONS_ADDR": "data/gen3/pret/pokeemerald.sym:124 (gBattleMons; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
         "ram.BATTLE_OUTCOME_ADDR": "data/gen3/pret/pokeemerald.sym:170 (gBattleOutcome; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
         "ram.BATTLE_RESULTS_ADDR": "data/gen3/pret/pokeemerald.sym:951 (gBattleResults; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
+        "ram.BATTLE_STRUCT_PTR_ADDR": "data/gen3/pret/pokeemerald.sym:181 (gBattleStruct; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
         "ram.BATTLE_TYPE_ADDR": "data/gen3/pret/pokeemerald.sym:106 (gBattleTypeFlags; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
         "ram.CHOSEN_ACTION_ADDR": "data/gen3/pret/pokeemerald.sym:146 (gChosenActionByBattler; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
+        "ram.CHOSEN_MOVE_ADDR": "data/gen3/pret/pokeemerald.sym:156 (gChosenMoveByBattler; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
         "ram.DISABLE_STRUCTS_ADDR": "data/gen3/pret/pokeemerald.sym:165 (gDisableStructs; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
         "ram.ENEMY_BASE": "data/gen3/pret/pokeemerald.sym:203 (gEnemyParty; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
         "ram.ENEMY_COUNT_ADDR": "data/gen3/pret/pokeemerald.sym:201 (gEnemyPartyCount; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd)",
@@ -115,6 +120,8 @@
         "BATTLE_MOVE_PP_OFFSET": 4,
         "BATTLE_RESULTS_FOE_FAINTS_OFF": 1,
         "BATTLE_RESULTS_PLAYER_FAINTS_OFF": 0,
+        "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": 128,
+        "BATTLE_STRUCT_MOVE_TARGET_OFF": 12,
         "BATTLE_TYPE_DOUBLE_MASK": 1,
         "BATTLE_TYPE_LINK_MASK": 2,
         "BATTLE_TYPE_TRAINER_MASK": 8,
@@ -146,6 +153,7 @@
         "SB2_ENC_KEY_OFFSET": 172,
         "SB2_NAME_OFFSET": 0,
         "SB2_OT_ID_OFFSET": 10,
+        "SB2_PLAYER_GENDER_OFFSET": 8,
         "SHEDINJA_SPECIES_ID": 303,
         "STATUS3_PERISH_SONG": 32,
         "TASK_STRUCT_SIZE": 40
@@ -158,8 +166,10 @@
         "BATTLE_MONS_ADDR": 33702020,
         "BATTLE_OUTCOME_ADDR": 33702714,
         "BATTLE_RESULTS_ADDR": 50355472,
+        "BATTLE_STRUCT_PTR_ADDR": 33703068,
         "BATTLE_TYPE_ADDR": 33697772,
         "CHOSEN_ACTION_ADDR": 33702428,
+        "CHOSEN_MOVE_ADDR": 33702516,
         "DISABLE_STRUCTS_ADDR": 33702588,
         "ENEMY_BASE": 33703748,
         "ENEMY_COUNT_ADDR": 33703146,
@@ -203,6 +213,45 @@
         }
       },
       "rom_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
+      "rom_tables": {
+        "gEvolutionTable": {
+          "address": 137515804,
+          "count": 412,
+          "size": 16480,
+          "stride": 40
+        },
+        "gSpeciesInfo": {
+          "address": 137495500,
+          "count": 412,
+          "size": 11536,
+          "stride": 28
+        },
+        "gTrainerClassNames": {
+          "address": 137428180,
+          "count": 66,
+          "size": 858,
+          "stride": 13
+        },
+        "gTrainers": {
+          "address": 137429040,
+          "count": 855,
+          "size": 34200,
+          "stride": 40
+        },
+        "gWildMonHeaders": {
+          "address": 139799880,
+          "count": 125,
+          "size": 2500,
+          "stride": 20
+        }
+      },
+      "rom_tables_provenance": {
+        "gEvolutionTable": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gEvolutionTable; data/gen3/pret/pokeemerald.sym:40912",
+        "gSpeciesInfo": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gSpeciesInfo; data/gen3/pret/pokeemerald.sym:40500",
+        "gTrainerClassNames": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gTrainerClassNames; data/gen3/pret/pokeemerald.sym:40250",
+        "gTrainers": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gTrainers; data/gen3/pret/pokeemerald.sym:40251",
+        "gWildMonHeaders": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd gWildMonHeaders; data/gen3/pret/pokeemerald.sym:47941"
+      },
       "rom_thumb": [
         "BATTLE_INTRO_GET_MONS_DATA_ADDR",
         "BEGIN_BATTLE_INTRO_ADDR",

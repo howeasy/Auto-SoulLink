@@ -130,8 +130,10 @@ class _Server:
     """The attributes the admission path touches, with the real methods bound onto it."""
 
     def __init__(self, contract, adapter=None):
+        from types import SimpleNamespace
         from server.server import SLinkServer
         self.adapter = adapter or get_adapter("gen1_rby", rom_type="Red")
+        self.state = SimpleNamespace(rom_type="Red", artifact_kind="clean")
         self._rom_contract = contract
         self.admission = {}
         for name in ("_decide_admission", "is_admitted"):

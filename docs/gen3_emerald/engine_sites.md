@@ -20,6 +20,7 @@ Schema: data/games/gen3_emerald/engine_signals.json titles.emerald.artifacts.cle
 
 | Kind | Emerald | Function | FR capture | Emerald capture |
 |---|---|---|---|---|
+| hatch | PINNED | AddHatchedMonToParty | +AA | +AA |
 | frame_control | PINNED | CallCallbacks | +A | +0 |
 | battle_begin | PINNED | CB2_InitBattle | +0 | +0 |
 | battle_end | PINNED | ReturnFromBattleToOverworld | +78 | +78 |
@@ -43,6 +44,14 @@ Schema: data/games/gen3_emerald/engine_signals.json titles.emerald.artifacts.cle
 | pc_release | PINNED | ReleaseMon | +3E | +3E |
 
 ## Capture inventory
+
+### hatch — AddHatchedMonToParty
+
+[pret src/egg_hatch.c#L358-L397](https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/egg_hatch.c#L358-L397). AddHatchedMonToParty +0xAA after MonRestorePP and CalculateMonStats; R5 = completed hatchling. Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; O-15 publishes one gift_daycare capture at hatch, never at GiveEgg. Point: R5.
+
+| Status | Function address / size | Anchor address / capture offset / flat | Expected bytes | Entry bytes |
+|---|---|---|---|---|
+| PINNED | 080714B8 / C0 (data/gen3/pret/pokeemerald.sym:3987) | 08071556 / +C / 71556 | 281CFDF7E4F9281CF7F7D5FB05B030BC | 30B585B00006000E03AC462121706421 |
 
 ### frame_control — CallCallbacks
 

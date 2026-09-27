@@ -153,6 +153,11 @@ CANDIDATES = [
 # C2-3b: offsets are relative to independently resolved FR/LG function symbols.
 # Literal anchors were separately read and disassembled in BOTH admitted ROMs.
 BINDINGS = {
+    "hatch": {
+        "function": "AddHatchedMonToParty", "anchor_offset": 0x9E, "capture": 12,
+        "anchors": {"fr": "281CFDF76AFA281CF7F739FB05B030BC", "lg": "281CFDF76AFA281CF7F739FB05B030BC"},
+        "entries": {"fr": "30B585B00006000E03AC462121706421", "lg": "30B585B00006000E03AC462121706421"},
+    },
     "frame_control": {
         "function": "CallCallbacks",
         "anchor_offset": 10,
@@ -429,6 +434,11 @@ BINDINGS = {
 }
 
 BOUND_CONTRACTS = {
+    "hatch": ("src/daycare.c#L1639-L1678",
+        "AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. "
+        "R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, "
+        "non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. "
+        "Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.", ["R5"]),
     "faint": ("src/battle_script_commands.c#L2831-L2905",
         "Battle opcode 0x19. At function +0x11C after the PLAYER counter increment/store "
         "(+0x11A); saturated counter skips the store but reaches this same point. Player-side, "
@@ -552,6 +562,12 @@ def output_path(pack: str) -> Path:
 # RR-only binary bindings. All constants were independently checked in both ROMs.
 # Unlike vanilla reference_size, these are explicit ESTIMATES with boundary bytes.
 RR_BODIES = {
+    # Both RR artifacts independently inspected: native hatch body stays in place.
+    "hatch": {name: {
+        "origin": None, "target": 0x08046D60, "anchor_offset": 0x9E, "capture": 12,
+        "pattern": "281CFDF76AFA281CF7F739FB05B030BC", "entry": "30B585B00006000E03AC462121706421",
+        "extent": 0xC0, "boundary": "00B503480078FFF7",
+    } for name in ("rr", "rr_companion")},
     "faint": {
         "rr": {
             "origin": None,
@@ -690,6 +706,13 @@ RR_BODIES = {
     }
 }
 RR_CONTRACTS = {
+    "hatch": {"replaces": "AddHatchedMonToParty (RR in-place)",
+        "source_path": "src/daycare.c#L1639-L1678", "source_root": PRET, "point": ["R5"],
+        "contract": "RR ROM 08046D60 body; capture 08046E0A after its CalculateMonStats call. "
+                    "R5 is the completed hatchling. RR CB2_EggHatch_0 calls this body at 080471D4; "
+                    "the body, entry, tail and caller were read independently in both RR artifacts. "
+                    "Require an aligned party record, non-egg/non-Bad-Egg; publish once in gift_daycare.",
+        "extent": "RR body ends at 08046E20: return at +0xB0, three data words +0xB4..BF; next ScriptHatchMon entry pinned."},
     "faint": {
         "replaces": "Cmd_tryfaintmon (opcode 0x19 dead; capture moved to opcode 0x1B cleanup)",
         "source_path": "src/general_bs_commands.c#L1392-L1433",
@@ -833,7 +856,7 @@ def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
         site = make_site(rom, at, data, capture_offset=b["capture"],
                          symbol=contract["replaces"], point=contract["point"])
         site.update(source="cfru_detour" if detour else "cfru_inplace",
-                    source_url=CFRU + contract["source_path"], replaces=contract["replaces"],
+                    source_url=contract.get("source_root", CFRU) + contract["source_path"], replaces=contract["replaces"],
                     capture_contract=contract["contract"],
                     context={"rom_offset": flat, "expected_hex": b["entry"]},
                     rr_body={"address": target, "extent_estimate": b["extent"],
@@ -1070,6 +1093,11 @@ EMERALD_DOC = ROOT / "docs/gen3_emerald/engine_sites.md"
 # kind -> (function, anchor_offset, capture, anchor hex @function+anchor_offset,
 #          entry hex @function+0, pret source, point, capture contract)
 EMERALD_BINDINGS = {
+    "hatch": ("AddHatchedMonToParty", 0x9E, 12, "281CFDF7E4F9281CF7F7D5FB05B030BC",
+        "30B585B00006000E03AC462121706421", "src/egg_hatch.c#L358-L397", ["R5"],
+        "AddHatchedMonToParty +0xAA after MonRestorePP and CalculateMonStats; R5 = completed hatchling. "
+        "Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; "
+        "O-15 publishes one gift_daycare capture at hatch, never at GiveEgg."),
     "frame_control": ("CallCallbacks", 0x0, 0, "10B5074C2068002801D0E6F2D3FD6068",
         "10B5074C2068002801D0E6F2D3FD6068", "src/main.c#L188-L195", ["R15", "CPSR"],
         "Emerald CallCallbacks has no save-failed/help-screen gate (FR 0800051A sits after one); "
@@ -1300,10 +1328,84 @@ def document_emerald(inventory: dict) -> str:
     return "\n".join(lines)
 
 
+# X1 offsets below are from the reference build's Thumb disassembly, not vanilla.
+# SOURCE contracts were read at e8bd1cd7; pack remains unadmitted/live_verified=false.
+EXPANSION_BINDINGS = {
+    "frame_control": ("AgbMainLoop", 0x20, "src/main.c:134-172", ["R15", "CPSR"],
+        "Start of the main-loop iteration at input polling, before callbacks; back edges from both VBlank wait paths return here. Not the inlined CallCallbacks function or FR's help gate."),
+    "battle_begin": ("CB2_InitBattle", 0, "src/battle_main.c:472-504", ["R15", "CPSR"],
+        "Entry before battle initialization/save relocation. Dedupe and battle-type filtering required."),
+    "battle_end": ("ReturnFromBattleToOverworld", 0x38, "src/battle_main.c:5422-5457", ["R0", "R15", "CPSR"],
+        "BL SetMainCallback2 after inBattle clear/callback1 restore on completion path. R0 saved callback; link-wait return bypasses this point. Not evolution-settled."),
+    "faint": ("Cmd_tryfaintmon", 0x8A, "src/battle_script_commands.c:1906; src/battle_util.c:11125-11153", ["R4", "R15", "CPSR"],
+        "After SetValuesOnFaint returns; R4 is battler, player/opponent counters updated. REQUIRE player-side ownership and identity dedupe; not every opcode invocation is a faint."),
+    "capture_wild": ("GiveCapturedMonToPlayer", 0x62, "src/battle_script_commands.c:8371; src/pokemon.c:2941-2961", ["R0", "R6", "R13", "R15", "CPSR"],
+        "Common return: R0 party/PC/failure, R6 source mon. REQUIRE saved caller LR at R13+16 equal 0x080AA0DA or 0x080AA36A (the two compiler-emitted Cmd_givecaughtmon call returns), success, and dedupe against mon_given. ScriptGiveMon also calls this routine."),
+    "mon_given": ("GiveCapturedMonToPlayer", 0x62, "src/pokemon.c:2941-2961; src/script_pokemon_util.c:76", ["R0", "R6", "R13", "R15", "CPSR"],
+        "Common return after party copy or CopyMonToPC. R0 outcome, R6 source mon. Captures and scripted gifts share this renamed routine; classify by caller and dedupe capture_wild."),
+    "pc_move": ("CopyMonToPC", 0x72, "src/pokemon.c:2963", ["R0", "R5", "R7", "R8", "R15", "CPSR"],
+        "Common epilogue: R0 allocation result, R8 source mon, R7 box/R5 slot only on success. Acquisition-to-storage, not every PC menu operation."),
+    "whiteout": ("CB2_WhiteOut", 0x80, "src/overworld.c:1956-1981", ["R0", "R15", "CPSR"],
+        "BL SetMainCallback2(CB2_Overworld) after whiteout healing/load completion; early state<120 return bypasses it. Not an HP-at-faint witness."),
+    "map_load": ("CB2_LoadMap2", 0x22, "src/overworld.c:1992-1998", ["R0", "R15", "CPSR"],
+        "BL SetMainCallback2(CB2_Overworld) after DoMapLoadLoop and callback1 restoration. Other map loaders remain outside this signal's coverage."),
+    "evolve_species_store": ("Task_EvolutionScene", 0x2D6, "src/evolution_scene.c:786-792", ["R4", "R15", "CPSR"],
+        "After SetMonData(MON_DATA_SPECIES=18), before evolution-tracker reset and stat/dex updates. R4 mon; cancellation bypasses this state."),
+    "trade_evolve_species_store": ("Task_TradeEvolutionScene", 0x252, "src/evolution_scene.c:1214-1220", ["R7", "R15", "CPSR"],
+        "After SetMonData(MON_DATA_SPECIES=18), before tracker/stat/dex updates. R7 mon; correlate native trade lease."),
+    "trade_begin": ("TradeMons", 0, "src/trade.c:3083", ["R0", "R1", "R15", "CPSR"],
+        "Entry: R0 player slot, R1 partner slot, pre-swap identities."),
+    "trade_done": ("TradeMons", 0xE2, "src/trade.c:3083-3205", ["R15", "CPSR"],
+        "Common epilogue after record/mail/dex branches; record-swap completion, not scene/evolution completion."),
+    "save": ("TrySavingData", 0x16, "src/save.c:773-792", ["R0", "R4", "R15", "CPSR"],
+        "Common epilogue before R4 restore. REQUIRE R0==SAVE_STATUS_OK(1) and R4==SAVE_NORMAL(0); every failure also reaches here."),
+    "poison_hp_before": ("DoPoisonFieldEffect", 0x3C, "src/field_poison.c:125-149", ["R0", "R4", "R15", "CPSR"],
+        "After GetMonData(MON_DATA_HP=10). R0 old HP, R4 mon. Pair by mon/iteration with post-store point."),
+    "poison_faint": ("DoPoisonFieldEffect", 0x54, "src/field_poison.c:135-149", ["R4", "R13", "R15", "CPSR"],
+        "Both SetMonData branches join before advancing R4. New HP=[R13]. REQUIRE paired old HP>0 and new HP==0. Reference build has Gen4+ poison minimum1, so this is not a demonstrated faint path."),
+    "pc_withdraw": ("SetPlacedMonData", 0x9A, "src/pokemon_storage_system.c:6450-6463", ["R4", "R5", "R6", "R15", "CPSR"],
+        "Party branch after SetMonFormPSS: R5==14, R6 slot, R4 party mon. Correlate moving-mon origin; placement can also be a party rearrangement."),
+    "pc_box_place": ("SetPlacedMonData", 0x5A, "src/pokemon_storage_system.c:6464-6468", ["R5", "R6", "R15", "CPSR"],
+        "Box branch after SetMonFormPSS: R5==5*box ID, R6 slot. Require box<14/slot<30 and correlate origin; do not duplicate deposit."),
+}
+EXPANSION_OPEN = {
+    "pc_deposit": "TryStorePartyMonInBox is absent from .sym (src/pokemon_storage_system.c:6491); compiler-inlined caller-site proof remains OPEN.",
+    "pc_release_begin": "ReleaseMon is absent from .sym; pre-removal identity capture at a caller remains OPEN (src/pokemon_storage_system.c ReleaseMon).",
+    "pc_release": "ReleaseMon is absent from .sym; post-PurgeMonOrBoxMon caller-site proof remains OPEN.",
+}
+
+
+def build_expansion(context):
+    from tools.gen_gen3_profile import EXPANSION_TITLE
+    from tools.pin_gen3_site import pin_expansion_site
+
+    sites, inventory = {}, {}
+    for kind, (symbol, capture, source, point, contract) in EXPANSION_BINDINGS.items():
+        site = pin_expansion_site(context, symbol, capture, point)
+        site.update(source=f"expansion@{context['source']['source_commit']}:{source}", capture_contract=contract)
+        sites[kind] = site
+        inventory[kind] = {"status": "PINNED_SOURCE_ONLY", "source": source, "capture_contract": contract}
+    inventory.update({k: {"status": "OPEN", "reason": v} for k, v in EXPANSION_OPEN.items()})
+    result = {"schema": "gen3-engine-signals-v1", "pack": "gen3_exp", "build": context["build"],
+              "evidence": "SOURCE_BYTE_PIN", "live_verified": False, "source": context["source"],
+              "inventory": inventory, "titles": {EXPANSION_TITLE: {"artifacts": {"clean": {
+                  "rom_sha1": context["source"]["rom_sha1"], "rom_md5": hashlib.md5(context["rom"]).hexdigest(), "sites": sites}}}}}
+    result["sha256"] = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--expansion", choices=["28877d73"])
+    parser.add_argument("--artifacts", type=Path)
     args = parser.parse_args()
+    if args.expansion:
+        from tools.gen_gen3_profile import expansion_inputs, expansion_write
+
+        context = expansion_inputs(args.expansion, args.artifacts)
+        expansion_write(context, "engine_signals.json", build_expansion(context), args.check)
+        return 0
     try:
         packs, inventory = build({name: load_rom(name) for name in ROM_SPECS})
     except (OSError, ValueError) as exc:

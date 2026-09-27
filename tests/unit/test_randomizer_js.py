@@ -43,6 +43,32 @@ def _run_node(tmp_path, body: str) -> dict:
     return json.loads(result.stdout.strip().splitlines()[-1])
 
 
+def test_emerald_family_keeps_its_picks_and_requires_the_fork_without_a_companion(tmp_path):
+    from server import upr_settings as U
+
+    out = _run_node(tmp_path, "form.options = " + json.dumps(U.option_form(every_family=True)) + ";\n" + """
+const rf = mod.randomizerFields(form);
+rf.family = 'gen3_emerald';
+rf.roms = [{ path: 'e.gba', clean: true, family: 'gen3_emerald', variant: 'Emerald', title: 'Emerald' },
+           { path: 'fr.gba', clean: true, family: 'gen3_frlg', variant: 'FireRed', title: 'FireRed' }];
+rf.rdraft.rom_a = rf.rdraft.rom_b = 'e.gba';
+rf.rdraft.randomize = true;
+rf.pre = { jar_found: true, jar_trusted: true, jar_fork: false, java_found: true };
+const noFork = rf.cartsWhy(), companion = rf.companionOk();
+rf.pre.jar_fork = true;
+console.log(JSON.stringify({ label: rf.familyLabel(rf.family), good: rf.usable(rf.roms[0]),
+  wrong: rf.usable(rf.roms[1]), noFork, ready: rf.cartsReady(), companion,
+  tutor: rf.optWhy(form.options.find(o => o.key === 'tutors')),
+  fossil: rf.optWhy(form.options.find(o => o.key === 'balance_static_levels')),
+  group: rf.romGroups()[0].label }));
+""")
+    assert out["label"] == "Emerald" and out["good"] and not out["wrong"]
+    assert "Emerald" in out["noFork"] and "fork jar" in out["noFork"]
+    assert out["ready"] and out["tutor"] == "" and out["fossil"] == "not available for Emerald"
+    assert not out["companion"]["ok"] and "No Emerald companion build" in out["companion"]["why"]
+    assert out["group"].startswith("Emerald")
+
+
 def test_carts_why_blocks_an_untrusted_jar_with_the_servers_own_message(tmp_path):
     out = _run_node(tmp_path, """
 const rf = mod.randomizerFields(form);

@@ -79,9 +79,17 @@ GAMES = [
 UNADMITTED_GAMES = frozenset({"gen3_ap"})  # labelled "not admitted"; handle_new refuses them
 GAME_LABELS = {key: label for key, label, _ in GAMES}
 GAME_MEMBERS = {key: members for key, _, members in GAMES}
-# The randomizer contract a Gen 1 game names (upr_settings.FAMILY_*): a pure run takes pure
-# cartridges only, a vanilla run vanilla ones -- the two cannot link.
-GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb"}
+# The randomizer contract a game names (upr_settings.FAMILY_*): a pure run takes pure
+# cartridges only, a vanilla run vanilla ones, a FireRed / LeafGreen run FR/LG ones -- no two
+# families can link. "gen3_rr" (Radical Red) is a DIFFERENT game key from "gen3" and is
+# deliberately absent here: RR is not randomizable by this pipeline (its map/data no longer
+# matches the vanilla FR/LG tables R2 verifies against), so a run named "gen3_rr" never lands
+# in randomizer_games and never offers the randomizer -- see
+# test_manager_names_the_frlg_family / the RR refusal test in test_upr_pipeline_gen3.py.
+GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb",
+               "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
+FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
+                "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald"}
 
 
 def _game_family(game: str | None) -> str | None:
@@ -154,7 +162,8 @@ OPTION_SUPPORT = {
                     "gen1_rby": {"ok": False, "why": "Gen 1 has no gender mechanic, so the clause can never fire."},
                     "gen1_purergb": {"ok": False, "why": "pureRGB has no gender mechanic, so the clause can never fire."}},
     "type_lock": {"all": True},
-    "explode_mode": {"all": False, "why": "Only the Radical Red client handles force_explode.",
+    "explode_mode": {"all": False, "why": "Explode Mode is not supported for this cartridge.",
+                     "rom_types": {title: {"ok": True} for title in ("firered", "leafgreen", "emerald")},
                      "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
                      "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
                      "gen3_frlge_rr": {"ok": True}},
@@ -177,7 +186,7 @@ OPTION_SUPPORT = {
     "pc_trade_npc": {"all": False, "why": "This switch turns off Radical Red's Pokémon-Center trade NPC — other games have no NPC it could turn off.",
                      "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
-                     "gen3_frlge_rr": {"ok": True}},
+                     "gen3_frlge_rr": {"ok": False, "why": "Trade unavailable for Radical Red in this build."}},
 }
 
 
@@ -221,7 +230,8 @@ def option_support(key: str, rom_types: list[str]) -> dict:
         gid = game_id_for_rom_type(rt) if rt else None
         if not gid:
             continue
-        specific = rule.get(gid + ("_rr" if rt.endswith("_rr") else "")) or rule.get(gid)
+        specific = (rule.get("rom_types", {}).get(rt)
+                    or rule.get(gid + ("_rr" if rt.endswith("_rr") else "")) or rule.get(gid))
         decided = specific["ok"] if specific else rule["all"]
         if not decided:
             return {"ok": False, "why": (specific or {}).get("why") or rule.get("why", ""),
@@ -279,6 +289,8 @@ def new_run_form() -> dict:
         "gen1_games": [k for k, _, m in GAMES if m and all(
             rt in ("red", "blue", "yellow", "red_ap", "blue_ap",
                    "purered", "pureblue", "puregreen") for rt in m)],
+        # the games the Cartridges step (companion / randomizer) serves: Gen 1 and FR/LG
+        "randomizer_games": [k for k, _, _m in GAMES if k in GAME_FAMILY],
     }
 
 
@@ -318,7 +330,7 @@ def _cache_rom_dirs() -> list[str]:
 
 
 ROM_DIRS = (PROJECT_ROOT, ROM_UPLOAD_DIR, os.path.join(PROJECT_ROOT, "patch", "build"), *_cache_rom_dirs())
-ROM_EXTS = (".gb", ".gbc")
+ROM_EXTS = (".gb", ".gbc", ".gba")
 UPLOAD_MAX = 64 << 20
 # path -> ((size, mtime_ns), describe_rom result): the ROM scan runs on every page load and
 # /api/roms call, over Google Drive; an unchanged file is not read again.
@@ -1097,13 +1109,13 @@ class RunManager:
         """The randomized-pair builder's state for a Gen 1 run: the categories the pipeline
         supports (from the same table the allowlist is computed from), what the run has,
         and where to start looking for the jar."""
-        if run is not None and run.get("game") not in new_run_form()["gen1_games"]:
+        if run is not None and run.get("game") not in new_run_form()["randomizer_games"]:
             return None
         from server.upr_pipeline import find_upr_jar, jar_is_fork, jar_is_trusted
         from server.upr_settings import option_form
         jar = find_upr_jar() or ""
         return {
-            "options": option_form(),
+            "options": option_form(every_family=True),
             "jar": jar,
             # only a jar whose sha256 is in data/upr_jars.json is ever run (upr_pipeline)
             "jar_trusted": bool(jar) and jar_is_trusted(jar),
@@ -1173,7 +1185,7 @@ class RunManager:
         r["created_short"] = (run.get("created_at") or "")[:16].replace("T", " ")
         r["safe_name"] = re.sub(r"[^\w-]", "_", run.get("name") or rid).strip("_") or rid
         r["game_label"] = GAME_LABELS.get(run.get("game") or "", "")
-        r["gen1"] = (run.get("game") or "") in new_run_form()["gen1_games"]
+        r["gen1"] = (run.get("game") or "") in new_run_form()["randomizer_games"]
         r["rom_ext"] = _rom_ext(run)
         return r
 
@@ -1457,8 +1469,8 @@ class RunManager:
             if wanted and wanted != family:
                 return web.json_response({"ok": False, "error": (
                     f"this run is {GAME_LABELS.get(run['game'], run['game'])}; these are "
-                    f"{'pureRGB' if family == FAMILY_PURE else 'vanilla'} cartridges -- pick "
-                    f"{'pureRGB' if wanted == FAMILY_PURE else 'vanilla Red / Blue / Yellow'} dumps")}, status=400)
+                    f"{FAMILY_WORDS.get(family, family)} cartridges -- pick "
+                    f"{FAMILY_WORDS.get(wanted, wanted)} dumps")}, status=400)
         # Either a settings file the user built in UPR's GUI, the form's spec (every option
         # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
         # two go through the SAME builder the allowlist is computed from, so a file made here
@@ -1469,10 +1481,10 @@ class RunManager:
                 if spec is not None:
                     if not isinstance(spec, dict):
                         raise UprSettingsError("spec must be an object")
-                    blob = build_spec(family_spec(spec, family))
+                    blob = build_spec(family_spec(spec, family), family=family)
                 else:
                     fastest = bool(body.get("fastest_text", True)) and family != FAMILY_PURE
-                    blob = build_categories(set(map(str, categories)), fastest_text=fastest)
+                    blob = build_categories(set(map(str, categories)), fastest_text=fastest, family=family)
             except UprSettingsError as exc:
                 return web.json_response({"ok": False, "error": str(exc)}, status=400)
             settings = os.path.join(MANAGER_DIR, run_id, "settings.rnqs")
@@ -1532,7 +1544,13 @@ class RunManager:
         """POST /api/randomizer/settings/export {spec, name?} — the form's settings as a UPR
         .rnqs: the file UPR's own GUI opens, the same bytes handle_randomize would write
         for this spec (upr_settings.build_spec)."""
-        from server.upr_settings import UprSettingsError, build_spec
+        from server.upr_settings import (
+            FAMILIES,
+            FAMILY_VANILLA,
+            UprSettingsError,
+            build_spec,
+            family_spec,
+        )
         try:
             body = await request.json()
         except Exception:
@@ -1540,8 +1558,11 @@ class RunManager:
         spec = body.get("spec")
         if not isinstance(spec, dict):
             return web.json_response({"ok": False, "error": "spec is required"}, status=400)
+        family = body.get("family") or FAMILY_VANILLA
+        if family not in FAMILIES:
+            return web.json_response({"ok": False, "error": f"unknown family: {family!r}"}, status=400)
         try:
-            blob = build_spec(spec)
+            blob = build_spec(family_spec(spec, family), family=family)
         except UprSettingsError as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
         name = re.sub(r"[^\w-]+", "_", str(body.get("name") or "slink")).strip("_") or "slink"
@@ -1559,7 +1580,7 @@ class RunManager:
         knows its own family and sends it, defaulting to vanilla when it does not (a run
         not yet tied to a family, or an older caller)."""
         from server.upr_pipeline import UprPipelineError, admit_settings
-        from server.upr_settings import FAMILY_PURE, FAMILY_VANILLA, spec_from_parsed, summarize
+        from server.upr_settings import FAMILIES, FAMILY_VANILLA, spec_from_parsed, summarize
         if request.content_type != "multipart/form-data":
             return web.json_response({"ok": False, "error": "multipart/form-data expected"}, status=400)
         reader = await request.multipart()
@@ -1576,13 +1597,13 @@ class RunManager:
         if len(raw) > 64 << 10:
             return web.json_response({"ok": False, "error": "not a settings file (too large)"}, status=400)
         family = family_raw or FAMILY_VANILLA
-        if family not in (FAMILY_VANILLA, FAMILY_PURE):
+        if family not in FAMILIES:
             return web.json_response({"ok": False, "error": f"unknown family: {family_raw!r}"}, status=400)
         try:
             parsed = admit_settings(raw, family)
         except UprPipelineError as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
-        spec = spec_from_parsed(parsed)
+        spec = spec_from_parsed(parsed, family)
         return web.json_response({"ok": True, "spec": spec, "summary": summarize(spec),
                                   "rom_name": parsed.get("rom_name", "")})
 
@@ -1609,7 +1630,7 @@ class RunManager:
         existing one only with `overwrite: true` (409 otherwise, so the page can ask first
         rather than silently clobbering someone's saved spec). The spec goes through the
         same builder the randomizer uses, so a saved preset is one it will accept."""
-        from server.upr_settings import UprSettingsError, build_spec
+        from server.upr_settings import FAMILIES, UprSettingsError, build_spec, family_spec
         try:
             body = await request.json()
         except Exception:
@@ -1623,10 +1644,15 @@ class RunManager:
         spec = body.get("spec")
         if not isinstance(spec, dict):
             return web.json_response({"ok": False, "error": "spec is required"}, status=400)
-        try:
-            build_spec(spec)
-        except UprSettingsError as exc:
-            return web.json_response({"ok": False, "error": str(exc)}, status=400)
+        errors = []
+        for family in FAMILIES:          # a preset is saveable when some family builds it
+            try:
+                build_spec(family_spec(spec, family), family=family)
+                break
+            except UprSettingsError as exc:
+                errors.append(str(exc))
+        else:
+            return web.json_response({"ok": False, "error": errors[0]}, status=400)
         presets = _load_presets()
         existing = next((p for p in presets if p["name"].lower() == name.lower()), None)
         if existing is not None and not body.get("overwrite"):
@@ -1699,7 +1725,7 @@ class RunManager:
         name = os.path.basename(field.filename or "") if field is not None else ""
         ext = os.path.splitext(name)[1].lower()
         if not name or ext not in ROM_EXTS + (".jar",):
-            return web.json_response({"ok": False, "error": "send a .gb, .gbc or .jar as `file`"}, status=400)
+            return web.json_response({"ok": False, "error": "send a .gb, .gbc, .gba or .jar as `file`"}, status=400)
         name = re.sub(r"[^\w .()\[\]'&+,-]", "_", name)
         if ext == ".jar":
             dest_dir, name = PROJECT_ROOT, "PokeRandoZX.jar"
@@ -2031,7 +2057,7 @@ class RunManager:
             "is_stream": False, "hide_chrome": False,
             "body_class": "board mgr",
             "gen1_runs": [self._augment_for_template(r) for r in runs
-                          if r.get("game") in new_run_form()["gen1_games"] and r.get("status") != "archived"],
+                          if r.get("game") in new_run_form()["randomizer_games"] and r.get("status") != "archived"],
         })
         return aiohttp_jinja2.render_template("tools.html", request, ctx)
 

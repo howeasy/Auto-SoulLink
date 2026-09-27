@@ -303,7 +303,7 @@ def test_the_event_rule_catches_the_pre_event_sweep_document():
     assert any("`hello`" in p for p in problems), problems
 
 
-def test_the_command_rule_catches_the_pre_command_sweep_document():
+def test_the_command_rule_catches_the_pre_command_sweep_document(tmp_path, monkeypatch):
     """Falsifier for rule 3, pinned to the revision before this card.
 
     The duplicate-`seq` row (`server.py:2512-2523`) is the one of the three known positives that
@@ -316,6 +316,17 @@ def test_the_command_rule_catches_the_pre_command_sweep_document():
     text = _doc_at(PRE_COMMAND_REV)
     if text is None or "server.py:2512-2523" not in text:
         pytest.skip(f"{PRE_COMMAND_REV}:docs/protocol.md unavailable or already re-anchored")
+    # Keep this historical counterexample independent of today's line shifts:
+    # its old, wrong range can otherwise happen to land on a new `seq` use.
+    # Freeze the cited server alongside the already pinned document. The
+    # checker and the exact expected bad range remain unchanged.
+    source = subprocess.run(["git", "show", f"{PRE_COMMAND_REV}:server/server.py"], cwd=_REPO,
+                            capture_output=True, text=True, encoding="utf-8")
+    assert source.returncode == 0, f"{PRE_COMMAND_REV}:server/server.py unavailable"
+    historical_server = tmp_path / "server.py"
+    historical_server.write_text(source.stdout, encoding="utf-8")
+    resolve = _resolve
+    monkeypatch.setitem(globals(), "_resolve", lambda name: historical_server if name == "server.py" else resolve(name))
     problems = check_citations(text)
     assert problems, "the pre-command-sweep document passed; rule 3 has no teeth"
     assert any("server.py:2512-2523" in p and "seq" in p for p in problems), problems

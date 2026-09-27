@@ -724,15 +724,15 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
             raise SystemExit(f"{title}: HandleInputChooseAction is not {PLAYER_CONTROLLER_OBJ}'s")
     slot = next(c["address"] for c in out["battle"]["clauses"] if c["name"] == "battle_input_controller")
     handoff, why = handoff_block(syms, sym_file, is_rr, roms, slot, profile["titles"][title], title)
-    if is_rr:
-        # F1 M5 / G5-CPU-HARDEN: structural, not gated on commit_hold. RR Explode's behaviour flips on
-        # this shape, so every RR build proves the hand-off AND move 153's effect + PP in every RR
-        # ROM, or it stops -- never a quiet drop to `unverified`.
+    if is_rr or title in ("firered", "leafgreen", "emerald"):
+        # Enabling Explode requires the complete hand-off shape AND move 153's effect/PP in
+        # every admitted ROM for this title; never silently weaken to an unverified binding.
         if handoff is None:
-            raise SystemExit(f"{title}: battle.handoff (RR, carries Explode+H) unproven: {why}")
-        explode, why = explode_head(profile["titles"][title], roms)
+            qualifier = "RR, carries Explode+H" if is_rr else "carries Explode+H"
+            raise SystemExit(f"{title}: battle.handoff ({qualifier}) unproven: {why}")
+        explode, why = explode_head(profile["titles"][title], roms, title=title)
         if explode is None:
-            raise SystemExit(f"{title}: battle.handoff.explode (RR Explode+H) unproven: {why}")
+            raise SystemExit(f"{title}: battle.handoff.explode (Explode+H) unproven: {why}")
         handoff["explode"] = explode
     elif handoff is None:
         unverified.append(f"battle.handoff: {why}")
@@ -1142,8 +1142,8 @@ EXPLODE_SOURCE = ("client.lua commit_plan rows, battler 0; profile.ram BATTLE_MO
                   "archive/gen3-old-client:lua/memory_gba.lua:1318-1345")
 
 
-def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | None, str]:
-    """({"head": rows, "source"}, "") for RR's Explode+H shape, or (None, why it is unproven)."""
+def explode_head(title_profile: dict, roms: dict[str, bytes], *, title: str = "radical_red") -> tuple[dict | None, str]:
+    """({"head": rows, "source"}, "") for this title's Explode+H shape, or an explicit refusal."""
     ram, derived, rom_facts = (title_profile.get(k, {}) for k in ("ram", "derived", "rom"))
     for section, key, table in (("ram", "BATTLE_MONS_ADDR", ram), ("ram", "CHOSEN_ACTION_ADDR", ram),
                                 ("ram", "CHOSEN_MOVE_ADDR", ram), ("rom", "BATTLE_MOVES_ADDR", rom_facts),
@@ -1153,13 +1153,14 @@ def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | No
             return None, f"profile.{section}.{key} absent"
     entry_at = rom_facts["BATTLE_MOVES_ADDR"] + EXPLODE_MOVE * derived["BATTLE_MOVE_ENTRY_SIZE"]
     pp_at = entry_at + derived["BATTLE_MOVE_PP_OFFSET"]
+    label = "RR" if title == "radical_red" else title
     for kind, rom in roms.items():
         if kind == "_fr":
             continue
         if body(rom, entry_at, 1)[0] != EFFECT_EXPLOSION:
-            return None, f"move {EXPLODE_MOVE} effect at {entry_at:#010x} is not EFFECT_EXPLOSION in RR {kind}"
+            return None, f"move {EXPLODE_MOVE} effect at {entry_at:#010x} is not EFFECT_EXPLOSION in {label} {kind}"
         if body(rom, pp_at, 1)[0] != EXPLODE_PP:
-            return None, f"move {EXPLODE_MOVE} PP at {pp_at:#010x} is not {EXPLODE_PP} in RR {kind}"
+            return None, f"move {EXPLODE_MOVE} PP at {pp_at:#010x} is not {EXPLODE_PP} in {label} {kind}"
     base = ram["BATTLE_MONS_ADDR"]
     rows = [row for i in range(4) for row in (
         {"name": f"move_{i}", "address": base + BATTLE_MON_MOVES_OFF + 2 * i, "width": 2,
@@ -1174,7 +1175,15 @@ def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | No
             if isinstance(derived.get(key), int):
                 rows.append({"name": name, "ptr": ram["BATTLE_STRUCT_PTR_ADDR"], "offset": derived[key],
                              "width": 1, "value": value})
-    return {"head": rows, "source": EXPLODE_SOURCE}, ""
+    source = EXPLODE_SOURCE
+    if title != "radical_red":
+        pin = "pokeemerald c65e93f2" if title == "emerald" else "pokefirered c75f3523"
+        source = (f"pret {pin}: include/battle.h BattleStruct.moveTarget/chosenMovePositions; "
+                  "src/battle_main.c HandleTurnActionSelectionState + HandleAction_UseMove; "
+                  "include/pokemon.h BattlePokemon.moves +0x0C / pp +0x24; "
+                  "profile addresses from this title's .sym; move 153 effect EFFECT_EXPLOSION and PP 5 "
+                  "verified in this title's own gBattleMoves; B_ACTION_USE_MOVE 0, move slot 0, foe target 1")
+    return {"head": rows, "source": source}, ""
 
 
 def handoff_block(syms, sym_file: str, is_rr: bool, roms: dict[str, bytes],
@@ -1277,10 +1286,142 @@ def render(value: dict) -> str:
     return json.dumps(value, indent=2, sort_keys=True) + "\n"
 
 
+def build_expansion(context):
+    """Bind expansion's clauses from its own symbols/compiler facts; never borrow CPU proof."""
+    sys.path.insert(0, str(ROOT))
+    from tools.gen_gen3_profile import EXPANSION_TITLE, expansion_symbol
+
+    facts = context["facts"]
+    types, const = facts["structs"], facts["constants"]
+    cite = f"expansion@{context['source']['source_commit']}"
+
+    def symbol(name, obj=None):
+        return expansion_symbol(context, name, obj)
+
+    def scalar(name, expect=0):
+        row = symbol(name)
+        if row["size"] not in (1, 2, 4):
+            raise ValueError(f"{name} is not a scalar .sym field")
+        return {"symbol": name, "address": row["address"], "offset": 0, "width": row["size"],
+                "expect": expect, "source": f"build:pokemon.sym:{row['line']}"}
+
+    predicates = {}
+    for name, member, target in (("callback1", "callback1", "CB1_Overworld"), ("callback2", "callback2", "CB2_Overworld")):
+        field = types["Main"]["fields"][member]
+        predicates[name] = {"symbol": "gMain", "address": symbol("gMain")["address"],
+                            "offset": field["offset"], "width": field["size"], "expect_symbol": target,
+                            "expect": symbol(target)["address"] | 1, "source": f"facts.structs.Main.fields.{member}; build .sym"}
+    for name, type_name, member, global_name in (("in_battle", "Main", "inBattle", "gMain"),
+                                               ("palette_fade_active", "PaletteFadeControl", "active", "gPaletteFade")):
+        field = types[type_name]["bitfields"][member]
+        predicates[name] = {"symbol": global_name, "address": symbol(global_name)["address"], "offset": field["offset"],
+                            "width": field["width"], "mask": int(field["mask"], 16), "expect": 0,
+                            "source": f"facts.structs.{type_name}.bitfields.{member}"}
+    for name, (global_name, *_) in PREDICATES.items():
+        if name not in predicates:
+            predicates[name] = scalar(global_name, const["CONTEXT_SHUTDOWN"] if name == "script_context_status" else 0)
+    anchors = {}
+    for name, function in {"cb1_overworld": "CB1_Overworld", "cb2_overworld": "CB2_Overworld",
+                           "run_tasks": "RunTasks", "frame_control": "AgbMainLoop", "try_saving_data": "TrySavingData"}.items():
+        row = symbol(function)
+        offset = row["address"] - ROM_BASE
+        anchors[name] = {"symbol": function, "address": row["address"], "rom_offset": offset, "length": row["size"],
+                         "expected_hex": {"clean": context["rom"][offset:offset + row["size"]].hex().upper()}}
+    allowed_names = ALLOWED_TASKS + EMERALD_ONLY_TASKS
+    allowed = {name: symbol(name)["address"] for name in allowed_names}
+    forbidden = {name: symbol(name)["address"] for name in FORBIDDEN_INVENTORY["emerald"]}
+    for name, rows in context["symbols"].items():
+        if name.startswith("Task_LinkContest_"):
+            if len(rows) != 1:
+                raise ValueError(f"ambiguous forbidden task: {name}")
+            forbidden[name] = rows[0]["address"]
+    vanilla = (ROOT / "data/gen3/pret/pokeemerald.sym").read_text()
+    vanilla_names = {line.split()[-1] for line in vanilla.splitlines() if line.split()}
+    census = {name: [row["address"] for row in rows] for name, rows in context["symbols"].items()
+              if name.startswith("Task_") and name not in allowed}
+    tasks = {"symbol": "gTasks", "address": symbol("gTasks")["address"],
+             "struct_size": types["Task"]["size"], "count": const["NUM_TASKS"],
+             "func_offset": types["Task"]["fields"]["func"]["offset"],
+             "is_active_offset": types["Task"]["fields"]["isActive"]["offset"],
+             # F2: name transfer only (no physical frame qualification), so the allow-list
+             "status": "OPEN",
+             # gets the same "OPEN" marker as cpu below -- a consumer keying off status
+             # (like cpu's own) refuses to treat this table as a qualified allow-list.
+             "allowed_overworld_tasks": allowed, "forbidden_inventory": forbidden,
+             "non_allowed_task_census": census,
+             "transferred_emerald_task_names": list(allowed_names),
+             "new_non_allowed_task_names": sorted(set(census) - vanilla_names),
+             "source": cite + ":src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c. Name transfer only; no physical qualification."}
+    clauses = []
+    for name, global_name, _, _, _, compare, expect in BATTLE_CLAUSES_FRLG:
+        row = symbol(global_name)
+        entry = {"name": name, "symbol": global_name, "address": row["address"], "offset": 0,
+                 "width": row["size"] if row["size"] in (1, 2, 4) else 1, "compare": compare,
+                 "source": cite + ":src/battle_main.c:3785-3875; src/battle_controller_player.c:154-180,234-330; include/battle_controllers.h:94-110; build .sym and compiler facts"}
+        if name == "battle_comm_0":
+            entry["expect"] = const["STATE_WAIT_ACTION_CHOSEN"]
+            entry["width"] = 1  # u8 array in battle.h; symbol size covers all slots.
+        elif name == "battle_input_controller":
+            entry.update(width=4, expect_symbol=expect,
+                         expect=symbol(expect, "src/battle_controller_player.o")["address"] | 1)
+        elif name == "battle_main_func":
+            entry.update(expect_symbol=expect, expect=symbol(expect)["address"] | 1)
+        elif name == "battle_not_link":
+            entry.update(mask=const["BATTLE_TYPE_LINK"], expect=0)
+        elif name == "battle_engine_loaded":
+            field = types["BattlePokemon"]["fields"]["maxHP"]
+            entry.update(offset=field["offset"], width=field["size"])
+        else:
+            entry["expect"] = expect
+        clauses.append(entry)
+    guard = {"symbol": "gBattleCommunication", "address": symbol("gBattleCommunication")["address"],
+             "offset": 0, "width": 1, "compare": "lt", "value": const["STATE_WAIT_ACTION_CONFIRMED_STANDBY"],
+             "indexed_by": "battler", "source": "compiler private source enum from battle_main.c"}
+    sound = {"version": "gen3-sound-v1", "ident_magic": const["ID_NUMBER"], "iwram_min": const["IWRAM_START"],
+             "iwram_max": const["IWRAM_END"], "track0_off": 0, "fields": [], "source": "compiler facts from include/gba/m4a_internal.h"}
+    for key, type_name, member in (("tracks_off", "MusicPlayerInfo", "tracks"), ("ident_off", "MusicPlayerInfo", "ident"),
+                                    ("player_head_off", "SoundInfo", "musicPlayerHead"), ("player_next_off", "MusicPlayerInfo", "musicPlayerNext")):
+        sound[key] = types[type_name]["fields"][member]["offset"]
+    for name, _, _, *on in SOUND_FIELDS:
+        owner = on[0] if on else "player"
+        type_name = "MusicPlayerTrack" if owner == "track" else "MusicPlayerInfo"
+        field = types[type_name]["fields"][name]
+        size = field["size"]
+        if owner == "track" and name == "flags":
+            size = types[type_name]["fields"]["gateTime"]["offset"] - field["offset"]
+        sound["fields"].append({"name": name, "offset": field["offset"], "size": size, "on": owner})
+    for key, name in (("sound_info_ptr", "SOUND_INFO_PTR"), ("sound_info", "gSoundInfo"), ("player_se1", "gMPlayInfo_SE1")):
+        sound[key] = {"symbol": name, "address": symbol(name)["address"], "source": "build .sym"}
+    sound["se_ids"] = {str(wire): const[name] for wire, name in ((16, "SE_FAINT"), (17, "SE_FLEE"), (22, "SE_BOO"),
+                                                                 (25, "SE_SUCCESS"), (26, "SE_FAILURE"), (95, "SE_SHINY"))}
+    return {EXPANSION_TITLE: {
+        "version": VERSION, "title": EXPANSION_TITLE, "admitted": False, "source": context["source"],
+        "anchors": anchors, "predicates": predicates, "witnesses": {"save_dialog_cb": scalar("sSaveDialogCallback")},
+        "tasks": tasks,
+        "cpu": {"status": "OPEN", "reason": cite + ":src/main.c:422-437: WaitForVBlank inlined; non-wireless calls BIOS VBlankIntrWait. No parked-CPU census or BIOS range admitted. Missing mode/range intentionally refuses cpu clause."},
+        "battle": {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard,
+                   "commit_hold": "OPEN: argument-taking controller ABI, Volatiles Perish mechanism and last-ball shortcut are not qualified for a commit handoff; the vanilla head is not copied."},
+        "pointers": {name: {"symbol": name, "address": symbol(name)["address"], "source": "build .sym"}
+                     for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr")},
+        "sound": sound, "gift_areas": [],
+        "open": {"cpu": "source branch and machine code known; frame-end parking unqualified", "battle_handoff": "new controller ABI and Volatiles mechanism",
+                 "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"},
+    }}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="fail if a committed file is stale")
+    ap.add_argument("--expansion", choices=["28877d73"])
+    ap.add_argument("--artifacts", type=pathlib.Path)
     args = ap.parse_args()
+    if args.expansion:
+        sys.path.insert(0, str(ROOT))
+        from tools.gen_gen3_profile import expansion_inputs, expansion_write
+
+        context = expansion_inputs(args.expansion, args.artifacts)
+        expansion_write(context, "write_checkpoint.json", build_expansion(context), args.check)
+        return 0
     rc = 0
     for pack in ALL_PACKS:
         target, unverified = build(pack)

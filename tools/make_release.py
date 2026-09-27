@@ -125,6 +125,9 @@ _LUA_GEN3 = [
     "safety.lua",
     "boxes.lua",
     "native.lua",   # RR companion mailbox part; Entry builds it for the companion kind (C4-7)
+    "trade.lua",
+    "trade_journal.lua",
+    "rom_content.lua",
 ]
 
 # lua/core/ — the shared client core (session/identity/deferred) Gen 3 binds first (P4 C4-1);

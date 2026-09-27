@@ -168,13 +168,12 @@ def test_capabilities_cover_every_routable_rom_type():
 def test_capabilities_distinguish_cartridges_within_one_generation():
     """Capability is a property of the cartridge, not of the generation.
 
-    Explode Mode and the native info panel come from the Radical Red companion patch, so
-    plain FireRed and Radical Red must not answer the same. If these ever match, the
-    generator has gone back to probing a default-constructed adapter and every RR run
-    would be told it cannot explode.
+    The native info panel remains RR-only, while the bound vanilla titles also implement
+    Explode. A default adapter must not erase the remaining per-cartridge distinction.
     """
     caps = _load("capabilities.json")
-    assert caps["firered"]["explode_mode"] is False
+    for title in ("firered", "leafgreen", "emerald"):
+        assert caps[title]["explode_mode"] is True
     assert caps["firered_rr"]["explode_mode"] is True
     assert caps["firered"]["info_panel"] is False
     assert caps["firered_rr"]["info_panel"] is True

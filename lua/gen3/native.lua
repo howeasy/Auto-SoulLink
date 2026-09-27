@@ -17,6 +17,8 @@
 -- readback) or a panel/NPC callback can write through the same sink in the same
 -- service() call while the caller's own job is refused at its guard.
 local N = {}
+local CALL_IDS = {fallen=1, dead_zone=2, first_link=3}
+local CALL_BIND_ATTEMPTS = 3
 local O = {abi=4, opcode=6, seq=8, status=10, ack=12, reason=14, args=16, result=48}
 local BUSY, OK, FAIL = 1, 2, 3
 -- ST_FAIL reason words (patch/src/handlers.c owns the numbering; ADDRESSES.md lists both sides).
@@ -34,11 +36,85 @@ end
 
 function N.new(profile, deps)
     local p = assert(profile.native, "profile.native required")
+    assert(p.ABI == 1 or p.ABI == 2, "unsupported native ABI")
+    local v2 = p.ABI == 2 and assert(p.abi_v2, "generated v2 ABI required") or nil
+    local offsets, fail_reasons = clone(O), clone(FAIL_REASONS)
+    local trade_fields, trade_phase_offset
+    if v2 then
+        local c = assert(v2.constants, "v2 constants required")
+        assert(c.SLINK_ABI_VERSION == p.ABI and c.SLINK_SIGNATURE == p.SIG, "v2 identity mismatch")
+        local fields = assert(v2.structs.SlinkMailboxV2.fields, "v2 mailbox layout required")
+        for alias, spec in pairs({signature={"signature",4,1,0x00},
+            abi={"abi_version",2,1,0x04}, opcode={"opcode",2,1,0x06},
+            seq={"seq",2,1,0x08}, status={"status",2,1,0x0A},
+            ack={"ack_seq",2,1,0x0C}, reason={"reason",2,1,0x0E},
+            args={"args",1,32,0x10}, result={"result",1,16,0x30},
+            capabilities={"capabilities",4,1,0x40}, session_epoch={"session_epoch",4,1,0x44}}) do
+            local field = assert(fields[spec[1]], "missing v2 mailbox field")
+            assert(field.offset == spec[4], "invalid v2 mailbox field offset: " .. spec[1])
+            assert(integer(field.offset, v2.structs.SlinkMailboxV2.size - field.width * field.count)
+                   and field.width == spec[2] and field.count == spec[3], "invalid v2 mailbox field")
+            offsets[alias] = field.offset
+        end
+        for name, value in pairs(p) do
+            if type(name) == "string" and name:match("^OP_") then
+                local expected = c["SLINK_" .. name]
+                assert(type(expected) == "number" and value == expected, "v2 opcode mismatch: " .. name)
+            end
+        end
+        for name, value in pairs(c) do
+            if name:match("^SLINK_OP_") then
+                assert(p[name:sub(7)] == value, "v2 opcode missing: " .. name)
+            end
+        end
+        local witness = assert(v2.structs.SlinkTradeWitnessV2, "trade witness layout required")
+        assert(witness.size == 0x50, "invalid trade witness size")
+        trade_fields = {}
+        for name, spec in pairs({session_epoch={0x00,4,1}, visit_id={0x04,4,1}, token={0x08,1,16},
+            revision={0x18,2,1}, visit_flags={0x1A,2,1}, milestones={0x1C,4,1}, milestone_seq={0x20,2,5},
+            final_result={0x2A,1,1}, save_status={0x2B,1,1}, milestone_frame={0x2C,4,5},
+            old_pid={0x40,4,1}, old_otid={0x44,4,1}, received_pid={0x48,4,1}, received_otid={0x4C,4,1}}) do
+            local field = assert(witness.fields[name], "missing trade witness field: " .. name)
+            assert(field.offset == spec[1] and field.width == spec[2] and field.count == spec[3],
+                   "invalid trade witness field: " .. name)
+            trade_fields[name] = field.offset
+        end
+        -- These words have different legacy RR meanings. Name them only for v2.
+        for symbol, name in pairs({SLINK_REASON_UNCERTAIN="uncertain",
+            SLINK_REASON_IDENTITY="identity", SLINK_REASON_CLIENT_TOO_OLD="client_too_old"}) do
+            fail_reasons[assert(c[symbol], "missing v2 failure reason")] = name
+        end
+        -- Older v2 profiles remain usable for their other capabilities. Durable
+        -- FR trade requires the T2-R1 phase field and constants in its profile.
+        local phase = fields.producer_phase
+        if phase then
+            assert(phase.offset == 0x48 and phase.width == 4 and phase.count == 1,
+                   "invalid trade producer phase field")
+            for name, value in pairs({SLINK_PHASE_IDLE=0, SLINK_PHASE_PRE_SAVE=1,
+                SLINK_PHASE_READY=2, SLINK_PHASE_SCENE=3, SLINK_PHASE_DONE=4,
+                SLINK_PHASE_UNCERTAIN=5, SLINK_REASON_WITHDRAW_TOO_LATE=14,
+                SLINK_CAP_DURABLE_TRADE=1, SLINK_WITNESS_OFFSET=0x50,
+                SLINK_SUCCESS_MILESTONES=0x1F, SLINK_SAVE_OK=1}) do
+                assert(c[name] == value, "invalid trade ABI constant: " .. name)
+            end
+            trade_phase_offset = phase.offset
+            fail_reasons[c.SLINK_REASON_WITHDRAW_TOO_LATE] = "withdraw_too_late"
+        end
+    end
+    local O = offsets
+    local session_epoch = 0
     local io, writes = assert(deps.io), assert(deps.writes)
     local send = assert(deps.send, "send(event, fields) required")
     local array = deps.array or function(t) return t end
     local reads = assert(deps.reads, "Gen 3 read facade required")
     local queue, pending, poisoned, posting = {}, nil, nil, false
+    local trade_context, trade_blocked, trade_wanted_epoch
+    local trade_binding_job, trade_serial = nil, 0
+    local fr_v2 = v2 and profile.pack == "gen3_frlg"
+    local call_queued, call_active, call_wanted_epoch
+    local call_handshake_job, call_binding_attempts, call_binding_failed = nil, 0, false
+    local call_first_posted, call_delivered_at = false, nil
+    local log = deps.log or function() end
     -- post-conditions awaited after an ACK (the rival swap's engine snapshot)
     local watches, SNAPSHOT_FRAMES = {}, 600
     local seq = deps.initial_seq or 0
@@ -56,18 +132,35 @@ function N.new(profile, deps)
     local SYNC_TIMEOUT = 1800
     local op_timeout = {}
     for name, frames in pairs({OP_SHOW_MENU = 2400, OP_SHOW_CHOICES = 2400, OP_SHOW_INFO = 2400,
-                               OP_CHOOSE_PARTY_MON = 2400, OP_TRADE_SCENE = 6000}) do
+                               OP_CHOOSE_PARTY_MON = 2400, OP_TRADE_PREPARE = 2400, OP_TRADE_SCENE = 6000}) do
         if p[name] then op_timeout[p[name]] = frames end
     end
     local function timeout_for(op) return deps.timeout_frames or op_timeout[op] or SYNC_TIMEOUT end
     local self = {}
 
     local function present()
-        if profile.pack ~= "gen3_rr" or deps.artifact_kind ~= "companion" then return false end
+        if (not v2 and profile.pack ~= "gen3_rr") or deps.artifact_kind ~= "companion" then return false end
         local ok, value = pcall(function()
             return io.read_u32(p.BASE) == p.SIG and io.read_u16(p.BASE + O.abi) == p.ABI
         end)
         return ok and value == true
+    end
+    function self:mailbox()
+        if not present() then return nil, "native absent" end
+        local ok, fields = pcall(function()
+            local out = {abi=p.ABI, opcode=io.read_u16(p.BASE + O.opcode),
+                seq=io.read_u16(p.BASE + O.seq), status=io.read_u16(p.BASE + O.status),
+                ack_seq=io.read_u16(p.BASE + O.ack), reason=io.read_u16(p.BASE + O.reason)}
+            out.reason_name = fail_reasons[out.reason]
+            if v2 then
+                out.capabilities = io.read_u32(p.BASE + O.capabilities)
+                out.session_epoch = io.read_u32(p.BASE + O.session_epoch)
+                if trade_phase_offset then out.producer_phase = io.read_u32(p.BASE + trade_phase_offset) end
+            end
+            return out
+        end)
+        if not ok then return nil, "native mailbox unreadable" end
+        return fields
     end
     function self:idle()
         if poisoned or pending or panel_showing then return false end
@@ -75,29 +168,89 @@ function N.new(profile, deps)
         local ok, value = pcall(function()
             return io.read_u16(p.BASE + O.opcode) == 0
                    and (posting or io.read_u16(p.BASE + O.status) ~= BUSY)
-                   and io.read_u8(p.INFO + 1) == io.read_u8(p.INFO + 2)
+                   and (v2 ~= nil or io.read_u8(p.INFO + 1) == io.read_u8(p.INFO + 2))
         end)
         return ok and value == true
     end
-    function self:trade_active() return false end -- apply_trade belongs to the trade card
+    function self:trade_active() return trade_context ~= nil and not trade_context.reconciled end
     function self:hello_fields() return {} end -- no invented wire capability fields
-
     local function finish(job, why, result, reason)
         if job.done then job.done(why, result, reason) end
     end
+    function self:cancel(handle)
+        for i, job in ipairs(queue) do
+            if job == handle then
+                table.remove(queue, i)
+                job.cancelled = true
+                finish(job, "guard:stale")
+                return true
+            end
+        end
+        return false -- published operations belong to the cartridge; never erase one
+    end
+
     local function abort(why)
         local active, waiting = pending, queue
         pending, queue = nil, {}
+        call_queued, call_active = nil, nil -- no replay across a native reset/freshness loss
         if active then finish(active, why) end
         for _, job in ipairs(waiting) do finish(job, why) end
     end
+    local function check_epoch()
+        if not v2 then return true end
+        local ok, value = pcall(io.read_u32, p.BASE + O.session_epoch)
+        if not ok or not integer(value, 0xFFFFFFFF) then
+            poisoned = "native epoch unreadable"
+            abort(poisoned)
+            return nil, poisoned
+        end
+        if value == 0 then
+            if session_epoch ~= 0 or poisoned then
+                if fr_v2 and (trade_context or trade_blocked) then
+                    trade_blocked = true
+                    poisoned = "trade epoch cleared while owned"
+                    abort(poisoned)
+                    return nil, poisoned
+                end
+                -- Native explicitly unarmed the mailbox. Retire old work, then
+                -- allow only a new handshake, including recovery from poison.
+                session_epoch, poisoned = 0, nil
+                abort("native epoch cleared")
+            end
+        elseif session_epoch ~= 0 and value ~= session_epoch then
+            if fr_v2 then trade_blocked = true end
+            poisoned = "native epoch changed"
+            abort(poisoned)
+            return nil, poisoned
+        end
+        return true
+    end
     local function enqueue(job)
         if not present() then finish(job, "native absent"); return nil, "native absent" end
+        local epoch_ok, epoch_why = check_epoch()
+        if not epoch_ok then finish(job, epoch_why); return nil, epoch_why end
         if poisoned then finish(job, poisoned); return nil, poisoned end
+        if v2 and not job.handshake and session_epoch == 0 then
+            finish(job, "client_too_old"); return nil, "client_too_old"
+        end
         if #queue >= 64 then finish(job, "native queue full"); return nil, "native queue full" end
         queue[#queue + 1] = job
         -- the job IS the handle: `job.posted` is this job's dispatch receipt (see the header)
         return job
+    end
+    function self:set_session_epoch(value)
+        if not v2 then return nil, "unsupported native ABI" end
+        if not integer(value, 0xFFFFFFFF) or value == 0 then return nil, "invalid session epoch" end
+        if not present() then return nil, "native absent" end
+        local epoch_ok, epoch_why = check_epoch()
+        if not epoch_ok then return nil, epoch_why end
+        if pending or #queue > 0 or not self:idle() then return nil, "native busy" end
+        if fr_v2 and not self:trade_epoch_writable() then return nil, "trade producer owned or unavailable" end
+        local bytes = {}
+        for i=0,3 do bytes[i+1] = (value >> (8*i)) & 0xFF end
+        return enqueue({handshake=true, stages={{p.BASE + O.session_epoch, bytes}},
+            valid=function() return not fr_v2 or self:trade_epoch_writable(), "trade producer owned or unavailable" end,
+            done=function(why) if not why then session_epoch=value end end})
     end
     local function encode(text, limit)
         local out = {}
@@ -157,6 +310,8 @@ function N.new(profile, deps)
                 -- native_idle clause (status ~= busy) refuse the rest of the post.
                 writes:write_u16(p.BASE + O.ack, (seq + 65535) % 65536)
                 writes:write_u16(p.BASE + O.seq, seq)
+                job.publish_attempted = true -- a sink failure can leave a valid low-byte opcode
+                if job.on_publish then job.on_publish() end
                 writes:write_u16(p.BASE + O.opcode, job.op) -- publish last
                 -- ... and the receipt is the publish's own witness: nothing after it can fail
                 job.posted = true
@@ -172,6 +327,478 @@ function N.new(profile, deps)
         if job.op then job.started = io.framecount(); pending = job
         else finish(job) end
         return true
+    end
+
+    -- Soul Link Match Call mirrors gen2/phone.lua's optional tags and scheduling.
+    -- The native Emerald producer owns the contact, text and safe UI entry.
+    local cc = v2 and v2.constants
+    local call_title = profile.titles and profile.titles.emerald
+    local species_table = call_title and call_title.rom_tables and call_title.rom_tables.gSpeciesInfo
+    local species_count = species_table and species_table.count
+    local call_species_limit = integer(species_count, 0x10000) and species_count > 1 and species_count - 1 or 0
+    local call_known_caps = 0
+    for name, value in pairs(cc or {}) do
+        if name:match("^SLINK_CAP_") then call_known_caps = call_known_caps | value end
+    end
+    local call_record_fields, call_witness_fields
+    if v2 then
+        local function layout(name, size, expected)
+            local shape = assert(v2.structs[name], "missing call ABI structure")
+            assert(shape.size == size, "invalid call ABI size")
+            local out = {}
+            for name_, spec in pairs(expected) do
+                local field = assert(shape.fields[name_], "missing call ABI field")
+                assert(field.offset == spec[1] and field.width == spec[2] and field.count == spec[3],
+                       "invalid call ABI field: " .. name_)
+                out[name_] = field.offset
+            end
+            return out
+        end
+        call_record_fields = layout("SlinkCallRecordV2", 36, {
+            event={0,1,1}, has_names={1,1,1}, caller_species={2,2,1}, receiver_species={4,2,1},
+            trainer={6,1,8}, caller_nick={14,1,11}, receiver_nick={25,1,11}})
+        call_witness_fields = layout("SlinkCallWitnessV2", 32, {
+            session_epoch={0,4,1}, seq={4,2,1}, revision={6,2,1}, phase={8,1,1},
+            event={9,1,1}, reason={10,2,1}, armed_frame={12,4,1}, delivered_frame={16,4,1}})
+    end
+    local function call_supported()
+        if not v2 or profile.pack ~= "gen3_emerald" then return false end
+        local mb = self:mailbox()
+        local caps = mb and mb.capabilities
+        return integer(caps, 0xFFFFFFFF) and (caps & ~call_known_caps) == 0
+               and (caps & cc.SLINK_CAP_MATCH_CALL) ~= 0
+    end
+    function self:match_call_capable()
+        if not call_supported() or poisoned or session_epoch == 0 then return false end
+        if call_binding_failed or (call_wanted_epoch and call_wanted_epoch ~= session_epoch) then return false end
+        local mb = self:mailbox()
+        return mb ~= nil and mb.session_epoch == session_epoch
+    end
+    function self:bind_match_call_session(value)
+        if not v2 or profile.pack ~= "gen3_emerald" or deps.artifact_kind ~= "companion"
+           or not integer(value, 0xFFFFFFFF) or value == 0 then return false end
+        if call_wanted_epoch ~= value then call_queued, call_active = nil, nil end
+        if call_handshake_job then self:cancel(call_handshake_job); call_handshake_job = nil end
+        call_binding_attempts, call_binding_failed = 0, false
+        call_wanted_epoch = value
+        return true
+    end
+    local function call_name(text, size)
+        if type(text) ~= "string" then return nil end
+        local out = {}
+        for glyph in text:gmatch(utf8.charpattern) do
+            local code = reads.charmap.codes[glyph]
+            if integer(code, 0xF6) and #out < size - 1 then out[#out+1] = code end
+        end
+        if #out == 0 then return nil end
+        while #out < size do out[#out+1] = 0xFF end
+        return out
+    end
+    local function call_record(id, data)
+        local row, rf = {}, call_record_fields
+        for i=1,36 do row[i] = i > rf.trainer and 0xFF or 0 end
+        row[rf.event+1] = id
+        local trainer = type(data) == "table" and call_name(data.trainer_name, 8)
+        if not trainer then return row end
+        row[rf.has_names+1] = 1
+        for i, b in ipairs(trainer) do row[rf.trainer+i] = b end
+        for _, item in ipairs({{"caller_mon", "caller_species", "caller_nick"},
+                               {"receiver_mon", "receiver_species", "receiver_nick"}}) do
+            local mon = type(data[item[1]]) == "table" and data[item[1]] or {}
+            local species = integer(mon.species_id, call_species_limit) and mon.species_id > 0 and mon.species_id or 0
+            row[rf[item[2]]+1], row[rf[item[2]]+2] = species & 0xFF, species >> 8
+            for i, b in ipairs(call_name(mon.nickname, 11) or {}) do row[rf[item[3]]+i] = b end
+        end
+        return row
+    end
+    local function word(bytes, offset, width)
+        local value = 0
+        for i=width,1,-1 do value = value * 256 + bytes[offset+i] end
+        return value
+    end
+    -- FireRed durable trade, contract f4b740f6 / producer 2133349d.
+    -- A beacon is not consent. This binding owns one opaque token/visit and
+    -- accepts only coherent, identity- and command-bound native witnesses.
+    local function trade_supported()
+        if not fr_v2 or deps.title ~= "firered" or deps.production ~= true or not trade_phase_offset then return false end
+        local mb = self:mailbox()
+        return mb and integer(mb.capabilities, 0xFFFFFFFF)
+            and (mb.capabilities & ~call_known_caps) == 0
+            and (mb.capabilities & cc.SLINK_CAP_DURABLE_TRADE) ~= 0 or false
+    end
+    function self:trade_capable()
+        if not trade_supported() or poisoned or trade_blocked or session_epoch == 0 then return false end
+        local mb = self:mailbox()
+        return mb ~= nil and mb.session_epoch == session_epoch
+            and (not trade_wanted_epoch or trade_wanted_epoch == session_epoch)
+            and integer(mb.producer_phase, cc.SLINK_PHASE_DONE)
+    end
+    function self:trade_epoch_writable()
+        if not trade_supported() or trade_blocked or trade_context then return false end
+        local ok, reconciled = pcall(function()
+            return deps.trade_recovery_clear and deps.trade_recovery_clear() == true
+        end)
+        if not ok or not reconciled then return false end
+        local mb = self:mailbox()
+        -- DONE is not reusable by an epoch rewrite. A consumed/reconciled
+        -- terminal result permits another PREPARE in the SAME session only.
+        return mb ~= nil and mb.producer_phase == cc.SLINK_PHASE_IDLE
+    end
+    function self:bind_trade_session(value)
+        if not fr_v2 or deps.title ~= "firered" or deps.production ~= true
+           or not integer(value, 0xFFFFFFFF) or value == 0 or trade_context or trade_blocked then return false end
+        trade_wanted_epoch = value
+        return true
+    end
+    local function trade_safe()
+        local ok, safe = pcall(function() return deps.trade_safe and deps.trade_safe() == true end)
+        return ok and safe
+    end
+    function self:trade_eligible(mon)
+        if not self:trade_capable() or type(mon) ~= "table" then return false end
+        -- Pinned pokefirered include/constants/items.h:121..132 are the
+        -- contiguous mail items; MAIL_NONE is 0xFF. These are FR-only facts.
+        return integer(mon.species, 411) and mon.species > 0 and mon.checksum_ok == true
+            and mon.has_species == 1 and mon.is_bad_egg ~= 1 and mon.is_bad_egg ~= true
+            and mon.is_egg ~= 1 and mon.is_egg ~= true and mon.is_egg_flag ~= 1
+            and mon.is_egg_flag ~= true and mon.mail == 0xFF
+            and integer(mon.held_item, 0xFFFF) and not (mon.held_item >= 121 and mon.held_item <= 132)
+    end
+    local function outgoing(key, slot)
+        local ok, found = pcall(function()
+            local party, match = reads.read_party(), nil
+            if type(party) ~= "table" or #party < 1 or #party > 6 then return nil end
+            for _, mon in ipairs(party) do
+                if reads.key(mon) == key then
+                    if match or not self:trade_eligible(mon) then return nil end
+                    match = mon
+                end
+            end
+            if match and integer(match.slot, 5) and (slot == nil or match.slot == slot) then return match end
+        end)
+        return ok and found or nil
+    end
+    local function fresh_trade_slot()
+        local mb = self:mailbox()
+        return mb and ((not trade_context and mb.producer_phase == cc.SLINK_PHASE_IDLE)
+            or (trade_context and trade_context.reconciled and mb.producer_phase == cc.SLINK_PHASE_DONE))
+    end
+    function self:trade_authorized(token, old_key)
+        -- Server authorization is owned by trade.lua's validated command path;
+        -- this predicate adds local identity/field/ownership checks, not consent.
+        return self:trade_capable() and trade_safe() and type(token) == "string" and #token > 0 and #token <= 256
+            and type(old_key) == "string" and old_key:match("^%x%x%x%x%x%x%x%x:%x%x%x%x%x%x%x%x$") ~= nil
+            and fresh_trade_slot() and pending == nil and #queue == 0 and outgoing(old_key) ~= nil or false
+    end
+    local function little(bytes, at, value, size)
+        for i=0,size-1 do bytes[at+i+1] = (value >> (8*i)) & 0xFF end
+    end
+    local function trade_args(t)
+        local bytes = {}
+        for i=1,32 do bytes[i] = 0 end
+        bytes[1], bytes[2] = t.slot, deps.player == "b" and 1 or 0
+        little(bytes,4,t.pid,4); little(bytes,8,t.otid,4); little(bytes,12,t.visit,4)
+        for i,b in ipairs(t.opaque) do bytes[16+i] = b end
+        return bytes
+    end
+    local function trade_witness(t, final_seq)
+        local wf, base = trade_fields, p.BASE + cc.SLINK_WITNESS_OFFSET
+        local ok, w = pcall(function()
+            local before = io.read_u16(base + wf.revision)
+            local raw = io.read_bytes(base, 0x50)
+            local after = io.read_u16(base + wf.revision)
+            if not integer(before,0xFFFF) or before == 0 or before % 2 ~= 0 or before ~= after
+               or word(raw,wf.revision,2) ~= before then return nil end
+            if word(raw,wf.session_epoch,4) ~= t.epoch or word(raw,wf.visit_id,4) ~= t.visit
+               or word(raw,wf.old_pid,4) ~= t.pid or word(raw,wf.old_otid,4) ~= t.otid then return nil end
+            for i,b in ipairs(t.opaque) do if raw[wf.token+i] ~= b then return nil end end
+            local bits, flags = word(raw,wf.milestones,4), word(raw,wf.visit_flags,2)
+            local result, saved = raw[wf.final_result+1], raw[wf.save_status+1]
+            if bits > 31 or flags > 3 or result > 3 or (bits & (t.seen or 0)) ~= (t.seen or 0) then return nil end
+            if (bits & 2) ~= 0 and (bits & 1) == 0 then return nil end
+            if (bits & 4) ~= 0 and (bits & 2) == 0 then return nil end
+            if (bits & 8) ~= 0 and (bits & 4) == 0 then return nil end
+            if ((bits & 16) == 0) ~= (result == 0) then return nil end
+            if (bits & 1) ~= 0 and (flags ~= 3 or (saved ~= 1 and saved ~= 255)) then return nil end
+            for i=0,4 do
+                if (bits & (1 << i)) ~= 0 then
+                    local expected = i == 0 and t.prepare_seq or (i == 4 and final_seq or t.scene_seq)
+                    if expected == nil or word(raw,wf.milestone_seq+2*i,2) ~= expected then return nil end
+                end
+            end
+            local received_pid, received_otid = word(raw,wf.received_pid,4), word(raw,wf.received_otid,4)
+            local mb = self:mailbox()
+            if not mb or mb.session_epoch ~= t.epoch or not integer(mb.producer_phase,cc.SLINK_PHASE_UNCERTAIN) then return nil end
+            if (result == 1 or result == 2) and mb.producer_phase ~= cc.SLINK_PHASE_DONE then return nil end
+            if result == 3 and mb.producer_phase ~= cc.SLINK_PHASE_UNCERTAIN then return nil end
+            if (bits & 8) ~= 0 and (saved ~= 1 or not t.incoming
+               or received_pid ~= t.incoming.pid or received_otid ~= t.incoming.otid) then return nil end
+            -- Port of abi.h slink_trade_success_is_durable, including expected
+            -- received identity. Milestone frames are diagnostic, never clocks.
+            if result == 1 and (bits ~= cc.SLINK_SUCCESS_MILESTONES or flags ~= 3 or saved ~= cc.SLINK_SAVE_OK
+               or not t.incoming or received_pid ~= t.incoming.pid or received_otid ~= t.incoming.otid) then return nil end
+            if result == 2 and (bits & 14) ~= 0 then return nil end
+            return {bits=bits, flags=flags, result=result, saved=saved}
+        end)
+        if ok and w then t.seen = w.bits; return w end
+        return nil
+    end
+    function self:trade_visit()
+        local t = trade_context
+        if not t or not t.prepared or t.scene_posted or t.withdraw_posted or t.reconciled
+           or not self:trade_capable() then return nil, "durable_trade_unavailable" end
+        local mb, w = self:mailbox(), trade_witness(t,t.prepare_seq)
+        if not mb or mb.producer_phase ~= cc.SLINK_PHASE_READY or not w or w.bits ~= 1
+           or w.flags ~= 3 or w.saved ~= 1 or w.result ~= 0 then return nil, "trade visit not ready" end
+        return {id=t.visit, old_key=t.old_key, accepted=true, pre_saved=true, apply_open=true}
+    end
+    function self:trade_reconciled(token)
+        local t = trade_context
+        if t and t.token == token and t.terminal and (t.terminal == 1 or t.terminal == 2) then
+            t.reconciled = true
+            return true
+        end
+        return false
+    end
+    function self:prepare_trade(cmd, done, valid)
+        if not self:trade_authorized(cmd.token, cmd.old_key) or not outgoing(cmd.old_key,cmd.slot)
+           or trade_serial == 0xFFFFFFFF then
+            if done then done("durable_trade_unavailable") end
+            return nil, "durable_trade_unavailable"
+        end
+        trade_serial = trade_serial + 1
+        local t = {token=cmd.token, old_key=cmd.old_key, slot=cmd.slot, epoch=session_epoch,
+            pid=tonumber(cmd.old_key:sub(1,8),16), otid=tonumber(cmd.old_key:sub(10,17),16),
+            visit=trade_serial, opaque={0x54,0x33,0x46,0x52}}
+        -- Stable opaque mapping for the full server token, unique per session
+        -- and preparation; no text truncation and no party-derived identity.
+        little(t.opaque,4,t.epoch,4); little(t.opaque,8,t.visit,4); little(t.opaque,12,(~t.visit)&0xFFFFFFFF,4)
+        trade_context = t
+        local job
+        job = {op=p.OP_TRADE_PREPARE, args=trade_args(t), stages={},
+            valid=function()
+                if trade_context ~= t or not self:trade_capable() or not trade_safe() or not outgoing(t.old_key,t.slot)
+                   then return false, "guard:stale" end
+                local mb = self:mailbox()
+                if not mb or (mb.producer_phase ~= cc.SLINK_PHASE_IDLE and mb.producer_phase ~= cc.SLINK_PHASE_DONE)
+                   then return false, "trade producer owned" end
+                if valid then return valid() end
+                return true
+            end,
+            on_publish=function() t.prepare_seq = job.seq end,
+            done=function(why)
+                local w = job.posted and trade_witness(t,t.prepare_seq)
+                if w and w.result == 2 then t.terminal, t.reconciled = 2, true end
+                if not why and w and w.result == 0 and w.bits == 1 and w.saved == 1 then
+                    t.prepared = true
+                    local visit = self:trade_visit()
+                    if visit then if done then done(nil,visit) end; return end
+                end
+                if job.posted and not t.reconciled then trade_blocked = true end
+                if not job.posted and trade_context == t then trade_context = nil end
+                if done then done(why or "native prepare lacks ready witness") end
+            end}
+        return enqueue(job)
+    end
+    function self:withdraw_trade(token)
+        local t = trade_context
+        if not t or t.token ~= token or t.reconciled then return nil, "no owned trade" end
+        if t.scene_posted or trade_blocked then return nil, "withdraw_too_late" end
+        if t.withdraw_job then return t.withdraw_job end
+        local job
+        job = {op=p.OP_TRADE_WITHDRAW, args=trade_args(t), stages={},
+            valid=function()
+                local mb = self:mailbox()
+                return trade_context == t and self:trade_capable() and not t.scene_posted
+                    and mb and mb.producer_phase == cc.SLINK_PHASE_READY, "withdraw_too_late"
+            end,
+            on_publish=function() t.withdraw_posted = true end,
+            done=function(why)
+                local w = job.posted and trade_witness(t,job.seq)
+                if w and w.result == 2 then t.terminal, t.reconciled = 2, true
+                elseif job.posted then trade_blocked = true end
+                if why and not t.reconciled then log("[SLink-gen3] trade withdrawal unproved: " .. why) end
+            end}
+        t.withdraw_job = enqueue(job)
+        return t.withdraw_job
+    end
+    local function trade_transfer(step, cmd, done, valid, progress)
+        local t = trade_context
+        if not self:trade_capable() or not t or not self:trade_visit() then return nil, "durable_trade_unavailable" end
+        if step == "enemy" then
+            local rows = cmd.blobs_hex
+            local hex = type(rows) == "table" and #rows == 1 and rows[1]
+            if type(hex) ~= "string" or #hex ~= 200 or hex:find("[^%x]") then return nil, "invalid blobs" end
+            local bytes = {}
+            for i=1,200,2 do bytes[#bytes+1] = tonumber(hex:sub(i,i+1),16) end
+            local ok, incoming = pcall(reads.decode_party_mon,bytes)
+            if not ok or not self:trade_eligible(incoming) then return nil, "ineligible incoming mon" end
+            for _, mon in ipairs(reads.read_party()) do
+                if reads.key(mon) == reads.key(incoming) then return nil, "duplicate incoming identity" end
+            end
+            return enqueue({stages={{p.BLOB_BUF,bytes}}, valid=function()
+                if trade_context ~= t or not self:trade_visit() or not trade_safe() then return false, "guard:stale" end
+                if valid then return valid() end
+                return true
+            end, done=function(why)
+                if not why then t.incoming = {bytes=bytes,pid=word(bytes,0,4),otid=word(bytes,4,4)} end
+                if done then done(why) end
+            end})
+        end
+        if step ~= "scene" or not t.incoming or cmd.token ~= t.token or cmd.old_key ~= t.old_key
+           or cmd.visit ~= t.visit or cmd.slot ~= t.slot then return nil, "invalid trade binding" end
+        local job
+        job = {op=p.OP_TRADE_SCENE, args=trade_args(t), stages={{p.BLOB_BUF,clone(t.incoming.bytes)}},
+            valid=function()
+                if trade_context ~= t or not self:trade_visit() or not trade_safe() or not outgoing(t.old_key,t.slot)
+                   then return false, "guard:stale" end
+                if valid then return valid() end
+                return true
+            end,
+            on_publish=function() t.scene_seq, t.scene_posted = job.seq, true end,
+            observe=function()
+                local w = trade_witness(t,job.seq)
+                job.observed = w
+                if w and progress then
+                    progress({commit_entered=(w.bits & 2) ~= 0, scene_done=(w.bits & 4) ~= 0,
+                        save_success=(w.bits & 8) ~= 0,
+                        final_result=({[1]="committed",[2]="unchanged",[3]="uncertain"})[w.result],
+                        unchanged_proved=w.result == 2})
+                end
+                return w
+            end,
+            done=function(why,result,reason)
+                -- Completion and progress consume the same coherent snapshot;
+                -- rereading here could turn a torn progress read into an ACK
+                -- success without delivering its save milestone to trade.lua.
+                local w = job.posted and job.observed
+                if job.posted and (not w or w.result == 0 or w.result == 3) then
+                    trade_blocked = true
+                    why = why or "native trade terminal witness missing"
+                elseif w then t.terminal = w.result end
+                if w and w.result == 2 then why = "native refused" end
+                if done then done(why,result,reason) end
+            end}
+        return enqueue(job)
+    end
+    local function service_trade_binding()
+        if not trade_wanted_epoch or session_epoch == trade_wanted_epoch or trade_binding_job
+           or poisoned or trade_blocked or not trade_supported() then return end
+        trade_binding_job = self:set_session_epoch(trade_wanted_epoch)
+    end
+    local function call_witness()
+        local wf = call_witness_fields
+        local base = p.BASE + cc.SLINK_CALL_WITNESS_OFFSET
+        local ok, witness = pcall(function()
+            local before = io.read_u16(base + wf.revision)
+            local raw = io.read_bytes(base, 32)
+            local after = io.read_u16(base + wf.revision)
+            if before ~= after or before % 2 ~= 0 or word(raw, wf.revision, 2) ~= before then return nil end
+            if before == 0 then
+                if raw[wf.phase+1] == cc.SLINK_CALL_EMPTY then
+                    return {revision=0, phase=cc.SLINK_CALL_EMPTY}
+                end
+                return nil
+            end
+            return {revision=before, epoch=word(raw,wf.session_epoch,4), seq=word(raw,wf.seq,2),
+                phase=raw[wf.phase+1], event=raw[wf.event+1], reason=word(raw,wf.reason,2),
+                delivered_frame=word(raw,wf.delivered_frame,4)}
+        end)
+        return ok and witness or nil
+    end
+    local function call_slot_free(w)
+        return w and (w.phase == cc.SLINK_CALL_EMPTY or w.phase == cc.SLINK_CALL_REFUSED
+                      or w.phase == cc.SLINK_CALL_COMPLETE)
+    end
+    local function call_args(id)
+        local args = {}
+        for i=1,32 do args[i] = 0 end
+        args[1] = id
+        return args
+    end
+    function self:request_match_call(name, data)
+        local id = CALL_IDS[name]
+        if not id or not self:match_call_capable() or (id == CALL_IDS.first_link and call_first_posted) then return false end
+        local row = call_record(id, data) -- own a snapshot; newest equal priority wins
+        if call_active and not call_active.job.posted and not call_active.job.publish_attempted then
+            if id <= call_active.id then
+                call_active.id = id
+                call_active.job.args = call_args(id)
+                call_active.job.stages[1][2] = row
+            end
+        elseif not call_queued or id <= call_queued.id then
+            call_queued = {id=id, row=row}
+        end
+        return true
+    end
+    local function service_calls()
+        if not call_supported() or poisoned then call_queued, call_active = nil, nil; return end
+        if call_wanted_epoch and session_epoch ~= call_wanted_epoch then
+            if call_binding_failed then return end
+            if call_binding_attempts >= CALL_BIND_ATTEMPTS then
+                if call_handshake_job then self:cancel(call_handshake_job); call_handshake_job = nil end
+                call_binding_failed = true
+                log("[SLink-gen3] match call handshake exhausted; explicit rebind required")
+                return
+            end
+            call_binding_attempts = call_binding_attempts + 1
+            -- Epoch is only a host field write, not native acceptance. Never
+            -- displace an old UI's owned record/witness while attempting it.
+            if not call_slot_free(call_witness()) then return end
+            if not call_handshake_job then call_handshake_job = self:set_session_epoch(call_wanted_epoch) end
+            return
+        end
+        call_handshake_job, call_binding_attempts = nil, 0
+        if not self:match_call_capable() then call_queued, call_active = nil, nil; return end
+        local now = io.framecount()
+        if call_active then
+            local active = call_active
+            if active.epoch ~= session_epoch then call_queued, call_active = nil, nil; return end
+            if not active.acked then return end
+            local w = call_witness()
+            if not w or w.revision == 0 or w.revision == active.before_revision or w.epoch ~= active.epoch
+               or w.seq ~= active.job.seq or w.event ~= active.id then return end
+            if w.phase == cc.SLINK_CALL_DELIVERED or w.phase == cc.SLINK_CALL_COMPLETE then
+                if not active.delivered then
+                    active.delivered, call_delivered_at = true, now -- emulator frames, as Gen 2
+                    log("[SLink-gen3] match call " .. active.id .. " delivered")
+                end
+                if w.phase == cc.SLINK_CALL_COMPLETE then call_active = nil end
+            elseif w.phase == cc.SLINK_CALL_REFUSED then
+                log("[SLink-gen3] match call refused: " .. tostring(w.reason))
+                call_active = nil
+            end
+            return
+        end
+        if not call_queued or not self:idle() or #queue ~= 0 then return end
+        if call_delivered_at and now >= call_delivered_at
+           and now - call_delivered_at < cc.SLINK_CALL_COOLDOWN_FRAMES then return end
+        if not call_slot_free(call_witness()) then return end
+        local next_call = call_queued
+        local active = {id=next_call.id, epoch=session_epoch}
+        call_active, call_queued = active, nil
+        active.job = enqueue({op=p.OP_MATCH_CALL, args=call_args(active.id),
+            stages={{p.BASE + cc.SLINK_TEXT_OFFSET, next_call.row}},
+            ready=function()
+                return call_active ~= active or call_slot_free(call_witness())
+            end,
+            valid=function()
+                if call_active ~= active or not self:match_call_capable() or active.epoch ~= session_epoch then
+                    return false, "guard:stale"
+                end
+                local w = call_witness()
+                if not call_slot_free(w) then return false, "call UI still owned", true end
+                active.before_revision = w.revision
+                return true
+            end,
+            on_publish=function()
+                if active.id == CALL_IDS.first_link then call_first_posted = true end
+            end,
+            done=function(why)
+                if call_active ~= active then return end
+                if why then call_active = nil else active.acked = true end
+            end})
+        if not active.job and call_active == active then call_active = nil end
     end
 
     function self:play_sound(id)
@@ -223,7 +850,14 @@ function N.new(profile, deps)
     -- valid (optional): a dispatch-time guard, called by service() immediately before this job is
     -- dispatched (same frame-end callback, CPU stopped); false, why drops the job with done(why).
     -- The trade FSM uses it to re-locate the offered mon at the moment a slot op actually posts.
-    function self:transfer(step, cmd, done, valid)
+    function self:transfer(step, cmd, done, valid, progress)
+        if fr_v2 then return trade_transfer(step,cmd,done,valid,progress) end
+        -- Direct scene probes exercise the legacy transport without claiming
+        -- durable completion. The FSM's milestone path still requires capability.
+        if step == "scene" and progress ~= nil and not self:trade_capable() then
+            if done then done("durable_trade_unavailable") end
+            return nil, "durable_trade_unavailable"
+        end
         local op, args, stages = nil, {}, {}
         if step == "scene" or step == "party" then
             if not integer(cmd.slot, 5) then return nil, "invalid party slot" end
@@ -236,18 +870,20 @@ function N.new(profile, deps)
                 return nil, "invalid blobs"
             end
             local bytes = {}
+            local mon_size = reads.PARTY_MON_SIZE
+            if not integer(mon_size, 600) or mon_size == 0 then return nil, "invalid mon size" end
             for _, hex in ipairs(rows) do
-                if type(hex) ~= "string" or #hex ~= 200 or hex:find("[^%x]") then
+                if type(hex) ~= "string" or #hex ~= 2 * mon_size or hex:find("[^%x]") then
                     return nil, "invalid blobs"
                 end
-                for i = 1, 200, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
+                for i = 1, 2 * mon_size, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
             end
             stages = {{p.BLOB_BUF, bytes}}
             if step == "party" then
                 op, args = assert(p.OP_SET_PARTY_MON), {cmd.slot, cmd.bump and 1 or 0}
             else op, args = assert(p.OP_SET_ENEMY_PARTY), {#rows} end
         else return nil, "unsupported transfer step" end
-        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid})
+        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid, progress=progress})
     end
     -- G5-RR-RIVAL: the patch's rival-swap window W1 (docs/gen3/research/rival_swap_refresh_window.md
     -- §5), mirrored from patch/src/handlers.c's OP_RIVAL_SWAP check (OMP F4): gBattleCommunication[0]
@@ -383,11 +1019,13 @@ function N.new(profile, deps)
             end}
     end
     function self:link_panel(cmd)
+        if v2 then return nil, "v2 panel binding unavailable" end
         panel_rows, panel_page = clone(cmd.rows or {}), 0
         return enqueue(panel_job(false))
     end
     function self:config(cmd)
         if cmd.native_sounds ~= nil then sounds_enabled = cmd.native_sounds == true end
+        if v2 then return nil, "v2 control binding unavailable" end
         local stages = {}
         if cmd.overworld_presence ~= nil or cmd.pc_trade_npc ~= nil then
             npc_enabled = cmd.overworld_presence ~= true and cmd.pc_trade_npc ~= false
@@ -404,11 +1042,19 @@ function N.new(profile, deps)
         local frame, here = io.framecount(), present()
         local owned_panel = pending and pending.panel
         if (last_frame and frame < last_frame) or (was_present and not here) then
+            if fr_v2 and trade_context and not trade_context.reconciled then trade_blocked = true end
             abort("native reset")
             poisoned, npc_count, panel_drawn, panel_showing = nil, nil, nil, false
+            session_epoch = 0
         end
         last_frame, was_present = frame, here
         if not here then return nil, "native absent" end
+        local epoch_ok, epoch_why = check_epoch()
+        if not epoch_ok then return nil, epoch_why end
+        if fr_v2 and trade_context and not trade_supported() then
+            trade_blocked, poisoned = true, "trade capability lost"
+            abort(poisoned)
+        end
         if pending then
             local job = pending
             local opcode = io.read_u16(p.BASE + O.opcode)
@@ -416,22 +1062,24 @@ function N.new(profile, deps)
                 poisoned = "native sequence overwritten"; abort(poisoned)
             elseif not stage_intact(job) then
                 poisoned = "native staging overwritten"; abort(poisoned)
-            elseif io.read_u16(p.BASE + O.ack) == job.seq
+            else
+                -- Observe before consuming the ACK: a native frame may publish
+                -- all milestones together. ACK/result scratch alone is no proof.
+                if job.observe then job.observe() end
+                if io.read_u16(p.BASE + O.ack) == job.seq
                 and (io.read_u16(p.BASE + O.status) == OK or io.read_u16(p.BASE + O.status) == FAIL) then
                 local status, result = io.read_u16(p.BASE + O.status), io.read_u8(p.BASE + O.result)
                 local reason = status == FAIL and io.read_u16(p.BASE + O.reason) or nil
                 pending = nil -- consume receipt BEFORE any next post can rewrite it
                 finish(job, status == FAIL and "native refused" or nil, result,
-                       reason and FAIL_REASONS[reason] or nil)
+                       reason and fail_reasons[reason] or nil)
             elseif frame - job.started >= timeout_for(job.op) then
                 -- Never reuse a timed-out slot: opcode==0 can mean an async handler
                 -- still owns it. A reset/absent beacon is the recovery boundary.
-                -- RECORDED LIMIT (C5-6a): the poison also blocks any recovery post, so a trade
-                -- whose OP_SET_ENEMY_PARTY stage timed out cannot post its OP_SET_PARTY_MON
-                -- silent-swap fallback; the trade FSM reads the slot back and reports it as it is.
-                -- A safe recovery post would need to know whether the patch still owns the timed-
-                -- out op, and nothing in the ABI says so, so none is attempted.
+                -- Poison blocks further posts. Durable trade treats a possibly committed
+                -- operation as uncertain; neither raw replacement nor RAM readback repairs it.
                 poisoned = "native timeout"; abort(poisoned)
+                end
             end
         end
         if poisoned then return nil, poisoned end
@@ -440,26 +1088,30 @@ function N.new(profile, deps)
             if wt.check() then table.remove(watches, i); wt.ok()
             elseif io.framecount() >= wt.deadline then table.remove(watches, i); wt.fail() end
         end
-        local counter = io.read_u8(p.PI_COUNT)
-        if npc_count ~= nil and counter > npc_count and npc_enabled and not pending then
-            send("trade_request", {})
-        end
-        npc_count = counter -- backwards counters re-latch; never synthesize an interaction
-        local drawn = io.read_u8(p.INFO + 2)
-        if panel_drawn ~= nil and drawn ~= panel_drawn and not owned_panel then
-            panel_showing = true
-        end
-        panel_drawn = drawn
-        if panel_showing and deps.panel_closed then
-            local closed, result = deps.panel_closed()
-            if closed then
-                panel_showing = false
-                if not pending then
-                    panel_page = result == 0 and panel_page + 1 or 0
-                    enqueue(panel_job(result == 0 and #panel_rows > p.INFO_MAXLINES))
+        if not v2 then -- v1 NPC/panel offsets are never inherited by a v2 mailbox
+            local counter = io.read_u8(p.PI_COUNT)
+            if npc_count ~= nil and counter > npc_count and npc_enabled and not pending then
+                send("trade_request", {})
+            end
+            npc_count = counter -- backwards counters re-latch; never synthesize an interaction
+            local drawn = io.read_u8(p.INFO + 2)
+            if panel_drawn ~= nil and drawn ~= panel_drawn and not owned_panel then
+                panel_showing = true
+            end
+            panel_drawn = drawn
+            if panel_showing and deps.panel_closed then
+                local closed, result = deps.panel_closed()
+                if closed then
+                    panel_showing = false
+                    if not pending then
+                        panel_page = result == 0 and panel_page + 1 or 0
+                        enqueue(panel_job(result == 0 and #panel_rows > p.INFO_MAXLINES))
+                    end
                 end
             end
         end
+        service_calls()
+        service_trade_binding()
         if not self:idle() or #queue == 0 then return true end
         -- a job whose `ready` says "not yet" (a staged rival swap waiting for its window) stays
         -- queued and does not block the jobs behind it
@@ -476,6 +1128,16 @@ function N.new(profile, deps)
         if ok ~= nil then table.remove(queue, at) end
         if ok == false then abort(poisoned) end
         return ok, why
+    end
+    local service, advertised_trade = self.service, false
+    function self:service()
+        local result = table.pack(service(self))
+        local capable = self:trade_capable()
+        if capable ~= advertised_trade then
+            advertised_trade = capable
+            if deps.trade_capability_changed then deps.trade_capability_changed(capable) end
+        end
+        return table.unpack(result,1,result.n)
     end
     return self
 end

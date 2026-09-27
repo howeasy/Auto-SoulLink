@@ -14,8 +14,8 @@ verified against patch/build/slink_RR.gba whenever that local witness exists.
 Packs (PLAN §4, §5.1):
     data/games/gen3_frlg/profile.json   titles firered, leafgreen (admitted; both read the
                                         `vanilla` table today) + the unadmitted titles
-                                        firered_ap (`.ap`) and emerald (`.emerald`), copied
-                                        verbatim so no data is lost
+                                        firered_ap (`.ap`). Emerald lives only in its
+                                        own pret-derived pack.
     data/games/gen3_rr/profile.json     title radical_red (`.radical_red`) + a `native` block
                                         for kind `companion`: the companion-patch mailbox ABI and
                                         the ghost/object-event addresses, sourced from the patch's
@@ -36,8 +36,10 @@ Packs (PLAN §4, §5.1):
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
+import os
 import pathlib
 import re
 import subprocess
@@ -53,6 +55,10 @@ STORAGE_HEADER = f"{PRET_PIN}:include/pokemon_storage_system.h"
 # boxes follows u8 currentBox, but BoxPokemon begins with u32 personality:
 # ARM alignment inserts three padding bytes (the header's 0x0001 comment is wrong).
 FRLG_DERIVED = {
+    "BATTLE_STRUCT_MOVE_TARGET_OFF": (0x0C, f"{PRET_PIN}:include/battle.h:373-380 "
+                                     "(BattleStruct.moveTarget; u8 prefix + wrappedMove[8])"),
+    "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": (0x80, f"{PRET_PIN}:include/battle.h:373-412 "
+                                         "(BattleStruct.chosenMovePositions; offsetof verified from prefix)"),
     "EXPERIENCE_TABLE_ENTRY_COUNT": (101, f"{PRET_PIN}:src/data/pokemon/experience_tables.h:18 "
                                     "(gExperienceTables[][MAX_LEVEL + 1])"),
     "MAX_LEVEL": (100, f"{PRET_PIN}:include/constants/pokemon.h:187 (MAX_LEVEL)"),
@@ -140,11 +146,13 @@ FRLG_SYM_ADDR = {
     ("rom", "EXPERIENCE_TABLES_ADDR"): "gExperienceTables",
     ("rom", "BATTLE_MOVES_ADDR"): "gBattleMoves",
     ("rom", "PP_UP_GET_MASK_ADDR"): "gPPUpGetMask",
-    # C4-ACTIVE-FAINT-P (mechanism P). CHOSEN_ACTION_ADDR/BATTLE_COMM_ADDR share RR's names on
-    # purpose; CHOSEN_MOVE_ADDR is deliberately absent, so vanilla stays not explode_capable.
+    # Shared engine action fields. Each title binds its own symbols; EXPLODE-BIND adds the
+    # chosen move and BattleStruct pointer without a companion-patch dependency.
     ("ram", "STATUS3_ADDR"): "gStatuses3",
     ("ram", "DISABLE_STRUCTS_ADDR"): "gDisableStructs",
     ("ram", "CHOSEN_ACTION_ADDR"): "gChosenActionByBattler",
+    ("ram", "CHOSEN_MOVE_ADDR"): "gChosenMoveByBattler",
+    ("ram", "BATTLE_STRUCT_PTR_ADDR"): "gBattleStruct",
     ("ram", "BATTLE_COMM_ADDR"): "gBattleCommunication",
 }
 
@@ -438,7 +446,6 @@ PACKS = {
         ("firered", "vanilla", True),
         ("leafgreen", "vanilla", True),
         ("firered_ap", "ap", False),
-        ("emerald", "emerald", False),
     ],
     "gen3_rr": [
         ("radical_red", "radical_red", True),
@@ -667,7 +674,108 @@ def _c_define(text: str, cname: str) -> tuple[int, int]:
     return (int(lit, 16) if lit[:2].lower() == "0x" else int(lit)), m.start()
 
 
-def native_block() -> dict:
+ABI_SRC = "patch/src/trade_targets/abi.h"
+V2_TARGETS = ("firered", "leafgreen", "emerald", "radical_red")
+
+
+def _abi_number(expression: str, constants: dict[str, int]) -> int:
+    """Evaluate only the integer-expression subset used by the canonical C ABI."""
+    expression = re.sub(r"\b(0x[0-9a-fA-F]+|\d+)[uUlL]+\b", r"\1", expression)
+    tree = ast.parse(expression.strip(), mode="eval")
+
+    def number(node):
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            return node.value
+        if isinstance(node, ast.Name) and node.id in constants:
+            return constants[node.id]
+        if isinstance(node, ast.BinOp):
+            left, right = number(node.left), number(node.right)
+            operations = {ast.Add: lambda: left + right, ast.Sub: lambda: left - right,
+                          ast.Mult: lambda: left * right, ast.LShift: lambda: left << right,
+                          ast.BitOr: lambda: left | right, ast.BitAnd: lambda: left & right}
+            if type(node.op) in operations:
+                return operations[type(node.op)]()
+        raise ValueError(f"unsupported ABI expression: {expression}")
+
+    return number(tree.body)
+
+
+def native_abi() -> dict:
+    """Read v2 constants and naturally aligned fixed-width structs from abi.h.
+
+    This is layout evidence only, never a title binding or a READY assertion.
+    Unknown declarations fail instead of silently moving subsequent fields.
+    """
+    source = (REPO / ABI_SRC).read_text(encoding="utf-8")
+    text = re.sub(r"/\*.*?\*/|//[^\n]*",
+                  lambda m: "\n" * m[0].count("\n"), source, flags=re.S)
+    constants, structs, citations = {}, {}, {}
+    declarations = [(m.start(), m[1], m[2]) for m in re.finditer(
+        r"^[ \t]*#define[ \t]+(SLINK_[A-Z0-9_]+)[ \t]+([^\n]+)", text, re.M)]
+    for enum in re.finditer(r"\benum\s+\w+\s*\{([^}]+)\}", text):
+        for row in re.finditer(r"[^,]+", enum[1]):
+            declaration = row[0].strip()
+            if not declaration:
+                continue
+            parsed = re.fullmatch(r"(SLINK_[A-Z0-9_]+)\s*=\s*(.+)", declaration, re.S)
+            if not parsed:
+                raise ValueError(f"unsupported ABI enum declaration: {declaration}")
+            offset = enum.start(1) + row.start() + len(row[0]) - len(row[0].lstrip())
+            declarations.append((offset, parsed[1], parsed[2]))
+    for offset, name, expression in sorted(declarations):
+        constants[name] = _abi_number(expression, constants)
+        citations[name] = f"{ABI_SRC}:{_line_of(text, offset)} ({name})"
+    for struct in re.finditer(r"typedef\s+struct\s*\{([^}]+)\}\s*(\w+)\s*;", text):
+        fields, offset, alignment = {}, 0, 1
+        for declaration in struct[1].split(";"):
+            declaration = declaration.strip()
+            if not declaration:
+                continue
+            match = re.fullmatch(r"uint(8|16|32)_t\s+(.+)", declaration, re.S)
+            if not match:
+                raise ValueError(f"unsupported ABI declaration: {declaration}")
+            width = int(match[1]) // 8
+            alignment = max(alignment, width)
+            for field in match[2].split(","):
+                field = field.strip()
+                parsed = re.fullmatch(r"(\w+)((?:\s*\[[^\]]+\])*)", field)
+                if not parsed:
+                    raise ValueError(f"unsupported ABI declaration: {declaration}")
+                count = 1
+                for dimension in re.findall(r"\[([^\]]+)\]", parsed[2]):
+                    size = _abi_number(dimension, constants)
+                    if size <= 0:
+                        raise ValueError(f"unsupported ABI array size: {dimension}")
+                    count *= size
+                offset = (offset + width - 1) // width * width
+                if parsed[1] in fields:
+                    raise ValueError(f"duplicate ABI field: {parsed[1]}")
+                fields[parsed[1]] = {"offset": offset, "width": width, "count": count}
+                offset += width * count
+        structs[struct[2]] = {"size": (offset + alignment - 1) // alignment * alignment,
+                             "fields": fields}
+        citations[struct[2]] = f"{ABI_SRC}:{_line_of(text, struct.start())} ({struct[2]})"
+    if constants.get("SLINK_ABI_VERSION") != 2 or "SlinkMailboxV2" not in structs:
+        raise ValueError("unsupported companion ABI")
+    return {"constants": constants, "structs": structs, "_src": citations,
+            "source_sha256": hashlib.sha256((REPO / ABI_SRC).read_bytes()).hexdigest()}
+
+
+def native_block(title: str | None = None) -> dict | None:
+    if title is not None:
+        if title not in V2_TARGETS:
+            raise ValueError(f"unknown companion target: {title}")
+        native_abi()  # validate the sole v2 layout source even while a target is held
+        path = f"patch/src/trade_targets/{title}.h"
+        text = (REPO / path).read_text(encoding="utf-8")
+        ready = re.search(r"^#define SLINK_TARGET_READY\s+(\w+)", text, re.M)
+        if not ready:
+            raise ValueError(f"missing READY gate: {path}")
+        if _abi_number(ready[1], {}) == 0:
+            return None
+        raise ValueError(f"no qualified v2 binding for {title}")
+    # The published RR UPS is still v1. Never replace its values/citations with
+    # the unqualified v2 header merely because its source is now available.
     values: dict[str, int] = {}
     src: dict[str, str] = {}
     text = (REPO / HANDLERS_SRC).read_text(encoding="utf-8", errors="replace")
@@ -902,6 +1010,36 @@ def _guard_leafgreen_not_copied(lg_entry: dict, fr_entry: dict, fr_by_addr: dict
                              f"(see C4-LGSE)")
 
 
+def rom_tables(title: str, text: str) -> tuple[dict, dict]:
+    """R0: cartridge table heads, independent of native/companion support.
+
+    Strides are the pinned pret layouts (Gen 3 randomized design R0); counts
+    include gWildMonHeaders' terminating sentinel and come from symbol sizes.
+    """
+    if title not in ("firered", "leafgreen", "emerald"):
+        raise ValueError("rom_tables is bound only for FireRed/LeafGreen/Emerald")
+    rows, provenance = {}, {}
+    strides = {"gTrainers": 40, "gWildMonHeaders": 20, "gEvolutionTable": 40,
+               "gSpeciesInfo": 28, "gTrainerClassNames": 13}
+    for name, stride in strides.items():
+        matches = list(re.finditer(rf"^([0-9a-fA-F]{{8}})\s+[lg]\s+([0-9a-fA-F]{{8}})\s+{name}$", text, re.M))
+        if len(matches) != 1:
+            raise ValueError(f"rom_tables: need exactly one {name} in poke{title}.sym")
+        match = matches[0]
+        address, size = int(match[1], 16), int(match[2], 16)
+        if not 0x08000000 <= address < 0x0A000000 or size <= 0 or size % stride:
+            raise ValueError(f"rom_tables: {name} has invalid address/size/stride")
+        if title == "emerald":
+            count = {"gTrainers": 855, "gWildMonHeaders": 125, "gEvolutionTable": 412,
+                     "gSpeciesInfo": 412, "gTrainerClassNames": 66}[name]
+            if size != count * stride:
+                raise ValueError(f"rom_tables: Emerald {name} size is not {count} * {stride}")
+        rows[name] = {"address": address, "size": size, "stride": stride, "count": size // stride}
+        pin = EMERALD_PIN if title == "emerald" else "pret/pokefirered@c75f3523"
+        provenance[name] = f"{pin} {name}; data/gen3/pret/poke{title}.sym:{_line_of(text, match.start())}"
+    return rows, provenance
+
+
 def build(pack: str, profiles: dict, source: dict) -> dict:
     out = {
         "schema": SCHEMA,
@@ -988,6 +1126,7 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
                     entry["_src"][f"rom.{cb2_key}"] = (
                         f"{path} {name} translated by symbol name from pokefirered.sym "
                         f"0x{fr_val:08X} ({PRET_PIN})")
+            entry["rom_tables"], entry["rom_tables_provenance"] = rom_tables(title, text)
         # C4-LGSE guard: the next FR-default value nobody translated must fail the build.
         _guard_leafgreen_not_copied(out["titles"]["leafgreen"], out["titles"]["firered"],
                                     fr_by_addr, fr_by_name, lg_by_name)
@@ -1063,6 +1202,8 @@ EMERALD_SYM_ADDR = {
     ("ram", "BATTLE_RESULTS_ADDR"): ("gBattleResults", False),
     ("ram", "BATTLE_TYPE_ADDR"): ("gBattleTypeFlags", False),
     ("ram", "CHOSEN_ACTION_ADDR"): ("gChosenActionByBattler", False),
+    ("ram", "CHOSEN_MOVE_ADDR"): ("gChosenMoveByBattler", False),
+    ("ram", "BATTLE_STRUCT_PTR_ADDR"): ("gBattleStruct", False),
     ("ram", "DISABLE_STRUCTS_ADDR"): ("gDisableStructs", False),
     ("ram", "ENEMY_BASE"): ("gEnemyParty", False),
     ("ram", "ENEMY_COUNT_ADDR"): ("gEnemyPartyCount", False),
@@ -1106,6 +1247,10 @@ EMERALD_SE_SONGS = {16: ("se_faint", 22, "SE_FAINT"), 17: ("se_flee", 23, "SE_FL
                     32: ("se_failure", 38, "SE_FAILURE"), 102: ("se_shiny", 108, "SE_SHINY")}
 # key -> (value, pret path:lines, identifier the cited lines carry, note)
 EMERALD_DERIVED = {
+    "BATTLE_STRUCT_MOVE_TARGET_OFF": (0x0C, "include/battle.h:354-361", "moveTarget",
+                                     "BattleStruct u8 prefix + wrappedMove[8]"),
+    "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": (0x80, "include/battle.h:354-392", "chosenMovePositions",
+                                         "offsetof verified from BattleStruct prefix"),
     "BADGE_FIRST_FLAG": (0x867, "include/constants/flags.h:1359", "FLAG_BADGE01_GET",
                          "SYSTEM_FLAGS 0x860 + 7 (flags.h:1348); the E2-ENTRY+BADGE derived "
                          "flag id lua/gen3/reads.lua and tools/gen3_reads_pydec.py derive "
@@ -1168,6 +1313,7 @@ EMERALD_DERIVED = {
     "SB1_VARS_OFFSET": (0x139C, "include/global.h:1021", "vars", "struct SaveBlock1"),
     "SB2_ENC_KEY_OFFSET": (0xAC, "include/global.h:532", "encryptionKey", "struct SaveBlock2"),
     "SB2_NAME_OFFSET": (0, "include/global.h:510", "playerName", "struct SaveBlock2"),
+    "SB2_PLAYER_GENDER_OFFSET": (0x08, "include/global.h:511", "playerGender", "struct SaveBlock2; MALE=0/FEMALE=1, include/constants/global.h:113-114"),
     "SB2_OT_ID_OFFSET": (0x0A, "include/global.h:513", "playerTrainerId", "struct SaveBlock2"),
     "SHEDINJA_SPECIES_ID": (303, "include/constants/species.h:309", "SPECIES_SHEDINJA", ""),
     "STATUS3_PERISH_SONG": (0x20, "include/constants/battle.h:162", "STATUS3_PERISH_SONG", ""),
@@ -1235,6 +1381,7 @@ def build_emerald() -> dict:
     src["derived.BASESTATS_ADDR_BY_GAME_CODE"] = "rom.BASESTATS_ADDR under game code BPEE"
     head = subprocess.run(["git", "log", "-1", "--format=%H", "--", EMERALD_SYM],
                           cwd=REPO, capture_output=True, text=True).stdout.strip()
+    tables, table_sources = rom_tables("emerald", text)
     return {
         "schema": SCHEMA,
         "generator": "tools/gen_gen3_profile.py",
@@ -1247,6 +1394,8 @@ def build_emerald() -> dict:
             "variant": "emerald",
             "rom_sha1": EMERALD_ROM_SHA1,
             "rom_thumb": _thumb_keys(sections["rom"]),
+            "rom_tables": tables,
+            "rom_tables_provenance": table_sources,
             **sections,
         }},
     }
@@ -1268,11 +1417,176 @@ def render(profile: dict) -> str:
     return json.dumps(profile, indent=2, sort_keys=True) + "\n"
 
 
+# X1-PACK is opt-in: default generation/checks of existing packs are unchanged.
+EXPANSION_BUILD = "28877d73"
+EXPANSION_TITLE = "emerald_expansion_28877d73"
+EXPANSION_SHA1 = "28877d733492299599f2b8fff50493109d72653c"
+
+
+def expansion_inputs(build=EXPANSION_BUILD, artifacts=None):
+    if build != EXPANSION_BUILD:
+        raise ValueError(f"unregistered expansion build: {build}")
+    directory = REPO / "data/games/gen3_exp" / build
+    facts = json.loads((directory / "facts.json").read_text(encoding="utf-8"))
+    artifacts = pathlib.Path(artifacts or os.environ.get("SLINK_EXPANSION_ARTIFACTS", REPO / ".cache/expansion-output/reference"))
+    files = {}
+    for name in ("pokeemerald.gba", "pokeemerald.sym", "pokeemerald.map"):
+        raw = (artifacts / name).read_bytes()
+        expected = facts["provenance"]["artifacts"][name]
+        if len(raw) != expected["size"] or hashlib.sha256(raw).hexdigest() != expected["sha256"]:
+            raise ValueError(f"expansion artifact identity mismatch: {name}")
+        files[name] = raw
+    if hashlib.sha1(files["pokeemerald.gba"]).hexdigest() != EXPANSION_SHA1:
+        raise ValueError("expansion ROM identity mismatch")
+    if facts["provenance"]["rom_sha1"] != EXPANSION_SHA1:
+        raise ValueError("expansion facts are bound to another ROM")
+    rows = {}
+    for line, raw in enumerate(files["pokeemerald.sym"].decode().splitlines(), 1):
+        m = re.fullmatch(r"([0-9a-f]{8}) [lg] ([0-9a-f]{8}) (\S+)", raw)
+        if m:
+            rows.setdefault(m[3], []).append({"address": int(m[1], 16), "size": int(m[2], 16), "line": line})
+    return {"build": build, "directory": directory, "facts": facts, "symbols": rows,
+            "map": files["pokeemerald.map"].decode(), "rom": files["pokeemerald.gba"],
+            "source": {"rom_sha1": EXPANSION_SHA1, "source_commit": facts["provenance"]["source_commit"],
+                       "symbols_sha256": hashlib.sha256(files["pokeemerald.sym"]).hexdigest(),
+                       "facts_sha256": hashlib.sha256(render(facts).encode()).hexdigest()}}
+
+
+def expansion_symbol(context, name, obj=None):
+    hits = context["symbols"].get(name, [])
+    if obj:
+        spans = re.findall(r"^ \.text\s+(0x[0-9a-f]+)\s+(0x[0-9a-f]+)\s+" + re.escape(obj) + r"$", context["map"], re.M)
+        if len(spans) != 1:
+            raise ValueError(f"expansion .map has no unique .text span for {obj}")
+        lo, size = (int(v, 16) for v in spans[0])
+        hits = [r for r in hits if lo <= r["address"] < lo + size]
+    if len(hits) != 1:
+        raise ValueError(f"expansion .sym has {len(hits)} occurrences of {name} ({obj or 'unscoped'})")
+    return hits[0]
+
+
+def expansion_write(context, filename, value, check=False):
+    path = context["directory"] / filename
+    text = render(value)
+    if check:
+        if not path.exists() or path.read_text(encoding="utf-8") != text:
+            raise ValueError(f"stale expansion output: {path}")
+        print(f"{path.relative_to(REPO)} is current")
+    else:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8", newline="\n")
+        print(f"wrote {path.relative_to(REPO)}")
+
+
+def build_expansion(context):
+    facts = context["facts"]
+    types, const = facts["structs"], facts["constants"]
+    sections = {"ram": {}, "rom": {}, "derived": {}}
+    src, dropped = {}, {}
+    removed = {"gDisableStructs", "gStatuses3", "gTrainerBattleOpponent_A", "BattleIntroGetMonsData"}
+    party = {"PARTY_BASE": ("gParties", "B_TRAINER_PLAYER", const["PARTY_SIZE"] * types["Pokemon"]["size"]),
+             "ENEMY_BASE": ("gParties", "B_TRAINER_OPPONENT_A", const["PARTY_SIZE"] * types["Pokemon"]["size"]),
+             "PARTY_COUNT_ADDR": ("gPartiesCount", "B_TRAINER_PLAYER", 1),
+             "ENEMY_COUNT_ADDR": ("gPartiesCount", "B_TRAINER_OPPONENT_A", 1)}
+    for (section, key), (symbol, thumb) in EMERALD_SYM_ADDR.items():
+        if symbol in removed:
+            dropped[key] = f"{symbol} has no expansion equivalent in this build"
+            continue
+        symbol = "gMovesInfo" if symbol == "gBattleMoves" else symbol
+        offset = 0
+        if key in party:
+            symbol, index, stride = party[key]
+            offset = const[index] * stride
+        row = expansion_symbol(context, symbol)
+        sections[section][key] = (row["address"] + offset) | int(thumb)
+        src[f"{section}.{key}"] = f"build:pokemon.sym:{row['line']} {symbol}+{offset}; Thumb={thumb}"
+    for name in ("gBattleControllerExecFlags", "gBattlerControllerFuncs"):
+        row = expansion_symbol(context, name)
+        key = {"gBattleControllerExecFlags": "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR", "gBattlerControllerFuncs": "BATTLER_CONTROLLER_FUNCS_ADDR"}[name]
+        sections["ram"][key] = row["address"]
+        src[f"ram.{key}"] = f"build:pokemon.sym:{row['line']} {name}"
+    row = expansion_symbol(context, "Task_LaunchLvlUpAnim", "src/battle_controller_player.o")
+    sections["rom"]["POST_BATTLE_WRITER_TASKS"] = [row["address"] | 1]
+    src["rom.POST_BATTLE_WRITER_TASKS"] = f"build:pokemon.sym:{row['line']} Task_LaunchLvlUpAnim in .map player-controller span, Thumb"
+    headers = {}
+    for _, (symbol, _, constant) in EMERALD_SE_SONGS.items():
+        row = expansion_symbol(context, symbol)
+        headers[str(const[constant])] = row["address"]
+        src[f"rom.SE_SONG_HEADERS.{const[constant]}"] = f"build:pokemon.sym:{row['line']} {symbol}; facts.constants.{constant}"
+    sections["rom"]["SE_SONG_HEADERS"] = headers
+    derived = sections["derived"]
+
+    def put(key, value, where):
+        derived[key] = value
+        src["derived." + key] = "facts.json:" + where
+
+    for key, constant in {
+        "BADGE_FIRST_FLAG": "FLAG_BADGE01_GET", "BATTLE_TYPE_DOUBLE_MASK": "BATTLE_TYPE_DOUBLE",
+        "BATTLE_TYPE_LINK_MASK": "BATTLE_TYPE_LINK", "BATTLE_TYPE_TRAINER_MASK": "BATTLE_TYPE_TRAINER",
+        "BOXES_PER_STORE": "TOTAL_BOXES_COUNT", "MONS_PER_BOX": "IN_BOX_COUNT", "PARTY_CAPACITY": "PARTY_SIZE",
+        "MAX_LEVEL": "MAX_LEVEL", "B_ACTION_NOTHING_FAINTED": "B_ACTION_NOTHING_FAINTED", "SHEDINJA_SPECIES_ID": "SPECIES_SHEDINJA",
+        "SB1_BALL_POCKET_COUNT": "BAG_POKEBALLS_COUNT", "NICKNAME_LEN": "POKEMON_NAME_LENGTH",
+        **{f"OUTCOME_{k}": f"B_OUTCOME_{k}" for k in ("WON", "LOST", "DREW", "RAN", "CAUGHT")},
+    }.items():
+        put(key, const[constant], "constants." + constant)
+    for key, type_name in {"BASESTATS_ENTRY_SIZE": "SpeciesInfo", "BATTLE_MOVE_ENTRY_SIZE": "MoveInfo",
+                           "TASK_STRUCT_SIZE": "Task", "BATTLE_MON_SIZE": "BattlePokemon",
+                           "PARTY_MON_SIZE": "Pokemon", "BOX_MON_SIZE": "BoxPokemon"}.items():
+        put(key, types[type_name]["size"], f"structs.{type_name}.size")
+    for key, type_name, member in (
+        ("BASESTATS_GROWTH_RATE_OFFSET", "SpeciesInfo", "growthRate"), ("BATTLE_MOVE_PP_OFFSET", "MoveInfo", "pp"),
+        ("BATTLE_MON_OT_ID_OFF", "BattlePokemon", "otId"), ("BATTLE_MON_PERSONALITY_OFF", "BattlePokemon", "personality"),
+        ("BATTLE_RESULTS_PLAYER_FAINTS_OFF", "BattleResults", "playerFaintCounter"),
+        ("BATTLE_RESULTS_FOE_FAINTS_OFF", "BattleResults", "opponentFaintCounter"),
+        ("BOX_DATA_OFFSET", "PokemonStorage", "boxes"), ("GMAIN_CB2_OFFSET", "Main", "callback2"),
+        ("SB1_FLAGS_OFFSET", "SaveBlock1", "flags"), ("SB1_VARS_OFFSET", "SaveBlock1", "vars"),
+        ("SB1_LOCATION_MAP_GROUP_OFFSET", "SaveBlock1", "location_mapGroup"),
+        ("SB1_LOCATION_MAP_NUM_OFFSET", "SaveBlock1", "location_mapNum"),
+        ("SB2_ENC_KEY_OFFSET", "SaveBlock2", "encryptionKey"), ("SB2_NAME_OFFSET", "SaveBlock2", "playerName"),
+        ("SB2_OT_ID_OFFSET", "SaveBlock2", "playerTrainerId"),
+    ):
+        put(key, types[type_name]["fields"][member]["offset"], f"structs.{type_name}.fields.{member}.offset")
+    put("SB1_BALL_POCKET_OFFSET", types["SaveBlock1"]["fields"]["bag"]["offset"] + types["Bag"]["fields"]["pokeBalls"]["offset"], "SaveBlock1.bag + Bag.pokeBalls")
+    put("BATTLE_MON_STAT_STAGES_OFF", types["BattlePokemon"]["fields"]["statStages"]["offset"] + const["STAT_ATK"], "BattlePokemon.statStages + constants.STAT_ATK")
+    put("EXPERIENCE_TABLE_ENTRY_COUNT", const["MAX_LEVEL"] + 1, "constants.MAX_LEVEL + 1")
+    flag = types["Main"]["bitfields"]["inBattle"]
+    put("GMAIN_INBATTLE_OFFSET", flag["offset"], "structs.Main.bitfields.inBattle.offset")
+    put("GMAIN_INBATTLE_MASK", int(flag["mask"], 16), "structs.Main.bitfields.inBattle.mask")
+    put("OVERWORLD_MODE", "gmain_flags", "Main.inBattle interpretation; client mode name")
+    for key, type_name, member in (("MON_SPECIES_MASK", "PokemonSubstruct0", "species"),
+                                   ("MON_ITEM_MASK", "PokemonSubstruct0", "heldItem"),
+                                   ("MON_MOVE_MASK", "PokemonSubstruct1", "move1")):
+        value = types[type_name]["bitfields"][member]
+        put(key, int(value["mask"], 16), f"structs.{type_name}.bitfields.{member}.mask")
+    for member in ("nickname11", "nickname12"):
+        put(member.upper() + "_FIELD", types["PokemonSubstruct0"]["bitfields"][member], "structs.PokemonSubstruct0.bitfields." + member)
+    put("BASESTATS_ADDR_BY_GAME_CODE", {"BPEE": sections["rom"]["BASESTATS_ADDR"]}, "rom.BASESTATS_ADDR, exact ROM only")
+    return {"schema": SCHEMA, "generator": "tools/gen_gen3_profile.py", "pack": "gen3_exp", "build": context["build"],
+            "source": context["source"], "titles": {EXPANSION_TITLE: {"admitted": False, "variant": EXPANSION_TITLE,
+            "rom_sha1": EXPANSION_SHA1, "rom_thumb": _thumb_keys(sections["rom"]), "_src": src, **sections,
+            "unavailable": dropped, "open": ["Runtime admission/CPU census and write safety qualification pending",
+            "Nickname extension uses two shifted fields, not a contiguous NICKNAME_EXTRA_OFFS; consumer support required"]}}}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--check", action="store_true",
                     help="exit 1 if a committed profile differs from a fresh generation")
+    ap.add_argument("--expansion", choices=[EXPANSION_BUILD], help="generate only this unadmitted expansion build")
+    ap.add_argument("--artifacts", type=pathlib.Path)
     args = ap.parse_args()
+    try:
+        return _generate_profiles(args)
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+
+def _generate_profiles(args: argparse.Namespace) -> int:
+    if args.expansion:
+        context = expansion_inputs(args.expansion, args.artifacts)
+        expansion_write(context, "profile.json", build_expansion(context), args.check)
+        return 0
 
     rr_witness = REPO / "patch/build/slink_RR.gba"
     if rr_witness.exists():
@@ -1287,11 +1601,9 @@ def main() -> int:
     # Build every pack fully before writing any of them. A maker that fails (raises, e.g.
     # build_emerald() on a bad .sym) must not leave a partial set of profile.json files on disk;
     # nothing below this point writes until every maker above has already succeeded.
-    try:
-        rendered = {pack: render(make()) for pack, make in makers}
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
+    for title in V2_TARGETS:
+        native_block(title)
+    rendered = {pack: render(make()) for pack, make in makers}
 
     stale = []
     for pack, text_out in rendered.items():

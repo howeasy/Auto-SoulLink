@@ -41,7 +41,10 @@ local io_ = {
     framecount = function() return emu.framecount() end,
     register   = function(name) return emu.getregister(name) end,
     write_u8   = function(addr, v) return memory.write_u8(addr, v, "System Bus") end,
-    saveram    = function() if client and client.saveram then return client.saveram() end end,
+    saveram    = function()
+        assert(client and client.saveram, "SaveRAM host API unavailable")
+        return client.saveram()
+    end,
 }
 
 -- Hook names prefixed "SLink-gen3-" (never "-shadow-": this instance mutates game state).
@@ -201,6 +204,141 @@ if session_counter then
     battle_nonce_seed = string.format("%08X%08X", session_counter % 4294967296,
                                       (math.floor(os.clock() * 1e6)
                                        + math.random(0, 4294967295) + rom_bits) % 4294967296)
+end
+
+-- >>> durable trade storage (T3-R5; self-contained host-adapter MODEL seam) >>>
+-- NLua's CLR bridge gives us OS-exclusive handles and FileStream.Flush(true),
+-- rather than treating Lua fflush/close as a disk-durability promise. No fallback
+-- weakens this contract: absent CLR/file APIs leave the trade journal unavailable.
+local function trade_file_adapter(import_type)
+    local File = assert(import_type("System.IO.File"), "System.IO.File unavailable")
+    local Mode = assert(import_type("System.IO.FileMode"))
+    local Access = assert(import_type("System.IO.FileAccess"))
+    local Share = assert(import_type("System.IO.FileShare"))
+    local Seek = assert(import_type("System.IO.SeekOrigin"))
+    local UTF8Encoding = assert(import_type("System.Text.UTF8Encoding"))
+    local utf8 = UTF8Encoding(false,true)
+    local Reader = assert(import_type("System.IO.StreamReader"))
+    local Writer = assert(import_type("System.IO.StreamWriter"))
+    local Thread = assert(import_type("System.Threading.Thread"))
+    local function finish(stream, fn)
+        local ok, result = pcall(fn)
+        local closed, why = pcall(function() stream:Dispose() end)
+        assert(closed, why)
+        if not ok then error(result) end
+        return result
+    end
+    local function write(stream, value, truncate)
+        if truncate then stream:Seek(0,Seek.Begin); stream:SetLength(0) end
+        local writer = Writer(stream,utf8,4096,true)
+        return finish(writer,function()
+            writer:Write(value)
+            writer:Flush()
+            stream:Flush(true)
+            return true
+        end)
+    end
+    return {
+        lock=function(path)
+            local last
+            for _=1,10 do
+                local fresh = not File.Exists(path)
+                local ok, stream = pcall(function()
+                    return File.Open(path,fresh and Mode.CreateNew or Mode.Open,Access.ReadWrite,Share.None)
+                end)
+                if ok then return stream,fresh end
+                last = stream
+                Thread.Sleep(5)
+            end
+            error("exclusive trade journal lock unavailable: " .. tostring(last))
+        end,
+        close=function(stream) stream:Dispose(); return true end,
+        read_handle=function(stream)
+            stream:Seek(0,Seek.Begin)
+            local reader = Reader(stream,utf8,false,4096,true)
+            return finish(reader,function() return reader:ReadToEnd() end)
+        end,
+        write_handle=function(stream,value) return write(stream,value,true) end,
+        read_file=function(path) if not File.Exists(path) then return nil end; return File.ReadAllText(path,utf8) end,
+        create_file=function(path,value)
+            local stream = File.Open(path,Mode.CreateNew,Access.Write,Share.None)
+            return finish(stream,function() return write(stream,value,false) end)
+        end,
+        append_file=function(path,value)
+            local stream = File.Open(path,Mode.Open,Access.Write,Share.None)
+            return finish(stream,function() stream:Seek(0,Seek.End); return write(stream,value,false) end)
+        end,
+    }
+end
+
+local function trade_battery_path(import_type, config, name, system, movie_active)
+    assert(system == "GBA" and movie_active == false, "battery proof requires a non-movie GBA session")
+    assert(type(name) == "string" and name ~= "", "loaded cartridge name unavailable")
+    local GameInfo = assert(import_type("BizHawk.Emulation.Common.GameInfo"))
+    local Paths = assert(import_type("BizHawk.Client.Common.PathEntryExtensions"))
+    local info = GameInfo()
+    info.Name, info.System = name, system
+    -- The same public path builder used by EmuHawk, including FilesystemSafeName
+    -- and configured Save RAM directory. Do not guess a filename or flush RAM here.
+    return Paths.SaveRamAbsolutePath(config.PathEntries,info,nil)
+end
+
+local function trade_live_snapshot(io_, profile, layout)
+    local a, d = profile.ram, profile.derived
+    local sb1, sb2 = io_.read_u32(a.SB1_PTR_ADDR), io_.read_u32(a.SB2_PTR_ADDR)
+    assert(sb1 >= 0x02000000 and sb1 < 0x02040000 and sb2 >= 0x02000000 and sb2 < 0x02040000,
+           "live save blocks unavailable")
+    local count = io_.read_u8(a.PARTY_COUNT_ADDR)
+    assert(count >= 1 and count <= 6, "live party unavailable")
+    local base = d.PARTY_IN_SB1 and sb1 + d.SB1_PARTY_BASE_OFFSET or a.PARTY_BASE
+    local bytes, out = io_.read_bytes(base,count*100), {}
+    for i=1,#bytes do out[i] = string.char(bytes[i]) end
+    return {sb1=sb1, sb2=sb2, party_count=count, party=table.concat(out),
+            counter=io_.read_u32(layout.counter), ot_id=io_.read_u32(sb2+d.SB2_OT_ID_OFFSET)}
+end
+-- <<< durable trade storage <<<
+
+local recovery_json = dofile(ROOT .. "/lua/json_codec.lua")
+if Entry.trade_journal_supported(ROOT, recovery_json, admitted) then
+    local Journal = dofile(ROOT .. "/lua/gen3/trade_journal.lua")
+    local json = recovery_json
+    local ok, store = pcall(function()
+        assert(luanet and luanet.import_type, "CLR durability adapter unavailable")
+        luanet.load_assembly("BizHawk.Emulation.Common")
+        luanet.load_assembly("BizHawk.Client.Common")
+        return Journal.file_store({json=json, fs=trade_file_adapter(luanet.import_type),
+                                   path=ROOT .. "/slink_gen3_trade"})
+    end)
+    if not ok then
+        local why = tostring(store)
+        store = {read=function() error(why) end, update=function() error(why) end}
+    end
+    io_.trade_journal = Journal.new({json=json, store=store, rom_sha1=admitted.rom_hash:lower(), player=player,
+                                    frame=io_.framecount, log=function(message) console.log(message) end})
+    io_.trade_reload_proof = function(title, profile, boot_seen)
+        local layout = Journal.RELOAD_LAYOUTS[title]
+        if not layout then return nil, "reload layout remains unqualified for " .. tostring(title) end
+        local function path()
+            assert(gameinfo.getromhash():lower() == admitted.rom_hash:lower(), "loaded cartridge changed")
+            return trade_battery_path(luanet.import_type,client.getconfig(),gameinfo.getromname(),
+                                      emu.getsystemid(),movie.isloaded())
+        end
+        local function read(file)
+            local handle = assert(io.open(file,"rb"), "on-disk battery unavailable")
+            local bytes = handle:read("a")
+            assert(handle:close(), "battery read close failed")
+            return bytes
+        end
+        local battery = path()
+        local before = trade_live_snapshot(io_,profile,layout)
+        local flash_before = read(battery)
+        local after = trade_live_snapshot(io_,profile,layout)
+        local flash_after = read(battery)
+        assert(path() == battery, "selected battery changed during proof")
+        return Journal.verify_reload({title=title, rom_sha1=admitted.rom_hash:lower(), boot_seen=boot_seen,
+                                      ram_before=before, ram_after=after,
+                                      flash_before=flash_before, flash_after=flash_after})
+    end
 end
 
 local ok_build, client = pcall(Entry.build, {
