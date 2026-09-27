@@ -2,6 +2,11 @@
   "constants": {
     "BALL_POKE": 1,
     "ITEM_POKE_BALL": 1,
+    "OPTION_DEPOSIT": 1,
+    "OPTION_EXIT": 4,
+    "OPTION_MOVE_ITEMS": 3,
+    "OPTION_MOVE_MONS": 0,
+    "OPTION_WITHDRAW": 2,
     "POCKETS_COUNT": 5,
     "POCKET_POKE_BALLS": 1
   },
@@ -27,10 +32,16 @@
       "CPPFLAGS": "-iquote include -Wno-trigraphs -DMODERN=1 -DTESTING=0 -DEMERALD -std=gnu17",
       "PREPROC": "tools/preproc/preproc"
     },
-    "generator_sha256": "60d09e92d16562e0dea05e8359418704059e477f039f390a54b9c541a0379b83",
-    "object_sha256": "21527697d1f2cc9bb20468455d5ebc9ba76914f895d56ee9d7adb6d61ec33a55",
-    "preprocessed_sha256": "e07b47e3d456e6cd93b5269852712d09d0d3e0f3e2e0af34bf7f2b5555fe8eeb",
-    "probe_sha256": "e6592f9a80e0270602d0a9fddab4a252c7c14b89a2d20475e97f4f075d1b9617"
+    "generator_sha256": "af528aba5b60bd77645ebe00bac51f4b1f2c808ec72ccac8c68789f790fb4fc8",
+    "object_sha256": "1ebfb818cd8110b73887a9ad44e0f48360c7b1226d0c95b99d7c2848fbc81cdd",
+    "pc_options_enum": {
+      "line": 59,
+      "sha256": "d7624ab7b184eb4d521618a5742bc54070d7d4323a34cc526df9e8df3284f8f0",
+      "source": "src/pokemon_storage_system.c",
+      "text": "enum {\n#if OW_PC_MOVE_ORDER <= GEN_3\n    OPTION_WITHDRAW,\n    OPTION_DEPOSIT,\n    OPTION_MOVE_MONS,\n#elif OW_PC_MOVE_ORDER >= GEN_4 && OW_PC_MOVE_ORDER <= GEN_6_XY\n    OPTION_DEPOSIT,\n    OPTION_WITHDRAW,\n    OPTION_MOVE_MONS,\n#elif OW_PC_MOVE_ORDER >= GEN_7\n    OPTION_MOVE_MONS,\n    OPTION_DEPOSIT,\n    OPTION_WITHDRAW,\n#endif\n    OPTION_MOVE_ITEMS,\n    OPTION_EXIT,\n    OPTIONS_COUNT,\n    OPTION_SELECT_MON\n};"
+    },
+    "preprocessed_sha256": "749f54193d1cd28aa89f6fc8064686d1d9e44ed4d4e16d5bbd5823eb6c4d0d4a",
+    "probe_sha256": "c115ce88dd239bf285a461d069011e91074d4748b72d39910ab3c54adaa6b4b3"
   },
   "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
   "schema": 1,

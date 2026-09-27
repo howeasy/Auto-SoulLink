@@ -1720,9 +1720,19 @@ local PC_DEPOSIT_BOX_ID = S.PC_DEPOSIT_BOX_ID -- sym:310; sDepositBoxId
 -- IN_PARTY 1, :108-115); they merely happen to share 0/1. A popup offers the option its
 -- cursor's own area implies, so map the area instead of comparing the two enums directly
 -- (C3-40, finding 5 of cx-006e6f09: a MOVE-MONS popup would have slipped through).
-local PC_POPUP_OPTION = { [0] = 0, [1] = 1 } -- CURSOR_AREA_IN_BOX -> OPTION_WITHDRAW,
-                                             -- CURSOR_AREA_IN_PARTY -> OPTION_DEPOSIT
 local PC = {}
+-- X3: that enum is private and its order follows OW_PC_MOVE_ORDER; the expansion reference build
+-- compiles WITHDRAW 2 / DEPOSIT 1 / MOVE_MONS 0 (data/games/gen3_exp/28877d73/harness_facts.json,
+-- the build's own compiler). PC.mode takes these, never a bare row number, on the Emerald engine.
+PC.OPTION = TITLE == Syms.EXP_TITLE and (function()
+    local f = assert(io.open(WT .. "/data/games/gen3_exp/28877d73/harness_facts.json", "rb"))
+    local k = JSON.decode(f:read("a")).constants
+    f:close()
+    return { withdraw = k.OPTION_WITHDRAW, deposit = k.OPTION_DEPOSIT, move_mons = k.OPTION_MOVE_MONS }
+end)() or { withdraw = 0, deposit = 1, move_mons = 2 }
+local PC_POPUP_OPTION = { [0] = PC.OPTION.withdraw, [1] = PC.OPTION.deposit }
+                                             -- CURSOR_AREA_IN_BOX -> OPTION_WITHDRAW,
+                                             -- CURSOR_AREA_IN_PARTY -> OPTION_DEPOSIT
 
 local function pc_task(fn)
     for i = 0, 15 do
@@ -1924,7 +1934,10 @@ function PC.popup(label, area, pos, row)
         return pc_fail(label, "storage_popup_missing")
     end
     local max_row = memory.read_u8(PC_MENU_MAX_CURSOR)
-    if max_row ~= 4 then return pc_fail(label, "storage_popup_wrong_row_count") end
+    if max_row ~= 4 then
+        return pc_fail(label, "storage_popup_wrong_row_count max_row=" .. max_row .. " cursor_pos="
+                       .. memory.read_u8(PC_CURSOR_POS) .. " area=" .. memory.read_u8(PC_CURSOR_AREA))
+    end
     -- The cursor is tested BEFORE each Down, so a budget of max_row presses reaches the last row
     -- (4, CANCEL) but never tests it: the popup would sit on row 4 and the leg would report
     -- storage_popup_cursor_stalled one press short (C3-41 finding 2). max_row + 1 walks 0..4.
@@ -3372,7 +3385,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         -- its popup, A takes STORE (row 0); the chooser opens on sDepositBoxId (box 0) and its A
         -- is the press that calls TryStorePartyMonInBox.
         PC.open(cp, L)
-        PC.mode(L, 1)
+        PC.mode(L, PC.OPTION.deposit)
         PC.popup(L, 1, 1, 0)
         PC.select(L, PC_DEPOSIT_MENU)
         PC.box(L)
@@ -3413,7 +3426,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
             return em_fail(L, "precondition: box 0 slot 0 occupied and a 1-mon party (after emerald_pc_deposit)")
         end
         PC.open(cp, L)
-        PC.mode(L, 0)             -- WITHDRAW is row 0 on a fresh menu: no press moves it
+        PC.mode(L, PC.OPTION.withdraw)             -- WITHDRAW is row 0 on a fresh menu: no press moves it
         PC.popup(L, 0, 0, 0)      -- box slot 0, WITHDRAW row 0
         PC.select(L, PC_WITHDRAW_MON)
         PC.withdraw(L)
@@ -3451,7 +3464,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         -- MOVE POKeMON (row 2): the box cursor opens on slot 0; Right to slot 1, A, A = MOVE (grab);
         -- Left to slot 0, A, A = PLACE. The carried flag must rise and fall between the two.
         PC.open(cp, L)
-        PC.mode(L, 2)   -- rows >= 2 work since master b6bd8f2b (PC.mode waits for progress)
+        PC.mode(L, PC.OPTION.move_mons)   -- rows >= 2 work since master b6bd8f2b (PC.mode waits for progress)
         em_box_cursor(L, 1)
         em_move_popup_row0(L, em_thumb(ES.Task_MoveMon))
         em_wait_carry(L, "grab_not_done", 1)
@@ -3493,7 +3506,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         end
         local target = before.party.order[2]      -- the withdrawn Zigzagoon
         PC.open(cp, L)
-        PC.mode(L, 1)
+        PC.mode(L, PC.OPTION.deposit)
         PC.popup(L, 1, 1, 3)                      -- party slot 1, RELEASE row 3
         PC.select(L, PC_RELEASE_MON)
         PC.release(L)                             -- NO -> Up -> YES, A, then both messages

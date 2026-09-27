@@ -1645,7 +1645,7 @@ end
 function ctx.pc_deposit(label)
     local before = ctx.party() or {}
     local PC = SP.PC
-    PC.open(cp, label); PC.mode(label, 1); PC.popup(label, 1, 1, 0)
+    PC.open(cp, label); PC.mode(label, PC.OPTION.deposit); PC.popup(label, 1, 1, 0)
     PC.select(label, S.Task_DepositMenu | 1); PC.box(label); PC.leave(cp, label)
     local after = ctx.party() or {}
     if #after ~= #before - 1 then return nil, fmt("party %d -> %d after the deposit", #before, #after) end
@@ -1669,7 +1669,7 @@ function ctx.pc_withdraw(label)
     local PC = SP.PC
     G.tap("Up", 2, 13)
     local slot = ctx.deposited_slot or 0
-    PC.open(cp, label); PC.mode(label, 0)
+    PC.open(cp, label); PC.mode(label, PC.OPTION.withdraw)
     if slot > 0 then SP.EMH.box_cursor(label, slot) end
     PC.popup(label, 0, slot, 0)
     PC.select(label, S.Task_WithdrawMon | 1); PC.withdraw(label); PC.leave(cp, label)
@@ -1692,7 +1692,7 @@ function ctx.pc_release(label, key)
     if not at or at.party ~= false or at.box ~= "0:" .. slot then return false, "release key not in its deposited slot" end
     local PC = SP.PC
     G.tap("Up", 2, 13)
-    PC.open(cp, label); PC.mode(label, 0)
+    PC.open(cp, label); PC.mode(label, PC.OPTION.withdraw)
     if slot > 0 then SP.EMH.box_cursor(label, slot) end
     PC.popup(label, 0, slot, 3)
     PC.select(label, S.Task_ReleaseMon | 1); PC.release(label); PC.leave(cp, label)

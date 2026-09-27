@@ -10,6 +10,7 @@
 #include "constants/items.h"
 #include "constants/pokeball.h"
 #include "x1_source_enums.h" /* the facts pipeline always generates it */
+#include "x3_pc_options.h"   /* the PC main-menu enum, copied verbatim from the pinned .c by the generator */
 
 #define SZ(t) static const u32 x1_size__##t USED = sizeof(struct t); \
     static const struct t x1_zero__##t USED = {0}
@@ -35,3 +36,6 @@ F(SaveBlock1, bag); F(SaveBlock1, flags);
 SZ(SaveBlock2);
 F(SaveBlock2, playerGender); F(SaveBlock2, specialSaveWarpFlags);
 A(SaveBlock2, playerTrainerId); F(SaveBlock2, encryptionKey);
+
+/* the PC main-menu rows (src/pokemon_storage_system.c; their order follows OW_PC_MOVE_ORDER) */
+K(OPTION_WITHDRAW); K(OPTION_DEPOSIT); K(OPTION_MOVE_MONS); K(OPTION_MOVE_ITEMS); K(OPTION_EXIT);

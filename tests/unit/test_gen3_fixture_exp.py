@@ -174,3 +174,16 @@ def test_scripted_play_bag_offsets_are_the_builds_compiler_facts():
     assert int(ctx.group(1), 16) == bag_menu["contextMenuNumItems"]["offset"]
     assert re.search(r"local BALLS_POCKET = (\d+)", lua).group(1) == str(HARNESS["constants"]["POCKET_POKE_BALLS"])
     assert "local ITEM_POKE_BALL = TITLE == Syms.EXP_TITLE and 1 or 4" in lua
+
+
+def test_pc_main_menu_rows_come_from_the_builds_compiled_enum():
+    """The PC main-menu order is a private enum gated on OW_PC_MOVE_ORDER: the reference build
+    compiles MOVE_MONS 0 / DEPOSIT 1 / WITHDRAW 2 (vanilla: WITHDRAW 0 / DEPOSIT 1 / MOVE_MONS 2).
+    Live boxsync_gen3 on 28877d73 first opened MOVE POKEMON for a withdraw (a six-row popup)."""
+    k = HARNESS["constants"]
+    assert (k["OPTION_MOVE_MONS"], k["OPTION_DEPOSIT"], k["OPTION_WITHDRAW"]) == (0, 1, 2)
+    assert "OW_PC_MOVE_ORDER" in HARNESS["provenance"]["pc_options_enum"]["text"]
+    lua = (ROOT / "lua/tests/gen3_scripted_play.lua").read_text(encoding="utf-8")
+    assert "withdraw = k.OPTION_WITHDRAW, deposit = k.OPTION_DEPOSIT, move_mons = k.OPTION_MOVE_MONS" in lua
+    duo = (ROOT / "lua/tests/duo/duo_gen3_main.lua").read_text(encoding="utf-8")
+    assert "PC.mode(label, 0)" not in duo and "PC.mode(label, 1)" not in duo

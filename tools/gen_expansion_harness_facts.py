@@ -29,6 +29,19 @@ OUTPUT = Path(__file__).resolve().parents[1] / "data/games/gen3_exp/28877d73/har
 ROM_SHA1 = "28877d733492299599f2b8fff50493109d72653c"
 
 
+def pc_options_enum(source: Path) -> dict:
+    """The private PC main-menu enum, verbatim (its #if arms included, so the compiler applies
+    the build's OW_PC_MOVE_ORDER): the one anonymous enum in src/pokemon_storage_system.c that
+    names OPTION_WITHDRAW."""
+    import re
+    text = (source / "src/pokemon_storage_system.c").read_text(encoding="utf-8")
+    found = [m for m in re.finditer(r"enum\s*\{.*?\}\s*;", text, re.S) if "OPTION_WITHDRAW" in m[0]]
+    gf.ex.require(len(found) == 1, "PC main-menu enum absent/ambiguous")
+    m = found[0]
+    return {"source": "src/pokemon_storage_system.c", "line": text[:m.start()].count("\n") + 1,
+            "text": m[0], "sha256": gf.sha(m[0].encode())}
+
+
 def build(source: Path, artifacts: Path, work: Path) -> dict:
     env = os.environ.copy()
     env["PATH"] = "/usr/bin:/bin"
@@ -43,11 +56,13 @@ def build(source: Path, artifacts: Path, work: Path) -> dict:
     receipt, _rom, _symbols, _elf = gf.read_artifacts(artifacts)
     gf.ex.require(receipt["rom"]["sha1"] == ROM_SHA1, "not the reference build")
     work.mkdir(parents=True, exist_ok=True)
+    pc_enum = pc_options_enum(source)
+    (work / "x3_pc_options.h").write_text(pc_enum["text"] + "\n", encoding="utf-8")
     obj, manifest = gf.compile_probe(source, PROBE, work, receipt, env)
     facts = gf.parse_probe(gf.elf_symbols(obj.read_bytes(), "x1_"))
     return {"schema": 1, "evidence": "SOURCE/COMPILER only; harness facts, no runtime qualification",
             "rom_sha1": ROM_SHA1, "source_commit": gf.PIN, **facts,
-            "provenance": {"probe_sha256": gf.source_sha(PROBE),
+            "provenance": {"probe_sha256": gf.source_sha(PROBE), "pc_options_enum": pc_enum,
                            "object_sha256": manifest["object_sha256"],
                            "preprocessed_sha256": manifest["preprocessed_sha256"],
                            "compiler": receipt["compiler"], "flags": manifest["flags"],
