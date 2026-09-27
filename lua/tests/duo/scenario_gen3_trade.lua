@@ -212,8 +212,15 @@ local function a_side(ctx, N, linked, partner, decline)
         return false, "the trade NPC never spawned in the Center"
     end
     ctx.log("AT_NPC npc_oe=" .. npc_slot(N))
-    if not talk(ctx, N) then return false, "never talked to the trade NPC" end
+    -- rx0 BEFORE talk(), not after: PHYSICAL live trade_decline_gen3_rr_as_a (card RR-FC-FIX,
+    -- second round) -- the patch sends trade_request in the SAME FRAME A talks (talk()'s own doc
+    -- comment), and this run's own receipt shows the server's msgbox landing (line "RX msgbox
+    -- text=Trade unavailable...") BEFORE talk() ever logs TALKED (gated on a LATER poll seeing
+    -- pi_count move). A snapshot taken after talk() returns can already be past the real answer,
+    -- which is exactly what turned into "TIMEOUT waiting for show_choices or the unavailability
+    -- msgbox" here.
     local rx0 = ctx.rx_count()
+    if not talk(ctx, N) then return false, "never talked to the trade NPC" end
     if not ctx.wait_sent("trade_request", nil, 60) then return false, "no trade_request after the talk" end
     -- RR trade is UNAVAILABLE until its durable-trade delta lands (docs/protocol.md: RR ABI1 has
     -- no recovery journal and never opts into server trade recovery). The server refuses at the
