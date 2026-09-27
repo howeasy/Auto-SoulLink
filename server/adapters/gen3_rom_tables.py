@@ -1,6 +1,6 @@
-"""Decode the English revision-0 FR/LG cartridge tables, including repointed data.
+"""Decode English revision-0 FR/LG/Emerald cartridge tables, including repointed data.
 
-``decode_rom_tables(rom, "firered" | "leafgreen")`` obtains table heads and sizes
+``decode_rom_tables(rom, "firered" | "leafgreen" | "emerald")`` obtains table heads and sizes
 by symbol name from data/gen3/pret/poke<title>.sym. No party or encounter-data
 address is taken from a clean-ROM symbol: every child pointer is read from ROM.
 The lower-level decoders take an explicit head and count for extracted tables.
@@ -29,6 +29,8 @@ build pads the 6-byte Evolution and NoItemDefaultMoves structs to 8 bytes and
 the 14-byte NoItemCustomMoves struct to 16. The pinned .sym sizes and the clean
 ROM controls in test_gen3_rom_tables.py verify these strides independently.
 This is a decoder, not ROM admission or validation of a randomizer's patches.
+Emerald c65e93f2 uses the same fields/strides (include/data.h, include/pokemon.h);
+test_gen3_emerald_rand.py verifies all 854 nonempty trainer parties against their ROM spans.
 """
 
 from __future__ import annotations
@@ -64,7 +66,9 @@ DEOXYS = 410
 # pret pokemon.c sDeoxysBaseStats: UPR saves the title's already-used forme into its row.
 DEOXYS_NORMAL = bytes((50, 150, 50, 150, 150, 50))
 DEOXYS_FORME = {"firered": bytes((50, 180, 20, 150, 180, 20)),
-                "leafgreen": bytes((50, 70, 160, 90, 70, 160))}
+                "leafgreen": bytes((50, 70, 160, 90, 70, 160)),
+                # pokeemerald c65e93f2 src/pokemon.c:1885-1893 sDeoxysBaseStats.
+                "emerald": bytes((50, 95, 90, 180, 95, 90))}
 
 # Native species IDs whose ORIGINAL second ability is zero in BOTH SHA-1-pinned
 # FR/LG gSpeciesInfo tables (pret c75f3523 src/data/pokemon/species_info.h).
@@ -77,6 +81,13 @@ with _SPECIES_RULES_PATH.open(encoding="utf-8") as _rules_file:
 FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset(_species_rules_facts["zero_second_ability_species"])
 SPECIES_RULE_BYTES = tuple(row["offset"] for row in _species_rules_facts["bytes"] if row["projected"])
 
+
+@cache
+def _emerald_species_rules_facts() -> dict:
+    path = Path(__file__).resolve().parents[2] / "data/games/gen3_emerald/species_rules.json"
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def normalised_species_rules(raw: bytes, title: str) -> bytes:
     """The shared Manager/server rule projection of gSpeciesInfo (pret SpeciesInfo).
 
@@ -85,17 +96,28 @@ def normalised_species_rules(raw: bytes, title: str) -> bytes:
     to retail. Other fields (e.g. held items and catch rate) are open randomizer options.
     """
     if title not in DEOXYS_FORME:
-        raise ValueError(f"unsupported FR/LG title: {title!r}")
+        raise ValueError(f"unsupported Gen 3 title: {title!r}")
+    if title == "emerald":
+        facts = _emerald_species_rules_facts()
+        zero_slots = frozenset(facts["zero_second_ability_species"])
+        rule_bytes = tuple(row["offset"] for row in facts["bytes"] if row["projected"])
+    else:
+        zero_slots, rule_bytes = FRLG_ZERO_SECOND_ABILITY_SPECIES, SPECIES_RULE_BYTES
+    return _normalised_species_rule_rows(raw, zero_slots, rule_bytes, DEOXYS_FORME[title])
+
+
+def _normalised_species_rule_rows(raw: bytes, zero_slots, rule_bytes, forme: bytes) -> bytes:
+    """Pure projection shared with the pinned-fact generator; no file reads."""
     if not raw or len(raw) % SPECIES_INFO_SIZE:
         raise ValueError("gSpeciesInfo must contain complete 28-byte records")
     rows = []
     for species, offset in enumerate(range(0, len(raw), SPECIES_INFO_SIZE)):
         row = bytearray(raw[offset:offset + SPECIES_INFO_SIZE])
-        if species == DEOXYS and bytes(row[:6]) == DEOXYS_FORME[title]:
+        if species == DEOXYS and bytes(row[:6]) == forme:
             row[:6] = DEOXYS_NORMAL
-        if species in FRLG_ZERO_SECOND_ABILITY_SPECIES and row[23] in (0, row[22]):
+        if species in zero_slots and row[23] in (0, row[22]):
             row[23] = row[22]
-        rows.append(bytes(row[b] for b in SPECIES_RULE_BYTES))
+        rows.append(bytes(row[b] for b in rule_bytes))
     return b"".join(rows)
 
 
@@ -152,8 +174,8 @@ def table_symbols(title: str, *, symbol_dir: Path = SYMBOL_DIR) -> dict:
     the new address and count explicitly; this helper describes the pinned heads.
     The pinned file is immutable; callers must not mutate the cached mapping.
     """
-    if title not in ("firered", "leafgreen"):
-        raise ValueError(f"unsupported FR/LG title: {title!r}")
+    if title not in ("firered", "leafgreen", "emerald"):
+        raise ValueError(f"unsupported Gen 3 title: {title!r}")
     result = {}
     path = Path(symbol_dir) / f"poke{title}.sym"
     for line in path.read_text(encoding="utf-8").splitlines():

@@ -799,6 +799,9 @@ class SLinkServer:
         # the ordinary vanilla pairing, not a mixed one (review: Fable 2026-09-20 #1).
         def _kind(rt: str, kind: str, content: object = None) -> str:
             cls = adapter_class_for_rom_type(rt) if rt else None
+            title_aware = getattr(cls, "pairing_kind_for_title", None)
+            if title_aware is not None:
+                return title_aware(rt, kind, content)
             return (cls or GameRulesAdapter).pairing_kind_for(kind, content)
 
         got_kind = _kind(rom_type, artifact_kind, rom_content)

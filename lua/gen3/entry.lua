@@ -61,7 +61,7 @@ end
 -- budget; native owns the timeout once a scene has actually been published.
 Entry.PACKS = {
     gen3_frlg = {
-        randomizable = true, -- R0; Emerald gets its own E-bind later, never inherited
+        randomizable = true,
         trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { firered = "firered", leafgreen = "leafgreen" },
         header_code = { BPRE = "firered", BPGE = "leafgreen" },
@@ -73,6 +73,7 @@ Entry.PACKS = {
     -- Registered so the packs/admission tables build and the hash is recognized (E2-ENTRY);
     -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
     gen3_emerald = {
+        randomizable = true,
         trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },

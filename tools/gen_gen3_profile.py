@@ -1010,8 +1010,8 @@ def rom_tables(title: str, text: str) -> tuple[dict, dict]:
     Strides are the pinned pret layouts (Gen 3 randomized design R0); counts
     include gWildMonHeaders' terminating sentinel and come from symbol sizes.
     """
-    if title not in ("firered", "leafgreen"):
-        raise ValueError("rom_tables is bound only for FireRed/LeafGreen")
+    if title not in ("firered", "leafgreen", "emerald"):
+        raise ValueError("rom_tables is bound only for FireRed/LeafGreen/Emerald")
     rows, provenance = {}, {}
     strides = {"gTrainers": 40, "gWildMonHeaders": 20, "gEvolutionTable": 40,
                "gSpeciesInfo": 28, "gTrainerClassNames": 13}
@@ -1023,8 +1023,14 @@ def rom_tables(title: str, text: str) -> tuple[dict, dict]:
         address, size = int(match[1], 16), int(match[2], 16)
         if not 0x08000000 <= address < 0x0A000000 or size <= 0 or size % stride:
             raise ValueError(f"rom_tables: {name} has invalid address/size/stride")
+        if title == "emerald":
+            count = {"gTrainers": 855, "gWildMonHeaders": 125, "gEvolutionTable": 412,
+                     "gSpeciesInfo": 412, "gTrainerClassNames": 66}[name]
+            if size != count * stride:
+                raise ValueError(f"rom_tables: Emerald {name} size is not {count} * {stride}")
         rows[name] = {"address": address, "size": size, "stride": stride, "count": size // stride}
-        provenance[name] = f"pret/pokefirered@c75f3523 {name}; data/gen3/pret/poke{title}.sym:{_line_of(text, match.start())}"
+        pin = EMERALD_PIN if title == "emerald" else "pret/pokefirered@c75f3523"
+        provenance[name] = f"{pin} {name}; data/gen3/pret/poke{title}.sym:{_line_of(text, match.start())}"
     return rows, provenance
 
 
@@ -1362,6 +1368,7 @@ def build_emerald() -> dict:
     src["derived.BASESTATS_ADDR_BY_GAME_CODE"] = "rom.BASESTATS_ADDR under game code BPEE"
     head = subprocess.run(["git", "log", "-1", "--format=%H", "--", EMERALD_SYM],
                           cwd=REPO, capture_output=True, text=True).stdout.strip()
+    tables, table_sources = rom_tables("emerald", text)
     return {
         "schema": SCHEMA,
         "generator": "tools/gen_gen3_profile.py",
@@ -1374,6 +1381,8 @@ def build_emerald() -> dict:
             "variant": "emerald",
             "rom_sha1": EMERALD_ROM_SHA1,
             "rom_thumb": _thumb_keys(sections["rom"]),
+            "rom_tables": tables,
+            "rom_tables_provenance": table_sources,
             **sections,
         }},
     }

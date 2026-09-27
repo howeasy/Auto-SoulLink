@@ -596,6 +596,8 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
                                "a ROM over itself, which would destroy the clean copy")
     with open(source_rom, "rb") as f:
         src_bytes = f.read()
+    if src_bytes[0xAC:0xB0] == b"BPEE":
+        raise UprPipelineError("Emerald randomization is not enabled in Manager: its UPR write-domain audit is pending")
     g3 = gen3_title(src_bytes)
     ext = ".gba" if g3 else ".gbc"
     if not output_rom.lower().endswith(ext):

@@ -213,7 +213,7 @@ def test_admission_by_anchors_when_the_hash_is_unknown_for_emerald():
     got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
                            header_code="BPEE"))
     assert got["admitted_by"] == "anchors"
-    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "clean")
+    assert (got["pack"], got["title"], got["kind"]) == ("gen3_emerald", "emerald", "rand")
     assert got["rom_type"] == "emerald"
 
 
