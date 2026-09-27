@@ -1152,7 +1152,13 @@ function Client.new(p)
         if not party then return end
         update_frozen(party)
         if st.frozen then return end                           -- a borrowed party is never ours
-        if not st.baselined then rescan_boxes(); st.baselined = true end
+        if not st.baselined then
+            rescan_boxes()
+            -- A readable quiet frame can precede the first eligible hello.
+            -- Initialize the PC/trade baseline too: that hello will not do it again.
+            rebaseline(party)
+            st.baselined = true
+        end
         seed_known(party)
         st.seen_count = count
     end

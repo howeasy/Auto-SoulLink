@@ -339,6 +339,39 @@ def test_open_kind_trade_done_reports_a_key_change_with_the_npc_trade_reason():
     assert kc["old_key"] == KB and kc["new_key"] == key_of(C, 0x9999) and kc["reason"] == "npc_trade"
 
 
+@pytest.mark.parametrize("same_frame", [True, False], ids=["captured-emerald-timing", "separate-frame-control"])
+@pytest.mark.parametrize("empty_baseline", [True, False], ids=["quiet-before-hello", "immediate-hello-control"])
+def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(monkeypatch, same_frame, empty_baseline):
+    from tests.unit import gen3_world as gw
+
+    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
+    w = World("gen3_emerald", "emerald", "clean")
+    bystander = mon_record(0x4D55444B, 0x20250925, species=283)
+    outgoing = mon_record(0x52414C5C, 0x20250925, species=392)
+    received = mon_record(0x84, 0x9746, species=298)
+    w.set_party([bystander, outgoing])
+    if empty_baseline:
+        # Quiet, readable startup precedes the first eligible hello on Emerald.
+        # This must seed both known keys and the eventual trade/PC baseline.
+        w.break_checkpoint()
+        w.step(3)
+        assert w.events("hello") == []
+        w.overworld_safe()
+    w.step_to(60)
+    w.regs["R0"], w.regs["R1"] = 1, 0
+    w.fire("trade_begin")
+    if not same_frame:
+        w.step()
+    w.set_party([bystander, received])
+    w.fire("trade_done")
+    w.step(240)
+    changes = w.events("key_change")
+    assert len(changes) == 1
+    assert (changes[0]["old_key"], changes[0]["new_key"], changes[0]["new_species"], changes[0]["reason"]) == (
+        "52414C5C:20250925", "00000084:00009746", 298, "npc_trade")
+    assert w.events("capture") == [] and w.writes == []
+
+
 # ── in-battle writes (owner ruling 2026-09-23) ────────────────────────────────────────────
 
 def test_a_bench_faint_lands_immediately_and_its_faint_is_not_reported():
