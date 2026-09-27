@@ -1,9 +1,9 @@
 # FireRed native trade candidate: consumer contract
 
-Producer source: **b6481dae8453266e8bccefc58ef169373cefbf7f** on
+Producer source: **2133349d2ef359dad4a002441994267d3c762651** on
 `claude/gen3-emerald-t2`. This immutable source commit precedes this contract
 commit so the document can name an actual producer SHA. ABI header baseline:
-`7660760045a4227b203d6a3d3a56ffa627ed5041`. WIP checkpoint: `094eeb54`.
+`7660760045a4227b203d6a3d3a56ffa627ed5041`, amended by T2-R1 below. WIP checkpoint: `094eeb54`.
 
 This is a **MODEL/build milestone**, not live duo qualification. FR target
 `SLINK_TARGET_READY` remains 0. Existing production Lua admission must remain
@@ -27,6 +27,11 @@ cannot distinguish it from production. Importing this receipt into a pinned
 production cartridge manifest is **not implemented by this milestone**. A test
 harness may explicitly admit it for a model/private run only.
 
+The candidate path selects ABI 2 independently of `--abi-version`: that option
+is not read on this path. The frame service advertises only after observing the
+heap size installed by the heap-clamp hook; a compiled payload alone is not a
+runtime beacon.
+
 The existing `--arena-probe trade` remains a separate TRP2 signature/capability-0
 fault-injection build. Its deliberate post-save failure switch is not compiled
 into the capability-enabled candidate. RR v1 is unchanged.
@@ -37,6 +42,10 @@ FR arena base is `0x0201B000`, size `0x1000`, obtained by clamping the native
 `0x02000000` heap from `0x1C000` to `0x1B000`. These are FR bindings, not LG/E
 addresses. `SLINK_TARGET_ARENA_BASE == 0` is an unqualified placeholder, not the
 runtime address: use `SLINK_TARGET_ARENA_CANDIDATE` for this private candidate.
+The arena lies inside the original heap reservation. `validate_arena` would
+reject it; the private builder does not run that static check. Its receipt says
+`arena_static_check: "skipped: heap clamp unqualified"`. Detour/ROM checks and
+a candidate build do not establish arena safety or physical qualification.
 
 All multibyte integers are little-endian. PID/OTID are unsigned 32-bit values;
 do not serialize their printed hex string directly as byte order. The token is
@@ -50,6 +59,7 @@ mapping from its server token; this producer does not define a text-token codec.
 | ACK seq / reason | `0x0C` / `0x0E` | u16 each |
 | args / result scratch | `0x10` / `0x30` | 32 / 16 bytes |
 | capability mask / session epoch | `0x40` / `0x44` | u32 each |
+| native producer phase / reserved | `0x48` / `0x4C` | u32 each |
 | trade witness | `0x50` | `0x50` bytes |
 | staged incoming record | `0x100` | first 100 bytes of 600-byte blob region |
 
@@ -94,7 +104,7 @@ Witness offsets below are relative to arena+`0x50`:
 5. `trade_visit` is a projection of that coherent witness and local ownership,
    not a new opcode or a beacon-derived invented visit. Return the same visit
    ID/old key, accepted, pre_saved, apply_open only after consent+pre-save,
-   before the client has posted SCENE/WITHDRAW, and while no terminal result is
+   with producer phase READY, before the client has posted SCENE/WITHDRAW, and while no terminal result is
    present. The producer has no standalone visit-discovery/NPC-selection API.
 
 PREPARE drives consent and pre-save; there is no separate pre-save command.
@@ -118,6 +128,14 @@ native trade scene. At the actual TradeMons entry, the guarded hook rechecks the
 original party slot and publishes COMMIT_ENTERED immediately before mutation.
 Scene/evolution completion is observed on return to the safe field. Native then
 calls the native save path and publishes success only after its successful return.
+FR entry points, from `data/gen3/pret/pokefirered.sym`, are SaveMapView
+`0x080590D8`, SaveQuestLogData `0x08112450`, and TrySavingData `0x080DA364`.
+The binding calls them in that order, with SAVE_NORMAL=0. At the pinned pret
+source `src/save.c:650-720`, HandleSavingData serializes the game and writes the
+full save slot; TrySavingData returns OK when flash is present and no damaged
+save sectors are reported after that operation. This is the native engine's
+success report, not independent evidence of host SaveRAM flush, disk durability,
+a cold reload, peer-cartridge completion, or journal reconciliation.
 
 | Index / bit | Meaning | Required command seq |
 | --- | --- | --- |
@@ -136,9 +154,12 @@ strictly increasing frame values or compare them to a different host clock.
 
 Deliver cumulative progress to `trade.lua` in this logical order:
 `commit_entered`, then `scene_done`, then `save_success`, then `final_result`.
-All may be observed in a single stable snapshot. Final committed=1 requires
-all bits `0x1F`, both visit flags, save_status=1, correct sequences, and received
-PID/OTID matching the incoming record. Save status 1 alone may describe the
+All may be observed in a single stable snapshot. The canonical structural success predicate is
+[`slink_trade_success_is_durable`](../../../patch/src/trade_targets/abi.h),
+called with the PREPARE seq, SCENE seq and expected incoming PID/OTID. Its
+received-identity comparison is part of that predicate; do not copy a weaker
+local version. It assumes the caller has already checked coherent snapshot,
+epoch, visit, token and outgoing identity as above. Save status 1 alone may describe the
 **pre-save** and is never post-save proof. The host must still flush SaveRAM and
 apply its journal rules; native save success alone does not retire that journal.
 
@@ -151,18 +172,49 @@ so FAIL alone cannot distinguish it from a post-mutation failure.
 
 Opcode 30 WITHDRAW repeats identity. Only the prepared READY state can become
 UNCHANGED via WITHDRAW, with FINAL_RESULT seq equal to the WITHDRAW request.
-During running native UI/scene it fails without proving cancellation. Opcode
+During running native UI/scene it fails with reason 14
+(`SLINK_REASON_WITHDRAW_TOO_LATE`) without proving cancellation or uncertainty
+of the original transaction. That transaction can still commit successfully. Opcode
 31 STATUS repeats identity and ACKs inspection; it does not advance or rebind
 the witness. Exact successful PREPARE/SCENE retries may return cached results;
 do not submit a new SCENE seq as recovery from an uncertain result.
 
-Reason 11 includes uncertainty; reason 12 covers identity/phase refusal. Reason
+Reason 11 denotes an UNCERTAIN terminal result; reason 14 rejects a too-late
+WITHDRAW without changing the transaction outcome; reason 12 covers identity/phase refusal. Reason
 13 is named CLIENT_TOO_OLD (zero epoch) in ABI but is not yet routed by this
 producer; zero epoch currently falls through reason 12. Bad args may use 2.
 There is **no reason-only pre-commit safe allow-list**. Missing COMMIT_ENTERED
 is not proof of no mutation. Only the correctly bound stable terminal UNCHANGED
 witness proves the producer's unchanged result. Late/wrong-identity requests
 must not acquire the older operation's witness.
+
+The mailbox native-only `producer_phase` at +0x48 is an aligned atomic u32:
+IDLE=0, PRE_SAVE=1, READY=2, SCENE=3, DONE=4, UNCERTAIN=5. PRE_SAVE/READY/SCENE/
+UNCERTAIN are owned states even when the witness epoch differs from the mailbox
+host epoch. The service publishes phase before and after processing every frame,
+including rejection paths. It does not retag the old witness when epoch changes.
+Sample with the emulator CPU paused at the service boundary; phase is not part
+of the witness revision and cannot replace coherent outcome checks. Unknown
+phase, stale binding, or unreadable data is not proof of an idle producer.
+
+To test no owned transaction: require a fresh admitted binding, empty local
+queue/no in-flight job, mailbox opcode 0 and status not BUSY, plus phase IDLE;
+phase DONE is reusable only after the client has consumed and reconciled its
+coherent terminal result. A phase read while a command is queued is insufficient.
+If an epoch write races PREPARE, the native phase remains PRE_SAVE/READY even
+though identities differ. Stop posting and recover; do not reinterpret that as
+an idle producer or overwrite its epoch to force reuse.
+
+Exact uncertain/epoch-race recovery:
+
+1. Stop staging/posting; retain the transaction journal and old witness identity.
+2. Perform a real game reset, allowing native UI teardown and volatile state
+   clearing. Do not clear producer_phase or controller memory from the host.
+3. Reload the native save and independently reconcile party/save evidence against
+   the retained transaction journal. Unresolved evidence keeps the client closed.
+4. After reconciliation, require a fresh cartridge binding and a serviced IDLE
+   phase with no pending mailbox job. Write a fresh nonzero session epoch through
+   the serialized queue, then allocate a new visit/token and PREPARE normally.
 
 UNCERTAIN is sticky in this candidate. Epoch writes do not reset it. No explicit
 reconciliation opcode is implemented. A real game reset clears volatile state;
