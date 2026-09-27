@@ -103,18 +103,18 @@ MOVES = {
     43:  [71, 78, 230, 51],  # Oddish: Absorb, Sweet Scent, Sweet Kiss, Acid
     69:  [22, 71, 78, 51],   # Bellsprout: Vine Whip, Absorb, Sweet Scent, Acid
     # Hoenn cast (--title emerald). Gen 3 vanilla move ids.
-    263: [33, 45, 29],       # Zigzagoon: Tackle, Growl, Headbutt
-    261: [33, 43],           # Poochyena: Tackle, Leer
-    270: [45, 71],           # Lotad: Growl, Absorb
-    273: [117, 106],         # Seedot: Bide, Harden
-    278: [45, 55],           # Wingull: Growl, Water Gun
-    276: [64, 45],           # Taillow: Peck, Growl
-    285: [71, 78],           # Shroomish: Absorb, Stun Spore
-    283: [145],              # Surskit: Bubble
-    293: [1],                # Whismur: Pound
-    328: [28, 117],          # Trapinch: Sand-Attack, Bide
-    322: [45, 52],           # Numel: Growl, Ember
-    265: [33, 81],           # Wurmple: Tackle, String Shot
+    288: [33, 45, 29],       # Zigzagoon: Tackle, Growl, Headbutt
+    286: [33, 43],           # Poochyena: Tackle, Leer
+    295: [45, 71],           # Lotad: Growl, Absorb
+    298: [117, 106],         # Seedot: Bide, Harden
+    309: [45, 55],           # Wingull: Growl, Water Gun
+    304: [64, 45],           # Taillow: Peck, Growl
+    306: [71, 78],           # Shroomish: Absorb, Stun Spore
+    311: [145],              # Surskit: Bubble
+    370: [1],                # Whismur: Pound
+    332: [28, 117],          # Trapinch: Sand-Attack, Bide
+    339: [45, 52],           # Numel: Growl, Ember
+    290: [33, 81],           # Wurmple: Tackle, String Shot
 }
 
 # One ability per species (Gen 3 FRLG ids, resolved by the adapter). Every mon used to
@@ -137,19 +137,20 @@ ABILITIES = {
     60: 11,   # Poliwag: Water Absorb
     54: 6,    # Psyduck: Damp
     10: 19,   # Caterpie (the wild foe): Shield Dust
-    # Hoenn cast (--title emerald, see GEN3_EMERALD_PAIRS below). Vanilla Gen 3 ids.
-    263: 53,  # Zigzagoon: Pickup
-    261: 50,  # Poochyena: Run Away
-    270: 33,  # Lotad: Swift Swim
-    273: 34,  # Seedot: Chlorophyll
-    278: 51,  # Wingull: Keen Eye
-    276: 62,  # Taillow: Guts
-    285: 27,  # Shroomish: Effect Spore
-    283: 33,  # Surskit: Swift Swim
-    293: 43,  # Whismur: Soundproof
-    328: 52,  # Trapinch: Hyper Cutter
-    322: 12,  # Numel: Oblivious
-    265: 19,  # Wurmple: Shield Dust
+    # Hoenn cast (--title emerald, see GEN3_EMERALD_PAIRS below). Gen 3 INTERNAL species ids
+    # (the save/wire index, not National Dex: Zigzagoon is 288 here, 263 nationally).
+    288: 53,  # Zigzagoon: Pickup
+    286: 50,  # Poochyena: Run Away
+    295: 33,  # Lotad: Swift Swim
+    298: 34,  # Seedot: Chlorophyll
+    309: 51,  # Wingull: Keen Eye
+    304: 62,  # Taillow: Guts
+    306: 27,  # Shroomish: Effect Spore
+    311: 33,  # Surskit: Swift Swim
+    370: 43,  # Whismur: Soundproof
+    332: 52,  # Trapinch: Hyper Cutter
+    339: 12,  # Numel: Oblivious
+    290: 19,  # Wurmple: Shield Dust
 }
 
 # A capture waiting on the other player (see GEN1_PENDING_*).
@@ -181,24 +182,24 @@ BOXED_B = (54, "PSYD008", "Quack",   10, 183)
 # exists) regardless of which area a player stands in. That panel stays empty for both
 # --title frlg and --title emerald; it is real per-cartridge behaviour, not a mock gap.
 GEN3_EMERALD_PAIRS = [
-    ("route_101", (263, "ZIGZ101", "Ziggy",  6, 0),   (261, "POOC101", "Snarl",  6, 0)),
-    ("route_102", (270, "LOTA102", "Lily",   8, 183), (273, "SEED102", "Nutty",  8, 0)),
-    ("route_104", (278, "WING104", "Gully",  9, 0),   (276, "TAIL104", "Swifty", 9, 210)),
-    ("route_105", (285, "SHRO105", "Puff",  11, 0),   (283, "SURS105", "Skater", 11, 200)),
-    ("route_106", (293, "WHIS106", "Echo",  12, 186), (328, "TRAP106", "Digger", 12, 0)),
-    ("route_107", (322, "NUME107", "Numie", 13, 0),   (265, "WURM107", "Wormy",  13, 197)),
+    ("route_101", (288, "ZIGZ101", "Ziggy",  6, 0),   (286, "POOC101", "Snarl",  6, 0)),
+    ("route_102", (295, "LOTA102", "Lily",   8, 183), (298, "SEED102", "Nutty",  8, 0)),
+    ("route_104", (309, "WING104", "Gully",  9, 0),   (304, "TAIL104", "Swifty", 9, 210)),
+    ("route_105", (306, "SHRO105", "Puff",  11, 0),   (311, "SURS105", "Skater", 11, 200)),
+    ("route_106", (370, "WHIS106", "Echo",  12, 186), (332, "TRAP106", "Digger", 12, 0)),
+    ("route_107", (339, "NUME107", "Numie", 13, 0),   (290, "WURM107", "Wormy",  13, 197)),
 ]
 
 GEN3_EMERALD_PENDING_AREA = "route_108"
-GEN3_EMERALD_PENDING_A = (300, "SKIT108", "Kitty", 14, 0)   # Skitty
-ABILITIES.setdefault(300, 56)  # Skitty: Cute Charm
+GEN3_EMERALD_PENDING_A = (315, "SKIT108", "Kitty", 14, 0)   # Skitty
+ABILITIES.setdefault(315, 56)  # Skitty: Cute Charm
 
 GEN3_EMERALD_DEAD_ZONE_AREA = "route_109"
-GEN3_EMERALD_DEAD_ZONE_BOB = (343, "BALT109", "Spinny", 8, 0)  # Baltoy
+GEN3_EMERALD_DEAD_ZONE_BOB = (318, "BALT109", "Spinny", 8, 0)  # Baltoy
 
 GEN3_EMERALD_BOXED_AREA = "route_112"
-GEN3_EMERALD_BOXED_A = (287, "SLAK112", "Lazy",    10, 217)   # Slakoth
-GEN3_EMERALD_BOXED_B = (296, "MAKU112", "Bruiser", 10, 183)   # Makuhita
+GEN3_EMERALD_BOXED_A = (364, "SLAK112", "Lazy",    10, 217)   # Slakoth
+GEN3_EMERALD_BOXED_B = (335, "MAKU112", "Bruiser", 10, 183)   # Makuhita
 
 # Final standing areas: BOTH have data/games/gen3_emerald/emerald_trainers.json
 # trainers_by_area entries (route_103: [520,523,526,529,532,535], route_110: [267,521,
