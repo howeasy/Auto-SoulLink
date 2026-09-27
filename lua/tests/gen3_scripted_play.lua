@@ -3164,7 +3164,7 @@ function EMH.save_via_menu(cp, domain)
     for _ = 1, 300 do
         G.tap("A", 3, 13)
         after = G.save_counter(domain)
-        if after > before then moved = true; break end
+        if G.counter_advanced(before, after) then moved = true; break end   -- rejects a torn read
     end
     if not moved then return false, before, after, "the save counter never advanced" end
     G.phase("saved", string.format("counter=%d->%d", before, after))

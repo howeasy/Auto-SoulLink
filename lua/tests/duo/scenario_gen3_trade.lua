@@ -186,6 +186,25 @@ local function run_scene(ctx, N)
     return ctx.last_sent("trade_done")
 end
 
+--- Wait up to `secs` for the FIRST show_choices or msgbox that arrives strictly AFTER `rx0`
+--- (a ctx.rx_count() snapshot taken right after trade_request was sent). Returns the rx entry, or
+--- nil on timeout. PHYSICAL live trade_decline_gen3_rr_as_a (card RR-FC-FIX): the walk to the NPC
+--- crosses Route 1 grass, which can queue an unrelated msgbox first (server/state.py dz_text, "X
+--- is a dead zone!" -- a wild-encounter notice, nothing to do with trade); the first version of
+--- this fix checked ctx.received("msgbox") > 0 / ctx.rx_after(0, ...), counting from the start of
+--- the whole receipt, and reported that stale notice as the trade refusal. Scoped to `rx0` so only
+--- a real response to THIS request ever counts.
+local function wait_trade_answer(ctx, rx0, secs)
+    local function answered()
+        return ctx.rx_after(rx0, function(m) return m.cmd == "show_choices" or m.cmd == "msgbox" end)
+    end
+    if not ctx.wait_until(function() return answered() ~= nil end, secs,
+                          "show_choices or the unavailability msgbox") then
+        return nil
+    end
+    return answered()
+end
+
 local function a_side(ctx, N, linked, partner, decline)
     local ok, why = walk_to_npc(ctx, N)
     if not ok then return false, why end
@@ -193,9 +212,28 @@ local function a_side(ctx, N, linked, partner, decline)
         return false, "the trade NPC never spawned in the Center"
     end
     ctx.log("AT_NPC npc_oe=" .. npc_slot(N))
+    -- rx0 BEFORE talk(), not after: PHYSICAL live trade_decline_gen3_rr_as_a (card RR-FC-FIX,
+    -- second round) -- the patch sends trade_request in the SAME FRAME A talks (talk()'s own doc
+    -- comment), and this run's own receipt shows the server's msgbox landing (line "RX msgbox
+    -- text=Trade unavailable...") BEFORE talk() ever logs TALKED (gated on a LATER poll seeing
+    -- pi_count move). A snapshot taken after talk() returns can already be past the real answer,
+    -- which is exactly what turned into "TIMEOUT waiting for show_choices or the unavailability
+    -- msgbox" here.
+    local rx0 = ctx.rx_count()
     if not talk(ctx, N) then return false, "never talked to the trade NPC" end
     if not ctx.wait_sent("trade_request", nil, 60) then return false, "no trade_request after the talk" end
-    if not ctx.wait_received("show_choices", nil, 120) then return false, "no show_choices" end
+    -- RR trade is UNAVAILABLE until its durable-trade delta lands (docs/protocol.md: RR ABI1 has
+    -- no recovery journal and never opts into server trade recovery). The server refuses at the
+    -- request itself, before ever opening the Trade/Say hey list -- a named msgbox, never
+    -- show_choices (card RR-FC-FIX; PYDEC final cut d9a928d7 saw a bare "no show_choices" FAIL
+    -- here because this driver only ever expected the old live flow). Wait for either, so the
+    -- real flow below still runs once trade support lands.
+    local answer = wait_trade_answer(ctx, rx0, 120)
+    if not answer then return false, "no show_choices" end
+    if answer.cmd == "msgbox" then
+        ctx.log("REFUSED_UNAVAILABLE reason=" .. tostring(answer.text))
+        return true
+    end
     -- the list is up once the script owns the field; A on its first row (Trade)
     if not ctx.wait_until(function() return u8(SC2) ~= 0 end, 60, "the choices script") then
         return false, "the Trade/Say hey list never opened"
@@ -243,7 +281,11 @@ local function a_side(ctx, N, linked, partner, decline)
 end
 
 local function b_side(ctx, N, decline)
-    if not ctx.wait_received("show_menu", nil, 1500) then return false, "no trade offer (show_menu)" end
+    -- RR trade is UNAVAILABLE (docs/protocol.md): the server refuses A's own trade_request before
+    -- ever building an offer for B, so B sees nothing at all -- no msgbox, no show_menu, nothing.
+    -- Bounded window (long enough for A's own request round trip) rather than the old 1500 s: a
+    -- timeout here is the expected outcome, not a failure, while trade stays unavailable.
+    if not ctx.wait_received("show_menu", nil, 90) then return true end
     if not ctx.wait_until(function() return u8(SC2) ~= 0 end, 120, "the YES/NO script") then
         return false, "the offer's YES/NO never opened"
     end
@@ -282,8 +324,11 @@ return function(ctx)
     if ctx.player == "a" then ok, report = a_side(ctx, N, linked, partner, decline)
     else ok, report = b_side(ctx, N, decline) end
     if not ok then return false, report end
-    if decline then
-        if not ctx.find(linked) then return false, linked .. " left the party after a decline" end
+    if type(report) ~= "table" then
+        -- nothing moved: RR trade unavailable (A's refusal, or B never got an offer to answer),
+        -- or -- once trade support lands -- a genuine partner decline
+        if not ctx.find(linked) then return false, linked .. " left the party though the trade never completed" end
+        if ctx.received("apply_trade") > 0 then return false, "apply_trade arrived though the trade never completed" end
         ctx.log("KEPT " .. linked .. " slot=" .. ctx.find(linked).slot)
     else
         if report.new_key ~= partner then
@@ -297,7 +342,9 @@ return function(ctx)
                         linked, partner, got.slot, got.species, got.level))
     end
     if not ctx.wait_go("SAVE", 1200) then return false, "the runner never released the SAVE" end
-    local sok, swhy = ctx.save(decline and "trade_decline" or "trade")
+    local traded = type(report) == "table"
+    local sok, swhy = ctx.save(traded and "trade" or (decline and "trade_decline" or "trade_unavailable"))
     if not sok then return false, swhy end
-    return true, decline and "declined; nothing moved" or ("traded " .. linked .. " for " .. partner)
+    if traded then return true, "traded " .. linked .. " for " .. partner end
+    return true, decline and "declined; nothing moved" or "RR trade unavailable; nothing moved"
 end

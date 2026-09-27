@@ -2338,6 +2338,21 @@ def gen3_trade_chain(inst, ka, kb, decline):
     return talked + chain + [native], list(zip(chain, chain[1:], strict=False)), [r"silent swap"]
 
 
+def gen3_trade_unavailable_chain(inst):
+    """(required, forbidden) receipt regexes for trade_gen3/trade_decline_gen3 on RR: ABI1 trade is
+    UNAVAILABLE until its durable-trade delta lands (docs/protocol.md) -- the server refuses A's
+    own trade_request itself, a named msgbox, never show_choices; B never hears about it at all.
+    Nothing moves on either cartridge (lua/tests/duo/scenario_gen3_trade.lua)."""
+    tx = lambda ev: rf"(?m)^TX {ev} - "                            # noqa: E731
+    rx = lambda cmd: rf"(?m)^RX {cmd}(?=\s|$)"                     # noqa: E731
+    forbidden = [rx("show_choices"), rx("show_menu"), rx("apply_trade"), tx("trade_done"),
+                r"(?m)^TRADED "]
+    if inst == "a":
+        return [tx("trade_request"), rx("msgbox"), r"(?m)^REFUSED_UNAVAILABLE reason=",
+               r"(?m)^KEPT "], forbidden
+    return [r"(?m)^KEPT "], forbidden
+
+
 def gen3_panel_text(raw: bytes) -> str:
     """One SlinkInfo line (FR-encoded, 0xFE = newline, 0xFF-terminated) through the Python
     codec's own charmap (gen3_codec._FR_DECODE via decode_name), independent of the Lua encoder."""
@@ -7626,27 +7641,19 @@ class DuoRun:
 
     def orchestrate_trade_gen3(self):
         """The RR PC trade NPC, driven only by the two cartridges: link the slot-1 mons (server
-        staging), name each side's partner key, GO. A talks to the NPC and answers the server's
-        native menus, B answers the offer; nothing is injected after GO. Both save only once the
-        server has settled (re-keyed links.json, or a declined offer on both receipts)."""
+        staging), name each side's partner key, GO. RR ABI1 trade is UNAVAILABLE until its
+        durable-trade delta lands (docs/protocol.md): A talks to the NPC and the server refuses
+        the trade_request itself, before ever opening the Trade/Say hey list; B never hears about
+        it. Both save once A's refusal is logged and each side confirms it kept its own mon."""
         self._gen3_prelude(link_slot=self.cfg.get("trade_slot", 1))
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         lines = self._gen3_linked_lines()
         lines["a"].append(f"PARTNER {kb}")
         lines["b"].append(f"PARTNER {ka}")
         self.go(lines)
-        if self.scenario == "trade_decline_gen3":
-            self._gen3_mark("b", r"^DECLINED ", "B declined the offer")
-            for inst, key in (("a", ka), ("b", kb)):
-                self._gen3_mark(inst, rf"^KEPT {re.escape(key)} ", "kept its linked mon")
-        else:
-            self._gen3_mark("a", rf"^TRADED gave={re.escape(ka)} got={re.escape(kb)} ", "A traded")
-            self._gen3_mark("b", rf"^TRADED gave={re.escape(kb)} got={re.escape(ka)} ", "B traded")
-
-            def rekeyed():
-                return any((e.get("a") or {}).get("key") == kb and (e.get("b") or {}).get("key") == ka
-                           for e in self._links_json())
-            self.wait_for("links.json re-keyed by the server's commit", rekeyed, 120)
+        self._gen3_mark("a", r"^REFUSED_UNAVAILABLE reason=", "A's trade_request was refused")
+        for inst, key in (("a", ka), ("b", kb)):
+            self._gen3_mark(inst, rf"^KEPT {re.escape(key)} ", "kept its linked mon")
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
 
@@ -7665,39 +7672,36 @@ class DuoRun:
 
     orchestrate_infopanel_dex_gen3 = orchestrate_infopanel_gen3
 
-    def _gen3_trade_facts(self, results, traded):
+    def _gen3_trade_unavailable_facts(self, results):
+        """RR ABI1 trade is UNAVAILABLE until its durable-trade delta lands (docs/protocol.md): the
+        server refuses A's own trade_request itself, a named msgbox, before it can ever open the
+        Trade/Say hey list -- B never hears about it. Nothing moves on either cartridge."""
         self._gen3_flush_boundary()
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         problems = gen3_trade_problems(
             ka, kb, self._links_json(), {i: self._gen3_saved(i) for i in "ab"},
-            {i: self._gen3_fixture_saved(i) for i in "ab"}, traded)
-        decline = not traded
+            {i: self._gen3_fixture_saved(i) for i in "ab"}, traded=False)
         for inst in ("a", "b"):
-            required, ordered, forbidden = gen3_trade_chain(inst, ka, kb, decline)
-            problems += gen3_receipt_problems(inst, results[inst], required=required,
-                                              ordered=ordered, forbidden=forbidden)
+            required, forbidden = gen3_trade_unavailable_chain(inst)
+            problems += gen3_receipt_problems(inst, results[inst], required=required, forbidden=forbidden)
             if inst == "a" and len(re.findall(r"(?m)^TX trade_request ", results[inst])) != 1:
                 problems.append("a: expected exactly one trade_request")
         if re.search(r"(?m)^TX trade_request ", results["b"]):
             problems.append("b: sent a trade_request (it never talked to the NPC)")
-        if traded:
-            for inst, gets in (("a", kb), ("b", ka)):
-                got = next((m for m in self._gen3_saved(inst)[0] if gen3_key(m) == gets), None)
-                if got is not None:
-                    problems += gen3_record_problems(f"{inst}: the received {gets}", got,
-                                                     self._gen3_rr, self._gen3_limits(inst))
         return ka, kb, problems
 
     def assert_trade_gen3_saved(self, results):
-        ka, kb, problems = self._gen3_trade_facts(results, traded=True)
-        self._gen3_raise(problems, f"trade_gen3: NPC talk -> Trade -> slot 1 -> partner YES -> "
-                                   f"native scene both sides; saved a holds {kb}, b holds {ka} "
-                                   f"(partner records intact), links.json re-keyed, each key once")
+        ka, kb, problems = self._gen3_trade_unavailable_facts(results)
+        self._gen3_raise(problems, f"trade_gen3: RR ABI1 trade unavailable -- the server refused "
+                                   f"{ka}'s trade_request before the Trade/Say hey list ever "
+                                   f"opened; both saves keep their fixture party, link {ka}/{kb} "
+                                   f"unchanged")
 
     def assert_trade_decline_gen3_saved(self, results):
-        ka, kb, problems = self._gen3_trade_facts(results, traded=False)
-        self._gen3_raise(problems, f"trade_decline_gen3: offer {ka} for {kb} declined with B; no "
-                                   f"apply_trade, both saves hold their fixture party, link unchanged")
+        ka, kb, problems = self._gen3_trade_unavailable_facts(results)
+        self._gen3_raise(problems, f"trade_decline_gen3: RR ABI1 trade unavailable -- the server "
+                                   f"refused {ka}'s trade_request before any offer reached B; "
+                                   f"both saves keep their fixture party, link {ka}/{kb} unchanged")
 
     def assert_infopanel_gen3_saved(self, results):
         alive = sum(1 for e in self._links_json() if e.get("status") == "alive")
@@ -8547,9 +8551,15 @@ class DuoRun:
                                (kept, r"(?m)^SAVE_WITNESS_DUMP ")],
                               [gen3_tx("memorialize_done", key)])
             else:
+                # A is the side whose engine faint site fires: it fights NATURALLY in every case
+                # (wild/trainer/lhammer/...) and can legitimately gain EXP before it goes down.
+                # B's KO is engine-forced with no input (active_faint_chain), so its growth only
+                # moves when the case gives it real turns first (the "trainer" case, PREP_LEVEL).
+                # PYDEC FAIL on the RR final cut (d9a928d7): the memorial for A's key differed in
+                # experience because this mask never covered A's own natural growth.
                 problems += gen3_memorial_problems(inst, saved, fixture, key, box, rr=self._gen3_rr,
                                                    limits=self._gen3_limits(inst), battled=True,
-                                                   trained=inst == "b" and case == "trainer")
+                                                   trained=inst == "a" or case == "trainer")
                 done = gen3_tx("memorialize_done", key)
                 marks[inst] = ([done], [(done, r"(?m)^SAVE_WITNESS_DUMP ")], [])
         site = r"(?m)^ENGINE_FAINT_SITE "
