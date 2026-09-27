@@ -463,6 +463,15 @@ class SoulLinkState:
         if changed:
             self._save()
 
+    def refuse_hidden_event(self, player_id: str, msg: dict) -> list[dict] | None:
+        """A withheld party cannot supply gameplay mutations or retire owed reports."""
+        event = msg.get("event")
+        if (self.adapter.supports_trade_recovery() and self.party_hidden[player_id]
+                and event in self.HIDDEN_PARTY_EVENTS):
+            log.warning("[%s] %s refused: party hidden; waiting for a trustworthy snapshot", player_id, event)
+            return [{"cmd": "noop", "refused": "party_hidden"}]
+        return None
+
     def handle_event(self, player_id: str, msg: dict) -> list[dict]:
         """
         Process one event from player_id.
@@ -470,6 +479,9 @@ class SoulLinkState:
         Cross-player commands are queued and delivered on the partner's next call.
         """
         event = msg.get("event", "unknown")
+        refused = self.refuse_hidden_event(player_id, msg)
+        if refused is not None:
+            return refused
 
         # The client has spoken about this key, so nothing we sent for it is still on the wire:
         # every answer to a SYNC_COMMAND (sync_retrieve_done/_failed, box_mon_failed,
@@ -832,6 +844,8 @@ class SoulLinkState:
     # unlinked); such events wait in pt["held_events"] and replay after commit or rollback.
     TRADE_HELD_EVENTS = {"faint": "_handle_faint", "party_to_box": "_handle_party_to_box",
                          "box_to_party": "_handle_box_to_party", "release": "_handle_release"}
+    HIDDEN_PARTY_EVENTS = frozenset(("capture", "faint", "party_to_box", "box_to_party",
+                                   "key_change", "whiteout", "release"))
 
     AMBIGUITY_GATED = ("faint", "party_to_box", "box_to_party", "release", "key_change", "stats_cache",
                        "sync_retrieve_done", "sync_retrieve_failed", "box_mon_failed",

@@ -2099,6 +2099,10 @@ class SLinkServer:
         if event != "hello" and not self.is_admitted(player_id):
             return [{"cmd": "noop", "refused": "admission"}]
 
+        refused = self.state.refuse_hidden_event(player_id, msg)
+        if refused is not None:
+            return refused  # before presentation enrichment or command/census mutation
+
         if event == "hello":
             # ── Transactional hello (Codex cx-2985fe38 F1/F2) ──────────────────────────
             # Stage the candidate rom_type/panel/panel_abi/sfx facts and the adapter they
