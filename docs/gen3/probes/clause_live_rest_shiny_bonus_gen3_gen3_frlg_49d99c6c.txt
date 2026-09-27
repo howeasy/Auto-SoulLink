@@ -1,0 +1,42 @@
+# CLAUSE-LIVE-REST gen3_frlg shiny_bonus_gen3
+# source: 49d99c6c4e7509810b8389ab7182965652b28d71
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario shiny_bonus_gen3 --lane clause-rest-shiny-fr --keep-data
+# cwd: C:/slink-wt/g3-clause-run (frozen clean checkout)
+# private state: .cache/state; archived artifacts: C:/slink-wt/g3-clause-live-rest/.cache/live/shiny_bonus_gen3_gen3_frlg_49d99c6c
+
+
+========== scenario: shiny_bonus_gen3 ==========
+[duo] shiny_bonus_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=3b50a0f353881c8952ee8998cc2052288307b7ce3fe4503a9266fc015ecbe409 b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=a604eb2bf5f190562035d03fe356b7ff0771944f30a9f2e31e2570a470958a2b write_checkpoint.json=11dd57184a8f9f79483e9175bd870efe0cef183211cbc7ba93d520fbedfd33ca profile.json=bc642c4cc12a9df0b0d34bebca13ea6ee62108df03a296738797deae15b0e77e source=49d99c6c4e7509810b8389ab7182965652b28d71
+[duo] server up: tcp=51904 http=51905 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_shiny_bonus_gen3_d4xbh8jg
+[duo] timing server 1.1s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=6F64B542:99DE0D8A b=49BDD147:1C600D89
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): 6F64B542:99DE0D8A <-> 49BDD147:1C600D89 on route_1, alive
+[duo] SYNTH_SHINY_SETUP {"after": "8903df978a0dde99cac3bec1bfd3ffff505f0202c4c9c8c8ffffff00de7f0000130e010e0a0e010e0348010e220e010e030e010e200e010e036b032ce5ad9800030e010e030e010e030e010e030e010e0000000002ff0d000d0007000600070006000600", "after_key": "97DF0389:99DE0D8A", "after_sha256": "af0b808b77505b26e3d2e555ae2234908611d31ce29c875daedc8596c16be209", "before": "897176928a0dde99cac3bec1bfd3ffff505f0202c4c9c8c8ffffff00de7f0000137ca80b0a7ca80b033aa80b227ca80b037ca80b207ca80b0319aa29e5df3105037ca80b037ca80b037ca80b037ca80b0000000002ff0d000d0007000600070006000600", "before_key": "92767189:99DE0D8A", "before_sha256": "af2cbdbc6af66c4599aeec0178eb6b33a01b7b195bdeb1b3e95b3099faf3ecfb", "label": "SYNTH wild PID before native capture", "level": 2, "rr": false, "species": 16}
+[duo] SHINY_PENDING {"area_states": {"pallet_town": "pending_both", "route_1": "linked"}, "bonus_keys": {"a": ["97DF0389:99DE0D8A"], "b": []}, "links": [{"a": {"is_shiny": false, "key": "6F64B542:99DE0D8A", "level": 4, "nickname": "RATTATA", "species": 19}, "area_id": "route_1", "b": {"is_shiny": false, "key": "49BDD147:1C600D89", "level": 3, "nickname": "PIDGEY", "species": 16}, "cause": "", "encounter_a": null, "encounter_b": null, "initiating_player": "", "killed_at": null, "killer": null, "status": "alive"}], "pending_bonus": {"a": [], "b": ["97DF0389:99DE0D8A"]}}
+[duo] timing orchestrate 41.0s
+[duo] timing results 3.6s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=34c741d1ddb01a325d598bf9f1b6978ac2f41c94442a5bd63a2ffce1385534d0 file=34c741d1ddb01a325d598bf9f1b6978ac2f41c94442a5bd63a2ffce1385534d0 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=f08ce51880adc11b152d321b6696a5a583b80636c371dc3f233c76a3cb3084bd file=f08ce51880adc11b152d321b6696a5a583b80636c371dc3f233c76a3cb3084bd match=true saves=1 counter=4->5 rtc=normalized
+[duo] SHINY_BALLS side=a baseline=20 final=16 throws=4
+[duo] SHINY_BALLS side=b baseline=20 final=16 throws=4
+[duo] shiny exception: native catch bypassed linked area; next native partner catch formed and saved the bonus pair
+[duo] timing oracle 1.0s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] shiny_bonus_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_shiny_bonus_gen3_d4xbh8jg
+
+========== summary ==========
+  shiny_bonus_gen3: PASS (attempt 1 of 8)

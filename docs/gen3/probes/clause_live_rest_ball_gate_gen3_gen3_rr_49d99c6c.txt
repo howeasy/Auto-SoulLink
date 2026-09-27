@@ -1,0 +1,42 @@
+# CLAUSE-LIVE-REST gen3_rr ball_gate_gen3
+# source: 49d99c6c4e7509810b8389ab7182965652b28d71
+# command: python tools/e2e_duo.py --game gen3_rr --scenario ball_gate_gen3 --lane clause-rest-ball-rr --keep-data
+# cwd: C:/slink-wt/g3-clause-run (frozen clean checkout)
+# private state: .cache/state; archived artifacts: C:/slink-wt/g3-clause-live-rest/.cache/live/ball_gate_gen3_gen3_rr_49d99c6c
+
+
+========== scenario: ball_gate_gen3 ==========
+[duo] ball_gate_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c14eb7f55f5e4cc16cae88d4a53f1f6851321cae86b8ef93eaf0e479bbb0f52f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=327197e1b9fe9deb377da7eb49139f63034df144ce40d4a0d4884d2b853f8a81 write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=49d99c6c4e7509810b8389ab7182965652b28d71
+[duo] server up: tcp=51536 http=51537 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_ball_gate_gen3_jsj3x3tz
+[duo] timing server 1.2s
+[duo] cleared 9 stale artifact(s) for ball_gate_gen3: e2e_ball_gate_gen3_a_1_witness.bin, e2e_ball_gate_gen3_a_attempt1_result.txt, e2e_ball_gate_gen3_a_post_flip_result.txt, e2e_ball_gate_gen3_a_result.txt, e2e_ball_gate_gen3_b_1_witness.bin, e2e_ball_gate_gen3_b_attempt1_result.txt, e2e_ball_gate_gen3_b_post_flip_result.txt, e2e_ball_gate_gen3_b_result.txt, e2e_ball_gate_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=65300007:2BDDC8BF b=3A094BE1:D4223740
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): 65300007:2BDDC8BF <-> 3A094BE1:D4223740 on route_1, alive
+[duo] timing orchestrate 54.7s
+[duo] timing results 5.5s
+[duo] RESULT_LINE a: RESULT: PASS (caught 65300007:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (caught 3A094BE1:D4223740)
+[duo] SAVE_WITNESS_SHA256 inst=a site=17aa4a8dd076c0c61b423c27caa254412869689494f7b57b2bfac4cff3983a98 file=17aa4a8dd076c0c61b423c27caa254412869689494f7b57b2bfac4cff3983a98 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=cec4ab853ebd02e858dabccaafc21d8a61fde5efd1f1b35dc243dd4e737c7c64 file=cec4ab853ebd02e858dabccaafc21d8a61fde5efd1f1b35dc243dd4e737c7c64 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] BAG_BALLS baseline=10 final=9 throws=1 inst=a native_grant=10
+[duo] BAG_BALLS baseline=10 final=9 throws=1 inst=b native_grant=10
+[duo] link: 65300007:2BDDC8BF <-> 3A094BE1:D4223740 alive on route_1 and saved once in each party
+[duo] ball gate: pre-ball native faint suppressed; native reward activates; post-ball real catch/link saved
+[duo] timing oracle 0.5s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] ball_gate_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_ball_gate_gen3_jsj3x3tz
+
+========== summary ==========
+  ball_gate_gen3: PASS (attempt 1 of 8)
