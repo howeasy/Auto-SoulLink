@@ -23,6 +23,9 @@ body with any optional 16-byte mGBA RTC suffix already stripped by
 | Fixture | Source | Date | sha256 |
 |---|---|---|---|
 | `rr_town.sav` | `E:/Howard/Bizhawk/GBA/SaveRAM/slink RR.SaveRAM` (source sha256 `bb0c514ba045d2710529b7e03b31d56d62e5aca8eaa29f89005b628166150edc`), built from `patch/build/slink_RR.gba` (the existing companion-patched RR battery save `tools/mkstates.py` also drives, `tools/mkstates.py:100-150`) | 2026-09-21 | `b4b991f623c969eeb5c3d06ef54ef2da73cda62b4759a2c730aece7c18def9a3` |
+| `firered_party_evolve_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind evolve` from `firered_party_battle.sav` (SYNTH: slot-0 Squirtle Lv15, EXP 2534 (one short of Lv16), Lv15 stats); NAT-LEGS a2fa1f94, receipts `docs/gen3/probes/fc_*_gen3_fr_as_a_a2fa1f94.txt` | 2026-09-26 | `c87d50de4613d5f50c2c8e30d177975882d5c821487a748345f746a65dc418b0` |
+| `firered_party_trade_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind trade` from `firered_party_town.sav` (SYNTH: slot 1 = player-owned Lv10 ABRA (fresh PID); continue-game warp to Route2_House (7,3) below the NPC trader; trade flag clear); NAT-LEGS a2fa1f94, receipts `docs/gen3/probes/fc_*_gen3_fr_as_a_a2fa1f94.txt` | 2026-09-26 | `7c84bdf705838356dbb6d5002a8825459d05a7d13bed7d58d023730cb7263768` |
+| `firered_party_poison_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind poison` from `firered_party_town.sav` (SYNTH: slot-0 Squirtle at 1 HP, poisoned); NAT-LEGS a2fa1f94, receipts `docs/gen3/probes/fc_*_gen3_fr_as_a_a2fa1f94.txt` | 2026-09-26 | `1f50a04f0c812451f8b159582f4e03a7d1a1ce07de7ebd016a25fdd67a928833` |
 
 `rr_town_b.sav` was **attempted and refused**: `derive-b --rr` always
 refuses (see `tools/gen3_fixtures.py:RR_DERIVE_REFUSAL`) because the
