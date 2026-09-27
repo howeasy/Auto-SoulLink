@@ -80,6 +80,7 @@ function Client.new(p)
     local trade
     local owed = p.owed_reports and p.owed_reports.new() or nil
     local trade_epoch, trade_connected = 0, false
+    local trade_reset_epoch = 0
     local trade_report_epochs = setmetatable({}, {__mode="k"})
     local a, d = profile.ram, profile.derived
     local arr = json.array
@@ -152,6 +153,14 @@ function Client.new(p)
         else
             session_nonce = nil
         end
+    end
+    if native and p.artifact_kind == "companion" and native.bind_match_call_session and session_nonce then
+        -- The production nonce's first word is the persisted session counter.
+        -- Short explicit harness seeds are also u32s; never invent an epoch.
+        local epoch_seed = #session_nonce == 16 and session_nonce:sub(1,8)
+                           or (#session_nonce <= 8 and session_nonce or nil)
+        local epoch = epoch_seed and tonumber(epoch_seed, 16)
+        if epoch and epoch > 0 then native:bind_match_call_session(epoch) end
     end
     local battle_seq = 0
     -- RIVAL AUTHORITY (C5-11c BLOCKER 2). The battle that may accept a rival swap, as the immutable
@@ -948,6 +957,7 @@ function Client.new(p)
         return overworld_ok()
     end
     function drv.on_reset()
+        trade_reset_epoch = trade_reset_epoch + 1
         if trade then trade:reset() end
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
@@ -1081,6 +1091,7 @@ function Client.new(p)
             if had then log("rival authority closed by " .. tostring(sig and sig.kind)) end
         end
         local function capture_trade_before(sig)
+            sig.trade_reset_epoch = trade_reset_epoch
             local party, why = party_read()
             if not party then
                 log("NPC trade preimage unavailable: " .. tostring(why))
@@ -1128,7 +1139,7 @@ function Client.new(p)
         elseif k == "map_load" then f.map = true
         elseif k == "save" then f.save = true
         elseif k == "trade_begin" then                          -- OPEN kind, not PHYSICAL
-            st.trade = sig.trade_before
+            st.trade = sig.trade_reset_epoch == trade_reset_epoch and sig.trade_before or nil
         elseif k == "trade_done" then f.trade = true            -- OPEN kind, not PHYSICAL
         end
         -- evolve_species_store / trade_evolve_species_store (OPEN, not PHYSICAL): a Gen 3
@@ -1627,6 +1638,18 @@ function Client.new(p)
     session = core.Session.new({ net = transport, json = json, hud = hud, log = sink, tag = TAG,
                                  player = p.player, game = drv, identity = Id, deferred = Q })
     session.driver, session.state = drv, st
+    if native and p.artifact_kind == "companion" and native.request_match_call then
+        local base_command = session.handle_command
+        function session:handle_command(cmd)
+            -- Same optional tag seam as gen2/client.lua: the original command
+            -- still runs, and unsupported cartridges silently ignore the tag.
+            if cmd.cmd ~= "noop" and cmd.phone ~= nil then
+                local ok, why = pcall(native.request_match_call, native, cmd.phone, cmd.phone_data)
+                if not ok then log("match_call request failed: " .. tostring(why)) end
+            end
+            return base_command(self, cmd)
+        end
+    end
     local base_send = session.send
     session.send = function(a, b, c)
         local event = (a == session) and b or a

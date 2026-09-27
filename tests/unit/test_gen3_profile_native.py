@@ -128,10 +128,45 @@ def test_main_reports_missing_input_without_a_traceback_or_partial_profiles(monk
     assert list(tmp_path.rglob("profile.json")) == []
 
 
+@pytest.mark.parametrize("error", [subprocess.CalledProcessError(1, ["profile-input"]),
+                                  subprocess.TimeoutExpired(["profile-input"], 1)])
+def test_main_reports_subprocess_failures_without_a_traceback(monkeypatch, capsys, error):
+    def fail(_args):
+        raise error
+    monkeypatch.setattr(g, "_generate_profiles", fail)
+    monkeypatch.setattr(g.sys, "argv", ["gen_gen3_profile.py"])
+    assert g.main() == 1
+    assert "profile-input" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("phase", ["link", "exec"])
+def test_host_layout_probe_skips_when_the_toolchain_is_unusable(monkeypatch, tmp_path, phase):
+    monkeypatch.setenv("SLINK_HOST_GCC", "model-gcc")
+    calls = []
+
+    def run(command, **_kwargs):
+        calls.append(command)
+        if phase == "link" or len(calls) == 2:
+            raise subprocess.CalledProcessError(1, command)
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(pytest.skip.Exception, match="host C toolchain unavailable"):
+        test_python_v2_layout_matches_host_c_sizeof_and_offsetof(tmp_path)
+
+
 def test_python_v2_layout_matches_host_c_sizeof_and_offsetof(tmp_path):
     compiler = os.environ.get("SLINK_HOST_GCC") or shutil.which("gcc")
     if not compiler:
         pytest.skip("host C compiler unavailable")
+    probe, probe_exe = tmp_path / "compiler_probe.c", tmp_path / "compiler_probe.exe"
+    probe.write_text('#include <stdio.h>\nint main(void) { printf("ready\\n"); return 0; }\n')
+    try:
+        subprocess.run([compiler, "-std=c11", str(probe), "-o", str(probe_exe)],
+                       check=True, capture_output=True, text=True)
+        subprocess.run([str(probe_exe)], check=True, capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        pytest.skip(f"host C toolchain unavailable: {exc}")
     abi = g.native_abi()
     expected, statements = {}, []
     for name, layout in abi["structs"].items():
@@ -145,9 +180,27 @@ def test_python_v2_layout_matches_host_c_sizeof_and_offsetof(tmp_path):
                       + "\n".join(statements) + "\nreturn 0;\n}\n")
     subprocess.run([compiler, "-std=c11", "-I", str((REPO / g.ABI_SRC).parent),
                     str(source), "-o", str(executable)], check=True, capture_output=True, text=True)
-    run = subprocess.run([str(executable)], check=True, capture_output=True, text=True)
+    try:
+        run = subprocess.run([str(executable)], check=True, capture_output=True, text=True)
+    except (OSError, subprocess.SubprocessError) as exc:
+        pytest.skip(f"host C toolchain unavailable: {exc}")
     actual = {name: int(value) for name, value in (line.split("=") for line in run.stdout.splitlines())}
     assert actual == expected
+
+
+def test_real_abi_compilation_failure_is_not_hidden_as_a_toolchain_skip(monkeypatch, tmp_path):
+    monkeypatch.setenv("SLINK_HOST_GCC", "model-gcc")
+    calls = []
+
+    def run(command, **_kwargs):
+        calls.append(command)
+        if len(calls) == 3:
+            raise subprocess.CalledProcessError(1, command, stderr="static assertion failed")
+        return subprocess.CompletedProcess(command, 0, stdout="ready\n", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(subprocess.CalledProcessError):
+        test_python_v2_layout_matches_host_c_sizeof_and_offsetof(tmp_path)
 
 
 def test_legacy_emerald_stub_is_absent_from_frlg_pack():

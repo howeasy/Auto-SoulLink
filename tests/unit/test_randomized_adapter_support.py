@@ -26,7 +26,7 @@ async def test_unbound_randomized_generations_are_refused_at_hello(tmp_path, tit
     assert not server.state.rom_type and not server.state.player_identity
 
 
-@pytest.mark.parametrize("title", ("heartgold", "pokemon_black", "emerald", "unknown-persisted-title"))
+@pytest.mark.parametrize("title", ("heartgold", "pokemon_black", "unknown-persisted-title"))
 def test_an_unsupported_randomized_committed_run_is_refused_even_for_a_clean_candidate(tmp_path, title):
     server = SLinkServer(data_dir=str(tmp_path))
     server.state.rom_type, server.state.artifact_kind = title, "rand"
@@ -49,7 +49,7 @@ def test_direct_admission_cannot_bypass_the_adapter_capability(tmp_path, game_id
 
 
 @pytest.mark.parametrize("title", ("red", "Blue", "yellow", "red_ap", "PureRed", "pureblue", "puregreen",
-                                   "firered", "leafgreen"))
+                                   "firered", "leafgreen", "emerald"))
 def test_existing_randomized_foundations_explicitly_opt_in(title):
     assert adapter_class_for_rom_type(title).supports_randomized(title) is True
 

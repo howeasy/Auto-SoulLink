@@ -302,6 +302,7 @@ class UprPipelineError(Exception):
 # header game code at 0xAC names the title and 0xBC is the revision (the pins are rev 0).
 GEN3_ROM_SIZE = 16 << 20
 GEN3_CODES = {b"BPRE": "firered", b"BPGE": "leafgreen"}
+EMERALD_RANDOMIZER_REFUSAL = "Emerald randomization is not enabled in Manager: its UPR write-domain audit is pending"
 GEN3_TITLE_WORDS = {"firered": "FireRed", "leafgreen": "LeafGreen"}
 _GEN3_PACK = os.path.join(_REPO, "data", "games", "gen3_frlg")
 # gSpeciesInfo row (pret include/pokemon.h SpeciesInfo, 28 bytes): the fields a Soul Link
@@ -507,6 +508,9 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
             rom = f.read()
         # the Manager's ROM scan dedups on this, so it reads each file once, not twice
         info["sha1"] = hashlib.sha1(rom).hexdigest()
+        if rom[0xAC:0xB0] == b"BPEE":
+            info.update(clean=False, title=EMERALD_RANDOMIZER_REFUSAL)
+            return info
         if g3 := gen3_identify(rom):
             info.update(family=FAMILY_FRLG, kind=g3["kind"], clean=g3["pinned"],
                         variant=GEN3_TITLE_WORDS[g3["title"]])
@@ -596,6 +600,8 @@ def randomize(jar: str, settings_path: str, source_rom: str, output_rom: str,
                                "a ROM over itself, which would destroy the clean copy")
     with open(source_rom, "rb") as f:
         src_bytes = f.read()
+    if src_bytes[0xAC:0xB0] == b"BPEE":
+        raise UprPipelineError(EMERALD_RANDOMIZER_REFUSAL)
     g3 = gen3_title(src_bytes)
     ext = ".gba" if g3 else ".gbc"
     if not output_rom.lower().endswith(ext):

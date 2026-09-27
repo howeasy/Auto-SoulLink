@@ -207,9 +207,9 @@ def test_overlapping_ranges_are_ambiguous_and_rejected():
         decode_trainers({ROM_BASE: bytes(40), ROM_BASE + 8: bytes(8)}, ROM_BASE, 1)
 
 
-def test_only_frlg_titles_are_accepted():
-    with pytest.raises(ValueError, match="unsupported FR/LG title"):
-        decode_rom_tables(b"", "emerald")
+def test_unbound_gen3_titles_are_refused():
+    with pytest.raises(ValueError, match="unsupported Gen 3 title"):
+        decode_rom_tables(b"", "ruby")
 
 
 @pytest.fixture(scope="module")

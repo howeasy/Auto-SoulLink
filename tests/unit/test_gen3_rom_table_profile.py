@@ -32,12 +32,16 @@ def test_table_partial_stride_is_fatal():
         g.rom_tables("firered", bad)
 
 
-def test_committed_metadata_is_only_on_fr_and_lg():
+def test_committed_metadata_is_on_frlg_and_emerald_only():
     frlg = json.loads((g.REPO / "data/games/gen3_frlg/profile.json").read_text())
     for title in ("firered", "leafgreen"):
         text = (g.REPO / f"data/gen3/pret/poke{title}.sym").read_text()
         assert frlg["titles"][title]["rom_tables"] == g.rom_tables(title, text)[0]
         assert frlg["titles"][title]["rom_tables_provenance"] == g.rom_tables(title, text)[1]
-    for pack in ("gen3_rr", "gen3_emerald"):
-        data = json.loads((g.REPO / f"data/games/{pack}/profile.json").read_text())
-        assert all("rom_tables" not in entry for entry in data["titles"].values())
+    emerald = json.loads((g.REPO / "data/games/gen3_emerald/profile.json").read_text())["titles"]["emerald"]
+    text = (g.REPO / "data/gen3/pret/pokeemerald.sym").read_text()
+    assert emerald["rom_tables"] == g.rom_tables("emerald", text)[0]
+    assert emerald["rom_tables_provenance"] == g.rom_tables("emerald", text)[1]
+    rr = json.loads((g.REPO / "data/games/gen3_rr/profile.json").read_text())
+    assert all("rom_tables" not in entry for entry in rr["titles"].values())
+    assert "rom_tables" not in frlg["titles"]["firered_ap"]
