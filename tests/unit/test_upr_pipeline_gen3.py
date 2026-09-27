@@ -18,6 +18,7 @@ import aiohttp
 import pytest
 
 from server import cartridges, upr_pipeline, upr_settings as U
+from server.adapters.gen3_rom_tables import DEOXYS
 from server.upr_pipeline import UprPipelineError
 from tools.gen3_final_cut import ROOT_DUMPS, STAGED, rom_pins
 
@@ -162,7 +163,7 @@ def test_upr_normalizations_are_not_refusals(tmp_path, title):
     The clean dump itself stores Deoxys's NORMAL stats (proven below), so this is the actual
     src -> out delta a real UPR save produces, not an arbitrary edit."""
     from server.adapters.gen3_frlge import _DEOXYS_FORME, _DEOXYS_NORMAL
-    bulbasaur, deoxys = _species_row(title, 1), _species_row(title, upr_pipeline.DEOXYS)
+    bulbasaur, deoxys = _species_row(title, 1), _species_row(title, DEOXYS)
 
     def edit(r):
         assert r[bulbasaur + 23] == 0
@@ -179,7 +180,7 @@ def test_changed_deoxys_stats_that_are_not_the_forme_are_refused(tmp_path, title
     normalisation (Gen3RomHandler.java:796-809); a real edit to that row -- one that does not
     land on the forme bytes -- must still be caught, or a base-stat randomizer on Deoxys would
     pass silently (the bug fixed here: the old code zeroed the row unconditionally)."""
-    deoxys = _species_row(title, upr_pipeline.DEOXYS)
+    deoxys = _species_row(title, DEOXYS)
     src, out = _variant(tmp_path, title, lambda r: r.__setitem__(deoxys, r[deoxys] ^ 0xFF))
     with pytest.raises(UprPipelineError, match="base stats"):
         upr_pipeline._check_content_gen3(src, out)
@@ -189,8 +190,8 @@ def test_changed_deoxys_stats_that_are_not_the_forme_are_refused(tmp_path, title
 def test_row_409_is_not_treated_as_deoxys(tmp_path, title):
     """Pins the species-row index convention: DEOXYS = 410 is the exact row the exemption
     applies to; its neighbour (409) must be refused like any other species."""
-    assert upr_pipeline.DEOXYS == 410
-    row = _species_row(title, upr_pipeline.DEOXYS - 1)
+    assert DEOXYS == 410
+    row = _species_row(title, DEOXYS - 1)
     src, out = _variant(tmp_path, title, lambda r: r.__setitem__(row, r[row] ^ 0xFF))
     with pytest.raises(UprPipelineError, match="base stats"):
         upr_pipeline._check_content_gen3(src, out)

@@ -57,9 +57,6 @@ from server.adapters.gen1_rom_scan import (
     scan_base_stats,
 )
 from server.adapters.gen3_rom_tables import (
-    DEOXYS,
-    SPECIES_INFO_SIZE,
-    SPECIES_RULE_BYTES,
     gen3_content_fingerprint,
     normalised_species_rules,
 )
