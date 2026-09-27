@@ -308,3 +308,22 @@ Client/native/READY files remain unchanged. Full verification follows in the R3 
 R3 targeted verification: **269 passed in 6.24s** across trade/state/client, wire schema,
 hello, board and accessibility tests. Final source citations and whitespace checks pass;
 the full suite will be recorded against the committed R3 cut.
+
+
+## R3 completion receipt — 2026-09-27
+
+Implementation: `2cf0c3b276cbf71015914c237cfb175f34de28b4`. The full run used the same
+pinned local prerequisite bindings as R1/R2, with source unchanged throughout:
+
+```text
+python -m pytest tests/unit -q -p no:randomly -n 4 --dist=loadfile
+15469 passed, 362 skipped in 911.62s (0:15:11)
+Exit code: 0
+```
+
+Full output: `.cache/t4-r3-full-unit.txt`; SHA-256
+`28e618abce4232923f75e8614d98b6c3adf691f8b80c30900415f556558677f3`.
+The T4 test file now has 78 controls; the combined targeted suite passed 269 tests.
+Both normal and rejected-hello traces remain byte-identical to `cd5c1697` for all five GB
+titles; managed-run config controls separately verify omission of `run_id` for Gen 1/2.
+No client/producer/READY change or physical qualification is part of this card.
