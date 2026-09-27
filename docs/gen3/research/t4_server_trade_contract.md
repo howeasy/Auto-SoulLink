@@ -239,7 +239,8 @@ wrong-save/rejected-hello sequence receipts are:
 | Gold | 5059 | `401051be4090e7f99122869cb0253d0aadfd29d206c16ac083f63eaf053e2b2d` |
 | Silver | 5061 | `d46e948859ead03b7b1c34b725f68a3769402f10601fa303e201c1687a3d9c91` |
 
-R2 full-suite result and commit identifiers will be appended in the completion receipt.
+R2 implementation: `f78c1b064c7f0118b33e8b9f9d2c69c9bb202af8`.
+Macro-import follow-up: `ca98393e742785813a037c7ef18a7ac3f0eca9f5`.
 
 
 R2 first full run at `f78c1b06`: **3 failed, 15449 passed, 362 skipped in 902.40s**.
@@ -249,3 +250,22 @@ follow-up guards the banner with `status is defined and status.players is define
 was weakened. Accessibility + existing trade banners + T4 controls: **90 passed in 3.90s**.
 The required full rerun is recorded separately; the failing output remains in
 `.cache/t4-r2-full-unit.txt`.
+
+
+## R2 final completion receipt — 2026-09-27
+
+The full rerun used the same prerequisite bindings as the R1 receipt above and the source at
+`ca98393e`. Neither the original R1 implementation nor its receipt was amended.
+
+```text
+python -m pytest tests/unit -q -p no:randomly -n 4 --dist=loadfile
+15452 passed, 362 skipped in 891.96s (0:14:51)
+Exit code: 0
+```
+
+Full output: `.cache/t4-r2-final-full-unit.txt`.
+SHA-256: `0faa7ecafa8aa37d39f247676b73923eb265568817cd70fd8a9e6fe442ee1645`.
+The first failed full-run output is retained separately. Final targeted controls: 61 in the
+T4 test file; 197 trade/state/client/board tests; 90 accessibility/banner/T4 tests after the
+macro-import fix. Final source-citation and whitespace checks pass. No client/producer or READY
+change was made, and no physical trade qualification is claimed.
