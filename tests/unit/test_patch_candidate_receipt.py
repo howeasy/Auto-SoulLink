@@ -26,7 +26,8 @@ def test_private_fr_candidate_discloses_unqualified_heap_clamp(tmp_path):
     assert receipt["arena_static_check"] == "skipped: heap clamp unqualified"
     assert receipt["production"] is False
     assert receipt["ready"] == 0
-    assert receipt["capabilities"] == 7
+    assert receipt["capabilities"] == 23
+    assert set(receipt["rival_bindings"]) == {"RIVAL_START", "RIVAL_DUMMY"}
     assert set(receipt["sound_bindings"]) == {"SOUND_SE", "SOUND_FANFARE"}
     assert set(receipt["carrier_bindings"]) == {"CARRIER_SPAWN", "CARRIER_REMOVE", "CARRIER_CHOOSE"}
     assert len(receipt["panel_detours"]) == 6

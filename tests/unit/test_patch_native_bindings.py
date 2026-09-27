@@ -34,3 +34,7 @@ def test_fr_carrier_calls_match_pinned_vanilla_symbols():
     assert spec["SOUND_SE"] == symbols["PlaySE"]
     assert spec["SOUND_FANFARE"] == symbols["PlayFanfare"]
     assert symbols["dummy_song_header"]-symbols["gSongTable"] == spec["SOUND_COUNT"]*8
+    for field,symbol in (("RIVAL_START","CB2_HandleStartBattle"),("RIVAL_DUMMY","BeginBattleIntroDummy"),
+                         ("RIVAL_COMM","gBattleCommunication"),("RIVAL_MAIN_FUNC","gBattleMainFunc"),
+                         ("RIVAL_FLAGS","gBattleTypeFlags"),("RIVAL_TRAINER","gTrainerBattleOpponent_A")):
+        assert spec[field]==symbols[symbol]

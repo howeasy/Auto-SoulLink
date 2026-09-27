@@ -401,8 +401,8 @@ slot. No direct sound-player RAM poke or new game option is introduced.
 The existing `native_sounds` client option suppresses posting when false and
 posts opcode 19 when true. The shared Lua option/queue behavior is tested on its
 established RR MODEL fixture; that is not separate FR/T3 client admission or
-physical audio evidence. Native dispatch currently has SOURCE/MODEL/build
-coverage only and requires a leased live engine-playback check. READY stays 0;
+physical audio evidence. The initial checkpoint had SOURCE/MODEL/build coverage; the bounded leased
+engine-playback evidence is recorded below. READY stays 0;
 no production patch is published by this extension.
 
 ### FR native sound live receipt, 2026-09-27
@@ -428,3 +428,50 @@ This is native dispatch/m4a-state evidence, not audible-output, speaker/device,
 or physical FR client-toggle qualification. No screenshots supplied facts.
 The nonzero mismatch check requires CONTROL epoch staging described above;
 the old mailbox-only handshake does not supply that configuration. READY is 0.
+
+## FR Rival Team Swap W1 candidate extension
+
+Opcode 28 retains the RR request shape: args[0]=count 1..6, args[1..2]=trainer
+ID u16 little-endian, and count*100 party-record bytes staged at BLOB. Mailbox
+epoch must be nonzero and match CONTROL.session_epoch. Candidate mask becomes
+23 (trade, panel, sound, rival); no Explode bit is added by this producer.
+
+The native consumption gate is bound to **vanilla FR**:
+
+| Evidence | Required value |
+| --- | --- |
+| gMain.callback2 at `0x030030F4` | CB2_HandleStartBattle `0x08010509` |
+| gBattleMainFunc at `0x03004F84` | BeginBattleIntroDummy `0x080123BD` |
+| gBattleCommunication[0] at `0x02023E82` | less than 15 |
+| gBattleTypeFlags at `0x02022B4C` | TRAINER mask 0x08 set, LINK mask 0x02 clear |
+| gTrainerBattleOpponent_A at `0x020386AE` | requested trainer ID |
+| gMain.inBattle at `0x03003529` | mask 0x02 set |
+
+Source: pinned `battle_main.c:648-716,934-1066` creates the trainer party before
+returning with this callback/state; case 15 invokes InitBattleControllers, whose
+single-player path changes the dummy function and then calls SetBattlePartyIds
+(`battle_controllers.c`). Non-link FR normally passes states 0,1,15: this is a
+short early window, so the existing client pre-announcement/staging discipline
+is still required. RR's callback address is not reused. W2 is not implemented.
+
+All records are copied to aligned private stack storage before validation. The
+native wrapper is explicitly out-of-line so its 600-byte snapshot is released
+before the original game callbacks execute.
+Native GetMonData checks species/checksum-bad-egg state on the copy; eligibility
+uses HP (field 57), SPECIES_OR_EGG (65, egg=412), and IS_EGG (45), matching the
+engine selection predicate. Singles require at least one selectable slot;
+doubles (flag 1) require two distinct selectable slots. A fainted lead with a
+later live slot is valid in W1. The gate is read again before the first enemy
+write. Success replaces gEnemyParty records, zeroes unused slots, then publishes
+gEnemyPartyCount; it never writes gBattleMons or performs a late refresh.
+
+Refusal leaves the enemy party untouched: BAD_ARGS=2 for count/record refusal,
+WINDOW_CLOSED=8 for a closed/mismatched context, SLOTS_UNVIABLE=15 for insufficient
+selectable slots, IDENTITY=12 for a configuration epoch mismatch, and
+CLIENT_TOO_OLD=13 for zero epoch. There is no raw fallback.
+
+The client still owns server session/battle_id equality, queued-payload freshness
+and response correlation from `rival_swap_refresh_window.md`. Native W1+trainer
+matching is not proof of that per-battle request identity. No new battle_id ABI
+field is invented here. This extension currently has SOURCE/MODEL/build evidence
+only; a leased natural trainer-battle check remains required. READY stays 0.

@@ -73,10 +73,13 @@ enum SlinkStatus { SLINK_ST_BUSY = 1, SLINK_ST_OK = 2, SLINK_ST_FAIL = 3 };
  * establish the client's actual version. A nonzero mismatched epoch is IDENTITY.
  */
 enum SlinkFailureReason {
+    SLINK_REASON_BAD_ARGS = 2,
+    SLINK_REASON_WINDOW_CLOSED = 8,
     SLINK_REASON_UNCERTAIN = 11,
     SLINK_REASON_IDENTITY = 12,
     SLINK_REASON_CLIENT_TOO_OLD = 13,
-    SLINK_REASON_WITHDRAW_TOO_LATE = 14
+    SLINK_REASON_WITHDRAW_TOO_LATE = 14,
+    SLINK_REASON_SLOTS_UNVIABLE = 15
 };
 enum SlinkProducerPhase {
     SLINK_PHASE_IDLE = 0, SLINK_PHASE_PRE_SAVE = 1, SLINK_PHASE_READY = 2,

@@ -183,6 +183,7 @@ static int nc_owned(void);
 #include "native_panel.h"
 #include "native_carrier.h"
 #include "native_sound.h"
+#include "native_rival.h"
 #endif
 __attribute__((used)) void slink_native_frame(void)
 {
@@ -194,7 +195,7 @@ __attribute__((used)) void slink_native_frame(void)
 #elif SLINK_TARGET_READY || defined(SLINK_NATIVE_TRADE_CANDIDATE)
         slink_trade_advertise(NT_MB);
 #if defined(SLINK_NATIVE_TRADE_CANDIDATE)
-        NT_MB->capabilities |= SLINK_CAP_INFO_PANEL | SLINK_CAP_NATIVE_SOUND;
+        NT_MB->capabilities |= SLINK_CAP_INFO_PANEL | SLINK_CAP_NATIVE_SOUND | SLINK_CAP_RIVAL_SWAP;
 #endif
 #else
         NT_MB->signature=SLINK_SIGNATURE;
@@ -204,6 +205,7 @@ __attribute__((used)) void slink_native_frame(void)
         slink_native_carrier_service();
         slink_native_panel_service();
         slink_native_sound_service();
+        slink_native_rival_service();
 #endif
         slink_trade_service(NT_STATE,NT_MB,NT_WITNESS,
             (const volatile uint8_t *)(NT_BASE+SLINK_BLOB_OFFSET),&nt_engine);
