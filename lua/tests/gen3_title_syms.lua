@@ -106,9 +106,14 @@ M.entries = {
                               rr_source = "docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md "
                                   .. "§3.1 (CFRU action menu) + ROM LDR@0x090A9ED8 = 0x02023FF8",
                              emerald = 0x020244AC },
-    -- OBJ_EVENTS_ADDR (gObjectEvents): no RR citation found (no ROM anchor, no old-client use, not
-    -- in rr_pc_menu.md). ABSENT.
+    -- OBJ_EVENTS_ADDR (gObjectEvents) on RR: ROM byte anchor (card RR-SYNTH). The literal word
+    -- 0x02036E38 sits at 303 word-aligned offsets in FireRed (USA) and 378 in slink_RR.gba; 301 of
+    -- FireRed's 303 are at IDENTICAL offsets in RR (vanilla code CFRU kept), and the 77 RR-only
+    -- hits are CFRU's own code referencing the same base.
     OBJ_EVENTS_ADDR        = { symbol = "gObjectEvents",         firered = 0x02036E38, leafgreen = 0x02036E38,
+                             radical_red = 0x02036E38,
+                             rr_source = "ROM byte anchor: docs/gen3/research/rr_obj_events_anchor.md "
+                                 .. "(literal at 301/303 FireRed offsets unchanged in slink_RR.gba)",
                              emerald = 0x02037350 },
     GMAIN_CALLBACK2_ADDR   = { symbol = "gMain", offset = 0x04,  firered = 0x030030F4, leafgreen = 0x030030F4,
                                 radical_red = 0x030030F4, rr_source = RR_PC_MENU_MD .. "63 (\"gMain.callback2 "

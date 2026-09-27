@@ -45,7 +45,7 @@ def test_expansion_title_uses_generated_reference_addresses():
 def test_legacy_columns_are_byte_identical():
     body = TABLE.read_text().split("M.entries = {", 1)[1].split("\nlocal TITLES", 1)[0]
     assert hashlib.sha256(body.encode()).hexdigest() == (
-        "44659638f2a833f2f7d42cbf5c7ff2cc8f8568c2f1b31084e31ec8205cacb1bb")
+        "58b5b55492a972e44a1073ac1ca11199118dc5de48e780171bfa76a542212a0a")
 
 
 def test_every_generated_entry_resolves_or_is_explicit_nil(artifact):
