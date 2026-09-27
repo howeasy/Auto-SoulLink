@@ -1051,7 +1051,7 @@ function Client.new(p)
             f.battle_identity = true
         end
         local t = trainer()
-        if t then f.ot_id, f.trainer_name = t.ot_id, t.name end
+        if t then f.ot_id, f.trainer_name, f.player_gender = t.ot_id, t.name, t.player_gender end
         if native and native.hello_fields then
             for k, v in pairs(native:hello_fields() or {}) do f[k] = v end
         end
@@ -1088,7 +1088,7 @@ function Client.new(p)
             f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), gen
         end
         local t = trainer()
-        if t then f.trainer_name = t.name end
+        if t then f.trainer_name, f.player_gender = t.name, t.player_gender end
         return f
     end
 
