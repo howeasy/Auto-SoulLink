@@ -4747,7 +4747,7 @@ FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
     "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
-    "7a3867499d66eb3621e0e7dde43bd033fc679f01": REPO / "patch" / "build" / "slink_RR.gba",
+    "da579690db7d6933a0952a1f490312842793f71a": REPO / "patch" / "build" / "slink_RR.gba",
 }
 
 

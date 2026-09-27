@@ -953,6 +953,10 @@ def build(roms: dict[str, bytes]) -> tuple[dict, dict]:
         inventory[name] = {c["kind"]: resolve(c, name, rom) for c in CANDIDATES}
         artifact = {"rom_sha1": sha1, "rom_md5": hashlib.md5(rom).hexdigest(),
                     "sites": {k: r["site"] for k, r in inventory[name].items() if r["status"] == "PINNED"}}
+        if name == "rr_companion":
+            # RR-DURABLE: the shipped durable-trade UPS (patch/dist/SLink-RR.ups); its native
+            # trade descriptor binds only for explicit production metadata (lua/gen3/entry.lua).
+            artifact = {"production": True, **artifact}
         packs[pack]["titles"].setdefault(title, {"artifacts": {}})["artifacts"][kind] = artifact
     for pack in packs.values():
         if pack["pack"] == "gen3_frlg":

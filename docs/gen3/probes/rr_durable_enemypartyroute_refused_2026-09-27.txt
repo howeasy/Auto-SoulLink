@@ -1,0 +1,12 @@
+native arm possible at frame 388
+  [ok] native:transfer(enemy) queued the op
+  [ok] op posted to the mailbox (dispatch receipt)
+  [ok] opcode acked  — why=native refused result=0 reason=nil
+  [ok] ack is ST_FAIL (a refused trade bypass)  — why=native refused result=0 reason=nil
+  [ok] reason is REASON_DURABLE_ONLY (9)  — reason=9
+  [ok] enemy slot 0 untouched  — 
+  [ok] enemy slot 1 untouched  — 
+  [ok] enemy slot 2 untouched  — 
+  [ok] gEnemyPartyCount untouched  — count 0 -> 0
+  [ok] beacon still present (no corruption)
+RESULT: PASS enemypartyroute (0 checks failed)

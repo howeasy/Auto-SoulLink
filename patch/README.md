@@ -42,7 +42,7 @@ build-specific). Re-pin and rebuild for a different build: `python patch/tools/b
 ## Apply the patch
 
 Apply `patch/dist/SLink-RR.ups` to your clean RR ROM with any UPS patcher
-(Flips, NUPS, RomPatcher.js, …). Result md5 should be `c372c428c8f41cbbde5c71d6408233dd`.
+(Flips, NUPS, RomPatcher.js, …). Result md5 should be `70e7e746e573a2d00df5d3ef41d19d61`.
 Then load the patched ROM in BizHawk as usual.
 
 UPS only — no IPS is provided. The patch now bundles the **Battle Calc** (the in-battle

@@ -1684,7 +1684,7 @@ def cmd_make_frlg_synth(args: argparse.Namespace) -> int:
 #
 # RR game facts (never vanilla FR/LG -- RR's stats/evolutions/learnsets are its own,
 # memory: RR types/data are non-standard) are read directly from patch/build/slink_RR.gba
-# (sha1 7a3867499d66eb3621e0e7dde43bd033fc679f01, the pin in data/games/gen3_rr/profile.json).
+# (sha1 da579690db7d6933a0952a1f490312842793f71a, the pin in data/games/gen3_rr/profile.json).
 # Each ROM table address below is a CFRU expansion pointer: the vanilla function at that ROM
 # offset is overwritten with a `LDR r0,[PC,#0]; BX r0` thunk into expansion code/data (the
 # same relocation CFRU_BASESTATS_PTR already documents for base stats), found by dereferencing

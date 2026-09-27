@@ -69,7 +69,7 @@ TARGETS: dict[str, dict] = {
         "label":       "Radical Red",
         "patch":       "SLink-RR.ups",
         "base_md5":    "8529f3a45d32bce4da637976fcf269d4",
-        "patched_md5": "c372c428c8f41cbbde5c71d6408233dd",
+        "patched_md5": "70e7e746e573a2d00df5d3ef41d19d61",
         "accept":      ".gba,application/octet-stream",
         "out_name":    "Pokemon - Radical Red (SLink companion).gba",
         "base_hint":   "a clean Radical Red 4.1 ROM",
