@@ -1,0 +1,10 @@
+attempt 1 of 3
+IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 write_checkpoint.json=002f84a81dc8e20defc63ff6c7ea6fb88ed45eef9425099deea5dc15e257f0a0 profile.json=3fc3d78f074cca9fb89c587af351c4911d4a636d2908373229d13604dfe6b471 source=c1b5c738d23b4c713d37dab4c3d6a73e5cb642a0
+RESULT_LINE a: RESULT: PASS (caught BE8CEE7D:20250925)
+RESULT_LINE b: RESULT: PASS (caught FB193BE2:DFDAF6DA)
+SAVE_WITNESS_SHA256 inst=a site=1739e030aa1f58e4496a61baacf5c43012734b4627cf8a82eedcec3a80734b78 file=1739e030aa1f58e4496a61baacf5c43012734b4627cf8a82eedcec3a80734b78 match=true saves=1 counter=2->3 rtc=normalized
+SAVE_WITNESS_SHA256 inst=b site=cdc5c02684e3c7a91ce880a8cfcfd74dce133f8838ceb065a948f41e919c6bb1 file=cdc5c02684e3c7a91ce880a8cfcfd74dce133f8838ceb065a948f41e919c6bb1 match=true saves=1 counter=3->4 rtc=normalized
+BAG_BALLS baseline=20 final=19 throws=1 inst=a native_grant=0
+BAG_BALLS baseline=20 final=19 throws=1 inst=b native_grant=0
+link: BE8CEE7D:20250925 <-> FB193BE2:DFDAF6DA alive on route_102 and saved once in each party
+PYDEC: PASS asserted scenario facts
