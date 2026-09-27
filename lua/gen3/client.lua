@@ -27,7 +27,7 @@
 --   native:hello_fields() -> table merged into hello (panel/sfx capabilities)
 --   native:replace_rival_team(cmd) / show_menu(cmd) / show_choices(cmd) / choose_mon(cmd) /
 --   link_panel(cmd) / config(cmd) / play_sound(id) / transfer(step, args, done) (the trade FSM
---   below owns apply_trade: identity, preflight, lifecycle, readback, fallback, trade_done)
+--   trade.lua owns prepare/apply/withdraw, milestones, readback and owed completion)
 --
 -- Reducer model (the Gen 1 rule, lua/gen1/client.lua:14-17): events are derived from engine
 -- signals, never from polling. A signal marks WHAT kind of change the engine made this frame;
@@ -77,6 +77,10 @@ function Client.new(p)
     local writes, policy, boxes = assert(p.writes, "writes"), assert(p.policy, "policy"), p.boxes
     local json, hud, io, native = assert(p.json, "json"), assert(p.hud, "hud"), assert(p.io, "io"), p.native
     local core = assert(p.core, "core")
+    local trade
+    local owed = p.owed_reports and p.owed_reports.new() or nil
+    local trade_epoch, trade_connected = 0, false
+    local trade_report_epochs = setmetatable({}, {__mode="k"})
     local a, d = profile.ram, profile.derived
     local arr = json.array
     local area_map, locations = p.area_map or {}, p.locations or {}
@@ -170,18 +174,14 @@ function Client.new(p)
         commanded = {},    -- keys WE zeroed: their faint is not reported (old client force_fainted_keys)
         party_prev = {},   -- key -> { slot, level, max_hp } at the last settle (PC diff baseline)
         carried = {},      -- keys that left the party into the PC cursor, not yet placed
-        box_cache = {}, boxes_ok = false,
+        box_cache = {}, boxes_ok = false, box_generation = 0,
         battle = nil,      -- battle_begin .. battle_end lifecycle
         frozen = false,    -- a borrowed party is in RAM
         flags = {},        -- what the signals of this frame said changed
         has_pokeballs = false, last_area = nil, trade = nil, sound_frame = nil, sound_logged = {},
         baselined = false, seen_count = nil, observe_at = nil,
         trade_apply = nil, trade_settle_until = 0,
-        trade_unresolved = {},   -- token -> the unresolved transaction, each watched for its own late fact
-        -- field_wait: frames an apply waits for a clear field before the silent swap (old client
-        -- :2250); backstop: frames after the scene post before a lost ACK is reconciled from the
-        -- slot, LONGER than the patch's own ~5400-frame scene timeout (old client :563-566)
-        trade_limits = { field_wait = 1800, backstop = 6000, settle = 30 },
+        trade_limits = { settle = 30 },
         bframe = nil, bcache = nil,
     }
 
@@ -300,9 +300,12 @@ function Client.new(p)
             end
         end
         st.box_cache, st.boxes_ok = cache, ok
+        if ok then st.box_generation = st.box_generation + 1 end
         return cache
     end
+    local function box_generation() return st.boxes_ok and st.box_generation or nil end
     local function pc_boxes_wire()
+        if not st.boxes_ok then return nil end
         local out = arr({})
         for _, e in ipairs(st.box_cache) do
             out[#out + 1] = { box = e.box, slot = e.slot, key = e.key, species_id = e.species_id,
@@ -563,7 +566,7 @@ function Client.new(p)
         -- not from the queued phase: a post that is refused or held writes nothing, and until
         -- something is written the party can only change the ordinary way, so ordinary reduction
         -- keeps going
-        local trading = (st.trade_apply ~= nil and st.trade_apply.posted == true)
+        local trading = (st.trade_apply ~= nil and (st.trade_apply.posted == true or st.trade_apply.possibly_posted == true))
                         or io.framecount() < st.trade_settle_until
         if trading then st.trade = nil end
         if not st.frozen and not trading then
@@ -934,25 +937,55 @@ function Client.new(p)
         return overworld_ok()
     end
     function drv.on_reset()
+        if trade then trade:reset() end
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
         st.last_area, st.trade = nil, nil
         st.opp_seen, st.pre_announced_id = nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
-        st.trade_apply, st.trade_settle_until, st.trade_unresolved = nil, 0, {}   -- the save is gone
+        st.trade_apply, st.trade_settle_until = nil, 0
         -- C5-11d MAJOR 3: the battle the authority named is gone with the save, whatever the
         -- battle RAM still says; a queued job must not ride it (reducer lifecycle or not)
         rival_authority = nil
     end
+    function drv.on_disconnect() trade_connected = false end
 
+    -- One read-only cartridge snapshot per session, including cached failure. The Gen 3
+    -- reader owns bounds/pointer walking; this hook only binds table metadata and transport.
+    local content_cache = {attempted=false}
+    local function rom_content()
+        if p.artifact_kind ~= "rand" then return nil end
+        if not content_cache.attempted then
+            content_cache.attempted = true
+            local ok, payload, why = pcall(function()
+                local source = assert(profile.rom_tables, "profile has no rom_tables")
+                local tables = {rom_size=p.rom_size} -- reader's documented 32 MiB window default if absent
+                for _, name in ipairs({"gTrainers", "gWildMonHeaders", "gEvolutionTable", "gSpeciesInfo", "gTrainerClassNames"}) do
+                    local row = assert(source[name], "missing ROM table " .. name)
+                    tables[name] = {address=tonumber(row.address), count=tonumber(row.count), size=tonumber(row.size)}
+                end
+                local reader = assert(p.rom_content_new, "ROM content reader unavailable")(tables, {read_u8=io.read_u8})
+                return reader:payload()
+            end)
+            if ok and type(payload) == "table" and type(payload.tables) == "table" and type(payload.fingerprint) == "string" then
+                content_cache.payload = payload
+            else
+                log("rom_content unavailable: " .. tostring(ok and (why or "invalid reader result") or payload))
+            end
+        end
+        return content_cache.payload
+    end
     -- No wire side effect here (no area_enter, no banner): hello is the connection's first line.
     function drv.hello_fields()
+        if not trade_connected and p.net.connected() then
+            trade_epoch, trade_connected = trade_epoch + 1, true
+        end
         local party = party_read() or {}
         update_frozen(party)
         rescan_boxes()
         -- a borrowed party is never published nor learned as ours (docs/protocol.md §9 item 11):
         -- hello.party stays present and empty, exactly like tick_fields' guard
-        local own = st.frozen and {} or party
+        local own = (st.frozen or (trade and trade:hide_party())) and {} or party
         -- Once a baseline exists hello REPORTS and never learns: the session builds hello before
         -- this frame's signals drain, so a mon added since the last quiet frame (its acquisition
         -- hook firing this frame or the next) must stay unknown for settle to report it as a
@@ -969,6 +1002,7 @@ function Client.new(p)
         st.last_area = area_id .. "|" .. loc
         local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind,
                     rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
+                    pc_boxes_generation = box_generation(),
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
                     in_battle = in_battle(), badges = badges(), ball_count = ball_count() }
         if session_nonce then
@@ -982,6 +1016,9 @@ function Client.new(p)
         if native and native.hello_fields then
             for k, v in pairs(native:hello_fields() or {}) do f[k] = v end
         end
+        if trade and trade:hide_party() then f.pc_boxes, f.pc_boxes_generation = nil, nil end
+        f.trade_prepare = trade ~= nil and trade:capable() == true
+        f.rom_content = rom_content()
         return f
     end
 
@@ -998,8 +1035,10 @@ function Client.new(p)
                     is_trainer_battle = b and b.is_trainer or false, is_doubles = b and b.is_doubles or false,
                     trainer_id = b and b.is_trainer and num(b.trainer_id) or nil,
                     enemy_party = enemy_wire(b), ball_count = n, badges = badges() }
-        if not st.frozen then f.party = party_wire(party) end
-        if st.boxes_ok then f.pc_boxes = pc_boxes_wire() end
+        if not st.frozen and not (trade and trade:hide_party()) then f.party = party_wire(party) end
+        if st.boxes_ok and not (trade and trade:hide_party()) then
+            f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), st.box_generation
+        end
         local t = trainer()
         if t then f.trainer_name = t.name end
         return f
@@ -1307,233 +1346,102 @@ function Client.new(p)
         return true
     end
 
-    -- the disabled-foundation write guard (PLAN §10): no trade path -> nothing written, no reply
-    -- ── the RR PC trade (apply_trade), PLAN §5.6, docs/protocol.md §6.2 ───────────
-    -- The Gen 1 standard's shape (lua/gen1/client.lua:1594-1765) over the old RR client's native
-    -- sequence (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:2211-2293): every byte is a native.lua transfer, i.e.
-    -- writes:arm("native") over the mailbox and BLOB_BUF; this FSM writes nothing itself.
-    --   wait      buffered until a clear field (the overworld checkpoint) with an eligible
-    --             session; the offered mon is re-located by old_key (the slot is a snapshot).
-    --             Nothing is owned yet: unrelated signals keep reducing normally.
-    --   stage     transfer("enemy", {blob}) = OP_SET_ENEMY_PARTY: the partner mon into
-    --             gEnemyParty[0] (no slot involved)
-    --   scene     transfer("scene", {slot}) = OP_TRADE_SCENE
-    --   fallback  transfer("party", {slot, blob}) = OP_SET_PARTY_MON, the silent faithful swap
-    --   scene_lost the scene's ACK was lost: nothing is written, wait the backstop
-    --   readback  the op reported done (or its ACK was lost): read the party back by KEY
-    -- Every slot op carries a DISPATCH-TIME guard (native.lua runs it just before posting, in
-    -- the same frame-end callback): the offered key is re-located at that instant; moved means
-    -- re-post at its new slot, unreadable means try again, gone means nothing is posted.
-    -- Completions report only FACTS read back: the partner's key present = the swap landed; the
-    -- offered key still present after a done/lost op = unchanged. When the trade failed or the
-    -- result cannot be read (stage poisoned, silent swap failed, no conclusive read-back) NO
-    -- trade_done is sent and nothing is purged: the trade is "unresolved", the server watchdog's
-    -- inferred-key commit settles it (PLAN §5.6/§10, the recorded limit), and a later read-back
-    -- that finds the partner's mon still reports that fact. The one unchanged-key trade_done
-    -- without a read-back fact stays the Gen 1 standard's: the offered mon cannot be located
-    -- unambiguously, so no bystander slot is ever written (old client :692 ponytail).
-    local function partner_key_of(hex)
-        local function u32(off)
-            local v = 0
-            for i = 3, 0, -1 do v = v * 256 + tonumber(hex:sub(2 * (off + i) + 1, 2 * (off + i) + 2), 16) end
-            return v
-        end
-        return string.format("%08X:%08X", u32(0), u32(4))
+    -- Durable trade is a separate protocol owner. It never writes; native owns every stage.
+    -- V1 companions have no save witness and therefore cannot implement this capability.
+    local function sync_trade()
+        if not trade then return end
+        local active, prepared = trade:state()
+        st.trade_apply = active or prepared
     end
-    -- where are the partner's mon and the offered mon now (by key, so a reorder cannot fool it)
-    local function trade_evidence(t)
-        local party = party_read()
-        if not party then return nil end
-        local got, old
-        for _, m in ipairs(party) do
-            local k = key(m)
-            if k == t.partner_key then got = m end
-            if k == t.old_key then old = m end
-        end
-        return party, got, old
-    end
-    local function trade_report(t, party, mon, changed, how)
-        local new_key = changed and key(mon) or t.old_key
-        local slot = mon and mon.slot or t.slot
-        local species = changed and mon.species or 0
-        if st.trade_apply == t then st.trade_apply = nil end
-        if st.trade_unresolved[t.token] == t then st.trade_unresolved[t.token] = nil end
-        st.trade_settle_until = io.framecount() + st.trade_limits.settle
-        if changed then
-            -- a local key migration only (protocol §6.5): the server re-keys from trade_done
-            st.known[t.old_key], st.alive[t.old_key], st.commanded[t.old_key] = nil, nil, nil
-            st.known[new_key] = true
-            -- box moves queued for either key are stale now the mon changed players (old :3423-3429)
-            local items = session.deferred.items
-            for i = #items, 1, -1 do
-                local q = items[i]
-                if (q.key == t.old_key or q.key == new_key)
-                   and (q.cmd == "box_mon" or q.cmd == "party_mon" or q.cmd == "memorialize") then
-                    log("trade: purged the queued " .. q.cmd .. " " .. tostring(q.key))
-                    table.remove(items, i)
+    if native and p.Trade and owed and p.artifact_kind == "companion" then
+        local trade_policy = assert(p.trade_policy, "pack trade policy required")
+        trade = p.Trade.new({native=native, frame=io.framecount, eligible=eligible,
+            log=log, hud=hud,
+            epoch=function() return trade_epoch end,
+            prepare_frames=trade_policy.prepare_frames, apply_frames=trade_policy.apply_frames,
+            ready_to_send=function() return session and session.hello_sent and p.net.connected() end,
+            clear=function() return not in_battle() and overworld_ok() end,
+            party=party_read, key=key, capacity=d.PARTY_CAPACITY or 6, mon_size=R.PARTY_MON_SIZE,
+            decode_blob=function(hex)
+                local bytes = {}
+                for i=1,#hex,2 do bytes[#bytes+1] = tonumber(hex:sub(i,i+1),16) end
+                return reads.decode_party_mon(bytes)
+            end,
+            report_pending=function(epoch, value)
+                for _, row in ipairs(owed.list) do
+                    if row.event == "trade_done" and row.fields.token == value
+                       and trade_report_epochs[row.fields] == epoch then return true end
                 end
-            end
-        end
-        if party then seed_known(party); rebaseline(party) end
-        log("trade: " .. how .. "; trade_done " .. t.old_key .. " -> " .. new_key)
-        send("trade_done", { token = t.token, slot = slot, new_key = new_key, new_species = species })
+                return false
+            end,
+            send=function(event, fields, epoch)
+                if event == "trade_done" then
+                    trade_report_epochs[fields] = epoch
+                    owed.list[#owed.list+1] = {event=event, fields=fields}
+                    return true
+                end
+                return send(event, fields)
+            end,
+            completed=function(t, changed, party, mon)
+                if changed then
+                    local new_key = key(mon)
+                    st.known[t.old_key], st.alive[t.old_key], st.commanded[t.old_key] = nil, nil, nil
+                    st.known[new_key] = true
+                    local items = session.deferred.items
+                    for i=#items,1,-1 do
+                        local q=items[i]
+                        if (q.key == t.old_key or q.key == new_key)
+                           and (q.cmd == "box_mon" or q.cmd == "party_mon" or q.cmd == "memorialize") then
+                            table.remove(items,i)
+                        end
+                    end
+                    seed_known(party); rebaseline(party)
+                    st.trade_settle_until = io.framecount() + st.trade_limits.settle
+                end
+            end})
     end
-    local function trade_unresolved(t, why)
-        if st.trade_apply ~= t then return end
-        st.trade_apply = nil
-        st.trade_unresolved[t.token] = t
-        t.phase = "unresolved"
-        log("TRADE UNRESOLVED: " .. why .. "; no trade_done, nothing purged (the server watchdog settles it)")
-        hud.show("TRADE UNRESOLVED: " .. why, 255, 120, 60, 600)
-    end
-    local function trade_abort(t, why)
-        if st.trade_apply ~= t then return end
-        st.trade_apply = nil
-        log("trade ABORTED: " .. why .. "; no swap performed, no completion")
-    end
-    -- the owned op said done (or went silent): report what the party shows, else keep reading
-    local function trade_readback(t, how)
-        if st.trade_apply ~= t then return end
-        local party, got, old = trade_evidence(t)
-        if party and got then return trade_report(t, party, got, true, how) end
-        if party and old then return trade_report(t, party, old, false, how .. " (unchanged)") end
-        if t.phase ~= "readback" then
-            t.phase, t.readback_why, t.readback_since = "readback", how, io.framecount()
-            log("trade: " .. how .. "; no conclusive read-back yet, no trade_done")
-        end
-    end
-    -- one native transfer; done(why, result) fires exactly once (native.lua calls it on refusal
-    -- at enqueue too; an argument refusal returns without calling it). The returned job handle is
-    -- this post's own dispatch receipt: `handle.posted` is set when native.lua publishes that
-    -- job's opcode -- and never for a refused, guarded-off or still-queued job.
-    local function transfer(t, step, args, on_done, valid)
-        local fired = false
-        local handle, why = native:transfer(step, args, function(w, r) fired = true; on_done(w, r) end, valid)
-        if not handle and not fired then on_done(why or "transfer refused") end
-        if handle then
-            t.posts = t.posts or {}
-            t.posts[#t.posts + 1] = handle
-        end
-        return handle
-    end
-    -- the dispatch-time guard for a slot op: the offered key must be exactly at t.slot NOW
-    local function slot_guard(t)
-        return function()
-            if st.trade_apply ~= t then return false, "guard:stale" end
-            local party = party_read()
-            if not party then return false, "guard:unreadable" end
-            local slot = session.identity:find_party_slot(t.old_key, party)
-            if slot == nil then return false, "guard:lost" end
-            if slot ~= t.slot then t.moved_to = slot; return false, "guard:moved" end
-            return true
-        end
-    end
-    local post_fallback
-    local function post_scene(t)
-        t.phase, t.scene_frame = "scene", t.scene_frame or io.framecount()
-        transfer(t, "scene", { slot = t.slot }, function(swhy)
-            if st.trade_apply ~= t or swhy == "guard:stale" then return end
-            if not swhy then return trade_readback(t, "native scene complete") end
-            if swhy == "guard:moved" then t.slot = t.moved_to; return post_scene(t) end
-            if swhy == "guard:unreadable" then return post_scene(t) end
-            if swhy == "guard:lost" then
-                -- nothing was posted for the slot and the offered mon cannot be located: the
-                -- Gen 1 standard's "nothing changed"
-                return trade_report(t, party_read(), nil, false, "the offered mon left the party before the scene")
-            end
-            if swhy == "native refused" or swhy == "native absent" then
-                return post_fallback(t, "scene " .. swhy)
-            end
-            -- the ACK was lost (timeout, overwritten sequence): the scene may still be running
-            -- natively, so nothing is written; the backstop reads the party back
-            t.phase = "scene_lost"
-            log("trade: scene ACK lost (" .. swhy .. "); waiting the backstop, no overwrite")
-        end, slot_guard(t))
-    end
-    post_fallback = function(t, why)
-        t.phase = "fallback"
-        transfer(t, "party", { slot = t.slot, blob_hex = t.blob_hex }, function(fwhy)
-            if st.trade_apply ~= t or fwhy == "guard:stale" then return end
-            if not fwhy then return trade_readback(t, "silent swap after " .. why) end
-            if fwhy == "guard:moved" then t.slot = t.moved_to; return post_fallback(t, why) end
-            if fwhy == "guard:unreadable" then return post_fallback(t, why) end
-            if fwhy == "guard:lost" then
-                -- the pre-trade mon is not in the party: never swap on top of a scene that may
-                -- have swapped (the old "pairs break" double write); read back what is there
-                return trade_readback(t, why .. "; the offered mon is gone before the silent swap")
-            end
-            trade_unresolved(t, "silent swap failed (" .. fwhy .. ") after " .. why)
-        end, slot_guard(t))
-    end
-    local function post_stage(t)
-        t.phase = "stage"
-        st.known[t.partner_key] = true                             -- never a capture if it lands
-        transfer(t, "enemy", { blobs_hex = { t.blob_hex } }, function(why)
-            if st.trade_apply ~= t or why == "guard:stale" then return end
-            if why == "native absent" then return trade_abort(t, "companion absent") end
-            if why then return post_fallback(t, "stage " .. why) end
-            post_scene(t)
-        end, function()
-            if st.trade_apply ~= t then return false, "guard:stale" end
-            return true
-        end)
-    end
-    local function trade_tick()
-        local f = io.framecount()
-        for _, u in pairs(st.trade_unresolved) do
-            -- a later read-back that finds a transaction's partner mon is a fact worth reporting
-            local party, got = trade_evidence(u)
-            if party and got then trade_report(u, party, got, true, "late read-back: the swap landed") end
-        end
-        local t = st.trade_apply
-        if not t then return end
-        if t.phase == "scene_lost" then
-            if f - t.scene_frame >= st.trade_limits.backstop then trade_readback(t, "scene ACK lost") end
-            return
-        end
-        if t.phase == "readback" then
-            if f - t.readback_since >= st.trade_limits.backstop then
-                return trade_unresolved(t, "no conclusive read-back (" .. t.readback_why .. ")")
-            end
-            return trade_readback(t, t.readback_why)
-        end
-        if t.phase ~= "wait" or not eligible() or in_battle() then return end
-        local party = party_read()
-        if not party then return end
-        local clear = overworld_ok()
-        if not clear and f - t.since < st.trade_limits.field_wait then return end
-        -- re-locate by key: the slot index is a snapshot from mon_chosen (protocol §6.2 item 2)
-        local slot, _, _, why = session.identity:find_party_slot(t.old_key, party)
-        if not slot then
-            return trade_report(t, party, nil, false, "the offered mon is " .. (why or "not in the party"))
-        end
-        t.slot = slot
-        if clear then return post_stage(t) end
-        post_fallback(t, "the field never cleared")                -- the old client's :2250 rule
-    end
-    drv.after_receive = trade_tick
-    C.apply_trade = function(cmd)
-        -- the disabled-foundation guard (PLAN §10): no native part (vanilla FRLG, RR clean) means no
-        -- trade path -- nothing written, no reply (the old client's no-patch abort, :2233-2242)
-        if not (native and native.transfer) then
-            log("apply_trade refused: no trade path on this cartridge (nothing written) " .. tostring(cmd.old_key))
-            return true
-        end
-        if st.trade_apply then
-            log("apply_trade ignored: a trade is already in flight " .. tostring(cmd.old_key))
-            return true
-        end
-        local hex = cmd.blob_hex
-        if type(hex) ~= "string" or #hex ~= 2 * R.PARTY_MON_SIZE or hex:find("[^%x]")
-           or type(cmd.old_key) ~= "string" or cmd.old_key == "" then
-            log("apply_trade: bad blob_hex or old_key, skipped")      -- the old client's :983
-            return true
-        end
-        st.trade_apply = { token = cmd.token or "", slot = cmd.slot, old_key = cmd.old_key,
-                           blob_hex = hex, partner_key = partner_key_of(hex), phase = "wait",
-                           since = io.framecount() }
-        log("apply_trade received for " .. cmd.old_key .. ": queued for the native trade")
+    C.apply_prepare = function(cmd)
+        if trade then trade:prepare(cmd); sync_trade()
+        else send("apply_ready", {token=cmd.token, ok=false}) end
         return true
+    end
+    C.apply_trade = function(cmd)
+        if trade and trade:capable() then trade:apply(cmd); sync_trade()
+        else
+            log("apply_trade refused: durable native trade unavailable")
+            if type(cmd.token) == "string" and cmd.token ~= "" and type(cmd.old_key) == "string" and cmd.old_key ~= "" then
+                local fields = {token=cmd.token, slot=cmd.slot, new_key=cmd.old_key, new_species=0}
+                local cancel = {token=cmd.token, choice=0, withdraw=true}
+                if owed then
+                    owed.list[#owed.list+1] = {event="trade_done", fields=fields}
+                    owed.list[#owed.list+1] = {event="menu_result", fields=cancel}
+                else send("trade_done", fields); send("menu_result", cancel) end
+            end
+        end
+        return true
+    end
+    C.withdraw_trade = function(cmd)
+        if trade then trade:withdraw(cmd); sync_trade() end
+        return true
+    end
+    drv.after_receive = function()
+        if trade then trade:tick(); sync_trade() end
+        if owed then
+            local refresh=false
+            owed:step(p.net.connected(), session.hello_sent == true, function(event, fields)
+                local sent=send(event,fields)
+                local epoch = trade_report_epochs[fields]
+                if sent and event == "trade_done" and fields.uncertain and fields.after_reset
+                   and trade and trade:reloaded(fields.token, epoch) then
+                    trade:allow_reload_evidence(fields.token, epoch)
+                    refresh=true
+                end
+                return sent
+            end)
+            -- Server only consumes a hello AFTER the uncertainty declaration. This second
+            -- hello is allowed only after the real reset boundary, never from unsaved RAM.
+            if refresh then session.hello_sent=false end
+        end
     end
     -- native pickers/menus (RR PC trade NPC); otherwise the core answers with the cancel sentinels
     -- Once native takes a prompt it owns the answer (its done callback replies, including the
@@ -1662,27 +1570,39 @@ function Client.new(p)
         local ok, awhy = armed_write("sound", plan, args)
         if not ok then sound_refused(tostring(awhy)) end
     end
+    local trade_frame
     drv.pre_pump = function()
+        if owed then owed:step(p.net.connected(), false, send) end
+        if trade_frame and io.framecount() < trade_frame then
+            if trade then trade:reset(); sync_trade() end
+            session.hello_sent = false
+        end
+        trade_frame = io.framecount()
         if not (native and native.service) then return end
         -- C5-11c MAJOR 3: this used to clear st.battle on a live boundary, which made
         -- finish_battle skip the encounter result (RR companion then sent no no_catch where RR
         -- clean did). The rival authority above replaces it and never touches the lifecycle.
         native:service()
-        -- the trade's first actual post is the posting job's OWN dispatch receipt (native.lua sets
-        -- `posted` when it publishes that job's opcode). Never infer it from sink bytes: a
-        -- completion callback (e.g. a panel page job) or a panel/NPC callback can write
-        -- through the same sink in this very call while our job is refused at its guard.
-        local t = st.trade_apply
-        if t and t.posts then
-            for _, handle in ipairs(t.posts) do
-                if handle.posted == true then t.posted = true break end
-            end
-        end
+        sync_trade() -- each native job's own publication receipt, never inferred from sink bytes
     end
 
     local Id = core.Identity.new({ key = key })
     local Q = core.Deferred.new({ exec = exec, memorial_box = memorial_box })
-    session = core.Session.new({ net = p.net, json = json, hud = hud, log = sink, tag = TAG,
+    local transport = p.net
+    if owed then
+        transport = setmetatable({
+            send=function(line) local result=p.net.send(line); owed:line_sent(); return result end,
+            receive=function()
+                local line=p.net.receive()
+                if line ~= nil then
+                    owed:line_received()
+                    local ok, reply=pcall(json.decode,line)
+                    if ok and type(reply)=="table" and type(reply.commands)=="table" then owed:answer(reply.commands) end
+                end
+                return line
+            end}, {__index=p.net})
+    end
+    session = core.Session.new({ net = transport, json = json, hud = hud, log = sink, tag = TAG,
                                  player = p.player, game = drv, identity = Id, deferred = Q })
     session.driver, session.state = drv, st
     local base_send = session.send

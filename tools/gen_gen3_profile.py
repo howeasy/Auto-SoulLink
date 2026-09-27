@@ -903,6 +903,30 @@ def _guard_leafgreen_not_copied(lg_entry: dict, fr_entry: dict, fr_by_addr: dict
                              f"(see C4-LGSE)")
 
 
+def rom_tables(title: str, text: str) -> tuple[dict, dict]:
+    """R0: cartridge table heads, independent of native/companion support.
+
+    Strides are the pinned pret layouts (Gen 3 randomized design R0); counts
+    include gWildMonHeaders' terminating sentinel and come from symbol sizes.
+    """
+    if title not in ("firered", "leafgreen"):
+        raise ValueError("rom_tables is bound only for FireRed/LeafGreen")
+    rows, provenance = {}, {}
+    strides = {"gTrainers": 40, "gWildMonHeaders": 20, "gEvolutionTable": 40,
+               "gSpeciesInfo": 28, "gTrainerClassNames": 13}
+    for name, stride in strides.items():
+        matches = list(re.finditer(rf"^([0-9a-fA-F]{{8}})\s+[lg]\s+([0-9a-fA-F]{{8}})\s+{name}$", text, re.M))
+        if len(matches) != 1:
+            raise ValueError(f"rom_tables: need exactly one {name} in poke{title}.sym")
+        match = matches[0]
+        address, size = int(match[1], 16), int(match[2], 16)
+        if not 0x08000000 <= address < 0x0A000000 or size <= 0 or size % stride:
+            raise ValueError(f"rom_tables: {name} has invalid address/size/stride")
+        rows[name] = {"address": address, "size": size, "stride": stride, "count": size // stride}
+        provenance[name] = f"pret/pokefirered@c75f3523 {name}; data/gen3/pret/poke{title}.sym:{_line_of(text, match.start())}"
+    return rows, provenance
+
+
 def build(pack: str, profiles: dict, source: dict) -> dict:
     out = {
         "schema": SCHEMA,
@@ -989,6 +1013,7 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
                     entry["_src"][f"rom.{cb2_key}"] = (
                         f"{path} {name} translated by symbol name from pokefirered.sym "
                         f"0x{fr_val:08X} ({PRET_PIN})")
+            entry["rom_tables"], entry["rom_tables_provenance"] = rom_tables(title, text)
         # C4-LGSE guard: the next FR-default value nobody translated must fail the build.
         _guard_leafgreen_not_copied(out["titles"]["leafgreen"], out["titles"]["firered"],
                                     fr_by_addr, fr_by_name, lg_by_name)

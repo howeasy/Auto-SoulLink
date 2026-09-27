@@ -243,10 +243,15 @@ def test_rr_force_explode_menu_skip_commit_is_fully_logged():
 
 # ── (c) the disabled-foundation write guard (PLAN §10) ────────────────────────────────────────
 
-def test_apply_trade_on_frlg_produces_zero_writes_and_no_reply():
+def test_apply_trade_on_frlg_reports_unchanged_and_cancels_menu_with_zero_writes():
     w = _live()
     n = len(w.sent)
     w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
     w.step(3)
     assert w.writes == []
-    assert [m["event"] for m in w.sent[n:] if m["event"] not in ("tick", "safe")] == []
+    replies = [m for m in w.sent[n:] if m["event"] not in ("tick", "safe")]
+    assert [m["event"] for m in replies] == ["trade_done", "menu_result"]
+    report, cancel = replies
+    assert (report["token"], report["slot"], report["new_key"], report["new_species"]) == ("t", 0, KA, 0)
+    assert "uncertain" not in report and "after_reset" not in report
+    assert (cancel["token"], cancel["choice"], cancel["withdraw"]) == ("t", 0, True)

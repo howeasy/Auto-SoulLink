@@ -176,13 +176,32 @@ def _admit(world, **args):
     return world.Entry.admit(world.lua.table(**table))
 
 
-def test_admission_by_anchors_when_the_hash_is_unknown():
-    world = World(pack="gen3_frlg", title="firered", build=False)
+@pytest.mark.parametrize("title,code", [("firered", "BPRE"), ("leafgreen", "BPGE")])
+def test_admission_by_anchors_when_the_hash_is_unknown(title, code):
+    world = World(pack="gen3_frlg", title=title, build=False)
     got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read,
-                           header_code="BPRE"))
+                           header_code=code))
     assert got["admitted_by"] == "anchors"
-    assert (got["pack"], got["title"], got["kind"]) == ("gen3_frlg", "firered", "clean")
-    assert got["rom_type"] == "firered"
+    assert (got["pack"], got["title"], got["kind"]) == ("gen3_frlg", title, "rand")
+    assert got["rom_type"] == title
+
+
+@pytest.mark.parametrize("kind", ["clean", "companion"])
+def test_rr_anchor_admission_keeps_its_existing_kind(kind):
+    world = World(pack="gen3_rr", title="radical_red", kind=kind, build=False)
+    got = lua_to_py(_admit(world, rom_hash="00" * 20, rom_read=world._rom_read))
+    assert got["kind"] == kind and got["admitted_by"] == "anchors"
+
+
+def test_rand_routes_through_the_single_gate_and_uses_clean_sites():
+    world = World(pack="gen3_frlg", title="firered", build=False)
+    codec = world.lua.eval(f'dofile("{(REPO / "lua/json_codec.lua").as_posix()}")')
+    got = world.Entry.admit_routed(world.lua.table(root=REPO.as_posix(), json=codec,
+        rom_hash="00" * 20, rom_read=world._rom_read, header_code="BPRE"))
+    assert got.kind == "rand"
+    world.kind = "rand"
+    _observer, parts = world.Entry.build(world.deps())
+    assert parts.kind == "rand" and parts.artifact_kind == "clean"
 
 
 def test_admission_by_anchors_when_the_hash_is_unknown_for_emerald():
