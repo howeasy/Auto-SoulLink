@@ -36,7 +36,7 @@
      },
      {
       "what": "roamer code/constant rewrite (getRoamers applies it on every clean run)",
-      "source": "gen3_offsets.ini [Emerald (U)] CreateInitialRoamerMonFunctionStartOffset; Gen3RomHandler.applyEmeraldRoamerPatch:2568-2594",
+      "source": "gen3_offsets.ini [Emerald (U)] CreateInitialRoamerMonFunctionStartOffset; Gen3RomHandler.applyEmeraldRoamerPatch:2559-2586",
       "ranges": "0x161B9C+4 0x161BA2+1 0x161BB0+4 0x161BC4+4"
      },
      {

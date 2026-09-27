@@ -518,7 +518,7 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
         _comp("first-battle IPS (getStaticPokemon applies it on every clean run)",
               f"jar {e['tweaks']['StaticFirstBattleTweak']}.ips; {H}.getStaticPokemon", tweak("StaticFirstBattleTweak")),
         _comp("roamer code/constant rewrite (getRoamers applies it on every clean run)",
-              f"{ini_src} CreateInitialRoamerMonFunctionStartOffset; {H}.applyEmeraldRoamerPatch:2568-2594",
+              f"{ini_src} CreateInitialRoamerMonFunctionStartOffset; {H}.applyEmeraldRoamerPatch:2559-2586",
               [(V["CreateInitialRoamerMonFunctionStartOffset"] + lo, V["CreateInitialRoamerMonFunctionStartOffset"] + hi)
                for lo, hi in ((8, 12), (14, 15), (28, 32), (48, 52))]),
     ] if emerald else [
