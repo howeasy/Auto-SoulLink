@@ -1,4 +1,4 @@
-#if !defined(SLINK_ARENA_PROBE) && !defined(SLINK_NATIVE_TRADE_PROBE) /* SLink companion patch — injected handlers (Thumb, freestanding C).
+#if !defined(SLINK_ARENA_PROBE) && !defined(SLINK_NATIVE_TRADE_PROBE) && !defined(SLINK_NATIVE_TRADE_CANDIDATE) /* SLink companion patch — injected handlers (Thumb, freestanding C).
  *
  * Compiled by arm-none-eabi-gcc and linked at CODE_BASE (0x08378CA8) by slink.ld, so
  * slink_hook() sits exactly where the CallCallbacks hook `bl`s to (build.py writes that
@@ -2289,7 +2289,7 @@ void slink_hook(void)
     ack(ST_OK, 0);
 }
 
-#elif defined(SLINK_NATIVE_TRADE_PROBE)
+#elif defined(SLINK_NATIVE_TRADE_PROBE) || defined(SLINK_NATIVE_TRADE_CANDIDATE)
 #include "trade_targets/native_trade.h"
 #else /* diagnostic build only; preserve v1 source line citations above */
 /* Diagnostic-only InitHeap replacement, no UPS/admission/capability publication.

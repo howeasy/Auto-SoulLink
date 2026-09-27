@@ -182,8 +182,15 @@ __attribute__((used)) void slink_native_frame(void)
 {
     if (((NtBool)(SLINK_TARGET_SAVE_FAILED_SCREEN|1u))() || ((NtBool)(SLINK_TARGET_HELP_CALLBACK|1u))()) return;
     if (NT_READ32(SLINK_TARGET_HEAP_SIZE_PTR)==SLINK_TARGET_HEAP_SIZE-SLINK_TARGET_ARENA_SIZE) {
-        NT_MB->signature=0x32505254u; /* TRP2 private producer probe, NOT admitted SLNK */
+#if defined(SLINK_NATIVE_TRADE_PROBE)
+        NT_MB->signature=0x32505254u; /* TRP2 private fault-injection probe */
         NT_MB->abi_version=SLINK_ABI_VERSION;NT_MB->capabilities=0;
+#elif SLINK_TARGET_READY || defined(SLINK_NATIVE_TRADE_CANDIDATE)
+        slink_trade_advertise(NT_MB);
+#else
+        NT_MB->signature=SLINK_SIGNATURE;
+        NT_MB->abi_version=SLINK_ABI_VERSION;NT_MB->capabilities=0;
+#endif
         slink_trade_service(NT_STATE,NT_MB,NT_WITNESS,
             (const volatile uint8_t *)(NT_BASE+SLINK_BLOB_OFFSET),&nt_engine);
     }

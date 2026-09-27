@@ -102,8 +102,10 @@ def thumb_entry_jump(address, destination):
     return bytes.fromhex("004b1847") + (destination | 1).to_bytes(4, "little")
 
 
-def build_arena_probe(title, rom_path, mode):
-    """Private diagnostic ROM only. Never writes dist, UPS or a production beacon."""
+def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
+    """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
+    if trade_candidate and mode != "trade":
+        raise ValueError("trade candidate requires trade composition")
     if title != "firered":
         raise ValueError("arena probe currently has only FireRed source bindings")
     clean = Path(rom_path).read_bytes()
@@ -114,12 +116,14 @@ def build_arena_probe(title, rom_path, mode):
     if mode == "trade":
         for key in ("TRADE_MON", "EVO_GETTER"):
             validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
-    out = Path(BUILD) / f"arena-{title}-{mode}"
+    out = Path(BUILD) / (f"candidate-{title}-trade" if trade_candidate else f"arena-{title}-{mode}")
     out.mkdir(parents=True, exist_ok=True)
     header = Path(SRC) / "trade_targets" / f"{title}.h"
     obj, elf, binary = out / "probe.o", out / "probe.elf", out / "probe.bin"
     flag = "-DSLINK_NATIVE_TRADE_PROBE=1" if mode == "trade" else (
         f"-DSLINK_ARENA_PROBE={ {'positive':1,'negative':2,'exhaustion':3,'census':4}[mode]}")
+    if trade_candidate:
+        flag = "-DSLINK_NATIVE_TRADE_CANDIDATE=1"
     entry = "slink_native_heap" if mode == "trade" else "slink_heap_probe"
     run([GCC, *CFLAGS, flag,
          "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
@@ -158,7 +162,10 @@ def build_arena_probe(title, rom_path, mode):
                                   "replacement":data[offset:offset+8].hex(),"symbol":symbol})
     rom = out / "probe.gba"
     rom.write_bytes(data)
-    receipt = {"status": "UNQUALIFIED_DIAGNOSTIC_ONLY", "target": title, "mode": mode,
+    receipt = {"status": "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
+               "target": title, "mode": mode, "ready": spec["READY"],
+               "production": False,
+               "capabilities": 1 if trade_candidate else 0,
                "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
                "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),
                "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],
@@ -276,6 +283,8 @@ def main():
     ap.add_argument("--target", choices=TARGET_NAMES, default="radical_red")
     ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
     ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
+    ap.add_argument("--trade-candidate", action="store_true",
+                    help="private FR ABI v2 trade ROM, capability enabled; READY/UPS publication unchanged")
     ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census", "trade"),
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
@@ -288,6 +297,14 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    if args.trade_candidate:
+        if args.arena_probe or args.check or args.describe or args.no_verify_md5:
+            ap.error("trade candidate cannot combine with probes/check/describe/verification bypass")
+        try:
+            build_arena_probe(args.target, args.rom, "trade", trade_candidate=True)
+        except (ValueError, OSError) as error:
+            ap.error(str(error))
+        return 0
     if args.describe:
         print(json.dumps(target_spec(args.target), indent=2))
         return 0

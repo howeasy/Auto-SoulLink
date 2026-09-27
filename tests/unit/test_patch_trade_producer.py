@@ -29,12 +29,22 @@ static int pre_start(void *p) { (void)p; return 1; }
 static int pre_poll(void *p) { (void)p; return pre_done; }
 static int scene_start(void *p,unsigned slot,const uint8_t *b) { (void)p;(void)slot;(void)b;starts++;return 1; }
 static int scene_poll(void *p) { (void)p;return scene_done; }
-static int save(void *p) { (void)p;saves++;return save_ok; }
+static volatile SlinkTradeWitnessV2 *observed;
+static int save(void *p) {
+  (void)p;
+  /* The save engine observes a committed, completed scene, never final success. */
+  if (observed->milestones != 7 || observed->final_result != SLINK_TRADE_PENDING
+      || !observed->revision || (observed->revision & 1)) return -1;
+  saves++;return save_ok;
+}
 static int received(void *p,unsigned slot,uint32_t *pid,uint32_t *ot) { (void)p;(void)slot;*pid=33;*ot=44;return 1; }
 static uint32_t clock_frame(void *p) { (void)p;return ++frame; }
 static void word(uint8_t *p,uint32_t v) { memcpy(p,&v,4); }
 int main(void) {
   SlinkTradeProducer state={0}; SlinkMailboxV2 m={0}; SlinkTradeWitnessV2 w={0}; uint8_t blob[100]={0};
+  slink_trade_advertise(&m);
+  if (m.signature != 0x4B4E4C53 || m.abi_version != 2 || m.capabilities != 1) return 20;
+  observed=&w;
   SlinkTradeEngine e={0,safe,locate,validate,pre_start,pre_poll,scene_start,scene_poll,save,received,clock_frame};
   m.session_epoch=7;m.seq=1;m.opcode=SLINK_OP_TRADE_PREPARE;
   word(m.args+4,11);word(m.args+8,22);word(m.args+12,8);m.args[16]=9;
@@ -65,11 +75,16 @@ int main(void) {
     return 0;
   }
   if (!OMIT_COMMIT && !slink_trade_commit_entered(&state,&w,0,&e)) return 4;
+  if (!OMIT_COMMIT && (w.milestones != 3 || w.milestone_seq[SLINK_COMMIT_ENTERED] != 2
+      || !w.revision || (w.revision & 1))) return 21;
   scene_done=1;save_ok=SAVE_RESULT;slink_trade_service(&state,&m,&w,blob,&e);
   if (SAVE_RESULT && !OMIT_COMMIT) {
     if (saves!=1 || w.final_result!=SLINK_TRADE_COMMITTED || m.status!=SLINK_ST_OK) return 5;
     if (!slink_trade_success_is_durable(&w,1,2)) return 6;
     if (w.received_pid!=33 || w.received_otid!=44) return 7;
+    if (!(w.milestone_frame[SLINK_COMMIT_ENTERED] < w.milestone_frame[SLINK_SCENE_EVOLUTION_DONE]
+        && w.milestone_frame[SLINK_SCENE_EVOLUTION_DONE] < w.milestone_frame[SLINK_POST_SAVE_OK]
+        && w.milestone_frame[SLINK_POST_SAVE_OK] < w.milestone_frame[SLINK_FINAL_RESULT])) return 22;
   } else {
     if (saves!=(OMIT_COMMIT?0:1) || w.final_result!=SLINK_TRADE_UNCERTAIN) return 5;
     if (w.milestones&(1u<<SLINK_POST_SAVE_OK) || m.status==SLINK_ST_OK) return 6;

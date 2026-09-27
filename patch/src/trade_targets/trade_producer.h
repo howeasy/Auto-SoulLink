@@ -7,6 +7,14 @@
 #include "abi.h"
 
 enum SlinkTradePhase { TP_IDLE, TP_PRE_SAVE, TP_READY, TP_SCENE, TP_DONE, TP_UNCERTAIN };
+
+/* Feature implementation beacon; target READY remains a separate release gate. */
+static inline void slink_trade_advertise(volatile SlinkMailboxV2 *m)
+{
+    m->abi_version = SLINK_ABI_VERSION;
+    m->capabilities = SLINK_CAP_DURABLE_TRADE;
+    m->signature = SLINK_SIGNATURE;
+}
 typedef struct {
     void *context;
     int (*safe_field)(void *);
