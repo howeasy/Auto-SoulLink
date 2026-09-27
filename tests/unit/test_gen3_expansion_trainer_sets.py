@@ -596,16 +596,37 @@ def test_unbattled_key_candidates_never_appear_in_any_battle_script():
 
 
 def test_key_trainers_with_no_area_are_reported():
-    """Item 5 (MINOR, report only): every OTHER key trainer the shipped pack has no area for.
-    Currently TRAINER_TABITHA_MOSSDEEP/TRAINER_MAXIE_MOSSDEEP: their fight is a `multi_2_vs_2`
-    script line in MossdeepCity_SpaceCenter_2F/scripts.inc, a macro
-    tools/gen_gen3_trainers.py's SHARED trainer_maps() helper doesn't recognise (it only
-    matches `trainerbattle*` lines) -- a real gap, but in shared code out of this card's lease
-    (tools/gen_gen3_exp_trainers.py may only READ that helper, not patch it). This test reports
-    the known set rather than silently accepting a growing one: a new area-less key trainer
-    should be looked at, not waved through."""
+    """TG-MULTI: every key trainer has an area, including the Mossdeep multi-battle pair."""
     data = _pack()
     arealess = sorted(t["const"] for t in data["trainers"].values()
                        if t.get("key") and not t.get("area"))
     print(f"key trainers with no area: {arealess}", file=sys.stderr)
-    assert arealess == ["TRAINER_MAXIE_MOSSDEEP", "TRAINER_TABITHA_MOSSDEEP"], arealess
+    assert arealess == [], arealess
+
+
+def test_multi_battle_macro_argument_roles_match_the_pinned_source():
+    src = _need_source()
+    text = _read(src / "asm/macros/battle_frontier/battle_tower.inc")
+    definitions = {name: [arg.strip().split(":")[0] for arg in args.split(",")]
+                   for name, args in re.findall(r"^\s*\.macro (multi_\w+) ([^\n]+)", text, re.M)}
+    two_opponents = ["trainer1Id", "trainer1LoseText", "trainer2Id", "trainer2LoseText", "partnerId"]
+    one_opponent = ["trainer1Id", "trainer1LoseText", "partnerId"]
+    assert definitions == {
+        "multi_2_vs_2": two_opponents, "multi_fixed_2_vs_2": two_opponents,
+        "multi_2_vs_1": one_opponent, "multi_fixed_2_vs_1": one_opponent,
+        "multi_wild": ["partnerId"], "multi_fixed_wild": ["partnerId"],
+        "multi_do": ["type"], "multi_do_fixed": ["type"],
+    }
+    event = _read(src / "asm/macros/event.inc")
+    low_level = re.search(r"\.macro setmultitrainerbattle ([^\n]+)", event)
+    assert low_level
+    assert [arg.strip().split(":")[0] for arg in low_level[1].split(",")] == [
+        "trainer_a", "lose_text_a", "trainer_b", "lose_text_b", "partnerId"]
+
+
+def test_space_center_multi_battle_opponents_are_upcoming_in_mossdeep():
+    data = _pack()
+    for trainer_id, name in ((514, "TRAINER_TABITHA_MOSSDEEP"), (734, "TRAINER_MAXIE_MOSSDEEP")):
+        trainer = data["trainers"][str(trainer_id)]
+        assert (trainer["const"], trainer["area"], trainer["key"]) == (name, "mossdeep_city", True)
+    assert {514, 734} <= set(_adapter().trainers_for_area("mossdeep_city"))

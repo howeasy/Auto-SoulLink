@@ -23927,6 +23927,7 @@
           "ability": "Inner Focus"
         }
       ],
+      "area": "mossdeep_city",
       "key": true,
       "level_cap": 40,
       "calc_label": "Magma Admin Tabitha"
@@ -35628,6 +35629,7 @@
           "ability": "Magma Armor"
         }
       ],
+      "area": "mossdeep_city",
       "key": true,
       "level_cap": 44,
       "calc_label": "Magma Leader Maxie (3)"
@@ -44428,6 +44430,8 @@
     ],
     "mossdeep_city": [
       271,
+      514,
+      734,
       794,
       795,
       796,
