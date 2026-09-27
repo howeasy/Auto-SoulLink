@@ -21,6 +21,7 @@ import json
 import re
 import subprocess
 import sys
+from collections import defaultdict
 from pathlib import Path
 
 import pytest
@@ -305,58 +306,143 @@ def test_priority_trainers_areas_are_client_emittable():
     keys = set(roster["trainers_by_area"])
     bad = sorted(keys - valid)
     assert not bad, (
-        f"trainers_by_area key(s) {bad} aren't an area_id the RR/FRLG client "
-        f"ever emits (not in area_map.json or gen3_frlge_locations.lua) -- "
-        f"their trainers can never show. Fix the sheet-text -> area_id "
-        f"mapping in tools/gen_rr_priority_trainers.py's _AREA_OVERRIDES/"
+        f"trainers_by_area key(s) {bad} aren't a coarse area_id the RR/FRLG "
+        f"client ever emits in ordinary play (not in area_map.json) -- their "
+        f"trainers can never show. Fix the sheet-text -> area_id mapping in "
+        f"tools/gen_rr_priority_trainers.py's _AREA_OVERRIDES/"
         f"_normalize_area_name, don't hand-edit the JSON."
     )
 
 
-# Key-fight "families" the Upcoming Key Trainers widget must be able to show
-# somewhere at least once: gym leaders (incl. Johto/RR crossover leaders and
-# their post-game "*"-prefixed rematch tiers), Elite Four members, the final
-# Champion battle (RR labels this fighter "Rival" in some sets and the
-# vanilla rival's name, e.g. "Blue", in others -- same conceptual fight, one
-# family), the overworld Rival battles, and Giovanni's boss fights. Classes
-# in the same family are merged before checking reachability: a calc-only
-# alternate-moveset duplicate (e.g. "Champion Blue Set 2", sourced purely
-# from the setdex with no sheet header/Trainer-Order location at all) isn't
-# a separately-reachable encounter, only another set for a fight some sibling
-# id in the family already carries the area for.
-_KEY_FIGHT_FAMILIES = {
-    "leader": {"Gym Leader", "Leader", "*Leader"},
-    "elite_four": {"Elite Four", "*Elite Four"},
-    "champion": {"Champion"},
-    "rival": {"Rival", "*Rival"},
-    "giovanni": {"Giovanni", "Boss"},
+def test_area_overrides_values_are_all_coarse_area_ids():
+    """RR-PT3 item 3: every _AREA_OVERRIDES VALUE (not just what happens to
+    survive into the committed roster -- test_priority_trainers_areas_are_
+    client_emittable only catches a bad value once some sheet header
+    actually triggers it) must itself be a coarse area_id in area_map.json.
+    An override that maps sheet text to a bogus non-coarse id (e.g. the
+    former "ss_aqua", "mt_silver", "faraway_island", "chrono_island" --
+    none of which are real pret pokefirered maps at all -- or the former
+    "rocket_warehouse", a real place but the wrong, fine-only, id) is a
+    latent bug: harmless until the community sheet adds or edits a row
+    whose header text happens to match that key, at which point it silently
+    produces an unreachable trainers_by_area bucket with no test catching it
+    until someone notices trainers missing in play."""
+    import gen_rr_priority_trainers as grpt
+    valid = _coarse_area_ids()
+    bad = {k: v for k, v in grpt._AREA_OVERRIDES.items() if v not in valid}
+    assert not bad, (
+        f"_AREA_OVERRIDES value(s) aren't coarse area_map.json ids: {bad} -- "
+        f"map each to the coarse id the client actually reports at that "
+        f"place (BFS to the nearest area_map.json-mapped ancestor, same rule "
+        f"as every other entry in _AREA_OVERRIDES), or drop the entry with a "
+        f"comment if the place doesn't exist in RR's FR-layout map set at all."
+    )
+
+
+def test_priority_trainers_parties_area_matches_trainers_by_area():
+    """RR-PT3 item 1: every rt_id listed under trainers_by_area[area] must
+    have parties[id]["area"] == area (or, for an id legitimately placed
+    under more than one area, area is among a list and the id is under
+    every one of those areas) -- previously steps (b)/(c)/(d) of the
+    trainers_by_area build (Nuzlocke Redux / Trainer Order / gym-leader
+    rematch inheritance) appended the id to trainers_by_area but never wrote
+    the derived area back onto the party record itself, so parties[id]
+    silently disagreed with (or omitted) the area trainers_by_area actually
+    placed it under. Also checks every placed party carries "area_source"
+    (tools/gen_rr_priority_trainers.py's _attach) naming which step placed
+    it, so a heuristic (non-header) placement is reviewable rather than
+    indistinguishable from a sheet-stated one."""
+    roster = json.loads((_GEN3_FRLGE_DIR / "rr_priority_trainers.json")
+                         .read_text(encoding="utf-8"))
+    parties = roster["parties"]
+    tba = roster["trainers_by_area"]
+    valid_sources = {"sheet_header", "trainer_order", "name_claim", "rematch_inherit"}
+    checked = 0
+    for area, ids in tba.items():
+        for rid in ids:
+            info = parties.get(str(rid))
+            assert info is not None, f"trainers_by_area[{area!r}] names rt_id {rid}, not in parties"
+            party_area = info.get("area")
+            assert party_area, f"parties[{rid}] (in trainers_by_area[{area!r}]) has no area at all"
+            areas = party_area if isinstance(party_area, list) else [party_area]
+            assert area in areas, (
+                f"parties[{rid}][\"area\"] = {party_area!r} doesn't include "
+                f"{area!r}, the trainers_by_area bucket it's actually listed under"
+            )
+            source = info.get("area_source")
+            assert source in valid_sources, (
+                f"parties[{rid}] is placed (area={party_area!r}) but area_source "
+                f"is {source!r}, not one of {sorted(valid_sources)}"
+            )
+            checked += 1
+    assert checked > 0, "expected at least one placed trainer to check"
+
+
+# Key-fight classes the Upcoming Key Trainers widget must be able to show:
+# gym leaders (incl. Johto/RR crossover leaders and their post-game
+# "*"-prefixed rematch tiers), Elite Four members, the final Champion battle,
+# the overworld Rival battles, and Giovanni's boss fights.
+_KEY_FIGHT_CLASSES = {
+    "Gym Leader", "Leader", "*Leader", "Elite Four", "*Elite Four",
+    "Champion", "Rival", "*Rival", "Giovanni", "Boss",
 }
-_KEY_FIGHT_CLASSES = {c for classes in _KEY_FIGHT_FAMILIES.values() for c in classes}
+
+# RR-PT3 item 2: named key fights with NO reachable placement anywhere in
+# trainers_by_area, and why -- checked per NAME (not the old per-FAMILY
+# floor, which let a name with zero reachable ids hide behind a sibling name
+# in the same class family). Every name below is EVERY rt_id under that name
+# in a key-fight class having source "calc:..." (a calc/normal.js SETDEX
+# entry with no boss-sheet header/Trainer-Order row at all -- see
+# tools/gen_rr_priority_trainers.py's _build_roster step 1a/1b comments), so
+# there is no sheet location text to map: not a bug, a genuinely separate
+# identity from a name that IS placed.
+#   "Blue": RR's own sheet labels the final Rival/Champion battle "Rival" in
+#     the boss-sheet headers (aliased to rr_trainers.json's "Terry" for id
+#     matching, see _NAME_ALIASES) -- placed and reachable under that name.
+#     The calc/normal.js SETDEX separately carries "Rival Blue"/"Champion
+#     Blue" labels (the vanilla rival's own name) with no sheet counterpart
+#     of their own, so those ids never get an area. Same conceptual fight,
+#     already reachable under "Terry" -- not a gap in the widget.
+_UNPLACED_KEY_FIGHTS = {
+    "Blue": "no sheet header/Trainer-Order row for this name -- calc-only "
+            "alternate name for the Rival/Champion fight already reachable "
+            "under 'Terry'",
+}
 
 
-def test_priority_trainers_key_fight_families_have_reachable_area():
-    """RR-PT2 item 3: every key-fight category (gym leaders incl. rematches,
-    rival, Elite Four/Champion, Giovanni's sets) has at least one reachable
-    rt_id under trainers_by_area -- the literal bar the card asks to
-    confirm. Checked per FAMILY, not per individual name: within "rival"/
-    "champion" a good few rt_ids are calc-only alternate-moveset duplicates
-    with no sheet location at all (they were never going to resolve, and
-    fixing that is a naming/identity redesign outside this card's scope --
-    e.g. RR's own sheet gives the final battle two different display names,
-    "Rival" and the vanilla rival's name), so long as the category as a
-    whole is reachable somewhere the widget can still show that fight."""
+def test_priority_trainers_key_fights_have_reachable_area_per_name():
+    """RR-PT3 item 2: every NAMED key fight (gym leaders incl. rematches,
+    rival, Elite Four, champion, Giovanni) must have >=1 reachable rt_id
+    under trainers_by_area -- checked per name, not per class family (a
+    family-level floor let one reachable name mask every other unreachable
+    name sharing its class, e.g. Falkner/Bugsy/etc. all share class
+    "Leader"). Any name with zero reachable placements must be explicitly
+    listed in _UNPLACED_KEY_FIGHTS with the reason (there is no sheet
+    location for it at all) -- a regen that creates a NEW unplaced name, or
+    silently fixes a documented one, fails this test rather than passing
+    quietly either way."""
     roster = json.loads((_GEN3_FRLGE_DIR / "rr_priority_trainers.json")
                          .read_text(encoding="utf-8"))
     parties = roster["parties"]
     placed = {rid for ids in roster["trainers_by_area"].values() for rid in ids}
-    class_to_family = {c: fam for fam, classes in _KEY_FIGHT_FAMILIES.items() for c in classes}
-    by_family: dict[str, list[int]] = {fam: [] for fam in _KEY_FIGHT_FAMILIES}
+    names_all: set[str] = set()
+    names_reachable: set[str] = set()
     for rid_str, p in parties.items():
-        fam = class_to_family.get(p.get("class"))
-        if fam:
-            by_family[fam].append(int(rid_str))
-    missing = sorted(fam for fam, ids in by_family.items() if not any(i in placed for i in ids))
-    assert not missing, f"key fight famil(y/ies) with NO reachable area at all: {missing}"
+        if p.get("class") not in _KEY_FIGHT_CLASSES:
+            continue
+        name = p["name"]
+        names_all.add(name)
+        if int(rid_str) in placed:
+            names_reachable.add(name)
+    unplaced = names_all - names_reachable
+    assert unplaced == set(_UNPLACED_KEY_FIGHTS), (
+        f"unplaced key-fight name(s) changed: now {sorted(unplaced)}, "
+        f"documented {sorted(_UNPLACED_KEY_FIGHTS)}. A NEW unplaced name "
+        f"needs a sheet-location trace (map it via _AREA_OVERRIDES/"
+        f"area_of_map if the sheet gives a real Kanto/Sevii place, or add it "
+        f"here with the sheet's own text if it gives none); a name that's "
+        f"newly placed should be removed from _UNPLACED_KEY_FIGHTS above."
+    )
 
 
 def test_priority_trainers_gym_leader_rematches_inherit_base_area():
@@ -364,21 +450,47 @@ def test_priority_trainers_gym_leader_rematches_inherit_base_area():
     sheets -- the Trainer Order sheet is a single first-playthrough pass and
     never lists these) fights at the SAME gym as the base leader, so it must
     show up in the same trainers_by_area bucket rather than being stranded
-    with no area. Pins the exact (base, rematch, area) triples the
-    2026-09-26 regen dropped and RR-PT2 restored (see
-    docs/gen3/research/rr_priority_regen_2026-09-26.md)."""
+    with no area.
+
+    RR-PT3: resolved by NAME from the roster, not hard-coded rt_ids -- a
+    regen can renumber ids (rr_trainers.json candidate picking is
+    party-size-scored, not identity-stable), so pinning bare integers here
+    just breaks on the next unrelated regen. Uses the "area_source" field
+    card RR-PT3 added (tools/gen_rr_priority_trainers.py's _attach): a
+    leader's "base" id(s) are whichever the sheet/Trainer Order placed
+    directly (area_source != "rematch_inherit"); every same-name id tagged
+    "rematch_inherit" must land in that same area. Still pins the specific
+    leaders the 2026-09-26 regen dropped and RR-PT2 restored (see
+    docs/gen3/research/rr_priority_regen_2026-09-26.md): Brock, Misty (two
+    rematch tiers), Lt. Surge, Erika, and the Johto crossover leader Clair."""
     roster = json.loads((_GEN3_FRLGE_DIR / "rr_priority_trainers.json")
                          .read_text(encoding="utf-8"))
+    parties = roster["parties"]
     tba = roster["trainers_by_area"]
-    for base, rematch, area in [
-        (414, 56, "pewter_city"),      # Brock
-        (415, 48, "cerulean_city"),    # Misty (Kanto Rematch tier)
-        (415, 32, "cerulean_city"),    # Misty (Postgame tier)
-        (416, 51, "vermilion_city"),   # Lt. Surge
-        (417, 65, "celadon_city"),     # Erika
-        (74, 38, "viridian_city"),     # Clair (Johto crossover leader)
-    ]:
-        assert base in tba.get(area, []), f"base trainer {base} missing from {area}"
-        assert rematch in tba.get(area, []), (
-            f"rematch trainer {rematch} not placed alongside its base fight at {area}"
-        )
+
+    leaders_by_name: dict[str, dict[int, dict]] = defaultdict(dict)
+    for rid_str, info in parties.items():
+        if info.get("class") == "Gym Leader":
+            leaders_by_name[info["name"]][int(rid_str)] = info
+
+    for name in ("Brock", "Misty", "Lt. Surge", "Erika", "Clair"):
+        entries = leaders_by_name.get(name)
+        assert entries, f"no Gym Leader roster entries for {name!r}"
+        rematches = {rid: info for rid, info in entries.items()
+                     if info.get("area_source") == "rematch_inherit"}
+        bases = {rid: info for rid, info in entries.items() if rid not in rematches}
+        assert rematches, f"{name}: expected at least one rematch-inherited id"
+        assert bases, f"{name}: expected at least one base (non-rematch) id"
+        base_areas = {info.get("area") for info in bases.values()}
+        assert all(base_areas), f"{name}: a base id has no area"
+        assert len(base_areas) == 1, f"{name}: base fight(s) span multiple areas: {base_areas}"
+        area = next(iter(base_areas))
+        for rid in bases:
+            assert rid in tba.get(area, []), f"{name} base id {rid} missing from {area}"
+        for rid, info in rematches.items():
+            assert info.get("area") == area, (
+                f"{name} rematch id {rid} area {info.get('area')!r} != base area {area!r}"
+            )
+            assert rid in tba.get(area, []), (
+                f"{name} rematch id {rid} not placed alongside its base fight at {area}"
+            )

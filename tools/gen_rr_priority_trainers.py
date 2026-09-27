@@ -782,13 +782,27 @@ _AREA_OVERRIDES = {
     # docs/gen3/research/rr_priority_regen_2026-09-26.md records the map-by-map
     # trace for each.
     "S.S. ANNE":            "vermilion_city",
-    "S.S. AQUA":            "ss_aqua",
+    # "S.S. Aqua" (a Johto ferry in vanilla GSC/HGSS) has no map at all in
+    # pret pokefirered's decomp (data/games/gen3_frlge/gen3_frlge_locations.lua
+    # -- generated from that same decomp -- has no s.s._aqua/ss_aqua entry of
+    # any kind, fine or coarse, unlike every other place in this table).
+    # RR is a FireRed hack (Kanto+Sevii map set only; card RR-PT3's game-fact
+    # ruling: no Johto towns exist), so there's no reachable area_id to map
+    # this to -- dropped rather than guessed. If the sheet actually uses this
+    # text for a real Kanto encounter, add the correct mapping here instead
+    # of reinstating "ss_aqua" (not a coarse id; caught by the
+    # _AREA_OVERRIDES_are_coarse test).
     "POKÉMON LEAGUE":       "indigo_plateau",
     "POKEMON LEAGUE":       "indigo_plateau",
     "INDIGO PLATEAU":       "indigo_plateau",
     "MT. MOON":             "mt_moon",
     "MT. EMBER":            "mt_ember",
-    "MT. SILVER":           "mt_silver",
+    # "Mt. Silver" (a Johto/Kanto-border postgame area, first in GSC/HGSS)
+    # has no map in pret pokefirered's decomp -- gen3_frlge_locations.lua has
+    # no mt_silver entry, fine or coarse, unlike Mt. Ember/Mt. Moon just
+    # above which are both real FireRed maps. RR being FireRed-based (Kanto+
+    # Sevii only), there's no reachable area_id here -- dropped rather than
+    # guessed; see the S.S. Aqua comment above for the same reasoning.
     "POKÉMON TOWER":        "pokemon_tower",
     "POKEMON TOWER":        "pokemon_tower",
     "PKMN TOWER":           "pokemon_tower",
@@ -797,7 +811,14 @@ _AREA_OVERRIDES = {
     "POKÉMON MANSION ENTRANCE": "pokemon_mansion",
     "POKEMON MANSION ENTRANCE": "pokemon_mansion",
     "ROCKET HIDEOUT":       "celadon_city",
-    "ROCKET WAREHOUSE":     "rocket_warehouse",
+    # "Rocket Warehouse" is Five Island's FiveIsland_RocketWarehouse -- a real
+    # fine location (gen3_frlge_locations.lua "1:114" =
+    # "five_island_rocket_warehouse", named/prefixed the same way every other
+    # child-of-a-town fine id in that table is) but with no area_map.json
+    # entry of its own, same sticky-coarse situation as Rocket Hideout above:
+    # its only warp leads back to Five Island (area_map.json "3:16"), so
+    # that's the coarse id the client actually reports while inside it.
+    "ROCKET WAREHOUSE":     "five_island",
     "DIGLETT'S CAVE":       "digletts_cave",
     "DIGLETTS CAVE":        "digletts_cave",
     "VIRIDIAN FOREST":      "viridian_forest",
@@ -817,8 +838,13 @@ _AREA_OVERRIDES = {
     "LOST CAVE":            "lost_cave",
     "NAVEL ROCK":           "navel_rock",
     "BIRTH ISLAND":         "birth_island",
-    "FARAWAY ISLAND":       "faraway_island",
-    "FAR. ISLAND":          "faraway_island",
+    # "Faraway Island" (Mew, added in Emerald -- see
+    # data/games/gen3_emerald/area_map.json's "faraway_island") has no map at
+    # all in pret pokefirered's decomp: gen3_frlge_locations.lua covers every
+    # other Sevii/mystery-gift island (Birth Island, Navel Rock, even the
+    # unused "prototype_sevii_isle_6..9" maps) but no faraway_island of any
+    # kind. RR being FireRed-based, there's no reachable area_id -- dropped
+    # rather than guessed; see the S.S. Aqua comment above.
     "TANOBY RUINS":         "tanoby_ruins",
     "SILPH CO.":            "silph_co",
     "SILPH CO":             "silph_co",
@@ -833,7 +859,10 @@ _AREA_OVERRIDES = {
     "KINDLE ROAD":          "kindle_road",
     "CAPE BRINK":           "cape_brink",
     "SEVAULT CANYON":       "sevault_canyon",
-    "CHRONO ISLAND":        "chrono_island",
+    # "Chrono Island" isn't a real Sevii/FRLG location at all (not in
+    # gen3_frlge_locations.lua, fine or coarse) -- likely an RR-invented or
+    # mis-transcribed sheet name. No reachable area_id -- dropped rather than
+    # guessed; see the S.S. Aqua comment above.
     "GREEN PATH":           "green_path",
     "CANYON ENTRANCE":      "sevault_canyon",
     "OAK'S LABORATORY":     "oaks_lab",
@@ -1514,7 +1543,13 @@ def _build_roster(src: Path) -> tuple[dict, list[str]]:
     trainers_by_area: dict[str, list[int]] = defaultdict(list)
     assigned_area: dict[int, str] = {}    # rt_id → primary area
 
-    def _attach(area: str, rt_id: int, *, primary: bool) -> None:
+    def _attach(area: str, rt_id: int, *, primary: bool, source: str) -> None:
+        """Add rt_id to trainers_by_area[area]. On the FIRST (primary) attach
+        for an id, also write the area back onto parties[id]["area"] (so the
+        two stay in sync -- previously (b)/(c)/(d) only updated
+        trainers_by_area, leaving parties[id]["area"] blank for every id they
+        placed) plus "area_source" recording which step placed it, for
+        reviewability of the heuristic (non-header) placements."""
         if not area:
             return
         if rt_id in trainers_by_area[area]:
@@ -1522,12 +1557,16 @@ def _build_roster(src: Path) -> tuple[dict, list[str]]:
         trainers_by_area[area].append(rt_id)
         if primary and rt_id not in assigned_area:
             assigned_area[rt_id] = area
+            info = parties.get(str(rt_id))
+            if info is not None:
+                info["area"] = area
+                info["area_source"] = source
 
     # (a) Header-derived areas. Each trainer attaches to exactly ONE area
     # (the one its own sheet header stated).
     for rt_id_str, info in parties.items():
         if info.get("area"):
-            _attach(info["area"], int(rt_id_str), primary=True)
+            _attach(info["area"], int(rt_id_str), primary=True, source="sheet_header")
 
     # Build a queue of unassigned ids per (Title-cased name) so secondary
     # sources can hand out one location at a time.
@@ -1552,7 +1591,7 @@ def _build_roster(src: Path) -> tuple[dict, list[str]]:
                 continue
             rt_id = _claim_unassigned(name)
             if rt_id is not None:
-                _attach(area_id, rt_id, primary=True)
+                _attach(area_id, rt_id, primary=True, source="name_claim")
 
     # (c) Trainer Order — fills in anything redux didn't cover.
     for trainer_name, area_id, _is_optional in order_pairs:
@@ -1560,7 +1599,7 @@ def _build_roster(src: Path) -> tuple[dict, list[str]]:
             continue
         rt_id = _claim_unassigned(trainer_name.title())
         if rt_id is not None:
-            _attach(area_id, rt_id, primary=True)
+            _attach(area_id, rt_id, primary=True, source="trainer_order")
 
     # (d) Gym Leader rematch tiers inherit their base fight's area (card
     # RR-PT2). The Trainer Order sheet is a single first-playthrough pass —
@@ -1581,7 +1620,7 @@ def _build_roster(src: Path) -> tuple[dict, list[str]]:
             continue
         area = leader_area_by_name.get(info["name"])
         if area:
-            _attach(area, rid, primary=True)
+            _attach(area, rid, primary=True, source="rematch_inherit")
 
     # 6) Serialize.
     out_doc = {

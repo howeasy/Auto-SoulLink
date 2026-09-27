@@ -44,13 +44,15 @@ def test_trainers_for_area_returns_known_pewter_city():
 
 
 def test_trainers_for_area_pewter_city_has_falkner():
-    """Falkner fights at Pewter Museum, which reports as "pewter_city"
-    (RR-PT2 -- see test_trainers_for_area_returns_known_pewter_city). The
-    old "pewter_museum" area_id is not one the client can ever emit."""
-    ids = _rr().trainers_for_area("pewter_city")
-    assert ids, "pewter_city should host Falkner"
-    # His rr_trainers.json id should be in the list (43 or 45).
-    assert 43 in ids or 45 in ids
+    """Falkner has two RR fights, at two different (real) locations: id 45
+    at Pewter Museum -- which reports as "pewter_city" (RR-PT2 -- see
+    test_trainers_for_area_returns_known_pewter_city) -- and id 43 at Rock
+    Tunnel. Exact sets, not "or": rr_priority_trainers.json is the source of
+    truth, so a regen that moves either id must fail this test loudly rather
+    than pass on whichever id happened to still be present. The old
+    "pewter_museum" area_id is not one the client can ever emit."""
+    assert sorted(_rr().trainers_for_area("pewter_city")) == [45, 56, 414]
+    assert sorted(_rr().trainers_for_area("rock_tunnel")) == [43]
     assert not _rr().trainers_for_area("pewter_museum"), (
         "pewter_museum is not a client-emittable area_id any more (RR-PT2)"
     )
