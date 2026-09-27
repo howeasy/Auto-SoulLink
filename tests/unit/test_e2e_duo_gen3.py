@@ -4385,14 +4385,59 @@ def test_game_help_names_the_new_rows():
         assert row in help_text, row
 
 
-def test_memorial_problems_accept_trained_growth_only_when_trained(pair):
-    fixture, _ = pair
+def _memorial_saved(**overrides):
+    """(saved, fixture) for gen3_memorial_problems with STARTER cut from the party into the
+    memorial box: party [PIDGEY], box 13 slot 0 holding the key, nothing else moved. `overrides`
+    patch the MEMORIAL RECORD only. The party tail (level, max_hp, the six stats) is injected
+    on purpose: gen3_codec._PARTY_TAIL is party-only, so a decoded BoxPokemon can never carry
+    those fields and this pins the mask as declared rather than as one save shape happens to
+    reach it."""
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
+    flushed, cut = _decoded(saved), _decoded(fixture)
+    flushed[1][(13, 0)] = dict(flushed[1][(13, 0)], **overrides)
+    return flushed, cut
+
+
+# every field GEN3_TRAINED_MUTABLE names, at a value the cartridge's own record bounds accept
+_TRAINED_GROWTH = [
+    ("experience", 1261), ("level", 9), ("max_hp", 24), ("attack", 13), ("defense", 14),
+    ("speed", 12), ("sp_attack", 13), ("sp_defense", 15), ("moves", [33, 33, 0, 0]),
+    ("evs", {"hp": 4, "attack": 4, "defense": 0, "speed": 0, "sp_attack": 0, "sp_defense": 0}),
+]
+
+
+@pytest.mark.parametrize("field,value", _TRAINED_GROWTH)
+def test_memorial_trained_masks_the_growth_field_and_nothing_else(field, value):
+    """PYDEC FAIL on the RR final cut (d9a928d7): "a: the memorial ... differs from the fixture
+    record in [('experience', 228, 267)]". A fights naturally before it goes down, so its
+    memorial record may legitimately carry growth the fixture's does not. Each field the mask
+    names is hidden when the side was trained -- and is still a diff when it was not, so a
+    trained side cannot launder a change the game had no business making."""
+    assert field in duo.GEN3_TRAINED_MUTABLE
     key = _key(STARTER)
-    grown = _mon(STARTER["personality"], party=False)
-    grown["experience"] = 1261
-    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): grown})
-    assert _mem("b", _decoded(saved), _decoded(fixture), key, 13, trained=True) == []
-    assert any("differs from the fixture" in p for p in _mem("b", _decoded(saved), _decoded(fixture), key, 13))
+    clean, fixture = _memorial_saved()
+    assert _mem("a", clean, fixture, key, 13) == []       # the untouched record reports nothing
+    grown, _ = _memorial_saved(**{field: value})
+    assert _mem("a", grown, fixture, key, 13, trained=True) == []
+    assert any(f"('{field}'," in p for p in _mem("a", grown, fixture, key, 13))
+
+
+@pytest.mark.parametrize("field,value", [("species", 16), ("personality", 0x11112222),
+                                         ("ot_id", 0x33445566)])
+def test_memorial_trained_never_masks_identity_or_species(field, value):
+    """`trained` is a growth mask, not a blank cheque. A changed species is a different mon filed
+    under the key and stays a diff; a changed personality or OT id makes the key lookup miss, so
+    the record is reported as not sitting in the memorial box at all. A wrong-save deposit is
+    exactly what a mask that grew to cover identity would hide."""
+    key = _key(STARTER)
+    saved, fixture = _memorial_saved(**{field: value})
+    problems = _mem("a", saved, fixture, key, 13, trained=True)
+    assert problems
+    if field == "species":
+        assert any("('species'," in p for p in problems), problems
+    else:
+        assert any("not exactly once in the memorial box" in p for p in problems), problems
 
 
 def test_last_mon_problems_positive_and_negatives(pair):
@@ -4500,32 +4545,59 @@ def test_a_throwing_watcher_is_reported_by_name_before_it_is_dropped():
     assert "WATCHER_ERROR scenario=%s watcher=%s" in text
 
 
-def test_linked_faint_active_gen3_masks_growth_for_the_natural_side_too(ph, monkeypatch, tmp_path):
+_LFA_SCENARIO = {"wild": "linked_faint_active_gen3", "whiteout": "linked_faint_active_whiteout_gen3",
+                 "trainer": "linked_faint_active_trainer_gen3", "lhammer": "linked_faint_active_lhammer_gen3",
+                 "explode": "explode_gen3"}
+
+# (side, trained) each linked_faint_active case hands gen3_memorial_problems, in call order.
+# A is the side whose engine faint site fires: it fights NATURALLY in every case
+# (wild/trainer/lhammer/...), so it can legitimately gain EXP before it goes down. B's KO is
+# engine-forced with no input (active_faint_chain), so its growth only moves in the trainer
+# case, where PREP_LEVEL levels it up before the hand-off. Whiteout never reaches the check on
+# B: its linked mon is B's only mon, so game_over drops the memorialize and the last mon is kept
+# (ruling 21) -- B is checked by gen3_last_mon_problems instead.
+_LFA_TRAINED_MASK = {
+    "wild": (("a", True), ("b", False)),
+    "whiteout": (("a", True),),
+    "trainer": (("a", True), ("b", True)),
+    "lhammer": (("a", True), ("b", False)),
+    "explode": (("a", True), ("b", False)),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_LFA_TRAINED_MASK))
+def test_linked_faint_active_masks_growth_for_the_natural_side_only(ph, monkeypatch, tmp_path, case):
     """PYDEC FAIL on the RR final cut (d9a928d7): "a: the memorial ... differs from the fixture
-    record in [('experience', 228, 267)]". A is the side whose engine faint site fires -- it
-    fights NATURALLY in every case (wild/trainer/lhammer/...), so it can legitimately gain EXP
-    before it goes down. The call site only masked growth for B, and only when case=='trainer'."""
+    record in [('experience', 228, 267)]". The call site masks growth with
+    `trained=inst == "a" or case == "trainer"`, so the table below is the whole rule: A always,
+    B only for the trainer case. It is a table rather than one wild case because B is not
+    uniformly unmasked -- the trainer case levels B up first (PREP_LEVEL) and the whiteout case
+    never memorializes B at all."""
     fixture = _fixture([STARTER, PIDGEY])
     k = _key(STARTER)
-    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
-    run, notes = _oracle_stub(monkeypatch, tmp_path, "linked_faint_active_gen3", {"a": saved, "b": saved},
-                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "memorial",
-                                        "cause": "battle"}])
+    memorial = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
+    kept = _saved(fixture, 3, [STARTER], {(0, 0): _mon(PIDGEY["personality"], party=False, species=16)})
+    scenario = _LFA_SCENARIO[case]
+    saved = {"a": memorial, "b": kept if case == "whiteout" else memorial}
+    links = [{"a": {"key": k}, "b": {"key": k},
+              "status": "dead" if case == "whiteout" else "memorial", "cause": "battle"}]
+    run, _ = _oracle_stub(monkeypatch, tmp_path, scenario, saved, fixture, links)
     run._link_keys = {"a": k, "b": k}
     calls = []
     monkeypatch.setattr(duo, "gen3_memorial_problems",
                         lambda inst, *a, **kw: calls.append((inst, kw.get("trained"))) or [])
+    cmd = "force_explode" if case == "explode" else "force_faint"
     (tmp_path / "slink.log").write_text(
-        f"[a] faint → force_faint b:{k}\nfully memorialized\n", encoding="utf-8")
-    _, _, _, log_b = ph("wild", "b")
-    receipts = {
-        "a": (f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n"
-              f"SAVE_WITNESS_DUMP path=p\n"),
-        "b": log_b.replace("K0", k) + f"TX memorialize_done {k} {{}}\n",
-    }
-    run.assert_linked_faint_active_gen3_saved(receipts)
-    assert ("a", True) in calls    # A fought naturally: growth is legitimate every case
-    assert ("b", False) in calls   # B's KO is engine-forced with no input in the wild case
+        f"[a] faint → {cmd} b:{k}\n" + ("" if case == "whiteout" else "fully memorialized\n"),
+        encoding="utf-8")
+    _, _, _, log = ph(case, "b")
+    receipts = {"a": (f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n"
+                      f"SAVE_WITNESS_DUMP path=p\n"),
+                "b": log.replace("K0", k).replace("K1", _key(PIDGEY))}
+    # the receipt verdict itself is test_linked_faint_active_oracle_on_p_h_receipts' job; the
+    # mask is decided in the saved-state loop, before the oracle looks at a receipt at all
+    getattr(run, duo.SCENARIOS[scenario]["oracle"])(receipts)
+    assert calls == list(_LFA_TRAINED_MASK[case])
 
 
 def test_linked_faint_active_oracle_keeps_the_last_mon_on_both_sides(ph, monkeypatch, tmp_path):
