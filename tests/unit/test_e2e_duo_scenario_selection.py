@@ -866,7 +866,8 @@ GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3")
 ))
 def test_randomized_frlg_registration(name, module, target):
     row = SCENARIOS[name]
-    assert row["gen3_rand"] and row["games"] == ("gen3_frlg",)
+    games = ("gen3_frlg", "gen3_emerald") if name == "trainer_panel_gen3_rand" else ("gen3_frlg",)
+    assert row["gen3_rand"] and row["games"] == games
     assert row["scenario_module"] == module and row["target"] == target
     assert row["oracle"] == f"assert_{name}_saved"
     assert callable(getattr(DuoRun, row["oracle"]))
@@ -878,10 +879,11 @@ def test_randomized_frlg_registration(name, module, target):
 def test_randomized_rows_never_join_scenario_all_but_run_when_named():
     """OMP review cx-904adf25 finding 1: the R4 rows leaked into `--scenario all` on both FR/LG
     lanes. They are explicit_only: absent from scenarios_for, still applicable by name."""
-    for row in GEN3_FRLG_ROWS:
+    for row in (*GEN3_FRLG_ROWS, "gen3_emerald"):
         assert set(scenarios_for(row)) & duo_module.GEN3_RAND_SCENARIOS == set()
     for name in duo_module.GEN3_RAND_SCENARIOS:
-        assert scenario_applies(name, "gen3_frlg")
+        for game in SCENARIOS[name]["games"]:
+            assert scenario_applies(name, game)
 
 
 def test_gen3_frlg_selection_is_exactly_its_seven():
