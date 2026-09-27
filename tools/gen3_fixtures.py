@@ -284,6 +284,42 @@ def _rr_write_spans(parsed: dict) -> list[tuple[int, int, int]]:
     return spans
 
 
+def _rr_field_patcher(spans: list[tuple[int, int, int]], patches: dict[int, int], label: str):
+    """A ``field(address, data)`` closure that maps a RAM span to its flash offset(s) via
+    ``spans`` (``_rr_write_spans``) and records byte patches in ``patches``. Shared by
+    :func:`_derive_b_rr` (identity rekey) and :func:`build_rr_synth` (party edits) so both
+    patch surgically -- never re-encoding a whole sector (that would erase parasite/unknown
+    bytes CFRU never validates)."""
+    def field(address: int, data: bytes) -> None:
+        for n, value in enumerate(data):
+            addr = address + n
+            hits = [start + addr - lo for lo, hi, start in spans if lo <= addr < hi]
+            if len(hits) != 1:
+                raise ValueError(f"RR {label} byte 0x{addr:08X} has no unique flash mapping")
+            offset = hits[0]
+            if offset in patches and patches[offset] != value:
+                raise ValueError(f"conflicting RR {label} fields")
+            patches[offset] = value
+    return field
+
+
+def _rr_recompute_touched_checksums(parsed: dict, seed: bytes, new_body: bytearray,
+                                    manifest: list[str]) -> None:
+    """Only the selected slot's sectors that actually changed get a recomputed chunk checksum
+    (RR_CHUNK_TABLE size, not the whole 4KiB sector -- rr_save_layout.md:132-154); everything
+    else, including parasite/extension bytes, is untouched."""
+    half = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
+    for sector in parsed["sectors"][half:half + codec.NUM_SECTORS_PER_SLOT]:
+        size = codec.RR_CHUNK_TABLE[sector["id"]][1]
+        start = sector["index"] * codec.SECTOR_SIZE
+        chunk = bytes(new_body[start:start + size])
+        if chunk != seed[start:start + size]:
+            checksum = codec.sector_checksum(chunk, size)
+            off = start + codec.OFF_SECTOR_CHECKSUM
+            new_body[off:off + 2] = checksum.to_bytes(2, "little")
+            manifest.append(f"sector[{sector['index']}] id={sector['id']} chunk checksum recomputed")
+
+
 def _derive_b_rr(a_body: bytes) -> tuple[bytes, list[str]]:
     """Patch the selected slot and shared extension, retaining all other bytes.
 
@@ -304,17 +340,7 @@ def _derive_b_rr(a_body: bytes) -> tuple[bytes, list[str]]:
     encoded_name = codec.encode_name(new_name, codec.OT_NAME_LEN)
     spans = _rr_write_spans(parsed)
     patches: dict[int, int] = {}
-
-    def field(address: int, data: bytes) -> None:
-        for n, value in enumerate(data):
-            addr = address + n
-            hits = [start + addr - lo for lo, hi, start in spans if lo <= addr < hi]
-            if len(hits) != 1:
-                raise ValueError(f"RR identity byte 0x{addr:08X} has no unique flash mapping")
-            offset = hits[0]
-            if offset in patches and patches[offset] != value:
-                raise ValueError("conflicting RR identity fields")
-            patches[offset] = value
+    field = _rr_field_patcher(spans, patches, "identity")
 
     field(codec.RR_SAVEBLOCK2_ADDR + 0xA, new_tid.to_bytes(4, "little"))
     field(codec.RR_SAVEBLOCK2_ADDR, encoded_name)
@@ -344,16 +370,7 @@ def _derive_b_rr(a_body: bytes) -> tuple[bytes, list[str]]:
         new_body[offset] = value
     # Only affected rotating chunks have checksums; parasite and extension
     # bytes are outside those sums (rr_save_layout.md:132-154; codec:419-426).
-    half = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
-    for sector in parsed["sectors"][half:half + codec.NUM_SECTORS_PER_SLOT]:
-        size = codec.RR_CHUNK_TABLE[sector["id"]][1]
-        start = sector["index"] * codec.SECTOR_SIZE
-        chunk = bytes(new_body[start:start + size])
-        if chunk != a_body[start:start + size]:
-            checksum = codec.sector_checksum(chunk, size)
-            off = start + codec.OFF_SECTOR_CHECKSUM
-            new_body[off:off + 2] = checksum.to_bytes(2, "little")
-            manifest.append(f"sector[{sector['index']}] id={sector['id']} chunk checksum recomputed")
+    _rr_recompute_touched_checksums(parsed, a_body, new_body, manifest)
     result = bytes(new_body)
     qualified = qualify_one(result, rr=True)
     if not qualified["ok"]:
@@ -1627,6 +1644,131 @@ def cmd_make_frlg_synth(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# RR natural-leg seeds (card RR-SYNTH): the `evolve_gen3`/`poison_faint_gen3` natural legs
+# (docs/gen3_requirements.md S-8/S-11) run on gen3_frlg and gen3_emerald but were BLOCKED on
+# gen3_rr because make-frlg-synth hardcodes the vanilla flash layout and refuses a CFRU (--rr)
+# seed outright (docs/gen3_requirements.md S-8 row: "a working RR leg needs new tool
+# plumbing"). `make-rr-synth` is that plumbing: it reuses _rr_write_spans/_rr_field_patcher/
+# _rr_recompute_touched_checksums (derive-b --rr's surgical sector-patch pattern -- codec's
+# encode_party_mon never re-encrypts under rr=True, and write_sector is never called, so
+# parasite/unknown bytes and every other sector are untouched).
+#
+# RR game facts (never vanilla FR/LG -- RR's stats/evolutions/learnsets are its own,
+# memory: RR types/data are non-standard) are read directly from patch/build/slink_RR.gba
+# (sha1 7a3867499d66eb3621e0e7dde43bd033fc679f01, the pin in data/games/gen3_rr/profile.json).
+# Each ROM table address below is a CFRU expansion pointer: the vanilla function at that ROM
+# offset is overwritten with a `LDR r0,[PC,#0]; BX r0` thunk into expansion code/data (the
+# same relocation CFRU_BASESTATS_PTR already documents for base stats), found by dereferencing
+# each vanilla function's own literal pool and cross-checked against several evolution
+# families before trusting the decode:
+#   RR_BASESTATS_TABLE = 0x097B98EC   deref of CFRU_BASESTATS_PTR (data/games/gen3_rr/
+#       profile.json "rom".CFRU_BASESTATS_PTR = 0x080001BC; lua/games/gen3_frlge.lua:354).
+#       species 0 decodes all-zero; species 1 (Bulbasaur, rr_species.json) decodes to the
+#       exact vanilla 45/49/49/45(spd)/65/65, type Grass/Poison, growthRate=3 (MEDIUM_SLOW) --
+#       the pret 28-byte BaseStats layout (species_info.h) with growthRate at +19
+#       (profile.json derived.BASESTATS_GROWTH_RATE_OFFSET=19), confirming both the table
+#       address and struct layout are unchanged from vanilla, only the address relocated.
+#   RR_EVO_TABLE = 0x097CD9B0   pool constant loaded 3x by GetEvolutionTargetSpecies's RR
+#       thunk (vanilla pokefirered.sym: GetEvolutionTargetSpecies 08042ec4 size 0x2f0).
+#       Stride 128B/species = 16 evolution slots (EVOS_PER_MON expanded from vanilla's 5) *
+#       8B each (method u16, param u16, target u16, pad u16). Cross-checked against 3
+#       families: species1->2 method=4 param=16 (Bulbasaur->Ivysaur, vanilla level), 2->3
+#       method=4 param=36 (Ivysaur->Venusaur -- RR RAISED this from vanilla's 32, proving
+#       this is RR's own table, not a vanilla mirror), 277->278 method=4 param=16
+#       (TREECKO->GROVYLE), 278->279 param=36, 1324->1325 method=4 param=23
+#       (Smoliv->Dolliv). method=4 is consistently EVO_LEVEL.
+#   RR_EXP_TABLE = 0x0915514C   pool constant (profile.json "rom".EXPERIENCE_TABLES_ADDR,
+#       box_level anchor). 256-word stride per growth rate (profile.json derived
+#       .EXPERIENCE_TABLE_ENTRY_COUNT=256; MAX_LEVEL=250), index = growthRate*256 + level.
+#       Row 0 (GROWTH_MEDIUM_FAST) reproduces level**3 exactly for level 1..254; row 3
+#       (GROWTH_MEDIUM_SLOW, Treecko's own growthRate byte above) gives 2034 at level 15 and
+#       2535 at level 16 (matches the closed-form MEDIUM_SLOW curve).
+#   RR_LEVELUP_LEARNSETS = 0x0980175C   pool constant, GetLevelUpMovesBySpecies's RR thunk
+#       (vanilla pokefirered.sym: GetLevelUpMovesBySpecies 08043dd4 size 0x58; the SAME thunk
+#       also loads 0xFFFF and 0x1FF into dead vanilla-path registers, i.e. CFRU's
+#       EXPAND_MOVESETS build -- github.com/Skeli789/Complete-Fire-Red-Upgrade @
+#       b637a27898b14e25dd24d0f69a3e302f0069deb8 include/pokemon.h:551-555 `struct
+#       __attribute__((packed)) LevelUpMove { u16 move; u8 level; }`, src/learn_move.c: array
+#       terminates at {move:0, level:0xFF}, NOT vanilla's packed single-u16 scheme). A
+#       per-species pointer array (`const struct LevelUpMove* const gLevelUpLearnsets[]`);
+#       decoding species277 (TREECKO) gives clean, level-sorted entries at levels
+#       [1,1,5,9,13,15,17,21,25,29,33,37,41,45,49] then the END sentinel -- no level-16
+#       entry, so leveling 15->16 (TREECKO's own EVO_LEVEL) teaches nothing and the
+#       evolution scene never stops for a move-learn prompt.
+#
+# poison_faint_gen3 (S-11): NOT built. RR's DoPoisonFieldEffect (vanilla pokefirered.sym
+# 080a0618 size 0x82) detours to 0x090B20D4 -- and the bytes there are `00 20 70 47`, i.e.
+# `MOVS r0, #0; BX LR`: an unconditional `return FLDPSN_NONE` stub with NO party loop and NO
+# HP mutation at all (confirmed directly against patch/build/slink_RR.gba; independently
+# already pinned by docs/gen3_engine_sites.md's own source note, "RR DoPoisonFieldEffect
+# detours 080A0618 -> 090B20D4, which is 00207047 (MOVS R0,0; BX LR): no HP mutation exists on
+# this admitted path", citing CFRU src/overworld.c:1934-2001's NO_POISON_IN_OW build option).
+# This is stronger than the "1-HP survive floor" the card asked to check for: field poison
+# cannot faint OR EVEN DAMAGE a party mon outside battle on the companion-patched RR ROM the
+# live duo rows boot, so poison_faint_gen3 is refused for gen3_rr rather than built around a
+# fixture that can never trigger its own oracle.
+SPECIES_TREECKO_RR, SPECIES_GROVYLE_RR = 277, 278       # data/games/gen3_frlge/rr_species.json
+TREECKO_RR_BASE = {"hp": 40, "attack": 45, "defense": 35, "speed": 70,
+                   "sp_attack": 65, "sp_defense": 55}   # RR_BASESTATS_TABLE + 277*28
+TREECKO_RR_GROWTH_RATE = 3                              # GROWTH_MEDIUM_SLOW; same table entry
+TREECKO_RR_EVOLVE_LEVEL = 16                            # RR_EVO_TABLE species 277 slot 0
+TREECKO_RR_EXP_LV15 = 2034                              # RR_EXP_TABLE[3*256 + 15]
+TREECKO_RR_EXP_LV16 = 2535                              # RR_EXP_TABLE[3*256 + 16]
+RR_SYNTH_KINDS = ("evolve",)
+
+
+def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
+    """The SYNTH edit of an RR party fixture for `kind` -> (body, manifest). Deterministic.
+    Surgical sector patch only (see the module note above); never write_sector."""
+    if kind not in RR_SYNTH_KINDS:
+        raise ValueError(f"unknown RR synth kind {kind!r}")
+    report = qualify_one(seed, rr=True)
+    if not report["ok"]:
+        raise ValueError(f"seed does not qualify: {report['message']}")
+    parsed = codec.parse_flash(seed, cfru=True)
+    party = codec.rr_party_from_save(seed)
+    mon = dict(party[0])
+    if mon["species"] != SPECIES_TREECKO_RR:
+        raise ValueError(f"seed party[0] is species {mon['species']}, not TREECKO "
+                         f"(RR species id {SPECIES_TREECKO_RR})")
+    manifest = []
+    if kind == "evolve":
+        level = TREECKO_RR_EVOLVE_LEVEL - 1
+        mon.update(experience=TREECKO_RR_EXP_LV16 - 1, level=level,
+                   **_gen3_stats(TREECKO_RR_BASE, mon, level))
+        mon["hp"] = mon["max_hp"]
+        manifest.append(f"party[0] TREECKO(RR {SPECIES_TREECKO_RR}) Lv{level} "
+                        f"exp={mon['experience']} (Lv{TREECKO_RR_EVOLVE_LEVEL} at "
+                        f"{TREECKO_RR_EXP_LV16}, RR's own MEDIUM_SLOW table) stats recomputed "
+                        f"from RR base stats, hp={mon['hp']}/{mon['max_hp']}; RR's learnset has "
+                        f"no level-{TREECKO_RR_EVOLVE_LEVEL} entry, so no move-learn prompt")
+    raw = codec.encode_party_mon(mon, rr=True)
+    address = codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_OFFSET  # slot 0
+    spans = _rr_write_spans(parsed)
+    patches: dict[int, int] = {}
+    _rr_field_patcher(spans, patches, "party[0]")(address, raw)
+    new_body = bytearray(seed)
+    for offset, value in patches.items():
+        new_body[offset] = value
+    _rr_recompute_touched_checksums(parsed, seed, new_body, manifest)
+    result = bytes(new_body)
+    qualified = qualify_one(result, rr=True)
+    if not qualified["ok"]:
+        raise ValueError(f"derived save does not re-qualify: {qualified['message']}")
+    return result, manifest
+
+
+def cmd_make_rr_synth(args: argparse.Namespace) -> int:
+    body, manifest = build_rr_synth(Path(args.seed).read_bytes(), args.kind)
+    Path(args.out).write_bytes(body)
+    for line in manifest:
+        print("SYNTH " + line)
+    r = qualify_one(body, rr=True)
+    print(f"wrote {args.out} sha256={sha256_hex(body)} ok={r['ok']} party={r['party']}")
+    return 0 if r["ok"] else 1
+
+
+# ---------------------------------------------------------------------------
 
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__,
@@ -1716,6 +1858,13 @@ def build_parser() -> argparse.ArgumentParser:
     p_syn.add_argument("--seed", required=True)
     p_syn.add_argument("--out", required=True)
     p_syn.set_defaults(func=cmd_make_frlg_synth)
+
+    p_syn_rr = sub.add_parser("make-rr-synth", help="NO EMULATOR: SYNTH edit of an RR (CFRU) "
+                                                    "party fixture for a natural-leg row (RR-SYNTH)")
+    p_syn_rr.add_argument("--kind", choices=RR_SYNTH_KINDS, required=True)
+    p_syn_rr.add_argument("--seed", required=True)
+    p_syn_rr.add_argument("--out", required=True)
+    p_syn_rr.set_defaults(func=cmd_make_rr_synth)
 
     return ap
 

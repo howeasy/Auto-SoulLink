@@ -392,7 +392,18 @@ SCENARIOS = {
     # same tile as emerald_battle.sav, so no city/forest walk); B idles on emerald_town_b.sav
     # (already committed). EVOLVE_FACTS (below the oracle) carries the post-evolution species per
     # game so the oracle isn't a Wartortle-only constant.
-    "evolve_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+    # card RR-SYNTH: gen3_rr joins too. rr_evolve_synth.sav (tools/gen3_fixtures.py
+    # make-rr-synth --kind evolve over rr_battle2.sav) is a SYNTH Lv15 TREECKO one EXP short of
+    # its RR Lv16 EVO_LEVEL evolution (RR's own relocated evolution/base-stat/exp tables, not
+    # vanilla FR/LG -- see the build_rr_synth module comment in tools/gen3_fixtures.py); RR's
+    # own level-up learnset has no level-16 entry for TREECKO, so no move-learn prompt. B idles
+    # on the DEFAULT target's "town" ("b": "town" -> rr_town_b.sav, already committed): evolve
+    # never force-faints B, so the single-mon fixture is fine here (unlike poison_faint_gen3
+    # below). No target_by_game override needed: the default {"a": "evolve_synth", "b": "town"}
+    # already resolves to rr_evolve_synth.sav / rr_town_b.sav via gen3_rr's own "rr_{target}"
+    # sides template.
+    "evolve_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"),
+                    "explicit_only": True,
                     "target": {"a": "evolve_synth", "b": "town"},
                     "target_by_game": {"gen3_emerald": {"a": "evolve", "b": "town"}},
                     "frames": 2000000, "no_save": ("b",),
@@ -405,6 +416,15 @@ SCENARIOS = {
     # FR/LG's "town" fixture already carries 2 party mons (unlike Emerald's, which is a single
     # Mudkip for that kind), so B's Emerald side boots "pc" instead (Mudkip + Poochyena, slot 1
     # present) -- the same B-idle fixture boxsync_gen3/whiteout_gen3 already use for gen3_emerald.
+    # card RR-SYNTH: gen3_rr does NOT join this row. The NPC trade needs RR's own in-game trade
+    # table (requested species + received mon) and the trader NPC's map/object-event position,
+    # neither of which is pinned anywhere in this repo (data/games/gen3_rr/profile.json has no
+    # trade-table address, and no map-header/object-event source is cached for RR's map bank).
+    # Guessing either risks shipping a fixture that boots into a wall or trades the wrong mon;
+    # per the card's own instruction this is refused and reported rather than guessed. Someone
+    # with ROM access to RR's relocated trade table (same CFRU-thunk technique used for the
+    # evolution/base-stat/learnset tables above) and a way to read RR's map/event data can pick
+    # this back up.
     "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
                        "target": {"a": "trade_synth", "b": "town"},
                        "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
@@ -414,7 +434,16 @@ SCENARIOS = {
     # lead is force_faint'ed by the server (Soul Link), and a single-mon party would white out
     # (RESULT: FAIL "no memorialize_done" -- the game overs before the memorial can send), exactly
     # the reason linked_faint_active_gen3 already substitutes "pc" for gen3_emerald.
-    "poison_faint_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+    # card RR-SYNTH: gen3_rr does NOT join this row -- checked and refused, not attempted blind.
+    # RR's DoPoisonFieldEffect (vanilla pokefirered.sym 080a0618) detours to 0x090B20D4, whose
+    # bytes are `00 20 70 47` = `MOVS r0,#0; BX LR`: an unconditional `return FLDPSN_NONE` stub,
+    # no party loop, no HP mutation at all (confirmed directly against patch/build/slink_RR.gba;
+    # independently already pinned by docs/gen3_engine_sites.md's own source note citing CFRU
+    # src/overworld.c's NO_POISON_IN_OW build option). Field poison cannot faint OR EVEN DAMAGE a
+    # party mon outside battle on the companion-patched RR ROM these duo rows boot, so there is
+    # no natively-reachable S-11 site to build a SYNTH seed around on gen3_rr.
+    "poison_faint_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"),
+                          "explicit_only": True,
                           "target": {"a": "poison_synth", "b": "town"},
                           "target_by_game": {"gen3_emerald": {"a": "poison", "b": "pc"}},
                           "frames": 2000000,
@@ -7308,6 +7337,7 @@ class DuoRun:
     GEN3_AREA_CONTROL_AREAS = {
         "gen3_frlg": ("viridian_city", "route_1", "route_2", "viridian_forest"),
         "gen3_emerald": ("route_102",),
+        "gen3_rr": ("route_1",),   # rr_battle2 / rr_evolve_synth stand in Route 1 grass (map 3.19)
     }
 
     def _gen3_area_control(self):
@@ -8173,10 +8203,14 @@ class DuoRun:
     # NAT-LEGS-4 (Emerald parity): the post-evolution species is a game fact, not a Wartortle
     # constant. FR/LG: SQUIRTLE (7) -> WARTORTLE (8) at level 16 (pret pokefirered
     # src/data/pokemon/evolution.h, EVO_LEVEL 16). Emerald: MUDKIP (283) -> MARSHTOMP (284) at
-    # level 16 (pret pokeemerald c65e93f2 src/data/pokemon/evolution.h:129). RR is never a source
-    # here (RR data is RR-only) -- this row does not run on gen3_rr.
+    # level 16 (pret pokeemerald c65e93f2 src/data/pokemon/evolution.h:129). RR is never sourced
+    # from vanilla FR/LG/Emerald data (RR data is RR-only): card RR-SYNTH read RR's own
+    # relocated evolution table (tools/gen3_fixtures.py RR_EVO_TABLE = 0x097CD9B0 in
+    # patch/build/slink_RR.gba) directly -- TREECKO (RR species id 277, rr_species.json) ->
+    # GROVYLE (278) at level 16, method EVO_LEVEL.
     EVOLVE_FACTS = {
         "gen3_emerald": {"species": 284, "level": 16},
+        "gen3_rr": {"species": 278, "level": 16},
     }
     EVOLVE_DEFAULT = {"species": 8, "level": 16}
 

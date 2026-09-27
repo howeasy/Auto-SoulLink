@@ -48,3 +48,7 @@ slink_lua.log
 # C5-11b: the Gen 3 client's per-install session counter (lua/gen3/run.lua writes it at
 # the install root, which is the repo root during dev runs).
 slink_gen3_session.*
+
+# Gen 3 durable trade journal (lua/gen3/run.lua), written beside the install root at runtime
+slink_gen3_trade.log
+slink_gen3_trade.guard
