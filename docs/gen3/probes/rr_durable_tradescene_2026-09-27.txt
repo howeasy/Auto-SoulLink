@@ -1,0 +1,62 @@
+[vanilla] partner pid=EBEF11C2 otid=2BDDC8A7 species=277 | slot0 pid before=EBEF11DA | count=1 saves=4
+  [ok] vanilla: producer idle and capability advertised  — phase=0
+  [ok] vanilla: epoch staged in the shadow block
+  [ok] vanilla: PREPARE posted
+  [ok] vanilla: PREPARE acked READY after the native pre-save  — why=nil result=0 reason=0
+  [ok] vanilla: producer READY  — phase=2
+  [ok] vanilla: pre-save witnessed (milestone 0, save OK, accepted+consent)  — milestones=1 save=1 flags=3
+  [ok] vanilla: the pre-save wrote flash (gSaveCounter advanced)  — 4 -> 5
+  [ok] vanilla: SCENE posted
+  [ok] vanilla: SCENE acked COMMITTED  — why=nil result=0 reason=0
+  [ok] vanilla: producer DONE  — phase=4
+  [ok] vanilla: witness: five milestones, save OK, COMMITTED  — milestones=0x1F save=1 final=1
+  [ok] vanilla: witness received identity is the partner  — EBEF11C2:2BDDC8A7
+  [ok] vanilla: the post-save wrote flash  — 5 -> 6
+  [ok] vanilla: gPlayerPartyCount unchanged by the scene  — count 1 -> 1
+  [ok] vanilla: gPlayerParty[0] is now the traded-in partner mon  — got pid=EBEF11C2 otid=2BDDC8A7 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] vanilla: the received species is intact  — species=277
+  [ok] vanilla: beacon still present (no crash)
+[expanded] partner pid=EBEF11C2 otid=2BDDC8A7 species=1324 | slot0 pid before=EBEF11DA | count=1 saves=4
+  [ok] expanded: producer idle and capability advertised  — phase=0
+  [ok] expanded: epoch staged in the shadow block
+  [ok] expanded: PREPARE posted
+  [ok] expanded: PREPARE acked READY after the native pre-save  — why=nil result=0 reason=0
+  [ok] expanded: producer READY  — phase=2
+  [ok] expanded: pre-save witnessed (milestone 0, save OK, accepted+consent)  — milestones=1 save=1 flags=3
+  [ok] expanded: the pre-save wrote flash (gSaveCounter advanced)  — 4 -> 5
+  [ok] expanded: SCENE posted
+  [ok] expanded: SCENE acked COMMITTED  — why=nil result=0 reason=0
+  [ok] expanded: producer DONE  — phase=4
+  [ok] expanded: witness: five milestones, save OK, COMMITTED  — milestones=0x1F save=1 final=1
+  [ok] expanded: witness received identity is the partner  — EBEF11C2:2BDDC8A7
+  [ok] expanded: the post-save wrote flash  — 5 -> 6
+  [ok] expanded: gPlayerPartyCount unchanged by the scene  — count 1 -> 1
+  [ok] expanded: gPlayerParty[0] is now the traded-in partner mon  — got pid=EBEF11C2 otid=2BDDC8A7 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] expanded: the received species is intact  — species=1324
+  [ok] expanded: beacon still present (no crash)
+[fullname] partner pid=EBEF11C2 otid=2BDDC8A7 species=1324 | slot0 pid before=EBEF11DA | count=1 saves=4
+  [ok] fullname: producer idle and capability advertised  — phase=0
+  [ok] fullname: epoch staged in the shadow block
+  [ok] fullname: PREPARE posted
+  [ok] fullname: PREPARE acked READY after the native pre-save  — why=nil result=0 reason=0
+  [ok] fullname: producer READY  — phase=2
+  [ok] fullname: pre-save witnessed (milestone 0, save OK, accepted+consent)  — milestones=1 save=1 flags=3
+  [ok] fullname: the pre-save wrote flash (gSaveCounter advanced)  — 4 -> 5
+  [ok] fullname: SCENE posted
+  [ok] fullname: SCENE acked COMMITTED  — why=nil result=0 reason=0
+  [ok] fullname: producer DONE  — phase=4
+  [ok] fullname: witness: five milestones, save OK, COMMITTED  — milestones=0x1F save=1 final=1
+  [ok] fullname: witness received identity is the partner  — EBEF11C2:2BDDC8A7
+  [ok] fullname: the post-save wrote flash  — 5 -> 6
+  [ok] fullname: gPlayerPartyCount unchanged by the scene  — count 1 -> 1
+  [ok] fullname: gPlayerParty[0] is now the traded-in partner mon  — got pid=EBEF11C2 otid=2BDDC8A7 want pid=EBEF11C2 otid=2BDDC8A7
+  [ok] fullname: the received species is intact  — species=1324
+  [ok] fullname: beacon still present (no crash)
+[bare21] partner pid=EBEF11C2 otid=2BDDC8A7 species=277 | slot0 pid before=EBEF11DA | count=1 saves=4
+  [ok] bare21: producer idle and capability advertised  — phase=0
+  [ok] bare21: epoch staged in the shadow block
+  [ok] bare21: a SCENE without a READY PREPARE is refused  — why=native refused result=0 reason=12
+  [ok] bare21: refused as identity (12)  — why=native refused result=0 reason=12
+  [ok] bare21: nothing traded
+  [ok] bare21: no native save
+RESULT: PASS tradescene (0 checks failed)

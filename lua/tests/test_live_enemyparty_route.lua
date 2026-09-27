@@ -1,15 +1,11 @@
--- test_live_enemyparty_route.lua — LIVE validation of OP_SET_ENEMY_PARTY, the field trade's enemy-
--- party transport, through lua/gen3/native.lua: native:transfer("enemy", {blobs_hex}) stages the
--- partner's raw 100-byte party-mon blobs in BLOB_BUF and posts the op, and the patch byte-copies them
--- into gEnemyParty + sets the count.
+-- test_live_enemyparty_route.lua — RR-DURABLE: OP_SET_ENEMY_PARTY (16), the OLD raw field-trade
+-- staging, through lua/gen3/native.lua's v1 transport (native:transfer("enemy")). On the durable
+-- companion it is a trade bypass (Codex Emerald ruling P1): the patch must ACK ST_FAIL with
+-- REASON_DURABLE_ONLY (9) and leave gEnemyParty and its count untouched. The durable trade stages
+-- the incoming record itself (patch/src/rr_trade_relay.h). The rival swap has its own opcode 28.
 --
--- The point of the opcode (vs CreateMon per slot) is FAITHFULNESS: it must reproduce the partner's
--- EXACT mons (moves/IVs/EVs/PID/item), not a fresh species+level mon. So the gate stages DETERMINISTIC
--- synthetic blobs (distinct per slot) and asserts each enemy slot comes back BYTE-FOR-BYTE identical.
--- The count is set and the first unused slot's maxHP is zeroed (the CFRU scan terminator).
---
--- Savestate-free by design: a pure memcpy into the gEnemyParty EWRAM region, validated from a fresh
--- boot. (The rival swap's own opcode 28 is a separate path: native:replace_rival_team.) PATCHED ROM.
+-- Savestate-free by design: a would-be memcpy into the gEnemyParty EWRAM region, checked from a
+-- fresh boot. PATCHED ROM.
 local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
 local t = G.open("enemypartyroute")
 t.boot()
@@ -54,23 +50,23 @@ for i = 1, N do
     rows[i], hex[i] = b, t.hex(b)
 end
 
--- Sanity: enemy slot 0 currently differs from our blob, so a later match proves the copy wrote.
-t.log("enemy-slot0-pre-differs=" .. tostring(not blob_eq(t.read_blob(ENEMY), rows[1])))
+local before = {}
+for i = 1, N do before[i] = t.read_blob(ENEMY + (i - 1) * MON) end
+local count0 = memory.read_u8(t.ram.ENEMY_COUNT_ADDR)
 
 local job = t.watch(t.native:transfer("enemy", { blobs_hex = hex }))
 t.check("native:transfer(enemy) queued the op", job ~= nil)
 t.check("op posted to the mailbox (dispatch receipt)", t.wait_posted(job))
 local r = t.wait(job, 60)
 t.check("opcode acked", r ~= nil, t.receipt_str(r))
-t.check("ack is ST_OK", r ~= nil and r.why == nil, t.receipt_str(r))
-
+t.check("ack is ST_FAIL (a refused trade bypass)", r ~= nil and r.why == "native refused", t.receipt_str(r))
+t.check("reason is REASON_DURABLE_ONLY (9)", memory.read_u16_le(t.P.BASE + 14) == 9,
+        "reason=" .. memory.read_u16_le(t.P.BASE + 14))
 for i = 1, N do
-    local eq, badj = blob_eq(t.read_blob(ENEMY + (i - 1) * MON), rows[i])
-    t.check("enemy slot " .. (i - 1) .. " byte-identical to staged blob",
-            eq, eq and "" or ("first diff @byte " .. tostring(badj)))
+    local eq, badj = blob_eq(t.read_blob(ENEMY + (i - 1) * MON), before[i])
+    t.check("enemy slot " .. (i - 1) .. " untouched", eq, eq and "" or ("first diff @byte " .. tostring(badj)))
 end
-t.check("gEnemyPartyCount == N", memory.read_u8(t.ram.ENEMY_COUNT_ADDR) == N,
-        "count=" .. memory.read_u8(t.ram.ENEMY_COUNT_ADDR))
-t.check("trailing slot " .. N .. " maxHP zeroed (CFRU scan terminator)", maxhp(N) == 0, "maxhp=" .. maxhp(N))
+t.check("gEnemyPartyCount untouched", memory.read_u8(t.ram.ENEMY_COUNT_ADDR) == count0,
+        "count " .. count0 .. " -> " .. memory.read_u8(t.ram.ENEMY_COUNT_ADDR))
 t.check("beacon still present (no corruption)", t.present())
 t.finish()

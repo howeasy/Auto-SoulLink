@@ -23,7 +23,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 FR_SHA1 = "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc"
 RR_ARTIFACTS = {"964f951a0fdaf209e4ea1344883ef0d557bb3a80": "Pokemon - Radical Red.gba",
-                "7a3867499d66eb3621e0e7dde43bd033fc679f01": "patch/build/slink_RR.gba"}
+                "da579690db7d6933a0952a1f490312842793f71a": "patch/build/slink_RR.gba"}
 NOTE = "docs/gen3/research/rr_harness_syms_2026-09-24.md"
 
 

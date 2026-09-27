@@ -149,13 +149,15 @@ function Entry.artifacts(root, json, pack)
     return out
 end
 
--- Bootstrap storage is meaningful only for a companion with the durable
--- witness ABI. RR's admitted ABI1 must not acquire an unbindable journal.
+-- Bootstrap storage is meaningful only for a companion with the durable witness: the
+-- ABI2 arena, or RR's isolated durable descriptor (RR-DURABLE: native.TRADE_BASE, the shadow
+-- block of patch/src/rr_trade_relay.h). An ABI1 profile without it gets no journal.
 function Entry.trade_journal_supported(root, json, artifact)
     if artifact.kind ~= "companion" and artifact.kind ~= "rand_companion" then return false end
     local files = assert(Entry.PACK_FILES[artifact.pack], "unknown pack")
     local full = load_json(json, root .. "/" .. files.profile)
-    return type(full.native) == "table" and full.native.ABI == 2
+    return type(full.native) == "table" and (full.native.ABI == 2
+        or (artifact.pack == "gen3_rr" and type(full.native.TRADE_BASE) == "number"))
 end
 
 -- hash (lowercase sha1 or md5) -> { pack, title, kind, rom_type } over every pack's
@@ -424,7 +426,9 @@ local function build_production(deps, c)
             artifact_kind = c.artifact_kind, log = log,
             panel_closed = panel_closed,
         })
-        if fr_native then
+        local rr_native = pack == "gen3_rr" and c.title == "radical_red" and c.production == true
+            and type(full_profile.native.TRADE_BASE) == "number"
+        if fr_native or rr_native then
             -- Same persisted boot counter the client uses for its battle nonce.
             -- The wire connection counter is not the native/journal epoch.
             local seed = os.getenv("SLINK_GEN3_BATTLE_NONCE") or deps.battle_nonce_seed

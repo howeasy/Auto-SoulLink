@@ -885,10 +885,12 @@ def test_c511a_the_patch_handler_keeps_the_two_uses_apart():
     for part in ("RV_BATTLE_COMM", "RV_BATTLE_MAIN_FUNC", "RV_GMAIN_CB2", "RV_BATTLE_TYPE_LINK",
                  "RV_TRAINER_OPPONENT", "REASON_WINDOW_CLOSED", "stage_enemy_party(count)"):
         assert part in rival, part
-    trade = src[src.index("case OP_SET_ENEMY_PARTY:"):]
-    trade = trade[:trade.index("case OP_SET_PARTY_MON:")]
-    assert "RV_" not in trade, "opcode 16 must stay free of the window check"
-    assert "stage_enemy_party(count)" in trade
+    # RR-DURABLE (Codex Emerald ruling P1): on the durable build the raw trade stages 16/18
+    # are trade bypasses and are always refused by name; the trade stages through the producer.
+    raw = src[src.index("case OP_SET_ENEMY_PARTY:"):]
+    raw = raw[:raw.index("case OP_SPAWN_PEER_NPC:")]
+    assert "case OP_SET_PARTY_MON:" in raw and "ack(ST_FAIL, REASON_DURABLE_ONLY)" in raw
+    assert "stage_enemy_party" not in raw and "SLINK_BLOB_BUF" not in raw and "gPlayerParty" not in raw
 
 
 @pytest.mark.parametrize("lost_ack", [False, True])

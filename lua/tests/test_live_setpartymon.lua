@@ -1,11 +1,10 @@
--- test_live_setpartymon.lua — LIVE validation of OP_SET_PARTY_MON (the TRADE primitive) through
--- lua/gen3/native.lua. Mirrors what the client does to apply a trade: native:transfer("party", ...)
--- stages ONE 100-byte party-mon blob (the partner's traded half) in BLOB_BUF and posts the op, and the
--- patch byte-copies it into gPlayerParty[slot]. Asserts the slot comes back BYTE-FOR-BYTE identical
--- (faithful: species/moves/IVs/EVs/PID/item).
+-- test_live_setpartymon.lua — RR-DURABLE: OP_SET_PARTY_MON (18), the OLD raw 100-byte record
+-- replacement, through lua/gen3/native.lua's v1 transport (native:transfer("party")). On the durable
+-- companion raw record replacement is never a trade path (Codex Emerald ruling P1): the patch must
+-- ACK ST_FAIL with REASON_DURABLE_ONLY (9) and leave gPlayerParty[slot] and the count untouched.
 --
--- Savestate-free by design: the opcode is a pure memcpy into the gPlayerParty EWRAM region, so it is
--- validated from a fresh boot. PATCHED ROM.
+-- Savestate-free by design: a would-be memcpy into the gPlayerParty EWRAM region, checked from a
+-- fresh boot. PATCHED ROM.
 local G = dofile((SLINK_ROOT or os.getenv("SLINK_ROOT")) .. "/lua/tests/gen3_gatelib.lua")
 local t = G.open("setpartymon")
 t.boot()
@@ -45,19 +44,20 @@ local blob = {}
 for j = 1, MON do blob[j] = (SLOT * 53 + j * 11 + 0x23) % 256 end
 blob[0x58 + 1] = 0x2C; blob[0x59 + 1] = 0x01      -- maxHP = 0x012C (offset 0x58, u16) — non-zero
 
-t.log("slot-pre-differs=" .. tostring(not blob_eq(t.read_blob(PARTY + SLOT * MON), blob)))
+local before = t.read_blob(PARTY + SLOT * MON)
+local count0 = memory.read_u8(t.ram.PARTY_COUNT_ADDR)
 
 local job = t.watch(t.native:transfer("party", { slot = SLOT, blob_hex = t.hex(blob), bump = true }))
 t.check("native:transfer(party) queued the op", job ~= nil)
 t.check("op posted to the mailbox (dispatch receipt)", t.wait_posted(job))
 local r = t.wait(job, 60)
 t.check("opcode acked", r ~= nil, t.receipt_str(r))
-t.check("ack is ST_OK", r ~= nil and r.why == nil, t.receipt_str(r))
-
-local eq, badj = blob_eq(t.read_blob(PARTY + SLOT * MON), blob)
-t.check("gPlayerParty[" .. SLOT .. "] byte-identical to staged blob (faithful trade)",
-        eq, eq and "" or ("first diff @byte " .. tostring(badj)))
-t.check("party count covers the slot (bump)", memory.read_u8(t.ram.PARTY_COUNT_ADDR) >= SLOT + 1,
-        "count=" .. memory.read_u8(t.ram.PARTY_COUNT_ADDR))
+t.check("ack is ST_FAIL (raw record replacement refused)", r ~= nil and r.why == "native refused", t.receipt_str(r))
+t.check("reason is REASON_DURABLE_ONLY (9)", memory.read_u16_le(t.P.BASE + 14) == 9,
+        "reason=" .. memory.read_u16_le(t.P.BASE + 14))
+local eq, badj = blob_eq(t.read_blob(PARTY + SLOT * MON), before)
+t.check("gPlayerParty[" .. SLOT .. "] untouched", eq, eq and "" or ("first diff @byte " .. tostring(badj)))
+t.check("party count untouched", memory.read_u8(t.ram.PARTY_COUNT_ADDR) == count0,
+        "count " .. count0 .. " -> " .. memory.read_u8(t.ram.PARTY_COUNT_ADDR))
 t.check("beacon still present (no corruption)", t.present())
 t.finish()

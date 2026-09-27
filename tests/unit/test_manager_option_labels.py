@@ -36,9 +36,9 @@ def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     assert option_support(key, RR)["ok"]
 
 
-def test_rr_trade_is_named_unavailable_until_its_durable_delta():
-    support = option_support("pc_trade_npc", RR)
-    assert not support["ok"] and "unavailable" in support["why"].lower()
+def test_rr_trade_npc_is_available_with_the_durable_delta():
+    """RR-DURABLE: the witness UPS trades; only an old-UPS client is refused, by the server."""
+    assert option_support("pc_trade_npc", RR)["ok"] is True
 
 
 def test_overworld_presence_is_greyed_everywhere_while_deferred():

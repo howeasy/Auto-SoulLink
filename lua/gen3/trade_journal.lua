@@ -148,8 +148,13 @@ end
 
 -- SOURCE: pokefirered c75f3523 / pokeemerald c65e93f2 save.c, GFRomHeader,
 -- and the independent Python oracle server/adapters/gen3_codec.py:539-638.
--- RR is deliberately absent: never borrow FR's counter or custom save layout.
+-- RR is keyed by its wire rom_type and never borrows FR's layout: CFRU's 0xFF0 chunk
+-- (docs/gen3/research/rr_save_layout.md sec 1), gSaveCounter from RR's own CFRU save
+-- bodies' pool words (0x090B8C70/0x090B8DC4), SaveBlock pointers from the write
+-- checkpoint's ROM-read SetSaveBlocksPointers pool (the profile's SB1_PTR_ADDR is legacy).
 J.RELOAD_LAYOUTS = {
+    firered_rr={counter=0x03005390, sb2_size=0xF24, sb1_size=0x3D68, count_offset=0x34, party_offset=0x38,
+                chunk=0xFF0, sb1_ptr=0x03005008, sb2_ptr=0x0300500C},
     firered={counter=0x03005390, sb2_size=0xF24, sb1_size=0x3D68, count_offset=0x34, party_offset=0x38},
     leafgreen={counter=0x03005390, sb2_size=0xF24, sb1_size=0x3D68, count_offset=0x34, party_offset=0x38},
     emerald={counter=0x03006200, sb2_size=0xF2C, sb1_size=0x3D88, count_offset=0x234, party_offset=0x238},
@@ -168,10 +173,10 @@ local function flash_slot(bytes, first, layout)
             signatures = signatures + 1
             local id = word(bytes,at+0xFF4,2)
             if id > 13 or sections[id] then return nil, "duplicate/invalid save section" end
-            local size
+            local size, chunk = nil, layout.chunk or 0xF80
             if id == 0 then size = layout.sb2_size
-            elseif id <= 4 then size = math.min(0xF80,layout.sb1_size-(id-1)*0xF80)
-            else size = math.min(0xF80,0x83D0-(id-5)*0xF80) end
+            elseif id <= 4 then size = math.min(chunk,layout.sb1_size-(id-1)*chunk)
+            else size = math.min(chunk,0x83D0-(id-5)*chunk) end
             local sum = 0
             for p=0,size-4,4 do sum = (sum + word(bytes,at+p,4)) & U32 end
             if ((sum >> 16) + sum) & 0xFFFF ~= word(bytes,at+0xFF6,2) then return nil, "save checksum mismatch" end

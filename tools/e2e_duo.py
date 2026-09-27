@@ -534,7 +534,7 @@ SCENARIOS = {
                              "no_save": ("a", "b"), "oracle": "assert_rival_swap_real_gen3_saved"},
     "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
-                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
+                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("b",),
                            "oracle": "assert_native_absent_gen3_saved"},
     # G5 two-player evidence for the retired old-client rows, rebuilt on the new client.
     # trade / trade_decline: the companion's Pokemon-Center trade NPC; both boot rr_battle2{,_b}
@@ -2351,8 +2351,11 @@ def gen3_trade_problems(ka, kb, link_rows, saved, fixture, traded):
 
 
 def gen3_trade_chain(inst, ka, kb, decline):
-    """(required, ordered, forbidden) receipt regexes for one side of the NPC trade. A trade must
-    run the native scene on BOTH sides (no silent swap)."""
+    """(required, ordered, forbidden) receipt regexes for one side of the NPC trade (RR-DURABLE):
+    the server's native menus, then on YES the durable round on BOTH sides -- apply_prepare ->
+    apply_ready ok (the native pre-save), apply_trade -> trade_done with the partner's key (the
+    native scene + post-save) -> the server's commit notice. The named refusal an old-UPS client
+    gets is never a pass, and no side may report an uncertain or refused apply."""
     tx = lambda ev, body="": rf"(?m)^TX {ev} - .*{body}"          # noqa: E731
     rx = lambda cmd: rf"(?m)^RX {cmd}(?=\s|$)"                    # noqa: E731
     # TALKED is a required witness but not an ordering anchor: the patch sends trade_request in the
@@ -2366,32 +2369,20 @@ def gen3_trade_chain(inst, ka, kb, decline):
             chain.append(r"(?m)^RX msgbox text=Your partner declined")
     else:
         chain = [rx("show_menu"), tx("menu_result", f'"choice":{0 if decline else 1}')]
+    never = [r"(?m)^REFUSED_UNAVAILABLE ", r"apply_trade refused"]
     if decline:
-        return talked + chain, list(zip(chain, chain[1:], strict=False)), [rx("apply_trade"), tx("trade_done"),
-                                                     r"(?m)^TRADED "]
+        return talked + chain, list(zip(chain, chain[1:], strict=False)), never + [
+            rx("apply_prepare"), rx("apply_trade"), tx("trade_done"), r"(?m)^TRADED "]
     gets = kb if inst == "a" else ka
     gives = ka if inst == "a" else kb
-    chain += [rx("apply_trade"), tx("trade_done", f'"new_key":"{re.escape(gets)}"'),
+    done = tx("trade_done", f'"new_key":"{re.escape(gets)}"')
+    chain += [rx("apply_prepare"), tx("apply_ready", '"ok":true'), rx("apply_trade"), done,
               rf"(?m)^TRADED gave={re.escape(gives)} got={re.escape(gets)} "]
-    # each side ran the NATIVE scene (lua/gen3/client.lua trade_readback), never the silent-swap
-    # fallback the initiator used while the party chooser left its script waiting
-    native = rf"trade: native scene complete; trade_done {re.escape(gives)} -> {re.escape(gets)}"
-    return talked + chain + [native], list(zip(chain, chain[1:], strict=False)), [r"silent swap"]
-
-
-def gen3_trade_unavailable_chain(inst):
-    """(required, forbidden) receipt regexes for trade_gen3/trade_decline_gen3 on RR: ABI1 trade is
-    UNAVAILABLE until its durable-trade delta lands (docs/protocol.md) -- the server refuses A's
-    own trade_request itself, a named msgbox, never show_choices; B never hears about it at all.
-    Nothing moves on either cartridge (lua/tests/duo/scenario_gen3_trade.lua)."""
-    tx = lambda ev: rf"(?m)^TX {ev} - "                            # noqa: E731
-    rx = lambda cmd: rf"(?m)^RX {cmd}(?=\s|$)"                     # noqa: E731
-    forbidden = [rx("show_choices"), rx("show_menu"), rx("apply_trade"), tx("trade_done"),
-                r"(?m)^TRADED "]
-    if inst == "a":
-        return [tx("trade_request"), rx("msgbox"), r"(?m)^REFUSED_UNAVAILABLE reason=",
-               r"(?m)^KEPT "], forbidden
-    return [r"(?m)^KEPT "], forbidden
+    # the server's commit notice follows BOTH trade_done reports, so it may land after this
+    # side's own TRADED read-back (live receipt, RR-DURABLE trade_gen3): ordered after trade_done only
+    notice = r"(?m)^RX msgbox text=Traded "
+    return (talked + chain + [notice], list(zip(chain, chain[1:], strict=False)) + [(done, notice)],
+            never + [tx("apply_ready", '"ok":false'), tx("trade_done", '"uncertain":true')])
 
 
 def gen3_panel_text(raw: bytes) -> str:
@@ -7862,19 +7853,28 @@ class DuoRun:
 
     def orchestrate_trade_gen3(self):
         """The RR PC trade NPC, driven only by the two cartridges: link the slot-1 mons (server
-        staging), name each side's partner key, GO. RR ABI1 trade is UNAVAILABLE until its
-        durable-trade delta lands (docs/protocol.md): A talks to the NPC and the server refuses
-        the trade_request itself, before ever opening the Trade/Say hey list; B never hears about
-        it. Both save once A's refusal is logged and each side confirms it kept its own mon."""
+        staging), name each side's partner key, GO. A talks to the NPC and answers the server's
+        native menus, B answers the offer, and on YES both run the durable native trade
+        (RR-DURABLE: pre-save, scene, post-save); nothing is injected after GO. Both save only
+        once the server has settled (re-keyed links.json, or a declined offer on both receipts)."""
         self._gen3_prelude(link_slot=self.cfg.get("trade_slot", 1))
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         lines = self._gen3_linked_lines()
         lines["a"].append(f"PARTNER {kb}")
         lines["b"].append(f"PARTNER {ka}")
         self.go(lines)
-        self._gen3_mark("a", r"^REFUSED_UNAVAILABLE reason=", "A's trade_request was refused")
-        for inst, key in (("a", ka), ("b", kb)):
-            self._gen3_mark(inst, rf"^KEPT {re.escape(key)} ", "kept its linked mon")
+        if self.scenario == "trade_decline_gen3":
+            self._gen3_mark("b", r"^DECLINED ", "B declined the offer")
+            for inst, key in (("a", ka), ("b", kb)):
+                self._gen3_mark(inst, rf"^KEPT {re.escape(key)} ", "kept its linked mon")
+        else:
+            self._gen3_mark("a", rf"^TRADED gave={re.escape(ka)} got={re.escape(kb)} ", "A traded")
+            self._gen3_mark("b", rf"^TRADED gave={re.escape(kb)} got={re.escape(ka)} ", "B traded")
+
+            def rekeyed():
+                return any((e.get("a") or {}).get("key") == kb and (e.get("b") or {}).get("key") == ka
+                           for e in self._links_json())
+            self.wait_for("links.json re-keyed by the server's commit", rekeyed, 120)
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
 
@@ -7893,36 +7893,40 @@ class DuoRun:
 
     orchestrate_infopanel_dex_gen3 = orchestrate_infopanel_gen3
 
-    def _gen3_trade_unavailable_facts(self, results):
-        """RR ABI1 trade is UNAVAILABLE until its durable-trade delta lands (docs/protocol.md): the
-        server refuses A's own trade_request itself, a named msgbox, before it can ever open the
-        Trade/Say hey list -- B never hears about it. Nothing moves on either cartridge."""
+    def _gen3_trade_facts(self, results, traded):
         self._gen3_flush_boundary()
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         problems = gen3_trade_problems(
             ka, kb, self._links_json(), {i: self._gen3_saved(i) for i in "ab"},
-            {i: self._gen3_fixture_saved(i) for i in "ab"}, traded=False)
+            {i: self._gen3_fixture_saved(i) for i in "ab"}, traded)
         for inst in ("a", "b"):
-            required, forbidden = gen3_trade_unavailable_chain(inst)
-            problems += gen3_receipt_problems(inst, results[inst], required=required, forbidden=forbidden)
+            required, ordered, forbidden = gen3_trade_chain(inst, ka, kb, not traded)
+            problems += gen3_receipt_problems(inst, results[inst], required=required,
+                                              ordered=ordered, forbidden=forbidden)
             if inst == "a" and len(re.findall(r"(?m)^TX trade_request ", results[inst])) != 1:
                 problems.append("a: expected exactly one trade_request")
         if re.search(r"(?m)^TX trade_request ", results["b"]):
             problems.append("b: sent a trade_request (it never talked to the NPC)")
+        if traded:
+            for inst, gets in (("a", kb), ("b", ka)):
+                got = next((m for m in self._gen3_saved(inst)[0] if gen3_key(m) == gets), None)
+                if got is not None:
+                    problems += gen3_record_problems(f"{inst}: the received {gets}", got,
+                                                     self._gen3_rr, self._gen3_limits(inst))
         return ka, kb, problems
 
     def assert_trade_gen3_saved(self, results):
-        ka, kb, problems = self._gen3_trade_unavailable_facts(results)
-        self._gen3_raise(problems, f"trade_gen3: RR ABI1 trade unavailable -- the server refused "
-                                   f"{ka}'s trade_request before the Trade/Say hey list ever "
-                                   f"opened; both saves keep their fixture party, link {ka}/{kb} "
-                                   f"unchanged")
+        ka, kb, problems = self._gen3_trade_facts(results, traded=True)
+        self._gen3_raise(problems, f"trade_gen3: NPC talk -> Trade -> slot 1 -> partner YES -> "
+                                   f"durable native pre-save/scene/post-save both sides; saved a holds "
+                                   f"{kb}, b holds {ka} (partner records intact), links.json re-keyed, "
+                                   f"each key once")
 
     def assert_trade_decline_gen3_saved(self, results):
-        ka, kb, problems = self._gen3_trade_unavailable_facts(results)
-        self._gen3_raise(problems, f"trade_decline_gen3: RR ABI1 trade unavailable -- the server "
-                                   f"refused {ka}'s trade_request before any offer reached B; "
-                                   f"both saves keep their fixture party, link {ka}/{kb} unchanged")
+        ka, kb, problems = self._gen3_trade_facts(results, traded=False)
+        self._gen3_raise(problems, f"trade_decline_gen3: offer {ka} for {kb} declined with B; no "
+                                   f"apply_prepare/apply_trade, both saves hold their fixture party, "
+                                   f"link unchanged")
 
     def assert_infopanel_gen3_saved(self, results):
         alive = sum(1 for e in self._links_json() if e.get("status") == "alive")
@@ -8354,17 +8358,15 @@ class DuoRun:
         return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
 
     def orchestrate_native_absent_gen3(self):
-        """PLAN P5's clean-vs-companion RR control, with a VALID operation (Codex C4-6b finding 6;
-        the trade port landed at 78908fe8): B boots rom_kind=clean, A the companion build. Each
-        side is sent a well-formed apply_trade -- its slot-1 key as old_key, the PARTNER
-        fixture's slot-1 party record as blob_hex. The companion must stage it natively (the
-        stage op ACKed, the trade FSM past "stage"); the clean cartridge must refuse it and write
-        nothing."""
+        """PLAN P5's clean-vs-companion RR control (Codex C4-6b finding 6), redesigned for the
+        durable trade (RR-DURABLE): B boots rom_kind=clean, A the companion build. Each side is
+        sent the same well-formed apply_prepare -- its slot-1 key as old_key. The companion must
+        answer ok only after its NATIVE pre-save (PREPARE posted, the native save dialog, READY);
+        the clean cartridge must answer ok:false and write nothing."""
         ka, kb = self._gen3_prelude()
         self.go()
-        for inst, own, partner in (("a", ka, "b"), ("b", kb, "a")):
-            self.queue_command(inst, {"cmd": "apply_trade", "slot": 1, "old_key": own[1],
-                                      "blob_hex": self._gen3_party_record_hex(partner, 1),
+        for inst, own in (("a", ka), ("b", kb)):
+            self.queue_command(inst, {"cmd": "apply_prepare", "slot": 1, "old_key": own[1],
                                       "token": f"native_absent_{inst}"})
         self._native_absent_keys = {"a": ka[1], "b": kb[1]}
 
@@ -9128,29 +9130,27 @@ class DuoRun:
                                    "identity-less team was refused with stale_battle_id")
 
     def assert_native_absent_gen3_saved(self, results):
-        """native_absent_gen3: the same valid apply_trade, two outcomes. A (companion): the client
-        queued it, wrote through the armed native window, and the stage op completed (NATIVE_
-        STAGED: the FSM left "stage"). B (clean): the client's refusal line, no native write, zero
-        writes. Neither side saves."""
-        ka, kb = self._native_absent_keys["a"], self._native_absent_keys["b"]
+        """native_absent_gen3 (RR-DURABLE): the same valid apply_prepare, two outcomes. A
+        (companion): a native write AFTER the command (the PREPARE post; the link panel may write
+        native before it), the native pre-save (gSaveCounter advanced), the producer READY, and
+        apply_ready ok:true. B (clean): apply_ready ok:false, no write at all. Neither side saves."""
         native_write = r"(?m)^\[client\] \[SLink-gen3\] write native "
-        queued = rf"(?m)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued"
-        staged = r"(?m)^NATIVE_STAGED phase=\S+ writes=[1-9]"
-        # the trade's own native write FOLLOWS the queued line: the companion's link panel
-        # (RX link_panel) legitimately writes native before any trade arrives (live 156a521f),
-        # so the first `write native` line proves nothing about the trade
-        trade_write = (rf"(?ms)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued.*?"
-                       r"^\[client\] \[SLink-gen3\] write native .*?^NATIVE_STAGED phase=\S+ writes=[1-9]")
+        prepared = r"(?m)^NATIVE_PREPARED phase=2 writes=[1-9]"
+        after_cmd = r"(?ms)^RX apply_prepare\b.*?^\[client\] \[SLink-gen3\] write native "
+        ready_ok = r'(?m)^TX apply_ready - .*"ok":true'
         problems = gen3_receipt_problems(
-            "a", results["a"], required=[r"(?m)^RX apply_trade\b", queued, native_write, staged, trade_write])
-        refused = (rf"(?m)^\[client\] \[SLink-gen3\] apply_trade refused: no trade path on this "
-                   rf"cartridge \(nothing written\) {re.escape(kb)}")
+            "a", results["a"], required=[r"(?m)^RX apply_prepare\b", after_cmd, ready_ok, prepared],
+            forbidden=[r'(?m)^TX apply_ready - .*"ok":false'])
+        m = re.search(r"(?m)^PRESAVE_COUNTER before=(\d+) after=(\d+)$", results["a"])
+        if not m or int(m[2]) <= int(m[1]):
+            problems.append("a: the native pre-save never advanced gSaveCounter "
+                            f"({m[0] if m else 'no PRESAVE_COUNTER line'})")
         problems += gen3_receipt_problems(
-            "b", results["b"], required=[r"(?m)^RX apply_trade\b", refused, r"(?m)^WRITES 0$",
-                                         r"(?m)^PROBE_SETTLED writes=0$"],
-            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write "])
-        self._gen3_raise(problems, "native_absent: the companion staged the valid trade natively; "
-                                   "the clean cartridge refused it and wrote nothing")
+            "b", results["b"], required=[r"(?m)^RX apply_prepare\b", r'(?m)^TX apply_ready - .*"ok":false',
+                                         r"(?m)^WRITES 0$", r"(?m)^PROBE_SETTLED writes=0$"],
+            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write ", r'"ok":true'])
+        self._gen3_raise(problems, "native_absent: the companion answered the valid prepare only after "
+                                   "its native pre-save; the clean cartridge refused it and wrote nothing")
 
     def _run_oracle(self, results):
         """Revalidate the family contract and run its injected evidence stages.

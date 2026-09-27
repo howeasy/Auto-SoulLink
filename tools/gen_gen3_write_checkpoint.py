@@ -63,7 +63,7 @@ ROMS = {
         "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     ("gen3_rr", "radical_red", "companion"): (
         ROOT / "patch" / "build" / "slink_RR.gba",
-        "7a3867499d66eb3621e0e7dde43bd033fc679f01"),
+        "da579690db7d6933a0952a1f490312842793f71a"),
     ("gen3_emerald", "emerald", "clean"): (
         pathlib.Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"),
         "f3ae088181bf583e55daf962a92bb46f4f1d07b7"),
@@ -1279,6 +1279,9 @@ def native_block(profile: dict | None) -> dict | None:
         if nat.get(key) is None:
             continue
         spans.append({"key": key, "start": nat[key], "size": size, "what": what})
+    if nat.get("TRADE_BASE") is not None:   # RR-DURABLE: patch/src/rr_trade_relay.h shadow block
+        spans.append({"key": "TRADE_BASE", "start": nat["TRADE_BASE"] + 0x44, "size": 4,
+                      "what": "RR-DURABLE shadow session_epoch (the only host-written word of the durable block)"})
     entry = {"version": "gen3-native-v1", "base": nat.get("BASE"), "sig": nat.get("SIG"),
              "abi": nat.get("ABI"), "info": nat.get("INFO"), "spans": spans, "source": NATIVE_SOURCE}
     entry.update(NATIVE_LAYOUT)

@@ -101,6 +101,32 @@ function N.new(profile, deps)
             fail_reasons[c.SLINK_REASON_WITHDRAW_TOO_LATE] = "withdraw_too_late"
         end
     end
+    -- RR-DURABLE (Codex Emerald ruling P3): Radical Red stays ABI1 (its legacy reasons 11/12
+    -- keep their meaning). Its durable trade is an ISOLATED descriptor: the shared FR/LG
+    -- producer's shadow SlinkMailboxV2 at profile native.TRADE_BASE (patch/src/rr_trade_relay.h)
+    -- holds capabilities/session_epoch/producer_phase at +0x40/+0x44/+0x48 and the witness at
+    -- +0x50; commands still travel through the ABI1 mailbox at BASE. The witness layout and
+    -- constants below are abi.h's, the same literals the v2 path asserts its generated ABI against.
+    -- Bound only for the admitted production RR companion (lua/gen3/entry.lua): any other ABI1
+    -- world keeps the v1 transport, whose raw 16/18/21 trade paths the durable patch refuses.
+    local rr_durable = not v2 and profile.pack == "gen3_rr" and deps.title == "radical_red"
+        and deps.production == true and integer(p.TRADE_BASE, 0x0203FFAF)
+        and p.TRADE_BASE >= p.BASE + 0x50 or false
+    local rr_trade_constants
+    if rr_durable then
+        local d = p.TRADE_BASE - p.BASE
+        offsets.capabilities, offsets.session_epoch, trade_phase_offset = d + 0x40, d + 0x44, d + 0x48
+        trade_fields = {session_epoch=0x00, visit_id=0x04, token=0x08, revision=0x18, visit_flags=0x1A,
+            milestones=0x1C, milestone_seq=0x20, final_result=0x2A, save_status=0x2B,
+            milestone_frame=0x2C, old_pid=0x40, old_otid=0x44, received_pid=0x48, received_otid=0x4C}
+        rr_trade_constants = {SLINK_PHASE_IDLE=0, SLINK_PHASE_PRE_SAVE=1, SLINK_PHASE_READY=2,
+            SLINK_PHASE_SCENE=3, SLINK_PHASE_DONE=4, SLINK_PHASE_UNCERTAIN=5,
+            SLINK_REASON_WITHDRAW_TOO_LATE=14, SLINK_CAP_DURABLE_TRADE=1, SLINK_WITNESS_OFFSET=0x50,
+            SLINK_SUCCESS_MILESTONES=0x1F, SLINK_SAVE_OK=1}
+        fail_reasons[14] = "withdraw_too_late" -- unused by any RR v1 opcode
+    end
+    local epoch_mailbox = v2 ~= nil or rr_durable
+    local trade_base = rr_durable and p.TRADE_BASE or p.BASE
     local O = offsets
     local session_epoch = 0
     local io, writes = assert(deps.io), assert(deps.writes)
@@ -112,10 +138,12 @@ function N.new(profile, deps)
     local trade_binding_job, trade_serial = nil, 0
     local fr_v2 = v2 and (profile.pack == "gen3_frlg"
         or (profile.pack == "gen3_emerald" and deps.title == "emerald" and deps.production == true))
+        or rr_durable
     local frlg_title = (profile.pack == "gen3_frlg" and (deps.title == "firered" or deps.title == "leafgreen"))
         or (profile.pack == "gen3_emerald" and deps.title == "emerald")
+        or rr_durable
     local control
-    if fr_v2 and frlg_title and deps.production == true then
+    if v2 and fr_v2 and frlg_title and deps.production == true then
         local c, layout = v2.constants, assert(v2.structs.SlinkControlV2, "CONTROL layout required")
         assert(layout.size == 16 and c.SLINK_PI_COUNT_WIDTH == 4, "invalid CONTROL layout")
         for name, expected in pairs({session_epoch={0,4},pi_count={4,4},tn_enable={8,1}}) do
@@ -168,7 +196,7 @@ function N.new(profile, deps)
                 seq=io.read_u16(p.BASE + O.seq), status=io.read_u16(p.BASE + O.status),
                 ack_seq=io.read_u16(p.BASE + O.ack), reason=io.read_u16(p.BASE + O.reason)}
             out.reason_name = fail_reasons[out.reason]
-            if v2 then
+            if epoch_mailbox then
                 out.capabilities = io.read_u32(p.BASE + O.capabilities)
                 out.session_epoch = io.read_u32(p.BASE + O.session_epoch)
                 if trade_phase_offset then out.producer_phase = io.read_u32(p.BASE + trade_phase_offset) end
@@ -213,7 +241,7 @@ function N.new(profile, deps)
         for _, job in ipairs(waiting) do finish(job, why) end
     end
     local function check_epoch()
-        if not v2 then return true end
+        if not epoch_mailbox then return true end
         local ok, value = pcall(io.read_u32, p.BASE + O.session_epoch)
         if not ok or not integer(value, 0xFFFFFFFF) then
             poisoned = "native epoch unreadable"
@@ -255,7 +283,7 @@ function N.new(profile, deps)
         return job
     end
     function self:set_session_epoch(value)
-        if not v2 then return nil, "unsupported native ABI" end
+        if not epoch_mailbox then return nil, "unsupported native ABI" end
         if not integer(value, 0xFFFFFFFF) or value == 0 then return nil, "invalid session epoch" end
         if not present() then return nil, "native absent" end
         local epoch_ok, epoch_why = check_epoch()
@@ -357,7 +385,7 @@ function N.new(profile, deps)
 
     -- Soul Link Match Call mirrors gen2/phone.lua's optional tags and scheduling.
     -- The native Emerald producer owns the contact, text and safe UI entry.
-    local cc = v2 and v2.constants
+    local cc = v2 and v2.constants or rr_trade_constants
     local call_title = profile.titles and profile.titles.emerald
     local species_table = call_title and call_title.rom_tables and call_title.rom_tables.gSpeciesInfo
     local species_count = species_table and species_table.count
@@ -527,6 +555,16 @@ function N.new(profile, deps)
     end
     function self:trade_eligible(mon)
         if not self:trade_capable() or type(mon) ~= "table" then return false end
+        if rr_durable then
+            -- RR facts: CFRU leaves the BoxPokemon checksum zero (no checksum_ok key, never false),
+            -- species ids run past FR's 411 (a u16), and ItemIsMail (0x080980F8) is byte-identical
+            -- to FR's in RR, so 121..132 are its mail items too.
+            return integer(mon.species, 0xFFFF) and mon.species > 0 and mon.checksum_ok ~= false
+                and mon.has_species == 1 and mon.is_bad_egg ~= 1 and mon.is_bad_egg ~= true
+                and mon.is_egg ~= 1 and mon.is_egg ~= true and mon.is_egg_flag ~= 1
+                and mon.is_egg_flag ~= true and mon.mail == 0xFF
+                and integer(mon.held_item, 0xFFFF) and not (mon.held_item >= 121 and mon.held_item <= 132)
+        end
         -- Pinned pokefirered include/constants/items.h:121..132 are the
         -- contiguous mail items; MAIL_NONE is 0xFF. These are FR-only facts.
         return integer(mon.species, 411) and mon.species > 0 and mon.checksum_ok == true
@@ -573,7 +611,7 @@ function N.new(profile, deps)
         return bytes
     end
     local function trade_witness(t, final_seq)
-        local wf, base = trade_fields, p.BASE + cc.SLINK_WITNESS_OFFSET
+        local wf, base = trade_fields, trade_base + cc.SLINK_WITNESS_OFFSET
         local ok, w = pcall(function()
             local before = io.read_u16(base + wf.revision)
             local raw = io.read_bytes(base, 0x50)

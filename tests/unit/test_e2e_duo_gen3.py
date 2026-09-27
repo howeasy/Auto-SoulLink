@@ -630,43 +630,52 @@ def test_link_oracle_counts_the_thrown_balls(monkeypatch, tmp_path):
 
 
 # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────────
-def _native_absent_receipts(ka="KA", kb="KB"):
-    a = ("RX apply_trade\n"
-         f"[client] [SLink-gen3] apply_trade received for {ka}: queued for the native trade\n"
-         "[client] [SLink-gen3] write native 0x0203F800 +100 frame 9\n"
-         "TRADE_PHASE scene\nNATIVE_STAGED phase=scene writes=3\nWRITES 3\n")
-    b = ("RX apply_trade\n"
-         f"[client] [SLink-gen3] apply_trade refused: no trade path on this cartridge (nothing written) {kb}\n"
+def _native_absent_receipts():
+    a = ("RX apply_prepare\n"
+         "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n"
+         "PRESAVE_COUNTER before=4 after=5\n"
+         'TX apply_ready - {"event":"apply_ready","ok":true,"token":"native_absent_a"}\n'
+         "NATIVE_PREPARED phase=2 writes=3\nWRITES 3\n")
+    b = ("RX apply_prepare\n"
+         'TX apply_ready - {"event":"apply_ready","ok":false,"token":"native_absent_b"}\n'
          "PROBE_SETTLED writes=0\nWRITES 0\n")
     return {"a": a, "b": b}
 
 
-def test_native_absent_oracle_needs_a_native_stage_and_a_clean_refusal():
-    """Finding 6: the same VALID trade proves the companion's success and the clean refusal."""
+def test_native_absent_oracle_needs_a_native_presave_and_a_clean_refusal():
+    """RR-DURABLE redesign: the same valid apply_prepare. The companion answers ok only after its
+    native pre-save (a native write after the command, gSaveCounter advanced, producer READY);
+    the clean cartridge answers ok:false and writes nothing."""
+    # the companion half saves natively (its pre-save), so only the clean half is no_save;
+    # A's flash is byte-checked by the save-witness stage like every saving half
+    assert duo.SCENARIOS["native_absent_gen3"]["no_save"] == ("b",)
     run = _oracle_run("native_absent_gen3", game="gen3_rr")
     notes = []
     run._pydec_note = notes.append
     run._native_absent_keys = {"a": "KA", "b": "KB"}
     receipts = _native_absent_receipts()
     run.assert_native_absent_gen3_saved(receipts)
-    assert notes and "staged the valid trade" in notes[-1]
-    # the old probe's outcome -- both sides refuse, nobody writes -- is now a FAIL on A
-    both_refuse = dict(receipts, a=receipts["b"].replace("KB", "KA"))
-    with pytest.raises(RuntimeError, match="write native"):
+    assert notes and "native pre-save" in notes[-1]
+    both_refuse = dict(receipts, a=receipts["b"])
+    with pytest.raises(RuntimeError, match="write native|ok.:true"):
         run.assert_native_absent_gen3_saved(both_refuse)
-    unstaged = dict(receipts, a=receipts["a"].replace("NATIVE_STAGED phase=scene writes=3\n", ""))
-    with pytest.raises(RuntimeError, match="NATIVE_STAGED"):
-        run.assert_native_absent_gen3_saved(unstaged)
+    unsaved = dict(receipts, a=receipts["a"].replace("after=5", "after=4"))
+    with pytest.raises(RuntimeError, match="pre-save"):
+        run.assert_native_absent_gen3_saved(unsaved)
+    not_ready = dict(receipts, a=receipts["a"].replace("NATIVE_PREPARED phase=2", "NATIVE_PREPARED phase=1"))
+    with pytest.raises(RuntimeError, match="NATIVE_PREPARED"):
+        run.assert_native_absent_gen3_saved(not_ready)
     clean_wrote = dict(receipts, b=receipts["b"] + "[client] [SLink-gen3] write overworld 0x1 +2 frame 3\n")
     with pytest.raises(RuntimeError, match="forbidden"):
         run.assert_native_absent_gen3_saved(clean_wrote)
-    # live 156a521f: the companion's link panel writes native BEFORE the trade arrives; the
-    # trade's own write is the one after the queued line, and that is what must exist
+    clean_ok = dict(receipts, b=receipts["b"].replace('"ok":false', '"ok":true'))
+    with pytest.raises(RuntimeError, match="ok.:false"):
+        run.assert_native_absent_gen3_saved(clean_ok)
+    # the companion's link panel writes native BEFORE the command; only a write after it counts
     panel = "RX link_panel\n[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4\n"
-    run.assert_native_absent_gen3_saved(dict(receipts, a=panel + receipts["a"]))
     panel_only = dict(receipts, a=panel + receipts["a"].replace(
-        "[client] [SLink-gen3] write native 0x0203F800 +100 frame 9\n", ""))
-    with pytest.raises(RuntimeError, match="missing"):
+        "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n", ""))
+    with pytest.raises(RuntimeError, match="write native"):
         run.assert_native_absent_gen3_saved(panel_only)
 
 
@@ -1195,7 +1204,7 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 1, key = "K1", hp = 5, max_hp = 17, species = 16, level = 4 },
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
-                  D = {}, hp0_tag = "FORCED_HP0", title = spec.emerald and "emerald" or "firered",
+                  D = { wt = WT }, hp0_tag = "FORCED_HP0", title = spec.emerald and "emerald" or "firered",
                   emerald_engine = spec.emerald and true or false,
                   rr = spec.rr and true or false }
     -- E4c-2: an Emerald whiteout heals in C before the landing (overworld.c:357-366), so the
@@ -1311,11 +1320,15 @@ function FAKE(scenario, player, phase, spec)
     ctx.wait_received = function(cmd)
         if cmd == "force_explode" and spec.executes ~= false then used = 153 end
         -- the companion's native stage writes; the clean side writes only what spec.writes says
-        if cmd == "apply_trade" then writes = writes + (player == "a" and 3 or (spec.writes or 0)) end
+        if cmd == "apply_prepare" then writes = writes + (player == "a" and 3 or (spec.writes or 0)) end
         return spec.received ~= false
     end
     ctx.last_sent = function(event)
         if event == "rival_team_replaced" then return spec.rival_reply or { error = "stale_battle_id" } end
+        if event == "apply_ready" then
+            if spec.ready_ok ~= nil then return { ok = spec.ready_ok } end
+            return { ok = player == "a" }
+        end
         return { area_id = "route_1", species_id = 16 }
     end
     ctx.await_turn = function() return spec.turn or "action" end
@@ -1385,8 +1398,11 @@ function FAKE(scenario, player, phase, spec)
                -- Emerald's START-menu witness (EMH.menu_ready), the same open flag as RR's
                EMH = { menu_ready = function() return rr_menu_open end } }
     -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
+    ctx.press = ctx.press or function() end
     ctx.peek_u8 = function(addr)
         if addr == 0x0203ABE0 then return rr_menu_open and 1 or 0xFF end
+        if addr == 0x0203FE98 then return spec.producer_phase or 2 end    -- RR TRADE_BASE + 0x48
+        if addr >= 0x03005390 and addr < 0x03005394 then return addr == 0x03005390 and 4 or 0 end
         error("fake ctx.peek_u8: no address " .. tostring(addr))
     end
     ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
@@ -1580,6 +1596,7 @@ def lua():
         defs += face
     if all(defs):
         runtime.globals().HOLD_SRC = "\n".join(d.group(0) for d in defs)
+    runtime.globals().WT = str(REPO).replace(chr(92), "/")
     runtime.execute(_FAKE_CTX)
     return runtime
 
@@ -1646,7 +1663,8 @@ def _run_module(lua, scenario, player, phase, spec):
     # explode runs on the P+H model (_PH_MODEL, case "explode")
     ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
     ("rival_swap", "a", "initial", {}, []),
-    ("native_absent", "a", "initial", {}, ["TRADE_PHASE scene", "NATIVE_STAGED phase=scene writes=3"]),
+    ("native_absent", "a", "initial", {}, ["PRESAVE_COUNTER before=4 after=4",
+                                           "NATIVE_PREPARED phase=2 writes=3"]),
     ("native_absent", "b", "initial", {}, ["PROBE_SETTLED writes=0"]),
 ])
 def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spec, markers):
@@ -1667,9 +1685,10 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
     ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='window_closed'}"}, "expected error=stale_battle_id"),
-    ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_trade never arrived"),
+    ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_prepare never arrived"),
     ("native_absent", "b", "initial", {"writes": 1}, "the clean cartridge wrote 1 time(s)"),
-    ("native_absent", "a", "initial", {"trade_phase": "fallback"}, "the native stage failed"),
+    ("native_absent", "a", "initial", {"ready_ok": "lua:false"}, "the companion refused the valid prepare"),
+    ("native_absent", "b", "initial", {"ready_ok": "lua:true"}, "the clean cartridge said ok"),
     # finding 2's falsifier: the mirrored deposit ACKed (stats_cache) but moved nothing
     ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
@@ -4755,13 +4774,13 @@ FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
     "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
-    "7a3867499d66eb3621e0e7dde43bd033fc679f01": REPO / "patch" / "build" / "slink_RR.gba",
+    "da579690db7d6933a0952a1f490312842793f71a": REPO / "patch" / "build" / "slink_RR.gba",
 }
 
 
 # (the companion no longer carries a Task_HandleChooseMonInput 0x0811FB29 literal: its party chooser
 # calls RR's ChoosePartyMonByMenuType, which owns that reference)
-COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x0837992C]}
+COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x08379D84]}
 
 
 def _pret_battle_berries():

@@ -915,7 +915,7 @@ class SoulLinkState:
         """Talk-to-partner → show the native action menu (TRADE / SAY HEY). TRADE opens the party
         picker; SAY HEY just pings the partner."""
         unavailable = self.adapter.trade_unavailable_reason()
-        if unavailable:
+        if unavailable and not all(self.trade_prepare.values()):
             self.queued_commands[player_id].append({"cmd": "msgbox", "text": unavailable})
             return
         if self.pending_trade is not None:

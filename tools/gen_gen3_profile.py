@@ -196,6 +196,8 @@ RR_DERIVED = {
     # the same id as pret's SPECIES_SHEDINJA (FRLG_DERIVED above).
     "SHEDINJA_SPECIES_ID": (303, 'data/games/gen3_frlge/rr_species.json:"303"="Shedinja" '
                             "(RR species table; CFRU keeps this id unrenumbered)"),
+    "SB2_NAME_OFFSET": (0x00, "archive/gen3-old-client:lua/memory_gba.lua:721-725 (old-client RR profile, "
+                        "production-tested: M.readTrainerName decodes playerName generically at SB2+0)"),
     "BATTLE_MON_STAT_STAGES_OFF": (0x19, "archive/gen3-old-client:lua/memory_gba.lua:402-406 (old-client RR profile, "
                                    "production-tested: M.readStatStages; CFRU puts type3 at "
                                    "+0x18, so ATK..EVA start at +0x19)"),
@@ -205,7 +207,7 @@ RR_DERIVED = {
 # were read from the admitted companion SHA1 below and checked against clean RR.
 # Keep complete reader bodies + literal pools, so a pointer alone is not evidence
 # for which field is being accessed. No Capstone dependency in the generator.
-RR_WITNESS_SHA1 = "7a3867499d66eb3621e0e7dde43bd033fc679f01"
+RR_WITNESS_SHA1 = "da579690db7d6933a0952a1f490312842793f71a"
 RR_ROM_ANCHORS = {
     "controller_exec_marker": (0x17248,
         "00b50006030e0848006802210840002810d0064a06499800401801680907106808431060"
@@ -635,7 +637,7 @@ MAILBOX_C_SYMBOL = {
     "BATTLE_NOTIF": "BN", "TN_ENABLE": "TN", "CALC_OFF": "SLINK_CALC_OFF", "INFO": "SI",
     "INFO_MAXLINES": "INFO_ROWS", "INFO_PAGESLOT": "INFO_PAGE_SLOT", "INFO_BAR_W": "BAR_W",
     "EVR": "EV", "GH": "GH", "GHOST_PAL_BUF": "GHOST_PAL_BUF", "GPLAYER_AVATAR": "gPlayerAvatar",
-    "SW": "SW", "EV_PLAYER_FAINT": "EV_PLAYER_FAINT", "EV_FOE_FAINT": "EV_FOE_FAINT",
+    "SW": "SW", "TRADE_BASE": "RT_BASE", "EV_PLAYER_FAINT": "EV_PLAYER_FAINT", "EV_FOE_FAINT": "EV_FOE_FAINT",
     "EV_OUTCOME": "EV_OUTCOME", "EV_PARTY_ADD": "EV_PARTY_ADD", "EV_EVOLVE": "EV_EVOLVE",
 }
 # ghost/object-event addresses (post-RC feature; kept for the same byte-identical reason as
@@ -654,6 +656,7 @@ MAILBOX_OPCODES = (
     "OP_SHOW_MENU", "OP_SET_PARTY_MON", "OP_PLAY_SE", "OP_CHOOSE_PARTY_MON", "OP_TRADE_SCENE",
     "OP_SHOW_CHOICES", "OP_SHOW_BATTLE_MESSAGE", "OP_DEPOSIT_MON", "OP_WITHDRAW_MON",
     "OP_MEMORIALIZE", "OP_SHOW_INFO", "OP_RIVAL_SWAP",
+    "OP_TRADE_PREPARE", "OP_TRADE_WITHDRAW", "OP_TRADE_STATUS",   # RR-DURABLE producer opcodes
 )
 
 # `#define NAME <literal>` or the pointer-cast form `#define NAME ((Type *)<literal>)`.

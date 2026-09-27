@@ -199,7 +199,7 @@ OPTION_SUPPORT = {
                      "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                      "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
-                     "gen3_frlge_rr": {"ok": False, "why": "Trade unavailable for Radical Red in this build."}},
+                     "gen3_frlge_rr": {"ok": True}},
 }
 
 
