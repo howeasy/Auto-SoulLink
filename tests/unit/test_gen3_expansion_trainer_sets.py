@@ -50,12 +50,18 @@ sys.path.insert(0, str(_REPO))
 from server.adapters import gen3_expansion as _gen3_expansion_mod  # noqa: E402
 from server.adapters.gen3_expansion import ROM_TYPE, Gen3ExpansionAdapter  # noqa: E402
 from server.adapters.gen3_frlge import default_moves  # noqa: E402
+from tools.gen_area_map import _expansion_source_sha256  # noqa: E402
 from tools.gen_gen3_exp_trainers import (  # noqa: E402
+    AREA_MAP,
+    KEY_CLASSES,
+    UNBATTLED_KEY_CANDIDATES,
+    _check_area_map_digest,
     enum_values,
     parse_learnset_tables,
     parse_species_learnset_symbols,
     pretty,
 )
+from tools.gen_gen3_trainers import area_of_map, map_jsons, map_keys, read as _read  # noqa: E402
 
 _LOCK = json.loads((_REPO / "data/gen3_exp_sources.lock.json").read_text(encoding="utf-8"))
 _PIN = _LOCK["source"]["commit"]
@@ -406,3 +412,200 @@ def test_trainers_pack_source_mismatch_fails_closed(tmp_path, monkeypatch):
             _gen3_expansion_mod._load_trainers_pack()
     finally:
         _gen3_expansion_mod._load_trainers_pack.cache_clear()
+
+
+# ── OMP cx-c801628e (independent re-review of XC4b's fixes) -- card XC4c ────────────────────
+
+def test_key_trainer_name_collisions_within_an_area_get_distinct_fight_labels():
+    """Item 1 (MAJOR): server.py's _trainer_panel_html (~server.py:1020-1041) only folds
+    same-name key trainers into ONE Upcoming Key Trainers row (rendered as sub-variants) when
+    every trainer in the (area, name, level_cap // 10) bucket has a NON-EMPTY and pairwise
+    DISTINCT fight_label; otherwise every trainer gets its own row. Without fight_label at all
+    (the bug this card fixes), Brendan/May's starter-variant fights and a gym leader's Vs
+    Seeker rematch tiers would never group -- 6 separate "Brendan" rows on route_103 instead of
+    one "Brendan" row with 3 starter sub-variants. Reproduces server.py's exact bucketing over
+    the shipped pack (not source-gated: this is a property of the generated data, checked
+    directly)."""
+    data = _pack()
+    by_const = {t["const"]: t for t in data["trainers"].values()}
+    cap_bucket_size = 10
+    buckets: dict[tuple, list[str]] = {}
+    for t in data["trainers"].values():
+        if not t.get("key") or not t.get("area"):
+            continue
+        cap_bucket = (t.get("level_cap") or 0) // cap_bucket_size
+        buckets.setdefault((t["area"], t["name"].title(), cap_bucket), []).append(t["const"])
+    multi = {k: v for k, v in buckets.items() if len(v) > 1}
+    assert multi, "expected at least one same-name/same-area/same-level-band key trainer group"
+    # The review's own example: route_103/110/119 each carry a 3-way Brendan bucket and a
+    # 3-way May bucket (their three starter variants) -- THESE must clear server.py's
+    # distinct-nonempty check (fight_label present and unique per variant), or the panel would
+    # still show them as 6 separate rows instead of one row with 3 sub-variants. (Not every
+    # multi-trainer bucket needs this: e.g. victory_road's WALLY_VR_1/VR_2 land in the same
+    # cap_bucket by coincidence but are genuinely different fights, not a starter/rematch
+    # group -- WALLY_VR_1 has no fight_label, so server.py correctly falls back to separate
+    # rows for that pair instead of merging them.)
+    # level_cap differs per route (5 / 20 / 31 -- Brendan/May get stronger as the story
+    # advances), so each area lands in its own cap_bucket; look each one up rather than
+    # assuming a shared bucket index.
+    for area in ("route_103", "route_110", "route_119"):
+        for name in ("Brendan", "May"):
+            cap = next(t["level_cap"] for t in data["trainers"].values()
+                       if t.get("area") == area and t["name"] == name and t.get("key"))
+            key = (area, name, cap // cap_bucket_size)
+            assert key in multi, (key, sorted(buckets))
+            labels = [by_const[c].get("fight_label") or "" for c in multi[key]]
+            assert len(multi[key]) == 3, (key, multi[key])
+            assert all(labels), (key, multi[key], labels)
+            assert len(set(labels)) == len(labels), (key, multi[key], labels)
+    wally = [t["fight_label"] for t in data["trainers"].values()
+             if t["const"].startswith("TRAINER_WALLY_") and t.get("fight_label")]
+    assert any(fl.startswith("Rematch") for fl in wally), wally
+
+
+def test_grematchtable_area_matches_independently_derived_map_area():
+    """Item 2 (MAJOR): literal ground-truth check for four gRematchTable rows, read straight
+    from src/battle_setup.c at the pin (not from the generator's own output) and resolved to
+    an area through the SAME area_of_map() BFS-fallback the generator uses -- Rustboro City,
+    Mauville City and Lavaridge Town carry no area_map.json entry of their own, so this
+    actually exercises the BFS fallback, not a direct lookup."""
+    src = _need_source()
+    keys = map_keys(src)
+    all_maps = map_jsons(src)
+    grouped_maps = {name: m for name, m in all_maps.items() if m["id"] in keys}
+    area_map = json.loads(AREA_MAP.read_text(encoding="utf-8"))
+    map_area = area_of_map(grouped_maps, keys, area_map)
+    battle_setup = _read(src / "src/battle_setup.c")
+
+    cases = [
+        ("REMATCH_ROXANNE", "TRAINER_ROXANNE_", "MAP_RUSTBORO_CITY", "route_104"),
+        ("REMATCH_WATTSON", "TRAINER_WATTSON_", "MAP_MAUVILLE_CITY", "route_110"),
+        ("REMATCH_FLANNERY", "TRAINER_FLANNERY_", "MAP_LAVARIDGE_TOWN", "route_112"),
+        ("REMATCH_TATE_AND_LIZA", "TRAINER_TATE_AND_LIZA_", "MAP_MOSSDEEP_CITY", "mossdeep_city"),
+    ]
+    data = _pack()
+    for rematch_name, const_prefix, expected_map, expected_area in cases:
+        m = re.search(rf"\[{rematch_name}\]\s*=\s*REMATCH\(([^)]*)\)", battle_setup)
+        assert m, rematch_name
+        args = [p.strip() for p in m.group(1).split(",")]
+        assert len(args) == 6 and args[-1] == expected_map, (rematch_name, args)
+        assert map_area.get(expected_map) == expected_area, (expected_map, map_area.get(expected_map))
+
+        tiers = {t["const"]: t for t in data["trainers"].values()
+                  if re.fullmatch(rf"{const_prefix}\d", t["const"])}
+        assert len(tiers) == 5, (const_prefix, sorted(tiers))
+        for const, t in tiers.items():
+            assert t.get("area") == expected_area, (const, t.get("area"))
+
+
+def test_trainer_party_ivs_macro_param_order_matches_the_generator():
+    """Item 3 (MAJOR): the generator's per-mon .iv parse (tools/gen_gen3_exp_trainers.py's
+    parse_mons + build()) assumes TRAINER_PARTY_IVS(hp, atk, def, speed, spatk, spdef) --
+    SPEED in the 4th slot, not spatk (module docstring). Read the macro definition straight
+    from this pin's include/data.h, independent of the generator, and assert the parameter
+    order actually matches, so a future pin reordering the macro's arguments fails loudly here
+    instead of silently mis-mapping every trainer mon's IVs."""
+    src = _need_source()
+    text = _read(src / "include/data.h")
+    m = re.search(r"#define\s+TRAINER_PARTY_IVS\(([^)]*)\)", text)
+    assert m, "TRAINER_PARTY_IVS macro definition not found in include/data.h"
+    params = [p.strip() for p in m.group(1).split(",")]
+    assert params == ["hp", "atk", "def", "speed", "spatk", "spdef"], params
+
+
+def test_every_json_pack_mon_carries_explicit_ivs():
+    """Item 5 (MINOR): this build's trainers.h always sets an explicit .iv (module docstring,
+    verified one .iv per .species in src/data/trainers.h) -- the generator now refuses instead
+    of defaulting to a fake all-31 spread (tools/gen_gen3_exp_trainers.py's setdex-building
+    loop) when a mon has none, so every party mon shipped in the pack must carry its own
+    explicit ivs dict; this asserts the invariant the refusal protects, on the shipped data."""
+    data = _pack()
+    checked = 0
+    for t in data["trainers"].values():
+        for mon in t["party"]:
+            assert mon.get("ivs"), (t["const"], mon["species"])
+            checked += 1
+    assert checked > 0
+
+
+def test_area_map_digest_refuses_on_a_mismatched_source_tree(tmp_path):
+    """Item 5 (MINOR): _check_area_map_digest() recomputes tools/gen_area_map.py's
+    _expansion_source_sha256 (the same digest gen3_exp_areas.lua's own header records,
+    binding it to its map_groups.json/region_map_sections.json/wild_encounters.json inputs)
+    and refuses area_map.json when it doesn't match -- a stale area_map.json built from a
+    different source tree (a map reordering between expansion versions) must never be used
+    quietly. Self-contained: builds a tiny synthetic source tree, no pinned source needed."""
+    fake_src = tmp_path / "src"
+    (fake_src / "data/maps").mkdir(parents=True)
+    (fake_src / "src/data/region_map").mkdir(parents=True)
+    (fake_src / "data/maps/map_groups.json").write_text("{}", encoding="utf-8")
+    (fake_src / "src/data/region_map/region_map_sections.json").write_text("{}", encoding="utf-8")
+    (fake_src / "src/data/wild_encounters.json").write_text("{}", encoding="utf-8")
+    area_map = tmp_path / "area_map.json"
+    area_map.write_text("{}", encoding="utf-8")
+    areas_lua = tmp_path / "gen3_exp_areas.lua"
+
+    areas_lua.write_text(f"-- source_sha256: {'0' * 64}\n", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        _check_area_map_digest(fake_src, area_map)
+
+    areas_lua.write_text(f"-- source_sha256: {_expansion_source_sha256(fake_src)}\n", encoding="utf-8")
+    _check_area_map_digest(fake_src, area_map)  # matching digest: no raise
+
+    areas_lua.unlink()
+    with pytest.raises(SystemExit):
+        _check_area_map_digest(fake_src, area_map)  # no areas.lua at all: refuse, don't skip
+
+
+def test_rival_class_is_trainer_class_rival_never_a_pokemon_trainer_macro():
+    """Item 6 (reviewer's open question): confirm which TRAINER_CLASS_* Brendan/May/Wally use
+    in this build. Verified against the pin: TRAINER_CLASS_RIVAL (displayed "{PKMN} TRAINER"
+    via src/battle_main.c's gTrainerClasses, which the adapter's calc_name/pretty() path turns
+    into "Pokémon Trainer"); no TRAINER_CLASS_POKEMON_TRAINER macro exists anywhere in this
+    pin. KEY_CLASSES must track the real constant, not the display text."""
+    src = _need_source()
+    trainer_types = _read(src / "include/constants/trainers.h")
+    assert "TRAINER_CLASS_RIVAL" in trainer_types
+    assert "TRAINER_CLASS_POKEMON_TRAINER" not in trainer_types
+    trainers_h = re.sub(r"#line \d+\n\s*", "", _read(src / "src/data/trainers.h"))
+    m = re.search(r"\[DIFFICULTY_NORMAL\]\[TRAINER_BRENDAN_ROUTE_103_MUDKIP\]\s*=\s*\{.*?"
+                  r"\.trainerClass\s*=\s*TRAINER_CLASS_(\w+),", trainers_h, re.S)
+    assert m and m.group(1) == "RIVAL"
+    assert "RIVAL" in KEY_CLASSES
+
+
+def test_unbattled_key_candidates_never_appear_in_any_battle_script():
+    """Item 5 (MINOR): TRAINER_RED/TRAINER_LEAF are RIVAL-classed with a real party, so
+    KEY_CLASSES alone would flag them key -- but nothing in the pinned source ever fights
+    them: not a map trainerbattle/multi-battle script, not a gRematchTable row. Scans the same
+    two file sets tools/gen_gen3_trainers.py's trainer_maps() and this generator's
+    parse_rematch_groups() read (map scripts.inc/data/scripts *.inc, and battle_setup.c) --
+    independent of trusting the generator's own UNBATTLED_KEY_CANDIDATES exclusion."""
+    src = _need_source()
+    haystack = [_read(src / "src/battle_setup.c")]
+    haystack += [_read(p) for p in (src / "data/maps").glob("*/scripts.inc")]
+    haystack += [_read(p) for p in (src / "data/scripts").glob("*.inc")]
+    text = "\n".join(haystack)
+    for const in sorted(UNBATTLED_KEY_CANDIDATES):
+        assert not re.search(rf"\b{const}\b", text), const
+
+    data = _pack()
+    for const in UNBATTLED_KEY_CANDIDATES:
+        t = next(v for v in data["trainers"].values() if v["const"] == const)
+        assert not t.get("key"), const
+
+
+def test_key_trainers_with_no_area_are_reported():
+    """Item 5 (MINOR, report only): every OTHER key trainer the shipped pack has no area for.
+    Currently TRAINER_TABITHA_MOSSDEEP/TRAINER_MAXIE_MOSSDEEP: their fight is a `multi_2_vs_2`
+    script line in MossdeepCity_SpaceCenter_2F/scripts.inc, a macro
+    tools/gen_gen3_trainers.py's SHARED trainer_maps() helper doesn't recognise (it only
+    matches `trainerbattle*` lines) -- a real gap, but in shared code out of this card's lease
+    (tools/gen_gen3_exp_trainers.py may only READ that helper, not patch it). This test reports
+    the known set rather than silently accepting a growing one: a new area-less key trainer
+    should be looked at, not waved through."""
+    data = _pack()
+    arealess = sorted(t["const"] for t in data["trainers"].values()
+                       if t.get("key") and not t.get("area"))
+    print(f"key trainers with no area: {arealess}", file=sys.stderr)
+    assert arealess == ["TRAINER_MAXIE_MOSSDEEP", "TRAINER_TABITHA_MOSSDEEP"], arealess
