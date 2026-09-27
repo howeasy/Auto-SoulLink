@@ -48,10 +48,12 @@ def test_rand_pairs_only_with_rand():
 
 @pytest.mark.asyncio
 async def test_a_clean_firered_cannot_join_a_rand_run_and_the_kind_reaches_the_adapter(tmp_path):
+    from tests.unit.test_gen3_rand_admission import randomized_payload
+
     srv = SLinkServer(data_dir=str(tmp_path))
     send, close = await _session(srv)
     try:
-        await send(_hello("a", FR_RAND))
+        await send(_hello("a", {**FR_RAND, "rom_content": randomized_payload()}))
         assert srv.state.artifact_kind == "rand"
         assert srv.adapter._artifact_kind == "rand", "set_artifact_kind stored the committed kind"
         await send(_hello("b", FR_CLEAN))

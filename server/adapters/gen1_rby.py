@@ -276,6 +276,10 @@ def _natdex(internal: int) -> int:
 class Gen1Adapter(GameAdapter):
     """One per-player view of a Gen 1 cartridge; ROM encounters can override retail."""
 
+    @classmethod
+    def supports_randomized(cls, rom_type: str) -> bool:
+        return isinstance(rom_type, str) and rom_type in _ROM_VARIANT
+
     def __init__(self, **kwargs):
         rom_type = kwargs.get("rom_type") or "red"
         if rom_type not in _ROM_VARIANT:

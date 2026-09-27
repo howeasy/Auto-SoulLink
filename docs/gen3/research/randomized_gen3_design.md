@@ -37,14 +37,28 @@ anchors)`, with 18-31 K bytes changed, 690-730 of them below 0x1E0000 (code).
   falsifier of the whole effort is that same scratch run expecting `rand`.
 
 **Key design decision: mirror Gen 1's rule-table policy exactly.** Types, evolutions,
-movesets, base stats and abilities stay forbidden, so `evo_family`/`species_types`
+movesets, base stats, growth rates and abilities stay forbidden, so `evo_family`/`species_types`
 (species/dupes/type clause) keep reading the vanilla pret tables. `adapter_for` already rests on
 this: `server/server.py:913-918` says rule semantics "retain the run adapter" because
 "supported randomizer settings share those semantics". Only DISPLAY and PANEL data is read per
 ROM: wild encounters and trainer parties. The client ships raw table bytes, as Gen 1 does, and
 the server decodes them with `server/adapters/gen3_rom_tables.py` (Codex is building it). The
-server also decodes evolutions and species info to REFUSE a cartridge whose rule tables
-differ from vanilla. That turns the policy into a check, even for a ROM built outside the Manager.
+server also decodes evolutions and species info to REFUSE a cartridge whose evolution methods,
+parameters or targets, base stats, types, gender ratios, growth rates or abilities differ from vanilla. The
+Manager and server use one `normalised_species_rules` projection, including SpeciesInfo byte
+19 (growth rate) and 16 (gender ratio). RF-5 classifies every SpeciesInfo byte in `data/games/gen3_frlg/species_rules.json`; this data drives the projection. Catch rate and held items are explicit ruling-31 exceptions to the unprojected-byte/write-domain disjointness check. All other unprojected bytes are disjoint from allowed write spans. The ability-fill cross-check covers the fork's writable species (1 onward); species-zero is retained in the 284-species normalization set but has no baseline write span. The sparse report does not include level-up learnsets: under accepted RF-2
+option B, cartridge-reported default-move parties omit inferred moves, while explicit trainer
+moves remain available. The Manager's whole-file write-domain audit also checks forbidden
+learnset writes in the outputs it prepares.
+
+**Owner ruling 33 (2026-09-26): obedience and evolution-gate code patches are allowed.**
+When wild encounters, starters or statics are randomized, the fork's Deoxys/Mew obedience
+patch and removal of the pre-National-Dex gate on level/stone evolutions are accepted RC side
+effects. They are not evolution-rule table changes. The permitted bytes are the
+`obedience_evo_code` domain in `data/games/gen3_frlg/upr_write_domains.json`, enabled by those
+settings in `server/upr_gen3_write_domain.py` `domains_for_spec`. Evolution-table edits remain
+forbidden, and engine sites/checkpoint anchors still have to match. The recorded owner decision
+is `docs/gen3/G4_request_draft.md` §6 ruling 33.
 
 ## 1. The accepted framework (Gen 1 / pureRGB), to mirror
 

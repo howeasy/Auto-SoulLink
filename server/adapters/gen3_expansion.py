@@ -160,6 +160,10 @@ class Gen3ExpansionAdapter(Gen3Adapter):
     def game_id(self):
         return "gen3_exp"
 
+    def reports_box_census(self) -> bool:
+        # Server data support is not an admitted client that stamps complete box scans.
+        return False
+
     def species_name(self, species_id):
         return _name(self._species.get(species_id, {}), f"Species #{species_id}")
 
