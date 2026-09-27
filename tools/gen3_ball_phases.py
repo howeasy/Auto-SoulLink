@@ -78,6 +78,9 @@ def transition(run):
         run._pydec_note(json.dumps(manifest, sort_keys=True))
         Path(run.go_files[i]).unlink(missing_ok=True)
     run._ball_phases, run._gen3_phase_fixtures = phases, fixtures
+    # Declare both forthcoming phases before constructing either stub. A's
+    # partner path must not point at B's already-completed phase-1 receipt.
+    run._phase = {**getattr(run, "_phase", {}), "a": "post_flip", "b": "post_flip"}
     for i in ("a", "b"):
         run.launch_instance(i, phase="post_flip", seed=True)
     run._gen3_prelude()

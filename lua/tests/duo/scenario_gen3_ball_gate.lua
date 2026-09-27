@@ -92,11 +92,24 @@ return function(ctx)
         end
     end
     if ctx.title == "radical_red" then
-        ctx.SP.return_to_grass_origin(ctx.cp, "pre-ball")
+        -- The lead has just fainted. This short re-anchor can itself encounter
+        -- a wild mon before the parcel helper is loaded; never inherit FIGHT.
+        local walked, walk_why = ctx.flee_incidentals("pre-ball return", function()
+            ctx.SP.return_to_grass_origin(ctx.cp, "pre-ball")
+        end)
+        if not walked then return false, "pre-ball return RUN failed: " .. tostring(walk_why) end
         local rr = dofile(ctx.D.wt .. "/lua/tests/gen3_rr_battle_fixture.lua")
         -- Catch the first encounter on the return from Oak; a setup flee here
         -- would dead-zone the first legal area before the intended catch.
-        if not rr.native_ball_gift(ctx.cp, reward, catch_current) then return false, "RR native parcel reward failed" end
+        local function flee_before_reward()
+            local ok, why = ctx.run_away("parcel before first Ball")
+            if not ok then ctx.fail("pre-ball parcel RUN failed: " .. tostring(why)) end
+            ctx.jlog("BALL_PARCEL_FLEE", {outcome=ctx.battle_outcome(), balls=ctx.balls()})
+            return true
+        end
+        if not rr.native_ball_gift(ctx.cp, reward, catch_current, flee_before_reward) then
+            return false, "RR native parcel reward failed"
+        end
     else
         local x = ctx.G.pos(ctx.cp)
         if ctx.title == "emerald" and x ~= 3 then ctx.play.step(ctx.cp, "Left", 6148, true, false) end

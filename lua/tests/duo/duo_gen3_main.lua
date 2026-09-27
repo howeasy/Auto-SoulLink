@@ -1721,7 +1721,7 @@ if wants_routes then
         u32=function(a) return memory.read_u32_le(a,"System Bus") end,
     },S,log)
 end
-if D.active_faint_case == "whiteout" then
+if D.active_faint_case == "whiteout" or D.scenario == "ball_gate_gen3" then
     --- fn() with every incidental battle FLED instead of fought (T2's proven escape policy,
     --- gen3_routes.lua with_incidental_escape); the lone-lead walks of linked_faint_active's
     --- whiteout case (W3, live FR-as-A at b0483efe: the walk back fought a Route 1 encounter,
