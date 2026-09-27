@@ -46,17 +46,17 @@ def test_unmanaged_config_does_not_invent_a_run_identity(tmp_path):
     assert config["run_id"] == ""
 
 
-def _server(tmp_path):
+def _server(tmp_path, title=None):
     srv = SLinkServer(data_dir=str(tmp_path))
     for pid in ("a", "b"):
-        srv._dispatch(pid, _hello(pid, pc_boxes=[{"key": "00000003:" + pid * 8,
+        srv._dispatch(pid, _hello(pid, rom_type=title or TITLES[pid], pc_boxes=[{"key": "00000003:" + pid * 8,
                                                 "species_id": 25, "box": 0, "slot": 0}]))
         assert srv.is_admitted(pid) and not srv.state.identity_error.get(pid)
     return srv
 
 
-def _applying(tmp_path, *, prepare_only=False):
-    srv = _server(tmp_path)
+def _applying(tmp_path, *, prepare_only=False, title=None):
+    srv = _server(tmp_path, title)
     entry = LinkEntry(area_id="route_1", status=LinkStatus.ALIVE,
                       a=MonInfo(key=KEYS["a"], species=1, level=12),
                       b=MonInfo(key=KEYS["b"], species=4, level=12))
@@ -77,14 +77,15 @@ def _applying(tmp_path, *, prepare_only=False):
 
 
 @pytest.mark.parametrize("event", ["hello", "tick", "safe"])
-def test_hidden_snapshot_preserves_last_good_party_and_display(tmp_path, event):
-    srv = _server(tmp_path)
+@pytest.mark.parametrize("title", ["firered", "emerald", "firered_rr"])
+def test_hidden_snapshot_preserves_last_good_party_and_display(tmp_path, event, title):
+    srv = _server(tmp_path, title)
     state = srv.state
     before = deepcopy((state.party_keys["a"], state.party_size["a"],
                        state.partner_blobs["a"], state.party_key_census["a"],
                        state.party_slots["a"], state.snapshot_no["a"],
                        srv.party_details["a"], srv.pc_boxes["a"]))
-    msg = _hello("a", party=[], pc_boxes=[], pc_boxes_generation=2, party_hidden=True)
+    msg = _hello("a", rom_type=title, party=[], pc_boxes=[], pc_boxes_generation=2, party_hidden=True)
     msg["event"] = event
     srv._dispatch("a", msg)
     after = (state.party_keys["a"], state.party_size["a"],
@@ -328,7 +329,7 @@ async def test_malformed_recovery_stays_connected_hidden_and_visible_on_board(tm
         response = await client.get("/")
         html = await response.text()
         assert response.status == 200
-        assert "Player A: party withheld" in html and "recovery information" in html
+        assert "Player A: party withheld" in html and recovery["problem"] in html
     restarted = SLinkServer(data_dir=str(tmp_path))
     assert restarted.state.trade_recovery_errors["a"] == recovery["problem"]
 
@@ -530,6 +531,65 @@ def test_final_receipt_is_one_way_bookkeeping_with_a_bounded_epoch():
     for fields in ({"token": ""}, {"verdict": "await"}, {"epoch": True}, {"epoch": 0},
                    {"epoch": 1.5}, {"epoch": None}, {"epoch": 2**32}):
         assert schema.validate_command({"cmd": "trade_final", "token": "t1", "verdict": "committed", **fields})
+
+
+@pytest.mark.parametrize("title", ["firered", "emerald", "firered_rr"])
+@pytest.mark.parametrize("via", ["state", "server"])
+@pytest.mark.parametrize("event", ["capture", "faint", "party_to_box", "box_to_party",
+                                    "key_change", "whiteout", "release"])
+def test_hidden_player_cannot_mutate_game_state(tmp_path, caplog, title, via, event):
+    srv, _entry, _token = _applying(tmp_path, title=title)
+    srv._dispatch("a", _hello("a", rom_type=title, party_hidden=True))
+    state = srv.state
+    snapshot = lambda: deepcopy((state.links, state.party_keys, state.pending_captures,
+                                 state.pending_trade, state.queued_commands, state.sync_inflight,
+                                 srv.party_details, srv.pc_boxes, srv._mon_cache))
+    before = snapshot()
+    msg = {"event": event, "key": KEYS["a"], "old_key": KEYS["a"],
+           "new_key": "00000009:00000011", "new_species": 25, "reason": "npc_trade",
+           "area_id": "route_2", "species_id": 25, "level": 10, "hp": 20, "maxHP": 20}
+    if event == "capture":
+        msg["key"] = "00000009:00000011"
+    elif event == "whiteout":
+        msg = {"event": event}
+    call = state.handle_event if via == "state" else srv._dispatch
+    assert call("a", msg) == [{"cmd": "noop", "refused": "party_hidden"}]
+    assert snapshot() == before
+    assert event in caplog.text and "party hidden" in caplog.text
+
+
+def test_empty_visible_hello_releases_visibility_but_is_not_trade_evidence(tmp_path):
+    srv, entry, token = _applying(tmp_path)
+    srv._dispatch("a", _hello("a", trade_outstanding=[{"token": token, "epoch": 7}]))
+    srv._dispatch("a", _hello("a", party=[]))
+    assert not srv.state.party_hidden["a"] and not srv.state.trade_recovery_pending["a"]
+    assert srv.state.pending_trade["verdict"]["a"] == "await"
+    assert srv.state.pending_trade["hello_only"]["a"] is True
+    assert srv.state.party_keys["a"] == set() and srv.state.party_size["a"] == 0
+    assert srv.state.partner_blobs["a"] == [] and srv.party_details["a"] == {}
+    assert entry.a.key == KEYS["a"] and entry.b.key == KEYS["b"]
+
+
+def test_recovery_capability_refusal_is_not_reported_as_wrong_save(tmp_path):
+    from server.board import connection_state
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv._dispatch("a", _hello("a", rom_type="emerald_expansion_28877d73", party_hidden=True))
+    connection = connection_state(srv._build_status_dict()["players"]["a"], live=True)
+    assert connection["slug"] == "wrong_game"
+    assert connection["label"] == "Unsupported recovery"
+    assert "Trade recovery extension unavailable" in connection["line"]
+    assert "Wrong save" not in connection["line"] and "different trainer" not in connection["line"]
+
+
+@pytest.mark.asyncio
+async def test_recovery_banner_displays_and_escapes_the_actual_problem(tmp_path):
+    srv = _server(tmp_path)
+    srv._dispatch("a", _hello("a", party_hidden=True))
+    srv.state.trade_recovery_errors["a"] = "Unreadable <journal> & lease"
+    async with TestClient(TestServer(build_app(srv))) as client:
+        html = await (await client.get("/")).text()
+    assert "Unreadable &lt;journal&gt; &amp; lease" in html
+    assert "Unreadable <journal>" not in html
 
 
 def _legacy_trace(path, title, decorated, rejected=False):

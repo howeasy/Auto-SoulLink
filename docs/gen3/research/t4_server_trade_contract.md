@@ -327,3 +327,28 @@ The T4 test file now has 78 controls; the combined targeted suite passed 269 tes
 Both normal and rejected-hello traces remain byte-identical to `cd5c1697` for all five GB
 titles; managed-run config controls separately verify omission of `run_id` for Gen 1/2.
 No client/producer/READY change or physical qualification is part of this card.
+
+
+## T4-R4 review follow-up
+
+The server owns the hidden-party mutation gate: for opted-in players it refuses `capture`,
+`faint`, `party_to_box`, `box_to_party`, `key_change`, `whiteout`, and `release` with
+`noop{refused:"party_hidden"}` plus a warning. The guard runs before state acknowledgements,
+watchdogs, held-event insertion, or presentation enrichment. The client MUST NOT publish
+these mutations while its party is withheld; a refused report is not an acknowledgement of
+its effect and must not be treated as processed. No change to Gen 1/2's non-opted-in handling.
+
+The board classifies recovery-capability refusal as **Unsupported recovery**, not Wrong save,
+and renders the actual recovery problem with HTML escaping. Hidden snapshot/opt-in controls
+now cover FireRed, Emerald and RR. Forty-two gate cases (seven events, both dispatch seams,
+three titles) failed before the guard and pass afterward.
+
+An explicit visible `hello` with `party: []` is still an authoritative empty snapshot: it
+releases `party_hidden` / `trade_recovery_pending`, clears the retained party caches, and
+supplies **no trade evidence**. The pending trade remains `await` + `hello_only`, so a concrete
+trade_done still cannot settle it. The client remains responsible for qualifying any visible
+hello's reload provenance. This behavior is pinned by a dedicated control.
+
+Known limit (N2): no admin debug-clear endpoint is provided. A later valid visible hello is
+the server release path. Targeted R4 + prior state/hello/board/accessibility controls:
+**224 passed in 5.67s**. Full-suite verification will be appended after the R4 run.
