@@ -1021,13 +1021,23 @@ def parse_rom_content(payload: dict) -> dict[int, bytes]:
     the SHA-1 of the bytes shipped (recomputed, never trusted). That SHA-1 is transport integrity
     only; admission compares gen3_content_fingerprint (rom_content_fingerprint)."""
     rom = {}
+    previous_end = None
     for row in payload["tables"]:
         addr, raw = row["addr"], bytes.fromhex(row["hex"])
         if not isinstance(addr, int) or isinstance(addr, bool) or not raw:
             raise ValueError("rom_content regions need an integer address and bytes")
-        rom[addr] = raw   # an overlap fails in the decoder; a repeated address, the fingerprint
+        if previous_end is not None and addr < previous_end:
+            raise ValueError("rom_content regions must be strictly ascending and non-overlapping")
+        previous_end = addr + len(raw)
+        rom[addr] = raw
     if not rom or _transport_sha1(rom) != payload["fingerprint"]:
         raise ValueError("rom_content fingerprint is not the SHA-1 of its bytes")
+    title = rom_title(rom)
+    referenced = gen3_rom_tables.rom_content_ranges(
+        rom, {name: _symbol(title, name) for name in _CONTENT_HEADS})
+    if any(not any(start <= addr and addr + len(raw) <= end for start, end in referenced)
+           for addr, raw in rom.items()):
+        raise ValueError("rom_content contains extra unreferenced ROM bytes")
     return rom
 
 

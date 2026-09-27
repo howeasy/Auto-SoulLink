@@ -263,6 +263,61 @@ def decode_rom_tables(rom: RomData, title: str, *, symbol_dir: Path = SYMBOL_DIR
     }
 
 
+def rom_content_ranges(rom: RomData, heads: Mapping[str, tuple[int, int]]) -> list[tuple[int, int]]:
+    """Exact referenced byte intervals [start, end) for the client table report.
+
+    ``heads`` is the trusted title profile's {symbol: (address, size)} mapping,
+    including the species-info and trainer-class-name heads. Shared/overlapping
+    references are merged; gaps are not. Reads also prove every required byte is
+    present, so a consumer can reject any supplied bytes outside these intervals.
+    """
+    reader = _Rom(rom)
+    intervals = []
+
+    def capture(address, size, label):
+        if size <= 0:
+            raise ValueError(f"{label}: empty ROM table range")
+        raw = reader.read(address, size, label)
+        intervals.append((address, address + size))
+        return raw
+
+    tables = {name: capture(address, size, name) for name, (address, size) in heads.items()}
+    trainers = tables["gTrainers"]
+    if len(trainers) % TRAINER_SIZE:
+        raise ValueError("gTrainers: truncated record")
+    for at in range(0, len(trainers), TRAINER_SIZE):
+        flags, count = trainers[at], trainers[at + 32]
+        if flags >= len(PARTY_SIZES) or count > 6:
+            raise ValueError(f"trainer[{at // TRAINER_SIZE}]: invalid party flags/count")
+        pointer = struct.unpack_from("<I", trainers, at + 36)[0]
+        if count:
+            capture(pointer, count * PARTY_SIZES[flags], "trainer party")
+        elif pointer:
+            capture(pointer, 1, "empty trainer party pointer")
+
+    wild = tables["gWildMonHeaders"]
+    if len(wild) % WILD_HEADER_SIZE:
+        raise ValueError("gWildMonHeaders: truncated record")
+    for at in range(0, len(wild), WILD_HEADER_SIZE):
+        if wild[at] == 0xFF:
+            break
+        for index, (kind, count) in enumerate(WILD_COUNTS.items(), 1):
+            pointer = struct.unpack_from("<I", wild, at + index * 4)[0]
+            if pointer:
+                info = capture(pointer, 8, f"wild {kind} info")
+                capture(struct.unpack_from("<I", info, 4)[0], count * 4, f"wild {kind} slots")
+    else:
+        raise ValueError("gWildMonHeaders: missing 0xFF map-group sentinel")
+
+    merged = []
+    for start, end in sorted(intervals):
+        if merged and start <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(end, merged[-1][1]))
+        else:
+            merged.append((start, end))
+    return merged
+
+
 def _canon(obj):
     if isinstance(obj, dict):
         return {repr(k) if not isinstance(k, str) else k: _canon(v) for k, v in obj.items()}
