@@ -1134,15 +1134,18 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
 
 
 @pytest.mark.parametrize("name,kind,link_slot,games,emerald_b", (
-    ("evolve_gen3", "evolve", 0, ("gen3_frlg",), None),
+    # NAT-LEGS-4: evolve_gen3 also runs E<->E on gen3_emerald, target_by_game swapping the FR/LG
+    # "_synth" fixture stem for Emerald's own committed emerald_evolve.sav; its oracle
+    # (assert_evolve_gen3_saved) is species-aware (EVOLVE_FACTS keyed by self.game), not a
+    # WARTORTLE-only constant. B idles on "town" (emerald_town_b.sav), same as FR/LG.
+    ("evolve_gen3", "evolve", 0, ("gen3_frlg", "gen3_emerald"), "town"),
     # NAT-LEGS-3: npc_trade_gen3/poison_faint_gen3 also run E<->E on gen3_emerald, target_by_game
     # swapping the FR/LG "_synth" fixture stem for Emerald's own naming (emerald_trade.sav,
-    # emerald_poison.sav); evolve_gen3 stays FR/LG-only (its oracle hardcodes WARTORTLE species 8,
-    # not Emerald's Mudkip -> Marshtomp -- out of this card's lease). npc_trade_gen3 links party
-    # slot 1 on BOTH halves; FR/LG's "town" fixture already carries a second party mon, but
-    # Emerald's is a single Mudkip, so its B side boots "pc" (Mudkip + Poochyena) instead --
-    # poison_faint_gen3 links slot 0, but B's linked lead is still force_faint'ed (Soul Link), so
-    # Emerald's B side needs "pc" too: a single-mon "town" party whites out instead of memorializing.
+    # emerald_poison.sav). npc_trade_gen3 links party slot 1 on BOTH halves; FR/LG's "town" fixture
+    # already carries a second party mon, but Emerald's is a single Mudkip, so its B side boots
+    # "pc" (Mudkip + Poochyena) instead -- poison_faint_gen3 links slot 0, but B's linked lead is
+    # still force_faint'ed (Soul Link), so Emerald's B side needs "pc" too: a single-mon "town"
+    # party whites out instead of memorializing.
     ("npc_trade_gen3", "trade", 1, ("gen3_frlg", "gen3_emerald"), "pc"),
     ("poison_faint_gen3", "poison", 0, ("gen3_frlg", "gen3_emerald"), "pc")))
 def test_nat_legs_rows_are_wired(name, kind, link_slot, games, emerald_b, monkeypatch):

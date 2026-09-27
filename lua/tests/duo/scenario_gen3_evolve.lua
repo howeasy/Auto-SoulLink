@@ -1,13 +1,27 @@
--- scenario_gen3_evolve.lua — evolve_gen3: S-8 `evolve_species_store` on FR/LG (card NAT-LEGS).
+-- scenario_gen3_evolve.lua — evolve_gen3: S-8 `evolve_species_store` on FR/LG and Emerald (card
+-- NAT-LEGS, NAT-LEGS-4).
 --
--- SYNTH setup, disclosed (O-33): A boots firered_party_evolve_synth.sav, whose party[0] Squirtle
--- is Lv15 and one EXP short of Lv16 (tools/gen3_fixtures.py make-frlg-synth --kind evolve). The
--- runner links A's slot-0 Squirtle with B's slot 0 (server staging). NATIVE: a Route 1 wild
--- battle, Tackle until it ends, the level-up and the post-battle evolution scene -- A presses
--- only (B cancels an evolution, pret evolution_scene.c). A Gen 3 evolution keeps PID:OTID, so the
--- client publishes WARTORTLE on its next tick (lua/gen3/client.lua on_signal); the oracle reads
--- the server's links.json half and A's saved party. B idles on its town fixture.
-local SQUIRTLE, WARTORTLE = 7, 8
+-- FR/LG SYNTH setup, disclosed (O-33): A boots firered_party_evolve_synth.sav, whose party[0]
+-- Squirtle is Lv15 and one EXP short of Lv16 (tools/gen3_fixtures.py make-frlg-synth --kind
+-- evolve). Emerald SYNTH setup (card NAT-LEGS-4): A boots emerald_evolve.sav, whose party[0]
+-- Mudkip is Lv15 and one EXP short of Lv16 (tools/gen3_fixtures.py make-emerald --kind evolve,
+-- card E2-FIX-VARIANTS round 3), standing directly on Route 102's grass. The runner links A's
+-- slot-0 mon with B's slot 0 (server staging). NATIVE: a wild battle, Tackle until it ends, the
+-- level-up and the post-battle evolution scene -- A presses only (B cancels an evolution, pret
+-- evolution_scene.c). A Gen 3 evolution keeps PID:OTID, so the client publishes the new species on
+-- its next tick (lua/gen3/client.lua on_signal); the oracle reads the server's links.json half and
+-- A's saved party. B idles on its town fixture.
+local EVOLVE = {
+    -- pre: {species, level} the fixture holds; post: the post-evolution species (pret
+    -- src/data/pokemon/evolution.h, both {EVO_LEVEL, 16, ...}: firered/leafgreen c75f3523
+    -- SPECIES_SQUIRTLE -> SPECIES_WARTORTLE; pokeemerald c65e93f2 SPECIES_MUDKIP ->
+    -- SPECIES_MARSHTOMP). Neither post-evolution species' own Lv16 learnset move interrupts the
+    -- scripted mash: Wartortle has none; Marshtomp's Lv16 MUD_SHOT auto-learns silently into the
+    -- fixture's deliberately-open 4th move slot (tests/fixtures/gen3/README.md).
+    firered   = {pre = 7,   level = 15, post = 8},
+    leafgreen = {pre = 7,   level = 15, post = 8},
+    emerald   = {pre = 283, level = 15, post = 284},
+}
 
 --- Log every validated engine signal of `kinds` as the session drains it (harness-side tee on
 --- the client's own signal source; nothing is filtered, delayed or changed).
@@ -32,9 +46,10 @@ return function(ctx)
         if not ctx.wait_until(ctx.partner_done, 1500, "A's RESULT") then return false, "A never finished" end
         return true, "idled while A evolved"
     end
+    local fx = assert(EVOLVE[ctx.title], "evolve_gen3: no EVOLVE facts for title " .. tostring(ctx.title))
     local m = ctx.find(linked)
-    if not (m and m.species == SQUIRTLE and m.level == 15) then
-        return false, "the linked key " .. linked .. " is not the fixture's Lv15 Squirtle"
+    if not (m and m.species == fx.pre and m.level == fx.level) then
+        return false, "the linked key " .. linked .. " is not the fixture's Lv" .. fx.level .. " species " .. fx.pre
     end
     tap_signals(ctx, { evolve_species_store = true, battle_begin = true, battle_end = true })
     ctx.log("READY " .. linked)
@@ -51,14 +66,14 @@ return function(ctx)
     end
     local evolved = ctx.mash_until(function()
         local now = ctx.find(linked)
-        return now and now.species == WARTORTLE and ctx.on_field() and ctx.player_idle() and now
+        return now and now.species == fx.post and ctx.on_field() and ctx.player_idle() and now
     end, 300, "A")
-    if not evolved then return false, "the linked key never read WARTORTLE back on the field" end
+    if not evolved then return false, "the linked key never read species " .. fx.post .. " back on the field" end
     ctx.log(ctx.fmt("EVOLVED %s species=%d level=%d frame=%d", linked, evolved.species, evolved.level,
                     emu.framecount()))
     ctx.frames(300)                                            -- ticks carry the new species
     if ctx.sent("key_change") > 0 then return false, "a Gen 3 evolution must not change the key" end
     local ok, why = ctx.save("evolve")
     if not ok then return false, why end
-    return true, "evolved " .. linked .. " to WARTORTLE"
+    return true, "evolved " .. linked .. " to species " .. fx.post
 end

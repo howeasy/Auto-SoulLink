@@ -383,8 +383,16 @@ SCENARIOS = {
     #                reason npc_trade (S-9 trade_done); the migration is judged (NAT-LEGS-3)
     #   poison_faint a field poison step faints the 1-HP lead; B's linked mon is force-fainted
     #                (S-11 poison_faint + the Soul Link rule)
-    "evolve_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",), "explicit_only": True,
-                    "target": {"a": "evolve_synth", "b": "town"}, "frames": 2000000, "no_save": ("b",),
+    # card NAT-LEGS-4 (Emerald parity): evolve_gen3 also runs E<->E on gen3_emerald, target_by_game
+    # swapping the FR/LG "_synth" stem for Emerald's own committed emerald_evolve.sav (already built,
+    # card E2-FIX-VARIANTS round 3: SYNTH Mudkip Lv15, EXP one short of Lv16, on Route 102 grass --
+    # same tile as emerald_battle.sav, so no city/forest walk); B idles on emerald_town_b.sav
+    # (already committed). EVOLVE_FACTS (below the oracle) carries the post-evolution species per
+    # game so the oracle isn't a Wartortle-only constant.
+    "evolve_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+                    "target": {"a": "evolve_synth", "b": "town"},
+                    "target_by_game": {"gen3_emerald": {"a": "evolve", "b": "town"}},
+                    "frames": 2000000, "no_save": ("b",),
                     "oracle": "assert_evolve_gen3_saved"},
     # NAT-LEGS-3: gen3_emerald joins as its own E<->E leg (RustboroCity_House1's INGAME_TRADE_SEEDOT,
     # emerald_trade.sav; target_by_game overrides the FR/LG "_synth" fixture stem with Emerald's own
@@ -2620,7 +2628,7 @@ GAMES = {
         # route_1-bound oracle reads through DuoRun._hunt_area. "catch" (20 balls) is the same
         # tile as "battle" (5 balls) -- link_gen3/deadzone_gen3 hunt there so a ball_hunt scenario
         # never runs the fixture's Poke Balls out for real.
-        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102"},
+        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102", "evolve": "route_102"},
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,
@@ -7169,17 +7177,31 @@ class DuoRun:
         return self.wait_for(f"{inst}: {what}", lambda: re.search(
             pattern, read_result(self.scenario, inst) or "", re.M), timeout or self.cfg["timeout"])
 
+    # Per-game-family areas for _gen3_area_control: gen3_frlg's evolve leg walks Viridian's Route 1
+    # grass (a defensive superset around it); gen3_emerald's evolve_gen3 leg stands directly on
+    # Route 102 grass (tests/fixtures/gen3/README.md emerald_evolve.sav, "same map/tile as
+    # `battle`" -- no city/forest walk to cover).
+    GEN3_AREA_CONTROL_AREAS = {
+        "gen3_frlg": ("viridian_city", "route_1", "route_2", "viridian_forest"),
+        "gen3_emerald": ("route_102",),
+    }
+
     def _gen3_area_control(self):
         """Write-window controls, NOT encounter-rule qualification. A normal RUN or training KO
         otherwise dead-zones its area and queues play_sound to BOTH clients
         (state._handle_no_catch), violating an isolated write and an idle peer's contract.
-        Resolve only SERVER test state before GO; no RAM/save edit."""
-        for area in ("viridian_city", "route_1", "route_2", "viridian_forest"):
+        Resolve only SERVER test state before GO; no RAM/save edit. `self.game` defaults to
+        gen3_frlg (unit test doubles for the FR/LG-only callers never set it)."""
+        family = scenario_family(getattr(self, "game", "gen3_frlg") or "gen3_frlg")
+        areas = self.GEN3_AREA_CONTROL_AREAS.get(family)
+        if not areas:
+            raise RuntimeError(f"_gen3_area_control: no area list for game family {family!r}")
+        for area in areas:
             reply = api(self.http_port, "POST", "/api/debug/set_area_state", {"area_id": area, "state": "linked"})
             if not reply.get("ok"):
                 raise RuntimeError(f"battle-window area control refused: {area}: {reply}")
-        self._pydec_note("BATTLE_WINDOW_AREA_CONTROL server_only=linked "
-                         "areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified")
+        self._pydec_note(f"BATTLE_WINDOW_AREA_CONTROL server_only=linked areas={','.join(areas)} "
+                         "encounter_rules=not_qualified")
 
     def orchestrate_trainer_bench_gen3(self):
         ka, kb = self._gen3_prelude()  # command-only carrier: no death/memorialize event or injected link
@@ -7945,18 +7967,32 @@ class DuoRun:
         problems = [] if boxes == f_boxes else [f"{inst}: the saved boxes differ from the fixture's"]
         return party, f_party, problems
 
+    # NAT-LEGS-4 (Emerald parity): the post-evolution species is a game fact, not a Wartortle
+    # constant. FR/LG: SQUIRTLE (7) -> WARTORTLE (8) at level 16 (pret pokefirered
+    # src/data/pokemon/evolution.h, EVO_LEVEL 16). Emerald: MUDKIP (283) -> MARSHTOMP (284) at
+    # level 16 (pret pokeemerald c65e93f2 src/data/pokemon/evolution.h:129). RR is never a source
+    # here (RR data is RR-only) -- this row does not run on gen3_rr.
+    EVOLVE_FACTS = {
+        "gen3_emerald": {"species": 284, "level": 16},
+    }
+    EVOLVE_DEFAULT = {"species": 8, "level": 16}
+
     def assert_evolve_gen3_saved(self, results):
         """S-8: the evolution scene's species store fired (SIGNAL evolve_species_store), no key
-        changed, the server's linked half now reads WARTORTLE (8) from A's tick, and A saved the
-        same key as a Lv16 WARTORTLE with the rest of the party untouched."""
+        changed, the server's linked half now reads the game's post-evolution species from A's
+        tick, and A saved the same key at the post-evolution species/level with the rest of the
+        party untouched."""
         self._gen3_flush_boundary()
         ka, kb = self._link_keys["a"], self._link_keys["b"]
+        facts = self.EVOLVE_FACTS.get(self.game, self.EVOLVE_DEFAULT)
+        species, level = facts["species"], facts["level"]
         row = self._gen3_one_link("alive")
         half = {h.get("key"): h for h in (row.get("a") or {}, row.get("b") or {})}
-        problems = [] if (half.get(ka) or {}).get("species") == 8 else [
-            f"server: A's linked half {half.get(ka)} is not species 8 (WARTORTLE)"]
+        problems = [] if (half.get(ka) or {}).get("species") == species else [
+            f"server: A's linked half {half.get(ka)} is not species {species}"]
         problems += gen3_receipt_problems(
-            "a", results["a"], required=[r"(?m)^SIGNAL evolve_species_store ", rf"(?m)^EVOLVED {re.escape(ka)} species=8 level=16"],
+            "a", results["a"], required=[r"(?m)^SIGNAL evolve_species_store ",
+                                         rf"(?m)^EVOLVED {re.escape(ka)} species={species} level={level}"],
             forbidden=[r"(?m)^TX key_change "],
             # the evolution runs INSIDE the battle's end (battle_main.c TryEvolvePokemon), so the
             # pinned battle_end completion site follows it (live: 4310 < 4589)
@@ -7967,10 +8003,11 @@ class DuoRun:
         keys = [gen3_key(m) for m in party]
         if keys != [gen3_key(m) for m in f_party]:
             problems.append(f"a: saved party keys {keys} are not the fixture's")
-        elif (party[0]["species"], party[0]["level"]) != (8, 16):
-            problems.append(f"a: saved slot 0 is species {party[0]['species']} Lv{party[0]['level']}, not WARTORTLE Lv16")
-        self._gen3_raise(problems, f"evolve: {ka} evolved to WARTORTLE Lv16 under the same key; "
-                                   f"links.json half species=8 (partner {kb} unchanged)")
+        elif (party[0]["species"], party[0]["level"]) != (species, level):
+            problems.append(f"a: saved slot 0 is species {party[0]['species']} Lv{party[0]['level']}, "
+                            f"not species {species} Lv{level}")
+        self._gen3_raise(problems, f"evolve: {ka} evolved to species {species} Lv{level} under the "
+                                   f"same key; links.json half species={species} (partner {kb} unchanged)")
 
     # card NAT-LEGS-3 (Emerald parity): each game's npc_trade_gen3 target trades away a fixed mon
     # for a fixed one, so the resulting key/species are game facts, not FR/LG constants. FR/LG:
