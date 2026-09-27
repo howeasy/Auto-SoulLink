@@ -33,11 +33,6 @@ local function tap_signals(ctx, kinds)
         local out = drain(self)
         for _, s in ipairs(out) do
             if kinds[s.kind] then ctx.log(ctx.fmt("SIGNAL %s frame=%d address=0x%08X", s.kind, s.frame, s.address)) end
-            if s.kind == "trade_done" then
-                for _, m in ipairs(ctx.party() or {}) do
-                    ctx.log(ctx.fmt("TRADE_DEBUG slot=%d key=%s species=%d", m.slot, m.key, m.species))
-                end
-            end
         end
         return out
     end
