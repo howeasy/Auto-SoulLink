@@ -6,13 +6,15 @@
 #define SLINK_TRADE_PRODUCER_H
 #include "abi.h"
 
-enum SlinkTradePhase { TP_IDLE, TP_PRE_SAVE, TP_READY, TP_SCENE, TP_DONE, TP_UNCERTAIN };
+enum SlinkTradePhase { TP_IDLE=SLINK_PHASE_IDLE, TP_PRE_SAVE=SLINK_PHASE_PRE_SAVE,
+    TP_READY=SLINK_PHASE_READY, TP_SCENE=SLINK_PHASE_SCENE,
+    TP_DONE=SLINK_PHASE_DONE, TP_UNCERTAIN=SLINK_PHASE_UNCERTAIN };
 
 /* Feature implementation beacon; target READY remains a separate release gate. */
 static inline void slink_trade_advertise(volatile SlinkMailboxV2 *m)
 {
     m->abi_version = SLINK_ABI_VERSION;
-    m->capabilities = SLINK_CAP_DURABLE_TRADE;
+    m->capabilities |= SLINK_CAP_DURABLE_TRADE;
     m->signature = SLINK_SIGNATURE;
 }
 typedef struct {
@@ -103,7 +105,7 @@ static inline int slink_trade_commit_entered(SlinkTradeProducer *s,
     return 1;
 }
 
-static inline void slink_trade_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
+static inline void tp_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
     volatile SlinkTradeWitnessV2 *w, const volatile uint8_t *blob, const SlinkTradeEngine *e)
 {
     if (s->phase == TP_PRE_SAVE) {
@@ -180,7 +182,7 @@ static inline void slink_trade_service(SlinkTradeProducer *s, volatile SlinkMail
         tp_ack(m,seq,1,0); /* witness remains bound to the original command sequences */
     } else if (op==SLINK_OP_TRADE_WITHDRAW) {
         if (s->phase==TP_READY) tp_finish(s,m,w,seq,SLINK_TRADE_UNCHANGED,e);
-        else tp_ack(m,seq,0,11); /* running UI/scene is not a certainly unpicked job */
+        else tp_ack(m,seq,0,SLINK_REASON_WITHDRAW_TOO_LATE);
     } else if (op==SLINK_OP_TRADE_SCENE) {
         if (s->phase==TP_DONE && seq==s->scene_seq && w->final_result==SLINK_TRADE_COMMITTED) {
             tp_ack(m,seq,1,0); return;
@@ -197,5 +199,16 @@ static inline void slink_trade_service(SlinkTradeProducer *s, volatile SlinkMail
     } else {
         tp_ack(m,seq,0,2);
     }
+}
+/* Publish ownership after every service path, including an identity rejection.
+ * Aligned u32 write is atomic on ARM7; host samples only with CPU paused. It is
+ * independent of the host-written epoch and cannot be cleared by a rebind.
+ */
+static inline void slink_trade_service(SlinkTradeProducer *s, volatile SlinkMailboxV2 *m,
+    volatile SlinkTradeWitnessV2 *w, const volatile uint8_t *blob, const SlinkTradeEngine *e)
+{
+    m->producer_phase=s->phase;
+    tp_service(s,m,w,blob,e);
+    m->producer_phase=s->phase;
 }
 #endif

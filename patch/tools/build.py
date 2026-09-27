@@ -165,6 +165,7 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
     receipt = {"status": "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
                "target": title, "mode": mode, "ready": spec["READY"],
                "production": False,
+               "arena_static_check": "skipped: heap clamp unqualified",
                "capabilities": 1 if trade_candidate else 0,
                "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
                "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),

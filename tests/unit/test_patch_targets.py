@@ -53,6 +53,7 @@ _Static_assert(SLINK_REASON_IDENTITY == 12, "v2 identity reason");
 _Static_assert(SLINK_REASON_CLIENT_TOO_OLD == 13, "v2 unarmed client reason");
 int main(void) {
     SlinkTradeWitnessV2 w = {0};
+    w.received_pid = 33; w.received_otid = 44;
     w.visit_flags = SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT;
     w.final_result = SLINK_TRADE_COMMITTED;
     w.save_status = SLINK_SAVE_OK;
@@ -60,16 +61,21 @@ int main(void) {
     for (unsigned i = 1; i < 5; i++) w.milestone_seq[i] = 9;
     w.milestones = (1u << SLINK_PRE_SAVE_OK) | (1u << SLINK_COMMIT_ENTERED)
                  | (1u << SLINK_SCENE_EVOLUTION_DONE);
-    if (slink_trade_success_is_durable(&w, 7, 9)) return 1;
+    if (slink_trade_success_is_durable(&w, 7, 9, 33, 44)) return 1;
     w.milestones |= (1u << SLINK_POST_SAVE_OK);
-    if (slink_trade_success_is_durable(&w, 7, 9)) return 2;
+    if (slink_trade_success_is_durable(&w, 7, 9, 33, 44)) return 2;
     w.milestones |= (1u << SLINK_FINAL_RESULT);
-    if (!slink_trade_success_is_durable(&w, 7, 9)) return 3;
+    if (!slink_trade_success_is_durable(&w, 7, 9, 33, 44)) return 3;
+    w.received_pid = 34;
+    if (slink_trade_success_is_durable(&w, 7, 9, 33, 44)) return 6;
+    w.received_pid = 33; w.received_otid = 45;
+    if (slink_trade_success_is_durable(&w, 7, 9, 33, 44)) return 7;
+    w.received_otid = 44;
     w.milestone_seq[SLINK_FINAL_RESULT] = 8;
-    if (slink_trade_success_is_durable(&w, 7, 9)) return 4;
+    if (slink_trade_success_is_durable(&w, 7, 9, 33, 44)) return 4;
     w.milestone_seq[SLINK_FINAL_RESULT] = 9;
     w.save_status = SLINK_SAVE_FAILED;
-    if (slink_trade_success_is_durable(&w, 7, 9)) return 5;
+    if (slink_trade_success_is_durable(&w, 7, 9, 33, 44)) return 5;
     return 0;
 }
 ''')
