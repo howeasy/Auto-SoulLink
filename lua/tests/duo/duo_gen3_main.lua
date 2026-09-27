@@ -1317,8 +1317,11 @@ local boot_keys = {}
 --- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
 function ctx.catch(label)
     if not ctx.hunt(label) then return nil, "no wild encounter" end
+    -- R4-DRIVER: the 20-ball SYNTH fixtures must stay on this instrumented path after eight
+    -- misses. The former fall-through let the scene settler throw an unlogged ninth ball.
+    local throw_budget = 20
     local throws = 0
-    while throws < 8 do
+    while throws < throw_budget do
         local turn = SP.verify_fight_cursor(cp, "incidental_battle")
         if turn == nil then break end
         if turn == "party" then return nil, "a forced party menu came up while catching" end
@@ -1356,7 +1359,12 @@ function ctx.catch(label)
         if r == "over" then break end
         if r ~= "action" then return nil, "no decision point after the throw (" .. tostring(r) .. ")" end
     end
-    play.wait_scene_settled(cp, 1800)
+    if play.in_battle(cp) ~= false then
+        if throws >= throw_budget then return nil, "capture throw budget exhausted (20)" end
+        return nil, "capture ended without an inactive battle witness"
+    end
+    local settled, settle_why = play.wait_scene_settled(cp, 1800)
+    if not settled then return nil, "capture scene did not settle: " .. tostring(settle_why) end
     local outcome = memory.read_u8(S.gBattleOutcome)
     if outcome ~= B_OUTCOME_CAUGHT then return nil, "the battle ended with outcome " .. outcome end
     -- The client's own capture event names the key: by the time the field settles the server may
