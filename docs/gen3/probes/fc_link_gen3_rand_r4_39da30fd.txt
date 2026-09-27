@@ -1,0 +1,133 @@
+# R4-LIVE physical receipt; cut 39da30fd050671e089420c3a5c5f04e0933715ab
+# Integrated base: c0704a31. Inputs: clean-derived fixture saves (SYNTH).
+# Invocation: python tools/e2e_duo.py --game gen3_frlg --scenario link_gen3_rand --lane r4 --keep-data
+# SLINK_GEN3_RAND_ROMS=C:/slink-wt/rand_roms
+# SLINK_STATE_DIR=C:/slink-wt/g3-rfix/.lane/r4/39da30fd/link_gen3_rand/state
+# Raw stdout: C:/slink-wt/g3-rfix/.lane/r4/39da30fd/link_gen3_rand/stdout.txt SHA256=7619b20b6f4714a5ac4e9ac227a4d4ebf0a7330d0b8e441ca2a1783594a2cd87
+# Each row ran once; no unchanged failing run was retried.
+
+========== scenario: link_gen3_rand ==========
+[duo] link_gen3_rand: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] RAND_INPUT a SYNTH=clean-derived-save title=firered sha1=c6598b7b0c4a1116d220905e56fd6f00fb1250b6 transport_sha1=d3829ee598aeb730b9e50d3b688665eb899bcebc content_fingerprint=630a4561a1eee5d667a93707ff6680730f8847af6326b05e0e404eb8fc2a5cee
+[duo] RAND_INPUT b SYNTH=clean-derived-save title=leafgreen sha1=ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba transport_sha1=61e5b04cf2d729c37a5b7a95c2165b471201feca content_fingerprint=2931bd90ec9091f7a058078d827512a0b07a1f380fd8f06d06b7bcbce141c938
+[duo] IDENTITY a=firered:rom=0364287fe73aaacc74b9026c27e5ac2d90828c99c77fbd611d71bff5d98f7561:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=ae6d50136b5f2834b7ae8e3b30004f9651ab78832816eb0438705c33bb39acb0:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=90b97f77951b2eb64cfb4416c1b93395da6660d649819f9f984e0a1389be2bdc source=39da30fd050671e089420c3a5c5f04e0933715ab
+[duo] server up: tcp=57142 http=57143 data=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\link_gen3_rand\state\slink_duo_link_gen3_rand_60y4gmoo
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] RAND_PROCESS side=a phase=initial pid=36284
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] RAND_PROCESS side=b phase=initial pid=36272
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] RAND_VERDICT phase=pair evidence=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\link_gen3_rand\state\slink_duo_link_gen3_rand_60y4gmoo\rand_pair.json sha256=d853b762fcfc26f3fdbc2a3421ae20606360f639cf81f788294376fbbee33abd
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 12.6s
+[duo] RESULT_LINE a: (none)
+[duo] RESULT_LINE b: RESULT: FAIL (hunt ended out-of-balls)
+[duo] PYDEC: FAIL client RESULT before both RESULT lines
+[duo] link_gen3_rand: a client finished before 'both RESULT lines' (a: no RESULT; b: RESULT: FAIL (hunt ended out-of-balls))
+--- link_gen3_rand a result (last 25 lines) ---
+PARTY slot=0 key=2D356A90:99DE0D8A species=7 level=9 hp=27/27
+MYKEY 1 263620B6:99DE0D8A
+PARTY slot=1 key=263620B6:99DE0D8A species=16 level=4 hp=17/17
+booted frame=778 map=map=787 at=(12,37) balls=4
+RAND_HELLO_SUMMARY {"artifact_kind": "rand", "regions": 5, "rom_sha1": "c6598b7b0c4a1116d220905e56fd6f00fb1250b6", "rom_type": "firered", "table_bytes": 89643, "transport_sha1": "d3829ee598aeb730b9e50d3b688665eb899bcebc"} raw_line_sha256=35ac673884cabe45a9fe5015d8ab26225ab825abfa42c5c0eab5fd4eaed6336d (cartridge table bytes retained privately)
+RAND_SYNTH clean-derived fixture on randomized cartridge phase=initial
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase encounter-found frame=1156 link: cycle 3 mid-step Down at (13,37)
+[client] [gen3] phase battle-state-saved frame=1156 C:/slink-wt/g3-rfix/.lane/r4/39da30fd/link_gen3_rand/state/slink_fr_battle.State
+THREW 1
+THREW 2
+RX play_sound
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 3182
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 3182
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 3182
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 3182
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 3182
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 3182
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 3182
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 3182
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 3182
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 3182
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 3182
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 3182
+RX msgbox text=Route 1 is a dead zone!
+--- link_gen3_rand b result (last 25 lines) ---
+RAND_HELLO_SUMMARY {"artifact_kind": "rand", "regions": 5, "rom_sha1": "ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba", "rom_type": "leafgreen", "table_bytes": 89643, "transport_sha1": "61e5b04cf2d729c37a5b7a95c2165b471201feca"} raw_line_sha256=739388cd911a5aaf8a893f1f2da196777f980ce42931f59b95eee5528a6be983 (cartridge table bytes retained privately)
+RAND_SYNTH clean-derived fixture on randomized cartridge phase=initial
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase encounter-found frame=1192 link: cycle 3 mid-step Right at (12,37)
+[client] [gen3] phase battle-state-saved frame=1192 C:/slink-wt/g3-rfix/.lane/r4/39da30fd/link_gen3_rand/state/slink_fr_battle.State
+THREW 1
+THREW 2
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"b","seq":94,"species_id":231}
+TX safe - {"event":"safe","player":"b","seq":95}
+RX play_sound
+[client] [SLink-gen3] write sound 0x03007340 +4 frame 3230
+[client] [SLink-gen3] write sound 0x03007348 +1 frame 3230
+[client] [SLink-gen3] write sound 0x03007349 +1 frame 3230
+[client] [SLink-gen3] write sound 0x0300734C +4 frame 3230
+[client] [SLink-gen3] write sound 0x030023E8 +4 frame 3230
+[client] [SLink-gen3] write sound 0x030023E8 +1 frame 3230
+[client] [SLink-gen3] write sound 0x030023F7 +1 frame 3230
+[client] [SLink-gen3] write sound 0x030023FB +1 frame 3230
+[client] [SLink-gen3] write sound 0x03002401 +1 frame 3230
+[client] [SLink-gen3] write sound 0x03002408 +4 frame 3230
+[client] [SLink-gen3] write sound 0x03002428 +4 frame 3230
+[client] [SLink-gen3] write sound 0x03007344 +4 frame 3230
+RX msgbox text=Route 1 is a dead zone!
+WRITES 12
+RESULT: FAIL (hunt ended out-of-balls)
+[duo] data dir kept: C:\slink-wt\g3-rfix\.lane\r4\39da30fd\link_gen3_rand\state\slink_duo_link_gen3_rand_60y4gmoo
+
+========== summary ==========
+  link_gen3_rand: FAIL (attempt 1 of 1)
+# Evidence C:/slink-wt/g3-rfix/.lane/r4/39da30fd/link_gen3_rand/state/slink_duo_link_gen3_rand_60y4gmoo/rand_pair.json SHA256=d853b762fcfc26f3fdbc2a3421ae20606360f639cf81f788294376fbbee33abd
+{"effective_kind": "rand", "hellos": {"a": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "c6598b7b0c4a1116d220905e56fd6f00fb1250b6", "rom_type": "firered", "table_bytes": 89643, "transport_sha1": "d3829ee598aeb730b9e50d3b688665eb899bcebc"}, "b": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba", "rom_type": "leafgreen", "table_bytes": 89643, "transport_sha1": "61e5b04cf2d729c37a5b7a95c2165b471201feca"}}, "identity_errors": {}, "phase": "rand_pair", "players": {"a": {"admission": "admitted", "admission_reason": "cartridge matches the contract", "connected": true, "current_area_id": "route_1", "party_keys": ["2D356A90:99DE0D8A", "263620B6:99DE0D8A"], "trainer_name": "JONN"}, "b": {"admission": "admitted", "admission_reason": "cartridge matches the contract", "connected": true, "current_area_id": "route_1", "party_keys": ["BC73F9B0:1C600D89", "F6B6A64D:1C600D89"], "trainer_name": "MAX"}}}
+# Failure diagnosis: B fixture has two Poke Balls; two real throws missed, no_catch dead-zoned Route 1. No alive link formed.
+# The four-ball boot line belongs to A. No product/oracle defect was demonstrated; the FAIL is retained.
+# Intentional red replay (desired one-alive-link assertion):
+REPLAY_CAUSE: pinned clean-derived B fixture has 2 Poke Balls; both were thrown; no_catch then out-of-balls
+F
+================================== FAILURES ===================================
+____ test_recorded_randomized_link_completed_after_the_two_available_balls ____
+.lane\r4\39da30fd\link_gen3_rand\failure_replay.py:20: in test_recorded_randomized_link_completed_after_the_two_available_balls
+    assert len([row for row in state["links"] if row["status"] == "alive"]) == 1, "No alive randomized pair formed"
+E   AssertionError: No alive randomized pair formed
+E   assert 0 == 1
+E    +  where 0 = len([])
+=========================== short test summary info ===========================
+FAILED .lane/r4/39da30fd/link_gen3_rand/failure_replay.py::test_recorded_randomized_link_completed_after_the_two_available_balls
+1 failed in 0.28s
+
+# Replay source SHA256=7570d0c27b62c01f60e16f8d7fffabaf5357f5124b98c397fa632c51e6528e9e
+"""Intentional red replay of the physical link failure; not a passing regression test."""
+import json
+import re
+from pathlib import Path
+
+from tools.e2e_duo import gen3_ball_count
+
+ROOT = Path(__file__).resolve().parents[4]
+
+
+def test_recorded_randomized_link_completed_after_the_two_available_balls():
+    receipt = (Path(__file__).parent / "client_b.txt").read_text(encoding="utf-8")
+    fixture = (Path(__file__).parent / "fixture_b.sav").read_bytes()
+    assert gen3_ball_count(fixture, "leafgreen") == 2
+    assert len(re.findall(r"(?m)^THREW \d+$", receipt)) == 2
+    assert "TX no_catch -" in receipt
+    assert "RESULT: FAIL (hunt ended out-of-balls)" in receipt
+    print("REPLAY_CAUSE: pinned clean-derived B fixture has 2 Poke Balls; both were thrown; no_catch then out-of-balls")
+    state = json.loads((Path(__file__).parent / "state/slink_duo_link_gen3_rand_60y4gmoo/links.json").read_text())
+    assert len([row for row in state["links"] if row["status"] == "alive"]) == 1, "No alive randomized pair formed"
+
+# Frozen failed input/observations:
+# client_a.txt SHA256=c370e085efb74c593cfb2d3b3060ea6686eef1bbc6fc9cd3f85b71c1c3d4d3a5
+# client_b.txt SHA256=abc2fd3ee5e141119d31579e7b2e9e87601f1b4ae0e73a1e22c09e430da4800d
+# fixture_b.sav SHA256=934184df33c5de0f8eeac56d1647ab465664ad2fd047fda8dd1475ce35af7b11

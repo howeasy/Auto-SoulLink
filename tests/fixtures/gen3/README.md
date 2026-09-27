@@ -22,6 +22,8 @@ body with any optional 16-byte mGBA RTC suffix already stripped by
 
 | Fixture | Source | Date | sha256 |
 |---|---|---|---|
+| `firered_party_catch_synth.sav` | `make-frlg-synth --kind catch` from `firered_party_battle.sav` (`95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e`): SYNTH Poke Balls 4→20; only encrypted quantity and its section checksum change. R4-LINK, justified by the failed `fc_link_gen3_rand_r4_39da30fd.txt` receipt. | 2026-09-27 | `3b50a0f353881c8952ee8998cc2052288307b7ce3fe4503a9266fc015ecbe409` |
+| `leafgreen_party_catch_synth.sav` | `make-frlg-synth --kind catch` from `leafgreen_party_battle.sav` (`3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae`): SYNTH Poke Balls 2→20; only encrypted quantity and its section checksum change. R4-LINK, justified by the failed `fc_link_gen3_rand_r4_39da30fd.txt` receipt. | 2026-09-27 | `a604eb2bf5f190562035d03fe356b7ff0771944f30a9f2e31e2570a470958a2b` |
 | `rr_town.sav` | `E:/Howard/Bizhawk/GBA/SaveRAM/slink RR.SaveRAM` (source sha256 `bb0c514ba045d2710529b7e03b31d56d62e5aca8eaa29f89005b628166150edc`), built from `patch/build/slink_RR.gba` (the existing companion-patched RR battery save `tools/mkstates.py` also drives, `tools/mkstates.py:100-150`) | 2026-09-21 | `b4b991f623c969eeb5c3d06ef54ef2da73cda62b4759a2c730aece7c18def9a3` |
 | `firered_party_evolve_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind evolve` from `firered_party_battle.sav` (SYNTH: slot-0 Squirtle Lv15, EXP 2534 (one short of Lv16), Lv15 stats); NAT-LEGS a2fa1f94, receipts `docs/gen3/probes/fc_evolve_gen3_fr_as_a_a2fa1f94.txt` | 2026-09-26 | `c87d50de4613d5f50c2c8e30d177975882d5c821487a748345f746a65dc418b0` |
 | `firered_party_trade_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind trade` from `firered_party_town.sav` (SYNTH: slot 1 = player-owned Hardy-nature Lv10 ABRA (fresh PID); continue-game warp to Route2_House (7,3) below the NPC trader; trade flag clear); NAT-LEGS a2fa1f94, **regenerated** NAT-LEGS-2 (OMP cx-6821246e F3: the old build computed ABRA's stats from the pre-trade mon's personality, one Defense point off), receipts `docs/gen3/probes/fc_npc_trade_gen3_fr_as_a_bd2d191b.txt` (NAT-LEGS-3: the key_change is now accepted/migrated) | 2026-09-26 | `9d1d0ea46ddab394f92e727cbc43e20389528fecb212404ce706dccc983b080a` |
@@ -45,6 +47,26 @@ for the same reason: `SB1_PARTY_BASE_OFFSET` (`data/games/gen3_rr/profile.json`
 `titles.radical_red.derived`) is a real RAM/profile offset, but its
 disk-chunk validity for RR 4.1 specifically is not established. Boxes are
 not read for RR at all (`qualify --rr` prints a note instead).
+
+## R4-LINK catch stock (2026-09-27)
+
+The [first randomized-link attempt](../../../docs/gen3/probes/fc_link_gen3_rand_r4_39da30fd.txt)
+failed after LeafGreen's two real Poke Ball throws missed. The owner's R4-LINK card authorizes
+20 Poke Balls on both capture sides, following the Emerald `catch` fixture precedent. These are
+**SYNTH input saves**, built without an emulator or RAM poke:
+
+```
+python tools/gen3_fixtures.py make-frlg-synth --kind catch --seed tests/fixtures/gen3/firered_party_battle.sav --out tests/fixtures/gen3/firered_party_catch_synth.sav
+python tools/gen3_fixtures.py make-frlg-synth --kind catch --seed tests/fixtures/gen3/leafgreen_party_battle.sav --out tests/fixtures/gen3/leafgreen_party_catch_synth.sav
+```
+
+The builder preserves the entire flash except the existing Poke Ball quantity word and that
+sector's checksum. It retains the current slot/counter, party, boxes, OT identity, location,
+other items, inactive slot and spare bytes. Tests re-derive both committed files and constrain
+the physical byte diff. Only `link_gen3_rand` selects `catch_synth`; its ROMs, capture driver,
+one-attempt budget and oracles are unchanged. The receipt prints each fixture path/hash and
+its SYNTH 20-ball stock. Structural qualification does not itself establish live usability;
+the subsequent R4-LINK receipt records the physical attempt.
 
 ## `boot-check` — the usability signature (emulator lane)
 

@@ -78,7 +78,7 @@ SCENARIOS = {
         "target": "town", "frames": 1200000, "no_save": ("a", "b"), "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_admit", "oracle": "assert_admit_randomized_frlg_saved"},
     "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg",),
-        "target": "battle", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
+        "target": "catch_synth", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg",),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
@@ -2632,6 +2632,13 @@ GAMES = {
 # FRLG-R4 helpers: independent ROM-file and saved-flash oracles. These are
 # exclusive to the three randomized rows; no trade or legacy scenario changes.
 GEN3_RAND_SCENARIOS = {"admit_randomized_frlg", "link_gen3_rand", "trainer_panel_gen3_rand"}
+GEN3_RAND_PHASES = {
+    "pair": {"a": ("a", "rand"), "b": ("b", "rand")},
+    "wrong_rom": {"a": ("b", "rand")},
+    "mixed_kind": {"b": ("clean_b", "clean")},
+    "rules_changed": {"a": ("forbidden_a", "rand")},
+    "equivalent_pair": {"a": ("equivalent_a", "rand"), "b": ("clean_b", "clean")},
+}
 # The randomized ROMs are never committed: point SLINK_GEN3_RAND_ROMS at a directory holding
 # {FireRed,LeafGreen}_allowed.gba. Unset = the rows BLOCK by name (no machine-specific default).
 GEN3_RAND_SCRATCH = Path(os.environ["SLINK_GEN3_RAND_ROMS"]) if os.environ.get("SLINK_GEN3_RAND_ROMS") else None
@@ -2671,7 +2678,7 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
     import struct
 
     from server.adapters.gen3_codec import decode_name
-    from server.adapters.gen3_rom_tables import decode_rom_tables
+    from server.adapters.gen3_rom_tables import decode_rom_tables, gen3_content_fingerprint
 
     names = {"gTrainers", "gWildMonHeaders", "gEvolutionTable", "gSpeciesInfo",
              "gTrainerClassNames", "gSpeciesNames"}
@@ -2696,13 +2703,21 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
             read(address, size)
     address, size = symbols["gTrainers"]
     trainers = read(address, size)
+    trainer_parties = {}
     for offset in range(0, size, 40):
         flags, count = trainers[offset], trainers[offset + 32]
         if flags > 3 or count > 6:
             raise ValueError("randomized oracle: invalid trainer flags/count")
         pointer = struct.unpack_from("<I", trainers, offset + 36)[0]
+        trainer_parties[offset // 40] = []
         if count:
-            read(pointer, count * (16 if flags & 1 else 8))
+            stride = 16 if flags & 1 else 8
+            party = read(pointer, count * stride)
+            # Independent of decode_rom_tables/ingest: pret battle.h's lvl u8 at +2 and
+            # species u16 at +4. A shared-decoder level bug must not teach the oracle its answer.
+            trainer_parties[offset // 40] = [
+                {"level": party[i + 2], "species": struct.unpack_from("<H", party, i + 4)[0]}
+                for i in range(0, len(party), stride)]
         elif pointer:
             read(pointer, 1)
     address, size = symbols["gWildMonHeaders"]
@@ -2731,8 +2746,10 @@ def gen3_rand_rom_facts(raw, title, root=REPO):
     name_bytes = raw[address - 0x08000000:address - 0x08000000 + size]
     if len(name_bytes) != size or size % 11:
         raise ValueError("randomized oracle: species names truncated")
+    tables = decode_rom_tables(raw, title)
     return {"title": title, "sha1": hashlib.sha1(raw).hexdigest(), "payload": payload,
-            "tables": decode_rom_tables(raw, title),
+            "tables": tables, "trainer_parties": trainer_parties,
+            "content_fingerprint": gen3_content_fingerprint(tables),
             "species_names": {i // 11: decode_name(name_bytes[i:i + 11])
                               for i in range(0, size, 11)}}
 
@@ -2742,6 +2759,12 @@ def gen3_rand_hello(text):
     if len(rows) != 1:
         raise ValueError(f"expected one complete RAND_HELLO, got {len(rows)}")
     return json.loads(rows[0])
+
+
+def gen3_rand_contract(facts):
+    """Manager wire contract: the semantic SHA-256, not the transport SHA-1."""
+    return {"players": {side: {"rom_sha1": facts[side]["sha1"],
+                              "fingerprint": facts[side]["content_fingerprint"]} for side in ("a", "b")}}
 
 
 def gen3_rand_hello_problems(hello, facts, kind="rand"):
@@ -2760,23 +2783,23 @@ def gen3_rand_hello_problems(hello, facts, kind="rand"):
 def gen3_rand_admission_problems(phase, status, hellos, facts):
     """No connected/default-admitted shortcut: require actual contract verdicts."""
     problems = []
-    sides = ("a", "b") if phase == "pair" else ("a",) if phase == "wrong_rom" else ("b",)
-    for side in sides:
+    for side, (source, kind) in GEN3_RAND_PHASES[phase].items():
         player = (status.get("players") or {}).get(side, {})
-        expected = facts[side] if phase == "pair" else facts["b"] if phase == "wrong_rom" else facts["clean_b"]
         problems += [f"{side}: {p}" for p in gen3_rand_hello_problems(
-            hellos.get(side, {}), expected, "clean" if phase == "mixed_kind" else "rand")]
+            hellos.get(side, {}), facts[source], kind)]
         reason = player.get("admission_reason", "")
-        if phase == "pair":
+        if phase in ("pair", "equivalent_pair"):
+            expected_reason = ("cartridge matches the contract" if phase == "pair"
+                               else "no randomized-ROM contract for this run")
             if (not player.get("connected") or player.get("admission") != "admitted"
-                    or reason != "cartridge matches the contract"):
+                    or reason != expected_reason):
                 problems.append(f"{side}: no explicit accepted contract verdict")
         else:
             named = ("not the cartridge built for player a" if phase == "wrong_rom"
-                     else "Mixed artifact kinds:")
+                     else "randomized evolutions" if phase == "rules_changed" else "Mixed artifact kinds:")
             if player.get("admission") != "rejected" or named not in reason:
                 problems.append(f"{side}: missing named {phase} rejection")
-            if phase == "wrong_rom" and any(facts[p]["payload"]["fingerprint"][:12] not in reason
+            if phase == "wrong_rom" and any(facts[p]["content_fingerprint"][:12] not in reason
                                              for p in ("a", "b")):
                 problems.append("wrong-ROM rejection lacks expected/reported fingerprints")
             if phase == "mixed_kind" and not all(k in reason for k in ("'rand'", "'clean'")):
@@ -2785,6 +2808,16 @@ def gen3_rand_admission_problems(phase, status, hellos, facts):
                 problems.append(f"{side}: rejected cartridge adopted party/identity/area")
             if status.get("links"):
                 problems.append(f"{side}: admission-only negative leg created links")
+    if phase in ("pair", "equivalent_pair"):
+        effective = "clean" if phase == "equivalent_pair" else "rand"
+        if status.get("gen3_rand_effective_kind") != effective:
+            problems.append(f"{phase}: effective kind is not {effective}")
+        if status.get("gen3_rand_identity_errors") != {}:
+            problems.append(f"{phase}: identity/pairing error proof missing or nonempty")
+    if phase == "equivalent_pair":
+        if (facts["equivalent_a"]["sha1"] == facts["clean_a"]["sha1"]
+                or facts["equivalent_a"]["content_fingerprint"] != facts["clean_a"]["content_fingerprint"]):
+            problems.append("32(b): control is not an unknown hash with clean-equivalent tables")
     return problems
 
 
@@ -2796,30 +2829,35 @@ def _gen3_rand_species(name):
     return re.sub(r"[^A-Z0-9]", "", text.upper())
 
 
-def gen3_rand_panel_problems(probes, facts, retail):
+def gen3_rand_panel_problems(probes, facts, retail, expected_area="viridian_forest"):
     """Actual per-player trainer_brief + calc fallback versus independent ROM IDs."""
     problems, selected = [], {}
     for side in ("a", "b"):
         probe = probes.get(side) or {}
         if probe.get("kind") != "rand" or not probe.get("area"):
             problems.append(f"{side}: randomized per-player adapter/area missing")
+        if probe.get("area") != expected_area:
+            problems.append(f"{side}: nearby area is not the trainer fixture's {expected_area}")
         briefs = probe.get("briefs") or {}
+        requested = {str(tid) for tid, row in retail.items() if row.get("area") == expected_area and row.get("party")}
+        if set(briefs) != requested:
+            problems.append(f"{side}: nearby trainer brief IDs differ from the independent source roster")
         if not briefs:
             problems.append(f"{side}: no nearby trainer briefs")
         changed = False
         for tid, brief in briefs.items():
-            row = facts[side]["tables"]["trainers"].get(int(tid))
+            party = facts[side]["trainer_parties"].get(int(tid))
             base = retail.get(str(tid), {})
-            if not row or not row["party"] or base.get("area") != probe.get("area"):
+            if not party or base.get("area") != expected_area:
                 problems.append(f"{side}: trainer {tid} has no ROM party/nearby source area")
                 continue
             expected = [(_gen3_rand_species(facts[side]["species_names"][m["species"]]), m["level"])
-                        for m in row["party"]]
+                        for m in party]
             actual = [(_gen3_rand_species(m.get("species")), m.get("level"))
                       for m in (brief.get("party") or [])]
             if actual != expected:
                 problems.append(f"{side}: trainer {tid} party differs from its OWN ROM")
-            if brief.get("area") != probe.get("area"):
+            if brief.get("area") != expected_area:
                 problems.append(f"{side}: trainer {tid} is not nearby")
             if brief.get("calc_label") or (probe.get("calc_labels") or {}).get(str(tid)) != "":
                 problems.append(f"{side}: trainer {tid} did not use species/level calc fallback")
@@ -2859,7 +2897,7 @@ def gen3_rand_capture_problems(saved, key, facts):
     return problems
 
 
-def gen3_rand_status_probe(server, status):
+def gen3_rand_status_probe(server, status, retail=None):
     """Read-only harness instrumentation of the LIVE server's existing adapters.
 
     No substitute ingest/brief implementation or expected answers are installed.
@@ -2868,20 +2906,23 @@ def gen3_rand_status_probe(server, status):
     """
     from server.server import _calc_trainer_label
 
+    if retail is None:
+        retail = json.loads(Path(REPO, "data/games/gen3_frlge/frlg_trainers.json").read_text())["trainers"]
     probes = {}
     for side in ("a", "b"):
         adapter = server.adapter_for(side)
-        table = getattr(adapter, "_rom_trainers", None) or {}
         area = server.player_area_id.get(side, "")
-        briefs = {str(tid): adapter.trainer_brief(tid)
-                  for tid, row in table.get("trainers", {}).items() if row.get("area") == area}
+        # Select IDs from independent pret area metadata, never the adopted table being tested.
+        briefs = {str(tid): adapter.trainer_brief(int(tid))
+                  for tid, row in retail.items() if row.get("area") == area and row.get("party")}
         briefs = {tid: brief for tid, brief in briefs.items() if brief}
         probes[side] = {"kind": getattr(adapter, "_artifact_kind", None), "area": area,
                         "briefs": briefs, "calc_labels": {
                             tid: _calc_trainer_label(brief, [{"species_name": m["species"]}
                                                            for m in brief["party"]])
                             for tid, brief in briefs.items()}}
-    return {**status, "gen3_rand_probe": probes}
+    return {**status, "gen3_rand_probe": probes, "gen3_rand_effective_kind": server.state.artifact_kind,
+            "gen3_rand_identity_errors": dict(server.state.identity_error)}
 
 
 def gen3_rand_server_main():
@@ -2891,7 +2932,8 @@ def gen3_rand_server_main():
     from server import server as module
 
     original = module.SLinkServer._build_status_dict
-    module.SLinkServer._build_status_dict = lambda self: gen3_rand_status_probe(self, original(self))
+    retail = json.loads(Path(REPO, "data/games/gen3_frlge/frlg_trainers.json").read_text())["trainers"]
+    module.SLinkServer._build_status_dict = lambda self: gen3_rand_status_probe(self, original(self), retail)
     asyncio.run(module.main(host="127.0.0.1", port=int(sys.argv[1]), http_port=int(sys.argv[2]),
                             reset=True, data_dir=sys.argv[3]))
 
@@ -2913,8 +2955,14 @@ class DuoRun:
         self.http_port = free_port()
         if self.cfg.get("gen3_rand"):
             os.makedirs(BUILD, exist_ok=True)
+        data_parent = BUILD if self.cfg.get("gen3_rand") else None
+        if self.cfg.get("gen3_rand") and os.environ.get("SLINK_STATE_DIR"):
+            data_parent = Path(os.environ["SLINK_STATE_DIR"]).resolve()
+            if not data_parent.is_relative_to(Path(REPO).resolve()):
+                raise RuntimeError("randomized lane SLINK_STATE_DIR must be private to this worktree")
+            data_parent.mkdir(parents=True, exist_ok=True)
         self.data_dir = tempfile.mkdtemp(prefix=f"slink_duo_{scenario}_",
-                                         dir=BUILD if self.cfg.get("gen3_rand") else None)
+                                         dir=data_parent)
         # This run's lane: the stub, the config copy, the SaveRAM directory and the window
         # position are keyed by it (the `lane` property below). --lane names a lane for a wrapper
         # that wants stable names ("pure-a", "lane3"); the port is the default.
@@ -3660,6 +3708,8 @@ class DuoRun:
         self.emu_by_inst[inst] = p
         self._launch_times[inst] = time.time()
         print(f"[duo] launched {inst} phase={phase} seed={seed}")
+        if self.cfg.get("gen3_rand"):
+            self._pydec_note(f"RAND_PROCESS side={inst} phase={phase} pid={p.pid}")
         return p
 
     def terminate_instance(self, inst):
@@ -7480,6 +7530,14 @@ class DuoRun:
         pins = rom_pins(REPO)
         for side in ("a", "b"):
             title = self.gcfg["sides"][side][0]
+            if self.scenario == "link_gen3_rand":
+                fixture = self._gen3_fixture_bytes(side)
+                balls = gen3_ball_count(fixture, title)
+                if balls != 20:
+                    raise RuntimeError(f"{side}: R4-LINK SYNTH fixture must have 20 Poke Balls, got {balls}")
+                self._pydec_note(f"RAND_SYNTH_FIXTURE {side} file={self._gen3_fixture_path(side)} "
+                                 f"sha256={hashlib.sha256(fixture).hexdigest()} PokeBalls={balls} "
+                                 "change=quantity_and_section_checksum_only")
             label = "FireRed" if title == "firered" else "LeafGreen"
             path = source / f"{label}_allowed.gba"
             if not path.is_file():
@@ -7494,36 +7552,65 @@ class DuoRun:
             self._rand_inputs[side] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
             self._rand_facts[side] = facts
             self._pydec_note(f"RAND_INPUT {side} SYNTH=clean-derived-save title={title} "
-                             f"sha1={facts['sha1']} fingerprint={facts['payload']['fingerprint']}")
+                             f"sha1={facts['sha1']} transport_sha1={facts['payload']['fingerprint']} "
+                             f"content_fingerprint={facts['content_fingerprint']}")
         if self._rand_facts["a"]["payload"]["fingerprint"] == self._rand_facts["b"]["payload"]["fingerprint"]:
             raise RuntimeError("randomized pair has identical fingerprints; swap control invalid")
-        title = self._rand_inputs["b"]["title"]
-        clean = next((base / STAGED[title] for base in (Path(REPO), *Path(REPO).parents)
-                      if (base / STAGED[title]).is_file()), None)
-        if clean is None:
-            raise RuntimeError(f"BLOCKED: pinned clean {title} ROM absent for mixed-kind control")
-        raw = clean.read_bytes()
-        if hashlib.sha1(raw).hexdigest() != pins[title]:
-            raise RuntimeError(f"present-but-wrong clean {title} SHA-1")
-        clean_dest = stage / f"clean_{title}.gba"
-        clean_dest.write_bytes(raw)
-        self._rand_inputs["clean_b"] = {"title": title, "clean": True,
-                                         "rom": clean_dest.relative_to(REPO).as_posix()}
-        self._rand_facts["clean_b"] = gen3_rand_rom_facts(raw, title)
+        for side in ("a", "b"):
+            title = self._rand_inputs[side]["title"]
+            clean = next((base / STAGED[title] for base in (Path(REPO), *Path(REPO).parents)
+                          if (base / STAGED[title]).is_file()), None)
+            if clean is None:
+                raise RuntimeError(f"BLOCKED: pinned clean {title} ROM absent for clean-kind controls")
+            raw = clean.read_bytes()
+            if hashlib.sha1(raw).hexdigest() != pins[title]:
+                raise RuntimeError(f"present-but-wrong clean {title} SHA-1")
+            clean_dest = stage / f"clean_{title}.gba"
+            clean_dest.write_bytes(raw)
+            self._rand_inputs[f"clean_{side}"] = {"title": title, "clean": True,
+                                                 "rom": clean_dest.relative_to(REPO).as_posix()}
+            self._rand_facts[f"clean_{side}"] = gen3_rand_rom_facts(raw, title)
+            if side == "a" and self.scenario == "admit_randomized_frlg":
+                # SYNTH 32(b): one unused trailing padding byte changes the ROM hash, while
+                # every shipped table and every engine/site anchor stays byte-identical.
+                if raw[-1] != 255:
+                    raise RuntimeError("clean-equivalent control needs trailing 0xFF padding")
+                equivalent = raw[:-1] + b"\xFE"
+                dest = stage / f"equivalent_{title}.gba"
+                dest.write_bytes(equivalent)
+                self._rand_inputs["equivalent_a"] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
+                self._rand_facts["equivalent_a"] = gen3_rand_rom_facts(equivalent, title)
+                if self._rand_facts["equivalent_a"]["payload"] != self._rand_facts["clean_a"]["payload"]:
+                    raise RuntimeError("32(b) control changed shipped table bytes")
+                label = "FireRed" if title == "firered" else "LeafGreen"
+                widest = source / f"{label}_widest.gba"
+                if not widest.is_file():
+                    raise RuntimeError(f"BLOCKED: rule-changed control absent: {widest}")
+                forbidden = widest.read_bytes()
+                dest = stage / f"forbidden_{title}.gba"
+                dest.write_bytes(forbidden)
+                self._rand_inputs["forbidden_a"] = {"title": title, "rom": dest.relative_to(REPO).as_posix()}
+                self._rand_facts["forbidden_a"] = gen3_rand_rom_facts(forbidden, title)
+                if self._rand_facts["forbidden_a"]["tables"]["evolutions"] == self._rand_facts["clean_a"]["tables"]["evolutions"]:
+                    raise RuntimeError("rule-changed control has no changed evolution table")
+                from server.upr_pipeline import gen3_site_mismatches
+                for control in (equivalent, forbidden):
+                    if gen3_site_mismatches(control, title):
+                        raise RuntimeError("control changes engine sites, so cannot isolate table admission")
+                self._pydec_note(f"RAND_32B_INPUT equivalent_sha1={hashlib.sha1(equivalent).hexdigest()} "
+                                 f"clean_sha1={pins[title]} SYNTH=one_unused_tail_byte tables_identical=true "
+                                 f"forbidden_sha1={hashlib.sha1(forbidden).hexdigest()}")
         self._rand_current = {side: self._rand_inputs[side] for side in ("a", "b")}
-        contract = {"players": {side: {"rom_sha1": self._rand_facts[side]["sha1"],
-                     "fingerprint": self._rand_facts[side]["payload"]["fingerprint"]}
-                     for side in ("a", "b")}}
-        Path(self.data_dir, "rom_contract.json").write_text(json.dumps(contract), encoding="utf-8")
+        Path(self.data_dir, "rom_contract.json").write_text(json.dumps(gen3_rand_contract(self._rand_facts)), encoding="utf-8")
 
     def _observe_gen3_rand_admission(self, phase):
-        sides = ("a", "b") if phase == "pair" else ("a",) if phase == "wrong_rom" else ("b",)
+        sides = GEN3_RAND_PHASES[phase]
 
         def ready():
             status = self._status() or {}
             players = status.get("players") or {}
             if not all(players.get(side, {}).get("admission") == (
-                    "admitted" if phase == "pair" else "rejected") for side in sides):
+                    "admitted" if phase in ("pair", "equivalent_pair") else "rejected") for side in sides):
                 return None
             if phase == "pair" and not all(players[side].get("admission_reason") ==
                                              "cartridge matches the contract" for side in sides):
@@ -7575,6 +7662,7 @@ class DuoRun:
         # Rejected slots have never been accepted, so stale adopted state cannot
         # hide a rejection. Both controls use real cartridge launches, no forged hello.
         self._clear_attempt_artifacts()
+        self._start_gen3_rand_rule_controls()
         self._rand_current["a"] = self._rand_inputs["b"]
         self.launch_instance("a", phase="wrong_rom")
         self._observe_gen3_rand_admission("wrong_rom")
@@ -7592,6 +7680,30 @@ class DuoRun:
         self._rand_current["b"] = self._rand_inputs["b"]
         self._expected_exit.discard("b")
         self.launch_instance("b")
+
+    def _start_gen3_rand_rule_controls(self):
+        """Physical rule refusal and 32(b), on a run with no accepted identity yet."""
+        self._rand_current["a"] = self._rand_inputs["forbidden_a"]
+        self.launch_instance("a", phase="rules_changed")
+        self._observe_gen3_rand_admission("rules_changed")
+        self._finish_gen3_rand_negative("a", "rules_changed")
+        Path(self.data_dir, "rom_contract.json").unlink()
+        for side, source, phase in (("a", "equivalent_a", "equivalent"), ("b", "clean_b", "clean_partner")):
+            self._rand_current[side] = self._rand_inputs[source]
+            self._expected_exit.discard(side)
+            self.launch_instance(side, phase=phase)
+        self._observe_gen3_rand_admission("equivalent_pair")
+        self._finish_gen3_rand_negative("a", "equivalent_a")
+        self._finish_gen3_rand_negative("b", "equivalent_b")
+        # A clean committed run cannot then accept the genuinely randomized pair. Keep its
+        # evidence and start a new private server, rather than changing a run's identity.
+        self.server.terminate()
+        self.server.wait(timeout=15)
+        self.data_dir = tempfile.mkdtemp(prefix="randomized_pair_", dir=self.data_dir)
+        Path(self.data_dir, "rom_contract.json").write_text(json.dumps(gen3_rand_contract(self._rand_facts)), encoding="utf-8")
+        self._expected_exit.clear()
+        self._rand_current = {side: self._rand_inputs[side] for side in ("a", "b")}
+        self.start_server()
 
     def orchestrate_admit_randomized_frlg(self):
         self._gen3_prelude()
@@ -7637,13 +7749,23 @@ class DuoRun:
             problems += gen3_rand_admission_problems(phase, **self._rand_evidence[phase], facts=self._rand_facts)
             side, path = self._rand_negative_saves[phase]
             problems += gen3_rand_saved_problems(path.read_bytes(), self._gen3_fixture_bytes(side), unchanged_bytes=True)
+        for phase in ("rules_changed", "equivalent_pair"):
+            if phase not in self._rand_evidence:
+                raise RuntimeError(f"ruling 32 live phase absent: {phase}")
+            problems += gen3_rand_admission_problems(phase, **self._rand_evidence[phase], facts=self._rand_facts)
+        for phase in ("rules_changed", "equivalent_a", "equivalent_b"):
+            if phase not in self._rand_negative_saves:
+                raise RuntimeError(f"ruling 32 passive flash proof absent: {phase}")
+            side, path = self._rand_negative_saves[phase]
+            problems += gen3_rand_saved_problems(path.read_bytes(), self._gen3_fixture_bytes(side), unchanged_bytes=True)
         self._gen3_flush_boundary()
         for side in ("a", "b"):
             if "RAND_PASSIVE writes=0" not in results[side]:
                 problems.append(f"{side}: final admission client did not remain passive")
             problems += gen3_rand_saved_problems(self._gen3_rand_fresh_flushed(side), self._gen3_fixture_bytes(side),
                                                  unchanged_bytes=True)
-        self._gen3_raise(problems, "rand pair admitted; actual other-player ROM and mixed-kind ROM refused; flash unchanged")
+        self._gen3_raise(problems, "rand pair admitted; other-player/mixed-kind/rule-changed ROMs refused; "
+                                  "32(b) declared-rand clean-equivalent pair effective=clean; flash unchanged")
 
     def assert_link_gen3_rand_saved(self, results):
         self._check_gen3_rand_pair()
