@@ -340,8 +340,8 @@ def test_open_kind_trade_done_reports_a_key_change_with_the_npc_trade_reason():
 
 
 @pytest.mark.parametrize("same_frame", [True, False], ids=["captured-emerald-timing", "separate-frame-control"])
-@pytest.mark.parametrize("empty_baseline", [True, False], ids=["quiet-before-hello", "immediate-hello-control"])
-def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(monkeypatch, same_frame, empty_baseline):
+@pytest.mark.parametrize("startup", ["immediate", "quiet_party", "trainer_first"])
+def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(monkeypatch, same_frame, startup):
     from tests.unit import gen3_world as gw
 
     monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
@@ -349,8 +349,12 @@ def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(
     bystander = mon_record(0x4D55444B, 0x20250925, species=283)
     outgoing = mon_record(0x52414C5C, 0x20250925, species=392)
     received = mon_record(0x84, 0x9746, species=298)
+    if startup == "trainer_first":
+        w.set_party([])
+        w.break_checkpoint()
+        w.step(3)
     w.set_party([bystander, outgoing])
-    if empty_baseline:
+    if startup != "immediate":
         # Quiet, readable startup precedes the first eligible hello on Emerald.
         # This must seed both known keys and the eventual trade/PC baseline.
         w.break_checkpoint()
@@ -370,6 +374,17 @@ def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(
     assert (changes[0]["old_key"], changes[0]["new_key"], changes[0]["new_species"], changes[0]["reason"]) == (
         "52414C5C:20250925", "00000084:00009746", 298, "npc_trade")
     assert w.events("capture") == [] and w.writes == []
+
+
+def test_npc_trade_without_a_readable_entry_preimage_does_not_guess_from_cached_party():
+    w = live(pids=(A, B))
+    w.poke_int(w.ram["PARTY_COUNT_ADDR"], 7, 1)  # invalid at entry, readable again at completion
+    w.fire("trade_begin")
+    w.set_party([mon_record(A, OT), mon_record(C, 0x9999, species=122)])
+    w.fire("trade_done")
+    w.step(3)
+    assert w.events("key_change") == []
+    assert any("NPC trade preimage unavailable" in line for line in w.logs)
 
 
 # ── in-battle writes (owner ruling 2026-09-23) ────────────────────────────────────────────
