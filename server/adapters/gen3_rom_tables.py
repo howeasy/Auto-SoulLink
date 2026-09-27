@@ -75,23 +75,71 @@ DEOXYS_FORME = {"firered": bytes((50, 180, 20, 150, 180, 20)),
 # UPR may fill only these empty slots with ability 1. In particular, Vibrava's
 # two LEVITATE slots are both nonzero: erasing its second slot changes the ability
 # selected by pokemon.c:3791-3798 for an inherited abilityNum=1.
-_SPECIES_RULES_PATH = Path(__file__).resolve().parents[2] / "data/games/gen3_frlg/species_rules.json"
-with _SPECIES_RULES_PATH.open(encoding="utf-8") as _rules_file:
-    _species_rules_facts = json.load(_rules_file)
-FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset(_species_rules_facts["zero_second_ability_species"])
-SPECIES_RULE_BYTES = tuple(row["offset"] for row in _species_rules_facts["bytes"] if row["projected"])
+_SPECIES_RULES_DIR = Path(__file__).resolve().parents[2] / "data/games"
+_HEX_DIGITS = "0123456789abcdef"
+# Both pinned tables classify 284 originally-empty second-ability slots across their 412
+# species (gen3_frlg/species_rules.json:235-520, gen3_emerald/species_rules.json:229-514).
+ZERO_SECOND_ABILITY_SPECIES_COUNT = 284
+# The SpeciesInfo tables hold 412 rows; an ID above this is a corrupted list, not a species.
+SPECIES_ID_LIMIT = 512
 
 
-_EMERALD_SPECIES_RULES_PATH = Path(__file__).resolve().parents[2] / "data/games/gen3_emerald/species_rules.json"
-with _EMERALD_SPECIES_RULES_PATH.open(encoding="utf-8") as _rules_file:
-    EMERALD_SPECIES_RULES_FACTS = json.load(_rules_file)
+def _sha256_pin(facts, keys, label):
+    node = facts
+    for key in keys:
+        if not isinstance(node, dict) or key not in node:
+            raise ValueError(f"{label} is missing {'.'.join(keys)}")
+        node = node[key]
+    if (not isinstance(node, str) or len(node) != 64
+            or any(c not in _HEX_DIGITS for c in node)):
+        raise ValueError(f"invalid {label} {'.'.join(keys)}")
+
+
+def _load_species_rule_facts(name, required, pins):
+    """Load one required species_rules.json, refusing a broken installation at import.
+
+    These are admission facts, not optional display data: a silently dropped pin or a
+    truncated species list would admit a cartridge the rules never classified. FR/LG and
+    Emerald pin different keys, so the CHECK is shared and the pin lists are not.
+    """
+    label = f"{name}/species_rules.json"
+    with (_SPECIES_RULES_DIR / label).open(encoding="utf-8") as _rules_file:
+        facts = json.load(_rules_file)
+    if not isinstance(facts, dict):
+        raise ValueError(f"invalid {label}")
+    for key in required:
+        if key not in facts:
+            raise ValueError(f"{label} is missing {key}")
+    slots = facts["zero_second_ability_species"]
+    if (not isinstance(slots, list) or len(slots) != ZERO_SECOND_ABILITY_SPECIES_COUNT
+            or any(not isinstance(s, int) or isinstance(s, bool)
+                   or not 0 <= s < SPECIES_ID_LIMIT for s in slots)
+            or any(low >= high for low, high in zip(slots, slots[1:], strict=False))):
+        raise ValueError(f"invalid {label} zero_second_ability_species")
+    for pin in pins:
+        _sha256_pin(facts, pin, label)
+    return facts
+
+
+FRLG_SPECIES_RULES_FACTS = _load_species_rule_facts(
+    "gen3_frlg",
+    required=("bytes", "zero_second_ability_species", "titles"),
+    pins=(("titles", "firered", "symbols_sha256"),
+          ("titles", "firered", "species_info_sha256"),
+          ("titles", "leafgreen", "symbols_sha256"),
+          ("titles", "leafgreen", "species_info_sha256")))
+FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset(
+    FRLG_SPECIES_RULES_FACTS["zero_second_ability_species"])
+SPECIES_RULE_BYTES = tuple(row["offset"] for row in FRLG_SPECIES_RULES_FACTS["bytes"] if row["projected"])
+
+
 # These are required admission facts, not optional display data. Refuse a broken
 # installation at import instead of leaving a None pin to look like a changed ROM.
-for _pin_name in ("normalised_species_rules_sha256", "evolutions_sha256", "clean_content_sha256"):
-    _pin_value = EMERALD_SPECIES_RULES_FACTS[_pin_name]
-    if (not isinstance(_pin_value, str) or len(_pin_value) != 64
-            or any(c not in "0123456789abcdef" for c in _pin_value)):
-        raise ValueError(f"invalid Emerald species_rules.json {_pin_name}")
+EMERALD_SPECIES_RULES_FACTS = _load_species_rule_facts(
+    "gen3_emerald",
+    required=("bytes", "zero_second_ability_species",
+              "normalised_species_rules_sha256", "evolutions_sha256", "clean_content_sha256"),
+    pins=(("normalised_species_rules_sha256",), ("evolutions_sha256",), ("clean_content_sha256",)))
 
 
 def normalised_species_rules(raw: bytes, title: str) -> bytes:
