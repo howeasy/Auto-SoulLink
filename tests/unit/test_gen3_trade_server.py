@@ -570,6 +570,22 @@ def test_empty_visible_hello_releases_visibility_but_is_not_trade_evidence(tmp_p
     assert entry.a.key == KEYS["a"] and entry.b.key == KEYS["b"]
 
 
+def test_emerald_hidden_empty_hello_is_not_an_empty_party_or_ball_gate_signal(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    srv._dispatch("a", _hello("a", rom_type="emerald", has_pokeballs=False))
+    state = srv.state
+    snapshot = lambda: deepcopy((state.player_identity, state.pokeballs_obtained,
+                                 state.party_size, state.party_keys, state.partner_blobs,
+                                 state._has_helld, state.snapshot_no, state.mon_stats,
+                                 srv.party_details))
+    before = snapshot()
+    msg = _hello("a", rom_type="emerald", party=[], party_hidden=True, has_pokeballs=True)
+    srv._dispatch("a", msg)
+    assert not msg.get("_rejected") and state.party_hidden["a"]
+    assert snapshot() == before
+    assert not state.pokeballs_obtained["a"] and state.party_size["a"] == 1
+
+
 def test_recovery_capability_refusal_is_not_reported_as_wrong_save(tmp_path):
     from server.board import connection_state
     srv = SLinkServer(data_dir=str(tmp_path))

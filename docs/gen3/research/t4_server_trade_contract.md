@@ -352,3 +352,13 @@ hello's reload provenance. This behavior is pinned by a dedicated control.
 Known limit (N2): no admin debug-clear endpoint is provided. A later valid visible hello is
 the server release path. Targeted R4 + prior state/hello/board/accessibility controls:
 **224 passed in 5.67s**. Full-suite verification will be appended after the R4 run.
+
+
+R4 full run at `4229d7d8`: **15520 passed, 362 skipped in 1001.57s (0:16:41)**, exit 0.
+Output: `.cache/t4-r4-full-unit.txt`; SHA-256 `f0dc83aca3eed7902920cb0eb375fbf865ffd8e2b9c99384fb676535ad6eb97e`.
+The coordinator's additional Emerald control was then added: hidden hello with `party: []`
+and `party_hidden: true` preserves trainer identity, ball activation, party size/keys/blobs,
+snapshot counters, reconciliation state and presentation. It cannot be interpreted as an
+empty authoritative party. That control and the contrasting visible-empty release control
+pass together (**2 passed in 0.89s**); the combined KC full suite includes the extra control.
+No debug-clear endpoint was added (known limit N2).
