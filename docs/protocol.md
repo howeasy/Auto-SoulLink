@@ -169,7 +169,7 @@ The existing keyed responses are `sync_retrieve_done` / `sync_retrieve_failed` f
 | Uniqueness | not guaranteed for Gen 1; the server refuses (force-faints) a capture whose key already indexes a live link, and both halves of a pair MUST have distinct keys | `state.py:3316-3339` |
 | Stability | MUST be stable across party↔box moves and across reconnects; MUST change only via `key_change` (or a trade, §6) | `state.py:3223-3236` |
 
-`species_id` on the wire is the **game-internal** species id (CFRU id for RR, internal index for Gen 1). The adapter converts with `to_national_dex`/`species_name` (`base.py:399-401`, `gen3_frlge.py:802-803`, `gen1_rby.py:504-506`). `level` is the displayed level (int). Slots are 0-based (`lua/gen3/reads.lua:347-352`).
+`species_id` on the wire is the **game-internal** species id (CFRU id for RR, internal index for Gen 1). The adapter converts with `to_national_dex`/`species_name` (`base.py:407-409`, `gen3_frlge.py:842-843`, `gen1_rby.py:504-506`). `level` is the displayed level (int). Slots are 0-based (`lua/gen3/reads.lua:347-352`).
 
 ### 3.2 Event table
 
