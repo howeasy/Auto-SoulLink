@@ -1,0 +1,69 @@
+{
+  "status": "SOURCE_ONLY_NOT_COMPOSED",
+  "source_commit": "c65e93f20a5275ab03b07d6f6411096a82a60ffd",
+  "rom_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
+  "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc",
+  "entries": [
+    {
+      "symbol": "CallCallbacks",
+      "address": 134219036,
+      "bytes": "10b5074c20680028"
+    },
+    {
+      "symbol": "InitHeap",
+      "address": 134220572,
+      "bytes": "00b5044a1060044a"
+    },
+    {
+      "symbol": "SaveGame",
+      "address": 134872960,
+      "bytes": "00b5fff7d1ff0348"
+    },
+    {
+      "symbol": "SaveMapView",
+      "address": 134775748,
+      "bytes": "f0b54f464646c0b4"
+    },
+    {
+      "symbol": "TrySavingData",
+      "address": 135607096,
+      "bytes": "30b50006050e0948"
+    },
+    {
+      "symbol": "ShowPokenavFieldMessage",
+      "address": 134840888,
+      "bytes": "30b5041c094d2878"
+    },
+    {
+      "symbol": "StartMatchCallFromScript",
+      "address": 135880832,
+      "bytes": "00b503490120c871"
+    },
+    {
+      "symbol": "IsMatchCallTaskActive",
+      "address": 135880852,
+      "bytes": "00b5034813f7a4f8"
+    },
+    {
+      "symbol": "MatchCall_PrintIntro",
+      "address": 135881432,
+      "bytes": "10b50006000e8100"
+    },
+    {
+      "symbol": "MatchCall_PrintMessage",
+      "address": 135881520,
+      "bytes": "10b50006000e8100"
+    },
+    {
+      "symbol": "MatchCall_EndCall",
+      "address": 135881712,
+      "bytes": "00b56bf66ffb0006"
+    }
+  ],
+  "notes": [
+    "CallCallbacks original tail retains callback1 and callback2; source contains no FR save/help guards.",
+    "SaveGame is the native scripted consent/save entry; no FR SaveQuestLogData analogue assumed.",
+    "ShowPokenavFieldMessage expands into gStringVar4 and owns field message state; StartMatchCallFromScript ignores its message argument.",
+    "Task state4 follows window slide-in; native adapter must prove actual UI entry and text release, including allocation-failure paths."
+  ]
+}

@@ -534,8 +534,8 @@ references, linked entry and FF payload range, and emits its own receipt at
 `patch/build/candidate-leafgreen-trade/receipt.json`. It does not publish UPS.
 FR-only allocator probe modes remain FR-only; permitting an LG private candidate
 does not admit the heap carve-out or inherit FR physical receipts. LG READY=0,
-production=false, capability mask23 for the test composition. Native LG trade,
-carrier/panel, sound and rival lifecycle checks remain to be leased and run.
+production=false, capability mask23 for the test composition. The initial native
+LG lifecycle checks were unrun; the bounded receipts follow below.
 
 ### LG single-cart live receipts, 2026-09-27
 
@@ -572,3 +572,50 @@ LG-specific sound-table oracle controls reject using the FR tables. These are
 bounded native single-cart checks with replayed payloads and the disclosed trade
 setup, not live server/T3 integration, duo, all-scene heap, or production admission.
 No screenshots supplied game facts. READY stays 0; no UPS is published.
+
+## Emerald source and Match Call MODEL checkpoint
+
+This is not an Emerald native composition or admission. The builder still
+rejects Emerald candidate builds and its READY remains0. Source pin:
+`pret/pokeemerald c65e93f20a5275ab03b07d6f6411096a82a60ffd`; exact BPEE revision0
+ROM SHA1 `f3ae088181bf583e55daf962a92bb46f4f1d07b7` was checked. Entry addresses
+and short ROM anchors are recorded in `trade_targets/emerald_lifecycle.json`.
+
+Emerald CallCallbacks at `0800051C` has no FR save/help guards. Its first eight
+bytes include `ldr r4,[pc,#0x1C]`, reading gMain `030022C0` from literal `0800053C`.
+The header explicitly requires replay/relocation and continuation at `08000525`:
+save r4/LR, load the relocated gMain pointer, load callback1 and preserve its CMP
+flags into the original tail. That tail invokes both callbacks. A plain reuse
+of the FR body/guards is not an implementation of this contract.
+
+Native save consent is `SaveGame 0809FF80` and its SaveGameTask publishes result
+1 on success, 0 on cancel/error before resuming the script. Normal post-save
+entry points include SaveMapView `080883C4` and TrySavingData `08153338`; no FR
+quest-log call is assumed. Native integration and lifecycle tests are still open.
+
+For Match Call, `ShowPokenavFieldMessage 08098238` first checks the field message
+owner, expands its text into gStringVar4, creates a completion watcher and calls
+`StartMatchCallFromScript 08196080`. The latter ignores its message argument:
+calling it alone does not stage text. The native task progresses through graphics,
+window creation, slide-in, intro/message, slide-out and cleanup. A native adapter
+must prove visible entry and eventual release, including allocation-failure and
+script unlock paths; timer guesses or task creation alone are insufficient.
+
+`call_producer.h` is a standalone controller tested with engine callbacks, not
+yet connected to that native UI. It accepts the agreed event in args[0] with
+remaining args zero, validates/copies the 36-byte record, publishes coherent
+nonzero-even ARMED/REFUSED before ACK, and marks DELIVERED only from the engine's
+visible signal. COMPLETE retains event/delivered_frame until a subsequent job.
+Name fields require bounded EOS and reject text command bytes F7..FE; missing
+or out-of-range species remain generic-call metadata rather than rejection.
+Native rendering/contact/text parity with the Gen2 phone strings remains open.
+
+The model preserves an open UI's old-epoch record/witness. A fresh request while
+occupied receives prompt CALL_BUSY=16 without replacing the old witness. An
+epoch change drops only pending work that has not entered native UI. Cooldown
+10800 uses the native frame at actual delivery and survives host epoch changes.
+CALL_UNAVAILABLE=17 denotes refusal/unobserved delivery after UI release;
+CALL_COOLDOWN=18 denotes the native gap. Epoch/seq replay with a different event
+is refused as IDENTITY. These are v2 reason names; none changes the trade
+pre-commit refusal allow-list. No Match Call capability is published by this
+MODEL checkpoint.
