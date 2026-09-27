@@ -113,11 +113,12 @@ EMERALD_PINNED_INPUTS = {
 }
 # card E4b-CKPT review (OMP cx-6b619663 F1): the unit_emerald row's own tests (test_gen3_codec_
 # emerald.py, test_gen3_emerald_{areas,badges,moves_items,pack}.py, test_gen3_title_syms.py) read
-# the pret CLONE at .cache/pret/pokeemerald/, the same way the shared "unit" lane's tests already
-# need .cache/pret/{pokered,pokefirered,pokecrystal}/ (UNPINNED_INPUTS above). Kept an Emerald-only
-# extra input (like EMERALD_PINNED_INPUTS above), never added to the shared UNPINNED_INPUTS, which
-# the frlg/rr preamble prints unconditionally.
-EMERALD_UNPINNED_INPUTS = [".cache/pret/pokeemerald/"]
+# the pret CLONE at .cache/pret/pokeemerald/. It was an Emerald-only extra until EXPLODE-BIND made
+# the SHARED "unit" lane read it too (the Emerald write-checkpoint generator in
+# test_gen3_write_checkpoint.py / test_gen3_explode_bind.py): release_gate_quick failed 3 tests in
+# the FR/LG lane without it (fc 66184e35). It now lives in the shared UNPINNED_INPUTS below, so the
+# Emerald-only extra is empty (kept as the extension point).
+EMERALD_UNPINNED_INPUTS: list[str] = []
 # E7-SKIPS: unit_emerald's own tests, selected by FILE, never `-k` (release_lanes.py's own
 # rule, verify_gen3_release.py's _UNIT_FILES). `-k "gen3 and emerald"` over the whole tests/unit
 # tree still IMPORTS every module under the path first -- a `-k` selector filters ITEMS, not
