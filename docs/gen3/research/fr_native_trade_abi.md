@@ -385,7 +385,11 @@ FR bindings are PlaySE `0x080722CC` and PlayFanfare `0x08071C60`; the builder
 pins both entry byte sequences in `sound_bindings`. The 347-entry native song
 table admits IDs 0..346; larger IDs are refused before an engine call. Source
 and symbol extent (`dummy_song_header - gSongTable`, eight bytes per entry)
-independently establish the bound. Calls require a nonzero session epoch and
+independently establish the bound. Calls require a nonzero session epoch matching
+CONTROL.session_epoch at arena+0x800. The consumer must stage that configuration
+binding alongside its mailbox epoch before posting sound; writing only the
+mailbox epoch is insufficient. A mismatch returns IDENTITY (12) without calling
+either native routine; epoch zero returns CLIENT_TOO_OLD (13). Calls
 refuse while a panel/carrier UI or PREPARE/SCENE owns the native lane.
 
 An OK ACK means the native routine was invoked, not that the requested sound

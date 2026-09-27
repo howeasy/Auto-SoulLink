@@ -21,21 +21,24 @@ static int music(void *p,uint16_t song) { (void)p;fanfare++;last=song;return 1; 
 int main(void) {
   SlinkMailboxV2 m={0};SlinkSoundEngine e={0,347,effect,music};
   m.session_epoch=7;m.seq=1;m.opcode=19;m.args[0]=25;
-  slink_sound_service(&m,&e,0);
+  slink_sound_service(&m,&e,0,7);
   if (effects!=1 || fanfare || last!=25 || m.status!=2 || m.ack_seq!=1 || m.opcode) return 1;
   m.seq=2;m.opcode=9;m.args[0]=0x2d;m.args[1]=1;
-  slink_sound_service(&m,&e,0);
+  slink_sound_service(&m,&e,0,7);
   if (effects!=1 || fanfare!=1 || last!=301 || m.status!=2 || m.ack_seq!=2) return 2;
   m.seq=3;m.opcode=19;m.args[0]=0x5b; /* ID347 is first outside table */
-  slink_sound_service(&m,&e,0);
+  slink_sound_service(&m,&e,0,7);
   if (effects!=1 || fanfare!=1 || m.status!=3) return 3;
   m.seq=4;m.opcode=19;m.args[0]=25;m.args[1]=0;m.session_epoch=0;
-  slink_sound_service(&m,&e,0);
+  slink_sound_service(&m,&e,0,7);
   if (effects!=1 || m.reason!=SLINK_REASON_CLIENT_TOO_OLD) return 4;
   m.seq=5;m.opcode=19;m.session_epoch=7;
-  slink_sound_service(&m,&e,1);
+  slink_sound_service(&m,&e,1,7);
   if (effects!=1 || m.status!=3) return 5;
-  m.opcode=29;slink_sound_service(&m,&e,0);
+  m.seq=6;m.opcode=19;m.session_epoch=8;
+  slink_sound_service(&m,&e,0,7);
+  if (effects!=1 || fanfare!=1 || m.status!=3 || m.reason!=SLINK_REASON_IDENTITY) return 7;
+  m.opcode=29;slink_sound_service(&m,&e,0,7);
   if (m.opcode!=29 || effects!=1) return 6;
   return 0;
 }
