@@ -1558,14 +1558,33 @@ def build_expansion(context):
                                    ("MON_MOVE_MASK", "PokemonSubstruct1", "move1")):
         value = types[type_name]["bitfields"][member]
         put(key, int(value["mask"], 16), f"structs.{type_name}.bitfields.{member}.mask")
-    for member in ("nickname11", "nickname12"):
-        put(member.upper() + "_FIELD", types["PokemonSubstruct0"]["bitfields"][member], "structs.PokemonSubstruct0.bitfields." + member)
+    # X2: the record-layout keys lua/gen3/reads.lua and gen3_codec.decode_*_masked consume
+    # ({word_off, word_size, shift, width} in the substruct), converted from the compiler's
+    # {offset, width (bytes), shift, bits} facts -- one representation, no hand copy.
+    def field(type_name, member):
+        f = types[type_name]["bitfields"][member]
+        return {"word_off": f["offset"], "word_size": f["width"], "shift": f["shift"], "width": f["bits"]}
+
+    for key, type_name, member in (("EXPERIENCE_MASK", "PokemonSubstruct0", "experience"),
+                                   ("PP_MASK", "PokemonSubstruct1", "pp1"),
+                                   ("MARKINGS_MASK", "BoxPokemon", "markings")):
+        put(key, int(types[type_name]["bitfields"][member]["mask"], 16), f"structs.{type_name}.bitfields.{member}.mask")
+    put("NICKNAME_EXTRA", {"chars": [field("PokemonSubstruct0", m) for m in ("nickname11", "nickname12")]},
+        "structs.PokemonSubstruct0.bitfields.nickname11/nickname12")
+    put("POKEBALL_FIELD", field("PokemonSubstruct0", "pokeball"), "structs.PokemonSubstruct0.bitfields.pokeball")
+    put("ABILITY_NUM_FIELD", field("PokemonSubstruct3", "abilityNum"), "structs.PokemonSubstruct3.bitfields.abilityNum")
+    # reads.lua reads BoxPokemon.unknown as the u16 at 0x1E: the hpLost:14 lane shinyModifier shares
+    lane, shiny = types["BoxPokemon"]["bitfields"]["hpLost"], types["BoxPokemon"]["bitfields"]["shinyModifier"]
+    if lane["offset"] != 0x1E or lane["width"] != 2 or not 0 <= shiny["offset"] - lane["offset"] < 2:
+        raise ValueError("BoxPokemon.shinyModifier is not in the u16 lane at 0x1E")
+    put("SHINY_MODIFIER_FIELD", {"shift": (shiny["offset"] - lane["offset"]) * 8 + shiny["shift"],
+                                 "width": shiny["bits"]},
+        "structs.BoxPokemon.bitfields.shinyModifier relative to hpLost's u16 lane")
     put("BASESTATS_ADDR_BY_GAME_CODE", {"BPEE": sections["rom"]["BASESTATS_ADDR"]}, "rom.BASESTATS_ADDR, exact ROM only")
     return {"schema": SCHEMA, "generator": "tools/gen_gen3_profile.py", "pack": "gen3_exp", "build": context["build"],
             "source": context["source"], "titles": {EXPANSION_TITLE: {"admitted": False, "variant": EXPANSION_TITLE,
             "rom_sha1": EXPANSION_SHA1, "rom_thumb": _thumb_keys(sections["rom"]), "_src": src, **sections,
-            "unavailable": dropped, "open": ["Runtime admission/CPU census and write safety qualification pending",
-            "Nickname extension uses two shifted fields, not a contiguous NICKNAME_EXTRA_OFFS; consumer support required"]}}}
+            "unavailable": dropped, "open": ["Runtime admission/CPU census and write safety qualification pending"]}}}
 
 
 def main() -> int:

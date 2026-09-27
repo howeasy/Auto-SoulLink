@@ -48,9 +48,11 @@ def test_expansion_is_not_admitted_and_removed_fields_are_absent():
         assert all(value is not None for value in p[section].values())
     assert p["derived"]["SHEDINJA_SPECIES_ID"] == 292
     assert p["derived"]["BATTLE_MON_SIZE"] == 140
-    assert p["derived"]["NICKNAME11_FIELD"]["shift"] == 5
-    assert p["derived"]["NICKNAME12_FIELD"]["shift"] == 6
-    assert "NICKNAME_EXTRA_OFFS" not in p["derived"]
+    # X2: the 12-char nickname lanes in the reads.lua/gen3_codec layout shape (bit 53 and 86
+    # of the Growth substruct: nickname11 = experience u32 bits 21-28, nickname12 = +10 bits 6-13)
+    chars = p["derived"]["NICKNAME_EXTRA"]["chars"]
+    assert [c["word_off"] * 8 + c["shift"] for c in chars] == [53, 86] and {c["width"] for c in chars} == {8}
+    assert "NICKNAME_EXTRA_OFFS" not in p["derived"] and "NICKNAME11_FIELD" not in p["derived"]
 
 
 def test_every_profile_address_resolves_in_build_symbols(context):
