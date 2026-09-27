@@ -111,7 +111,7 @@
   {% for pid, player in status.players.items() if player.get('trade_recovery', {}).get('hidden') %}
     <div class="trade-problem trade-problem-uncertain" role="status">
       <b>&#9888; Player {{ pid | upper }}: party withheld</b>
-      <span class="trade-problem-text">{% if player.trade_recovery.problem %}The recovery information could not be read. {% endif %}{% if player.party_details %}The last trusted party is shown.{% else %}No trusted party snapshot is available.{% endif %} Trading is paused until a fresh, trustworthy snapshot arrives.</span>
+      <span class="trade-problem-text">{% if player.trade_recovery.problem %}{{ player.trade_recovery.problem }} {% endif %}{% if player.party_details %}The last trusted party is shown.{% else %}No trusted party snapshot is available.{% endif %} Trading is paused until a fresh, trustworthy snapshot arrives.</span>
     </div>
   {% endfor %}
   {% endif %}
