@@ -67,7 +67,9 @@ local S = Syms.for_title(TITLE)
 -- own pack/checkpoint reads). Emerald is a separate pret decomp (data/games/gen3_emerald),
 -- neither FR/LG's pokefirered profile nor RR's hand-patched one.
 local PROFILE_PACK_BY_TITLE = { firered = "gen3_frlg", leafgreen = "gen3_frlg",
-                                 radical_red = "gen3_rr", emerald = "gen3_emerald" }
+                                 radical_red = "gen3_rr", emerald = "gen3_emerald",
+                                 -- X3: one directory per onboarded expansion build
+                                 [Syms.EXP_TITLE] = "gen3_exp/28877d73" }
 local PROFILE_PACK = assert(PROFILE_PACK_BY_TITLE[TITLE],
     "gen3_scripted_play: no profile pack for title " .. tostring(TITLE))
 local profile_file = assert(io.open(WT .. "/data/games/" .. PROFILE_PACK .. "/profile.json", "rb"))
@@ -79,7 +81,7 @@ if TITLE == "radical_red" then
     -- RR/CFRU's box layout is compressed (25 boxes, no BOX_DATA_OFFSET) -- the FR/LG
     -- "uncompressed box layout" invariant below does not apply and must not be asserted here.
     assert(profile.admitted, "radical_red profile is not admitted")
-elseif TITLE == "emerald" then
+elseif Syms.emerald_engine(TITLE) then
     -- Emerald's own profile (data/games/gen3_emerald/profile.json) matches FR/LG's
     -- uncompressed box layout (BOX_DATA_OFFSET==4, BOXES_PER_STORE==14, same pret PC struct)
     -- but is not yet flagged `admitted` pending its own live gate -- this driver is authored
@@ -173,7 +175,9 @@ local function sb1_ptr(cp)
     local sb1 = memory.read_u32_le(int(ptr.address))
     -- sizeof(struct SaveBlock1): FR/LG 0x3D68, Emerald 0x3D88 (pret include/global.h; the ROM
     -- header's saveBlock1Size, gen3_codec SAVEBLOCK1_SIZE_EMERALD)
-    if sb1 < 0x02000000 or sb1 > 0x02040000 - (TITLE == "emerald" and 0x3D88 or 0x3D68)
+    -- (X3: the expansion reference build's is 15568 = 0x3CD0, facts.json SaveBlock1.size)
+    if sb1 < 0x02000000 or sb1 > 0x02040000 - (TITLE == "emerald" and 0x3D88
+                                                  or Syms.emerald_engine(TITLE) and 0x3CD0 or 0x3D68)
        or sb1 % 4 ~= 0 then return nil end
     return sb1
 end
@@ -198,7 +202,7 @@ local function whiteout_destination(cp, checkpoint)
     local raw = checkpoint or last_heal_checkpoint(cp)
     if not raw then return nil end
     local group, num, warp, x, y = raw.group, raw.num, raw.warp, raw.x, raw.y
-    if TITLE == "emerald" and warp == 255 then
+    if Syms.emerald_engine(TITLE) and warp == 255 then
         -- E4-DUO-2: Emerald has no interior projection. pret pokeemerald c65e93f2
         -- src/overworld.c:357-366 DoWhiteOut -> SetWarpDestinationToLastHealLocation (:665-668)
         -- warps straight to gSaveBlock1Ptr->lastHealLocation, which SetLastHealLocationWarp
@@ -380,7 +384,9 @@ local SPECIAL_VAR_ITEM_ID_ADDR = S.SPECIAL_VAR_ITEM_ID_ADDR  -- gSpecialVar_Item
 -- with gSaveBlock2Ptr->encryptionKey (src/item.c:20-29 GetBagItemQuantity/SetBagItemQuantity,
 -- :41-49 ApplyNewEncryptionKeyToBagItems only XORs the quantity fields); the itemId this file
 -- reads is plaintext, like every other RAM read here.
-local ITEM_POKE_BALL = 4
+-- X3: the expansion reference build renumbered its items: ITEM_POKE_BALL is 1 there
+-- (data/games/gen3_exp/28877d73/harness_facts.json constants, compiled from its items.h enum).
+local ITEM_POKE_BALL = TITLE == Syms.EXP_TITLE and 1 or 4
 local SB1_POKEBALLS_POCKET_OFFSET = 0x0430
 
 local function bag_menu_up() return memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == CB2_BAG_MENU_RUN end
@@ -3030,7 +3036,7 @@ LEGS[#LEGS + 1] = {
 -- ponytail: EMH holds the E2-LEGS round-2 Emerald helpers in one table -- the main chunk sits at
 -- Lua's 200-local cap. Empty unless TITLE == "emerald", like EMERALD_LEGS.
 local EMERALD_LEGS, EMH = {}, {}
-if TITLE == "emerald" then
+if Syms.emerald_engine(TITLE) then
 
 --- group/num/x/y destination check for a leg's own `check(cp)` -- returns a message (leg
 --- precondition failed) or nil (ok), the shape playlib's `leg.check` wants.
@@ -3095,12 +3101,12 @@ local EMERALD_START_SYM_NAMES = {
 local function load_emerald_start_syms()
     local want, out = {}, {}
     for _, n in ipairs(EMERALD_START_SYM_NAMES) do want[n] = true end
-    for line in io.lines(WT .. "/data/gen3/pret/pokeemerald.sym") do
+    for line in io.lines(Syms.sym_path(WT, TITLE)) do
         local addr, name = line:match("^(%x+) %a+ %x+ (%S+)$")
         if addr and want[name] then out[name] = tonumber(addr, 16) end
     end
     for _, n in ipairs(EMERALD_START_SYM_NAMES) do
-        assert(out[n], "gen3_scripted_play: symbol " .. n .. " missing from pokeemerald.sym")
+        assert(out[n], "gen3_scripted_play: symbol " .. n .. " missing from " .. Syms.sym_path(WT, TITLE))
     end
     return out
 end
@@ -4414,7 +4420,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     end,
 }
 
-end -- if TITLE == "emerald"
+end -- if Syms.emerald_engine(TITLE)
 
 -- ── run ──────────────────────────────────────────────────────────────────────────────────────
 
@@ -4477,7 +4483,7 @@ local function emerald_stopped_legs(stop_after)
 end
 
 local function run()
-    if TITLE == "emerald" then
+    if Syms.emerald_engine(TITLE) then
         local stop_after = os.getenv("SLINK_GEN3_PLAY_STOP_AFTER")
         local em_legs, why = EMERALD_LEGS, nil
         if stop_after then em_legs, why = emerald_stopped_legs(stop_after) end

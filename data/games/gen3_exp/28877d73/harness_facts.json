@@ -1,0 +1,134 @@
+{
+  "constants": {
+    "BALL_POKE": 1,
+    "ITEM_POKE_BALL": 1,
+    "POCKETS_COUNT": 5,
+    "POCKET_POKE_BALLS": 1
+  },
+  "evidence": "SOURCE/COMPILER only; harness facts, no runtime qualification",
+  "provenance": {
+    "compiler": {
+      "host": "Linux",
+      "package": "gcc-arm-none-eabi",
+      "package_version": "15:13.2.rel1-2",
+      "path": "/usr/bin/arm-none-eabi-gcc",
+      "sha256": "38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59",
+      "ssh_alias": "hgbox",
+      "status": "provisional",
+      "version": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "flags": {
+      "AS": "arm-none-eabi-as",
+      "ASFLAGS": "-mcpu=arm7tdmi -march=armv4t -meabi=5 --defsym MODERN=1 --defsym EMERALD=1",
+      "ASSETS_DIR_NAME": "build/assets",
+      "CC1": "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1 -quiet",
+      "CFLAGS": "-mthumb -mthumb-interwork -O2 -mabi=apcs-gnu -mtune=arm7tdmi -march=armv4t -Wno-pointer-to-int-cast -std=gnu17 -Werror -Wall -Wno-strict-aliasing -Wno-attribute-alias -Woverride-init -Wnonnull -Wenum-conversion -Wno-error=unused-variable -Wno-error=unused-const-variable -Wno-error=unused-parameter -Wno-error=unused-function -Wno-error=unused-but-set-parameter -Wno-error=unused-but-set-variable -Wno-error=unused-value -Wno-error=unused-local-typedefs -Wno-error=deprecated-declarations",
+      "CPP": "arm-none-eabi-cpp",
+      "CPPFLAGS": "-iquote include -Wno-trigraphs -DMODERN=1 -DTESTING=0 -DEMERALD -std=gnu17",
+      "PREPROC": "tools/preproc/preproc"
+    },
+    "generator_sha256": "60d09e92d16562e0dea05e8359418704059e477f039f390a54b9c541a0379b83",
+    "object_sha256": "21527697d1f2cc9bb20468455d5ebc9ba76914f895d56ee9d7adb6d61ec33a55",
+    "preprocessed_sha256": "e07b47e3d456e6cd93b5269852712d09d0d3e0f3e2e0af34bf7f2b5555fe8eeb",
+    "probe_sha256": "e6592f9a80e0270602d0a9fddab4a252c7c14b89a2d20475e97f4f075d1b9617"
+  },
+  "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+  "schema": 1,
+  "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+  "structs": {
+    "BagMenu": {
+      "bitfields": {},
+      "fields": {
+        "contextMenuNumItems": {
+          "offset": 2088,
+          "size": 1
+        }
+      },
+      "size": 3144
+    },
+    "BagPosition": {
+      "bitfields": {},
+      "fields": {
+        "cursorPosition": {
+          "count": 5,
+          "element_size": 2,
+          "offset": 8,
+          "size": 10
+        },
+        "pocket": {
+          "offset": 5,
+          "size": 1
+        },
+        "scrollPosition": {
+          "count": 5,
+          "element_size": 2,
+          "offset": 18,
+          "size": 10
+        }
+      },
+      "size": 28
+    },
+    "SaveBlock1": {
+      "bitfields": {},
+      "fields": {
+        "bag": {
+          "offset": 1376,
+          "size": 744
+        },
+        "continueGameWarp": {
+          "offset": 12,
+          "size": 8
+        },
+        "flags": {
+          "offset": 4720,
+          "size": 300
+        },
+        "lastHealLocation": {
+          "offset": 28,
+          "size": 8
+        },
+        "location": {
+          "offset": 4,
+          "size": 8
+        },
+        "mapLayoutId": {
+          "offset": 50,
+          "size": 2
+        },
+        "money": {
+          "offset": 1168,
+          "size": 4
+        },
+        "pos": {
+          "offset": 0,
+          "size": 4
+        }
+      },
+      "size": 15568
+    },
+    "SaveBlock2": {
+      "bitfields": {},
+      "fields": {
+        "encryptionKey": {
+          "offset": 172,
+          "size": 4
+        },
+        "playerGender": {
+          "offset": 8,
+          "size": 1
+        },
+        "playerTrainerId": {
+          "count": 4,
+          "element_size": 1,
+          "offset": 10,
+          "size": 4
+        },
+        "specialSaveWarpFlags": {
+          "offset": 9,
+          "size": 1
+        }
+      },
+      "size": 3884
+    }
+  }
+}

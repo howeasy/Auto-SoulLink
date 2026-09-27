@@ -28,8 +28,10 @@ assert(D and D.wt and D.player and D.scenario and D.result, "SLINK_DUO not confi
 -- or symbol table branches on D.title ("radical_red" vs firered/leafgreen), not on D.game.
 -- E4: "gen3_emerald" is the battery-boot Emerald row (E<->E); its pack, .sym and START/save
 -- flows are selected by D.title == "emerald" below.
-assert(D.game == "gen3_frlg" or D.game == "gen3_rr" or D.game == "gen3_emerald",
-       "duo_gen3_main only serves game gen3_frlg/gen3_rr/gen3_emerald, got " .. tostring(D.game))
+-- X3: "gen3_exp" is the pokeemerald-expansion reference build (E<->E shape); every Emerald-ENGINE
+-- branch below takes it too (EMERALD_ENGINE), while its pack, .sym and data are its own.
+assert(D.game == "gen3_frlg" or D.game == "gen3_rr" or D.game == "gen3_emerald" or D.game == "gen3_exp",
+       "duo_gen3_main only serves game gen3_frlg/gen3_rr/gen3_emerald/gen3_exp, got " .. tostring(D.game))
 assert(D.title, "SLINK_DUO.title missing (the GAMES row's sides)")
 
 local ROOT = D.wt
@@ -139,6 +141,8 @@ local function read_json(rel)
     return assert(JSON.decode(raw), "malformed " .. rel)
 end
 local title = D.title
+local TITLES = load_or_die("/lua/tests/gen3_title_syms.lua", "gen3_title_syms.lua")
+local EMERALD_ENGINE = TITLES.emerald_engine(title)
 -- P5: radical_red's pack lives under data/games/gen3_rr, not gen3_frlg's (different checkpoint
 -- predicate and RAM/derived offsets -- RR's 25-box layout in particular, gen3_codec commit
 -- 62887460). Every OTHER read in this file goes through `cp`/`profile`, so this one branch is
@@ -247,7 +251,7 @@ if title == "radical_red" then
 else
     local want = {}
     for _, n in ipairs(SYMS) do want[n] = true end
-    local path = ROOT .. "/data/gen3/pret/poke" .. title .. ".sym"
+    local path = TITLES.sym_path(ROOT, title)
     guard("pret symbols in " .. path, function()
         local fh = assert(io.open(path, "r"), "cannot read " .. path)
         for line in fh:lines() do
@@ -269,14 +273,14 @@ else
         end
         local missing = {}
         for _, n in ipairs(SYMS) do if not S[n] then missing[#missing + 1] = n end end
-        if title == "emerald" and #missing > 0 then
+        if EMERALD_ENGINE and #missing > 0 then
             -- E4: FR/LG-only START-menu/save-dialog/bag names (pokeemerald rebuilt those menus,
             -- src/start_menu.c, src/item_menu.c) are ABSENT, not guessed: reading one raises by
             -- name at the point of use (fail closed), the rr_symbols rule. Emerald's own START/
             -- save flow is gen3_scripted_play.lua EMH.save_via_menu (pokeemerald.sym names).
-            log("SYMS_ABSENT emerald " .. table.concat(missing, ","))
+            log("SYMS_ABSENT " .. title .. " " .. table.concat(missing, ","))
             setmetatable(S, { __index = function(_, k)
-                error("symbol " .. tostring(k) .. " is absent from pokeemerald.sym (FR/LG-only name)", 2)
+                error("symbol " .. tostring(k) .. " is absent from " .. path .. " (FR/LG-only name)", 2)
             end })
             missing = {}
         end
@@ -412,9 +416,35 @@ SLINK_GEN3_CLIENT = nil
 local battle_parts
 local original_dofile = dofile
 local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
+--- TEST-ONLY admission of gen3_exp/<title> (X3; the E4 pre-EG4 precedent, be492ee4): the
+--- profile's admitted=false and Entry.ROUTED's missing gen3_exp both stay in production until
+--- the owner's XG gates. On the gen3_exp duo row ONLY, json_codec's decode is wrapped so the
+--- decoded profile's titles[<title>].admitted reads true, and Entry.ROUTED gains gen3_exp; any
+--- other game gets both back untouched. Self-contained (no upvalues) so a unit test runs this
+--- exact body; every receipt logs the line.
+local function test_admission_codec(game, title, json, logf)
+    if game ~= "gen3_exp" or type(json) ~= "table" then return json end
+    local decode = json.decode
+    return setmetatable({ decode = function(...)
+        local doc = decode(...)
+        local row = type(doc) == "table" and type(doc.titles) == "table" and doc.titles[title]
+        if type(row) == "table" and row.admitted == false then
+            row.admitted = true
+            logf("TEST-ONLY admission of gen3_exp/" .. title .. " (pre-XG; production refuses)")
+        end
+        return doc
+    end }, { __index = json })
+end
 do
     dofile = function(path)
         local value = original_dofile(path)
+        if tostring(path):gsub("\\", "/"):match("/lua/json_codec%.lua$") then
+            value = test_admission_codec(D.game, title, value, log)
+        end
+        if path == ROOT .. "/lua/gen3/entry.lua" and D.game == "gen3_exp" then
+            value.ROUTED.gen3_exp = true
+            log("TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)")
+        end
         if path == ROOT .. "/lua/gen3/entry.lua" then
             local build = value.build
             value.build = function(...)
@@ -454,6 +484,7 @@ log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, 
 -- ── context ──────────────────────────────────────────────────────────────────────────────
 local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G = G, SP = SP,
               play = play, cp = cp, reader = reader, sym = S, title = title, session = session,
+              emerald_engine = EMERALD_ENGINE,
               finished = FINISHED, emulator = emu }
 
 function ctx.jlog(tag, value) log(tag .. " " .. JSON.encode(value)) end
@@ -1336,7 +1367,7 @@ end
 --- Grass hunt from the pinned Route 1 square (gen3_scripted_play hunt_encounter).
 --- E4: Emerald hunts Route 102's pinned grass loop (gen3_scripted_play.lua EMH, proven at E2).
 function ctx.hunt(label)
-    if title == "emerald" then return SP.EMH.hunt(cp, label, 40) end
+    if EMERALD_ENGINE then return SP.EMH.hunt(cp, label, 40) end
     return SP.hunt_encounter(cp, label, 40)
 end
 
@@ -1397,7 +1428,7 @@ function ctx.catch(label, already_hunted)
         end
         local ok, why = ctx.choose_action(ACTION_BAG)
         if not ok then return nil, why end
-        if title == "emerald" then
+        if EMERALD_ENGINE then
             -- E4: Emerald's heap gBagMenu/gBagPosition bag (EMH.throw_ball waits for input itself)
             if not SP.EMH.throw_ball(cp, label) then return nil, "the Emerald ball throw failed" end
         else
@@ -1554,11 +1585,11 @@ local function reversed(name, as)
     SP.PATHS[as] = { map = p.map, from = { p.to[1], p.to[2] }, to = { p.from[1], p.from[2] }, dirs = dirs }
 end
 reversed("pokecenter_entrance_to_pc", "pc_to_pokecenter_entrance")   -- the same tiles, walked back
-if title == "emerald" then reversed("em_oldale_center_to_pc", "em_pc_to_center_door") end
+if EMERALD_ENGINE then reversed("em_oldale_center_to_pc", "em_pc_to_center_door") end
 
 --- Route 1 grass origin -> facing the Viridian Pokemon Center PC (the viridian_pc leg's walk).
 function ctx.walk_to_pc(label)
-    if title == "emerald" then
+    if EMERALD_ENGINE then
         -- E4: from the pc fixture's own Oldale tile (6,17) into the Center (emerald_enter_pc's
         -- door, (6,16) -> 2.2 (7,8)), then gen3_scripted_play.lua's em_oldale_center_to_pc path
         local ok, why = play.enter_warp(cp, "Up", 20)
@@ -1579,7 +1610,7 @@ end
 
 --- The PC -> the Route 1 grass origin (Center door, Viridian, Route 1 north to south).
 function ctx.walk_pc_to_grass(label)
-    if title == "emerald" then
+    if EMERALD_ENGINE then
         -- E4c: the PC -> the Center door landing (7,8) -> out through Oldale's door; the exit
         -- lands on (6,17), the pinned `from` of the Route 103 walk ctx.hunt takes next
         play.follow(cp, "em_pc_to_center_door", label)
@@ -1668,7 +1699,7 @@ function ctx.save(tag)
     local dom = G.flash_domain()
     if not dom then return false, "no flash memory domain" end
     -- E4: Emerald's gMenuCallback START menu (gen3_scripted_play.lua EMH, proven at E2)
-    local ok, before, after, why = (title == "emerald" and SP.EMH.save_via_menu or G.save_via_menu)(cp, dom)
+    local ok, before, after, why = (EMERALD_ENGINE and SP.EMH.save_via_menu or G.save_via_menu)(cp, dom)
     if not ok then return false, "SAVE failed: " .. tostring(why) end
     log(fmt("SAVE_WITNESS %s counter=%d->%d", tag, before, after))
     ctx.frames(30)
@@ -1680,7 +1711,7 @@ end
 -- one -- the driver never reaches MYKEY, so a bare raise here writes no RESULT either.
 local reached_field = guard("boot to field from the battery save", function()
     -- E4: Emerald boots A-only (EMH.boot_to_field, the gen3_emerald_boot_check.lua rule)
-    return (title == "emerald" and SP.EMH.boot_to_field or G.boot_to_field)(cp, 9000)
+    return (EMERALD_ENGINE and SP.EMH.boot_to_field or G.boot_to_field)(cp, 9000)
 end)
 if not reached_field then
     G.shot(D.scenario .. "_" .. D.player .. "_bootfail")

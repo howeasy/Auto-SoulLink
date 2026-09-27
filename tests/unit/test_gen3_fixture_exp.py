@@ -134,3 +134,43 @@ def test_committed_exp_fixture_sha256s_are_the_ones_the_readme_publishes():
     for name in names:
         digest = hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest()
         assert f"| `{name}` |" in readme and digest in readme, name
+
+
+# --- the offsets the seed and the harness read, bound to the build's own compiler -------------
+HARNESS = json.loads((ROOT / "data/games/gen3_exp/28877d73/harness_facts.json").read_text(encoding="utf-8"))
+
+
+def test_harness_facts_are_compiled_from_the_current_probe():
+    from tools import gen_expansion_harness_facts as hf
+    assert hf.check() == []
+
+
+def test_seed_offsets_are_the_builds_compiler_facts():
+    sb1, sb2 = HARNESS["structs"]["SaveBlock1"]["fields"], HARNESS["structs"]["SaveBlock2"]["fields"]
+    assert [sb1[f]["offset"] for f in ("pos", "location", "continueGameWarp", "lastHealLocation",
+                                       "mapLayoutId", "money", "bag", "flags")] == \
+        [0x00, 0x04, 0x0C, 0x1C, 0x32, 0x490, 0x560, 0x1270]
+    assert [sb2[f]["offset"] for f in ("playerGender", "specialSaveWarpFlags", "playerTrainerId",
+                                       "encryptionKey")] == [0x08, 0x09, 0x0A, fx.SB2_ENCRYPTION_KEY]
+    assert (HARNESS["structs"]["SaveBlock1"]["size"], HARNESS["structs"]["SaveBlock2"]["size"]) == \
+        C._TITLE_SAVE_SIZES[T][::-1]
+    facts = json.loads((ROOT / "data/games/gen3_exp/28877d73/facts.json").read_text(encoding="utf-8"))
+    assert sb1["bag"]["offset"] + facts["structs"]["Bag"]["fields"]["pokeBalls"]["offset"] == fx.SB1_BALL_POCKET_EMERALD
+    assert HARNESS["constants"]["ITEM_POKE_BALL"] == HARNESS["constants"]["BALL_POKE"] == fx.EXP_ITEM_POKE_BALL
+
+
+def test_scripted_play_bag_offsets_are_the_builds_compiler_facts():
+    """gen3_scripted_play.lua's Emerald ball throw serves both engine titles with one set of
+    literals: they must equal the expansion build's compiled BagPosition/BagMenu offsets too."""
+    import re
+    lua = (ROOT / "lua/tests/gen3_scripted_play.lua").read_text(encoding="utf-8")
+    pos = re.search(r"EM_BAG_POS_POCKET_OFF, EM_BAG_POS_CURSOR_OFF, EM_BAG_POS_SCROLL_OFF = "
+                    r"(0x\w+), (0x\w+), (0x\w+)", lua)
+    ctx = re.search(r"EM_BAG_MENU_CTX_NUM_ITEMS_OFF = (0x\w+)", lua)
+    bag_pos, bag_menu = HARNESS["structs"]["BagPosition"]["fields"], HARNESS["structs"]["BagMenu"]["fields"]
+    assert [int(v, 16) for v in pos.groups()] == [bag_pos["pocket"]["offset"],
+                                                   bag_pos["cursorPosition"]["offset"],
+                                                   bag_pos["scrollPosition"]["offset"]]
+    assert int(ctx.group(1), 16) == bag_menu["contextMenuNumItems"]["offset"]
+    assert re.search(r"local BALLS_POCKET = (\d+)", lua).group(1) == str(HARNESS["constants"]["POCKET_POKE_BALLS"])
+    assert "local ITEM_POKE_BALL = TITLE == Syms.EXP_TITLE and 1 or 4" in lua

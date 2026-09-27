@@ -758,8 +758,10 @@ def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     run.gcfg = dict(row, sides=dict(row["sides"], b=("firered", "firered_party_{target}_b")))
     assert run._gen3_title("b") == "firered"
     assert run._gen3_fixture_path("b").endswith("firered_party_town_b.sav")
-    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen; E4: emerald.
-    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red", "emerald"}
+    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen; E4: emerald;
+    # X3: the expansion reference build (GAMES["gen3_exp"], test_e2e_duo_gen3_exp.py).
+    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red", "emerald",
+                                    "emerald_expansion_28877d73"}
     for inst in ("a", "b"):
         assert row["sides"][inst][0] in duo.GEN3_TITLES
 
@@ -1052,7 +1054,9 @@ local MODULES = {{
   ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}}, PROFILE_PACK_BY_TITLE = {{
       firered = "gen3_frlg", leafgreen = "gen3_frlg", radical_red = "gen3_rr", emerald = "gen3_emerald" }} }},
   ["/repo/lua/gen3/reads.lua"] = {{ new = function() return {{}} end }},
-  ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end }},
+  ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end,
+      emerald_engine = function(t) return t == "emerald" end,
+      sym_path = function(root, t) return root .. "/data/gen3/pret/poke" .. t .. ".sym" end }},
 }}
 local function dofile(path)
     local m = MODULES[path]
@@ -1192,6 +1196,7 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
                   D = {}, hp0_tag = "FORCED_HP0", title = spec.emerald and "emerald" or "firered",
+                  emerald_engine = spec.emerald and true or false,
                   rr = spec.rr and true or false }
     -- E4c-2: an Emerald whiteout heals in C before the landing (overworld.c:357-366), so the
     -- Emerald party reads full; spec.unhealed leaves the lead short (the landing must refuse it)
@@ -4298,7 +4303,7 @@ def test_active_faint_chain_is_red_on_the_old_hold_and_a_press(ph, mutate, probl
 
 
 def test_p_h_rows_are_registered_with_their_cases():
-    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr", "gen3_emerald")),
+    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp")),
              "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr")),
              "linked_faint_active_trainer_gen3": ("trainer", ("gen3_frlg",)),
              "active_end_gen3": ("command", ("gen3_frlg",)),
@@ -5196,7 +5201,8 @@ def test_emerald_admission_is_production_only():
     assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
                       entry)
     assert "test_admission_codec" not in entry
-    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
+    # X3: the seam is back for gen3_exp ONLY (test_e2e_duo_gen3_exp.py); it never touches Emerald
+    assert 'if game ~= "gen3_exp"' in DRIVER.read_text(encoding="utf-8")
 
 
 def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():
