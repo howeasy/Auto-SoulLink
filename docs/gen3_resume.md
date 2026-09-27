@@ -35,7 +35,7 @@ Resources (owner): at most 3 subagents; unlimited headless OMP for reviews, test
 - ask the owner for ONE landing;
 - signatures only on the owner's explicit "yes".
 
-**Open owner rulings:**
+**Owner rulings 2026-09-27 (in chat):** (36) "No phone" -- no Soul Link phone on FR/LG/RR (the parity cells are closed as ruled out; Emerald Match Call, already built, pending owner confirmation that it stays); (37) "RR not in scope for rando" -- randomized Radical Red is OUT of this RC (ruling 29 stays for FR/LG/Emerald).
 - (a) the Soul Link phone on FR/LG/RR: none has a native phone and ruling 30's companion list has none, so it is treated as Emerald-only (Match Call) unless the owner says otherwise;
 - (b) randomized Radical Red: ruling 29 says randomized Gen 3 is in scope, but UPR cannot randomize CFRU. Is it in scope, and from what source?
 
