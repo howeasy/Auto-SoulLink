@@ -280,6 +280,61 @@ def test_randomized_link_oracle_positive_negative_reverted(fault, facts):
                     mutate, "exactly once" if fault in ("missing", "duplicate", "boxed") else "Route 1")
 
 
+# E-RAND-CATCH: link_gen3_rand extends from FR<->LG to E<->E, reusing the already-pinned
+# Emerald randomized ROM/seed path admit_randomized_emerald and trainer_panel_gen3_rand share
+# (GEN3_RAND_SCRATCH / SLINK_GEN3_RAND_ROMS, "Emerald_allowed.gba" / "Emerald_allowed_b.gba").
+def test_link_gen3_rand_extends_to_emerald_with_its_own_catch_fixture():
+    entry = duo.SCENARIOS["link_gen3_rand"]
+    assert set(entry["games"]) == {"gen3_frlg", "gen3_emerald"}
+    # FR/LG keeps the R4-LINK SYNTH 20-ball fixture; Emerald reuses its own pre-existing
+    # 20-ball `catch` fixture (tests/fixtures/gen3/README.md E2-FIX-VARIANTS round 3) -- no
+    # new SYNTH file, following the Emerald `catch` fixture precedent the README documents.
+    assert duo.scenario_target(entry, "gen3_frlg") == "catch_synth"
+    assert duo.scenario_target(entry, "gen3_emerald") == "catch"
+    assert duo.scenario_attempt_limit("link_gen3_rand", "gen3_emerald") == 1
+    for stem in ("emerald_catch.sav", "emerald_catch_b.sav"):
+        assert (ROOT / "tests/fixtures/gen3" / stem).is_file()
+
+
+def test_capture_oracle_uses_each_titles_own_randomized_hunt_table():
+    """pret map_groups: FR/LG Route 1 is (3, 19); Emerald Route 102 is (0, 17)
+    (data/games/gen3_emerald/area_map.json "0:17": "route_102", the same key
+    gen3_rand_encounter_problems already reads from the independent wild_slots probe)."""
+    catch = _mon(123, species=1, level=5)
+    key = duo.gen3_key(catch)
+    fixture = _fixture([STARTER])
+    saved = duo.gen3_decode(_saved(fixture, 3, [STARTER, catch]))
+    slot = [{"land": {"rate": 20, "mons": [{"species": 1, "min_level": 3, "max_level": 6}]}}]
+    firered_facts = {"title": "firered", "tables": {"wild_encounters": {(3, 19): slot}}}
+    emerald_facts = {"title": "emerald", "tables": {"wild_encounters": {(0, 17): slot}}}
+    assert duo.gen3_rand_capture_problems(saved, key, firered_facts) == []
+    assert duo.gen3_rand_capture_problems(saved, key, emerald_facts) == []
+    # the wrong title's table key must not satisfy the other title's oracle
+    empty = {"title": "emerald", "tables": {"wild_encounters": {}}}
+    assert any("Route 102" in p for p in duo.gen3_rand_capture_problems(saved, key, empty))
+    empty = {"title": "firered", "tables": {"wild_encounters": {}}}
+    assert any("Route 1" in p for p in duo.gen3_rand_capture_problems(saved, key, empty))
+
+
+def test_catch_fixture_note_discloses_synth_only_for_frlg_not_emerald():
+    fr = (ROOT / "tests/fixtures/gen3/firered_party_catch_synth.sav").read_bytes()
+    note = duo.gen3_rand_catch_note("a", "firered", "firered_party_catch_synth.sav", fr)
+    assert note.startswith("RAND_SYNTH_FIXTURE")
+    assert "change=quantity_and_section_checksum_only" in note
+
+    em = (ROOT / "tests/fixtures/gen3/emerald_catch.sav").read_bytes()
+    note = duo.gen3_rand_catch_note("a", "emerald", "emerald_catch.sav", em)
+    assert note.startswith("RAND_CATCH_FIXTURE")
+    assert "SYNTH=false" in note
+    assert "change=quantity_and_section_checksum_only" not in note
+
+
+def test_catch_fixture_note_raises_when_ball_count_is_not_twenty():
+    wrong = (ROOT / "tests/fixtures/gen3/firered_party_battle.sav").read_bytes()  # 4 balls
+    with pytest.raises(RuntimeError, match="20 Poke Balls"):
+        duo.gen3_rand_catch_note("a", "firered", "x", wrong)
+
+
 def test_dependency_gate_reads_committed_sources_and_blocks_before_launch(monkeypatch):
     monkeypatch.setattr(duo, "gen3_rand_dependencies", lambda: ["CR-R1 missing", "CR-R2 missing"])
     for name in duo.GEN3_RAND_SCENARIOS:

@@ -80,8 +80,12 @@ SCENARIOS = {
     "admit_randomized_emerald": {"flags": [], "timeout": 600, "games": ("gen3_emerald",),
         "target": "town", "frames": 1200000, "no_save": ("a", "b"), "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_admit", "oracle": "assert_admit_randomized_frlg_saved"},
-    "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg",),
-        "target": "catch_synth", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
+    # E-RAND-CATCH: E<->E reuses Emerald's own pre-existing 20-ball `catch` fixture (the
+    # non-randomized rows' emerald_catch{,_b}.sav) rather than a new SYNTH file -- only FR/LG
+    # needs the R4-LINK SYNTH catch_synth edit (2/4 Poke Balls in the battle save).
+    "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_emerald"),
+        "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch"},
+        "frames": 2000000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
@@ -2991,19 +2995,41 @@ def gen3_rand_saved_problems(saved, fixture, *, unchanged_bytes=False):
     return []
 
 
+# pret map_groups: FR/LG Route 1 is (3, 19); Emerald Route 102 is (0, 17) (the same key
+# gen3_rand_encounter_problems already reads from the independent wild_slots probe, and
+# data/games/gen3_emerald/area_map.json "0:17": "route_102").
+GEN3_RAND_HUNT_TABLE = {"firered": ((3, 19), "Route 1"), "leafgreen": ((3, 19), "Route 1"),
+                        "emerald": ((0, 17), "Route 102")}
+
+
 def gen3_rand_capture_problems(saved, key, facts):
     party, boxes = saved
     found = [m for m in party if gen3_key(m) == key]
     problems = []
     if len(found) != 1 or any(gen3_key(m) == key for m in boxes.values()):
         return ["randomized catch not saved exactly once in party"]
-    land = facts["tables"]["wild_encounters"].get((3, 19), [])  # pret map_groups: Route1
+    map_key, area_label = GEN3_RAND_HUNT_TABLE[facts["title"]]
+    land = facts["tables"]["wild_encounters"].get(map_key, [])
     slots = [m for variant in land for m in (variant.get("land") or {}).get("mons", [])]
     if not any(m["species"] == found[0]["species"]
                and min(m["min_level"], m["max_level"]) <= found[0]["level"]
                <= max(m["min_level"], m["max_level"]) for m in slots):
-        problems.append("saved catch is absent from this cartridge's Route 1 land table")
+        problems.append(f"saved catch is absent from this cartridge's {area_label} land table")
     return problems
+
+
+def gen3_rand_catch_note(side, title, path, fixture):
+    """R4-LINK's 20-ball fixture disclosure. FR/LG's catch_synth is a SYNTH ball-count edit
+    (tests/fixtures/gen3/README.md "R4-LINK catch stock"); Emerald's catch fixture predates
+    R4-LINK and needs no edit (same README, E2-FIX-VARIANTS round 3): already 20 balls."""
+    balls = gen3_ball_count(fixture, title)
+    if balls != 20:
+        raise RuntimeError(f"{side}: R4-LINK fixture must have 20 Poke Balls, got {balls}")
+    if title == "emerald":
+        return (f"RAND_CATCH_FIXTURE {side} file={path} sha256={hashlib.sha256(fixture).hexdigest()} "
+                f"PokeBalls={balls} SYNTH=false source=pre-existing_emerald_catch_fixture")
+    return (f"RAND_SYNTH_FIXTURE {side} file={path} sha256={hashlib.sha256(fixture).hexdigest()} "
+            f"PokeBalls={balls} change=quantity_and_section_checksum_only")
 
 
 def gen3_rand_status_probe(server, status, retail=None):
@@ -7658,12 +7684,7 @@ class DuoRun:
             title = self.gcfg["sides"][side][0]
             if self.scenario == "link_gen3_rand":
                 fixture = self._gen3_fixture_bytes(side)
-                balls = gen3_ball_count(fixture, title)
-                if balls != 20:
-                    raise RuntimeError(f"{side}: R4-LINK SYNTH fixture must have 20 Poke Balls, got {balls}")
-                self._pydec_note(f"RAND_SYNTH_FIXTURE {side} file={self._gen3_fixture_path(side)} "
-                                 f"sha256={hashlib.sha256(fixture).hexdigest()} PokeBalls={balls} "
-                                 "change=quantity_and_section_checksum_only")
+                self._pydec_note(gen3_rand_catch_note(side, title, self._gen3_fixture_path(side), fixture))
             label = {"firered": "FireRed", "leafgreen": "LeafGreen", "emerald": "Emerald"}[title]
             suffix = "_b" if title == "emerald" and side == "b" else ""
             path = source / f"{label}_allowed{suffix}.gba"

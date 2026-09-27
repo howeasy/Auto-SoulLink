@@ -872,7 +872,9 @@ GEN3_RR_NAT_SCENARIOS = ("evolve_gen3",)
 ))
 def test_randomized_frlg_registration(name, module, target):
     row = SCENARIOS[name]
-    games = ("gen3_frlg", "gen3_emerald") if name == "trainer_panel_gen3_rand" else ("gen3_frlg",)
+    # E-RAND-CATCH: link_gen3_rand joined trainer_panel_gen3_rand on gen3_emerald, reusing
+    # Emerald's own pre-existing `catch` fixture (target_by_game) instead of a new SYNTH file.
+    games = ("gen3_frlg",) if name == "admit_randomized_frlg" else ("gen3_frlg", "gen3_emerald")
     assert row["gen3_rand"] and row["games"] == games
     assert row["scenario_module"] == module and row["target"] == target
     assert row["oracle"] == f"assert_{name}_saved"
