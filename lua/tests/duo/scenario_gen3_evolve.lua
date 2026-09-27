@@ -21,6 +21,8 @@ local EVOLVE = {
     firered   = {pre = 7,   level = 15, post = 8},
     leafgreen = {pre = 7,   level = 15, post = 8},
     emerald   = {pre = 283, level = 15, post = 284},
+    -- card RR-SYNTH: RR's own relocated evolution table (tools/gen3_fixtures.py build_rr_synth)
+    radical_red = {pre = 277, level = 15, post = 278},
 }
 
 --- Log every validated engine signal of `kinds` as the session drains it (harness-side tee on
