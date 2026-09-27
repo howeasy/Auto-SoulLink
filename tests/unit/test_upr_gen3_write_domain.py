@@ -4,7 +4,8 @@ settings write nothing, enabled settings write only inside their domains, 0 stra
 
 The model rows run everywhere. The ROM rows skip by name when the pinned clean dumps, the
 Manager-made outputs ($SLINK_GEN3_RAND_ROMS) or the pinned fork jar + Java are absent; a
-present-but-wrong clean dump fails.
+present-but-wrong clean dump fails, and with $SLINK_GEN3_ROMS set, a run where EVERY ROM row
+skipped fails (the module teardown guard).
 """
 from __future__ import annotations
 
@@ -26,7 +27,27 @@ TITLES = ("firered", "leafgreen")
 MODEL = W.load_model()
 # every byte where an allowed domain meets a forbidden table is one of these two fork
 # normalisations (the lossless control writes them with every setting off)
-KNOWN_OVERLAP = ("ability 2 := ability 1", "Deoxys record stats")
+KNOWN_OVERLAP = {"ability2_normalisation", "deoxys_stats"}
+_ROWS: dict[str, set] = {"attempted": set(), "skipped": set()}
+
+
+def _row() -> str:
+    return os.environ.get("PYTEST_CURRENT_TEST", "?").rsplit(" ", 1)[0]
+
+
+def _rom_skip(msg: str):
+    _ROWS["skipped"].add(_row())
+    pytest.skip(msg)
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _rom_rows_must_not_all_skip():
+    """With $SLINK_GEN3_ROMS set the ROM rows are expected to run: if every one that was
+    selected skipped, the environment is broken, not absent -- fail rather than pass green."""
+    yield
+    tried = _ROWS["attempted"]
+    if os.environ.get("SLINK_GEN3_ROMS") and tried and tried <= _ROWS["skipped"]:
+        pytest.fail(f"SLINK_GEN3_ROMS is set but all {len(tried)} ROM/jar-backed rows skipped")
 
 
 def _spans(components) -> set[int]:
@@ -112,11 +133,65 @@ def test_allowed_meets_forbidden_only_at_the_known_normalisations():
     for title in TITLES:
         domains = MODEL["titles"][title]["domains"]
         forbidden = set().union(*(_spans(domains[d]) for d in W.FORBIDDEN_DOMAINS))
-        known = _spans([c for c in domains["baseline"] if c["what"].startswith(KNOWN_OVERLAP)])
+        known = _spans([c for c in domains["baseline"] if c.get("id") in KNOWN_OVERLAP])
         for name, comps in domains.items():
             if name not in W.FORBIDDEN_DOMAINS:
                 assert not (_spans(comps) & forbidden) - known, (title, name)
         assert known & forbidden                     # the overlap is real, and named
+        assert {c.get("id") for c in domains["baseline"]} >= KNOWN_OVERLAP
+
+
+def test_free_space_admits_only_writes_packed_from_its_start():
+    clean = bytes(0x200)
+    model = {"titles": {"t": {"clean_sha1": hashlib.sha1(clean).hexdigest(), "domains": {
+        "baseline": [{"what": "b", "source": "s", "ranges": "0x000150+4"}],
+        "free_space": [{"what": "f", "source": "s", "ranges": "0x000100+256", "packed": True}]}}}}
+    out = bytearray(clean)
+    for i in (0x104, 0x105, 0x10B, 0x110, 0x152):     # gaps of 5 and 4; 0x152 is baseline's
+        out[i] = 1
+    assert W.audit("t", clean, bytes(out), {"baseline", "free_space"}, model)["stray"] == []
+    out[0x117] = 1                                    # 6 unchanged bytes after 0x110
+    r = W.audit("t", clean, bytes(out), {"baseline", "free_space"}, model)
+    assert r["stray"] == [0x117] and r["named"] == {"free_space (not packed from 0x000100)": 1}
+    assert W.audit("t", clean, bytes(out), {"baseline"}, model)["named"] == {"free_space": 5}
+
+
+def test_check_output_refuses_by_name(tmp_path, monkeypatch):
+    from server.upr_pipeline import UprPipelineError
+    gba, jar = tmp_path / "c.gba", tmp_path / "other.jar"
+    rom = bytearray(16 << 20)
+    rom[0xAC:0xB0] = b"BPRE"
+    gba.write_bytes(bytes(rom))
+    jar.write_bytes(b"not the modelled jar")
+    with pytest.raises(UprPipelineError, match="could not run"):          # OSError: no output
+        W.check_output(str(gba), str(tmp_path / "missing.gba"), {})
+    with pytest.raises(UprPipelineError, match=r"covers only \['firered', 'leafgreen'\]"):
+        W.check_output(str(jar), str(jar), {})
+    with pytest.raises(UprPipelineError, match="not the jar the write domains were modelled from"):
+        W.check_output(str(gba), str(gba), {}, jar=str(jar))
+    monkeypatch.setattr(W, "MODEL_PATH", tmp_path / "gone.json")
+    with pytest.raises(UprPipelineError, match="could not run.*gone.json"):
+        W.check_output(str(gba), str(gba), {})
+
+
+def test_field_item_pool_is_the_forks_own():
+    """FIELD_TMS / FIELD_REGULAR re-derived from the fork source's Gen3Constants.setupAllowedItems."""
+    import re
+    src = next((b / ".cache" / "slink-upr" / "src" / "com" / "dabomstew" / "pkrandom" / "constants"
+                for b in (ROOT, *ROOT.parents) if (b / ".cache" / "slink-upr" / "src").is_dir()), None)
+    if src is None:
+        pytest.skip("fork source tree .cache/slink-upr/src absent")
+    ids = {m[1]: int(m[2]) for m in re.finditer(r"int (\w+) = (\d+);", (src / "Gen3Items.java").read_text(encoding="utf-8"))}
+    body = (src / "Gen3Constants.java").read_text(encoding="utf-8").split("void setupAllowedItems()")[1].split("nonBadItemsRSE =")[0]
+    items = set(range(1, ids[re.search(r"new ItemList\(Gen3Items\.(\w+)\)", body)[1]] + 1))
+    tms = set()
+    for kind, args in re.findall(r"allowedItems\.(banRange|banSingles|tmRange)\(([^)]*)\)", body):
+        vals = [ids[a.strip().removeprefix("Gen3Items.")] if "Gen3Items" in a else int(a) for a in args.split(",")]
+        if kind == "banSingles":
+            items -= set(vals)
+        else:
+            (items.difference_update if kind == "banRange" else tms.update)(range(vals[0], vals[0] + vals[1]))
+    assert W.FIELD_TMS == tms and W.FIELD_REGULAR == items - tms
 
 
 def test_audit_names_every_stray_byte():
@@ -141,10 +216,12 @@ def test_audit_names_every_stray_byte():
 
 # ── ROM rows ────────────────────────────────────────────────────────────────────────────
 def _clean_path(title: str) -> Path:
-    candidates = [base / rel for base in (ROOT, *ROOT.parents) for rel in (STAGED[title], ROOT_DUMPS[title])]
+    _ROWS["attempted"].add(_row())
+    env = [Path(os.environ["SLINK_GEN3_ROMS"])] if os.environ.get("SLINK_GEN3_ROMS") else []
+    candidates = [base / rel for base in (*env, ROOT, *ROOT.parents) for rel in (STAGED[title], ROOT_DUMPS[title])]
     path = next((c for c in candidates if c.exists()), None)
     if path is None:
-        pytest.skip(f"pinned clean {title} ROM absent (looked for {STAGED[title]} / {ROOT_DUMPS[title]})")
+        _rom_skip(f"pinned clean {title} ROM absent (looked for {STAGED[title]} / {ROOT_DUMPS[title]})")
     digest = hashlib.sha1(path.read_bytes()).hexdigest()
     assert digest == rom_pins(str(ROOT))[title], f"{path} present but wrong {title} SHA-1 {digest}"
     return path
@@ -156,9 +233,10 @@ def _clean(title: str) -> bytes:
 
 def _jar() -> str:
     from server import upr_pipeline
+    _ROWS["attempted"].add(_row())
     jar = upr_pipeline.find_upr_jar()
     if not jar or not upr_pipeline.jar_is_trusted(jar):
-        pytest.skip("pinned SLink UPR fork jar absent (tools/build_upr_fork.py --pin)")
+        _rom_skip("pinned SLink UPR fork jar absent (tools/build_upr_fork.py --pin)")
     return jar
 
 
@@ -182,7 +260,7 @@ def _manager_output(title: str, kind: str) -> Path:
     name = f"{'FireRed' if title == 'firered' else 'LeafGreen'}_{kind}.gba"
     path = Path(folder or "/nonexistent") / name
     if not path.exists() or not Path(f"{path}.log").exists():
-        pytest.skip(f"Manager-made {name} (+ .log) absent (set SLINK_GEN3_RAND_ROMS to the folder holding it)")
+        _rom_skip(f"Manager-made {name} (+ .log) absent (set SLINK_GEN3_RAND_ROMS to the folder holding it)")
     return path
 
 
@@ -207,7 +285,7 @@ def test_widest_output_strays_are_named_by_the_forbidden_settings(title):
 def _run_fork(tmp_path: Path, title: str, spec: dict) -> tuple[bytes, bytes, dict]:
     jar = _jar()
     if not shutil.which("java"):
-        pytest.skip("java not on PATH")
+        _rom_skip("java not on PATH")
     clean = _clean(title)
     src, settings, out = tmp_path / f"{title}.gba", tmp_path / "s.rnqs", tmp_path / f"{title}_out.gba"
     src.write_bytes(clean)
@@ -235,8 +313,48 @@ def test_every_allowed_option_at_once_stays_in_its_domains(tmp_path, title):
     # the combinations admission refuses as unverifiable (upr_settings.forbidden_enabled)
     spec.update(trainers="random", trainers_similar_strength=False, wild_restriction="none")
     clean, out, eff = _run_fork(tmp_path, title, spec)
-    r = W.audit(title, clean, out, W.domains_for_spec(eff))
+    r = W.audit(title, clean, out, W.domains_for_spec(eff))   # (domains overlap here, e.g. fossil
+    assert r["stray"] == [], r["named"]                        # levels inside statics: no tightness)
+
+
+def _assert_tight(title: str, clean: bytes, out: bytes, enabled: set[str]):
+    """0 stray bytes AND every enabled domain received a byte no other enabled domain explains
+    (a domain granted to a setting that never writes it -- a WIDENED domain -- fails here)."""
+    r = W.audit(title, clean, out, enabled)
     assert r["stray"] == [], r["named"]
+    domains = MODEL["titles"][title]["domains"]
+    changed = W.changed_offsets(clean, out)
+    for d in sorted(enabled - {"baseline"}):
+        others = W._merge(s for o in enabled - {d} for s in W._ranges(domains[o]))
+        own = W._merge(W._ranges(domains[d]))
+        assert any(W._inside(own, i) and not W._inside(others, i) for i in changed), (
+            f"{d} is enabled by {sorted(enabled)} but received no byte of its own: a widened domain")
+
+
+def _isolation_cases():
+    """Every FR/LG option that writes, alone, at every choice value (catch-rate at every tier);
+    a sub-option rides on the parent PARENT names. 59 cases per title."""
+    off = _off_spec()
+    for key, opt in U.options_for(FRLG).items():
+        if key in W.NO_WRITE_OPTIONS:
+            continue
+        if opt["kind"] == "choice":
+            values = [v for v in opt["choices"] if v != off[key]]
+        elif opt["kind"] == "int":
+            values = range(1, opt["max"] + 1) if key == "wild_min_catch_rate" else [opt["max"]]
+        else:
+            values = [True]
+        yield from ((key, v) for v in values)
+
+
+@pytest.mark.parametrize("title", TITLES)
+@pytest.mark.parametrize(("key", "value"), list(_isolation_cases()))
+def test_each_option_alone_writes_exactly_its_domains(tmp_path, title, key, value):
+    spec = {**_off_spec(), **PARENT.get(key, {}), key: value}
+    clean, out, eff = _run_fork(tmp_path, title, spec)
+    enabled = W.domains_for_spec(eff)
+    assert enabled - W.domains_for_spec({**_off_spec(), **PARENT.get(key, {})}), (key, "enables nothing")
+    _assert_tight(title, clean, out, enabled)
 
 
 def test_pipeline_entry_point_admits_allowed_and_refuses_widest_by_name():
