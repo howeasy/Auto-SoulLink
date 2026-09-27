@@ -1136,23 +1136,17 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
 @pytest.mark.parametrize("name,kind,link_slot", (
     ("evolve_gen3", "evolve", 0), ("npc_trade_gen3", "trade", 1), ("poison_faint_gen3", "poison", 0)))
 def test_nat_legs_rows_are_wired(name, kind, link_slot, monkeypatch):
-    """NAT-LEGS: FR-only, explicit_only (never in `--scenario all`, never on gen3_lgfr's LG-as-A
-    side, which has no synth fixture), A boots the committed SYNTH fixture the builder reproduces
-    byte for byte from its pinned seed, B idles on town, and the orchestrator links `link_slot`."""
-    import gen3_fixtures as fx
-
+    """NAT-LEGS: explicit_only (never in `--scenario all` on either FR-as-A `gen3_frlg` or
+    LG-as-A `gen3_lgfr`, card NAT-LEGS-2), A boots the committed SYNTH fixture, B idles on town,
+    and the orchestrator links `link_slot`. Fixture byte-reproduction is checked separately below
+    (once per title, since `orchestrate_*` doesn't care which title is behind "a")."""
     row = SCENARIOS[name]
     assert row["games"] == ("gen3_frlg",) and row["explicit_only"] is True
     assert row["target"] == {"a": f"{kind}_synth", "b": "town"}
     assert row["oracle"] == f"assert_{name}_saved" and callable(getattr(DuoRun, row["oracle"]))
-    assert name not in scenarios_for("gen3_frlg") and scenario_applies(name, "gen3_frlg")
+    for game in ("gen3_frlg", "gen3_lgfr"):
+        assert name not in scenarios_for(game) and scenario_applies(name, game)
     assert os.path.isfile(os.path.join(REPO, "lua", "tests", "duo", f"scenario_gen3_{name[:-5]}.lua"))
-    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
-    seed = "firered_party_battle.sav" if kind == "evolve" else "firered_party_town.sav"
-    with open(os.path.join(fixtures, seed), "rb") as f:
-        built, _ = fx.build_frlg_synth(f.read(), kind)
-    with open(os.path.join(fixtures, f"firered_party_{kind}_synth.sav"), "rb") as f:
-        assert f.read() == built
     run = DuoRun.__new__(DuoRun)
     calls = []
     monkeypatch.setattr(run, "_gen3_prelude", lambda link_slot=None: calls.append(link_slot), raising=False)
@@ -1161,3 +1155,30 @@ def test_nat_legs_rows_are_wired(name, kind, link_slot, monkeypatch):
     monkeypatch.setattr(run, "go", lambda lines=None: calls.append("go"), raising=False)
     getattr(run, f"orchestrate_{name}")()
     assert calls == [link_slot] + (["area"] if kind == "evolve" else []) + ["go"]
+
+
+@pytest.mark.parametrize("pack,seed_scene", (("firered", "battle"), ("leafgreen", "battle")))
+def test_nat_legs_evolve_synth_reproduces_from_its_seed(pack, seed_scene):
+    _assert_frlg_synth_reproduces(pack, "evolve", seed_scene)
+
+
+@pytest.mark.parametrize("pack", ("firered", "leafgreen"))
+def test_nat_legs_trade_synth_reproduces_from_its_seed(pack):
+    _assert_frlg_synth_reproduces(pack, "trade", "town")
+
+
+@pytest.mark.parametrize("pack", ("firered", "leafgreen"))
+def test_nat_legs_poison_synth_reproduces_from_its_seed(pack):
+    _assert_frlg_synth_reproduces(pack, "poison", "town")
+
+
+def _assert_frlg_synth_reproduces(pack, kind, seed_scene):
+    """Every committed `<pack>_party_<kind>_synth.sav` (NAT-LEGS FR-as-A, NAT-LEGS-2 LG-as-A) is
+    exactly what `make-frlg-synth` builds from its pinned party seed -- no hand edit, no drift."""
+    import gen3_fixtures as fx
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{pack}_party_{seed_scene}.sav"), "rb") as f:
+        built, _ = fx.build_frlg_synth(f.read(), kind)
+    with open(os.path.join(fixtures, f"{pack}_party_{kind}_synth.sav"), "rb") as f:
+        assert f.read() == built
