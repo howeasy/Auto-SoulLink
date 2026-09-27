@@ -1141,9 +1141,10 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     # not Emerald's Mudkip -> Marshtomp -- out of this card's lease). npc_trade_gen3 links party
     # slot 1 on BOTH halves; FR/LG's "town" fixture already carries a second party mon, but
     # Emerald's is a single Mudkip, so its B side boots "pc" (Mudkip + Poochyena) instead --
-    # poison_faint_gen3 links slot 0, so Emerald's "town" (single Mudkip) is fine for B there.
+    # poison_faint_gen3 links slot 0, but B's linked lead is still force_faint'ed (Soul Link), so
+    # Emerald's B side needs "pc" too: a single-mon "town" party whites out instead of memorializing.
     ("npc_trade_gen3", "trade", 1, ("gen3_frlg", "gen3_emerald"), "pc"),
-    ("poison_faint_gen3", "poison", 0, ("gen3_frlg", "gen3_emerald"), "town")))
+    ("poison_faint_gen3", "poison", 0, ("gen3_frlg", "gen3_emerald"), "pc")))
 def test_nat_legs_rows_are_wired(name, kind, link_slot, games, emerald_b, monkeypatch):
     """NAT-LEGS: explicit_only (never in `--scenario all` on either FR-as-A `gen3_frlg` or
     LG-as-A `gen3_lgfr`, card NAT-LEGS-2), A boots the committed SYNTH fixture, B idles on town,

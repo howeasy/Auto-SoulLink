@@ -399,9 +399,13 @@ SCENARIOS = {
                        "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
                        "frames": 2000000, "no_save": ("b",),
                        "oracle": "assert_npc_trade_gen3_saved"},
+    # B's Emerald side boots "pc" (Mudkip + Poochyena), not "town" (single Mudkip): B's own linked
+    # lead is force_faint'ed by the server (Soul Link), and a single-mon party would white out
+    # (RESULT: FAIL "no memorialize_done" -- the game overs before the memorial can send), exactly
+    # the reason linked_faint_active_gen3 already substitutes "pc" for gen3_emerald.
     "poison_faint_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
                           "target": {"a": "poison_synth", "b": "town"},
-                          "target_by_game": {"gen3_emerald": {"a": "poison", "b": "town"}},
+                          "target_by_game": {"gen3_emerald": {"a": "poison", "b": "pc"}},
                           "frames": 2000000,
                           "oracle": "assert_poison_faint_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
