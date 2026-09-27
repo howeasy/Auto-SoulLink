@@ -92,9 +92,11 @@ def test_v2_abi_is_read_from_shared_header():
         "SLINK_REASON_UNCERTAIN": 11, "SLINK_REASON_IDENTITY": 12, "SLINK_REASON_CLIENT_TOO_OLD": 13}
 
 
-def test_unqualified_v2_targets_emit_no_native_binding():
-    for title in ("firered", "leafgreen", "emerald", "radical_red"):
-        assert g.native_block(title) is None
+def test_published_v2_targets_emit_own_binding_and_rr_v2_stays_held():
+    for title in ("firered", "leafgreen", "emerald"):
+        assert g.native_block(title)["ABI"]==2
+        assert g.native_block(title)["BASE"]==0x0201B000
+    assert g.native_block("radical_red") is None
 
 
 def test_v2_header_parser_refuses_unknown_field_types(monkeypatch, tmp_path):

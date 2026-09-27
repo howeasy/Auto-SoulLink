@@ -1,5 +1,664 @@
 {
   "generator": "tools/gen_gen3_profile.py",
+  "native": {
+    "ABI": 2,
+    "BASE": 33665024,
+    "BLOB_BUF": 33665280,
+    "INFO": 33666784,
+    "INFO_LINEW": 32,
+    "INFO_MAXLINES": 6,
+    "INFO_PAGESLOT": 7,
+    "MENU_BUF": 33666400,
+    "OP_ARM_PEER_INTERACT": 13,
+    "OP_CHOOSE_PARTY_MON": 20,
+    "OP_CREATE_MON": 4,
+    "OP_DEPOSIT_MON": 24,
+    "OP_DESPAWN_PEER_NPC": 7,
+    "OP_FORCE_FAINT": 2,
+    "OP_FORCE_MOVE": 3,
+    "OP_FORCE_MOVE_SLOT": 5,
+    "OP_GHOST_CLEAR": 15,
+    "OP_GHOST_SPAWN": 14,
+    "OP_MATCH_CALL": 32,
+    "OP_MEMORIALIZE": 26,
+    "OP_PING": 1,
+    "OP_PLAY_FANFARE": 9,
+    "OP_PLAY_SE": 19,
+    "OP_RIVAL_SWAP": 28,
+    "OP_SET_ENEMY_PARTY": 16,
+    "OP_SET_PARTY_MON": 18,
+    "OP_SHOW_BATTLE_MESSAGE": 23,
+    "OP_SHOW_CHOICES": 22,
+    "OP_SHOW_INFO": 27,
+    "OP_SHOW_MENU": 17,
+    "OP_SHOW_MESSAGE": 8,
+    "OP_SPAWN_PEER_NPC": 6,
+    "OP_TRADE_PREPARE": 29,
+    "OP_TRADE_SCENE": 21,
+    "OP_TRADE_STATUS": 31,
+    "OP_TRADE_WITHDRAW": 30,
+    "OP_WITHDRAW_MON": 25,
+    "PI_COUNT": 33667076,
+    "SIG": 1263422547,
+    "TEXT_BUF": 33665888,
+    "TN_ENABLE": 33667080,
+    "_src": {
+      "ABI": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "BASE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "BLOB_BUF": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "INFO": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "INFO_LINEW": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "INFO_MAXLINES": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "INFO_PAGESLOT": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "MENU_BUF": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_ARM_PEER_INTERACT": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_CHOOSE_PARTY_MON": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_CREATE_MON": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_DEPOSIT_MON": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_DESPAWN_PEER_NPC": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_FORCE_FAINT": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_FORCE_MOVE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_FORCE_MOVE_SLOT": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_GHOST_CLEAR": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_GHOST_SPAWN": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_MATCH_CALL": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_MEMORIALIZE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_PING": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_PLAY_FANFARE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_PLAY_SE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_RIVAL_SWAP": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_SET_ENEMY_PARTY": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_SET_PARTY_MON": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_SHOW_BATTLE_MESSAGE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_SHOW_CHOICES": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_SHOW_INFO": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_SHOW_MENU": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_SHOW_MESSAGE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_SPAWN_PEER_NPC": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_TRADE_PREPARE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_TRADE_SCENE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_TRADE_STATUS": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_TRADE_WITHDRAW": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "OP_WITHDRAW_MON": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "PI_COUNT": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "SIG": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "TEXT_BUF": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)",
+      "TN_ENABLE": "patch/src/trade_targets/abi.h (canonical ABI2 layout); patch/src/trade_targets/emerald.h:17 (reserved arena)"
+    },
+    "abi_v2": {
+      "_src": {
+        "SLINK_ABI_VERSION": "patch/src/trade_targets/abi.h:18 (SLINK_ABI_VERSION)",
+        "SLINK_ARENA_SIZE": "patch/src/trade_targets/abi.h:19 (SLINK_ARENA_SIZE)",
+        "SLINK_BLOB_OFFSET": "patch/src/trade_targets/abi.h:22 (SLINK_BLOB_OFFSET)",
+        "SLINK_BLOB_SIZE": "patch/src/trade_targets/abi.h:23 (SLINK_BLOB_SIZE)",
+        "SLINK_CALC_OFF_FIELD": "patch/src/trade_targets/abi.h:209 (SLINK_CALC_OFF_FIELD)",
+        "SLINK_CALL_ARMED": "patch/src/trade_targets/abi.h:160 (SLINK_CALL_ARMED)",
+        "SLINK_CALL_COMPLETE": "patch/src/trade_targets/abi.h:161 (SLINK_CALL_COMPLETE)",
+        "SLINK_CALL_COOLDOWN_FRAMES": "patch/src/trade_targets/abi.h:39 (SLINK_CALL_COOLDOWN_FRAMES)",
+        "SLINK_CALL_DELIVERED": "patch/src/trade_targets/abi.h:160 (SLINK_CALL_DELIVERED)",
+        "SLINK_CALL_EMPTY": "patch/src/trade_targets/abi.h:160 (SLINK_CALL_EMPTY)",
+        "SLINK_CALL_RECORD_OFFSET": "patch/src/trade_targets/abi.h:38 (SLINK_CALL_RECORD_OFFSET)",
+        "SLINK_CALL_REFUSED": "patch/src/trade_targets/abi.h:161 (SLINK_CALL_REFUSED)",
+        "SLINK_CALL_WITNESS_OFFSET": "patch/src/trade_targets/abi.h:37 (SLINK_CALL_WITNESS_OFFSET)",
+        "SLINK_CAP_BATTLE_CALC": "patch/src/trade_targets/abi.h:67 (SLINK_CAP_BATTLE_CALC)",
+        "SLINK_CAP_DURABLE_TRADE": "patch/src/trade_targets/abi.h:62 (SLINK_CAP_DURABLE_TRADE)",
+        "SLINK_CAP_EXPLODE": "patch/src/trade_targets/abi.h:65 (SLINK_CAP_EXPLODE)",
+        "SLINK_CAP_INFO_PANEL": "patch/src/trade_targets/abi.h:63 (SLINK_CAP_INFO_PANEL)",
+        "SLINK_CAP_MATCH_CALL": "patch/src/trade_targets/abi.h:68 (SLINK_CAP_MATCH_CALL)",
+        "SLINK_CAP_NATIVE_SOUND": "patch/src/trade_targets/abi.h:64 (SLINK_CAP_NATIVE_SOUND)",
+        "SLINK_CAP_RIVAL_SWAP": "patch/src/trade_targets/abi.h:66 (SLINK_CAP_RIVAL_SWAP)",
+        "SLINK_COMMIT_ENTERED": "patch/src/trade_targets/abi.h:92 (SLINK_COMMIT_ENTERED)",
+        "SLINK_CONTROL_EPOCH_FIELD": "patch/src/trade_targets/abi.h:205 (SLINK_CONTROL_EPOCH_FIELD)",
+        "SLINK_CONTROL_OFFSET": "patch/src/trade_targets/abi.h:35 (SLINK_CONTROL_OFFSET)",
+        "SLINK_CONTROL_SIZE": "patch/src/trade_targets/abi.h:36 (SLINK_CONTROL_SIZE)",
+        "SLINK_FINAL_RESULT": "patch/src/trade_targets/abi.h:94 (SLINK_FINAL_RESULT)",
+        "SLINK_INFO_BAR_WIDTH": "patch/src/trade_targets/abi.h:34 (SLINK_INFO_BAR_WIDTH)",
+        "SLINK_INFO_CLOSED_FIELD": "patch/src/trade_targets/abi.h:193 (SLINK_INFO_CLOSED_FIELD)",
+        "SLINK_INFO_DRAWN_FIELD": "patch/src/trade_targets/abi.h:188 (SLINK_INFO_DRAWN_FIELD)",
+        "SLINK_INFO_ENABLE_FIELD": "patch/src/trade_targets/abi.h:192 (SLINK_INFO_ENABLE_FIELD)",
+        "SLINK_INFO_EPOCH_FIELD": "patch/src/trade_targets/abi.h:186 (SLINK_INFO_EPOCH_FIELD)",
+        "SLINK_INFO_LINES_FIELD": "patch/src/trade_targets/abi.h:189 (SLINK_INFO_LINES_FIELD)",
+        "SLINK_INFO_LINE_WIDTH": "patch/src/trade_targets/abi.h:30 (SLINK_INFO_LINE_WIDTH)",
+        "SLINK_INFO_MAX_LINES": "patch/src/trade_targets/abi.h:32 (SLINK_INFO_MAX_LINES)",
+        "SLINK_INFO_OFFSET": "patch/src/trade_targets/abi.h:28 (SLINK_INFO_OFFSET)",
+        "SLINK_INFO_PAGES_FIELD": "patch/src/trade_targets/abi.h:191 (SLINK_INFO_PAGES_FIELD)",
+        "SLINK_INFO_PAGE_FIELD": "patch/src/trade_targets/abi.h:190 (SLINK_INFO_PAGE_FIELD)",
+        "SLINK_INFO_PAGE_SLOT": "patch/src/trade_targets/abi.h:33 (SLINK_INFO_PAGE_SLOT)",
+        "SLINK_INFO_REQUEST_FIELD": "patch/src/trade_targets/abi.h:187 (SLINK_INFO_REQUEST_FIELD)",
+        "SLINK_INFO_RESULT_FIELD": "patch/src/trade_targets/abi.h:195 (SLINK_INFO_RESULT_FIELD)",
+        "SLINK_INFO_ROW_COUNT": "patch/src/trade_targets/abi.h:31 (SLINK_INFO_ROW_COUNT)",
+        "SLINK_INFO_SIZE": "patch/src/trade_targets/abi.h:29 (SLINK_INFO_SIZE)",
+        "SLINK_INFO_STATE_FIELD": "patch/src/trade_targets/abi.h:194 (SLINK_INFO_STATE_FIELD)",
+        "SLINK_INFO_TEXT_FIELD": "patch/src/trade_targets/abi.h:196 (SLINK_INFO_TEXT_FIELD)",
+        "SLINK_MAILBOX_OFFSET": "patch/src/trade_targets/abi.h:20 (SLINK_MAILBOX_OFFSET)",
+        "SLINK_MENU_OFFSET": "patch/src/trade_targets/abi.h:26 (SLINK_MENU_OFFSET)",
+        "SLINK_MENU_SIZE": "patch/src/trade_targets/abi.h:27 (SLINK_MENU_SIZE)",
+        "SLINK_MILESTONE_COUNT": "patch/src/trade_targets/abi.h:94 (SLINK_MILESTONE_COUNT)",
+        "SLINK_OP_ARM_PEER_INTERACT": "patch/src/trade_targets/abi.h:49 (SLINK_OP_ARM_PEER_INTERACT)",
+        "SLINK_OP_CHOOSE_PARTY_MON": "patch/src/trade_targets/abi.h:52 (SLINK_OP_CHOOSE_PARTY_MON)",
+        "SLINK_OP_CREATE_MON": "patch/src/trade_targets/abi.h:46 (SLINK_OP_CREATE_MON)",
+        "SLINK_OP_DEPOSIT_MON": "patch/src/trade_targets/abi.h:54 (SLINK_OP_DEPOSIT_MON)",
+        "SLINK_OP_DESPAWN_PEER_NPC": "patch/src/trade_targets/abi.h:47 (SLINK_OP_DESPAWN_PEER_NPC)",
+        "SLINK_OP_FORCE_FAINT": "patch/src/trade_targets/abi.h:45 (SLINK_OP_FORCE_FAINT)",
+        "SLINK_OP_FORCE_MOVE": "patch/src/trade_targets/abi.h:45 (SLINK_OP_FORCE_MOVE)",
+        "SLINK_OP_FORCE_MOVE_SLOT": "patch/src/trade_targets/abi.h:46 (SLINK_OP_FORCE_MOVE_SLOT)",
+        "SLINK_OP_GHOST_CLEAR": "patch/src/trade_targets/abi.h:50 (SLINK_OP_GHOST_CLEAR)",
+        "SLINK_OP_GHOST_SPAWN": "patch/src/trade_targets/abi.h:49 (SLINK_OP_GHOST_SPAWN)",
+        "SLINK_OP_MATCH_CALL": "patch/src/trade_targets/abi.h:59 (SLINK_OP_MATCH_CALL)",
+        "SLINK_OP_MEMORIALIZE": "patch/src/trade_targets/abi.h:55 (SLINK_OP_MEMORIALIZE)",
+        "SLINK_OP_PING": "patch/src/trade_targets/abi.h:45 (SLINK_OP_PING)",
+        "SLINK_OP_PLAY_FANFARE": "patch/src/trade_targets/abi.h:48 (SLINK_OP_PLAY_FANFARE)",
+        "SLINK_OP_PLAY_SE": "patch/src/trade_targets/abi.h:52 (SLINK_OP_PLAY_SE)",
+        "SLINK_OP_RIVAL_SWAP": "patch/src/trade_targets/abi.h:56 (SLINK_OP_RIVAL_SWAP)",
+        "SLINK_OP_SET_ENEMY_PARTY": "patch/src/trade_targets/abi.h:50 (SLINK_OP_SET_ENEMY_PARTY)",
+        "SLINK_OP_SET_PARTY_MON": "patch/src/trade_targets/abi.h:51 (SLINK_OP_SET_PARTY_MON)",
+        "SLINK_OP_SHOW_BATTLE_MESSAGE": "patch/src/trade_targets/abi.h:54 (SLINK_OP_SHOW_BATTLE_MESSAGE)",
+        "SLINK_OP_SHOW_CHOICES": "patch/src/trade_targets/abi.h:53 (SLINK_OP_SHOW_CHOICES)",
+        "SLINK_OP_SHOW_INFO": "patch/src/trade_targets/abi.h:56 (SLINK_OP_SHOW_INFO)",
+        "SLINK_OP_SHOW_MENU": "patch/src/trade_targets/abi.h:51 (SLINK_OP_SHOW_MENU)",
+        "SLINK_OP_SHOW_MESSAGE": "patch/src/trade_targets/abi.h:48 (SLINK_OP_SHOW_MESSAGE)",
+        "SLINK_OP_SPAWN_PEER_NPC": "patch/src/trade_targets/abi.h:47 (SLINK_OP_SPAWN_PEER_NPC)",
+        "SLINK_OP_TRADE_PREPARE": "patch/src/trade_targets/abi.h:57 (SLINK_OP_TRADE_PREPARE)",
+        "SLINK_OP_TRADE_SCENE": "patch/src/trade_targets/abi.h:53 (SLINK_OP_TRADE_SCENE)",
+        "SLINK_OP_TRADE_STATUS": "patch/src/trade_targets/abi.h:58 (SLINK_OP_TRADE_STATUS)",
+        "SLINK_OP_TRADE_WITHDRAW": "patch/src/trade_targets/abi.h:57 (SLINK_OP_TRADE_WITHDRAW)",
+        "SLINK_OP_WITHDRAW_MON": "patch/src/trade_targets/abi.h:55 (SLINK_OP_WITHDRAW_MON)",
+        "SLINK_PHASE_DONE": "patch/src/trade_targets/abi.h:89 (SLINK_PHASE_DONE)",
+        "SLINK_PHASE_IDLE": "patch/src/trade_targets/abi.h:88 (SLINK_PHASE_IDLE)",
+        "SLINK_PHASE_PRE_SAVE": "patch/src/trade_targets/abi.h:88 (SLINK_PHASE_PRE_SAVE)",
+        "SLINK_PHASE_READY": "patch/src/trade_targets/abi.h:88 (SLINK_PHASE_READY)",
+        "SLINK_PHASE_SCENE": "patch/src/trade_targets/abi.h:89 (SLINK_PHASE_SCENE)",
+        "SLINK_PHASE_UNCERTAIN": "patch/src/trade_targets/abi.h:89 (SLINK_PHASE_UNCERTAIN)",
+        "SLINK_PI_COUNT_FIELD": "patch/src/trade_targets/abi.h:206 (SLINK_PI_COUNT_FIELD)",
+        "SLINK_PI_COUNT_WIDTH": "patch/src/trade_targets/abi.h:207 (SLINK_PI_COUNT_WIDTH)",
+        "SLINK_POST_SAVE_OK": "patch/src/trade_targets/abi.h:93 (SLINK_POST_SAVE_OK)",
+        "SLINK_PRE_SAVE_CONSENT": "patch/src/trade_targets/abi.h:98 (SLINK_PRE_SAVE_CONSENT)",
+        "SLINK_PRE_SAVE_OK": "patch/src/trade_targets/abi.h:92 (SLINK_PRE_SAVE_OK)",
+        "SLINK_REASON_BAD_ARGS": "patch/src/trade_targets/abi.h:76 (SLINK_REASON_BAD_ARGS)",
+        "SLINK_REASON_CALL_BUSY": "patch/src/trade_targets/abi.h:83 (SLINK_REASON_CALL_BUSY)",
+        "SLINK_REASON_CALL_COOLDOWN": "patch/src/trade_targets/abi.h:85 (SLINK_REASON_CALL_COOLDOWN)",
+        "SLINK_REASON_CALL_UNAVAILABLE": "patch/src/trade_targets/abi.h:84 (SLINK_REASON_CALL_UNAVAILABLE)",
+        "SLINK_REASON_CLIENT_TOO_OLD": "patch/src/trade_targets/abi.h:80 (SLINK_REASON_CLIENT_TOO_OLD)",
+        "SLINK_REASON_IDENTITY": "patch/src/trade_targets/abi.h:79 (SLINK_REASON_IDENTITY)",
+        "SLINK_REASON_SLOTS_UNVIABLE": "patch/src/trade_targets/abi.h:82 (SLINK_REASON_SLOTS_UNVIABLE)",
+        "SLINK_REASON_UNCERTAIN": "patch/src/trade_targets/abi.h:78 (SLINK_REASON_UNCERTAIN)",
+        "SLINK_REASON_WINDOW_CLOSED": "patch/src/trade_targets/abi.h:77 (SLINK_REASON_WINDOW_CLOSED)",
+        "SLINK_REASON_WITHDRAW_TOO_LATE": "patch/src/trade_targets/abi.h:81 (SLINK_REASON_WITHDRAW_TOO_LATE)",
+        "SLINK_SAVE_FAILED": "patch/src/trade_targets/abi.h:109 (SLINK_SAVE_FAILED)",
+        "SLINK_SAVE_OK": "patch/src/trade_targets/abi.h:108 (SLINK_SAVE_OK)",
+        "SLINK_SCENE_EVOLUTION_DONE": "patch/src/trade_targets/abi.h:93 (SLINK_SCENE_EVOLUTION_DONE)",
+        "SLINK_SIGNATURE": "patch/src/trade_targets/abi.h:17 (SLINK_SIGNATURE)",
+        "SLINK_ST_BUSY": "patch/src/trade_targets/abi.h:70 (SLINK_ST_BUSY)",
+        "SLINK_ST_FAIL": "patch/src/trade_targets/abi.h:70 (SLINK_ST_FAIL)",
+        "SLINK_ST_OK": "patch/src/trade_targets/abi.h:70 (SLINK_ST_OK)",
+        "SLINK_SUCCESS_MILESTONES": "patch/src/trade_targets/abi.h:107 (SLINK_SUCCESS_MILESTONES)",
+        "SLINK_TEXT_OFFSET": "patch/src/trade_targets/abi.h:24 (SLINK_TEXT_OFFSET)",
+        "SLINK_TEXT_SIZE": "patch/src/trade_targets/abi.h:25 (SLINK_TEXT_SIZE)",
+        "SLINK_TN_ENABLE_FIELD": "patch/src/trade_targets/abi.h:208 (SLINK_TN_ENABLE_FIELD)",
+        "SLINK_TRADE_COMMITTED": "patch/src/trade_targets/abi.h:101 (SLINK_TRADE_COMMITTED)",
+        "SLINK_TRADE_PENDING": "patch/src/trade_targets/abi.h:101 (SLINK_TRADE_PENDING)",
+        "SLINK_TRADE_UNCERTAIN": "patch/src/trade_targets/abi.h:102 (SLINK_TRADE_UNCERTAIN)",
+        "SLINK_TRADE_UNCHANGED": "patch/src/trade_targets/abi.h:102 (SLINK_TRADE_UNCHANGED)",
+        "SLINK_VISIT_ACCEPTED": "patch/src/trade_targets/abi.h:97 (SLINK_VISIT_ACCEPTED)",
+        "SLINK_WITNESS_OFFSET": "patch/src/trade_targets/abi.h:21 (SLINK_WITNESS_OFFSET)",
+        "SlinkCallRecordV2": "patch/src/trade_targets/abi.h:154 (SlinkCallRecordV2)",
+        "SlinkCallWitnessV2": "patch/src/trade_targets/abi.h:163 (SlinkCallWitnessV2)",
+        "SlinkControlV2": "patch/src/trade_targets/abi.h:198 (SlinkControlV2)",
+        "SlinkInfoV2": "patch/src/trade_targets/abi.h:175 (SlinkInfoV2)",
+        "SlinkMailboxV2": "patch/src/trade_targets/abi.h:111 (SlinkMailboxV2)",
+        "SlinkTradeWitnessV2": "patch/src/trade_targets/abi.h:131 (SlinkTradeWitnessV2)"
+      },
+      "constants": {
+        "SLINK_ABI_VERSION": 2,
+        "SLINK_ARENA_SIZE": 4096,
+        "SLINK_BLOB_OFFSET": 256,
+        "SLINK_BLOB_SIZE": 600,
+        "SLINK_CALC_OFF_FIELD": 9,
+        "SLINK_CALL_ARMED": 1,
+        "SLINK_CALL_COMPLETE": 4,
+        "SLINK_CALL_COOLDOWN_FRAMES": 10800,
+        "SLINK_CALL_DELIVERED": 2,
+        "SLINK_CALL_EMPTY": 0,
+        "SLINK_CALL_RECORD_OFFSET": 3648,
+        "SLINK_CALL_REFUSED": 3,
+        "SLINK_CALL_WITNESS_OFFSET": 3584,
+        "SLINK_CAP_BATTLE_CALC": 32,
+        "SLINK_CAP_DURABLE_TRADE": 1,
+        "SLINK_CAP_EXPLODE": 8,
+        "SLINK_CAP_INFO_PANEL": 2,
+        "SLINK_CAP_MATCH_CALL": 64,
+        "SLINK_CAP_NATIVE_SOUND": 4,
+        "SLINK_CAP_RIVAL_SWAP": 16,
+        "SLINK_COMMIT_ENTERED": 1,
+        "SLINK_CONTROL_EPOCH_FIELD": 0,
+        "SLINK_CONTROL_OFFSET": 2048,
+        "SLINK_CONTROL_SIZE": 1536,
+        "SLINK_FINAL_RESULT": 4,
+        "SLINK_INFO_BAR_WIDTH": 38,
+        "SLINK_INFO_CLOSED_FIELD": 12,
+        "SLINK_INFO_DRAWN_FIELD": 6,
+        "SLINK_INFO_ENABLE_FIELD": 11,
+        "SLINK_INFO_EPOCH_FIELD": 0,
+        "SLINK_INFO_LINES_FIELD": 8,
+        "SLINK_INFO_LINE_WIDTH": 32,
+        "SLINK_INFO_MAX_LINES": 6,
+        "SLINK_INFO_OFFSET": 1760,
+        "SLINK_INFO_PAGES_FIELD": 10,
+        "SLINK_INFO_PAGE_FIELD": 9,
+        "SLINK_INFO_PAGE_SLOT": 7,
+        "SLINK_INFO_REQUEST_FIELD": 4,
+        "SLINK_INFO_RESULT_FIELD": 15,
+        "SLINK_INFO_ROW_COUNT": 8,
+        "SLINK_INFO_SIZE": 288,
+        "SLINK_INFO_STATE_FIELD": 14,
+        "SLINK_INFO_TEXT_FIELD": 32,
+        "SLINK_MAILBOX_OFFSET": 0,
+        "SLINK_MENU_OFFSET": 1376,
+        "SLINK_MENU_SIZE": 384,
+        "SLINK_MILESTONE_COUNT": 5,
+        "SLINK_OP_ARM_PEER_INTERACT": 13,
+        "SLINK_OP_CHOOSE_PARTY_MON": 20,
+        "SLINK_OP_CREATE_MON": 4,
+        "SLINK_OP_DEPOSIT_MON": 24,
+        "SLINK_OP_DESPAWN_PEER_NPC": 7,
+        "SLINK_OP_FORCE_FAINT": 2,
+        "SLINK_OP_FORCE_MOVE": 3,
+        "SLINK_OP_FORCE_MOVE_SLOT": 5,
+        "SLINK_OP_GHOST_CLEAR": 15,
+        "SLINK_OP_GHOST_SPAWN": 14,
+        "SLINK_OP_MATCH_CALL": 32,
+        "SLINK_OP_MEMORIALIZE": 26,
+        "SLINK_OP_PING": 1,
+        "SLINK_OP_PLAY_FANFARE": 9,
+        "SLINK_OP_PLAY_SE": 19,
+        "SLINK_OP_RIVAL_SWAP": 28,
+        "SLINK_OP_SET_ENEMY_PARTY": 16,
+        "SLINK_OP_SET_PARTY_MON": 18,
+        "SLINK_OP_SHOW_BATTLE_MESSAGE": 23,
+        "SLINK_OP_SHOW_CHOICES": 22,
+        "SLINK_OP_SHOW_INFO": 27,
+        "SLINK_OP_SHOW_MENU": 17,
+        "SLINK_OP_SHOW_MESSAGE": 8,
+        "SLINK_OP_SPAWN_PEER_NPC": 6,
+        "SLINK_OP_TRADE_PREPARE": 29,
+        "SLINK_OP_TRADE_SCENE": 21,
+        "SLINK_OP_TRADE_STATUS": 31,
+        "SLINK_OP_TRADE_WITHDRAW": 30,
+        "SLINK_OP_WITHDRAW_MON": 25,
+        "SLINK_PHASE_DONE": 4,
+        "SLINK_PHASE_IDLE": 0,
+        "SLINK_PHASE_PRE_SAVE": 1,
+        "SLINK_PHASE_READY": 2,
+        "SLINK_PHASE_SCENE": 3,
+        "SLINK_PHASE_UNCERTAIN": 5,
+        "SLINK_PI_COUNT_FIELD": 4,
+        "SLINK_PI_COUNT_WIDTH": 4,
+        "SLINK_POST_SAVE_OK": 3,
+        "SLINK_PRE_SAVE_CONSENT": 2,
+        "SLINK_PRE_SAVE_OK": 0,
+        "SLINK_REASON_BAD_ARGS": 2,
+        "SLINK_REASON_CALL_BUSY": 16,
+        "SLINK_REASON_CALL_COOLDOWN": 18,
+        "SLINK_REASON_CALL_UNAVAILABLE": 17,
+        "SLINK_REASON_CLIENT_TOO_OLD": 13,
+        "SLINK_REASON_IDENTITY": 12,
+        "SLINK_REASON_SLOTS_UNVIABLE": 15,
+        "SLINK_REASON_UNCERTAIN": 11,
+        "SLINK_REASON_WINDOW_CLOSED": 8,
+        "SLINK_REASON_WITHDRAW_TOO_LATE": 14,
+        "SLINK_SAVE_FAILED": 255,
+        "SLINK_SAVE_OK": 1,
+        "SLINK_SCENE_EVOLUTION_DONE": 2,
+        "SLINK_SIGNATURE": 1263422547,
+        "SLINK_ST_BUSY": 1,
+        "SLINK_ST_FAIL": 3,
+        "SLINK_ST_OK": 2,
+        "SLINK_SUCCESS_MILESTONES": 31,
+        "SLINK_TEXT_OFFSET": 864,
+        "SLINK_TEXT_SIZE": 512,
+        "SLINK_TN_ENABLE_FIELD": 8,
+        "SLINK_TRADE_COMMITTED": 1,
+        "SLINK_TRADE_PENDING": 0,
+        "SLINK_TRADE_UNCERTAIN": 3,
+        "SLINK_TRADE_UNCHANGED": 2,
+        "SLINK_VISIT_ACCEPTED": 1,
+        "SLINK_WITNESS_OFFSET": 80
+      },
+      "source_sha256": "db628e307a1309c056a1c2a184f2f1f11c263bf9ad53dd140ac170475306bf42",
+      "structs": {
+        "SlinkCallRecordV2": {
+          "fields": {
+            "caller_nick": {
+              "count": 11,
+              "offset": 14,
+              "width": 1
+            },
+            "caller_species": {
+              "count": 1,
+              "offset": 2,
+              "width": 2
+            },
+            "event": {
+              "count": 1,
+              "offset": 0,
+              "width": 1
+            },
+            "has_names": {
+              "count": 1,
+              "offset": 1,
+              "width": 1
+            },
+            "receiver_nick": {
+              "count": 11,
+              "offset": 25,
+              "width": 1
+            },
+            "receiver_species": {
+              "count": 1,
+              "offset": 4,
+              "width": 2
+            },
+            "trainer": {
+              "count": 8,
+              "offset": 6,
+              "width": 1
+            }
+          },
+          "size": 36
+        },
+        "SlinkCallWitnessV2": {
+          "fields": {
+            "armed_frame": {
+              "count": 1,
+              "offset": 12,
+              "width": 4
+            },
+            "delivered_frame": {
+              "count": 1,
+              "offset": 16,
+              "width": 4
+            },
+            "event": {
+              "count": 1,
+              "offset": 9,
+              "width": 1
+            },
+            "phase": {
+              "count": 1,
+              "offset": 8,
+              "width": 1
+            },
+            "reason": {
+              "count": 1,
+              "offset": 10,
+              "width": 2
+            },
+            "reserved": {
+              "count": 3,
+              "offset": 20,
+              "width": 4
+            },
+            "revision": {
+              "count": 1,
+              "offset": 6,
+              "width": 2
+            },
+            "seq": {
+              "count": 1,
+              "offset": 4,
+              "width": 2
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            }
+          },
+          "size": 32
+        },
+        "SlinkControlV2": {
+          "fields": {
+            "calc_off": {
+              "count": 1,
+              "offset": 9,
+              "width": 1
+            },
+            "pi_count": {
+              "count": 1,
+              "offset": 4,
+              "width": 4
+            },
+            "reserved": {
+              "count": 6,
+              "offset": 10,
+              "width": 1
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            },
+            "tn_enable": {
+              "count": 1,
+              "offset": 8,
+              "width": 1
+            }
+          },
+          "size": 16
+        },
+        "SlinkInfoV2": {
+          "fields": {
+            "closed_seq": {
+              "count": 1,
+              "offset": 12,
+              "width": 2
+            },
+            "drawn_seq": {
+              "count": 1,
+              "offset": 6,
+              "width": 2
+            },
+            "enable": {
+              "count": 1,
+              "offset": 11,
+              "width": 1
+            },
+            "lines": {
+              "count": 1,
+              "offset": 8,
+              "width": 1
+            },
+            "page": {
+              "count": 1,
+              "offset": 9,
+              "width": 1
+            },
+            "pages": {
+              "count": 1,
+              "offset": 10,
+              "width": 1
+            },
+            "request_seq": {
+              "count": 1,
+              "offset": 4,
+              "width": 2
+            },
+            "reserved": {
+              "count": 4,
+              "offset": 16,
+              "width": 4
+            },
+            "result": {
+              "count": 1,
+              "offset": 15,
+              "width": 1
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            },
+            "state": {
+              "count": 1,
+              "offset": 14,
+              "width": 1
+            },
+            "text": {
+              "count": 256,
+              "offset": 32,
+              "width": 1
+            }
+          },
+          "size": 288
+        },
+        "SlinkMailboxV2": {
+          "fields": {
+            "abi_version": {
+              "count": 1,
+              "offset": 4,
+              "width": 2
+            },
+            "ack_seq": {
+              "count": 1,
+              "offset": 12,
+              "width": 2
+            },
+            "args": {
+              "count": 32,
+              "offset": 16,
+              "width": 1
+            },
+            "capabilities": {
+              "count": 1,
+              "offset": 64,
+              "width": 4
+            },
+            "opcode": {
+              "count": 1,
+              "offset": 6,
+              "width": 2
+            },
+            "producer_phase": {
+              "count": 1,
+              "offset": 72,
+              "width": 4
+            },
+            "reason": {
+              "count": 1,
+              "offset": 14,
+              "width": 2
+            },
+            "reserved": {
+              "count": 1,
+              "offset": 76,
+              "width": 4
+            },
+            "result": {
+              "count": 16,
+              "offset": 48,
+              "width": 1
+            },
+            "seq": {
+              "count": 1,
+              "offset": 8,
+              "width": 2
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 68,
+              "width": 4
+            },
+            "signature": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            },
+            "status": {
+              "count": 1,
+              "offset": 10,
+              "width": 2
+            }
+          },
+          "size": 80
+        },
+        "SlinkTradeWitnessV2": {
+          "fields": {
+            "final_result": {
+              "count": 1,
+              "offset": 42,
+              "width": 1
+            },
+            "milestone_frame": {
+              "count": 5,
+              "offset": 44,
+              "width": 4
+            },
+            "milestone_seq": {
+              "count": 5,
+              "offset": 32,
+              "width": 2
+            },
+            "milestones": {
+              "count": 1,
+              "offset": 28,
+              "width": 4
+            },
+            "old_otid": {
+              "count": 1,
+              "offset": 68,
+              "width": 4
+            },
+            "old_pid": {
+              "count": 1,
+              "offset": 64,
+              "width": 4
+            },
+            "received_otid": {
+              "count": 1,
+              "offset": 76,
+              "width": 4
+            },
+            "received_pid": {
+              "count": 1,
+              "offset": 72,
+              "width": 4
+            },
+            "revision": {
+              "count": 1,
+              "offset": 24,
+              "width": 2
+            },
+            "save_status": {
+              "count": 1,
+              "offset": 43,
+              "width": 1
+            },
+            "session_epoch": {
+              "count": 1,
+              "offset": 0,
+              "width": 4
+            },
+            "token": {
+              "count": 16,
+              "offset": 8,
+              "width": 1
+            },
+            "visit_flags": {
+              "count": 1,
+              "offset": 26,
+              "width": 2
+            },
+            "visit_id": {
+              "count": 1,
+              "offset": 4,
+              "width": 4
+            }
+          },
+          "size": 80
+        }
+      }
+    }
+  },
   "pack": "gen3_emerald",
   "schema": "gen3-profile-v1",
   "source": {

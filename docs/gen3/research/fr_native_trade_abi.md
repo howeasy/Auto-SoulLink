@@ -101,6 +101,9 @@ Witness offsets below are relative to arena+`0x50`:
    consent or readiness. Consent is flag 2. Successful native pre-save publishes
    milestone 0 with the PREPARE seq, then ACKs PREPARE OK. A declined/failed
    pre-save publishes terminal UNCHANGED, bound to PREPARE seq.
+   Consent is a monotonic flag, not a separately sequenced milestone: a poll
+   may publish it earlier, or coalesce it with PRE_SAVE_OK on observed success.
+   Consumers must require both and must not require two distinct revisions.
 5. `trade_visit` is a projection of that coherent witness and local ownership,
    not a new opcode or a beacon-derived invented visit. Return the same visit
    ID/old key, accepted, pre_saved, apply_open only after consent+pre-save,
@@ -575,6 +578,9 @@ No screenshots supplied game facts. READY stays 0; no UPS is published.
 
 ## Emerald source and Match Call MODEL checkpoint
 
+Historical checkpoint at cb541d7e/f8371d27; superseded by the native candidate
+section below. The evidence in this section remains SOURCE/MODEL only.
+
 This is not an Emerald native composition or admission. The builder still
 rejects Emerald candidate builds and its READY remains0. Source pin:
 `pret/pokeemerald c65e93f20a5275ab03b07d6f6411096a82a60ffd`; exact BPEE revision0
@@ -619,3 +625,246 @@ CALL_COOLDOWN=18 denotes the native gap. Epoch/seq replay with a different event
 is refused as IDENTITY. These are v2 reason names; none changes the trade
 pre-commit refusal allow-list. No Match Call capability is published by this
 MODEL checkpoint.
+
+## T2-EMERALD-NATIVE candidate composition (physical checks pending)
+
+The private builder now accepts the exact Emerald BPEE rev0 ROM. READY remains0,
+production=false, and no UPS is emitted. Its candidate capability mask87 is
+trade1 + panel2 + sounds4 + rival16 + MatchCall64. This advertises implemented
+candidate handlers, not production admission or completed physical qualification.
+
+`emerald_bindings.json` records 75 source-symbol bindings against the pinned
+pokeemerald symbols. The native frame wrapper saves its incoming registers,
+calls the services with an aligned stack, restores them, replays the relocated
+entry, and branches to original `08000525`. The build receipt validates and
+records that tail and the original gMain literal. Disassembly confirms the
+relocated CMP is followed by LDR/BX, preserving its flags into the original BEQ.
+FR/LG rebuild byte-for-byte to their previously tested candidate hashes.
+
+Emerald-specific adaptations:
+
+- `SaveGame`, then `SaveMapView`/`TrySavingData`; no FR quest-log save call.
+- Preserve all 13 stock START action-table entries; append action13 and insert
+  it before EXIT7 in the normal menu. Preserve the PokeNav flag check. Emerald
+  has no parallel description table; its normal font is1 and script window
+  tile base100. The existing nine-slot menu order accommodates eight stock rows
+  plus SoulLink.
+- Native `ChoosePartyMon 081B94B0` writes `gSpecialVar_0x8004` through
+  BufferMonSelection. The unused ChoosePartyMonByMenuType does not. Native
+  cancellation255 translates to carrier result7 only after field return.
+- Scott graphics219, wander2, localF1, tile(10,4) in the source-listed sixteen
+  PokemonCenter_1F maps; the actual Spawn API takes border-adjusted (17,11).
+  Physical interaction checks are pending; this is not an all-Center claim.
+- Rival W1 still closes before state15 InitBattleControllers. Emerald has its
+  own callback/main/trainer/party bindings. Sound table IDs are0..609.
+
+The Match Call native adapter keeps its owned record atE40, controller atE80,
+runtime atE90 and a bounded 256-byte formatted message atF00. It requires both
+PokeNav and Match Call unlock flags. It waits for a safe field and three free
+task slots, then runs lockall/callnative/waitmessage/releaseall/end. The native
+call uses ShowPokenavFieldMessage, which expands into gStringVar4; it never calls
+StartMatchCallFromScript alone. The adapter reports visible delivery when the
+real ExecuteMatchCall reaches state5 (intro ended, message started), and release
+only after its task, field-message owner and script lock are all gone. Native
+allocation failures therefore follow the script's ordinary unlock path and
+produce REFUSED if delivery was never observed. These lifecycle assertions still
+need PHYSICAL evidence.
+
+`call_text.h` renders the Gen2 generic/named phone bodies in Gen3 text encoding,
+using native PLAYER expansion and ROM species names. Both species must be valid
+for named bodies; absent caller nickname falls back to its species. Receiver
+body uses species, matching Gen2. Formatting and candidate-build checks each
+had a failing first run, then passed. The callback continuation receipt also had
+a missing-field red before its green. Patch-focused regression:267 passed,
+170 skipped; the skipped external prerequisites are not physical evidence.
+
+`test_patch_emerald_live.py --prepare` stages isolated scripts/configs without
+launching an emulator. The panel, sound, carrier, real Calvin318 rival and native
+trade/save/reload probes are prepared from existing Emerald fixtures, using
+symbol-audited address translation and explicit semantic adaptations. No live
+PASS is claimed here. The current early-game fixtures have neither PokeNav nor
+Match Call; positive phone proof awaits a naturally unlocked save. The locked-
+device refusal probe is prepared separately. No story flags are patched for it.
+
+## T2-EMERALD-NATIVE single-cart physical receipts (2026-09-27)
+
+Producer `ccb8aed63d1f09b95010209bca5a2b6c2eecea6c` passed the six bounded
+native feature probes plus the early-game phone refusal control. Aggregate:
+`patch/build/em-live-20260927.json`; individual receipts and raw captures:
+`patch/build/em-{panel,sound,carrier,rival,trade,call-refusal,call}-live-20260927/`.
+Every run used ROM SHA256
+`fc7eda3609e704021a268953f91043085473c204171bc4e6b4ac34364a0f6fdc`.
+All seven owned EmuHawk PIDs were verified absent at exit.
+
+- Panel (PID41816): native START order1,2,4,5,6,13,7, two independent five-row
+  readbacks and page header, bound drawing/field lock, VRAM/palette changes,
+  A0/B127 closure. Replayed panel rows, not a server/T3 integration claim.
+- Sound (PID22208): native SE25 and fanfare367, ROM-selected m4a headers
+  `088FC5AC`/`0890DBFC`, advancing clocks, fanfare counter77->0 and BGM/task
+  release. Invalid IDs and unarmed/stale epochs refused without extra native
+  calls. No audible-output claim.
+- Carrier (PID49584): normal walk from Oldale into Center2,2, native Scott NPC
+  counter edges, A/B choices/chooser/offer results, native PREPARE save2->3,
+  WITHDRAW unchanged, independent party/SaveRAM decode, disable cleanup.
+  No all-Center, server or duo qualification.
+- Rival (PID46840): normal Right step from(32,16) triggered real Calvin318;
+  W1 consumed at stage0, ACK before state15 selection, native engine selected
+  live second slot Poochyena286 from the replayed team with fainted first slot.
+  Late refusal reason8 preserved all600 enemy bytes and party count.
+- Trade (PID30212): existing Emerald PC fixture, native consent/save, commit,
+  trade evolution and post-save; counter2->4. Machoke67 became Machamp68 with
+  PID13572468/OT78563412. Reset without another manual SAVE retained it;
+  independent flash/reloaded-party checks and unchanged boxed storage passed.
+  This was the two-party-mon fixture, not FR/LG's full-party/full-box stress seed.
+- Phone refusal (PID46276): unmodified early fixture had neither unlock flag;
+  coherent REFUSED17, no ShowPokenavFieldMessage call, no field lock.
+- Match Call (PID45256): three native messages (named fallen, generic dead-zone,
+  named first-link), ARMED before native show, state5 message delivery, script/
+  task release before COMPLETE. Native field-buffer text and owned record were
+  independently decoded. A new-epoch request during the first open call got
+  BUSY16 without replacing its old-epoch witness/record/text. Immediate retry
+  got COOLDOWN18; later deliveries occurred at native frames718,11826,23140.
+
+Coordinator O-33 authorization allowed an offline SYNTH phone setup. Starting
+from committed Emerald town SHA256
+`f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a`, only active
+flash offsets `3315:00->80` (Match Call flag), `33FC:01->05` (PokeNav flag), and
+sector checksum `3FF6:AE->B2,3FF7:2A->AA` changed. Seed SHA256:
+`7754fa3c8a0a13852a8452596ae47484c8e0d27092ca1da1bc778ce28b843c55`.
+`synth_setup.json` records every changed byte. No registered-trainer change was
+needed: the source's script-triggered path uses gStringVar4 directly. No flags
+were written during the run, and both unlock bytes were checked unchanged.
+
+The initial phone oracle rejected all three decoded strings because native
+CHAR_SGL_QUOTE_RIGHT B4 decodes to U+2019 while its expected strings used ASCII
+apostrophes. `initial_oracle_failure.json` is retained. The expectation was
+corrected and the unmodified native capture re-evaluated; no candidate change
+or emulator rerun was needed. The committed captured-trace test rejects altered
+text, record species, epoch binding, delivery state, missing release, lost busy
+ownership, missing cooldown and missing overall success.
+
+These are PHYSICAL single-cart candidate receipts with disclosed replayed/SYNTH
+inputs, not duo/server integration, all-scene heap qualification or production
+admission. READY remains0 and no UPS was published. T2 stops here; the RR durable
+delta has not started and awaits coordinator confirmation.
+
+## T2-PUBLISH (2026-09-27)
+
+The owner authorized publication after the bounded native receipts above.
+Integration through646586fd and T5 througha37ebb44 are merged into
+`claude/gen3-emerald-t2`. The ABI merge retains the native producer phase,
+reason names and received-identity durability predicate. RR keeps ABI1; its
+UPS reproduces byte-for-byte with patched MD5c372c428c8f41cbbde5c71d6408233dd.
+
+FR, LG and Emerald now have READY1 and arena0201B000. The production builder
+validates the native heap reservation, composes the tested payload, creates
+and round-trips a title-specific UPS, and writes `patch/dist/gen3_companions.json`.
+`--check` compares both UPS bytes and the manifest row. The published ROM bytes
+are identical to the previously tested candidates; READY publication changes
+the build/admission gates rather than silently changing the native payload.
+Private candidate receipts remain production=false/READY0 for the T5 harness.
+
+Published artifacts:
+
+| Title | UPS | Result SHA1 | ABI/capabilities |
+|---|---|---|---|
+| FireRed | SLink-FireRed.ups | 10109d33a937af6182827a5b0b36abccfaabd1c9 | 2 / 23 |
+| LeafGreen | SLink-LeafGreen.ups | e651983a7e0d3cbd8810c76252755d2f09bd9bf0 | 2 / 23 |
+| Emerald | SLink-Emerald.ups | 2eef703ca448df5d782d16490cf2608803a7ef13 | 2 / 87 |
+
+The same manifest supplies the patcher registry and validates the UPS used by
+the engine-site/checkpoint generators. Companion sites retain their clean
+semantic locations except FR/LG frame_control: their old CallCallbacks+10 is
+bypassed by the native replacement, so the published artifact observes the
+real CallCallbacks entry instead. Expected site/context and checkpoint bytes
+are taken from the verified UPS result. The shipped profiles carry the canonical
+ABI2 layout, with title-specific runtime readers and admission metadata.
+
+The T5 consumer supplies the native carrier controls and durable-trade binding.
+Publication extends that binding to Emerald under its own pack/title, using its
+existing save-reload layout. The missing ABI2 link-panel publisher now stages
+epoch/request/text without overwriting native drawn/closed/state/result fields;
+updates wait while the panel owns its snapshot. Model tests cover publication,
+deferred updates and the Emerald durable preparation handshake. Rival readback
+uses the selected title's own profile, rather than the RR table.
+
+The Manager and release bundle expose all three UPS files. For an allowed
+randomized cartridge, composition follows randomization and refuses overlap
+with any protected native injection or detour span; the final output is what
+the run contract hashes. Internally this is `rand_companion`, while the existing
+wire kind stays `rand`, including ROM-content proof and randomized pairing rules.
+No new wire artifact kind was introduced.
+
+Production UPS smokes apply the shipped UPS to each pinned clean owner ROM,
+then cold-boot, open/close the native panel, perform a native trade with evolution
+and both saves, and reset/reload without another manual SAVE. All passed:
+
+- FR PID40280: `patch/build/production-firered-live-20260927/production_receipt.json`,
+  native counter4->6, received Machamp identity retained.
+- LG PID45488: `patch/build/production-leafgreen-live-20260927/production_receipt.json`,
+  native counter3->5, received Machamp identity retained.
+- Emerald PID46024: `patch/build/production-em-trade-live-20260927/emerald_receipt.json`,
+  native counter2->4, received Machamp identity retained.
+
+Every received key was13572468:78563412. Python independently decoded the native
+SaveRAM and reloaded party. The probes used private state/config directories and
+only their owned PIDs; all three PIDs were verified absent afterward. FR/LG used
+the disclosed full-party/full-box SYNTH fixture; Emerald used its two-mon PC
+fixture. These are native single-cart production-UPS smokes, not additional duo
+or all-scene heap qualification. T5 owns the duo receipts and OMP review.
+
+### OMP review dispositions (cx-6db186a8 / cx-38e266e5)
+
+- Chooser sentinel: accepted. Emerald's native cancel isFF, so the adapter now
+  initializes8004 toFFFF and interprets that as pending. A realFF translates to7.
+  The FR/LG path retainsFF as pending. Host-C controls cover pending, slot3 and
+  both cancellation conventions.
+- Consent timing: clarified rather than changing the engine. At pokeemerald
+  c65e93f2 `src/start_menu.c:1003-1023`, SaveConfirmInputCallback handles initial
+  consent; `:1063-1078` handles overwrite consent. Both Yes paths lead through
+  SaveSavingMessageCallback/SaveDoSaveCallback (`:1080-1106`). The input callback
+  being active alone is not consent. The witness contract above explicitly
+  permits consent and successful pre-save to share an atomic revision.
+- Callback replay: builder validation now selects exactly one CallCallbacks
+  continuation by symbol, verifies entry+8 and Thumb continuation, derives the
+  original PC-relative pool address, and requires the replay assembly to agree
+  with GMAIN/FRAME_RESUME. Reordered/unrelated rows are accepted; missing,
+  duplicate or inconsistent bindings are refused before compilation.
+- Emerald Main offsets: confirmed from the pinned `include/main.h:23` (explicit
+  vblankCounter2 offset024) and`:38-40` (byte439, inBattle is the second bit).
+  ENEMY_COUNT is correctly020244EA in the committed header and the pinned
+  gEnemyPartyCount symbol; the reported shorter value is not in the commit.
+- FR/LG artifact identity: default-run tests reconstruct the injected payload
+  from each checked-in UPS's XOR records over its verified FF source reservation,
+  then compare with frozen native-receipt payload hashes. This requires neither
+  owner ROMs nor a compiler. Source reproduction remains a separate --check gate.
+- Match Call watchdog: accepted with an ownership safeguard. After600 native
+  frames without observed delivery, the controller asks the adapter to cancel.
+  A displaced pre-show script has no remaining text owner and releases promptly;
+  an owned lockall prefix is replaced only by its releaseall/end cleanup and
+  remains owned until actual field release. A UI which really started can wait
+  for the player indefinitely; a timer alone must never free its text for reuse.
+  Model controls prove timeout refusal/reopening and refusal to release when the
+  engine cannot prove cancellation. No delivery or cooldown is credited on timeout.
+- Match Call visibility: state5 is not inherently one frame; PrintMessage waits
+  for text, sound and A/B. Nonetheless, state6/7 also prove that state5 completed.
+  The adapter now retains the maximum observed state and accepts5..7 as delivery.
+  An entirely unobserved message still cannot manufacture delivery/cooldown.
+- Runtime2/3 are now explicit acquired/failed states, including a failed-show
+  branch which cannot credit another task's message. The u8 return cast is
+  correct: `src/field_message_box.c:80` returns bool8, and
+  `include/gba/types.h:27` typedefs bool8 asu8.
+- ABI comments now state that an epoch change cancels ARMED only before native
+  ownership. Replay ACKs preserve original acceptance; later UI failure is
+  reported through the coherent witness, not by rewriting the original ACK.
+
+The reviewed Emerald UPS was rebuilt and re-smoked (PID46024, panel plus durable
+trade/reload). An old-candidate carrier run (PID49328) independently observed
+the faulty255 sentinel twice and failed the new oracle. The reviewed production
+carrier (PID35352) observed65535 twice and passed selection/cancellation and
+pre-save/withdrawal. Native Match Call events1/2/3, busy ownership and cooldown
+passed again on the reviewed UPS (PID33732); the early-fixture refusal passed
+again (PID8364). All owned PIDs exited. Older production Emerald trade proof is
+retained under `production-em-trade-live-20260927-pre-omp`; original candidate
+carrier proof is retained under `em-carrier-live-20260927-pre-omp`.
+The default FR/LG payload identity check passed after this rebuild.

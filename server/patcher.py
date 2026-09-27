@@ -133,6 +133,26 @@ TARGETS: dict[str, dict] = {
 
 DEFAULT_TARGET = "rr"
 
+# The same build manifest pins the downloadable patch and runtime admission.
+def _register_gen3_companions():
+    import json
+    manifest = os.path.join(_DIST, "gen3_companions.json")
+    if not os.path.exists(manifest):
+        return
+    with open(manifest, encoding="utf-8") as stream:
+        rows = json.load(stream)["titles"]
+    for title, label in (("firered", "FireRed"), ("leafgreen", "LeafGreen"), ("emerald", "Emerald")):
+        row = rows.get(title)
+        if row and row.get("production") is True:
+            TARGETS[title] = {"slug":title,"label":f"Pokemon {label}","patch":row["patch"],
+                "base_md5":row["base_md5"],"patched_md5":row["rom_md5"],
+                "accept":".gba,application/octet-stream",
+                "out_name":f"Pokemon - {label} (SLink companion).gba",
+                "base_hint":f"a clean English Pokemon {label} revision-0 ROM"}
+
+
+_register_gen3_companions()
+
 
 def patch_path(slug: str) -> str:
     """Absolute path to a target's UPS file."""

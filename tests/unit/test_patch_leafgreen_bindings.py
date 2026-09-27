@@ -32,4 +32,4 @@ def test_leafgreen_complete_bindings_match_own_symbol_provenance():
             assert symbols[item["symbol"]]=={item["symbol_address"]}
             assert item["address"]==item["symbol_address"]+item["offset"]
     assert lg["ARENA_CANDIDATE"]==lg["HEAP_BASE"]+lg["HEAP_SIZE"]-lg["ARENA_SIZE"]
-    assert lg["READY"]==0
+    assert lg["READY"]==1

@@ -1,5 +1,5 @@
 {
-  "status": "SOURCE_ONLY_NOT_COMPOSED",
+  "status": "SOURCE_PINNED",
   "source_commit": "c65e93f20a5275ab03b07d6f6411096a82a60ffd",
   "rom_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
   "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc",

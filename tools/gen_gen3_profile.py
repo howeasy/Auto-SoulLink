@@ -765,7 +765,7 @@ def native_block(title: str | None = None) -> dict | None:
     if title is not None:
         if title not in V2_TARGETS:
             raise ValueError(f"unknown companion target: {title}")
-        native_abi()  # validate the sole v2 layout source even while a target is held
+        abi = native_abi()
         path = f"patch/src/trade_targets/{title}.h"
         text = (REPO / path).read_text(encoding="utf-8")
         ready = re.search(r"^#define SLINK_TARGET_READY\s+(\w+)", text, re.M)
@@ -773,7 +773,19 @@ def native_block(title: str | None = None) -> dict | None:
             raise ValueError(f"missing READY gate: {path}")
         if _abi_number(ready[1], {}) == 0:
             return None
-        raise ValueError(f"no qualified v2 binding for {title}")
+        constants = abi["constants"]
+        base, base_off = _c_define(text, "SLINK_TARGET_ARENA_BASE")
+        native = {"BASE":base,"SIG":constants["SLINK_SIGNATURE"],"ABI":2,"abi_v2":abi}
+        native.update({name.removeprefix("SLINK_"):value for name,value in constants.items()
+                       if name.startswith("SLINK_OP_")})
+        for name, offset in (("BLOB_BUF","SLINK_BLOB_OFFSET"),("TEXT_BUF","SLINK_TEXT_OFFSET"),
+                             ("MENU_BUF","SLINK_MENU_OFFSET"),("INFO","SLINK_INFO_OFFSET")):
+            native[name]=base+constants[offset]
+        native.update(INFO_LINEW=32,INFO_MAXLINES=constants["SLINK_INFO_MAX_LINES"],
+                      INFO_PAGESLOT=constants["SLINK_INFO_PAGE_SLOT"],PI_COUNT=base+0x804,TN_ENABLE=base+0x808)
+        native["_src"]={name:f"{ABI_SRC} (canonical ABI2 layout); {path}:{_line_of(text,base_off)} (reserved arena)"
+                        for name in native if name!="abi_v2"}
+        return native
     # The published RR UPS is still v1. Never replace its values/citations with
     # the unqualified v2 header merely because its source is now available.
     values: dict[str, int] = {}
@@ -1179,6 +1191,8 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
             for name, (off, raw) in RR_ROM_ANCHORS.items()
         }
         out["native"] = native_block()
+    elif pack == "gen3_frlg":
+        out["native"] = native_block("firered")
     return out
 
 
@@ -1386,6 +1400,7 @@ def build_emerald() -> dict:
         "schema": SCHEMA,
         "generator": "tools/gen_gen3_profile.py",
         "pack": "gen3_emerald",
+        "native": native_block("emerald"),
         "source": {"file": EMERALD_SYM, "git_head": head or "unknown",
                    "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
         "titles": {"emerald": {

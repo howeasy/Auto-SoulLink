@@ -305,7 +305,7 @@ async def test_the_page_was_drawn_by_the_gen3_adapter_for_this_cartridge(rom_typ
         assert made.api["players"]["a"]["capabilities"]["game_id"] == "gen3_frlge"
         # RR retains the companion panel; the bound vanilla titles also have Explode Mode.
         caps = made.api["players"]["a"]["capabilities"]
-        assert caps["info_panel"] is rom_type.endswith("_rr")
+        assert caps["info_panel"] is True  # both titles now publish native companions
         assert caps["explode_mode"] is (rom_type.endswith("_rr") or rom_type in ("firered", "leafgreen", "emerald"))
     finally:
         await made._close()

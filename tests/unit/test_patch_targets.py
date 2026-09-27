@@ -36,10 +36,11 @@ def test_far_heap_entry_is_a_full_thumb_veneer_not_out_of_range_bl():
         build.thumb_entry_jump(0x08002B82, 0x08EB0B20)
 
 
-def test_unqualified_target_cannot_publish_a_payload():
+def test_published_targets_reserve_heap_and_unqualified_rr_v2_stays_closed():
     for target in ("firered", "leafgreen", "emerald"):
-        with pytest.raises(ValueError, match="not qualified"):
-            build.require_ready(target)
+        assert build.require_ready(target)["ARENA_BASE"]==0x0201B000
+    with pytest.raises(ValueError, match="not qualified"):
+        build.require_ready("radical_red")
 
 
 def test_abi_success_requires_native_post_save(tmp_path):

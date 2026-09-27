@@ -148,7 +148,9 @@ typedef struct {
  * into CALL_RECORD_OFFSET before ACK, and retain through COMPLETE. Every name
  * must contain 0xFF within its array. Species IDs are u16, never GB-size bytes.
  * Neither opcode acceptance nor ARMED is delivery. Publish DELIVERED only on
- * actual Match Call UI entry, then COMPLETE when no native UI owns the text. */
+ * actual Match Call UI entry, then COMPLETE when no native UI owns the text.
+ * A new epoch cancels an ARMED job only before native UI ownership begins;
+ * an already-owned ARMED/DELIVERED UI retains its original epoch and record. */
 typedef struct {
     uint8_t event, has_names;
     uint16_t caller_species, receiver_species;

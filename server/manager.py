@@ -144,7 +144,7 @@ def _legacy_cartridges(run: dict) -> dict | None:
 
 # The titles the SLink companion exists for (a UPS in patch/dist, a target in
 # server/patcher.py). Yellow is absent on purpose: it has no free WRAM for the mailbox.
-COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen")
+COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen", "FireRed", "LeafGreen", "Emerald")
 
 # Run options: what each does, in the form's own words, and which cartridges can honour
 # it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
@@ -178,12 +178,14 @@ OPTION_SUPPORT = {
                      "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
                      "gen3_frlge_rr": {"ok": True}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
+                        "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen3_frlge_rr": {"ok": True}},
     "overworld_presence": {"all": False, "why": "Deferred until after this release (docs/gen3/TODO.md)."},
     "native_messages": {"all": False, "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."},
     "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB).",
+                      "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},
                       "gen3_frlge_rr": {"ok": True}},
@@ -194,6 +196,7 @@ OPTION_SUPPORT = {
     # `always`: the cartridge trades this way whether or not the switch is on -- the form
     # shows the row greyed AND checked, so it does not read as "no trade NPC here".
     "pc_trade_npc": {"all": False, "why": "This switch turns off Radical Red's Pokémon-Center trade NPC — other games have no NPC it could turn off.",
+                     "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                      "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen3_frlge_rr": {"ok": False, "why": "Trade unavailable for Radical Red in this build."}},

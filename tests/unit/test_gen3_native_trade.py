@@ -17,8 +17,8 @@ def bizhawk_lua_version(monkeypatch):
 
 class TradeNativeWorld(World):
     def __init__(self, *, capability=1, production=True, title="firered",
-                 player="a", initial_seq=10, epoch=0x12345678):
-        super().__init__(abi=2, pack="gen3_frlg")
+                 player="a", initial_seq=10, epoch=0x12345678, pack="gen3_frlg"):
+        super().__init__(abi=2, pack=pack)
         self.battle = False
         self.recovery_clear = True
         assert self.lua.eval("_VERSION") == "Lua 5.4"
@@ -150,6 +150,16 @@ def test_prepare_requires_consent_presave_and_matching_ready_phase():
     w.service()
     assert w.prepared_results[0][0] is None
     assert w.native.trade_visit(w.native).old_key == w.old_key
+
+
+def test_emerald_published_binding_uses_same_durable_contract():
+    w=TradeNativeWorld(title="emerald",pack="gen3_emerald",capability=87)
+    assert w.native.trade_capable(w.native) is True
+    w.prepare(ready=False)
+    assert w.read(w.n["BASE"]+6,2)==29
+    w.witness(bits=1,result=0,phase=2)
+    w.ack();w.service()
+    assert w.native.trade_visit(w.native).old_key==w.old_key
 
 
 @pytest.mark.parametrize("field,value", [("is_egg", 1), ("is_bad_egg", 1), ("species", 0),

@@ -2,6 +2,7 @@
 #ifndef SLINK_NATIVE_CARRIER_H
 #define SLINK_NATIVE_CARRIER_H
 #include "carrier_producer.h"
+#include "native_choice.h"
 #define NC_STATE ((SlinkCarrierProducer *)(NT_BASE+0xB40u))
 #define NC_RUNTIME ((volatile uint32_t *)(NT_BASE+0x960u))
 #define NC_CONTROL ((volatile SlinkControlV2 *)(NT_BASE+SLINK_CONTROL_OFFSET))
@@ -42,12 +43,16 @@ static int nc_arm(void *unused,uint8_t oe,uint8_t enabled)
 }
 static int nc_safe(void *unused)
 {
-    return nt_safe(unused) && !NP_STATE->active && np_task_available()
+    return nt_safe(unused) && !NP_STATE->active && !ncall_owned() && np_task_available()
         && (NT_STATE->phase==TP_IDLE || NT_STATE->phase==TP_DONE);
 }
 static void nc_choose_party(void)
 {
+#ifdef SLINK_TARGET_CARRIER_CHOOSE_NO_ARGS
+    ((NtVoid)(SLINK_TARGET_CARRIER_CHOOSE|1u))();
+#else
     ((void(*)(uint8_t))(SLINK_TARGET_CARRIER_CHOOSE|1u))(SLINK_TARGET_CARRIER_CHOOSE_TYPE);
+#endif
 }
 static void nc_choices_entry(void)
 {
@@ -88,7 +93,7 @@ static int nc_start(void *unused,const SlinkCarrierProducer *s)
     NT_READ16(SLINK_TARGET_SPECIAL_RESULT)=0xffff;
     if (s->opcode==SLINK_OP_CHOOSE_PARTY_MON) {
         nc_remove_npc();
-        NT_READ16(SLINK_TARGET_TRADE_TABLE_VAR)=0xff;
+        NT_READ16(SLINK_TARGET_TRADE_TABLE_VAR)=SLINK_CHOICE_PENDING;
         NT_SCRIPT[i++]=0x23;nc_script_word(&i,(uint32_t)nc_choose_party|1u);
         NT_SCRIPT[i++]=0x27;NT_SCRIPT[i++]=0x02;
     } else {
@@ -118,6 +123,9 @@ static int nc_poll(void *unused,uint8_t *result)
     if (!NC_RUNTIME[1]) return 0;
     uint16_t value=NT_READ16(NC_STATE->opcode==SLINK_OP_CHOOSE_PARTY_MON
         ? SLINK_TARGET_TRADE_TABLE_VAR:SLINK_TARGET_SPECIAL_RESULT);
+#ifdef SLINK_TARGET_CARRIER_CANCEL
+    if (NC_STATE->opcode==SLINK_OP_CHOOSE_PARTY_MON) return slink_native_choice_result(value,result);
+#endif
     if (value==0xffff || value==0xff) return 0;
     if (NC_STATE->opcode==SLINK_OP_CHOOSE_PARTY_MON && !(value<6 || value==7)) return -1;
     if (NC_STATE->opcode==SLINK_OP_SHOW_MENU && value>1) return -1;
@@ -131,7 +139,7 @@ static void nc_drive_npc(void)
     if (NC_NPC->epoch!=NT_MB->session_epoch) { NC_NPC->epoch=NT_MB->session_epoch;NC_NPC->armed=0; }
     if (NT_READ32(SLINK_TARGET_GMAIN+4u)!=SLINK_TARGET_FIELD_CALLBACK) return;
     if (NT_MB->opcode==SLINK_OP_TRADE_SCENE && nt_safe(0)) nc_remove_npc();
-    if (!nt_safe(0) || nc_owned() || NP_STATE->active) return;
+    if (!nt_safe(0) || nc_owned() || NP_STATE->active || ncall_owned()) return;
     unsigned player=NT_READ8(SLINK_TARGET_CARRIER_AVATAR+5u);
     if (player>=16 || !(NT_READ8(nc_object(player))&1)) return;
     uint32_t p=nc_object(player);

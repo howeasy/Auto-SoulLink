@@ -1,6 +1,6 @@
-/* T2 target SOURCE candidates: patched_trade_bindings.md sections 1-5.
- * ABI v2 arena/detour/payload are NOT QUALIFIED. READY must remain zero.
- * RR v1 continues through the legacy builder until the v2 delta is proven.
+/* Published ABI2 target: source pins and bounded native receipts are recorded
+ * in docs/gen3/research/fr_native_trade_abi.md and the build manifest.
+ * RR ABI1 continues through its separate legacy builder.
  */
 #ifndef SLINK_TARGET_FIRERED_H
 #define SLINK_TARGET_FIRERED_H
@@ -14,10 +14,10 @@
 #define SLINK_TARGET_DETOUR_BYTES "3bf1a9f9"
 #define SLINK_TARGET_HEAP_BASE 0x02000000u
 #define SLINK_TARGET_HEAP_SIZE 0x1C000u
-#define SLINK_TARGET_ARENA_BASE 0u
+#define SLINK_TARGET_ARENA_BASE 0x0201B000u
 #define SLINK_TARGET_ARENA_SIZE 0x1000u
 /* c75f3523 malloc.c:186-191; pokefirered.sym:625-626,1042-1047.
- * Candidate carve-out only: READY stays zero until full lifecycle qualification. */
+ * Native heap carve-out; the published build reserves this tail. */
 #define SLINK_TARGET_ARENA_CANDIDATE 0x0201B000u
 #define SLINK_TARGET_HEAP_INIT 0x08002B80u
 #define SLINK_TARGET_HEAP_INIT_BYTES "00b5044a1060044a"
@@ -79,7 +79,7 @@
 #define SLINK_TARGET_MON_DATA_EGG 45u
 #define SLINK_TARGET_MAIN_BATTLE_OFFSET 0x439u
 #define SLINK_TARGET_MAIN_FRAME_OFFSET 0x24u
-#define SLINK_TARGET_READY 0u
+#define SLINK_TARGET_READY 1u
 /* Panel bindings: pinned pret pokefirered start_menu.c/script_menu.c/menu_helpers.c. */
 #define SLINK_TARGET_PANEL_NORMAL_MENU 0x0806EDB0u
 #define SLINK_TARGET_PANEL_NORMAL_BYTES "00b51248fff78cfc"
@@ -130,7 +130,7 @@
 #define SLINK_TARGET_SOUND_SE_BYTES "00b50004010c0648"
 #define SLINK_TARGET_SOUND_FANFARE 0x08071C60u
 #define SLINK_TARGET_SOUND_FANFARE_BYTES "00b50004030c0021"
-#if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+#if defined(SLINK_NATIVE_COMPANION)
 static const unsigned short slink_target_pokecenters[]={
     0x0504,0x0605,0x0703,0x0800,0x0901,0x0A0C,0x0B05,0x0C05,0x0D00,0x0E06,
     0x1000,0x1500,0x1F03,0x2000,0x2102,0x2201,0x2301,0x2400,0x2500

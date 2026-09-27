@@ -93,11 +93,11 @@ RIVAL_LUA=r'''
 '''
 
 
-def rival_problems(text,expected):
+def rival_problems(text,expected,*,start_callback=0x08010509,dummy_callback=0x080123BD,trainer=102):
     from server.adapters import gen3_codec as codec
 
     problems=[]
-    early=re.search(r"RIVAL_CONSUME seq=1 callback=08010509 main=080123BD stage=(\d+) flags=([0-9A-F]+) trainer=102 inbattle=1",text)
+    early=re.search(rf"RIVAL_CONSUME seq=1 callback={start_callback:08X} main={dummy_callback:08X} stage=(\d+) flags=([0-9A-F]+) trainer={trainer} inbattle=1",text)
     if not early or int(early[1])>=15 or int(early[2],16)&10!=8:
         problems.append("missing native W1 consumption")
     if "RIVAL_ACK seq=1 status=2 reason=0" not in text or "SELECTION_ENTRY count=2 ack=1 status=2 stage=15" not in text:
@@ -122,7 +122,7 @@ def rival_problems(text,expected):
             if int.from_bytes(raw[off:off+size],"little")!=mon[key]:
                 problems.append(f"native BattlePokemon {key} differs")
     late=re.search(r"RIVAL_CONSUME seq=2 callback=([0-9A-F]+) main=([0-9A-F]+) stage=(\d+)",text)
-    if not late or (late[1]=="08010509" and late[2]=="080123BD" and int(late[3])<15):
+    if not late or (late[1]==f"{start_callback:08X}" and late[2]==f"{dummy_callback:08X}" and int(late[3])<15):
         problems.append("late request not observed outside W1")
     before=re.search(r"LATE_BEFORE ([0-9A-F]{1200})",text)
     after=re.search(r"LATE_AFTER ([0-9A-F]{1200})",text)

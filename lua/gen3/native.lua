@@ -110,8 +110,10 @@ function N.new(profile, deps)
     local queue, pending, poisoned, posting = {}, nil, nil, false
     local trade_context, trade_blocked, trade_wanted_epoch, trade_dead_notice
     local trade_binding_job, trade_serial = nil, 0
-    local fr_v2 = v2 and profile.pack == "gen3_frlg"
-    local frlg_title = deps.title == "firered" or deps.title == "leafgreen"
+    local fr_v2 = v2 and (profile.pack == "gen3_frlg"
+        or (profile.pack == "gen3_emerald" and deps.title == "emerald" and deps.production == true))
+    local frlg_title = (profile.pack == "gen3_frlg" and (deps.title == "firered" or deps.title == "leafgreen"))
+        or (profile.pack == "gen3_emerald" and deps.title == "emerald")
     local control
     if fr_v2 and frlg_title and deps.production == true then
         local c, layout = v2.constants, assert(v2.structs.SlinkControlV2, "CONTROL layout required")
@@ -135,6 +137,7 @@ function N.new(profile, deps)
     local last_frame, was_present, npc_count, panel_drawn
     local npc_enabled, sounds_enabled = false, true
     local panel_rows, panel_page, panel_showing = {}, 0, false
+    local panel_dirty, panel_reopen = false, false
     -- Per-op ACK deadlines, each LONGER than the patch's own timeout for that op so the patch's
     -- ST_FAIL normally wins the race (patch/src/handlers.c drive_ui :1030-1072):
     --   sync ops (acked the frame they run)              1800
@@ -966,7 +969,7 @@ function N.new(profile, deps)
     -- CB2_HandleStartBattle (RV_CB2_START_BATTLE), has no pack word, so it stays the patch's alone
     -- (a refusal there is REASON_WINDOW_CLOSED, never a write). A post read open at this frame end
     -- is consumed by the next frame's slink_hook, before the callbacks run (§5.2).
-    local rr = profile.titles and profile.titles.radical_red
+    local rr = profile.titles and profile.titles[deps.title or "radical_red"]
     function self:rival_window_open()
         local ram, rom, der = rr and rr.ram, rr and rr.rom, rr and rr.derived
         if not (ram and rom and der and ram.BATTLE_MAIN_FUNC_ADDR and ram.BATTLE_COMM_ADDR
@@ -1025,7 +1028,7 @@ function N.new(profile, deps)
                     reply(why == "native refused" and (reason or "native_refused") or why, nil, reason)
                     return
                 end
-                local ram = assert(profile.titles.radical_red.ram)
+                local ram = assert(rr.ram)
                 local actual = io.read_bytes(ram.ENEMY_BASE, #bytes)
                 for i, b in ipairs(bytes) do
                     if actual[i] ~= b then reply("enemy_readback_failed"); return end
@@ -1064,6 +1067,30 @@ function N.new(profile, deps)
     end
 
     local function panel_job(open)
+        if v2 then
+            local c=v2.constants
+            local pages=math.min(255,math.max(1,math.ceil(#panel_rows/c.SLINK_INFO_MAX_LINES)))
+            panel_page=panel_page%pages
+            local text,lines={},0
+            for i=1,256 do text[i]=255 end
+            local function row(slot,value)
+                for i,b in ipairs(encode(value,c.SLINK_INFO_LINE_WIDTH)) do text[slot*32+i]=b end
+            end
+            for i=panel_page*6+1,math.min(#panel_rows,(panel_page+1)*6) do
+                row(lines,tostring(panel_rows[i]):gsub("|","\n"));lines=lines+1
+            end
+            if lines==0 then row(0,"No run data yet");lines=1 end
+            row(7,string.format("PAGE %d/%d",panel_page+1,pages))
+            local epoch,bytes=session_epoch,{}
+            for i=0,3 do bytes[i+1]=(epoch>>(8*i))&255 end
+            local request=(io.read_u16(p.INFO+c.SLINK_INFO_REQUEST_FIELD)%65535)+1
+            return {op=open and p.OP_SHOW_INFO or nil,args={},stages={
+                {p.INFO+c.SLINK_INFO_TEXT_FIELD,text},
+                {p.INFO+c.SLINK_INFO_LINES_FIELD,{lines,panel_page,pages,1}},
+                {p.INFO+c.SLINK_INFO_EPOCH_FIELD,bytes},
+                {p.INFO+c.SLINK_INFO_REQUEST_FIELD,{request&255,request>>8}}},
+                valid=function() return session_epoch==epoch and epoch~=0 and io.read_u8(p.INFO+c.SLINK_INFO_STATE_FIELD)==0,"panel identity/ownership changed" end}
+        end
         local pages = math.max(1, math.ceil(#panel_rows / p.INFO_MAXLINES))
         panel_page = panel_page % pages
         local rows = {}
@@ -1093,7 +1120,13 @@ function N.new(profile, deps)
             end}
     end
     function self:link_panel(cmd)
-        if v2 then return nil, "v2 panel binding unavailable" end
+        if v2 then
+            local mb=self:mailbox()
+            if not mb or (mb.capabilities&v2.constants.SLINK_CAP_INFO_PANEL)==0 then return nil,"native panel absent" end
+            panel_rows,panel_page=clone(cmd.rows or {}),0
+            panel_dirty,panel_reopen=true,false
+            return true
+        end
         panel_rows, panel_page = clone(cmd.rows or {}), 0
         return enqueue(panel_job(false))
     end
@@ -1205,6 +1238,20 @@ function N.new(profile, deps)
                         enqueue(panel_job(result == 0 and #panel_rows > p.INFO_MAXLINES))
                     end
                 end
+            end
+        end
+        if v2 then
+            local state=io.read_u8(p.INFO+v2.constants.SLINK_INFO_STATE_FIELD)
+            if panel_showing and state==0 then
+                panel_showing=false
+                if not panel_dirty then
+                    local next_page=io.read_u8(p.INFO+v2.constants.SLINK_INFO_RESULT_FIELD)==0 and #panel_rows>6
+                    panel_page=next_page and panel_page+1 or 0
+                    panel_dirty,panel_reopen=true,next_page
+                end
+            else panel_showing=state~=0 end
+            if panel_dirty and not panel_showing and session_epoch~=0 and not pending and #queue==0 then
+                enqueue(panel_job(panel_reopen));panel_dirty,panel_reopen=false,false
             end
         end
         service_calls()

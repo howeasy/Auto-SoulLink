@@ -71,15 +71,15 @@ SOUND_LUA=r'''
 '''
 
 
-def sound_problems(text,rom,*,song_table=0x084A32CC,mplay_table=0x084A329C):
+def sound_problems(text,rom,*,song_table=0x084A32CC,mplay_table=0x084A329C,fanfare_id=257):
     problems=[]
     def word(address,size=4):
         start=address-0x08000000
         return int.from_bytes(rom[start:start+size],"little")
     calls=re.findall(r"SOUND_CALL kind=(\w+) seq=(\d+) id=(\d+)",text)
-    if calls!=[("se","1","25"),("m4a","1","25"),("fanfare","2","257"),("m4a","2","257")]:
+    if calls!=[("se","1","25"),("m4a","1","25"),("fanfare","2",str(fanfare_id)),("m4a","2",str(fanfare_id))]:
         problems.append(f"wrong native call trace: {calls}")
-    for op,song,seq in ((19,25,1),(9,257,2)):
+    for op,song,seq in ((19,25,1),(9,fanfare_id,2)):
         match=re.search(rf"SOUND_ACTIVE op={op} id={song} seq={seq} player=([0-9A-F]+) header=([0-9A-F]+) status=([0-9A-F]+) clock=(\d+)->(\d+)",text)
         entry=song_table+song*8
         if not match:

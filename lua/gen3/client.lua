@@ -170,7 +170,7 @@ function Client.new(p)
             session_nonce = nil
         end
     end
-    if native and p.artifact_kind == "companion" and native.bind_match_call_session and session_nonce then
+    if native and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and native.bind_match_call_session and session_nonce then
         -- The production nonce's first word is the persisted session counter.
         -- Short explicit harness seeds are also u32s; never invent an epoch.
         local epoch_seed = #session_nonce == 16 and session_nonce:sub(1,8)
@@ -1034,7 +1034,7 @@ function Client.new(p)
     -- reader owns bounds/pointer walking; this hook only binds table metadata and transport.
     local content_cache = {attempted=false}
     local function rom_content()
-        if p.artifact_kind ~= "rand" then return nil end
+        if p.artifact_kind ~= "rand" and p.artifact_kind ~= "rand_companion" then return nil end
         if not content_cache.attempted then
             content_cache.attempted = true
             local ok, payload, why = pcall(function()
@@ -1084,7 +1084,9 @@ function Client.new(p)
         local area_id, loc = area_now()
         st.last_area = area_id .. "|" .. loc
         local gen, gen_ok = box_generation()                -- advertised only when the scan was complete
-        local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind,
+        -- Companion is a local native capability; randomized pairing stays the
+        -- existing wire kind and still carries its cartridge's ROM content.
+        local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind == "rand_companion" and "rand" or p.artifact_kind,
                     rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
                     pc_boxes_generation = gen_ok and gen or nil,
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
@@ -1528,7 +1530,7 @@ function Client.new(p)
         local active, prepared = trade:state()
         st.trade_apply = active or prepared
     end
-    if p.Trade and owed and p.artifact_kind == "companion" and (native or journal) then
+    if p.Trade and owed and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and (native or journal) then
         local trade_policy = assert(p.trade_policy, "pack trade policy required")
         trade = p.Trade.new({native=native or {trade_capable=function() return false end}, journal=journal,
             frame=io.framecount, eligible=function() return not awaiting_trade_run and eligible() end,
@@ -1900,7 +1902,7 @@ function Client.new(p)
     session = core.Session.new({ net = transport, json = json, hud = hud, log = sink, tag = TAG,
                                  player = p.player, game = drv, identity = Id, deferred = Q })
     session.driver, session.state = drv, st
-    if native and p.artifact_kind == "companion" and native.request_match_call then
+    if native and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and native.request_match_call then
         local base_command = session.handle_command
         function session:handle_command(cmd)
             -- Same optional tag seam as gen2/client.lua: the original command

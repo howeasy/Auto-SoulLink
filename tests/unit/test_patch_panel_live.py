@@ -81,13 +81,13 @@ PANEL_LUA = r'''
 '''
 
 
-def panel_problems(text):
+def panel_problems(text, *, soul_action=9, exit_action=6):
     from tools.e2e_duo import gen3_panel_text
 
     problems = []
     for n, button, result in ((1, "A", 0), (2, "B", 127)):
         menu = re.search(rf"START_MENU {n} count=(\d+) order=([\d,]+) cursor=(\d+)", text)
-        if not menu or not menu[2].endswith(",9,6"):
+        if not menu or not menu[2].endswith(f",{soul_action},{exit_action}"):
             problems.append(f"open {n}: missing normal START/SOULLINK/EXIT")
         opened = re.search(rf"PANEL_OPEN {n} epoch=7 request={n} drawn={n} state=2 sc2=1 lines=5 page=0 pages=1 vram=(\w+)->(\w+) palette=(\d+)", text)
         if not opened or opened[1] == opened[2] or int(opened[3]) == 0:
