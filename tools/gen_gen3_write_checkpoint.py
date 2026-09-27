@@ -325,6 +325,28 @@ RR_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
           "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
           "irq_entry": RR_IRQ_ENTRY}
 
+# X3 (EXP-X23): the expansion reference build's inlined WaitForVBlank (expansion e8bd1cd7
+# src/main.c:422-437) has TWO idles, both measured live on ROM 28877d73 (BizHawk 2.11.1 HLE BIOS):
+#  * gWirelessCommType == 0 (outdoors): BIOS VBlankIntrWait -> IntrWait's halt. Census
+#    docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt (no hook): 1800/1800 at R15 0x1F8,
+#    System, ARM. With the client's frame_control exec hook
+#    (docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt): 600/600 at the IRQ vector entry
+#    R15 0x1C, mode 0x12, ARM, R14_irq 0x1F8 -- the RR G5-RR-CPU-IRQ shape, IntrWait's halt instead
+#    of Halt's (same HLE BIOS bytes as RR's receipt). Admitted as irq_entry, R14 0x1F8 only.
+#  * gWirelessCommType != 0 (inside a Pokemon Center: the Union Room tasks): a busy-wait inlined in
+#    AgbMainLoop, 0x0817AB38 ldrh r3,[r4,#0x1c] / tst r5,r3 / beq / b 0x0817AAC0 (no store; the
+#    bytes are the pack's frame_control anchor). Census docs/gen3_emerald/probes/
+#    census_exp_center_2026-09-27.txt: 1629/1800 frame ends at R15 0x0817AB3A..3E, System, Thumb;
+#    the rest (171) on the IRQ entry taken FROM that game code (R14 0x0817AB3C), refused on purpose;
+#    the same shape with the hook. Admitted as the main range, the FR/LG WaitForVBlank precedent.
+# The hookless System-mode BIOS park is not admitted: the production client always has exec hooks.
+EXP_CPU = {"mode": 0x1F, "thumb": 1, "pc_min": 0x0817AB38, "pc_max": 0x0817AB3F,
+           "observed_pc": 0x0817AB3A, "symbol": "AgbMainLoop (inlined WaitForVBlank, wireless busy-wait)",
+           "census": "docs/gen3_emerald/probes/census_exp_center_2026-09-27.txt",
+           "irq_entry": {"mode": 0x12, "thumb": 0, "pc": [0x1C], "lr_min": 0x1F8, "lr_max": 0x1F8,
+                         "evidence": "docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt",
+                         "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt"}}
+
 
 def cpu_clause(title: str, syms, is_rr: bool) -> dict:
     if is_rr:
@@ -1355,15 +1377,15 @@ def build_expansion(context):
              "struct_size": types["Task"]["size"], "count": const["NUM_TASKS"],
              "func_offset": types["Task"]["fields"]["func"]["offset"],
              "is_active_offset": types["Task"]["fields"]["isActive"]["offset"],
-             # F2: name transfer only (no physical frame qualification), so the allow-list
-             "status": "OPEN",
-             # gets the same "OPEN" marker as cpu below -- a consumer keying off status
-             # (like cpu's own) refuses to treat this table as a qualified allow-list.
+             # X3: names transferred from Emerald, then qualified by the idle census (every
+             # sampled frame's active task set admitted); other states are the duo rows' evidence.
+             "status": "CENSUS",
+             "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
              "allowed_overworld_tasks": allowed, "forbidden_inventory": forbidden,
              "non_allowed_task_census": census,
              "transferred_emerald_task_names": list(allowed_names),
              "new_non_allowed_task_names": sorted(set(census) - vanilla_names),
-             "source": cite + ":src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c. Name transfer only; no physical qualification."}
+             "source": cite + ":src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c."}
     clauses = []
     for name, global_name, _, _, _, compare, expect in BATTLE_CLAUSES_FRLG:
         row = symbol(global_name)
@@ -1410,13 +1432,13 @@ def build_expansion(context):
         "version": VERSION, "title": EXPANSION_TITLE, "admitted": False, "source": context["source"],
         "anchors": anchors, "predicates": predicates, "witnesses": {"save_dialog_cb": scalar("sSaveDialogCallback")},
         "tasks": tasks,
-        "cpu": {"status": "OPEN", "reason": cite + ":src/main.c:422-437: WaitForVBlank inlined; non-wireless calls BIOS VBlankIntrWait. No parked-CPU census or BIOS range admitted. Missing mode/range intentionally refuses cpu clause."},
+        "cpu": json.loads(json.dumps(EXP_CPU)),
         "battle": {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard,
                    "commit_hold": "OPEN: argument-taking controller ABI, Volatiles Perish mechanism and last-ball shortcut are not qualified for a commit handoff; the vanilla head is not copied."},
         "pointers": {name: {"symbol": name, "address": symbol(name)["address"], "source": "build .sym"}
                      for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr")},
         "sound": sound, "gift_areas": [],
-        "open": {"cpu": "source branch and machine code known; frame-end parking unqualified", "battle_handoff": "new controller ABI and Volatiles mechanism",
+        "open": {"battle_handoff": "new controller ABI and Volatiles mechanism",
                  "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"},
     }}
 

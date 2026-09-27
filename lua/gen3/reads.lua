@@ -250,6 +250,10 @@ function R.new(profile, io, pointers)
     local mons_per_box = d.MONS_PER_BOX or R.MONS_PER_BOX
     local r = { charmap = cm, rr = rr, party_capacity = party_capacity,
                 mons_per_box = mons_per_box }
+    -- X2: gBattleMons geometry from the pack when it proves its own (the expansion reference
+    -- build's 140-byte BattlePokemon, hp at +42: its compiler facts); vanilla keeps pret's.
+    r.BATTLE_MON_SIZE = d.BATTLE_MON_SIZE or R.BATTLE_MON_SIZE
+    r.BATTLE_MON_HP_OFF = d.BATTLE_MON_HP_OFF or R.BATTLE_MON_HP_OFF
     r.expand_compressed_mon = R.expand_compressed_mon
     r.PARTY_MON_SIZE = R.PARTY_MON_SIZE
     r.BOX_MON_SIZE = R.BOX_MON_SIZE
@@ -673,7 +677,7 @@ function R.new(profile, io, pointers)
         if type(a.BATTLE_MONS_ADDR) ~= "number" or not off then
             return nil, "profile has no ram.BATTLE_MONS_ADDR/derived.BATTLE_MON_STAT_STAGES_OFF"
         end
-        return io.read_bytes(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + off, 7)
+        return io.read_bytes(a.BATTLE_MONS_ADDR + battler * r.BATTLE_MON_SIZE + off, 7)
     end
 
     -- True only while gBattleMons[battler] IS `mon` (a decoded party/enemy record): battler <
@@ -689,7 +693,7 @@ function R.new(profile, io, pointers)
                        .. "derived.BATTLE_MON_PERSONALITY_OFF/BATTLE_MON_OT_ID_OFF"
         end
         if type(mon) ~= "table" or battler >= io.read_u8(a.BATTLERS_COUNT_ADDR) then return false end
-        local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
+        local base = a.BATTLE_MONS_ADDR + battler * r.BATTLE_MON_SIZE
         return io.read_u32(base + pers) == mon.personality and io.read_u32(base + otid) == mon.ot_id
     end
 
@@ -710,7 +714,7 @@ function R.new(profile, io, pointers)
         -- table, not Lua nil (lua/json_codec.lua), so "is this address present" is a type
         -- check, never a plain truthiness check.
         if d.OVERWORLD_MODE == "battle_outcome" and type(a.BATTLE_MONS_ADDR) == "number" then
-            local max_hp = io.read_u16(a.BATTLE_MONS_ADDR + R.BATTLE_MON_HP_OFF + 4)
+            local max_hp = io.read_u16(a.BATTLE_MONS_ADDR + r.BATTLE_MON_HP_OFF + 4)
             out.in_battle = max_hp > 0 and io.read_u8(a.BATTLE_OUTCOME_ADDR) == 0
         elseif type(a.GMAIN_ADDR) == "number" and d.GMAIN_INBATTLE_OFFSET and d.GMAIN_INBATTLE_MASK then
             out.in_battle = (io.read_u8(a.GMAIN_ADDR + d.GMAIN_INBATTLE_OFFSET) & d.GMAIN_INBATTLE_MASK) ~= 0

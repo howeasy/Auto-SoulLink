@@ -758,8 +758,10 @@ def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     run.gcfg = dict(row, sides=dict(row["sides"], b=("firered", "firered_party_{target}_b")))
     assert run._gen3_title("b") == "firered"
     assert run._gen3_fixture_path("b").endswith("firered_party_town_b.sav")
-    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen; E4: emerald.
-    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red", "emerald"}
+    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen; E4: emerald;
+    # X3: the expansion reference build (GAMES["gen3_exp"], test_e2e_duo_gen3_exp.py).
+    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red", "emerald",
+                                    "emerald_expansion_28877d73"}
     for inst in ("a", "b"):
         assert row["sides"][inst][0] in duo.GEN3_TITLES
 
@@ -1052,7 +1054,9 @@ local MODULES = {{
   ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}}, PROFILE_PACK_BY_TITLE = {{
       firered = "gen3_frlg", leafgreen = "gen3_frlg", radical_red = "gen3_rr", emerald = "gen3_emerald" }} }},
   ["/repo/lua/gen3/reads.lua"] = {{ new = function() return {{}} end }},
-  ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end }},
+  ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end,
+      emerald_engine = function(t) return t == "emerald" end,
+      sym_path = function(root, t) return root .. "/data/gen3/pret/poke" .. t .. ".sym" end }},
 }}
 local function dofile(path)
     local m = MODULES[path]
@@ -1192,6 +1196,7 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
                   D = {}, hp0_tag = "FORCED_HP0", title = spec.emerald and "emerald" or "firered",
+                  emerald_engine = spec.emerald and true or false,
                   rr = spec.rr and true or false }
     -- E4c-2: an Emerald whiteout heals in C before the landing (overworld.c:357-366), so the
     -- Emerald party reads full; spec.unhealed leaves the lead short (the landing must refuse it)
@@ -2541,13 +2546,16 @@ def battle_model():
     consts = re.search(r"^local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = .*$", text, re.M)
     outcome = re.search(r"^local B_OUTCOME_WON = .*$", text, re.M)
     self_damage = re.search(r"^local SELF_DAMAGE_EFFECTS = \{.*?^\}$", text, re.M | re.S)
+    # X3: the vanilla gBattleMons/move-table geometry (the driver's BM table) and its power read
+    geometry = re.search(r"^local BM = \{.*?effect_off = 0 \}$", text, re.M | re.S)
+    assert geometry, "duo_gen3_main.lua must define the vanilla BM geometry"
     menus = re.findall(r"^local function (?:ctrl0|action_menu_up|move_menu_up)\(\).*$", text, re.M)
     assert consts and outcome and self_damage and len(menus) == 3
     runtime.execute("\n".join([consts.group(0), outcome.group(0), *menus,
                                _lua_defs(DRIVER, ["game_press"]),
                                "local function press(btn, gap) return game_press(btn, joypad.set, G.advance,"
                                " function() return memory.read_u16_le(GMAIN + 0x2C) end, gap, 30) end",
-                               self_damage.group(0),
+                               self_damage.group(0), geometry.group(0), _lua_defs(DRIVER, ["move_power"]),
                                _lua_defs(DRIVER, ["move_effect", "steer", "ctx.choose_action",
                                                   "ctx.status_move_slot", "any_move_slot", "ctx.use_move",
                                                   "ctx.lose_active"]),
@@ -5331,7 +5339,8 @@ def test_emerald_admission_is_production_only():
     assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
                       entry)
     assert "test_admission_codec" not in entry
-    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
+    # X3: the seam is back for gen3_exp ONLY (test_e2e_duo_gen3_exp.py); it never touches Emerald
+    assert 'if game ~= "gen3_exp"' in DRIVER.read_text(encoding="utf-8")
 
 
 def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():

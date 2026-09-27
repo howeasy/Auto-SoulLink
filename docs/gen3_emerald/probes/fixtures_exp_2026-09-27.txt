@@ -1,0 +1,36 @@
+# X3 expansion fixtures, built live 2026-09-27 (EXP-X23) on the reference build ROM sha1 28877d733492299599f2b8fff50493109d72653c
+# make-exp driver lines (lua/tests/gen3_emerald_boot_check.lua, SLINK_BOOT_SYM = build pokeemerald.sym):
+town    RESULT: PASS counter 1 -> 2 map=0.10 pos=(6,17)   phases: overworld-cb2 frame=514, save-dialog row=3/6, saved frame=1183
+battle  RESULT: PASS counter 1 -> 2 map=0.17 pos=(21,16)
+pc      RESULT: PASS counter 1 -> 2 map=0.10 pos=(6,17)
+catch   RESULT: PASS counter 1 -> 2 map=0.17 pos=(21,16)
+town_b  RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+battle_b RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)
+pc_b    RESULT: PASS counter 2 -> 3 map=0.10 pos=(6,17)
+catch_b RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)
+every run: boot_check_verdict + exp_fixture_problems empty (else make-exp refuses to write)
+# qualify --title emerald_expansion_28877d73:
+tests/fixtures/gen3/exp_battle.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 258, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/exp_battle_b.sav: OK size=131072 slot=1 counter=3 rotation=2 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 258, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/exp_catch.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 258, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/exp_catch_b.sav: OK size=131072 slot=1 counter=3 rotation=2 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 258, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/exp_pc.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 258, 'level': 5}, {'key': '504F4F4D:20250925', 'species': 261, 'level': 3}]
+  boxes: 2 occupied slots
+tests/fixtures/gen3/exp_pc_b.sav: OK size=131072 slot=1 counter=3 rotation=2 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 258, 'level': 5}, {'key': '504F4F4D:DFDAF6DA', 'species': 261, 'level': 3}]
+  boxes: 2 occupied slots
+tests/fixtures/gen3/exp_town.sav: OK size=131072 slot=0 counter=2 rotation=1 trainer='EMER'#20250925 rtc_suffix=False
+  party: [{'key': '4D55444B:20250925', 'species': 258, 'level': 5}]
+  boxes: 0 occupied slots
+tests/fixtures/gen3/exp_town_b.sav: OK size=131072 slot=1 counter=3 rotation=2 trainer='EMERB'#DFDAF6DA rtc_suffix=False
+  party: [{'key': '4D55444B:DFDAF6DA', 'species': 258, 'level': 5}]
+  boxes: 0 occupied slots

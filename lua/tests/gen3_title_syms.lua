@@ -381,6 +381,22 @@ local module_dir = debug.getinfo(1, "S").source:match("^@(.*[/\\])") or ""
 TITLES[EXP_TITLE] = true
 
 M.TITLES = TITLES
+M.EXP_TITLE = EXP_TITLE
+
+--- X3: the titles on the pokeemerald engine -- vanilla Emerald and the expansion reference build
+--- share the maps, the gMenuCallback START menu and the Emerald legs (gen3_scripted_play EMH), so
+--- a harness branch written for Emerald's engine takes both; data/facts still come per title.
+function M.emerald_engine(title) return title == "emerald" or title == EXP_TITLE end
+
+--- The title's own linker .sym: pret's committed file for the vanilla titles, the reference
+--- build's own (never committed; tools/build_expansion.py) for the expansion title.
+function M.sym_path(root, title)
+    if title == EXP_TITLE then
+        return os.getenv("SLINK_EXPANSION_SYMS") or ((os.getenv("SLINK_EXPANSION_ARTIFACTS")
+            or (root .. "/.cache/expansion-output/reference")) .. "/pokeemerald.sym")
+    end
+    return root .. "/data/gen3/pret/poke" .. title .. ".sym"
+end
 
 --- name -> address for `title`, for every entry that HAS one. Errors loudly (never a silent
 --- nil/0) only for an unrecognized title. A recognized title missing one entry's column is not

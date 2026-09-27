@@ -28,7 +28,9 @@ local NAMES = {
 local function load_syms()
     local want, out = {}, {}
     for _, n in ipairs(NAMES) do want[n] = true end
-    for line in io.lines(WT .. "/data/gen3/pret/pokeemerald.sym") do
+    -- SLINK_BOOT_SYM: another pokeemerald-engine build's own .sym (make-exp passes the
+    -- expansion reference build's; its start menu and save callbacks keep these names)
+    for line in io.lines(os.getenv("SLINK_BOOT_SYM") or (WT .. "/data/gen3/pret/pokeemerald.sym")) do
         local addr, name = line:match("^(%x+) %a+ %x+ (%S+)$")
         if addr and want[name] then out[name] = tonumber(addr, 16) end
     end

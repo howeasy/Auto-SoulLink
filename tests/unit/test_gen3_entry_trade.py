@@ -16,7 +16,8 @@ def entry_model_tree(tmp_path, monkeypatch):
     monkeypatch.setattr(native_model, "lupa", lua54)
     root = native_model.ROOT
     shutil.copytree(root / "lua", tmp_path / "lua")
-    for pack in ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_frlge"):
+    # gen3_exp (X3): registered in Entry.PACKS, so admission opens its pack too
+    for pack in ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_frlge", "gen3_exp"):
         shutil.copytree(root / "data/games" / pack, tmp_path / "data/games" / pack)
     return tmp_path
 

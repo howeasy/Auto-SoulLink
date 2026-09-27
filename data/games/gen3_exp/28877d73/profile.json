@@ -12,10 +12,12 @@
   "titles": {
     "emerald_expansion_28877d73": {
       "_src": {
+        "derived.ABILITY_NUM_FIELD": "facts.json:structs.PokemonSubstruct3.bitfields.abilityNum",
         "derived.BADGE_FIRST_FLAG": "facts.json:constants.FLAG_BADGE01_GET",
         "derived.BASESTATS_ADDR_BY_GAME_CODE": "facts.json:rom.BASESTATS_ADDR, exact ROM only",
         "derived.BASESTATS_ENTRY_SIZE": "facts.json:structs.SpeciesInfo.size",
         "derived.BASESTATS_GROWTH_RATE_OFFSET": "facts.json:structs.SpeciesInfo.fields.growthRate.offset",
+        "derived.BATTLE_MON_HP_OFF": "facts.json:structs.BattlePokemon.fields.hp.offset",
         "derived.BATTLE_MON_OT_ID_OFF": "facts.json:structs.BattlePokemon.fields.otId.offset",
         "derived.BATTLE_MON_PERSONALITY_OFF": "facts.json:structs.BattlePokemon.fields.personality.offset",
         "derived.BATTLE_MON_SIZE": "facts.json:structs.BattlePokemon.size",
@@ -31,17 +33,18 @@
         "derived.BOX_DATA_OFFSET": "facts.json:structs.PokemonStorage.fields.boxes.offset",
         "derived.BOX_MON_SIZE": "facts.json:structs.BoxPokemon.size",
         "derived.B_ACTION_NOTHING_FAINTED": "facts.json:constants.B_ACTION_NOTHING_FAINTED",
+        "derived.EXPERIENCE_MASK": "facts.json:structs.PokemonSubstruct0.bitfields.experience.mask",
         "derived.EXPERIENCE_TABLE_ENTRY_COUNT": "facts.json:constants.MAX_LEVEL + 1",
         "derived.GMAIN_CB2_OFFSET": "facts.json:structs.Main.fields.callback2.offset",
         "derived.GMAIN_INBATTLE_MASK": "facts.json:structs.Main.bitfields.inBattle.mask",
         "derived.GMAIN_INBATTLE_OFFSET": "facts.json:structs.Main.bitfields.inBattle.offset",
+        "derived.MARKINGS_MASK": "facts.json:structs.BoxPokemon.bitfields.markings.mask",
         "derived.MAX_LEVEL": "facts.json:constants.MAX_LEVEL",
         "derived.MONS_PER_BOX": "facts.json:constants.IN_BOX_COUNT",
         "derived.MON_ITEM_MASK": "facts.json:structs.PokemonSubstruct0.bitfields.heldItem.mask",
         "derived.MON_MOVE_MASK": "facts.json:structs.PokemonSubstruct1.bitfields.move1.mask",
         "derived.MON_SPECIES_MASK": "facts.json:structs.PokemonSubstruct0.bitfields.species.mask",
-        "derived.NICKNAME11_FIELD": "facts.json:structs.PokemonSubstruct0.bitfields.nickname11",
-        "derived.NICKNAME12_FIELD": "facts.json:structs.PokemonSubstruct0.bitfields.nickname12",
+        "derived.NICKNAME_EXTRA": "facts.json:structs.PokemonSubstruct0.bitfields.nickname11/nickname12",
         "derived.NICKNAME_LEN": "facts.json:constants.POKEMON_NAME_LENGTH",
         "derived.OUTCOME_CAUGHT": "facts.json:constants.B_OUTCOME_CAUGHT",
         "derived.OUTCOME_DREW": "facts.json:constants.B_OUTCOME_DREW",
@@ -51,6 +54,8 @@
         "derived.OVERWORLD_MODE": "facts.json:Main.inBattle interpretation; client mode name",
         "derived.PARTY_CAPACITY": "facts.json:constants.PARTY_SIZE",
         "derived.PARTY_MON_SIZE": "facts.json:structs.Pokemon.size",
+        "derived.POKEBALL_FIELD": "facts.json:structs.PokemonSubstruct0.bitfields.pokeball",
+        "derived.PP_MASK": "facts.json:structs.PokemonSubstruct1.bitfields.pp1.mask",
         "derived.SB1_BALL_POCKET_COUNT": "facts.json:constants.BAG_POKEBALLS_COUNT",
         "derived.SB1_BALL_POCKET_OFFSET": "facts.json:SaveBlock1.bag + Bag.pokeBalls",
         "derived.SB1_FLAGS_OFFSET": "facts.json:structs.SaveBlock1.fields.flags.offset",
@@ -61,6 +66,7 @@
         "derived.SB2_NAME_OFFSET": "facts.json:structs.SaveBlock2.fields.playerName.offset",
         "derived.SB2_OT_ID_OFFSET": "facts.json:structs.SaveBlock2.fields.playerTrainerId.offset",
         "derived.SHEDINJA_SPECIES_ID": "facts.json:constants.SPECIES_SHEDINJA",
+        "derived.SHINY_MODIFIER_FIELD": "facts.json:structs.BoxPokemon.bitfields.shinyModifier relative to hpLost's u16 lane",
         "derived.TASK_STRUCT_SIZE": "facts.json:structs.Task.size",
         "ram.BATTLERS_COUNT_ADDR": "build:pokemon.sym:55 gBattlersCount+0; Thumb=False",
         "ram.BATTLER_CONTROLLER_FUNCS_ADDR": "build:pokemon.sym:951 gBattlerControllerFuncs",
@@ -71,8 +77,10 @@
         "ram.BATTLE_MONS_ADDR": "build:pokemon.sym:157 gBattleMons+0; Thumb=False",
         "ram.BATTLE_OUTCOME_ADDR": "build:pokemon.sym:58 gBattleOutcome+0; Thumb=False",
         "ram.BATTLE_RESULTS_ADDR": "build:pokemon.sym:959 gBattleResults+0; Thumb=False",
+        "ram.BATTLE_STRUCT_PTR_ADDR": "build:pokemon.sym:64 gBattleStruct+0; Thumb=False",
         "ram.BATTLE_TYPE_ADDR": "build:pokemon.sym:54 gBattleTypeFlags+0; Thumb=False",
         "ram.CHOSEN_ACTION_ADDR": "build:pokemon.sym:98 gChosenActionByBattler+0; Thumb=False",
+        "ram.CHOSEN_MOVE_ADDR": "build:pokemon.sym:99 gChosenMoveByBattler+0; Thumb=False",
         "ram.ENEMY_BASE": "build:pokemon.sym:478 gParties+600; Thumb=False",
         "ram.ENEMY_COUNT_ADDR": "build:pokemon.sym:473 gPartiesCount+1; Thumb=False",
         "ram.GMAIN_ADDR": "build:pokemon.sym:1052 gMain+0; Thumb=False",
@@ -107,12 +115,19 @@
       },
       "admitted": false,
       "derived": {
+        "ABILITY_NUM_FIELD": {
+          "shift": 5,
+          "width": 2,
+          "word_off": 11,
+          "word_size": 1
+        },
         "BADGE_FIRST_FLAG": 2151,
         "BASESTATS_ADDR_BY_GAME_CODE": {
           "BPEE": 141418812
         },
         "BASESTATS_ENTRY_SIZE": 264,
         "BASESTATS_GROWTH_RATE_OFFSET": 21,
+        "BATTLE_MON_HP_OFF": 42,
         "BATTLE_MON_OT_ID_OFF": 132,
         "BATTLE_MON_PERSONALITY_OFF": 76,
         "BATTLE_MON_SIZE": 140,
@@ -128,30 +143,32 @@
         "BOX_DATA_OFFSET": 4,
         "BOX_MON_SIZE": 80,
         "B_ACTION_NOTHING_FAINTED": 13,
+        "EXPERIENCE_MASK": 2097151,
         "EXPERIENCE_TABLE_ENTRY_COUNT": 101,
         "GMAIN_CB2_OFFSET": 4,
         "GMAIN_INBATTLE_MASK": 2,
         "GMAIN_INBATTLE_OFFSET": 1081,
+        "MARKINGS_MASK": 15,
         "MAX_LEVEL": 100,
         "MONS_PER_BOX": 30,
         "MON_ITEM_MASK": 1023,
         "MON_MOVE_MASK": 2047,
         "MON_SPECIES_MASK": 2047,
-        "NICKNAME11_FIELD": {
-          "bits": 8,
-          "initializer_sha256": "47f12f6f32e004365dcf529f126cd3e7f70f4d759fe6c485f7d6a19a7211e574",
-          "mask": "0x1fe0",
-          "offset": 6,
-          "shift": 5,
-          "width": 2
-        },
-        "NICKNAME12_FIELD": {
-          "bits": 8,
-          "initializer_sha256": "1f94247adef7214caed83f8f57f72f6f7492fd053287a6c2220f0ad0f2452a4b",
-          "mask": "0x3fc0",
-          "offset": 10,
-          "shift": 6,
-          "width": 2
+        "NICKNAME_EXTRA": {
+          "chars": [
+            {
+              "shift": 5,
+              "width": 8,
+              "word_off": 6,
+              "word_size": 2
+            },
+            {
+              "shift": 6,
+              "width": 8,
+              "word_off": 10,
+              "word_size": 2
+            }
+          ]
         },
         "NICKNAME_LEN": 12,
         "OUTCOME_CAUGHT": 7,
@@ -162,6 +179,13 @@
         "OVERWORLD_MODE": "gmain_flags",
         "PARTY_CAPACITY": 6,
         "PARTY_MON_SIZE": 100,
+        "POKEBALL_FIELD": {
+          "shift": 0,
+          "width": 6,
+          "word_off": 10,
+          "word_size": 1
+        },
+        "PP_MASK": 127,
         "SB1_BALL_POCKET_COUNT": 16,
         "SB1_BALL_POCKET_OFFSET": 1616,
         "SB1_FLAGS_OFFSET": 4720,
@@ -172,11 +196,14 @@
         "SB2_NAME_OFFSET": 0,
         "SB2_OT_ID_OFFSET": 10,
         "SHEDINJA_SPECIES_ID": 292,
+        "SHINY_MODIFIER_FIELD": {
+          "shift": 14,
+          "width": 1
+        },
         "TASK_STRUCT_SIZE": 40
       },
       "open": [
-        "Runtime admission/CPU census and write safety qualification pending",
-        "Nickname extension uses two shifted fields, not a contiguous NICKNAME_EXTRA_OFFS; consumer support required"
+        "Runtime admission/CPU census and write safety qualification pending"
       ],
       "ram": {
         "BATTLERS_COUNT_ADDR": 33554640,
@@ -188,8 +215,10 @@
         "BATTLE_MONS_ADDR": 33555696,
         "BATTLE_OUTCOME_ADDR": 33554648,
         "BATTLE_RESULTS_ADDR": 50340892,
+        "BATTLE_STRUCT_PTR_ADDR": 33554736,
         "BATTLE_TYPE_ADDR": 33554636,
         "CHOSEN_ACTION_ADDR": 33555100,
+        "CHOSEN_MOVE_ADDR": 33555104,
         "ENEMY_BASE": 33758652,
         "ENEMY_COUNT_ADDR": 33758037,
         "GMAIN_ADDR": 50357952,

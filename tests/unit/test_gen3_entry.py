@@ -28,6 +28,8 @@ PACKS = {
     # it unconditionally regardless, so the anchor- and hash-coverage tests below must
     # exercise it too (F4/F13).
     "gen3_emerald": REPO / "data" / "games" / "gen3_emerald",
+    # X3: registered (not routed, not admitted); one directory per onboarded expansion build
+    "gen3_exp": REPO / "data" / "games" / "gen3_exp" / "28877d73",
 }
 
 
@@ -247,8 +249,8 @@ def test_admission_table_refuses_a_duplicate_digest(tmp_path):
     # PACKS (F4/F13) now includes gen3_emerald itself -- Entry.artifacts() opens every pack in
     # Entry.PACKS unconditionally, so the doctored tmp_path tree needs it too, and this loop
     # already covers it (no separate copytree call for it).
-    for pack, source in PACKS.items():
-        shutil.copytree(source, tmp_path / "data" / "games" / pack)
+    for source in PACKS.values():
+        shutil.copytree(source, tmp_path / source.relative_to(REPO))
     doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
     blob = json.loads(doctored.read_text(encoding="utf-8"))
     dupe = blob["titles"]["firered"]["artifacts"]["clean"]["rom_sha1"]
@@ -285,8 +287,8 @@ def test_admission_refuses_an_ambiguous_rom(tmp_path, other_pack, other_title):
     # PACKS (F4/F13) now includes gen3_emerald itself -- Entry.artifacts() opens every pack in
     # Entry.PACKS unconditionally, so the doctored tmp_path tree needs it too, and this loop
     # already covers it (no separate copytree call for it).
-    for pack, source in PACKS.items():
-        shutil.copytree(source, tmp_path / "data" / "games" / pack)
+    for source in PACKS.values():
+        shutil.copytree(source, tmp_path / source.relative_to(REPO))
     doctored = tmp_path / "data" / "games" / other_pack / "engine_signals.json"
     blob = json.loads(doctored.read_text(encoding="utf-8"))
     source = json.loads((PACKS["gen3_frlg"] / "engine_signals.json").read_text(encoding="utf-8"))

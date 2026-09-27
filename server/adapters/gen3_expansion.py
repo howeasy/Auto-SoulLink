@@ -101,28 +101,18 @@ _CALC_CRITICAL_MACROS = ("B_CRIT_MULTIPLIER", "B_PHYSICAL_SPECIAL_SPLIT", "B_ABI
 # include/config/general.h: GEN_1 0 .. GEN_9 8 -- the calc profile below is gen 9 only.
 _GEN_9 = 8
 
-# XR-1/XR-2 party-record bit layout for this build (server/adapters/gen3_codec.py
-# decode_party_mon_masked/validate_expansion_layout), verified against
-# rh-hideout/pokeemerald-expansion tag expansion/1.17.0 (e8bd1cd7) include/pokemon.h and
-# cross-checked byte-for-byte against this ROM's own facts.json PokemonSubstruct0/1/3
-# bitfields (species mask 0x7ff, heldItem mask 0x3ff, move masks 0x7ff, experience mask
-# 0x1fffff, pp masks 0x7f, pokeball word_off10/width6, abilityNum word_off8/shift29/width2)
-# -- identical to tests/fixtures/gen3/expansion_layout_e8bd1cd7.json's "layout" block.
-EXPANSION_PARTY_LAYOUT = {
-    "MON_SPECIES_MASK": 2047,
-    "MON_ITEM_MASK": 1023,
-    "MON_MOVE_MASK": 2047,
-    "EXPERIENCE_MASK": 2097151,
-    "NICKNAME_EXTRA": {"chars": [
-        {"word_off": 4, "word_size": 4, "shift": 21, "width": 8},
-        {"word_off": 10, "word_size": 2, "shift": 6, "width": 8},
-    ]},
-    "POKEBALL_FIELD": {"word_off": 10, "word_size": 2, "shift": 0, "width": 6},
-    "ABILITY_NUM_FIELD": {"word_off": 8, "word_size": 4, "shift": 29, "width": 2},
-    "PP_MASK": 127,
-    "MARKINGS_MASK": 15,
-    "SHINY_MODIFIER_FIELD": {"shift": 14, "width": 1},
-}
+PROFILE_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/profile.json"
+# XR-1/XR-2 party-record bit layout (gen3_codec.decode_party_mon_masked), read from the
+# same profile.derived block lua/gen3/reads.lua decodes with: tools/gen_gen3_profile.py
+# generates it from this build's compiler facts (facts.json bitfields), so the server and
+# the client share one source (X2).
+LAYOUT_KEYS = ("MON_SPECIES_MASK", "MON_ITEM_MASK", "MON_MOVE_MASK", "EXPERIENCE_MASK",
+               "NICKNAME_EXTRA", "POKEBALL_FIELD", "ABILITY_NUM_FIELD", "PP_MASK",
+               "MARKINGS_MASK", "SHINY_MODIFIER_FIELD")
+_DERIVED = json.loads(PROFILE_PACK.read_text(encoding="utf-8"))["titles"][
+    "emerald_expansion_28877d73"]["derived"]
+EXPANSION_PARTY_LAYOUT = gen3_codec.validate_expansion_layout(
+    {key: _DERIVED[key] for key in LAYOUT_KEYS})
 
 # data.json's id-0 rows carry sentinels, not names: SPECIES_NONE/MOVE_NONE/ITEM_NONE/
 # ABILITY_NONE are "??????????", "????????", "-" and "????????" in the shipped pack.
@@ -274,6 +264,13 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         return None
 
     def encounter_table(self, area_id):
+        # Recorded reference-build limit (PLAN X2): no wild table is extracted for this build.
+        return None
+
+    def rom_content_fingerprint(self, payload):
+        return None  # no randomized binding: the vanilla Gen 3 table decoder never reads it
+
+    def ingest_rom_content(self, payload):
         return None
 
     def trainer_info(self, trainer_id):

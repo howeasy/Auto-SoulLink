@@ -123,6 +123,9 @@ local parts = step("build-parts", function()
         ev = { on_bus_exec = ev_wrap.on_bus_exec, unregister = ev_wrap.unregister },
         net = nil, hud = nil,
         log = function(s) console.log("[reads-probe] " .. tostring(s)) end,
+        -- the observer-only seam shadow_run.lua honours (EG2): an unadmitted title builds OBSERVER
+        -- parts only when the run names exactly "<pack>/<title>" (X3: the expansion reference build)
+        allow_unadmitted = os.getenv("SLINK_SHADOW_UNADMITTED"),
     }
     local _client, parts_ = Entry.build(deps)
     return parts_

@@ -325,8 +325,8 @@ SCENARIOS = {
     # actually cross-checked against the RR binary (Task_DepositMenu/Task_WithdrawMon, a few
     # battle-flag addresses) are confirmed identical to FR's; the rest (battle action/move
     # cursors, map names/tile coordinates) are assumed, not verified.
-    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-                       "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": "town",
+    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
+                       "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"}, "target": "town",
                        "frames": 2000000, "oracle": "assert_faint_cmd_gen3_saved"},
     # G5-RR-BATTERY: on gen3_rr every row that links or trades the slot-1 mon, or throws a Poke
     # Ball, boots rr_battle2{,_b}.sav (two mons, nine balls; 80913bdf) via target_by_game --
@@ -335,6 +335,10 @@ SCENARIOS = {
     # A1 and R1 (RR companion): mechanism P+H on the wild battle (active_faint_case "wild").
     # `target_by_game` (scenario_target): RR's rr_battle.sav holds ONE mon and no balls, so R1's
     # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
+    # X3: not on gen3_exp -- the expansion build replaced gStatuses3/gDisableStructs with struct
+    # Volatiles and the controller ABI, so its pack proves no Perish+hand-off plan and the client
+    # HOLDS an active battler's force_faint until it leaves battle (lua/gen3/client.lua
+    # active_faint_capable); P+H is re-derived at XG3 (docs/gen3_emerald/PLAN.md X3 row).
     "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
                                  "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                                  "target": "battle",
@@ -357,16 +361,16 @@ SCENARIOS = {
                                          "scenario_module": "linked_faint_active",
                                          "active_faint_case": "trainer",
                                          "oracle": "assert_linked_faint_active_trainer_gen3_saved"},
-    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-                     "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
+    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
+                     "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
     # E4c: on gen3_emerald the receipt is Emerald's own landing, not FR's Center: DoWhiteOut heals
     # in C and warps straight to gSaveBlock1Ptr->lastHealLocation, OUTDOORS (pret pokeemerald
     # src/overworld.c:357-366,665-668; heal_locations.json:82-85 Oldale Town 0.10 (6,17)).
     # Both sides boot the two-mon pc fixture (slot 1 is the linked mon; A deposits it at the Oldale
     # PC and walks out to Route 103 with its lone starter).
-    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
+                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
     # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
@@ -472,9 +476,9 @@ SCENARIOS = {
     # retries on the 5-ball fixture (B ran out of balls twice) before the catch fixture existed.
     # FR/LG link_gen3 hunts the SYNTH party_catch_synth saves (20 balls) for the same reason: the
     # LeafGreen battle save holds 2 balls and gen3_lgfr failed out-of-balls 3/3.
-    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
                   "ball_hunt": True,
-                  "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch",
+                  "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch", "gen3_exp": "catch",
                                      "gen3_frlg": "catch_synth", "gen3_lgfr": "catch_synth"},
                   "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
     "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
@@ -640,7 +644,7 @@ SCENARIOS["shiny_bonus_gen3"] = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_fr_trade")
+OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_fr_trade", "gen3_exp")
 
 
 def is_pure_pairing(game) -> bool:
@@ -737,7 +741,7 @@ RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
 # (retryable_gen1_rng), the per-attempt idle jitter the driver echoes (jitter_problems) and the
 # attempt budget (scenario_attempt_limit). A Gen 3 scenario opts in with `ball_hunt`: only a
 # half that throws Poke Balls can end on the out-of-balls cause.
-RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr", "gen3_emerald")
+RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp")
 # A partner half's own "I only failed because the other half did" line (the gen3 drivers phrase
 # it "CONSEQUENCE: <what>"). It never retries by itself: the pair still needs a CAUSE_RNG.
 CONSEQUENCE_PREFIX = "CONSEQUENCE: "
@@ -1417,6 +1421,15 @@ def saved_money(sram):
 # tools/gen3_fixtures.py:saveram_name (BizHawk has no gamedb hash for this ROM, so it derives
 # the battery name from the launched filename, underscores->spaces -- "slink_RR.gba" is what
 # actually gets launched here, unstaged, so this is that rule applied to that exact name).
+GEN3_EXP_TITLE = "emerald_expansion_28877d73"
+
+
+def gen3_emerald_engine(title) -> bool:
+    """X3: the titles on the pokeemerald engine (vanilla Emerald + the expansion reference build
+    share the maps, the whiteout landing and the START-menu flows); data stays per title."""
+    return title in ("emerald", GEN3_EXP_TITLE)
+
+
 GEN3_TITLES = {
     "firered": {"rom": "Pokemon - FireRed Version (USA).gba",
                 "saveram": "Pokemon - FireRed Version (USA).SaveRAM"},
@@ -1426,6 +1439,11 @@ GEN3_TITLES = {
     # E4: BizHawk's gamedb knows a clean BPEE dump (tools/gen3_fixtures.py EMERALD_SAVERAM).
     "emerald": {"rom": "Pokemon - Emerald Version (USA, Europe).gba",
                 "saveram": "Pokemon - Emerald Version (USA, Europe).SaveRAM"},
+    # X3: the pokeemerald-expansion reference build -- never committed, built by
+    # tools/build_expansion.py into .cache/expansion-output/reference and staged as
+    # patch/build/gen3_pokeemerald.gba; BizHawk's gamedb does not know it, so the battery is
+    # named after the staged file (gen3_fixtures.saveram_name).
+    GEN3_EXP_TITLE: {"artifact": "pokeemerald.gba", "saveram": "gen3 pokeemerald.SaveRAM"},
 }
 # The raw, UNPATCHED Radical Red dump (patch/tools/build.py:91 DEFAULT_RR, patch/README.md:18),
 # for native_absent_gen3's clean-boot side only (`rom_kind`: "clean"). It resolves through the
@@ -1438,7 +1456,7 @@ GEN3_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3")
 # Each title's pack directory under data/games (the same split duo_gen3_main.lua and
 # gen3_scripted_play.lua PROFILE_PACK_BY_TITLE make).
 GEN3_PACKS = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "radical_red": "gen3_rr",
-              "emerald": "gen3_emerald"}
+              "emerald": "gen3_emerald", GEN3_EXP_TITLE: "gen3_exp/28877d73"}
 GEN3_RR_PROFILE = os.path.join(REPO, "data", "games", "gen3_rr", "profile.json")
 # Receipt lines the Gen 3 driver writes (lua/tests/duo/duo_gen3_main.lua): one per non-tick
 # event it SENDS and one per command it RECEIVES.
@@ -1470,12 +1488,15 @@ def gen3_decode(image, rr=False, title="frlg"):
     """
     codec = gen3_codec()
     body = codec.split_rtc(image)[0]
+    layout = None
+    if title == codec.TITLE_EXPANSION:          # X2: records are masked bitfields there
+        from server.adapters.gen3_expansion import EXPANSION_PARTY_LAYOUT as layout
     boxes = {}
-    for box, row in enumerate(codec.boxes_from_save(body, rr=rr, title=title)):
+    for box, row in enumerate(codec.boxes_from_save(body, rr=rr, title=title, layout=layout)):
         for slot, mon in enumerate(row):
             if mon["has_species"] and mon["species"]:
                 boxes[(box, slot)] = mon
-    return codec.party_from_save(body, rr=rr, title=title), boxes
+    return codec.party_from_save(body, rr=rr, title=title, layout=layout), boxes
 
 
 def gen3_codec_title(title) -> str:
@@ -1654,6 +1675,13 @@ def gen3_limits(title, rom=None):
 
         def species(value):
             return value in known
+    elif title == GEN3_EXP_TITLE:
+        facts = os.path.join(REPO, "data", "games", GEN3_PACKS[title], "facts.json")
+        with open(facts, encoding="utf-8") as handle:
+            num_species = json.load(handle)["constants"]["NUM_SPECIES"]
+
+        def species(value):
+            return 1 <= value < num_species
     else:
         def species(value):
             return 1 <= value < GEN3_VANILLA_NUM_SPECIES
@@ -2440,6 +2468,7 @@ FAMILY_EVIDENCE = {
     "gen3_rr": EvidenceContract("check_save_witness_gen3", require_oracle=True),
     "gen3_emerald": EvidenceContract("check_save_witness_gen3", require_oracle=True),
     "gen3_fr_trade": EvidenceContract("check_native_trade_witness", require_oracle=True),
+    "gen3_exp": EvidenceContract("check_save_witness_gen3", require_oracle=True),
 }
 
 
@@ -2779,6 +2808,21 @@ GAMES = {
         # tile as "battle" (5 balls) -- link_gen3/deadzone_gen3 hunt there so a ball_hunt scenario
         # never runs the fixture's Poke Balls out for real.
         "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102", "evolve": "route_102"},
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
+    },
+    # X3: the pokeemerald-expansion reference build (ROM 28877d73), E<->E on its own make-exp
+    # fixtures (tests/fixtures/gen3/exp_*.sav); same maps and hunts as gen3_emerald. Pre-XG the
+    # driver admits it through a TEST-ONLY seam (duo_gen3_main.lua test_admission_codec), logged
+    # in every receipt; production refuses it (unrouted, unadmitted).
+    "gen3_exp": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_exp",
+        "play": "gen3_fixtures",
+        "sides": {"a": (GEN3_EXP_TITLE, "exp_{target}"), "b": (GEN3_EXP_TITLE, "exp_{target}_b")},
+        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102"},
         "uses_savestate": False,
         "scenario_prefix": "gen3_",
         "oracle_required": True,
@@ -3321,6 +3365,13 @@ class DuoRun:
             return self._rand_current[inst]["rom"]
         title = self._gen3_title(inst)
         row = GEN3_TITLES[title]
+        if "artifact" in row:
+            artifacts = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS")
+                             or Path(REPO) / ".cache/expansion-output/reference")
+            rom = artifacts / row["artifact"]
+            if not rom.is_file():
+                raise FileNotFoundError(f"{rom} not found (tools/build_expansion.py --host hgbox)")
+            return gen3_fixtures.stage_rom(str(rom))
         staged = row.get("staged")
         if staged and self._gen3_rom_kind(inst) == "companion":
             if not os.path.isfile(os.path.join(REPO, staged)):
@@ -8884,7 +8935,7 @@ class DuoRun:
         # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
         # that box_mon (TX stats_cache would be the held write landing).
         center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
-        if self._gen3_title("a") == "emerald":
+        if gen3_emerald_engine(self._gen3_title("a")):
             # E4c replacements, each for a stated Emerald fact (pret pokeemerald c65e93f2):
             #  CENTER_STATE (Union Room set live at the Center landing) -> LANDING_STATE at A's
             #    fixture's own lastHealLocation (SaveBlock1 +0x1C WarpData, include/global.h:581-588,
@@ -8927,6 +8978,14 @@ class DuoRun:
         group, num = int.from_bytes(sb1[0x1C:0x1D], "little", signed=True), int.from_bytes(
             sb1[0x1D:0x1E], "little", signed=True)
         x, y = (int.from_bytes(sb1[at:at + 2], "little", signed=True) for at in (0x20, 0x22))
+        if self._gen3_title(inst) == GEN3_EXP_TITLE:
+            # X3: the expansion build whites out INTO the heal location's respawn map
+            # (OW_WHITEOUT_CUTSCENE >= GEN_4), harness_facts.json whiteout_respawns
+            facts = os.path.join(REPO, "data", "games", GEN3_PACKS[GEN3_EXP_TITLE], "harness_facts.json")
+            with open(facts, encoding="utf-8") as handle:
+                rows = json.load(handle)["whiteout_respawns"]
+            row = next(r for r in rows if r["heal"] == [group, num, x, y] and "respawn" in r)
+            group, num, x, y = row["respawn"]
         return rf"map={group}\.{num} at=\({x},{y}\)"
 
     def _gen3_whiteout_control(self) -> str:
@@ -8934,7 +8993,7 @@ class DuoRun:
         G5-RR-NURSE-2: RR's nurse cutscene never refuses (no message/waitmessage in her script),
         so RR holds the probe in the START menu (start_menu). E4c: Emerald lands OUTDOORS (no
         nurse), so it takes the START-menu control too, with its own menu witness."""
-        return "start_menu" if self._gen3_rr or self._gen3_title("a") == "emerald" else "nurse"
+        return "start_menu" if self._gen3_rr or gen3_emerald_engine(self._gen3_title("a")) else "nurse"
 
     def _gen3_sent_event(self, text, event, key):
         """The decoded JSON of the first `TX <event> <key> {...}` line, or None."""

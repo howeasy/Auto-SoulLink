@@ -51,7 +51,7 @@ def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
             assert contract.require_oracle is True
             assert contract.witness_validator
             assert callable(getattr(DuoRun, contract.witness_validator, None))
-        elif GAMES[game].get("game", game) in ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_fr_trade"):
+        elif GAMES[game].get("game", game) in ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_fr_trade", "gen3_exp"):
             # the new Gen 3 battery rows take the Gen 1 rule with their own witness
             assert contract.require_oracle is True
             assert contract.witness_validator == GAMES[game]["save_witness"]
@@ -890,7 +890,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
     shared rows stay out of it."""
     assert "gen3_frlg" in duo_module.OPT_IN_GAMES
     for game in GAMES:
-        if game not in GEN3_FRLG_ROWS + ("gen3_rr", "gen3_emerald"):
+        if game not in GEN3_FRLG_ROWS + ("gen3_rr", "gen3_emerald", "gen3_exp"):
             assert not set(scenarios_for(game)) & set(GEN3_RR_SCENARIOS), game
     for name in SCENARIOS:
         if name not in (GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + GEN3_NAT_SCENARIOS
@@ -901,13 +901,17 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
     for name in GEN3_FRLG_SCENARIOS:
         # Shared rows also name gen3_emerald (E<->E), appended, never renamed.
         assert SCENARIOS[name]["games"] in (("gen3_frlg", "gen3_rr"),
-                                            ("gen3_frlg", "gen3_rr", "gen3_emerald")), name
+                                            ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+                                            # X3: the expansion reference build's core-loop rows
+                                            ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp")), name
         # the ball-RNG retry (card C4-6g): only the halves that throw Poke Balls retry
         expected = 8 if name in ("species_clause_gen3", "ball_gate_gen3") else 3 if SCENARIOS[name].get("ball_hunt") else 1
         assert scenario_attempt_limit(name, "gen3_frlg") == expected, name
         assert scenario_attempt_limit(name, "gen3_rr") == (8 if name == "gender_clause_gen3" else expected), name
     assert set(scenarios_for("gen3_emerald")) == set(GEN3_FRLG_SCENARIOS) - {
         "linked_faint_active_whiteout_gen3"}
+    assert set(scenarios_for("gen3_exp")) == {"faint_cmd_gen3", "link_gen3", "whiteout_gen3",
+                                              "boxsync_gen3"}
     assert {n for n in GEN3_FRLG_SCENARIOS if SCENARIOS[n].get("ball_hunt")} == {
         "link_gen3", "deadzone_gen3", "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "ball_gate_gen3"}
     for name in GEN3_RR_ONLY_SCENARIOS:

@@ -321,6 +321,16 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         # the fixed-gift clause bypasses (Beldum/Wynaut/Castform/Mew/Deoxys) -- OMP cx-9f0eacae F1.
         "statics.json",
     ],
+    "gen3_exp/28877d73": [
+        # X3: registered in Entry.PACKS/PACK_FILES (not routed, not admitted), so
+        # Entry.admission_table opens its engine_signals.json for every GBA cartridge -- same
+        # F1 rule as gen3_emerald above. Mirrors Entry.PACK_FILES.gen3_exp.
+        "profile.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "gen3_exp_locations.lua",
+    ],
     "gen4_hgsspt": [
         "gen4_hgsspt_areas.lua",
         "gen4_hgsspt_areas_pt.lua",

@@ -25,6 +25,10 @@ ROMS = [
     ("rr", REPO / "patch/build/slink_RR.gba", "radical_red"),
     ("fr", Path("E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba"), "vanilla"),
     ("emerald", Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"), "emerald"),
+    # X3: the pokeemerald-expansion reference build (never committed; tools/build_expansion.py)
+    ("exp", Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS")
+                 or REPO / ".cache/expansion-output/reference") / "pokeemerald.gba",
+     "emerald_expansion_28877d73"),
 ]
 pytestmark = [
     pytest.mark.live,
@@ -33,7 +37,7 @@ pytestmark = [
 ]
 
 
-@pytest.mark.parametrize("name,source,variant", ROMS, ids=["rr", "fr", "emerald"])
+@pytest.mark.parametrize("name,source,variant", ROMS, ids=["rr", "fr", "emerald", "exp"])
 def test_gen3_hook_probe(name, source, variant, monkeypatch):
     for prerequisite in (Path(gate_runner.EMUHAWK), Path(gate_runner.BIZHAWK_CONFIG), source):
         if not prerequisite.is_file():
@@ -45,7 +49,7 @@ def test_gen3_hook_probe(name, source, variant, monkeypatch):
     if name == "fr":
         rom = f"patch/build/probe_gen3_{name}.gba"
         shutil.copyfile(source, REPO / rom)
-    if name == "emerald":
+    if name in ("emerald", "exp"):
         # BizHawk's gamedb knows this dump: redirect its battery to a per-run dir instead of the
         # developer's GBA SaveRAM folder (tools/gen3_fixtures.py RUN_DIR; SLINK_GEN3_FIXTURE_RUNS).
         # MINOR 9: reuse _prepare_run's rmtree/mkdir (handles Drive read-only dirs,
@@ -54,7 +58,7 @@ def test_gen3_hook_probe(name, source, variant, monkeypatch):
         # dir must be empty right after this call.
         import gen3_fixtures
         rom, run_dir, _battery = gen3_fixtures._prepare_run(
-            "probe_hooks_emerald", str(source), seed=None, saveram_name_override=None)
+            f"probe_hooks_{name}", str(source), seed=None, saveram_name_override=None)
         assert not any(run_dir.iterdir()), f"run dir not empty before launch: {run_dir}"
         cfg = run_dir / "config.ini"
         gen3_fixtures.write_gba_run_config(gate_runner.BIZHAWK_CONFIG, str(cfg), str(run_dir))
