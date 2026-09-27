@@ -133,7 +133,7 @@ local function save_via_menu(domain)
         pulse("A", i)
         if i % 16 ~= 0 then return false end
         after = G.save_counter(domain)
-        return after > before
+        return G.counter_advanced(before, after)   -- rejects a torn mid-write read (gen3_boot_check.lua)
     end)
     if not moved then return false, before, "the save counter never advanced" end
     G.phase("saved", string.format("counter=%d->%d", before, after))
