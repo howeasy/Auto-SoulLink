@@ -35,7 +35,7 @@ Integration `claude/gen3-integration` @5e001952 in C:/slink-wt/g3-int.
   - the dead savestate path and the tests/e2e/test_duo.py orphan deleted.
 
 **QUEUE (in order):**
-1. **T2-PUBLISH** (Codex Emerald, em-t2 `claude/gen3-emerald-t2`): FR/LG/E production UPS + READY, and the Emerald native companion.
+1. **T2-PUBLISH** (Codex Emerald, em-t2 `claude/gen3-emerald-t2` **@1d2a9512**, which already contains integration da089baf and review fixes c8543439): FR/LG/E production UPS + READY, and the Emerald native companion. Emerald UPS sha1 2eef703c...; FR/LG bytes are unchanged. Live PASS at wrap-up: boot/panel/trade/reload; chooser fix (red on the old candidate, green on production); phone events 1/2/3 plus busy/cooldown; locked-device refusal. Its full suite was STILL RUNNING at wrap-up: confirm its exit code 0 before merging.
    - Live PASS set: patch/build/em-live-20260927.json and t2-publish-live-20260927.json.
    - The OMP review findings for trade/save (cx-6db186a8) and Match Call (cx-38e266e5) are fixed per Emerald's report.
    - Get its final sha + suite exit, merge it, rerun the full suite and the citation test.
