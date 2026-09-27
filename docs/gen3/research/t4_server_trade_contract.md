@@ -240,3 +240,12 @@ wrong-save/rejected-hello sequence receipts are:
 | Silver | 5061 | `d46e948859ead03b7b1c34b725f68a3769402f10601fa303e201c1687a3d9c91` |
 
 R2 full-suite result and commit identifiers will be appended in the completion receipt.
+
+
+R2 first full run at `f78c1b06`: **3 failed, 15449 passed, 362 skipped in 902.40s**.
+All three failures were existing accessibility tests importing `_board.html` macros without
+`status`. The new banner called `status.players.items()` during that import. A separate
+follow-up guards the banner with `status is defined and status.players is defined`; no test
+was weakened. Accessibility + existing trade banners + T4 controls: **90 passed in 3.90s**.
+The required full rerun is recorded separately; the failing output remains in
+`.cache/t4-r2-full-unit.txt`.
