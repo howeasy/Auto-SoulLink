@@ -420,6 +420,11 @@ class Gen3Adapter(GameAdapter):
         return {"named": "clean", "companion": "clean"}.get(kind, kind)
 
     @classmethod
+    def supports_randomized(cls, rom_type: str) -> bool:
+        # Emerald and expansion do not yet have a randomized-ROM reader/admission binding.
+        return rom_type in ("firered", "leafgreen")
+
+    @classmethod
     def pairing_kind_for(cls, kind: str, rom_content: object) -> str:
         """Owner ruling 32: a `rand` cartridge whose trainers, wild tables and evolutions equal
         pret's (the Manager's contract fingerprint of the clean title) pairs as clean. Anything
@@ -927,9 +932,13 @@ class Gen3Adapter(GameAdapter):
 
     def refused_rom_content(self, payload: object, *, artifact_kind: str | None = None) -> str:
         kind = self._artifact_kind if artifact_kind is None else artifact_kind
+        randomized = kind in ("rand", "rand_overlay")
+        if randomized and not self.supports_randomized(self._rom_type):
+            return (f"randomized cartridges are not supported for {self._rom_type}: "
+                    "no randomized-ROM binding")
         if self._is_rr:
-            return "randomized cartridges are supported only for FireRed/LeafGreen" if kind == "rand" else ""
-        if kind == "rand" and not payload:
+            return ""
+        if randomized and not payload:
             return "randomized FR/LG hello is missing rom_content; cartridge rules cannot be verified"
         try:
             rom = parse_rom_content(payload)
@@ -937,7 +946,7 @@ class Gen3Adapter(GameAdapter):
         except ForbiddenRomTables as exc:
             return str(exc)
         except Exception as exc:                      # noqa: BLE001 - failed proof must refuse rand
-            if kind == "rand":
+            if randomized:
                 return f"randomized FR/LG rom_content could not be verified: {exc}"
             return ""
         return ""

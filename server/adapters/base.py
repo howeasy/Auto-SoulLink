@@ -329,6 +329,12 @@ class GameRulesAdapter(ABC):
         return {"named": "clean"}.get(kind, kind)
 
     @classmethod
+    def supports_randomized(cls, rom_type: str) -> bool:
+        """Whether this title has a randomized-cartridge binding. Existing foundations keep
+        their admission policy unless they explicitly restrict supported titles."""
+        return True
+
+    @classmethod
     def pairing_kind_for(cls, kind: str, rom_content: object) -> str:
         """`pairing_kind`, given the hello's own ROM report (None when it sent none). Still a
         class lookup, for the same reason. A foundation may pair a declared kind by what the

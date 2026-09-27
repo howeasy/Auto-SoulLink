@@ -767,6 +767,10 @@ class SLinkServer:
         if artifact_kind not in _KNOWN_ARTIFACT_KINDS:
             return (f"Bad artifact_kind for slot {player_id.upper()}: {artifact_kind!r} is not "
                     f"a known kind (expected one of {sorted(_KNOWN_ARTIFACT_KINDS)})")
+        cls = adapter_class_for_rom_type(rom_type) or GameRulesAdapter
+        if artifact_kind in ("rand", "rand_overlay") and not cls.supports_randomized(rom_type):
+            return (f"randomized cartridges are not supported for {rom_type}: "
+                    "no randomized-ROM binding")
         want = foundation_for_rom_type(self.state.rom_type) if self.state.rom_type else ""
         if want and got != want:
             return (f"Mixed games: slot {player_id.upper()} runs {got}, "
@@ -794,10 +798,10 @@ class SLinkServer:
         an error condition, it is a run that has not started for them yet.
         """
         payload, kind = msg.get("rom_content"), msg.get("artifact_kind", "clean")
-        if kind == "rand" or (not self._rom_contract and payload):
+        if kind in ("rand", "rand_overlay") or (not self._rom_contract and payload):
             refused = self.adapter.refused_rom_content(payload, artifact_kind=kind)
             if refused:
-                if kind == "rand":
+                if kind in ("rand", "rand_overlay"):
                     # Unverified reconnects must not display a previous cartridge's tables.
                     # The caller still rolls back the staged identity/rule state on refusal.
                     getattr(self, "_player_adapters", {}).pop(player_id, None)

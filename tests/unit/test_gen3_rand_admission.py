@@ -128,7 +128,8 @@ async def test_radical_red_cannot_use_the_no_fingerprint_fallback_for_rand(tmp_p
     server = SLinkServer(data_dir=str(tmp_path))
     async with client(server) as send:
         response = await send(hello("firered_rr", "rand"))
-    assert response["commands"] == [{"cmd": "noop", "refused": "admission"}]
+    assert response["commands"][0]["cmd"] == "hud_show"  # refused before kind normalization
+    assert server.admission["a"]["state"] == "rejected"
     assert "randomized" in server.admission["a"]["reason"]
 
 
@@ -139,7 +140,8 @@ async def test_a_contract_does_not_let_rand_bypass_an_unsupported_fingerprint_ho
     server = SLinkServer(data_dir=str(tmp_path))
     async with client(server) as send:
         response = await send(hello("firered_rr", "rand", rom_content={"unreadable": True}))
-    assert response["commands"] == [{"cmd": "noop", "refused": "admission"}]
+    assert response["commands"][0]["cmd"] == "hud_show"
+    assert server.admission["a"]["state"] == "rejected"
     assert "randomized" in server.admission["a"]["reason"]
 
 
