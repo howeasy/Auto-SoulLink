@@ -365,6 +365,10 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def trade_unavailable_reason(self) -> str:
+        """Named cartridge-level trade refusal; empty preserves existing behavior."""
+        return ""
+
     def refused_trade_recovery(self) -> str:
         """Named refusal when a foundation cannot interpret these optional fields."""
         return ""

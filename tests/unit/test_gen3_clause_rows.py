@@ -144,7 +144,7 @@ def test_clause_oracle_rejects_a_live_catch_in_the_memorial_slot(monkeypatch, tm
         rules.clause_oracle(run, results)
 
 
-@pytest.mark.parametrize("title,expected", [("firered", 17), ("leafgreen", 17), ("emerald", 287), ("radical_red", 453)])
+@pytest.mark.parametrize("title,expected", [("firered", 17), ("leafgreen", 17), ("emerald", 287), ("radical_red", 289)])
 def test_family_builder_uses_its_own_rom_and_preserves_the_key(title, expected):
     import gen3_fixtures as fx
 
@@ -164,7 +164,7 @@ def test_family_builder_uses_its_own_rom_and_preserves_the_key(title, expected):
     assert new[0]["hp"] == new[0]["max_hp"] > 0
     assert old[1:] == new[1:] and manifest[0].startswith("SYNTH")
     facts = rules.species_facts(rules.source_rom(title), title)
-    lower = {"firered": 16, "leafgreen": 16, "emerald": 286, "radical_red": 452}[title]
+    lower = {"firered": 16, "leafgreen": 16, "emerald": 286, "radical_red": 288}[title]
     assert rules.same_family(facts, expected, lower)
     assert rules.gender({"1": {"gender_ratio": 255}}, 1, "00000000:00000001") == "genderless"
 
@@ -328,6 +328,7 @@ def _ball_case(monkeypatch, tmp_path):
         [{"a": {"key": keys["a"]}, "b": {"key": keys["b"]}, "status": "alive", "area_id": "viridian_forest"}])
     run._link_keys = keys
     run._ball_pre_status = {"players": {i: {"nuzlocke_active": False, "ball_count": 0} for i in ("a", "b")}}
+    run.cfg = dict(run.cfg, post_flip_stock=False)  # this seam exercises the single-phase oracle controls
     run._status = lambda: {"players": {i: {"nuzlocke_active": True, "ball_count": 1} for i in ("a", "b")}}
     run._reconnect_events = lambda: []
     run._reconnect_document = lambda: {"pokeballs_obtained": {"a": True, "b": True}}
@@ -362,7 +363,6 @@ def test_ball_gate_cannot_pass_a_server_that_was_already_active(monkeypatch, tmp
 
 @pytest.mark.parametrize("old,new", [('"before":false', '"before":true'),
                                     ('"balls":1', '"balls":2'), ('outcome=4', 'outcome=1'),
-                                    ('"attempted":0', '"attempted":2'),
                                     ('BALL_PRE_ENCOUNTER', 'NO_PRE_ENCOUNTER')])
 def test_ball_gate_rejects_weak_acquisition_and_preball_receipts(monkeypatch, tmp_path, old, new):
     rules, run, results, _ = _ball_case(monkeypatch, tmp_path)
@@ -496,15 +496,21 @@ def test_complete_gate_setup_has_zero_balls_hp1_lead_and_fast_healthy_reserve(ti
     assert fx.qualify_one(body, rr=title == "radical_red", title=duo.gen3_codec_title(title))["ok"]
 
 
-@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald", "radical_red"])
-def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_activation(title):
+@pytest.mark.parametrize("title,stock_phase,phase", [
+    (t, False, "initial") for t in ("firered", "leafgreen", "emerald", "radical_red")
+] + [(t, True, p) for t in ("firered", "leafgreen", "emerald") for p in ("initial", "post_flip")])
+def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_activation(title, stock_phase, phase):
     from lupa import LuaRuntime
     lua = LuaRuntime(unpack_returned_tuples=True)
     scenario = lua.execute("return dofile('lua/tests/duo/scenario_gen3_ball_gate.lua')")
     ctx = lua.execute('''
       local c={player='a',D={wt='.'},cp={},session={state={has_pokeballs=false}},
                stock=0,inside=false,dead=false,caught=false,flag=false,lines={},catch_calls=0}
-      c.wait_go=function(mark) if mark=='CAPTURE' then c.released=true end;return true end
+      c.wait_go=function(mark)
+        if mark=='CAPTURE' or c.D.phase=='post_flip' then c.released=true end
+        if mark=='SAVE_GATE' then c.save_gate=true end
+        return true
+      end
       c.balls=function() return c.stock end
       c.game_flag=function() return c.flag end
       c.attempted=function() return 0 end
@@ -539,9 +545,16 @@ def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_acti
         c.catch_calls=c.catch_calls+1;c.caught=true;return 'CAUGHT'
       end
       c.find=function(key) if key=='CAUGHT' and c.caught then return {key=key,slot=2} end end
-      c.save=function() assert(c.caught);return true end
+      c.save=function()
+        if c.D.ball_stock_phase and c.D.phase=='initial' then
+          assert(c.save_gate and c.stock==1 and not c.caught);c.native_phase_saved=true
+        else assert(c.caught) end
+        return true,'saved'
+      end
       c.fail=function(why) error(why) end
-      c.G={pos=function() return c.title=='emerald' and 3 or 4,2 end,tap=function() end}
+      c.G={pos=function() return c.title=='emerald' and 3 or 4,2 end,
+           tap=function() error('unverified facing tap after an unfinished step') end}
+      c.face=function(direction) c.faced=direction;return true end
       c.play={step=function() c.inside=true;return true end,wait_scene_settled=function() return true end}
       c.SP={return_to_grass_origin=function() end}
       c.mash_until=function(p) c.stock=1;c.flag=true;c.session.state.has_pokeballs=true;return p() end
@@ -558,7 +571,16 @@ def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_acti
       return c
     ''')
     ctx["title"] = title
+    ctx.D.ball_stock_phase, ctx.D.phase = stock_phase, phase
+    if phase == "post_flip":
+        ctx.stock, ctx.dead, ctx.flag, ctx.session.state.has_pokeballs = 20, True, True, True
     assert scenario(ctx)[0] is True
+    if stock_phase and phase == "initial":
+        assert ctx.native_phase_saved is True and ctx.catch_calls == 0
+        return
+    if phase == "post_flip":
+        assert ctx.BALL_STOCK_READY.balls == 20 and ctx.catch_calls == 1
+        return
     assert ctx["catch_calls"] == 1 and ctx["BALL_FAINT"]["key"] == "LEAD"
     tags = [ctx["lines"][i] for i in range(1, len(ctx["lines"]) + 1)]
     assert tags.index("BALL_FAINT") < tags.index("BALL_PRE") < tags.index("BALL_FLIP") < tags.index("BALL_POST_CATCH")

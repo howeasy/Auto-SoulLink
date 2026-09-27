@@ -470,7 +470,10 @@ class Gen3Adapter(GameAdapter):
         self._artifact_kind = kind or "clean"
 
     def supports_trade_recovery(self) -> bool:
-        return self._is_rr or self._rom_type in ("firered", "leafgreen", "emerald", "firered_ap", "leafgreen_ap")
+        return not self._is_rr and self._rom_type in ("firered", "leafgreen", "emerald", "firered_ap", "leafgreen_ap")
+
+    def trade_unavailable_reason(self) -> str:
+        return "Trade unavailable for Radical Red in this build." if self._is_rr else ""
 
     def refused_trade_recovery(self) -> str:
         return ("" if self.supports_trade_recovery() else

@@ -76,20 +76,25 @@ def test_the_flag_parses_and_defaults_off(monkeypatch):
 
 def test_without_the_flag_the_server_argv_is_unchanged(tmp_path):
     run = _run(tmp_path)
+    run._server_run_id = "wire-log-model"
     assert run.server_cmd() == [
         sys.executable, "-m", "server.server",
         "--host", "127.0.0.1",
         "--port", "54321",
         "--http-port", "8080",
         "--data-dir", run.data_dir,
+        "--run-id", "wire-log-model",
     ] + run.cfg["flags"]
     assert run._wire_dir() is None
     assert run.collect_wire_logs() == []
 
 
 def test_with_the_flag_the_server_argv_gains_exactly_the_wire_log_pair(tmp_path):
-    plain = _run(tmp_path).server_cmd()
+    plain_run = _run(tmp_path)
+    plain_run._server_run_id = "wire-log-model"
+    plain = plain_run.server_cmd()
     run = _run(tmp_path, wire_log=True)
+    run._server_run_id = "wire-log-model"
     assert run.server_cmd() == plain + ["--wire-log", os.path.join(run.data_dir, "wire")]
 
 

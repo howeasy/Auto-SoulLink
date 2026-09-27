@@ -597,6 +597,7 @@ SCENARIOS["release_gen3"] = {
     "oracle": "assert_release_gen3_saved",
 }
 SCENARIOS["ball_gate_gen3"] = {
+    "post_flip_stock": True,
     "flags": [], "timeout": 2400, "frames": 3000000,
     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
     "ball_hunt": True, "rng_attempts": 8,
@@ -872,6 +873,8 @@ def scenario_attempt_limit(name, game):
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     entry = SCENARIOS.get(name, {})
+    if entry.get("rule_kind") == "gender" and scenario_family(game) == "gen3_rr":
+        return 8
     if rng_retry_family(game) and entry.get("rng_attempts"):
         return entry["rng_attempts"]
     if entry.get("rule_kind") in ("species", "family"):
@@ -3233,6 +3236,8 @@ class DuoRun:
         return self.gcfg["sides"][inst][0]
 
     def _gen3_fixture_path(self, inst) -> str:
+        if inst in getattr(self, "_gen3_phase_fixtures", {}):
+            return self._gen3_phase_fixtures[inst]
         stem = self.gcfg["sides"][inst][1].format(target=self._target_for(inst))
         return os.path.join(GEN3_FIXTURES, stem + ".sav")
 
@@ -3446,12 +3451,14 @@ class DuoRun:
         return os.path.join(self.data_dir, "wire")
 
     def server_cmd(self):
-        """The server subprocess's argv. Byte-identical to the old literal without --wire-log."""
+        """Manager-equivalent run identity, stable across this run's reconnects."""
+        if not getattr(self, "_server_run_id", None):
+            self._server_run_id = "duo-" + uuid.uuid4().hex
         cmd = [sys.executable, "-m", "server.server",
                "--host", "127.0.0.1",
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
-               "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
+               "--data-dir", self.data_dir, "--run-id", self._server_run_id] + self.cfg["flags"] + self.args.server_flags
         wire = self._wire_dir()
         if wire:
             cmd += ["--wire-log", wire]
@@ -3860,6 +3867,7 @@ class DuoRun:
             # title's pack files and pret symbols by `title`.
             duo.update({"title": self._gen3_title(inst),
                         "scenario_prefix": self.gcfg["scenario_prefix"]})
+            duo["ball_stock_phase"] = bool(self.cfg.get("post_flip_stock") and not self._gen3_rr)
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]

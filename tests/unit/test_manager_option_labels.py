@@ -28,12 +28,17 @@ def test_the_no_patch_generations_are_allowed_and_say_so(key):
     assert "no patch" in s["why"].lower(), s
 
 
-@pytest.mark.parametrize("key", ["battle_calc", "pc_trade_npc"])
+@pytest.mark.parametrize("key", ["battle_calc"])
 def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     """The other half of the same honesty: a Gen 1 player switching these on gets nothing,
     so they cannot be switched on."""
     assert not option_support(key, GEN1)["ok"]
     assert option_support(key, RR)["ok"]
+
+
+def test_rr_trade_is_named_unavailable_until_its_durable_delta():
+    support = option_support("pc_trade_npc", RR)
+    assert not support["ok"] and "unavailable" in support["why"].lower()
 
 
 def test_overworld_presence_is_greyed_everywhere_while_deferred():
