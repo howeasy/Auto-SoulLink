@@ -150,12 +150,12 @@ CARRIER_LUA = r'''
 '''
 
 
-def carrier_problems(text, seed=None, saved=None):
+def carrier_problems(text, seed=None, saved=None, *, title="frlg", center="5,4", field_callback=0x080565B5):
     from server.adapters import gen3_codec as codec
     from tools.e2e_duo import gen3_panel_text
 
     problems = []
-    edges = re.findall(r"NPC_EDGE (\d+) counter=(\d+)->(\d+) slot=(\d+) local=241 map=5,4 field=1 owned=0", text)
+    edges = re.findall(rf"NPC_EDGE (\d+) counter=(\d+)->(\d+) slot=(\d+) local=241 map={center} field=1 owned=0", text)
     if len(edges)!=2 or any(int(end)!=int(start)+1 or int(slot)>=16 for _,start,end,slot in edges):
         problems.append("missing native NPC counter edges")
     expected=[("22","1","0"),("20","2","0"),("17","3","1"),
@@ -168,7 +168,7 @@ def carrier_problems(text, seed=None, saved=None):
             problems.append(f"unbound UI entry {op}/{seq}")
     for seq in (2,7):
         entry=re.search(rf"UI_ENTER op=20 seq={seq} epoch=7 owned=1 cb=([0-9A-F]+)",text)
-        if not entry or int(entry[1],16)==0x080565B5:
+        if not entry or int(entry[1],16)==field_callback:
             problems.append("party chooser never left field callback")
     expected_texts=["OAK: Took you long enough.\nPEER is waiting. Make it quick.",
                     "Trade your Squirtle for Pidgey?"]*2
@@ -201,7 +201,7 @@ def carrier_problems(text, seed=None, saved=None):
     if "PARTY_UNCHANGED " not in text or "NPC_DISABLED field=1 owned=0" not in text:
         problems.append("missing party/cleanup evidence")
     if seed is not None:
-        original=codec.party_from_save(seed)
+        original=codec.party_from_save(seed,title=title)
         def roster(party):
             return [(m["species"],m["personality"],m["ot_id"]) for m in party]
         dump=re.search(r"PARTY_UNCHANGED ([0-9A-F]+)$",text,re.M)
@@ -213,11 +213,11 @@ def carrier_problems(text, seed=None, saved=None):
             if roster(party)!=roster(original) or any(m["checksum_ok"] is not True for m in party):
                 problems.append("independent party RAM decode differs")
         if saved is not None:
-            valid,why=codec.qualify_flash(saved)
+            valid,why=codec.qualify_flash(saved,title=title)
             if not valid:
                 problems.append(f"native SaveRAM invalid: {why}")
-            elif (roster(codec.party_from_save(saved))!=roster(original)
-                  or codec.parse_flash(saved)["counter"]!=codec.parse_flash(seed)["counter"]+1):
+            elif (roster(codec.party_from_save(saved,title=title))!=roster(original)
+                  or codec.parse_flash(saved,title=title)["counter"]!=codec.parse_flash(seed,title=title)["counter"]+1):
                 problems.append("native SaveRAM party/counter differs")
     if "RESULT: PASS" not in text:
         problems.append("script did not pass")

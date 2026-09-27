@@ -575,6 +575,9 @@ No screenshots supplied game facts. READY stays 0; no UPS is published.
 
 ## Emerald source and Match Call MODEL checkpoint
 
+Historical checkpoint at cb541d7e/f8371d27; superseded by the native candidate
+section below. The evidence in this section remains SOURCE/MODEL only.
+
 This is not an Emerald native composition or admission. The builder still
 rejects Emerald candidate builds and its READY remains0. Source pin:
 `pret/pokeemerald c65e93f20a5275ab03b07d6f6411096a82a60ffd`; exact BPEE revision0
@@ -619,3 +622,63 @@ CALL_COOLDOWN=18 denotes the native gap. Epoch/seq replay with a different event
 is refused as IDENTITY. These are v2 reason names; none changes the trade
 pre-commit refusal allow-list. No Match Call capability is published by this
 MODEL checkpoint.
+
+## T2-EMERALD-NATIVE candidate composition (physical checks pending)
+
+The private builder now accepts the exact Emerald BPEE rev0 ROM. READY remains0,
+production=false, and no UPS is emitted. Its candidate capability mask87 is
+trade1 + panel2 + sounds4 + rival16 + MatchCall64. This advertises implemented
+candidate handlers, not production admission or completed physical qualification.
+
+`emerald_bindings.json` records 75 source-symbol bindings against the pinned
+pokeemerald symbols. The native frame wrapper saves its incoming registers,
+calls the services with an aligned stack, restores them, replays the relocated
+entry, and branches to original `08000525`. The build receipt validates and
+records that tail and the original gMain literal. Disassembly confirms the
+relocated CMP is followed by LDR/BX, preserving its flags into the original BEQ.
+FR/LG rebuild byte-for-byte to their previously tested candidate hashes.
+
+Emerald-specific adaptations:
+
+- `SaveGame`, then `SaveMapView`/`TrySavingData`; no FR quest-log save call.
+- Preserve all 13 stock START action-table entries; append action13 and insert
+  it before EXIT7 in the normal menu. Preserve the PokeNav flag check. Emerald
+  has no parallel description table; its normal font is1 and script window
+  tile base100. The existing nine-slot menu order accommodates eight stock rows
+  plus SoulLink.
+- Native `ChoosePartyMon 081B94B0` writes `gSpecialVar_0x8004` through
+  BufferMonSelection. The unused ChoosePartyMonByMenuType does not. Native
+  cancellation255 translates to carrier result7 only after field return.
+- Scott graphics219, wander2, localF1, tile(10,4) in the source-listed sixteen
+  PokemonCenter_1F maps; the actual Spawn API takes border-adjusted (17,11).
+  Physical interaction checks are pending; this is not an all-Center claim.
+- Rival W1 still closes before state15 InitBattleControllers. Emerald has its
+  own callback/main/trainer/party bindings. Sound table IDs are0..609.
+
+The Match Call native adapter keeps its owned record atE40, controller atE80,
+runtime atE90 and a bounded 256-byte formatted message atF00. It requires both
+PokeNav and Match Call unlock flags. It waits for a safe field and three free
+task slots, then runs lockall/callnative/waitmessage/releaseall/end. The native
+call uses ShowPokenavFieldMessage, which expands into gStringVar4; it never calls
+StartMatchCallFromScript alone. The adapter reports visible delivery when the
+real ExecuteMatchCall reaches state5 (intro ended, message started), and release
+only after its task, field-message owner and script lock are all gone. Native
+allocation failures therefore follow the script's ordinary unlock path and
+produce REFUSED if delivery was never observed. These lifecycle assertions still
+need PHYSICAL evidence.
+
+`call_text.h` renders the Gen2 generic/named phone bodies in Gen3 text encoding,
+using native PLAYER expansion and ROM species names. Both species must be valid
+for named bodies; absent caller nickname falls back to its species. Receiver
+body uses species, matching Gen2. Formatting and candidate-build checks each
+had a failing first run, then passed. The callback continuation receipt also had
+a missing-field red before its green. Patch-focused regression:267 passed,
+170 skipped; the skipped external prerequisites are not physical evidence.
+
+`test_patch_emerald_live.py --prepare` stages isolated scripts/configs without
+launching an emulator. The panel, sound, carrier, real Calvin318 rival and native
+trade/save/reload probes are prepared from existing Emerald fixtures, using
+symbol-audited address translation and explicit semantic adaptations. No live
+PASS is claimed here. The current early-game fixtures have neither PokeNav nor
+Match Call; positive phone proof awaits a naturally unlocked save. The locked-
+device refusal probe is prepared separately. No story flags are patched for it.

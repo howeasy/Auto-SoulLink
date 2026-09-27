@@ -38,4 +38,4 @@ def test_emerald_requires_relocated_callback_prologue_and_own_save_call():
     assert continuation["thumb_address"]==(continuation["address"]|1)==spec["FRAME_RESUME"]
     assert continuation["offset"]+len(bytes.fromhex(continuation["bytes"]))<=sizes[continuation["symbol"]]
     assert continuation["bytes"]=="01d0e6f2d3fd6068"
-    assert facts["status"]=="SOURCE_ONLY_NOT_COMPOSED"
+    assert facts["status"]=="SOURCE_PINNED_CANDIDATE_UNQUALIFIED"

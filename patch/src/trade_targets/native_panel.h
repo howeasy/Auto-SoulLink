@@ -17,7 +17,11 @@ _Static_assert(0xA00u+sizeof(SlinkPanelProducer)<=SLINK_CALL_WITNESS_OFFSET,"pan
 #define FSP 0x00u
 #define FEOS 0xFFu
 #define FONT_SMALL 0u
+#ifdef SLINK_TARGET_PANEL_FONT_NORMAL
+#define FONT_NORMAL SLINK_TARGET_PANEL_FONT_NORMAL
+#else
 #define FONT_NORMAL 2u
+#endif
 #define INFO_ROWS SLINK_INFO_MAX_LINES
 #define INFO_PAGE_SLOT SLINK_INFO_PAGE_SLOT
 #define INFO_PITCH 13u
@@ -41,14 +45,24 @@ static int np_task_available(void)
 static u8 CreateWindowFromRect(u8 left,u8 top,u8 width,u8 height)
 {
     /* script_menu.c's template, with AddWindow failure checked BEFORE tilemap. */
-    struct { u8 bg,x,y,w,h,palette;u16 base; } template={0,left+1,top+1,width,height,15,0x38};
+    struct { u8 bg,x,y,w,h,palette;u16 base; } template={0,left+1,top+1,width,height,15,
+#ifdef SLINK_TARGET_PANEL_WINDOW_BASE
+        SLINK_TARGET_PANEL_WINDOW_BASE
+#else
+        0x38
+#endif
+    };
     u8 win=((u8(*)(const void *))(SLINK_TARGET_PANEL_ADD_WINDOW|1u))(&template);
     if (win!=0xffu) ((void(*)(u8))(SLINK_TARGET_PANEL_PUT_TILEMAP|1u))(win);
     return win;
 }
 #include "panel_render.h"
 /* Builder preserves the original nine entries, appending a tenth. */
+#ifdef SLINK_TARGET_PANEL_STOCK_ACTIONS
+__attribute__((used)) const uint32_t slink_panel_actions[2*(SLINK_TARGET_PANEL_STOCK_ACTIONS+1)]={0};
+#else
 __attribute__((used)) const uint32_t slink_panel_actions[20]={0};
+#endif
 __attribute__((used)) const uint32_t slink_panel_descriptions[10]={0};
 __attribute__((used)) const u8 slink_panel_label[]={FU('S'),FU('O'),FU('U'),FU('L'),FU('L'),FU('I'),FU('N'),FU('K'),FEOS};
 __attribute__((used)) const u8 slink_panel_description[]={FU('V'),FL('i'),FL('e'),FL('w'),FSP,FU('S'),FL('o'),FL('u'),FL('l'),FSP,FU('L'),FL('i'),FL('n'),FL('k'),FEOS};
@@ -63,14 +77,26 @@ __attribute__((used)) void slink_panel_normal_menu(void)
     void (*append)(u8)=(void(*)(u8))(SLINK_TARGET_PANEL_APPEND|1u);
     if (flag(SLINK_TARGET_PANEL_DEX_FLAG)==1) append(0);
     if (flag(SLINK_TARGET_PANEL_PARTY_FLAG)==1) append(1);
-    append(2);append(3);append(4);append(5);
+    append(2);
+#ifdef SLINK_TARGET_PANEL_NAV_FLAG
+    if (flag(SLINK_TARGET_PANEL_NAV_FLAG)==1) append(3);
+    append(4);append(5);append(6);
+#else
+    append(3);append(4);append(5);
+#endif
     if (!NP_STATE->active && (NT_STATE->phase==TP_IDLE || NT_STATE->phase==TP_DONE)
-        && slink_panel_valid(NP_INFO,NT_MB->session_epoch)) append(9);
+        && slink_panel_valid(NP_INFO,NT_MB->session_epoch))
+#ifdef SLINK_TARGET_PANEL_STOCK_ACTIONS
+        append(SLINK_TARGET_PANEL_STOCK_ACTIONS);
+    append(SLINK_TARGET_PANEL_EXIT_ACTION);
+#else
+        append(9);
     append(6);
+#endif
 }
 static int np_safe(void *unused)
 {
-    return !nc_owned() && nt_safe(unused) && (NT_STATE->phase==TP_IDLE || NT_STATE->phase==TP_DONE)
+    return !nc_owned() && !ncall_owned() && nt_safe(unused) && (NT_STATE->phase==TP_IDLE || NT_STATE->phase==TP_DONE)
         && np_task_available();
 }
 static int np_start(void *unused,const SlinkInfoV2 *snapshot)

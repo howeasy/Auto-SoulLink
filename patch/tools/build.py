@@ -106,8 +106,8 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
     """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
     if trade_candidate and mode != "trade":
         raise ValueError("trade candidate requires trade composition")
-    if title != "firered" and not (title == "leafgreen" and trade_candidate):
-        raise ValueError("diagnostics require FireRed; private candidates support FireRed/LeafGreen")
+    if title != "firered" and not (title in ("leafgreen", "emerald") and trade_candidate):
+        raise ValueError("diagnostics require FireRed; private candidates support FireRed/LeafGreen/Emerald")
     clean = Path(rom_path).read_bytes()
     spec = validate_base(title, clean)
     carrier_bindings, sound_bindings, rival_bindings = {}, {}, {}
@@ -151,12 +151,14 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
     if trade_candidate:
         symbols = {line.split()[-1]: int(line.split()[0], 16)
                    for line in symbol_text.splitlines() if len(line.split()) == 3}
-        for key, count, table_key, symbol, additions in (
-            ("actions", 72, "PANEL_ACTION_TABLE", "slink_panel_actions",
+        tables = [
+            ("actions", spec.get("PANEL_STOCK_ACTIONS", 9)*8, "PANEL_ACTION_TABLE", "slink_panel_actions",
              (symbols["slink_panel_label"], symbols["slink_panel_menu_callback"] | 1)),
-            ("descriptions", 36, "PANEL_DESC_TABLE", "slink_panel_descriptions",
-             (symbols["slink_panel_description"],)),
-        ):
+        ]
+        if "PANEL_DESC_TABLE" in spec:
+            tables.append(("descriptions", 36, "PANEL_DESC_TABLE", "slink_panel_descriptions",
+                           (symbols["slink_panel_description"],)))
+        for key, count, table_key, symbol, additions in tables:
             offset = symbols[symbol] - spec["CODE_CANDIDATE"]
             length = count + 4 * len(additions)
             if offset < 0 or offset + length > len(blob) or any(blob[offset:offset+length]):
@@ -196,6 +198,16 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
         data[offset:offset+8] = thumb_entry_jump(spec["FRAME_ENTRY"], frame)
         frame_receipt = {"address": spec["FRAME_ENTRY"], "original": spec["FRAME_BYTES"],
                          "replacement": data[offset:offset+8].hex()}
+        if spec.get("FRAME_REPLAY_REQUIRED"):
+            facts = json.loads(header.with_name(f"{title}_lifecycle.json").read_text())
+            tail = facts["continuations"][0]
+            if tail["thumb_address"] != spec["FRAME_RESUME"]:
+                raise ValueError("callback continuation differs from pinned lifecycle")
+            validate_detour(clean, tail["address"], bytes.fromhex(tail["bytes"]))
+            validate_detour(clean, spec["FRAME_GMAIN_LITERAL"], spec["GMAIN"].to_bytes(4,"little"))
+            frame_receipt["continuation"] = {"address":spec["FRAME_RESUME"],
+                "gmain_literal":spec["FRAME_GMAIN_LITERAL"],"gmain":spec["GMAIN"],
+                "original_tail":tail["bytes"]}
     trade_detours = []
     if mode == "trade":
         for key, symbol in (("TRADE_MON","slink_native_trade_gate"), ("EVO_GETTER","slink_native_evolution_gate")):
@@ -211,7 +223,7 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
                "target": title, "mode": mode, "ready": spec["READY"],
                "production": False,
                "arena_static_check": "skipped: heap clamp unqualified",
-               "capabilities": 23 if trade_candidate else 0,
+               "capabilities": (87 if spec.get("CALL_FEATURE") else 23) if trade_candidate else 0,
                "panel_detours": panel_detours, "panel_tables": panel_tables,
                "carrier_bindings": carrier_bindings,
                "sound_bindings": sound_bindings,

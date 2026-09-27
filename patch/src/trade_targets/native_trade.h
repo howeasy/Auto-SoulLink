@@ -121,7 +121,9 @@ static int nt_post_save(void *unused)
     if (NT_UI[2]==1) return 0; /* named private falsifier: no post-save occurred */
 #endif
     ((NtVoid)(SLINK_TARGET_SAVE_MAP|1u))();
+#ifdef SLINK_TARGET_SAVE_QUEST
     ((NtVoid)(SLINK_TARGET_SAVE_QUEST|1u))();
+#endif
     return ((uint8_t(*)(uint8_t))(SLINK_TARGET_SAVE_NORMAL|1u))(0)==SLINK_SAVE_OK;
 }
 static int nt_received(void *unused,unsigned slot,uint32_t *pid,uint32_t *ot)
@@ -180,14 +182,28 @@ __attribute__((section(".text.entry"),used)) void slink_native_heap(void *heap,u
 }
 #if defined(SLINK_NATIVE_TRADE_CANDIDATE)
 static int nc_owned(void);
+#ifdef SLINK_TARGET_CALL_FEATURE
+static int ncall_owned(void);
+#else
+#define ncall_owned() 0
+#endif
 #include "native_panel.h"
 #include "native_carrier.h"
 #include "native_sound.h"
 #include "native_rival.h"
+#ifdef SLINK_TARGET_CALL_FEATURE
+#include "native_call.h"
 #endif
+#endif
+#ifdef SLINK_TARGET_FRAME_REPLAY_REQUIRED
+__attribute__((used,noinline)) void slink_native_services(void)
+#else
 __attribute__((used)) void slink_native_frame(void)
+#endif
 {
+#ifdef SLINK_TARGET_SAVE_FAILED_SCREEN
     if (((NtBool)(SLINK_TARGET_SAVE_FAILED_SCREEN|1u))() || ((NtBool)(SLINK_TARGET_HELP_CALLBACK|1u))()) return;
+#endif
     if (NT_READ32(SLINK_TARGET_HEAP_SIZE_PTR)==SLINK_TARGET_HEAP_SIZE-SLINK_TARGET_ARENA_SIZE) {
 #if defined(SLINK_NATIVE_TRADE_PROBE)
         NT_MB->signature=0x32505254u; /* TRP2 private fault-injection probe */
@@ -206,12 +222,29 @@ __attribute__((used)) void slink_native_frame(void)
         slink_native_panel_service();
         slink_native_sound_service();
         slink_native_rival_service();
+#ifdef SLINK_TARGET_CALL_FEATURE
+        NT_MB->capabilities |= SLINK_CAP_MATCH_CALL;
+        slink_native_call_service();
+#endif
 #endif
         slink_trade_service(NT_STATE,NT_MB,NT_WITNESS,
             (const volatile uint8_t *)(NT_BASE+SLINK_BLOB_OFFSET),&nt_engine);
     }
+#ifndef SLINK_TARGET_FRAME_REPLAY_REQUIRED
     volatile uint32_t *callbacks=(volatile uint32_t *)SLINK_TARGET_GMAIN;
     if (callbacks[0]) ((NtVoid)callbacks[0])();
     if (callbacks[1]) ((NtVoid)callbacks[1])();
+#endif
 }
+#ifdef SLINK_TARGET_FRAME_REPLAY_REQUIRED
+/* Preserve the original callback tail, including flags from relocated CMP.
+ * Eight stack words keep the C service call aligned; the original prologue is
+ * replayed only after returning from all producer stack allocations. */
+__attribute__((naked,used)) void slink_native_frame(void)
+{
+    __asm__ volatile("push {r0-r6,lr}\n bl slink_native_services\n"
+        "ldr r3,[sp,#28]\n mov lr,r3\n pop {r0-r6}\n add sp,#4\n"
+        SLINK_TARGET_FRAME_REPLAY_ASM ".align 2\n .ltorg\n");
+}
+#endif
 #endif
