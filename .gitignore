@@ -32,6 +32,7 @@ data/obs_config.json
 # intermediate .o files). data/pret_syms.json IS committed (50KB artifact
 # so contributors without RGBDS can still run pytest).
 /.cache/
+/.lane/
 
 # F-7: cache of the pinned Radical Red generator sources (tools/fetch_rr_sources.py);
 # hash-verified and repopulated on demand, not checked in.
