@@ -175,7 +175,17 @@ def _panel_case(facts):
         "102": {"area": "viridian_forest", "party": [{"species": name, "level": 5}]}},
         "calc_labels": {"102": ""}} for side, name in (("a", "Bulbasaur"), ("b", "Ivysaur"))}
     retail = {"102": {"area": "viridian_forest", "party": [{"species": "Weedle", "level": 6}]}}
-    return {"probes": probes, "retail": retail}
+    return {"probes": probes, "retail": retail, "expected_area": "viridian_forest"}
+
+
+def test_panel_oracle_requires_an_explicit_expected_area(facts):
+    case = _panel_case(facts)
+    args = (case["probes"], facts, case["retail"])
+    with pytest.raises(TypeError):     # no default may assume the FR/LG fixture's area
+        duo.gen3_rand_panel_problems(*args)
+    for falsy in ("", None):
+        with pytest.raises(ValueError, match="expected_area"):
+            duo.gen3_rand_panel_problems(*args, expected_area=falsy)
 
 
 @pytest.mark.parametrize("fault", ("swapped", "retail", "level", "area", "label", "calc", "missing"))
@@ -231,7 +241,7 @@ def test_panel_probe_and_oracle_are_rom_free_and_do_not_filter_on_adopted_area()
         "a": "viridian_forest", "b": "viridian_forest"}, state=SimpleNamespace(artifact_kind="rand",
                                                                                identity_error={}))
     probes = duo.gen3_rand_status_probe(server, {}, retail=retail)["gen3_rand_probe"]
-    case = {"probes": probes, "retail": retail}
+    case = {"probes": probes, "retail": retail, "expected_area": "viridian_forest"}
     _revert_checked(case, lambda c: duo.gen3_rand_panel_problems(facts=facts, **c),
                     lambda c: c["probes"]["a"]["briefs"]["102"].update(area="wrong-area"), "not nearby")
 
@@ -499,7 +509,7 @@ def test_real_upr_tables_and_live_server_adapter_probe(title, label, tmp_path):
     assert [m["level"] for m in probe["briefs"]["102"]["party"]] == [m["level"] for m in expected]
     assert probe["calc_labels"]["102"] == ""
     retail = json.loads((ROOT / "data/games/gen3_frlge/frlg_trainers.json").read_text())["trainers"]
-    case = {"probes": probes, "retail": retail}
+    case = {"probes": probes, "retail": retail, "expected_area": "viridian_forest"}
     both = {"a": fact, "b": partner_fact}
     _revert_checked(case, lambda c: duo.gen3_rand_panel_problems(facts=both, **c),
                     lambda c: c["probes"]["a"].update(briefs=copy.deepcopy(c["probes"]["b"]["briefs"])),

@@ -60,6 +60,10 @@ def test_reference_presentation_and_explicit_unsupported_surfaces():
     assert [m["species"] for m in a.trainer_party(1)] == ["Geodude"] and a.trainer_brief(1)["area"] == "jagged_pass"
     assert a.trainer_info(1) == ("Sawyer", "Hiker")
     assert a.trainer_brief(1)["calc_label"] == "Hiker Sawyer"  # F5: setdex base string
+    # Card XC4c item 1: fight_label now reaches trainer_brief (server.py's Upcoming Key
+    # Trainers grouping reads it straight from there).
+    assert a.trainer_brief(520)["fight_label"] == "Rival has Treecko"
+    assert "fight_label" not in a.trainer_brief(1)  # no starter/rematch suffix -> omitted
     assert a.area_display_name("mt_pyre") == "Mt Pyre"  # F6: humanize_area_id fallback, no table
     assert a.area_display_name("") == ""
     assert a.rival_trainer_ids() == set()
@@ -422,3 +426,27 @@ async def test_a_vanilla_game_still_gets_its_own_area_catalog(tmp_path):
         await client.close()
     assert "pallet_town" in body["area_ids"]
     assert "route_101" not in body["area_ids"]  # that's Emerald's own map, not FR/LG's
+
+
+# ── card XC4c item 5: copy-isolation, one level deeper than gen3_frlge's own check ──────────
+
+def test_trainer_party_and_brief_are_deep_copies_not_shared_with_the_cached_pack():
+    """Mirrors tests/unit/test_gen3_frlg_trainers.py's test_adapter_vanilla_titles copy-
+    isolation check ("callers get copies"), extended one level deeper: this build's mons
+    always carry a nested ivs dict (never optional, unlike vanilla pret's), so a caller
+    mutating trainer_party(1)[0]["ivs"]["hp"] must not corrupt the functools.cache-shared
+    pack that every other trainer_party()/trainer_brief() call reads from afterward. A plain
+    `dict(m)` shallow copy (the bug: item 5) would share that nested dict by reference."""
+    a = get_adapter("gen3_exp")
+    party = a.trainer_party(1)
+    party[0]["species"] = "X"
+    party[0]["ivs"]["hp"] = 999
+    party[0]["moves"].append("Fake Move")
+    fresh = a.trainer_party(1)
+    assert fresh[0]["species"] == "Geodude"
+    assert fresh[0]["ivs"]["hp"] == 0
+    assert "Fake Move" not in fresh[0]["moves"]
+
+    brief = a.trainer_brief(1)
+    brief["party"][0]["ivs"]["hp"] = 999
+    assert a.trainer_brief(1)["party"][0]["ivs"]["hp"] == 0

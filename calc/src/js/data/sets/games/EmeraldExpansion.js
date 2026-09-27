@@ -8,12 +8,13 @@
 // build; include/config/battle.h's B_TRAINER_MON_RANDOM_ABILITY == 0 confirms the game itself
 // resolves it the same way).
 //
-// Known gap, same one Emerald.js/FRLG.js already document: a trainer name like "GRUNT" (53
-// hits) or "MAY"/"BRENDAN" (16 each) repeats across unrelated battles, so the Prep tab's
-// name-based grouping (slink_bridge.js _buildTrainerIndex, keyed on the text before " | ")
-// will merge those into one combined entry. Every party slot is still present in this file
-// (see tests/unit/test_gen3_expansion_trainer_sets.py's whole-file species+level check) --
-// this only affects how same-named/unnamed trainers are grouped for display.
+// Trainer name collisions ("GRUNT" x53, "MAY"/"BRENDAN" x16 each) do NOT merge in the Prep
+// tab: compute_bases() (tools/gen_gen3_exp_trainers.py) gives every trainer id its own unique
+// base text before " | " -- a Vs Seeker rematch chain (TRAINER_X_1..5) gets "<base> Rematch N",
+// any other same-name collision gets "<base> (2)", "<base> (3)", ... by trainer id order (OMP
+// cx-081c78d3 F1, fixed XC4b; see tests/unit/test_gen3_expansion_trainer_sets.py's
+// test_no_base_name_maps_to_more_than_one_trainer_index). Full coverage is still whole-file:
+// every DIFFICULTY_NORMAL party slot in src/data/trainers.h is present here, not a subset.
 
 var CUSTOMSETDEX_EE = {
 "Abra":{"Psychic Edward | Emerald Expansion ": {"index": "320000000232", "level": 15, "ability": "Synchronize", "item": "None", "nature": "Hardy", "ivs": {"hp": 0, "at": 0, "df": 0, "sa": 0, "sd": 0, "sp": 0}, "moves": ["Hidden Power", "No Move", "No Move", "No Move"]}, "Psychic Jaclyn | Emerald Expansion ": {"index": "320000000243", "level": 16, "ability": "Synchronize", "item": "None", "nature": "Hardy", "ivs": {"hp": 0, "at": 0, "df": 0, "sa": 0, "sd": 0, "sp": 0}, "moves": ["Hidden Power", "No Move", "No Move", "No Move"]}},

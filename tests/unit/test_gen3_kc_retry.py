@@ -20,6 +20,11 @@ census is re-requested by the tick, the resend rides only a tick that actually w
 with no stamped message sends nothing, and the real Gen 3 driver publishes ONE two-value
 box_generation for the core (through tests/unit/gen3_world.py's World, the harness
 tests/unit/test_gen3_client.py builds).
+
+Round 3 (review cx-9ffbb054) covers the rescan's blast radius and the window's edges: the tick
+re-requests an incomplete census only while a refusal is armed for one, stale evidence refuses
+the retirement instead of guessing, a second key_change ends the first alias's authority, and
+the ACK's own ordering decides what a command still naming the old key does.
 """
 from __future__ import annotations
 
@@ -41,6 +46,7 @@ JSON = (REPO / "lua" / "json_codec.lua").as_posix()
 
 A, B = "0000000A:12345678", "0000000B:12345678"
 OLD, NEW = "000000EE:12345678", "000000FF:12345678"
+OLD2, NEW2 = "000000C1:12345678", "000000C2:12345678"   # a SECOND change, mid-window
 
 # KC-RETRY: the DRIVER from test_core_session.py plus the two optional retry hooks
 # (box_generation -> gen, complete; rescan_boxes()), driven from `st.box_gen` / `st.box_ok`.
@@ -112,7 +118,10 @@ class World:
         self.set_party((A, 0), (B, 1))
         self.signals = L.table(drain=lambda s: L.table_from([]), close=lambda s: None)
         st.signals = self.signals
-        self.driver = L.execute(DRIVER)(st, lambda *a: None)
+        self.calls: dict[str, int] = {}     # driver-hook call counts (rescan_boxes, read_party, ...)
+        def sink(kind, *_rest):
+            self.calls[kind] = self.calls.get(kind, 0) + 1
+        self.driver = L.execute(DRIVER)(st, sink)
         Identity = L.eval(f'dofile("{IDENTITY}")')
         self.identity = Identity.new(L.table(key=L.eval("function(m) return m.key end")))
         exec_ = L.table(arm=lambda: None, disarm=lambda: None,
@@ -136,16 +145,30 @@ class World:
         return self.replies.pop(0) if self.replies else None
 
     def mon(self, key, slot):
+        return self.mon_ev(key, slot, [0x80], [1, 2])
+
+    def mon_ev(self, key, slot, nick, moves):
+        """A decoded record. `nick`/`moves` are the evidence lua/core/identity.lua freezes at a
+        key_change (evidence_of): the two fields a key rename never touches, so a record that
+        stops matching them is a DIFFERENT mon wearing the same key."""
         L = self.lua
         return L.table_from({"key": key, "slot": slot, "nickname": "MON", "level": 5, "max_hp": 20,
-                             "nickname_bytes": L.table_from([0x80]), "moves": L.table_from([1, 2])})
+                             "nickname_bytes": L.table_from(nick), "moves": L.table_from(moves)})
 
     def set_party(self, *entries):
-        self.st.party = self.lua.table_from([self.mon(*e) for e in entries])
+        self.set_party_mons(*[self.mon(*e) for e in entries])
+
+    def set_party_mons(self, *mons):
+        self.st.party = self.lua.table_from(list(mons))
 
     def command(self, **cmd):
-        assert ps.validate_command(cmd) == [], ps.validate_command(cmd)
-        self.replies.append(json.dumps({"commands": [cmd]}))
+        self.reply(cmd)
+
+    def reply(self, *cmds):
+        """One reply line carrying SEVERAL commands, in the order the server queued them."""
+        for c in cmds:
+            assert ps.validate_command(c) == [], ps.validate_command(c)
+        self.replies.append(json.dumps({"commands": list(cmds)}))
 
     def step(self, n=1):
         for _ in range(n):
@@ -309,16 +332,34 @@ def test_a_force_faint_under_the_old_key_lands_during_the_retry_window():
     assert not any("key not in party" in line for line in w.logs), w.logs
 
 
-def test_an_incomplete_census_is_re_requested_on_the_next_tick_with_no_pc_activity():
-    """Nothing but PC activity refreshes the Gen 3 census, so a trade-clash refusal (which asks
-    for no rescan) could never make progress: the tick re-requests the scan, once (MAJOR-2)."""
+def test_the_tick_rescans_only_for_an_armed_refusal_and_at_most_once_per_tick():
+    """The per-tick rescan exists for ONE consumer: a refused key_change waiting for a newer
+    COMPLETE census. Ungated, a scan that cannot land (a null storage pointer across a menu or a
+    battle) is re-requested every 30 frames for the rest of the session, and the only thing it
+    can change is the generation nobody is waiting on (F1)."""
     w = World()
     w.step_to(60)
-    w.st.box_ok, w.st.box_gen = False, 7            # a scan that did not land
-    w.step_to(90)                                   # exactly one tick, no PC activity anywhere
-    assert (int(w.st.box_gen), w.st.box_ok) == (8, True), "the tick re-requests the incomplete census"
-    w.step_to(120)                                  # and stops asking once it is complete
-    assert int(w.st.box_gen) == 8, "at most one rescan per tick, none once complete"
+    w.calls.clear()                                 # count only what the ticks under test do
+    w.st.box_ok, w.st.box_gen = False, 7            # a scan that did not land ...
+    w.st.scan_fails = True                          # ... and none that would
+    w.step_to(600)                                  # 18 ticks, nothing armed
+    assert w.calls.get("rescan_boxes", 0) == 0, "no refusal is waiting: the tick never re-requests"
+    assert (int(w.st.box_gen), w.st.box_ok) == (7, False), "and the generation stands still"
+
+    w.set_party((NEW, 0))
+    w.begin_alias(OLD, NEW)
+    w.command(cmd="key_change_rejected", old_key=OLD, new_key=NEW, reason="ambiguous key (trade clash)")
+    w.step_to(660)                                  # two more ticks, a refusal armed
+    assert w.calls["rescan_boxes"] == 2, "one per tick while the refusal waits, never more"
+    assert int(w.st.box_gen) == 7, "a scan that cannot land still does not advance the generation"
+
+    w.st.scan_fails = False                         # the PC wakes up: a newer complete census lands
+    w.step_to(690)
+    assert w.calls["rescan_boxes"] == 3 and int(w.st.box_gen) == 8
+    assert len(w.events("key_change")) == 2, "and the refusal is re-sent off it, exactly once"
+    w.step_to(900)
+    assert w.calls["rescan_boxes"] == 3, "not armed any more: the census is complete, so the tick stops"
+    assert len(w.events("key_change")) == 2, "never re-sent a second time"
 
 
 def test_the_resend_waits_for_a_tick_that_actually_goes_out():
@@ -378,3 +419,67 @@ def test_the_real_gen3_driver_publishes_the_core_two_value_box_generation():
     w.poke_int(psp, w.ram["POKEMON_STORAGE_BASE"], 4)
     drv.rescan_boxes()
     assert drv.box_generation() == (gen + 1, True), "only a complete scan advances the generation"
+
+
+# -- round 3 (review cx-9ffbb054): the edges of the refusal window -------------------------------
+
+def test_stale_evidence_under_a_pending_alias_refuses_the_force_faint_as_lost():
+    """The alias resolves the old key on EVIDENCE FROZEN at the change (nickname bytes + moves),
+    never on the key alone. A record that has stopped matching it is a different mon wearing the
+    same key, so the retirement is refused rather than guessed: a force_faint faints a partner for
+    good, and guessing here faints the wrong one."""
+    w = World()
+    w.step_to(60)
+    w.set_party((NEW, 0), (B, 1))                    # p[1] freezes the changed record's evidence
+    w.begin_alias(OLD, NEW)
+    w.set_party_mons(w.mon_ev(NEW, 0, [0x81], [1, 2]))   # same key, the evidence is gone
+    fainted: list[tuple] = []
+    w.q.exec.faint_slot = lambda slot, name: fainted.append((int(slot), str(name)))
+    w.step()
+    w.command(cmd="force_faint", key=OLD, nickname="MON")
+    w.step()
+    assert fainted == [], "a record that stopped matching the alias is never the one to faint"
+    assert any("retired record left the party" in line for line in w.logs), w.logs
+    assert w.identity.pending is not None, "a refused command consumes nothing"
+
+
+def test_a_second_key_change_mid_window_ends_the_first_olds_authority():
+    """Identity holds ONE pending alias: begin_alias overwrites it, so the first old key has no
+    alias left to resolve through and the server -- which still names that mon by it until IT
+    answers -- gets nothing. Pinned rather than wished away: a queue of aliases is a different
+    contract, and the one-sided one is the safe one (no wrong record is ever fainted)."""
+    w = World()
+    w.step_to(60)
+    w.set_party((NEW, 0))
+    w.begin_alias(OLD, NEW)
+    w.set_party((NEW2, 0))
+    w.begin_alias(OLD2, NEW2)                        # the second change lands before the first is answered
+    w.step()
+    fainted: list[tuple] = []
+    w.q.exec.faint_slot = lambda slot, name: fainted.append((int(slot), str(name)))
+    w.command(cmd="force_faint", key=OLD, nickname="MON")
+    w.step()
+    assert fainted == [], "the overwritten alias no longer names a record"
+    assert any("key not in party" in line for line in w.logs), w.logs
+    w.command(cmd="force_faint", key=OLD2, nickname="MON")
+    w.step()
+    assert fainted == [(0, "force_faint")], "the alias that IS pending still resolves"
+
+
+def test_an_ack_before_the_force_faint_in_one_reply_drops_the_stale_old_key_command():
+    """Reply order is the server's queue order. The ACK commits the rename and CONSUMES the alias
+    (apply_ack -> identity:ack), so a command that still names the old key after it, in the SAME
+    reply, is stale by construction: it is dropped by name, not resolved to anything. Only a
+    command already HELD when the ACK landed follows the rename -- the next test."""
+    w = World()
+    w.step_to(60)
+    w.set_party((NEW, 0))
+    w.begin_alias(OLD, NEW)
+    fainted: list[tuple] = []
+    w.q.exec.faint_slot = lambda slot, name: fainted.append((int(slot), str(name)))
+    w.reply({"cmd": "key_change_ack", "old_key": OLD, "new_key": NEW, "migrated": True},
+            {"cmd": "force_faint", "key": OLD, "nickname": "MON"})
+    w.step()
+    assert w.identity.pending is None, "the ACK consumed the alias"
+    assert fainted == [], "nothing resolves the old key once the ACK has landed"
+    assert any("key not in party" in line for line in w.logs), w.logs

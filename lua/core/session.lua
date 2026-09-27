@@ -353,8 +353,13 @@ function Session.new(p)
 
     function self:send_tick()
         -- KEY-SCOPE-5: an incomplete census is retried here, at most once per tick, and BEFORE
-        -- the tick so the census this tick publishes is the fresh one
-        if game.box_generation and game.rescan_boxes then
+        -- the tick so the census this tick publishes is the fresh one -- but only while a refused
+        -- key_change is still armed for one. Nothing else consumes the rescan (the driver keeps
+        -- the census fresh on its own PC triggers), and a scan that CANNOT land -- a null storage
+        -- pointer across a menu or a battle -- would otherwise walk every box every 30 frames
+        -- for the rest of the session.
+        local a = identity.pending
+        if a and a.retry_gen and game.box_generation and game.rescan_boxes then
             local _, complete = game.box_generation()
             if complete == false then game.rescan_boxes() end
         end

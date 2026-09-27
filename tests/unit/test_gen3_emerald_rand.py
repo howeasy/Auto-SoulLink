@@ -386,3 +386,23 @@ async def test_committed_emerald_rand_rejects_a_firered_report_at_admission(tmp_
     assert server.admission["b"]["state"] == "rejected"
     assert "not an Emerald cartridge report" in server.admission["b"]["reason"]
     assert not server.state.player_identity.get("b") and not server.party_details["b"]
+
+
+@pytest.mark.asyncio
+async def test_commit_path_never_normalises_a_foreign_title_report_to_clean(emerald_rom, tmp_path):
+    """Integration-merge audit (OMP cx-4b7ffc34 F1), end-to-end REGRESSION GUARD (not a
+    falsifier of the commit-site edit: admission already refuses this hello before the commit
+    runs, so the test passes with or without it). A legacy run (rom_type committed, kind empty)
+    receiving an FR/LG `rand` hello carrying clean *Emerald* tables must never commit `clean`;
+    the commit site now also uses the title-aware rule as defence in depth."""
+    from server.adapters.gen3_frlge import Gen3Adapter
+    from server.server import SLinkServer
+    from tests.unit.test_gen3_rand_admission import client, hello
+
+    report = emerald_payload(emerald_rom)
+    assert Gen3Adapter.pairing_kind_for_title("firered", "rand", report) == "rand"
+    server = SLinkServer(data_dir=str(tmp_path))
+    server.state.rom_type, server.state.artifact_kind = "firered", ""
+    async with client(server) as send:
+        await send(hello(rom_type="firered", kind="rand", rom_content=report))
+    assert server.state.artifact_kind != "clean"

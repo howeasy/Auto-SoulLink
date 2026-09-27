@@ -2896,8 +2896,10 @@ def _gen3_rand_species(name):
     return re.sub(r"[^A-Z0-9]", "", text.upper())
 
 
-def gen3_rand_panel_problems(probes, facts, retail, expected_area="viridian_forest"):
+def gen3_rand_panel_problems(probes, facts, retail, *, expected_area):
     """Actual per-player trainer_brief + calc fallback versus independent ROM IDs."""
+    if not expected_area:
+        raise ValueError("gen3_rand_panel_problems requires the fixture's expected_area")
     problems, selected = [], {}
     for side in ("a", "b"):
         probe = probes.get(side) or {}
@@ -2973,8 +2975,6 @@ def gen3_rand_status_probe(server, status, retail=None):
     """
     from server.server import _calc_trainer_label
 
-    if retail is None:
-        retail = json.loads(Path(REPO, "data/games/gen3_frlge/frlg_trainers.json").read_text())["trainers"]
     probes = {}
     for side in ("a", "b"):
         adapter = server.adapter_for(side)
@@ -3003,8 +3003,8 @@ def gen3_rand_server_main():
     from server import server as module
 
     original = module.SLinkServer._build_status_dict
-    retail = json.loads(Path(REPO, "data/games/gen3_frlge/frlg_trainers.json").read_text())["trainers"]
-    module.SLinkServer._build_status_dict = lambda self: gen3_rand_status_probe(self, original(self), retail)
+    # per-title retail roster is chosen inside the probe (gen3_rand_retail)
+    module.SLinkServer._build_status_dict = lambda self: gen3_rand_status_probe(self, original(self))
     asyncio.run(module.main(host="127.0.0.1", port=int(sys.argv[1]), http_port=int(sys.argv[2]),
                             reset=True, data_dir=sys.argv[3]))
 

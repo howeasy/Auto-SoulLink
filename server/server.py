@@ -2214,7 +2214,11 @@ class SLinkServer:
                 from server.adapters import GameRulesAdapter, adapter_class_for_rom_type
                 _declared = msg.get("artifact_kind", "clean")
                 _cls = adapter_class_for_rom_type(rom) or GameRulesAdapter
-                _by_content = _cls.pairing_kind_for(_declared, msg.get("rom_content"))
+                # same title-aware rule as _mixed_games_error._kind: a rand hello is never
+                # normalised to clean by another title's proof (gen3_frlge.pairing_kind_for_title)
+                _title_aware = getattr(_cls, "pairing_kind_for_title", None)
+                _by_content = (_title_aware(rom, _declared, msg.get("rom_content")) if _title_aware
+                               else _cls.pairing_kind_for(_declared, msg.get("rom_content")))
                 self.state.artifact_kind = (_by_content if _by_content != _cls.pairing_kind(_declared)
                                             else {"named": "clean"}.get(_declared, _declared))
                 _dirty = True

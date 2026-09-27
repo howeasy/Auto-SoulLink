@@ -1,7 +1,11 @@
 """RF-3: committed normalization facts are checked even without private ROMs."""
 import hashlib
 import json
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from server.adapters.gen3_rom_tables import FRLG_ZERO_SECOND_ABILITY_SPECIES
 
@@ -19,7 +23,7 @@ def test_committed_original_empty_ability_slots_have_pinned_provenance_and_ancho
     assert slots == sorted(set(slots)) and len(slots) == 284
     assert {0, 1, 410, 411} <= set(slots)             # NONE, Bulbasaur, Deoxys, EGG
     assert not {19, 333} & set(slots)                # Rattata: RUN_AWAY/GUTS; Vibrava: two LEVITATE
-    assert FRLG_ZERO_SECOND_ABILITY_SPECIES == frozenset(slots)
+    assert frozenset(slots) == FRLG_ZERO_SECOND_ABILITY_SPECIES
     assert set(facts["titles"]) == {"firered", "leafgreen"}
     for title, evidence in facts["titles"].items():
         assert evidence["rom_sha1"] == lock["outputs"][f"poke{title}"]["sha1"]
@@ -35,3 +39,41 @@ def test_generated_facts_match_both_pinned_dumps():
 
     assert build({title: _clean(title) for title in ("firered", "leafgreen")}) == json.loads(
         FACTS.read_text(encoding="utf-8"))
+
+
+@pytest.mark.parametrize("fault,marker", (
+    ("missing_file", "FileNotFoundError"),
+    ("missing_pin", "symbols_sha256"),
+    ("short_pin", "species_info_sha256"),
+    ("truncated_slots", "zero_second_ability_species"),
+    ("duplicated_slots", "zero_second_ability_species"),
+))
+def test_frlg_rule_facts_are_required_at_import(fault, marker):
+    # A subprocess isolates the import without replacing the module held by other tests.
+    script = '''
+import io, json
+from pathlib import Path
+path = Path('data/games/gen3_frlg/species_rules.json')
+facts = json.loads(path.read_text())
+original = Path.open
+def opened(self, *args, **kwargs):
+    if self.as_posix().endswith('data/games/gen3_frlg/species_rules.json'):
+        if FAULT == 'missing_file':
+            raise FileNotFoundError('FR/LG species_rules fixture absent')
+        if FAULT == 'missing_pin':
+            del facts['titles']['firered']['symbols_sha256']
+        elif FAULT == 'short_pin':
+            facts['titles']['leafgreen']['species_info_sha256'] = 'abc'
+        elif FAULT == 'truncated_slots':
+            facts['zero_second_ability_species'] = facts['zero_second_ability_species'][:-1]
+        else:
+            facts['zero_second_ability_species'] = [0, 1, 1] + facts['zero_second_ability_species'][3:]
+        return io.StringIO(json.dumps(facts))
+    return original(self, *args, **kwargs)
+Path.open = opened
+import server.adapters.gen3_rom_tables
+'''
+    result = subprocess.run([sys.executable, "-c", "FAULT=" + repr(fault) + "\n" + script],
+                            cwd=ROOT, capture_output=True, text=True, timeout=30)
+    assert result.returncode != 0, "a broken FR/LG species_rules.json silently survived import"
+    assert marker in result.stderr
