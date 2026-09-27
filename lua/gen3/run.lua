@@ -298,9 +298,10 @@ local function trade_live_snapshot(io_, profile, layout)
 end
 -- <<< durable trade storage <<<
 
-if admitted.kind == "companion" then
+local recovery_json = dofile(ROOT .. "/lua/json_codec.lua")
+if Entry.trade_journal_supported(ROOT, recovery_json, admitted) then
     local Journal = dofile(ROOT .. "/lua/gen3/trade_journal.lua")
-    local json = dofile(ROOT .. "/lua/json_codec.lua")
+    local json = recovery_json
     local ok, store = pcall(function()
         assert(luanet and luanet.import_type, "CLR durability adapter unavailable")
         luanet.load_assembly("BizHawk.Emulation.Common")

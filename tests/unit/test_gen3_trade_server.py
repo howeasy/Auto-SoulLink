@@ -29,7 +29,7 @@ def _hello(pid, **extra):
 
 
 @pytest.mark.parametrize("title,opted_in", [("firered", True), ("emerald", True),
-                                            ("firered_rr", True), ("Red", False), ("Crystal", False)])
+                                            ("firered_rr", False), ("Red", False), ("Crystal", False)])
 def test_config_exposes_existing_run_id_only_to_recovery_clients(tmp_path, title, opted_in):
     srv = SLinkServer(data_dir=str(tmp_path), run_id="run_journal_42")
     commands = srv._dispatch("a", _hello("a", rom_type=title, artifact_kind="clean", party=[]))
@@ -77,7 +77,7 @@ def _applying(tmp_path, *, prepare_only=False, title=None):
 
 
 @pytest.mark.parametrize("event", ["hello", "tick", "safe"])
-@pytest.mark.parametrize("title", ["firered", "emerald", "firered_rr"])
+@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
 def test_hidden_snapshot_preserves_last_good_party_and_display(tmp_path, event, title):
     srv = _server(tmp_path, title)
     state = srv.state
@@ -533,7 +533,7 @@ def test_final_receipt_is_one_way_bookkeeping_with_a_bounded_epoch():
         assert schema.validate_command({"cmd": "trade_final", "token": "t1", "verdict": "committed", **fields})
 
 
-@pytest.mark.parametrize("title", ["firered", "emerald", "firered_rr"])
+@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
 @pytest.mark.parametrize("via", ["state", "server"])
 @pytest.mark.parametrize("event", ["capture", "faint", "party_to_box", "box_to_party",
                                     "key_change", "whiteout", "release"])
