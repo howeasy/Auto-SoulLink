@@ -52,11 +52,11 @@ def test_emerald_requires_the_fork_even_if_a_stock_jar_were_trusted(tmp_path, mo
                                  randomize={"settings_path": str(settings)}, jar=str(jar))
 
 
-def test_emerald_companion_stays_refused_and_a_clean_copy_needs_no_randomizer(tmp_path):
+def test_emerald_companion_and_clean_copy_need_no_randomizer(tmp_path):
     source = str(_clean_path("emerald"))
     sources = {"a": source, "b": source}
-    with pytest.raises(cartridges.CartridgeError, match="no Emerald companion"):
-        cartridges.provision(str(tmp_path / "held"), sources, companion=True, randomize=None)
+    published=cartridges.provision(str(tmp_path / "published"), sources, companion=True, randomize=None)
+    assert published["players"]["a"]["kind"]=="companion"
     result = cartridges.provision(str(tmp_path / "copy"), sources, companion=False, randomize=None)
     assert result["family"] == FAMILY and result["randomizer"] is None
     assert (tmp_path / "copy/roms/a.gba").read_bytes() == Path(source).read_bytes()

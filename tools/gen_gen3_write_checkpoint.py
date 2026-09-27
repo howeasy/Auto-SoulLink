@@ -44,6 +44,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 SYM_DIR = ROOT / "data" / "gen3" / "pret"
 VERSION = "gen3-overworld-v1"
 ROM_BASE = 0x08000000
@@ -738,10 +739,9 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         unverified.append(f"battle.handoff: {why}")
     if handoff is not None:
         out["battle"]["handoff"] = handoff
-    if is_rr:
-        native = native_block(profile)
-        if native is not None:
-            out["native"] = native
+    native = native_block(profile)
+    if native is not None:
+        out["native"] = native
     out["sound"] = sound_block(syms, is_rr, title)
     out["sound"]["se_ids"] = se_ids(title, profile["titles"][title]["rom"]["SE_SONG_HEADERS"])
     out["gift_areas"] = gift_areas(pack, title)
@@ -775,6 +775,12 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
     else:
         for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr"):
             out["pointers"][name] = {"symbol": name, "address": syms[name][0], "source": sym_file}
+    if title in ("firered","leafgreen","emerald"):
+        from tools.gen3_companions import published
+        companion=published(title,roms["clean"],ROOT)
+        if companion:
+            for anchor in out["anchors"].values():
+                anchor["expected_hex"]["companion"]=body(companion[0],ROM_BASE+anchor["rom_offset"],anchor["length"]).hex().upper()
     return out, unverified
 
 
@@ -1240,6 +1246,12 @@ def native_block(profile: dict | None) -> dict | None:
     if not profile or not isinstance(profile.get("native"), dict):
         return None
     nat = profile["native"]
+    if nat.get("ABI")==2:
+        c=nat["abi_v2"]["constants"]
+        return {"version":"gen3-native-v2","base":nat["BASE"],"sig":nat["SIG"],"abi":2,
+                "abi_off":4,"opcode_off":6,"status_off":10,"busy":1,"info":nat["INFO"],
+                "info_state_off":c["SLINK_INFO_STATE_FIELD"],
+                "source":"patch/src/trade_targets/abi.h; native heap reservation"}
     spans = []
     for key, size, what in NATIVE_ARENA:
         if nat.get(key) is None:

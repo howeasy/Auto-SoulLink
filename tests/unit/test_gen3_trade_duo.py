@@ -329,7 +329,7 @@ def test_only_explicit_runner_context_can_authorize_candidate(problem):
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
-def test_projection_does_not_change_the_production_pack_and_built_candidate_is_refused(monkeypatch, title):
+def test_private_projection_does_not_override_the_published_cartridge_identity(monkeypatch, title):
     directory = ROOT / f"patch/build/candidate-{title}-trade"
     if not (directory / "probe.gba").exists():
         pytest.skip("T5 private FR candidate build absent")
@@ -350,9 +350,11 @@ def test_projection_does_not_change_the_production_pack_and_built_candidate_is_r
             rom_read=lambda at, n: lua.table(*rom[at : at + n]),
         )
     )
-    assert isinstance(result, tuple) and result[0] is None
     shipped = json.loads((ROOT / "data/games/gen3_frlg/engine_signals.json").read_text())
-    assert "companion" not in shipped["titles"][title]["artifacts"]
+    public=shipped["titles"][title]["artifacts"]["companion"]
+    assert public["production"] is True and not public.get("harness_only")
+    assert public["rom_sha1"]==receipt["sha1"]  # publication deliberately retained tested bytes
+    assert result.kind=="companion" and result.admitted_by=="hash"
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])

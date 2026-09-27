@@ -270,7 +270,7 @@ def test_epoch_read_failure_aborts_without_writes_and_recovers_only_after_clear(
 def test_v2_panel_and_control_do_not_inherit_v1_memory_layout():
     w = World(abi=2)
     assert w.native.link_panel(w.native, w.lua.table(rows=w.lua.table("hello"))) == (
-        None, "v2 panel binding unavailable")
+        None, "native panel absent")
     assert w.native.config(w.native, w.lua.table(pc_trade_npc=True, battle_calc=True)) == (
         None, "v2 control binding unavailable")
     w.service()

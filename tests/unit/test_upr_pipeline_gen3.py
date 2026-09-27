@@ -331,10 +331,10 @@ def test_provision_refuses_a_stock_jar_for_frlg(tmp_path, monkeypatch):
                              randomize={"settings_path": str(settings)}, jar=str(jar))
 
 
-def test_companion_is_refused_for_frlg_until_it_exists(tmp_path):
+def test_published_companions_provision_for_frlg(tmp_path):
     fr, lg = str(_clean_path("firered")), str(_clean_path("leafgreen"))
-    with pytest.raises(cartridges.CartridgeError, match="no FireRed / LeafGreen companion"):
-        cartridges.provision(str(tmp_path), {"a": fr, "b": lg}, companion=True, randomize=None)
+    result=cartridges.provision(str(tmp_path), {"a": fr, "b": lg}, companion=True, randomize=None)
+    assert all(row["kind"]=="companion" for row in result["players"].values())
 
 
 def _jar() -> str:

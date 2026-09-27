@@ -744,3 +744,68 @@ These are PHYSICAL single-cart candidate receipts with disclosed replayed/SYNTH
 inputs, not duo/server integration, all-scene heap qualification or production
 admission. READY remains0 and no UPS was published. T2 stops here; the RR durable
 delta has not started and awaits coordinator confirmation.
+
+## T2-PUBLISH (2026-09-27)
+
+The owner authorized publication after the bounded native receipts above.
+Integration through646586fd and T5 througha37ebb44 are merged into
+`claude/gen3-emerald-t2`. The ABI merge retains the native producer phase,
+reason names and received-identity durability predicate. RR keeps ABI1; its
+UPS reproduces byte-for-byte with patched MD5c372c428c8f41cbbde5c71d6408233dd.
+
+FR, LG and Emerald now have READY1 and arena0201B000. The production builder
+validates the native heap reservation, composes the tested payload, creates
+and round-trips a title-specific UPS, and writes `patch/dist/gen3_companions.json`.
+`--check` compares both UPS bytes and the manifest row. The published ROM bytes
+are identical to the previously tested candidates; READY publication changes
+the build/admission gates rather than silently changing the native payload.
+Private candidate receipts remain production=false/READY0 for the T5 harness.
+
+Published artifacts:
+
+| Title | UPS | Result SHA1 | ABI/capabilities |
+|---|---|---|---|
+| FireRed | SLink-FireRed.ups | 10109d33a937af6182827a5b0b36abccfaabd1c9 | 2 / 23 |
+| LeafGreen | SLink-LeafGreen.ups | e651983a7e0d3cbd8810c76252755d2f09bd9bf0 | 2 / 23 |
+| Emerald | SLink-Emerald.ups | 2ffab4380ce91468833a11fa0b1bae6bf4acb4f3 | 2 / 87 |
+
+The same manifest supplies the patcher registry and validates the UPS used by
+the engine-site/checkpoint generators. Companion sites retain their clean
+semantic locations except FR/LG frame_control: their old CallCallbacks+10 is
+bypassed by the native replacement, so the published artifact observes the
+real CallCallbacks entry instead. Expected site/context and checkpoint bytes
+are taken from the verified UPS result. The shipped profiles carry the canonical
+ABI2 layout, with title-specific runtime readers and admission metadata.
+
+The T5 consumer supplies the native carrier controls and durable-trade binding.
+Publication extends that binding to Emerald under its own pack/title, using its
+existing save-reload layout. The missing ABI2 link-panel publisher now stages
+epoch/request/text without overwriting native drawn/closed/state/result fields;
+updates wait while the panel owns its snapshot. Model tests cover publication,
+deferred updates and the Emerald durable preparation handshake. Rival readback
+uses the selected title's own profile, rather than the RR table.
+
+The Manager and release bundle expose all three UPS files. For an allowed
+randomized cartridge, composition follows randomization and refuses overlap
+with any protected native injection or detour span; the final output is what
+the run contract hashes. Internally this is `rand_companion`, while the existing
+wire kind stays `rand`, including ROM-content proof and randomized pairing rules.
+No new wire artifact kind was introduced.
+
+Production UPS smokes apply the shipped UPS to each pinned clean owner ROM,
+then cold-boot, open/close the native panel, perform a native trade with evolution
+and both saves, and reset/reload without another manual SAVE. All passed:
+
+- FR PID40280: `patch/build/production-firered-live-20260927/production_receipt.json`,
+  native counter4->6, received Machamp identity retained.
+- LG PID45488: `patch/build/production-leafgreen-live-20260927/production_receipt.json`,
+  native counter3->5, received Machamp identity retained.
+- Emerald PID44332: `patch/build/production-em-trade-live-20260927/emerald_receipt.json`,
+  native counter2->4, received Machamp identity retained.
+
+Every received key was13572468:78563412. Python independently decoded the native
+SaveRAM and reloaded party. The probes used private state/config directories and
+only their owned PIDs; all three PIDs were verified absent afterward. FR/LG used
+the disclosed full-party/full-box SYNTH fixture; Emerald used its two-mon PC
+fixture. These are native single-cart production-UPS smokes, not additional duo
+or all-scene heap qualification. T5 owns the duo receipts and OMP review.

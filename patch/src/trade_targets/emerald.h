@@ -1,6 +1,6 @@
-/* T2 target SOURCE candidates: patched_trade_bindings.md sections 1-5.
- * ABI v2 arena/detour/payload are NOT QUALIFIED. READY must remain zero.
- * RR v1 continues through the legacy builder until the v2 delta is proven.
+/* Published ABI2 target: source pins and bounded native receipts are recorded
+ * in docs/gen3/research/fr_native_trade_abi.md and the build manifest.
+ * RR ABI1 continues through its separate legacy builder.
  */
 #ifndef SLINK_TARGET_EMERALD_H
 #define SLINK_TARGET_EMERALD_H
@@ -14,11 +14,11 @@
 #define SLINK_TARGET_DETOUR_BYTES "10b5074c20680028"
 #define SLINK_TARGET_HEAP_BASE 0x02000000u
 #define SLINK_TARGET_HEAP_SIZE 0x1C000u
-#define SLINK_TARGET_ARENA_BASE 0u
+#define SLINK_TARGET_ARENA_BASE 0x0201B000u
 #define SLINK_TARGET_ARENA_SIZE 0x1000u
-#define SLINK_TARGET_READY 0u
+#define SLINK_TARGET_READY 1u
 /* Entry contains a PC-relative load. The private native composition relocates
- * it and continues the original two callbacks. READY remains zero. */
+ * it and continues the original two callbacks. */
 #define SLINK_TARGET_FRAME_REPLAY_REQUIRED 1u
 #define SLINK_TARGET_FRAME_ENTRY 0x0800051Cu
 #define SLINK_TARGET_FRAME_BYTES "10b5074c20680028"
@@ -154,7 +154,7 @@
 #define SLINK_TARGET_PANEL_ACTION_REFS "0x0809F818,0x0809FB78"
 #define SLINK_TARGET_TRADE_GATE_ASM ".hword 0xb5f0,0x464f,0x4646,0xb4c0\n ldr r3,=0x807b4d9\n bx r3\n"
 #define SLINK_TARGET_EVO_GATE_ASM ".hword 0xb5f0,0x4657,0x464e,0x4645\n ldr r3,=0x806d0a1\n bx r3\n"
-#if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+#if defined(SLINK_NATIVE_COMPANION)
 static const unsigned short slink_target_pokecenters[]={0x202,0x301,0x405,0x504,0x604,0x700,0x804,0x90b,0xa05,0xb05,0xc02,0xd06,0xe03,0xf02,0x100c,0x1a35};
 #endif
 #endif

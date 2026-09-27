@@ -1,0 +1,176 @@
+{
+  "schema": "slink-gen3-companions-v1",
+  "titles": {
+    "emerald": {
+      "abi": 2,
+      "arena_base": 33665024,
+      "arena_size": 4096,
+      "base_md5": "605b89b67018abcea91e693a4dd25be3",
+      "base_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
+      "capabilities": 87,
+      "patch": "SLink-Emerald.ups",
+      "payload_sha256": "a6b88fb2993d387855d341cd767d84c59a5f60e20577b1a1ece4118aa36e5e4b",
+      "production": true,
+      "protected_spans": [
+        {
+          "offset": 14929764,
+          "size": 10878
+        },
+        {
+          "offset": 2844,
+          "size": 8
+        },
+        {
+          "offset": 1308,
+          "size": 8
+        },
+        {
+          "offset": 505040,
+          "size": 8
+        },
+        {
+          "offset": 446616,
+          "size": 8
+        },
+        {
+          "offset": 653336,
+          "size": 4
+        },
+        {
+          "offset": 654200,
+          "size": 4
+        },
+        {
+          "offset": 652492,
+          "size": 8
+        }
+      ],
+      "rom_md5": "cab93578ccf950d2f5db2834b0cb535c",
+      "rom_sha1": "2ffab4380ce91468833a11fa0b1bae6bf4acb4f3",
+      "rom_sha256": "fc7eda3609e704021a268953f91043085473c204171bc4e6b4ac34364a0f6fdc",
+      "ups_sha256": "521e41139b86fb454037610d552c7e04edc1f561ca3a54981afbce2376f61613"
+    },
+    "firered": {
+      "abi": 2,
+      "arena_base": 33665024,
+      "arena_size": 4096,
+      "base_md5": "e26ee0d44e809351c8ce2d73c7400cdd",
+      "base_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
+      "capabilities": 23,
+      "patch": "SLink-FireRed.ups",
+      "payload_sha256": "bce6a8eaba3ea0bd6aadd147643eac8deb0b3d610a79e80b6e3bf1e6d70f0dd1",
+      "production": true,
+      "protected_spans": [
+        {
+          "offset": 15403808,
+          "size": 8625
+        },
+        {
+          "offset": 11136,
+          "size": 8
+        },
+        {
+          "offset": 1296,
+          "size": 8
+        },
+        {
+          "offset": 329740,
+          "size": 8
+        },
+        {
+          "offset": 274116,
+          "size": 8
+        },
+        {
+          "offset": 454556,
+          "size": 4
+        },
+        {
+          "offset": 455540,
+          "size": 4
+        },
+        {
+          "offset": 455672,
+          "size": 4
+        },
+        {
+          "offset": 454968,
+          "size": 4
+        },
+        {
+          "offset": 455528,
+          "size": 4
+        },
+        {
+          "offset": 454064,
+          "size": 8
+        }
+      ],
+      "rom_md5": "f3989b7545a622b808cafedd5a03822c",
+      "rom_sha1": "10109d33a937af6182827a5b0b36abccfaabd1c9",
+      "rom_sha256": "421f72aa88f3eda47bbf316cde7a1aac8369aaabae3188987123f1bb7a990007",
+      "ups_sha256": "7034d76a4ad58b4410a304e97a28e86f1716709c68eb7bc596c99fc6064e06ea"
+    },
+    "leafgreen": {
+      "abi": 2,
+      "arena_base": 33665024,
+      "arena_size": 4096,
+      "base_md5": "612ca9473451fa42b51d1711031ed5f6",
+      "base_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e",
+      "capabilities": 23,
+      "patch": "SLink-LeafGreen.ups",
+      "payload_sha256": "f078482f26a8637977b23f013438ff8467e00b38b3ad67f6f5d82104e06670a7",
+      "production": true,
+      "protected_spans": [
+        {
+          "offset": 15404564,
+          "size": 8625
+        },
+        {
+          "offset": 11136,
+          "size": 8
+        },
+        {
+          "offset": 1296,
+          "size": 8
+        },
+        {
+          "offset": 329740,
+          "size": 8
+        },
+        {
+          "offset": 274116,
+          "size": 8
+        },
+        {
+          "offset": 454556,
+          "size": 4
+        },
+        {
+          "offset": 455540,
+          "size": 4
+        },
+        {
+          "offset": 455672,
+          "size": 4
+        },
+        {
+          "offset": 454968,
+          "size": 4
+        },
+        {
+          "offset": 455528,
+          "size": 4
+        },
+        {
+          "offset": 454064,
+          "size": 8
+        }
+      ],
+      "rom_md5": "212450676d820bc85fbd6274868f5fed",
+      "rom_sha1": "e651983a7e0d3cbd8810c76252755d2f09bd9bf0",
+      "rom_sha256": "a0e5fe73b888f86abf8d9722703334a3afd1ee5f68d56ed7f8e6ef08eec48db0",
+      "ups_sha256": "420a42f5427e1100ea39c3d992cffe51d420109dbb819e115c986865f9be86bb"
+    }
+  }
+}

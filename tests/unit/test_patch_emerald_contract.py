@@ -17,7 +17,7 @@ def test_emerald_requires_relocated_callback_prologue_and_own_save_call():
     assert spec["GMAIN"]==0x030022C0
     assert spec["FRAME_BYTES"]=="10b5074c20680028"
     assert "ldr r4,=0x030022c0" in spec["FRAME_REPLAY_ASM"]
-    assert spec["READY"]==0
+    assert spec["READY"]==1
     facts=json.loads((ROOT/"patch/src/trade_targets/emerald_lifecycle.json").read_text())
     assert facts["source_commit"]=="c65e93f20a5275ab03b07d6f6411096a82a60ffd"
     assert facts["symbols_sha256"]==hashlib.sha256((ROOT/"data/gen3/pret/pokeemerald.sym").read_bytes()).hexdigest()

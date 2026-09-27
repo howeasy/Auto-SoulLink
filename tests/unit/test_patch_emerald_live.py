@@ -363,15 +363,21 @@ def problems(mode, text, base):
     return errors
 
 
-def run(mode, prepare=False):
+def run(mode, prepare=False, *, production=False):
     sys.path.insert(0,str(ROOT))
     from tools.gen1_playthrough import disable_rewind
     from server.adapters import gen3_codec as codec
-    base=ROOT/f".cache/e-{mode}"
+    base=ROOT/f".cache/{'pub-' if production else ''}e-{mode}"
     base.mkdir(parents=True,exist_ok=True)
     candidate=ROOT/"patch/build/candidate-emerald-trade"
-    for name in ("probe.gba","receipt.json"):
-        shutil.copyfile(candidate/name,base/name)
+    if not production:
+        for name in ("probe.gba","receipt.json"):
+            shutil.copyfile(candidate/name,base/name)
+    if production:
+        from tools.gen3_companions import published
+        rom,row=published("emerald",(Path(os.environ["SLINK_GEN3_ROMS"])/"Pokemon - Emerald Version (USA, Europe).gba").read_bytes())
+        (base/"probe.gba").write_bytes(rom)
+        shutil.copyfile(ROOT/"patch/build/production-emerald/receipt.json",base/"receipt.json")
     kind="trainer" if mode=="rival" else "pc" if mode=="trade" else "town"
     seed=(ROOT/f"tests/fixtures/gen3/emerald_{kind}.sav").read_bytes()
     synth=None
@@ -404,6 +410,10 @@ def run(mode, prepare=False):
     config["AutoLoadLastSaveSlot"]=False;config["AutoSaveLastSaveSlot"]=False
     (base/"config.ini").write_text(json.dumps(config,indent=2))
     script,audit=body(mode)
+    if production:
+        assert mode=="trade", "production smoke includes boot/panel/trade/reload"
+        panel,panel_audit=body("panel")
+        script=panel+script;audit.update(panel_audit)
     script='''local out=assert(io.open("'''+(base/"result.txt").as_posix()+'''","w"))
 local function log(s) out:write(s.."\\n");out:flush() end
 local function rd(a) return memory.read_u32_le(a,"System Bus") end
@@ -457,12 +467,16 @@ out:close();client.exit()
     text=result.read_text() if result.exists() else "FAIL: no output"
     print(text)
     errors=problems(mode,text,base)
+    if production:
+        errors+=problems("panel",text,base)
     rejected=bool(problems(mode,text.replace("RESULT: PASS","RESULT: FAIL"),base))
     receipt.update(result="PASS" if not errors and rejected else "FAIL",problems=errors,
                    missing_success_rejected=rejected,address_bindings=audit,
                    scope="Emerald private single-cart native producer; replayed payloads and existing SYNTH fixture; no server/duo/admission")
+    if production:
+        receipt.update(production=True,scope="Published UPS applied to pinned clean Emerald: native boot/panel/trade/save/reload smoke; SYNTH fixture",ups_sha256=row["ups_sha256"])
     (base/"emerald_receipt.json").write_text(json.dumps(receipt,indent=2)+"\n")
-    archive=ROOT/f"patch/build/em-{mode}-live-20260927"
+    archive=ROOT/f"patch/build/{'production-' if production else ''}em-{mode}-live-20260927"
     archive.mkdir(exist_ok=True)
     for name in ("emerald_receipt.json","result.txt","run_receipt.json","receipt.json","probe.lua","config.ini",
                  "seed.sav","rival.bin","late.bin","incoming.bin","reload_party.bin","address_bindings.json","synth_setup.json"):

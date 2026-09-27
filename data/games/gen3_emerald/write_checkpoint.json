@@ -4,7 +4,8 @@
       "cb1_overworld": {
         "address": 134766084,
         "expected_hex": {
-          "clean": "00B5054A51680548814203D1D08D918DFFF7CAFF01BC0047C02200035D5E0808"
+          "clean": "00B5054A51680548814203D1D08D918DFFF7CAFF01BC0047C02200035D5E0808",
+          "companion": "00B5054A51680548814203D1D08D918DFFF7CAFF01BC0047C02200035D5E0808"
         },
         "length": 32,
         "rom_offset": 548356,
@@ -13,7 +14,8 @@
       "cb2_overworld": {
         "address": 134766172,
         "expected_hex": {
-          "clean": "10B50948C079C009041C002C02D000207AF740FCFFF7D8FF002C01D000F082FA10BC01BC00470000D47F0302"
+          "clean": "10B50948C079C009041C002C02D000207AF740FCFFF7D8FF002C01D000F082FA10BC01BC00470000D47F0302",
+          "companion": "10B50948C079C009041C002C02D000207AF740FCFFF7D8FF002C01D000F082FA10BC01BC00470000D47F0302"
         },
         "length": 44,
         "rom_offset": 548444,
@@ -22,7 +24,8 @@
       "frame_control": {
         "address": 134219036,
         "expected_hex": {
-          "clean": "10B5074C2068002801D0E6F2D3FD6068002801D0E6F2CEFD10BC01BC00470000C0220003"
+          "clean": "10B5074C2068002801D0E6F2D3FD6068002801D0E6F2CEFD10BC01BC00470000C0220003",
+          "companion": "004B18476DF5E30801D0E6F2D3FD6068002801D0E6F2CEFD10BC01BC00470000C0220003"
         },
         "length": 36,
         "rom_offset": 1308,
@@ -31,7 +34,8 @@
       "run_tasks": {
         "address": 134910220,
         "expected_hex": {
-          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921683DF2D5FFA079FF28F5D130BC01BC00470000005E0003"
+          "clean": "30B500F015F80006000E10280AD0074D84002418E400641921683DF2D5FFA079FF28F5D130BC01BC00470000005E0003",
+          "companion": "30B500F015F80006000E10280AD0074D84002418E400641921683DF2D5FFA079FF28F5D130BC01BC00470000005E0003"
         },
         "length": 48,
         "rom_offset": 692492,
@@ -40,7 +44,8 @@
       "try_saving_data": {
         "address": 135607096,
         "expected_hex": {
-          "clean": "30B50006050E09480468012C09D1281CFFF75CFF0648006800280DD0281C25F01BFE0449FF200880FF2008E0885D0003FC6100039462000302480480012030BC02BC084794620003"
+          "clean": "30B50006050E09480468012C09D1281CFFF75CFF0648006800280DD0281C25F01BFE0449FF200880FF2008E0885D0003FC6100039462000302480480012030BC02BC084794620003",
+          "companion": "30B50006050E09480468012C09D1281CFFF75CFF0648006800280DD0281C25F01BFE0449FF200880FF2008E0885D0003FC6100039462000302480480012030BC02BC084794620003"
         },
         "length": 72,
         "rom_offset": 1389368,
@@ -267,6 +272,19 @@
         "rustboro_city_devon_corp_2f"
       ],
       "source": "gen3_emerald/statics.json gift rows x area_map.json, less the starter's wild route_101"
+    },
+    "native": {
+      "abi": 2,
+      "abi_off": 4,
+      "base": 33665024,
+      "busy": 1,
+      "info": 33666784,
+      "info_state_off": 14,
+      "opcode_off": 6,
+      "sig": 1263422547,
+      "source": "patch/src/trade_targets/abi.h; native heap reservation",
+      "status_off": 10,
+      "version": "gen3-native-v2"
     },
     "pointers": {
       "gPokemonStoragePtr": {

@@ -71,8 +71,11 @@ class World:
             g.put(n["base"] + n["abi_off"], n["abi"], 2)
             g.put(n["base"] + n["opcode_off"], 0, 2)
             g.put(n["base"] + n["status_off"], 2, 2)          # ST_OK, not ST_BUSY
-            g.put(n["info"] + n["info_drawn_off"], 1, 1)
-            g.put(n["info"] + n["info_ack_off"], 1, 1)
+            if n["abi"] == 2:
+                g.put(n["info"] + n["info_state_off"], 0, 1)
+            else:
+                g.put(n["info"] + n["info_drawn_off"], 1, 1)
+                g.put(n["info"] + n["info_ack_off"], 1, 1)
         snd = self.pack["sound"]
         if "player_se1" in snd:
             g.put(snd["player_se1"]["address"] + snd["ident_off"], snd["ident_magic"], 4)

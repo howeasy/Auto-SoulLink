@@ -60,7 +60,7 @@ def validate_base(title, data):
     return spec
 
 
-def validate_arena(title, start, size):
+def validate_arena(title, start, size, *, heap_size=None):
     """Static exclusion, NOT physical qualification. Reservation proofs are separate."""
     if size <= 0 or start < 0x02000000 or start + size > 0x02040000:
         raise ValueError("arena outside EWRAM")
@@ -69,7 +69,7 @@ def validate_arena(title, start, size):
     # nevertheless real: pret include/malloc.h:6 and src/main.c:154. A future
     # carve-out needs explicit ROM mutation + runtime proof; zero symbol size
     # cannot silently authorize it.
-    if max(start, spec["HEAP_BASE"]) < min(start + size, spec["HEAP_BASE"] + spec["HEAP_SIZE"]):
+    if max(start, spec["HEAP_BASE"]) < min(start + size, spec["HEAP_BASE"] + (spec["HEAP_SIZE"] if heap_size is None else heap_size)):
         raise ValueError("arena overlap with gHeap reservation (heap clamp not qualified)")
     if not spec["SYMBOLS"]:
         raise ValueError("RR has no matching source symbols; its arena needs a binary/physical proof")
@@ -79,6 +79,8 @@ def validate_arena(title, start, size):
         if len(fields) != 4:
             continue
         address, extent = int(fields[0], 16), int(fields[2], 16)
+        if fields[3] == "gHeap" and address == spec["HEAP_BASE"] and heap_size is not None:
+            extent = heap_size  # runtime InitHeap detour reserves the published tail
         if extent and max(start, address) < min(start + size, address + extent):
             raise ValueError(f"arena overlap with {fields[3]} [{address:#x}, {address + extent:#x})")
 
@@ -87,7 +89,10 @@ def require_ready(title):
     spec = target_spec(title)
     if not spec["READY"]:
         raise ValueError(f"{title} ABI v2 not qualified: arena, detour and payload evidence required")
-    validate_arena(title, spec["ARENA_BASE"], spec["ARENA_SIZE"])
+    if spec["ARENA_BASE"] != spec["HEAP_BASE"] + spec["HEAP_SIZE"] - spec["ARENA_SIZE"]:
+        raise ValueError("published arena must match the native heap reservation")
+    validate_arena(title, spec["ARENA_BASE"], spec["ARENA_SIZE"],
+                   heap_size=spec["HEAP_SIZE"]-spec["ARENA_SIZE"])
     return spec
 
 
@@ -102,7 +107,7 @@ def thumb_entry_jump(address, destination):
     return bytes.fromhex("004b1847") + (destination | 1).to_bytes(4, "little")
 
 
-def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
+def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, production=False):
     """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
     if trade_candidate and mode != "trade":
         raise ValueError("trade candidate requires trade composition")
@@ -110,6 +115,10 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
         raise ValueError("diagnostics require FireRed; private candidates support FireRed/LeafGreen/Emerald")
     clean = Path(rom_path).read_bytes()
     spec = validate_base(title, clean)
+    if production:
+        if not trade_candidate:
+            raise ValueError("production requires the complete native composition")
+        require_ready(title)
     carrier_bindings, sound_bindings, rival_bindings = {}, {}, {}
     if trade_candidate:
         for key in ("CARRIER_SPAWN", "CARRIER_REMOVE", "CARRIER_CHOOSE"):
@@ -127,14 +136,14 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
     if mode == "trade":
         for key in ("TRADE_MON", "EVO_GETTER"):
             validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
-    out = Path(BUILD) / (f"candidate-{title}-trade" if trade_candidate else f"arena-{title}-{mode}")
+    out = Path(BUILD) / (f"production-{title}" if production else f"candidate-{title}-trade" if trade_candidate else f"arena-{title}-{mode}")
     out.mkdir(parents=True, exist_ok=True)
     header = Path(SRC) / "trade_targets" / f"{title}.h"
     obj, elf, binary = out / "probe.o", out / "probe.elf", out / "probe.bin"
     flag = "-DSLINK_NATIVE_TRADE_PROBE=1" if mode == "trade" else (
         f"-DSLINK_ARENA_PROBE={ {'positive':1,'negative':2,'exhaustion':3,'census':4}[mode]}")
     if trade_candidate:
-        flag = "-DSLINK_NATIVE_TRADE_CANDIDATE=1"
+        flag = "-DSLINK_NATIVE_COMPANION=1"
     entry = "slink_native_heap" if mode == "trade" else "slink_heap_probe"
     run([GCC, *CFLAGS, flag,
          "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
@@ -219,10 +228,10 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
                                   "replacement":data[offset:offset+8].hex(),"symbol":symbol})
     rom = out / "probe.gba"
     rom.write_bytes(data)
-    receipt = {"status": "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
-               "target": title, "mode": mode, "ready": spec["READY"],
-               "production": False,
-               "arena_static_check": "skipped: heap clamp unqualified",
+    receipt = {"status": "PRODUCTION_COMPANION" if production else "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
+               "target": title, "mode": mode, "ready": spec["READY"] if production else 0,
+               "production": production,
+               "arena_static_check": "native heap reservation" if production else "skipped: heap clamp unqualified",
                "capabilities": (87 if spec.get("CALL_FEATURE") else 23) if trade_candidate else 0,
                "panel_detours": panel_detours, "panel_tables": panel_tables,
                "carrier_bindings": carrier_bindings,
@@ -236,7 +245,42 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
                "trade_detours": trade_detours,
                "compiler": run([GCC, "--version"])}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
-    print(f"DIAGNOSTIC ONLY: {rom} (no UPS, no qualification)")
+    print(f"{'PRODUCTION' if production else 'DIAGNOSTIC ONLY'}: {rom}")
+    return out, receipt
+
+
+PUBLISHED_TARGETS = {"firered":"FireRed", "leafgreen":"LeafGreen", "emerald":"Emerald"}
+
+
+def publish_native(title, rom_path, *, check=False):
+    """Build, round-trip and pin one vanilla ABI2 UPS; RR keeps its ABI1 pipeline."""
+    out, receipt = build_arena_probe(title, rom_path, "trade", trade_candidate=True, production=True)
+    clean, patched = Path(rom_path).read_bytes(), (out/"probe.gba").read_bytes()
+    patch = make_ups.ups_create(clean, patched)
+    if make_ups.ups_apply(clean, patch) != patched:
+        raise ValueError("production UPS round-trip differs")
+    name = f"SLink-{PUBLISHED_TARGETS[title]}.ups"
+    row = {"patch":name,"abi":2,"capabilities":receipt["capabilities"],"production":True,
+           "base_sha1":hashlib.sha1(clean).hexdigest(),"base_md5":hashlib.md5(clean).hexdigest(),
+           "rom_sha1":hashlib.sha1(patched).hexdigest(),"rom_md5":hashlib.md5(patched).hexdigest(),
+           "rom_sha256":hashlib.sha256(patched).hexdigest(),"ups_sha256":hashlib.sha256(patch).hexdigest(),
+           "arena_base":require_ready(title)["ARENA_BASE"],"arena_size":0x1000,
+           "payload_sha256":receipt["payload_sha256"],
+           "protected_spans":[{"offset":require_ready(title)["CODE_CANDIDATE"]-ROM_BASE,"size":receipt["payload_bytes"]}]
+               + [{"offset":item.get("address",item.get("detour"))-ROM_BASE,"size":len(bytes.fromhex(item["original"]))}
+                  for item in [receipt,receipt["frame_detour"],*receipt["trade_detours"],*receipt["panel_detours"]]]}
+    manifest = Path(DIST)/"gen3_companions.json"
+    data = json.loads(manifest.read_text()) if manifest.exists() else {"schema":"slink-gen3-companions-v1","titles":{}}
+    if check:
+        if (Path(DIST)/name).read_bytes() != patch or data["titles"].get(title) != row:
+            raise ValueError(f"{title} published UPS/manifest differs from source")
+        print(f"CHECK OK: {name} and manifest reproduce")
+    else:
+        Path(DIST).mkdir(parents=True,exist_ok=True)
+        (Path(DIST)/name).write_bytes(patch)
+        data["titles"][title]=row
+        manifest.write_text(json.dumps(data,indent=2,sort_keys=True)+"\n")
+        print(f"PUBLISHED {name}: sha1 {row['rom_sha1']}")
 
 
 def _toolchain_dir():
@@ -376,7 +420,15 @@ def main():
         except (ValueError, OSError) as error:
             ap.error(str(error))
         return 0
-    if args.target != "radical_red" or args.abi_version == 2:
+    if args.target in PUBLISHED_TARGETS:
+        if args.no_verify_md5:
+            ap.error("base verification bypass is not supported for pinned companion targets")
+        try:
+            publish_native(args.target,args.rom,check=args.check)
+        except (ValueError,OSError) as error:
+            ap.error(str(error))
+        return 0
+    if args.abi_version == 2:
         try:
             require_ready(args.target)
         except ValueError as error:

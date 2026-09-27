@@ -28,4 +28,4 @@ def test_emerald_native_bindings_have_own_symbol_provenance():
     assert proof["bindings"]["CALL_SHOW"]["symbol"]=="ShowPokenavFieldMessage"
     assert "SAVE_QUEST" not in spec and "PANEL_DESC_TABLE" not in spec
     assert spec["ARENA_CANDIDATE"]==spec["HEAP_BASE"]+spec["HEAP_SIZE"]-spec["ARENA_SIZE"]
-    assert spec["READY"]==0
+    assert spec["READY"]==1

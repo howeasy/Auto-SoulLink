@@ -180,7 +180,7 @@ __attribute__((section(".text.entry"),used)) void slink_native_heap(void *heap,u
     ((void(*)(void *,uint32_t))(SLINK_TARGET_PUT_FIRST_HEADER|1u))(heap,size);
     /* Do not erase transaction state when save/menu code reinitializes gHeap. */
 }
-#if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+#if defined(SLINK_NATIVE_COMPANION)
 static int nc_owned(void);
 #ifdef SLINK_TARGET_CALL_FEATURE
 static int ncall_owned(void);
@@ -208,16 +208,16 @@ __attribute__((used)) void slink_native_frame(void)
 #if defined(SLINK_NATIVE_TRADE_PROBE)
         NT_MB->signature=0x32505254u; /* TRP2 private fault-injection probe */
         NT_MB->abi_version=SLINK_ABI_VERSION;NT_MB->capabilities=0;
-#elif SLINK_TARGET_READY || defined(SLINK_NATIVE_TRADE_CANDIDATE)
+#elif SLINK_TARGET_READY || defined(SLINK_NATIVE_COMPANION)
         slink_trade_advertise(NT_MB);
-#if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+#if defined(SLINK_NATIVE_COMPANION)
         NT_MB->capabilities |= SLINK_CAP_INFO_PANEL | SLINK_CAP_NATIVE_SOUND | SLINK_CAP_RIVAL_SWAP;
 #endif
 #else
         NT_MB->signature=SLINK_SIGNATURE;
         NT_MB->abi_version=SLINK_ABI_VERSION;NT_MB->capabilities=0;
 #endif
-#if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+#if defined(SLINK_NATIVE_COMPANION)
         slink_native_carrier_service();
         slink_native_panel_service();
         slink_native_sound_service();

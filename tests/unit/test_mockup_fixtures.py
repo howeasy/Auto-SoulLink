@@ -175,7 +175,7 @@ def test_capabilities_distinguish_cartridges_within_one_generation():
     for title in ("firered", "leafgreen", "emerald"):
         assert caps[title]["explode_mode"] is True
     assert caps["firered_rr"]["explode_mode"] is True
-    assert caps["firered"]["info_panel"] is False
+    assert caps["firered"]["info_panel"] is True
     assert caps["firered_rr"]["info_panel"] is True
     # Gen 1 needs no patch at all for Explode Mode -- the headline Gen 1 claim the
     # mockups make, and the one most likely to be quietly wrong.

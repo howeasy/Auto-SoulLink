@@ -1,5 +1,23 @@
 # SLink Companion Patch (Radical Red) — testing guide
 
+FireRed, LeafGreen and Emerald companions are published as
+`patch/dist/SLink-{FireRed,LeafGreen,Emerald}.ups`. Apply each to its matching
+English revision-0 ROM through `/patcher`; `gen3_companions.json` pins the base,
+result and UPS hashes. These builds use ABI2 at `0201B000` and reserve the last
+4 KiB of the native heap. FR/LG publish capabilities23; Emerald publishes87,
+including Match Call. RR keeps the separate ABI1 build described below.
+
+Build or verify a vanilla companion with
+`python patch/tools/build.py --target firered --rom <clean.gba>` (substitute
+`leafgreen` or `emerald`), adding `--check` to compare the UPS and manifest without
+publishing changes. `--trade-candidate` remains a private test build. The release
+builder's `--with-patch` option includes all three UPS files and their manifest.
+
+The Manager can compose a companion after an allowed randomizer run: it refuses
+any randomizer change inside the companion's protected code/data spans. The
+final ROM hash belongs to the run contract. Native capability and randomized
+pairing remain separate; the hello uses the existing `rand` wire kind.
+
 > The Game Boy companion builds live beside this one: `patch/gen1/` (the Red/Blue binary patch,
 > `patch/dist/SLink-RB-{Red,Blue}.ups`) and `patch/gen1/purergb/` (the pureRGB **source overlay**,
 > `patch/dist/SLink-Pure{Red,Blue,Green}.ups`). `tools/make_release.py --with-patch` bundles all
