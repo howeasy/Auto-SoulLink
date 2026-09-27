@@ -3612,7 +3612,8 @@ class SoulLinkState:
         The Lua client detected that a mon's key changed.  For Gen 3 (RR Nature
         Changer), personality changes but otId/species/nickname stay the same.
         For NPC in-game trades, the outgoing mon's key is replaced by the
-        received mon's key and the Soul Link pair is preserved.
+        received mon's key. Owner ruling 35 retires that pair after migration if the
+        resulting pair violates an enabled species/family, gender or type clause.
         For Gen 1, evolution changes the internal species index in the key, and
         may also update species/nickname.
 
@@ -3818,6 +3819,20 @@ class SoulLinkState:
         self.key_migration_ledger[player_id].append({"old_key": old_key, "new_key": new_key})
         _ack(True)
 
+        # Owner ruling 35: the NPC exchange already happened. Keep its real identity,
+        # then retire THIS pair if the resulting pair violates an enabled clause.
+        if reason == "npc_trade" and entry is not None and entry.status == LinkStatus.ALIVE:
+            violation = self._check_link_mutation_violation(entry)
+            if violation:
+                log.warning("[%s] NPC trade clause retirement in %s: %s", player_id, entry.area_id, violation[0])
+                changed = getattr(entry, player_id)
+                if changed and changed.key == new_key:
+                    self.party_keys[player_id].discard(new_key)
+                    if not self._has_pending_command(player_id, new_key, *DEATH_COMMANDS):
+                        self.queued_commands[player_id].append(
+                            {"cmd": "force_faint", "key": new_key, "nickname": changed.nickname or ""})
+                self._propagate_faint(player_id, entry, cause="npc_trade_clause")
+
         # A2: a transformation never revives.  The link was already buried under the old
         # key, so the death is owed again under the new one.
         # Two obligations, deduplicated separately (review cx-6aacc4f1 #2): a queued memorial
@@ -3902,7 +3917,14 @@ class SoulLinkState:
             refs.add("pending_trade")
         return refs
 
-    def _check_link_violation(self, a_mon: MonInfo, b_mon: MonInfo) -> tuple[str, str] | None:
+    def _check_link_mutation_violation(self, entry: LinkEntry) -> tuple[str, str] | None:
+        """Validate the post-exchange pair without treating its own identity as a duplicate."""
+        if entry.status != LinkStatus.ALIVE or not entry.a or not entry.b:
+            return None
+        return self._check_link_violation(entry.a, entry.b, existing_entry=entry)
+
+    def _check_link_violation(self, a_mon: MonInfo, b_mon: MonInfo, *,
+                              existing_entry: LinkEntry | None = None) -> tuple[str, str] | None:
         """Return (violation_message, violating_player_id) or None if the link is valid."""
         # ── Key collision ─────────────────────────────────────────────────────────────
         # CHECKED FIRST, and unconditionally: this is not a rule the player opted into, it
@@ -3922,7 +3944,7 @@ class SoulLinkState:
             if not (mon and mon.key):
                 continue
             existing = self.entry_for(pid, mon.key)       # KEY-SCOPE: per player
-            if existing is not None and existing.status == LinkStatus.ALIVE:
+            if existing is not None and existing is not existing_entry and existing.status == LinkStatus.ALIVE:
                 return (f"Key collision: {mon.key} already identifies a live link in "
                         f"{existing.area_id}", pid)
 
@@ -3942,7 +3964,7 @@ class SoulLinkState:
             # Same-save duplicate check: neither player can have a species/family
             # that already exists in one of their other alive links.
             for entry in self.links:
-                if entry.status != LinkStatus.ALIVE:
+                if entry is existing_entry or entry.status != LinkStatus.ALIVE:
                     continue
                 if entry.a and entry.a.species and self.adapter.evo_family(entry.a.species) == a_base:
                     existing_name = self.adapter.species_name(entry.a.species)
@@ -4029,8 +4051,8 @@ class SoulLinkState:
                          level: int = 0, cause: str = "battle"):
         """Mark entry dead, queue force_faint (or force_explode if Explode Mode is on)
         for partner, queue memorialize for both.  `cause` is what the memorial records:
-        "battle" (default) or "identity_lost" (a rejected key_change, PLAN A1/U5 -- the
-        retire is not an Explosion cue, so explode mode is not consulted for it)."""
+        "battle" (default), "identity_lost" (a rejected identity migration), or
+        "npc_trade_clause" (owner ruling 35). Non-battle retirements do not trigger Explode."""
         partner     = _partner(player_id)
         player_mon  = entry.a if player_id == "a" else entry.b
         partner_mon = entry.b if player_id == "a" else entry.a

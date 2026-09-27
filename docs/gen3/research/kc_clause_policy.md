@@ -1,81 +1,79 @@
-# KC-CLAUSE: NPC exchange policy requires an owner ruling
+# KC-CLAUSE: owner ruling 35
 
-Reviewed 2026-09-27 in `C:/slink-wt/g3-kcc`, branch `claude/gen3-kc-clause`, at
-`26fa0e1f5956330561d45170e1fdfd57f0164e42`. **No generation rechecks clauses on this
-post-exchange migration. Gen 3 already uses the Gen 1/2 path.** Implementation stops here as
-assigned: no new rule, production edit, or policy-asserting regression test was introduced.
-The observed behavior is pair preservation; whether that should override an enabled clause
-needs an explicit owner decision.
+Owner decision: 2026-09-27, recorded in `docs/gen3/G4_request_draft.md` §6.
+Implementation branch: `claude/gen3-kc-clause`. Integration `a5084489` was merged first
+at `13ff6c98`; no master merge or push is part of this card.
 
-## Established facts
+## Decision and behavior
 
-- Gen 1 sends `key_change` with `reason="npc_trade"` and the received species after readback:
-  `lua/gen1/client.lua:124-127,1591-1621`.
-- Gen 2 recognizes the completed exchange in `lua/gen2/signals.lua:761-766`, then sends the
-  same reason/new species through `lua/gen2/client.lua:1217-1223`.
-- Gen 3 already uses this same path (`lua/gen3/client.lua:472-487`).
-- Shared `_handle_key_change` explicitly preserves an NPC-traded pair, performs identity/census
-  collision checks, then replaces the key and optional species without a species/gender/type
-  clause check (`server/state.py:3397-3423,3467-3517,3519-3540,3606-3625`). No generation branch
-  adds such a check. `server/server.py:2378-2380,2490-2494,2582-2598` only delegates, migrates
-  accepted presentation, and logs the result.
-- `_check_link_violation` has only two production call sites: shiny-bonus formation
-  (`server/state.py:2104`) and ordinary pair formation (`:2380`). Capture duplicate prevention
-  is `:2271-2316`; wild-encounter rerolls start at `:2558`. The evolution-family check in
-  `_is_trade_descendant` (`:1137-1145`) recognizes a native Soul Link trade outcome; it is not
-  an NPC-trade species/dupes-clause check.
-- The documented species rule rejects shared evolution families and duplicate captures,
-  force-fainting the violating capture while leaving its area open (`docs/REFERENCE.md:797`;
-  `README.md:184-185`; `server/manager.py:148`). This defines acquisition outcomes, not the
-  consequence of a completed NPC exchange on an existing pair. `docs/gen1_requirements.md:114`
-  says evolution/NPC migration keeps the link. The randomized design explicitly queues this
-  unresolved policy (`docs/gen3/research/randomized_gen3_design.md:220-223`).
-- A generic identity rejection is not a cartridge rollback: these reports are emitted after
-  the exchange. Reusing `_check_link_violation` directly on an existing indexed link would
-  also reject its own keys before reaching the clauses (`server/state.py:3709-3715`), and
-  the family scan includes the current alive pair (`:3732-3749`). A future mutation validator
-  must distinguish the current pair from another conflicting pair.
+An NPC exchange has already changed the cartridge. Accept the new key/species first, then
+validate the resulting alive pair against the run's enabled species/evolution-family, gender
+and type clauses. A violation retires **only the pair that changed**, with the dedicated
+cause `npc_trade_clause` (shown as **NPC trade clause violation** on the memorial).
 
-## MODEL evidence (no emulator)
+- The ordinary identity/census collision preflight still runs before migration. A genuine key
+  collision remains a separate identity-safety refusal; a clause failure is never disguised
+  as identity loss.
+- `_check_link_mutation_violation` delegates to the capture-time clause validator with the
+  current entry excluded from its own key and existing-family lookup. It still checks the
+  two members against each other and checks other alive links on both players.
+- Clauses are independently opt-in. Genderless/unknown-gender exemptions and adapter-provided
+  family/type/gender facts are the same as at capture time. Dead other links do not block.
+  Capture-time fixed-gift handling is unchanged; this validator handles the later NPC exchange.
+- The received mon is still healthy, unlike a normal faint report: queue its force-faint
+  explicitly under the **new** key, then use `_propagate_faint` to retire the pair and queue
+  the partner's faint plus both memorials. ACK precedes the new death commands; faint precedes
+  burial. Non-battle retirement does not trigger Explode Mode.
+- Preserve the resolved encounter area and all other pairs. Do not unresolve an area, open a
+  capture retry, or penalize the older pair whose family caused the conflict.
+- This applies to `reason="npc_trade"` on the shared Gen 1/2/3 path. Ordinary evolution,
+  nature changes and native Soul Link trade settlement are not expanded by this ruling.
 
-An in-memory protocol dispatch probe exercised Red, Blue, Yellow, PureRed, Crystal, Gold,
-Silver, FireRed, LeafGreen, Emerald and RR with `species_lock=True`, unique keys, fresh box
-censuses, and received species resolved through each selected adapter. On each title:
+Implementation anchors: `server/state.py` `_handle_key_change`,
+`_check_link_mutation_violation`, `_check_link_violation`, `_propagate_faint`;
+`server/templates/_macros.html` `tombstone`.
 
-1. Bulbasaur becomes Charmander beside a linked Charmander.
-2. Bulbasaur becomes Charmeleon beside a linked Charmander (same family).
-3. Bulbasaur becomes Squirtle while a different alive pair already holds Squirtle.
+## Why an owner decision was needed
 
-All **33** changes were acknowledged as migrated and kept the pair ALIVE, with no death or
-rejection commands, including subsequent ticks. All **33** subsequent duplicate-capture
-controls were refused, proving the rule was enabled. Raw model rows: `.cache/kcc-model.json`.
-These are characterization results, not a newly approved policy or physical qualification.
+The first, documentation-only card (`d20f8b80`, source base `26fa0e1f`) correctly stopped:
+all generations migrated NPC identities without rechecking clauses. The source descriptions
+below are historical at that base, not claims about the implementation after ruling 35:
 
-## Owner choices to report (not implemented)
+- Gen 1 emits after readback (`lua/gen1/client.lua:124-127,1591-1621`); Gen 2 recognizes the
+  finished exchange (`lua/gen2/signals.lua:761-766`) and emits the same reason/species
+  (`lua/gen2/client.lua:1217-1223`); Gen 3 uses the same event (`lua/gen3/client.lua:472-487`).
+- The old migration preserved the pair (`server/state.py:3397-3423,3519-3540,3606-3625`).
+  `_check_link_violation` was called only for bonus/ordinary pair creation (`:2104,2380`);
+  duplicate captures and encounter rerolls were separate (`:2271-2316,2558`).
+- Existing rules described capture rejection and area retry (`docs/REFERENCE.md:797`), while
+  `docs/gen1_requirements.md:114` described migration keeping the link. The randomized design
+  explicitly queued the unresolved policy (`docs/gen3/research/randomized_gen3_design.md:220-223`).
+- Directly checking an already-indexed pair would find its own keys/family as duplicates
+  (`server/state.py:3709-3715,3732-3749`). The mutation exclusion addresses that trap.
 
-- Explicitly grandfather completed exchanges: adopt the actual received identity and keep the
-  existing link; define clauses as acquisition/pair-creation checks and document the exception.
-- Enforce clauses continuously: adopt the actual identity first, then retire the newly
-  violating pair under a dedicated rule consequence. Specify which pair loses on a duplicate,
-  and whether type/gender changes and other species-changing events have the same treatment.
-- Prevent a disallowed NPC trade before it commits: a new client/engine preflight mechanism;
-  refusing the later key-change report alone cannot undo the game transaction.
+The original 33 MODEL cases (11 titles × same species / same family / other alive link)
+all stayed ALIVE, while all 33 duplicate-capture controls were refused. Ruling 35 turned those
+33 characterizations into red-first falsifiers: all failed before the implementation and pass
+afterward. Raw historical rows remain locally at `.cache/kcc-model.json`.
 
-Recommendation: obtain the owner decision and apply it consistently across generations. Do
-not invent a Gen 3-only penalty or silently treat a species conflict as identity loss.
+## Verification map
 
-## Verification / exit
+`tests/unit/test_state_npc_trade_clauses.py` covers Red, Blue, Yellow, PureRed,
+Crystal, Gold, Silver, FireRed, LeafGreen, Emerald and RR:
 
-```text
-python -m pytest tests/unit -q -p no:randomly -n 4 --dist=loadfile
-15365 passed, 515 skipped in 938.22s (0:15:38)
-Exit code: 0
-```
+| Contract | Control |
+|---|---|
+| Accept identity, retire changed pair, retain other pair and area | 33 original species/family cases; both new/current keys receive faint then memorial, ACK is retained |
+| Enabled rules only | Species disabled; valid families/self exclusion; enabled/disabled type and gender; unknown/genderless exemptions |
+| Correct player and live-link scope | Player B exchange, same-player duplicate, dead other pair ignored |
+| Durable/idempotent result | Named cause/species survive reload; replay does not retire again |
+| User-visible explanation | Killfeed cause and memorial text say NPC trade clause violation |
 
-Full output: `.cache/kcc-full-unit.txt`; SHA-256
-`e78e87576e3fa2b10d71e5f40999d0851e1c5089bd900422332924e58ab8d874`. Local ignored ROM/build/fixture
-prerequisites were copied from the verified lane and SHA-256 compared. No emulator ran.
-This is a clean baseline and characterization receipt, not evidence that post-exchange clause
-enforcement exists. No production file changed. After the owner selects a policy, add its
-red-first controls across Gen 1/2/3 before implementation; do not infer a penalty from the
-existing capture-retry behavior or reuse identity-loss retirement for a species conflict.
+Targeted run: **493 passed in 6.08s** (105 new mutation controls, existing state/key-change,
+memorial acknowledgement and accessibility tests). Source-citation and whitespace checks pass.
+This is SOURCE/MODEL work; no emulator or physical qualification is claimed.
+
+The documentation-only baseline was **15365 passed, 515 skipped in 938.22s**, exit 0,
+recorded in `.cache/kcc-full-unit.txt` (SHA-256
+`e78e87576e3fa2b10d71e5f40999d0851e1c5089bd900422332924e58ab8d874`).
+The implementation's full-suite receipt follows after its final run.
