@@ -347,3 +347,32 @@ respawn on safe field return. Private carrier state is arena+0xB40, NPC state
 +0xCE0, runtime scratch +0x960; compile-time bounds keep panel and phone storage
 separate. Consumers must retain HARNESS_ONLY selection labeling until the native
 carrier is bound and independently exercised; enum IDs alone prove nothing.
+
+### FR carrier live receipt, 2026-09-27
+
+Producer `684ab4c8ec09c22c46f93c3c670e35026c6e895e` passed one single-cart
+normal-input run from the existing FR town save, walking into Viridian Center.
+Receipt: `patch/build/carrier-live-20260927/carrier_receipt.json`; native log,
+script, config, input save and flushed native SaveRAM are alongside it.
+Candidate ROM SHA256:
+`ddc2803b270f1ecbd42aefb2a1bb45308b122fee2131943625b71ab5fc74056d`.
+The private directory was `.cache/c`, with SLINK_STATE_DIR at its `states`
+child. Only owned EmuHawk PID 45424 ran; it exited and the lane was released.
+
+The native Center NPC produced counter edges 0->1 and 1->2 from ordinary facing
+A presses. Replayed server-format `Trade / Say hey` and offer text then drove
+22/20/17 to results 0/0/1. The party chooser entered CB2_InitPartyMenu
+(`0x0811EBD1`). PREPARE consent/pre-save produced the bound witness, exactly one
+native TrySavingData entry, and save counter 4->5; WITHDRAW returned UNCHANGED.
+The B paths returned 127/7/0. Every UI ACK followed safe-field return and owned=0;
+disabling TN removed the NPC. Python decoded the private text/options, party RAM
+and flushed SaveRAM independently: roster/checksums were intact and the save
+counter advanced once. Altered counter/result/epoch/callback/option receipts
+are rejected by the recorded oracle controls.
+
+This qualifies that bounded native carrier sequence only. It used replayed
+server payloads, not a live server/T3 carrier adapter. It did not run SCENE, a
+duo, cold save reload, every Center map, ghost interaction, or explicit opcode-13
+arming (the PC NPC arms itself). No screenshot supplied game facts. The earlier
+HARNESS_ONLY selection seam remains so labeled until replaced and independently
+exercised in T5. READY remains 0.
