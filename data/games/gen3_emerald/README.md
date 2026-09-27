@@ -14,8 +14,9 @@ Pins: pret/pokeemerald `c65e93f20a5275ab03b07d6f6411096a82a60ffd`; its published
 
 ## `profile.json`
 
-It has the same key set as the `gen3_frlg` `firered` title: 25 `ram`, 14 `rom`, 44 `derived`, and
-the same `rom_thumb` list. Unlike FR/LG it is **not** parsed out of `lua/games/gen3_frlge.lua`.
+It has the same RAM/ROM keys as the `gen3_frlg` `firered` title: 25 `ram` and 14 `rom`.
+Its 45 `derived` fields include Emerald's additional `BADGE_FIRST_FLAG`; the `rom_thumb` list
+matches FireRed. Unlike FR/LG it is **not** parsed out of `lua/games/gen3_frlge.lua`.
 
 - Every address is read out of `pokeemerald.sym` by symbol name, and must be unique there.
   Code pointers are stored Thumb (`|1`).
@@ -37,8 +38,9 @@ Controls in the test:
   trainer id and name offsets, `gSpeciesInfo`, `gBattleMoves` and the Poké Ball pocket count.
 - **Literal pool.** `BATTLE_TYPE_ADDR` must be `0x02022FEC`, with 457 little-endian ROM refs. The
   probe's negative control is that the address one page up has 0 refs.
-- **Stub cross-check.** The old unadmitted `emerald` stub in `gen3_frlg/profile.json` is an
-  independent second source. The profile must agree with every value that stub carries.
+- **Lua literal cross-check.** The original `GEN3.profiles.emerald` table in
+  `lua/games/gen3_frlge.lua` is an independent second source. The profile must agree with its
+  24 populated literals. The obsolete Emerald row has been removed from `gen3_frlg/profile.json`.
 
 ### Recorded limits
 

@@ -41,14 +41,23 @@ function N.new(profile, deps)
         local c = assert(v2.constants, "v2 constants required")
         assert(c.SLINK_ABI_VERSION == p.ABI and c.SLINK_SIGNATURE == p.SIG, "v2 identity mismatch")
         local fields = assert(v2.structs.SlinkMailboxV2.fields, "v2 mailbox layout required")
-        for alias, spec in pairs({abi={"abi_version",2,1}, opcode={"opcode",2,1},
-            seq={"seq",2,1}, status={"status",2,1}, ack={"ack_seq",2,1}, reason={"reason",2,1},
-            args={"args",1,32}, result={"result",1,16},
-            capabilities={"capabilities",4,1}, session_epoch={"session_epoch",4,1}}) do
+        for alias, spec in pairs({signature={"signature",4,1,0x00},
+            abi={"abi_version",2,1,0x04}, opcode={"opcode",2,1,0x06},
+            seq={"seq",2,1,0x08}, status={"status",2,1,0x0A},
+            ack={"ack_seq",2,1,0x0C}, reason={"reason",2,1,0x0E},
+            args={"args",1,32,0x10}, result={"result",1,16,0x30},
+            capabilities={"capabilities",4,1,0x40}, session_epoch={"session_epoch",4,1,0x44}}) do
             local field = assert(fields[spec[1]], "missing v2 mailbox field")
+            assert(field.offset == spec[4], "invalid v2 mailbox field offset: " .. spec[1])
             assert(integer(field.offset, v2.structs.SlinkMailboxV2.size - field.width * field.count)
                    and field.width == spec[2] and field.count == spec[3], "invalid v2 mailbox field")
             offsets[alias] = field.offset
+        end
+        for name, value in pairs(p) do
+            if type(name) == "string" and name:match("^OP_") then
+                local expected = c["SLINK_" .. name]
+                assert(type(expected) == "number" and value == expected, "v2 opcode mismatch: " .. name)
+            end
         end
         -- These words have different legacy RR meanings. Name them only for v2.
         for symbol, name in pairs({SLINK_REASON_UNCERTAIN="uncertain",
@@ -95,14 +104,18 @@ function N.new(profile, deps)
     end
     function self:mailbox()
         if not present() then return nil, "native absent" end
-        local fields = {abi=p.ABI, opcode=io.read_u16(p.BASE + O.opcode),
-            seq=io.read_u16(p.BASE + O.seq), status=io.read_u16(p.BASE + O.status),
-            ack_seq=io.read_u16(p.BASE + O.ack), reason=io.read_u16(p.BASE + O.reason)}
-        fields.reason_name = fail_reasons[fields.reason]
-        if v2 then
-            fields.capabilities = io.read_u32(p.BASE + O.capabilities)
-            fields.session_epoch = io.read_u32(p.BASE + O.session_epoch)
-        end
+        local ok, fields = pcall(function()
+            local out = {abi=p.ABI, opcode=io.read_u16(p.BASE + O.opcode),
+                seq=io.read_u16(p.BASE + O.seq), status=io.read_u16(p.BASE + O.status),
+                ack_seq=io.read_u16(p.BASE + O.ack), reason=io.read_u16(p.BASE + O.reason)}
+            out.reason_name = fail_reasons[out.reason]
+            if v2 then
+                out.capabilities = io.read_u32(p.BASE + O.capabilities)
+                out.session_epoch = io.read_u32(p.BASE + O.session_epoch)
+            end
+            return out
+        end)
+        if not ok then return nil, "native mailbox unreadable" end
         return fields
     end
     function self:idle()
@@ -150,8 +163,32 @@ function N.new(profile, deps)
         if active then finish(active, why) end
         for _, job in ipairs(waiting) do finish(job, why) end
     end
+    local function check_epoch()
+        if not v2 then return true end
+        local ok, value = pcall(io.read_u32, p.BASE + O.session_epoch)
+        if not ok or not integer(value, 0xFFFFFFFF) then
+            poisoned = "native epoch unreadable"
+            abort(poisoned)
+            return nil, poisoned
+        end
+        if value == 0 then
+            if session_epoch ~= 0 or poisoned then
+                -- Native explicitly unarmed the mailbox. Retire old work, then
+                -- allow only a new handshake, including recovery from poison.
+                session_epoch, poisoned = 0, nil
+                abort("native epoch cleared")
+            end
+        elseif session_epoch ~= 0 and value ~= session_epoch then
+            poisoned = "native epoch changed"
+            abort(poisoned)
+            return nil, poisoned
+        end
+        return true
+    end
     local function enqueue(job)
         if not present() then finish(job, "native absent"); return nil, "native absent" end
+        local epoch_ok, epoch_why = check_epoch()
+        if not epoch_ok then finish(job, epoch_why); return nil, epoch_why end
         if poisoned then finish(job, poisoned); return nil, poisoned end
         if v2 and not job.handshake and session_epoch == 0 then
             finish(job, "client_too_old"); return nil, "client_too_old"
@@ -164,6 +201,9 @@ function N.new(profile, deps)
     function self:set_session_epoch(value)
         if not v2 then return nil, "unsupported native ABI" end
         if not integer(value, 0xFFFFFFFF) or value == 0 then return nil, "invalid session epoch" end
+        if not present() then return nil, "native absent" end
+        local epoch_ok, epoch_why = check_epoch()
+        if not epoch_ok then return nil, epoch_why end
         if pending or #queue > 0 or not self:idle() then return nil, "native busy" end
         local bytes = {}
         for i=0,3 do bytes[i+1] = (value >> (8*i)) & 0xFF end
@@ -492,10 +532,8 @@ function N.new(profile, deps)
         end
         last_frame, was_present = frame, here
         if not here then return nil, "native absent" end
-        if v2 and session_epoch ~= 0 and io.read_u32(p.BASE + O.session_epoch) ~= session_epoch then
-            poisoned = "native epoch changed"
-            abort(poisoned)
-        end
+        local epoch_ok, epoch_why = check_epoch()
+        if not epoch_ok then return nil, epoch_why end
         if pending then
             local job = pending
             local opcode = io.read_u16(p.BASE + O.opcode)

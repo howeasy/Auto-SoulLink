@@ -707,8 +707,15 @@ def native_abi() -> dict:
     declarations = [(m.start(), m[1], m[2]) for m in re.finditer(
         r"^[ \t]*#define[ \t]+(SLINK_[A-Z0-9_]+)[ \t]+([^\n]+)", text, re.M)]
     for enum in re.finditer(r"\benum\s+\w+\s*\{([^}]+)\}", text):
-        for row in re.finditer(r"(SLINK_[A-Z0-9_]+)\s*=\s*([^,]+)", enum[1]):
-            declarations.append((enum.start(1) + row.start(), row[1], row[2]))
+        for row in re.finditer(r"[^,]+", enum[1]):
+            declaration = row[0].strip()
+            if not declaration:
+                continue
+            parsed = re.fullmatch(r"(SLINK_[A-Z0-9_]+)\s*=\s*(.+)", declaration, re.S)
+            if not parsed:
+                raise ValueError(f"unsupported ABI enum declaration: {declaration}")
+            offset = enum.start(1) + row.start() + len(row[0]) - len(row[0].lstrip())
+            declarations.append((offset, parsed[1], parsed[2]))
     for offset, name, expression in sorted(declarations):
         constants[name] = _abi_number(expression, constants)
         citations[name] = f"{ABI_SRC}:{_line_of(text, offset)} ({name})"
@@ -1546,6 +1553,14 @@ def main() -> int:
     ap.add_argument("--expansion", choices=[EXPANSION_BUILD], help="generate only this unadmitted expansion build")
     ap.add_argument("--artifacts", type=pathlib.Path)
     args = ap.parse_args()
+    try:
+        return _generate_profiles(args)
+    except (ValueError, OSError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+
+def _generate_profiles(args: argparse.Namespace) -> int:
     if args.expansion:
         context = expansion_inputs(args.expansion, args.artifacts)
         expansion_write(context, "profile.json", build_expansion(context), args.check)
@@ -1564,13 +1579,9 @@ def main() -> int:
     # Build every pack fully before writing any of them. A maker that fails (raises, e.g.
     # build_emerald() on a bad .sym) must not leave a partial set of profile.json files on disk;
     # nothing below this point writes until every maker above has already succeeded.
-    try:
-        for title in V2_TARGETS:
-            native_block(title)
-        rendered = {pack: render(make()) for pack, make in makers}
-    except ValueError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
+    for title in V2_TARGETS:
+        native_block(title)
+    rendered = {pack: render(make()) for pack, make in makers}
 
     stale = []
     for pack, text_out in rendered.items():
