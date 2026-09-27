@@ -3499,24 +3499,43 @@ class DuoRun:
         `wire_rejected.jsonl` (the tap's bounded sink for lines it could not attribute to a
         real player) is server-side debug evidence, not a per-player transcript -- it is never
         promoted here.
+
+        A player this run did NOT log is left with no transcript at all: its stale golden is
+        removed and this run's data-dir source is named in the print instead. Copying what
+        exists and saying nothing about what does not is what let a FAILING run be read off a
+        PASSING run's transcript (T5, 2026-09-27: native_trade_firered_b_gen3_new.jsonl held a
+        completed trade_done while the failing run's own wire/wire_b.jsonl held none).
         """
         wire = self._wire_dir()
-        if not wire or not os.path.isdir(wire):
+        if not wire:
             return []
-        os.makedirs(WIRE_FIXTURES, exist_ok=True)
+        sources = {}
+        if os.path.isdir(wire):
+            for name in sorted(os.listdir(wire)):
+                if not (name.startswith("wire_") and name.endswith(".jsonl")):
+                    continue
+                player = name[len("wire_"):-len(".jsonl")]
+                if player != "rejected":
+                    sources[player] = os.path.join(wire, name)
+        if sources:
+            os.makedirs(WIRE_FIXTURES, exist_ok=True)
+        # All active Gen 3 rows use the new battery client; non-Gen3 rows keep their game key
+        # (getattr: a unit-test double need not carry a row key).
+        label = "gen3_new" if self.is_gen3_battery else getattr(self, "game", "")
+        # "a" and "b" are the tap's whole per-player set (server/server.py: VALID_PLAYERS), so a
+        # player with no file in this run's dir is one whose golden is now older than the run.
         landed = []
-        for name in sorted(os.listdir(wire)):
-            if not (name.startswith("wire_") and name.endswith(".jsonl")):
-                continue
-            player = name[len("wire_"):-len(".jsonl")]
-            if player == "rejected":
-                continue
-            # All active Gen 3 rows use the new battery client; non-Gen3 rows keep their game key.
-            label = "gen3_new" if self.is_gen3_battery else self.game
+        for player in sorted(set(sources) | {"a", "b"}):
             dest = os.path.join(WIRE_FIXTURES, f"{self.scenario}_{player}_{label}.jsonl")
-            shutil.copyfile(os.path.join(wire, name), dest)
-            print(f"[duo] wire log: {dest}")
-            landed.append(dest)
+            source = sources.get(player) or os.path.join(wire, f"wire_{player}.jsonl")
+            if player in sources:
+                shutil.copyfile(source, dest)
+                print(f"[duo] wire log: {dest}")
+                landed.append(dest)
+            elif os.path.exists(dest):
+                os.remove(dest)
+                print(f"[duo] no wire log for {player} this run: {source} is absent; removed the "
+                      f"stale {dest} (an earlier run's transcript)")
         return landed
 
     def start_server(self):
