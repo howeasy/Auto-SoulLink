@@ -12,6 +12,7 @@ end
 local PRECOMMIT_REFUSALS = {}
 function T.new(d)
     local native = assert(d.native)
+    local journal = d.journal
     local precommit_refusals = copy(d.precommit_refusal_reasons or PRECOMMIT_REFUSALS)
     assert(type(d.prepare_frames) == "number" and d.prepare_frames > 0 and d.prepare_frames % 1 == 0,
            "pack prepare deadline required")
@@ -21,6 +22,7 @@ function T.new(d)
     assert(d.epoch, "trade session epoch required")
     local active, prepared = nil, nil
     local retired, owed, uncertain_records = {}, {}, {}
+    local recovery_reports = {}
     local self = {}
     local function bucket(records, epoch)
         records[epoch] = records[epoch] or {}
@@ -102,6 +104,9 @@ function T.new(d)
         emit("trade_done", result, t.epoch)
         if active == t then active = nil end
         if prepared == t then prepared = nil end
+        if t.journaled and journal and (not may_commit(t) or t.precommit_proved) then
+            journal:precommit_unchanged(t.token,t.journal_epoch)
+        end
         if native.withdraw_trade then native:withdraw_trade(t.token) end
         if d.completed then d.completed(t, false) end
     end
@@ -147,6 +152,9 @@ function T.new(d)
         if not got or old or got.is_egg == 1 or got.is_bad_egg == 1 or got.checksum_ok == false then
             return uncertain(t, "saved result does not match received identity")
         end
+        if not journal or journal:native_saved(t.token,t.journal_epoch) ~= true then
+            return uncertain(t, "durable journal result unavailable")
+        end
         local fields = {token=t.token, slot=got.slot, new_key=d.key(got), new_species=got.species}
         bucket(retired, t.epoch)[t.token], active = fields, nil
         emit("trade_done", fields, t.epoch)
@@ -157,6 +165,14 @@ function T.new(d)
         if active ~= t then return end
         local mon = locate(t.old_key)
         if not mon then return unchanged(t) end
+        if not t.journaled then
+            local ok, why = journal:arm(t.token,t.journal_epoch)
+            if ok ~= true then
+                if d.log then d.log("trade write-ahead refused: " .. tostring(why)) end
+                return unchanged(t)
+            end
+            t.journaled = true
+        end
         t.slot, t.phase = mon.slot, "scene"
         t.scene_attempt = (t.scene_attempt or 0) + 1
         local attempt = t.scene_attempt
@@ -181,6 +197,7 @@ function T.new(d)
                 if why then
                     local named_refusal = why == "native refused" and token(reason)
                     if named_refusal and precommit_refusals[reason] == true and not t.commit_entered then
+                        t.precommit_proved = true
                         return unchanged(t)
                     end
                     if may_commit(t) then
@@ -196,6 +213,7 @@ function T.new(d)
             function()
                 if active ~= t or t.scene_attempt ~= attempt or t.phase ~= "scene" then return false, "guard:stale" end
                 if t.epoch ~= d.epoch() then return false, "guard:epoch" end
+                if not journal:lease_open(t.token,t.journal_epoch) then return false, "guard:journal" end
                 if d.frame() > t.apply_deadline then return false, "guard:apply_expired" end
                 local v, current = visit(), locate(t.old_key)
                 if not v or v.id ~= t.visit or not current then return false, "guard:lost" end
@@ -229,6 +247,8 @@ function T.new(d)
                 emit("apply_ready", {token=cmd.token, ok=false}); flush(); return
             end
             local t = {token=cmd.token, epoch=epoch, old_key=cmd.old_key, slot=mon.slot, phase="preparing", prepare_pending=true}
+            t.journal_epoch = journal:allocate()
+            if not t.journal_epoch then emit("apply_ready", {token=cmd.token, ok=false}); flush(); return end
             prepared = t
             t.prepare_job = native:prepare_trade({token=t.token, slot=t.slot, old_key=t.old_key}, function(why, w)
                 if prepared ~= t or t.phase ~= "preparing" then return end
@@ -252,8 +272,10 @@ function T.new(d)
         local v, mon = visit(), locate(cmd.old_key)
         local ok = v ~= nil and mon ~= nil and active == nil and prepared == nil and retired_for(epoch, cmd.token) == nil
         if ok then
+            local durable_epoch = journal:allocate()
+            if not durable_epoch then emit("apply_ready", {token=cmd.token, ok=false}); flush(); return end
             prepared = {token=cmd.token, epoch=epoch, old_key=cmd.old_key, slot=mon.slot, visit=v.id, phase="prepared",
-                        prepare_deadline=d.frame() + d.prepare_frames}
+                        prepare_deadline=d.frame() + d.prepare_frames, journal_epoch=durable_epoch}
         end
         emit("apply_ready", {token=cmd.token, ok=ok})
         flush()
@@ -274,13 +296,15 @@ function T.new(d)
         flush()
     end
     function self:reset()
+        if journal then journal:discontinuity() end
+        recovery_reports = {}
         if prepared then
             local t = prepared
             unchanged(t)
         end
         local t = active
         if t and may_commit(t) then
-            t.reload_seen = true
+            t.requires_reload, t.reload_seen, t.evidence_allowed = true, false, false
             declare_uncertain(t, "reset after possible commit")
         elseif t then
             unchanged(t)
@@ -289,7 +313,7 @@ function T.new(d)
             for value, record in pairs(records) do
                 if not record.reload_seen and ((record.requires_reload and not record.evidence_allowed)
                    or report_pending(epoch, value)) then
-                    record.reload_seen = true
+                    record.requires_reload, record.reload_seen, record.evidence_allowed = true, false, false
                     declare_uncertain(record, "reset after uncertainty")
                 end
             end
@@ -353,6 +377,8 @@ function T.new(d)
         if not t.stage_job and active == t then unchanged(t) end
     end
     function self:hide_party()
+        if journal and journal:hidden() then return true end
+        if not journal and native.trade_capable and native:trade_capable() then return true end
         for _, records in pairs(uncertain_records) do
             for _, t in pairs(records) do
                 if t.requires_reload and not t.evidence_allowed then return true end
@@ -362,13 +388,53 @@ function T.new(d)
     end
     function self:allow_reload_evidence(value, epoch)
         local record = (uncertain_records[epoch or d.epoch()] or {})[value]
-        if record and record.reload_seen then record.evidence_allowed = true end
+        if record and record.reload_seen and journal and journal:declared(value,record.journal_epoch) == true then
+            record.evidence_allowed = true
+        end
     end
     function self:reloaded(value, epoch)
         local record = (uncertain_records[epoch or d.epoch()] or {})[value]
         return record and record.reload_seen == true or false
     end
-    function self:capable() return native.trade_capable and native:trade_capable() == true end
+    function self:outstanding() return journal and journal:outstanding() or nil end
+    function self:qualify_reload(proof)
+        if not journal or journal:qualify(proof) ~= true then return false end
+        local records = journal:qualified_records() or {}
+        for _, r in ipairs(records) do
+            local id = tostring(r.epoch) .. ":" .. r.token
+            if not recovery_reports[id] then
+                recovery_reports[id] = true
+                for _, by_token in pairs(uncertain_records) do
+                    local old = by_token[r.token]
+                    if old and old.journal_epoch == r.epoch then old.reload_seen = true end
+                end
+                emit("trade_done", {token=r.token, uncertain=true, after_reset=true}, r.epoch)
+            end
+        end
+        return #records > 0
+    end
+    function self:declaration_sent(value)
+        if not journal then return false end
+        local candidates = {}
+        for _, r in ipairs(journal:qualified_records() or {}) do
+            if r.token == value then candidates[#candidates+1] = r end
+        end
+        if #candidates ~= 1 then return false end
+        local r = candidates[1]
+        if journal:declared(r.token,r.epoch) ~= true then return false end
+        for _, by_token in pairs(uncertain_records) do
+            local old = by_token[value]
+            if old and old.journal_epoch == r.epoch then old.evidence_allowed = true end
+        end
+        return true
+    end
+    function self:server_final(cmd)
+        if not journal then return false end
+        return journal:final(cmd.token,cmd.epoch,cmd.verdict)
+    end
+    function self:capable()
+        return journal ~= nil and journal:ready() and native.trade_capable and native:trade_capable() == true
+    end
     function self:state()
         if active then
             active.posted = (active.stage_job and active.stage_job.posted == true)

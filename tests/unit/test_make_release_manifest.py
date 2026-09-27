@@ -144,6 +144,7 @@ def test_the_closure_is_the_gen1_client_and_nothing_stale():
         # runtime, because Entry.admit/admission_table reads every pack's sites to admit any
         # cartridge (entry.lua Entry.PACK_FILES names both packs literally).
         "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/client.lua",
+        "lua/gen3/trade_journal.lua",
         "lua/core/session.lua", "lua/core/identity.lua", "lua/core/deferred.lua",
         "data/games/gen3_frlg/profile.json", "data/games/gen3_rr/engine_signals.json",
         # The Gen 2 (Crystal) production graph, cut over at U5.

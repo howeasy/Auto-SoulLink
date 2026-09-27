@@ -7,6 +7,7 @@ import lupa
 import pytest
 
 from tests.unit import gen3_world as gw
+from tests.unit.gen3_trade_journal_model import JournalModel
 from tests.unit.gen3_world import World, lua_to_py
 from tests.unit.test_gen3_client import (
     KA,
@@ -81,6 +82,8 @@ class TradeWorld:
             send=send)
         if precommit_refusal_reasons is not None:
             self.deps.precommit_refusal_reasons = self.lua.table_from(precommit_refusal_reasons)
+        self.journal_model = JournalModel(ot="00000002")
+        self.deps.journal = self.journal_model(self.lua)
         self.trade = module.new(self.deps)
 
     def command(self, method, **fields):
@@ -189,7 +192,7 @@ def test_reset_has_no_nonreload_parameter_or_false_bypass():
     world.progress(job, commit_entered=True)
     world.trade.reset(world.trade, False)  # Lua ignores surplus args, never weakens reset
     world.tick()
-    assert world.trade.reloaded(world.trade, "t", world.epoch) is True
+    assert world.trade.reloaded(world.trade, "t", world.epoch) is False
     assert world.trade.hide_party(world.trade) is True
     assert [f for n, f in world.events if n == "trade_done"] == [
         {"token": "t", "uncertain": True, "after_reset": True}]
@@ -251,7 +254,7 @@ def test_post_save_without_tokened_final_result_is_not_success():
     world.tick()
     assert not [f for n, f in world.events if n == "trade_done" and "new_key" in f]
     assert [f for n, f in world.events if n == "trade_done"] == [{"token": "t", "uncertain": True}]
-    assert world.trade.hide_party(world.trade) is False
+    assert world.trade.hide_party(world.trade) is True
 
 
 def test_interrupted_scene_publication_is_not_claimed_unchanged():
@@ -395,7 +398,9 @@ class CartridgeModel:
 def durable_client(monkeypatch, player="a", mons=None):
     monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "0000BEEF")
     carrier = CartridgeModel()
-    world = World("gen3_rr", "radical_red", "companion", player=player, native=carrier)
+    carrier.journal_model = JournalModel(player=player)
+    world = World("gen3_rr", "radical_red", "companion", player=player, native=carrier,
+                  journal=carrier.journal_model)
     world.set_party(party(A, B) if mons is None else mons)
     world.step_to(60)
     assert world.events("hello")[0]["trade_prepare"] is True
@@ -438,14 +443,15 @@ def test_client_uncertainty_survives_disconnect_and_reset_hello_order(monkeypatc
     start = len(world.sent)
     world.step(2)
     messages = world.sent[start:]
-    assert [m["event"] for m in messages if m["event"] in ("hello", "trade_done")] == ["hello", "trade_done", "hello"]
+    assert [m["event"] for m in messages if m["event"] in ("hello", "trade_done")] == ["hello", "trade_done"]
+    assert all(m.get("party_hidden") for m in messages if m["event"] == "hello")
     assert world.events("trade_done")[-1]["uncertain"] is True
     assert world.events("trade_done")[-1]["after_reset"] is True
     assert world.events("trade_done")[-1]["token"] == "t"
 
 
 @pytest.mark.parametrize("save_success", [False, True])
-def test_frame_rollback_requires_post_declaration_reload_hello(monkeypatch, save_success):
+def test_frame_rollback_never_qualifies_a_visible_reload_hello(monkeypatch, save_success):
     world, carrier, blob = durable_client(monkeypatch)
     start_client_trade(world, carrier, blob)
     carrier.jobs[-1]["progress"](carrier.lua.table(
@@ -458,8 +464,7 @@ def test_frame_rollback_requires_post_declaration_reload_hello(monkeypatch, save
     report = next(m for m in messages if m["event"] == "trade_done")
     assert report["uncertain"] is True and report["after_reset"] is True
     hellos = [m for m in messages if m["event"] == "hello"]
-    assert len(hellos) == 2 and hellos[0]["party"] == []
-    assert KP in {m["key"] for m in hellos[1]["party"]}
+    assert len(hellos) == 1 and hellos[0]["party"] == [] and hellos[0]["party_hidden"] is True
 
 
 def test_unsaved_uncertainty_hides_party_across_reconnect_without_reset(monkeypatch):
@@ -607,7 +612,7 @@ def server_and_clients_applying(monkeypatch, world, carrier, delay_before_dispat
     return state, token, other
 
 
-def test_unsaved_uncertainty_cross_wire_waits_for_post_reset_hello(monkeypatch):
+def test_unsaved_uncertainty_cross_wire_waits_for_qualified_reload_not_reset(monkeypatch):
     world, carrier, _ = durable_client(monkeypatch)
     state, token, _other = server_and_clients_applying(monkeypatch, world, carrier)
     start = len(world.sent)
@@ -622,18 +627,18 @@ def test_unsaved_uncertainty_cross_wire_waits_for_post_reset_hello(monkeypatch):
     assert state.pending_trade["verdict"]["a"] == "await"
     assert (state.links[0].a.key, state.links[0].b.key) == (KB, KP)
     assert all(not m.get("party") for m in world.sent[start:] if m["event"] == "tick")
-    # MODEL reload contains the received mon. Only the post-declaration hello is evidence.
+    # A reset callback alone supplies no qualified battery evidence.
     start = len(world.sent)
     world.client.driver.on_reset()
     world.client.hello_sent = False
     world.step(3)
     for message in world.sent[start:]:
         state.handle_event("a", message)
-    assert state.pending_trade is None
-    assert (state.links[0].a.key, state.links[0].b.key) == (KP, KB)
+    assert state.pending_trade is not None and state.pending_trade["verdict"]["a"] == "await"
+    assert (state.links[0].a.key, state.links[0].b.key) == (KB, KP)
 
 
-def test_reset_uncertainty_cross_wire_settles_on_post_declaration_hello(monkeypatch):
+def test_reset_uncertainty_cross_wire_stays_hidden_without_battery_proof(monkeypatch):
     world, carrier, _ = durable_client(monkeypatch)
     state, token, _other = server_and_clients_applying(monkeypatch, world, carrier)
     carrier.jobs[-1]["progress"](carrier.lua.table(commit_entered=True))
@@ -648,14 +653,14 @@ def test_reset_uncertainty_cross_wire_settles_on_post_declaration_hello(monkeypa
     messages = world.sent[start:]
     hellos = [m for m in messages if m["event"] == "hello"]
     assert hellos[0]["party"] == []
-    assert any(m["key"] == KP for m in hellos[1]["party"])
+    assert len(hellos) == 1 and hellos[0]["party_hidden"] is True
     for message in messages:
         state.handle_event("a", message)
     assert next(m for m in messages if m["event"] == "trade_done")["after_reset"] is True
-    assert state.pending_trade is None
+    assert state.pending_trade is not None
 
 
-def test_reset_evidence_barrier_keeps_the_reloaded_party_baseline(monkeypatch):
+def test_reset_without_evidence_never_learns_the_withheld_party_baseline(monkeypatch):
     world, carrier, blob = durable_client(monkeypatch)
     start_client_trade(world, carrier, blob)
     carrier.jobs[-1]["progress"](carrier.lua.table(commit_entered=True))
@@ -671,7 +676,7 @@ def test_reset_evidence_barrier_keeps_the_reloaded_party_baseline(monkeypatch):
     world.set_party(existing)
     world.fire("mon_given")
     world.step(40)
-    assert [m["key"] for m in world.events("capture")] == [KC]
+    assert world.events("capture") == []
 
 
 def test_v1_refusal_answers_certain_unchanged_and_cancels_menu_on_wire(monkeypatch):
@@ -853,24 +858,24 @@ def test_acknowledged_unsaved_uncertainty_keeps_reset_barrier_across_epochs():
     world.prepare()
     assert world.events[-1] == ("apply_ready", {"token": "t", "ok": False})
     assert world.trade.hide_party(world.trade) is True
-    # Delivery is not evidence of a native save. A later reset must re-declare
-    # this old epoch's uncertainty even when no transport report is outstanding.
+    # Delivery and reset are not evidence of a native save. Neither may retire
+    # the persistent barrier, even when no transport report is outstanding.
     world.trade.reset(world.trade)
     world.tick()
-    assert world.trade.reloaded(world.trade, "t", 1) is True
+    assert world.trade.reloaded(world.trade, "t", 1) is False
     assert world.trade.hide_party(world.trade) is True
     world.trade.allow_reload_evidence(world.trade, "t", 1)
-    assert world.trade.hide_party(world.trade) is False
-    scene = world.start()
-    world.progress(scene, commit_entered=True)
+    assert world.trade.hide_party(world.trade) is True
+    world.trade.server_final(world.trade, world.lua.table(token="t", epoch=1, verdict="resolved"))
+    assert world.trade.hide_party(world.trade) is True
     world.trade.reset(world.trade)
     world.tick()
-    assert world.trade.reloaded(world.trade, "t", 1) is True
-    assert world.trade.reloaded(world.trade, "t", 2) is True
+    assert world.trade.reloaded(world.trade, "t", 1) is False
+    assert not world.trade.reloaded(world.trade, "t", 2)
     world.trade.allow_reload_evidence(world.trade, "t", 1)
     assert world.trade.hide_party(world.trade) is True
     world.trade.allow_reload_evidence(world.trade, "t", 2)
-    assert world.trade.hide_party(world.trade) is False
+    assert world.trade.hide_party(world.trade) is True
     old_scene["done"](None, 0, None)
     world.tick()
     assert not [f for n, f in world.events if n == "trade_done" and "new_key" in f]
