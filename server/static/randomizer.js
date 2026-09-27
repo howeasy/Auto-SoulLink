@@ -347,6 +347,7 @@ function randomizerFields(form) {
       if (!a || !b) return 'Pick a cartridge for both players.';
       var ra = this.pick('a'), rb = this.pick('b');
       if ((ra && !this.usable(ra)) || (rb && !this.usable(rb))) return 'That cartridge cannot be used here.';
+      if (this.rdraft.randomize && this.family === 'gen2_gsc') return 'Gen 2 has no randomizer support; turn Randomize off.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
       if (this.rdraft.randomize && this.pre && this.pre.jar_found && this.pre.jar_trusted === false) {
         return this.pre.jar_error || 'This PokeRandoZX.jar is not a known build; SLink will not run it.';

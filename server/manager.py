@@ -1424,7 +1424,7 @@ class RunManager:
             return web.json_response({"ok": False, "error": "Invalid JSON"}, status=400)
 
         from server import cartridges
-        from server.upr_pipeline import family_of, find_upr_jar
+        from server.upr_pipeline import FAMILY_GEN2, family_of, find_upr_jar
         from server.upr_settings import (
             FAMILY_PURE,
             FAMILY_VANILLA,
@@ -1462,10 +1462,14 @@ class RunManager:
                 return web.json_response({"ok": False, "error": str(exc)}, status=400)
             wanted = _game_family(run.get("game"))
             if wanted and wanted != family:
+                words = {FAMILY_PURE: ("pureRGB", "pureRGB"), FAMILY_GEN2: ("Gen 2", "Gold / Silver / Crystal")}
                 return web.json_response({"ok": False, "error": (
                     f"this run is {GAME_LABELS.get(run['game'], run['game'])}; these are "
-                    f"{'pureRGB' if family == FAMILY_PURE else 'vanilla'} cartridges -- pick "
-                    f"{'pureRGB' if wanted == FAMILY_PURE else 'vanilla Red / Blue / Yellow'} dumps")}, status=400)
+                    f"{words.get(family, ('vanilla',))[0]} cartridges -- pick "
+                    f"{words.get(wanted, ('', 'vanilla Red / Blue / Yellow'))[1]} dumps")}, status=400)
+        if randomize and family == FAMILY_GEN2:
+            return web.json_response({"ok": False, "error": (
+                "Gen 2 has no randomizer support; turn Randomize off")}, status=400)
         # Either a settings file the user built in UPR's GUI, the form's spec (every option
         # in upr_settings.OPTIONS), or the six categories older callers speak in -- the last
         # two go through the SAME builder the allowlist is computed from, so a file made here
