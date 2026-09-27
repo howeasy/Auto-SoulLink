@@ -138,14 +138,17 @@
       147
     ],
     "celadon_city": [
-      417
+      16,
+      17,
+      65,
+      69,
+      350,
+      385,
+      417,
+      538
     ],
     "celadon_city_game_corner": [
       382
-    ],
-    "celadon_hotel": [
-      16,
-      17
     ],
     "cerulean_cave": [
       19,
@@ -156,23 +159,21 @@
       475
     ],
     "cerulean_city": [
+      32,
+      48,
       332,
       333,
       334,
       415,
       436
     ],
-    "cinnabar_gym": [
+    "cinnabar_island": [
+      61,
       179,
       180,
-      215
-    ],
-    "cinnabar_isl": [
-      61,
+      215,
+      419,
       513
-    ],
-    "cinnabar_island": [
-      419
     ],
     "cinnabar_lab": [
       29,
@@ -180,7 +181,7 @@
       63,
       64
     ],
-    "dig_house": [
+    "digletts_cave": [
       71,
       371
     ],
@@ -193,9 +194,6 @@
       80,
       83,
       86
-    ],
-    "joyful": [
-      2
     ],
     "kindle_road": [
       3,
@@ -219,10 +217,6 @@
     "lavender_town": [
       28
     ],
-    "mansion_f4": [
-      454,
-      455
-    ],
     "mt_ember": [
       41,
       53,
@@ -234,17 +228,6 @@
       46,
       170
     ],
-    "nugget_bridge": [
-      70,
-      110,
-      122,
-      123,
-      144,
-      361,
-      501,
-      503,
-      504
-    ],
     "oaks_lab": [
       200,
       210
@@ -253,10 +236,13 @@
       66
     ],
     "pewter_city": [
+      45,
+      56,
       414
     ],
-    "pewter_museum": [
-      45
+    "pokemon_mansion": [
+      454,
+      455
     ],
     "pokemon_tower": [
       52,
@@ -269,12 +255,6 @@
     ],
     "rock_tunnel": [
       43
-    ],
-    "rocket_hideout": [
-      69,
-      350,
-      385,
-      538
     ],
     "route_11": [
       49
@@ -330,6 +310,17 @@
     "route_23": [
       57
     ],
+    "route_24": [
+      70,
+      110,
+      122,
+      123,
+      144,
+      361,
+      501,
+      503,
+      504
+    ],
     "route_25": [
       47,
       75
@@ -361,21 +352,21 @@
       431,
       437
     ],
-    "ss_anne": [
-      50,
-      135,
-      482,
-      512
-    ],
-    "treasure_bea": [
+    "treasure_beach": [
       546,
       548
     ],
     "two_island": [
+      2,
       76
     ],
     "vermilion_city": [
-      416
+      50,
+      51,
+      135,
+      416,
+      482,
+      512
     ],
     "victory_road": [
       393,
@@ -386,6 +377,7 @@
       406
     ],
     "viridian_city": [
+      38,
       74
     ],
     "viridian_forest": [
@@ -486,7 +478,7 @@
           "level_offset": 0
         }
       ],
-      "area": "joyful",
+      "area": "two_island",
       "level_cap": 100,
       "calc_label": "Game Corner Ace Trainer Andrew (Back To Back)",
       "fight_label": "Back To Back",
@@ -1074,7 +1066,7 @@
           "level_offset": -2
         }
       ],
-      "area": "celadon_hotel",
+      "area": "celadon_city",
       "calc_label": "Beauty Sam (If Lv ≥ 59)",
       "fight_label": "If Lv ≥ 59",
       "sprite_url": "https://i.ibb.co/bN4WBzT/Beauty.png"
@@ -1141,7 +1133,7 @@
           "level_offset": -2
         }
       ],
-      "area": "celadon_hotel",
+      "area": "celadon_city",
       "calc_label": "Beauty Shelly (Back To Back)",
       "fight_label": "Back To Back",
       "sprite_url": "https://i.ibb.co/bN4WBzT/Beauty.png"
@@ -2684,7 +2676,7 @@
           ]
         }
       ],
-      "area": "pewter_museum",
+      "area": "pewter_city",
       "level_cap": 15,
       "calc_label": "Leader Falkner",
       "sprite_url": "https://i.ibb.co/gMdPsRL/Falkner.png"
@@ -3047,7 +3039,7 @@
           "level_offset": -2
         }
       ],
-      "area": "ss_anne",
+      "area": "vermilion_city",
       "level_cap": 27,
       "calc_label": "Brendan (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
@@ -3953,7 +3945,7 @@
           ]
         }
       ],
-      "area": "cinnabar_isl",
+      "area": "cinnabar_island",
       "level_cap": 73,
       "calc_label": "May (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
@@ -4583,7 +4575,7 @@
           ]
         }
       ],
-      "area": "rocket_hideout",
+      "area": "celadon_city",
       "level_cap": 47,
       "calc_label": "Giovanni (Rocket Hide.)",
       "fight_label": "Rocket Hide.",
@@ -7072,7 +7064,7 @@
           "level_offset": -4
         }
       ],
-      "area": "nugget_bridge",
+      "area": "route_24",
       "calc_label": "Bug Catcher Cale (If Lv ≥ 22)",
       "fight_label": "If Lv ≥ 22",
       "sprite_url": "https://i.ibb.co/cw6n81f/Bug-Catcher.png"
@@ -7741,7 +7733,7 @@
           "level_offset": -4
         }
       ],
-      "area": "nugget_bridge",
+      "area": "route_24",
       "calc_label": "Lass Reli (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
       "sprite_url": "https://i.ibb.co/8sm893K/Lass.png"
@@ -7794,7 +7786,7 @@
           "level_offset": -4
         }
       ],
-      "area": "nugget_bridge",
+      "area": "route_24",
       "calc_label": "Lass Ali (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
       "sprite_url": "https://i.ibb.co/8sm893K/Lass.png"
@@ -8624,7 +8616,7 @@
           "level_offset": -4
         }
       ],
-      "area": "ss_anne",
+      "area": "vermilion_city",
       "calc_label": "Sailor Edmond & Sailor Trevor (If Lv ≥ 34)",
       "fight_label": "If Lv ≥ 34",
       "sprite_url": "https://i.ibb.co/vj4rHpy/Sailors.png"
@@ -9077,7 +9069,7 @@
           "level_offset": -3
         }
       ],
-      "area": "nugget_bridge",
+      "area": "route_24",
       "calc_label": "Camper Ethan (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
       "sprite_url": "https://i.ibb.co/n7Pn1gb/Camper.png"
@@ -11239,7 +11231,7 @@
           "level_offset": -4
         }
       ],
-      "area": "cinnabar_gym",
+      "area": "cinnabar_island",
       "calc_label": "Ace Trainer Derek (Back To Back)",
       "fight_label": "Back To Back",
       "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
@@ -11320,7 +11312,7 @@
           "level_offset": -4
         }
       ],
-      "area": "cinnabar_gym",
+      "area": "cinnabar_island",
       "calc_label": "Ace Trainer Zac (Back To Back)",
       "fight_label": "Back To Back",
       "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
@@ -13411,7 +13403,7 @@
           "level_offset": -5
         }
       ],
-      "area": "cinnabar_gym",
+      "area": "cinnabar_island",
       "calc_label": "Ace Trainer Lucy (Back To Back)",
       "fight_label": "Back To Back",
       "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
@@ -21055,7 +21047,7 @@
           "level_offset": -4
         }
       ],
-      "area": "nugget_bridge",
+      "area": "route_24",
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Nugg. Bridge)",
       "fight_label": "Nugg. Bridge",
@@ -21123,7 +21115,7 @@
           "level_offset": -3
         }
       ],
-      "area": "dig_house",
+      "area": "digletts_cave",
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Dig House)",
       "fight_label": "Dig House",
@@ -21322,7 +21314,7 @@
           "level_offset": -4
         }
       ],
-      "area": "rocket_hideout",
+      "area": "celadon_city",
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Rocket Hide.)",
       "fight_label": "Rocket Hide.",
@@ -24592,7 +24584,7 @@
           "level_offset": -4
         }
       ],
-      "area": "mansion_f4",
+      "area": "pokemon_mansion",
       "calc_label": "Burglar Max (Rematch)",
       "fight_label": "Rematch",
       "sprite_url": "https://i.ibb.co/r4MDjgq/Burglar.png"
@@ -24673,7 +24665,7 @@
           "level_offset": -4
         }
       ],
-      "area": "mansion_f4",
+      "area": "pokemon_mansion",
       "calc_label": "Burglar Anson (Rematch)",
       "fight_label": "Rematch",
       "sprite_url": "https://i.ibb.co/r4MDjgq/Burglar.png"
@@ -26015,7 +26007,7 @@
           "level_offset": -4
         }
       ],
-      "area": "ss_anne",
+      "area": "vermilion_city",
       "calc_label": "Lass Ann & Gentleman Brooks (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
       "sprite_url": "https://i.ibb.co/mGsbFtG/Lass-Gentleman.png"
@@ -26123,7 +26115,7 @@
           "ivs": {}
         }
       ],
-      "area": "nugget_bridge",
+      "area": "route_24",
       "calc_label": "*Lass Reli",
       "fight_label": "If Lv ≥ 27"
     },
@@ -26175,7 +26167,7 @@
           "level_offset": -4
         }
       ],
-      "area": "nugget_bridge",
+      "area": "route_24",
       "calc_label": "Youngster Timmy (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
       "sprite_url": "https://i.ibb.co/6nGd7Gm/Youngster.png"
@@ -26231,7 +26223,7 @@
           "ivs": {}
         }
       ],
-      "area": "nugget_bridge",
+      "area": "route_24",
       "calc_label": "*Youngster Timmy",
       "fight_label": "If Lv ≥ 27"
     },
@@ -26385,7 +26377,7 @@
           "ivs": {}
         }
       ],
-      "area": "cinnabar_isl",
+      "area": "cinnabar_island",
       "level_cap": 73,
       "calc_label": "PkMn Trainer May",
       "fight_label": "If Rival Has Bulbasaur"
@@ -27173,7 +27165,7 @@
           "level_offset": -3
         }
       ],
-      "area": "rocket_hideout",
+      "area": "celadon_city",
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Rocket Hide.)",
       "fight_label": "Rocket Hide.",
@@ -27227,7 +27219,7 @@
           "level_offset": 0
         }
       ],
-      "area": "treasure_bea",
+      "area": "treasure_beach",
       "level_cap": 100,
       "calc_label": "Swimmer Amara (Back To Back)",
       "fight_label": "Back To Back",
@@ -27363,7 +27355,7 @@
           "level_offset": 0
         }
       ],
-      "area": "treasure_bea",
+      "area": "treasure_beach",
       "level_cap": 100,
       "calc_label": "Swimmer Abigail (Back To Back)",
       "fight_label": "Back To Back",

@@ -78,26 +78,146 @@ as a separate finding below rather than patched here -- no owner ruling covers
 redesigning that matching, and it's a cosmetic widget gap (both areas still show
 that leader), not a data-correctness issue.
 
-## Other finding (not fixed here, flagged for follow-up)
+## Other finding from RR-PT — fixed by card RR-PT2 (2026-09-27)
 
-`_KNOWN_UNRESOLVABLE_AREA_KEYS` in the new test documents 11 **pre-existing**
-`trainers_by_area` keys that were already present before this card and don't match
-either `area_map.json` or `gen3_frlge_locations.lua`: `celadon_hotel`, `cinnabar_gym`,
-`cinnabar_isl`, `dig_house`, `joyful`, `mansion_f4`, `nugget_bridge`, `pewter_museum`,
-`rocket_hideout`, `ss_anne`, `treasure_bea` (the last is also a truncated spelling of
-`treasure_beach`, an id that DOES exist in `area_map.json`). Indoor areas only ever
-report the *fine* per-room id from `gen3_frlge_locations.lua` (e.g.
-`rocket_hideout_b1f`), never the bare building name, so these areas' Upcoming Key
-Trainers widgets can never fire. Out of scope for RR-PT (regen + one spelling fix);
-worth its own card since it spans 11 areas and needs a matching-design decision
-(which room id per building, or a client-side prefix-collapse), not a one-line
-override.
+`_KNOWN_UNRESOLVABLE_AREA_KEYS` (added by card RR-PT, removed by RR-PT2) documented 11
+**pre-existing** `trainers_by_area` keys that don't match either `area_map.json` or
+`gen3_frlge_locations.lua`: `celadon_hotel`, `cinnabar_gym`, `cinnabar_isl`,
+`dig_house`, `joyful`, `mansion_f4`, `nugget_bridge`, `pewter_museum`,
+`rocket_hideout`, `ss_anne`, `treasure_bea`. See the addendum below for how each was
+resolved and the current (post-RR-PT2) state of the roster.
+
+---
+
+# Addendum — card RR-PT2 (2026-09-27): making the 11 dead keys reachable
+
+## The mechanism (why a bare building name is never client-emittable)
+
+`lua/gen3/client.lua`'s `area_now()` reports `area_map[bank:num] or ""` for the coarse
+`area_id` (from `data/games/gen3_frlge/area_map.json`) and `locations[bank:num] or ""`
+for the fine `loc_name` (from `gen3_frlge_locations.lua`, DISPLAY-only per that file's
+own header comment). `server.py`'s handlers make `player_area_id` **sticky**: the
+`hello`/`area_enter` handlers only overwrite it when the wire message's `area_id` is
+non-empty (`if area: self.player_area_id[player_id] = area`). So while a player stands
+in a building with no `area_map.json` entry of its own (a gym, a hideout floor, a
+hotel, a museum), `player_area_id` keeps whatever coarse area the player last walked
+in **from** — and `_trainer_panel_html`'s effective area
+(`player_area_id.get(pid) or player_area.get(pid)`, `server.py`) resolves to that
+sticky coarse value, never the fine per-room name. This is exactly the rule
+`tools/gen_gen3_trainers.py`'s `area_of_map()` already encodes for vanilla FR/LG
+(BFS over `area_map.json` + pret's map warps/connections to the nearest mapped
+ancestor; see that generator's module docstring) — vanilla Brock, standing in
+`PewterCity_Gym` (no `area_map.json` entry), is tagged `pewter_city` for the same
+reason.
+
+## Per-dead-key mapping (fix landed in `tools/gen_rr_priority_trainers.py`'s
+`_AREA_OVERRIDES`)
+
+Verified against the pinned pret pokefirered clone
+(`data/gen3_sources.lock.json` commit `c75f352304d529f6ba92d4f74b9cf8b5c3810788`,
+`E:/Google Drive/SLink/.cache/pret/pokefirered`, confirmed at that exact commit)
+by running the real `area_of_map()`/`map_jsons()`/`map_keys()` helpers against every
+map involved — not by inspection.
+
+| Dead key (sheet text) | Real map(s) | `area_of_map()` result | Reachable area now |
+|---|---|---|---|
+| `celadon_hotel` ("CELADON HOTEL"/"CELADON CITY HOTEL") | `CeladonCity_Hotel` | 1 hop to `MAP_CELADON_CITY` | `celadon_city` |
+| `cinnabar_gym` ("CINNABAR GYM") | `CinnabarIsland_Gym` | 1 hop to `MAP_CINNABAR_ISLAND` | `cinnabar_island` |
+| `cinnabar_isl` ("CINNABAR ISL.") | `CinnabarIsland` itself | direct `area_map.json["3:8"]` hit, no BFS needed | `cinnabar_island` (already existed; just a truncated-spelling miss) |
+| `dig_house` ("DIG HOUSE") | `DiglettsCave_NorthEntrance`/`_SouthEntrance` | direct `area_map.json["1:36"/"1:38"]` hit | `digletts_cave` (community name for the cave's entrance building; sheet position — right after Cerulean/Misty, right before S.S. Anne — and level_cap 27 both fit the Diglett's Cave detour) |
+| `joyful` ("JOYFUL" 4-line header) | `TwoIsland_JoyfulGameCorner` | 1 hop to `MAP_TWO_ISLAND` | `two_island` |
+| `mansion_f4` ("MANSION F4"/"POKEMON MANSION 4F") | one of `PokemonMansion_1F/2F/3F/B1F` (vanilla has only 4 floors; whichever RR numbers "4F", all four already share one id) | direct `area_map.json` hit on every floor | `pokemon_mansion` |
+| `nugget_bridge` ("NUGGET BRIDGE"/"NUGG. BRIDGE") | `Route24` (pret has no separate map for the bridge segment — it's part of the one Route 24 map) | direct `area_map.json["3:43"]` hit | `route_24` |
+| `pewter_museum` ("PEWTER MUSEUM") | `PewterCity_Museum_1F`/`_2F` | 1 hop to `MAP_PEWTER_CITY` | `pewter_city` (same bucket as Brock's gym — both report the town while inside) |
+| `rocket_hideout` ("ROCKET HIDE."/"ROCKET HIDE"/"ROCKET HIDEOUT") | `RocketHideout_B1F..B4F` | 2 hops (hideout floor → `CeladonCity_GameCorner`, itself unmapped → `MAP_CELADON_CITY`) | `celadon_city` |
+| `ss_anne` ("S.S. ANNE") | every `SSAnne_*` map (26 rooms) | 1 hop to `MAP_VERMILION_CITY` | `vermilion_city` |
+| `treasure_bea` ("TREASURE BEA.") | `OneIsland_TreasureBeach` | direct `area_map.json["3:46"]` hit | `treasure_beach` (already existed; just a truncated-spelling miss, same class of bug as `vermilion_city`/`vermillion_city`) |
+
+All 11 keys are gone from `trainers_by_area` after the regen; their trainers now live
+under the real reachable buckets above (e.g. `rocket_hideout`'s `[69, 350, 385, 538]`
+moved into `celadon_city`, which already had Erika's `417`).
+
+**Related finding, not changed by this card:** `celadon_city_game_corner` (Grunt id
+`382`) is subject to the exact same sticky-coarse mechanism — the Game Corner has no
+`area_map.json` entry either, so by the same rule it should also report `celadon_city`
+while the player stands there, not its own fine name. It currently "passes" the
+client-emittable test only because it happens to string-match
+`gen3_frlge_locations.lua`'s fine per-room table, but per the mechanism above that
+fine name is not what `player_area_id` actually holds except in the narrow edge case
+of a hello arriving before any coarse `area_enter` has ever fired this session (e.g.
+a save file that boots directly inside that room). Not one of the 11 keys card RR-PT
+flagged, and not touched here — flagging for an owner ruling on whether to fold it
+into `celadon_city` too, consistent with `rocket_hideout` above.
+
+## Rematch-tag fix (item 2)
+
+Root cause: `trainers_by_area` assignment step (c) ("Trainer Order — same
+one-unassigned-rt_id-per-name rule") claims **one** unassigned same-named `rt_id` per
+`Trainer Order` sheet row. That sheet is a single first-playthrough-progression pass
+with exactly one row per gym leader name — it never lists a post-Elite-Four rematch
+tier — so the rematch copy (sourced from the separate "Kanto Rematch"/"Postgame"
+sheets, itself carrying no location header) was left permanently unassigned. (The
+generator's optional `redux_page.html` input, referenced in a code comment as a
+second source for exactly this kind of hint, isn't a tracked/pinned file and isn't
+present in this worktree, so it can't be relied on to supply it either.)
+
+Fix: a new step (d) in `tools/gen_rr_priority_trainers.py` (`build()`, after step (c))
+gathers every already-assigned `class == "Gym Leader"` trainer's area by name, then
+attaches any still-unassigned `Gym Leader` with the same name to that same area.
+Scoped strictly to class `"Gym Leader"` — a name-only match across all classes would
+be wrong for names reused across many unrelated fights (`"Grunt"`, `"Rival"`).
+
+Restored exactly the 5 areas card RR-PT's diff table flagged:
+
+| Area | Base id | Rematch id(s) |
+|---|---|---|
+| `pewter_city` | 414 (Brock) | 56 |
+| `cerulean_city` | 415 (Misty) | 48, 32 |
+| `vermilion_city` | 416 (Lt. Surge) | 51 |
+| `celadon_city` | 417 (Erika) | 65 |
+| `viridian_city` | 74 (Clair) | 38 |
+
+## Key-fight coverage confirmation (item 3)
+
+Every key-fight category has at least one reachable `rt_id`:
+
+- **Gym leaders + rematches**: all 8 Kanto leaders + the 3 Johto/RR-crossover leaders
+  (Falkner, Chuck, Whitney/Morty/Jasmine ×3/Pryce — several already had their own
+  header area) are reachable; the 5 rematch tiers above are now reachable alongside
+  their base fight.
+- **Rival**: 12 of 18 `Rival`/`*Rival`-class ids are reachable (the rest are
+  calc-only alternate-moveset duplicates of an already-reachable route battle).
+- **Elite Four / Champion**: the base Elite Four fights (Lorelei/Bruno/Agatha/Lance,
+  ids `77/80/83/86`) are reachable at `indigo_plateau`; the Champion fight is
+  reachable via its `"Rival"`-named `Champion`-class ids (`435/436/437`) at
+  `cerulean_city`. (The `*Elite Four` post-game alt-set ids and the vanilla-rival-named
+  `Champion`/`Rival`-class ids for "Blue"/"Lance" are calc-only duplicates with no
+  sheet location at all — same "duplicate set, not a separate encounter" shape as the
+  Rival case above, not something this card's area-mapping fix reaches.)
+- **Giovanni's sets**: reachable at `rocket_hideout`'s new home `celadon_city`
+  (ids `69`, `350`), `silph_co` (id `348`), and `cerulean_cave` (id `349`).
+
+New regression tests (`tests/unit/test_gen3_rr_generators.py`):
+`test_priority_trainers_key_fight_families_have_reachable_area` (per-family floor —
+gym leaders, rival, Elite Four, Champion, Giovanni's sets each need >=1 reachable id)
+and `test_priority_trainers_gym_leader_rematches_inherit_base_area` (pins the exact
+5-area table above). `test_priority_trainers_areas_are_client_emittable`'s
+`_KNOWN_UNRESOLVABLE_AREA_KEYS` allowlist is removed entirely (no exceptions remain).
+`tests/unit/test_trainer_panel.py`'s `pewter_museum`-specific test is renamed/rewritten
+to `test_trainers_for_area_pewter_city_has_falkner`, since Falkner now (correctly)
+answers under `pewter_city`, and it also asserts `pewter_museum` itself returns `[]`.
 
 ## Exit checks
 
 ```
+SLINK_RR_SRC_CACHE=data/.rr_src_cache python tools/gen_rr_priority_trainers.py --check
+OK: regenerated roster matches ... byte-for-byte (443 trainers)
+
 SLINK_RR_SRC_CACHE=data/.rr_src_cache python -m pytest tests/unit/test_gen3_rr_generators.py -q
-28 passed
+30 passed
+
+python -m pytest tests/unit/test_trainer_panel.py -q
+14 passed
 ```
 
 Full suite: see the run this receipt accompanies.
