@@ -8,14 +8,24 @@ input was not logged.
 
 `ctx.catch` now allows at most **20 instrumented throws**. Every throw still uses the existing
 bag-input witnesses, throw helper, `THREW N` marker and battle-turn wait. Reaching the budget
-with battle active returns `capture throw budget exhausted (20)`; it cannot fall into scene
-advancement. A completed catch also propagates a scene-settle refusal. The saved-ball oracle
-is unchanged.
+with battle active and an empty pocket (the 20th throw was the last ball) returns the bare
+`out-of-balls`, the same RNG-classified reason as the mid-hunt exhaustion path (R4-DRIVER-2,
+OMP cx-d84db30c review of d998cc65: `tools/e2e_duo.py classify_gen1_result` only retries
+`"hunt ended out-of-balls"`; the old unconditional `capture throw budget exhausted (20)` at
+20/20 balls was FINAL and un-retryable). Reaching the budget with balls remaining still
+returns `capture throw budget exhausted (20)`; neither path falls into scene advancement. A
+completed catch also propagates a scene-settle refusal. The saved-ball oracle is unchanged.
 
 `playlib.P.wait_scene_settled` now requires battle to be known inactive before evaluating the
 scene and again before an input or success decision. Active or unreadable state returns a
-named refusal. This protects **every caller**, including a battle that begins during a wait
-or a predicate evaluation. It does not press buttons or advance a frame on that refusal.
+named refusal (logged via `H.phase("scene-wait-refused", why)`, so a refusal is visible in
+receipts even at the ~9 call sites that discard the boolean return). This protects **every
+caller**, including a battle that begins during a wait or a predicate evaluation. It does not
+press buttons or advance a frame on that refusal. The second, pre-decision recheck is a
+forward-compat property of the contract -- `in_battle` may read `nil` (unreadable) per its
+own signature -- not a response to any Gen 3 state this review observed changing between the
+two calls: every production binding's `in_battle` is `not pred_ok(cp, ...)`, a pure memory
+read that cannot itself flip mid-iteration.
 
 ## Registered duo rows with changed paths
 

@@ -48,6 +48,7 @@ keep the SID.
 """
 from __future__ import annotations
 
+import copy
 import functools
 import json
 import re
@@ -83,6 +84,8 @@ def _load_trainers_pack() -> tuple[dict[int, dict], dict[str, list[int]]]:
     trainers = {int(k): v for k, v in raw["trainers"].items()}
     trainers_by_area = {k: list(v) for k, v in raw["trainers_by_area"].items()}
     return trainers, trainers_by_area
+
+
 # include/constants/pokemon.h:5-28 at e8bd1cd7; NOT vanilla's zero-based types.
 TYPE_NAMES = ("None", "Normal", "Fighting", "Flying", "Poison", "Ground", "Rock", "Bug",
               "Ghost", "Steel", "???", "Fire", "Water", "Grass", "Electric", "Psychic",
@@ -287,19 +290,25 @@ class Gen3ExpansionAdapter(Gen3Adapter):
     def trainer_party(self, trainer_id):
         trainers, _ = _load_trainers_pack()
         tr = trainers.get(trainer_id)
-        return [dict(m) for m in tr["party"]] if tr else []
+        # deepcopy: every mon dict nests further mutable structure (ivs, moves) that `dict(m)`
+        # only shallow-copies -- a caller mutating out["party"][i]["ivs"]["hp"] would otherwise
+        # corrupt the functools.cache-shared pack for every trainer_party()/trainer_brief() call
+        # after it (card XC4c item 5; mirrors test_gen3_frlg_trainers.py's copy-isolation check,
+        # extended one level deeper for this build's always-explicit ivs).
+        return copy.deepcopy(tr["party"]) if tr else []
 
     def trainer_brief(self, trainer_id):
         trainers, _ = _load_trainers_pack()
         tr = trainers.get(trainer_id)
         if not tr or not tr["party"]:
             return None
-        out = {"name": tr["name"], "class": tr["class"], "party": [dict(m) for m in tr["party"]],
+        out = {"name": tr["name"], "class": tr["class"], "party": copy.deepcopy(tr["party"]),
                "area": tr.get("area", "")}
         if isinstance(tr.get("level_cap"), int):
             out["level_cap"] = tr["level_cap"]
-        if tr.get("calc_label"):
-            out["calc_label"] = tr["calc_label"]
+        for k in ("calc_label", "fight_label"):
+            if tr.get(k):
+                out[k] = tr[k]
         return out
 
     def milestone_cap_for_fight_label(self, fight_label):

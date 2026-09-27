@@ -404,7 +404,7 @@ def test_manager_names_the_frlg_family():
     assert "gen3" in manager.new_run_form()["randomizer_games"]
     assert ".gba" in manager.ROM_EXTS
     rows = {r["key"]: r for r in U.option_form(every_family=True)}
-    assert rows["tutors"]["families"] == [FRLG]
+    assert rows["tutors"]["families"] == [FRLG, U.FAMILY_EMERALD]
     assert FRLG not in rows["update_type_effectiveness"]["families"]
     assert FRLG in rows["wild"]["families"]
 

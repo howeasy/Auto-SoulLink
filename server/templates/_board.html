@@ -107,6 +107,14 @@
   {# A native trade the server can't resolve on its own: one side's post-trade party read
      didn't confirm what was expected. "uncertain" is still gathering evidence; "conflict"
      means it never will and a human has to sort out the two parties by hand. #}
+  {% if status is defined and status.players is defined %}
+  {% for pid, player in status.players.items() if player.get('trade_recovery', {}).get('hidden') %}
+    <div class="trade-problem trade-problem-uncertain" role="status">
+      <b>&#9888; Player {{ pid | upper }}: party withheld</b>
+      <span class="trade-problem-text">{% if player.trade_recovery.problem %}The recovery information could not be read. {% endif %}{% if player.party_details %}The last trusted party is shown.{% else %}No trusted party snapshot is available.{% endif %} Trading is paused until a fresh, trustworthy snapshot arrives.</span>
+    </div>
+  {% endfor %}
+  {% endif %}
   {% set tp = status.trade_problem %}
   {% if tp %}
     {% set a_mon = status.players.a.party_details.get(tp.a_key) %}

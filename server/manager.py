@@ -87,9 +87,9 @@ GAME_MEMBERS = {key: members for key, _, members in GAMES}
 # in randomizer_games and never offers the randomizer -- see
 # test_manager_names_the_frlg_family / the RR refusal test in test_upr_pipeline_gen3.py.
 GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_purergb",
-               "gen3": "gen3_frlg"}
+               "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
-                "gen3_frlg": "FireRed / LeafGreen"}
+                "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald"}
 
 
 def _game_family(game: str | None) -> str | None:

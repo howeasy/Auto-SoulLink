@@ -100,7 +100,9 @@ sys.path.insert(0, str(ROOT))
 
 from server.adapters.gen3_expansion import ROM_TYPE, Gen3ExpansionAdapter  # noqa: E402
 from server.adapters.gen3_frlge import default_moves  # noqa: E402
+from tools.gen_area_map import _expansion_source_sha256  # noqa: E402
 from tools.gen_gen3_trainers import (  # noqa: E402
+    _emerald_rematch,
     area_of_map,
     defines,
     map_jsons,
@@ -113,9 +115,22 @@ from tools.gen_gen3_trainers import (  # noqa: E402
 OUT_JSON = ROOT / "data/games/gen3_exp/28877d73/gen3_exp_trainers.json"
 OUT_JS = ROOT / "calc/src/js/data/sets/games/EmeraldExpansion.js"
 AREA_MAP = ROOT / "data/games/gen3_exp/28877d73/area_map.json"
+AREAS_LUA = ROOT / "data/games/gen3_exp/28877d73/gen3_exp_areas.lua"
 
 KEY_CLASSES = {"LEADER", "ELITE_FOUR", "CHAMPION", "RIVAL",
                "AQUA_LEADER", "MAGMA_LEADER", "AQUA_ADMIN", "MAGMA_ADMIN"}
+
+# Vs Seeker rival encounters (Brendan/May route/city fights): the trainer const's own suffix
+# names the PLAYER's starter (see module docstring on fight_label). Same three species this
+# build's starters use -- GAMES["emerald"]["starters"] in tools/gen_gen3_trainers.py.
+STARTERS = ("TREECKO", "TORCHIC", "MUDKIP")
+
+# Card XC4c: gTrainers ids never battled by any trainerbattle/multi-battle script or gRematchTable
+# row anywhere in the pinned source (verified: TRAINER_RED/TRAINER_LEAF appear only in
+# include/constants/opponents.h and src/data/trainers.h/.party) -- the same two link-battle
+# save-slot placeholders vanilla pret Emerald excludes via GAMES["emerald"]["unused"] in
+# tools/gen_gen3_trainers.py. Never a key trainer, however key-classed they're declared.
+UNBATTLED_KEY_CANDIDATES = {"TRAINER_RED", "TRAINER_LEAF"}
 
 
 def enum_values(text: str, prefix: str) -> dict[str, int]:
@@ -179,14 +194,48 @@ def parse_mons(body: str) -> list[dict]:
     return mons
 
 
+def _species_info_blocks(src: Path) -> list[tuple[str, str]]:
+    """[(SPECIES_X, body), ...] across every src/data/pokemon/species_info/gen_*_families.h
+    file, in file order -- the same per-species struct-literal blocks
+    parse_species_learnset_symbols() and rival_starter_lines() both read fields out of."""
+    out = []
+    for f in sorted((src / "src/data/pokemon/species_info").glob("gen_*_families.h")):
+        out += re.findall(r"\[(SPECIES_\w+)\]\s*=\s*\{(.*?)\n    \},\n", read(f), re.S)
+    return out
+
+
 def parse_species_learnset_symbols(src: Path) -> dict[str, str]:
     out: dict[str, str] = {}
-    for f in sorted((src / "src/data/pokemon/species_info").glob("gen_*_families.h")):
-        for sp, body in re.findall(r"\[(SPECIES_\w+)\]\s*=\s*\{(.*?)\n    \},\n", read(f), re.S):
-            m = re.search(r"\.levelUpLearnset\s*=\s*(\w+),", body)
-            if m:
-                out.setdefault(sp, m.group(1))
+    for sp, body in _species_info_blocks(src):
+        m = re.search(r"\.levelUpLearnset\s*=\s*(\w+),", body)
+        if m:
+            out.setdefault(sp, m.group(1))
     return out
+
+
+def rival_starter_lines(src: Path, starters: tuple[str, ...]) -> dict[str, set[str]]:
+    """starter (e.g. "MUDKIP") -> every SPECIES_X macro in its forward evolution family
+    (base + each stage reached by that first stage's OWN first-listed .evolutions branch).
+    Mirrors tools/gen_gen3_trainers.py's evolution.h-derived `lines` (same algorithm: walk
+    forward from the starter), adapted to this fork's schema -- each species_info block
+    carries its own targets directly (`.evolutions = EVOLUTION({EVO_METHOD, param,
+    SPECIES_X}, ...)`), no separate evolution.h. Only the FIRST branch is followed: this
+    build's starter chains (Treecko/Torchic/Mudkip) are single-branch, no CONDITIONS/#if
+    (unlike e.g. Eevee) -- verified against src/data/pokemon/species_info/gen_3_families.h
+    at the pin, so a second branch here would mean the pin changed and this needs revisiting,
+    not a case to silently handle."""
+    blocks = dict(_species_info_blocks(src))
+    lines: dict[str, set[str]] = {}
+    for s in starters:
+        line: set[str] = set()
+        sp = f"SPECIES_{s}"
+        while sp and sp not in line:
+            line.add(sp)
+            m = re.search(r"\.evolutions\s*=\s*EVOLUTION\(\s*\{\s*EVO_\w+\s*,[^,]*,\s*(SPECIES_\w+)",
+                          blocks.get(sp, ""))
+            sp = m.group(1) if m else None
+        lines[s] = line
+    return lines
 
 
 def parse_learnset_tables(src: Path) -> dict[str, list[tuple[int, str]]]:
@@ -210,7 +259,31 @@ def parse_rematch_groups(battle_setup_c: str) -> list[tuple[list[str], str]]:
         parts = [p.strip() for p in args.split(",")]
         if len(parts) == 6:
             out.append((parts[:5], parts[5]))
+        else:
+            print(f"warning: gRematchTable REMATCH({args}) has {len(parts)} args, want 6 -- skipped",
+                  file=sys.stderr)
     return out
+
+
+def _check_area_map_digest(src: Path, area_map_path: Path) -> None:
+    """Refuse a stale area_map.json: gen3_exp_areas.lua (its sibling output, owned by the same
+    XC phase that owns area_map.json) records a `source_sha256` header over this pin's
+    map_groups.json/region_map_sections.json/wild_encounters.json (tools/gen_area_map.py's
+    _expansion_source_sha256, the same digest that binds gen3_exp_areas.lua to its inputs).
+    If area_map.json/gen3_exp_areas.lua were built from a DIFFERENT source tree than `src` (a
+    map reordering between expansion versions, say), map_area()'s "group:num" lookups could
+    silently point at the wrong area -- so this must fail loudly, not use stale data quietly."""
+    areas_lua = area_map_path.parent / "gen3_exp_areas.lua"
+    if not areas_lua.exists():
+        raise SystemExit(f"{areas_lua} not found -- can't verify {area_map_path} against this source tree")
+    m = re.search(r"source_sha256:\s*([0-9a-f]{64})", read(areas_lua))
+    if not m:
+        raise SystemExit(f"{areas_lua} has no source_sha256 header to verify {area_map_path} against")
+    recorded, actual = m.group(1), _expansion_source_sha256(src)
+    if recorded != actual:
+        raise SystemExit(f"{area_map_path} was built from a different source tree than {src} "
+                          f"({areas_lua.name}'s source_sha256 {recorded} != {actual}) -- "
+                          "regenerate the area map against this pin first")
 
 
 def compute_bases(trainers: dict[int, dict]) -> dict[int, str]:
@@ -269,6 +342,7 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
     sp_learnset_sym = parse_species_learnset_symbols(src)
     learnset_tables = parse_learnset_tables(src)
 
+    _check_area_map_digest(src, area_map_path)
     keys = map_keys(src)
     # This fork carries leftover/orphan map dirs (SecretBase_*, AbandonedShip_Underwater*, ...)
     # that have a map.json but are never listed under any data/maps/map_groups.json group.
@@ -282,6 +356,7 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
     area_map = json.loads(read(area_map_path))
     map_area = area_of_map(grouped_maps, keys, area_map)
     tmaps = trainer_maps(src, all_maps)
+    rival_lines = rival_starter_lines(src, STARTERS)
 
     def calc_species(sp_macro: str) -> str | None:
         sid = species_ids.get(sp_macro)
@@ -313,8 +388,9 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
         name_m = re.search(r'\.trainerName\s*=\s*_\("([^"]*)"\)', body)
         cls_m = re.search(r"\.trainerClass\s*=\s*TRAINER_CLASS_(\w+)", body)
         cls_key = cls_m.group(1) if cls_m else ""
+        mons = parse_mons(body)
         party = []
-        for mon in parse_mons(body):
+        for mon in mons:
             sid = species_ids.get(mon["species"])
             if sid is None:
                 unresolved_species += 1
@@ -340,9 +416,27 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
         areas = sorted({map_area[m] for m in tmaps.get(f"TRAINER_{const}", ()) if m in map_area})
         if areas:
             t["area"] = areas[0]
-        if cls_key in KEY_CLASSES and party:
+        if cls_key in KEY_CLASSES and party and f"TRAINER_{const}" not in UNBATTLED_KEY_CANDIDATES:
             t["key"] = True
             t["level_cap"] = max(p["level"] for p in party)
+            # Upcoming Key Trainers panel row label (server.py _trainer_panel_html): distinct
+            # fight_labels are what let it show Brendan/May's route/city starter-variant fights,
+            # or a gym leader's Vs Seeker rematch tiers, as separate rows instead of merging same-
+            # name/same-class encounters into one. Mirrors tools/gen_gen3_trainers.py's build()
+            # exactly: "Rematch N" component first, starter-variant component second, joined with
+            # " · " when both apply (never happens for THIS build's rivals -- see module docstring,
+            # OMP cx-081c78d3 F2 -- but Wally's tiers get only the rematch half).
+            fl = ""
+            if any(const.endswith("_" + s) for s in STARTERS):
+                mine = {m["species"] for m in mons}
+                hits = [f"Rival has {s.title()}" for s in STARTERS if rival_lines[s] & mine]
+                if len(hits) != 1:
+                    raise SystemExit(f"TRAINER_{const}: party has {len(hits)} starter evolution "
+                                      f"lines, want exactly 1: {sorted(mine)}")
+                (fl,) = hits
+            fl = " · ".join(filter(None, [_emerald_rematch(const, cls_key), fl]))
+            if fl:
+                t["fight_label"] = fl
         trainers[tid] = t
 
     # Rematch tiers (TRAINER_ROXANNE_2.._5 etc.) aren't triggered by a map trainerbattle script
@@ -361,7 +455,11 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
         for const_name in const_names:
             tid = opp_ids.get(const_name)
             if tid in trainers:
-                trainers[tid]["area"] = area
+                # setdefault, never overwrite: a trainerbattle script area (tmaps, above) is
+                # ground truth for where THIS fight actually happens and must win over a
+                # gRematchTable guess; among multiple REMATCH rows naming the same trainer (not
+                # seen in this build, but the table format allows it), the first row wins too.
+                trainers[tid].setdefault("area", area)
 
     bases = compute_bases(trainers)
     for tid, t in trainers.items():
@@ -389,6 +487,15 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
             sp = mon["species"]
             if not sp:
                 continue
+            # Every party mon in this build has an explicit .iv = TRAINER_PARTY_IVS(...) (module
+            # docstring; verified: one .iv per .species in src/data/trainers.h, always). A
+            # missing ivs here means the .iv parse regex silently failed on some mon, not that
+            # this trainer really has no IVs -- refuse rather than fake a perfect-31 spread that
+            # would read as real (never-verified) data (card XC4c item 5).
+            if not mon.get("ivs"):
+                raise SystemExit(f"TRAINER_{trainers[tid]['const']}: {sp} lvl {mon['level']} has "
+                                  "no ivs -- an .iv = TRAINER_PARTY_IVS(...) parse must have failed")
+            iv = mon["ivs"]
             slot = setdex.setdefault(sp, {})
             key = _dedupe_key(slot, base)
             slot[key] = {
@@ -397,15 +504,12 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
                 "ability": mon.get("ability", ""),
                 "item": mon.get("item", "None") or "None",
                 "nature": mon.get("nature", "Hardy"),
-                "ivs": mon.get("ivs") or {"hp": 31, "at": 31, "df": 31, "sa": 31, "sd": 31, "sp": 31},
+                # ivs dict from mon uses atk/def/spa/spd/spe keys; the setdex convention is
+                # at/df/sa/sd/sp -- remap here rather than carrying two shapes through the module.
+                "ivs": {"hp": iv["hp"], "at": iv["atk"], "df": iv["def"],
+                        "sa": iv["spa"], "sd": iv["spd"], "sp": iv["spe"]},
                 "moves": (mon.get("moves") or []) + ["No Move"] * (4 - len(mon.get("moves") or [])),
             }
-            # ivs dict from mon uses atk/def/spa/spd/spe keys; the setdex convention is
-            # at/df/sa/sd/sp -- remap here rather than carrying two shapes through the module.
-            if mon.get("ivs"):
-                iv = mon["ivs"]
-                slot[key]["ivs"] = {"hp": iv["hp"], "at": iv["atk"], "df": iv["def"],
-                                    "sa": iv["spa"], "sd": iv["spd"], "sp": iv["spe"]}
 
     if unresolved_species:
         print(f"warning: {unresolved_species} party slots had an unresolved SPECIES_ macro", file=sys.stderr)
@@ -423,12 +527,13 @@ def render_js(setdex: dict) -> str:
 // build; include/config/battle.h's B_TRAINER_MON_RANDOM_ABILITY == 0 confirms the game itself
 // resolves it the same way).
 //
-// Known gap, same one Emerald.js/FRLG.js already document: a trainer name like "GRUNT" (53
-// hits) or "MAY"/"BRENDAN" (16 each) repeats across unrelated battles, so the Prep tab's
-// name-based grouping (slink_bridge.js _buildTrainerIndex, keyed on the text before " | ")
-// will merge those into one combined entry. Every party slot is still present in this file
-// (see tests/unit/test_gen3_expansion_trainer_sets.py's whole-file species+level check) --
-// this only affects how same-named/unnamed trainers are grouped for display.
+// Trainer name collisions ("GRUNT" x53, "MAY"/"BRENDAN" x16 each) do NOT merge in the Prep
+// tab: compute_bases() (tools/gen_gen3_exp_trainers.py) gives every trainer id its own unique
+// base text before " | " -- a Vs Seeker rematch chain (TRAINER_X_1..5) gets "<base> Rematch N",
+// any other same-name collision gets "<base> (2)", "<base> (3)", ... by trainer id order (OMP
+// cx-081c78d3 F1, fixed XC4b; see tests/unit/test_gen3_expansion_trainer_sets.py's
+// test_no_base_name_maps_to_more_than_one_trainer_index). Full coverage is still whole-file:
+// every DIFFICULTY_NORMAL party slot in src/data/trainers.h is present here, not a subset.
 '''
     lines = [header, "var CUSTOMSETDEX_EE = {"]
     species_items = sorted(setdex.items())

@@ -1300,7 +1300,11 @@ function ctx.run_away(label)
         local ok, why = ctx.choose_action(ACTION_RUN)
         if not ok then return false, why end
         local r = ctx.await_turn(120, "B")
-        if r == "over" then play.wait_scene_settled(cp, 1800) return true end
+        if r == "over" then
+            local settled, settle_why = play.wait_scene_settled(cp, 1800)
+            if not settled then return false, "escape scene did not settle: " .. tostring(settle_why) end
+            return true
+        end
         if r ~= "action" then return false, "no decision point after RUN (" .. tostring(r) .. ")" end
     end
     return false, label .. ": could not escape in 10 turns"
@@ -1360,7 +1364,13 @@ function ctx.catch(label)
         if r ~= "action" then return nil, "no decision point after the throw (" .. tostring(r) .. ")" end
     end
     if play.in_battle(cp) ~= false then
-        if throws >= throw_budget then return nil, "capture throw budget exhausted (20)" end
+        -- A budget-exhausting throw can be the fixture's LAST ball: report the RNG-classified
+        -- "out-of-balls" (tools/e2e_duo.py classify_gen1_result retryable), not the generic
+        -- budget message, which e2e_duo.py treats as FINAL (R4-DRIVER-2 review, OMP cx-d84db30c).
+        if throws >= throw_budget then
+            if ctx.balls() == 0 then return nil, "out-of-balls" end
+            return nil, "capture throw budget exhausted (20)"
+        end
         return nil, "capture ended without an inactive battle witness"
     end
     local settled, settle_why = play.wait_scene_settled(cp, 1800)

@@ -437,6 +437,12 @@ python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixtur
 - Runtime confirmation (scratch probe, not committed): cold boot of `rr_battle.sav`, pace the
   `GRASS_LOOP` square → `wild battle after 11 grass steps at (13,38)`.
 - Seeded under the default battery name `gen3 slink RR.SaveRAM`.
+- NAT-LEGS-4: an `evolve_gen3` RR leg (a one-level-short SYNTH edit, like the FR/LG/Emerald
+  fixtures above) is BLOCKED, not attempted. `tools/gen3_fixtures.py make-frlg-synth` -- the only
+  builder for that SYNTH shape -- hardcodes `qualify_flash()`/`decode_party_mon()` to FR/LG's
+  vanilla flash layout with no `--rr`/`--cfru` flag; feeding it `rr_battle.sav` refuses outright
+  ("sector 1 (id 13) bad checksum" -- this save only qualifies under `cfru=True`, RR's CFRU-layout
+  sectors). A working RR leg needs new `--rr` plumbing on that subcommand.
 
 **Differences from the FR analogue a scenario author must know.** The party is ONE mon
 (`rr_town.sav`'s), and the CFRU ball pocket is EMPTY (`tools/e2e_duo.py` `gen3_ball_count` → 0;
@@ -636,7 +642,7 @@ Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
 | `emerald_badges.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; badge flags 0x867-0x86A (FLAG_BADGE01..04_GET, flags.h:1359-1362) set in the SYNTH seed, straddling flag bytes 0x10C/0x10D (E2-BADGES); a save the game cannot produce (4 badges, no story progress) that exists only to prove the badge read | `04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f` |
 | `emerald_catch.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; 20 Poké Balls (E2-FIX-VARIANTS r3) | `592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0` |
 | `emerald_catch_b.sav` | same | same | `derive-b --title emerald` over `emerald_catch.sav` (EG4-RC ball risk): `EMERB` #DFDAF6DA, the party mon re-keyed -- the B side of the deadzone_gen3/link_gen3 ball hunts on `gen3_emerald`, so a real half never runs the fixture out of its 5-ball `battle` allotment | `cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b` |
-| `emerald_evolve.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv15 at EXP 2534 (one short of Lv16), moves Tackle/Growl/Water Gun + a free slot (E2-FIX-VARIANTS r3) | `244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd` |
+| `emerald_evolve.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv15 at EXP 2534 (one short of Lv16), moves Tackle/Growl/Water Gun + a free slot (E2-FIX-VARIANTS r3); `evolve_gen3` E<->E PASS (NAT-LEGS-4, oracle made species-aware), receipt `docs/gen3/probes/fc_evolve_gen3_emerald_58a4f1fe.txt` | `244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd` |
 | `emerald_poison.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; Mudkip Lv5 poisoned at 1 HP + Poochyena Lv3 (E2-FIX-VARIANTS r3); `poison_faint_gen3` E<->E PASS (NAT-LEGS-3), receipts `docs/gen3/probes/fc_poison_faint_gen3_emerald_9ce65d28.txt` | `c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0` |
 | `emerald_gift.sav` | Lavaridge Town (0.12) | (4,8) | below the egg woman (LavaridgeTown_EventScript_EggWoman, giveegg WYNAUT); FLAG_RECEIVED_LAVARIDGE_EGG clear (E2-FIX-VARIANTS r3) | `7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552` |
 | `emerald_trade.sav` | RustboroCity_House1 (11.10) | (6,5) | one step S of the Trader NPC (6,4); party Mudkip Lv5 + a player-owned Ralts Lv7 (INGAME_TRADE_SEEDOT's requestedSpecies); NAT-LEGS-3 -- fixture/boot-check PASS, but the `npc_trade_gen3` duo leg is BLOCKED on a `lua/gen3/client.lua` key_change bug outside this card's lease, receipts `docs/gen3/probes/fc_npc_trade_gen3_emerald_BLOCKED_3a64fdbb.txt` | `9dff9cf03d160ff07d06ed98779e0713eeae0e8f091e0f0e29ac6d99a0edbba8` |

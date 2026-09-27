@@ -220,7 +220,7 @@ def test_emerald_sparse_default_move_parties_never_inherit_retail_moves_or_calc_
     assert all("moves" not in mon for mon in brief["party"])
 
 
-def test_manager_refuses_emerald_by_name_before_calling_upr(emerald_rom, monkeypatch, tmp_path):
+def test_manager_refuses_an_unqualified_jar_for_emerald_before_calling_upr(emerald_rom, monkeypatch, tmp_path):
     from server import upr_pipeline as U
 
     source, output, jar, settings = (tmp_path / n for n in ("clean.gba", "out.gba", "upr.jar", "settings.rnqs"))
@@ -228,7 +228,7 @@ def test_manager_refuses_emerald_by_name_before_calling_upr(emerald_rom, monkeyp
     jar.write_bytes(b"model jar")
     settings.write_bytes(b"model settings")
     monkeypatch.setattr(U.shutil, "which", lambda _: "java")
-    with pytest.raises(U.UprPipelineError, match="Emerald.*Manager"):
+    with pytest.raises(U.UprPipelineError, match="Emerald.*fork jar"):
         U.randomize(str(jar), str(settings), str(source), str(output))
 
 
@@ -278,7 +278,7 @@ def test_protocol_describes_emerald_randomized_admission_and_title_aware_pairing
     assert "Emerald, RR, expansion" not in protocol
 
 
-def test_manager_identification_and_preflight_refuse_emerald_by_name_without_a_rom(tmp_path):
+def test_manager_identification_and_preflight_refuse_an_incomplete_emerald_header(tmp_path):
     from server import upr_pipeline as U
 
     raw = bytearray(0xC0)
@@ -287,14 +287,14 @@ def test_manager_identification_and_preflight_refuse_emerald_by_name_without_a_r
     source.write_bytes(raw)
     info = U.describe_rom(str(source), jar_fork=True)
     assert info["clean"] is False
-    assert "Emerald randomization is not enabled in Manager" in info["title"]
+    assert "Emerald header is not a supported" in info["title"]
     check = U.preflight("", {"a": str(source), "b": str(source)})
     assert check["ok"] is False
     assert check["roms"]["a"]["title"] == info["title"]
-    assert b"BPEE" not in U.GEN3_CODES and U.gen3_identify(bytes(raw)) is None
+    assert U.GEN3_CODES[b"BPEE"] == "emerald" and U.gen3_identify(bytes(raw)) is None
 
 
-def test_manager_provision_surfaces_the_emerald_refusal_before_java(tmp_path, monkeypatch):
+def test_manager_provision_refuses_an_incomplete_emerald_header_before_java(tmp_path, monkeypatch):
     from server import cartridges, upr_pipeline as U
 
     raw = bytearray(0xC0)
@@ -303,7 +303,7 @@ def test_manager_provision_surfaces_the_emerald_refusal_before_java(tmp_path, mo
     source.write_bytes(raw)
     calls = []
     monkeypatch.setattr(U, "randomize", lambda *a, **kw: calls.append("Java"))
-    with pytest.raises(cartridges.CartridgeError, match="Emerald randomization is not enabled in Manager"):
+    with pytest.raises(cartridges.CartridgeError, match="Emerald header is not a supported"):
         cartridges.provision(str(tmp_path / "run"), {"a": str(source), "b": str(source)},
                              companion=False, randomize={"settings_path": "unused.rnqs"})
     assert calls == []

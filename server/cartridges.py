@@ -13,7 +13,7 @@ from patch.gen1.tools import inject
 from patch.tools.make_ups import ups_apply
 from server import patcher, upr_pipeline
 from server.adapters.gen1_rom_scan import RomScanError, identify
-from server.upr_settings import FAMILY_FRLG, FAMILY_PURE, FAMILY_VANILLA
+from server.upr_settings import FAMILY_EMERALD, FAMILY_PURE, FAMILY_VANILLA, GEN3_FAMILIES
 from tools.gen1_playthrough import REPO, _overlay_admission_row
 
 
@@ -84,10 +84,11 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
             raise CartridgeError(f"player {pid}: choose a pinned cartridge; "
                                  f"{info['title'] or 'source ROM not found'}")
     family = upr_pipeline.family_of(sources)
-    if companion and family == FAMILY_FRLG:
+    if companion and family in GEN3_FAMILIES:
         # The FR/LG companion (owner ruling 27) is being built in the Emerald lane; until it
         # is admitted here a FireRed / LeafGreen pair is provisioned without one.
-        raise CartridgeError("no FireRed / LeafGreen companion yet; turn Companion off")
+        title = "Emerald" if family == FAMILY_EMERALD else "FireRed / LeafGreen"
+        raise CartridgeError(f"no {title} companion yet; turn Companion off")
     data = {pid: Path(path).read_bytes() for pid, path in sources.items()}
     if companion and family == FAMILY_VANILLA:
         for rom in data.values():
@@ -102,8 +103,9 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
             raise CartridgeError(upr_pipeline.untrusted_jar_message(jar))
         if family == FAMILY_PURE and not upr_pipeline.jar_is_fork(jar):
             raise CartridgeError(upr_pipeline.PUREGB_RANDOMIZER_REFUSAL)
-        if family == FAMILY_FRLG and not upr_pipeline.jar_is_fork(jar):
-            raise CartridgeError(upr_pipeline.FRLG_RANDOMIZER_REFUSAL)
+        if family in GEN3_FAMILIES and not upr_pipeline.jar_is_fork(jar):
+            raise CartridgeError(upr_pipeline.EMERALD_RANDOMIZER_REFUSAL if family == FAMILY_EMERALD
+                                 else upr_pipeline.FRLG_RANDOMIZER_REFUSAL)
     if companion and (family == FAMILY_PURE or randomize is None):
         data = {pid: _companion(rom, family, infos[pid]) for pid, rom in data.items()}
 
@@ -113,7 +115,7 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
     # Never replace the picked original, including through a symlink or hard link.
     destinations = list(outputs.values())
     if randomize is not None:
-        ext = ".gba" if family == FAMILY_FRLG else ".gbc"
+        ext = ".gba" if family in GEN3_FAMILIES else ".gbc"
         destinations.extend(roms / f"{pid}_randomized{ext}" for pid in sources)
         if companion and family == FAMILY_PURE:
             destinations.extend(roms / f"{pid}_companion.gbc" for pid in sources)

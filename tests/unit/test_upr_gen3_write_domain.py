@@ -242,9 +242,9 @@ def _jar() -> str:
     return jar
 
 
-def _log_spec(log: Path) -> dict:
+def _log_spec(log: Path, family: str = FRLG) -> dict:
     line = next(ln for ln in log.read_text(encoding="utf-8-sig").splitlines() if ln.startswith("Settings String:"))
-    return U.spec_from_parsed(U.parse_settings_string(line.split(": ", 1)[1]), FRLG)
+    return U.spec_from_parsed(U.parse_settings_string(line.split(": ", 1)[1]), family)
 
 
 def test_model_is_the_fresh_build_from_the_pinned_jar_and_roms():
@@ -310,14 +310,15 @@ def _seeded_probe(jar: str) -> Path:
     return out
 
 
-def _run_fork(tmp_path: Path, title: str, spec: dict, *, seed: int | None = None) -> tuple[bytes, bytes, dict]:
+def _run_fork(tmp_path: Path, title: str, spec: dict, *, seed: int | None = None,
+              family: str = FRLG) -> tuple[bytes, bytes, dict]:
     jar = _jar()
     if not shutil.which("java"):
         _rom_skip("java not on PATH")
     clean = _clean(title)
     src, settings, out = tmp_path / f"{title}.gba", tmp_path / "s.rnqs", tmp_path / f"{title}_out.gba"
     src.write_bytes(clean)
-    settings.write_bytes(U.build_spec(spec, family=FRLG))
+    settings.write_bytes(U.build_spec(spec, family=family))
     # Gen3RomHandler.java:4270-4273 can select the original PC Potion. A fresh random
     # seed made the strict own-byte oracle fail by chance. Pin each (title, spec) to a
     # stable 48-bit seed; all isolation cases still MUST change every enabled domain.
@@ -329,7 +330,7 @@ def _run_fork(tmp_path: Path, title: str, spec: dict, *, seed: int | None = None
                     "-s", str(settings), "-i", str(src), "-o", str(out), "-seed", str(seed), "-l"],
                    check=True, capture_output=True, timeout=300)
     assert f"Random Seed: {seed}" in Path(f"{out}.log").read_text(encoding="utf-8")
-    return clean, out.read_bytes(), _log_spec(Path(f"{out}.log"))
+    return clean, out.read_bytes(), _log_spec(Path(f"{out}.log"), family)
 
 
 @pytest.mark.parametrize("title", TITLES)
@@ -354,12 +355,12 @@ def test_every_allowed_option_at_once_stays_in_its_domains(tmp_path, title):
     assert r["stray"] == [], r["named"]                        # levels inside statics: no tightness)
 
 
-def _assert_tight(title: str, clean: bytes, out: bytes, enabled: set[str]):
+def _assert_tight(title: str, clean: bytes, out: bytes, enabled: set[str], model: dict = MODEL):
     """0 stray bytes AND every enabled domain received a byte no other enabled domain explains
     (a domain granted to a setting that never writes it -- a WIDENED domain -- fails here)."""
-    r = W.audit(title, clean, out, enabled)
+    r = W.audit(title, clean, out, enabled, model)
     assert r["stray"] == [], r["named"]
-    domains = MODEL["titles"][title]["domains"]
+    domains = model["titles"][title]["domains"]
     changed = W.changed_offsets(clean, out)
     for d in sorted(enabled - {"baseline"}):
         others = W._merge(s for o in enabled - {d} for s in W._ranges(domains[o]))
