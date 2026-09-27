@@ -71,3 +71,19 @@ def test_rr_selector_resolves_primary_tables_and_the_distinct_legacy_fallback(rr
         rr.table_heads(bytes(changed))
 
 
+def test_catalog_diff_retains_species_and_slot_order_discrepancies():
+    headers = rr.read_table(bytes(fake_rom()), rr.BASE+0x20)
+    decoded = {"rom_sha1": "model", "tables": {"Day": headers, "Night": [], "Fallback": []}}
+    areas = {"3:19": "route_1"}
+    catalog = {"route_1": {"Day": [{"species_id": 288, "min_level": 2, "max_level": 4}]*12}}
+    diff = rr.catalog_diff(decoded, areas, catalog)
+    assert diff["mismatched_methods"] == 1
+    assert diff["mismatches"][0]["rom_only"][0]["species_id"] == 1222
+    assert diff["mismatches"][0]["catalog_only"][0]["species_id"] == 288
+    headers[0]["habitats"]["land"]["slots"][0]["species_id"] = 19
+    catalog["route_1"]["Day"] = [
+        {"species_id": sid, "min_level": 2, "max_level": 4} for sid in [1222, 19] + [1222]*10
+    ]
+    reordered = rr.catalog_diff(decoded, areas, catalog)["mismatches"]
+    assert len(reordered) == 1 and reordered[0]["order_differs"]
+    assert reordered[0]["rom_only"] == reordered[0]["catalog_only"] == []

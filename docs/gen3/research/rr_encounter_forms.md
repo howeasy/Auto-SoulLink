@@ -67,35 +67,166 @@ The former JSON instead used 288, 19 and 52. Day's Zigzagoon remains 288.
 This supports Emerald-2's separate base Linoone289/Galarian Linoone1223 paired
 family control; its production family-map correction is a separate owned change.
 
-## Source chain and scope
+## ROM-authoritative generation
 
-The generator reads the hash-pinned community C snapshot from
-`data/gen3_rr_sources.lock.json` through `fetch_rr_sources.cached_source`.
-Wild source SHA256: `24ebfcda8be7e0fce44cd47165d0acb70154d2e05c825a9480112351c6429ea9`.
-Species-header SHA256: `775bedd9b0afd37b5e62f9d18558302992aa4149dd1150c96033ee04dadf71cd`.
-Both were fetched into this worktree's ignored `data/.rr_src_cache/` and verified.
+The initial bounded repair corrected 155 IDs across 66 form names/31 areas, but
+left unrelated community-data drift. The coordinator explicitly expanded this
+card to replace the entire encounter catalog with ROM-authoritative generation.
+The final generator no longer uses community slot populations, levels or rates.
 
-`gen_rr_encounters._resolve_species_id` formerly tried the display name and then
-`display.split()[0]`. `Zigzagoon G` therefore became base Zigzagoon. The mapping
-repair uses the same complete-constant naming rules as `gen_rr_species.to_display`
-and fails on an unknown form. It preserves encounter display names and other keys.
+`gen_rr_encounters.py` reads every override/fallback header and every statically
+selectable fallback variant. It follows RR's map/habitat precedence, omits
+SPECIES_NONE slots, and deduplicates shared slot arrays within an area. The
+probabilities come from RR's own chooser CMP instructions at
+`0808274C` (land), `08082808` (water/rock) and `0808285C` (fishing). They are
+conditional slot rates for their source pool; combining floors does not invent
+one normalized probability distribution for the whole dungeon.
 
-The broader census also finds non-form source/parser/projection drift. That is
-tracked separately from the form correction; final scope and verification follow
-in the completion receipt. The raw ROM uses additional species IDs
-1356,1361,1362,1371 absent from the current `rr_species.json` (maximum1355).
-The primary header at map1:4 has no coarse `area_map.json` key; it remains in the
-raw census instead of being assigned a guessed vanilla area.
+The result has **81 client location keys and 3,745 slots**, replacing 53/2,103.
+Treasure Beach has distinct Day/Night rod tables, so its methods retain those
+period labels. Other identical non-land populations share the ordinary method
+label. Land retains Day/Night separately. All 134 map keys are covered through
+the existing client coarse-area routing or its existing fine-location fallback;
+no vanilla wild data or guessed area names enter generation. The three fine
+fallbacks are map1:4 `ss_anne_exterior`, map3:57 `five_island_memorial_pillar`,
+and map3:63 `seven_island_sevault_canyon_entrance`.
 
-Reproduce the raw census:
+`data/gen3_rr_encounters_rom.json` records each output row's source map, period,
+variant, selected table, header/info/slot addresses and four slot bytes. It also
+records chooser rates, input hashes and all excluded NONE addresses. Gameplay
+fields come from ROM; names come from the species catalog or pinned display-label
+metadata. Changing labels cannot change species IDs, levels or probabilities.
+
+`rr_encounter_forms_diff.json` contains before/after details for **every area**.
+Against the complete selection model the old file differs in **66 areas and
+197 methods**; the regenerated file differs in **zero areas/methods**. This
+includes the initial forms bug, stale populations, Route10/24/25 swaps, missing
+fallback areas, and commented/placeholder rows that the community parser leaked.
+Example: Route22 Good Rod's first slot is ROM species1144 **Clobbopus**, not the
+old Carvanha326. (An earlier message called1144 Arrokuda; that name was wrong.)
+
+## Species-name extension and provenance
+
+RR's own header pointers give name table `094042CC` (11-byte rows, pointer at
+`08000144`) and base stats `097B98EC` (28-byte rows, pointer at `080001BC`).
+The ROM contains 20 additional named/stat-bearing records, IDs1356–1375, after
+the old catalog maximum1355. Record1376 has an unterminated name and six zero
+stats, marking the end of this verified contiguous extension; this is a pinned
+RR4.1 boundary, not an inferred limit for every CFRU build.
+
+Every added record is independently read from those ROM tables. Existing display
+labels remain stable. The ROM's short names (e.g.1361 `Polchageis`) do not always
+carry full spelling or form labels. For those presentation details, the pinned
+Jwow display key supplies `Poltchageist`, `Ursaluna-Bloodmoon`, Ogerpon masks, etc.
+Its numeric ID and six stats must match the ROM record before a label is accepted.
+No JavaScript executes: the data-only object is parsed through a literal AST.
+
+`data/gen3_rr_species_rom.json` stores raw name/base-stat bytes, addresses,
+ROM names, display-label source and the extension boundary. All nonzero wild IDs
+resolve in the final **1,349-entry** species catalog. Missing/ambiguous tail data
+is a named generator failure, not an unknown species on the panel.
+
+The pinned community sources are display metadata only:
+
+- wild C SHA256 `24ebfcda8be7e0fce44cd47165d0acb70154d2e05c825a9480112351c6429ea9`;
+- species header SHA256 `775bedd9b0afd37b5e62f9d18558302992aa4149dd1150c96033ee04dadf71cd`;
+- Jwow data.js SHA256 `04c9dc94b6a7e3d33f5dcb5e804487466e7a249f4d340cf19853d70f37596df9`.
+
+Their URLs/commits remain in `data/gen3_rr_sources.lock.json`. They were fetched
+through its verifying cache. ROMs are never committed. Generated catalogs use
+UTF-8/LF so the intentional catalog-byte hash in the evolution artifact survives
+Windows checkout/regeneration.
+
+## Consumer audit and C3 composition
+
+- `server/adapters/gen3_frlge.py:288-292,620-632` loads/returns the RR JSON as-is;
+  `server/server.py:1392-1399,2912` publishes it in per-player status. The API did
+  expose base IDs beside regional labels.
+- `server/templates/_board.html:201-207` renders unique **name** strings, not
+  species IDs or sprites. Names such as `Zigzagoon G` already looked regional;
+  that text was not evidence that their numeric IDs were correct. The final
+  catalog preserves those existing display abbreviations where available.
+- `tools/gen3_clause_rows.py` consumed JSON IDs for wild capture/clause/family
+  oracles. Its old fixture assumed base Zigzagoon288 exists in both times.
+  C3 now consumes the ROM reader and uses the disclosed base/Galar evolved pair.
+- Production dupes use the live species ID and `adapter.evo_family`, not encounter
+  JSON. The initial base incorrectly separated1222/1223 and attached1154 to288.
+  Emerald-2's completed C3 `97205f26632dd9abb179af5666f0894e5d36e728` was merged as
+  `a5294c0`; it supplies the ROM-derived RR family generator and corrected test.
+  Its generated artifact was regenerated under the transferred lease against
+  this extended name catalog: **1,349 species, 735 edges**.
+- The coordinator expanded this card to fix the tail's missing production types.
+  `gen_rr_types.py` now reads ROM type bytes for every nonempty catalog record,
+  producing 1,348 type entries. An explicit bijection maps raw0–17 identically
+  and rawFairy23 to canonicalFairy18; all raw IDs present are round-trip tested.
+  `data/gen3_rr_types_rom.json` records every source address/raw pair/conversion.
+  Twenty new rows are added; the ROM also corrects Raichu26's secondary Normal
+  type and Masquerain312's type order. The empty reserved record920 is not given
+  invented types. Generic/non-RR type behavior is unchanged.
+
+- The full gate exposed that `pokemon_data.species_name` still used only the
+  static generic table, emitting `#1356`–`#1375`. The RR-only lookup now consumes
+  the generated catalog. All existing names are unchanged; generic/NatDex names
+  keep their old map. The adapter and calculator name-resolution tests verify
+  every newly named entry, with no new allowlist or weakened assertion.
+
+The catalog describes statically selectable tables, including
+conditional fallback variants. It does not observe a save's current override
+pointer, swarm state or encounter-modifying ability; those limits remain explicit.
+
+## Reproduction and tests
 
 ```powershell
-python tools/rr_rom_encounters.py --rom 'C:/slink-wt/g3-int/patch/build/rr_clean.gba' --output .cache/rr-wild-census.json
 $env:SLINK_RR_ROM='C:/slink-wt/g3-int/patch/build/rr_clean.gba'
-python -m pytest tests/unit/test_rr_rom_encounters.py -q -p no:randomly
+python tools/gen_rr_species.py --rom $env:SLINK_RR_ROM
+python tools/gen_rr_encounters.py --rom $env:SLINK_RR_ROM
+python tools/gen_rr_types.py --rom $env:SLINK_RR_ROM
+python tools/gen_rr_evolutions.py --rom $env:SLINK_RR_ROM
+python tools/rr_rom_encounters.py --rom $env:SLINK_RR_ROM --catalog data/games/gen3_frlge/rr_encounters.json --output .cache/rr-wild-census.json --diff-output .cache/rr-catalog-check.json
+python -m pytest tests/unit/test_rr_encounter_forms.py tests/unit/test_rr_rom_species.py tests/unit/test_rr_rom_encounters.py -q -p no:randomly
 ```
 
-Initial reader controls: 5 passed, covering real RR heads/Route1, changed
-selector bytes, a synthetic moved party-species slot array, out-of-range
-pointers and a bounded missing sentinel. Form-generator red controls reproduced
-9 failures before the mapping repair; all 13 mapping controls pass afterward.
+The tests first reproduced the collapsed form IDs and four unnamed live wild IDs.
+They now read every generated slot back from its ROM pointer, verify probability
+intervals, header/info/slot ownership and complete source coverage, and exercise
+sample areas including both Route1 periods. Bounds, missing sentinel, changed
+selector, slot order, unknown form, wrong display metadata and executable display
+input all have negative controls. The C3 composition resolves the earlier failing
+single-family Night fixture test. The final full-gate receipt follows below.
+
+## Final verification receipt — 2026-09-27
+
+Reader `58ae29fc`; initial form mapping `546c4bc6`; C3 composition `a5294c02`;
+ROM-authoritative encounters/names/types/family outputs `d1231c5a`; RR runtime
+name binding `58c7e5cc84c2d81fa1a187a142da5706d149db09`.
+The latter was the source HEAD for the completed full gate.
+
+```text
+source /c/slink-wt/g3-env.sh
+python -m pytest tests/unit -q -p no:randomly -n 2 --dist=loadfile --maxfail=1 -o tmp_path_retention_policy=failed
+12374 passed, 4388 skipped, 2 warnings in 373.38s (0:06:13)
+Exit code: 0
+```
+
+Explicit process-local bindings: `SLINK_RR_ROM=C:/slink-wt/g3-int/patch/build/rr_clean.gba`,
+`PYTHONPATH=C:/slink-wt/g3-t5-fr-duo/.cache/test-deps`,
+`SLINK_ARMGCC=E:/Google Drive/SLink/patch/vendor/armgcc/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin`,
+TEMP/TMP/TMPDIR=`C:/slink-wt/g3-rr-enc-forms/.cache/test-temp`.
+The skips are not qualification passes. Both warnings are the existing invalid
+`\c` literals observed by the legacy-runtime AST check.
+
+Full output: `.cache/rr-enc-forms-full-unit-retry.txt`, SHA256
+`5e365e8946df897e45484085267e1c793c50951a3c018b3795fdb67e0adfc31d`.
+The first full run reached 10,830 passes/4,057 skips before the calculator-name
+test exposed the missing runtime catalog lookup. That real consumer bug was
+fixed, and 242 name/adapter/calculator tests passed before the complete rerun.
+Its failure output is retained at `.cache/rr-enc-forms-full-unit.txt`, SHA256
+`a83061fc1856037f87d886748bc0a3b8860e782822edd91f5b515fc2c40a894b`.
+
+The focused encounter/name/type/family/generator run passed 189 tests with ten
+optional skips. Generator `--check` passes for species, encounters, types and
+evolution families. Ruff passes. The audit's related-output hashes match the
+committed LF bytes, and the family artifact binds the committed species catalog.
+The before/after per-area drift receipt is `rr_encounter_forms_diff.json`:
+66 areas/197 methods differing before, zero afterward. No emulator was launched,
+and no T5 newline/oracle file was touched by this card.

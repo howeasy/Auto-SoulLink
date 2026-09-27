@@ -587,13 +587,27 @@ for _cfru_id, _name in SPECIES_NAMES.items():
 del _cfru_id, _name, _nat
 
 
+def _rr_species_names() -> dict[int, str]:
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "data/games/gen3_frlge/rr_species.json"
+    if not path.exists():
+        return {}
+    return {int(sid): name for sid, name in json.loads(path.read_text(encoding="utf-8")).items()}
+
+
+_RR_SPECIES_NAMES = _rr_species_names()
+
+
 def species_name(species_id: int, is_rr: bool = False) -> str:
     """Look up a species display name by ID.
 
     species_id is ALWAYS a CFRU internal ID (all ROM types use this).
-    SPECIES_NAMES is keyed by CFRU ID, so we always use it directly.
-    The is_rr parameter is kept for API compat but no longer changes behavior.
+    RR uses its generated catalog; generic/NatDex names retain the existing map.
     """
+    if is_rr and species_id in _RR_SPECIES_NAMES:
+        return _RR_SPECIES_NAMES[species_id]
     return SPECIES_NAMES.get(species_id, f"#{species_id}")
 
 
