@@ -42,29 +42,45 @@ index, no offset -- same convention gen_gen3_trainers.py documents for FR/LG).
 
 Key trainers (Upcoming Key Trainers panel): TRAINER_CLASS_LEADER, ELITE_FOUR, CHAMPION, RIVAL
 (Brendan/May -- hardcoded per row in this build, not synthesized like FRLG's player-name
-substitution), AQUA_LEADER, MAGMA_LEADER, AQUA_ADMIN, MAGMA_ADMIN. No Vs Seeker rematch-tier or
-fight_label handling in this pass; level_cap is the trainer's own highest party level.
+substitution), AQUA_LEADER, MAGMA_LEADER, AQUA_ADMIN, MAGMA_ADMIN. level_cap is the trainer's own
+highest party level.
 
 Area: reuse tools/gen_gen3_trainers.py's generic map-graph helpers (map.json/scripts.inc schema
 is identical to pret's, since expansion forked pret's map tooling) against the PRE-EXISTING
 data/games/gen3_exp/28877d73/area_map.json ("group:num" -> area id; owned by another XC phase,
 READ ONLY here). Confirmed against this pin's data/maps/map_groups.json: group 0 index 0 is
-PetalburgCity, and area_map.json's "0:0" is "petalburg_city".
+PetalburgCity, and area_map.json's "0:0" is "petalburg_city". Vs Seeker rematch tiers (the
+TRAINER_X_2.._5 constants that never appear in a map trainerbattle script -- a separate rematch
+system re-fights the same NPC in place) get their area from src/battle_setup.c's gRematchTable
+(include/battle_setup.h's `struct RematchTrainer {trainerIds[5]; mapGroup; mapNum}`), fed through
+the SAME map_area (map id -> area, including its BFS-nearest-mapped-area fallback for a map like
+Mt. Chimney that has no area of its own) so a rematch tier lands in the exact map the pinned
+source re-fights it in -- never a same-class/same-name guess (OMP cx-081c78d3 F2: Brendan and May
+alone share 16 rival fights under one (class, name), so guessing by that pair is not safe; the
+rival battles aren't in gRematchTable at all -- they're plain trainerbattle scripts already found
+by trainer_maps() -- so they get no fallback and simply keep whatever tmaps found, or no area).
 
 Names (species/move/item/ability) are resolved through Gen3ExpansionAdapter itself
 (species_name/move_name/item_name/ability_name + calc_name()) so trainer sets speak the exact
 calc-spelling table the rest of the adapter already uses -- no separate name table here.
+MOVE_HIDDEN_POWER never carries an explicit type in this build (no field for one exists on
+struct TrainerMon -- checked include/data.h; the type is the vanilla per-mon IV formula, which
+this generator has no per-mon IV-to-type table for), so it is emitted as the bare move name
+"Hidden Power", not "Hidden Power <Type>" (OMP cx-081c78d3 F10).
 
-Prep tab base-name collisions: text before " | " in a setdex key is the Prep tab's grouping
-name (calc/src/js/slink_bridge.js's _buildTrainerIndex, `setKey.slice(0, pipeIdx)`); text after
-it is an opaque uniqueness key, never displayed. This build individually names 854/855
-trainers (a big improvement over the generic "GRUNT"/blank names FRLG's table has to fall back
-on), but a name like "GRUNT" (53 hits) or "MAY"/"BRENDAN" (16 each) still repeats across
-unrelated battles -- exactly the "generic/ambiguous name" gap Emerald.js's own header already
-documents as unchecked. This generator does not try to solve that (same accepted limitation);
-_dedupe_key() only guarantees the JS object literal never silently drops a party slot to a
-duplicate key -- full species+level fidelity, whatever the Prep tab's own display grouping does
-with it.
+Prep tab base-name collisions: the Prep tab groups a setdex key by the text before " | "
+(calc/src/js/slink_bridge.js's _buildTrainerIndex, `setKey.slice(0, pipeIdx)`) into ONE encounter
+list, so two different trainer ids must never render the same base text -- see compute_bases()
+(OMP cx-081c78d3 F1: a rematch tier's discriminator used to sit after the pipe, an opaque
+uniqueness key that never affects grouping, so a gym leader's five rematch tiers all merged into
+one fake combined party). compute_bases() gives every trainer id its own base: a name that's
+already unique keeps it bare; a gRematchTable-linked rematch chain (TRAINER_X_1.._5, same
+class+name) gets "<base> Rematch N"; any other collision (two unrelated trainers sharing a
+generic class+name like "GRUNT") is disambiguated by trainer id order, "<base> (2)", "<base> (3)",
+... -- never by how many times a name has been seen for one species (that varies per species and
+doesn't track trainer identity). _dedupe_key() still guards the JS object literal against two
+mons of the SAME trainer's OWN party (a duplicate species in one party) silently colliding on one
+key; that's a within-trainer collision, correctly rendered as one encounter, not the bug above.
 
 Run against a LOCAL copy of the pinned source tree (never point this at a live shared host from
 here -- copy only the files you need, see the card's instructions):
@@ -97,7 +113,6 @@ from tools.gen_gen3_trainers import (  # noqa: E402
 OUT_JSON = ROOT / "data/games/gen3_exp/28877d73/gen3_exp_trainers.json"
 OUT_JS = ROOT / "calc/src/js/data/sets/games/EmeraldExpansion.js"
 AREA_MAP = ROOT / "data/games/gen3_exp/28877d73/area_map.json"
-LOCK = ROOT / "data/gen3_exp_sources.lock.json"
 
 KEY_CLASSES = {"LEADER", "ELITE_FOUR", "CHAMPION", "RIVAL",
                "AQUA_LEADER", "MAGMA_LEADER", "AQUA_ADMIN", "MAGMA_ADMIN"}
@@ -181,6 +196,54 @@ def parse_learnset_tables(src: Path) -> dict[str, list[tuple[int, str]]]:
                                     read(f), re.S):
             out[sym] = [(int(lv), mv) for lv, mv in re.findall(r"LEVEL_UP_MOVE\(\s*(\d+),\s*(MOVE_\w+)\)", body)]
     return out
+
+
+def parse_rematch_groups(battle_setup_c: str) -> list[tuple[list[str], str]]:
+    """[(["TRAINER_WATTSON_1", ..., "TRAINER_WATTSON_5"], "MAP_MAUVILLE_CITY"), ...] from
+    src/battle_setup.c's gRematchTable -- ground truth for where a Vs Seeker rematch tier is
+    fought (include/battle_setup.h's `struct RematchTrainer {trainerIds[5]; mapGroup; mapNum}`,
+    filled by this file's own `REMATCH(trainer1..5, map)` macro). Matches only real invocations
+    ("[REMATCH_X] = REMATCH(...)"), never the macro's own `#define REMATCH(trainer1, ...)`
+    signature line (no "=" precedes "REMATCH(" there)."""
+    out = []
+    for args in re.findall(r"=\s*REMATCH\(([^)]*)\)", battle_setup_c):
+        parts = [p.strip() for p in args.split(",")]
+        if len(parts) == 6:
+            out.append((parts[:5], parts[5]))
+    return out
+
+
+def compute_bases(trainers: dict[int, dict]) -> dict[int, str]:
+    """tid -> the Prep tab base name (text before " | ") for that trainer, never shared with any
+    OTHER trainer id (see module docstring, OMP cx-081c78d3 F1)."""
+    raw_base = {tid: " ".join(filter(None, [t["class"], t["name"]])).strip() or f"Trainer #{tid}"
+                for tid, t in trainers.items()}
+    groups: dict[str, list[int]] = {}
+    for tid, b in raw_base.items():
+        groups.setdefault(b, []).append(tid)
+    bases: dict[int, str] = {}
+    for b, tids in groups.items():
+        if len(tids) == 1:
+            bases[tids[0]] = b
+            continue
+        tiers = {}
+        for tid in tids:
+            m = re.search(r"_(\d+)$", trainers[tid]["const"])
+            if m:
+                tiers[tid] = int(m.group(1))
+        # A recognisable rematch chain: every trainer in the collision has its own numeric
+        # tier suffix (TRAINER_X_1..TRAINER_X_N), one trainer per tier, tiers 1..len(tids).
+        if len(tiers) == len(tids) and sorted(tiers.values()) == list(range(1, len(tids) + 1)):
+            for tid in tids:
+                tier = tiers[tid]
+                bases[tid] = b if tier == 1 else f"{b} Rematch {tier - 1}"
+        else:
+            # Generic name collision (e.g. two unrelated "GRUNT" trainers): dedupe by trainer
+            # id, never by how many times a species has already seen this base (that count
+            # depends on which species is asking, not on trainer identity).
+            for i, tid in enumerate(sorted(tids)):
+                bases[tid] = b if i == 0 else f"{b} ({i + 1})"
+    return bases
 
 
 def _dedupe_key(slot: dict, base: str) -> str:
@@ -284,19 +347,25 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
 
     # Rematch tiers (TRAINER_ROXANNE_2.._5 etc.) aren't triggered by a map trainerbattle script
     # at all (a separate rematch system re-fights the same NPC in place), so they never get an
-    # area from tmaps. pret's own gen_gen3_trainers.py handles the equivalent case by reading
-    # src/vs_seeker.c's rematch table; parsing this build's own rematch tables is out of scope
-    # for this card, so instead: any key trainer sharing (class, name) with one that DOES have an
-    # area inherits it -- the rematch NPC fights in the same spot as the trainer it rematches.
-    by_identity: dict[tuple[str, str], str] = {}
-    for t in trainers.values():
-        if t.get("key") and t.get("area"):
-            by_identity.setdefault((t["class"], t["name"]), t["area"])
-    for t in trainers.values():
-        if t.get("key") and not t.get("area"):
-            area = by_identity.get((t["class"], t["name"]))
-            if area:
-                t["area"] = area
+    # area from tmaps. gRematchTable is the pinned source's own record of where each rematch
+    # chain is fought -- fed through the same map_area BFS-fallback map every other area comes
+    # from, so a map with no area of its own (Mt. Chimney) still resolves the same way a
+    # trainerbattle script placed there would. This is the actual data, never a (class, name)
+    # guess (OMP cx-081c78d3 F2) -- Brendan/May's 16 rival fights are NOT in gRematchTable at
+    # all (they're ordinary trainerbattle scripts already found by tmaps above), so they get no
+    # fallback here and simply keep whatever tmaps found, or no area.
+    for const_names, map_name in parse_rematch_groups(read(src / "src/battle_setup.c")):
+        area = map_area.get(map_name)
+        if not area:
+            continue
+        for const_name in const_names:
+            tid = opp_ids.get(const_name)
+            if tid in trainers:
+                trainers[tid]["area"] = area
+
+    bases = compute_bases(trainers)
+    for tid, t in trainers.items():
+        t["calc_label"] = bases[tid]
 
     by_area: dict[str, list[int]] = {}
     for tid, t in sorted(trainers.items()):
@@ -315,7 +384,7 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> tuple[dict, dict]:
 
     setdex: dict[str, dict[str, dict]] = {}
     for tid, t in sorted(trainers.items()):
-        base = " ".join(filter(None, [t["class"], t["name"]])).strip() or f"Trainer #{tid}"
+        base = bases[tid]
         for mon in t["party"]:
             sp = mon["species"]
             if not sp:

@@ -128,7 +128,7 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 | EC-2 | `Gen3Adapter` keeps `rom_type`; title data (statics, items overlay, sprites `generation-iii/emerald`, label "Emerald", title-aware area catalog) | SERVER | ✓ | ✓ | ◐ |
 | EC-3 | By-name refusal (`lua/slink.lua`) and `UNADMITTED_GAMES` flip only with EG4 (ruling 24) | CONTROL | · | · | · |
 | EC-4 | Conformance World rows + capabilities fixture regenerated | MODEL | ✓ | ✓ | — |
-| XC-1 | `gen3_expansion.py` adapter contract (full `base.py` surface; empty trainer/encounter = recorded limit); `pokemon_data.py` untouched | SERVER | · | · | · |
+| XC-1 | `gen3_expansion.py` adapter contract (full `base.py` surface; trainer panels served from `gen3_exp_trainers.json` since XC4/XC4b, empty encounter table = recorded limit); `pokemon_data.py` untouched | SERVER | · | · | · |
 
 ### EG4 candidate final cut (2026-09-26; `claude/gen3-emerald-rc2`)
 
@@ -190,7 +190,8 @@ randomized Emerald (Gen 3 ruling 29), trainer names / Upcoming Key Trainers / ca
 ## Recorded limits
 
 Carried from the shipped Gen 3 contract (`docs/gen3_requirements.md`), plus: expansion reference build
-serves no trainer/encounter-table panels (adapter returns empty).
+serves trainer panels (trainer_info/trainers_for_area/trainer_party/trainer_brief, XC4/XC4b) but no
+encounter-table panel (`encounter_table()` returns `None` -- adapter returns empty).
 
 ## Receipts
 
