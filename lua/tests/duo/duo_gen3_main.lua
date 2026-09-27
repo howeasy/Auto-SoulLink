@@ -289,6 +289,29 @@ else
     end)
 end
 
+--- gBattleMons/move-table geometry. Vanilla: pret struct BattlePokemon (0x58 bytes: moves +0x0C,
+--- pp +0x24, hp +0x28) and struct BattleMove (effect byte 0, power byte 1) -- CFRU keeps both.
+--- X3: the expansion reference build redesigned both; its geometry is the build's own compiler
+--- facts (facts.json BattlePokemon 140 bytes, MoveInfo.power a 9-bit field). Its effect enum is
+--- not CFRU's, so no effect id is trusted there (move_effect -> nil: any_move_slot skips it).
+local BM = { size = 0x58, moves = 0x0C, pp = 0x24, hp = 0x28,
+             power = { off = 1, width = 1, shift = 0, mask = 0xFF }, effect_off = 0 }
+if title == TITLES.EXP_TITLE then
+    BM = guard("expansion battle geometry (facts.json)", function()
+        local st = read_json("data/games/gen3_exp/28877d73/facts.json").structs
+        local b, pw = st.BattlePokemon, st.MoveInfo.bitfields.power
+        return { size = b.size, moves = b.fields.moves.offset, pp = b.fields.pp.offset,
+                 hp = b.fields.hp.offset,
+                 power = { off = pw.offset, width = pw.width, shift = pw.shift, mask = (1 << pw.bits) - 1 } }
+    end)
+end
+--- `move`'s base power from the pack's move table (rom.BATTLE_MOVES_ADDR, derived.BATTLE_MOVE_ENTRY_SIZE).
+local function move_power(move)
+    local at = profile.rom.BATTLE_MOVES_ADDR + move * profile.derived.BATTLE_MOVE_ENTRY_SIZE + BM.power.off
+    local raw = BM.power.width == 1 and memory.read_u8(at) or memory.read_u16_le(at)
+    return (raw >> BM.power.shift) & BM.power.mask
+end
+
 -- ── seams teed before run.lua binds them ─────────────────────────────────────────────────
 local seen_tx, seen_rx, tx, rx = {}, {}, {}, {}
 local witness_saves, wrong_save_hud = 0, false
@@ -356,7 +379,7 @@ local function faint_site_now()
     local slot = memory.read_u16_le(S.gBattlerPartyIndexes, "System Bus")
     local base = reader.party_base()
     return { frame = emu.framecount(), active = memory.read_u8(S.gActiveBattler, "System Bus"),
-             battler0_slot = slot, battle_hp = memory.read_u16_le(S.gBattleMons + 0x28, "System Bus"),
+             battler0_slot = slot, battle_hp = memory.read_u16_le(S.gBattleMons + BM.hp, "System Bus"),
              party_hp = base and memory.read_u16_le(base + slot * 100 + 0x56, "System Bus") or -1,
              counter = memory.read_u8(S.gBattleResults, "System Bus") }
 end
@@ -853,7 +876,7 @@ ctx.handoff = { slot_addr = S.gBattlerControllerFuncs, from = S.PlayerBufferExec
 --- hp +0x28), as a set: no SLink write may touch either.
 function ctx.hp_addrs(slot)
     local base = reader.party_base() or profile.ram.PARTY_BASE
-    return { [base + slot * 100 + 0x56] = true, [S.gBattleMons + 0x28] = true }
+    return { [base + slot * 100 + 0x56] = true, [S.gBattleMons + BM.hp] = true }
 end
 --- One frame's engine reads for the carrier. gMain.heldKeysRaw +0x28 (pret include/main.h);
 --- gBattleResults playerFaintCounter +0 / lastUsedMovePlayer +0x22 (include/battle.h); battler 0's
@@ -866,7 +889,7 @@ function ctx.engine_sample(slot)
     return { frame = emu.framecount(), in_battle = play.in_battle(cp) and true or false,
              ctrl0 = u32(S.gBattlerControllerFuncs), exec = u32(S.gBattleControllerExecFlags),
              keys = u16(S.gMain + 0x28), battler0_slot = u16(S.gBattlerPartyIndexes),
-             battle_hp = u16(bm + 0x28), pp = { u8(bm + 0x24), u8(bm + 0x25), u8(bm + 0x26), u8(bm + 0x27) },
+             battle_hp = u16(bm + BM.hp), pp = { u8(bm + BM.pp), u8(bm + BM.pp + 1), u8(bm + BM.pp + 2), u8(bm + BM.pp + 3) },
              status3 = u32(S.gStatuses3), counter = u8(S.gBattleResults), last_move = u16(S.gBattleResults + 0x22),
              outcome = u8(S.gBattleOutcome), party_hp = base and u16(base + slot * 100 + 0x56) or -1 }
 end
@@ -1253,9 +1276,9 @@ function ctx.status_move_slot()
     local base = S.gBattleMons                            -- battler 0
     local table_at, size = profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE
     for slot = 0, 3 do
-        local move = memory.read_u16_le(base + 0x0C + slot * 2)
-        local pp = memory.read_u8(base + 0x24 + slot)
-        if move ~= 0 and pp > 0 and memory.read_u8(table_at + move * size + 1) == 0 then return slot end
+        local move = memory.read_u16_le(base + BM.moves + slot * 2)
+        local pp = memory.read_u8(base + BM.pp + slot)
+        if move ~= 0 and pp > 0 and move_power(move) == 0 then return slot end
     end
 end
 
@@ -1276,8 +1299,8 @@ local SELF_DAMAGE_EFFECTS = {
 --- or nil if the table isn't known -- never pret FR's gBattleMoves on RR (G5-RR-MOVEPICK).
 local function move_effect(move)
     local table_at, size = profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE
-    if not (table_at and size and move and move ~= 0) then return nil end
-    return memory.read_u8(table_at + move * size)
+    if not (table_at and size and move and move ~= 0 and BM.effect_off) then return nil end
+    return memory.read_u8(table_at + move * size + BM.effect_off)
 end
 
 --- The first move of battler 0 with PP left AND a known, non-self-damaging effect: lose_active's
@@ -1292,8 +1315,8 @@ end
 local function any_move_slot()
     local base = S.gBattleMons                            -- battler 0
     for slot = 0, 3 do
-        local move = memory.read_u16_le(base + 0x0C + slot * 2)
-        local pp = memory.read_u8(base + 0x24 + slot)
+        local move = memory.read_u16_le(base + BM.moves + slot * 2)
+        local pp = memory.read_u8(base + BM.pp + slot)
         if move ~= 0 and pp > 0 then
             local effect = move_effect(move)
             if effect and not SELF_DAMAGE_EFFECTS[effect] then return slot, effect end
@@ -1507,7 +1530,7 @@ function ctx.lose_active(key, label)
     -- RR R4 at 97672e6d spent all 30 of Leer's PP on one foe and failed "no no-damage move with
     -- PP". After STALL_TURNS turns with no HP lost, RUN and hunt a fresh foe (G5-RR-MOVEPICK).
     local STALL_TURNS = 6
-    local function lead_hp() return memory.read_u16_le(S.gBattleMons + 0x28) end
+    local function lead_hp() return memory.read_u16_le(S.gBattleMons + BM.hp) end
     local last_hp, stalled, hunts, used_status, fallback_effect = nil, 0, 1, false, nil
     -- Attribution guard (G5-RR-CLEAN-2): any_move_slot already excludes self-damaging/unknown-
     -- effect moves, so this should never fire on real data -- it exists so a faint that DOES
@@ -1560,7 +1583,7 @@ function ctx.lose_active(key, label)
             last_hp = hp
             if stalled >= STALL_TURNS and hunts < 6 then
                 log(fmt("LOSE_REHUNT %s turn=%d hp=%d foe_hp=%d", key, turn_no, hp,
-                        memory.read_u16_le(S.gBattleMons + 0x58 + 0x28)))
+                        memory.read_u16_le(S.gBattleMons + BM.size + BM.hp)))
                 local ran, rwhy = ctx.run_away(label .. " rehunt")
                 if not ran then return false, label .. ": re-hunt escape: " .. tostring(rwhy) end
                 if not ctx.hunt(label .. " rehunt") then return false, label .. ": re-hunt found no encounter" end

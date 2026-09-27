@@ -2546,13 +2546,16 @@ def battle_model():
     consts = re.search(r"^local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = .*$", text, re.M)
     outcome = re.search(r"^local B_OUTCOME_WON = .*$", text, re.M)
     self_damage = re.search(r"^local SELF_DAMAGE_EFFECTS = \{.*?^\}$", text, re.M | re.S)
+    # X3: the vanilla gBattleMons/move-table geometry (the driver's BM table) and its power read
+    geometry = re.search(r"^local BM = \{.*?effect_off = 0 \}$", text, re.M | re.S)
+    assert geometry, "duo_gen3_main.lua must define the vanilla BM geometry"
     menus = re.findall(r"^local function (?:ctrl0|action_menu_up|move_menu_up)\(\).*$", text, re.M)
     assert consts and outcome and self_damage and len(menus) == 3
     runtime.execute("\n".join([consts.group(0), outcome.group(0), *menus,
                                _lua_defs(DRIVER, ["game_press"]),
                                "local function press(btn, gap) return game_press(btn, joypad.set, G.advance,"
                                " function() return memory.read_u16_le(GMAIN + 0x2C) end, gap, 30) end",
-                               self_damage.group(0),
+                               self_damage.group(0), geometry.group(0), _lua_defs(DRIVER, ["move_power"]),
                                _lua_defs(DRIVER, ["move_effect", "steer", "ctx.choose_action",
                                                   "ctx.status_move_slot", "any_move_slot", "ctx.use_move",
                                                   "ctx.lose_active"]),

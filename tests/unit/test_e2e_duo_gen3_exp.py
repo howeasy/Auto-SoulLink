@@ -109,3 +109,20 @@ def test_the_save_witness_reads_the_sites_own_save_type_register(point, ok):
     assert (got[0] if isinstance(got, tuple) else got) is ok
     sites = json.loads((REPO / "data/games/gen3_exp/28877d73/engine_signals.json").read_text())
     assert "R4" in sites["titles"][EXP]["artifacts"]["clean"]["sites"]["save"]["point"]
+
+
+def test_battle_geometry_is_the_builds_compiler_facts_and_vanilla_is_unchanged():
+    """Live whiteout_gen3 on 28877d73 read no status move: the driver's vanilla gBattleMons
+    offsets (pp +0x24, hp +0x28, stride 0x58) and move power (byte 1) are wrong on the expansion
+    build, whose BattlePokemon is 140 bytes and whose MoveInfo.power is a 9-bit field."""
+    facts = json.loads((REPO / "data/games/gen3_exp/28877d73/facts.json").read_text())["structs"]
+    bp, power = facts["BattlePokemon"], facts["MoveInfo"]["bitfields"]["power"]
+    assert (bp["size"], bp["fields"]["moves"]["offset"], bp["fields"]["pp"]["offset"],
+            bp["fields"]["hp"]["offset"]) == (140, 0x0C, 37, 42)
+    assert (power["offset"], power["width"], power["shift"], power["bits"]) == (10, 2, 7, 9)
+    src = DRIVER.read_text(encoding="utf-8")
+    assert ("local BM = { size = 0x58, moves = 0x0C, pp = 0x24, hp = 0x28,\n"
+            "             power = { off = 1, width = 1, shift = 0, mask = 0xFF }, effect_off = 0 }") in src
+    assert "if title == TITLES.EXP_TITLE then" in src and "st.BattlePokemon, st.MoveInfo.bitfields.power" in src
+    for literal in ("S.gBattleMons + 0x28", "base + 0x24 + slot", "+ 0x58 + 0x28"):
+        assert literal not in src, literal
