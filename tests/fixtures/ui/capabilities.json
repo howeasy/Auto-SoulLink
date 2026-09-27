@@ -391,7 +391,7 @@
       "Mind Badge",
       "Rain Badge"
     ],
-    "explode_mode": false,
+    "explode_mode": true,
     "game_id": "gen3_frlge",
     "info_panel": false,
     "info_panel_width": 0,
@@ -449,7 +449,7 @@
       "Volcano Badge",
       "Earth Badge"
     ],
-    "explode_mode": false,
+    "explode_mode": true,
     "game_id": "gen3_frlge",
     "info_panel": false,
     "info_panel_width": 0,
@@ -647,7 +647,7 @@
       "Volcano Badge",
       "Earth Badge"
     ],
-    "explode_mode": false,
+    "explode_mode": true,
     "game_id": "gen3_frlge",
     "info_panel": false,
     "info_panel_width": 0,

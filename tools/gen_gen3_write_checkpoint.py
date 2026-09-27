@@ -724,15 +724,15 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
             raise SystemExit(f"{title}: HandleInputChooseAction is not {PLAYER_CONTROLLER_OBJ}'s")
     slot = next(c["address"] for c in out["battle"]["clauses"] if c["name"] == "battle_input_controller")
     handoff, why = handoff_block(syms, sym_file, is_rr, roms, slot, profile["titles"][title], title)
-    if is_rr:
-        # F1 M5 / G5-CPU-HARDEN: structural, not gated on commit_hold. RR Explode's behaviour flips on
-        # this shape, so every RR build proves the hand-off AND move 153's effect + PP in every RR
-        # ROM, or it stops -- never a quiet drop to `unverified`.
+    if is_rr or title in ("firered", "leafgreen", "emerald"):
+        # Enabling Explode requires the complete hand-off shape AND move 153's effect/PP in
+        # every admitted ROM for this title; never silently weaken to an unverified binding.
         if handoff is None:
-            raise SystemExit(f"{title}: battle.handoff (RR, carries Explode+H) unproven: {why}")
-        explode, why = explode_head(profile["titles"][title], roms)
+            qualifier = "RR, carries Explode+H" if is_rr else "carries Explode+H"
+            raise SystemExit(f"{title}: battle.handoff ({qualifier}) unproven: {why}")
+        explode, why = explode_head(profile["titles"][title], roms, title=title)
         if explode is None:
-            raise SystemExit(f"{title}: battle.handoff.explode (RR Explode+H) unproven: {why}")
+            raise SystemExit(f"{title}: battle.handoff.explode (Explode+H) unproven: {why}")
         handoff["explode"] = explode
     elif handoff is None:
         unverified.append(f"battle.handoff: {why}")
@@ -1142,8 +1142,8 @@ EXPLODE_SOURCE = ("client.lua commit_plan rows, battler 0; profile.ram BATTLE_MO
                   "archive/gen3-old-client:lua/memory_gba.lua:1318-1345")
 
 
-def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | None, str]:
-    """({"head": rows, "source"}, "") for RR's Explode+H shape, or (None, why it is unproven)."""
+def explode_head(title_profile: dict, roms: dict[str, bytes], *, title: str = "radical_red") -> tuple[dict | None, str]:
+    """({"head": rows, "source"}, "") for this title's Explode+H shape, or an explicit refusal."""
     ram, derived, rom_facts = (title_profile.get(k, {}) for k in ("ram", "derived", "rom"))
     for section, key, table in (("ram", "BATTLE_MONS_ADDR", ram), ("ram", "CHOSEN_ACTION_ADDR", ram),
                                 ("ram", "CHOSEN_MOVE_ADDR", ram), ("rom", "BATTLE_MOVES_ADDR", rom_facts),
@@ -1153,13 +1153,14 @@ def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | No
             return None, f"profile.{section}.{key} absent"
     entry_at = rom_facts["BATTLE_MOVES_ADDR"] + EXPLODE_MOVE * derived["BATTLE_MOVE_ENTRY_SIZE"]
     pp_at = entry_at + derived["BATTLE_MOVE_PP_OFFSET"]
+    label = "RR" if title == "radical_red" else title
     for kind, rom in roms.items():
         if kind == "_fr":
             continue
         if body(rom, entry_at, 1)[0] != EFFECT_EXPLOSION:
-            return None, f"move {EXPLODE_MOVE} effect at {entry_at:#010x} is not EFFECT_EXPLOSION in RR {kind}"
+            return None, f"move {EXPLODE_MOVE} effect at {entry_at:#010x} is not EFFECT_EXPLOSION in {label} {kind}"
         if body(rom, pp_at, 1)[0] != EXPLODE_PP:
-            return None, f"move {EXPLODE_MOVE} PP at {pp_at:#010x} is not {EXPLODE_PP} in RR {kind}"
+            return None, f"move {EXPLODE_MOVE} PP at {pp_at:#010x} is not {EXPLODE_PP} in {label} {kind}"
     base = ram["BATTLE_MONS_ADDR"]
     rows = [row for i in range(4) for row in (
         {"name": f"move_{i}", "address": base + BATTLE_MON_MOVES_OFF + 2 * i, "width": 2,
@@ -1174,7 +1175,15 @@ def explode_head(title_profile: dict, roms: dict[str, bytes]) -> tuple[dict | No
             if isinstance(derived.get(key), int):
                 rows.append({"name": name, "ptr": ram["BATTLE_STRUCT_PTR_ADDR"], "offset": derived[key],
                              "width": 1, "value": value})
-    return {"head": rows, "source": EXPLODE_SOURCE}, ""
+    source = EXPLODE_SOURCE
+    if title != "radical_red":
+        pin = "pokeemerald c65e93f2" if title == "emerald" else "pokefirered c75f3523"
+        source = (f"pret {pin}: include/battle.h BattleStruct.moveTarget/chosenMovePositions; "
+                  "src/battle_main.c HandleTurnActionSelectionState + HandleAction_UseMove; "
+                  "include/pokemon.h BattlePokemon.moves +0x0C / pp +0x24; "
+                  "profile addresses from this title's .sym; move 153 effect EFFECT_EXPLOSION and PP 5 "
+                  "verified in this title's own gBattleMoves; B_ACTION_USE_MOVE 0, move slot 0, foe target 1")
+    return {"head": rows, "source": source}, ""
 
 
 def handoff_block(syms, sym_file: str, is_rr: bool, roms: dict[str, bytes],

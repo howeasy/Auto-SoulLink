@@ -561,13 +561,14 @@ def test_a_held_battler_at_battle_end_lands_at_the_overworld_checkpoint():
     assert w.party_hp(0) == 0 and write_reasons(w) == ["overworld"]
 
 
-def test_frlg_force_explode_on_the_active_battler_is_a_held_faint():
+def test_frlg_force_explode_commits_but_keeps_hp_for_the_engine():
     w = live()
     w.battle_ok = True
     w.enter_battle([FOE], active=(0,))
     w.command(cmd="force_explode", key=KA)
     w.step(3)
-    assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
+    assert w.writes and w.client.battle_pending_count(w.client) == 1
+    assert w.party_hp(0) == 20 and w._read(w.ram["CHOSEN_MOVE_ADDR"], 2) == 153
 
 
 def _lift_rr_commit_hold(w):
@@ -785,22 +786,21 @@ def test_p_frlg_active_force_faint_commits_the_perish_plan_in_order_with_the_han
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
-def test_p_never_touches_explode_mode_force_explode_on_frlg_is_the_parents_hold(title):
-    """Owner 2026-09-23: Explode Mode is untouched. On FR/LG (explode not capable: no
-    CHOSEN_MOVE_ADDR) force_explode on the active battler is exactly the parent's behaviour:
-    held as "active battler", zero bytes, no Perish/no-op/commit byte, every frame of the turn;
-    it lands only on switch-out as battle_faint. The same world with force_faint commits P."""
-    assert "CHOSEN_MOVE_ADDR" not in World(title=title).ram      # explode_capable stays false
+def test_frlg_explosion_is_separate_from_perish_and_retains_the_bench_rule(title):
+    """Explosion coerces move 153, not Perish; a switch-out still lands the linked bench faint."""
     w = _p_world(title)
     w.command(cmd="force_explode", key=KA)
     w.step(30)
-    assert w.writes == [] and write_reasons(w) == []
+    assert set(write_reasons(w)) == {"battle_commit"}
     (held,) = lua_to_py_list(w.client.battle_pending)
-    assert str(held.cmd) == "force_explode" and str(held.why) == "active battler"
-    assert w._read(P_STATUS3, 4) & STATUS3_PERISH_SONG == 0 and w._read(P_COMM, 1) == 1
+    assert str(held.cmd) == "force_explode" and str(held.why) == "explosion committed"
+    assert w._read(P_STATUS3, 4) & STATUS3_PERISH_SONG == 0 and w._read(P_COMM, 1) == 3
+    assert w._read(w.ram["CHOSEN_ACTION_ADDR"], 1) == 0
+    assert w._read(w.ram["CHOSEN_MOVE_ADDR"], 2) == 153
     w.set_active([1])                                            # the parent's landing: switch-out
+    _next_parked_menu(w)                                         # engine has completed the prior hand-off
     w.step()
-    assert w.party_hp(0) == 0 and write_reasons(w) == ["battle_faint"]
+    assert w.party_hp(0) == 0 and write_reasons(w)[-1] == "battle_faint"
     assert w.client.battle_pending_count(w.client) == 0
     # control: the linked-faint path on the same title still uses P
     w = _p_world(title)
