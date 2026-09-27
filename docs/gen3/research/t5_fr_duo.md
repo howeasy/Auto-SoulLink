@@ -159,3 +159,37 @@ changed only RR's 58 source-line references: a recursive comparison excluding
 profiles were byte-equivalent as data. All 78 profile tests and the generated
 write-checkpoint check then passed. This metadata repair is kept separate from
 the carrier implementation.
+
+
+## Final unit/build receipt — 2026-09-27
+
+Carrier implementation: `3ad04f063611d1fae8f0622821dcf8c29af4707d`.
+Generated-citation repair: `ed95ba185f0025b8da7ad94d1f59f5fbbca9b6ed`.
+Source remained at the latter commit for the completed full gate.
+
+```text
+source /c/slink-wt/g3-env.sh
+python -m pytest tests/unit -q -p no:randomly -n 2 --dist=loadfile --maxfail=1 -o tmp_path_retention_policy=failed
+15041 passed, 1519 skipped in 1381.77s (0:23:01)
+Exit code: 0
+```
+
+Additional process-local bindings: `PYTHONPATH=C:/slink-wt/g3-t5-fr-duo/.cache/test-deps`
+(pytest-xdist 3.8.0, execnet 2.1.1); `SLINK_ARMGCC` as in the live command above;
+TEMP/TMP/TMPDIR=`D:/slink-wt/g3-t5-fr-duo-test-temp`. No retained --basetemp was used.
+The 1,519 skips are not qualification passes.
+
+Full output: `.cache/t5-fr-duo-full-unit.txt`; SHA-256
+`7c7352199a990dae13fbd14c5ba1ce0c2419cff78efe5a44814076e727221a71`.
+The two new carrier test files contain 64 controls. The related focused run
+passed 1,039 tests with one skip; the final carrier-only run passed all 64.
+Ruff passed. All 305 Lua files parsed with the repository checker, and the five
+changed/bound native/safety/duo modules also compiled under Lua 5.4.
+
+The private candidate built offline with the specified xPack compiler:
+ROM SHA1 `41c66e6b8dceffd295ad8355e3b0a39ecea106f3`, payload SHA256
+`b622049ccc5f4521e96bc8c8db1c31ddfdfdcdffbe2e99362cc476d1015c90d4`.
+Offline preparation recovered the clean-ROM pin, generated both SYNTH saves and
+read evolution target 65 from the ROM. Both live rows remain **UNRUN**, with the
+commands and acceptance criteria above handed to the coordinator. No emulator,
+production artifact, READY flag, UPS, or master branch was changed by this card.
