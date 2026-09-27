@@ -193,3 +193,40 @@ sample areas including both Route1 periods. Bounds, missing sentinel, changed
 selector, slot order, unknown form, wrong display metadata and executable display
 input all have negative controls. The C3 composition resolves the earlier failing
 single-family Night fixture test. The final full-gate receipt follows below.
+
+## Final verification receipt — 2026-09-27
+
+Reader `58ae29fc`; initial form mapping `546c4bc6`; C3 composition `a5294c02`;
+ROM-authoritative encounters/names/types/family outputs `d1231c5a`; RR runtime
+name binding `58c7e5cc84c2d81fa1a187a142da5706d149db09`.
+The latter was the source HEAD for the completed full gate.
+
+```text
+source /c/slink-wt/g3-env.sh
+python -m pytest tests/unit -q -p no:randomly -n 2 --dist=loadfile --maxfail=1 -o tmp_path_retention_policy=failed
+12374 passed, 4388 skipped, 2 warnings in 373.38s (0:06:13)
+Exit code: 0
+```
+
+Explicit process-local bindings: `SLINK_RR_ROM=C:/slink-wt/g3-int/patch/build/rr_clean.gba`,
+`PYTHONPATH=C:/slink-wt/g3-t5-fr-duo/.cache/test-deps`,
+`SLINK_ARMGCC=E:/Google Drive/SLink/patch/vendor/armgcc/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin`,
+TEMP/TMP/TMPDIR=`C:/slink-wt/g3-rr-enc-forms/.cache/test-temp`.
+The skips are not qualification passes. Both warnings are the existing invalid
+`\c` literals observed by the legacy-runtime AST check.
+
+Full output: `.cache/rr-enc-forms-full-unit-retry.txt`, SHA256
+`5e365e8946df897e45484085267e1c793c50951a3c018b3795fdb67e0adfc31d`.
+The first full run reached 10,830 passes/4,057 skips before the calculator-name
+test exposed the missing runtime catalog lookup. That real consumer bug was
+fixed, and 242 name/adapter/calculator tests passed before the complete rerun.
+Its failure output is retained at `.cache/rr-enc-forms-full-unit.txt`, SHA256
+`a83061fc1856037f87d886748bc0a3b8860e782822edd91f5b515fc2c40a894b`.
+
+The focused encounter/name/type/family/generator run passed 189 tests with ten
+optional skips. Generator `--check` passes for species, encounters, types and
+evolution families. Ruff passes. The audit's related-output hashes match the
+committed LF bytes, and the family artifact binds the committed species catalog.
+The before/after per-area drift receipt is `rr_encounter_forms_diff.json`:
+66 areas/197 methods differing before, zero afterward. No emulator was launched,
+and no T5 newline/oracle file was touched by this card.
