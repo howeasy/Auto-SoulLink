@@ -1,44 +1,61 @@
 #!/usr/bin/env python3
-"""Generate data/games/gen3_frlge/frlg_trainers.json from the pinned pret pokefirered source.
+"""Generate the vanilla Gen 3 trainer tables from pinned pret source, one schema, one code path:
+data/games/gen3_frlge/frlg_trainers.json (pret pokefirered) and
+data/games/gen3_emerald/emerald_trainers.json (pret pokeemerald). GAMES holds the per-game rules.
 
 Owner ruling 28 (2026-09-26): trainer names, Upcoming Key Trainers and the calc Prep tab on
-vanilla FireRed/LeafGreen. The adapter (server/adapters/gen3_frlge.py) reads this file and holds
-no game facts of its own. Written against pokefirered; the pret root, area map, setdex and output
-are arguments so the Emerald lane can point it at pokeemerald.
+vanilla FireRed/LeafGreen and Emerald. The adapter (server/adapters/gen3_frlge.py) reads these
+files and holds no game facts of its own.
 
 Facts and where they come from (all pret, never Radical Red):
   id        gTrainers index = the TRAINER_* value in include/constants/opponents.h. gTrainers is a
             designated-initializer array (`[TRAINER_X] = {...}` in src/data/trainers.h), and the
             Gen 3 client reports gTrainerBattleOpponent_A, which CreateNPCTrainerParty indexes
             gTrainers with (src/battle_main.c). So wire trainer_id == json key, no offset.
-  name      .trainerName, title-cased. RIVAL_EARLY / RIVAL_LATE / CHAMPION print the player-chosen
-            rival name instead (src/battle_message.c), so those get name "" and rival: true.
+  name      .trainerName, title-cased. FR/LG RIVAL_EARLY / RIVAL_LATE / CHAMPION print the
+            player-chosen rival name instead (src/battle_message.c), so those get name "" and
+            rival: true. Emerald has no such substitution: May, Brendan and Wally keep theirs.
   class     gTrainerClassNames (src/data/text/trainer_class_names.h), title-cased.
   party     src/data/trainer_parties.h. Explicit .moves when the struct has them, otherwise the
             level-up moves GiveBoxMonInitialMoveset (src/pokemon.c) gives: walk the learnset up to
             the level, skip a known move, push out the first move when all four are full
             (gen3_frlge.default_moves; `learnsets` ships the tables it walks).
+            Learnsets are PER TITLE: pret level_up_learnsets.h has #if FIRERED / LEAFGREEN
+            branches (Deoxys's forme, Dugtrio's move order), evaluated by title_branch().
+            `learnsets` is the first title's table; `learnsets_by_title` holds, for each other
+            title, only the species whose learnset differs. Trainer parties are shared, and the
+            build fails if another title's learnsets would change any trainer's default moves.
             Species/move/item ids are named through the server's own vanilla Gen 3 tables in
             calc spelling, the same names the live battle feed uses.
-  area      the map whose script runs the trainerbattle (data/maps/*/scripts.inc directly, or a
+  area      the map whose script runs the trainerbattle (every TRAINER_* on the line but the
+            TRAINER_BATTLE_* mode, so `trainerbattle TRAINER_BATTLE_SET_TRAINER_A,
+            TRAINER_MAXIE_MOSSDEEP` counts; data/maps/*/scripts.inc directly, or a
             data/scripts/*.inc label named by a map's object event), then the nearest map over
             warps/connections that the area map knows. The client keeps the last known area
             while it stands in an unmapped map (a gym, a hideout floor), and that is the town or
-            dungeon it walked in from. Vs Seeker rematch tiers take their base trainer's area
-            (sRematches in src/vs_seeker.c).
-  key       KEY RULE: class LEADER, ELITE_FOUR, CHAMPION, RIVAL_EARLY, RIVAL_LATE or BOSS, or a
-            TEAM_ROCKET trainer whose constant says ADMIN. Key trainers carry level_cap (their
-            highest party level) and, for starter-dependent or rematch fights, fight_label.
+            dungeon it walked in from. Rematch tiers take their base trainer's area (FR/LG
+            sRematches in src/vs_seeker.c, Emerald gRematchTable in src/battle_setup.c).
+  key       KEY RULE: a trainer with a party that some map script fights (it has an area) and a
+            key class. FR/LG: LEADER, ELITE_FOUR, CHAMPION, RIVAL_EARLY, RIVAL_LATE, BOSS, or a
+            TEAM_ROCKET trainer whose constant says ADMIN. Emerald: LEADER, ELITE_FOUR, CHAMPION,
+            RIVAL (May, Brendan, Wally, Steven), MAGMA_LEADER, AQUA_LEADER, MAGMA_ADMIN,
+            AQUA_ADMIN (the team bosses and admins, as Giovanni and the Rocket admins in FR/LG).
+            Key trainers carry level_cap (their highest party level) and, for starter-dependent
+            or rematch fights, fight_label: "Rival has <starter>" (the starter whose evolution
+            line is in the party; the constant suffix names the rival's starter in FR/LG but the
+            player's in Emerald); FR/LG "Rematch"; Emerald "Rematch <n>" for the _<n+1> tier.
   calc_label the setdex trainer key (text before " | ") whose fight has exactly this party's
             species/level set; failing that, the key naming this trainer that shares the most of
-            it (the setdex splits a fight with a repeated species over "(1)"/"(2)" keys). None
-            found -> omitted, and the bridge falls back to species/level.
+            it (the setdex splits a fight with a repeated species over "(1)"/"(2)" keys).
+            Emerald.js keys a Brendan fight "<Town> Rival", so a named RIVAL-class trainer with
+            no label retries as "Rival". None found -> omitted; the bridge falls back to
+            species/level.
 
-FR and LG share one table: pret has no FIRERED/LEAFGREEN conditional in trainers.h,
+FR and LG share one trainer table: pret has no FIRERED/LEAFGREEN conditional in trainers.h,
 trainer_parties.h or the class names (checked here, the build fails if one appears).
 
-    python tools/gen_gen3_trainers.py            # regenerate
-    python tools/gen_gen3_trainers.py --check    # exit 1 if the committed json is stale
+    python tools/gen_gen3_trainers.py [--game frlg|emerald]            # regenerate
+    python tools/gen_gen3_trainers.py [--game frlg|emerald] --check    # exit 1 if stale
 """
 from __future__ import annotations
 
@@ -61,18 +78,63 @@ OUT = ROOT / "data/games/gen3_frlge/frlg_trainers.json"
 AREA_MAP = ROOT / "data/games/gen3_frlge/area_map.json"
 SETDEX = ROOT / "calc/src/js/data/sets/games/FRLG.js"
 LOCK = ROOT / "data/gen3_sources.lock.json"
+# the pokeemerald commit data/gen3/pret/pokeemerald.sym was published from (PLAN.md E0)
+EMERALD_PROVENANCE = ROOT / "data/gen3/pret/pokeemerald_provenance.json"
 TITLES = ["firered", "leafgreen"]
 
-KEY_CLASSES = {"LEADER", "ELITE_FOUR", "CHAMPION", "RIVAL_EARLY", "RIVAL_LATE", "BOSS"}
-RIVAL_NAME_CLASSES = {"RIVAL_EARLY", "RIVAL_LATE", "CHAMPION"}
-STARTERS = ("BULBASAUR", "CHARMANDER", "SQUIRTLE")
+
+def read(p: Path) -> str:
+    return p.read_text(encoding="utf-8")
 
 
-def find_pret(env=os.environ) -> Path:
-    """tests/unit/gen3_pret.py's lookup: $SLINK_PRET_FIRERED_SRC, else .cache/pret up the tree."""
-    if env.get("SLINK_PRET_FIRERED_SRC"):
-        return Path(env["SLINK_PRET_FIRERED_SRC"])
-    rel = ".cache/pret/pokefirered"
+def _frlg_rematch(const: str, cls: str) -> str:
+    return "Rematch" if "_REMATCH" in const or (cls == "ELITE_FOUR" and re.search(r"_\d+$", const)) else ""
+
+
+def _emerald_rematch(const: str, cls: str) -> str:
+    m = re.search(r"_(\d+)$", const)
+    return f"Rematch {int(m[1]) - 1}" if m and int(m[1]) > 1 else ""
+
+
+GAMES = {
+    "frlg": {
+        "repo": "pret/pokefirered", "clone": "pokefirered", "env": "SLINK_PRET_FIRERED_SRC",
+        "pin": lambda: json.loads(read(LOCK))["source"]["commit"],
+        "titles": TITLES, "out": OUT, "area_map": AREA_MAP, "setdex": SETDEX,
+        "key_classes": {"LEADER", "ELITE_FOUR", "CHAMPION", "RIVAL_EARLY", "RIVAL_LATE", "BOSS"},
+        "admin_class": "TEAM_ROCKET",
+        "rival_name_classes": {"RIVAL_EARLY", "RIVAL_LATE", "CHAMPION"},
+        "starters": ("BULBASAUR", "CHARMANDER", "SQUIRTLE"),
+        "rematches": ("src/vs_seeker.c", "sRematches[]", r"\{\s*\{([^}]*)\}"),
+        "rematch_label": _frlg_rematch,
+    },
+    "emerald": {
+        "repo": "pret/pokeemerald", "clone": "pokeemerald", "env": "SLINK_PRET_EMERALD_SRC",
+        "pin": lambda: json.loads(read(EMERALD_PROVENANCE))["origin"]["source_commit"],
+        "titles": ["emerald"],
+        "out": ROOT / "data/games/gen3_emerald/emerald_trainers.json",
+        "area_map": ROOT / "data/games/gen3_emerald/area_map.json",
+        "setdex": ROOT / "calc/src/js/data/sets/games/Emerald.js",
+        "key_classes": {"LEADER", "ELITE_FOUR", "CHAMPION", "RIVAL", "MAGMA_LEADER", "AQUA_LEADER",
+                        "MAGMA_ADMIN", "AQUA_ADMIN"},
+        "admin_class": None,
+        "rival_name_classes": set(),
+        "starters": ("TREECKO", "TORCHIC", "MUDKIP"),
+        "rematches": ("src/battle_setup.c", "gRematchTable[", r"REMATCH\(([^)]*)\)"),
+        "rematch_label": _emerald_rematch,
+    },
+}
+KEY_CLASSES = GAMES["frlg"]["key_classes"]
+RIVAL_NAME_CLASSES = GAMES["frlg"]["rival_name_classes"]
+STARTERS = GAMES["frlg"]["starters"]
+
+
+def find_pret(env=os.environ, game: str = "frlg") -> Path:
+    """tests/unit/gen3_pret.py's lookup: the game's $SLINK_PRET_*_SRC, else .cache/pret up the tree."""
+    g = GAMES[game]
+    if env.get(g["env"]):
+        return Path(env[g["env"]])
+    rel = f".cache/pret/{g['clone']}"
     return next((d / rel for d in (ROOT, *ROOT.parents) if (d / rel).exists()), ROOT / rel)
 
 
@@ -95,16 +157,56 @@ def defines(text: str, prefix: str) -> dict[str, int]:
             if re.fullmatch(r"0x[0-9A-Fa-f]+|\d+", m[1])}
 
 
-def read(p: Path) -> str:
-    return p.read_text(encoding="utf-8")
+def _title_cond(cond: str, title: str) -> bool:
+    """A pret #if condition over FIRERED/LEAFGREEN, `title`'s macro the one defined."""
+    py = re.sub(r"defined\s*\(\s*(\w+)\s*\)|defined\s+(\w+)", lambda m: m[1] or m[2], cond)
+    py = re.sub(r"\b(FIRERED|LEAFGREEN)\b", lambda m: str(m[1] == title.upper()), py)
+    py = py.replace("&&", " and ").replace("||", " or ").replace("!", " not ")
+    if not re.fullmatch(r"(\s|True|False|and|or|not|\(|\))*", py):
+        raise SystemExit(f"unsupported per-title #if condition: {cond.strip()!r}")
+    return bool(eval(py))  # noqa: S307 - the fullmatch above admits only booleans and logic
 
 
-def learnsets(root: Path) -> dict[str, list[tuple[int, str]]]:
+def title_branch(text: str, title: str) -> str:
+    """`text` as the C preprocessor builds it for `title`, for the #if/#ifdef/#ifndef/#elif/#else
+    blocks that name FIRERED or LEAFGREEN (their directives dropped). Any other directive, an
+    include guard say, stays in place with its body."""
+    out, stack = [], []   # per open #if: [names a title, branch is live, a branch was taken]
+    for line in text.splitlines(keepends=True):
+        m = re.match(r"\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)", line)
+        kind, cond = (m[1], m[2]) if m else ("", "")
+        titled = bool(re.search(r"\b(FIRERED|LEAFGREEN)\b", cond))
+        if kind in ("if", "ifdef", "ifndef"):
+            if titled:
+                live = (_title_cond(cond, title) if kind == "if"
+                        else (cond.strip() == title.upper()) != (kind == "ifndef"))
+                stack.append([True, live, live])
+                continue
+            stack.append([False, True, True])
+        elif kind == "elif":
+            if titled != stack[-1][0]:
+                raise SystemExit(f"#elif mixes per-title and other conditions: {line.strip()!r}")
+            if titled:
+                live = not stack[-1][2] and _title_cond(cond, title)
+                stack[-1][1:] = [live, stack[-1][2] or live]
+                continue
+        elif kind == "else" and stack[-1][0]:
+            stack[-1][1] = not stack[-1][2]
+            continue
+        elif kind == "endif" and stack.pop()[0]:
+            continue
+        if all(f[1] for f in stack):
+            out.append(line)
+    return "".join(out)
+
+
+def learnsets(root: Path, title: str) -> dict[str, list[tuple[int, str]]]:
+    """SPECIES_* -> [(level, MOVE_*)], as `title` is built."""
+    src = title_branch(read(root / "src/data/pokemon/level_up_learnsets.h"), title)
     arrays = {name: [(int(lv), mv) for lv, mv in re.findall(r"LEVEL_UP_MOVE\(\s*(\d+),\s*(MOVE_\w+)\)", body)]
-              for name, body in re.findall(r"const u16 (s\w+LevelUpLearnset)\[\] = \{(.*?)\};",
-                                           read(root / "src/data/pokemon/level_up_learnsets.h"), re.S)}
-    return {sp: arrays[arr] for sp, arr in re.findall(r"\[(SPECIES_\w+)\]\s*=\s*(s\w+LevelUpLearnset)",
-                                                      read(root / "src/data/pokemon/level_up_learnset_pointers.h"))}
+              for name, body in re.findall(r"const u16 (s\w+LevelUpLearnset)\[\] = \{(.*?)\};", src, re.S)}
+    ptrs = title_branch(read(root / "src/data/pokemon/level_up_learnset_pointers.h"), title)
+    return {sp: arrays[arr] for sp, arr in re.findall(r"\[(SPECIES_\w+)\]\s*=\s*(s\w+LevelUpLearnset)", ptrs)}
 
 
 def parse_parties(root: Path) -> dict[str, list[dict]]:
@@ -164,12 +266,13 @@ def trainer_maps(root: Path, maps: dict[str, dict]) -> dict[str, set[str]]:
             if m:
                 label = m[1]
                 continue
-            t = re.match(r"\s*trainerbattle\w*\s+(TRAINER_\w+)", line)
-            if t:
+            if not re.match(r"\s*trainerbattle\w*\s", line):
+                continue
+            for tr in re.findall(r"\bTRAINER_(?!BATTLE_)\w+", line):
                 if owner:
-                    out.setdefault(t[1], set()).add(owner)
+                    out.setdefault(tr, set()).add(owner)
                 elif label:
-                    by_label.setdefault(label, set()).add(t[1])
+                    by_label.setdefault(label, set()).add(tr)
     for m in maps.values():
         for ev in m.get("object_events") or []:
             for tr in by_label.get(ev.get("script", ""), ()):
@@ -242,9 +345,12 @@ def calc_label(pairs: frozenset, who: str, exact: dict, by_key: dict) -> str | N
     return None
 
 
-def build(root: Path, area_map_path: Path = AREA_MAP, setdex_path: Path = SETDEX) -> dict:
+def build(root: Path, area_map_path: Path | None = None, setdex_path: Path | None = None,
+          game: str = "frlg") -> dict:
     from server.adapters.gen3_frlge import Gen3Adapter  # vanilla id -> calc-spelling names
-    names = Gen3Adapter(is_rr=False, rom_type="firered")
+    g = GAMES[game]
+    titles = g["titles"]
+    names = Gen3Adapter(is_rr=False, rom_type=titles[0])
 
     for f in ("src/data/trainers.h", "src/data/trainer_parties.h", "src/data/text/trainer_class_names.h"):
         if re.search(r"^\s*#\s*if.*(FIRERED|LEAFGREEN)", read(root / f), re.M):
@@ -257,78 +363,114 @@ def build(root: Path, area_map_path: Path = AREA_MAP, setdex_path: Path = SETDEX
     class_names = dict(re.findall(r'\[TRAINER_CLASS_(\w+)\]\s*=\s*_\("([^"]*)"\)',
                                   read(root / "src/data/text/trainer_class_names.h")))
     parties = parse_parties(root)
-    ls = learnsets(root)
+    ls_by_title = {t: learnsets(root, t) for t in titles}
+    ls = ls_by_title[titles[0]]
     maps = map_jsons(root)
     keys = map_keys(root)
-    area_map = json.loads(read(area_map_path))
+    area_map = json.loads(read(area_map_path or g["area_map"]))
     map_area = area_of_map(maps, keys, area_map)
     tmaps = trainer_maps(root, maps)
-    exact, by_key = setdex_fights(load_setdex(setdex_path))
+    exact, by_key = setdex_fights(load_setdex(setdex_path or g["setdex"]))
+
+    evos = {sp: set(re.findall(r"SPECIES_\w+", body)) for sp, body in re.findall(
+        r"\[(SPECIES_\w+)\]\s*=\s*\{(.*?)\}\},", read(root / "src/data/pokemon/evolution.h"), re.S)}
+    lines = {}                                            # starter -> its evolution line
+    for s in g["starters"]:
+        line, todo = set(), [f"SPECIES_{s}"]
+        while todo:
+            line.add(sp := todo.pop())
+            todo += evos.get(sp, set()) - line
+        lines[s] = line
+
+    rows = parse_trainers(root)
+    area = {}
+    for row in rows:
+        hits = sorted({map_area[m] for m in tmaps.get(row["const"], ()) if m in map_area})
+        if hits:
+            area[row["const"]] = hits[0]
+    # Rematch tiers fight where their base trainer stands.
+    src, start, pattern = g["rematches"]
+    for tiers in re.findall(pattern, read(root / src).split(start, 1)[1].split("};", 1)[0]):
+        consts = re.findall(r"TRAINER_\w+", tiers)
+        for c in consts[1:]:
+            if consts[0] in area:
+                area.setdefault(c, area[consts[0]])
 
     def move_name(m: str) -> str:
         return names.calc_name("move", names.move_name(moves[m]))
 
     trainers: dict[int, dict] = {}
-    for row in parse_trainers(root):
+    for row in rows:
         tid = opp[row["const"]]
-        rival = row["class"] in RIVAL_NAME_CLASSES
+        rival = row["class"] in g["rival_name_classes"]
         party = []
         for mon in parties.get(row["party"], []):
             entry = {"species": names.calc_species(species[mon["species"]]), "level": mon["level"]}
             if mon["item"] and items[mon["item"]]:
                 entry["item"] = names.calc_name("item", names.item_name(items[mon["item"]]))
-            mv = ([m for m in mon["moves"] if m != "MOVE_NONE"] if mon["moves"] is not None
-                  else default_moves(ls[mon["species"]], mon["level"]))
+            if mon["moves"] is not None:
+                mv = [m for m in mon["moves"] if m != "MOVE_NONE"]
+            else:
+                mv = default_moves(ls[mon["species"]], mon["level"])
+                for other in titles[1:]:
+                    if default_moves(ls_by_title[other][mon["species"]], mon["level"]) != mv:
+                        raise SystemExit(f"{row['const']}: {other} default moves differ: split the table by title")
             entry["moves"] = [move_name(m) for m in mv]
             party.append(entry)
         t = {"const": row["const"], "name": "" if rival else pretty(row["name"]),
              "class": pretty(class_names.get(row["class"], "")), "party": party}
         if rival:
             t["rival"] = True
-        areas = sorted({map_area[m] for m in tmaps.get(row["const"], ()) if m in map_area})
-        if areas:
-            t["area"] = areas[0]
-        key = row["class"] in KEY_CLASSES or (row["class"] == "TEAM_ROCKET" and "ADMIN" in row["const"])
-        if key and party:
+        if row["const"] in area:
+            t["area"] = area[row["const"]]
+        key = row["class"] in g["key_classes"] or (row["class"] == g["admin_class"] and "ADMIN" in row["const"])
+        if key and party and "area" in t:
             t["key"] = True
             t["level_cap"] = max(p["level"] for p in party)
-            label = next((f"Rival has {s.title()}" for s in STARTERS if row["const"].endswith("_" + s)), "")
-            if "_REMATCH" in row["const"] or (row["class"] == "ELITE_FOUR" and re.search(r"_\d+$", row["const"])):
-                label = " · ".join(filter(None, ["Rematch", label]))
+            label = ""
+            if any(row["const"].endswith("_" + s) for s in g["starters"]):
+                # FR/LG's suffix names the rival's starter, Emerald's the PLAYER's: read the party
+                mine = {m["species"] for m in parties[row["party"]]}
+                (label,) = [f"Rival has {s.title()}" for s in g["starters"] if lines[s] & mine]
+            label = " · ".join(filter(None, [g["rematch_label"](row["const"], row["class"]), label]))
             if label:
                 t["fight_label"] = label
-        label = party and calc_label(frozenset((canon(p["species"]), p["level"]) for p in party),
-                                     t["name"] or "Rival", exact, by_key)
-        if label:
-            t["calc_label"] = label
+        if party:
+            pairs = frozenset((canon(p["species"]), p["level"]) for p in party)
+            label = calc_label(pairs, t["name"] or "Rival", exact, by_key)
+            if not label and row["class"] == "RIVAL" and t["name"]:
+                label = calc_label(pairs, "Rival", exact, by_key)
+            if label:
+                t["calc_label"] = label
         trainers[tid] = t
-
-    # Vs Seeker rematch tiers fight where their base trainer stands.
-    for row in re.findall(r"\{\s*\{([^}]*)\}", read(root / "src/vs_seeker.c").split("sRematches[]", 1)[1].split("};", 1)[0]):
-        ids = [opp[c] for c in re.findall(r"TRAINER_\w+", row)]
-        base = trainers.get(ids[0], {}).get("area") if ids else None
-        for i in ids[1:]:
-            if base and "area" not in trainers[i]:
-                trainers[i]["area"] = base
 
     by_area: dict[str, list[int]] = {}
     for tid, t in sorted(trainers.items()):
         if t.get("key") and t.get("area"):
             by_area.setdefault(t["area"], []).append(tid)
-    return {
-        "_note": "GENERATED by tools/gen_gen3_trainers.py from pret pokefirered -- do not edit. "
+    by_title = {}
+    for t in titles[1:]:
+        diff = {sp: lst for sp, lst in ls_by_title[t].items() if ls.get(sp) != lst}
+        by_title[t] = {str(species[sp]): [[lv, moves[m]] for lv, m in lst]
+                       for sp, lst in sorted(diff.items(), key=lambda kv: species[kv[0]])}
+    out = {
+        "_note": f"GENERATED by tools/gen_gen3_trainers.py from {g['repo']} -- do not edit. "
                  "Keys are gTrainers indexes = the wire trainer_id (gTrainerBattleOpponent_A). "
                  "See the tool docstring for every rule (key, area, calc_label, default moves).",
-        "source": {"repo": "pret/pokefirered", "commit": git_head(root)},
-        "titles": TITLES,
+        "source": {"repo": g["repo"], "commit": git_head(root)},
+        "titles": titles,
         "shared": True,
         "trainers": {str(k): v for k, v in sorted(trainers.items())},
         "trainers_by_area": dict(sorted(by_area.items())),
-        # species id -> [[level, move id], ...]: pret's level-up learnsets (movesets may not be
-        # randomized, owner ruling 31), for the default moves of a randomized cartridge's parties.
+        # species id -> [[level, move id], ...]: pret's level-up learnsets for titles[0] (movesets
+        # may not be randomized, owner ruling 31), for the default moves of a randomized
+        # cartridge's parties. learnsets_by_title: another title's species that differ.
         "learnsets": {str(species[sp]): [[lv, moves[m]] for lv, m in learnset]
                       for sp, learnset in sorted(ls.items(), key=lambda kv: species[kv[0]])},
     }
+    if any(by_title.values()):
+        out["learnsets_by_title"] = by_title
+    return out
 
 
 def dump(data: dict) -> str:
@@ -336,7 +478,7 @@ def dump(data: dict) -> str:
     items = list(data.items())
     for i, (k, v) in enumerate(items):
         comma = "," if i < len(items) - 1 else ""
-        if isinstance(v, dict) and k in ("trainers", "trainers_by_area", "learnsets"):
+        if isinstance(v, dict) and k in ("trainers", "trainers_by_area", "learnsets", "learnsets_by_title"):
             lines.append(f"  {json.dumps(k)}: {{")
             sub = list(v.items())
             for j, (sk, sv) in enumerate(sub):
@@ -349,30 +491,31 @@ def dump(data: dict) -> str:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    ap.add_argument("--pret", type=Path, default=None, help="pret checkout (default: pinned pokefirered)")
-    ap.add_argument("--area-map", type=Path, default=AREA_MAP)
-    ap.add_argument("--setdex", type=Path, default=SETDEX)
-    ap.add_argument("--out", type=Path, default=OUT)
+    ap.add_argument("--game", choices=sorted(GAMES), default="frlg")
+    ap.add_argument("--pret", type=Path, default=None, help="pret checkout (default: the pinned clone)")
+    ap.add_argument("--area-map", type=Path, default=None)
+    ap.add_argument("--setdex", type=Path, default=None)
+    ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--check", action="store_true", help="exit 1 if --out differs from a regeneration")
     a = ap.parse_args()
-    root = a.pret or find_pret()
+    g = GAMES[a.game]
+    out = a.out or g["out"]
+    root = a.pret or find_pret(game=a.game)
     if not root.exists():
-        print(f"pret source not found: {root} (set SLINK_PRET_FIRERED_SRC)", file=sys.stderr)
+        print(f"pret source not found: {root} (set {g['env']})", file=sys.stderr)
         return 2
-    if a.pret is None:
-        pin = json.loads(read(LOCK))["source"]["commit"]
-        if git_head(root) != pin:
-            print(f"{root} is at {git_head(root)}, not the pin {pin} ({LOCK.name})", file=sys.stderr)
-            return 2
-    text = dump(build(root, a.area_map, a.setdex))
+    if a.pret is None and git_head(root) != g["pin"]():
+        print(f"{root} is at {git_head(root)}, not the pin {g['pin']()}", file=sys.stderr)
+        return 2
+    text = dump(build(root, a.area_map, a.setdex, game=a.game))
     if a.check:
-        if not a.out.exists() or a.out.read_text(encoding="utf-8") != text:
-            print(f"{a.out} is stale -- re-run tools/gen_gen3_trainers.py", file=sys.stderr)
+        if not out.exists() or out.read_text(encoding="utf-8") != text:
+            print(f"{out} is stale -- re-run tools/gen_gen3_trainers.py --game {a.game}", file=sys.stderr)
             return 1
-        print(f"{a.out.name} is up to date")
+        print(f"{out.name} is up to date")
         return 0
-    a.out.write_text(text, encoding="utf-8", newline="\n")
-    print(f"wrote {a.out}")
+    out.write_text(text, encoding="utf-8", newline="\n")
+    print(f"wrote {out}")
     return 0
 
 
