@@ -207,7 +207,7 @@ async def test_roms_are_found_in_the_project_folder_with_a_verdict(manager_clien
     monkeypatch.setattr(manager, "ROM_DIRS", (str(tmp_path), str(tmp_path / "roms")))
     j = await (await manager_client.get("/api/roms")).json()
     assert [r["name"] for r in j["roms"]] == ["crystal.gbc"]
-    assert j["roms"][0]["clean"] is False and j["roms"][0]["title"] == "not a Gen 1 cartridge"
+    assert j["roms"][0]["clean"] is False and j["roms"][0]["title"].startswith("not a recognised cartridge")
 
 
 @pytest.mark.asyncio
