@@ -56,6 +56,13 @@ Integration `claude/gen3-integration` @5e001952 in C:/slink-wt/g3-int.
      (3) gen3_exp registered but unrouted;
      (4) the second compiler probe as the source of harness facts.
    - It touches the shared lua/gen3 safety/reads/client/entry and server/adapters. Merge after T2, run the full suite, OMP review, ping Gen 2.
+   - OMP review cx-2ce936ca: no FR/LG/RR/E behaviour change in the shared hunks. Follow-ups:
+     (1) the server routes emerald_expansion_28877d73→gen3_exp (server/adapters/__init__.py:41,88,186,238; pre-existing on integration) while the client refuses it. Decide with the XG1 "registered but unrouted" ruling: refuse server-side like crystal_ap, or route both halves together.
+     (2) client.lua BATTLE_MON_MOVES_OFF/PP_OFF are still literals while stride/HP are pack-driven (latent: the expansion has no battle.handoff, so it is unreachable).
+     (3) boxes_from_save under-reads the expansion storage tail (fusions, 540 B).
+     (4) test_gen3_exp_reads lacks a gen3_rr row.
+     (5) tests/fixtures/gen3/README.md:37-38 is stale about rr=True.
+     (6) the safety IRQ exception keys on pack.title; key it on pack identity or bios_sha1.
    - Needs gitignored inputs: .cache/expansion-output/reference (the build from hgbox), the .cache/expansion-src junction, and .cache/x1-probe/probe.o.
 4. **Final cuts** per title: `python tools/gen3_final_cut.py --cut <sha> --title frlg|rr|emerald --lane C:/slink-wt/g3-lane`.
 5. **Landing prep:** refresh `claude/gen3-landing-prep` (C:/slink-wt/rv-land) against master, ping Gen 2, then ONE landing request to the owner.
