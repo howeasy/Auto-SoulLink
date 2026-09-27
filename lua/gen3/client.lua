@@ -86,6 +86,7 @@ function Client.new(p)
     local trade_epoch, trade_connected = 0, false
     local trade_reset_epoch = 0
     local trade_report_epochs = setmetatable({}, {__mode="k"})
+    local owed_hold = nil       -- the reason the last owed report is held, logged once per hold
     local a, d = profile.ram, profile.derived
     local arr = json.array
     local area_map, locations = p.area_map or {}, p.locations or {}
@@ -1614,6 +1615,17 @@ function Client.new(p)
                 local fields = {token=cmd.token, slot=cmd.slot, new_key=cmd.old_key, new_species=0}
                 local cancel = {token=cmd.token, choice=0, withdraw=true}
                 if owed then
+                    -- This branch owes a NON-uncertain trade_done, and the owed gate
+                    -- (drv.after_receive) refuses one while the hello is hidden.
+                    -- session.hello_visible only refreshes when a NEW hello is BUILT, and
+                    -- core/session.lua sends one only while hello_sent is false -- so without
+                    -- an armer the report (and the menu_result cancel behind it) stalls
+                    -- until a reconnect. trade.lua's completed() is the other armer; arm the
+                    -- same recovery here. The report stays NON-uncertain on purpose: this
+                    -- refusal can only justify "unchanged", which is server semantics.
+                    if not session.hello_visible then
+                        st.trade_hello_pending, st.trade_hello_check = true, nil
+                    end
                     owed.list[#owed.list+1] = {event="trade_done", fields=fields}
                     owed.list[#owed.list+1] = {event="menu_result", fields=cancel}
                 else send("trade_done", fields); send("menu_result", cancel) end
@@ -1648,8 +1660,22 @@ function Client.new(p)
                 end
                 return sent
             end, function(event)
-                return (event ~= "trade_done" and event ~= "menu_result")
-                    or (not awaiting_trade_run and (not journal or journal:ready()))
+                if event ~= "trade_done" and event ~= "menu_result" then owed_hold = nil return true end
+                local why = nil
+                if awaiting_trade_run then why = "trade run not bound"
+                elseif journal and not journal:ready() then why = "trade journal not ready" end
+                if why then
+                    -- owed:step runs on EVERY after_receive, and a held head blocks every
+                    -- later report (lua/owed_reports.lua:62). Name the reason once per
+                    -- hold; a second line would only be per-frame noise.
+                    if owed_hold ~= why then
+                        owed_hold = why
+                        log(string.format("owed %s held: %s", event, why))
+                    end
+                    return false
+                end
+                owed_hold = nil
+                return true
             end)
             -- Server only consumes a hello AFTER the uncertainty declaration. This second
             -- hello is allowed only after the real reset boundary, never from unsaved RAM.
@@ -1829,12 +1855,8 @@ function Client.new(p)
                 elseif not ok or why then log("trade reload held: " .. tostring(ok and why or proof)) end
             end
         end
-        if not (native and native.service) then return end
-        -- C5-11c MAJOR 3: this used to clear st.battle on a live boundary, which made
-        -- finish_battle skip the encounter result (RR companion then sent no no_catch where RR
-        -- clean did). The rival authority above replaces it and never touches the lifecycle.
-        native:service()
-        sync_trade() -- each native job's own publication receipt, never inferred from sink bytes
+        -- the hidden-HELLO recovery runs with or without a native part: a clean cartridge's
+        -- refused apply_trade owes reports behind it too (OMP cx-2e644e72 F1)
         if st.trade_hello_pending and session.hello_sent and not session.hello_visible
            and (not st.trade_hello_check or io.framecount()-st.trade_hello_check >= 30)
            and not in_battle() and overworld_ok() then
@@ -1844,6 +1866,12 @@ function Client.new(p)
                 session.hello_sent = false -- one refresh when visibility returns, no hidden-HELLO spin
             end
         end
+        if not (native and native.service) then return end
+        -- C5-11c MAJOR 3: this used to clear st.battle on a live boundary, which made
+        -- finish_battle skip the encounter result (RR companion then sent no no_catch where RR
+        -- clean did). The rival authority above replaces it and never touches the lifecycle.
+        native:service()
+        sync_trade() -- each native job's own publication receipt, never inferred from sink bytes
     end
 
     local Id = core.Identity.new({ key = key })
