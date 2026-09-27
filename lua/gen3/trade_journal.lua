@@ -306,7 +306,10 @@ function J.new(d)
             assert(epoch <= s.counter, "unallocated trade epoch")
             for _, r in ipairs(s.records) do
                 if r.token == value and r.epoch == epoch and same(r.binding,context) then return true end
-                assert(not same(r.binding,context), "unsettled lease already exists for this binding")
+                -- Recheck under the storage lock: another process may have armed a
+                -- different run after this instance's cached readiness/prepare.
+                assert(r.binding.rom_sha1 ~= d.rom_sha1 or r.binding.player ~= d.player,
+                       "unsettled lease already exists for this cartridge/player")
             end
             s.records[#s.records+1] = {binding=context, token=value, epoch=epoch, final=""}
             return true
@@ -321,6 +324,14 @@ function J.new(d)
             end
         end
         return out
+    end
+    function self:has_entries()
+        local s = read()
+        if not s then return true end
+        for _, r in ipairs(s.records) do
+            if r.binding.rom_sha1 == d.rom_sha1 and r.binding.player == d.player then return true end
+        end
+        return false
     end
     function self:hidden()
         local s = read()

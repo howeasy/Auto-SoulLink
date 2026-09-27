@@ -1518,6 +1518,9 @@ def test_major2_a_mid_battle_reconnect_with_a_borrowed_party_hellos_an_empty_par
     w.connected = True
     w.step()
     assert w.events("hello")[-1]["party"] == []
+    assert w.events("hello")[-1]["party_hidden"] is True
+    assert "pc_boxes" not in w.events("hello")[-1]
+    assert "trade_outstanding" not in w.events("hello")[-1]  # borrowed-only, not a journal declaration
 
 
 def test_major3_a_force_faint_during_a_borrowed_party_is_held_and_lands_after_restore():

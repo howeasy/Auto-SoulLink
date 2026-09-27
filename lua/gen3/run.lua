@@ -272,7 +272,7 @@ local function trade_battery_path(import_type, config, name, system, movie_activ
     assert(system == "GBA" and movie_active == false, "battery proof requires a non-movie GBA session")
     assert(type(name) == "string" and name ~= "", "loaded cartridge name unavailable")
     local GameInfo = assert(import_type("BizHawk.Emulation.Common.GameInfo"))
-    local Paths = assert(import_type("BizHawk.Client.Common.PathEntryCollectionExtensions"))
+    local Paths = assert(import_type("BizHawk.Client.Common.PathEntryExtensions"))
     local info = GameInfo()
     info.Name, info.System = name, system
     -- The same public path builder used by EmuHawk, including FilesystemSafeName
@@ -300,6 +300,8 @@ if admitted.kind == "companion" then
     local json = dofile(ROOT .. "/lua/json_codec.lua")
     local ok, store = pcall(function()
         assert(luanet and luanet.import_type, "CLR durability adapter unavailable")
+        luanet.load_assembly("BizHawk.Emulation.Common")
+        luanet.load_assembly("BizHawk.Client.Common")
         return Journal.file_store({json=json, fs=trade_file_adapter(luanet.import_type),
                                    path=ROOT .. "/slink_gen3_trade"})
     end)

@@ -1,6 +1,8 @@
 """T3-R5 production-client withholding controls (native/storage MODEL seams)."""
 import json
 
+import pytest
+
 from tests.unit.test_gen3_trade import durable_client, start_client_trade, swap_in_partner
 
 
@@ -63,6 +65,70 @@ def test_journal_without_a_server_run_identity_cannot_advertise_trade(monkeypatc
     assert world.events("hello")[-1]["trade_prepare"] is False
 
 
+@pytest.mark.parametrize("config", (None, "", 17, "another-run"))
+def test_reconnect_cannot_accept_final_or_redeclare_until_run_is_reconfirmed(tmp_path, monkeypatch, config):
+    world, model, _, _, token, _, _ = recovering_pair(tmp_path, monkeypatch)
+    world.replies.clear()
+    world.connected = False
+    world.step()
+    world.connected = True
+    start = len(world.sent)
+    commands = [] if config is None else [{"cmd": "config", "run_id": config}]
+    commands.append({"cmd": "trade_final", "token": token, "verdict": "resolved"})
+    world.replies.append(json.dumps({"commands": commands}))
+    world.step(35)
+    record = model.journal.state.records[1]
+    assert record.final == "" and record.binding.run_id == "run-a"
+    snapshots = [m for m in world.sent[start:] if m["event"] in ("hello", "tick", "safe")]
+    assert snapshots and all(m.get("party_hidden") is True for m in snapshots)
+    assert all(not m.get("trade_outstanding") for m in snapshots)
+    assert not [m for m in world.sent[start:] if m["event"] == "trade_done"]
+    world.replies.append(json.dumps({"commands": [
+        {"cmd": "config", "run_id": "run-a"},
+        {"cmd": "trade_final", "token": token, "verdict": "resolved"}]}))
+    world.step(35)
+    assert model.journal.state.records[1].final == "resolved"
+    assert model.journal.hidden(model.journal) is True
+
+
+def test_new_intent_cannot_reuse_an_earlier_boot_episode(monkeypatch):
+    from tests.unit.gen3_trade_journal_model import JournalModel
+    from tests.unit.gen3_world import SB1_ADDR, SB2_ADDR, World
+    from tests.unit.test_gen3_trade import PARTNER, A, B, CartridgeModel, party
+
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "0000BEEF")
+    carrier = CartridgeModel()
+    world = World(native=carrier, journal=JournalModel(), model_companion=True)
+    world.set_party(party(A, B))
+    world.step_to(60)
+    blob = world.encode(PARTNER).hex().upper()
+    world.poke_int(world.ram["SB1_PTR_ADDR"], 0, 4)
+    world.poke_int(world.ram["SB2_PTR_ADDR"], 0, 4)
+    world.poke_int(world.ram["PARTY_COUNT_ADDR"], 0, 1)
+    world.step(2)
+    world.poke_int(world.ram["SB1_PTR_ADDR"], SB1_ADDR, 4)
+    world.poke_int(world.ram["SB2_PTR_ADDR"], SB2_ADDR, 4)
+    world.poke_int(world.ram["PARTY_COUNT_ADDR"], 2, 1)
+    world.step(35)
+    called = []
+    world.io.trade_reload_proof = lambda *_: called.append(True)
+    start_client_trade(world, carrier, blob)
+    swap_in_partner(world)
+    carrier.ack(commit_entered=True, scene_done=True)
+    world.step(35)
+    assert not called  # the boot observation predates this intent and proves nothing about it
+    assert world.events("tick")[-1]["party_hidden"] is True
+    world.poke_int(world.ram["SB1_PTR_ADDR"], 0, 4)
+    world.poke_int(world.ram["SB2_PTR_ADDR"], 0, 4)
+    world.poke_int(world.ram["PARTY_COUNT_ADDR"], 0, 1)
+    world.step(2)
+    world.poke_int(world.ram["SB1_PTR_ADDR"], SB1_ADDR, 4)
+    world.poke_int(world.ram["SB2_PTR_ADDR"], SB2_ADDR, 4)
+    world.poke_int(world.ram["PARTY_COUNT_ADDR"], 2, 1)
+    world.step(35)
+    assert called  # a later boot episode reaches the independent verifier
+
+
 def recovering_pair(tmp_path, monkeypatch, corrupt=False):
     import lupa
 
@@ -110,10 +176,6 @@ def recovering_pair(tmp_path, monkeypatch, corrupt=False):
             cursor = len(world.sent)
             for message in messages:
                 commands = server._dispatch("a", message)
-                # Until T4-R3 lands, its exact agreed config shape is the sole stub.
-                for command in commands:
-                    if command.get("cmd") == "config":
-                        command.setdefault("run_id", "run-a")
                 world.replies.append(json.dumps({"commands": commands}))
     pump(65)
     return world, restored, server, entry, token, epoch, pump
@@ -188,6 +250,7 @@ def test_qualified_battery_reload_orders_declaration_then_visible_hello_and_sett
     assert server.state.pending_trade is None
     assert (entry.a.key, entry.b.key) == ("00000002:00000022", "00000001:00000011")
     assert not server.state.party_hidden["a"] and not server.state.trade_recovery_pending["a"]
+    assert len(model.journal.state.records) == 0  # real T4 trade_final retires the qualified entry
 
 
 def test_corrupt_journal_keeps_real_server_snapshot_hidden(tmp_path, monkeypatch):
@@ -198,6 +261,19 @@ def test_corrupt_journal_keeps_real_server_snapshot_hidden(tmp_path, monkeypatch
     assert server.state.party_hidden["a"] is True
     pump(30)
     assert model.data == "corrupt" and world.events("tick")[-1]["party_hidden"] is True
+
+
+def test_real_server_admin_final_does_not_release_the_client_reload_barrier(tmp_path, monkeypatch):
+    world, model, server, entry, token, epoch, pump = recovering_pair(tmp_path, monkeypatch)
+    server._dispatch("b", {"event": "trade_done", "token": token,
+                           "new_key": "00000002:00000022", "new_species": 4})
+    assert server.state.resolve_trade(token, "rollback")[0] is True
+    pump(35)
+    record = model.journal.state.records[1]
+    assert record.final == "resolved" and record.epoch == epoch
+    assert model.journal.hidden(model.journal) is True
+    assert world.events("tick")[-1]["party_hidden"] is True
+    assert entry.a.key == "00000001:00000011"
 
 
 def test_unrecovered_party_does_not_generate_faint_or_capture_evidence(monkeypatch):

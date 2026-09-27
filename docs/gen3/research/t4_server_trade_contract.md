@@ -110,11 +110,11 @@ recovery, or hello-only barrier: the opted-in Gen 3 side stays `await` until tha
 A refused Gen 3 hello must not tick the trade watchdog or drain earlier queued APPLY commands.
 Identity and recovery validation precede both. Base/Gen 1/Gen 2 retain their existing ordering.
 
-### OPEN client prerequisites
+### Client prerequisites at the T4 base
 
-The current `trade_epoch` is a per-VM connection counter, starting at zero and incremented on
+At the T4 base, `trade_epoch` was a per-VM connection counter, starting at zero and incremented on
 hello (`lua/gen3/client.lua:82,990-995` at the base); `uncertain_records`, `owed`, and `retired`
-are only Lua tables (`lua/gen3/trade.lua:23`). They do **not** satisfy this contract yet.
+were only Lua tables (`lua/gen3/trade.lua:23`). They did **not** satisfy this contract.
 Emerald-2 agreed to the following counterpart requirements; this card makes no client edits:
 
 - Allocate a durable monotonic nonzero u32 lease epoch, retaining the originating value across
@@ -327,3 +327,76 @@ The T4 test file now has 78 controls; the combined targeted suite passed 269 tes
 Both normal and rejected-hello traces remain byte-identical to `cd5c1697` for all five GB
 titles; managed-run config controls separately verify omission of `run_id` for Gen 1/2.
 No client/producer/READY change or physical qualification is part of this card.
+
+
+## T3-R5 client counterpart — SOURCE / MODEL
+
+`lua/gen3/trade_journal.lua` now owns the persistent intent and independent local reload barrier.
+`trade.lua` allocates a durable originating u32 epoch and commits the bound intent before it can
+queue a scene. Dispatch rechecks that intent. The older connection counter remains only a
+readiness/dispatch fence; it is not exported as the persisted originating epoch.
+
+The journal is bound to exact cartridge SHA1, player, server `config.run_id`, and trainer OT.
+The client never manufactures a run identity. A missing/empty run ID cannot authorize durable
+trade. On a connection that previously received a run identity, pending reports, terminal
+receipts and fresh trade eligibility wait for the new connection's config; an unresolved record is not rebound to a
+new run. A first hidden hello can request config without publishing RAM. The next hello carries
+matching `trade_outstanding` entries before any recovery evidence.
+
+Storage uses an append-only sequence of canonical, length/checksum-framed snapshots, plus a
+separate guard seal. An OS-exclusive guard handle serializes writers; the log and guard are each
+flushed with `FileStream.Flush(true)` before an allocation or intent returns. A missing member,
+partial append, bad frame, invalid/duplicate record, sequence rollback, or mismatched seal is a
+named failure, never an empty recovered journal. Initial provisioning is allowed only when a
+new guard is created and no log exists; the guard is permanent. Removing all journal artifacts
+is an operator reset outside automatic recovery. The counter never wraps past 0xFFFFFFFF.
+Intent creation rechecks conflicting cartridge/player leases inside that storage lock, so two
+already-prepared processes cannot authorize separate runs using stale readiness state.
+
+The NLua/.NET adapter in `run.lua` fails closed if its required host APIs are unavailable. The
+real adapter has been exercised in a fresh host process and a second process, including the
+configured battery-path builder. This is host MODEL evidence, not an emulator trade receipt.
+
+### Qualified reload criterion
+
+A falling frame counter, arbitrary savestate load, reset callback, TCP reply, and `trade_final`
+are insufficient. After at least two observed frames with cleared save-block pointers and an
+empty party, the client requires a stable, live overworld readback that matches the on-disk
+battery selected by EmuHawk's own `PathEntryExtensions.SaveRamAbsolutePath`:
+
+1. Two identical battery reads, with an exact 0x20000 body and optional 16-byte RTC suffix.
+2. A complete checksummed 14-section save slot with unique section IDs and one counter; no
+   partially corrupt slot is accepted. Slot selection handles the 0xFFFFFFFF-to-zero wrap and
+   refuses conflicting equal-counter save blocks.
+3. Stable live save-block pointers, save counter, trainer OT, party count, and every active
+   party-record byte, matching that selected save. The cartridge hash is bound into the proof.
+4. An ordered uncertainty declaration on the accepted connection, followed by a later visible
+   hello. Qualified bytes alone do not lift the barrier before the declaration is sent.
+
+The counter/layout bindings are separately pinned for FireRed, LeafGreen and Emerald and
+checked against their committed symbols. **RR remains unqualified for this reload reader**;
+FR's counter/layout is never borrowed. A future RR binding needs its own source/ROM proof.
+
+The verifier reads the existing battery file; it does not call `client.saveram()` to manufacture
+its proof. Movies are refused by the battery-path adapter. The published path is derived using
+the loaded cartridge name, system, and the emulator's configured Save RAM location.
+
+Both a journal hold and a borrowed/frozen party emit `party_hidden:true`; the common marker is
+intentional. Borrowed-only episodes have no `trade_outstanding` record. Hello/tick suppress party
+and census evidence, and the Gen 3 transport marks snapshot-free `safe` messages. Unrecovered
+party RAM cannot generate faint/capture/PC evidence or authorize ordinary party writes.
+
+`trade_final` is bookkeeping only. Its run-bound token and optional epoch must match; repeats
+are idempotent. A final received before reload remains a durable tombstone with its local
+barrier intact. The entry is retired only when both the server's final and local durability
+conditions hold. Restart re-establishes uncertainty for an unretired entry.
+
+All production `trade_capable()`/READY holds remain in force. No ROM producer or native ABI was
+changed, and this work provides no physical durable-trade or power-loss qualification.
+
+Primary host API sources used for the adapter:
+
+- [Pinned BizHawk path builder](https://github.com/TASEmulators/BizHawk/blob/bdddf4a58aa1a022afb11dc73294a81a5aa7bbd5/src/BizHawk.Client.Common/config/PathEntryCollectionExtensions.cs)
+- [NLua CLR bridge](https://github.com/NLua/NLua)
+- [BizHawk Lua API](https://tasvideos.org/Bizhawk/LuaFunctions): `client.saveram` flushes save RAM;
+  it is not evidence that a battery reload occurred.

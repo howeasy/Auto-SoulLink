@@ -172,6 +172,7 @@ function T.new(d)
                 return unchanged(t)
             end
             t.journaled = true
+            if d.intent_committed then d.intent_committed(t) end
         end
         t.slot, t.phase = mon.slot, "scene"
         t.scene_attempt = (t.scene_attempt or 0) + 1

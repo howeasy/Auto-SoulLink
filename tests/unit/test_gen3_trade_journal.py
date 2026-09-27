@@ -152,6 +152,18 @@ def test_record_is_never_rebound_to_another_run():
     assert other.hidden(other) is True  # foreign unresolved intent is not permission to publish RAM
 
 
+def test_two_prepared_runs_cannot_publish_conflicting_intents_from_stale_state():
+    store = Store()
+    _, _, one = journal(store, fresh=True)
+    _, _, two = journal(store, run="run-b")
+    first_epoch, second_epoch = one.allocate(one), two.allocate(two)
+    assert one.arm(one, "first", first_epoch) is True
+    assert two.arm(two, "second", second_epoch) is not True
+    _, _, restarted = journal(store)
+    assert len(restarted.outstanding(restarted)) == 1
+    assert restarted.outstanding(restarted)[1].token == "first"
+
+
 def flash_and_ram(title="emerald", counter=7):
     from server.adapters import gen3_codec as C
     layout = C.slot_layout(title=title)

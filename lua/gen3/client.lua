@@ -80,6 +80,7 @@ function Client.new(p)
     local trade
     local journal = io.trade_journal
     local trade_run_id, trade_run_ot
+    local awaiting_trade_run = journal and not journal:ready() or false
     local reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
     local owed = p.owed_reports and p.owed_reports.new() or nil
     local trade_epoch, trade_connected = 0, false
@@ -119,7 +120,9 @@ function Client.new(p)
     local session
     local function send(event, fields) return session.send(event, fields) end
     local function eligible() return session ~= nil and session:eligible() end
-    local function recovery_hidden() return journal and journal:hidden() or false end
+    local function recovery_hidden()
+        return journal and (journal:hidden() or (awaiting_trade_run and journal:has_entries())) or false
+    end
     -- The BLOCKER gate (C4-2d): native and sound arms need an eligible session. Wrapping the
     -- injected policy covers every arm made through the one sink, including a job native.lua
     -- queued while eligible and tries to post after a pause.
@@ -977,7 +980,10 @@ function Client.new(p)
         -- battle RAM still says; a queued job must not ride it (reducer lifecycle or not)
         rival_authority = nil
     end
-    function drv.on_disconnect() trade_connected = false end
+    function drv.on_disconnect()
+        trade_connected = false
+        if trade_run_id then awaiting_trade_run = true end
+    end
 
     -- One read-only cartridge snapshot per session, including cached failure. The Gen 3
     -- reader owns bounds/pointer walking; this hook only binds table metadata and transport.
@@ -1014,7 +1020,7 @@ function Client.new(p)
         rescan_boxes()
         -- a borrowed party is never published nor learned as ours (docs/protocol.md §9 item 11):
         -- hello.party stays present and empty, exactly like tick_fields' guard
-        local hidden = st.frozen or (trade and trade:hide_party()) or (journal and journal:hidden())
+        local hidden = st.frozen or (trade and trade:hide_party()) or recovery_hidden()
         local own = hidden and {} or party
         -- Once a baseline exists hello REPORTS and never learns: the session builds hello before
         -- this frame's signals drain, so a mon added since the last quiet frame (its acquisition
@@ -1051,9 +1057,9 @@ function Client.new(p)
             f.party_hidden = true
             f.pc_boxes, f.pc_boxes_generation = nil, nil
         end
-        local outstanding = journal and journal:outstanding()
+        local outstanding = journal and not awaiting_trade_run and journal:outstanding()
         if outstanding and #outstanding > 0 then f.trade_outstanding = outstanding end
-        f.trade_prepare = trade ~= nil and trade:capable() == true
+        f.trade_prepare = not awaiting_trade_run and trade ~= nil and trade:capable() == true
         f.rom_content = rom_content()
         return f
     end
@@ -1071,7 +1077,7 @@ function Client.new(p)
                     is_trainer_battle = b and b.is_trainer or false, is_doubles = b and b.is_doubles or false,
                     trainer_id = b and b.is_trainer and num(b.trainer_id) or nil,
                     enemy_party = enemy_wire(b), ball_count = n, badges = badges() }
-        local hidden = st.frozen or (trade and trade:hide_party()) or (journal and journal:hidden())
+        local hidden = st.frozen or (trade and trade:hide_party()) or recovery_hidden()
         if hidden then f.party_hidden = true else f.party = party_wire(party) end
         -- the ONE box-generation accessor, the same one hello_fields reads (review F4): the tick
         -- path can never publish a different verdict than the hello did
@@ -1407,11 +1413,17 @@ function Client.new(p)
     if p.Trade and owed and p.artifact_kind == "companion" and (native or journal) then
         local trade_policy = assert(p.trade_policy, "pack trade policy required")
         trade = p.Trade.new({native=native or {trade_capable=function() return false end}, journal=journal,
-            frame=io.framecount, eligible=eligible,
+            frame=io.framecount, eligible=function() return not awaiting_trade_run and eligible() end,
+            intent_committed=function()
+                reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
+            end,
             log=log, hud=hud,
             epoch=function() return trade_epoch end,
             prepare_frames=trade_policy.prepare_frames, apply_frames=trade_policy.apply_frames,
-            ready_to_send=function() return session and session.hello_sent and p.net.connected() end,
+            ready_to_send=function()
+                return not awaiting_trade_run and (not journal or journal:ready())
+                    and session and session.hello_sent and p.net.connected()
+            end,
             clear=function() return not in_battle() and overworld_ok() end,
             party=party_read, key=key, capacity=d.PARTY_CAPACITY or 6, mon_size=R.PARTY_MON_SIZE,
             decode_blob=function(hex)
@@ -1477,6 +1489,7 @@ function Client.new(p)
         return true
     end
     C.trade_final = function(cmd)
+        if journal and (awaiting_trade_run or not journal:ready()) then return true end
         if trade then trade:server_final(cmd)
         elseif journal then journal:final(cmd.token,cmd.epoch,cmd.verdict) end
         return true
@@ -1485,7 +1498,8 @@ function Client.new(p)
         if trade then trade:tick(); sync_trade() end
         if owed then
             local refresh=false
-            owed:step(p.net.connected(), session.hello_sent == true, function(event, fields)
+            owed:step(p.net.connected(), session.hello_sent == true and not awaiting_trade_run
+                       and (not journal or journal:ready()), function(event, fields)
                 local sent=send(event,fields)
                 if sent and event == "trade_done" and fields.uncertain and fields.after_reset
                    and trade and trade:declaration_sent(fields.token) then
@@ -1521,11 +1535,13 @@ function Client.new(p)
             if type(cmd.run_id) ~= "string" or cmd.run_id == "" or not ot then
                 journal:unbind()
                 trade_run_id, trade_run_ot = nil, nil
+                awaiting_trade_run = true
                 log("trade journal binding refused: server run identity or trainer unavailable")
-            elseif trade_run_id ~= cmd.run_id or trade_run_ot ~= ot then
+            elseif awaiting_trade_run or trade_run_id ~= cmd.run_id or trade_run_ot ~= ot then
                 local ok, why = journal:bind(cmd.run_id,ot)
                 if ok then
                     trade_run_id, trade_run_ot = cmd.run_id, ot
+                    awaiting_trade_run = false
                     session.hello_sent = false
                 else log("trade journal binding refused: " .. tostring(why)) end
             end
@@ -1650,7 +1666,7 @@ function Client.new(p)
         end
         trade_frame = io.framecount()
         if journal then
-            local empty = reads.read_sb2 and not reads.read_sb2()
+            local empty = reads.read_sb1 and not reads.read_sb1() and reads.read_sb2 and not reads.read_sb2()
                 and num(a.PARTY_COUNT_ADDR) and io.read_u8(a.PARTY_COUNT_ADDR) == 0
             if empty then reload_empty_frames = reload_empty_frames + 1
             elseif reload_empty_frames >= 2 then
@@ -1681,7 +1697,7 @@ function Client.new(p)
                 -- this Gen 3 transport's withheld safe; Gen 1/2 bytes stay unchanged.
                 local ok, fields = pcall(json.decode,line)
                 if ok and type(fields) == "table" and fields.event == "safe"
-                   and (st.frozen or (trade and trade:hide_party()) or (journal and journal:hidden())) then
+                   and (st.frozen or (trade and trade:hide_party()) or recovery_hidden()) then
                     fields.party_hidden = true
                     line = json.encode(fields)
                 end
