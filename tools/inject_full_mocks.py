@@ -19,6 +19,11 @@ widgets still show "no data", call /api/reset first.
 in a Johto cast on that title (both players), and adds one MEMORIAL pair (fainted, then
 confirmed into the memorial box the way the client confirms a memorialize) beside the
 DEAD one.
+
+`--game gen3 --title firered_rr|frlg|emerald` picks the Gen 3 cartridge pair: firered_rr
+(default, unchanged) is Radical Red on both sides; frlg is vanilla FireRed/LeafGreen
+(the existing Kanto cast, just non-RR rom_types); emerald is vanilla Emerald on both
+sides with its own Hoenn cast (Kanto area ids don't exist on that foundation).
 """
 import asyncio
 import contextlib
@@ -97,6 +102,19 @@ MOVES = {
     37:  [52, 39, 46, 44],   # Vulpix: Ember, Tail Whip, Roar, Bite
     43:  [71, 78, 230, 51],  # Oddish: Absorb, Sweet Scent, Sweet Kiss, Acid
     69:  [22, 71, 78, 51],   # Bellsprout: Vine Whip, Absorb, Sweet Scent, Acid
+    # Hoenn cast (--title emerald). Gen 3 vanilla move ids.
+    263: [33, 45, 29],       # Zigzagoon: Tackle, Growl, Headbutt
+    261: [33, 43],           # Poochyena: Tackle, Leer
+    270: [45, 71],           # Lotad: Growl, Absorb
+    273: [117, 106],         # Seedot: Bide, Harden
+    278: [45, 55],           # Wingull: Growl, Water Gun
+    276: [64, 45],           # Taillow: Peck, Growl
+    285: [71, 78],           # Shroomish: Absorb, Stun Spore
+    283: [145],              # Surskit: Bubble
+    293: [1],                # Whismur: Pound
+    328: [28, 117],          # Trapinch: Sand-Attack, Bide
+    322: [45, 52],           # Numel: Growl, Ember
+    265: [33, 81],           # Wurmple: Tackle, String Shot
 }
 
 # One ability per species (Gen 3 FRLG ids, resolved by the adapter). Every mon used to
@@ -119,6 +137,19 @@ ABILITIES = {
     60: 11,   # Poliwag: Water Absorb
     54: 6,    # Psyduck: Damp
     10: 19,   # Caterpie (the wild foe): Shield Dust
+    # Hoenn cast (--title emerald, see GEN3_EMERALD_PAIRS below). Vanilla Gen 3 ids.
+    263: 53,  # Zigzagoon: Pickup
+    261: 50,  # Poochyena: Run Away
+    270: 33,  # Lotad: Swift Swim
+    273: 34,  # Seedot: Chlorophyll
+    278: 51,  # Wingull: Keen Eye
+    276: 62,  # Taillow: Guts
+    285: 27,  # Shroomish: Effect Spore
+    283: 33,  # Surskit: Swift Swim
+    293: 43,  # Whismur: Soundproof
+    328: 52,  # Trapinch: Hyper Cutter
+    322: 12,  # Numel: Oblivious
+    265: 19,  # Wurmple: Shield Dust
 }
 
 # A capture waiting on the other player (see GEN1_PENDING_*).
@@ -133,6 +164,48 @@ DEAD_ZONE_BOB = (10, "CATE007", "Cat",     8, 0)
 BOXED_AREA = "route8"
 BOXED_A = (60, "POLI008", "Bubbles", 10, 217)
 BOXED_B = (54, "PSYD008", "Quack",   10, 183)
+
+
+# ── Gen 3 Emerald (--title emerald) variant ──────────────────────────────
+# The FR/LG cast above is Kanto-only: route1..route9 etc. don't exist in a Hoenn
+# game_id, and clean Emerald pairs against clean Emerald only (server/adapters/__init__.py
+# _ROM_TYPE_TO_FOUNDATION: gen3_emerald != gen3_frlg), so both players run "emerald".
+# Areas are real ids from data/games/gen3_emerald/area_map.json; final areas additionally
+# need entries in data/games/gen3_emerald/emerald_trainers.json's trainers_by_area so the
+# Upcoming Key Trainers widget renders (verified against that file, not invented).
+#
+# NOTE for the wild-encounters panel: server/adapters/gen3_frlge.py encounter_table()
+# returns None for any non-RR, non-ingested cartridge (`if not self._is_rr: return None`,
+# docstring: "None ... non-RR or unmapped area") -- a CLEAN Emerald or FR/LG cartridge has
+# NO wild-encounter data in this repo (no data/games/gen3_emerald/*encounters* file
+# exists) regardless of which area a player stands in. That panel stays empty for both
+# --title frlg and --title emerald; it is real per-cartridge behaviour, not a mock gap.
+GEN3_EMERALD_PAIRS = [
+    ("route_101", (263, "ZIGZ101", "Ziggy",  6, 0),   (261, "POOC101", "Snarl",  6, 0)),
+    ("route_102", (270, "LOTA102", "Lily",   8, 183), (273, "SEED102", "Nutty",  8, 0)),
+    ("route_104", (278, "WING104", "Gully",  9, 0),   (276, "TAIL104", "Swifty", 9, 210)),
+    ("route_105", (285, "SHRO105", "Puff",  11, 0),   (283, "SURS105", "Skater", 11, 200)),
+    ("route_106", (293, "WHIS106", "Echo",  12, 186), (328, "TRAP106", "Digger", 12, 0)),
+    ("route_107", (322, "NUME107", "Numie", 13, 0),   (265, "WURM107", "Wormy",  13, 197)),
+]
+
+GEN3_EMERALD_PENDING_AREA = "route_108"
+GEN3_EMERALD_PENDING_A = (300, "SKIT108", "Kitty", 14, 0)   # Skitty
+ABILITIES.setdefault(300, 56)  # Skitty: Cute Charm
+
+GEN3_EMERALD_DEAD_ZONE_AREA = "route_109"
+GEN3_EMERALD_DEAD_ZONE_BOB = (343, "BALT109", "Spinny", 8, 0)  # Baltoy
+
+GEN3_EMERALD_BOXED_AREA = "route_112"
+GEN3_EMERALD_BOXED_A = (287, "SLAK112", "Lazy",    10, 217)   # Slakoth
+GEN3_EMERALD_BOXED_B = (296, "MAKU112", "Bruiser", 10, 183)   # Makuhita
+
+# Final standing areas: BOTH have data/games/gen3_emerald/emerald_trainers.json
+# trainers_by_area entries (route_103: [520,523,526,529,532,535], route_110: [267,521,
+# 524,527,530,533,536,656,778,779,780,781]) so Upcoming Key Trainers renders on both
+# sides, and they differ so the split view shows distinct trainer cards per player.
+GEN3_EMERALD_FINAL_A = "route_103"
+GEN3_EMERALD_FINAL_B = "route_110"
 
 
 # ── Gen 1 (Red/Blue) variant ─────────────────────────────────────────────
@@ -286,6 +359,14 @@ def _gen2_pp(moves: list[int]) -> list[int]:
     return [pp.get(m, 0) for m in moves]
 
 
+def _is_gen3_emerald() -> bool:
+    """--game gen3 --title emerald: the only Gen 3 title with its own cast (see
+    GEN3_EMERALD_PAIRS above) -- clean Emerald pairs only with clean Emerald
+    (server/adapters/__init__.py _ROM_TYPE_TO_FOUNDATION), and Kanto area ids don't
+    exist in it."""
+    return GAME == "gen3" and TITLE == "emerald"
+
+
 def _rom_type(player: str) -> str:
     """What each player's client reports in its hello.
 
@@ -295,19 +376,31 @@ def _rom_type(player: str) -> str:
     client ever sends -- and produced Gen 3 abilities and genders on Red/Blue mons.
 
     Gen 1 uses Red and Blue, which is a real pair and exercises two different versions in
-    one run. Gen 3 uses firered_rr on BOTH sides, because Radical Red is a FireRed hack
-    and there is no LeafGreen build of it: "leafgreen_rr", which this script used to send,
-    is not a cartridge that exists. It is routed nowhere, though server.py:3397 does carry
-    a display label for it.
+    one run. Gen 3 defaults to firered_rr on BOTH sides (unchanged from before --title
+    existed), because Radical Red is a FireRed hack and there is no LeafGreen build of it:
+    "leafgreen_rr", which this script used to send, is not a cartridge that exists. It is
+    routed nowhere, though server.py:3397 does carry a display label for it.
+
+    --title frlg sends the real vanilla pair (firered / leafgreen, both foundation
+    gen3_frlg -- server/adapters/__init__.py). --title emerald sends "emerald" on both
+    sides: Emerald has no LeafGreen-equivalent second cartridge either, and its own
+    foundation (gen3_emerald) only pairs with itself.
     """
     if _is_gen1():
         return "red" if player == "a" else "blue"
     if GAME == "gen2":
         return TITLE.capitalize()  # lua/gen2/entry.lua sends "Crystal" / "Gold" / "Silver"
+    if GAME == "gen3":
+        if TITLE == "frlg":
+            return "firered" if player == "a" else "leafgreen"
+        if TITLE == "emerald":
+            return "emerald"
     return "firered_rr"
 
 
 def _pairs():
+    if _is_gen3_emerald():
+        return GEN3_EMERALD_PAIRS
     return {"gen1": GEN1_PAIRS, "gen2": GEN2_PAIRS}.get(GAME, PAIRS)
 
 
@@ -326,22 +419,38 @@ def _final_areas() -> tuple[str, str]:
     Gen 3 also wants priority trainers so the Upcoming Trainers widget renders. This used
     to say pewter_museum "so the widget renders (Falkner @ Pewter Museum)", which has one
     priority trainer and no encounters at all; route_22 has seven and six.
+
+    That "wild encounter table" requirement only holds for --title firered_rr: RR ships
+    its own encounter file (rr_encounters.json) and is_rr gates Gen3Adapter.encounter_table
+    on it. Clean vanilla FR/LG and clean Emerald have NO shipped wild-encounter data at
+    all (server/adapters/gen3_frlge.py encounter_table(): "None for clean FR/LG or areas
+    with no encounter data") -- so for --title frlg / emerald the encounter panel is empty
+    on EVERY area, by real per-cartridge behaviour, and area choice there is driven only by
+    trainers_by_area (Upcoming Key Trainers).
     """
+    if _is_gen3_emerald():
+        return (GEN3_EMERALD_FINAL_A, GEN3_EMERALD_FINAL_B)
     return {"gen1": ("route_3", "route_24"),
             "gen2": ("ilex_forest", "national_park")}.get(GAME, ("route_22", "cerulean_city"))
 
 
 def _pending():
+    if _is_gen3_emerald():
+        return (GEN3_EMERALD_PENDING_AREA, GEN3_EMERALD_PENDING_A)
     return {"gen1": (GEN1_PENDING_AREA, GEN1_PENDING_A),
             "gen2": (GEN2_PENDING_AREA, GEN2_PENDING_A)}.get(GAME, (PENDING_AREA, PENDING_A))
 
 
 def _dead_zone():
+    if _is_gen3_emerald():
+        return (GEN3_EMERALD_DEAD_ZONE_AREA, GEN3_EMERALD_DEAD_ZONE_BOB)
     return {"gen1": (GEN1_DEAD_ZONE_AREA, GEN1_DEAD_ZONE_BOB),
             "gen2": (GEN2_DEAD_ZONE_AREA, GEN2_DEAD_ZONE_BOB)}.get(GAME, (DEAD_ZONE_AREA, DEAD_ZONE_BOB))
 
 
 def _boxed():
+    if _is_gen3_emerald():
+        return (GEN3_EMERALD_BOXED_AREA, GEN3_EMERALD_BOXED_A, GEN3_EMERALD_BOXED_B)
     return {"gen1": (GEN1_BOXED_AREA, GEN1_BOXED_A, GEN1_BOXED_B),
             "gen2": (GEN2_BOXED_AREA, GEN2_BOXED_A, GEN2_BOXED_B)}.get(GAME, (BOXED_AREA, BOXED_A, BOXED_B))
 
@@ -658,8 +767,12 @@ if __name__ == "__main__":
     _ap = argparse.ArgumentParser(description=__doc__)
     _ap.add_argument("--game", choices=("gen3", "gen1", "gen2"), default="gen3",
                      help="which generation's cast to inject (default: gen3)")
-    _ap.add_argument("--title", choices=("crystal", "gold", "silver"), default="crystal",
-                     help="gen2 only: the title both players run (default: crystal)")
+    _ap.add_argument("--title",
+                     choices=("crystal", "gold", "silver", "firered_rr", "frlg", "emerald"),
+                     default="crystal",
+                     help="gen2: the title both players run (default: crystal). "
+                          "gen3: firered_rr (default, RR both sides), frlg (vanilla "
+                          "firered/leafgreen), emerald (vanilla emerald both sides, Hoenn cast)")
     _args = _ap.parse_args()
     GAME, TITLE = _args.game, _args.title
     asyncio.run(main())
