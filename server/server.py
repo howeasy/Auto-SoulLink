@@ -2173,7 +2173,10 @@ class SLinkServer:
                 loc     = msg.get("loc_name", "")
                 party_n = len(msg.get("party", []))
                 log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
-                self._ingest_box_census(player_id, msg)
+                defer_trade_census = self.adapter.supports_trade_recovery() or (
+                    ("party_hidden" in msg or "trade_outstanding" in msg) and self.adapter.refused_trade_recovery())
+                if not defer_trade_census:
+                    self._ingest_box_census(player_id, msg)
 
                 # Run state machine first (handles identity lock check).
                 cmds = self.state.handle_event(player_id, msg)
@@ -2189,6 +2192,9 @@ class SLinkServer:
                 self._log_event(player_id, "hello",
                                 "REJECTED — wrong save/slot", area or loc)
                 return cmds
+
+            if defer_trade_census:
+                self._ingest_box_census(player_id, msg)
 
             # ACCEPTED. The staged rom_type/panel/panel_abi/sfx/adapter are already applied
             # above; only the presentation follow-ups (panel re-send, adapter-switch log)
@@ -2259,17 +2265,18 @@ class SLinkServer:
             stats_before = copy.deepcopy(self.state.mon_stats)
             if msg.get("rom_content"):
                 self._ingest_rom_content(player_id, msg["rom_content"])
-            if "pc_boxes" in msg:
+            if "pc_boxes" in msg and not self.state.party_snapshot_withheld(player_id, msg):
                 self.pc_boxes[player_id] = msg["pc_boxes"]
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
                     if bk:
                         self._cache_mon_info(bk, bentry, player_id)
                 self._check_memorial_box_contamination(player_id, msg["pc_boxes"])
-            # Seed party_details from snapshot
-            self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
-            for k, det in self.party_details[player_id].items():
-                self._cache_mon_info(k, det, player_id)
+            # A withheld party preserves the last display, without refreshing its evidence.
+            if not self.state.party_snapshot_withheld(player_id, msg):
+                self.party_details[player_id] = self._party_snapshot(player_id, msg.get("party", []))
+                for k, det in self.party_details[player_id].items():
+                    self._cache_mon_info(k, det, player_id)
             if _dirty or self.state.mon_stats != stats_before:
                 self.state._save()
             # Seed battle state from hello (so page reflects battle immediately)
@@ -2389,7 +2396,7 @@ class SLinkServer:
                 self.player_kanto_badges[player_id] = msg["kanto_badges"]
             if "trainer_name" in msg:
                 self.trainer_name[player_id] = msg["trainer_name"]
-            if "pc_boxes" in msg:
+            if "pc_boxes" in msg and not self.state.party_snapshot_withheld(player_id, msg):
                 self.pc_boxes[player_id] = msg["pc_boxes"]
                 for bentry in msg["pc_boxes"]:
                     bk = bentry.get("key", "")
@@ -2482,7 +2489,8 @@ class SLinkServer:
         # On tick, replace party_details entirely from the authoritative party snapshot.
         # This prevents captures that went straight to the PC box (full-party captures)
         # from appearing as phantom party mons between ticks.
-        if "party" in msg and event == "tick":
+        if ("party" in msg and event == "tick"
+                and not self.state.party_snapshot_withheld(player_id, msg)):
             self.party_details[player_id] = self._party_snapshot(player_id, msg["party"])
             for k, det in self.party_details[player_id].items():
                 self._cache_mon_info(k, det, player_id)
@@ -2854,6 +2862,10 @@ class SLinkServer:
                     "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
                     "awaiting_save": s.awaiting_save.get(pid, False),  # BURIAL-VISIBLE
+                    **({"trade_recovery": {"hidden": s.party_hidden[pid],
+                                          "pending": s.trade_recovery_pending[pid],
+                                          "problem": s.trade_recovery_errors[pid]}}
+                       if self.adapter.supports_trade_recovery() else {}),
                     # Surfaced rather than only logged: a player whose events are being
                     # dropped needs to be told which cartridge the run expects, otherwise
                     # the game simply appears not to be recording anything.
@@ -5015,6 +5027,9 @@ class SLinkServer:
         foundation implements the generation (`reports_box_census`), where a missing one is no
         census. Any box mutation makes the census stale until the next complete scan."""
         event, bc = msg.get("event"), self.box_census[player_id]
+        if self.state.party_snapshot_withheld(player_id, msg):
+            bc["boxes"] = None  # retained display is not collision evidence
+            return
         if event == "hello":
             bc.update(capable="pc_boxes_generation" in msg, gen=-1, boxes=None)
         elif "pc_boxes_generation" in msg:
