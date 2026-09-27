@@ -2310,8 +2310,11 @@ def gen3_trade_problems(ka, kb, link_rows, saved, fixture, traded):
 
 
 def gen3_trade_chain(inst, ka, kb, decline):
-    """(required, ordered, forbidden) receipt regexes for one side of the NPC trade. A trade must
-    run the native scene on BOTH sides (no silent swap)."""
+    """(required, ordered, forbidden) receipt regexes for one side of the NPC trade (RR-DURABLE):
+    the server's native menus, then on YES the durable round on BOTH sides -- apply_prepare ->
+    apply_ready ok (the native pre-save), apply_trade -> trade_done with the partner's key (the
+    native scene + post-save) -> the server's commit notice. The named refusal an old-UPS client
+    gets is never a pass, and no side may report an uncertain or refused apply."""
     tx = lambda ev, body="": rf"(?m)^TX {ev} - .*{body}"          # noqa: E731
     rx = lambda cmd: rf"(?m)^RX {cmd}(?=\s|$)"                    # noqa: E731
     # TALKED is a required witness but not an ordering anchor: the patch sends trade_request in the
@@ -2325,32 +2328,17 @@ def gen3_trade_chain(inst, ka, kb, decline):
             chain.append(r"(?m)^RX msgbox text=Your partner declined")
     else:
         chain = [rx("show_menu"), tx("menu_result", f'"choice":{0 if decline else 1}')]
+    never = [r"(?m)^REFUSED_UNAVAILABLE ", r"apply_trade refused"]
     if decline:
-        return talked + chain, list(zip(chain, chain[1:], strict=False)), [rx("apply_trade"), tx("trade_done"),
-                                                     r"(?m)^TRADED "]
+        return talked + chain, list(zip(chain, chain[1:], strict=False)), never + [
+            rx("apply_prepare"), rx("apply_trade"), tx("trade_done"), r"(?m)^TRADED "]
     gets = kb if inst == "a" else ka
     gives = ka if inst == "a" else kb
-    chain += [rx("apply_trade"), tx("trade_done", f'"new_key":"{re.escape(gets)}"'),
+    chain += [rx("apply_prepare"), tx("apply_ready", '"ok":true'), rx("apply_trade"),
+              tx("trade_done", f'"new_key":"{re.escape(gets)}"'), r"(?m)^RX msgbox text=Traded ",
               rf"(?m)^TRADED gave={re.escape(gives)} got={re.escape(gets)} "]
-    # each side ran the NATIVE scene (lua/gen3/client.lua trade_readback), never the silent-swap
-    # fallback the initiator used while the party chooser left its script waiting
-    native = rf"trade: native scene complete; trade_done {re.escape(gives)} -> {re.escape(gets)}"
-    return talked + chain + [native], list(zip(chain, chain[1:], strict=False)), [r"silent swap"]
-
-
-def gen3_trade_unavailable_chain(inst):
-    """(required, forbidden) receipt regexes for trade_gen3/trade_decline_gen3 on RR: ABI1 trade is
-    UNAVAILABLE until its durable-trade delta lands (docs/protocol.md) -- the server refuses A's
-    own trade_request itself, a named msgbox, never show_choices; B never hears about it at all.
-    Nothing moves on either cartridge (lua/tests/duo/scenario_gen3_trade.lua)."""
-    tx = lambda ev: rf"(?m)^TX {ev} - "                            # noqa: E731
-    rx = lambda cmd: rf"(?m)^RX {cmd}(?=\s|$)"                     # noqa: E731
-    forbidden = [rx("show_choices"), rx("show_menu"), rx("apply_trade"), tx("trade_done"),
-                r"(?m)^TRADED "]
-    if inst == "a":
-        return [tx("trade_request"), rx("msgbox"), r"(?m)^REFUSED_UNAVAILABLE reason=",
-               r"(?m)^KEPT "], forbidden
-    return [r"(?m)^KEPT "], forbidden
+    return talked + chain, list(zip(chain, chain[1:], strict=False)), never + [
+        tx("apply_ready", '"ok":false'), tx("trade_done", '"uncertain":true')]
 
 
 def gen3_panel_text(raw: bytes) -> str:
@@ -7641,19 +7629,28 @@ class DuoRun:
 
     def orchestrate_trade_gen3(self):
         """The RR PC trade NPC, driven only by the two cartridges: link the slot-1 mons (server
-        staging), name each side's partner key, GO. RR ABI1 trade is UNAVAILABLE until its
-        durable-trade delta lands (docs/protocol.md): A talks to the NPC and the server refuses
-        the trade_request itself, before ever opening the Trade/Say hey list; B never hears about
-        it. Both save once A's refusal is logged and each side confirms it kept its own mon."""
+        staging), name each side's partner key, GO. A talks to the NPC and answers the server's
+        native menus, B answers the offer, and on YES both run the durable native trade
+        (RR-DURABLE: pre-save, scene, post-save); nothing is injected after GO. Both save only
+        once the server has settled (re-keyed links.json, or a declined offer on both receipts)."""
         self._gen3_prelude(link_slot=self.cfg.get("trade_slot", 1))
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         lines = self._gen3_linked_lines()
         lines["a"].append(f"PARTNER {kb}")
         lines["b"].append(f"PARTNER {ka}")
         self.go(lines)
-        self._gen3_mark("a", r"^REFUSED_UNAVAILABLE reason=", "A's trade_request was refused")
-        for inst, key in (("a", ka), ("b", kb)):
-            self._gen3_mark(inst, rf"^KEPT {re.escape(key)} ", "kept its linked mon")
+        if self.scenario == "trade_decline_gen3":
+            self._gen3_mark("b", r"^DECLINED ", "B declined the offer")
+            for inst, key in (("a", ka), ("b", kb)):
+                self._gen3_mark(inst, rf"^KEPT {re.escape(key)} ", "kept its linked mon")
+        else:
+            self._gen3_mark("a", rf"^TRADED gave={re.escape(ka)} got={re.escape(kb)} ", "A traded")
+            self._gen3_mark("b", rf"^TRADED gave={re.escape(kb)} got={re.escape(ka)} ", "B traded")
+
+            def rekeyed():
+                return any((e.get("a") or {}).get("key") == kb and (e.get("b") or {}).get("key") == ka
+                           for e in self._links_json())
+            self.wait_for("links.json re-keyed by the server's commit", rekeyed, 120)
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
 
@@ -7672,36 +7669,40 @@ class DuoRun:
 
     orchestrate_infopanel_dex_gen3 = orchestrate_infopanel_gen3
 
-    def _gen3_trade_unavailable_facts(self, results):
-        """RR ABI1 trade is UNAVAILABLE until its durable-trade delta lands (docs/protocol.md): the
-        server refuses A's own trade_request itself, a named msgbox, before it can ever open the
-        Trade/Say hey list -- B never hears about it. Nothing moves on either cartridge."""
+    def _gen3_trade_facts(self, results, traded):
         self._gen3_flush_boundary()
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         problems = gen3_trade_problems(
             ka, kb, self._links_json(), {i: self._gen3_saved(i) for i in "ab"},
-            {i: self._gen3_fixture_saved(i) for i in "ab"}, traded=False)
+            {i: self._gen3_fixture_saved(i) for i in "ab"}, traded)
         for inst in ("a", "b"):
-            required, forbidden = gen3_trade_unavailable_chain(inst)
-            problems += gen3_receipt_problems(inst, results[inst], required=required, forbidden=forbidden)
+            required, ordered, forbidden = gen3_trade_chain(inst, ka, kb, not traded)
+            problems += gen3_receipt_problems(inst, results[inst], required=required,
+                                              ordered=ordered, forbidden=forbidden)
             if inst == "a" and len(re.findall(r"(?m)^TX trade_request ", results[inst])) != 1:
                 problems.append("a: expected exactly one trade_request")
         if re.search(r"(?m)^TX trade_request ", results["b"]):
             problems.append("b: sent a trade_request (it never talked to the NPC)")
+        if traded:
+            for inst, gets in (("a", kb), ("b", ka)):
+                got = next((m for m in self._gen3_saved(inst)[0] if gen3_key(m) == gets), None)
+                if got is not None:
+                    problems += gen3_record_problems(f"{inst}: the received {gets}", got,
+                                                     self._gen3_rr, self._gen3_limits(inst))
         return ka, kb, problems
 
     def assert_trade_gen3_saved(self, results):
-        ka, kb, problems = self._gen3_trade_unavailable_facts(results)
-        self._gen3_raise(problems, f"trade_gen3: RR ABI1 trade unavailable -- the server refused "
-                                   f"{ka}'s trade_request before the Trade/Say hey list ever "
-                                   f"opened; both saves keep their fixture party, link {ka}/{kb} "
-                                   f"unchanged")
+        ka, kb, problems = self._gen3_trade_facts(results, traded=True)
+        self._gen3_raise(problems, f"trade_gen3: NPC talk -> Trade -> slot 1 -> partner YES -> "
+                                   f"durable native pre-save/scene/post-save both sides; saved a holds "
+                                   f"{kb}, b holds {ka} (partner records intact), links.json re-keyed, "
+                                   f"each key once")
 
     def assert_trade_decline_gen3_saved(self, results):
-        ka, kb, problems = self._gen3_trade_unavailable_facts(results)
-        self._gen3_raise(problems, f"trade_decline_gen3: RR ABI1 trade unavailable -- the server "
-                                   f"refused {ka}'s trade_request before any offer reached B; "
-                                   f"both saves keep their fixture party, link {ka}/{kb} unchanged")
+        ka, kb, problems = self._gen3_trade_facts(results, traded=False)
+        self._gen3_raise(problems, f"trade_decline_gen3: offer {ka} for {kb} declined with B; no "
+                                   f"apply_prepare/apply_trade, both saves hold their fixture party, "
+                                   f"link unchanged")
 
     def assert_infopanel_gen3_saved(self, results):
         alive = sum(1 for e in self._links_json() if e.get("status") == "alive")
