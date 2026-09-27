@@ -1,0 +1,37 @@
+# CLAUSE-LIVE-REST RR family map-shape failure
+# source: 49d99c6c4e7509810b8389ab7182965652b28d71
+# This is FAIL, not a qualified family row. Native Route 1 map marker is numeric787; the oracle required dotted text3.19.
+# Raw attempt artifacts: C:/slink-wt/g3-clause-live-rest/.cache/live/family_rr_numeric_map_failure
+
+
+========== scenario: species_family_gen3 ==========
+[duo] species_family_gen3: attempt 1 of 16
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=49d99c6c4e7509810b8389ab7182965652b28d71
+[duo] server up: tcp=59546 http=59547 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_vmrpp3f3
+[duo] timing server 1.2s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 9.1s
+[duo] timing results 4.2s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=5bd5ccf57ce5df1727f5de39f8b8784cfa48607398968d7c0de3418253d27895 file=5bd5ccf57ce5df1727f5de39f8b8784cfa48607398968d7c0de3418253d27895 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=b06a36c10bb0c77b6e7a0e39b6581ddce6d5c15a3028014b4097291af215cc2d file=b06a36c10bb0c77b6e7a0e39b6581ddce6d5c15a3028014b4097291af215cc2d match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:2BDDC8BF", "map": 787, "owned": 289, "player": "a", "related": false, "species": 286, "x": 13, "y": 38}
+[duo] timing oracle 0.3s
+[duo] PYDEC: FAIL RR family encounter was not on Route 1 (3.19)
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_vmrpp3f3
+[duo] species_family_gen3: attempt 1 aborted — RuntimeError: RR family encounter was not on Route 1 (3.19)
+
+========== summary ==========
+  species_family_gen3: FAIL (attempt 1 of 16) — RuntimeError: RR family encounter was not on Route 1 (3.19)

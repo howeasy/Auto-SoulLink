@@ -643,7 +643,9 @@ def family_wild_facts(run, encounter):
     # Read the actual booted cartridge's selector/slot tables. Both periods are
     # eligible; this row does not pretend to have proved the runtime RTC hour.
     from rr_rom_encounters import decode_encounters, effective_maps
-    if encounter.get("map") != "3.19":
+    # play.map() emits group*256+number (Route 1 is 3.19 -> 787), not
+    # the dotted label printed by map metadata.
+    if encounter.get("map") != 3 * 256 + 19:
         raise RuntimeError("RR family encounter was not on Route 1 (3.19)")
     decoded = decode_encounters((ROOT / run._gen3_rom("a")).read_bytes())
     return [slot for period in ("Day", "Night") for slot in

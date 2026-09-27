@@ -125,7 +125,7 @@ def test_family_driver_binds_the_actual_native_foe_to_the_matching_link_half(foe
       c.hunt=function() c.messages[#c.messages+1]={cmd='gui_prompt',text='Dupes clause: Zigzagoon -- reroll!'};return true end
       c.wild_ready=function() return true end
       c.run_away=function() return true end
-      c.G={pos=function() return 13,38 end};c.play={map=function() return '3.19' end}
+      c.G={pos=function() return 13,38 end};c.play={map=function() return 787 end}
       c.wait_until=function(p) return p() end
       c.jlog=function(tag,value) c.lines[tag]=value end
       c.log=function() end;c.save=function() return true end
@@ -135,6 +135,7 @@ def test_family_driver_binds_the_actual_native_foe_to_the_matching_link_half(foe
     assert scenario(ctx) is True
     receipt = ctx.lines.FAMILY_ENCOUNTER
     assert (receipt.related, receipt.player, receipt.owned, receipt.key) == (True, owner, evolved, owner.upper())
+    assert receipt.map == 3 * 256 + 19
     assert ctx.lines.CLAUSE_REROLL.species == foe
 
 
@@ -174,7 +175,7 @@ def _family_oracle_case(monkeypatch, tmp_path, foe):
     run._pydec_note = notes.append
     inst = "b" if foe == 1222 else "a"
     marker = {"key": halves[inst]["key"], "owned": halves[inst]["species"], "player": inst,
-              "species": foe, "related": foe in (288, 1222), "map": "3.19", "x": 13, "y": 38}
+              "species": foe, "related": foe in (288, 1222), "map": 3 * 256 + 19, "x": 13, "y": 38}
     prompt = "Dupes clause: native species -- reroll!"
     def receipts(**updates):
         return {"a": "FAMILY_ENCOUNTER " + json.dumps({**marker, **updates}) + "\n"
@@ -198,7 +199,7 @@ def test_family_oracle_accepts_rom_proven_day_or_night_against_actual_link_half(
 def test_family_oracle_rejects_wrong_map_and_retains_unobserved_species(monkeypatch, tmp_path):
     rules, run, _, notes, receipts = _family_oracle_case(monkeypatch, tmp_path, 951)
     with pytest.raises(RuntimeError, match="Route 1"):
-        rules.family_oracle(run, receipts(map="3.1"))
+        rules.family_oracle(run, receipts(map=3 * 256 + 1))
     with pytest.raises(rules.ClauseUnobserved):
         rules.family_oracle(run, receipts())
     assert any('"species": 951' in line for line in notes)
