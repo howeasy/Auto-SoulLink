@@ -857,6 +857,12 @@ GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 # NAT-LEGS: the FR/LG natural legs (S-8, S-9, S-11), explicit_only (FR-as-A SYNTH fixtures)
 GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3")
+# card RR-SYNTH: of the three NAT_SCENARIOS, only evolve_gen3 also names gen3_rr (RR-SYNTH
+# built rr_evolve_synth.sav + the RR evolution/base-stat/learnset facts). npc_trade_gen3 stays
+# refused (no RR trade-table/map-position source); poison_faint_gen3 stays refused (RR's
+# DoPoisonFieldEffect is an unconditional no-op stub, no HP mutation to build a fixture
+# around) -- see both rows' comments in tools/e2e_duo.py SCENARIOS.
+GEN3_RR_NAT_SCENARIOS = ("evolve_gen3",)
 
 
 @pytest.mark.parametrize("name,module,target", (
@@ -912,7 +918,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         if name not in (GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + GEN3_NAT_SCENARIOS
                         + tuple(duo_module.GEN3_RAND_SCENARIOS)):
             assert not scenario_applies(name, "gen3_frlg"), name
-        if name not in GEN3_RR_SCENARIOS:
+        if name not in GEN3_RR_SCENARIOS + GEN3_RR_NAT_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name
     for name in GEN3_FRLG_SCENARIOS:
         # E4: the seven shared rows also name gen3_emerald (E<->E), appended, never renamed
@@ -1135,12 +1141,15 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
         run._check_bizhawk_paths()
 
 
-@pytest.mark.parametrize("name,kind,link_slot,games,emerald_b", (
+@pytest.mark.parametrize("name,kind,link_slot,games,emerald_b,rr_b", (
     # NAT-LEGS-4: evolve_gen3 also runs E<->E on gen3_emerald, target_by_game swapping the FR/LG
     # "_synth" fixture stem for Emerald's own committed emerald_evolve.sav; its oracle
     # (assert_evolve_gen3_saved) is species-aware (EVOLVE_FACTS keyed by self.game), not a
     # WARTORTLE-only constant. B idles on "town" (emerald_town_b.sav), same as FR/LG.
-    ("evolve_gen3", "evolve", 0, ("gen3_frlg", "gen3_emerald"), "town"),
+    # card RR-SYNTH: gen3_rr joins too, no target_by_game override needed (rr_b=None) -- the
+    # default target's "b": "town" already resolves to rr_town_b.sav, and evolve never
+    # force-faints B so the single-mon fixture is fine.
+    ("evolve_gen3", "evolve", 0, ("gen3_frlg", "gen3_emerald", "gen3_rr"), "town", None),
     # NAT-LEGS-3: npc_trade_gen3/poison_faint_gen3 also run E<->E on gen3_emerald, target_by_game
     # swapping the FR/LG "_synth" fixture stem for Emerald's own naming (emerald_trade.sav,
     # emerald_poison.sav). npc_trade_gen3 links party slot 1 on BOTH halves; FR/LG's "town" fixture
@@ -1148,9 +1157,18 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     # "pc" (Mudkip + Poochyena) instead -- poison_faint_gen3 links slot 0, but B's linked lead is
     # still force_faint'ed (Soul Link), so Emerald's B side needs "pc" too: a single-mon "town"
     # party whites out instead of memorializing.
-    ("npc_trade_gen3", "trade", 1, ("gen3_frlg", "gen3_emerald"), "pc"),
-    ("poison_faint_gen3", "poison", 0, ("gen3_frlg", "gen3_emerald"), "pc")))
-def test_nat_legs_rows_are_wired(name, kind, link_slot, games, emerald_b, monkeypatch):
+    # card RR-SYNTH: npc_trade_gen3 stays FR/LG+Emerald only -- RR's trade table/trader position
+    # is not derivable from anything pinned in this repo (refused, not guessed; see the
+    # npc_trade_gen3 comment in SCENARIOS).
+    ("npc_trade_gen3", "trade", 1, ("gen3_frlg", "gen3_emerald"), "pc", None),
+    # card RR-SYNTH: poison_faint_gen3 stays FR/LG+Emerald only. RR's DoPoisonFieldEffect
+    # detours to an unconditional `MOVS r0,#0; BX LR` stub (0x090B20D4 in
+    # patch/build/slink_RR.gba) -- no HP mutation at all outside battle, so there is no
+    # natively-reachable S-11 site on RR to build a fixture around (refused, not guessed; see
+    # the poison_faint_gen3 comment in SCENARIOS and tools/gen3_fixtures.py's build_rr_synth
+    # module comment).
+    ("poison_faint_gen3", "poison", 0, ("gen3_frlg", "gen3_emerald"), "pc", None)))
+def test_nat_legs_rows_are_wired(name, kind, link_slot, games, emerald_b, rr_b, monkeypatch):
     """NAT-LEGS: explicit_only (never in `--scenario all` on either FR-as-A `gen3_frlg` or
     LG-as-A `gen3_lgfr`, card NAT-LEGS-2), A boots the committed SYNTH fixture, B idles on town,
     and the orchestrator links `link_slot`. Fixture byte-reproduction is checked separately below
@@ -1160,11 +1178,17 @@ def test_nat_legs_rows_are_wired(name, kind, link_slot, games, emerald_b, monkey
     assert row["target"] == {"a": f"{kind}_synth", "b": "town"}
     if "gen3_emerald" in games:
         assert row["target_by_game"]["gen3_emerald"] == {"a": kind, "b": emerald_b}
+    if "gen3_rr" in games and rr_b is not None:
+        assert row["target_by_game"]["gen3_rr"] == {"a": f"{kind}_synth", "b": rr_b}
+    elif "gen3_rr" in games:
+        assert "gen3_rr" not in (row.get("target_by_game") or {})
     assert row["oracle"] == f"assert_{name}_saved" and callable(getattr(DuoRun, row["oracle"]))
     for game in ("gen3_frlg", "gen3_lgfr"):
         assert name not in scenarios_for(game) and scenario_applies(name, game)
     if "gen3_emerald" in games:
         assert name not in scenarios_for("gen3_emerald") and scenario_applies(name, "gen3_emerald")
+    if "gen3_rr" in games:
+        assert name not in scenarios_for("gen3_rr") and scenario_applies(name, "gen3_rr")
     assert os.path.isfile(os.path.join(REPO, "lua", "tests", "duo", f"scenario_gen3_{name[:-5]}.lua"))
     run = DuoRun.__new__(DuoRun)
     calls = []
@@ -1258,3 +1282,129 @@ def test_nat_legs_trade_synth_refuses_a_seed_with_no_owned_slot1_mon(break_it):
             codec.write_sector(chunk, entry["id"], parsed["counter"], layout)
     with pytest.raises(ValueError, match="slot 1 is empty|OT mismatch"):
         fx.build_frlg_synth(bytes(tampered), "trade")
+
+
+# ---------------------------------------------------------------------------
+# card RR-SYNTH: make-rr-synth (build_rr_synth), the CFRU-aware sibling of build_frlg_synth
+# that unblocks evolve_gen3 on gen3_rr (docs/gen3_requirements.md S-8 row: "a working RR leg
+# needs new tool plumbing"). poison_faint_gen3 (S-11) stays refused on RR: RR's
+# DoPoisonFieldEffect detours to an unconditional `MOVS r0,#0; BX LR` stub with no HP
+# mutation at all outside battle (tools/gen3_fixtures.py's build_rr_synth module comment,
+# docs/gen3_engine_sites.md), so RR_SYNTH_KINDS is evolve-only -- there is nothing to build a
+# "poison" kind around.
+# ---------------------------------------------------------------------------
+
+RR_SYNTH_SEED = "rr_battle2"   # tests/fixtures/gen3/rr_battle2.sav: TREECKO Lv6 + Smoliv Lv4
+
+
+def test_rr_synth_builder_is_deterministic():
+    """Two runs of build_rr_synth over the same seed byte-for-byte agree (same requirement as
+    the FR/LG builder: no wall-clock/random state leaks into the output)."""
+    import gen3_fixtures as fx
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_SYNTH_SEED}.sav"), "rb") as f:
+        seed = f.read()
+    built1, _ = fx.build_rr_synth(seed, "evolve")
+    built2, _ = fx.build_rr_synth(seed, "evolve")
+    assert built1 == built2
+
+
+def test_rr_evolve_synth_reproduces_from_its_seed():
+    """The committed `rr_evolve_synth.sav` is exactly what build_rr_synth builds from
+    rr_battle2.sav -- no hand edit, no drift (same contract as the FR/LG synth fixtures)."""
+    import gen3_fixtures as fx
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_SYNTH_SEED}.sav"), "rb") as f:
+        built, _ = fx.build_rr_synth(f.read(), "evolve")
+    with open(os.path.join(fixtures, "rr_evolve_synth.sav"), "rb") as f:
+        assert f.read() == built
+
+
+def test_rr_synth_fixtures_qualify_rr():
+    """qualify --rr must accept the committed RR synth fixture (CFRU codec path, not the
+    vanilla flash layout make-frlg-synth is stuck with)."""
+    import gen3_fixtures as fx
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, "rr_evolve_synth.sav"), "rb") as f:
+        data = f.read()
+    result = fx.qualify_one(data, rr=True)
+    assert result["ok"], result["message"]
+
+
+def test_rr_evolve_synth_fields_decode_as_intended():
+    """party[0] is TREECKO one EXP short of its RR evolution level, RR-base-stat-recomputed,
+    full HP, no status -- the exact fields the evolve_gen3 oracle needs (S-8)."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    path = os.path.join(REPO, "tests", "fixtures", "gen3", "rr_evolve_synth.sav")
+    with open(path, "rb") as f:
+        party = codec.rr_party_from_save(f.read())
+    mon = party[0]
+    assert mon["species"] == fx.SPECIES_TREECKO_RR
+    assert mon["level"] == fx.TREECKO_RR_EVOLVE_LEVEL - 1
+    assert mon["experience"] == fx.TREECKO_RR_EXP_LV16 - 1
+    assert mon["status"] == 0
+    assert mon["hp"] == mon["max_hp"]
+    recomputed = fx._gen3_stats(fx.TREECKO_RR_BASE, mon, mon["level"])
+    assert {k: mon[k] for k in recomputed} == recomputed
+
+
+def test_rr_synth_touches_only_the_party_slot_sector():
+    """Every byte outside the one rewritten CFRU sector (party slot 0's sector, plus its own
+    2-byte chunk checksum) is identical to the seed -- no whole-sector re-encode, no parasite/
+    extension/other-slot drift (the RR-specific hazard build_frlg_synth's write_sector
+    approach does not have to worry about)."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_SYNTH_SEED}.sav"), "rb") as f:
+        seed = f.read()
+    built, _ = fx.build_rr_synth(seed, "evolve")
+    assert len(built) == len(seed)
+    diffs = [i for i in range(len(seed)) if seed[i] != built[i]]
+    assert diffs, "the builder must change at least one byte"
+    parsed = codec.parse_flash(seed, cfru=True)
+    half = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
+    touched_sectors = {s["index"] for s in parsed["sectors"][half:half + codec.NUM_SECTORS_PER_SLOT]}
+    for offset in diffs:
+        sector_index = offset // codec.SECTOR_SIZE
+        assert sector_index in touched_sectors, (
+            f"byte 0x{offset:X} changed outside the selected slot's own sectors")
+
+
+def test_rr_synth_refuses_a_seed_whose_party0_is_not_treecko():
+    """The builder asserts its own seed instead of trusting it (same discipline as OMP
+    cx-6821246e F5 for the FR/LG trade kind): a seed whose party[0] is not TREECKO is refused,
+    not silently mutated into a nonsense fixture."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_SYNTH_SEED}.sav"), "rb") as f:
+        seed = f.read()
+    parsed = codec.parse_flash(seed, cfru=True)
+    sb1 = bytearray(parsed["sb1"])
+    mon = codec.decode_party_mon(bytes(sb1[codec.SB1_PARTY_OFFSET:
+                                            codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE]), rr=True)
+    mon["species"] = 1   # Bulbasaur, not Treecko
+    sb1[codec.SB1_PARTY_OFFSET:codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE] = \
+        codec.encode_party_mon(mon, rr=True)
+    tampered = bytearray(seed)
+    address = codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_OFFSET
+    spans = fx._rr_write_spans(parsed)
+    patches = {}
+    fx._rr_field_patcher(spans, patches, "party[0]")(
+        address, bytes(sb1[codec.SB1_PARTY_OFFSET:codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE]))
+    for offset, value in patches.items():
+        tampered[offset] = value
+    fx._rr_recompute_touched_checksums(parsed, seed, tampered, [])
+    with pytest.raises(ValueError, match="not TREECKO"):
+        fx.build_rr_synth(bytes(tampered), "evolve")
