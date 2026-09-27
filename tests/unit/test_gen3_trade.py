@@ -923,3 +923,31 @@ def test_client_reconnect_reuses_token_only_after_old_report_is_acknowledged(mon
     world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
     world.step()
     assert world.events("apply_ready")[-1]["ok"] is True
+
+
+def test_a_briefly_unauthorized_native_prepare_is_held_not_refused():
+    """T5 LG->FR 2026-09-27: apply_prepare arrived while the native side was still busy
+    ("native not authorized") and the terminal ok=false cancelled the whole trade. A valid
+    prepare waits up to prepare_frames for authorization, then proceeds."""
+    world = TradeWorld()
+    ready = {"ok": False}
+    pending = []
+    world.native.trade_authorized = lambda *_: ready["ok"]
+    world.native.prepare_trade = lambda _, cmd, done, valid: pending.append((cmd, done, valid)) or world.lua.table()
+    world.prepare()
+    world.tick(); world.tick()
+    assert world.events == [] and pending == []
+    ready["ok"] = True
+    world.tick()
+    assert len(pending) == 1 and world.events == []
+
+
+def test_a_prepare_that_never_gets_authorized_still_refuses_at_the_deadline():
+    world = TradeWorld()
+    world.native.trade_authorized = lambda *_: False
+    world.native.prepare_trade = lambda *_: world.lua.table()
+    world.prepare()
+    assert world.events == []
+    world.frame += 601
+    world.tick()
+    assert world.events[-1] == ("apply_ready", {"token": "t", "ok": False})
