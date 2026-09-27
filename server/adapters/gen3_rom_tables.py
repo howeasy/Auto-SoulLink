@@ -59,7 +59,6 @@ TABLE_STRIDES = {
 SYMBOL_DIR = Path(__file__).resolve().parents[2] / "data/gen3/pret"
 RomData = bytes | Mapping[int, bytes]
 SPECIES_INFO_SIZE = 28
-SPECIES_RULE_BYTES = (0, 1, 2, 3, 4, 5, 6, 7, 19, 22, 23)
 DEOXYS = 410
 # pret pokemon.c sDeoxysBaseStats: UPR saves the title's already-used forme into its row.
 DEOXYS_NORMAL = bytes((50, 150, 50, 150, 150, 50))
@@ -73,12 +72,14 @@ DEOXYS_FORME = {"firered": bytes((50, 180, 20, 150, 180, 20)),
 # selected by pokemon.c:3791-3798 for an inherited abilityNum=1.
 _SPECIES_RULES_PATH = Path(__file__).resolve().parents[2] / "data/games/gen3_frlg/species_rules.json"
 with _SPECIES_RULES_PATH.open(encoding="utf-8") as _rules_file:
-    FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset(json.load(_rules_file)["zero_second_ability_species"])
+    _species_rules_facts = json.load(_rules_file)
+FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset(_species_rules_facts["zero_second_ability_species"])
+SPECIES_RULE_BYTES = tuple(row["offset"] for row in _species_rules_facts["bytes"] if row["projected"])
 
 def normalised_species_rules(raw: bytes, title: str) -> bytes:
     """The shared Manager/server rule projection of gSpeciesInfo (pret SpeciesInfo).
 
-    Preserve base stats, types, growth rate and both abilities. Only the fork's known
+    Preserve the classified rule fields, including gender and growth rate. Only the fork's known
     Deoxys forme write and ability-1 fill of a pinned originally-empty slot are equivalent
     to retail. Other fields (e.g. held items and catch rate) are open randomizer options.
     """
@@ -88,13 +89,12 @@ def normalised_species_rules(raw: bytes, title: str) -> bytes:
         raise ValueError("gSpeciesInfo must contain complete 28-byte records")
     rows = []
     for species, offset in enumerate(range(0, len(raw), SPECIES_INFO_SIZE)):
-        row = raw[offset:offset + SPECIES_INFO_SIZE]
-        rules = bytearray(row[b] for b in SPECIES_RULE_BYTES)
-        if species == DEOXYS and row[:6] == DEOXYS_FORME[title]:
-            rules[:6] = DEOXYS_NORMAL
+        row = bytearray(raw[offset:offset + SPECIES_INFO_SIZE])
+        if species == DEOXYS and bytes(row[:6]) == DEOXYS_FORME[title]:
+            row[:6] = DEOXYS_NORMAL
         if species in FRLG_ZERO_SECOND_ABILITY_SPECIES and row[23] in (0, row[22]):
-            rules[-1] = row[22]
-        rows.append(rules)
+            row[23] = row[22]
+        rows.append(bytes(row[b] for b in SPECIES_RULE_BYTES))
     return b"".join(rows)
 
 

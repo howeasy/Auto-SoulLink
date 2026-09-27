@@ -19,6 +19,42 @@ STAGED = {"firered": "patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba",
           "leafgreen": "patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba"}
 
 
+def byte_policy() -> list[dict]:
+    """RF-5 policy, laid out by pret include/pokemon.h:208-236 (plus agbcc tail padding)."""
+    names = (
+        "baseHP", "baseAttack", "baseDefense", "baseSpeed", "baseSpAttack", "baseSpDefense",
+        "types[0]", "types[1]", "catchRate", "expYield", "evYield_HP/Attack/Defense/Speed",
+        "evYield_SpAttack/SpDefense/reserved", "itemCommon low", "itemCommon high",
+        "itemRare low", "itemRare high", "genderRatio", "eggCycles", "friendship", "growthRate",
+        "eggGroups[0]", "eggGroups[1]", "abilities[0]", "abilities[1]", "safariZoneFleeRate",
+        "bodyColor/noFlip", "padding[0]", "padding[1]",
+    )
+    projected = {*range(8), 16, 19, 22, 23}
+    reasons = {
+        8: "Ruling 31: minimum catch-rate settings are open; the server does not infer a catch from this value.",
+        16: "Ruling 31 shared-rule policy, RF-5: gender clauses and display use the pinned personality/gender ratio.",
+        19: "Ruling 31 shared-rule policy, RF-3: growth-curve changes remain forbidden by the Manager envelope.",
+    }
+    rows = []
+    for offset, name in enumerate(names):
+        reason = reasons.get(offset)
+        allowed = []
+        if offset == 8:
+            allowed = ["catch_rate"]
+        elif 12 <= offset <= 15:
+            allowed = ["wild_held_items"]
+            reason = "Ruling 31: wild held items are open; these item bytes are not fixed species rules."
+        elif offset < 8 or offset in (22, 23):
+            reason = "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+        elif offset in (25, 26, 27):
+            reason = "Ruling 31/RF-5: appearance or padding has no Soul Link rule meaning; no allowed setting changes it."
+        elif reason is None:
+            reason = "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+        rows.append({"offset": offset, "name": name, "projected": offset in projected,
+                     "allowed_write_domains": allowed, "reason": reason})
+    return rows
+
+
 def build(roms: dict[str, bytes]) -> dict:
     lock = json.loads((ROOT / "data/gen3_sources.lock.json").read_text(encoding="utf-8"))
     if set(roms) != set(STAGED):
@@ -47,6 +83,8 @@ def build(roms: dict[str, bytes]) -> dict:
         raise ValueError("the pinned titles disagree on original empty second-ability slots")
     return {"schema": 1, "generated_by": "python tools/gen_gen3_species_rules.py",
             "source": lock["source"], "record_size": 28, "second_ability_offset": 23,
+            "layout_source": "pret/pokefirered include/pokemon.h:208-236; agbcc sizeof(SpeciesInfo)=28",
+            "bytes": byte_policy(),
             "titles": titles, "zero_second_ability_species": originals["firered"]}
 
 

@@ -1074,7 +1074,7 @@ CLEAN_CONTENT_SHA256 = {
 # gSpeciesInfo, as projected by _evolutions_digest/_species_rules_digest.
 # tests/unit/test_gen3_rom_ingest.py re-derives both from the pinned clean dumps.
 _EVOLUTIONS_SHA256 = "cdbbae339af1f2c071349d709d92abae6b5915702f44f51011abc0b472cc7c5d"
-_SPECIES_RULES_SHA256 = "06e7f0e7edb350b1c64260af7ec36faf763f53fd0865ef3449e017a20f8b8a4c"
+_SPECIES_RULES_SHA256 = "bece12dddc1d36701f817930d8bb6effbd73213db94bec27ac4b96a70238287f"
 
 SPECIES_INFO_SIZE = gen3_rom_tables.SPECIES_INFO_SIZE
 _CONTENT_HEADS = ("gTrainers", "gWildMonHeaders", "gEvolutionTable", "gSpeciesInfo",
@@ -1174,7 +1174,7 @@ def decode_verified(rom, title: str) -> dict:
         bad.append("evolutions")
     addr, size = _symbol(title, "gSpeciesInfo")
     if _species_rules_digest(reader.read(addr, size, "gSpeciesInfo"), title) != _SPECIES_RULES_SHA256:
-        bad.append("types/abilities/base stats/growth rates")
+        bad.append("types/abilities/base stats/growth rates/gender ratios")
     if bad:
         raise ForbiddenRomTables(f"{title} cartridge has randomized {' and '.join(bad)}, which "
                                  "SLink does not support (the server rules on pret's tables)")

@@ -426,7 +426,7 @@ def _check_content_gen3(source_rom: str, output_rom: str) -> dict:
             f"({', '.join(bad[:6])}); SLink hooks and admits by these, so the output is refused")
     if _gen3_species_rules(out, si["title"]) != _gen3_species_rules(src, si["title"]):
         raise UprPipelineError(
-            "base stats, types, growth rates or abilities differ from the source — a setting "
+            "base stats, types, growth rates, gender ratios or abilities differ from the source — a setting "
             "that changes data the Soul Link rules read was enabled")
     try:
         tables = decode_rom_tables(out, si["title"])

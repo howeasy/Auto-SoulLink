@@ -7,6 +7,215 @@
   },
   "record_size": 28,
   "second_ability_offset": 23,
+  "layout_source": "pret/pokefirered include/pokemon.h:208-236; agbcc sizeof(SpeciesInfo)=28",
+  "bytes": [
+    {
+      "offset": 0,
+      "name": "baseHP",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 1,
+      "name": "baseAttack",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 2,
+      "name": "baseDefense",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 3,
+      "name": "baseSpeed",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 4,
+      "name": "baseSpAttack",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 5,
+      "name": "baseSpDefense",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 6,
+      "name": "types[0]",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 7,
+      "name": "types[1]",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 8,
+      "name": "catchRate",
+      "projected": false,
+      "allowed_write_domains": [
+        "catch_rate"
+      ],
+      "reason": "Ruling 31: minimum catch-rate settings are open; the server does not infer a catch from this value."
+    },
+    {
+      "offset": 9,
+      "name": "expYield",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+    },
+    {
+      "offset": 10,
+      "name": "evYield_HP/Attack/Defense/Speed",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+    },
+    {
+      "offset": 11,
+      "name": "evYield_SpAttack/SpDefense/reserved",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+    },
+    {
+      "offset": 12,
+      "name": "itemCommon low",
+      "projected": false,
+      "allowed_write_domains": [
+        "wild_held_items"
+      ],
+      "reason": "Ruling 31: wild held items are open; these item bytes are not fixed species rules."
+    },
+    {
+      "offset": 13,
+      "name": "itemCommon high",
+      "projected": false,
+      "allowed_write_domains": [
+        "wild_held_items"
+      ],
+      "reason": "Ruling 31: wild held items are open; these item bytes are not fixed species rules."
+    },
+    {
+      "offset": 14,
+      "name": "itemRare low",
+      "projected": false,
+      "allowed_write_domains": [
+        "wild_held_items"
+      ],
+      "reason": "Ruling 31: wild held items are open; these item bytes are not fixed species rules."
+    },
+    {
+      "offset": 15,
+      "name": "itemRare high",
+      "projected": false,
+      "allowed_write_domains": [
+        "wild_held_items"
+      ],
+      "reason": "Ruling 31: wild held items are open; these item bytes are not fixed species rules."
+    },
+    {
+      "offset": 16,
+      "name": "genderRatio",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31 shared-rule policy, RF-5: gender clauses and display use the pinned personality/gender ratio."
+    },
+    {
+      "offset": 17,
+      "name": "eggCycles",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+    },
+    {
+      "offset": 18,
+      "name": "friendship",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+    },
+    {
+      "offset": 19,
+      "name": "growthRate",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31 shared-rule policy, RF-3: growth-curve changes remain forbidden by the Manager envelope."
+    },
+    {
+      "offset": 20,
+      "name": "eggGroups[0]",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+    },
+    {
+      "offset": 21,
+      "name": "eggGroups[1]",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+    },
+    {
+      "offset": 22,
+      "name": "abilities[0]",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 23,
+      "name": "abilities[1]",
+      "projected": true,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31: base stats, types and abilities are fixed server/calc rule data."
+    },
+    {
+      "offset": 24,
+      "name": "safariZoneFleeRate",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: no server rule consumes this field; no allowed randomizer setting may change it."
+    },
+    {
+      "offset": 25,
+      "name": "bodyColor/noFlip",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: appearance or padding has no Soul Link rule meaning; no allowed setting changes it."
+    },
+    {
+      "offset": 26,
+      "name": "padding[0]",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: appearance or padding has no Soul Link rule meaning; no allowed setting changes it."
+    },
+    {
+      "offset": 27,
+      "name": "padding[1]",
+      "projected": false,
+      "allowed_write_domains": [],
+      "reason": "Ruling 31/RF-5: appearance or padding has no Soul Link rule meaning; no allowed setting changes it."
+    }
+  ],
   "titles": {
     "firered": {
       "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
