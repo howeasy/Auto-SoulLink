@@ -815,7 +815,7 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
             tables = _check_content_gen3(sources[player], info["output"])
             info["sites_intact"] = True        # _check_content_gen3 refuses otherwise
             info["write_domain"] = upr_gen3_write_domain.check_output(
-                sources[player], info["output"], info["spec"])
+                sources[player], info["output"], info["spec"], jar=jar)
             info["content_hash"] = info["fingerprint"] = gen3_content_fingerprint(tables)
             results[player] = info
             continue

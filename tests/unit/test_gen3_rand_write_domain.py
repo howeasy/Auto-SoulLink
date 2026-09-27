@@ -4,6 +4,7 @@ ROM controls use the pinned sources and the design's scratch UPR outputs; only t
 Java invocation is replaced. Missing private ROMs skip by name, never with synthetic success.
 """
 import hashlib
+import json
 from pathlib import Path
 
 import pytest
@@ -12,7 +13,20 @@ from server import upr_gen3_write_domain as W, upr_pipeline as P, upr_settings a
 from tests.unit.test_upr_gen3_write_domain import _clean_path, _log_spec, _manager_output
 
 
-def _prepare(tmp_path, monkeypatch, first_title, *, widest_movesets=False):
+def _prepare(tmp_path, monkeypatch, first_title, *, widest_movesets=False,
+             executed_jar_matches=True, discovered_jar_matches=True):
+    # The external process is replaced, but hashing and the audit's model-file read are real.
+    modelled = tmp_path / "modelled.jar"
+    modelled.write_bytes(b"the modelled test randomizer")
+    other = tmp_path / "other.jar"
+    other.write_bytes(b"a different test randomizer")
+    model = W.load_model()
+    model["jar_sha256"] = hashlib.sha256(modelled.read_bytes()).hexdigest()
+    model_path = tmp_path / "model.json"
+    model_path.write_text(json.dumps(model), encoding="utf-8")
+    monkeypatch.setattr(W, "MODEL_PATH", model_path)
+    monkeypatch.setattr(P, "find_upr_jar", lambda: str(modelled if discovered_jar_matches else other))
+    executed = str(modelled if executed_jar_matches else other)
     titles = {"a": first_title, "b": "leafgreen" if first_title == "firered" else "firered"}
     sources = {p: str(_clean_path(title)) for p, title in titles.items()}
     outputs = {title: _manager_output(title, "allowed") for title in titles.values()}
@@ -34,6 +48,7 @@ def _prepare(tmp_path, monkeypatch, first_title, *, widest_movesets=False):
         P._check_content_gen3(sources["a"], str(probe))
 
     def randomize(_jar, _settings, source, output, *, java):
+        assert _jar == executed
         title = P.gen3_title(Path(source).read_bytes())
         raw = raw_outputs[title]
         Path(output).write_bytes(raw)
@@ -45,7 +60,7 @@ def _prepare(tmp_path, monkeypatch, first_title, *, widest_movesets=False):
                 "version": "4.6.1-slink3"}
 
     monkeypatch.setattr(P, "randomize", randomize)
-    return P.prepare_pair("external-process-replaced.jar", str(settings), sources, str(tmp_path / "out"))
+    return P.prepare_pair(executed, str(settings), sources, str(tmp_path / "out"))
 
 
 @pytest.mark.parametrize("title", ("firered", "leafgreen"))
@@ -60,3 +75,17 @@ def test_prepare_pair_retains_the_write_domain_receipt_for_both_titles(tmp_path,
         assert row["sites_intact"] is True
         assert row["write_domain"]["changed"] > 1000
         assert row["write_domain"]["domains"] == sorted(W.domains_for_spec(row["spec"]))
+
+
+@pytest.mark.parametrize("matches", (False, True), ids=("different-executed-jar", "modelled-executed-jar"))
+def test_prepare_pair_audits_the_executed_jar_instead_of_a_discovered_one(tmp_path, monkeypatch, matches):
+    # Discovery deliberately names the opposite jar: a default lookup would either admit the
+    # wrong build or refuse the right one. Neither randomize nor the SHA-256 check runs Java.
+    if matches:
+        result = _prepare(tmp_path, monkeypatch, "firered", executed_jar_matches=True,
+                          discovered_jar_matches=False)
+        assert all(row["write_domain"]["changed"] > 1000 for row in result["players"].values())
+    else:
+        with pytest.raises(P.UprPipelineError, match="other.jar.*not the jar the write domains were modelled from"):
+            _prepare(tmp_path, monkeypatch, "firered", executed_jar_matches=False,
+                     discovered_jar_matches=True)
