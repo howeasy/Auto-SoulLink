@@ -25,9 +25,13 @@
 --     commands = { [name] = fn(cmd) -> consumed? }; battle_write(entry, slot, mon, ending)
 --       -> "done" | "hold", why | nil; party_borrowed() -> bool (a borrowed party is in RAM:
 --     a force_* whose key is not in it is HELD, not dropped); box_generation() -> gen, complete
---       (KEY-SCOPE-5: the Gen 1/2 client's own raw generation counter and whether the last scan
---       was complete -- enables a retryable key_change refusal to be resent); rescan_boxes()
---       (requested once on a "box census unavailable" refusal).
+--       (KEY-SCOPE-5: the generation the driver's own box scan bumps ONLY on a complete scan, and
+--       whether that last scan was complete; the pair gates a retryable key_change refusal's
+--       resend. TWO values on purpose -- Gen 1/2's own accessor (lua/gen1/client.lua:342)
+--       returns the one, nil-if-incomplete WIRE field, because nothing there needs the flag
+--       apart; a driver answering with one value reads as "complete unknown" here and is never
+--       rescan-driven); rescan_boxes() (called once per tick while the last scan was incomplete
+--       -- lua/gen1/client.lua:2309 -- and at once on a "box census unavailable" refusal).
 --
 -- Nothing semantic precedes hello (docs/protocol.md §9 item 4): an event emitted while the
 -- connection has not sent its hello yet (a frame hook, a hello_fields side effect) is held in
@@ -156,13 +160,6 @@ function Session.new(p)
     end
 
     -- ── in-battle writes ───────────────────────────────────────────────────────────
-    local function resolve(key, party)
-        local slot, mon, _, why = identity:find_party_slot(key, party)
-        local a = identity.pending
-        if not slot and not why and a and a.old_key == key then slot, mon, why = identity:observe_one(a, party) end
-        return slot, mon, why
-    end
-
     function self:battle_pending_count() return #self.battle_pending end
 
     function self:drop_battle_writes(why)
@@ -178,8 +175,8 @@ function Session.new(p)
         local party = game.read_party()
         local keep = {}
         for _, e in ipairs(self.battle_pending) do
-            local slot, mon, why
-            if party then slot, mon, why = resolve(e.key, party) end
+            local slot, mon, _party, why
+            if party then slot, mon, _party, why = identity:find_party_slot(e.key, party) end
             local res, rwhy
             if why then
                 log(e.cmd .. " refused in battle: " .. why .. " " .. tostring(e.key))
@@ -332,7 +329,9 @@ function Session.new(p)
     -- census NEWER than the refusal has gone out (mirrors lua/gen1/client.lua resend_refused_change).
     local function resend_refused_change()
         local a = identity.pending
-        if a and a.retry_gen and game.box_generation then
+        -- `a.msg` is the exact message the driver sent; Identity:begin_alias never sets it, and a
+        -- resend with no fields is a key_change nobody can act on. Stay armed, send nothing.
+        if a and a.msg and a.retry_gen and game.box_generation then
             local gen, complete = game.box_generation()
             if complete and gen and gen > a.retry_gen then
                 a.retry_gen = nil
@@ -353,9 +352,19 @@ function Session.new(p)
     end
 
     function self:send_tick()
+        -- KEY-SCOPE-5: an incomplete census is retried here, at most once per tick, and BEFORE
+        -- the tick so the census this tick publishes is the fresh one
+        if game.box_generation and game.rescan_boxes then
+            local _, complete = game.box_generation()
+            if complete == false then game.rescan_boxes() end
+        end
         local f = game.tick_fields()
-        if f then send("tick", f) end
-        resend_refused_change()
+        -- the resend rides the tick that carries the newer census: a tick that went nowhere
+        -- published no census, so re-sending on it only earns the same refusal again
+        if f then
+            send("tick", f)
+            resend_refused_change()
+        end
     end
 
     -- PLAN §5.4: a stuck hold is diagnosable -- what, why, since when -- from the CONSOLE, never

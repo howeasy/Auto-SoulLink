@@ -304,7 +304,10 @@ function Client.new(p)
         if ok then st.box_generation = st.box_generation + 1 end
         return cache
     end
-    local function box_generation() return st.boxes_ok and st.box_generation or nil end
+    -- the ONE box-generation accessor: (raw generation, whether the last scan was complete) for
+    -- the core (lua/core/session.lua); a wire field takes `ok and gen or nil` of it, so the two
+    -- can never disagree
+    local function box_generation() return st.box_generation, st.boxes_ok end
     local function pc_boxes_wire()
         if not st.boxes_ok then return nil end
         local out = arr({})
@@ -904,9 +907,10 @@ function Client.new(p)
     drv.read_party = party_read
     drv.in_battle = in_battle
     drv.battle_write = battle_write
-    -- KEY-SCOPE-5: the core's key_change retry hook -- st.box_generation only bumps on a
-    -- complete rescan, so it doubles as the raw generation counter core/session.lua needs.
-    drv.box_generation = function() return st.box_generation, st.boxes_ok end
+    -- KEY-SCOPE-5: the core's key_change retry hook. st.box_generation only bumps on a complete
+    -- rescan, so it IS the raw generation counter core/session.lua needs. This is the same
+    -- accessor the hello census field reads, not a second one that could drift away from it.
+    drv.box_generation = box_generation
     drv.rescan_boxes = rescan_boxes
     function drv.party_borrowed()
         local party = party_read()
@@ -1010,9 +1014,10 @@ function Client.new(p)
         latch_balls(false)                                     -- a resume, not an acquisition
         local area_id, loc = area_now()
         st.last_area = area_id .. "|" .. loc
+        local gen, gen_ok = box_generation()                -- advertised only when the scan was complete
         local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind,
                     rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
-                    pc_boxes_generation = box_generation(),
+                    pc_boxes_generation = gen_ok and gen or nil,
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
                     in_battle = in_battle(), badges = badges(), ball_count = ball_count() }
         if session_nonce then

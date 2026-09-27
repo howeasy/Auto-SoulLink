@@ -13,6 +13,13 @@ Falsifiers 1-4 drive lua/core/session.lua directly under lupa (mirrors tests/uni
 World, with the KC-RETRY driver hooks `box_generation()` and `rescan_boxes()` added). Falsifier 5
 is a cross-wire test through the real server (server/state.py / server/server.py), reusing the
 Gen 3 census helpers from tests/unit/test_state_key_scope.py.
+
+The round-2 falsifiers (review cx-876c8b77) cover the CLIENT half of the same window: a force_faint
+the server sends under the OLD key while the refusal is in flight still lands, an incomplete
+census is re-requested by the tick, the resend rides only a tick that actually went out, a refusal
+with no stamped message sends nothing, and the real Gen 3 driver publishes ONE two-value
+box_generation for the core (through tests/unit/gen3_world.py's World, the harness
+tests/unit/test_gen3_client.py builds).
 """
 from __future__ import annotations
 
@@ -212,17 +219,19 @@ def test_no_resend_on_an_incomplete_census_or_the_same_generation():
 def test_a_census_refusal_requests_a_rescan_a_trade_clash_refusal_does_not():
     w = World()
     w.step_to(60)
+    w.st.box_ok, w.st.box_gen = True, 5    # a complete census already out, so no per-tick rescan
     w.begin_alias(OLD, NEW)
     w.command(cmd="key_change_rejected", old_key=OLD, new_key=NEW, reason="box census unavailable")
     w.step()
-    assert w.st.box_gen == 1 and w.st.box_ok is True           # rescan_boxes() ran once
+    assert w.st.box_gen == 6 and w.st.box_ok is True           # the refusal's rescan ran once
 
     w = World()
     w.step_to(60)
+    w.st.box_ok, w.st.box_gen = True, 5
     w.begin_alias(OLD, NEW)
     w.command(cmd="key_change_rejected", old_key=OLD, new_key=NEW, reason="ambiguous key (trade clash)")
     w.step()
-    assert w.st.box_gen == 0, "not a census reason: no rescan requested"
+    assert w.st.box_gen == 5, "not a census reason: no rescan requested"
     assert w.identity.pending is not None
 
 
@@ -244,11 +253,11 @@ def test_a_non_retryable_refusal_still_retires_the_alias():
 # -- falsifier 5: cross-wire through the real server -------------------------------------------
 
 def test_cross_wire_npc_trade_census_refusal_then_resend_reaches_partner_faint(tmp_path):
-    """The server-side half of KEY-SCOPE-5 that lua/gen3/client.lua's retry now relies on
-    (mirrors tests/unit/test_state_key_scope.py's own KEY-SCOPE-5 census tests): an npc_trade
-    key_change refused for "box census unavailable" retires nothing, and the identical
-    key_change is accepted once a fresh complete census has gone out; a later faint under the
-    new key still reaches the partner's link."""
+    """SERVER-SIDE REGRESSION GUARD, not a client test: the half of KEY-SCOPE-5 that
+    lua/gen3/client.lua's retry relies on (mirrors tests/unit/test_state_key_scope.py's own
+    KEY-SCOPE-5 census tests). An npc_trade key_change refused for "box census unavailable"
+    retires nothing, and the identical key_change is accepted once a fresh complete census has
+    gone out; a later faint under the new key still reaches the partner's link."""
     from server.state import LinkStatus
     from tests.unit.test_state_key_scope import (
         B1,
@@ -278,3 +287,94 @@ def test_cross_wire_npc_trade_census_refusal_then_resend_reaches_partner_faint(t
     a_cmds = srv.state.handle_event("a", {"event": "noop"})
     assert [c["key"] for c in _named(a_cmds, "force_faint")] == [l1.a.key]
     assert l1.status == LinkStatus.DEAD
+
+
+# -- round 2 (review cx-876c8b77): the client's own half of the same window ----------------------
+
+def test_a_force_faint_under_the_old_key_lands_during_the_retry_window():
+    """The server names the mon by the OLD key for the whole refusal window, so a force_faint it
+    sends in that window must reach the record the cartridge actually holds (MAJOR-1: the
+    resolver ignored the pending alias, so route_force dropped it as "key not in party")."""
+    w = World()
+    w.step_to(60)                                  # hello out, writes enabled
+    w.set_party((NEW, 0))                          # the cartridge holds the NEW key, and only it
+    w.begin_alias(OLD, NEW)
+    w.command(cmd="key_change_rejected", old_key=OLD, new_key=NEW, reason="ambiguous key (trade clash)")
+    w.step()
+    fainted: list[tuple] = []
+    w.q.exec.faint_slot = lambda slot, name: fainted.append((int(slot), str(name)))
+    w.command(cmd="force_faint", key=OLD, nickname="MON")
+    w.step()
+    assert fainted == [(0, "force_faint")], "the old key must resolve to the record the cartridge holds"
+    assert not any("key not in party" in line for line in w.logs), w.logs
+
+
+def test_an_incomplete_census_is_re_requested_on_the_next_tick_with_no_pc_activity():
+    """Nothing but PC activity refreshes the Gen 3 census, so a trade-clash refusal (which asks
+    for no rescan) could never make progress: the tick re-requests the scan, once (MAJOR-2)."""
+    w = World()
+    w.step_to(60)
+    w.st.box_ok, w.st.box_gen = False, 7            # a scan that did not land
+    w.step_to(90)                                   # exactly one tick, no PC activity anywhere
+    assert (int(w.st.box_gen), w.st.box_ok) == (8, True), "the tick re-requests the incomplete census"
+    w.step_to(120)                                  # and stops asking once it is complete
+    assert int(w.st.box_gen) == 8, "at most one rescan per tick, none once complete"
+
+
+def test_the_resend_waits_for_a_tick_that_actually_goes_out():
+    """The resend is justified by a NEWER COMPLETE CENSUS, so it may only ride a tick that
+    published one; a tick with no party publishes nothing and the refusal stays armed (MAJOR-3)."""
+    w = World()
+    w.step_to(60)
+    w.st.box_ok, w.st.box_gen = True, 1
+    msg = w.begin_alias(OLD, NEW)
+    w.command(cmd="key_change_rejected", old_key=OLD, new_key=NEW, reason="box census unavailable")
+    w.step_to(66)
+    assert (int(w.st.box_gen), w.st.box_ok) == (2, True)   # the refusal asked for that rescan at once
+    w.st.tick_ok = False                              # tick_fields() -> nil: nothing to publish
+    w.step_to(90)                                     # the census tick goes nowhere
+    assert len(w.events("key_change")) == 1, "the resend rides the tick that carries the census"
+    assert w.identity.pending.retry_gen is not None, "and the refusal stays armed until one goes out"
+    w.st.tick_ok = True
+    w.step_to(120)
+    assert [{k: m[k] for k in msg} for m in w.events("key_change")] == [msg, msg]
+
+
+def test_a_refusal_with_no_stamped_message_sends_nothing_and_stays_armed():
+    """Identity:begin_alias never sets `msg` (the driver stamps the message it sent). Without one
+    there is nothing to re-send, and inventing an empty key_change puts an unwireable event on
+    the protocol -- so the refusal must stay armed, waiting for a real message (MINOR)."""
+    w = World()
+    w.step_to(60)
+    w.st.box_ok, w.st.box_gen = True, 1
+    p = w.st.party
+    w.identity.begin_alias(w.identity, OLD, NEW, p[1], p)       # no .msg: nothing was stamped
+    w.command(cmd="key_change_rejected", old_key=OLD, new_key=NEW, reason="box census unavailable")
+    w.step_to(66)
+    assert int(w.st.box_gen) == 2, "the refusal asked for the rescan at once"
+    w.step_to(120)                                      # a newer complete census goes out
+    assert w.events("key_change") == [], "no key_change to re-send, and none is invented"
+    assert w.identity.pending is not None
+    assert w.identity.pending.retry_gen is not None, "still armed for a stamped message"
+
+
+def test_the_real_gen3_driver_publishes_the_core_two_value_box_generation():
+    """lua/gen3/client.lua kept TWO box_generation accessors -- a one-value local for the wire
+    field and a two-value drv hook -- which could disagree. There is one now: the core's
+    (generation, last-scan-complete) pair, of which the wire field takes the nil-if-incomplete
+    half (MAJOR-4). Driven through the real pack data, as tests/unit/test_gen3_client.py does."""
+    from tests.unit.gen3_world import World as Gen3World
+
+    w = Gen3World()
+    drv = w.client.driver
+    drv.rescan_boxes()
+    gen, complete = drv.box_generation()
+    gen = int(gen)
+    assert complete is True and gen >= 1, "a complete scan publishes (gen, true)"
+    psp = w.wc["pointers"]["gPokemonStoragePtr"]["address"]
+    w.poke_int(psp, 0, 4)                             # the storage pointer is null: the scan stops
+    drv.rescan_boxes()
+    assert drv.box_generation() == (gen, False), "an incomplete scan publishes (gen, false)"
+    w.poke_int(psp, w.ram["POKEMON_STORAGE_BASE"], 4)
+    drv.rescan_boxes()
+    assert drv.box_generation() == (gen + 1, True), "only a complete scan advances the generation"
