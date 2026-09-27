@@ -98,6 +98,29 @@ async def test_a_valid_rand_report_is_admitted_but_its_bad_hash_is_not(tmp_path,
             assert "fingerprint" in server.admission["a"]["reason"]
 
 
+@pytest.mark.parametrize("title", ("firered", "leafgreen"))
+@pytest.mark.parametrize("proof", ("missing", "empty", "bad-hash", "valid"))
+@pytest.mark.asyncio
+async def test_supported_rand_overlay_requires_verified_content(tmp_path, title, proof):
+    fields = {}
+    if proof == "empty":
+        fields["rom_content"] = {}
+    elif proof in ("bad-hash", "valid"):
+        fields["rom_content"] = randomized_payload(title)
+        if proof == "bad-hash":
+            fields["rom_content"]["fingerprint"] = "0" * 40
+    server = SLinkServer(data_dir=str(tmp_path))
+    async with client(server) as send:
+        response = await send(hello(title, "rand_overlay", **fields))
+    if proof == "valid":
+        assert server.admission["a"]["state"] == "admitted"
+        assert server.adapter_for("a").trainer_party(414)[0]["species"] == "Graveler"
+    else:
+        assert server.admission["a"]["state"] == "rejected"
+        assert "rom_content" in server.admission["a"]["reason"]
+        assert response["commands"] == [{"cmd": "noop", "refused": "admission"}]
+
+
 @pytest.mark.parametrize("rom_type,kind", (
     ("red", "clean"), ("red", "rand"), ("crystal", "clean"), ("crystal", "overlay"),
     ("firered", "clean"), ("leafgreen", "clean"), ("firered_rr", "clean"),

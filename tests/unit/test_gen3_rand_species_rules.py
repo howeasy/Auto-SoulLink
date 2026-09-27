@@ -60,3 +60,26 @@ async def test_fork_baseline_writes_are_accepted_by_the_manager_and_socket(tmp_p
         reply = await send(hello(title, "rand", rom_content=report))
     assert server.admission["a"]["state"] == "admitted"
     assert not any(c.get("refused") for c in reply["commands"])
+
+
+@pytest.mark.parametrize("title", ("firered", "leafgreen"))
+@pytest.mark.asyncio
+async def test_originally_empty_second_ability_only_allows_filling_with_the_first(tmp_path, title):
+    original = _clean(title)
+    raw = bytearray(original)
+    head = symbols(title, len(raw))["gSpeciesInfo"]["address"] - 0x08000000
+    offset = head + 28
+    assert (raw[offset + 22], raw[offset + 23]) == (65, 0)  # pinned Bulbasaur: OVERGROW/NONE
+    raw[offset + 23] = 66                                # a different, nonzero ability
+    report = _payload(bytes(raw), title)
+    assert Gen3Adapter.pairing_kind_for("rand", report) == "rand"
+    server = SLinkServer(data_dir=str(tmp_path / "run"))
+    async with client(server) as send:
+        await send(hello(title, "rand", rom_content=report))
+    assert server.admission["a"]["state"] == "rejected"
+    assert "abilities" in server.admission["a"]["reason"]
+    source, output = tmp_path / "clean.gba", tmp_path / "changed.gba"
+    source.write_bytes(original)
+    output.write_bytes(raw)
+    with pytest.raises(upr_pipeline.UprPipelineError, match="abilities"):
+        upr_pipeline._check_content_gen3(str(source), str(output))

@@ -70,27 +70,9 @@ DEOXYS_FORME = {"firered": bytes((50, 180, 20, 150, 180, 20)),
 # UPR may fill only these empty slots with ability 1. In particular, Vibrava's
 # two LEVITATE slots are both nonzero: erasing its second slot changes the ability
 # selected by pokemon.c:3791-3798 for an inherited abilityNum=1.
-FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset((
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 21, 22,
-    25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43,
-    44, 45, 46, 47, 48, 49, 52, 53, 56, 57, 66, 67, 68, 69, 70, 71, 86, 87,
-    90, 91, 92, 93, 94, 96, 97, 102, 103, 106, 107, 109, 110, 114, 115, 116,
-    117, 122, 123, 124, 125, 126, 127, 128, 129, 130, 132, 133, 134, 135, 136,
-    137, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157,
-    158, 159, 160, 169, 172, 173, 174, 179, 180, 181, 182, 187, 188, 189, 191,
-    192, 196, 197, 198, 200, 201, 202, 204, 205, 212, 213, 216, 217, 220, 221,
-    223, 224, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 243,
-    244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255, 256, 257, 258,
-    259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 271, 272, 273,
-    274, 275, 276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286, 287, 288,
-    289, 290, 291, 292, 293, 294, 301, 302, 303, 304, 305, 306, 307, 308, 309,
-    310, 311, 312, 315, 316, 317, 318, 319, 321, 322, 323, 324, 325, 328, 329,
-    330, 331, 339, 340, 341, 342, 343, 344, 345, 346, 347, 348, 349, 353, 354,
-    356, 357, 358, 359, 360, 361, 362, 364, 365, 366, 369, 370, 371, 372, 373,
-    374, 375, 376, 377, 378, 379, 380, 385, 387, 388, 389, 390, 391, 395, 396,
-    397, 398, 399, 400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411,
-))
-
+_SPECIES_RULES_PATH = Path(__file__).resolve().parents[2] / "data/games/gen3_frlg/species_rules.json"
+with _SPECIES_RULES_PATH.open(encoding="utf-8") as _rules_file:
+    FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset(json.load(_rules_file)["zero_second_ability_species"])
 
 def normalised_species_rules(raw: bytes, title: str) -> bytes:
     """The shared Manager/server rule projection of gSpeciesInfo (pret SpeciesInfo).
