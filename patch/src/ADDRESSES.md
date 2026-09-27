@@ -408,9 +408,9 @@ against `BPRE.ld` and disassembled (capstone):
 | 13 | ARM_PEER_INTERACT | `[0]`=ghost oeId `[1]`=armed | talk-to-ghost detection (legacy; ghost auto-arms now) |
 | 14 | GHOST_SPAWN | `[0]`=gfxId `[1]`=localId | engine-driven peer ghost: hook spawns+walks it via held movements (GhostState@0x0203F850) |
 | 15 | GHOST_CLEAR | — | hook cleanly removes the ghost (RemoveEventObject) |
-| 16 | SET_ENEMY_PARTY | `[0]`=count; blobs staged in `0x0203FA00` | faithful byte-copy of count×100 party-mon bytes into `gEnemyParty` + set count (rival-team-swap) |
+| 16 | SET_ENEMY_PARTY | — | **RR-DURABLE: always refused** (`REASON_DURABLE_ONLY` 9) — a raw trade stage is a durable-trade bypass. The rival swap has its own opcode 28 |
 | 17 | SHOW_MENU | text (FR-encoded) in `0x0203F900` → `result[0]`=choice (1=YES 0=NO) | native YES/NO field menu (`yesnobox`); **async** — ack ST_BUSY, `drive_menu` publishes `gSpecialVar_Result`@`0x020370D0` when the script ends. Talk-to-partner menuing foundation. |
-| 18 | SET_PARTY_MON | `[0]`=slot `[1]`=bump; one blob staged in `0x0203FA00` | faithful 100-byte blob copy into `gPlayerParty[slot]` (trade — mirror of SET_ENEMY_PARTY) |
+| 18 | SET_PARTY_MON | — | **RR-DURABLE: always refused** (`REASON_DURABLE_ONLY` 9) — raw record replacement is never a trade path |
 | 19 | PLAY_SE | `[0..1]`=songId | `PlaySE(songId)` @`0x080722CC` — native sound effect (retires the Lua m4a SE1 RAM-poke) |
 | 20 | CHOOSE_PARTY_MON | — → `result[0]`=slot(0-5)/7=cancel | native "Choose a POKéMON" menu via `callnative ChoosePartyMonByMenuType` (FR `special` idx is reordered on RR); ASYNC, `drive_ui` publishes Var8004 |
 | 21 | TRADE_SCENE | ABI2 trade args (slot, role, old PID/OT, visit, token) + the incoming record in `SLINK_BLOB_BUF` | **RR-DURABLE**: owned by the shared producer (`rr_trade_relay.h`, `trade_targets/trade_producer.h`), only after a READY PREPARE. Stages `gEnemyParty[0]`, runs `callnative DoInGameTradeScene` @`0x08054440`, then the native post-save (`SaveMapView`, `SaveQuestLogData`, `TrySavingData(SAVE_NORMAL)`) before the witnessed DONE. The old raw v1 scene ack is gone |
@@ -431,6 +431,7 @@ against `BPRE.ld` and disassembled (capstone):
 | 1 | `REASON_SCRIPT_CONTEXT` | `sScriptContext2Enabled` (a script owns the field) |
 | 2 | `REASON_BAD_ARGS` | out-of-range args |
 | 3 | `REASON_NOT_ON_FIELD` | `on_field()` false |
+| 9 | `REASON_DURABLE_ONLY` | **RR-DURABLE** — raw trade opcode 16/18 on the durable build. Durable-trade refusals (identity 12, uncertain 11, withdraw_too_late 14) are the producer's ABI2 words in the SHADOW mailbox and reach Lua through the relay only for opcodes 21/29/30/31; the v1 meanings of 11/12 for the other opcodes are unchanged |
 | 8 | `REASON_WINDOW_CLOSED` | **C5-11a** — `OP_RIVAL_SWAP` consumed outside the rival-swap window. `lua/gen3/native.lua` mirrors this table (`FAIL_REASONS`) and surfaces the NAME to the job, which replies `rival_team_replaced{error="window_closed", reason="window_closed"}` (G5-RR-RIVAL review F3; was error="refresh_failed") |
 
 ### Rival-swap window constants (`OP_RIVAL_SWAP`, C5-11a)

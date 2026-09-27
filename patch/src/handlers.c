@@ -115,6 +115,7 @@ enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 #define REASON_BAD_ARGS       2u
 #define REASON_NOT_ON_FIELD   3u
 #define REASON_WINDOW_CLOSED  8u   /* OP_RIVAL_SWAP consumed outside the rival-swap window */
+#define REASON_DURABLE_ONLY   9u   /* RR-DURABLE: raw trade opcode 16/18 refused (trade bypass) */
 
 /* Rival-swap window (C5-11a, doc §5.3). Radical Red addresses, from the profile's `ram` block and
  * the C5-9 pins; ADDRESSES.md carries the table and the rebuild re-verifies them. */
@@ -2035,9 +2036,12 @@ static int rt_pre_poll(void *unused)
     return (cb == SAVE_PRINTING_CB || cb == SAVE_WRITING_CB) ? 2 : 0;
 }
 static const SlinkTradeEngine rt_engine;
-/* The in-game scene cannot be cancelled once launched, so the mutation window opens at
- * launch: COMMIT_ENTERED is published here, after the producer's slot/identity recheck. Any
- * later failure is therefore UNCERTAIN, never UNCHANGED (no TradeMons detour on CFRU). */
+/* RR publishes COMMIT_ENTERED EARLIER than FR/LG: at scene launch (the no-return boundary),
+ * after the producer's slot/identity recheck, not at TradeMons entry. It is NOT evidence that
+ * TradeMons ran. The in-game scene cannot be cancelled once launched, so after this barrier a
+ * timeout, launch failure or reset is UNCERTAIN, WITHDRAW is too late (14), never UNCHANGED,
+ * and no evolution suppression is needed. Success still needs the scene's return, the received
+ * PID/OT at the slot and the native post-save (Codex Emerald ruling P2). */
 static int rt_scene_start(void *unused, unsigned slot, const uint8_t *record)
 {
     if (!rt_safe(unused)) return 0;
@@ -2198,35 +2202,12 @@ void slink_hook(void)
         break;
     }
 
-    case OP_SET_ENEMY_PARTY: {   /* args: [0]=count. Lua staged count*100 raw party-mon bytes in
-                                    SLINK_BLOB_BUF. Faithful byte-copy into gEnemyParty (preserves the
-                                    partner's EXACT mons: moves/IVs/EVs/PID/item) — NOT CreateMon, which
-                                    would lose all of that. The active-foe gBattleMons refresh stays in
-                                    Lua (refreshActiveEnemyBattlers): CFRU substruct decrypt has no clean
-                                    engine fn. RR/CFRU party-mon layout == enemy-mon layout (NO_ENCRYPT),
-                                    so a raw memcpy is sufficient — same basis as M.writeEnemyParty. */
-        u8 count = MB->args[0];
-        if (count == 0 || count > 6) { ack(ST_FAIL, REASON_BAD_ARGS); return; }
-        stage_enemy_party(count);
-        break;
-    }
-
-    case OP_SET_PARTY_MON: {     /* TRADE: faithful 100-byte blob copy into gPlayerParty[slot].
-                                    args: [0]=slot [1]=bump (1 = ensure party count covers the slot).
-                                    Lua staged ONE complete party-mon (the partner's traded half) in
-                                    SLINK_BLOB_BUF. Same basis as OP_SET_ENEMY_PARTY (RR NO_ENCRYPT ->
-                                    raw memcpy preserves species/moves/IVs/EVs/PID/item exactly), but
-                                    into the PLAYER party. A trade replaces an existing slot, so the
-                                    count is unchanged unless `bump` is set (defensive). */
-        u8 slot = MB->args[0];
-        u8 bump = MB->args[1];
-        if (slot > 5) { ack(ST_FAIL, 2); return; }
-        volatile u8 *src = (volatile u8 *)SLINK_BLOB_BUF;
-        volatile u8 *dst = (volatile u8 *)(gPlayerParty + (u32)slot * MON_SIZE);
-        for (u32 j = 0; j < MON_SIZE; j++) dst[j] = src[j];
-        if (bump && R8(gPlayerPartyCount) < slot + 1) R8(gPlayerPartyCount) = slot + 1;
-        break;
-    }
+    case OP_SET_ENEMY_PARTY:      /* RR-DURABLE: the raw trade stage (16) and raw record copy (18) */
+    case OP_SET_PARTY_MON:        /* are trade bypasses on this build. The durable producer stages
+                                     the incoming record itself (rr_trade_relay); the rival swap
+                                     keeps its own opcode 28. Always refused, by name. */
+        ack(ST_FAIL, REASON_DURABLE_ONLY);
+        return;
 
     case OP_SPAWN_PEER_NPC: {     /* args: [0]=gfxId [1]=localId [2..3]=x [4..5]=y [6]=movement */
         u8  gfx     = MB->args[0];
