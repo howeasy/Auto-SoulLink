@@ -90,13 +90,37 @@ def test_learnsets_take_each_titles_if_branch():
 
 
 def test_title_branch_evaluates_pret_conditionals():
-    src = "a\n#if defined(FIRERED)\nfr\n#elif defined(LEAFGREEN)\nlg\n#else\nother\n#endif\n" \
-          "#ifndef GUARD\nguarded\n#endif\n#ifdef LEAFGREEN\nlg2\n#endif\n"
-    assert gen.title_branch(src, "firered") == "a\nfr\n#ifndef GUARD\nguarded\n#endif\n"
-    assert gen.title_branch(src, "leafgreen") == "a\nlg\n#ifndef GUARD\nguarded\n#endif\nlg2\n"
-    assert gen.title_branch(src, "emerald") == "a\nother\n#ifndef GUARD\nguarded\n#endif\n"
+    # the guard wraps the whole file (its #ifndef is the first non-blank line, its #endif the
+    # last) -- title_branch keeps it and its directives verbatim; everything else must resolve
+    # against FIRERED/LEAFGREEN or it isn't a "proven" guard (see the next test).
+    src = ("#ifndef GUARD\n"
+           "a\n#if defined(FIRERED)\nfr\n#elif defined(LEAFGREEN)\nlg\n#else\nother\n#endif\n"
+           "#ifdef LEAFGREEN\nlg2\n#endif\n"
+           "#endif\n")
+    assert gen.title_branch(src, "firered") == "#ifndef GUARD\na\nfr\n#endif\n"
+    assert gen.title_branch(src, "leafgreen") == "#ifndef GUARD\na\nlg\nlg2\n#endif\n"
+    assert gen.title_branch(src, "emerald") == "#ifndef GUARD\na\nother\n#endif\n"
     with pytest.raises(SystemExit):
         gen.title_branch("#if FIRERED + 1\n#endif\n", "firered")
+
+
+def test_title_branch_rejects_unresolvable_conditionals():
+    """OMP review cx-6b3b8309 finding 1: a non-title conditional used to pass through silently
+    (both branches emitted), and an #ifdef/#ifndef with more than the bare macro name (not valid
+    C, but pret typo'd it once) was silently evaluated False instead of flagged. Only a proven
+    top-of-file include guard is still let through -- everything else must raise."""
+    with pytest.raises(SystemExit):
+        gen.title_branch("#ifdef SOME_CONFIG\nx\n#else\ny\n#endif\n", "firered")
+    with pytest.raises(SystemExit):
+        gen.title_branch("#ifdef FIRERED && X\n#endif\n", "firered")
+    with pytest.raises(SystemExit):
+        gen.title_branch("#ifndef GUARD\na\n#endif\nb\n", "firered")  # guard isn't the last line
+    with pytest.raises(SystemExit):
+        gen.title_branch("a\n#ifndef GUARD\nb\n#endif\n", "firered")  # guard isn't the first line
+    with pytest.raises(SystemExit):
+        gen.title_branch("#else\n#endif\n", "firered")  # #else with nothing open
+    with pytest.raises(SystemExit):
+        gen.title_branch("#endif\n", "firered")  # #endif with nothing open
 
 
 def test_json_carries_per_title_learnsets():
@@ -126,6 +150,13 @@ TABLES = {"firered": DATA, "leafgreen": DATA,
           "emerald": json.loads((ROOT / "data/games/gen3_emerald/emerald_trainers.json").read_text(encoding="utf-8"))}
 
 
+def test_learnsets_cover_all_412_species():
+    """ROM-free: both JSONs' `learnsets` table is keyed by every species id 0..411 (NUM_SPECIES),
+    not just the ones some trainer's default-moves party happens to touch."""
+    assert set(DATA["learnsets"]) == {str(i) for i in range(412)}
+    assert set(TABLES["emerald"]["learnsets"]) == {str(i) for i in range(412)}
+
+
 @pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
 def test_parties_match_the_rom(title):
     """Every generated party against the clean ROM gTrainers: species, level, held item, and the
@@ -140,8 +171,15 @@ def test_parties_match_the_rom(title):
     names = Gen3Adapter(is_rr=False, rom_type=title)
     addr, size = symbol(title, "gTrainers")
     table = TABLES[title]["trainers"]
-    dummies, bad = 0, []
+    # Emerald's link-battle save-slot placeholders (TRAINER_RED/LEAF/BRENDAN_PLACEHOLDER/
+    # MAY_PLACEHOLDER) are in the ROM's gTrainers but excluded from our table (no trainerbattle
+    # ever fights them; gen.GAMES["emerald"]["unused"]) -- skip what the ROM has and we don't.
+    unused = len(gen.GAMES["emerald"]["unused"]) if title == "emerald" else 0
+    dummies, bad, excluded = 0, [], 0
     for tid, tr in decode_trainers(rom, addr, size // 40).items():
+        if str(tid) not in table:
+            excluded += 1
+            continue
         ours = table[str(tid)]["party"]
         if not ours and tr["party"]:
             dummies += 1
@@ -158,3 +196,4 @@ def test_parties_match_the_rom(title):
             bad.append(tid)
     assert bad == []
     assert dummies == {"firered": 103, "leafgreen": 103, "emerald": 0}[title]
+    assert excluded == unused

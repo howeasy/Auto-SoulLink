@@ -42,11 +42,17 @@ def test_generator_check_matches_committed_json():
 
 
 def test_table_covers_gtrainers():
-    # gTrainers is 40-byte struct Trainer entries; the .sym size / 40 is the count
+    # gTrainers is 40-byte struct Trainer entries; the .sym size / 40 is the count. The generator
+    # drops the 4 link-battle save-slot placeholders (TRAINER_RED/LEAF/BRENDAN_PLACEHOLDER/
+    # MAY_PLACEHOLDER, ids 851-854, the table's last 4): no trainerbattle or other reference in
+    # data/maps or data/scripts ever fights them, so they'd otherwise dangle as an unfightable
+    # "Groudon Lv5"/"Kyogre Lv5" a trainer_brief lookup could still surface (GAMES["emerald"]
+    # ["unused"] in tools/gen_gen3_trainers.py).
     line = next(ln for ln in (ROOT / "data/gen3/pret/pokeemerald.sym").read_text().splitlines()
                 if ln.endswith(" gTrainers"))
-    assert int(line.split()[2], 16) // 40 == len(TRAINERS) == 855
-    assert sorted(int(k) for k in TRAINERS) == list(range(855))
+    assert int(line.split()[2], 16) // 40 == 855
+    assert len(TRAINERS) == 851
+    assert sorted(int(k) for k in TRAINERS) == list(range(851))
 
 
 def test_json_keys_are_pret_trainer_constants():
@@ -54,6 +60,7 @@ def test_json_keys_are_pret_trainer_constants():
     opp = gen.defines((root / "include/constants/opponents.h").read_text(encoding="utf-8"), "TRAINER_")
     order = re.findall(r"^    \[(TRAINER_\w+)\] =", (root / "src/data/trainers.h").read_text(encoding="utf-8"), re.M)
     assert [opp[c] for c in order] == list(range(len(order)))
+    order = [c for c in order if c not in gen.GAMES["emerald"]["unused"]]
     assert {int(k): v["const"] for k, v in TRAINERS.items()} == {opp[c]: c for c in order}
 
 
@@ -122,8 +129,11 @@ def test_key_trainers():
               "TRAINER_MAXIE_MOSSDEEP", "TRAINER_MATT", "TRAINER_TABITHA_MT_CHIMNEY",
               "TRAINER_MAY_LILYCOVE_TORCHIC", "TRAINER_BRENDAN_RUSTBORO_MUDKIP"):
         assert c in key, c
-    # RIVAL-class link/Frontier stand-ins no script fights are not key
+    # link-battle save-slot placeholders no script ever fights: dropped from TRAINERS entirely
+    # (test_table_covers_gtrainers), so they can't be key either
     assert not key & {"TRAINER_RED", "TRAINER_LEAF", "TRAINER_BRENDAN_PLACEHOLDER", "TRAINER_MAY_PLACEHOLDER"}
+    assert not {"TRAINER_RED", "TRAINER_LEAF", "TRAINER_BRENDAN_PLACEHOLDER", "TRAINER_MAY_PLACEHOLDER"} & \
+        {v["const"] for v in TRAINERS.values()}
     assert {v["class"] for v in TRAINERS.values() if v.get("key")} == {
         "Leader", "Elite Four", "Champion", "Pokémon Trainer", "Magma Leader", "Aqua Leader",
         "Magma Admin", "Aqua Admin"}
@@ -139,11 +149,17 @@ def test_calc_labels_are_emerald_setdex_keys():
     keys = {full.split(" | ")[0].strip() for sets in setdex.values() for full in sets}
     labels = {v["calc_label"] for v in TRAINERS.values() if "calc_label" in v}
     assert labels <= keys
-    # 476 of Emerald.js's 499 trainer keys join; the rest are ambiguous grunts ("Magma Grunt 5"
+    # 475 of Emerald.js's 499 trainer keys join; the rest are ambiguous grunts ("Magma Grunt 5"
     # spans two places) or setdex parties that differ from pret (Fortree May | Mudkip has a
-    # Pelipper where sParty_MayRoute119Mudkip has Lombre)
-    assert (len(labels), len(keys)) == (476, 499)
-    assert sum("calc_label" in v for v in TRAINERS.values()) == 506
+    # Pelipper where sParty_MayRoute119Mudkip has Lombre).
+    # OMP review cx-6b3b8309 finding 5: calc_label's fuzzy fallback used to let a single-mon party
+    # take a label from a DIFFERENT fight whose species+level didn't match its own (Mt Chimney's
+    # combined Numel+Zubat "Magma Grunt" fight labelled a lone Numel AND a lone Zubat; an unrelated
+    # "Magma Grunt 5" fight labelled a lone Mightyena at the same level). A single-mon party now
+    # only takes a label whose setdex fight has its exact species+level, dropping 3 labels (146,
+    # 579, 589) and the now-unused "Magma Grunt" text from `labels` (476 -> 475, 506 -> 503).
+    assert (len(labels), len(keys)) == (475, 499)
+    assert sum("calc_label" in v for v in TRAINERS.values()) == 503
     # every first-fight key trainer is joined; rematch tiers are not in the setdex
     unjoined = [v["const"] for v in TRAINERS.values() if v.get("key") and "calc_label" not in v]
     assert all(re.search(r"_[2-5]$", c) for c in unjoined if c != "TRAINER_MAY_ROUTE_119_MUDKIP"), unjoined
