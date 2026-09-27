@@ -31,3 +31,6 @@ def test_fr_carrier_calls_match_pinned_vanilla_symbols():
                           ("CARRIER_OBJECTS","gObjectEvents"),
                           ("CARRIER_AVATAR","gPlayerAvatar")):
         assert spec[field] == symbols[symbol]
+    assert spec["SOUND_SE"] == symbols["PlaySE"]
+    assert spec["SOUND_FANFARE"] == symbols["PlayFanfare"]
+    assert symbols["dummy_song_header"]-symbols["gSongTable"] == spec["SOUND_COUNT"]*8

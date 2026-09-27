@@ -110,11 +110,14 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
         raise ValueError("arena probe currently has only FireRed source bindings")
     clean = Path(rom_path).read_bytes()
     spec = validate_base(title, clean)
-    carrier_bindings = {}
+    carrier_bindings, sound_bindings = {}, {}
     if trade_candidate:
         for key in ("CARRIER_SPAWN", "CARRIER_REMOVE", "CARRIER_CHOOSE"):
             validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
             carrier_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
+        for key in ("SOUND_SE", "SOUND_FANFARE"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            sound_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
     validate_detour(clean, spec["HEAP_INIT"], bytes.fromhex(spec["HEAP_INIT_BYTES"]))
     if mode in ("census", "trade"):
         validate_detour(clean, spec["FRAME_ENTRY"], bytes.fromhex(spec["FRAME_BYTES"]))
@@ -205,9 +208,10 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
                "target": title, "mode": mode, "ready": spec["READY"],
                "production": False,
                "arena_static_check": "skipped: heap clamp unqualified",
-               "capabilities": 3 if trade_candidate else 0,
+               "capabilities": 7 if trade_candidate else 0,
                "panel_detours": panel_detours, "panel_tables": panel_tables,
                "carrier_bindings": carrier_bindings,
+               "sound_bindings": sound_bindings,
                "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
                "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),
                "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],

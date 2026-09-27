@@ -124,6 +124,12 @@
 #define SLINK_TARGET_CARRIER_Y 9u
 #define SLINK_TARGET_CARRIER_STRIDE 0x24u
 #define SLINK_TARGET_CARRIER_NEW_KEYS 0x2Eu
+/* sound/song_table.inc has 347 entries, IDs 0..346; sound.c owns suppression/fallback. */
+#define SLINK_TARGET_SOUND_COUNT 347u
+#define SLINK_TARGET_SOUND_SE 0x080722CCu
+#define SLINK_TARGET_SOUND_SE_BYTES "00b50004010c0648"
+#define SLINK_TARGET_SOUND_FANFARE 0x08071C60u
+#define SLINK_TARGET_SOUND_FANFARE_BYTES "00b50004030c0021"
 #if defined(SLINK_NATIVE_TRADE_CANDIDATE)
 static const unsigned short slink_target_pokecenters[]={
     0x0504,0x0605,0x0703,0x0800,0x0901,0x0A0C,0x0B05,0x0C05,0x0D00,0x0E06,

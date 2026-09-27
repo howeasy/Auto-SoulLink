@@ -376,3 +376,27 @@ duo, cold save reload, every Center map, ghost interaction, or explicit opcode-1
 arming (the PC NPC arms itself). No screenshot supplied game facts. The earlier
 HARNESS_ONLY selection seam remains so labeled until replaced and independently
 exercised in T5. READY remains 0.
+
+## FR native sounds candidate extension
+
+Opcodes 19 PLAY_SE and 9 PLAY_FANFARE take a u16 little-endian song ID in
+args[0..1]. Candidate capability mask is now 7 (trade, panel, native sound).
+FR bindings are PlaySE `0x080722CC` and PlayFanfare `0x08071C60`; the builder
+pins both entry byte sequences in `sound_bindings`. The 347-entry native song
+table admits IDs 0..346; larger IDs are refused before an engine call. Source
+and symbol extent (`dummy_song_header - gSongTable`, eight bytes per entry)
+independently establish the bound. Calls require a nonzero session epoch and
+refuse while a panel/carrier UI or PREPARE/SCENE owns the native lane.
+
+An OK ACK means the native routine was invoked, not that the requested sound
+was audible or finished. The engine's own PlaySE suppression during quest-log
+playback remains intact. PlayFanfare retains its native fallback to the first
+fanfare for in-range IDs absent from its fanfare list, and requires a free task
+slot. No direct sound-player RAM poke or new game option is introduced.
+
+The existing `native_sounds` client option suppresses posting when false and
+posts opcode 19 when true. The shared Lua option/queue behavior is tested on its
+established RR MODEL fixture; that is not separate FR/T3 client admission or
+physical audio evidence. Native dispatch currently has SOURCE/MODEL/build
+coverage only and requires a leased live engine-playback check. READY stays 0;
+no production patch is published by this extension.
