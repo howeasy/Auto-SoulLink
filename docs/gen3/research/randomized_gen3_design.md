@@ -44,9 +44,9 @@ this: `server/server.py:913-918` says rule semantics "retain the run adapter" be
 ROM: wild encounters and trainer parties. The client ships raw table bytes, as Gen 1 does, and
 the server decodes them with `server/adapters/gen3_rom_tables.py` (Codex is building it). The
 server also decodes evolutions and species info to REFUSE a cartridge whose evolution methods,
-parameters or targets, base stats, types, growth rates or abilities differ from vanilla. The
+parameters or targets, base stats, types, gender ratios, growth rates or abilities differ from vanilla. The
 Manager and server use one `normalised_species_rules` projection, including SpeciesInfo byte
-19 (growth rate). The sparse report does not include level-up learnsets: under accepted RF-2
+19 (growth rate) and 16 (gender ratio). RF-5 classifies every SpeciesInfo byte in `data/games/gen3_frlg/species_rules.json`; this data drives the projection. Catch rate and held items are explicit ruling-31 exceptions to the unprojected-byte/write-domain disjointness check. All other unprojected bytes are disjoint from allowed write spans. The ability-fill cross-check covers the fork's writable species (1 onward); species-zero is retained in the 284-species normalization set but has no baseline write span. The sparse report does not include level-up learnsets: under accepted RF-2
 option B, cartridge-reported default-move parties omit inferred moves, while explicit trainer
 moves remain available. The Manager's whole-file write-domain audit also checks forbidden
 learnset writes in the outputs it prepares.

@@ -493,6 +493,8 @@ All five owner scope decisions (a)–(e) are settled and recorded above.
     - **(c) Opcode gates:** the 12 deferred gates are a signed limit; the 26 ported live gates cover the opcodes in use.
     - **(d) Per-item evidence:** the P2 anchor/md5/deleted-file/write-guard/native-control items are satisfied by the existing unit/model evidence (the pin tests, test_gen3_write_ownership, the test_gen3_native control tests). No separate live receipts are needed.
     G5. **S**
+34. **RR priority-trainer roster provenance** (owner, 2026-09-27, RF-5): regenerate the Radical Red priority-trainer roster from the current pinned community sheet. The data refresh is assigned to `claude/gen3-f7-rr-pins`; the roster and its source pin travel together. **S**
+
 33. **The fork's FR/LG obedience and evolution-gate patches are allowed for the RC** (owner, 2026-09-26, RF-3): the UPR fork makes Deoxys/Mew obey and lifts the pre-National-Dex gate on level/stone evolutions whenever wild encounters, starters or statics are randomized. These specific code patches are accepted side effects of those randomizations, not evolution-rule changes. The allowance is the audited `obedience_evo_code` domain in `data/games/gen3_frlg/upr_write_domains.json`, enabled by `server/upr_gen3_write_domain.py` `domains_for_spec`; the evolution table and the other forbidden rule fields remain protected. See `docs/gen3/research/randomized_gen3_design.md` §0. **S**
 
 32. **Randomized refusal and pairing** (owner, 2026-09-26, given in the Emerald session and relayed to the Gen 3 lane):
