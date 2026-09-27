@@ -861,7 +861,7 @@ GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3")
 
 @pytest.mark.parametrize("name,module,target", (
     ("admit_randomized_frlg", "rand_admit", "town"),
-    ("link_gen3_rand", "rand_link", "battle"),
+    ("link_gen3_rand", "rand_link", "catch_synth"),
     ("trainer_panel_gen3_rand", "rand_trainer_panel", "trainer"),
 ))
 def test_randomized_frlg_registration(name, module, target):

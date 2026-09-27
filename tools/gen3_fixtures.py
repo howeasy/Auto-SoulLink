@@ -1484,15 +1484,46 @@ def cmd_make_emerald(args: argparse.Namespace) -> int:
 #           down (data/maps/Route2_House/map.json); FLAG_DID_MIMIEN_TRADE (0x248) must be clear.
 #   poison  party[0] -> 1 HP + STATUS1_POISON on the Viridian town tile: FRLG's field poison has
 #           no 1-HP floor (field_poison.c DoPoisonFieldEffect), so the next 4-step tick faints it.
+#   catch   R4-LINK: existing Poke Ball stack -> 20, plus only its section checksum. The failed
+#           fc_link_gen3_rand_r4_39da30fd receipt exhausted LG's two balls; all other bytes stay.
 # ---------------------------------------------------------------------------
 
-FRLG_SYNTH_KINDS = ("evolve", "trade", "poison")
+FRLG_SYNTH_KINDS = ("evolve", "trade", "poison", "catch")
 FRLG_SB1_FLAGS = 0x0EE0               # SaveBlock1.flags, include/global.h:790
 FLAG_DID_MIMIEN_TRADE = 0x248         # include/constants/flags.h:609
 ROUTE2_HOUSE_WARP = (15, 1, 7, 3)     # map_groups.json gMapGroup_IndoorRoute2[1]; below Reyley (7,2)
 SQUIRTLE_BASE = {"hp": 44, "attack": 48, "defense": 65, "speed": 43, "sp_attack": 50, "sp_defense": 64}
 ABRA_BASE = {"hp": 25, "attack": 20, "defense": 15, "speed": 90, "sp_attack": 105, "sp_defense": 55}
 SPECIES_ABRA, MOVE_TELEPORT, TELEPORT_PP = 63, 100, 20   # species.h:67, moves.h:104, battle_moves.h
+FRLG_CATCH_BALLS = 20                                # disclosed SYNTH stock, Emerald catch precedent
+FRLG_BALL_POCKET, FRLG_BALL_SLOTS = 0x430, 13          # global.h:780, constants/global.h:38
+FRLG_ENCRYPTION_KEY = 0xF20                          # global.h:358; item.c:20-29, low u16 XOR
+
+
+def _frlg_catch_stock(seed: bytes, parsed: dict) -> tuple[bytes, list[str]]:
+    """Patch exactly the existing quantity word and the containing sector's checksum."""
+    sb1, sb2 = parsed["sb1"], parsed["sb2"]
+    matches = [FRLG_BALL_POCKET + i * 4 for i in range(FRLG_BALL_SLOTS)
+               if int.from_bytes(sb1[FRLG_BALL_POCKET + i * 4:FRLG_BALL_POCKET + i * 4 + 2], "little") == ITEM_POKE_BALL]
+    if len(matches) != 1:
+        raise ValueError("catch seed must contain exactly one existing Poke Ball stack")
+    quantity_at = matches[0] + 2
+    key = int.from_bytes(sb2[FRLG_ENCRYPTION_KEY:FRLG_ENCRYPTION_KEY + 2], "little")
+    before = int.from_bytes(sb1[quantity_at:quantity_at + 2], "little") ^ key
+    entry = next(e for e in codec.slot_layout() if e["object"] == "sb1"
+                 and e["offset"] <= quantity_at and quantity_at + 2 <= e["offset"] + e["size"])
+    start = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
+    sector = next(s for s in parsed["sectors"][start:start + codec.NUM_SECTORS_PER_SLOT]
+                  if s["id"] == entry["id"])
+    base = sector["index"] * codec.SECTOR_SIZE
+    body = bytearray(seed)
+    at = base + quantity_at - entry["offset"]
+    body[at:at + 2] = (FRLG_CATCH_BALLS ^ key).to_bytes(2, "little")
+    checksum = codec.sector_checksum(body[base:base + codec.SECTOR_SIZE], entry["size"])
+    at = base + codec.OFF_SECTOR_CHECKSUM
+    body[at:at + 2] = checksum.to_bytes(2, "little")
+    return bytes(body), [f"R4-LINK Poke Balls {before}->{FRLG_CATCH_BALLS}; "
+                         f"SB1+0x{quantity_at:04X} encrypted quantity and sector {sector['index']} checksum only"]
 
 
 def _gen3_stats(base: dict, mon: dict, level: int) -> dict:
@@ -1518,6 +1549,8 @@ def build_frlg_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
     if not ok:
         raise ValueError(f"seed does not qualify: {msg}")
     parsed = codec.parse_flash(seed)
+    if kind == "catch":
+        return _frlg_catch_stock(seed, parsed)
     sb1, sb2 = bytearray(parsed["sb1"]), bytearray(parsed["sb2"])
     at = [codec.SB1_PARTY_OFFSET + i * codec.PARTY_MON_SIZE for i in range(2)]
     party = [codec.decode_party_mon(bytes(sb1[a:a + codec.PARTY_MON_SIZE])) for a in at]

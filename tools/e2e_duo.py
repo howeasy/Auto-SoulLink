@@ -78,7 +78,7 @@ SCENARIOS = {
         "target": "town", "frames": 1200000, "no_save": ("a", "b"), "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_admit", "oracle": "assert_admit_randomized_frlg_saved"},
     "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg",),
-        "target": "battle", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
+        "target": "catch_synth", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg",),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
@@ -7530,6 +7530,14 @@ class DuoRun:
         pins = rom_pins(REPO)
         for side in ("a", "b"):
             title = self.gcfg["sides"][side][0]
+            if self.scenario == "link_gen3_rand":
+                fixture = self._gen3_fixture_bytes(side)
+                balls = gen3_ball_count(fixture, title)
+                if balls != 20:
+                    raise RuntimeError(f"{side}: R4-LINK SYNTH fixture must have 20 Poke Balls, got {balls}")
+                self._pydec_note(f"RAND_SYNTH_FIXTURE {side} file={self._gen3_fixture_path(side)} "
+                                 f"sha256={hashlib.sha256(fixture).hexdigest()} PokeBalls={balls} "
+                                 "change=quantity_and_section_checksum_only")
             label = "FireRed" if title == "firered" else "LeafGreen"
             path = source / f"{label}_allowed.gba"
             if not path.is_file():
