@@ -1080,9 +1080,20 @@ function Client.new(p)
             end
             if had then log("rival authority closed by " .. tostring(sig and sig.kind)) end
         end
+        local function capture_trade_before(sig)
+            local party, why = party_read()
+            if not party then
+                log("NPC trade preimage unavailable: " .. tostring(why))
+                return
+            end
+            -- TradeMons entry still holds the outgoing identities. By signal
+            -- drain time the swap is complete, and the quiet/PC cache may be empty.
+            sig.trade_before = {}
+            for _, mon in ipairs(party) do sig.trade_before[mon.slot] = key(mon) end
+        end
         sig_src = p.Signals.new(profile, p.sites, io, p.ev,
                                 {battle_begin = close_authority, battle_end = close_authority,
-                                 whiteout = close_authority})
+                                 whiteout = close_authority, trade_begin = capture_trade_before})
         return sig_src
     end
 
@@ -1117,8 +1128,7 @@ function Client.new(p)
         elseif k == "map_load" then f.map = true
         elseif k == "save" then f.save = true
         elseif k == "trade_begin" then                          -- OPEN kind, not PHYSICAL
-            st.trade = {}
-            for pk, prev in pairs(st.party_prev) do st.trade[prev.slot] = pk end
+            st.trade = sig.trade_before
         elseif k == "trade_done" then f.trade = true            -- OPEN kind, not PHYSICAL
         end
         -- evolve_species_store / trade_evolve_species_store (OPEN, not PHYSICAL): a Gen 3

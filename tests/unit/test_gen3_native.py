@@ -9,7 +9,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class World:
-    def __init__(self, present=True, initial_seq=0, kind="companion", scene_capability_model=False, abi=1):
+    def __init__(self, present=True, initial_seq=0, kind="companion", scene_capability_model=False, abi=1,
+                 mutate_native=None):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.profile = json.loads((ROOT / "data/games/gen3_rr/profile.json").read_text())
         self.n = self.profile["native"]
@@ -17,6 +18,8 @@ class World:
             from tools.gen_gen3_profile import native_abi
             self.n["ABI"], self.n["abi_v2"] = 2, native_abi()
             self.n["BASE"] = 0x0201B000  # private MODEL arena; no admitted v2 profile
+        if mutate_native is not None:
+            mutate_native(self.n)
         self.ram = self.profile["titles"]["radical_red"]["ram"]
         self.bus = {}
         self.frame = 10
@@ -111,6 +114,21 @@ def test_v2_mailbox_reads_capabilities_and_queues_only_epoch_handshake():
     assert w.native.mailbox(w.native).session_epoch == 0x12345678
 
 
+@pytest.mark.parametrize("field", ["signature", "abi_version", "opcode", "seq", "status", "ack_seq",
+                                  "reason", "args", "result", "capabilities", "session_epoch"])
+def test_v2_rejects_shifted_mailbox_fields_before_any_io(field):
+    def shift(native):
+        native["abi_v2"]["structs"]["SlinkMailboxV2"]["fields"][field]["offset"] += 2
+    with pytest.raises(lupa.LuaError, match="v2 mailbox field offset"):
+        World(abi=2, mutate_native=shift)
+
+
+@pytest.mark.parametrize("opcode,value", [("OP_PLAY_SE", 20), ("OP_NOT_IN_ABI", 100)])
+def test_v2_rejects_opcodes_that_disagree_with_the_canonical_abi(opcode, value):
+    with pytest.raises(lupa.LuaError, match="v2 opcode mismatch"):
+        World(abi=2, mutate_native=lambda native: native.update({opcode: value}))
+
+
 @pytest.mark.parametrize("epoch", [0, -1, 1.5, 0x100000000])
 def test_v2_rejects_invalid_epoch_without_writes(epoch):
     w = World(abi=2)
@@ -151,6 +169,84 @@ def test_v2_commands_require_handshake_and_refuse_changed_epoch():
     w.put(w.n["BASE"] + 0x44, 10, 4)
     w.service()
     assert len(w.output) == before and results[0][0] == "native epoch changed"
+
+
+@pytest.mark.parametrize("poison_first", [False, True])
+def test_native_epoch_zero_allows_only_a_new_handshake(poison_first):
+    w = World(abi=2)
+    w.native.set_session_epoch(w.native, 9)
+    w.service()
+    if poison_first:
+        w.put(w.n["BASE"] + 0x44, 10, 4)
+        assert w.native.service(w.native) == (None, "native epoch changed")
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    before = len(w.output)
+    assert w.native.play_sound(w.native, 25) == (None, "client_too_old")
+    assert len(w.output) == before
+    handle = w.native.set_session_epoch(w.native, 11)
+    assert handle is not None and not isinstance(handle, tuple)
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 11
+    assert [a for a, _ in w.output[before:]] == list(range(w.n["BASE"] + 0x44, w.n["BASE"] + 0x48))
+    w.native.play_sound(w.native, 25)
+    w.service()
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_PLAY_SE"]
+
+
+def test_native_epoch_zero_aborts_old_queued_work_before_rehandshake():
+    w = World(abi=2)
+    w.native.set_session_epoch(w.native, 9)
+    w.service()
+    results = []
+    w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 100)),
+                      lambda *args: results.append(args))
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    handle = w.native.set_session_epoch(w.native, 10)
+    assert handle is not None and not isinstance(handle, tuple)
+    assert results == [("native epoch cleared", None, None)]
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 10 and w.read(w.n["BASE"] + 6, 2) == 0
+
+
+@pytest.mark.parametrize("reader,offset", [("read_u16", 6), ("read_u32", 0x40), ("read_u32", 0x44)])
+def test_mailbox_read_failure_is_a_named_refusal_not_an_exception(reader, offset):
+    w = World(abi=2)
+    original = w.native_io[reader]
+
+    def unreadable(address):
+        if address == w.n["BASE"] + offset:
+            raise RuntimeError("synthetic mailbox read failure")
+        return original(address)
+
+    w.native_io[reader] = unreadable
+    assert w.native.mailbox(w.native) == (None, "native mailbox unreadable")
+    assert w.output == []
+
+
+def test_epoch_read_failure_aborts_without_writes_and_recovers_only_after_clear():
+    w = World(abi=2)
+    w.native.set_session_epoch(w.native, 9)
+    w.service()
+    results = []
+    w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 100)),
+                      lambda *args: results.append(args))
+    before = len(w.output)
+    original = w.native_io.read_u32
+
+    def unreadable(address):
+        if address == w.n["BASE"] + 0x44:
+            raise RuntimeError("synthetic epoch read failure")
+        return original(address)
+
+    w.native_io.read_u32 = unreadable
+    assert w.native.service(w.native) == (None, "native epoch unreadable")
+    assert results == [("native epoch unreadable", None, None)] and len(w.output) == before
+    w.native_io.read_u32 = original
+    assert w.native.play_sound(w.native, 25) == (None, "native epoch unreadable")
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    w.native.set_session_epoch(w.native, 10)
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 10
 
 
 def test_v2_panel_and_control_do_not_inherit_v1_memory_layout():
