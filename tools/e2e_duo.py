@@ -390,9 +390,13 @@ SCENARIOS = {
     # emerald_trade.sav; target_by_game overrides the FR/LG "_synth" fixture stem with Emerald's own
     # naming, tests/fixtures/gen3/README.md). The oracle's NPC_TRADE_FACTS carries the per-game
     # new_key/species; poison_faint_gen3's oracle is already game-agnostic (no species assertion).
+    # orchestrate_npc_trade_gen3 links party slot 1 on BOTH halves (_gen3_prelude(link_slot=1)):
+    # FR/LG's "town" fixture already carries 2 party mons (unlike Emerald's, which is a single
+    # Mudkip for that kind), so B's Emerald side boots "pc" instead (Mudkip + Poochyena, slot 1
+    # present) -- the same B-idle fixture boxsync_gen3/whiteout_gen3 already use for gen3_emerald.
     "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
                        "target": {"a": "trade_synth", "b": "town"},
-                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "town"}},
+                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
                        "frames": 2000000, "no_save": ("b",),
                        "oracle": "assert_npc_trade_gen3_saved"},
     "poison_faint_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
