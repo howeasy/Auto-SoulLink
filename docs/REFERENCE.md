@@ -1030,7 +1030,7 @@ pytest tests/integration/test_phase1_comms.py -v
 
 ### BizHawk live tests
 
-**Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo.py` (16 scenarios on the patched RR ROM) plus `SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py` (the `lua/gen3/` client on vanilla FRLG/LGFR and Radical Red).
+**Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py` (the `lua/gen3/` client on vanilla FRLG/LGFR, Radical Red and Emerald). The savestate-driven Gen 3 wrapper that the old client had was deleted with that client (`archive/gen3-old-client`); `tools/e2e_duo.py` is still the runner behind every Gen 3 duo scenario.
 
 **Gen 1 and Gen 2** have no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
 
@@ -1117,7 +1117,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{cryst
 | `tools/gen_rr_priority_trainers.py` | Generator for `rr_priority_trainers.json` + the calc `slink_priority.js` setdex (RR priority/key trainers) |
 | `tools/lua_syntax_check.py` | Syntax-checks `lua/**/*.lua` with lupa (Lua 5.5) — catches `goto`/bitwise errors the system luac 5.1 rejects |
 | `tools/inject_full_mocks.py` | Injects full mock state (6 linked pairs, dead-zone, boxed pair, memorial, enemy battle w/ held items) into a running server for UI testing |
-| `tools/e2e_duo.py` | Two-instance headless E2E harness — throwaway server + two EmuHawk instances running scripted scenarios (faint, boxsync, trade, explode, rival swap; peer ghost's `ghost` scenario was dropped when Overworld Presence was deferred post-RC); pytest wrapper in `tests/e2e/test_duo.py` (gated behind `SLINK_E2E=1`) |
+| `tools/e2e_duo.py` | Two-instance headless E2E harness — throwaway server + two EmuHawk instances running scripted scenarios (faint, boxsync, trade, explode, rival swap; peer ghost's `ghost` scenario was dropped when Overworld Presence was deferred post-RC); per-generation pytest wrappers in `tests/e2e/` (all gated behind `SLINK_E2E=1`): `test_duo_gen3.py` (Gen 3), `test_duo_gen1_new.py` / `test_duo_gen1_pure.py` (Gen 1), `test_duo_gen2_new.py` (Gen 2) |
 | `ruff.toml` / `requirements-dev.txt` | Ruff lint config + pinned dev dependency (`pip install -r requirements-dev.txt`; `ruff check .`) |
 | `tests/TESTING.md` | Live BizHawk test guide |
 | **Damage Calculator** | |
