@@ -475,3 +475,31 @@ and response correlation from `rival_swap_refresh_window.md`. Native W1+trainer
 matching is not proof of that per-battle request identity. No new battle_id ABI
 field is invented here. This extension currently has SOURCE/MODEL/build evidence
 only; a leased natural trainer-battle check remains required. READY stays 0.
+
+### FR Rival W1 live receipt, 2026-09-27
+
+Producer `c7c6bd46675320ea362c3320458e8608264068b4` passed the bounded real-trainer
+check. Receipt: `patch/build/rival-live-20260927/rival_receipt.json`; native log,
+script, config, input save and replacement/late payloads are alongside it.
+ROM SHA256: `421f72aa88f3eda47bbf316cde7a1aac8369aaabae3188987123f1bb7a990007`.
+One owned PID 42860 ran under `.cache/r` / `.cache/r/states`, exited, and the lane
+was released. An earlier driver trial never triggered a battle and is retained
+under `rival-live-20260927-failed-trigger`; the native handler was not exercised
+there. Waiting for a quiet field and completing a normal Right step reached
+Rick102's sight line from the existing FR trainer fixture.
+
+The replayed peer-fixture team deliberately had a fainted lead and live second
+slot. Native dispatch was observed at W1 stage 0 with the exact FR callback,
+dummy function, trainer102 and TRAINER flag. ACK preceded the engine's
+SetBattlePartyIds at stage15; its entry readback exactly matched the replacement
+and zeroed unused records. Native selection chose slot1, and Python independently
+matched BattlePokemon species/HP/level/maxHP/PID/OT to that live second record.
+The late request was consumed at callback `08011101`, main function `08014041`,
+stage1 (still less than15), and refused with reason8. All600 enemy-party bytes
+and count remained unchanged. Altered selection/ACK/window/late-write receipts
+are rejected by oracle controls.
+
+This is a real Rick trainer battle with replayed team data, not a live-server,
+duo, automatic story-rival, battle-finish or save-persistence qualification.
+Only normal inputs triggered/advanced gameplay; writes were confined to the
+owned request/config/staging ABI. No screenshots supplied facts. READY stays 0.
