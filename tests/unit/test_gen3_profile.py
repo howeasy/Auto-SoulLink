@@ -21,7 +21,7 @@ PROFILES = {p: REPO / "data" / "games" / p / "profile.json" for p in ("gen3_frlg
 
 # which Lua profile table each admitted/unadmitted title reads today
 TITLE_TABLE = {
-    "firered": "vanilla", "leafgreen": "vanilla", "firered_ap": "ap", "emerald": "emerald",
+    "firered": "vanilla", "leafgreen": "vanilla", "firered_ap": "ap",
     "radical_red": "radical_red",
 }
 
@@ -555,7 +555,7 @@ def test_p4_c4_2a_engine_constants_match_the_pinned_pret_header() -> None:
         assert derived["BASESTATS_GROWTH_RATE_OFFSET"] == 0x13
 
 
-@pytest.mark.parametrize("name", ["firered_ap", "emerald"])
+@pytest.mark.parametrize("name", ["firered_ap"])
 def test_pret_additions_do_not_admit_unverified_titles(name: str) -> None:
     title = _title(name)
     assert "_src" not in title
@@ -603,7 +603,7 @@ def test_admission_flags_and_source_block() -> None:
     frlg = _load("gen3_frlg")
     assert [t for t, v in frlg["titles"].items() if v["admitted"]] == ["firered", "leafgreen"]
     assert frlg["titles"]["firered_ap"]["admitted"] is False
-    assert frlg["titles"]["emerald"]["admitted"] is False
+    assert "emerald" not in frlg["titles"]
     assert _load("gen3_rr")["titles"]["radical_red"]["admitted"] is True
     for pack, data in ((p, _load(p)) for p in PROFILES):
         assert data["source"]["file"] == "lua/games/gen3_frlge.lua"

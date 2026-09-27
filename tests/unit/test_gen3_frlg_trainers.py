@@ -129,7 +129,13 @@ def test_calc_labels_are_frlg_setdex_keys():
     keys = {full.split(" | ")[0].strip() for sets in setdex.values() for full in sets}
     labels = {v["calc_label"] for v in TRAINERS.values() if "calc_label" in v}
     assert labels <= keys
-    assert len(labels) == len(keys)        # every setdex trainer is joined to a pret trainer
+    # every setdex trainer is joined to a pret trainer, except "Biker Goon 2": OMP review
+    # cx-6b3b8309 finding 5 (calc_label's by_key fallback let a single-mon party take a label from
+    # a DIFFERENT fight whose species+level didn't match its own -- FRLG.js's "Biker Goon 2" is one
+    # setdex entry covering a combined Koffing+Grimer fight, but TRAINER_BIKER_GOON_2 (Koffing 38)
+    # and TRAINER_BIKER_GOON_3 (Grimer 38) are two separate single-mon trainers, neither an exact
+    # species+level match). A single-mon party now only takes an exact match, so it's unjoined.
+    assert len(keys) - len(labels) == 1 and "Biker Goon 2" in keys - labels
     key_trainers = [v for v in TRAINERS.values() if v.get("key")]
     # the two Sevii Rocket admins are not in FRLG.js: they fall back to species/level matching
     assert [v["const"] for v in key_trainers if "calc_label" not in v] == [
