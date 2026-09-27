@@ -121,8 +121,6 @@ FRLG_DERIVED = {
     "B_ACTION_NOTHING_FAINTED": (13, f"{PRET_PIN}:include/battle.h:48 (B_ACTION_NOTHING_FAINTED)"),
     # C5-6: gBattleMons[b].statStages[STAT_ATK] -- ATK..EVA are the 7 bytes from here, in the
     # wire order; statStages[STAT_HP] at +0x18 is never shown (reads.lua read_stat_stages).
-    "SB2_NAME_OFFSET": (0x00, "archive/gen3-old-client:lua/memory_gba.lua:721-725 (old-client RR profile, "
-                        "production-tested: M.readTrainerName decodes playerName generically at SB2+0)"),
     "BATTLE_MON_STAT_STAGES_OFF": (0x19, f"{PRET_PIN}:include/pokemon.h:187 (BattlePokemon."
                                    "statStages at 0x18); include/constants/pokemon.h:166-175 "
                                    "(STAT_HP=0, STAT_ATK=1 .. STAT_EVASION=7)"),
@@ -1263,8 +1261,6 @@ EMERALD_DERIVED = {
     "BASESTATS_GROWTH_RATE_OFFSET": (0x13, "include/pokemon.h:319", "growthRate", "struct SpeciesInfo"),
     "BATTLE_MON_OT_ID_OFF": (0x54, "include/pokemon.h:294", "otId", "struct BattlePokemon"),
     "BATTLE_MON_PERSONALITY_OFF": (0x48, "include/pokemon.h:291", "personality", "struct BattlePokemon"),
-    "SB2_NAME_OFFSET": (0x00, "archive/gen3-old-client:lua/memory_gba.lua:721-725 (old-client RR profile, "
-                        "production-tested: M.readTrainerName decodes playerName generically at SB2+0)"),
     "BATTLE_MON_STAT_STAGES_OFF": (0x19, "include/pokemon.h:277", "statStages",
                                    "statStages at 0x18 + STAT_ATK 1, include/constants/pokemon.h:75-76"),
     "BATTLE_MOVE_PP_OFFSET": (4, "include/pokemon.h:327-333", "pp",

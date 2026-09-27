@@ -231,7 +231,7 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     rr_c4_2a_keys = {
         "SB1_LOCATION_MAP_GROUP_OFFSET", "SB1_LOCATION_MAP_NUM_OFFSET", "SB1_BADGE_BYTE_OFFSET",
         "BATTLE_TYPE_TRAINER_MASK", "BATTLE_TYPE_DOUBLE_MASK", "OUTCOME_WON", "OUTCOME_LOST",
-        "OUTCOME_DREW", "BATTLE_MON_STAT_STAGES_OFF",
+        "OUTCOME_DREW", "BATTLE_MON_STAT_STAGES_OFF", "SB2_NAME_OFFSET",
     }
     for key in rr_c4_2a_keys:
         cite = title["_src"].get(f"derived.{key}")
@@ -251,8 +251,11 @@ def test_rr_party_capacity_comes_from_its_existing_detector() -> None:
     assert title["derived"]["SB1_LOCATION_MAP_GROUP_OFFSET"] == 0x04
     assert title["derived"]["SB1_BADGE_BYTE_OFFSET"] == 0x104
     assert title["derived"]["OUTCOME_CAUGHT"] == 7 and title["derived"]["OUTCOME_RAN"] == 4
-    # values this card could NOT find evidence for stay absent (RR-OPEN, reported to the owner)
-    for key in ("SB2_NAME_OFFSET", "GMAIN_INBATTLE_OFFSET", "GMAIN_INBATTLE_MASK"):
+    # values this card could NOT find evidence for stay absent (RR-OPEN, reported to the owner).
+    # SB2_NAME_OFFSET left this list at RR-DURABLE: the old client's M.readTrainerName reads
+    # playerName generically at SB2+0 (archive/gen3-old-client:lua/memory_gba.lua:721-725),
+    # the same owner-accepted old-client evidence as the keys above.
+    for key in ("GMAIN_INBATTLE_OFFSET", "GMAIN_INBATTLE_MASK"):
         assert key not in title["derived"] and key not in title["ram"] and key not in title["rom"]
 
 
@@ -585,7 +588,7 @@ def test_c511a_the_rival_opcode_is_in_the_native_block() -> None:
     title = _title("radical_red")
     native = _load("gen3_rr")["native"]
     assert native["OP_RIVAL_SWAP"] == 28
-    assert native["OP_SET_ENEMY_PARTY"] == 16, "opcode 16 stays the trade's"
+    assert native["OP_SET_ENEMY_PARTY"] == 16, "opcode 16 keeps its number (refused on the durable build)"
     assert "patch/src/handlers.c" in native["_src"]["OP_RIVAL_SWAP"]
     assert title["rom"]["BATTLE_INTRO_GET_MONS_DATA_ADDR"] == 0x08012FAD
 
@@ -643,7 +646,7 @@ def test_native_matches_the_mailbox_and_ghost_sources() -> None:
         "OP_SHOW_MENU": 17, "OP_SHOW_MESSAGE": 8, "OP_SPAWN_PEER_NPC": 6,
         "OP_TRADE_SCENE": 21, "OP_WITHDRAW_MON": 25, "PI_COUNT": 0x0203F8D3,
         "SIG": 0x4B4E4C53, "SPRITES_BASE": 0x0202063C, "SW": 0x0203F840,
-        "TEXT_BUF": 0x0203F900, "TN_ENABLE": 0x0203F8D4,
+        "TEXT_BUF": 0x0203F900, "TN_ENABLE": 0x0203F8D4, "TRADE_BASE": 0x0203FE50,
     }
     assert native == want
     # the ABI anchors the card names, spelled out so a silent regex drift is caught
@@ -676,3 +679,25 @@ def test_json_is_deterministic(pack: str) -> None:
     assert b"\r\n" not in raw, f"{pack}: CRLF line endings"
     text = raw.decode("utf-8")
     assert text == json.dumps(json.loads(text), indent=2, sort_keys=True) + "\n"
+
+
+def test_rr_durable_trade_block_sits_in_the_proven_free_tail() -> None:
+    """RR-DURABLE: native.TRADE_BASE is handlers.c's RT_BASE. The shadow mailbox, witness,
+    producer state and pre-save flag (0x111 bytes, the C static assertions) start after
+    SlinkInfo's 264 bytes and end before the EWRAM end: inside the run test_live_ewramtail paints."""
+    native = _load("gen3_rr")["native"]
+    base = native["TRADE_BASE"]
+    assert "RT_BASE" in native["_src"]["TRADE_BASE"]
+    assert base % 4 == 0 and base >= native["INFO"] + 264
+    assert base + 0x111 <= 0x02040000
+    handlers = (REPO / "patch" / "src" / "handlers.c").read_text(encoding="utf-8")
+    assert "_Static_assert(RT_BASE + 0x111u <= 0x02040000u" in handlers
+    assert "_Static_assert(0xA0u + sizeof(SlinkTradeProducer) <= 0x110u" in handlers
+
+
+def test_rr_names_its_trainer_from_the_production_tested_generic_read() -> None:
+    """RR-DURABLE: the trade journal binds to the trainer (reads.read_trainer needs
+    SB2_NAME_OFFSET). The old client's M.readTrainerName read playerName at SB2+0 on RR."""
+    title = _title("radical_red")
+    assert title["derived"]["SB2_NAME_OFFSET"] == 0
+    assert "readTrainerName" in title["_src"]["derived.SB2_NAME_OFFSET"]

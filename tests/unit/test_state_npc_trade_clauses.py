@@ -197,7 +197,7 @@ def test_npc_clause_has_a_named_memorial_cause(tmp_path):
 
 
 @pytest.mark.parametrize("title,refusal", (("firered", "party_hidden"), ("emerald", "party_hidden"),
-                                          ("firered_rr", "identity")))
+                                          ("firered_rr", "party_hidden")))
 def test_hidden_npc_report_is_refused_before_identity_or_clause_retirement(tmp_path, title, refusal):
     srv, entry, _, ids = _setup(tmp_path, title)
     srv._dispatch("a", {"event": "hello", "rom_type": title, "ot_id": "1111",
@@ -205,10 +205,6 @@ def test_hidden_npc_report_is_refused_before_identity_or_clause_retirement(tmp_p
     before = deepcopy(entry)
     msg, replies = _exchange(srv, entry, ids["Charmander"])
     assert replies["a"] == [{"cmd": "noop", "refused": refusal}]
-    if title == "firered_rr":
-        # RR does not opt into the recovery extension; its withheld hello is
-        # refused before any NPC identity change can retire a pair.
-        assert "unavailable" in srv.state.identity_error["a"].lower()
     assert entry == before and entry.status == LinkStatus.ALIVE
     assert not msg.get("_key_change_status")
     assert not any(c["cmd"] in ("force_faint", "memorialize") for c in replies["b"])

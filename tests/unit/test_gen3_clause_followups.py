@@ -98,13 +98,9 @@ def test_rr_trade_reports_without_run_id_wait_and_block_a_later_release():
     w.fire("pc_release")
     w.step(5)
     assert not w.events("trade_done") and not w.events("menu_result") and not w.events("release")
-    w.command(cmd="config", run_id="managed-model-run")
-    w.step(5)
-    assert not w.events("trade_done")  # RR lacks SB2_NAME_OFFSET too; no guessed binding.
-    assert "SB2_NAME_OFFSET" not in w.d
-    # Isolate sender readiness with an explicit MODEL trainer read, without
-    # adding any production RR RAM fact. The complete queued order then drains.
-    w.parts.reads.read_trainer = lambda: w.lua.table(ot_id=0xABCD, name="MODEL")
+    # RR-DURABLE: RR reads its trainer (derived.SB2_NAME_OFFSET, old-client evidence), so the
+    # run binding alone completes the journal binding and the queued order drains in order.
+    assert w.d["SB2_NAME_OFFSET"] == 0
     w.command(cmd="config", run_id="managed-model-run")
     w.step(5)
     assert [m["event"] for m in w.sent if m["event"] in ("trade_done", "menu_result", "release")] == [

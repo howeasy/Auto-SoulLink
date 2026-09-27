@@ -128,12 +128,13 @@ def test_hello_carries_the_trainer_badges_and_seeded_boxes_on_frlg():
     assert [(e["box"], e["slot"], e["key"]) for e in hello["pc_boxes"]] == [(0, 3, KC)]
 
 
-def test_rr_hello_falls_back_without_the_trainer_read():
+def test_rr_hello_carries_the_trainer_read():
+    """RR-DURABLE: gen3_rr carries SB2_NAME_OFFSET now (the trade journal binds to the trainer)."""
     w = World("gen3_rr", "radical_red")
     w.set_party(party(A))
     w.step()
     (hello,) = w.events("hello")
-    assert "ot_id" not in hello and "trainer_name" not in hello and hello["party"][0]["key"] == KA
+    assert hello["ot_id"] and hello["trainer_name"] and hello["party"][0]["key"] == KA
 
 
 def test_a_pre_game_save_sends_no_hello():
