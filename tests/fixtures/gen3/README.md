@@ -830,3 +830,4 @@ owned record re-keyed, the SaveBlock3 sector chunks kept) then booted and re-sav
 | `exp_pc_b.sav` | same | same | same, EMERB | `9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085` |
 | `exp_catch.sav` | Route 102 (0.17) | (21,16) | Mudkip Lv5; 20 Poke Balls | `e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a` |
 | `exp_catch_b.sav` | same | same | same, EMERB | `345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0` |
+| `exp_center.sav` | Oldale Pokemon Center 1F (2.2) | (7,4) | Mudkip Lv5; 5 Poke Balls. Expansion-only kind: the "town" seed with only the position moved onto the whiteout respawn tile (harness_facts.json whiteout_respawns), for the frame-end CPU census inside a Center (docs/gen3_emerald/probes/census_exp_center_2026-09-27.txt) | `69dcb62f37f888b5be791cd6683d1894787f1f6583e9171f1f07d91d27dffbd8` |

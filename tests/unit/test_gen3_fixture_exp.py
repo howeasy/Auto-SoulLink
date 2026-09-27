@@ -130,7 +130,7 @@ def test_committed_exp_fixture_sha256s_are_the_ones_the_readme_publishes():
     import hashlib
     readme = (FIXTURES / "README.md").read_text(encoding="utf-8")
     names = sorted(p.name for p in FIXTURES.glob("exp_*.sav"))
-    assert len(names) == 8
+    assert len(names) == 9
     for name in names:
         digest = hashlib.sha256((FIXTURES / name).read_bytes()).hexdigest()
         assert f"| `{name}` |" in readme and digest in readme, name
@@ -214,3 +214,16 @@ def test_whiteout_respawns_are_the_roms_own_tables():
         assert [g, n, x, y] == row["heal"], row["id"]
         assert list(struct.unpack_from("<4H", rom, syms["sWhiteoutRespawnHealCenterMapIdxs"] + i * 8)) \
             == row["respawn"], row["id"]
+
+
+def test_the_center_kind_stands_on_the_oldale_respawn_tile():
+    src = _src()
+    map_dir, group, num, layout_id, x, y = fx.EXP_KINDS["center"]
+    oldale = next(r for r in HARNESS["whiteout_respawns"] if r["id"] == "HEAL_LOCATION_OLDALE_TOWN")
+    assert [group, num, x, y] == oldale["respawn"]
+    layouts = json.loads((src / "data/layouts/layouts.json").read_text())["layouts"]
+    layout = layouts[layout_id - 1]
+    assert layout["id"] == json.loads((src / f"data/maps/{map_dir}/map.json").read_text())["layout"]
+    block = (src / layout["blockdata_filepath"]).read_bytes()
+    v = int.from_bytes(block[(y * layout["width"] + x) * 2:][:2], "little")
+    assert (v >> 10) & 3 == 0                             # collision 0: walkable

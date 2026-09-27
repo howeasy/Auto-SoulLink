@@ -137,8 +137,9 @@
       "version": "gen3-battle-v1"
     },
     "cpu": {
-      "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
+      "census": "docs/gen3_emerald/probes/census_exp_center_2026-09-27.txt",
       "irq_entry": {
+        "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
         "evidence": "docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt",
         "lr_max": 504,
         "lr_min": 504,
@@ -149,10 +150,11 @@
         "thumb": 0
       },
       "mode": 31,
-      "observed_pc": 504,
-      "pc_max": 16383,
-      "pc_min": 0,
-      "thumb": 0
+      "observed_pc": 135768890,
+      "pc_max": 135768895,
+      "pc_min": 135768888,
+      "symbol": "AgbMainLoop (inlined WaitForVBlank, wireless busy-wait)",
+      "thumb": 1
     },
     "gift_areas": [],
     "open": {

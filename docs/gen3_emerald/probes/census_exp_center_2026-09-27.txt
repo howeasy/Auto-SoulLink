@@ -1,0 +1,41 @@
+# X3 (EXP-X23) frame-end CPU census INSIDE the Oldale Pokemon Center 1F (2.2 (7,4), the whiteout respawn tile),
+# expansion reference build ROM sha1 28877d733492299599f2b8fff50493109d72653c, battery tests/fixtures/gen3/exp_center.sav, no input, 2026-09-27.
+# The Union Room tasks run here and the build's WaitForVBlank takes its wireless branch: an inlined busy-wait in AgbMainLoop
+# (0x0817AB38 ldrh r3,[r4,#0x1c] / tst r5,r3 / beq 0x0817AB38 / b 0x0817AAC0; src/main.c:422-437), not the BIOS VBlankIntrWait.
+phase start frame=1 title=emerald_expansion_28877d73 hash=28877D733492299599F2B8FFF50493109D72653C
+phase field frame=643 map=(2,2) pos=(7,4)
+phase armed frame=702 sampling 1800 frame ends, no input
+---- [probe] interim at frame 600 (bios_seen=true) ----
+  overworld-idle: 600 frames
+    R15=0x0817AB3A x340
+    R15=0x0817AB3C x101
+    R15=0x0817AB3E x97
+    R15=0x0000001C x62
+    CPSR mode/T=31/1 x538
+    CPSR mode/T=18/0 x62
+    tasks={0814B2DC,0814B30C,0814B36C,0814C1B4,08173CA0,0822DEEC,0822EBC8} x600
+    (1 distinct task-function sets total)
+---- [probe] final at frame 1800 (bios_seen=true) ----
+  overworld-idle: 1800 frames
+    R15=0x0817AB3A x1039
+    R15=0x0817AB3E x296
+    R15=0x0817AB3C x294
+    R15=0x0000001C x171
+    CPSR mode/T=31/1 x1629
+    CPSR mode/T=18/0 x171
+    tasks={0814B2DC,0814B30C,0814B36C,0814C1B4,08173CA0,0822DEEC,0822EBC8} x1800
+    (1 distinct task-function sets total)
+RESULT: PASS overworld-idle=1800/1800
+
+# the same tile, lua/tests/probe_gen3_irq_park.lua (no hook, then the client's frame_control exec hook 0x0817AAC0):
+phase start frame=1 title=emerald_expansion_28877d73 hash=28877D733492299599F2B8FFF50493109D72653C
+BIOS 0x1B4..0x20F 00b0a0e301c3a0e301b3cce51eff2fe10100a0e30110a0e30c402de901c3a0e3000050e30000a0e30120a0e30300000ab8305ce10130c3e1b8304ce10103cce50802cce5b8305ce1013013e001302310b8304c110822cce5f7ffff0a
+NOHOOK R15=0817AB3A mode=1F T=1 R14=0817AB2B x339
+NOHOOK R15=0817AB3C mode=1F T=1 R14=0817AB2B x101
+NOHOOK R15=0817AB3E mode=1F T=1 R14=0817AB2B x98
+NOHOOK R15=0000001C mode=12 T=0 R14=0817AB3C x62
+HOOK R15=0817AB3A mode=1F T=1 R14=0817AB2B x367
+HOOK R15=0817AB3E mode=1F T=1 R14=0817AB2B x95
+HOOK R15=0817AB3C mode=1F T=1 R14=0817AB2B x86
+HOOK R15=0000001C mode=12 T=0 R14=0817AB3C x52
+RESULT: PASS anchor=0817AAC0 hook_hits=600 nohook_modal={R15=0817AB3A mode=1F T=1 R14=0817AB2B} hook_modal={R15=0817AB3A mode=1F T=1 R14=0817AB2B}

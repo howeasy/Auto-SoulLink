@@ -128,7 +128,7 @@ def test_checkpoint_uses_expansion_geometry_and_keeps_unsupported_clauses_open()
     assert len(p["tasks"]["allowed_overworld_tasks"]) == 8
     assert not set(p["tasks"]["allowed_overworld_tasks"]) & set(p["tasks"]["non_allowed_task_census"])
     # X3: the BIOS park + IntrWait IRQ entry from the live census/IRQ receipts (test_gen3_exp_safety.py)
-    assert (p["cpu"]["mode"], p["cpu"]["thumb"], p["cpu"]["observed_pc"]) == (0x1F, 0, 0x1F8)
+    assert (p["cpu"]["mode"], p["cpu"]["thumb"], p["cpu"]["observed_pc"]) == (0x1F, 1, 0x0817AB3A)
     assert p["cpu"]["irq_entry"]["lr_min"] == p["cpu"]["irq_entry"]["lr_max"] == 0x1F8
     assert "cpu" not in p["open"] and p["tasks"]["status"] == "CENSUS"
     assert p["battle"]["commit_hold"].startswith("OPEN")
@@ -194,15 +194,18 @@ def test_expansion_area_outputs_from_own_source(tmp_path):
 
 # ── F1: gen3_exp is data-only -- nothing routes a real cartridge into it ────────────────────
 def test_gen3_exp_is_unreachable_from_entry_lua_and_manager():
-    """The pack is deliberately UNADMITTED (module docstring): it must not be registered in
-    lua/gen3/entry.lua's Entry.PACKS (so no ROM hash/header can admit it) or Entry.ROUTED (so an
-    admitted cartridge could not be sent to a client build for it), and server/manager.py must
-    not offer it as a playable GAMES entry or even list it as a named UNADMITTED_GAMES key."""
+    """The pack is deliberately UNADMITTED (module docstring). X3 (the E2-ENTRY precedent) registers
+    it in lua/gen3/entry.lua's Entry.PACKS so its hash names its OWN pack (never gen3_emerald's) and
+    the launcher refuses it as unrouted (test_gen3_exp_entry.py); it must stay out of Entry.ROUTED,
+    carry no header_code (no by-name admission), keep its profile unadmitted, and server/manager.py
+    must not offer it as a playable GAMES entry or even list it as a named UNADMITTED_GAMES key."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     entry_path = (ROOT / "lua/gen3/entry.lua").as_posix()
     Entry = lua.eval(f'dofile("{entry_path}")')
-    assert "gen3_exp" not in {key for key, _ in Entry.PACKS.items()}
+    assert "gen3_exp" in {key for key, _ in Entry.PACKS.items()}
+    assert Entry.PACKS.gen3_exp.header_code is None
     assert "gen3_exp" not in {key for key, _ in Entry.ROUTED.items()}
+    assert read("profile.json")["titles"][TITLE]["admitted"] is False
 
     from server.manager import GAMES, UNADMITTED_GAMES
     assert "gen3_exp" not in {key for key, _, _ in GAMES}

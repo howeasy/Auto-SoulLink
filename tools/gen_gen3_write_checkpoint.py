@@ -324,18 +324,27 @@ RR_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
           "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
           "irq_entry": RR_IRQ_ENTRY}
 
-# X3 (EXP-X23): the expansion reference build parks in the BIOS too, but in IntrWait's halt loop:
-# its inlined WaitForVBlank calls VBlankIntrWait (expansion e8bd1cd7 src/main.c:422-437). Census
-# (docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt, Oldale, no input): 1800/1800 frame
-# ends at R15 0x1F8 (the HALTCNT strb @0x1F0 + 8), System mode, ARM, all overworld-idle. With the
-# client's frame_control exec hook (docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt): 600/600
-# at the IRQ vector entry R15 0x1C, mode 0x12, ARM, R14_irq 0x1F8 -- the IRQ taken with the
-# instruction after that strb next. Same HLE BIOS bytes as RR's receipt; only R14 0x1F8 is admitted.
-EXP_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
-           "observed_pc": 0x000001F8,
-           "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
+# X3 (EXP-X23): the expansion reference build's inlined WaitForVBlank (expansion e8bd1cd7
+# src/main.c:422-437) has TWO idles, both measured live on ROM 28877d73 (BizHawk 2.11.1 HLE BIOS):
+#  * gWirelessCommType == 0 (outdoors): BIOS VBlankIntrWait -> IntrWait's halt. Census
+#    docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt (no hook): 1800/1800 at R15 0x1F8,
+#    System, ARM. With the client's frame_control exec hook
+#    (docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt): 600/600 at the IRQ vector entry
+#    R15 0x1C, mode 0x12, ARM, R14_irq 0x1F8 -- the RR G5-RR-CPU-IRQ shape, IntrWait's halt instead
+#    of Halt's (same HLE BIOS bytes as RR's receipt). Admitted as irq_entry, R14 0x1F8 only.
+#  * gWirelessCommType != 0 (inside a Pokemon Center: the Union Room tasks): a busy-wait inlined in
+#    AgbMainLoop, 0x0817AB38 ldrh r3,[r4,#0x1c] / tst r5,r3 / beq / b 0x0817AAC0 (no store; the
+#    bytes are the pack's frame_control anchor). Census docs/gen3_emerald/probes/
+#    census_exp_center_2026-09-27.txt: 1629/1800 frame ends at R15 0x0817AB3A..3E, System, Thumb;
+#    the rest (171) on the IRQ entry taken FROM that game code (R14 0x0817AB3C), refused on purpose;
+#    the same shape with the hook. Admitted as the main range, the FR/LG WaitForVBlank precedent.
+# The hookless System-mode BIOS park is not admitted: the production client always has exec hooks.
+EXP_CPU = {"mode": 0x1F, "thumb": 1, "pc_min": 0x0817AB38, "pc_max": 0x0817AB3F,
+           "observed_pc": 0x0817AB3A, "symbol": "AgbMainLoop (inlined WaitForVBlank, wireless busy-wait)",
+           "census": "docs/gen3_emerald/probes/census_exp_center_2026-09-27.txt",
            "irq_entry": {"mode": 0x12, "thumb": 0, "pc": [0x1C], "lr_min": 0x1F8, "lr_max": 0x1F8,
-                         "evidence": "docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt"}}
+                         "evidence": "docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt",
+                         "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt"}}
 
 
 def cpu_clause(title: str, syms, is_rr: bool) -> dict:

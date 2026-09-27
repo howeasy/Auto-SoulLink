@@ -1547,6 +1547,12 @@ EXP_ARTIFACTS = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS")
 EXP_ROM_SHA1 = "28877d733492299599f2b8fff50493109d72653c"
 EXP_PACK = Path(REPO) / "data/games/gen3_exp/28877d73"
 EXP_KINDS = {k: EMERALD_KINDS[k] for k in ("town", "battle", "pc", "catch")}
+# X3, expansion-only: standing inside the Oldale Pokemon Center 1F on the whiteout respawn tile
+# (harness_facts.json whiteout_respawns: Oldale -> 2.2 (7,4); layout LAYOUT_POKEMON_CENTER_1F = id
+# 61 in data/layouts/layouts.json). The frame-end CPU census there (the Union Room tasks run).
+# Built from the "town" seed with only the position fields moved.
+EXP_ONLY_KINDS = {"center": ("OldaleTown_PokemonCenter_1F", 2, 2, 61, 7, 4)}
+EXP_KINDS |= EXP_ONLY_KINDS
 # pret pokeemerald species id -> this build's (national-order) id; data.json names checked by test
 EXP_SPECIES = {283: 258, 286: 261, 288: 263, 290: 265}
 EXP_ITEM_POKE_BALL = 1     # include/constants/items.h:13 ITEM_POKE_BALL; pokeball.h:7 BALL_POKE = 1
@@ -1614,13 +1620,19 @@ def exp_write_slot(blocks: dict, *, counter: int) -> bytes:
 
 def build_exp_seed(kind: str, flags: list[int]) -> bytes:
     """The SYNTH flash image for `kind` on the reference build (section header)."""
-    parsed = codec.parse_flash(build_emerald_seed(kind, flags), title=codec.TITLE_EMERALD)
+    parsed = codec.parse_flash(build_emerald_seed("town" if kind in EXP_ONLY_KINDS else kind, flags),
+                               title=codec.TITLE_EMERALD)
     sb2_size, sb1_size = codec._TITLE_SAVE_SIZES[codec.TITLE_EXPANSION]
     storage_size = codec._TITLE_STORAGE_SIZES[codec.TITLE_EXPANSION]
     sb2, sb1 = bytearray(parsed["sb2"]), bytearray(parsed["sb1"])
     if len(sb2) != sb2_size or any(sb1[sb1_size:]):
         raise ValueError("the Emerald seed does not fit the expansion SaveBlocks")
     sb1 = sb1[:sb1_size]
+    if kind in EXP_ONLY_KINDS:
+        _map, group, num, layout_id, x, y = EXP_ONLY_KINDS[kind]
+        sb1[0x00:0x04] = struct.pack("<hh", x, y)                    # pos
+        sb1[0x04:0x0C] = sb1[0x0C:0x14] = _warp(group, num, x, y)    # location, continueGameWarp
+        sb1[0x32:0x34] = layout_id.to_bytes(2, "little")             # mapLayoutId
     storage = bytearray(parsed["storage"]) + bytes(storage_size - len(parsed["storage"]))
     types, derived = _exp_types(), _exp_derived()
     if derived["SB1_BALL_POCKET_OFFSET"] != SB1_BALL_POCKET_EMERALD:
