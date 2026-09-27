@@ -46,6 +46,7 @@ import re
 import shutil
 import subprocess
 
+from server import upr_gen3_write_domain
 from server.adapters import variant_label
 from server.adapters.gen1_rom_scan import (
     GEN1_ROM_SIZE,
@@ -55,7 +56,13 @@ from server.adapters.gen1_rom_scan import (
     scan,
     scan_base_stats,
 )
-from server.adapters.gen3_rom_tables import gen3_content_fingerprint
+from server.adapters.gen3_rom_tables import (
+    DEOXYS,
+    SPECIES_INFO_SIZE,
+    SPECIES_RULE_BYTES,
+    gen3_content_fingerprint,
+    normalised_species_rules,
+)
 from server.upr_settings import (
     FAMILY_FRLG,
     FAMILY_PURE,
@@ -301,9 +308,6 @@ _GEN3_PACK = os.path.join(_REPO, "data", "games", "gen3_frlg")
 # rule or the calc reads -- base stats 0-5, types 6-7, growth rate 19, abilities 22-23. The
 # catch rate (8) and the held items (12-15) are NOT here: the minimum-catch-rate and the
 # (open, ruling 31) wild-held-item options legitimately rewrite them.
-SPECIES_INFO_SIZE = 28
-SPECIES_RULE_BYTES = (0, 1, 2, 3, 4, 5, 6, 7, 19, 22, 23)
-DEOXYS = 410                      # internal species id (pret include/constants/species.h)
 
 
 def _gen3_pack(name: str) -> dict:
@@ -369,30 +373,15 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
     return bad
 
 
-def _gen3_species_rules(rom: bytes, title: str) -> list[bytes]:
-    from server.adapters.gen3_frlge import _DEOXYS_FORME, _DEOXYS_NORMAL
-    from server.adapters.gen3_rom_tables import ROM_BASE, SYMBOL_DIR
-    with open(os.path.join(SYMBOL_DIR, f"poke{title}.sym"), encoding="utf-8") as f:
-        row = next((line.split() for line in f if line.rstrip().endswith(" gSpeciesInfo")), None)
-    if row is None:
-        raise UprPipelineError(f"poke{title}.sym has no gSpeciesInfo symbol")
-    base, size = int(row[0], 16) - ROM_BASE, int(row[2], 16)
-    rows = []
-    for species, i in enumerate(range(base, base + size, SPECIES_INFO_SIZE)):
-        rec = bytearray(rom[i + b] for b in SPECIES_RULE_BYTES)
-        # UPR writes ability 2 = ability 1 where the game has none (Gen3RomHandler.java:1322-1324);
-        # the game reads a 0 second ability as the first (pret CreateBoxMon), so it is the same.
-        if rec[-1] == 0:
-            rec[-1] = rec[-2]
-        # Deoxys's six stats are exempt ONLY when they are the title's hardcoded forme (UPR
-        # copies that into its row on every save, Gen3RomHandler.java:796-809; the battle reads
-        # those anyway) -- mirrors server/adapters/gen3_frlge.py's _species_rules_digest, the
-        # other reader of this same normalisation, so there is one definition of "the forme".
-        # Any OTHER change to this row (a real base-stat edit) must still be caught.
-        if species == DEOXYS and bytes(rec[:6]) == _DEOXYS_FORME[title]:
-            rec[:6] = _DEOXYS_NORMAL
-        rows.append(bytes(rec))
-    return rows
+def _gen3_species_rules(rom: bytes, title: str) -> bytes:
+    from server.adapters import gen3_rom_tables
+
+    try:
+        head = gen3_rom_tables.table_symbols(title, symbol_dir=gen3_rom_tables.SYMBOL_DIR)["gSpeciesInfo"]
+        raw = gen3_rom_tables._Rom(rom).read(head["address"], head["size"], "gSpeciesInfo")
+        return normalised_species_rules(raw, title)
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise UprPipelineError(f"gSpeciesInfo could not be read: {exc}") from exc
 
 
 def gen3_fingerprint_rom(rom: bytes) -> str:
@@ -432,7 +421,7 @@ def _check_content_gen3(source_rom: str, output_rom: str) -> dict:
             f"({', '.join(bad[:6])}); SLink hooks and admits by these, so the output is refused")
     if _gen3_species_rules(out, si["title"]) != _gen3_species_rules(src, si["title"]):
         raise UprPipelineError(
-            "base stats, types, growth rates or abilities differ from the source — a setting "
+            "base stats, types, growth rates, gender ratios or abilities differ from the source — a setting "
             "that changes data the Soul Link rules read was enabled")
     try:
         tables = decode_rom_tables(out, si["title"])
@@ -820,6 +809,8 @@ def prepare_pair(jar: str, settings_path: str, sources: dict[str, str], out_dir:
         if family == FAMILY_FRLG:
             tables = _check_content_gen3(sources[player], info["output"])
             info["sites_intact"] = True        # _check_content_gen3 refuses otherwise
+            info["write_domain"] = upr_gen3_write_domain.check_output(
+                sources[player], info["output"], info["spec"], jar=jar)
             info["content_hash"] = info["fingerprint"] = gen3_content_fingerprint(tables)
             results[player] = info
             continue

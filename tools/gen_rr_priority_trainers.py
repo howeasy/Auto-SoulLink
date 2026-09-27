@@ -761,7 +761,27 @@ def parse_boss_sheet(ws, ws_formulas=None) -> list[dict]:
 
 _AREA_OVERRIDES = {
     # Areas where the display name doesn't map 1:1 to an area_id snake_case.
-    "S.S. ANNE":            "ss_anne",
+    #
+    # card RR-PT2 (2026-09-27): a bare building/room name is never an
+    # area_id the RR/FRLG client actually emits (lua/gen3/client.lua's
+    # area_now() only reports data/games/gen3_frlge/area_map.json's coarse
+    # per-town/dungeon ids; gen3_frlge_locations.lua's fine per-room names
+    # feed loc_name for DISPLAY only). server.py's player_area_id is STICKY
+    # -- it only updates on a non-empty coarse reading (server.py
+    # "area_enter"/"hello" handlers), so while standing in a building with
+    # no area_map.json entry of its own (a gym, a hideout floor, a hotel),
+    # the effective area for trainers_for_area()/the Upcoming Key Trainers
+    # widget stays whatever coarse area the player last walked in FROM --
+    # exactly tools/gen_gen3_trainers.py's area_of_map() nearest-mapped-area
+    # BFS rule (vanilla FR/LG trainers are resolved the same way; see its
+    # module docstring). Every entry below that targets a building/room
+    # (not a route/town/dungeon area_map.json already names directly) is
+    # that BFS result, verified against pinned pret pokefirered
+    # data/maps/*/map.json warps/connections
+    # (data/gen3_sources.lock.json commit c75f352304d529f6ba92d4f74b9cf8b5c3810788):
+    # docs/gen3/research/rr_priority_regen_2026-09-26.md records the map-by-map
+    # trace for each.
+    "S.S. ANNE":            "vermilion_city",
     "S.S. AQUA":            "ss_aqua",
     "POKÉMON LEAGUE":       "indigo_plateau",
     "POKEMON LEAGUE":       "indigo_plateau",
@@ -776,7 +796,7 @@ _AREA_OVERRIDES = {
     "POKEMON MANSION":      "pokemon_mansion",
     "POKÉMON MANSION ENTRANCE": "pokemon_mansion",
     "POKEMON MANSION ENTRANCE": "pokemon_mansion",
-    "ROCKET HIDEOUT":       "rocket_hideout",
+    "ROCKET HIDEOUT":       "celadon_city",
     "ROCKET WAREHOUSE":     "rocket_warehouse",
     "DIGLETT'S CAVE":       "digletts_cave",
     "DIGLETTS CAVE":        "digletts_cave",
@@ -803,8 +823,12 @@ _AREA_OVERRIDES = {
     "SILPH CO.":            "silph_co",
     "SILPH CO":             "silph_co",
     "TRAINER TOWER":        "trainer_tower",
-    "NUGGET BRIDGE":        "nugget_bridge",
-    "NUGG. BRIDGE":         "nugget_bridge",
+    # "Nugget Bridge" is community shorthand for the bridge section of
+    # Route 24 -- pret pokefirered has no separate map for it (data/maps has
+    # exactly one MAP_ROUTE24 covering the whole route including the
+    # bridge), so the client only ever reports "route_24" there.
+    "NUGGET BRIDGE":        "route_24",
+    "NUGG. BRIDGE":         "route_24",
     "BOND BRIDGE":          "bond_bridge",
     "KINDLE ROAD":          "kindle_road",
     "CAPE BRINK":           "cape_brink",
@@ -820,19 +844,70 @@ _AREA_OVERRIDES = {
     "CERULEAN CITY GYM":    "cerulean_city",
     "VERMILION CITY GYM":   "vermilion_city",
     "VERMILLION CITY GYM":  "vermilion_city",
+    # Plain city name (no "GYM" suffix) — the RR client/area_map.json emits
+    # "vermilion_city" (one L); the community sheet spells the city both
+    # ways depending on tab (Trainer Order uses the double-L "Vermillion").
+    "VERMILION CITY":       "vermilion_city",
+    "VERMILLION CITY":      "vermilion_city",
     "CELADON CITY GYM":     "celadon_city",
     "FUCHSIA CITY GYM":     "fuchsia_city",
     "FUSCHIA CITY GYM":     "fuchsia_city",      # Nuzlocke Redux typo
     "SAFFRON CITY GYM":     "saffron_city",
     "CINNABAR ISLAND GYM":  "cinnabar_island",
     "VIRIDIAN CITY GYM":    "viridian_city",
-    "CELADON CITY GAME CORNER": "celadon_city_game_corner",
-    "GAME CORNER":             "celadon_city_game_corner",
-    "ROCKET HIDE.":            "rocket_hideout",
-    "ROCKET HIDE":             "rocket_hideout",
+    # Celadon Game Corner (CeladonCity_GameCorner/_PrizeRoom): no
+    # area_map.json entry of its own either -- same sticky-coarse mechanism
+    # as Rocket Hideout below (card RR-PT2 follow-up, 2026-09-27): a fine
+    # gen3_frlge_locations.lua-only id like "celadon_city_game_corner" is
+    # ONLY what a hello ever reports, before player_area_id has taken any
+    # coarse reading this session; server.py's trainer panel
+    # (player_area_id.get(pid) or player_area.get(pid)) receives the sticky
+    # coarse value in every other case, so this fine id is effectively
+    # unreachable in play, exactly like the 11 keys fixed above.
+    "CELADON CITY GAME CORNER": "celadon_city",
+    "GAME CORNER":             "celadon_city",
+    # Rocket Hideout's floors (RocketHideout_B1F..B4F) have no area_map.json
+    # entry of their own; its entrance is inside the Game Corner, which also
+    # has none. BFS over pret's warps lands two hops out, at Celadon City.
+    "ROCKET HIDE.":            "celadon_city",
+    "ROCKET HIDE":             "celadon_city",
     "CERULEA. CAVE":           "cerulean_cave",
     "CHAMPION":             "indigo_plateau",
     "ELITE FOUR":           "indigo_plateau",
+    # Celadon Hotel (CeladonCity_Hotel): no area_map.json entry; its own
+    # warp leads straight back to Celadon City.
+    "CELADON HOTEL":        "celadon_city",
+    "CELADON CITY HOTEL":   "celadon_city",
+    # Cinnabar Island Gym (CinnabarIsland_Gym): no area_map.json entry;
+    # BFS lands on the town, same as every other Kanto "X City Gym" above.
+    "CINNABAR GYM":         "cinnabar_island",
+    # "Cinnabar Isl." (Rivals sheet) is the OUTDOOR island map itself
+    # (MAP_CINNABAR_ISLAND, area_map.json "3:8"), just abbreviated with a
+    # trailing period the default normalizer doesn't strip into the
+    # existing "cinnabar_island" id.
+    "CINNABAR ISL.":        "cinnabar_island",
+    # "Dig House" (Team Rocket sheet, between the Cerulean Gym and S.S.
+    # Anne fights) is Diglett's Cave's entrance building
+    # (DiglettsCave_NorthEntrance/SouthEntrance) -- area_map.json already
+    # tags both "digletts_cave" directly (no BFS needed).
+    "DIG HOUSE":            "digletts_cave",
+    # "Joyful" (Postgame sheet header "JOYFUL\nGAME CORNER\n...") is Two
+    # Island's Joyful Game Corner (TwoIsland_JoyfulGameCorner): no
+    # area_map.json entry; BFS lands on Two Island.
+    "JOYFUL":               "two_island",
+    # "Mansion F4"/"Pokemon Mansion 4F": vanilla Pokemon Mansion has only
+    # four interior maps (1F/2F/3F/B1F), all four already sharing the one
+    # area_map.json id "pokemon_mansion" -- whichever floor RR calls "4F",
+    # it's covered.
+    "MANSION F4":           "pokemon_mansion",
+    "POKEMON MANSION 4F":   "pokemon_mansion",
+    "POKÉMON MANSION 4F":   "pokemon_mansion",
+    # Pewter Museum (PewterCity_Museum_1F/2F): no area_map.json entry; BFS
+    # lands on Pewter City, same as the vanilla Brock-at-the-gym case.
+    "PEWTER MUSEUM":        "pewter_city",
+    # "Treasure Bea." (Postgame sheet) truncates "Treasure Beach" -- an id
+    # area_map.json already has at "3:46" for this exact map.
+    "TREASURE BEA.":        "treasure_beach",
     # RR has multiple "Route 22" encounters (early + late game). Both map
     # to the single area_id reported by the game ("route_22"); the renderer
     # uses level_cap proximity to distinguish them into separate rows.
@@ -1486,6 +1561,27 @@ def _build_roster(src: Path) -> tuple[dict, list[str]]:
         rt_id = _claim_unassigned(trainer_name.title())
         if rt_id is not None:
             _attach(area_id, rt_id, primary=True)
+
+    # (d) Gym Leader rematch tiers inherit their base fight's area (card
+    # RR-PT2). The Trainer Order sheet is a single first-playthrough pass —
+    # it has exactly one row per leader name, so (c) claims only ONE
+    # unassigned same-name id (the base fight) and leaves every post-E4
+    # "Kanto Rematch"/"Postgame" tier of the SAME leader unassigned forever:
+    # they fight at the SAME gym, just later, so they belong in the same
+    # area as the leader's own already-assigned fight. Scoped to class
+    # "Gym Leader" only — a name-only match would be wrong for classes
+    # reused across many unrelated fights (e.g. "Grunt", "Rival").
+    leader_area_by_name: dict[str, str] = {}
+    for rt_id_str, info in parties.items():
+        if info.get("class") == "Gym Leader" and int(rt_id_str) in assigned_area:
+            leader_area_by_name.setdefault(info["name"], assigned_area[int(rt_id_str)])
+    for rt_id_str, info in parties.items():
+        rid = int(rt_id_str)
+        if rid in assigned_area or info.get("class") != "Gym Leader":
+            continue
+        area = leader_area_by_name.get(info["name"])
+        if area:
+            _attach(area, rid, primary=True)
 
     # 6) Serialize.
     out_doc = {
