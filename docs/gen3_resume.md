@@ -1,8 +1,51 @@
-# Gen 3 resume note (updated 2026-09-27, checkpoint 22: COMBINED Gen 3 orchestrator; integration branch green)
+# Gen 3 resume note (updated 2026-09-27, checkpoint 23: FINISH THE RC; combined orchestrator)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.
 
-## CURRENT STATE (2026-09-27, checkpoint 22, combined orchestrator)
+## CURRENT STATE (2026-09-27, checkpoint 23): owner "Finish the scope" / "Lets finish this RC"
+
+Integration `claude/gen3-integration` @646586fd in C:/slink-wt/g3-int. The full unit suite at 4fa041bf was 13044 passed / 0 failed. Nothing is on master; landing needs the owner's explicit approval, and Gen 2 must be pinged first (server/lua shared).
+Resources (owner): at most 3 subagents; unlimited headless OMP for reviews, tests and small code; Codex threads Emerald 01a0dec7, Emerald-2 01a0ded3 and FRLG 01a0df52, reached by `delivery=steer`.
+
+**Merge order into integration (each: full unit suite + OMP review; live rows where named):**
+1. **T5** native FR/LG trade duo: `codex/gen3-t5-fr-duo` @a37ebb44 (C:/slink-wt/g3-t5-fr-duo). Integration 646586fd is already merged into it; targeted tests 1628/0.
+   - Before the fix: 3/4 live rows PASS. The one fail, "capability hello not acknowledged", has its root cause fixed in 646586fd (the baton waited 0.5 s; now 5 s plus a log line).
+   - Rerun script: C:/slink-wt/run_t5native2.sh; logs C:/slink-wt/t5native*.log. OMP review cx-be726e1a.
+2. **RR-ENC-FORMS + C3** (FRLG): `codex/gen3-rr-enc-forms` @d1231c5a.
+   - The ROM-authoritative RR encounter catalog: 81 locations / 3745 slots, drift 0.
+   - Names through 1375; types converted RR23 -> canonical 18.
+   - The RR family generator: 1349 species / 735 edges.
+   - Wait for FRLG's full-gate reply (cx-0a61f1b1).
+3. **T2-PUBLISH** (Codex Emerald, em-t2 `claude/gen3-emerald-t2`): FR/LG/E production UPS + READY on top of T5.
+   - Emerald native PASS set: em-t2/patch/build/em-live-20260927.json.
+   - OMP review cx-ec1254e4.
+4. **RR-DURABLE** (Opus subagent, C:/slink-wt/g3-rrdur `claude/gen3-rr-durable`): RR save witness, making RR native trade available.
+   - Must also fold OMP cx-bfa0a588 F1/F4 into the trade oracle: typed refusal msgbox (no `phone` tag), forbid msgbox on B.
+   - Live: trade/trade_decline/native_absent on gen3_rr.
+5. **UI-QUAL** (Sonnet, C:/slink-wt/g3-uiq): the Emerald rival by player gender, Mauville Gym area, per-title trainer/upcoming/prep tests; then a coordinator browser check.
+6. **EXP-X23** (Opus, C:/slink-wt/g3-exp): expansion X2/X3, then the XG1 request draft. XG2 needs an owner decision on the shinyModifier shared-state change.
+7. **CLAUSE-LIVE-REST** (Emerald-2):
+   - live rows: shiny exception (O-33 disclosed PID rekey), PC release, pre-ball gate LG/E, RR gender/type;
+   - ledger docs/gen3/research/e_parity_ledger_2026-09-27.md on its branch.
+
+**Then:**
+- the final cut per title: `python tools/gen3_final_cut.py --cut <sha> --title frlg|rr|emerald --lane C:/slink-wt/g3-lane`;
+- refresh the landing-prep branch `claude/gen3-landing-prep` (C:/slink-wt/rv-land) against current master;
+- ping Gen 2;
+- ask the owner for ONE landing;
+- signatures only on the owner's explicit "yes".
+
+**Open owner rulings:**
+- (a) the Soul Link phone on FR/LG/RR: none has a native phone and ruling 30's companion list has none, so it is treated as Emerald-only (Match Call) unless the owner says otherwise;
+- (b) randomized Radical Red: ruling 29 says randomized Gen 3 is in scope, but UPR cannot randomize CFRU. Is it in scope, and from what source?
+
+RR fc at 0e10ebd0 after fixes:
+- faint_cmd_clean, linked_faint_active_clean and rr_opcode_gates PASS;
+- native_absent FAILs only because RR trade is refused, and turns green with RR-DURABLE;
+- whiteout, linked_faint_active and trade/trade_decline PASS in g3-rrfc (merged);
+- species_clause and ball_gate RR wait on items 2 and 7.
+
+## Earlier state (checkpoint 22, combined orchestrator)
 
 - Integration `claude/gen3-integration` (C:/slink-wt/g3-int) head 66184e35: full suite 13013 passed / 0 failed. Env: `source C:/slink-wt/g3-env.sh` (now also SLINK_JDK_BIN, SLINK_UPR_JAR, SLINK_EXPANSION_SRC, SLINK_HOST_GCC, SLINK_PRET_EMERALD). pytest.ini keeps tmp_path only for failures (C: filled twice from ~7 GB/run retention).
 - Merged since checkpoint 21: T4 server trade contract (+R3/R4), ruling 35 NPC-trade clause retirement (all gens), T3-R5/R6 Emerald client recovery, E-MGR randomizer write domain (+fixes), TG-MULTI, RR-SYNTH + RR NPC trade, E-RAND-CATCH, UI mocks per title, WILD-VANILLA (pret wild tables for clean FR/LG/E), EXPLODE-BIND (FR/LG/E), EMERALD-RIVAL (per-player gender filter), CLAUSE-ROWS-G3 + CLAUSE-FIX, GIFT-EGG-ROWS-G3 (O-15 applied to Gen 3: hatch = gift_daycare capture), calc Prep deep-link race fix, T3-BIND-FR (FR native trade client).
