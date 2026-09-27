@@ -249,7 +249,7 @@ def test_admission_table_refuses_a_duplicate_digest(tmp_path):
     # PACKS (F4/F13) now includes gen3_emerald itself -- Entry.artifacts() opens every pack in
     # Entry.PACKS unconditionally, so the doctored tmp_path tree needs it too, and this loop
     # already covers it (no separate copytree call for it).
-    for pack, source in PACKS.items():
+    for source in PACKS.values():
         shutil.copytree(source, tmp_path / source.relative_to(REPO))
     doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
     blob = json.loads(doctored.read_text(encoding="utf-8"))
@@ -287,7 +287,7 @@ def test_admission_refuses_an_ambiguous_rom(tmp_path, other_pack, other_title):
     # PACKS (F4/F13) now includes gen3_emerald itself -- Entry.artifacts() opens every pack in
     # Entry.PACKS unconditionally, so the doctored tmp_path tree needs it too, and this loop
     # already covers it (no separate copytree call for it).
-    for pack, source in PACKS.items():
+    for source in PACKS.values():
         shutil.copytree(source, tmp_path / source.relative_to(REPO))
     doctored = tmp_path / "data" / "games" / other_pack / "engine_signals.json"
     blob = json.loads(doctored.read_text(encoding="utf-8"))
