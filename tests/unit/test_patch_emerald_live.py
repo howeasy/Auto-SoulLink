@@ -258,6 +258,12 @@ def body(mode):
         text=text.replace('assert(h(0x020370C0)==expected,"chooser game var differs")',
                           'assert(h(0x020370C0)==(expected==7 and 255 or expected),"chooser game var differs")')
     text,audit=translate(text)
+    if mode=="carrier":
+        text=text.replace("  local seq=0",'''  assert(event.on_bus_exec(function()
+    log("CHOOSER_SENTINEL value="..h(0x020375E0))
+  end,0x081B94B0,"T2-choice-pending"),"chooser observer absent")
+  local seq=0''')
+        audit["emerald:ChoosePartyMon"]={"address":0x081B94B0,"symbol":"ChoosePartyMon","offset":0}
     return text.replace("native FR","native Emerald").replace("FR native","Emerald native"),audit
 
 
@@ -330,7 +336,9 @@ def problems(mode, text, base):
     seed=(base/"seed.sav").read_bytes()
     if mode=="carrier":
         if not save.exists():return ["native SaveRAM absent"]
-        return carrier_problems(text,seed,save.read_bytes(),title="emerald",center="2,2",field_callback=syms["CB2_Overworld"]|1)
+        errors=carrier_problems(text,seed,save.read_bytes(),title="emerald",center="2,2",field_callback=syms["CB2_Overworld"]|1)
+        if text.count("CHOOSER_SENTINEL value=65535")!=2:errors.append("chooser start sentinel not observed twice")
+        return errors
     errors=[]
     if "RESULT: PASS" not in text:errors.append("native script failed")
     if not save.exists() or not (base/"reload_party.bin").exists():return errors+["save/reload readback missing"]
@@ -410,8 +418,7 @@ def run(mode, prepare=False, *, production=False):
     config["AutoLoadLastSaveSlot"]=False;config["AutoSaveLastSaveSlot"]=False
     (base/"config.ini").write_text(json.dumps(config,indent=2))
     script,audit=body(mode)
-    if production:
-        assert mode=="trade", "production smoke includes boot/panel/trade/reload"
+    if production and mode=="trade":
         panel,panel_audit=body("panel")
         script=panel+script;audit.update(panel_audit)
     script='''local out=assert(io.open("'''+(base/"result.txt").as_posix()+'''","w"))
@@ -467,14 +474,14 @@ out:close();client.exit()
     text=result.read_text() if result.exists() else "FAIL: no output"
     print(text)
     errors=problems(mode,text,base)
-    if production:
+    if production and mode=="trade":
         errors+=problems("panel",text,base)
     rejected=bool(problems(mode,text.replace("RESULT: PASS","RESULT: FAIL"),base))
     receipt.update(result="PASS" if not errors and rejected else "FAIL",problems=errors,
                    missing_success_rejected=rejected,address_bindings=audit,
                    scope="Emerald private single-cart native producer; replayed payloads and existing SYNTH fixture; no server/duo/admission")
     if production:
-        receipt.update(production=True,scope="Published UPS applied to pinned clean Emerald: native boot/panel/trade/save/reload smoke; SYNTH fixture",ups_sha256=row["ups_sha256"])
+        receipt.update(production=True,scope=f"Published UPS applied to pinned clean Emerald: native {mode} smoke (trade includes panel/save/reload); SYNTH fixture",ups_sha256=row["ups_sha256"])
     (base/"emerald_receipt.json").write_text(json.dumps(receipt,indent=2)+"\n")
     archive=ROOT/f"patch/build/{'production-' if production else ''}em-{mode}-live-20260927"
     archive.mkdir(exist_ok=True)

@@ -107,6 +107,28 @@ def thumb_entry_jump(address, destination):
     return bytes.fromhex("004b1847") + (destination | 1).to_bytes(4, "little")
 
 
+def validate_frame_replay(spec, facts, clean):
+    tails=[row for row in facts["continuations"] if row.get("symbol")=="CallCallbacks"]
+    if len(tails)!=1:
+        raise ValueError("callback continuation must name CallCallbacks exactly once")
+    tail=tails[0]
+    entry=spec["FRAME_ENTRY"]
+    if (tail["symbol_address"]!=entry or tail["offset"]!=8 or tail["address"]!=entry+8
+            or tail["thumb_address"]!=(tail["address"]|1) or spec["FRAME_RESUME"]!=tail["thumb_address"]):
+        raise ValueError("callback continuation differs from the relocated eight-byte entry")
+    expected=(f"push {{r4,lr}}\n ldr r4,=0x{spec['GMAIN']:08x}\n ldr r0,[r4]\n cmp r0,#0\n"
+              f" ldr r3,=0x{spec['FRAME_RESUME']:08x}\n bx r3\n")
+    if spec["FRAME_REPLAY_ASM"]!=expected:
+        raise ValueError("callback replay assembly disagrees with GMAIN/FRAME_RESUME")
+    instruction=int.from_bytes(clean[entry-ROM_BASE+2:entry-ROM_BASE+4],"little")
+    if instruction&0xff00!=0x4c00 or ((entry+6)&~3)+4*(instruction&255)!=spec["FRAME_GMAIN_LITERAL"]:
+        raise ValueError("callback PC-relative gMain load disagrees with its pinned literal")
+    validate_detour(clean,tail["address"],bytes.fromhex(tail["bytes"]))
+    validate_detour(clean,spec["FRAME_GMAIN_LITERAL"],spec["GMAIN"].to_bytes(4,"little"))
+    return {"address":spec["FRAME_RESUME"],"gmain_literal":spec["FRAME_GMAIN_LITERAL"],
+            "gmain":spec["GMAIN"],"original_tail":tail["bytes"]}
+
+
 def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, production=False):
     """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
     if trade_candidate and mode != "trade":
@@ -115,6 +137,10 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
         raise ValueError("diagnostics require FireRed; private candidates support FireRed/LeafGreen/Emerald")
     clean = Path(rom_path).read_bytes()
     spec = validate_base(title, clean)
+    frame_replay=None
+    if spec.get("FRAME_REPLAY_REQUIRED"):
+        facts=json.loads((Path(SRC)/"trade_targets"/f"{title}_lifecycle.json").read_text())
+        frame_replay=validate_frame_replay(spec,facts,clean)
     if production:
         if not trade_candidate:
             raise ValueError("production requires the complete native composition")
@@ -208,15 +234,7 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False, productio
         frame_receipt = {"address": spec["FRAME_ENTRY"], "original": spec["FRAME_BYTES"],
                          "replacement": data[offset:offset+8].hex()}
         if spec.get("FRAME_REPLAY_REQUIRED"):
-            facts = json.loads(header.with_name(f"{title}_lifecycle.json").read_text())
-            tail = facts["continuations"][0]
-            if tail["thumb_address"] != spec["FRAME_RESUME"]:
-                raise ValueError("callback continuation differs from pinned lifecycle")
-            validate_detour(clean, tail["address"], bytes.fromhex(tail["bytes"]))
-            validate_detour(clean, spec["FRAME_GMAIN_LITERAL"], spec["GMAIN"].to_bytes(4,"little"))
-            frame_receipt["continuation"] = {"address":spec["FRAME_RESUME"],
-                "gmain_literal":spec["FRAME_GMAIN_LITERAL"],"gmain":spec["GMAIN"],
-                "original_tail":tail["bytes"]}
+            frame_receipt["continuation"] = frame_replay
     trade_detours = []
     if mode == "trade":
         for key, symbol in (("TRADE_MON","slink_native_trade_gate"), ("EVO_GETTER","slink_native_evolution_gate")):

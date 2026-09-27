@@ -2,9 +2,11 @@
 #ifndef SLINK_CALL_PRODUCER_H
 #define SLINK_CALL_PRODUCER_H
 #include "trade_producer.h"
+#define SLINK_CALL_START_TIMEOUT_FRAMES 600u
 typedef struct {
     uint32_t last_delivery;
     uint8_t active,ui_owned,has_delivery,ack_ok;
+    uint32_t ui_started;
 } SlinkCallProducer;
 typedef struct {
     void *context;
@@ -13,6 +15,7 @@ typedef struct {
     int (*start)(void *,const volatile SlinkCallRecordV2 *);
     int (*poll)(void *); /* 0 pending, 1 actually visible, 2 released, -1 failed/released */
     uint32_t (*frame)(void *);
+    int (*cancel)(void *); /* 1 only after proving no native owner can read the text */
 } SlinkCallEngine;
 static inline void call_open(volatile SlinkCallWitnessV2 *w)
 {
@@ -69,18 +72,26 @@ static inline void slink_call_service(SlinkCallProducer *s,volatile SlinkMailbox
                        delivered?0:SLINK_REASON_CALL_UNAVAILABLE);
             s->active=0;s->ui_owned=0;
         }
+        if (s->ui_owned && w->phase==SLINK_CALL_ARMED
+            && (uint32_t)(now-s->ui_started)>=SLINK_CALL_START_TIMEOUT_FRAMES
+            && e->cancel && e->cancel(e->context)) {
+            call_phase(w,SLINK_CALL_REFUSED,SLINK_REASON_CALL_UNAVAILABLE);
+            s->active=0;s->ui_owned=0;
+        }
     }
     if (s->active && !s->ui_owned && m->session_epoch!=w->session_epoch) {
         s->active=0;call_phase(w,SLINK_CALL_EMPTY,0);
     }
     if (s->active && !s->ui_owned && e->safe(e->context)) {
-        if (e->start(e->context,owned)) s->ui_owned=1;
+        if (e->start(e->context,owned)) { s->ui_owned=1;s->ui_started=now; }
         else { s->active=0;call_phase(w,SLINK_CALL_REFUSED,SLINK_REASON_CALL_UNAVAILABLE); }
     }
     if (m->opcode!=SLINK_OP_MATCH_CALL) return;
     uint16_t seq=m->seq;
     if (w->phase!=SLINK_CALL_EMPTY && w->session_epoch==m->session_epoch && w->seq==seq) {
         if (w->event!=m->args[0]) { tp_ack(m,seq,0,SLINK_REASON_IDENTITY);return; }
+        /* Replay preserves the initial acceptance ACK. A later UI failure is
+         * carried by the coherent witness, not a rewritten command receipt. */
         tp_ack(m,seq,s->ack_ok,s->ack_ok?0:w->reason);return;
     }
     if (s->active) { /* occupied-slot exception: preserve old witness AND text */

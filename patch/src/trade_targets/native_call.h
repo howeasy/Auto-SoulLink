@@ -3,6 +3,7 @@
 #define SLINK_NATIVE_CALL_H
 #include "call_producer.h"
 #include "call_text.h"
+#include "native_call_state.h"
 #define NCall_STATE ((SlinkCallProducer *)(NT_BASE+0xE80u))
 #define NCall_RUNTIME ((volatile uint32_t *)(NT_BASE+0xE90u))
 #define NCall_TEXT ((uint8_t *)(NT_BASE+0xF00u))
@@ -35,9 +36,9 @@ static void ncall_show(void)
 {
     /* Recheck task capacity inside the script: watcher, call task, icon task.
      * On failure waitmessage sees HIDDEN and the script still releases locks. */
-    NCall_RUNTIME[0]=3;
+    NCall_RUNTIME[0]=3; /* failed show: no native call acquired the text */
     if (ncall_free_tasks()>=3 && ((u8(*)(const u8 *))(SLINK_TARGET_CALL_SHOW|1u))(NCall_TEXT))
-        NCall_RUNTIME[0]=2;
+        NCall_RUNTIME[0]=2; /* native UI acquired the field-message text */
 }
 static int ncall_start(void *unused,const volatile SlinkCallRecordV2 *r)
 {
@@ -48,26 +49,50 @@ static int ncall_start(void *unused,const volatile SlinkCallRecordV2 *r)
     NT_SCRIPT[i++]=0x23;nc_script_word(&i,(uint32_t)ncall_show|1u);
     NT_SCRIPT[i++]=0x66; /* waitmessage: field-message watcher owns its completion */
     NT_SCRIPT[i++]=0x6b;NT_SCRIPT[i++]=0x02;
-    NCall_RUNTIME[0]=1;
+    NCall_RUNTIME[0]=1;NCall_RUNTIME[1]=0;
     ((NtSetup)(SLINK_TARGET_SCRIPT_SETUP|1u))((const u8 *)NT_SCRIPT);
     return 1;
 }
 static int ncall_poll(void *unused)
 {
     if (NCall_RUNTIME[0]==1) return 0;
+    if (NCall_RUNTIME[0]==3 || NCall_RUNTIME[0]==4)
+        return nt_safe(unused) && !((u8(*)(void))(SLINK_TARGET_CALL_MODE|1u))()
+            && !((u32(*)(void))(SLINK_TARGET_CALL_ACTIVE|1u))()?-1:0;
     for (unsigned i=0;i<16;i++) {
         uint32_t p=gTasks+i*0x28u;
         if (NT_READ8(p+4) && NT_READ32(p)==(SLINK_TARGET_CALL_TASK|1u)) {
             /* State 5 means the intro ended and PrintIntro started gStringVar4.
              * Creation or slide-in alone is not delivery of the actual call. */
             unsigned state=NT_READ16(p+8);
-            return state==5?1:0;
+            if (state>NCall_RUNTIME[1]) NCall_RUNTIME[1]=state;
+            return slink_match_call_message_started(NCall_RUNTIME[1])?1:0;
         }
     }
     if (nt_safe(unused) && !((u8(*)(void))(SLINK_TARGET_CALL_MODE|1u))()) return 2;
     return 0;
 }
-static const SlinkCallEngine ncall_engine={0,ncall_available,ncall_safe,ncall_start,ncall_poll,nt_frame};
+static int ncall_cancel(void *unused)
+{
+    (void)unused;
+    /* Never time out a UI which actually started: it may simply await the
+     * player's input. Only the pre-show script can be canceled here. */
+    if (NCall_RUNTIME[0]!=1) return 0;
+    uint32_t script=NT_READ32(SLINK_TARGET_CALL_SCRIPT_CONTEXT+8u);
+    if (script<(uint32_t)NT_SCRIPT || script>=(uint32_t)NT_SCRIPT+9u) {
+        /* Our prefix contains no call/goto before ncall_show. A displaced
+         * script pointer therefore cannot return into our pending message. */
+        NCall_RUNTIME[0]=0;return 1;
+    }
+    if (((u8(*)(void))(SLINK_TARGET_CALL_MODE|1u))()
+        || ((u32(*)(void))(SLINK_TARGET_CALL_ACTIVE|1u))()) return 0;
+    /* Still in our lockall prefix: replace only our own script with its native
+     * releaseall/end cleanup and await real field release in ncall_poll. */
+    NT_SCRIPT[0]=0x6b;NT_SCRIPT[1]=0x02;
+    ((NtSetup)(SLINK_TARGET_SCRIPT_SETUP|1u))((const u8 *)NT_SCRIPT);
+    NCall_RUNTIME[0]=4;return 0;
+}
+static const SlinkCallEngine ncall_engine={0,ncall_available,ncall_safe,ncall_start,ncall_poll,nt_frame,ncall_cancel};
 static void slink_native_call_service(void)
 {
     slink_call_service(NCall_STATE,NT_MB,NCall_WITNESS,NCall_RECORD,

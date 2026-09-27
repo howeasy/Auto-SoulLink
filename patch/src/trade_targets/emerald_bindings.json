@@ -377,6 +377,11 @@
       "symbol": "gSpeciesNames",
       "symbol_address": 137463240,
       "offset": 0
+    },
+    "CALL_SCRIPT_CONTEXT": {
+      "symbol": "sGlobalScriptContext",
+      "symbol_address": 50335296,
+      "offset": 0
     }
   }
 }

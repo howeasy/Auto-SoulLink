@@ -101,6 +101,9 @@ Witness offsets below are relative to arena+`0x50`:
    consent or readiness. Consent is flag 2. Successful native pre-save publishes
    milestone 0 with the PREPARE seq, then ACKs PREPARE OK. A declined/failed
    pre-save publishes terminal UNCHANGED, bound to PREPARE seq.
+   Consent is a monotonic flag, not a separately sequenced milestone: a poll
+   may publish it earlier, or coalesce it with PRE_SAVE_OK on observed success.
+   Consumers must require both and must not require two distinct revisions.
 5. `trade_visit` is a projection of that coherent witness and local ownership,
    not a new opcode or a beacon-derived invented visit. Return the same visit
    ID/old key, accepted, pre_saved, apply_open only after consent+pre-save,
@@ -767,7 +770,7 @@ Published artifacts:
 |---|---|---|---|
 | FireRed | SLink-FireRed.ups | 10109d33a937af6182827a5b0b36abccfaabd1c9 | 2 / 23 |
 | LeafGreen | SLink-LeafGreen.ups | e651983a7e0d3cbd8810c76252755d2f09bd9bf0 | 2 / 23 |
-| Emerald | SLink-Emerald.ups | 2ffab4380ce91468833a11fa0b1bae6bf4acb4f3 | 2 / 87 |
+| Emerald | SLink-Emerald.ups | 2eef703ca448df5d782d16490cf2608803a7ef13 | 2 / 87 |
 
 The same manifest supplies the patcher registry and validates the UPS used by
 the engine-site/checkpoint generators. Companion sites retain their clean
@@ -800,7 +803,7 @@ and both saves, and reset/reload without another manual SAVE. All passed:
   native counter4->6, received Machamp identity retained.
 - LG PID45488: `patch/build/production-leafgreen-live-20260927/production_receipt.json`,
   native counter3->5, received Machamp identity retained.
-- Emerald PID44332: `patch/build/production-em-trade-live-20260927/emerald_receipt.json`,
+- Emerald PID46024: `patch/build/production-em-trade-live-20260927/emerald_receipt.json`,
   native counter2->4, received Machamp identity retained.
 
 Every received key was13572468:78563412. Python independently decoded the native
@@ -809,3 +812,59 @@ only their owned PIDs; all three PIDs were verified absent afterward. FR/LG used
 the disclosed full-party/full-box SYNTH fixture; Emerald used its two-mon PC
 fixture. These are native single-cart production-UPS smokes, not additional duo
 or all-scene heap qualification. T5 owns the duo receipts and OMP review.
+
+### OMP review dispositions (cx-6db186a8 / cx-38e266e5)
+
+- Chooser sentinel: accepted. Emerald's native cancel isFF, so the adapter now
+  initializes8004 toFFFF and interprets that as pending. A realFF translates to7.
+  The FR/LG path retainsFF as pending. Host-C controls cover pending, slot3 and
+  both cancellation conventions.
+- Consent timing: clarified rather than changing the engine. At pokeemerald
+  c65e93f2 `src/start_menu.c:1003-1023`, SaveConfirmInputCallback handles initial
+  consent; `:1063-1078` handles overwrite consent. Both Yes paths lead through
+  SaveSavingMessageCallback/SaveDoSaveCallback (`:1080-1106`). The input callback
+  being active alone is not consent. The witness contract above explicitly
+  permits consent and successful pre-save to share an atomic revision.
+- Callback replay: builder validation now selects exactly one CallCallbacks
+  continuation by symbol, verifies entry+8 and Thumb continuation, derives the
+  original PC-relative pool address, and requires the replay assembly to agree
+  with GMAIN/FRAME_RESUME. Reordered/unrelated rows are accepted; missing,
+  duplicate or inconsistent bindings are refused before compilation.
+- Emerald Main offsets: confirmed from the pinned `include/main.h:23` (explicit
+  vblankCounter2 offset024) and`:38-40` (byte439, inBattle is the second bit).
+  ENEMY_COUNT is correctly020244EA in the committed header and the pinned
+  gEnemyPartyCount symbol; the reported shorter value is not in the commit.
+- FR/LG artifact identity: default-run tests reconstruct the injected payload
+  from each checked-in UPS's XOR records over its verified FF source reservation,
+  then compare with frozen native-receipt payload hashes. This requires neither
+  owner ROMs nor a compiler. Source reproduction remains a separate --check gate.
+- Match Call watchdog: accepted with an ownership safeguard. After600 native
+  frames without observed delivery, the controller asks the adapter to cancel.
+  A displaced pre-show script has no remaining text owner and releases promptly;
+  an owned lockall prefix is replaced only by its releaseall/end cleanup and
+  remains owned until actual field release. A UI which really started can wait
+  for the player indefinitely; a timer alone must never free its text for reuse.
+  Model controls prove timeout refusal/reopening and refusal to release when the
+  engine cannot prove cancellation. No delivery or cooldown is credited on timeout.
+- Match Call visibility: state5 is not inherently one frame; PrintMessage waits
+  for text, sound and A/B. Nonetheless, state6/7 also prove that state5 completed.
+  The adapter now retains the maximum observed state and accepts5..7 as delivery.
+  An entirely unobserved message still cannot manufacture delivery/cooldown.
+- Runtime2/3 are now explicit acquired/failed states, including a failed-show
+  branch which cannot credit another task's message. The u8 return cast is
+  correct: `src/field_message_box.c:80` returns bool8, and
+  `include/gba/types.h:27` typedefs bool8 asu8.
+- ABI comments now state that an epoch change cancels ARMED only before native
+  ownership. Replay ACKs preserve original acceptance; later UI failure is
+  reported through the coherent witness, not by rewriting the original ACK.
+
+The reviewed Emerald UPS was rebuilt and re-smoked (PID46024, panel plus durable
+trade/reload). An old-candidate carrier run (PID49328) independently observed
+the faulty255 sentinel twice and failed the new oracle. The reviewed production
+carrier (PID35352) observed65535 twice and passed selection/cancellation and
+pre-save/withdrawal. Native Match Call events1/2/3, busy ownership and cooldown
+passed again on the reviewed UPS (PID33732); the early-fixture refusal passed
+again (PID8364). All owned PIDs exited. Older production Emerald trade proof is
+retained under `production-em-trade-live-20260927-pre-omp`; original candidate
+carrier proof is retained under `em-carrier-live-20260927-pre-omp`.
+The default FR/LG payload identity check passed after this rebuild.

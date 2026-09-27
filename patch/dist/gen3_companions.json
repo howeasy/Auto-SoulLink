@@ -9,12 +9,12 @@
       "base_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
       "capabilities": 87,
       "patch": "SLink-Emerald.ups",
-      "payload_sha256": "a6b88fb2993d387855d341cd767d84c59a5f60e20577b1a1ece4118aa36e5e4b",
+      "payload_sha256": "fb3cbf886454e1ce47bbb13373d0280203f8ac79b9914f105e8080cb72d0899d",
       "production": true,
       "protected_spans": [
         {
           "offset": 14929764,
-          "size": 10878
+          "size": 11114
         },
         {
           "offset": 2844,
@@ -45,10 +45,10 @@
           "size": 8
         }
       ],
-      "rom_md5": "cab93578ccf950d2f5db2834b0cb535c",
-      "rom_sha1": "2ffab4380ce91468833a11fa0b1bae6bf4acb4f3",
-      "rom_sha256": "fc7eda3609e704021a268953f91043085473c204171bc4e6b4ac34364a0f6fdc",
-      "ups_sha256": "521e41139b86fb454037610d552c7e04edc1f561ca3a54981afbce2376f61613"
+      "rom_md5": "bca9de3751315fb126cf348a74cfae88",
+      "rom_sha1": "2eef703ca448df5d782d16490cf2608803a7ef13",
+      "rom_sha256": "258ccc9961f7525c79ca1d8364a4b390a3bb56219e07c7c4ca28b86a00a7f8d4",
+      "ups_sha256": "b747f13ce6fd6352e6c843a311e8a4f52fb8f3c3bfb09964261f7363fe69cb72"
     },
     "firered": {
       "abi": 2,
