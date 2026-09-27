@@ -1,8 +1,19 @@
-# Gen 3 resume note (updated 2026-09-27, checkpoint 21: COMBINED Gen 3 orchestrator; integration branch green)
+# Gen 3 resume note (updated 2026-09-27, checkpoint 22: COMBINED Gen 3 orchestrator; integration branch green)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.
 
-## CURRENT STATE (2026-09-27, checkpoint 21, combined orchestrator)
+## CURRENT STATE (2026-09-27, checkpoint 22, combined orchestrator)
+
+- Integration `claude/gen3-integration` (C:/slink-wt/g3-int) head 66184e35: full suite 13013 passed / 0 failed. Env: `source C:/slink-wt/g3-env.sh` (now also SLINK_JDK_BIN, SLINK_UPR_JAR, SLINK_EXPANSION_SRC, SLINK_HOST_GCC, SLINK_PRET_EMERALD). pytest.ini keeps tmp_path only for failures (C: filled twice from ~7 GB/run retention).
+- Merged since checkpoint 21: T4 server trade contract (+R3/R4), ruling 35 NPC-trade clause retirement (all gens), T3-R5/R6 Emerald client recovery, E-MGR randomizer write domain (+fixes), TG-MULTI, RR-SYNTH + RR NPC trade, E-RAND-CATCH, UI mocks per title, WILD-VANILLA (pret wild tables for clean FR/LG/E), EXPLODE-BIND (FR/LG/E), EMERALD-RIVAL (per-player gender filter), CLAUSE-ROWS-G3 + CLAUSE-FIX, GIFT-EGG-ROWS-G3 (O-15 applied to Gen 3: hatch = gift_daycare capture), calc Prep deep-link race fix, T3-BIND-FR (FR native trade client).
+- PHYSICAL PASS today: RR evolve_gen3 + npc_trade_gen3; explode_gen3 FR/LG/E; link_gen3 FR/LG on catch_synth; link_gen3_rand E<->E; gift_gen3 + egg_hatch_gen3 on FR/LG/E/RR; clause rows 17/24; FR native trade DUO (T5, codex/gen3-t5-fr-duo d0fee98a, HARNESS_ONLY selection) trade + decline with cold reloads; companion single-cart (claude/gen3-emerald-t2): FR carrier/panel/sound/rival, LG all five.
+- Open: CLAUSE-FIX-2 (Emerald-2; 7 oracle/driver fixes + RR clean trade-unavailability: ABI1 RR companion cannot meet the durable-trade contract, so RR native trade is unavailable on this branch until the RR durable delta; release drains via per-report owed gate); T5-NATIVE-CARRIER (FRLG; bind the real native carrier, FR<->LG pairing, fold review F1 visible-hello latch / F6 queue ready-skip / F7 throttle) — T5 not yet merged into integration; T2 Emerald native adapters + Match Call producer (Codex Emerald); EMERALD-RIVAL-R1 + G3-REZERO parked (Emerald-2, r1-rezero); FR/LG final-cut regression on 66184e35 running (C:/slink-wt/fc-frlg.log).
+- Owner-facing notes: RR native trade status (unavailable on branch until delta, master unchanged); O-15 applied to Gen 3 eggs (flagged to owner); ruling 35 recorded.
+- Landing: master has the Gen 2 landing 5b6f75eb; scratch merge showed 4 conflicting files (cartridges/manager/randomizer.js/upr_pipeline). Ask the owner for ONE landing after merging master into integration; ping Gen 2 (they said no sweep needed now).
+
+## Earlier state (checkpoint 21)
+
+### CURRENT STATE was (2026-09-27, checkpoint 21, combined orchestrator)
 
 - ONE orchestrator (claude session 30c21a7a) runs FR/LG + RR + Emerald + expansion. Sole ledger: the AGENT_CHECKPOINT in C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md (workers gen3-*, emerald-*). Nothing on master (master 5b6f75eb is the Gen 2 landing; no Gen 3 branch is in it).
 - **Integration branch `claude/gen3-integration`, worktree `C:/slink-wt/g3-int`**: 17988de4 + claude/gen3-emerald + everything below. Full tests/unit with ROM+pret inputs (`source C:/slink-wt/g3-env.sh`) green at 876df6e1: 11857 passed, 0 failed. Randomized ROMs kept at C:/slink-wt/rand_roms.
