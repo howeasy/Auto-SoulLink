@@ -1,0 +1,5756 @@
+{
+  "schema": "rr-encounter-form-audit-v1",
+  "rom_sha1": "964f951a0fdaf209e4ea1344883ef0d557bb3a80",
+  "base_commit": "d9a928d79a99aef33ac923cfbf589cda2715762d",
+  "catalog_sha256": "0476ff1ab896fae8ac7f05374efbd310f17900be3c940938a0b53e52e9b22c73",
+  "changes": [
+    {
+      "area": "berry_forest",
+      "method": "Day",
+      "slot_in_catalog": 0,
+      "name": "Carnivine S",
+      "old_species_id": 508,
+      "species_id": 1282
+    },
+    {
+      "area": "berry_forest",
+      "method": "Day",
+      "slot_in_catalog": 1,
+      "name": "Nymble S",
+      "old_species_id": 1316,
+      "species_id": 1200
+    },
+    {
+      "area": "berry_forest",
+      "method": "Day",
+      "slot_in_catalog": 2,
+      "name": "Decidueye H",
+      "old_species_id": 941,
+      "species_id": 1301
+    },
+    {
+      "area": "berry_forest",
+      "method": "Day",
+      "slot_in_catalog": 3,
+      "name": "Decidueye H",
+      "old_species_id": 941,
+      "species_id": 1301
+    },
+    {
+      "area": "berry_forest",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Carnivine S",
+      "old_species_id": 508,
+      "species_id": 1282
+    },
+    {
+      "area": "berry_forest",
+      "method": "Night",
+      "slot_in_catalog": 1,
+      "name": "Nymble S",
+      "old_species_id": 1316,
+      "species_id": 1200
+    },
+    {
+      "area": "berry_forest",
+      "method": "Night",
+      "slot_in_catalog": 2,
+      "name": "Decidueye H",
+      "old_species_id": 941,
+      "species_id": 1301
+    },
+    {
+      "area": "berry_forest",
+      "method": "Night",
+      "slot_in_catalog": 3,
+      "name": "Decidueye H",
+      "old_species_id": 941,
+      "species_id": 1301
+    },
+    {
+      "area": "berry_forest",
+      "method": "Old Rod",
+      "slot_in_catalog": 1,
+      "name": "Clauncher S",
+      "old_species_id": 800,
+      "species_id": 1287
+    },
+    {
+      "area": "berry_forest",
+      "method": "Good Rod",
+      "slot_in_catalog": 0,
+      "name": "Corsola G",
+      "old_species_id": 222,
+      "species_id": 1221
+    },
+    {
+      "area": "berry_forest",
+      "method": "Good Rod",
+      "slot_in_catalog": 1,
+      "name": "Feebas S",
+      "old_species_id": 328,
+      "species_id": 1285
+    },
+    {
+      "area": "berry_forest",
+      "method": "Good Rod",
+      "slot_in_catalog": 2,
+      "name": "Feebas S",
+      "old_species_id": 328,
+      "species_id": 1285
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Day",
+      "slot_in_catalog": 0,
+      "name": "Decidueye H",
+      "old_species_id": 941,
+      "species_id": 1301
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Day",
+      "slot_in_catalog": 1,
+      "name": "Sneasel H",
+      "old_species_id": 215,
+      "species_id": 1304
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Day",
+      "slot_in_catalog": 6,
+      "name": "Braviary H",
+      "old_species_id": 681,
+      "species_id": 1269
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Day",
+      "slot_in_catalog": 7,
+      "name": "Braviary H",
+      "old_species_id": 681,
+      "species_id": 1269
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Decidueye H",
+      "old_species_id": 941,
+      "species_id": 1301
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Night",
+      "slot_in_catalog": 1,
+      "name": "Sneasel H",
+      "old_species_id": 215,
+      "species_id": 1304
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Night",
+      "slot_in_catalog": 6,
+      "name": "Braviary H",
+      "old_species_id": 681,
+      "species_id": 1269
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Night",
+      "slot_in_catalog": 7,
+      "name": "Braviary H",
+      "old_species_id": 681,
+      "species_id": 1269
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Surfing",
+      "slot_in_catalog": 2,
+      "name": "Mantine S",
+      "old_species_id": 226,
+      "species_id": 1284
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Surfing",
+      "slot_in_catalog": 3,
+      "name": "Milotic S",
+      "old_species_id": 329,
+      "species_id": 1286
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Surfing",
+      "slot_in_catalog": 4,
+      "name": "Milotic S",
+      "old_species_id": 329,
+      "species_id": 1286
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Super Rod",
+      "slot_in_catalog": 2,
+      "name": "Dhelmise S",
+      "old_species_id": 998,
+      "species_id": 1294
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Super Rod",
+      "slot_in_catalog": 3,
+      "name": "Dhelmise S",
+      "old_species_id": 998,
+      "species_id": 1294
+    },
+    {
+      "area": "bond_bridge",
+      "method": "Super Rod",
+      "slot_in_catalog": 4,
+      "name": "Dhelmise S",
+      "old_species_id": 998,
+      "species_id": 1294
+    },
+    {
+      "area": "cape_brink",
+      "method": "Day",
+      "slot_in_catalog": 0,
+      "name": "Electrode H",
+      "old_species_id": 101,
+      "species_id": 1296
+    },
+    {
+      "area": "cape_brink",
+      "method": "Day",
+      "slot_in_catalog": 1,
+      "name": "Blitzle S",
+      "old_species_id": 575,
+      "species_id": 1274
+    },
+    {
+      "area": "cape_brink",
+      "method": "Day",
+      "slot_in_catalog": 2,
+      "name": "Lilligant H",
+      "old_species_id": 602,
+      "species_id": 1303
+    },
+    {
+      "area": "cape_brink",
+      "method": "Day",
+      "slot_in_catalog": 3,
+      "name": "Lilligant H",
+      "old_species_id": 602,
+      "species_id": 1303
+    },
+    {
+      "area": "cape_brink",
+      "method": "Day",
+      "slot_in_catalog": 4,
+      "name": "Slowbro G",
+      "old_species_id": 80,
+      "species_id": 1212
+    },
+    {
+      "area": "cape_brink",
+      "method": "Day",
+      "slot_in_catalog": 5,
+      "name": "Slowbro G",
+      "old_species_id": 80,
+      "species_id": 1212
+    },
+    {
+      "area": "cape_brink",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Electrode H",
+      "old_species_id": 101,
+      "species_id": 1296
+    },
+    {
+      "area": "cape_brink",
+      "method": "Night",
+      "slot_in_catalog": 1,
+      "name": "Blitzle S",
+      "old_species_id": 575,
+      "species_id": 1274
+    },
+    {
+      "area": "cape_brink",
+      "method": "Good Rod",
+      "slot_in_catalog": 0,
+      "name": "Corsola G",
+      "old_species_id": 222,
+      "species_id": 1221
+    },
+    {
+      "area": "cape_brink",
+      "method": "Super Rod",
+      "slot_in_catalog": 5,
+      "name": "Mantyke S",
+      "old_species_id": 511,
+      "species_id": 1283
+    },
+    {
+      "area": "cape_brink",
+      "method": "Super Rod",
+      "slot_in_catalog": 6,
+      "name": "Slowbro G",
+      "old_species_id": 80,
+      "species_id": 1212
+    },
+    {
+      "area": "cape_brink",
+      "method": "Super Rod",
+      "slot_in_catalog": 10,
+      "name": "Feebas S",
+      "old_species_id": 328,
+      "species_id": 1285
+    },
+    {
+      "area": "cape_brink",
+      "method": "Super Rod",
+      "slot_in_catalog": 12,
+      "name": "Corsola G",
+      "old_species_id": 222,
+      "species_id": 1221
+    },
+    {
+      "area": "celadon_city",
+      "method": "Good Rod",
+      "slot_in_catalog": 1,
+      "name": "Slowpoke G",
+      "old_species_id": 79,
+      "species_id": 1211
+    },
+    {
+      "area": "celadon_city",
+      "method": "Good Rod",
+      "slot_in_catalog": 2,
+      "name": "Slowpoke G",
+      "old_species_id": 79,
+      "species_id": 1211
+    },
+    {
+      "area": "celadon_city",
+      "method": "Super Rod",
+      "slot_in_catalog": 4,
+      "name": "Muk A",
+      "old_species_id": 89,
+      "species_id": 1035
+    },
+    {
+      "area": "digletts_cave",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Diglett A",
+      "old_species_id": 50,
+      "species_id": 1027
+    },
+    {
+      "area": "digletts_cave",
+      "method": "Night",
+      "slot_in_catalog": 3,
+      "name": "Yamask G",
+      "old_species_id": 615,
+      "species_id": 1228
+    },
+    {
+      "area": "digletts_cave",
+      "method": "Night",
+      "slot_in_catalog": 5,
+      "name": "Geodude A",
+      "old_species_id": 74,
+      "species_id": 1031
+    },
+    {
+      "area": "digletts_cave",
+      "method": "Night",
+      "slot_in_catalog": 12,
+      "name": "Diglett A",
+      "old_species_id": 50,
+      "species_id": 1027
+    },
+    {
+      "area": "digletts_cave",
+      "method": "Night",
+      "slot_in_catalog": 13,
+      "name": "Diglett A",
+      "old_species_id": 50,
+      "species_id": 1027
+    },
+    {
+      "area": "digletts_cave",
+      "method": "Night",
+      "slot_in_catalog": 14,
+      "name": "Stunfisk G",
+      "old_species_id": 671,
+      "species_id": 1229
+    },
+    {
+      "area": "digletts_cave",
+      "method": "Night",
+      "slot_in_catalog": 21,
+      "name": "Dugtrio A",
+      "old_species_id": 51,
+      "species_id": 1028
+    },
+    {
+      "area": "kindle_road",
+      "method": "Night",
+      "slot_in_catalog": 4,
+      "name": "Centiskorch S",
+      "old_species_id": 1143,
+      "species_id": 1290
+    },
+    {
+      "area": "kindle_road",
+      "method": "Night",
+      "slot_in_catalog": 5,
+      "name": "Centiskorch S",
+      "old_species_id": 1143,
+      "species_id": 1290
+    },
+    {
+      "area": "kindle_road",
+      "method": "Surfing",
+      "slot_in_catalog": 0,
+      "name": "Mantyke S",
+      "old_species_id": 511,
+      "species_id": 1283
+    },
+    {
+      "area": "kindle_road",
+      "method": "Surfing",
+      "slot_in_catalog": 3,
+      "name": "Mantine S",
+      "old_species_id": 226,
+      "species_id": 1284
+    },
+    {
+      "area": "kindle_road",
+      "method": "Surfing",
+      "slot_in_catalog": 4,
+      "name": "Mantine S",
+      "old_species_id": 226,
+      "species_id": 1284
+    },
+    {
+      "area": "kindle_road",
+      "method": "Good Rod",
+      "slot_in_catalog": 0,
+      "name": "Corsola G",
+      "old_species_id": 222,
+      "species_id": 1221
+    },
+    {
+      "area": "mt_ember",
+      "method": "Day",
+      "slot_in_catalog": 0,
+      "name": "Doduo S",
+      "old_species_id": 84,
+      "species_id": 1276
+    },
+    {
+      "area": "mt_ember",
+      "method": "Day",
+      "slot_in_catalog": 5,
+      "name": "Dodrio S",
+      "old_species_id": 85,
+      "species_id": 1277
+    },
+    {
+      "area": "mt_ember",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Doduo S",
+      "old_species_id": 84,
+      "species_id": 1276
+    },
+    {
+      "area": "mt_ember",
+      "method": "Night",
+      "slot_in_catalog": 5,
+      "name": "Dodrio S",
+      "old_species_id": 85,
+      "species_id": 1277
+    },
+    {
+      "area": "mt_ember",
+      "method": "Night",
+      "slot_in_catalog": 6,
+      "name": "Arcanine H",
+      "old_species_id": 59,
+      "species_id": 1272
+    },
+    {
+      "area": "mt_ember",
+      "method": "Night",
+      "slot_in_catalog": 7,
+      "name": "Arcanine H",
+      "old_species_id": 59,
+      "species_id": 1272
+    },
+    {
+      "area": "mt_ember",
+      "method": "Night",
+      "slot_in_catalog": 20,
+      "name": "Arcanine H",
+      "old_species_id": 59,
+      "species_id": 1272
+    },
+    {
+      "area": "mt_ember",
+      "method": "Night",
+      "slot_in_catalog": 21,
+      "name": "Arcanine H",
+      "old_species_id": 59,
+      "species_id": 1272
+    },
+    {
+      "area": "mt_ember",
+      "method": "Night",
+      "slot_in_catalog": 22,
+      "name": "Arcanine H",
+      "old_species_id": 59,
+      "species_id": 1272
+    },
+    {
+      "area": "mt_ember",
+      "method": "Night",
+      "slot_in_catalog": 23,
+      "name": "Arcanine H",
+      "old_species_id": 59,
+      "species_id": 1272
+    },
+    {
+      "area": "mt_moon",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Geodude A",
+      "old_species_id": 74,
+      "species_id": 1031
+    },
+    {
+      "area": "pewter_city",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Grimer A",
+      "old_species_id": 88,
+      "species_id": 1034
+    },
+    {
+      "area": "pokemon_mansion",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Raticate A",
+      "old_species_id": 20,
+      "species_id": 1021
+    },
+    {
+      "area": "pokemon_mansion",
+      "method": "Night",
+      "slot_in_catalog": 2,
+      "name": "Muk A",
+      "old_species_id": 89,
+      "species_id": 1035
+    },
+    {
+      "area": "pokemon_mansion",
+      "method": "Night",
+      "slot_in_catalog": 3,
+      "name": "Muk A",
+      "old_species_id": 89,
+      "species_id": 1035
+    },
+    {
+      "area": "pokemon_mansion",
+      "method": "Night",
+      "slot_in_catalog": 4,
+      "name": "Weezing G",
+      "old_species_id": 110,
+      "species_id": 1215
+    },
+    {
+      "area": "pokemon_mansion",
+      "method": "Night",
+      "slot_in_catalog": 14,
+      "name": "Weezing G",
+      "old_species_id": 110,
+      "species_id": 1215
+    },
+    {
+      "area": "pokemon_mansion",
+      "method": "Night",
+      "slot_in_catalog": 28,
+      "name": "Rapidash G",
+      "old_species_id": 78,
+      "species_id": 1210
+    },
+    {
+      "area": "pokemon_mansion",
+      "method": "Night",
+      "slot_in_catalog": 36,
+      "name": "Raticate A",
+      "old_species_id": 20,
+      "species_id": 1021
+    },
+    {
+      "area": "pokemon_tower",
+      "method": "Day",
+      "slot_in_catalog": 60,
+      "name": "Teddiursa S",
+      "old_species_id": 216,
+      "species_id": 1278
+    },
+    {
+      "area": "pokemon_tower",
+      "method": "Day",
+      "slot_in_catalog": 61,
+      "name": "Zoroark H",
+      "old_species_id": 624,
+      "species_id": 1281
+    },
+    {
+      "area": "pokemon_tower",
+      "method": "Day",
+      "slot_in_catalog": 73,
+      "name": "Typhlosion H",
+      "old_species_id": 157,
+      "species_id": 1299
+    },
+    {
+      "area": "rock_tunnel",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Graveler A",
+      "old_species_id": 75,
+      "species_id": 1032
+    },
+    {
+      "area": "rock_tunnel",
+      "method": "Night",
+      "slot_in_catalog": 12,
+      "name": "Sandslash A",
+      "old_species_id": 28,
+      "species_id": 1024
+    },
+    {
+      "area": "rock_tunnel",
+      "method": "Night",
+      "slot_in_catalog": 25,
+      "name": "Noibat S",
+      "old_species_id": 822,
+      "species_id": 866
+    },
+    {
+      "area": "rock_tunnel",
+      "method": "Night",
+      "slot_in_catalog": 30,
+      "name": "Arcanine H",
+      "old_species_id": 59,
+      "species_id": 1272
+    },
+    {
+      "area": "rock_tunnel",
+      "method": "Night",
+      "slot_in_catalog": 31,
+      "name": "Arcanine H",
+      "old_species_id": 59,
+      "species_id": 1272
+    },
+    {
+      "area": "rock_tunnel",
+      "method": "Rock Smash",
+      "slot_in_catalog": 1,
+      "name": "Golem A",
+      "old_species_id": 76,
+      "species_id": 1033
+    },
+    {
+      "area": "route_1",
+      "method": "Night",
+      "slot_in_catalog": 1,
+      "name": "Zigzagoon G",
+      "old_species_id": 288,
+      "species_id": 1222
+    },
+    {
+      "area": "route_1",
+      "method": "Night",
+      "slot_in_catalog": 2,
+      "name": "Rattata A",
+      "old_species_id": 19,
+      "species_id": 1020
+    },
+    {
+      "area": "route_1",
+      "method": "Night",
+      "slot_in_catalog": 4,
+      "name": "Meowth G",
+      "old_species_id": 52,
+      "species_id": 1208
+    },
+    {
+      "area": "route_10",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Voltorb H",
+      "old_species_id": 100,
+      "species_id": 1295
+    },
+    {
+      "area": "route_10",
+      "method": "Night",
+      "slot_in_catalog": 10,
+      "name": "Sneasel H",
+      "old_species_id": 215,
+      "species_id": 1304
+    },
+    {
+      "area": "route_10",
+      "method": "Night",
+      "slot_in_catalog": 11,
+      "name": "Sneasel H",
+      "old_species_id": 215,
+      "species_id": 1304
+    },
+    {
+      "area": "route_10",
+      "method": "Good Rod",
+      "slot_in_catalog": 1,
+      "name": "Shellos East",
+      "old_species_id": 475,
+      "species_id": 711
+    },
+    {
+      "area": "route_10",
+      "method": "Good Rod",
+      "slot_in_catalog": 2,
+      "name": "Corsola G",
+      "old_species_id": 222,
+      "species_id": 1221
+    },
+    {
+      "area": "route_12",
+      "method": "Night",
+      "slot_in_catalog": 6,
+      "name": "Avalugg H",
+      "old_species_id": 821,
+      "species_id": 1309
+    },
+    {
+      "area": "route_12",
+      "method": "Night",
+      "slot_in_catalog": 7,
+      "name": "Avalugg H",
+      "old_species_id": 821,
+      "species_id": 1309
+    },
+    {
+      "area": "route_13",
+      "method": "Day",
+      "slot_in_catalog": 8,
+      "name": "Exeggutor A",
+      "old_species_id": 103,
+      "species_id": 1037
+    },
+    {
+      "area": "route_17",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Weezing G",
+      "old_species_id": 110,
+      "species_id": 1215
+    },
+    {
+      "area": "route_17",
+      "method": "Night",
+      "slot_in_catalog": 2,
+      "name": "Muk A",
+      "old_species_id": 89,
+      "species_id": 1035
+    },
+    {
+      "area": "route_2",
+      "method": "Night",
+      "slot_in_catalog": 2,
+      "name": "Ponyta G",
+      "old_species_id": 77,
+      "species_id": 1209
+    },
+    {
+      "area": "route_2",
+      "method": "Night",
+      "slot_in_catalog": 8,
+      "name": "Zigzagoon G",
+      "old_species_id": 288,
+      "species_id": 1222
+    },
+    {
+      "area": "route_20",
+      "method": "Good Rod",
+      "slot_in_catalog": 2,
+      "name": "Corsola G",
+      "old_species_id": 222,
+      "species_id": 1221
+    },
+    {
+      "area": "route_21",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Wooper P",
+      "old_species_id": 194,
+      "species_id": 930
+    },
+    {
+      "area": "route_21",
+      "method": "Good Rod",
+      "slot_in_catalog": 2,
+      "name": "Corsola G",
+      "old_species_id": 222,
+      "species_id": 1221
+    },
+    {
+      "area": "route_22",
+      "method": "Night",
+      "slot_in_catalog": 1,
+      "name": "Sandshrew A",
+      "old_species_id": 27,
+      "species_id": 1023
+    },
+    {
+      "area": "route_3",
+      "method": "Day",
+      "slot_in_catalog": 11,
+      "name": "Meowth A",
+      "old_species_id": 52,
+      "species_id": 1029
+    },
+    {
+      "area": "route_3",
+      "method": "Night",
+      "slot_in_catalog": 11,
+      "name": "Meowth A",
+      "old_species_id": 52,
+      "species_id": 1029
+    },
+    {
+      "area": "route_4",
+      "method": "Day",
+      "slot_in_catalog": 8,
+      "name": "Pumpkaboo M",
+      "old_species_id": 818,
+      "species_id": 855
+    },
+    {
+      "area": "route_4",
+      "method": "Day",
+      "slot_in_catalog": 9,
+      "name": "Pumpkaboo M",
+      "old_species_id": 818,
+      "species_id": 855
+    },
+    {
+      "area": "route_4",
+      "method": "Night",
+      "slot_in_catalog": 8,
+      "name": "Pumpkaboo L",
+      "old_species_id": 818,
+      "species_id": 854
+    },
+    {
+      "area": "route_4",
+      "method": "Night",
+      "slot_in_catalog": 9,
+      "name": "Pumpkaboo L",
+      "old_species_id": 818,
+      "species_id": 854
+    },
+    {
+      "area": "route_5",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Meowth G",
+      "old_species_id": 52,
+      "species_id": 1208
+    },
+    {
+      "area": "route_5",
+      "method": "Night",
+      "slot_in_catalog": 3,
+      "name": "Vulpix A",
+      "old_species_id": 37,
+      "species_id": 1025
+    },
+    {
+      "area": "route_5",
+      "method": "Night",
+      "slot_in_catalog": 6,
+      "name": "Growlithe H",
+      "old_species_id": 58,
+      "species_id": 1271
+    },
+    {
+      "area": "route_5",
+      "method": "Night",
+      "slot_in_catalog": 8,
+      "name": "Grimer A",
+      "old_species_id": 88,
+      "species_id": 1034
+    },
+    {
+      "area": "route_5",
+      "method": "Night",
+      "slot_in_catalog": 9,
+      "name": "Grimer A",
+      "old_species_id": 88,
+      "species_id": 1034
+    },
+    {
+      "area": "route_6",
+      "method": "Good Rod",
+      "slot_in_catalog": 0,
+      "name": "Slowpoke G",
+      "old_species_id": 79,
+      "species_id": 1211
+    },
+    {
+      "area": "route_6",
+      "method": "Super Rod",
+      "slot_in_catalog": 0,
+      "name": "Slowbro G",
+      "old_species_id": 80,
+      "species_id": 1212
+    },
+    {
+      "area": "safari_zone_east",
+      "method": "Day",
+      "slot_in_catalog": 3,
+      "name": "Tauros P",
+      "old_species_id": 128,
+      "species_id": 1234
+    },
+    {
+      "area": "safari_zone_east",
+      "method": "Night",
+      "slot_in_catalog": 2,
+      "name": "Tauros P Fire",
+      "old_species_id": 128,
+      "species_id": 1240
+    },
+    {
+      "area": "safari_zone_east",
+      "method": "Night",
+      "slot_in_catalog": 3,
+      "name": "Tauros P Water",
+      "old_species_id": 128,
+      "species_id": 1235
+    },
+    {
+      "area": "safari_zone_east",
+      "method": "Night",
+      "slot_in_catalog": 6,
+      "name": "Zorua H",
+      "old_species_id": 623,
+      "species_id": 1280
+    },
+    {
+      "area": "safari_zone_east",
+      "method": "Night",
+      "slot_in_catalog": 7,
+      "name": "Zorua H",
+      "old_species_id": 623,
+      "species_id": 1280
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Day",
+      "slot_in_catalog": 13,
+      "name": "Darmanitan G",
+      "old_species_id": 608,
+      "species_id": 1226
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Day",
+      "slot_in_catalog": 26,
+      "name": "Ninetales A",
+      "old_species_id": 38,
+      "species_id": 1026
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Day",
+      "slot_in_catalog": 27,
+      "name": "Ninetales A",
+      "old_species_id": 38,
+      "species_id": 1026
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Day",
+      "slot_in_catalog": 37,
+      "name": "Darmanitan G",
+      "old_species_id": 608,
+      "species_id": 1226
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Day",
+      "slot_in_catalog": 38,
+      "name": "Ninetales A",
+      "old_species_id": 38,
+      "species_id": 1026
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Day",
+      "slot_in_catalog": 39,
+      "name": "Ninetales A",
+      "old_species_id": 38,
+      "species_id": 1026
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 0,
+      "name": "Sandslash A",
+      "old_species_id": 28,
+      "species_id": 1024
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 12,
+      "name": "Sandslash A",
+      "old_species_id": 28,
+      "species_id": 1024
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 13,
+      "name": "Darmanitan G",
+      "old_species_id": 608,
+      "species_id": 1226
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 26,
+      "name": "Ninetales A",
+      "old_species_id": 38,
+      "species_id": 1026
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 27,
+      "name": "Ninetales A",
+      "old_species_id": 38,
+      "species_id": 1026
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 36,
+      "name": "Sandslash A",
+      "old_species_id": 28,
+      "species_id": 1024
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 37,
+      "name": "Darmanitan G",
+      "old_species_id": 608,
+      "species_id": 1226
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 38,
+      "name": "Ninetales A",
+      "old_species_id": 38,
+      "species_id": 1026
+    },
+    {
+      "area": "seafoam_islands",
+      "method": "Night",
+      "slot_in_catalog": 39,
+      "name": "Ninetales A",
+      "old_species_id": 38,
+      "species_id": 1026
+    },
+    {
+      "area": "three_isle_port",
+      "method": "Day",
+      "slot_in_catalog": 1,
+      "name": "Clauncher S",
+      "old_species_id": 800,
+      "species_id": 1287
+    },
+    {
+      "area": "three_isle_port",
+      "method": "Day",
+      "slot_in_catalog": 2,
+      "name": "Goodra H",
+      "old_species_id": 814,
+      "species_id": 1298
+    },
+    {
+      "area": "three_isle_port",
+      "method": "Day",
+      "slot_in_catalog": 3,
+      "name": "Goodra H",
+      "old_species_id": 814,
+      "species_id": 1298
+    },
+    {
+      "area": "three_isle_port",
+      "method": "Day",
+      "slot_in_catalog": 4,
+      "name": "Samurott H",
+      "old_species_id": 556,
+      "species_id": 1300
+    },
+    {
+      "area": "three_isle_port",
+      "method": "Day",
+      "slot_in_catalog": 5,
+      "name": "Samurott H",
+      "old_species_id": 556,
+      "species_id": 1300
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Night",
+      "slot_in_catalog": 2,
+      "name": "Lilligant H",
+      "old_species_id": 602,
+      "species_id": 1303
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Night",
+      "slot_in_catalog": 3,
+      "name": "Lilligant H",
+      "old_species_id": 602,
+      "species_id": 1303
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Surfing",
+      "slot_in_catalog": 0,
+      "name": "Mantyke S",
+      "old_species_id": 511,
+      "species_id": 1283
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Surfing",
+      "slot_in_catalog": 2,
+      "name": "Basculegion F",
+      "old_species_id": 1268,
+      "species_id": 1306
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Surfing",
+      "slot_in_catalog": 3,
+      "name": "Mantine S",
+      "old_species_id": 226,
+      "species_id": 1284
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Surfing",
+      "slot_in_catalog": 4,
+      "name": "Mantine S",
+      "old_species_id": 226,
+      "species_id": 1284
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Good Rod",
+      "slot_in_catalog": 0,
+      "name": "Corsola G",
+      "old_species_id": 222,
+      "species_id": 1221
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Good Rod",
+      "slot_in_catalog": 1,
+      "name": "Mantyke S",
+      "old_species_id": 511,
+      "species_id": 1283
+    },
+    {
+      "area": "treasure_beach",
+      "method": "Good Rod",
+      "slot_in_catalog": 2,
+      "name": "Mantyke S",
+      "old_species_id": 511,
+      "species_id": 1283
+    },
+    {
+      "area": "victory_road",
+      "method": "Night",
+      "slot_in_catalog": 2,
+      "name": "Goodra H",
+      "old_species_id": 814,
+      "species_id": 1298
+    },
+    {
+      "area": "victory_road",
+      "method": "Night",
+      "slot_in_catalog": 8,
+      "name": "Marowak A",
+      "old_species_id": 105,
+      "species_id": 1039
+    },
+    {
+      "area": "viridian_forest",
+      "method": "Day",
+      "slot_in_catalog": 3,
+      "name": "Burmy Sandy",
+      "old_species_id": 465,
+      "species_id": 707
+    },
+    {
+      "area": "viridian_forest",
+      "method": "Day",
+      "slot_in_catalog": 21,
+      "name": "Pumpkaboo Xl",
+      "old_species_id": 818,
+      "species_id": 853
+    },
+    {
+      "area": "viridian_forest",
+      "method": "Night",
+      "slot_in_catalog": 3,
+      "name": "Burmy Trash",
+      "old_species_id": 465,
+      "species_id": 708
+    },
+    {
+      "area": "viridian_forest",
+      "method": "Night",
+      "slot_in_catalog": 15,
+      "name": "Burmy Trash",
+      "old_species_id": 465,
+      "species_id": 708
+    }
+  ],
+  "before_diff": {
+    "rom_sha1": "964f951a0fdaf209e4ea1344883ef0d557bb3a80",
+    "rom_areas": 53,
+    "catalog_areas": 53,
+    "mismatched_methods": 80,
+    "unmapped_primary_maps": [
+      [
+        1,
+        4
+      ]
+    ],
+    "mismatches": [
+      {
+        "area": "berry_forest",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1200,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1282,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1301,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 508,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 941,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1316,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "berry_forest",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1221,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1285,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 222,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 328,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "berry_forest",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1200,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1282,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1301,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 508,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 941,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1316,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "berry_forest",
+        "method": "Old Rod",
+        "rom_count": 2,
+        "catalog_count": 2,
+        "rom_only": [
+          {
+            "species_id": 1287,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 800,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "bond_bridge",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1269,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1301,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1304,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 215,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 681,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 941,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "bond_bridge",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1269,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1301,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1304,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 215,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 681,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 941,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "bond_bridge",
+        "method": "Super Rod",
+        "rom_count": 5,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 1294,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 3
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 998,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 3
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "bond_bridge",
+        "method": "Surfing",
+        "rom_count": 5,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 864,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 1284,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1286,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 226,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 310,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 329,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cape_brink",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1169,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1212,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1212,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1274,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1296,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1303,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 80,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 80,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 101,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 575,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 602,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 969,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cape_brink",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1221,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 222,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cape_brink",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1169,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1274,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1296,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 101,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 575,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 985,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cape_brink",
+        "method": "Super Rod",
+        "rom_count": 5,
+        "catalog_count": 20,
+        "rom_only": [],
+        "catalog_only": [
+          {
+            "species_id": 80,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 99,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 2
+          },
+          {
+            "species_id": 222,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 325,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 2
+          },
+          {
+            "species_id": 328,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 511,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 647,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 2
+          },
+          {
+            "species_id": 801,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 963,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 985,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 2
+          },
+          {
+            "species_id": 1137,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "celadon_city",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1211,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 79,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "celadon_city",
+        "method": "Super Rod",
+        "rom_count": 5,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 1035,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 89,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cerulean_cave",
+        "method": "Night",
+        "rom_count": 36,
+        "catalog_count": 36,
+        "rom_only": [
+          {
+            "species_id": 1258,
+            "min_level": 68,
+            "max_level": 70,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 1237,
+            "min_level": 68,
+            "max_level": 70,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "digletts_cave",
+        "method": "Night",
+        "rom_count": 24,
+        "catalog_count": 24,
+        "rom_only": [
+          {
+            "species_id": 1027,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          },
+          {
+            "species_id": 1027,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 2
+          },
+          {
+            "species_id": 1028,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 1
+          },
+          {
+            "species_id": 1031,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          },
+          {
+            "species_id": 1228,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          },
+          {
+            "species_id": 1229,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 50,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          },
+          {
+            "species_id": 50,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 2
+          },
+          {
+            "species_id": 51,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 1
+          },
+          {
+            "species_id": 74,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          },
+          {
+            "species_id": 615,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          },
+          {
+            "species_id": 671,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "kindle_road",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1221,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 222,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "kindle_road",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1290,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 1143,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "kindle_road",
+        "method": "Surfing",
+        "rom_count": 5,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 1283,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 1284,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 226,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 511,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "mt_ember",
+        "method": "Day",
+        "rom_count": 24,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 38,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 219,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 321,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 608,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 776,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 776,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1272,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 4
+          },
+          {
+            "species_id": 1276,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 1277,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 84,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 85,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "mt_ember",
+        "method": "Night",
+        "rom_count": 24,
+        "catalog_count": 24,
+        "rom_only": [
+          {
+            "species_id": 1272,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 6
+          },
+          {
+            "species_id": 1276,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 1277,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 59,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 6
+          },
+          {
+            "species_id": 84,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 85,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "mt_moon",
+        "method": "Night",
+        "rom_count": 36,
+        "catalog_count": 36,
+        "rom_only": [
+          {
+            "species_id": 1031,
+            "min_level": 12,
+            "max_level": 14,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 74,
+            "min_level": 12,
+            "max_level": 14,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "pewter_city",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1034,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          },
+          {
+            "species_id": 1361,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 88,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          },
+          {
+            "species_id": 1146,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "pokemon_mansion",
+        "method": "Day",
+        "rom_count": 72,
+        "catalog_count": 48,
+        "rom_only": [
+          {
+            "species_id": 154,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 157,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 2
+          },
+          {
+            "species_id": 201,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 8
+          },
+          {
+            "species_id": 282,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 448,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 482,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 929,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 1107,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 1169,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "pokemon_mansion",
+        "method": "Night",
+        "rom_count": 72,
+        "catalog_count": 48,
+        "rom_only": [
+          {
+            "species_id": 157,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 201,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 8
+          },
+          {
+            "species_id": 282,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 445,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 448,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 531,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 923,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 929,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 1021,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 2
+          },
+          {
+            "species_id": 1035,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 2
+          },
+          {
+            "species_id": 1169,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 1210,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 1215,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 20,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 2
+          },
+          {
+            "species_id": 78,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 89,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 2
+          },
+          {
+            "species_id": 110,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "pokemon_tower",
+        "method": "Day",
+        "rom_count": 84,
+        "catalog_count": 96,
+        "rom_only": [
+          {
+            "species_id": 1278,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1281,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1299,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1356,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1362,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 0,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 12
+          },
+          {
+            "species_id": 94,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 157,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 216,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 624,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1147,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "pokemon_tower",
+        "method": "Night",
+        "rom_count": 84,
+        "catalog_count": 60,
+        "rom_only": [
+          {
+            "species_id": 495,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 3
+          },
+          {
+            "species_id": 495,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 995,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 3
+          },
+          {
+            "species_id": 995,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1147,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1156,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1179,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1246,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 4
+          },
+          {
+            "species_id": 1278,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1281,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1292,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1299,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1356,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1362,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "rock_tunnel",
+        "method": "Day",
+        "rom_count": 36,
+        "catalog_count": 24,
+        "rom_only": [
+          {
+            "species_id": 866,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1083,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1171,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1229,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1229,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1237,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1272,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1302,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "rock_tunnel",
+        "method": "Night",
+        "rom_count": 36,
+        "catalog_count": 36,
+        "rom_only": [
+          {
+            "species_id": 668,
+            "min_level": 30,
+            "max_level": 32,
+            "count": 1
+          },
+          {
+            "species_id": 820,
+            "min_level": 30,
+            "max_level": 32,
+            "count": 1
+          },
+          {
+            "species_id": 866,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1032,
+            "min_level": 29,
+            "max_level": 31,
+            "count": 1
+          },
+          {
+            "species_id": 1272,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 28,
+            "min_level": 30,
+            "max_level": 32,
+            "count": 1
+          },
+          {
+            "species_id": 59,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 75,
+            "min_level": 29,
+            "max_level": 31,
+            "count": 1
+          },
+          {
+            "species_id": 491,
+            "min_level": 30,
+            "max_level": 32,
+            "count": 1
+          },
+          {
+            "species_id": 822,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "rock_tunnel",
+        "method": "Rock Smash",
+        "rom_count": 5,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 1033,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 76,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "rock_tunnel",
+        "method": "Surfing",
+        "rom_count": 5,
+        "catalog_count": 0,
+        "rom_only": [
+          {
+            "species_id": 0,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 5
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "route_1",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1020,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          },
+          {
+            "species_id": 1208,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          },
+          {
+            "species_id": 1222,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 19,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          },
+          {
+            "species_id": 52,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          },
+          {
+            "species_id": 288,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_10",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1304,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 506,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_10",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 711,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 1221,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 222,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 475,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_10",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 506,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 2
+          },
+          {
+            "species_id": 1295,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 100,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 215,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_11",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 956,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 612,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_12",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1309,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 821,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_13",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1037,
+            "min_level": 48,
+            "max_level": 50,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 103,
+            "min_level": 48,
+            "max_level": 50,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_13",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1307,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 964,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_17",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1035,
+            "min_level": 46,
+            "max_level": 48,
+            "count": 1
+          },
+          {
+            "species_id": 1215,
+            "min_level": 46,
+            "max_level": 48,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 89,
+            "min_level": 46,
+            "max_level": 48,
+            "count": 1
+          },
+          {
+            "species_id": 110,
+            "min_level": 46,
+            "max_level": 48,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_2",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1209,
+            "min_level": 3,
+            "max_level": 5,
+            "count": 1
+          },
+          {
+            "species_id": 1222,
+            "min_level": 3,
+            "max_level": 5,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 77,
+            "min_level": 3,
+            "max_level": 5,
+            "count": 1
+          },
+          {
+            "species_id": 288,
+            "min_level": 3,
+            "max_level": 5,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_20",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1221,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 222,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_21",
+        "method": "Good Rod",
+        "rom_count": 6,
+        "catalog_count": 6,
+        "rom_only": [
+          {
+            "species_id": 1221,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 222,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_21",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 930,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 194,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_22",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1144,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 326,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_22",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1023,
+            "min_level": 3,
+            "max_level": 5,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 27,
+            "min_level": 3,
+            "max_level": 5,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_24",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 239,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          },
+          {
+            "species_id": 938,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 641,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          },
+          {
+            "species_id": 861,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_24",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1144,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 330,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_24",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 240,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          },
+          {
+            "species_id": 938,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 641,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          },
+          {
+            "species_id": 861,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_25",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 641,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          },
+          {
+            "species_id": 861,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 239,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          },
+          {
+            "species_id": 938,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_25",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 641,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          },
+          {
+            "species_id": 861,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 240,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          },
+          {
+            "species_id": 938,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_3",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1029,
+            "min_level": 10,
+            "max_level": 12,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 52,
+            "min_level": 10,
+            "max_level": 12,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_3",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1029,
+            "min_level": 10,
+            "max_level": 12,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 52,
+            "min_level": 10,
+            "max_level": 12,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_4",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 855,
+            "min_level": 13,
+            "max_level": 15,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 818,
+            "min_level": 13,
+            "max_level": 15,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_4",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 854,
+            "min_level": 13,
+            "max_level": 15,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 818,
+            "min_level": 13,
+            "max_level": 15,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_5",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1025,
+            "min_level": 18,
+            "max_level": 20,
+            "count": 1
+          },
+          {
+            "species_id": 1034,
+            "min_level": 18,
+            "max_level": 20,
+            "count": 2
+          },
+          {
+            "species_id": 1208,
+            "min_level": 18,
+            "max_level": 20,
+            "count": 1
+          },
+          {
+            "species_id": 1271,
+            "min_level": 18,
+            "max_level": 20,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 37,
+            "min_level": 18,
+            "max_level": 20,
+            "count": 1
+          },
+          {
+            "species_id": 52,
+            "min_level": 18,
+            "max_level": 20,
+            "count": 1
+          },
+          {
+            "species_id": 58,
+            "min_level": 18,
+            "max_level": 20,
+            "count": 1
+          },
+          {
+            "species_id": 88,
+            "min_level": 18,
+            "max_level": 20,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_6",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1211,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 79,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_6",
+        "method": "Super Rod",
+        "rom_count": 5,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 1212,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 80,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_8",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 635,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          },
+          {
+            "species_id": 970,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 37,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          },
+          {
+            "species_id": 296,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_8",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 635,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          },
+          {
+            "species_id": 643,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 58,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          },
+          {
+            "species_id": 296,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Day",
+        "rom_count": 24,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 133,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 494,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 499,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 508,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 848,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1157,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1167,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1371,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Good Rod",
+        "rom_count": 6,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 117,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 211,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 313,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Night",
+        "rom_count": 24,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 133,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 494,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 499,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 508,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 848,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1157,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1167,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1371,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Old Rod",
+        "rom_count": 4,
+        "catalog_count": 2,
+        "rom_only": [
+          {
+            "species_id": 116,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          },
+          {
+            "species_id": 129,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Super Rod",
+        "rom_count": 10,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 119,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          },
+          {
+            "species_id": 327,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          },
+          {
+            "species_id": 381,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 2
+          },
+          {
+            "species_id": 603,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Surfing",
+        "rom_count": 10,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 55,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          },
+          {
+            "species_id": 131,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          },
+          {
+            "species_id": 329,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          },
+          {
+            "species_id": 381,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          },
+          {
+            "species_id": 472,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_east",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1234,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 128,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_east",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1235,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 1240,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 1280,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 128,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 623,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "seafoam_islands",
+        "method": "Day",
+        "rom_count": 48,
+        "catalog_count": 48,
+        "rom_only": [
+          {
+            "species_id": 1026,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 4
+          },
+          {
+            "species_id": 1226,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 38,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 4
+          },
+          {
+            "species_id": 608,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "seafoam_islands",
+        "method": "Night",
+        "rom_count": 48,
+        "catalog_count": 48,
+        "rom_only": [
+          {
+            "species_id": 1024,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 3
+          },
+          {
+            "species_id": 1026,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 4
+          },
+          {
+            "species_id": 1226,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 28,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 3
+          },
+          {
+            "species_id": 38,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 4
+          },
+          {
+            "species_id": 608,
+            "min_level": 62,
+            "max_level": 64,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "three_isle_port",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1287,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1298,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1300,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1300,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 556,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 556,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 800,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 814,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "three_isle_port",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 0,
+        "rom_only": [
+          {
+            "species_id": 206,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 235,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1115,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1136,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1287,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1298,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1300,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1300,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "three_isle_port",
+        "method": "Surfing",
+        "rom_count": 5,
+        "catalog_count": 0,
+        "rom_only": [
+          {
+            "species_id": 0,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 5
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "treasure_beach",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1221,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1283,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 222,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 511,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "treasure_beach",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1303,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 602,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "treasure_beach",
+        "method": "Surfing",
+        "rom_count": 5,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 1283,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 1284,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1306,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 226,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 511,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          },
+          {
+            "species_id": 1268,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "vermilion_city",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 120,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 984,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 90,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 98,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "victory_road",
+        "method": "Night",
+        "rom_count": 36,
+        "catalog_count": 36,
+        "rom_only": [
+          {
+            "species_id": 1039,
+            "min_level": 80,
+            "max_level": 82,
+            "count": 1
+          },
+          {
+            "species_id": 1298,
+            "min_level": 80,
+            "max_level": 82,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 105,
+            "min_level": 80,
+            "max_level": 82,
+            "count": 1
+          },
+          {
+            "species_id": 814,
+            "min_level": 80,
+            "max_level": 82,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "viridian_forest",
+        "method": "Day",
+        "rom_count": 24,
+        "catalog_count": 24,
+        "rom_only": [
+          {
+            "species_id": 177,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          },
+          {
+            "species_id": 707,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          },
+          {
+            "species_id": 853,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 25,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          },
+          {
+            "species_id": 465,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          },
+          {
+            "species_id": 818,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "viridian_forest",
+        "method": "Night",
+        "rom_count": 24,
+        "catalog_count": 24,
+        "rom_only": [
+          {
+            "species_id": 486,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          },
+          {
+            "species_id": 708,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 25,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          },
+          {
+            "species_id": 465,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      }
+    ]
+  },
+  "after_diff": {
+    "rom_sha1": "964f951a0fdaf209e4ea1344883ef0d557bb3a80",
+    "rom_areas": 53,
+    "catalog_areas": 53,
+    "mismatched_methods": 38,
+    "unmapped_primary_maps": [
+      [
+        1,
+        4
+      ]
+    ],
+    "mismatches": [
+      {
+        "area": "bond_bridge",
+        "method": "Surfing",
+        "rom_count": 5,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 864,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 310,
+            "min_level": 60,
+            "max_level": 65,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cape_brink",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1169,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 969,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cape_brink",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1169,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 985,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cape_brink",
+        "method": "Super Rod",
+        "rom_count": 5,
+        "catalog_count": 20,
+        "rom_only": [],
+        "catalog_only": [
+          {
+            "species_id": 99,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 2
+          },
+          {
+            "species_id": 325,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 2
+          },
+          {
+            "species_id": 647,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 2
+          },
+          {
+            "species_id": 801,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 963,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 985,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 2
+          },
+          {
+            "species_id": 1137,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 1212,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 1221,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 1283,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          },
+          {
+            "species_id": 1285,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "celadon_city",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 79,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 1211,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "cerulean_cave",
+        "method": "Night",
+        "rom_count": 36,
+        "catalog_count": 36,
+        "rom_only": [
+          {
+            "species_id": 1258,
+            "min_level": 68,
+            "max_level": 70,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 1237,
+            "min_level": 68,
+            "max_level": 70,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "mt_ember",
+        "method": "Day",
+        "rom_count": 24,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 38,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 219,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 321,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 608,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 776,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 776,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1272,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 4
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "pewter_city",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1361,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 1146,
+            "min_level": 7,
+            "max_level": 9,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "pokemon_mansion",
+        "method": "Day",
+        "rom_count": 72,
+        "catalog_count": 48,
+        "rom_only": [
+          {
+            "species_id": 154,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 157,
+            "min_level": 63,
+            "max_level": 65,
+            "count": 2
+          },
+          {
+            "species_id": 201,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 8
+          },
+          {
+            "species_id": 282,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 448,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 482,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 929,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 1107,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 1169,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "pokemon_mansion",
+        "method": "Night",
+        "rom_count": 72,
+        "catalog_count": 48,
+        "rom_only": [
+          {
+            "species_id": 157,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 201,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 8
+          },
+          {
+            "species_id": 282,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 445,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 448,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 531,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 923,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 929,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          },
+          {
+            "species_id": 1169,
+            "min_level": 75,
+            "max_level": 77,
+            "count": 2
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "pokemon_tower",
+        "method": "Day",
+        "rom_count": 84,
+        "catalog_count": 96,
+        "rom_only": [
+          {
+            "species_id": 1356,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1362,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 0,
+            "min_level": 0,
+            "max_level": 0,
+            "count": 12
+          },
+          {
+            "species_id": 94,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1147,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "pokemon_tower",
+        "method": "Night",
+        "rom_count": 84,
+        "catalog_count": 60,
+        "rom_only": [
+          {
+            "species_id": 495,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 3
+          },
+          {
+            "species_id": 495,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 995,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 3
+          },
+          {
+            "species_id": 995,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1147,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1156,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1179,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1246,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 4
+          },
+          {
+            "species_id": 1278,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1281,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1292,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1299,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1356,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1362,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "rock_tunnel",
+        "method": "Day",
+        "rom_count": 36,
+        "catalog_count": 24,
+        "rom_only": [
+          {
+            "species_id": 866,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1083,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1171,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1229,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1229,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1237,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1272,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1302,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "rock_tunnel",
+        "method": "Night",
+        "rom_count": 36,
+        "catalog_count": 36,
+        "rom_only": [
+          {
+            "species_id": 668,
+            "min_level": 30,
+            "max_level": 32,
+            "count": 1
+          },
+          {
+            "species_id": 820,
+            "min_level": 30,
+            "max_level": 32,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 491,
+            "min_level": 30,
+            "max_level": 32,
+            "count": 1
+          },
+          {
+            "species_id": 1024,
+            "min_level": 30,
+            "max_level": 32,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "rock_tunnel",
+        "method": "Surfing",
+        "rom_count": 5,
+        "catalog_count": 0,
+        "rom_only": [
+          {
+            "species_id": 0,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 5
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "route_10",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 1304,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 506,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_10",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 506,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 1304,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_11",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 956,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 2
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 612,
+            "min_level": 23,
+            "max_level": 25,
+            "count": 2
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_13",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1307,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 964,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_22",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1144,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 326,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_24",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 239,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          },
+          {
+            "species_id": 938,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 641,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          },
+          {
+            "species_id": 861,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_24",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 1144,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 330,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_24",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 240,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          },
+          {
+            "species_id": 938,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 641,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          },
+          {
+            "species_id": 861,
+            "min_level": 14,
+            "max_level": 16,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_25",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 641,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          },
+          {
+            "species_id": 861,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 239,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          },
+          {
+            "species_id": 938,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_25",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 641,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          },
+          {
+            "species_id": 861,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 240,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          },
+          {
+            "species_id": 938,
+            "min_level": 16,
+            "max_level": 18,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_8",
+        "method": "Day",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 635,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          },
+          {
+            "species_id": 970,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 37,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          },
+          {
+            "species_id": 296,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "route_8",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 635,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          },
+          {
+            "species_id": 643,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 58,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          },
+          {
+            "species_id": 296,
+            "min_level": 33,
+            "max_level": 35,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Day",
+        "rom_count": 24,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 133,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 494,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 499,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 508,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 848,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1157,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1167,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1371,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Good Rod",
+        "rom_count": 6,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 117,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 211,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 313,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Night",
+        "rom_count": 24,
+        "catalog_count": 12,
+        "rom_only": [
+          {
+            "species_id": 133,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 494,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 499,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 508,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          },
+          {
+            "species_id": 848,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1157,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1167,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 2
+          },
+          {
+            "species_id": 1371,
+            "min_level": 50,
+            "max_level": 52,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Old Rod",
+        "rom_count": 4,
+        "catalog_count": 2,
+        "rom_only": [
+          {
+            "species_id": 116,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          },
+          {
+            "species_id": 129,
+            "min_level": 2,
+            "max_level": 4,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Super Rod",
+        "rom_count": 10,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 119,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          },
+          {
+            "species_id": 327,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          },
+          {
+            "species_id": 381,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 2
+          },
+          {
+            "species_id": 603,
+            "min_level": 53,
+            "max_level": 55,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "safari_zone_center",
+        "method": "Surfing",
+        "rom_count": 10,
+        "catalog_count": 5,
+        "rom_only": [
+          {
+            "species_id": 55,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          },
+          {
+            "species_id": 131,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          },
+          {
+            "species_id": 329,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          },
+          {
+            "species_id": 381,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          },
+          {
+            "species_id": 472,
+            "min_level": 56,
+            "max_level": 58,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "three_isle_port",
+        "method": "Night",
+        "rom_count": 12,
+        "catalog_count": 0,
+        "rom_only": [
+          {
+            "species_id": 206,
+            "min_level": 85,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 235,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1115,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1136,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1287,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1298,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 2
+          },
+          {
+            "species_id": 1300,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 1
+          },
+          {
+            "species_id": 1300,
+            "min_level": 84,
+            "max_level": 85,
+            "count": 1
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "three_isle_port",
+        "method": "Surfing",
+        "rom_count": 5,
+        "catalog_count": 0,
+        "rom_only": [
+          {
+            "species_id": 0,
+            "min_level": 83,
+            "max_level": 85,
+            "count": 5
+          }
+        ],
+        "catalog_only": [],
+        "order_differs": false
+      },
+      {
+        "area": "vermilion_city",
+        "method": "Good Rod",
+        "rom_count": 3,
+        "catalog_count": 3,
+        "rom_only": [
+          {
+            "species_id": 120,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 984,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 90,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          },
+          {
+            "species_id": 98,
+            "min_level": 27,
+            "max_level": 29,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "viridian_forest",
+        "method": "Day",
+        "rom_count": 24,
+        "catalog_count": 24,
+        "rom_only": [
+          {
+            "species_id": 177,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 25,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      },
+      {
+        "area": "viridian_forest",
+        "method": "Night",
+        "rom_count": 24,
+        "catalog_count": 24,
+        "rom_only": [
+          {
+            "species_id": 486,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          }
+        ],
+        "catalog_only": [
+          {
+            "species_id": 25,
+            "min_level": 4,
+            "max_level": 6,
+            "count": 1
+          }
+        ],
+        "order_differs": false
+      }
+    ]
+  }
+}

@@ -3,28 +3,28 @@
     "Day": [
       {
         "name": "Carnivine S",
-        "species_id": 508,
+        "species_id": 1282,
         "rate": 20,
         "min_level": 85,
         "max_level": 85
       },
       {
         "name": "Nymble S",
-        "species_id": 1316,
+        "species_id": 1200,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Decidueye H",
-        "species_id": 941,
+        "species_id": 1301,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Decidueye H",
-        "species_id": 941,
+        "species_id": 1301,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
@@ -89,28 +89,28 @@
     "Night": [
       {
         "name": "Carnivine S",
-        "species_id": 508,
+        "species_id": 1282,
         "rate": 20,
         "min_level": 85,
         "max_level": 85
       },
       {
         "name": "Nymble S",
-        "species_id": 1316,
+        "species_id": 1200,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Decidueye H",
-        "species_id": 941,
+        "species_id": 1301,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Decidueye H",
-        "species_id": 941,
+        "species_id": 1301,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
@@ -219,7 +219,7 @@
       },
       {
         "name": "Clauncher S",
-        "species_id": 800,
+        "species_id": 1287,
         "rate": 30,
         "min_level": 83,
         "max_level": 85
@@ -228,21 +228,21 @@
     "Good Rod": [
       {
         "name": "Corsola G",
-        "species_id": 222,
+        "species_id": 1221,
         "rate": 60,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Feebas S",
-        "species_id": 328,
+        "species_id": 1285,
         "rate": 20,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Feebas S",
-        "species_id": 328,
+        "species_id": 1285,
         "rate": 20,
         "min_level": 83,
         "max_level": 85
@@ -290,14 +290,14 @@
     "Day": [
       {
         "name": "Decidueye H",
-        "species_id": 941,
+        "species_id": 1301,
         "rate": 20,
         "min_level": 85,
         "max_level": 85
       },
       {
         "name": "Sneasel H",
-        "species_id": 215,
+        "species_id": 1304,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
@@ -332,14 +332,14 @@
       },
       {
         "name": "Braviary H",
-        "species_id": 681,
+        "species_id": 1269,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Braviary H",
-        "species_id": 681,
+        "species_id": 1269,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
@@ -376,14 +376,14 @@
     "Night": [
       {
         "name": "Decidueye H",
-        "species_id": 941,
+        "species_id": 1301,
         "rate": 20,
         "min_level": 85,
         "max_level": 85
       },
       {
         "name": "Sneasel H",
-        "species_id": 215,
+        "species_id": 1304,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
@@ -418,14 +418,14 @@
       },
       {
         "name": "Braviary H",
-        "species_id": 681,
+        "species_id": 1269,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Braviary H",
-        "species_id": 681,
+        "species_id": 1269,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
@@ -476,21 +476,21 @@
       },
       {
         "name": "Mantine S",
-        "species_id": 226,
+        "species_id": 1284,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Milotic S",
-        "species_id": 329,
+        "species_id": 1286,
         "rate": 4,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Milotic S",
-        "species_id": 329,
+        "species_id": 1286,
         "rate": 1,
         "min_level": 83,
         "max_level": 85
@@ -552,21 +552,21 @@
       },
       {
         "name": "Dhelmise S",
-        "species_id": 998,
+        "species_id": 1294,
         "rate": 15,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Dhelmise S",
-        "species_id": 998,
+        "species_id": 1294,
         "rate": 4,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Dhelmise S",
-        "species_id": 998,
+        "species_id": 1294,
         "rate": 1,
         "min_level": 83,
         "max_level": 85
@@ -577,42 +577,42 @@
     "Day": [
       {
         "name": "Electrode H",
-        "species_id": 101,
+        "species_id": 1296,
         "rate": 20,
         "min_level": 85,
         "max_level": 85
       },
       {
         "name": "Blitzle S",
-        "species_id": 575,
+        "species_id": 1274,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Lilligant H",
-        "species_id": 602,
+        "species_id": 1303,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Lilligant H",
-        "species_id": 602,
+        "species_id": 1303,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Slowbro G",
-        "species_id": 80,
+        "species_id": 1212,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Slowbro G",
-        "species_id": 80,
+        "species_id": 1212,
         "rate": 10,
         "min_level": 83,
         "max_level": 85
@@ -663,14 +663,14 @@
     "Night": [
       {
         "name": "Electrode H",
-        "species_id": 101,
+        "species_id": 1296,
         "rate": 20,
         "min_level": 85,
         "max_level": 85
       },
       {
         "name": "Blitzle S",
-        "species_id": 575,
+        "species_id": 1274,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
@@ -802,7 +802,7 @@
     "Good Rod": [
       {
         "name": "Corsola G",
-        "species_id": 222,
+        "species_id": 1221,
         "rate": 60,
         "min_level": 83,
         "max_level": 85
@@ -860,14 +860,14 @@
       },
       {
         "name": "Mantyke S",
-        "species_id": 511,
+        "species_id": 1283,
         "rate": 100,
         "min_level": 0,
         "max_level": 0
       },
       {
         "name": "Slowbro G",
-        "species_id": 80,
+        "species_id": 1212,
         "rate": 100,
         "min_level": 0,
         "max_level": 0
@@ -895,7 +895,7 @@
       },
       {
         "name": "Feebas S",
-        "species_id": 328,
+        "species_id": 1285,
         "rate": 100,
         "min_level": 0,
         "max_level": 0
@@ -909,7 +909,7 @@
       },
       {
         "name": "Corsola G",
-        "species_id": 222,
+        "species_id": 1221,
         "rate": 100,
         "min_level": 0,
         "max_level": 0
@@ -1029,14 +1029,14 @@
       },
       {
         "name": "Slowpoke G",
-        "species_id": 79,
+        "species_id": 1211,
         "rate": 20,
         "min_level": 27,
         "max_level": 29
       },
       {
         "name": "Slowpoke G",
-        "species_id": 79,
+        "species_id": 1211,
         "rate": 20,
         "min_level": 27,
         "max_level": 29
@@ -1073,7 +1073,7 @@
       },
       {
         "name": "Muk A",
-        "species_id": 89,
+        "species_id": 1035,
         "rate": 1,
         "min_level": 53,
         "max_level": 55
@@ -2212,7 +2212,7 @@
     "Night": [
       {
         "name": "Diglett A",
-        "species_id": 50,
+        "species_id": 1027,
         "rate": 20,
         "min_level": 7,
         "max_level": 9
@@ -2233,7 +2233,7 @@
       },
       {
         "name": "Yamask G",
-        "species_id": 615,
+        "species_id": 1228,
         "rate": 10,
         "min_level": 7,
         "max_level": 9
@@ -2247,7 +2247,7 @@
       },
       {
         "name": "Geodude A",
-        "species_id": 74,
+        "species_id": 1031,
         "rate": 10,
         "min_level": 7,
         "max_level": 9
@@ -2296,21 +2296,21 @@
       },
       {
         "name": "Diglett A",
-        "species_id": 50,
+        "species_id": 1027,
         "rate": 20,
         "min_level": 23,
         "max_level": 25
       },
       {
         "name": "Diglett A",
-        "species_id": 50,
+        "species_id": 1027,
         "rate": 20,
         "min_level": 23,
         "max_level": 25
       },
       {
         "name": "Stunfisk G",
-        "species_id": 671,
+        "species_id": 1229,
         "rate": 10,
         "min_level": 23,
         "max_level": 25
@@ -2359,7 +2359,7 @@
       },
       {
         "name": "Dugtrio A",
-        "species_id": 51,
+        "species_id": 1028,
         "rate": 4,
         "min_level": 23,
         "max_level": 25
@@ -2498,14 +2498,14 @@
       },
       {
         "name": "Centiskorch S",
-        "species_id": 1143,
+        "species_id": 1290,
         "rate": 10,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Centiskorch S",
-        "species_id": 1143,
+        "species_id": 1290,
         "rate": 10,
         "min_level": 83,
         "max_level": 85
@@ -2556,7 +2556,7 @@
     "Surfing": [
       {
         "name": "Mantyke S",
-        "species_id": 511,
+        "species_id": 1283,
         "rate": 60,
         "min_level": 60,
         "max_level": 65
@@ -2577,14 +2577,14 @@
       },
       {
         "name": "Mantine S",
-        "species_id": 226,
+        "species_id": 1284,
         "rate": 4,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Mantine S",
-        "species_id": 226,
+        "species_id": 1284,
         "rate": 1,
         "min_level": 83,
         "max_level": 85
@@ -2609,7 +2609,7 @@
     "Good Rod": [
       {
         "name": "Corsola G",
-        "species_id": 222,
+        "species_id": 1221,
         "rate": 60,
         "min_level": 83,
         "max_level": 85
@@ -2671,7 +2671,7 @@
     "Day": [
       {
         "name": "Doduo S",
-        "species_id": 84,
+        "species_id": 1276,
         "rate": 20,
         "min_level": 60,
         "max_level": 65
@@ -2706,7 +2706,7 @@
       },
       {
         "name": "Dodrio S",
-        "species_id": 85,
+        "species_id": 1277,
         "rate": 10,
         "min_level": 83,
         "max_level": 85
@@ -2757,7 +2757,7 @@
     "Night": [
       {
         "name": "Doduo S",
-        "species_id": 84,
+        "species_id": 1276,
         "rate": 20,
         "min_level": 60,
         "max_level": 65
@@ -2792,21 +2792,21 @@
       },
       {
         "name": "Dodrio S",
-        "species_id": 85,
+        "species_id": 1277,
         "rate": 10,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Arcanine H",
-        "species_id": 59,
+        "species_id": 1272,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Arcanine H",
-        "species_id": 59,
+        "species_id": 1272,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
@@ -2897,28 +2897,28 @@
       },
       {
         "name": "Arcanine H",
-        "species_id": 59,
+        "species_id": 1272,
         "rate": 4,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Arcanine H",
-        "species_id": 59,
+        "species_id": 1272,
         "rate": 4,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Arcanine H",
-        "species_id": 59,
+        "species_id": 1272,
         "rate": 1,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Arcanine H",
-        "species_id": 59,
+        "species_id": 1272,
         "rate": 1,
         "min_level": 83,
         "max_level": 85
@@ -3183,7 +3183,7 @@
     "Night": [
       {
         "name": "Geodude A",
-        "species_id": 74,
+        "species_id": 1031,
         "rate": 20,
         "min_level": 12,
         "max_level": 14
@@ -3640,7 +3640,7 @@
     "Night": [
       {
         "name": "Grimer A",
-        "species_id": 88,
+        "species_id": 1034,
         "rate": 20,
         "min_level": 7,
         "max_level": 9
@@ -4066,7 +4066,7 @@
     "Night": [
       {
         "name": "Raticate A",
-        "species_id": 20,
+        "species_id": 1021,
         "rate": 20,
         "min_level": 63,
         "max_level": 65
@@ -4080,21 +4080,21 @@
       },
       {
         "name": "Muk A",
-        "species_id": 89,
+        "species_id": 1035,
         "rate": 10,
         "min_level": 63,
         "max_level": 65
       },
       {
         "name": "Muk A",
-        "species_id": 89,
+        "species_id": 1035,
         "rate": 10,
         "min_level": 63,
         "max_level": 65
       },
       {
         "name": "Weezing G",
-        "species_id": 110,
+        "species_id": 1215,
         "rate": 10,
         "min_level": 63,
         "max_level": 65
@@ -4164,7 +4164,7 @@
       },
       {
         "name": "Weezing G",
-        "species_id": 110,
+        "species_id": 1215,
         "rate": 10,
         "min_level": 63,
         "max_level": 65
@@ -4262,7 +4262,7 @@
       },
       {
         "name": "Rapidash G",
-        "species_id": 78,
+        "species_id": 1210,
         "rate": 10,
         "min_level": 63,
         "max_level": 65
@@ -4318,7 +4318,7 @@
       },
       {
         "name": "Raticate A",
-        "species_id": 20,
+        "species_id": 1021,
         "rate": 20,
         "min_level": 63,
         "max_level": 65
@@ -4826,14 +4826,14 @@
       },
       {
         "name": "Teddiursa S",
-        "species_id": 216,
+        "species_id": 1278,
         "rate": 20,
         "min_level": 85,
         "max_level": 85
       },
       {
         "name": "Zoroark H",
-        "species_id": 624,
+        "species_id": 1281,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
@@ -4917,7 +4917,7 @@
       },
       {
         "name": "Typhlosion H",
-        "species_id": 157,
+        "species_id": 1299,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
@@ -5848,7 +5848,7 @@
     "Night": [
       {
         "name": "Graveler A",
-        "species_id": 75,
+        "species_id": 1032,
         "rate": 20,
         "min_level": 29,
         "max_level": 31
@@ -5932,7 +5932,7 @@
       },
       {
         "name": "Sandslash A",
-        "species_id": 28,
+        "species_id": 1024,
         "rate": 20,
         "min_level": 30,
         "max_level": 32
@@ -6023,7 +6023,7 @@
       },
       {
         "name": "Noibat S",
-        "species_id": 822,
+        "species_id": 866,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
@@ -6058,14 +6058,14 @@
       },
       {
         "name": "Arcanine H",
-        "species_id": 59,
+        "species_id": 1272,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Arcanine H",
-        "species_id": 59,
+        "species_id": 1272,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
@@ -6109,7 +6109,7 @@
       },
       {
         "name": "Golem A",
-        "species_id": 76,
+        "species_id": 1033,
         "rate": 30,
         "min_level": 84,
         "max_level": 85
@@ -6234,14 +6234,14 @@
       },
       {
         "name": "Zigzagoon G",
-        "species_id": 288,
+        "species_id": 1222,
         "rate": 20,
         "min_level": 2,
         "max_level": 4
       },
       {
         "name": "Rattata A",
-        "species_id": 19,
+        "species_id": 1020,
         "rate": 10,
         "min_level": 2,
         "max_level": 4
@@ -6255,7 +6255,7 @@
       },
       {
         "name": "Meowth G",
-        "species_id": 52,
+        "species_id": 1208,
         "rate": 10,
         "min_level": 2,
         "max_level": 4
@@ -6401,7 +6401,7 @@
     "Night": [
       {
         "name": "Voltorb H",
-        "species_id": 100,
+        "species_id": 1295,
         "rate": 20,
         "min_level": 27,
         "max_level": 29
@@ -6471,14 +6471,14 @@
       },
       {
         "name": "Sneasel H",
-        "species_id": 215,
+        "species_id": 1304,
         "rate": 1,
         "min_level": 27,
         "max_level": 29
       },
       {
         "name": "Sneasel H",
-        "species_id": 215,
+        "species_id": 1304,
         "rate": 1,
         "min_level": 27,
         "max_level": 29
@@ -6547,14 +6547,14 @@
       },
       {
         "name": "Shellos East",
-        "species_id": 475,
+        "species_id": 711,
         "rate": 20,
         "min_level": 27,
         "max_level": 29
       },
       {
         "name": "Corsola G",
-        "species_id": 222,
+        "species_id": 1221,
         "rate": 20,
         "min_level": 27,
         "max_level": 29
@@ -6980,14 +6980,14 @@
       },
       {
         "name": "Avalugg H",
-        "species_id": 821,
+        "species_id": 1309,
         "rate": 5,
         "min_level": 50,
         "max_level": 52
       },
       {
         "name": "Avalugg H",
-        "species_id": 821,
+        "species_id": 1309,
         "rate": 5,
         "min_level": 50,
         "max_level": 52
@@ -7195,7 +7195,7 @@
       },
       {
         "name": "Exeggutor A",
-        "species_id": 103,
+        "species_id": 1037,
         "rate": 4,
         "min_level": 48,
         "max_level": 50
@@ -8034,7 +8034,7 @@
     "Night": [
       {
         "name": "Weezing G",
-        "species_id": 110,
+        "species_id": 1215,
         "rate": 20,
         "min_level": 46,
         "max_level": 48
@@ -8048,7 +8048,7 @@
       },
       {
         "name": "Muk A",
-        "species_id": 89,
+        "species_id": 1035,
         "rate": 10,
         "min_level": 46,
         "max_level": 48
@@ -8511,7 +8511,7 @@
       },
       {
         "name": "Ponyta G",
-        "species_id": 77,
+        "species_id": 1209,
         "rate": 10,
         "min_level": 3,
         "max_level": 5
@@ -8553,7 +8553,7 @@
       },
       {
         "name": "Zigzagoon G",
-        "species_id": 288,
+        "species_id": 1222,
         "rate": 4,
         "min_level": 3,
         "max_level": 5
@@ -8652,7 +8652,7 @@
       },
       {
         "name": "Corsola G",
-        "species_id": 222,
+        "species_id": 1221,
         "rate": 20,
         "min_level": 27,
         "max_level": 29
@@ -8786,7 +8786,7 @@
     "Night": [
       {
         "name": "Wooper P",
-        "species_id": 194,
+        "species_id": 930,
         "rate": 20,
         "min_level": 4,
         "max_level": 6
@@ -8988,7 +8988,7 @@
       },
       {
         "name": "Corsola G",
-        "species_id": 222,
+        "species_id": 1221,
         "rate": 20,
         "min_level": 27,
         "max_level": 29
@@ -9185,7 +9185,7 @@
       },
       {
         "name": "Sandshrew A",
-        "species_id": 27,
+        "species_id": 1023,
         "rate": 20,
         "min_level": 3,
         "max_level": 5
@@ -10317,7 +10317,7 @@
       },
       {
         "name": "Meowth A",
-        "species_id": 52,
+        "species_id": 1029,
         "rate": 1,
         "min_level": 10,
         "max_level": 12
@@ -10403,7 +10403,7 @@
       },
       {
         "name": "Meowth A",
-        "species_id": 52,
+        "species_id": 1029,
         "rate": 1,
         "min_level": 10,
         "max_level": 12
@@ -10470,14 +10470,14 @@
       },
       {
         "name": "Pumpkaboo M",
-        "species_id": 818,
+        "species_id": 855,
         "rate": 4,
         "min_level": 13,
         "max_level": 15
       },
       {
         "name": "Pumpkaboo M",
-        "species_id": 818,
+        "species_id": 855,
         "rate": 4,
         "min_level": 13,
         "max_level": 15
@@ -10556,14 +10556,14 @@
       },
       {
         "name": "Pumpkaboo L",
-        "species_id": 818,
+        "species_id": 854,
         "rate": 4,
         "min_level": 13,
         "max_level": 15
       },
       {
         "name": "Pumpkaboo L",
-        "species_id": 818,
+        "species_id": 854,
         "rate": 4,
         "min_level": 13,
         "max_level": 15
@@ -10674,7 +10674,7 @@
     "Night": [
       {
         "name": "Meowth G",
-        "species_id": 52,
+        "species_id": 1208,
         "rate": 20,
         "min_level": 18,
         "max_level": 20
@@ -10695,7 +10695,7 @@
       },
       {
         "name": "Vulpix A",
-        "species_id": 37,
+        "species_id": 1025,
         "rate": 10,
         "min_level": 18,
         "max_level": 20
@@ -10716,7 +10716,7 @@
       },
       {
         "name": "Growlithe H",
-        "species_id": 58,
+        "species_id": 1271,
         "rate": 5,
         "min_level": 18,
         "max_level": 20
@@ -10730,14 +10730,14 @@
       },
       {
         "name": "Grimer A",
-        "species_id": 88,
+        "species_id": 1034,
         "rate": 4,
         "min_level": 18,
         "max_level": 20
       },
       {
         "name": "Grimer A",
-        "species_id": 88,
+        "species_id": 1034,
         "rate": 4,
         "min_level": 18,
         "max_level": 20
@@ -10987,7 +10987,7 @@
     "Good Rod": [
       {
         "name": "Slowpoke G",
-        "species_id": 79,
+        "species_id": 1211,
         "rate": 60,
         "min_level": 27,
         "max_level": 29
@@ -11010,7 +11010,7 @@
     "Super Rod": [
       {
         "name": "Slowbro G",
-        "species_id": 80,
+        "species_id": 1212,
         "rate": 40,
         "min_level": 53,
         "max_level": 55
@@ -11879,7 +11879,7 @@
       },
       {
         "name": "Tauros P",
-        "species_id": 128,
+        "species_id": 1234,
         "rate": 10,
         "min_level": 50,
         "max_level": 52
@@ -11958,14 +11958,14 @@
       },
       {
         "name": "Tauros P Fire",
-        "species_id": 128,
+        "species_id": 1240,
         "rate": 10,
         "min_level": 50,
         "max_level": 52
       },
       {
         "name": "Tauros P Water",
-        "species_id": 128,
+        "species_id": 1235,
         "rate": 10,
         "min_level": 50,
         "max_level": 52
@@ -11986,14 +11986,14 @@
       },
       {
         "name": "Zorua H",
-        "species_id": 623,
+        "species_id": 1280,
         "rate": 5,
         "min_level": 50,
         "max_level": 52
       },
       {
         "name": "Zorua H",
-        "species_id": 623,
+        "species_id": 1280,
         "rate": 5,
         "min_level": 50,
         "max_level": 52
@@ -12810,7 +12810,7 @@
       },
       {
         "name": "Darmanitan G",
-        "species_id": 608,
+        "species_id": 1226,
         "rate": 20,
         "min_level": 62,
         "max_level": 64
@@ -12901,14 +12901,14 @@
       },
       {
         "name": "Ninetales A",
-        "species_id": 38,
+        "species_id": 1026,
         "rate": 10,
         "min_level": 62,
         "max_level": 64
       },
       {
         "name": "Ninetales A",
-        "species_id": 38,
+        "species_id": 1026,
         "rate": 10,
         "min_level": 62,
         "max_level": 64
@@ -12978,21 +12978,21 @@
       },
       {
         "name": "Darmanitan G",
-        "species_id": 608,
+        "species_id": 1226,
         "rate": 20,
         "min_level": 62,
         "max_level": 64
       },
       {
         "name": "Ninetales A",
-        "species_id": 38,
+        "species_id": 1026,
         "rate": 10,
         "min_level": 62,
         "max_level": 64
       },
       {
         "name": "Ninetales A",
-        "species_id": 38,
+        "species_id": 1026,
         "rate": 10,
         "min_level": 62,
         "max_level": 64
@@ -13057,7 +13057,7 @@
     "Night": [
       {
         "name": "Sandslash A",
-        "species_id": 28,
+        "species_id": 1024,
         "rate": 20,
         "min_level": 62,
         "max_level": 64
@@ -13141,14 +13141,14 @@
       },
       {
         "name": "Sandslash A",
-        "species_id": 28,
+        "species_id": 1024,
         "rate": 20,
         "min_level": 62,
         "max_level": 64
       },
       {
         "name": "Darmanitan G",
-        "species_id": 608,
+        "species_id": 1226,
         "rate": 20,
         "min_level": 62,
         "max_level": 64
@@ -13239,14 +13239,14 @@
       },
       {
         "name": "Ninetales A",
-        "species_id": 38,
+        "species_id": 1026,
         "rate": 10,
         "min_level": 62,
         "max_level": 64
       },
       {
         "name": "Ninetales A",
-        "species_id": 38,
+        "species_id": 1026,
         "rate": 10,
         "min_level": 62,
         "max_level": 64
@@ -13309,28 +13309,28 @@
       },
       {
         "name": "Sandslash A",
-        "species_id": 28,
+        "species_id": 1024,
         "rate": 20,
         "min_level": 62,
         "max_level": 64
       },
       {
         "name": "Darmanitan G",
-        "species_id": 608,
+        "species_id": 1226,
         "rate": 20,
         "min_level": 62,
         "max_level": 64
       },
       {
         "name": "Ninetales A",
-        "species_id": 38,
+        "species_id": 1026,
         "rate": 10,
         "min_level": 62,
         "max_level": 64
       },
       {
         "name": "Ninetales A",
-        "species_id": 38,
+        "species_id": 1026,
         "rate": 10,
         "min_level": 62,
         "max_level": 64
@@ -13622,35 +13622,35 @@
       },
       {
         "name": "Clauncher S",
-        "species_id": 800,
+        "species_id": 1287,
         "rate": 20,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Goodra H",
-        "species_id": 814,
+        "species_id": 1298,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Goodra H",
-        "species_id": 814,
+        "species_id": 1298,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Samurott H",
-        "species_id": 556,
+        "species_id": 1300,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Samurott H",
-        "species_id": 556,
+        "species_id": 1300,
         "rate": 10,
         "min_level": 83,
         "max_level": 85
@@ -13803,14 +13803,14 @@
       },
       {
         "name": "Lilligant H",
-        "species_id": 602,
+        "species_id": 1303,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
       },
       {
         "name": "Lilligant H",
-        "species_id": 602,
+        "species_id": 1303,
         "rate": 10,
         "min_level": 84,
         "max_level": 85
@@ -13875,7 +13875,7 @@
     "Surfing": [
       {
         "name": "Mantyke S",
-        "species_id": 511,
+        "species_id": 1283,
         "rate": 60,
         "min_level": 60,
         "max_level": 65
@@ -13889,21 +13889,21 @@
       },
       {
         "name": "Basculegion F",
-        "species_id": 1268,
+        "species_id": 1306,
         "rate": 5,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Mantine S",
-        "species_id": 226,
+        "species_id": 1284,
         "rate": 4,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Mantine S",
-        "species_id": 226,
+        "species_id": 1284,
         "rate": 1,
         "min_level": 83,
         "max_level": 85
@@ -13928,21 +13928,21 @@
     "Good Rod": [
       {
         "name": "Corsola G",
-        "species_id": 222,
+        "species_id": 1221,
         "rate": 60,
         "min_level": 83,
         "max_level": 85
       },
       {
         "name": "Mantyke S",
-        "species_id": 511,
+        "species_id": 1283,
         "rate": 20,
         "min_level": 60,
         "max_level": 65
       },
       {
         "name": "Mantyke S",
-        "species_id": 511,
+        "species_id": 1283,
         "rate": 20,
         "min_level": 60,
         "max_level": 65
@@ -14373,7 +14373,7 @@
       },
       {
         "name": "Goodra H",
-        "species_id": 814,
+        "species_id": 1298,
         "rate": 10,
         "min_level": 80,
         "max_level": 82
@@ -14415,7 +14415,7 @@
       },
       {
         "name": "Marowak A",
-        "species_id": 105,
+        "species_id": 1039,
         "rate": 4,
         "min_level": 80,
         "max_level": 82
@@ -14923,7 +14923,7 @@
       },
       {
         "name": "Burmy Sandy",
-        "species_id": 465,
+        "species_id": 707,
         "rate": 10,
         "min_level": 4,
         "max_level": 6
@@ -15049,7 +15049,7 @@
       },
       {
         "name": "Pumpkaboo Xl",
-        "species_id": 818,
+        "species_id": 853,
         "rate": 4,
         "min_level": 4,
         "max_level": 6
@@ -15093,7 +15093,7 @@
       },
       {
         "name": "Burmy Trash",
-        "species_id": 465,
+        "species_id": 708,
         "rate": 10,
         "min_level": 4,
         "max_level": 6
@@ -15177,7 +15177,7 @@
       },
       {
         "name": "Burmy Trash",
-        "species_id": 465,
+        "species_id": 708,
         "rate": 10,
         "min_level": 4,
         "max_level": 6

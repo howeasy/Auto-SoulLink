@@ -71,3 +71,12 @@ def test_rr_selector_resolves_primary_tables_and_the_distinct_legacy_fallback(rr
         rr.table_heads(bytes(changed))
 
 
+def test_catalog_diff_retains_species_and_slot_order_discrepancies():
+    headers = rr.read_table(bytes(fake_rom()), rr.BASE+0x20)
+    decoded = {"rom_sha1": "model", "tables": {"Day": headers, "Night": [], "Fallback": []}}
+    areas = {"3:19": "route_1"}
+    catalog = {"route_1": {"Day": [{"species_id": 288, "min_level": 2, "max_level": 4}]*12}}
+    diff = rr.catalog_diff(decoded, areas, catalog)
+    assert diff["mismatched_methods"] == 1
+    assert diff["mismatches"][0]["rom_only"][0]["species_id"] == 1222
+    assert diff["mismatches"][0]["catalog_only"][0]["species_id"] == 288

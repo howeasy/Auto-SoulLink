@@ -38,6 +38,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
+from gen_rr_species import to_display as species_table_name  # noqa: E402
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "data", "games", "gen3_frlge"))
@@ -238,20 +239,19 @@ def _build_name_to_id(species_path: str) -> dict[str, int]:
 
 
 def _resolve_species_id(const: str, name_to_id: dict[str, int]) -> int:
-    """Attempt to resolve a SPECIES constant to an RR internal species ID.
+    """Resolve the complete constant using the RR species generator's naming rules.
 
-    Tries the display name first (which handles overrides for special chars),
-    then the base name (first word), as a fallback for form variants.
-    Returns 0 if unresolved (e.g. SPECIES_NONE).
+    Presentation abbreviations such as 'Zigzagoon G' are not species identities.
+    A missing form is a generation error, never permission to use its base ID.
     """
-    display = _species_display_name(const)
-    if display == "None":
+    key = const.removeprefix("SPECIES_")
+    if key == "NONE":
         return 0  # SPECIES_NONE placeholder
-    sid = name_to_id.get(display.lower(), 0)
-    if not sid:
-        base = display.split()[0]
-        sid = name_to_id.get(base.lower(), 0)
-    return sid
+    canonical = species_table_name(key)
+    try:
+        return name_to_id[canonical.lower()]
+    except KeyError:
+        raise ValueError(f"Unresolved RR encounter species {const}: {canonical!r}") from None
 
 
 # ── Main parser ───────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 import struct
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -150,15 +151,54 @@ def primary_area_slots(decoded: dict, area_map: dict[str, str]) -> dict:
     return out
 
 
+def catalog_diff(decoded: dict, area_map: dict[str, str], catalog: dict) -> dict:
+    """Complete comparison with the primary table projection; preserve every discrepancy."""
+    actual = primary_area_slots(decoded, area_map)
+    mismatches = []
+
+    def values(rows):
+        return [(r["species_id"], r["min_level"], r["max_level"]) for r in rows]
+
+    for area in sorted(actual.keys() | catalog.keys()):
+        rom_methods, json_methods = actual.get(area, {}), catalog.get(area, {})
+        for method in sorted(rom_methods.keys() | json_methods.keys()):
+            rom_rows, json_rows = values(rom_methods.get(method, [])), values(json_methods.get(method, []))
+            if rom_rows != json_rows:
+                rom_counts, json_counts = Counter(rom_rows), Counter(json_rows)
+                mismatches.append({"area": area, "method": method,
+                    "rom_count": len(rom_rows), "catalog_count": len(json_rows),
+                    "rom_only": [{"species_id": row[0], "min_level": row[1], "max_level": row[2], "count": n}
+                                 for row, n in sorted((rom_counts-json_counts).items())],
+                    "catalog_only": [{"species_id": row[0], "min_level": row[1], "max_level": row[2], "count": n}
+                                     for row, n in sorted((json_counts-rom_counts).items())],
+                    "order_differs": rom_counts == json_counts})
+    unmapped = sorted({(r["map_group"], r["map_num"]) for period in ("Day", "Night")
+                       for r in decoded["tables"][period]
+                       if f"{r['map_group']}:{r['map_num']}" not in area_map})
+    return {"rom_sha1": decoded["rom_sha1"], "rom_areas": len(actual),
+            "catalog_areas": len(catalog), "mismatched_methods": len(mismatches),
+            "unmapped_primary_maps": [list(key) for key in unmapped], "mismatches": mismatches}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rom", type=Path, required=True)
     parser.add_argument("--output", type=Path, help="write the complete raw table census")
+    parser.add_argument("--catalog", type=Path, help="compare a generated encounter catalog")
+    parser.add_argument("--diff-output", type=Path, help="write the complete catalog comparison")
     args = parser.parse_args()
     decoded = decode_encounters(load_rom(args.rom))
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(decoded, indent=2)+"\n", encoding="utf-8")
+    if args.catalog:
+        area_map = json.loads((ROOT / "data/games/gen3_frlge/area_map.json").read_text())
+        diff = catalog_diff(decoded, area_map, json.loads(args.catalog.read_text(encoding="utf-8")))
+        if args.diff_output:
+            args.diff_output.parent.mkdir(parents=True, exist_ok=True)
+            args.diff_output.write_text(json.dumps(diff, indent=2)+"\n", encoding="utf-8")
+        print(f"Catalog comparison: {diff['mismatched_methods']} area/method differences; "
+              f"{len(diff['unmapped_primary_maps'])} primary map(s) have no coarse area key")
     print(json.dumps({"rom_sha1": decoded["rom_sha1"], "heads": decoded["heads"],
                       "header_counts": {name: len(rows) for name, rows in decoded["tables"].items()},
                       "slot_counts": {name: sum(len(h["slots"]) for r in rows for h in r["habitats"].values())

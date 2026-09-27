@@ -96,6 +96,61 @@ python -m pytest tests/unit/test_rr_rom_encounters.py -q -p no:randomly
 ```
 
 Initial reader controls: 5 passed, covering real RR heads/Route1, changed
-selector bytes, a synthetic moved party-species slot array, out-of-range
+selector bytes, a synthetic moved wild-species slot array, out-of-range
 pointers and a bounded missing sentinel. Form-generator red controls reproduced
 9 failures before the mapping repair; all 13 mapping controls pass afterward.
+
+## Form correction and complete primary-table comparison
+
+Regeneration changes only **155 species_id fields**, covering **66 form names
+in 31 areas**. All 2,103 rows, 53 areas, display names, rates and levels retain
+their previous shape/order. Unknown non-NONE constants now fail by name instead
+of silently falling back to a base species. Regional variants (Alola/Galar/
+Hisui/Paldea/Sevii), size forms and other suffixes use the same full-name mapping
+as the RR species generator.
+
+`rr_encounter_forms_diff.json` records every changed row and complete before/
+after primary-table differences. Comparison includes species, levels, row counts
+and order; it does not claim a ROM audit of encounter probability thresholds.
+Area/method differences fall from 80 to 38. Of the remaining 38, 35 differ in
+content/counts and three only in order. These are **known remaining data-quality
+gaps**, not passing qualifications or silently repaired game facts. Examples:
+
+- Route22 Good Rod: community Carvanha326 vs ROM Arrokuda1144.
+- Route10's relevant Day/Night populations and Route24/25 assignments differ.
+- Commented-out definitions leak 15 zero-level rows into Cape Brink Super Rod.
+- Coarse-area aggregation omits/adds populations in Tower/Mansion/Mt Ember/
+  Rock Tunnel/Safari Center, and includes a 12-row NONE placeholder in Tower Day.
+- Four nonzero wild IDs exceed the shipped species-name catalog (listed above).
+
+The direct slot-order tests cover every method of Route1, Route2, Mt Moon and
+Berry Forest, including both Route1 Day/Night. The wider discrepancies remain
+fully listed in the audit artifact; these sample passes do not certify the
+entire shipped catalog. The broader ROM-authoritative catalog/source change was
+raised to the coordinator separately from this bounded form-mapping repair.
+
+## Consumer audit (integration d9a928d7)
+
+- `server/adapters/gen3_frlge.py:288-292,620-632` loads/returns the RR JSON as-is.
+  `server/server.py:1392-1399,2912` publishes it in the per-player status payload.
+  Thus the API did expose incorrect base IDs for regional rows.
+- `server/templates/_board.html:201-207` renders the unique **name** strings,
+  not species IDs or species sprites. Those names already said `Zigzagoon G`
+  etc.; this patch preserves them. The current text-only Wild Here widget is
+  not evidence that the numeric IDs were correct.
+- `tools/gen3_clause_rows.py:225-233,260,502,522,632` treats the JSON IDs as
+  actual wild species for capture/clause/family oracles. Its former family seed
+  comment/target at 579-581 asserted base Zigzagoon288 exists in both times.
+  Corrected Night1222 disproves that assumption. Emerald-2 owns its fixture/
+  driver/oracle correction and consumes the independent RR reader.
+- Production dupes checks at `server/state.py:2788-2875,2915-2976` use the live
+  `species_id` and `adapter.evo_family`, not this encounter JSON. Therefore the
+  JSON repair alone cannot fix production family membership. At this base,
+  `Gen3Adapter.evo_family(1222/1223/1154)` returns `1222/1223/288`, while the
+  actual RR evolution graph places them together. That separate family-map
+  defect is being corrected by Emerald-2; generic/NatDex behavior is outside
+  this card. No server/UI consumer was changed here.
+
+The existing `test_rr_family_target_exists_in_both_own_time_tables` now fails
+on Night for the old single-base-family fixture. It is left intact rather than
+weakened to make a misleading green gate; the C3 composition must resolve it.
