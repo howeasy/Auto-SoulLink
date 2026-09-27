@@ -1,0 +1,41 @@
+# gen3_final_cut row=evolve_gen3_emerald item=NAT-LEGS-4 cut=58a4f1fecdebbe4d4138da0df73518677aa5eaec
+# lane=C:/slink-wt/g3-nat4
+# command: python tools/e2e_duo.py --game gen3_emerald --scenario evolve_gen3   (cwd=C:/slink-wt/g3-nat4)
+# env: SLINK_STATE_DIR=C:/slink-wt/g3-nat4/.lane/st4_evolve_gen3_emerald
+# verdict: PASS
+# inputs: rom:emerald=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af fixture:a=244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd fixture:b=17a34da61d32eb9c9e4fb5f8b6bd881245b5afa3213b369ebb71ac808f1043ec
+
+========== scenario: evolve_gen3 ==========
+[duo] evolve_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=17a34da61d32eb9c9e4fb5f8b6bd881245b5afa3213b369ebb71ac808f1043ec write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=61b438518f92c74833279f3e1f044b0c3d8ae909ef85aa9baed755e219b15b7f source=58a4f1fecdebbe4d4138da0df73518677aa5eaec
+[duo] server up: tcp=55416 http=55417 data=C:\Users\howar\AppData\Local\Temp\slink_duo_evolve_gen3_s87vafs2
+[duo] timing server 0.7s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 4D55444B:20250925 <-> 4D55444B:DFDAF6DA
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=route_102 encounter_rules=not_qualified
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 5.1s
+[duo] timing results 12.7s
+[duo] RESULT_LINE a: RESULT: PASS (evolved 4D55444B:20250925 to species 284)
+[duo] RESULT_LINE b: RESULT: PASS (idled while A evolved)
+[duo] SAVE_WITNESS_SHA256 inst=a site=b04eb166484d2f9e384d8337c78654c397c661b3bde1afb9e513eede7dca55ec file=b04eb166484d2f9e384d8337c78654c397c661b3bde1afb9e513eede7dca55ec match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] evolve: 4D55444B:20250925 evolved to species 284 Lv16 under the same key; links.json half species=284 (partner 4D55444B:DFDAF6DA unchanged)
+[duo] MARKER a: SIGNAL evolve_species_store frame=3719 address=0x0813E9D2
+[duo] MARKER a: EVOLVED 4D55444B:20250925 species=284 level=16 frame=4274
+[duo] MARKER a: SIGNAL battle_begin frame=943 address=0x08036760
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] evolve_gen3: a=PASS b=PASS
+
+========== summary ==========
+  evolve_gen3: PASS (attempt 1 of 1)
