@@ -396,7 +396,7 @@ end
 -- see docs/gen3/research/rr_fixture_route_2026-09-24.md for why this route exists and how each
 -- id was PROVEN against RR's own compiled scripts (not vanilla FireRed's).
 local function run_route2(existing_cp, duo_hooks)
-    duo_route_battle = nil
+    duo_route_battle = duo_hooks and duo_hooks.flee or nil
     if not existing_cp then G.open("gen3_rr_battle_fixture") end -- the standalone receipt is unchanged
     pcall(client.speedmode, 6399)
     G.budget = 400000
@@ -687,6 +687,6 @@ end
 
 -- The duo ball-gate row continues the same native, ROM-proven parcel route
 -- from an already-booted rr_battle save; no intro, shopping or memory writes.
-return { native_ball_gift = function(cp, reward, battle)
-    return run_route2(cp, {reward=reward, battle=battle})
+return { native_ball_gift = function(cp, reward, battle, flee_before_reward)
+    return run_route2(cp, {reward=reward, battle=battle, flee=flee_before_reward})
 end }
