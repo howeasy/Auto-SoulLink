@@ -2,9 +2,9 @@
 """e2e_duo.py — TWO-INSTANCE headless E2E harness for the SLink companion patch.
 
 Runs a throwaway SLink server + two concurrent EmuHawk instances (players a/b), both
-loading savestates from the SAME save (instance B mutates its party OTIDs pre-hello so
-mon keys don't collide in the server's flat key index), then orchestrates a scenario
-via the server's debug HTTP API and waits for both instances' result files.
+booting a battery save seeded from the SAME source (instance B mutates its party OTIDs
+pre-hello so mon keys don't collide in the server's flat key index), then orchestrates a
+scenario via the server's debug HTTP API and waits for both instances' result files.
 
     python tools/e2e_duo.py --scenario faint
     python tools/e2e_duo.py --scenario all --keep-alive
@@ -49,16 +49,15 @@ else:
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
 BIZHAWK_CONFIG = "E:/Howard/Bizhawk/config.ini"
-SAVESTATE_DIR = "E:/Howard/Bizhawk/GBA/State"
 ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 # Where --wire-log parks a run's golden transcripts (tests/fixtures/gen3/wire/README.md).
 WIRE_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3", "wire")
 WT_FWD = REPO.replace("\\", "/")
 
-# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
-# (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
-# Explosion self-faint whites out instead of opening the switch menu), and `games`.
+# Per-scenario knobs: extra server flags, per-side timeout (seconds), fillers (default True;
+# or {"a":…,"b":…} — explode keeps B at ONE mon so the Explosion self-faint whites out
+# instead of opening the switch menu), and `games`.
 #
 # `games` is which titles a scenario applies to. ABSENT MEANS EVERY TITLE — read it through
 # scenarios_for(), never inline.
@@ -166,8 +165,8 @@ SCENARIOS = {
     "gen2_soft_reset": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
                         "no_setup": True, "frames": 216000,
                         "oracle": "assert_gen2_soft_reset_saved", "oracle_kwargs": {}},
-    "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
-    "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    "faint":   {"flags": [], "timeout": 420},
+    "boxsync": {"flags": [], "timeout": 420},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
     # step 3): lua/tests/duo/scenario_gen1_*.lua and gen1_hunt.lua are gone, so every entry that
     # named `("gen1",)` went with them.
@@ -3829,17 +3828,13 @@ class DuoRun:
         elif self.gcfg.get("launch_profile") == "gen2":
             from run_gb_gate import GENS
             GENS["gen2"]["config"](self._gen2_plans[inst], Path(cfg_ini))
-        elif self.battery_boot:
+        else:
             import gen1_playthrough as g1
 
             # purergb pins the config to GBC + not-SGB (PLAN A15); the fixture key names the
             # foundation, so the pure row needs nothing else to get it.
             g1.write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst),
                                 purergb=g1.is_purergb(self.gcfg["fixture"][inst]))
-        else:
-            from run_gate import write_gate_config
-
-            write_gate_config(BIZHAWK_CONFIG, cfg_ini)   # rewind off (duo run 61569's crash)
         self._apply_lane_window(cfg_ini)
         self._phase = getattr(self, "_phase", {})
         self._phase[inst] = phase
@@ -3904,10 +3899,7 @@ class DuoRun:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
                 duo.update({"ext_addr": codec.RR_EXT_ADDR, "ext_size": codec.RR_EXT_SIZE})
-        if self.gcfg["uses_savestate"]:
-            ss = self.cfg["savestate"]
-            duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
-        elif seed and not self.cfg.get("cold_boot"):
+        if seed and not self.cfg.get("cold_boot"):
             self._seed_instance_save(inst)
         elif self.cfg.get("cold_boot"):
             os.makedirs(self._saveram_dir(inst), exist_ok=True)
