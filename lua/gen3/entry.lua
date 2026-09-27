@@ -78,6 +78,13 @@ Entry.PACKS = {
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },
     },
+    -- X3: the pokeemerald-expansion reference build (ROM 28877d73), registered so its hash names
+    -- its own pack (never gen3_emerald's) -- NOT routed and its profile NOT admitted until the
+    -- owner's XG gates (docs/gen3_emerald/PLAN.md X3). No header_code: an unknown-hash expansion
+    -- build is admitted by exact sha1 only, never by name.
+    gen3_exp = {
+        rom_type = { emerald_expansion_28877d73 = "emerald_expansion_28877d73" },
+    },
 }
 -- Every pack file Entry.build/Entry.admit reads, as literal repo-relative paths: the release
 -- manifest derives what to ship from these literals, so a pack file must be named here or a
@@ -106,6 +113,14 @@ Entry.PACK_FILES = {
         checkpoint = "data/games/gen3_emerald/write_checkpoint.json",
         area_map = "data/games/gen3_emerald/area_map.json",
         locations = "data/games/gen3_emerald/gen3_emerald_locations.lua",
+    },
+    -- X3: one directory per onboarded expansion build (its generated pack, TEMPLATES.md T6)
+    gen3_exp = {
+        profile = "data/games/gen3_exp/28877d73/profile.json",
+        sites = "data/games/gen3_exp/28877d73/engine_signals.json",
+        checkpoint = "data/games/gen3_exp/28877d73/write_checkpoint.json",
+        area_map = "data/games/gen3_exp/28877d73/area_map.json",
+        locations = "data/games/gen3_exp/28877d73/gen3_exp_locations.lua",
     },
 }
 -- Which packs lua/slink.lua's Gen 3 route sends to the rewritten client. The route reads this
