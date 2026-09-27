@@ -4500,6 +4500,34 @@ def test_a_throwing_watcher_is_reported_by_name_before_it_is_dropped():
     assert "WATCHER_ERROR scenario=%s watcher=%s" in text
 
 
+def test_linked_faint_active_gen3_masks_growth_for_the_natural_side_too(ph, monkeypatch, tmp_path):
+    """PYDEC FAIL on the RR final cut (d9a928d7): "a: the memorial ... differs from the fixture
+    record in [('experience', 228, 267)]". A is the side whose engine faint site fires -- it
+    fights NATURALLY in every case (wild/trainer/lhammer/...), so it can legitimately gain EXP
+    before it goes down. The call site only masked growth for B, and only when case=='trainer'."""
+    fixture = _fixture([STARTER, PIDGEY])
+    k = _key(STARTER)
+    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
+    run, notes = _oracle_stub(monkeypatch, tmp_path, "linked_faint_active_gen3", {"a": saved, "b": saved},
+                              fixture, [{"a": {"key": k}, "b": {"key": k}, "status": "memorial",
+                                        "cause": "battle"}])
+    run._link_keys = {"a": k, "b": k}
+    calls = []
+    monkeypatch.setattr(duo, "gen3_memorial_problems",
+                        lambda inst, *a, **kw: calls.append((inst, kw.get("trained"))) or [])
+    (tmp_path / "slink.log").write_text(
+        f"[a] faint → force_faint b:{k}\nfully memorialized\n", encoding="utf-8")
+    _, _, _, log_b = ph("wild", "b")
+    receipts = {
+        "a": (f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n"
+              f"SAVE_WITNESS_DUMP path=p\n"),
+        "b": log_b.replace("K0", k) + f"TX memorialize_done {k} {{}}\n",
+    }
+    run.assert_linked_faint_active_gen3_saved(receipts)
+    assert ("a", True) in calls    # A fought naturally: growth is legitimate every case
+    assert ("b", False) in calls   # B's KO is engine-forced with no input in the wild case
+
+
 def test_linked_faint_active_oracle_keeps_the_last_mon_on_both_sides(ph, monkeypatch, tmp_path):
     """R4 on RR's one-mon rr_battle.sav: A's natural faint and B's Perish KO both leave the lone
     linked mon in its party after game_over (ruling 21); no deposit, link DEAD, no memorial."""
