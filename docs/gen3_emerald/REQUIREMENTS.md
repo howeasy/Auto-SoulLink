@@ -68,8 +68,11 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
   PINNED, checkpoint `1401df8d`+`5d0a4bd7`, codec `60d207a9`+`f7e2d52f`, areas `81bb74e3`+`9538d3a4`,
   statics 21 entries, moves/items `f3f56f54` (Nature Power accuracy 95 vs FRLG 0 pinned). The rows
   above were left `·` after EG1 and written back on 2026-09-26 (OMP ledger audit cx-a1a7cdbd).
-- **EF-4 P ◐:** every site kind fired on hardware except `trade_begin`/`trade_done` (need a link
-  partner, E5). **EF-5 P ◐:** the overworld census is PHYSICAL
+- **EF-4 P ✓ (trade_begin/trade_done):** NAT-LEGS-3 (2026-09-27) fired both at the pinned TradeMons
+  site through `npc_trade_gen3 --game gen3_emerald` (RustboroCity_House1's INGAME_TRADE_SEEDOT --
+  a link partner was never required, an NPC trade reaches the same TradeMons swap): receipt
+  `docs/gen3/probes/fc_npc_trade_gen3_emerald_BLOCKED_3a64fdbb.txt`. Every OTHER site kind already
+  fired on hardware. **EF-5 P ◐:** the overworld census is PHYSICAL
   (`probes/census_emerald_overworld_2026-09-25.txt`); the Emerald-only forbidden states are
   SOURCE-only (`write_checkpoint.md` §8).
 
@@ -111,8 +114,9 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
   SOURCE/MODEL only.
 - **ES-1 P ◐:** `probes/hooks_emerald_2026-09-26.txt`, tracked-clean at `c891455d`. Rows a-return, b-interior and f are OPEN, as on FR.
 - **ES-2:** there are eight observer receipts (`probes/shadow_emerald_*_2026-09-26.*`) and the
-  negatives manifest (`negatives_manifest.json`, 75/75, the complete matrix). 11 of the 12 coverage kinds are
-  PHYSICAL; `trade_done` needs a link partner (E5).
+  negatives manifest (`negatives_manifest.json`, 75/75, the complete matrix). All 12 coverage kinds
+  are now PHYSICAL: `trade_done` fired 2026-09-27 through `npc_trade_gen3` (NAT-LEGS-3, no link
+  partner needed -- see EF-4).
 - **EW-1 ◐:** `probes/checkpoint_emerald_battle_2026-09-26.txt` (21/21, tracked-clean) covers
   every probed row. NOT run on Emerald: `pc_menu` (the PC write window), `battle_faint_prompt`,
   `battle_link`, the companion/RR rows, and the nine FR-only `bw_*` tutorial rows (`SKIP not selected for emerald/clean`). The probe constructs no writer, so an empty write
@@ -129,6 +133,34 @@ As in `docs/gen3_requirements.md` (ENGINE, PYDEC, GAME, SERVER, CONTROL), plus:
 | EC-3 | By-name refusal (`lua/slink.lua`) and `UNADMITTED_GAMES` flip only with EG4 (ruling 24) | CONTROL | · | · | · |
 | EC-4 | Conformance World rows + capabilities fixture regenerated | MODEL | ✓ | ✓ | — |
 | XC-1 | `gen3_expansion.py` adapter contract (full `base.py` surface; trainer panels served from `gen3_exp_trainers.json` since XC4/XC4b, empty encounter table = recorded limit); `pokemon_data.py` untouched | SERVER | · | · | · |
+
+### NAT-LEGS-3 evidence (2026-09-27; `claude/gen3-natural-legs-3`)
+
+The three NAT-LEGS kinds (evolve/npc_trade/poison_faint -- S-8/S-9/S-11 in
+`docs/gen3_requirements.md`) checked for an Emerald leg; none had one before this pass.
+
+- **poison_faint_gen3 ✓:** E↔E PASS at `9ce65d28` (both halves memorialized, save witnesses
+  match): `docs/gen3/probes/fc_poison_faint_gen3_emerald_9ce65d28.txt`. SYNTH fixture
+  `emerald_poison.sav` (already committed, E2-FIX-VARIANTS round 3) walked Down/Up between
+  Oldale Town (6,17)/(6,18) -- Up from (6,17) is the Pokemon Center's door warp, confirmed against
+  the raw layout blockdata (`data/layouts/OldaleTown/map.bin`), not just the map JSON. B's side
+  boots `emerald_pc.sav` (Mudkip + Poochyena), not `emerald_town.sav` (a single Mudkip): B's
+  linked lead is force_faint'ed by the server, and a single-mon party whites out instead of
+  memorializing, the same substitution `linked_faint_active_gen3` already makes for `gen3_emerald`.
+- **npc_trade_gen3 BLOCKED:** a new `emerald_trade.sav` SYNTH fixture (RustboroCity_House1, one
+  step S of the trader, `INGAME_TRADE_SEEDOT` -- pret pokeemerald c65e93f2
+  `src/data/trade.h:985-1001`) and oracle/scenario wiring landed, but the leg does not pass:
+  `docs/gen3/probes/fc_npc_trade_gen3_emerald_BLOCKED_3a64fdbb.txt`. The trade completes correctly
+  natively -- `SIGNAL trade_begin`/`trade_done` both fire at the pinned `TradeMons` site (EF-4,
+  now ✓ for this pair -- see above), the save flag is set, and an independent live memory read
+  (`ctx.party()`, not the client's own bookkeeping) confirms party slot 1 already holds the
+  received SEEDOT the instant `trade_done` fires -- but `lua/gen3/client.lua`'s own
+  `settle_trade`/`st.trade` bookkeeping never emits the `npc_trade` key_change (240 frames of
+  mashing A time out with the flag already true and 0 key_change sent). This is a bug in shared
+  client code, outside the NAT-LEGS-3 card's lease; reported for its owner to fix and re-run.
+- **evolve_gen3:** not attempted. Its oracle (`assert_evolve_gen3_saved`) hardcodes species 8
+  (WARTORTLE) for FR/LG's Squirtle -> Wartortle; Emerald's own SYNTH fixture (`emerald_evolve.sav`,
+  Mudkip -> Marshtomp) would need a species-aware oracle rewrite, out of this card's lease.
 
 ### EG4 candidate final cut (2026-09-26; `claude/gen3-emerald-rc2`)
 

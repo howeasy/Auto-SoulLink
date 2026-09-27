@@ -380,17 +380,33 @@ SCENARIOS = {
     #   evolve       a Route 1 wild win levels the Lv15 Squirtle to 16 and evolves it; the tick
     #                publishes WARTORTLE to the linked half (S-8 evolve_species_store)
     #   npc_trade    Reyley's Route 2 house trade (ABRA -> MR. MIME); the client emits key_change
-    #                reason npc_trade (S-9 trade_done); the server's reply is recorded only
+    #                reason npc_trade (S-9 trade_done); the migration is judged (NAT-LEGS-3)
     #   poison_faint a field poison step faints the 1-HP lead; B's linked mon is force-fainted
     #                (S-11 poison_faint + the Soul Link rule)
     "evolve_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",), "explicit_only": True,
                     "target": {"a": "evolve_synth", "b": "town"}, "frames": 2000000, "no_save": ("b",),
                     "oracle": "assert_evolve_gen3_saved"},
-    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",), "explicit_only": True,
-                       "target": {"a": "trade_synth", "b": "town"}, "frames": 2000000, "no_save": ("b",),
+    # NAT-LEGS-3: gen3_emerald joins as its own E<->E leg (RustboroCity_House1's INGAME_TRADE_SEEDOT,
+    # emerald_trade.sav; target_by_game overrides the FR/LG "_synth" fixture stem with Emerald's own
+    # naming, tests/fixtures/gen3/README.md). The oracle's NPC_TRADE_FACTS carries the per-game
+    # new_key/species; poison_faint_gen3's oracle is already game-agnostic (no species assertion).
+    # orchestrate_npc_trade_gen3 links party slot 1 on BOTH halves (_gen3_prelude(link_slot=1)):
+    # FR/LG's "town" fixture already carries 2 party mons (unlike Emerald's, which is a single
+    # Mudkip for that kind), so B's Emerald side boots "pc" instead (Mudkip + Poochyena, slot 1
+    # present) -- the same B-idle fixture boxsync_gen3/whiteout_gen3 already use for gen3_emerald.
+    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+                       "target": {"a": "trade_synth", "b": "town"},
+                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
+                       "frames": 2000000, "no_save": ("b",),
                        "oracle": "assert_npc_trade_gen3_saved"},
-    "poison_faint_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg",), "explicit_only": True,
-                          "target": {"a": "poison_synth", "b": "town"}, "frames": 2000000,
+    # B's Emerald side boots "pc" (Mudkip + Poochyena), not "town" (single Mudkip): B's own linked
+    # lead is force_faint'ed by the server (Soul Link), and a single-mon party would white out
+    # (RESULT: FAIL "no memorialize_done" -- the game overs before the memorial can send), exactly
+    # the reason linked_faint_active_gen3 already substitutes "pc" for gen3_emerald.
+    "poison_faint_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+                          "target": {"a": "poison_synth", "b": "town"},
+                          "target_by_game": {"gen3_emerald": {"a": "poison", "b": "pc"}},
+                          "frames": 2000000,
                           "oracle": "assert_poison_faint_gen3_saved"},
     # `ball_hunt`: a half throws Poke Balls, so "hunt ended out-of-balls" (the game's catch RNG
     # on a fixture's few balls) earns the Gen 1 standard's whole-run retry (RNG_RETRY_FAMILIES).
@@ -7956,14 +7972,30 @@ class DuoRun:
         self._gen3_raise(problems, f"evolve: {ka} evolved to WARTORTLE Lv16 under the same key; "
                                    f"links.json half species=8 (partner {kb} unchanged)")
 
+    # card NAT-LEGS-3 (Emerald parity): each game's npc_trade_gen3 target trades away a fixed mon
+    # for a fixed one, so the resulting key/species are game facts, not FR/LG constants. FR/LG:
+    # Reyley's Route 2 house, ABRA -> MR. MIME (pret pokefirered ingame_trades.h: personality
+    # 0x9CAE, OT id 1985 -> key 00009CAE:000007C1, species 122). Emerald: RustboroCity_House1's
+    # trader, a player Ralts -> his SEEDOT (pret pokeemerald c65e93f2 src/data/trade.h
+    # INGAME_TRADE_SEEDOT: personality 0x84, otId 38726 -> key 00000084:00009746, species 298).
+    NPC_TRADE_FACTS = {
+        "gen3_emerald": {"new_key": "00000084:00009746", "species": 298},
+    }
+    NPC_TRADE_DEFAULT = {"new_key": "00009CAE:000007C1", "species": 122}
+
     def assert_npc_trade_gen3_saved(self, results):
         """S-9: TradeMons fired (SIGNAL trade_begin -> trade_done) and THEN the client emitted
-        key_change reason npc_trade ABRA -> Reyley's MR. MIME (pret ingame_trades.h: personality
-        0x9CAE, OT id 1985, so key 00009CAE:000007C1); A saved MR. MIME in slot 1. The server's
-        reply to the key_change is recorded, not judged (the census interim, card NAT-LEGS)."""
+        key_change reason npc_trade for the game's fixed NPC trade (NPC_TRADE_FACTS /
+        NPC_TRADE_DEFAULT); A saved the received mon in slot 1. Card NAT-LEGS-3: this cut carries
+        both the box-census stamp (lua/gen3/client.lua pc_boxes_generation) and the key_change
+        retry (lua/core/session.lua RETRYABLE_REJECTIONS), so the migration now LANDS -- either
+        accepted on the first try, or refused once for a RETRYABLE reason and resent after a fresh
+        census. Both paths are asserted explicitly (not just recorded), and so is the final
+        links.json: A's half moves to the NEW key, still alive, B unchanged."""
         self._gen3_flush_boundary()
         ka = self._link_keys["a"]
-        new = "00009CAE:000007C1"
+        facts = self.NPC_TRADE_FACTS.get(self.game, self.NPC_TRADE_DEFAULT)
+        new, species = facts["new_key"], facts["species"]
         kc = rf'(?m)^TX key_change - .*"new_key":"{new}".*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"'
         problems = gen3_receipt_problems(
             "a", results["a"], required=[r"(?m)^SIGNAL trade_begin ", r"(?m)^SIGNAL trade_done ", kc],
@@ -7972,25 +8004,34 @@ class DuoRun:
         party, f_party, more = self._gen3_nat_saved_party("a")
         problems += more
         keys = [gen3_key(m) for m in party]
-        if keys != [gen3_key(f_party[0]), new] or party[1]["species"] != 122:
-            problems.append(f"a: saved party {keys}, expected [{gen3_key(f_party[0])}, {new}] with MR. MIME")
+        if keys != [gen3_key(f_party[0]), new] or party[1]["species"] != species:
+            problems.append(f"a: saved party {keys}, expected [{gen3_key(f_party[0])}, {new}] with species {species}")
+        # the reply sequence after the FIRST TX key_change: either an immediate ack (the generic
+        # RX logger in duo_gen3_main.lua prints "RX key_change_ack" with no key= field), or exactly
+        # one RETRYABLE refusal ("RX key_change_rejected") followed by exactly one resend of the
+        # SAME key_change and then the ack. Anything else is a problem, not a recorded curiosity.
         tail = (results["a"] or "").split("TX key_change", 1)[-1]
-        reply = re.findall(r"(?m)^RX .*$|^\[client\] \[SLink-gen3\] key_change .*$", tail)[:4]
+        seq = re.findall(r"(?m)^(?:RX key_change_(?:ack|rejected)|TX key_change - .*)$", tail)
+        settle = next((i for i, ln in enumerate(seq) if ln.startswith("RX key_change_ack")), None)
+        if settle is None:
+            problems.append(f"a: key_change never acked; observed reply sequence {seq}")
+        else:
+            pre = seq[:settle]
+            if pre and (len(pre) != 2 or not pre[0].startswith("RX key_change_rejected")
+                        or new not in pre[1] or ka not in pre[1]):
+                problems.append(f"a: expected an immediate ack, or ONE refusal + ONE resend of the "
+                                f"same key_change before the ack; observed {seq[:settle + 1]}")
+        reply = seq[:settle + 1] if settle is not None else seq
         rows = [(e.get("status"), (e.get("a") or {}).get("key"), (e.get("b") or {}).get("key"))
                 for e in self._links_json()]
-        # OMP cx-6821246e F2: `rows` used to be printed only, never asserted. Named and checked so
-        # a future flip is deliberate: on THIS cut the census key_change is rejected (not retried),
-        # so the persisted pair stays alive under A's OLD key, B's unchanged. The day the census
-        # retry lands and the server accepts the new key, this must be updated on purpose.
         kb = self._link_keys["b"]
-        expected_rows = [("alive", ka, kb)]
+        expected_rows = [("alive", new, kb)]
         if rows != expected_rows:
             problems.append(f"a: server links.json is {rows}, expected {expected_rows} "
-                            f"(a rejected npc_trade key_change should leave the pair alive under "
-                            f"A's OLD key)")
+                            f"(the migrated npc_trade key_change should leave the pair alive under "
+                            f"A's NEW key, B unchanged)")
         self._gen3_raise(problems, f"npc_trade: {ka} -> {new} key_change npc_trade emitted after "
-                                   f"trade_done; server reply (recorded, not judged): {reply}; "
-                                   f"links.json {rows}")
+                                   f"trade_done; reply sequence {reply}; links.json {rows}")
 
     def assert_poison_faint_gen3_saved(self, results):
         """S-11 + the Soul Link rule: the field poison step's site fired (SIGNAL poison_faint), THEN
