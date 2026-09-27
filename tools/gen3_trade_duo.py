@@ -1034,7 +1034,10 @@ def physical_problems(
                         problems.append(
                             f"{side}: {name} changed received immutable identity/genome"
                         )
-        except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
+        # Only genuine unreadable/missing evidence is an oracle finding. KeyError /
+        # TypeError / IndexError here are a harness bug (a renamed field, a malformed
+        # row), and swallowing them reported "unreadable evidence" instead of failing.
+        except (OSError, ValueError) as exc:
             problems.append(f"{side}: unreadable/missing T5 evidence: {exc}")
     if not decline and (len(journal_epochs) != 2 or len(set(journal_epochs)) != 2):
         problems.append("both clients did not own distinct sealed journal epochs")

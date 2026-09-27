@@ -1130,6 +1130,55 @@ def test_apply_trade_on_frlg_writes_nothing_and_reports_unchanged():
     assert [m["event"] for m in w.sent[n:] if m["event"] != "tick"] == ["trade_done", "menu_result"]
 
 
+def test_major4_a_refused_apply_trade_under_a_hidden_hello_still_reaches_the_wire():
+    """A refused apply_trade owes a NON-uncertain trade_done and, behind it, the
+    menu_result cancel. The owed gate (client.lua drv.after_receive) refuses a
+    non-uncertain trade_done while session.hello_visible is false, and hello_visible
+    only refreshes when a NEW hello is BUILT -- core/session.lua builds one only while
+    hello_sent is false, and the trade recovery block is the only thing that clears it.
+    Unarmed, both reports sit in owed.list until a reconnect; the refusal branch must
+    arm that recovery exactly as trade.lua's completed() does."""
+    w = live()
+    w.enter_battle([FOE], active=(0,))
+    w.step()
+    w.set_party([mon_record(0x99999999, 0x5555, species=7)])       # the partner's party in RAM
+    w.fire("map_load")
+    w.step()
+    w.connected = False
+    w.step()
+    w.connected = True
+    w.step()
+    assert w.events("hello")[-1]["party_hidden"] is True             # hello_visible latched false
+    w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
+    w.step(3)
+    assert w.events("menu_result") == [] and w.events("trade_done") == []
+    w.set_party(party(A, B))                                        # our own party is back
+    w.leave_battle()
+    w.overworld_safe()
+    w.step(60)
+    assert [m["token"] for m in w.events("trade_done")] == ["t"]
+    assert [m["token"] for m in w.events("menu_result")] == ["t"]
+    assert w.events("trade_done")[0].get("uncertain") is not True    # server semantics unchanged
+
+
+def test_a_held_owed_report_names_its_reason_once_and_not_once_per_frame():
+    """owed:step runs on every after_receive and a held head blocks every later report
+    (lua/owed_reports.lua:62). Without a line, a stalled trade_done is indistinguishable
+    from a running emulator -- the reason must be named, once per hold."""
+    from tests.unit.gen3_trade_journal_model import JournalModel
+
+    store = JournalModel(run=None)                    # never bound: ready() is false for good
+    w = World("gen3_frlg", "firered", "clean", journal=store, model_companion=True)
+    w.set_party(party(A))
+    w.step_to(60)
+    w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
+    w.step(120)
+    assert w.events("trade_done") == [] and w.events("menu_result") == []
+    assert [l for l in w.logs if "owed trade_done held" in l] == [
+        "[SLink-gen3] owed trade_done held: trade run not bound"
+    ]
+
+
 @pytest.mark.parametrize("name,extra,event,field,value", [
     ("show_choices", {"options": ["a"], "text": "?"}, "menu_result", "choice", 127),
     ("show_menu", {"text": "?"}, "menu_result", "choice", 0),

@@ -135,6 +135,23 @@ def test_pair_preflight_binds_each_title_and_shared_run_without_reusing_rom_fact
             assert t5.codec.party_from_save(fixture)[1]["species"] == 64
 
 
+def test_the_pair_is_firered_against_leafgreen_not_one_candidate_used_twice():
+    """The card claimed "Both sides use the same private FireRed candidate". That is a
+    different, wrong lane: prepare_pair refuses any title pair that is not exactly
+    {firered, leafgreen}, so each side gets its own ROM SHA-1, pret symbols and detours.
+
+    test_pair_preflight... asserts the two manifests' rom_sha1 really differ, but it
+    skips without the private candidate builds (patch/build/ is not committed), so the
+    contract that MAKES them differ is pinned here where it always runs."""
+    from tools import e2e_duo
+
+    sides = e2e_duo.GAMES["gen3_fr_trade"]["sides"]
+    assert (sides["a"][0], sides["b"][0]) == ("firered", "leafgreen")
+    for pair in ({"a": "firered", "b": "firered"}, {"a": "leafgreen", "b": "leafgreen"}):
+        with pytest.raises(ValueError, match="both FR and LG"):
+            t5.prepare_pair(ROOT, ROOT / "patch/build", pair)
+
+
 @pytest.mark.parametrize("decline,wrong_answer", [(False, False), (True, False), (True, True)])
 def test_offer_driver_uses_only_joypad_and_refuses_a_wrong_native_answer(decline, wrong_answer):
     from lupa import lua54

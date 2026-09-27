@@ -61,11 +61,16 @@ ROM/CPU/write-policy checks remain active.
 
 ## Inputs and mandatory oracles
 
-Both sides use the same private FireRed candidate. The two committed FireRed
-town saves are copied, then **SYNTH** edits only slot 1's species to Kadabra,
-held item/mail to none, and ability selector to 0. PID/OT, genome, nickname,
-moves, level/experience, story, map, other party records and boxes are retained.
-The native evolution recomputes stats. The manifest records seed/output hashes.
+The pair is **FireRed against LeafGreen**, one private candidate per side
+(`tools/gen3_trade_duo.py:402` `prepare_pair` refuses any title pair that is not
+exactly {firered, leafgreen}; `tools/e2e_duo.py:2706` `GAMES["gen3_fr_trade"]`
+names `a` firered and `b` leafgreen). Each side therefore has its own ROM
+SHA-1, its own pret symbols and its own detours — a shared FireRed candidate
+would be a different, wrong lane. The two committed town saves (the title's own,
+`tests/fixtures/gen3/<title>_party_town{,_b}.sav`) are copied, then **SYNTH**
+edits only slot 1's species to Kadabra, held item/mail to none, and ability
+selector to 0. PID/OT, genome, nickname, moves, level/experience, story, map,
+other party records and boxes are retained. The manifest records seed/output hashes.
 Kadabra's expected trade target is read from the cartridge's pret-derived
 evolution table (method EVO_TRADE=5), not from RR data.
 
