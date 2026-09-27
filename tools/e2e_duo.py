@@ -2896,8 +2896,10 @@ def _gen3_rand_species(name):
     return re.sub(r"[^A-Z0-9]", "", text.upper())
 
 
-def gen3_rand_panel_problems(probes, facts, retail, expected_area="viridian_forest"):
+def gen3_rand_panel_problems(probes, facts, retail, *, expected_area):
     """Actual per-player trainer_brief + calc fallback versus independent ROM IDs."""
+    if not expected_area:
+        raise ValueError("gen3_rand_panel_problems requires the fixture's expected_area")
     problems, selected = [], {}
     for side in ("a", "b"):
         probe = probes.get(side) or {}
