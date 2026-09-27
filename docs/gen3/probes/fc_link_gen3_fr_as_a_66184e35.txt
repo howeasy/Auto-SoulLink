@@ -1,0 +1,43 @@
+# gen3_final_cut row=link_gen3_fr_as_a item=§2-3_item1-2 cut=66184e35595578da7c8edbd00b08daf32015542d
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario link_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T14:12:04 cpu=37% emuhawk=0 python=4
+start_utc=2026-09-27T18:12:03Z tracked_clean_before=True
+
+========== scenario: link_gen3 ==========
+[duo] link_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=3b50a0f353881c8952ee8998cc2052288307b7ce3fe4503a9266fc015ecbe409 b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=a604eb2bf5f190562035d03fe356b7ff0771944f30a9f2e31e2570a470958a2b write_checkpoint.json=11dd57184a8f9f79483e9175bd870efe0cef183211cbc7ba93d520fbedfd33ca profile.json=bc642c4cc12a9df0b0d34bebca13ea6ee62108df03a296738797deae15b0e77e source=66184e35595578da7c8edbd00b08daf32015542d
+[duo] server up: tcp=49432 http=49433 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_sx3361d6
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=45AE0F8C:99DE0D8A b=03C05261:1C600D89
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): 45AE0F8C:99DE0D8A <-> 03C05261:1C600D89 on route_1, alive
+[duo] timing orchestrate 45.1s
+[duo] timing results 3.2s
+[duo] RESULT_LINE a: RESULT: PASS (caught 45AE0F8C:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (caught 03C05261:1C600D89)
+[duo] SAVE_WITNESS_SHA256 inst=a site=33013e3db026e3890df626c034df915fb52b73da1864e83e2cb01e0bc191caa0 file=33013e3db026e3890df626c034df915fb52b73da1864e83e2cb01e0bc191caa0 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=25bb2c7f54d23cbeb4cf5c831f36392f507abe8f8c3efc04ba8b69746be47a86 file=25bb2c7f54d23cbeb4cf5c831f36392f507abe8f8c3efc04ba8b69746be47a86 match=true saves=1 counter=4->5 rtc=normalized
+[duo] BAG_BALLS baseline=20 final=9 throws=11 inst=a native_grant=0
+[duo] BAG_BALLS baseline=20 final=16 throws=4 inst=b native_grant=0
+[duo] link: 45AE0F8C:99DE0D8A <-> 03C05261:1C600D89 alive on route_1 and saved once in each party
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] link_gen3: a=PASS b=PASS
+
+========== summary ==========
+  link_gen3: PASS (attempt 1 of 3)
+exit=0 end_utc=2026-09-27T18:12:54Z tracked_clean_after=True classification=pass

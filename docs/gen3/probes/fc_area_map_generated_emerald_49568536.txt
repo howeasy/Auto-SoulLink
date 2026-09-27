@@ -1,0 +1,23 @@
+# gen3_final_cut row=area_map_generated_emerald item=§13.1_source cut=495685364a82d6a106c2a64cf189ce66f38f72ce
+# lane=C:/slink-wt/g3-lane
+# command: python tools/gen_area_map.py --game emerald --check   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T14:59:25 cpu=57% emuhawk=0 python=5
+start_utc=2026-09-27T18:59:24Z tracked_clean_before=True
+current: data\games\gen3_emerald\area_map.json
+current: data\games\gen3_emerald\gen3_emerald_areas.lua
+current: data\games\gen3_emerald\gen3_emerald_locations.lua
+Checked 130 area entries
+  -> data\games\gen3_emerald\area_map.json
+  -> data\games\gen3_emerald\gen3_emerald_areas.lua
+Checked 518 location entries
+  -> data\games\gen3_emerald\gen3_emerald_locations.lua
+Spot-checks (areas):
+  3:9: area=None  loc=None
+  3:10: area=None  loc=None
+  1:0: area=None  loc=littleroot_town_brendans_house_1f
+  24:0: area=meteor_falls  loc=meteor_falls_1f_1_r
+exit=0 end_utc=2026-09-27T18:59:26Z tracked_clean_after=True classification=pass

@@ -1,0 +1,16 @@
+# gen3_final_cut row=unit_emerald item=§13.1_source cut=495685364a82d6a106c2a64cf189ce66f38f72ce
+# lane=C:/slink-wt/g3-lane
+# command: python -m pytest tests/unit/test_gen3_codec_emerald.py tests/unit/test_gen3_emerald_areas.py tests/unit/test_gen3_emerald_badges.py tests/unit/test_gen3_emerald_checkpoint.py tests/unit/test_gen3_emerald_client.py tests/unit/test_gen3_emerald_entry.py tests/unit/test_gen3_emerald_fixture_qualify.py tests/unit/test_gen3_emerald_moves_items.py tests/unit/test_gen3_emerald_pack.py tests/unit/test_gen3_emerald_play_legs.py tests/unit/test_gen3_emerald_server.py tests/unit/test_gen3_fixture_qualify_emerald.py tests/unit/test_gen3_title_syms.py -q -p no:randomly -rs   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T14:59:28 cpu=34% emuhawk=0 python=5
+start_utc=2026-09-27T18:59:26Z tracked_clean_before=True
+........................................................................ [ 21%]
+........................................................................ [ 42%]
+........................................................................ [ 63%]
+........................................................................ [ 84%]
+....................................................                     [100%]
+340 passed in 14.67s
+exit=0 end_utc=2026-09-27T18:59:44Z tracked_clean_after=True classification=pass

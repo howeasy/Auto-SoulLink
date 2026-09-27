@@ -1,0 +1,14 @@
+# gen3_final_cut row=checkpoint_emerald item=§13.2b_checkpoint cut=495685364a82d6a106c2a64cf189ce66f38f72ce
+# lane=C:/slink-wt/g3-lane
+# command: python tools/gen3_probe_receipt.py --title emerald --lane C:/slink-wt/g3-lane --out checkpoint_emerald_clean_49568536.txt   (cwd=C:\slink-wt\g3-int)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af state:gen3_probe_states_c4p2/slink_door.State=bab861059db39bb5d1afe845200ba26a6c64fbee6613455d8ea239eef7ee623a state:gen3_probe_states_c4p2/slink_overworld.State=bab861059db39bb5d1afe845200ba26a6c64fbee6613455d8ea239eef7ee623a state:gen3_probe_states_c4p2/slink_postbattle.State=8cfe450c3fecc3c5d2c13021cd113dc4c0eec0f57a16d741145bae153015e7f6 state:gen3_probe_states_c4p2/slink_prebattle.State=d83f10f8f9dc07103209cff403e19beeedd21a5a3fea72afaf7c7b8fc3726532 state:gen3_probe_states_c4p2/slink_prefaint.State=MISSING state:gen3_probe_states_c4p2/slink_preintro.State=8f6c837c14d0c51df7645859d1a057560764742100f1e7a43f8961f96d55b1ca state:gen3_probe_states_c4p2/slink_pretrainer.State=1d59be22e4861f61b02c9e8ec053b0dc80fab92064483b6112f38fb15c44c419 state:gen3_probe_states_c4p2/slink_script.State=861cc758428365a70cae6093a46191d69f7d3c0c5ebcf7b2d5e58f4729fd8989
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:00:09 cpu=60% emuhawk=0 python=5
+start_utc=2026-09-27T19:00:07Z tracked_clean_before=True
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_probe_gen3_checkpoint.ini --lua=lua/tests/probe_gen3_checkpoint.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] probe_gen3_checkpoint: RESULT: PASS all checkpoint controls  (92s)
+--- patch\build\probe_gen3_checkpoint_result.txt ---
+C:\slink-wt\g3-int\docs\gen3\probes\checkpoint_emerald_clean_49568536.txt
+exit=0 end_utc=2026-09-27T19:01:42Z tracked_clean_after=True classification=pass
