@@ -596,6 +596,12 @@ def key(mon: dict) -> str:
     return f"{mon['personality']:08X}:{mon['ot_id']:08X}"
 
 
+def carrier_text(text: str) -> str:
+    """The server text as the native carrier stores it: lua/gen3/native.lua encode() writes a
+    newline as the FR line-break byte 0xFE, which the name codec only takes as its <$FE> escape."""
+    return codec.decode_name(codec.encode_name(text.replace("\n", "<$FE>"), 256))
+
+
 def carrier_problems(rows: list[dict], manifest: dict, side: str, read, *, decline=False,
                      trade_epoch=None, trade_token=None) -> list[str]:
     """Decode native ownership/text/counter bytes and correlate actual server wire messages."""
@@ -649,7 +655,7 @@ def carrier_problems(rows: list[dict], manifest: dict, side: str, read, *, decli
             if trade_token is not None and msg.get("token") != trade_token:
                 raise ValueError("native carrier belongs to another server trade token")
             if op == 17 or (op == 22 and msg.get("text")):
-                expected = codec.decode_name(codec.encode_name(msg.get("text", ""), 256))
+                expected = carrier_text(msg.get("text", ""))
                 if b"\xff" not in text or codec.decode_name(text) != expected:
                     raise ValueError(f"native carrier {op} text differs from server command")
             if op == 22:

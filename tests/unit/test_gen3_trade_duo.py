@@ -799,3 +799,9 @@ def test_each_physical_requirement_has_a_negative_and_revert_control(tmp_path, f
         reloads["a"].append({**reloads["a"][0], "kind": "tx", "message": {"event": "trade_request"}})
     assert check_model(broken)
     assert check_model(model) == []
+
+
+def test_carrier_text_maps_a_newline_like_the_native_producer():
+    # lua/gen3/native.lua encode(): "\n" -> 0xFE; the oracle raised on it (T5 run 2026-09-27)
+    from tools.gen3_trade_duo import carrier_text
+    assert carrier_text("Trade?\nYes") == "Trade?<$FE>Yes"
