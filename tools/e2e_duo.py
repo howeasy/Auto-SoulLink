@@ -530,7 +530,7 @@ SCENARIOS = {
                              "no_save": ("a", "b"), "oracle": "assert_rival_swap_real_gen3_saved"},
     "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
-                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
+                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("b",),
                            "oracle": "assert_native_absent_gen3_saved"},
     # G5 two-player evidence for the retired old-client rows, rebuilt on the new client.
     # trade / trade_decline: the companion's Pokemon-Center trade NPC; both boot rr_battle2{,_b}

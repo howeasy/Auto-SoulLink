@@ -646,6 +646,9 @@ def test_native_absent_oracle_needs_a_native_presave_and_a_clean_refusal():
     """RR-DURABLE redesign: the same valid apply_prepare. The companion answers ok only after its
     native pre-save (a native write after the command, gSaveCounter advanced, producer READY);
     the clean cartridge answers ok:false and writes nothing."""
+    # the companion half saves natively (its pre-save), so only the clean half is no_save;
+    # A's flash is byte-checked by the save-witness stage like every saving half
+    assert duo.SCENARIOS["native_absent_gen3"]["no_save"] == ("b",)
     run = _oracle_run("native_absent_gen3", game="gen3_rr")
     notes = []
     run._pydec_note = notes.append
