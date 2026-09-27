@@ -1,0 +1,3 @@
+12731 passed, 4377 skipped, 3 warnings in 568.85s (0:09:28)
+EXIT=0
+HEAD=0c444561dd7513508467bf22a4c5656f74a4e514 cmd: python -m pytest -q -p no:cacheprovider tests/unit -o tmp_path_retention_policy=failed (after source C:/slink-wt/g3-env.sh)
