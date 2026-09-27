@@ -682,3 +682,65 @@ symbol-audited address translation and explicit semantic adaptations. No live
 PASS is claimed here. The current early-game fixtures have neither PokeNav nor
 Match Call; positive phone proof awaits a naturally unlocked save. The locked-
 device refusal probe is prepared separately. No story flags are patched for it.
+
+## T2-EMERALD-NATIVE single-cart physical receipts (2026-09-27)
+
+Producer `ccb8aed63d1f09b95010209bca5a2b6c2eecea6c` passed the six bounded
+native feature probes plus the early-game phone refusal control. Aggregate:
+`patch/build/em-live-20260927.json`; individual receipts and raw captures:
+`patch/build/em-{panel,sound,carrier,rival,trade,call-refusal,call}-live-20260927/`.
+Every run used ROM SHA256
+`fc7eda3609e704021a268953f91043085473c204171bc4e6b4ac34364a0f6fdc`.
+All seven owned EmuHawk PIDs were verified absent at exit.
+
+- Panel (PID41816): native START order1,2,4,5,6,13,7, two independent five-row
+  readbacks and page header, bound drawing/field lock, VRAM/palette changes,
+  A0/B127 closure. Replayed panel rows, not a server/T3 integration claim.
+- Sound (PID22208): native SE25 and fanfare367, ROM-selected m4a headers
+  `088FC5AC`/`0890DBFC`, advancing clocks, fanfare counter77->0 and BGM/task
+  release. Invalid IDs and unarmed/stale epochs refused without extra native
+  calls. No audible-output claim.
+- Carrier (PID49584): normal walk from Oldale into Center2,2, native Scott NPC
+  counter edges, A/B choices/chooser/offer results, native PREPARE save2->3,
+  WITHDRAW unchanged, independent party/SaveRAM decode, disable cleanup.
+  No all-Center, server or duo qualification.
+- Rival (PID46840): normal Right step from(32,16) triggered real Calvin318;
+  W1 consumed at stage0, ACK before state15 selection, native engine selected
+  live second slot Poochyena286 from the replayed team with fainted first slot.
+  Late refusal reason8 preserved all600 enemy bytes and party count.
+- Trade (PID30212): existing Emerald PC fixture, native consent/save, commit,
+  trade evolution and post-save; counter2->4. Machoke67 became Machamp68 with
+  PID13572468/OT78563412. Reset without another manual SAVE retained it;
+  independent flash/reloaded-party checks and unchanged boxed storage passed.
+  This was the two-party-mon fixture, not FR/LG's full-party/full-box stress seed.
+- Phone refusal (PID46276): unmodified early fixture had neither unlock flag;
+  coherent REFUSED17, no ShowPokenavFieldMessage call, no field lock.
+- Match Call (PID45256): three native messages (named fallen, generic dead-zone,
+  named first-link), ARMED before native show, state5 message delivery, script/
+  task release before COMPLETE. Native field-buffer text and owned record were
+  independently decoded. A new-epoch request during the first open call got
+  BUSY16 without replacing its old-epoch witness/record/text. Immediate retry
+  got COOLDOWN18; later deliveries occurred at native frames718,11826,23140.
+
+Coordinator O-33 authorization allowed an offline SYNTH phone setup. Starting
+from committed Emerald town SHA256
+`f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a`, only active
+flash offsets `3315:00->80` (Match Call flag), `33FC:01->05` (PokeNav flag), and
+sector checksum `3FF6:AE->B2,3FF7:2A->AA` changed. Seed SHA256:
+`7754fa3c8a0a13852a8452596ae47484c8e0d27092ca1da1bc778ce28b843c55`.
+`synth_setup.json` records every changed byte. No registered-trainer change was
+needed: the source's script-triggered path uses gStringVar4 directly. No flags
+were written during the run, and both unlock bytes were checked unchanged.
+
+The initial phone oracle rejected all three decoded strings because native
+CHAR_SGL_QUOTE_RIGHT B4 decodes to U+2019 while its expected strings used ASCII
+apostrophes. `initial_oracle_failure.json` is retained. The expectation was
+corrected and the unmodified native capture re-evaluated; no candidate change
+or emulator rerun was needed. The committed captured-trace test rejects altered
+text, record species, epoch binding, delivery state, missing release, lost busy
+ownership, missing cooldown and missing overall success.
+
+These are PHYSICAL single-cart candidate receipts with disclosed replayed/SYNTH
+inputs, not duo/server integration, all-scene heap qualification or production
+admission. READY remains0 and no UPS was published. T2 stops here; the RR durable
+delta has not started and awaits coordinator confirmation.

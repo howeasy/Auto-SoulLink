@@ -16,6 +16,42 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
+
+def build_call_seed(original):
+    """Change selected-slot flag bytes offline, retaining rotation/counter/padding.
+
+    Script-triggered calls do not select a registered trainer: match_call.c
+    StartMatchCallFromScript sets triggeredFromScript and StartMatchCall; the
+    PrintIntro path keeps gStringVar4 instead of SelectMatchCallMessage.
+    """
+    from server.adapters import gen3_codec as codec
+    parsed=codec.parse_flash(original,title="emerald")
+    assert codec.qualify_flash(original,title="emerald")[0]
+    layout=codec.slot_layout(codec.CHUNK_SIZE_VANILLA,title="emerald")
+    output=bytearray(original)
+    changed_sectors=set()
+    for flag in (0x862,0x12f):
+        offset=0x1270+(flag>>3)
+        for sector in parsed["sectors"][parsed["slot"]*14:(parsed["slot"]+1)*14]:
+            entry=layout[sector["id"]]
+            if entry["object"]=="sb1" and entry["offset"]<=offset<entry["offset"]+entry["size"]:
+                absolute=sector["index"]*0x1000+offset-entry["offset"]
+                output[absolute]|=1<<(flag&7)
+                changed_sectors.add((sector["index"],sector["id"]))
+                break
+        else:raise AssertionError("flag's native save section absent")
+    for index,sid in changed_sectors:
+        start=index*0x1000
+        checksum=codec.sector_checksum(bytes(output[start:start+0x1000]),layout[sid]["size"])
+        output[start+0xff6:start+0xff8]=checksum.to_bytes(2,"little")
+    result=bytes(output)
+    assert codec.qualify_flash(result,title="emerald")[0]
+    return result,{"setup":"SYNTH","source_fixture":"tests/fixtures/gen3/emerald_town.sav",
+        "source_sha256":hashlib.sha256(original).hexdigest(),"seed_sha256":hashlib.sha256(result).hexdigest(),
+        "source":"pret pokeemerald c65e93f2 include/constants/flags.h FLAG_SYS_POKENAV_GET=0x862, FLAG_HAS_MATCH_CALL=0x12F; include/global.h SaveBlock1.flags=0x1270",
+        "registered_trainer_changes":[],"registered_trainer_reason":"script-triggered Match Call uses the field-message buffer and does not select a registered trainer",
+        "exact_byte_changes":[{"offset":i,"before":a,"after":b} for i,(a,b) in enumerate(zip(original,result)) if a!=b]}
+
 CALL_REFUSAL_LUA = r'''
   local G=dofile(os.getenv("SLINK_ROOT").."/lua/tests/gen3_boot_check.lua")
   local cp=G.checkpoint()
@@ -45,6 +81,95 @@ CALL_REFUSAL_LUA = r'''
   G.idle(180)
   assert(shows==0 and b(0x03000F2C)==0,"refused call opened UI or locked controls")
   log("CALL_REFUSED locked_device shows=0 field_lock=0 witness="..hex(w,32))
+'''
+
+CALL_LUA = r'''
+  local G=dofile(os.getenv("SLINK_ROOT").."/lua/tests/gen3_boot_check.lua")
+  local cp=G.checkpoint()
+  assert(G.boot_to_field(cp,9000),"boot failed");G.idle(120)
+  local base,w,record=0x0201B000,0x0201BE00,0x0201BE40
+  local function b(a) return memory.read_u8(a,"System Bus") end
+  local function h(a) return memory.read_u16_le(a,"System Bus") end
+  local function wb(a,v) memory.write_u8(a,v,"System Bus") end
+  local function wh(a,v) memory.write_u16_le(a,v,"System Bus") end
+  local function wd(a,v) memory.write_u32_le(a,v,"System Bus") end
+  local function hex(a,n) local t={} for i=0,n-1 do t[#t+1]=string.format("%02X",b(a+i)) end return table.concat(t) end
+  local function stringhex(a) local n=0 while b(a+n)~=255 and n<999 do n=n+1 end;assert(n<999);return hex(a,n+1) end
+  local function wait(n,fn) for _=1,n do if fn() then return true end;G.advance() end;return fn() end
+  local function safe() return rd(0x030022C4)==0x08085E5D and b(0x03000F2C)==0 and b(0x03000E38)==2 end
+  assert(G.mash(1200,safe),"field unsafe")
+  assert(rd(base)==0x4B4E4C53 and rd(base+0x40)==87,"wrong native candidate")
+  local sb1=rd(0x03005D8C)
+  local nav_before,call_before=b(sb1+0x1270+(0x862>>3)),b(sb1+0x1270+(0x12F>>3))
+  assert((nav_before&(1<<(0x862&7)))~=0 and (call_before&(1<<(0x12F&7)))~=0,"SYNTH unlock flags absent")
+  local shows=0
+  assert(event.on_bus_exec(function()
+    shows=shows+1
+    log(string.format("CALL_NATIVE_SHOW count=%d text=%08X",shows,emu.getregister("R0")))
+  end,0x08098238,"T2-call-show"),"show hook absent")
+  local function task_state()
+    for i=0,15 do local t=0x03005E00+i*40
+      if b(t+4)~=0 and rd(t)==0x081960E1 then return h(t+8),h(t+12) end
+    end
+  end
+  local function name(a,text,size)
+    for i=0,size-1 do wb(a+i,255) end
+    for i=1,#text do wb(a+i-1,0xbb+text:byte(i)-65) end
+  end
+  local function stage(event,named)
+    for i=0,35 do wb(base+0x360+i,255) end
+    wb(base+0x360,event);wb(base+0x361,named and 1 or 0)
+    wh(base+0x362,named and 283 or 0);wh(base+0x364,named and 286 or 0)
+    if named then name(base+0x366,"PEER",8);name(base+0x36E,"ALPHA",11);name(base+0x379,"BETA",11) end
+  end
+  local function post(seq,event,epoch,status,reason)
+    assert(h(base+6)==0,"owned opcode")
+    for i=0,31 do wb(base+16+i,0) end
+    wd(base+0x44,epoch);wb(base+16,event);wh(base+8,seq);wh(base+10,1);wh(base+6,32)
+    assert(wait(120,function() return h(base+12)==seq and h(base+6)==0 end),"ACK missing")
+    assert(h(base+10)==status and h(base+14)==reason,"wrong phone ACK "..h(base+10).."/"..h(base+14))
+  end
+  local function delivered(seq,event,epoch)
+    assert(rd(w)==epoch and h(w+4)==seq and b(w+8)==1 and b(w+9)==event and rd(w+16)==0,"ACK was not ARMED")
+    log(string.format("CALL_ARMED seq=%d event=%d epoch=%d shows=%d witness=%s",seq,event,epoch,shows,hex(w,32)))
+    for tick=1,2400 do
+      if b(w+8)==2 then break end
+      joypad.set(tick%16==0 and {A=true} or {});G.advance()
+    end
+    joypad.set({})
+    local state,win=task_state()
+    assert(b(w+8)==2 and state==5 and b(0x03000F2C)~=0 and win~=255,"no visible native message")
+    assert(rd(w+16)>0 and h(w+6)%2==0,"delivery frame/revision absent")
+    log(string.format("CALL_DELIVERED seq=%d event=%d epoch=%d state=%d window=%d lock=%d witness=%s",seq,event,epoch,state,win,b(0x03000F2C),hex(w,32)))
+    log(string.format("CALL_RECORD seq=%d bytes=%s",seq,hex(record,36)))
+    log(string.format("CALL_BUFFER seq=%d bytes=%s",seq,stringhex(0x02021FC4)))
+  end
+  local function complete(seq,event,epoch)
+    for tick=1,3600 do
+      if b(w+8)==4 then break end
+      joypad.set(tick%16==0 and {A=true} or {});G.advance()
+    end
+    joypad.set({})
+    assert(b(w+8)==4 and rd(w)==epoch and h(w+4)==seq and b(w+9)==event and safe() and not task_state(),"UI did not release")
+    log(string.format("CALL_COMPLETE seq=%d event=%d epoch=%d lock=0 task=0 witness=%s",seq,event,epoch,hex(w,32)))
+  end
+  stage(1,true);post(1,1,7,2,0);delivered(1,1,7)
+  local oldw,oldr,oldtext=hex(w,32),hex(record,36),stringhex(0x02021FC4)
+  stage(2,false);post(2,2,8,3,16)
+  assert(hex(w,32)==oldw and hex(record,36)==oldr and stringhex(0x02021FC4)==oldtext,"busy epoch change stole old call")
+  log("CALL_BUSY seq=2 request_epoch=8 reason=16 old_witness_record_text_unchanged=1")
+  complete(1,1,7)
+  post(3,2,8,3,18)
+  assert(b(w+8)==3 and rd(w+16)==0 and shows==1,"cooldown redelivery")
+  log("CALL_COOLDOWN seq=3 reason=18 shows=1")
+  G.idle(10800)
+  stage(2,false);post(4,2,8,2,0);delivered(4,2,8);complete(4,2,8)
+  G.idle(10800)
+  stage(3,true);post(5,3,8,2,0);delivered(5,3,8);complete(5,3,8)
+  assert(shows==3,"wrong native show count")
+  sb1=rd(0x03005D8C)
+  assert(b(sb1+0x1270+(0x862>>3))==nav_before and b(sb1+0x1270+(0x12F>>3))==call_before,"unlock flags changed during probe")
+  log("CALL_SCOPE SYNTH offline unlock flags; native events1,2,3; busy ownership and cooldown; no flag writes in-run")
 '''
 
 
@@ -90,6 +215,7 @@ def body(mode):
     from tests.unit.test_patch_rival_live import RIVAL_LUA
     from tests.unit.test_patch_carrier_live import CARRIER_LUA
     if mode=="call-refusal":return CALL_REFUSAL_LUA,{}
+    if mode=="call":return CALL_LUA,{}
     text = {"panel":PANEL_LUA,"sound":SOUND_LUA,"trade":TRADE_LUA,
             "rival":RIVAL_LUA,"carrier":CARRIER_LUA}[mode]
     if mode=="panel":
@@ -142,6 +268,49 @@ def problems(mode, text, base):
     from tests.unit.test_patch_carrier_live import carrier_problems
     from tests.unit.test_patch_rival_live import rival_problems
     syms={name:a for a,_,name in symbols("pokeemerald")}
+    if mode=="call":
+        errors=[]
+        def decoded(raw):
+            return "<PAGE>".join("\n".join(codec.decode_name(line) for line in page.split(b"\xfe")) for page in raw.split(b"\xfb"))
+        expected={1:"PEER's\nALPHA fainted!<PAGE>Your POOCHYENA\nis gone too!",
+                  4:"EMER? Can you\nhear me? ...kssh...<PAGE>The catch here got\naway. This place<PAGE>is a DEAD ZONE.\nDon't look back!",
+                  5:"PEER's\nALPHA<PAGE>linked with your\nPOOCHYENA.<PAGE>They're linked!"}
+        # Native CHAR_SGL_QUOTE_RIGHT 0xB4 decodes as U+2019 in the Gen3 charmap.
+        expected={seq:value.replace("'","\u2019") for seq,value in expected.items()}
+        delivered_frames=[]
+        for seq,event,epoch in ((1,1,7),(4,2,8),(5,3,8)):
+            stamps=[]
+            for label,phase in (("ARMED",1),("DELIVERED",2),("COMPLETE",4)):
+                match=re.search(rf"CALL_{label} seq={seq} event={event} epoch={epoch} .*witness=([0-9A-F]{{64}})",text)
+                if not match:errors.append(f"missing {label} {seq}");continue
+                w=bytes.fromhex(match[1]);word=lambda off,n=4:int.from_bytes(w[off:off+n],"little")
+                if word(0)!=epoch or word(4,2)!=seq or not word(6,2) or word(6,2)&1 or w[8]!=phase or w[9]!=event:
+                    errors.append(f"unbound call witness {label}/{seq}")
+                stamps.append(word(16))
+            if len(stamps)==3:
+                if stamps[0] or not stamps[1] or stamps[2]!=stamps[1]:errors.append(f"wrong delivery/retention {seq}")
+                delivered_frames.append(stamps[1])
+            buf=re.search(rf"CALL_BUFFER seq={seq} bytes=([0-9A-F]+)",text)
+            if not buf or decoded(bytes.fromhex(buf[1]))!=expected[seq]:errors.append(f"native field message differs for {seq}")
+            record=re.search(rf"CALL_RECORD seq={seq} bytes=([0-9A-F]{{72}})",text)
+            if not record:errors.append(f"owned record absent for {seq}")
+            else:
+                r=bytes.fromhex(record[1]);named=event!=2
+                if r[0]!=event or r[1]!=int(named):errors.append(f"record event/names mismatch for {seq}")
+                if named:
+                    if (int.from_bytes(r[2:4],"little")!=283 or int.from_bytes(r[4:6],"little")!=286
+                            or [codec.decode_name(r[a:z]) for a,z in ((6,14),(14,25),(25,36))]!=["PEER","ALPHA","BETA"]):
+                        errors.append(f"owned name/species record differs for {seq}")
+                elif any(r[2:6]) or r[6:]!=b"\xff"*30:errors.append("generic call record differs")
+            if not re.search(rf"CALL_DELIVERED seq={seq} .*state=5 window=\d+ lock=1",text):errors.append(f"no actual UI {seq}")
+            if not re.search(rf"CALL_COMPLETE seq={seq} .*lock=0 task=0",text):errors.append(f"no native release {seq}")
+        if len(delivered_frames)!=3 or any(b-a<10800 for a,b in zip(delivered_frames,delivered_frames[1:])):
+            errors.append("native cooldown interval missing")
+        if "CALL_BUSY seq=2 request_epoch=8 reason=16 old_witness_record_text_unchanged=1" not in text:errors.append("no busy ownership control")
+        if "CALL_COOLDOWN seq=3 reason=18 shows=1" not in text:errors.append("no native cooldown refusal")
+        if len(re.findall(r"CALL_NATIVE_SHOW count=\d+ text=0201BF00",text))!=3:errors.append("wrong field-message dispatch count/pointer")
+        if "RESULT: PASS" not in text:errors.append("native script failed")
+        return errors
     if mode=="call-refusal":
         match=re.search(r"CALL_REFUSED locked_device shows=0 field_lock=0 witness=([0-9A-F]{64})",text)
         if not match:return ["native locked-device refusal absent"]
@@ -205,6 +374,10 @@ def run(mode, prepare=False):
         shutil.copyfile(candidate/name,base/name)
     kind="trainer" if mode=="rival" else "pc" if mode=="trade" else "town"
     seed=(ROOT/f"tests/fixtures/gen3/emerald_{kind}.sav").read_bytes()
+    synth=None
+    if mode=="call":
+        seed,synth=build_call_seed(seed)
+        (base/"synth_setup.json").write_text(json.dumps(synth,indent=2)+"\n")
     (base/"seed.sav").write_bytes(seed)
     incoming=codec.party_from_save(seed,title="emerald")[0]
     incoming.update(species=67,personality=0x13572468,ot_id=0x78563412,
@@ -270,6 +443,7 @@ out:close();client.exit()
              "config":str(base/"config.ini"),"script_sha256":hashlib.sha256(script.encode()).hexdigest(),
              "rom_sha256":hashlib.sha256((base/"probe.gba").read_bytes()).hexdigest(),
              "seed_sha256":hashlib.sha256(seed).hexdigest()}
+    if synth:receipt["synth_setup"]=synth
     (base/"run_receipt.json").write_text(json.dumps(receipt,indent=2))
     started=time.monotonic()
     try:
@@ -291,7 +465,7 @@ out:close();client.exit()
     archive=ROOT/f"patch/build/em-{mode}-live-20260927"
     archive.mkdir(exist_ok=True)
     for name in ("emerald_receipt.json","result.txt","run_receipt.json","receipt.json","probe.lua","config.ini",
-                 "seed.sav","rival.bin","late.bin","incoming.bin","reload_party.bin","address_bindings.json"):
+                 "seed.sav","rival.bin","late.bin","incoming.bin","reload_party.bin","address_bindings.json","synth_setup.json"):
         if (base/name).exists():shutil.copyfile(base/name,archive/name)
     saved=base/"frontend/GBA/Save RAM/probe.SaveRAM"
     if saved.exists():shutil.copyfile(saved,archive/"native.SaveRAM")
@@ -302,7 +476,7 @@ out:close();client.exit()
 if __name__=="__main__":
     sys.path.insert(0,str(ROOT))
     parser=argparse.ArgumentParser()
-    parser.add_argument("mode",choices=("panel","sound","carrier","rival","trade","call-refusal"))
+    parser.add_argument("mode",choices=("panel","sound","carrier","rival","trade","call-refusal","call"))
     parser.add_argument("--prepare",action="store_true")
     args=parser.parse_args()
     raise SystemExit(run(args.mode,args.prepare))
