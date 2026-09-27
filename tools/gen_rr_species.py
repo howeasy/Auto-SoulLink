@@ -26,10 +26,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fetch_rr_sources import cached_source  # noqa: E402
+from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 CANONICAL_OUTPUT = _REPO_ROOT / "data" / "games" / "gen3_frlge" / "rr_species.json"
+# The non-check write target -- kept identical to CANONICAL_OUTPUT so
+# `python tools/gen_rr_species.py` (no --check) actually updates the file
+# the --check mode (and every consumer) reads, instead of a stray
+# CWD-relative data/rr_species.json nothing imports.
+OUT_JSON = CANONICAL_OUTPUT
 
 # Special display name overrides
 SPECIAL_NAMES = {
@@ -163,16 +168,17 @@ def main() -> int:
                   f"({len(names)} species).")
             return 0
         print(f"DRIFT: regenerated output ({len(regen)} bytes) != "
-              f"{CANONICAL_OUTPUT} ({len(committed)} bytes)", file=sys.stderr)
+              f"{CANONICAL_OUTPUT} ({len(committed)} bytes)\n"
+              f"{diff_snippet(committed, regen)}", file=sys.stderr)
         return 1
 
     print(f"Parsed {len(names)} species entries (max ID: {max(names.keys())} = 0x{max(names.keys()):X})")
 
     # Save intermediate JSON
-    out_json = Path("data/rr_species.json")
-    with open(out_json, "w") as f:
+    OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
+    with open(OUT_JSON, "w") as f:
         f.write(regen)
-    print(f"Saved {len(names)} names to {out_json}")
+    print(f"Saved {len(names)} names to {OUT_JSON}")
 
     # Verify key entries
     checks = {

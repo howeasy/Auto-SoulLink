@@ -18,6 +18,8 @@ Usage:
 
 from __future__ import annotations
 
+import argparse
+import difflib
 import gzip
 import hashlib
 import json
@@ -61,11 +63,23 @@ def _xlsx_content_sha256(data: bytes) -> str:
     xl/worksheets/*.xml non-deterministically on each export (confirmed by
     exporting the same unedited sheet twice and diffing) -- a raw sha256
     would never match twice. This hashes openpyxl's (sheet, row, col,
-    repr(value)) tuples with data_only=True instead, which reproducible
+    repr(value)) tuples with data_only=True instead, which is reproducible
     across exports. See the rr_priority_trainers_sheet_xlsx lock note.
+
+    gen_rr_priority_trainers.py also opens the SAME file with data_only=False
+    and extracts trainer sprite URLs out of `=IMAGE("url")` formula cells
+    (parse_boss_sheet), which get committed into rr_priority_trainers.json's
+    sprite_url field -- so a sheet author swapping a trainer's sprite would
+    silently drift the committed roster without this pin ever noticing. The
+    raw formula/XML view itself is NOT export-stable (confirmed the same way
+    as above), but the EXTRACTED urls are, so those -- not the raw view --
+    are folded into the hash too.
     """
+    # Local imports: only this one pinned source is a spreadsheet, and this
+    # keeps fetch_rr_sources.py import-cheap for the other five generators.
     import io
 
+    from gen_rr_priority_trainers import _extract_image_url
     from openpyxl import load_workbook
 
     wb = load_workbook(io.BytesIO(data), data_only=True)
@@ -76,7 +90,27 @@ def _xlsx_content_sha256(data: bytes) -> str:
         for cell in row
         if cell.value is not None
     ]
-    return _sha256(json.dumps(rows, ensure_ascii=False).encode("utf-8"))
+    wb_formulas = load_workbook(io.BytesIO(data), data_only=False)
+    image_urls = sorted(
+        url
+        for ws in wb_formulas.worksheets
+        for row in ws.iter_rows()
+        for cell in row
+        if (url := _extract_image_url(cell.value))
+    )
+    payload = {"cells": rows, "image_urls": image_urls}
+    return _sha256(json.dumps(payload, ensure_ascii=False).encode("utf-8"))
+
+
+def diff_snippet(committed: str, regen: str, *, context: int = 3, max_lines: int = 40) -> str:
+    """A short unified diff of the first differing region between two text
+    blobs, for a DRIFT message -- a byte count alone doesn't say what changed."""
+    lines = list(difflib.unified_diff(
+        committed.splitlines(keepends=True),
+        regen.splitlines(keepends=True),
+        fromfile="committed", tofile="regenerated", n=context,
+    ))[:max_lines]
+    return "".join(lines) or "(no line-level diff -- binary or whitespace-only difference)"
 
 
 def _verify(entry: dict, data: bytes) -> tuple[bool, str, str]:
@@ -144,13 +178,18 @@ def cached_source_path(name: str, *, allow_fetch: bool = True) -> Path:
 
 
 def main(argv: list[str] | None = None) -> int:
-    argv = sys.argv[1:] if argv is None else argv
-    check_only = "--check" in argv
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true",
+                        help="Verify the existing cache only (no network)")
+    # An unrecognised flag is a parser error (SystemExit(2)) here, never a
+    # silent fall-through to the fetch path -- a typo'd --check used to mean
+    # every source got live-fetched instead of merely verified.
+    args = parser.parse_args(argv)
     lock = load_lock()
     ok = True
     for name in lock["sources"]:
         try:
-            data = cached_source(name, allow_fetch=not check_only)
+            data = cached_source(name, allow_fetch=not args.check)
         except Exception as exc:
             print(f"FAIL {name}: {exc}")
             ok = False

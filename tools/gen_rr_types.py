@@ -31,12 +31,15 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fetch_rr_sources import cached_source  # noqa: E402
+from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
 
-OUTPUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                      "data", "rr_types.json")
 CANONICAL_OUTPUT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) \
     / "data" / "games" / "gen3_frlge" / "rr_types.json"
+# The non-check write target -- kept identical to CANONICAL_OUTPUT so
+# `python tools/gen_rr_types.py` (no --check) actually updates the file
+# server/pokemon_data.py loads and --check compares against, instead of a
+# stray CWD-relative data/rr_types.json nothing reads.
+OUTPUT = str(CANONICAL_OUTPUT)
 
 # Gen III type constants (from pret/pokefirered include/constants/pokemon.h)
 # CFRU adds TYPE_FAIRY = 0x12 (18)
@@ -107,9 +110,11 @@ def main() -> int:
                   f"({len(json_out)} species).")
             return 0
         print(f"DRIFT: regenerated output ({len(regen)} bytes) != "
-              f"{CANONICAL_OUTPUT} ({len(committed)} bytes)", file=sys.stderr)
+              f"{CANONICAL_OUTPUT} ({len(committed)} bytes)\n"
+              f"{diff_snippet(committed, regen)}", file=sys.stderr)
         return 1
 
+    os.makedirs(os.path.dirname(OUTPUT), exist_ok=True)
     with open(OUTPUT, "w") as f:
         f.write(regen)
     print(f"Wrote {len(json_out)} entries to {OUTPUT} "
