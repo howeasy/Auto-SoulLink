@@ -136,24 +136,27 @@ if os.path.exists(_rr_priority_path):
         _RR_PRIORITY_PRE_CAPS  = {k: int(v) for k, v in (_ms.get("pre")  or {}).items()}
         _RR_PRIORITY_POST_CAPS = {k: int(v) for k, v in (_ms.get("post") or {}).items()}
 
-# Vanilla FireRed/LeafGreen trainer table, generated from pret pokefirered by
-# tools/gen_gen3_trainers.py (owner ruling 28). Keys are gTrainers indexes = the wire trainer_id
-# (no offset, unlike RR's rr_trainers.json). One table serves every title in its "titles" list.
-_FRLG_TRAINER_TABLE: dict = {}
-_frlg_trainers_path = os.path.join(_DATA_DIR, "frlg_trainers.json")
-if os.path.exists(_frlg_trainers_path):
-    with open(_frlg_trainers_path, encoding="utf-8") as _f:
-        _raw_ft = json.load(_f)
-        _FRLG_TRAINER_TABLE = {
-            "titles": frozenset(_raw_ft.get("titles") or ()),
-            "trainers": {int(k): v for k, v in (_raw_ft.get("trainers") or {}).items()},
-            "trainers_by_area": {k: list(v) for k, v in (_raw_ft.get("trainers_by_area") or {}).items()},
-            "learnsets": {int(k): [tuple(e) for e in v] for k, v in (_raw_ft.get("learnsets") or {}).items()},
-            "learnsets_by_title": {
-                title: {int(k): [tuple(e) for e in v] for k, v in rows.items()}
-                for title, rows in (_raw_ft.get("learnsets_by_title") or {}).items()
-            },
-        }
+def _load_trainer_table(path: str) -> dict:
+    """Load a pret-generated table with native gTrainers IDs and optional title learnsets."""
+    if not os.path.exists(path):
+        return {}
+    with open(path, encoding="utf-8") as f:
+        raw = json.load(f)
+    return {
+        "titles": frozenset(raw.get("titles") or ()),
+        "trainers": {int(k): v for k, v in (raw.get("trainers") or {}).items()},
+        "trainers_by_area": {k: list(v) for k, v in (raw.get("trainers_by_area") or {}).items()},
+        "learnsets": {int(k): [tuple(e) for e in v] for k, v in (raw.get("learnsets") or {}).items()},
+        "learnsets_by_title": {
+            title: {int(k): [tuple(e) for e in v] for k, v in rows.items()}
+            for title, rows in (raw.get("learnsets_by_title") or {}).items()
+        },
+    }
+
+
+# These tables use the wire's gTrainers indexes directly, unlike RR's rr_trainers.json.
+_FRLG_TRAINER_TABLE = _load_trainer_table(os.path.join(_DATA_DIR, "frlg_trainers.json"))
+_EMERALD_TRAINER_TABLE = _load_trainer_table(os.path.join(_EMERALD_DIR, "emerald_trainers.json"))
 
 # Rival trainer ID set for Radical Red (used by Rival Team Swap feature).
 # Built at import time by scanning _RR_TRAINERS for entries whose name is
@@ -615,7 +618,7 @@ class Gen3Adapter(GameAdapter):
         return _ability_description(ability_id, self._is_rr)
 
     def _frlg_trainer_table(self) -> dict | None:
-        """The FR/LG trainer table for this cartridge, or None. Every FR/LG trainer lookup goes
+        """The vanilla trainer table for this cartridge, or None. Every vanilla trainer lookup goes
         through here. A randomized run (or any adapter that ingested its ROM) reads its own
         gTrainers (ingest_rom_content), and has NO table until then, or when that report was
         unreadable: retail parties beside a randomized cartridge are misinformation.
@@ -624,9 +627,10 @@ class Gen3Adapter(GameAdapter):
             return None
         if self._artifact_kind == "rand" or self._rom_trainers is not None:
             return self._rom_trainers or None
-        if self._rom_type not in _FRLG_TRAINER_TABLE.get("titles", ()):
+        table = _EMERALD_TRAINER_TABLE if self._rom_type == "emerald" else _FRLG_TRAINER_TABLE
+        if self._rom_type not in table.get("titles", ()):
             return None
-        return _FRLG_TRAINER_TABLE
+        return table
 
     def _frlg_trainer(self, trainer_id: int) -> dict | None:
         table = self._frlg_trainer_table()
@@ -654,7 +658,7 @@ class Gen3Adapter(GameAdapter):
         """Return runtime trainer IDs that appear in the given area.
 
         Source: data/games/gen3_frlge/rr_priority_trainers.json for RR, and
-        frlg_trainers.json's key trainers for vanilla FR/LG; Emerald returns [].
+        the pret-generated title table's key trainers for vanilla FR/LG and Emerald.
         The returned IDs are the runtime IDs `trainer_info` takes and the Lua
         client's TRAINER_OPPONENT_ADDR read reports.
         """

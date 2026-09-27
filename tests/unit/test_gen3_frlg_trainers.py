@@ -163,7 +163,7 @@ def test_adapter_vanilla_titles(title):
     assert a.trainer_party(414)[0]["species"] == "Geodude"
 
 
-@pytest.mark.parametrize("rom_type", ["", "emerald", "firered_ap", "leafgreen_ap"])
+@pytest.mark.parametrize("rom_type", ["", "firered_ap", "leafgreen_ap"])
 def test_adapter_other_titles_have_no_frlg_table(rom_type):
     a = Gen3Adapter(is_rr=False, rom_type=rom_type)
     assert a.trainer_info(102) == ("", "")
@@ -198,6 +198,23 @@ def test_board_panel_renders_fr_key_trainers():
     brock = srv._trainer_panel_html("pewter_city", "a")
     assert "Brock" in brock and "Onix" in brock and 'data-calc-label="Leader Brock"' in brock
     assert srv._trainer_panel_html("viridian_forest", "a") == ""
+
+
+@pytest.mark.parametrize("tid,area,name,levels", (
+    (265, "route_104", "Roxanne", [12, 12, 15]),
+    (272, "sootopolis_city", "Juan", [41, 41, 43, 43, 46]),
+))
+def test_emerald_trainers_and_panel_use_the_emerald_table(tid, area, name, levels):
+    adapter = Gen3Adapter(rom_type="emerald")
+    assert adapter.trainer_info(tid) == (name, "Leader")
+    assert tid in adapter.trainers_for_area(area)
+    brief = adapter.trainer_brief(tid)
+    assert brief["area"] == area and brief["calc_label"] == f"Leader {name}"
+    assert [m["level"] for m in brief["party"]] == levels
+    html = _server(adapter)._trainer_panel_html(area, "a")
+    assert name in html and f'data-calc-label="Leader {name}"' in html
+    assert adapter.trainers_for_area("pewter_city") == []
+    assert "Brock" not in html
 
 
 # ── PHYSICAL: the trainer the FR/LG trainer-battle duo receipts fought ─────────────────────────
