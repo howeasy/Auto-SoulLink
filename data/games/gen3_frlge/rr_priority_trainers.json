@@ -480,7 +480,8 @@
       "level_cap": 100,
       "calc_label": "Game Corner Ace Trainer Andrew (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "3": {
       "name": "Red",
@@ -576,7 +577,8 @@
       "level_cap": 100,
       "calc_label": "Red (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/sHT2hBk/Red.png"
+      "sprite_url": "https://i.ibb.co/sHT2hBk/Red.png",
+      "area_source": "sheet_header"
     },
     "4": {
       "name": "Anne",
@@ -624,7 +626,8 @@
       ],
       "area": "viridian_forest",
       "calc_label": "Lass Anne",
-      "sprite_url": "https://i.ibb.co/8sm893K/Lass.png"
+      "sprite_url": "https://i.ibb.co/8sm893K/Lass.png",
+      "area_source": "sheet_header"
     },
     "5": {
       "name": "Komodo",
@@ -839,7 +842,8 @@
       "level_cap": 100,
       "calc_label": "Leader Bugsy (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/Lrh0bjy/Bugsy.png"
+      "sprite_url": "https://i.ibb.co/Lrh0bjy/Bugsy.png",
+      "area_source": "sheet_header"
     },
     "14": {
       "name": "Gambler",
@@ -1014,7 +1018,8 @@
       "area": "route_15",
       "calc_label": "Ace Trainer Haley (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "16": {
       "name": "Sam",
@@ -1067,7 +1072,8 @@
       "area": "celadon_city",
       "calc_label": "Beauty Sam (If Lv ≥ 59)",
       "fight_label": "If Lv ≥ 59",
-      "sprite_url": "https://i.ibb.co/bN4WBzT/Beauty.png"
+      "sprite_url": "https://i.ibb.co/bN4WBzT/Beauty.png",
+      "area_source": "sheet_header"
     },
     "17": {
       "name": "Shelly",
@@ -1134,7 +1140,8 @@
       "area": "celadon_city",
       "calc_label": "Beauty Shelly (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/bN4WBzT/Beauty.png"
+      "sprite_url": "https://i.ibb.co/bN4WBzT/Beauty.png",
+      "area_source": "sheet_header"
     },
     "18": {
       "name": "Cole",
@@ -1228,7 +1235,8 @@
       ],
       "area": "route_8",
       "calc_label": "Ace Trainer Cole",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "19": {
       "name": "Ketchup",
@@ -1323,7 +1331,8 @@
       "area": "cerulean_cave",
       "calc_label": "Black Belt Ketchup (First Battle)",
       "fight_label": "First Battle",
-      "sprite_url": "https://i.ibb.co/nzhVFm2/Ketchup.png"
+      "sprite_url": "https://i.ibb.co/nzhVFm2/Ketchup.png",
+      "area_source": "sheet_header"
     },
     "20": {
       "name": "Ketchup",
@@ -1418,7 +1427,8 @@
       "area": "cerulean_cave",
       "calc_label": "Black Belt Ketchup (Rematch)",
       "fight_label": "Rematch",
-      "sprite_url": "https://i.ibb.co/nzhVFm2/Ketchup.png"
+      "sprite_url": "https://i.ibb.co/nzhVFm2/Ketchup.png",
+      "area_source": "sheet_header"
     },
     "21": {
       "name": "Nelle",
@@ -1457,7 +1467,8 @@
       "area": "viridian_forest",
       "calc_label": "Ace Trainer Nelle (If Lv ≥ 15)",
       "fight_label": "If Lv ≥ 15",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "24": {
       "name": "Creator",
@@ -1590,7 +1601,8 @@
       "area": "saffron_city",
       "calc_label": "Dumass Kid (If Lv ≥ 59)",
       "fight_label": "If Lv ≥ 59",
-      "sprite_url": "https://i.ibb.co/TTVpygz/Kid.png"
+      "sprite_url": "https://i.ibb.co/TTVpygz/Kid.png",
+      "area_source": "sheet_header"
     },
     "26": {
       "name": "Brendan",
@@ -1686,7 +1698,8 @@
       "level_cap": 68,
       "calc_label": "Brendan (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png"
+      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png",
+      "area_source": "sheet_header"
     },
     "28": {
       "name": "Morty",
@@ -1782,7 +1795,8 @@
       "level_cap": 34,
       "calc_label": "Leader Morty (Post Lt. Surge)",
       "fight_label": "Post Lt. Surge",
-      "sprite_url": "https://i.ibb.co/h9K4sWf/Morty.png"
+      "sprite_url": "https://i.ibb.co/h9K4sWf/Morty.png",
+      "area_source": "sheet_header"
     },
     "29": {
       "name": "Jasmine",
@@ -1878,7 +1892,8 @@
       "level_cap": 73,
       "calc_label": "Leader Jasmine (Team One)",
       "fight_label": "Team One",
-      "sprite_url": "https://i.ibb.co/gSJKyHq/Jasmine.png"
+      "sprite_url": "https://i.ibb.co/gSJKyHq/Jasmine.png",
+      "area_source": "sheet_header"
     },
     "32": {
       "name": "Misty",
@@ -1973,7 +1988,9 @@
       "level_cap": 100,
       "calc_label": "Gym Leader Misty (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/mh2zYn4/Misty.png"
+      "sprite_url": "https://i.ibb.co/mh2zYn4/Misty.png",
+      "area": "cerulean_city",
+      "area_source": "rematch_inherit"
     },
     "35": {
       "name": "Gian",
@@ -2069,7 +2086,8 @@
       "level_cap": 100,
       "calc_label": "Dumass Gian (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TTVpygz/Kid.png"
+      "sprite_url": "https://i.ibb.co/TTVpygz/Kid.png",
+      "area_source": "sheet_header"
     },
     "38": {
       "name": "Clair",
@@ -2164,7 +2182,9 @@
       "level_cap": 100,
       "calc_label": "Gym Leader Clair (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/yFkD5QH/Clair.png"
+      "sprite_url": "https://i.ibb.co/yFkD5QH/Clair.png",
+      "area": "viridian_city",
+      "area_source": "rematch_inherit"
     },
     "39": {
       "name": "Lance",
@@ -2309,7 +2329,8 @@
       "area": "power_plant",
       "calc_label": "Dumass Jojo Fan (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/ZTK3dwM/Jojo-Fan.png"
+      "sprite_url": "https://i.ibb.co/ZTK3dwM/Jojo-Fan.png",
+      "area_source": "sheet_header"
     },
     "41": {
       "name": "Ariana",
@@ -2405,7 +2426,8 @@
       "level_cap": 100,
       "calc_label": "Ariana (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qgT6ZFT/Ariana.png"
+      "sprite_url": "https://i.ibb.co/qgT6ZFT/Ariana.png",
+      "area_source": "sheet_header"
     },
     "42": {
       "name": "Archer",
@@ -2494,7 +2516,8 @@
       "area": "silph_co",
       "level_cap": 79,
       "calc_label": "Ariana & Archer",
-      "sprite_url": "https://i.ibb.co/Ryc6bMZ/Archer-Ariana.png"
+      "sprite_url": "https://i.ibb.co/Ryc6bMZ/Archer-Ariana.png",
+      "area_source": "sheet_header"
     },
     "43": {
       "name": "Falkner",
@@ -2590,7 +2613,8 @@
       "level_cap": 100,
       "calc_label": "Leader Falkner (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/gMdPsRL/Falkner.png"
+      "sprite_url": "https://i.ibb.co/gMdPsRL/Falkner.png",
+      "area_source": "sheet_header"
     },
     "44": {
       "name": "Brendan",
@@ -2627,7 +2651,8 @@
       "level_cap": 15,
       "calc_label": "Brendan (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png"
+      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png",
+      "area_source": "sheet_header"
     },
     "45": {
       "name": "Falkner",
@@ -2677,7 +2702,8 @@
       "area": "pewter_city",
       "level_cap": 15,
       "calc_label": "Leader Falkner",
-      "sprite_url": "https://i.ibb.co/gMdPsRL/Falkner.png"
+      "sprite_url": "https://i.ibb.co/gMdPsRL/Falkner.png",
+      "area_source": "sheet_header"
     },
     "46": {
       "name": "Archer",
@@ -2728,7 +2754,8 @@
       "level_cap": 22,
       "calc_label": "Archer (Mt. Moon)",
       "fight_label": "Mt. Moon",
-      "sprite_url": "https://i.ibb.co/xhnkr2Z/Archer.png"
+      "sprite_url": "https://i.ibb.co/xhnkr2Z/Archer.png",
+      "area_source": "sheet_header"
     },
     "47": {
       "name": "Bugsy",
@@ -2796,7 +2823,8 @@
       "level_cap": 27,
       "calc_label": "Leader Bugsy (Pre Lt. Surge)",
       "fight_label": "Pre Lt. Surge",
-      "sprite_url": "https://i.ibb.co/Lrh0bjy/Bugsy.png"
+      "sprite_url": "https://i.ibb.co/Lrh0bjy/Bugsy.png",
+      "area_source": "sheet_header"
     },
     "48": {
       "name": "Misty",
@@ -2891,7 +2919,9 @@
       "level_cap": 27,
       "calc_label": "Gym Leader Misty (If Lv ≥ 68)",
       "fight_label": "If Lv ≥ 68",
-      "sprite_url": "https://i.ibb.co/mh2zYn4/Misty.png"
+      "sprite_url": "https://i.ibb.co/mh2zYn4/Misty.png",
+      "area": "cerulean_city",
+      "area_source": "rematch_inherit"
     },
     "49": {
       "name": "Whitney",
@@ -2973,7 +3003,8 @@
       "level_cap": 27,
       "calc_label": "Leader Whitney (Post Lt. Surge)",
       "fight_label": "Post Lt. Surge",
-      "sprite_url": "https://i.ibb.co/JtgmCkX/Whitney.png"
+      "sprite_url": "https://i.ibb.co/JtgmCkX/Whitney.png",
+      "area_source": "sheet_header"
     },
     "50": {
       "name": "Brendan",
@@ -3041,7 +3072,8 @@
       "level_cap": 27,
       "calc_label": "Brendan (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png"
+      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png",
+      "area_source": "sheet_header"
     },
     "51": {
       "name": "Lt. Surge",
@@ -3136,7 +3168,9 @@
       "level_cap": 34,
       "calc_label": "Gym Leader Lt. Surge (If Lv ≥ 68)",
       "fight_label": "If Lv ≥ 68",
-      "sprite_url": "https://i.ibb.co/w6kjj5K/Surge.png"
+      "sprite_url": "https://i.ibb.co/w6kjj5K/Surge.png",
+      "area": "vermilion_city",
+      "area_source": "rematch_inherit"
     },
     "52": {
       "name": "Morty",
@@ -3232,7 +3266,8 @@
       "level_cap": 100,
       "calc_label": "Gauntlet Boss Leader Morty (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/h9K4sWf/Morty.png"
+      "sprite_url": "https://i.ibb.co/h9K4sWf/Morty.png",
+      "area_source": "sheet_header"
     },
     "53": {
       "name": "Archer",
@@ -3328,7 +3363,8 @@
       "level_cap": 100,
       "calc_label": "Archer (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/xhnkr2Z/Archer.png"
+      "sprite_url": "https://i.ibb.co/xhnkr2Z/Archer.png",
+      "area_source": "sheet_header"
     },
     "54": {
       "name": "Ariana",
@@ -3481,7 +3517,9 @@
       ],
       "level_cap": 82,
       "calc_label": "Partner Brendan",
-      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png"
+      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png",
+      "area": "viridian_forest",
+      "area_source": "trainer_order"
     },
     "56": {
       "name": "Brock",
@@ -3575,7 +3613,9 @@
       ],
       "level_cap": 15,
       "calc_label": "Gym Leader Brock",
-      "sprite_url": "https://i.ibb.co/v10Rh61/Brock.png"
+      "sprite_url": "https://i.ibb.co/v10Rh61/Brock.png",
+      "area": "pewter_city",
+      "area_source": "rematch_inherit"
     },
     "57": {
       "name": "Brendan",
@@ -3665,7 +3705,8 @@
       "level_cap": 82,
       "calc_label": "Brendan (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png"
+      "sprite_url": "https://i.ibb.co/rpm30sn/Brendan.png",
+      "area_source": "sheet_header"
     },
     "58": {
       "name": "Pryce",
@@ -3761,7 +3802,8 @@
       "level_cap": 73,
       "calc_label": "Leader Pryce (Post Lt. Surge)",
       "fight_label": "Post Lt. Surge",
-      "sprite_url": "https://i.ibb.co/rkZGjMV/Pryce.png"
+      "sprite_url": "https://i.ibb.co/rkZGjMV/Pryce.png",
+      "area_source": "sheet_header"
     },
     "59": {
       "name": "Pryce",
@@ -3857,7 +3899,8 @@
       "level_cap": 100,
       "calc_label": "Secret Room Leader Pryce (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/rkZGjMV/Pryce.png"
+      "sprite_url": "https://i.ibb.co/rkZGjMV/Pryce.png",
+      "area_source": "sheet_header"
     },
     "61": {
       "name": "May",
@@ -3947,7 +3990,8 @@
       "level_cap": 73,
       "calc_label": "May (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/5Y4g02T/May.png"
+      "sprite_url": "https://i.ibb.co/5Y4g02T/May.png",
+      "area_source": "sheet_header"
     },
     "62": {
       "name": "Jasmine",
@@ -4043,7 +4087,8 @@
       "level_cap": 73,
       "calc_label": "Leader Jasmine (Team Two)",
       "fight_label": "Team Two",
-      "sprite_url": "https://i.ibb.co/gSJKyHq/Jasmine.png"
+      "sprite_url": "https://i.ibb.co/gSJKyHq/Jasmine.png",
+      "area_source": "sheet_header"
     },
     "63": {
       "name": "Jasmine",
@@ -4139,7 +4184,8 @@
       "level_cap": 73,
       "calc_label": "Leader Jasmine (Team Three)",
       "fight_label": "Team Three",
-      "sprite_url": "https://i.ibb.co/gSJKyHq/Jasmine.png"
+      "sprite_url": "https://i.ibb.co/gSJKyHq/Jasmine.png",
+      "area_source": "sheet_header"
     },
     "64": {
       "name": "Jasmine",
@@ -4169,7 +4215,8 @@
       "area": "cinnabar_lab",
       "level_cap": 73,
       "calc_label": "*Leader Jasmine Set 1",
-      "fight_label": "Team One"
+      "fight_label": "Team One",
+      "area_source": "sheet_header"
     },
     "65": {
       "name": "Erika",
@@ -4264,7 +4311,9 @@
       "level_cap": 44,
       "calc_label": "Gym Leader Erika (If Lv ≥ 68)",
       "fight_label": "If Lv ≥ 68",
-      "sprite_url": "https://i.ibb.co/z204J6T/Erika.png"
+      "sprite_url": "https://i.ibb.co/z204J6T/Erika.png",
+      "area": "celadon_city",
+      "area_source": "rematch_inherit"
     },
     "66": {
       "name": "Jojo Fan",
@@ -4360,7 +4409,8 @@
       "level_cap": 100,
       "calc_label": "Dumass Jojo Fan (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/ZTK3dwM/Jojo-Fan.png"
+      "sprite_url": "https://i.ibb.co/ZTK3dwM/Jojo-Fan.png",
+      "area_source": "sheet_header"
     },
     "67": {
       "name": "Archer",
@@ -4424,7 +4474,8 @@
       "level_cap": 79,
       "calc_label": "Archer (Cerulea. Cave)",
       "fight_label": "Cerulea. Cave",
-      "sprite_url": "https://i.ibb.co/xhnkr2Z/Archer.png"
+      "sprite_url": "https://i.ibb.co/xhnkr2Z/Archer.png",
+      "area_source": "sheet_header"
     },
     "68": {
       "name": "Ariana",
@@ -4487,7 +4538,8 @@
       "area": "cerulean_cave",
       "calc_label": "Ariana (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qgT6ZFT/Ariana.png"
+      "sprite_url": "https://i.ibb.co/qgT6ZFT/Ariana.png",
+      "area_source": "sheet_header"
     },
     "69": {
       "name": "Giovanni",
@@ -4577,7 +4629,8 @@
       "level_cap": 47,
       "calc_label": "Giovanni (Rocket Hide.)",
       "fight_label": "Rocket Hide.",
-      "sprite_url": "https://i.ibb.co/dcBy1qG/Giovanni.png"
+      "sprite_url": "https://i.ibb.co/dcBy1qG/Giovanni.png",
+      "area_source": "sheet_header"
     },
     "70": {
       "name": "Grunt",
@@ -4675,7 +4728,9 @@
       ],
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Set 3",
-      "fight_label": "Game Corner"
+      "fight_label": "Game Corner",
+      "area": "route_24",
+      "area_source": "trainer_order"
     },
     "71": {
       "name": "Grunt",
@@ -4729,7 +4784,9 @@
       ],
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Set 4",
-      "fight_label": "Rocket Hide."
+      "fight_label": "Rocket Hide.",
+      "area": "digletts_cave",
+      "area_source": "trainer_order"
     },
     "74": {
       "name": "Clair",
@@ -4817,7 +4874,9 @@
       ],
       "level_cap": 81,
       "calc_label": "Gym Leader Clair",
-      "sprite_url": "https://i.ibb.co/yFkD5QH/Clair.png"
+      "sprite_url": "https://i.ibb.co/yFkD5QH/Clair.png",
+      "area": "viridian_city",
+      "area_source": "trainer_order"
     },
     "75": {
       "name": "Bugsy",
@@ -4913,7 +4972,8 @@
       "level_cap": 27,
       "calc_label": "Leader Bugsy (Post Lt. Surge)",
       "fight_label": "Post Lt. Surge",
-      "sprite_url": "https://i.ibb.co/Lrh0bjy/Bugsy.png"
+      "sprite_url": "https://i.ibb.co/Lrh0bjy/Bugsy.png",
+      "area_source": "sheet_header"
     },
     "76": {
       "name": "Whitney",
@@ -5006,7 +5066,8 @@
       "level_cap": 100,
       "calc_label": "Whitney (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/JtgmCkX/Whitney.png"
+      "sprite_url": "https://i.ibb.co/JtgmCkX/Whitney.png",
+      "area_source": "sheet_header"
     },
     "77": {
       "name": "Lorelei",
@@ -5095,7 +5156,9 @@
       "level_cap": 85,
       "calc_label": "Elite Four Lorelei (Rain Team)",
       "fight_label": "Rain Team",
-      "sprite_url": "https://i.ibb.co/5BW746H/Lorelei.png"
+      "sprite_url": "https://i.ibb.co/5BW746H/Lorelei.png",
+      "area": "indigo_plateau",
+      "area_source": "trainer_order"
     },
     "78": {
       "name": "Lorelei",
@@ -5273,7 +5336,9 @@
       "level_cap": 85,
       "calc_label": "Elite Four Bruno (Team One)",
       "fight_label": "Team One",
-      "sprite_url": "https://i.ibb.co/Q9fb5Tk/Bruno.png"
+      "sprite_url": "https://i.ibb.co/Q9fb5Tk/Bruno.png",
+      "area": "indigo_plateau",
+      "area_source": "trainer_order"
     },
     "81": {
       "name": "Bruno",
@@ -5458,7 +5523,8 @@
       "level_cap": 100,
       "calc_label": "Gauntlet 2 Ace Trainer Samantha (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "83": {
       "name": "Agatha",
@@ -5549,7 +5615,9 @@
       "level_cap": 85,
       "calc_label": "Elite Four Agatha (Team One)",
       "fight_label": "Team One",
-      "sprite_url": "https://i.ibb.co/rcFfMw3/Agatha.png"
+      "sprite_url": "https://i.ibb.co/rcFfMw3/Agatha.png",
+      "area": "indigo_plateau",
+      "area_source": "trainer_order"
     },
     "84": {
       "name": "Agatha",
@@ -5736,7 +5804,8 @@
       "level_cap": 100,
       "calc_label": "Gauntlet 3 Ace Trainer Nick (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "86": {
       "name": "Lance",
@@ -5825,7 +5894,9 @@
       "level_cap": 85,
       "calc_label": "Elite Four Lance (Team One)",
       "fight_label": "Team One",
-      "sprite_url": "https://i.ibb.co/q7H43Kp/Lance.png"
+      "sprite_url": "https://i.ibb.co/q7H43Kp/Lance.png",
+      "area": "indigo_plateau",
+      "area_source": "trainer_order"
     },
     "87": {
       "name": "Lance",
@@ -5967,7 +6038,8 @@
         }
       ],
       "area": "berry_forest",
-      "calc_label": "SwimmerM Barry"
+      "calc_label": "SwimmerM Barry",
+      "area_source": "sheet_header"
     },
     "89": {
       "name": "Ben",
@@ -7065,7 +7137,8 @@
       "area": "route_24",
       "calc_label": "Bug Catcher Cale (If Lv ≥ 22)",
       "fight_label": "If Lv ≥ 22",
-      "sprite_url": "https://i.ibb.co/cw6n81f/Bug-Catcher.png"
+      "sprite_url": "https://i.ibb.co/cw6n81f/Bug-Catcher.png",
+      "area_source": "sheet_header"
     },
     "111": {
       "name": "Keigo",
@@ -7265,7 +7338,8 @@
       "level_cap": 100,
       "calc_label": "Gauntlet 3 Tester Symes (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "114": {
       "name": "Brent",
@@ -7734,7 +7808,8 @@
       "area": "route_24",
       "calc_label": "Lass Reli (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
-      "sprite_url": "https://i.ibb.co/8sm893K/Lass.png"
+      "sprite_url": "https://i.ibb.co/8sm893K/Lass.png",
+      "area_source": "sheet_header"
     },
     "123": {
       "name": "Ali",
@@ -7787,7 +7862,8 @@
       "area": "route_24",
       "calc_label": "Lass Ali (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
-      "sprite_url": "https://i.ibb.co/8sm893K/Lass.png"
+      "sprite_url": "https://i.ibb.co/8sm893K/Lass.png",
+      "area_source": "sheet_header"
     },
     "124": {
       "name": "Runan",
@@ -7883,7 +7959,8 @@
       "level_cap": 100,
       "calc_label": "Gauntlet 1 Tester Runan (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "125": {
       "name": "Haley",
@@ -7958,7 +8035,8 @@
         }
       ],
       "area": "route_15",
-      "calc_label": "Lass Haley"
+      "calc_label": "Lass Haley",
+      "area_source": "sheet_header"
     },
     "126": {
       "name": "Ann",
@@ -8617,7 +8695,8 @@
       "area": "vermilion_city",
       "calc_label": "Sailor Edmond & Sailor Trevor (If Lv ≥ 34)",
       "fight_label": "If Lv ≥ 34",
-      "sprite_url": "https://i.ibb.co/vj4rHpy/Sailors.png"
+      "sprite_url": "https://i.ibb.co/vj4rHpy/Sailors.png",
+      "area_source": "sheet_header"
     },
     "136": {
       "name": "Leonard",
@@ -9070,7 +9149,8 @@
       "area": "route_24",
       "calc_label": "Camper Ethan (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
-      "sprite_url": "https://i.ibb.co/n7Pn1gb/Camper.png"
+      "sprite_url": "https://i.ibb.co/n7Pn1gb/Camper.png",
+      "area_source": "sheet_header"
     },
     "145": {
       "name": "Ricky",
@@ -9248,7 +9328,8 @@
       "level_cap": 100,
       "calc_label": "Channeler Rachel (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/DDVMpxR/Channeler.png"
+      "sprite_url": "https://i.ibb.co/DDVMpxR/Channeler.png",
+      "area_source": "sheet_header"
     },
     "148": {
       "name": "Chris",
@@ -9758,7 +9839,8 @@
       "area": "route_9",
       "calc_label": "Picnicker Caitlin (If Lv ≥ 34)",
       "fight_label": "If Lv ≥ 34",
-      "sprite_url": "https://i.ibb.co/LSRVQF1/Picnicker.png"
+      "sprite_url": "https://i.ibb.co/LSRVQF1/Picnicker.png",
+      "area_source": "sheet_header"
     },
     "156": {
       "name": "Heidi",
@@ -10498,7 +10580,8 @@
       "area": "mt_moon",
       "calc_label": "Super Nerd Miguel (If Lv ≥ 15)",
       "fight_label": "If Lv ≥ 15",
-      "sprite_url": "https://i.ibb.co/vsXQ7g7/Super-Nerd.png"
+      "sprite_url": "https://i.ibb.co/vsXQ7g7/Super-Nerd.png",
+      "area_source": "sheet_header"
     },
     "171": {
       "name": "Aidan",
@@ -10762,7 +10845,8 @@
       "level_cap": 100,
       "calc_label": "Crush Girl Sharon (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/3N39wW0/Crush-Girl.png"
+      "sprite_url": "https://i.ibb.co/3N39wW0/Crush-Girl.png",
+      "area_source": "sheet_header"
     },
     "175": {
       "name": "Janny",
@@ -10858,7 +10942,8 @@
       "level_cap": 100,
       "calc_label": "Gauntlet 4 Ace Trainer Janny (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "176": {
       "name": "Owen",
@@ -10981,7 +11066,8 @@
       ],
       "area": "berry_forest",
       "calc_label": "*Gatekeeper Owen",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "177": {
       "name": "Erik",
@@ -11232,7 +11318,8 @@
       "area": "cinnabar_island",
       "calc_label": "Ace Trainer Derek (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "180": {
       "name": "Zac",
@@ -11313,7 +11400,8 @@
       "area": "cinnabar_island",
       "calc_label": "Ace Trainer Zac (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "181": {
       "name": "Marcos",
@@ -12257,7 +12345,8 @@
       "area": "route_13",
       "calc_label": "Biker Jared (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png"
+      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png",
+      "area_source": "sheet_header"
     },
     "196": {
       "name": "Malik",
@@ -12466,7 +12555,8 @@
       "area": "route_16",
       "calc_label": "Biker Lao (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png"
+      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png",
+      "area_source": "sheet_header"
     },
     "200": {
       "name": "Oak",
@@ -12562,7 +12652,8 @@
       "level_cap": 100,
       "calc_label": "Professor Oak (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/88pHxt3/Oak.png"
+      "sprite_url": "https://i.ibb.co/88pHxt3/Oak.png",
+      "area_source": "sheet_header"
     },
     "201": {
       "name": "Hideo",
@@ -12639,7 +12730,8 @@
       "area": "route_16",
       "calc_label": "Biker Hideo (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png"
+      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png",
+      "area_source": "sheet_header"
     },
     "202": {
       "name": "Ruben",
@@ -12706,7 +12798,8 @@
       "area": "route_16",
       "calc_label": "Biker Ruben (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png"
+      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png",
+      "area_source": "sheet_header"
     },
     "203": {
       "name": "Billy",
@@ -12906,7 +12999,8 @@
       "area": "route_18",
       "calc_label": "Biker William (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png"
+      "sprite_url": "https://i.ibb.co/qsQbp4Z/Biker.png",
+      "area_source": "sheet_header"
     },
     "207": {
       "name": "Lukas",
@@ -13219,7 +13313,8 @@
       "area": "oaks_lab",
       "level_cap": 100,
       "calc_label": "Professor Oak",
-      "sprite_url": "https://i.ibb.co/88pHxt3/Oak.png"
+      "sprite_url": "https://i.ibb.co/88pHxt3/Oak.png",
+      "area_source": "sheet_header"
     },
     "213": {
       "name": "Quinn",
@@ -13404,7 +13499,8 @@
       "area": "cinnabar_island",
       "calc_label": "Ace Trainer Lucy (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "216": {
       "name": "Arnie",
@@ -14515,7 +14611,8 @@
       "area": "route_12",
       "calc_label": "Fisherman Andrew (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/QpKd0mc/Fisherman.png"
+      "sprite_url": "https://i.ibb.co/QpKd0mc/Fisherman.png",
+      "area_source": "sheet_header"
     },
     "234": {
       "name": "Luis",
@@ -15181,7 +15278,8 @@
       "level_cap": 100,
       "calc_label": "Gauntlet 1 Ace Trainer Barry (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "243": {
       "name": "Dean",
@@ -15496,7 +15594,8 @@
       "area": "route_16",
       "calc_label": "Cue Ball Koji (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/Wv3HtLh/CueBall.png"
+      "sprite_url": "https://i.ibb.co/Wv3HtLh/CueBall.png",
+      "area_source": "sheet_header"
     },
     "250": {
       "name": "Luke",
@@ -15535,7 +15634,8 @@
       "area": "route_16",
       "calc_label": "Cue Ball Luke (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/Wv3HtLh/CueBall.png"
+      "sprite_url": "https://i.ibb.co/Wv3HtLh/CueBall.png",
+      "area_source": "sheet_header"
     },
     "251": {
       "name": "Camron",
@@ -15602,7 +15702,8 @@
       "area": "route_16",
       "calc_label": "Cue Ball Camron (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/Wv3HtLh/CueBall.png"
+      "sprite_url": "https://i.ibb.co/Wv3HtLh/CueBall.png",
+      "area_source": "sheet_header"
     },
     "252": {
       "name": "Raul",
@@ -16565,7 +16666,8 @@
       "area": "route_13",
       "calc_label": "Beauty Lola & Beauty Sheila (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/KLN8KG6/Beautys.png"
+      "sprite_url": "https://i.ibb.co/KLN8KG6/Beautys.png",
+      "area_source": "sheet_header"
     },
     "270": {
       "name": "Tiffany",
@@ -17401,7 +17503,8 @@
       ],
       "area": "route_12",
       "calc_label": "Rocker Luca",
-      "sprite_url": "https://i.ibb.co/3hYCYv8/Rocker.png"
+      "sprite_url": "https://i.ibb.co/3hYCYv8/Rocker.png",
+      "area_source": "sheet_header"
     },
     "286": {
       "name": "Dalton",
@@ -18040,7 +18143,8 @@
         }
       ],
       "area": "route_8",
-      "calc_label": "*PkMn Trainer Cole"
+      "calc_label": "*PkMn Trainer Cole",
+      "area_source": "sheet_header"
     },
     "298": {
       "name": "Vincent",
@@ -18153,7 +18257,8 @@
       "area": "route_13",
       "calc_label": "Bird Keeper Sebastian (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26GFSbd/Bird-Keeper.png"
+      "sprite_url": "https://i.ibb.co/26GFSbd/Bird-Keeper.png",
+      "area_source": "sheet_header"
     },
     "301": {
       "name": "Perry",
@@ -18220,7 +18325,8 @@
       "area": "route_13",
       "calc_label": "Bird Keeper Perry (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26GFSbd/Bird-Keeper.png"
+      "sprite_url": "https://i.ibb.co/26GFSbd/Bird-Keeper.png",
+      "area_source": "sheet_header"
     },
     "302": {
       "name": "Robert",
@@ -18287,7 +18393,8 @@
       "area": "route_13",
       "calc_label": "Bird Keeper Robert (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26GFSbd/Bird-Keeper.png"
+      "sprite_url": "https://i.ibb.co/26GFSbd/Bird-Keeper.png",
+      "area_source": "sheet_header"
     },
     "303": {
       "name": "Donald",
@@ -18606,7 +18713,8 @@
       "area": "route_18",
       "calc_label": "Ace Trainer Wilton (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "308": {
       "name": "Ramiro",
@@ -18673,7 +18781,8 @@
       "area": "route_18",
       "calc_label": "Dragon Tamer Ramiro (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/31XckWH/Dragon-Tamer.png"
+      "sprite_url": "https://i.ibb.co/31XckWH/Dragon-Tamer.png",
+      "area_source": "sheet_header"
     },
     "309": {
       "name": "Jacob",
@@ -18740,7 +18849,8 @@
       "area": "route_18",
       "calc_label": "Bird Keeper Jacob (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26GFSbd/Bird-Keeper.png"
+      "sprite_url": "https://i.ibb.co/26GFSbd/Bird-Keeper.png",
+      "area_source": "sheet_header"
     },
     "310": {
       "name": "Roger",
@@ -19250,7 +19360,8 @@
       "level_cap": 34,
       "calc_label": "Leader Chuck (Post Lt. Surge)",
       "fight_label": "Post Lt. Surge",
-      "sprite_url": "https://i.ibb.co/8rG6Bgc/Chuck.png"
+      "sprite_url": "https://i.ibb.co/8rG6Bgc/Chuck.png",
+      "area_source": "sheet_header"
     },
     "318": {
       "name": "Mike",
@@ -19672,7 +19783,8 @@
       "level_cap": 15,
       "calc_label": "Rival (If Rival Has Squirtle)",
       "fight_label": "If Rival Has Squirtle",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "330": {
       "name": "Rival",
@@ -19710,7 +19822,8 @@
       "level_cap": 82,
       "calc_label": "Rival (If Rival Has Charmander)",
       "fight_label": "If Rival Has Charmander",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "331": {
       "name": "Rival",
@@ -19748,7 +19861,8 @@
       "level_cap": 82,
       "calc_label": "Rival (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "332": {
       "name": "Rival",
@@ -19815,7 +19929,8 @@
       "level_cap": 27,
       "calc_label": "Rival (If Rival Has Squirtle)",
       "fight_label": "If Rival Has Squirtle",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "333": {
       "name": "Rival",
@@ -19882,7 +19997,8 @@
       "level_cap": 27,
       "calc_label": "Rival (If Rival Has Charmander)",
       "fight_label": "If Rival Has Charmander",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "334": {
       "name": "Rival",
@@ -19949,7 +20065,8 @@
       "level_cap": 27,
       "calc_label": "Rival (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "335": {
       "name": "Ted",
@@ -20845,7 +20962,8 @@
       "level_cap": 57,
       "calc_label": "Giovanni (Silph Co.)",
       "fight_label": "Silph Co.",
-      "sprite_url": "https://i.ibb.co/dcBy1qG/Giovanni.png"
+      "sprite_url": "https://i.ibb.co/dcBy1qG/Giovanni.png",
+      "area_source": "sheet_header"
     },
     "349": {
       "name": "Giovanni",
@@ -20935,7 +21053,8 @@
       "level_cap": 80,
       "calc_label": "Giovanni (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/dcBy1qG/Giovanni.png"
+      "sprite_url": "https://i.ibb.co/dcBy1qG/Giovanni.png",
+      "area_source": "sheet_header"
     },
     "350": {
       "name": "Giovanni",
@@ -20983,7 +21102,9 @@
       ],
       "level_cap": 80,
       "calc_label": "Boss Giovanni Set 1",
-      "fight_label": "Rocket Hide."
+      "fight_label": "Rocket Hide.",
+      "area": "celadon_city",
+      "area_source": "trainer_order"
     },
     "361": {
       "name": "Grunt",
@@ -21049,7 +21170,8 @@
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Nugg. Bridge)",
       "fight_label": "Nugg. Bridge",
-      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png"
+      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png",
+      "area_source": "sheet_header"
     },
     "371": {
       "name": "Grunt",
@@ -21117,7 +21239,8 @@
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Dig House)",
       "fight_label": "Dig House",
-      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png"
+      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png",
+      "area_source": "sheet_header"
     },
     "378": {
       "name": "Grunt",
@@ -21248,7 +21371,8 @@
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Game Corner)",
       "fight_label": "Game Corner",
-      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png"
+      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png",
+      "area_source": "sheet_header"
     },
     "385": {
       "name": "Grunt",
@@ -21316,7 +21440,8 @@
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Rocket Hide.)",
       "fight_label": "Rocket Hide.",
-      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png"
+      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png",
+      "area_source": "sheet_header"
     },
     "389": {
       "name": "Grunt",
@@ -21423,7 +21548,8 @@
       "area": "victory_road",
       "calc_label": "Ace Trainer George (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "394": {
       "name": "Colby",
@@ -21498,7 +21624,8 @@
       "area": "victory_road",
       "calc_label": "Ace Trainer Colby (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "396": {
       "name": "Rolando",
@@ -21579,7 +21706,8 @@
       "area": "victory_road",
       "calc_label": "Ace Trainer Rolando (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png"
+      "sprite_url": "https://i.ibb.co/TKBZjnF/Ace-Trainer-M.png",
+      "area_source": "sheet_header"
     },
     "398": {
       "name": "Owen",
@@ -21675,7 +21803,8 @@
       "level_cap": 100,
       "calc_label": "Final Battle Gatekeeper Owen (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/FYn1QFQ/Gatekeeper.png"
+      "sprite_url": "https://i.ibb.co/FYn1QFQ/Gatekeeper.png",
+      "area_source": "sheet_header"
     },
     "402": {
       "name": "Mary",
@@ -21854,7 +21983,8 @@
       "area": "victory_road",
       "calc_label": "Ace Trainer Caroline (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "404": {
       "name": "Alexa",
@@ -21930,7 +22060,8 @@
       "area": "victory_road",
       "calc_label": "Ace Trainer Alexa (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "406": {
       "name": "Naomi",
@@ -22011,7 +22142,8 @@
       "area": "victory_road",
       "calc_label": "Ace Trainer Naomi (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "411": {
       "name": "Bruno",
@@ -22352,7 +22484,9 @@
       ],
       "level_cap": 15,
       "calc_label": "Gym Leader Brock",
-      "sprite_url": "https://i.ibb.co/v10Rh61/Brock.png"
+      "sprite_url": "https://i.ibb.co/v10Rh61/Brock.png",
+      "area": "pewter_city",
+      "area_source": "trainer_order"
     },
     "415": {
       "name": "Misty",
@@ -22414,7 +22548,9 @@
       ],
       "level_cap": 27,
       "calc_label": "Gym Leader Misty",
-      "sprite_url": "https://i.ibb.co/mh2zYn4/Misty.png"
+      "sprite_url": "https://i.ibb.co/mh2zYn4/Misty.png",
+      "area": "cerulean_city",
+      "area_source": "trainer_order"
     },
     "416": {
       "name": "Lt. Surge",
@@ -22489,7 +22625,9 @@
       ],
       "level_cap": 34,
       "calc_label": "Gym Leader Lt. Surge",
-      "sprite_url": "https://i.ibb.co/w6kjj5K/Surge.png"
+      "sprite_url": "https://i.ibb.co/w6kjj5K/Surge.png",
+      "area": "vermilion_city",
+      "area_source": "trainer_order"
     },
     "417": {
       "name": "Erika",
@@ -22564,7 +22702,9 @@
       ],
       "level_cap": 44,
       "calc_label": "Gym Leader Erika",
-      "sprite_url": "https://i.ibb.co/z204J6T/Erika.png"
+      "sprite_url": "https://i.ibb.co/z204J6T/Erika.png",
+      "area": "celadon_city",
+      "area_source": "trainer_order"
     },
     "418": {
       "name": "Koga",
@@ -22648,7 +22788,9 @@
       ],
       "level_cap": 68,
       "calc_label": "Gym Leader Koga",
-      "sprite_url": "https://i.ibb.co/3THVf4D/Koga.png"
+      "sprite_url": "https://i.ibb.co/3THVf4D/Koga.png",
+      "area": "fuchsia_city",
+      "area_source": "trainer_order"
     },
     "419": {
       "name": "Blaine",
@@ -22736,7 +22878,9 @@
       ],
       "level_cap": 76,
       "calc_label": "Gym Leader Blaine",
-      "sprite_url": "https://i.ibb.co/zQPJrBn/Blaine.png"
+      "sprite_url": "https://i.ibb.co/zQPJrBn/Blaine.png",
+      "area": "cinnabar_island",
+      "area_source": "trainer_order"
     },
     "420": {
       "name": "Sabrina",
@@ -22824,7 +22968,9 @@
       ],
       "level_cap": 59,
       "calc_label": "Gym Leader Sabrina",
-      "sprite_url": "https://i.ibb.co/m8V4wv5/Sabrina.png"
+      "sprite_url": "https://i.ibb.co/m8V4wv5/Sabrina.png",
+      "area": "saffron_city",
+      "area_source": "trainer_order"
     },
     "421": {
       "name": "Thomas",
@@ -23238,7 +23384,8 @@
       "level_cap": 56,
       "calc_label": "Rival (If Rival Has Squirtle)",
       "fight_label": "If Rival Has Squirtle",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "430": {
       "name": "Rival",
@@ -23320,7 +23467,8 @@
       "level_cap": 56,
       "calc_label": "Rival (If Rival Has Charmander)",
       "fight_label": "If Rival Has Charmander",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "431": {
       "name": "Rival",
@@ -23402,7 +23550,8 @@
       "level_cap": 56,
       "calc_label": "Rival (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "432": {
       "name": "Blue",
@@ -23588,7 +23737,9 @@
       "level_cap": 15,
       "calc_label": "Champion Rival (Team Two)",
       "fight_label": "Team Two",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area": "route_22",
+      "area_source": "trainer_order"
     },
     "436": {
       "name": "Rival",
@@ -23674,7 +23825,9 @@
       "level_cap": 27,
       "calc_label": "Champion Rival (Team Two)",
       "fight_label": "Team Two",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area": "cerulean_city",
+      "area_source": "trainer_order"
     },
     "437": {
       "name": "Rival",
@@ -23760,7 +23913,9 @@
       "level_cap": 56,
       "calc_label": "Champion Rival (Team Two)",
       "fight_label": "Team Two",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area": "silph_co",
+      "area_source": "trainer_order"
     },
     "438": {
       "name": "Rival",
@@ -23856,7 +24011,8 @@
       "level_cap": 82,
       "calc_label": "Rival (If Rival Has Squirtle)",
       "fight_label": "If Rival Has Squirtle",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "439": {
       "name": "Rival",
@@ -23952,7 +24108,8 @@
       "level_cap": 82,
       "calc_label": "Rival (If Rival Has Charmander)",
       "fight_label": "If Rival Has Charmander",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "440": {
       "name": "Rival",
@@ -24048,7 +24205,8 @@
       "level_cap": 82,
       "calc_label": "Rival (If Rival Has Bulbasaur)",
       "fight_label": "If Rival Has Bulbasaur",
-      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png"
+      "sprite_url": "https://i.ibb.co/fXwks6z/Rival.png",
+      "area_source": "sheet_header"
     },
     "441": {
       "name": "Patricia",
@@ -24585,7 +24743,8 @@
       "area": "pokemon_mansion",
       "calc_label": "Burglar Max (Rematch)",
       "fight_label": "Rematch",
-      "sprite_url": "https://i.ibb.co/r4MDjgq/Burglar.png"
+      "sprite_url": "https://i.ibb.co/r4MDjgq/Burglar.png",
+      "area_source": "sheet_header"
     },
     "455": {
       "name": "Anson",
@@ -24666,7 +24825,8 @@
       "area": "pokemon_mansion",
       "calc_label": "Burglar Anson (Rematch)",
       "fight_label": "Rematch",
-      "sprite_url": "https://i.ibb.co/r4MDjgq/Burglar.png"
+      "sprite_url": "https://i.ibb.co/r4MDjgq/Burglar.png",
+      "area_source": "sheet_header"
     },
     "462": {
       "name": "Amanda",
@@ -24941,7 +25101,8 @@
       "area": "route_13",
       "calc_label": "Picnicker Alma (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/LSRVQF1/Picnicker.png"
+      "sprite_url": "https://i.ibb.co/LSRVQF1/Picnicker.png",
+      "area_source": "sheet_header"
     },
     "467": {
       "name": "Susie",
@@ -25022,7 +25183,8 @@
       "area": "route_13",
       "calc_label": "Picnicker Susie (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/LSRVQF1/Picnicker.png"
+      "sprite_url": "https://i.ibb.co/LSRVQF1/Picnicker.png",
+      "area_source": "sheet_header"
     },
     "468": {
       "name": "Valerie",
@@ -25592,7 +25754,9 @@
         }
       ],
       "calc_label": "Picnicker Ariana",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area": "cerulean_cave",
+      "area_source": "trainer_order"
     },
     "476": {
       "name": "Leah",
@@ -25697,7 +25861,8 @@
       "area": "route_12",
       "calc_label": "Camper Justin (If Lv ≥ 68)",
       "fight_label": "If Lv ≥ 68",
-      "sprite_url": "https://i.ibb.co/n7Pn1gb/Camper.png"
+      "sprite_url": "https://i.ibb.co/n7Pn1gb/Camper.png",
+      "area_source": "sheet_header"
     },
     "478": {
       "name": "Yazmin",
@@ -26008,7 +26173,8 @@
       "area": "vermilion_city",
       "calc_label": "Lass Ann & Gentleman Brooks (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
-      "sprite_url": "https://i.ibb.co/mGsbFtG/Lass-Gentleman.png"
+      "sprite_url": "https://i.ibb.co/mGsbFtG/Lass-Gentleman.png",
+      "area_source": "sheet_header"
     },
     "483": {
       "name": "Lamar",
@@ -26115,7 +26281,8 @@
       ],
       "area": "route_24",
       "calc_label": "*Lass Reli",
-      "fight_label": "If Lv ≥ 27"
+      "fight_label": "If Lv ≥ 27",
+      "area_source": "sheet_header"
     },
     "503": {
       "name": "Timmy",
@@ -26168,7 +26335,8 @@
       "area": "route_24",
       "calc_label": "Youngster Timmy (If Lv ≥ 27)",
       "fight_label": "If Lv ≥ 27",
-      "sprite_url": "https://i.ibb.co/6nGd7Gm/Youngster.png"
+      "sprite_url": "https://i.ibb.co/6nGd7Gm/Youngster.png",
+      "area_source": "sheet_header"
     },
     "504": {
       "name": "Timmy",
@@ -26223,7 +26391,8 @@
       ],
       "area": "route_24",
       "calc_label": "*Youngster Timmy",
-      "fight_label": "If Lv ≥ 27"
+      "fight_label": "If Lv ≥ 27",
+      "area_source": "sheet_header"
     },
     "512": {
       "name": "Brendan",
@@ -26252,7 +26421,9 @@
       ],
       "level_cap": 82,
       "calc_label": "*PkMn Trainer Brendan Set 1",
-      "fight_label": "If Rival Has Bulbasaur"
+      "fight_label": "If Rival Has Bulbasaur",
+      "area": "vermilion_city",
+      "area_source": "trainer_order"
     },
     "513": {
       "name": "May",
@@ -26378,7 +26549,8 @@
       "area": "cinnabar_island",
       "level_cap": 73,
       "calc_label": "PkMn Trainer May",
-      "fight_label": "If Rival Has Bulbasaur"
+      "fight_label": "If Rival Has Bulbasaur",
+      "area_source": "sheet_header"
     },
     "514": {
       "name": "Red",
@@ -26505,7 +26677,8 @@
       ],
       "area": "kindle_road",
       "calc_label": "*PkMn Trainer Red",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "518": {
       "name": "Sharon",
@@ -26601,7 +26774,8 @@
       "level_cap": 100,
       "calc_label": "Gauntlet 2 Ace Trainer Sharon (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png"
+      "sprite_url": "https://i.ibb.co/26kF6WW/Ace-Trainer-F.png",
+      "area_source": "sheet_header"
     },
     "519": {
       "name": "Amira",
@@ -26683,7 +26857,8 @@
       "level_cap": 100,
       "calc_label": "Tuber Amira (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/dbpWnbD/Tuber.png"
+      "sprite_url": "https://i.ibb.co/dbpWnbD/Tuber.png",
+      "area_source": "sheet_header"
     },
     "523": {
       "name": "Nikki",
@@ -26779,7 +26954,8 @@
       "level_cap": 100,
       "calc_label": "Aroma Lady Nikki (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/3NcSy5g/Aroma-Lady.png"
+      "sprite_url": "https://i.ibb.co/3NcSy5g/Aroma-Lady.png",
+      "area_source": "sheet_header"
     },
     "531": {
       "name": "Anthony",
@@ -27167,7 +27343,8 @@
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Rocket Hide.)",
       "fight_label": "Rocket Hide.",
-      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png"
+      "sprite_url": "https://i.ibb.co/kJrTDW3/Grunt.png",
+      "area_source": "sheet_header"
     },
     "546": {
       "name": "Amara",
@@ -27221,7 +27398,8 @@
       "level_cap": 100,
       "calc_label": "Swimmer Amara (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qNMR4cv/SwimmerF.png"
+      "sprite_url": "https://i.ibb.co/qNMR4cv/SwimmerF.png",
+      "area_source": "sheet_header"
     },
     "547": {
       "name": "Maria",
@@ -27289,7 +27467,8 @@
       "level_cap": 100,
       "calc_label": "Swimmer Maria (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qNMR4cv/SwimmerF.png"
+      "sprite_url": "https://i.ibb.co/qNMR4cv/SwimmerF.png",
+      "area_source": "sheet_header"
     },
     "548": {
       "name": "Abigail",
@@ -27357,7 +27536,8 @@
       "level_cap": 100,
       "calc_label": "Swimmer Abigail (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qNMR4cv/SwimmerF.png"
+      "sprite_url": "https://i.ibb.co/qNMR4cv/SwimmerF.png",
+      "area_source": "sheet_header"
     },
     "549": {
       "name": "Finn",
@@ -27425,7 +27605,8 @@
       "level_cap": 100,
       "calc_label": "Swimmer Finn (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/1Qbjwx2/SwimmerM.png"
+      "sprite_url": "https://i.ibb.co/1Qbjwx2/SwimmerM.png",
+      "area_source": "sheet_header"
     },
     "550": {
       "name": "Garrett",
@@ -27490,7 +27671,8 @@
       "level_cap": 100,
       "calc_label": "Swimmer Garrett (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/1Qbjwx2/SwimmerM.png"
+      "sprite_url": "https://i.ibb.co/1Qbjwx2/SwimmerM.png",
+      "area_source": "sheet_header"
     },
     "551": {
       "name": "Tommy",
@@ -27558,7 +27740,8 @@
       "level_cap": 100,
       "calc_label": "Fisherman Tommy (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/QpKd0mc/Fisherman.png"
+      "sprite_url": "https://i.ibb.co/QpKd0mc/Fisherman.png",
+      "area_source": "sheet_header"
     },
     "552": {
       "name": "Tanya",
@@ -27626,7 +27809,8 @@
       "level_cap": 100,
       "calc_label": "Crush Girl Tanya (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/3N39wW0/Crush-Girl.png"
+      "sprite_url": "https://i.ibb.co/3N39wW0/Crush-Girl.png",
+      "area_source": "sheet_header"
     },
     "553": {
       "name": "Shea",
@@ -27694,7 +27878,8 @@
       "level_cap": 100,
       "calc_label": "Black Belt Shea (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/nzhVFm2/Ketchup.png"
+      "sprite_url": "https://i.ibb.co/nzhVFm2/Ketchup.png",
+      "area_source": "sheet_header"
     },
     "554": {
       "name": "Hugh",
@@ -27748,7 +27933,8 @@
       "level_cap": 100,
       "calc_label": "Black Belt Hugh (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/nzhVFm2/Ketchup.png"
+      "sprite_url": "https://i.ibb.co/nzhVFm2/Ketchup.png",
+      "area_source": "sheet_header"
     },
     "555": {
       "name": "Bryce",
@@ -27830,7 +28016,8 @@
       "level_cap": 100,
       "calc_label": "Camper Bryce (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/n7Pn1gb/Camper.png"
+      "sprite_url": "https://i.ibb.co/n7Pn1gb/Camper.png",
+      "area_source": "sheet_header"
     },
     "556": {
       "name": "Claire",
@@ -27898,7 +28085,8 @@
       "level_cap": 100,
       "calc_label": "Picnicker Claire (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/LSRVQF1/Picnicker.png"
+      "sprite_url": "https://i.ibb.co/LSRVQF1/Picnicker.png",
+      "area_source": "sheet_header"
     },
     "558": {
       "name": "Violet",
@@ -27979,7 +28167,8 @@
       "level_cap": 100,
       "calc_label": "Aroma Lady Violet (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/3NcSy5g/Aroma-Lady.png"
+      "sprite_url": "https://i.ibb.co/3NcSy5g/Aroma-Lady.png",
+      "area_source": "sheet_header"
     },
     "559": {
       "name": "Alexis",
@@ -28061,7 +28250,8 @@
       "level_cap": 100,
       "calc_label": "Tuber Alexis (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/dbpWnbD/Tuber.png"
+      "sprite_url": "https://i.ibb.co/dbpWnbD/Tuber.png",
+      "area_source": "sheet_header"
     },
     "561": {
       "name": "Tisha",
@@ -28143,7 +28333,8 @@
       "level_cap": 100,
       "calc_label": "Swimmer Tisha (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/qNMR4cv/SwimmerF.png"
+      "sprite_url": "https://i.ibb.co/qNMR4cv/SwimmerF.png",
+      "area_source": "sheet_header"
     },
     "592": {
       "name": "Jocelyn",
@@ -28211,7 +28402,8 @@
       "level_cap": 100,
       "calc_label": "Crush Girl Jocelyn (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/3N39wW0/Crush-Girl.png"
+      "sprite_url": "https://i.ibb.co/3N39wW0/Crush-Girl.png",
+      "area_source": "sheet_header"
     },
     "595": {
       "name": "Logan",
@@ -28279,7 +28471,8 @@
       "level_cap": 100,
       "calc_label": "Gatekeeper Logan (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/3vV7Cw8/Ranger.png"
+      "sprite_url": "https://i.ibb.co/3vV7Cw8/Ranger.png",
+      "area_source": "sheet_header"
     },
     "597": {
       "name": "Beth",
@@ -28347,7 +28540,8 @@
       "level_cap": 100,
       "calc_label": "Ranger Beth (Back To Back)",
       "fight_label": "Back To Back",
-      "sprite_url": "https://i.ibb.co/3vV7Cw8/Ranger.png"
+      "sprite_url": "https://i.ibb.co/3vV7Cw8/Ranger.png",
+      "area_source": "sheet_header"
     },
     "654": {
       "name": "Luca",
@@ -28451,7 +28645,8 @@
         }
       ],
       "area": "route_12",
-      "calc_label": "*Rocker Luca"
+      "calc_label": "*Rocker Luca",
+      "area_source": "sheet_header"
     },
     "655": {
       "name": "Sheila",
@@ -28498,7 +28693,8 @@
         }
       ],
       "area": "route_13",
-      "calc_label": "*Beauty Sheila"
+      "calc_label": "*Beauty Sheila",
+      "area_source": "sheet_header"
     },
     "656": {
       "name": "Robert",
@@ -28587,7 +28783,8 @@
       ],
       "area": "route_13",
       "calc_label": "*Bird Keeper Robert",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "658": {
       "name": "Susie",
@@ -28692,7 +28889,8 @@
       ],
       "area": "route_13",
       "calc_label": "*Picnicker Susie",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "675": {
       "name": "Ruben",
@@ -28782,7 +28980,8 @@
       ],
       "area": "route_16",
       "calc_label": "*Biker Ruben",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "676": {
       "name": "Camron",
@@ -28868,7 +29067,8 @@
       ],
       "area": "route_16",
       "calc_label": "*Cue Ball Camron",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "680": {
       "name": "Jacob",
@@ -28991,7 +29191,8 @@
         }
       ],
       "area": "route_18",
-      "calc_label": "*Bird Keeper Jacob"
+      "calc_label": "*Bird Keeper Jacob",
+      "area_source": "sheet_header"
     },
     "683": {
       "name": "Darrin",
@@ -29109,7 +29310,8 @@
       ],
       "area": "kindle_road",
       "calc_label": "*SwimmerM Finn",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "691": {
       "name": "Sharon",
@@ -29405,7 +29607,8 @@
       ],
       "area": "kindle_road",
       "calc_label": "*Crush Girl Tanya",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "695": {
       "name": "Shea",
@@ -29491,7 +29694,8 @@
       ],
       "area": "kindle_road",
       "calc_label": "*Black Belt Shea",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "697": {
       "name": "Hugh",
@@ -29556,7 +29760,8 @@
       ],
       "area": "kindle_road",
       "calc_label": "*Black Belt Hugh",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "701": {
       "name": "Amira",
@@ -29665,7 +29870,8 @@
       ],
       "area": "bond_bridge",
       "calc_label": "*Tuber Amira",
-      "fight_label": "Back To Back"
+      "fight_label": "Back To Back",
+      "area_source": "sheet_header"
     },
     "736": {
       "name": "Bruno",

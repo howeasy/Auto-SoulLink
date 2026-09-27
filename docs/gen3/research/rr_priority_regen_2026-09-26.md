@@ -93,6 +93,22 @@ resolved and the current (post-RR-PT2) state of the roster.
 
 ## The mechanism (why a bare building name is never client-emittable)
 
+**Correction (card RR-PT3, 2026-09-27):** the paragraph originally here described
+all 11 dead keys as fine `loc_name`s that a sticky coarse `player_area_id` merely
+*shadowed* in ordinary play. That's only true of `celadon_city_game_corner` (the
+Follow-up section below) — checked directly against `gen3_frlge_locations.lua`,
+none of the other 11 override keys (`celadon_hotel`, `cinnabar_gym`, `dig_house`,
+`joyful`, `mansion_f4`, `nugget_bridge`, `pewter_museum`, `rocket_hideout`,
+`ss_anne`, plus the two truncated-spelling ones `cinnabar_isl`/`treasure_bea`) is a
+value that file's fine table, or `area_map.json`'s coarse table, ever actually
+contains — they were **never client-emittable in any form**, not shadowed-but-real.
+They're synthetic identifiers this override table itself invented (a snake_cased
+guess at the sheet's building name) that happened to look like a real area id.
+Folding `celadon_city_game_corner` was still the right call (below) precisely
+*because* it's the one case where the mechanism below is real: a genuine fine
+`loc_name` reachable only in the narrow window before the player's first coarse
+`area_enter` each session.
+
 `lua/gen3/client.lua`'s `area_now()` reports `area_map[bank:num] or ""` for the coarse
 `area_id` (from `data/games/gen3_frlge/area_map.json`) and `locations[bank:num] or ""`
 for the fine `loc_name` (from `gen3_frlge_locations.lua`, DISPLAY-only per that file's
@@ -103,7 +119,8 @@ in a building with no `area_map.json` entry of its own (a gym, a hideout floor, 
 hotel, a museum), `player_area_id` keeps whatever coarse area the player last walked
 in **from** — and `_trainer_panel_html`'s effective area
 (`player_area_id.get(pid) or player_area.get(pid)`, `server.py`) resolves to that
-sticky coarse value, never the fine per-room name. This is exactly the rule
+sticky coarse value, never the fine per-room name (when there even *is* a fine
+per-room name to shadow — see the correction above). This is exactly the rule
 `tools/gen_gen3_trainers.py`'s `area_of_map()` already encodes for vanilla FR/LG
 (BFS over `area_map.json` + pret's map warps/connections to the nearest mapped
 ancestor; see that generator's module docstring) — vanilla Brock, standing in
