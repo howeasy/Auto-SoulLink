@@ -361,7 +361,7 @@ local function build_production(deps, c)
     -- production metadata; no FR companion is currently shipped/admitted.
     local session   -- not `client`: that is a BizHawk global name (test_gen3_signals BizHawk-globals scan)
     local full_profile = load_json(c.json, c.root .. "/" .. files.profile)
-    local fr_native = pack == "gen3_frlg" and c.title == "firered" and c.production == true
+    local fr_native = pack == "gen3_frlg" and (c.title == "firered" or c.title == "leafgreen") and c.production == true
         and type(full_profile.native) == "table" and full_profile.native.ABI == 2
     if not native and (pack == "gen3_rr" or fr_native) and c.artifact_kind == "companion"
        and type(full_profile.native) == "table" then
@@ -393,7 +393,8 @@ local function build_production(deps, c)
             end,
             in_battle = function() return session and session.driver.in_battle() or false end,
             trade_safe = function()
-                return session ~= nil and not session.driver.in_battle() and safety:check(nil,"overworld") == true
+                if not session or session.driver.in_battle() then return false,"trade field unavailable" end
+                return safety:check(nil,"overworld")
             end,
             trade_recovery_clear = function()
                 local journal = io_.trade_journal
@@ -485,8 +486,8 @@ function Entry.build(deps)
     if mode == "production" then
         assert(artifact.production ~= false, "non-production cartridge cannot build a production client")
         if pack == "gen3_frlg" and artifact_kind == "companion" then
-            assert(title == "firered" and artifact.production == true,
-                   "FR companion requires explicit production cartridge metadata")
+            assert((title == "firered" or title == "leafgreen") and artifact.production == true,
+                   "FR/LG companion requires explicit production cartridge metadata")
         end
     end
     local sites = assert(artifact.sites, "artifact " .. artifact_kind .. " ships no sites")

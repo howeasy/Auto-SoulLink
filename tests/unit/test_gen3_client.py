@@ -659,9 +659,9 @@ def _hp_writes(w):
 
 
 def test_the_full_commit_lands_through_the_real_writes_and_safety_with_the_guard_last():
-    """C4-2e item 2: writes.lua re-checks the REAL battle_commit clause set before every byte;
-    gBattleCommunication[battler] is that set's battle_comm_0 clause AND its guard, so it must
-    be the plan's last write or the rest is refused mid-plan."""
+    """C4-2e item 2: writes.lua re-checks the REAL battle_commit clause set per write call
+    (the window is frame-bound); write_plan prevalidates its whole plan once. The final
+    gBattleCommunication guard hands control over only after the preceding updates."""
     w, base = _explode_world()
     w.command(cmd="force_explode", key=KA)
     w.step()
@@ -835,8 +835,8 @@ def test_ph_row_2_keeps_the_timer_high_nibble(title):
 
 def test_p_f4_control_comm_first_is_refused_mid_plan_by_the_real_sink():
     """F4 control: why comm must be last. gBattleCommunication[0] is both the battle_comm_0
-    clause and the commit guard, and writes.lua re-checks before every byte, so a write after
-    it is refused. (A property of writes.lua/safety.lua: this control is green on HEAD too.)"""
+    clause and the commit guard, and writes.lua re-checks per write call (the window is frame-bound), so the next
+    write call is refused. (A property of writes.lua/safety.lua: this control is green on HEAD too.)"""
     w = _p_world()
     writes = w.parts.writes
     allow = w.lua.eval("function() return true end")
