@@ -138,11 +138,9 @@
       147
     ],
     "celadon_city": [
-      65,
       417
     ],
     "celadon_city_game_corner": [
-      350,
       382
     ],
     "celadon_hotel": [
@@ -158,8 +156,6 @@
       475
     ],
     "cerulean_city": [
-      32,
-      48,
       332,
       333,
       334,
@@ -257,7 +253,6 @@
       66
     ],
     "pewter_city": [
-      56,
       414
     ],
     "pewter_museum": [
@@ -277,6 +272,7 @@
     ],
     "rocket_hideout": [
       69,
+      350,
       385,
       538
     ],
@@ -379,7 +375,6 @@
       76
     ],
     "vermilion_city": [
-      51,
       416
     ],
     "victory_road": [
@@ -391,7 +386,6 @@
       406
     ],
     "viridian_city": [
-      38,
       74
     ],
     "viridian_forest": [

@@ -102,9 +102,10 @@ def test_generator_check_against_cache(script):
     )
     assert result.returncode == 0, (
         f"{script} --check drifted from its committed output (exit {result.returncode}). "
-        f"See docs/gen3_requirements.md F-7 -- for gen_rr_priority_trainers.py this is a "
-        f"known, currently-reproducible finding (the community Google Sheet has moved on "
-        f"from what produced the committed roster), not a broken pin.\n"
+        f"See docs/gen3_requirements.md F-7 -- gen_rr_priority_trainers.py's committed "
+        f"roster was last regenerated from the {LOCK_PATH.name} pin on 2026-09-27 (card "
+        f"RR-PT); a fresh drift here means the pin has moved again since, not a broken "
+        f"pin -- re-run `python tools/gen_rr_priority_trainers.py` and diff the result.\n"
         f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
 
@@ -241,3 +242,73 @@ def test_xlsx_content_sha256_covers_extracted_image_urls():
     a = rrfetch._xlsx_content_sha256(_make_xlsx_bytes("https://example.com/a.png"))
     b = rrfetch._xlsx_content_sha256(_make_xlsx_bytes("https://example.com/b.png"))
     assert a != b
+
+
+_GEN3_FRLGE_DIR = ROOT / "data" / "games" / "gen3_frlge"
+
+# Pre-existing trainers_by_area keys (from before card RR-PT) that are NOT
+# an area_id the live RR client ever reports: GEN3.resolve_area() (the id
+# sent to the server as area_id) only covers the coarse, mostly-outdoor
+# entries in area_map.json/gen3_frlge_areas.lua; indoor sub-rooms instead
+# report the FINE per-room id from gen3_frlge_locations.lua (e.g.
+# "rocket_hideout_b1f", not "rocket_hideout") when the coarse lookup is
+# empty. These abbreviated keys match neither table, so their trainers can
+# never appear in the Upcoming Key Trainers widget -- a real, pre-existing
+# gap, not something card RR-PT introduced or is chartered to redesign.
+# Flagged for a follow-up card rather than silently carried forward.
+_KNOWN_UNRESOLVABLE_AREA_KEYS = {
+    "celadon_hotel", "cinnabar_gym", "cinnabar_isl", "dig_house", "joyful",
+    "mansion_f4", "nugget_bridge", "pewter_museum", "rocket_hideout",
+    "ss_anne", "treasure_bea",
+}
+
+
+def _client_emittable_area_ids() -> set[str]:
+    """Every area_id string the RR/FRLG client can ever put on the wire for
+    `trainers_for_area()`: the coarse table (area_map.json, mirrored in
+    gen3_frlge_areas.lua) it reports outdoors, union the fine per-room table
+    (gen3_frlge_locations.lua) it falls back to indoors (see
+    lua/gen3/client.lua's area_now(): area_id = coarse-or-"", loc = fine;
+    server.py's trainer-panel call falls back to `loc` only when the coarse
+    id is empty)."""
+    coarse = set(json.loads((_GEN3_FRLGE_DIR / "area_map.json")
+                             .read_text(encoding="utf-8")).values())
+    lua_text = (_GEN3_FRLGE_DIR / "gen3_frlge_locations.lua").read_text(encoding="utf-8")
+    fine = set(re.findall(r'=\s*"([a-z0-9_]+)"', lua_text))
+    return coarse | fine
+
+
+def test_priority_trainers_areas_are_client_emittable():
+    """F-7 (card RR-PT): every trainers_by_area key in the committed
+    rr_priority_trainers.json must be an area_id the client can actually
+    emit, modulo the pre-existing gap in _KNOWN_UNRESOLVABLE_AREA_KEYS --
+    otherwise that area's Upcoming Key Trainers widget silently never
+    fires. This is the regression guard for the vermillion_city/
+    vermilion_city bug: the community sheet spelled the city both ways
+    (Trainer Order tab used the double-L "VERMILLION CITY"), and only
+    "vermilion_city" (one L) is the id area_map.json/the client emits --
+    tools/gen_rr_priority_trainers.py's _AREA_OVERRIDES normalises both
+    spellings to it."""
+    valid = _client_emittable_area_ids() | _KNOWN_UNRESOLVABLE_AREA_KEYS
+    roster = json.loads((_GEN3_FRLGE_DIR / "rr_priority_trainers.json")
+                         .read_text(encoding="utf-8"))
+    keys = set(roster["trainers_by_area"])
+    bad = sorted(keys - valid)
+    assert not bad, (
+        f"trainers_by_area key(s) {bad} aren't an area_id the RR/FRLG client "
+        f"ever emits (not in area_map.json, gen3_frlge_locations.lua, or the "
+        f"known pre-existing exceptions) -- their trainers can never show. "
+        f"Fix the sheet-text -> area_id mapping in "
+        f"tools/gen_rr_priority_trainers.py's _AREA_OVERRIDES/"
+        f"_normalize_area_name, don't hand-edit the JSON."
+    )
+    # And the grandfather list shouldn't quietly grow: every key in it must
+    # still exist in the roster (else the exception is dead documentation)
+    # and still actually be unresolvable (else it should be dropped from
+    # the exception list, tightening the check).
+    stale = sorted(_KNOWN_UNRESOLVABLE_AREA_KEYS - keys)
+    assert not stale, f"remove from _KNOWN_UNRESOLVABLE_AREA_KEYS, no longer in the roster: {stale}"
+    now_resolvable = sorted(_KNOWN_UNRESOLVABLE_AREA_KEYS & _client_emittable_area_ids())
+    assert not now_resolvable, (
+        f"{now_resolvable} now resolve -- drop from _KNOWN_UNRESOLVABLE_AREA_KEYS"
+    )

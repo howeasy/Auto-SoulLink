@@ -820,6 +820,11 @@ _AREA_OVERRIDES = {
     "CERULEAN CITY GYM":    "cerulean_city",
     "VERMILION CITY GYM":   "vermilion_city",
     "VERMILLION CITY GYM":  "vermilion_city",
+    # Plain city name (no "GYM" suffix) — the RR client/area_map.json emits
+    # "vermilion_city" (one L); the community sheet spells the city both
+    # ways depending on tab (Trainer Order uses the double-L "Vermillion").
+    "VERMILION CITY":       "vermilion_city",
+    "VERMILLION CITY":      "vermilion_city",
     "CELADON CITY GYM":     "celadon_city",
     "FUCHSIA CITY GYM":     "fuchsia_city",
     "FUSCHIA CITY GYM":     "fuchsia_city",      # Nuzlocke Redux typo
