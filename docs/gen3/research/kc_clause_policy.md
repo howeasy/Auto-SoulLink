@@ -77,3 +77,18 @@ The documentation-only baseline was **15365 passed, 515 skipped in 938.22s**, ex
 recorded in `.cache/kcc-full-unit.txt` (SHA-256
 `e78e87576e3fa2b10d71e5f40999d0851e1c5089bd900422332924e58ab8d874`).
 The implementation's full-suite receipt follows after its final run.
+
+
+## Combined verification cut
+
+Clause implementation: `556d0c5f9e190448a8206984c471a6db388726f7`.
+T4-R4 (`4229d7d8` plus Emerald-control receipt `234aa086`) was merged at `7ddf6920`
+after the integration merge. The sole conflict was protocol prose/citation offsets: retain
+integration's FR/LG + Emerald wording and ruling 35, add R4's hidden-party contract, then
+reanchor source citations. No behavior was invented during resolution.
+
+The merged focused run passed **623 tests in 7.41s**. Three further interaction controls
+(FR, Emerald, RR) prove that a hidden NPC report is refused before identity migration or
+clause retirement; with those included, the two card-specific files pass **238 tests in
+5.15s** (108 mutation controls and 130 recovery controls). The final full suite will cover
+this combined cut, including the additional Emerald hidden-empty-hello control.
