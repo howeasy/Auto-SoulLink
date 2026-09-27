@@ -137,17 +137,38 @@ All 11 keys are gone from `trainers_by_area` after the regen; their trainers now
 under the real reachable buckets above (e.g. `rocket_hideout`'s `[69, 350, 385, 538]`
 moved into `celadon_city`, which already had Erika's `417`).
 
-**Related finding, not changed by this card:** `celadon_city_game_corner` (Grunt id
-`382`) is subject to the exact same sticky-coarse mechanism — the Game Corner has no
-`area_map.json` entry either, so by the same rule it should also report `celadon_city`
-while the player stands there, not its own fine name. It currently "passes" the
-client-emittable test only because it happens to string-match
-`gen3_frlge_locations.lua`'s fine per-room table, but per the mechanism above that
-fine name is not what `player_area_id` actually holds except in the narrow edge case
-of a hello arriving before any coarse `area_enter` has ever fired this session (e.g.
-a save file that boots directly inside that room). Not one of the 11 keys card RR-PT
-flagged, and not touched here — flagging for an owner ruling on whether to fold it
-into `celadon_city` too, consistent with `rocket_hideout` above.
+## Follow-up (same day): `celadon_city_game_corner` was the same bug, fixed too
+
+The first RR-PT2 pass flagged `celadon_city_game_corner` (Grunt id `382`) as a
+"related finding, not changed" pending an owner ruling, reasoning it was only
+reachable in the narrow edge case of a hello landing before any coarse `area_enter`
+had fired that session. The coordinator called this out as a **factual** fix, not a
+design/ownership question: `server.py`'s trainer-panel call is
+`self.player_area_id.get(pid, "") or self.player_area.get(pid, "")` (server.py
+~:2843) — `player_area_id` is the STICKY coarse value (only overwritten `if area:`
+in the `hello`/`area_enter` handlers), so `player_area`'s fine value is a fallback
+used only before the very first coarse reading of the session. Every reading after
+that receives the sticky coarse id, exactly the same mechanism that made the
+original 11 keys dead. `celadon_city_game_corner` (`CeladonCity_GameCorner`, pret
+map `10:14`) has no `area_map.json` entry of its own, same as `CeladonCity_Hotel` or
+`RocketHideout_*`; `area_of_map()` confirms it resolves to `celadon_city` one hop
+out (its own warp leads straight back to the city), and `CeladonCity_GameCorner_
+PrizeRoom` resolves the same way.
+
+Fixed the same way as the 11: `_AREA_OVERRIDES["CELADON CITY GAME CORNER"]` and
+`_AREA_OVERRIDES["GAME CORNER"]` now both map to `celadon_city` instead of
+`celadon_city_game_corner`. Regenerating folds Grunt `382` into `celadon_city`
+(now `[16, 17, 65, 69, 350, 382, 385, 417, 538]`); `trainers_by_area` drops to 44
+areas (was 45), and the roster now has **zero** non-coarse (`area_map.json`) keys.
+
+`test_priority_trainers_areas_are_client_emittable` is tightened to match: its
+helper (renamed `_coarse_area_ids()`, was `_client_emittable_area_ids()`) now
+returns ONLY `area_map.json`'s values, not the union with
+`gen3_frlge_locations.lua`'s fine per-room table — that fine table was never what
+the trainer panel receives in ordinary play, only in the narrow before-first-hello
+edge case above, so it was too permissive a validator. Re-running the tightened
+test against the regenerated roster confirms no other fine-only key slipped through:
+`celadon_city_game_corner` was the only one.
 
 ## Rematch-tag fix (item 2)
 

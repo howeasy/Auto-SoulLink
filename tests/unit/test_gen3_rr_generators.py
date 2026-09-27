@@ -246,13 +246,24 @@ def test_xlsx_content_sha256_covers_extracted_image_urls():
 
 _GEN3_FRLGE_DIR = ROOT / "data" / "games" / "gen3_frlge"
 
-# card RR-PT2 (2026-09-27): the 11 abbreviated building/room keys that used
-# to live here (celadon_hotel, cinnabar_gym, cinnabar_isl, dig_house,
-# joyful, mansion_f4, nugget_bridge, pewter_museum, rocket_hideout, ss_anne,
-# treasure_bea) matched neither table below, so their trainers could never
-# appear in the Upcoming Key Trainers widget. tools/gen_rr_priority_trainers.py's
-# _AREA_OVERRIDES now maps every one of them to the area_id the RR client
-# actually reports while standing there (the nearest area_map.json-mapped
+# card RR-PT2 (2026-09-27, tightened same day per a coordinator follow-up):
+# the 11 abbreviated building/room keys that used to live here
+# (celadon_hotel, cinnabar_gym, cinnabar_isl, dig_house, joyful, mansion_f4,
+# nugget_bridge, pewter_museum, rocket_hideout, ss_anne, treasure_bea), plus
+# celadon_city_game_corner found in the follow-up, all matched
+# gen3_frlge_locations.lua's FINE per-room table but not area_map.json's
+# COARSE one, so their trainers could never appear in the Upcoming Key
+# Trainers widget in practice: server.py's trainer-panel call
+# (`self.player_area_id.get(pid, "") or self.player_area.get(pid, "")`,
+# server.py ~:2843) only ever falls back to the fine `player_area` value
+# before the player's FIRST coarse area_enter this session -- every
+# area_enter/hello after that keeps player_area_id STICKY at the last
+# non-empty coarse reading (server.py's handlers only overwrite it
+# `if area:`), so a
+# fine-only id like "rocket_hideout_b1f" or "celadon_city_game_corner" is,
+# in real play, effectively unreachable. tools/gen_rr_priority_trainers.py's
+# _AREA_OVERRIDES now maps every one of these to the area_id the client
+# actually holds while standing there (the nearest area_map.json-mapped
 # ancestor over pret's warps/connections, same rule
 # tools/gen_gen3_trainers.py's area_of_map() uses for vanilla FR/LG) --
 # see docs/gen3/research/rr_priority_regen_2026-09-26.md for the per-key trace.
@@ -260,35 +271,35 @@ _GEN3_FRLGE_DIR = ROOT / "data" / "games" / "gen3_frlge"
 # reintroduces a dead key fails loudly instead of silently growing a list.
 
 
-def _client_emittable_area_ids() -> set[str]:
-    """Every area_id string the RR/FRLG client can ever put on the wire for
-    `trainers_for_area()`: the coarse table (area_map.json, mirrored in
-    gen3_frlge_areas.lua) it reports outdoors, union the fine per-room table
-    (gen3_frlge_locations.lua) it falls back to indoors (see
-    lua/gen3/client.lua's area_now(): area_id = coarse-or-"", loc = fine;
-    server.py's trainer-panel call falls back to `loc` only when the coarse
-    id is empty)."""
-    coarse = set(json.loads((_GEN3_FRLGE_DIR / "area_map.json")
-                             .read_text(encoding="utf-8")).values())
-    lua_text = (_GEN3_FRLGE_DIR / "gen3_frlge_locations.lua").read_text(encoding="utf-8")
-    fine = set(re.findall(r'=\s*"([a-z0-9_]+)"', lua_text))
-    return coarse | fine
+def _coarse_area_ids() -> set[str]:
+    """Every area_id string the RR/FRLG client's trainer panel can actually
+    receive in play: area_map.json's coarse per-town/dungeon table only
+    (mirrored in gen3_frlge_areas.lua). Deliberately excludes
+    gen3_frlge_locations.lua's fine per-room table -- that only ever feeds
+    `player_area`, which the trainer panel's `player_area_id.get(pid, "")
+    or player_area.get(pid, "")` (server.py ~:2843) falls back to before the
+    player's first coarse area_enter this session; every reading after that
+    is the sticky coarse value (see the module comment above)."""
+    return set(json.loads((_GEN3_FRLGE_DIR / "area_map.json")
+                           .read_text(encoding="utf-8")).values())
 
 
 def test_priority_trainers_areas_are_client_emittable():
     """F-7/RR-PT2: every trainers_by_area key in the committed
-    rr_priority_trainers.json must be an area_id the client can actually
-    emit -- otherwise that area's Upcoming Key Trainers widget silently
-    never fires. This is the regression guard for both the vermillion_city/
+    rr_priority_trainers.json must be a COARSE area_id (area_map.json) --
+    the only kind the trainer panel actually receives in play once the
+    player has ever reported one this session (see the module comment
+    above) -- otherwise that area's Upcoming Key Trainers widget silently
+    never fires. This is the regression guard for the vermillion_city/
     vermilion_city bug (the community sheet spelled the city both ways;
     only "vermilion_city", one L, is the id area_map.json/the client
-    emits) and the 11 dead building/room keys card RR-PT2 fixed (e.g.
-    "rocket_hideout", "pewter_museum" -- a bare building name is never
-    client-emittable; see tools/gen_rr_priority_trainers.py's
-    _AREA_OVERRIDES for the area_of_map()-derived fix). No allowlist: a
-    regen that reintroduces a dead key must fail this test, not grow a
-    grandfather list."""
-    valid = _client_emittable_area_ids()
+    emits) and every dead building/room key card RR-PT2 fixed (e.g.
+    "rocket_hideout", "pewter_museum", "celadon_city_game_corner" -- a bare
+    building/fine-per-room name is never reachable in the trainer panel;
+    see tools/gen_rr_priority_trainers.py's _AREA_OVERRIDES for the
+    area_of_map()-derived fix). No allowlist: a regen that reintroduces a
+    dead key must fail this test, not grow a grandfather list."""
+    valid = _coarse_area_ids()
     roster = json.loads((_GEN3_FRLGE_DIR / "rr_priority_trainers.json")
                          .read_text(encoding="utf-8"))
     keys = set(roster["trainers_by_area"])

@@ -143,12 +143,10 @@
       65,
       69,
       350,
+      382,
       385,
       417,
       538
-    ],
-    "celadon_city_game_corner": [
-      382
     ],
     "cerulean_cave": [
       19,
@@ -21246,7 +21244,7 @@
           "level_offset": -4
         }
       ],
-      "area": "celadon_city_game_corner",
+      "area": "celadon_city",
       "level_cap": 27,
       "calc_label": "Team Rocket Grunt Grunt (Game Corner)",
       "fight_label": "Game Corner",

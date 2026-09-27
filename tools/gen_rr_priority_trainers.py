@@ -855,8 +855,17 @@ _AREA_OVERRIDES = {
     "SAFFRON CITY GYM":     "saffron_city",
     "CINNABAR ISLAND GYM":  "cinnabar_island",
     "VIRIDIAN CITY GYM":    "viridian_city",
-    "CELADON CITY GAME CORNER": "celadon_city_game_corner",
-    "GAME CORNER":             "celadon_city_game_corner",
+    # Celadon Game Corner (CeladonCity_GameCorner/_PrizeRoom): no
+    # area_map.json entry of its own either -- same sticky-coarse mechanism
+    # as Rocket Hideout below (card RR-PT2 follow-up, 2026-09-27): a fine
+    # gen3_frlge_locations.lua-only id like "celadon_city_game_corner" is
+    # ONLY what a hello ever reports, before player_area_id has taken any
+    # coarse reading this session; server.py's trainer panel
+    # (player_area_id.get(pid) or player_area.get(pid)) receives the sticky
+    # coarse value in every other case, so this fine id is effectively
+    # unreachable in play, exactly like the 11 keys fixed above.
+    "CELADON CITY GAME CORNER": "celadon_city",
+    "GAME CORNER":             "celadon_city",
     # Rocket Hideout's floors (RocketHideout_B1F..B4F) have no area_map.json
     # entry of their own; its entrance is inside the Game Corner, which also
     # has none. BFS over pret's warps lands two hops out, at Celadon City.
