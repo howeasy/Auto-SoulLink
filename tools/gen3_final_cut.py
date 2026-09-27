@@ -151,8 +151,10 @@ UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
                    # tests/unit/test_gen3_shadow_diff.py parses these physical P3 captures
                    "patch/build/shadow_wire/",
                    # the pret clones the unit suite reads (test_gen1_trade_patch, the Gen 3
-                   # profile/route/tutorial tests); only these three, not all ~630 MB of .cache/pret
-                   ".cache/pret/pokered/", ".cache/pret/pokefirered/", ".cache/pret/pokecrystal/"]
+                   # profile/route/tutorial tests, and since EXPLODE-BIND the Emerald write
+                   # checkpoint generator); only these four, not all ~630 MB of .cache/pret
+                   ".cache/pret/pokered/", ".cache/pret/pokefirered/", ".cache/pret/pokecrystal/",
+                   ".cache/pret/pokeemerald/"]
 GITIGNORED_INPUTS = list(PINNED_INPUTS) + UNPINNED_INPUTS
 ITEM6_INPUTS = [p for p in UNPINNED_INPUTS if not p.endswith("/")]   # the Gen 1/2 dumps and builds
 
