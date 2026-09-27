@@ -285,7 +285,7 @@ end
 
 local function trade_live_snapshot(io_, profile, layout)
     local a, d = profile.ram, profile.derived
-    local sb1, sb2 = io_.read_u32(a.SB1_PTR_ADDR), io_.read_u32(a.SB2_PTR_ADDR)
+    local sb1, sb2 = io_.read_u32(layout.sb1_ptr or a.SB1_PTR_ADDR), io_.read_u32(layout.sb2_ptr or a.SB2_PTR_ADDR)
     assert(sb1 >= 0x02000000 and sb1 < 0x02040000 and sb2 >= 0x02000000 and sb2 < 0x02040000,
            "live save blocks unavailable")
     local count = io_.read_u8(a.PARTY_COUNT_ADDR)

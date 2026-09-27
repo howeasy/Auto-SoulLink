@@ -184,9 +184,9 @@ def test_two_prepared_runs_cannot_publish_conflicting_intents_from_stale_state()
     assert restarted.outstanding(restarted)[1].token == "first"
 
 
-def flash_and_ram(title="emerald", counter=7):
+def flash_and_ram(title="emerald", counter=7, cfru=False):
     from server.adapters import gen3_codec as C
-    layout = C.slot_layout(title=title)
+    layout = C.slot_layout(C.CHUNK_SIZE_CFRU if cfru else C.CHUNK_SIZE_VANILLA, title=title)
     blocks = {"sb2": bytearray(layout[0]["size"]), "sb1": bytearray(0x3D88 if title == "emerald" else 0x3D68),
               "storage": bytearray(C.STORAGE_SIZE)}
     blocks["sb2"][10:14] = (0x12345678).to_bytes(4, "little")
@@ -194,6 +194,7 @@ def flash_and_ram(title="emerald", counter=7):
     party = bytes(range(100))
     blocks["sb1"][count_at:count_at+4] = (1).to_bytes(4, "little")
     blocks["sb1"][party_at:party_at+100] = party
+    blocks["sb1"][-0x10] = 0xA5  # past CFRU's id-4 chunk (0xD98), inside vanilla's (0xEE8)
     flash = bytearray(b"\xff" * C.FLASH_SIZE)
     for row in layout:
         data = blocks[row["object"]][row["offset"]:row["offset"]+row["size"]]
@@ -447,4 +448,47 @@ def test_reload_counter_binding_matches_the_pinned_title_symbols(title):
     rows = [line.split() for line in (ROOT / f"data/gen3/pret/poke{title}.sym").read_text().splitlines()]
     address, size = next((int(r[0],16),int(r[2],16)) for r in rows if len(r)==4 and r[3]=="gSaveCounter")
     assert module.RELOAD_LAYOUTS[title].counter == address and size == 4
-    assert module.RELOAD_LAYOUTS["firered_rr"] is None
+
+
+def test_rr_reload_layout_is_the_cfru_chunk_table_and_rom_pinned_pointers():
+    """RR is keyed by its wire rom_type. Its sectors use CFRU's 0xFF0 chunk
+    (docs/gen3/research/rr_save_layout.md sec 1), and its SaveBlock pointers are the
+    write_checkpoint's ROM-read pool words, not the profile's legacy SB1_PTR_ADDR."""
+    import json
+    _, module, _ = journal(Store(), fresh=True)
+    rr = module.RELOAD_LAYOUTS["firered_rr"]
+    assert rr is not None and rr.chunk == 0xFF0
+    assert (rr.sb2_size, rr.sb1_size, rr.count_offset, rr.party_offset) == (0xF24, 0x3D68, 0x34, 0x38)
+    pointers = json.loads((ROOT / "data/games/gen3_rr/write_checkpoint.json").read_text())["radical_red"]["pointers"]
+    assert (rr.sb1_ptr, rr.sb2_ptr) == (pointers["gSaveBlock1Ptr"]["address"], pointers["gSaveBlock2Ptr"]["address"])
+    assert module.RELOAD_LAYOUTS["firered"].chunk in (None, 0xF80)
+
+
+def test_rr_save_counter_is_the_word_rrs_cfru_save_bodies_load():
+    """[ROM] gSaveCounter: every FR save function's pool word, plus the two CFRU save
+    bodies RR adds (0x090B8C70, 0x090B8DC4), name the same IWRAM word."""
+    import os
+    rom = Path(os.environ.get("SLINK_GEN3_ROMS", ROOT)) / "Pokemon - Radical Red.gba"
+    if not rom.exists():
+        pytest.skip("RR base ROM absent")
+    data = rom.read_bytes()
+    _, module, _ = journal(Store(), fresh=True)
+    want = module.RELOAD_LAYOUTS["firered_rr"].counter
+    for pool in (0x090B8C70, 0x090B8DC4, 0x080DA084):
+        assert int.from_bytes(data[pool - 0x08000000:pool - 0x08000000 + 4], "little") == want
+
+
+@pytest.mark.parametrize("fault", (None, "vanilla_chunk"))
+def test_rr_reload_proof_accepts_only_a_cfru_chunked_battery(fault):
+    store = Store()
+    lua, module, obj = journal(store, fresh=True)
+    epoch = arm(obj)
+    flash, ram = flash_and_ram(title="firered", cfru=fault is None)
+    request = {"title": "firered_rr", "rom_sha1": "a" * 40, "boot_seen": True, "flash_before": flash,
+               "flash_after": flash, "ram_before": ram, "ram_after": copy.deepcopy(ram)}
+    proof = module.verify_reload(lua.table_from(request, recursive=True))
+    if fault:
+        assert proof[0] is None and "checksum" in proof[1]
+    else:
+        assert proof.counter == 7 and obj.qualify(obj, proof) is True
+        assert obj.declared(obj, "t", epoch) is True
