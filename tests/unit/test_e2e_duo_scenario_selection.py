@@ -837,12 +837,13 @@ def test_list_lines_carry_the_attempt_limit_and_the_targets():
 # ── gen3_frlg: the new Gen 3 client on vanilla FRLG (card C4-6a) ────────────────────────────────
 GEN3_FRLG_SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3",
                        "whiteout_gen3", "link_gen3", "deadzone_gen3", "reconnect_gen3",
+                       "explode_gen3",
                        # G4-PH: the P+H whiteout variant (A1 (i) on FR/LG, R4 on RR)
                        "linked_faint_active_whiteout_gen3")
 # P5 (card C5-5): gen3_rr runs the shared Gen 3 scenarios (their `games` tuples EXTENDED,
 # never renamed) plus the RR-only scenarios (docs/gen3/PLAN.md §14 P5, minus the retired old
 # client's trade/ghost/infopanel rows and trade_abort, a later card).
-GEN3_RR_ONLY_SCENARIOS = ("explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
+GEN3_RR_ONLY_SCENARIOS = ("rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
                           # G4-PH: RR rows R2/R3/R5 (rr_active_faint_parity_scope §5.5)
                           "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3",
                           "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3",
@@ -857,12 +858,13 @@ GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 # NAT-LEGS: the FR/LG natural legs (S-8, S-9, S-11), explicit_only (FR-as-A SYNTH fixtures)
 GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3")
-# card RR-SYNTH: of the three NAT_SCENARIOS, only evolve_gen3 also names gen3_rr (RR-SYNTH
-# built rr_evolve_synth.sav + the RR evolution/base-stat/learnset facts). npc_trade_gen3 stays
-# refused (no RR trade-table/map-position source); poison_faint_gen3 stays refused (RR's
+# card RR-SYNTH/RR-NPCTRADE: of the three NAT_SCENARIOS, evolve_gen3 and npc_trade_gen3 also name
+# gen3_rr (RR-SYNTH built rr_evolve_synth.sav + the RR evolution/base-stat/learnset facts;
+# RR-NPCTRADE built rr_trade_synth.sav + RR's own in-game trade table/trader position,
+# docs/gen3/research/rr_ingame_trades.md). poison_faint_gen3 stays refused (RR's
 # DoPoisonFieldEffect is an unconditional no-op stub, no HP mutation to build a fixture
-# around) -- see both rows' comments in tools/e2e_duo.py SCENARIOS.
-GEN3_RR_NAT_SCENARIOS = ("evolve_gen3",)
+# around) -- see its comment in tools/e2e_duo.py SCENARIOS.
+GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (
@@ -872,13 +874,16 @@ GEN3_RR_NAT_SCENARIOS = ("evolve_gen3",)
 ))
 def test_randomized_frlg_registration(name, module, target):
     row = SCENARIOS[name]
-    games = ("gen3_frlg", "gen3_emerald") if name == "trainer_panel_gen3_rand" else ("gen3_frlg",)
+    # E-RAND-CATCH: link_gen3_rand joined trainer_panel_gen3_rand on gen3_emerald, reusing
+    # Emerald's own pre-existing `catch` fixture (target_by_game) instead of a new SYNTH file.
+    games = ("gen3_frlg",) if name == "admit_randomized_frlg" else ("gen3_frlg", "gen3_emerald")
     assert row["gen3_rand"] and row["games"] == games
     assert row["scenario_module"] == module and row["target"] == target
     assert row["oracle"] == f"assert_{name}_saved"
     assert callable(getattr(DuoRun, row["oracle"]))
     assert callable(getattr(DuoRun, f"orchestrate_{name}"))
-    assert scenario_attempt_limit(name, "gen3_frlg") == 1
+    # link_gen3_rand throws Poke Balls: the Gen 1 ball_hunt retry (out-of-balls / lost catch battle)
+    assert scenario_attempt_limit(name, "gen3_frlg") == (3 if name == "link_gen3_rand" else 1)
     assert not scenario_applies(name, "gen3_rr")
 
 
@@ -892,15 +897,15 @@ def test_randomized_rows_never_join_scenario_all_but_run_when_named():
             assert scenario_applies(name, game)
 
 
-def test_gen3_frlg_selection_is_exactly_its_seven():
-    """PLAN §5.5's FRLG matrix, pinned: `--scenario all --game gen3_frlg` runs these and only these."""
+def test_gen3_frlg_selection_is_exactly_its_bound_scenarios():
+    """The FRLG matrix, including Explode, is explicit: no unrelated family rows leak in."""
     for row in GEN3_FRLG_ROWS:
         assert sorted(scenarios_for(row)) == sorted(GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS), row
 
 
 def test_gen3_rr_selection_is_the_shared_set_plus_its_own_rows():
     """P5, card C5-5: `--scenario all --game gen3_rr` runs the shared Gen 3 scenarios plus
-    the RR-only explode/rival/native rows -- and nothing else (not the retired old-client
+    the RR-only rival/native rows -- and nothing else (not the retired old-client
     trade/ghost/infopanel rows, not any gen1/gen2 name)."""
     assert sorted(scenarios_for("gen3_rr")) == sorted(GEN3_RR_SCENARIOS)
     assert "gen3_rr" in duo_module.OPT_IN_GAMES
@@ -921,7 +926,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         if name not in GEN3_RR_SCENARIOS + GEN3_RR_NAT_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name
     for name in GEN3_FRLG_SCENARIOS:
-        # E4: the seven shared rows also name gen3_emerald (E<->E), appended, never renamed
+        # Shared rows also name gen3_emerald (E<->E), appended, never renamed.
         assert SCENARIOS[name]["games"] in (("gen3_frlg", "gen3_rr"),
                                             ("gen3_frlg", "gen3_rr", "gen3_emerald")), name
         # the ball-RNG retry (card C4-6g): only the halves that throw Poke Balls retry
@@ -1157,10 +1162,11 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     # "pc" (Mudkip + Poochyena) instead -- poison_faint_gen3 links slot 0, but B's linked lead is
     # still force_faint'ed (Soul Link), so Emerald's B side needs "pc" too: a single-mon "town"
     # party whites out instead of memorializing.
-    # card RR-SYNTH: npc_trade_gen3 stays FR/LG+Emerald only -- RR's trade table/trader position
-    # is not derivable from anything pinned in this repo (refused, not guessed; see the
-    # npc_trade_gen3 comment in SCENARIOS).
-    ("npc_trade_gen3", "trade", 1, ("gen3_frlg", "gen3_emerald"), "pc", None),
+    # card RR-NPCTRADE: gen3_rr joins too (rr_trade_synth.sav over rr_battle2.sav). B needs 2
+    # party mons for the link_slot=1 pairing, same as Emerald's "pc" substitution above; RR's
+    # own "town"/"town_b" fixtures only carry one mon, so target_by_game swaps B to "battle2"
+    # (rr_battle2_b.sav, already committed) instead.
+    ("npc_trade_gen3", "trade", 1, ("gen3_frlg", "gen3_emerald", "gen3_rr"), "pc", "battle2"),
     # card RR-SYNTH: poison_faint_gen3 stays FR/LG+Emerald only. RR's DoPoisonFieldEffect
     # detours to an unconditional `MOVS r0,#0; BX LR` stub (0x090B20D4 in
     # patch/build/slink_RR.gba) -- no HP mutation at all outside battle, so there is no
@@ -1287,11 +1293,11 @@ def test_nat_legs_trade_synth_refuses_a_seed_with_no_owned_slot1_mon(break_it):
 # ---------------------------------------------------------------------------
 # card RR-SYNTH: make-rr-synth (build_rr_synth), the CFRU-aware sibling of build_frlg_synth
 # that unblocks evolve_gen3 on gen3_rr (docs/gen3_requirements.md S-8 row: "a working RR leg
-# needs new tool plumbing"). poison_faint_gen3 (S-11) stays refused on RR: RR's
-# DoPoisonFieldEffect detours to an unconditional `MOVS r0,#0; BX LR` stub with no HP
-# mutation at all outside battle (tools/gen3_fixtures.py's build_rr_synth module comment,
-# docs/gen3_engine_sites.md), so RR_SYNTH_KINDS is evolve-only -- there is nothing to build a
-# "poison" kind around.
+# needs new tool plumbing"). card RR-NPCTRADE added the "trade" kind (S-9, RR's own Route2_House/
+# Reyley trade table). poison_faint_gen3 (S-11) stays refused on RR: RR's DoPoisonFieldEffect
+# detours to an unconditional `MOVS r0,#0; BX LR` stub with no HP mutation at all outside battle
+# (tools/gen3_fixtures.py's build_rr_synth module comment, docs/gen3_engine_sites.md), so
+# RR_SYNTH_KINDS has no "poison" kind -- there is nothing to build one around.
 # ---------------------------------------------------------------------------
 
 RR_SYNTH_SEED = "rr_battle2"   # tests/fixtures/gen3/rr_battle2.sav: TREECKO Lv6 + Smoliv Lv4
@@ -1408,3 +1414,143 @@ def test_rr_synth_refuses_a_seed_whose_party0_is_not_treecko():
     fx._rr_recompute_touched_checksums(parsed, seed, tampered, [])
     with pytest.raises(ValueError, match="not TREECKO"):
         fx.build_rr_synth(bytes(tampered), "evolve")
+
+
+# ---------------------------------------------------------------------------
+# card RR-NPCTRADE: make-rr-synth --kind trade, over rr_battle2.sav (party[1] is a player-owned
+# Smoliv -- the FRLG trade kind's own precedent for "which party slot"). RR facts (species,
+# base stats, exp, learnset, warp, flag) come from docs/gen3/research/rr_ingame_trades.md and
+# a direct decode of patch/build/slink_RR.gba, never vanilla FR/LG.
+# ---------------------------------------------------------------------------
+
+RR_TRADE_SEED = "rr_battle2"   # same seed as evolve: TREECKO Lv6 (untouched) + Smoliv Lv4 (traded)
+
+
+def test_rr_trade_synth_builder_is_deterministic():
+    import gen3_fixtures as fx
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_TRADE_SEED}.sav"), "rb") as f:
+        seed = f.read()
+    built1, _ = fx.build_rr_synth(seed, "trade")
+    built2, _ = fx.build_rr_synth(seed, "trade")
+    assert built1 == built2
+
+
+def test_rr_trade_synth_reproduces_from_its_seed():
+    """The committed `rr_trade_synth.sav` is exactly what build_rr_synth builds from
+    rr_battle2.sav -- no hand edit, no drift."""
+    import gen3_fixtures as fx
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_TRADE_SEED}.sav"), "rb") as f:
+        built, _ = fx.build_rr_synth(f.read(), "trade")
+    with open(os.path.join(fixtures, "rr_trade_synth.sav"), "rb") as f:
+        assert f.read() == built
+
+
+def test_rr_trade_synth_fixture_qualifies_rr():
+    import gen3_fixtures as fx
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, "rr_trade_synth.sav"), "rb") as f:
+        data = f.read()
+    result = fx.qualify_one(data, rr=True)
+    assert result["ok"], result["message"]
+
+
+def test_rr_trade_synth_party1_decodes_as_owned_snom_lv10():
+    """party[0] (TREECKO) is untouched; party[1] is a player-owned Lv10 SNOM (RR species 1164,
+    JYNX/"Dontae"'s requested species -- card RR-NPCTRADE-2: Route2_House/Reyley's MR_MIME check
+    is dead on the real RR ROM, docs/gen3/research/rr_ingame_trades.md), RR-base-stat-recomputed,
+    full HP, its first level-1 learnset move (RR's own RR_LEVELUP_LEARNSETS decode) -- the exact
+    fields the npc_trade_gen3 oracle/scenario need."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_TRADE_SEED}.sav"), "rb") as f:
+        seed_party = codec.rr_party_from_save(f.read())
+    with open(os.path.join(fixtures, "rr_trade_synth.sav"), "rb") as f:
+        data = f.read()
+        party = codec.rr_party_from_save(data)
+    assert party[0] == seed_party[0]   # untouched
+    mon = party[1]
+    assert mon["species"] == fx.RR_SPECIES_SNOM
+    assert mon["level"] == 10 and mon["experience"] == fx.RR_SNOM_EXP_LV10
+    assert mon["status"] == 0 and mon["hp"] == mon["max_hp"]
+    assert mon["moves"] == [fx.RR_MOVE_SNOM, 0, 0, 0]
+    assert mon["pp"] == [fx.RR_SNOM_MOVE_PP, 0, 0, 0]
+    assert mon["personality"] % 25 == 0   # Hardy, same construction as the FR/LG trade kind
+    assert mon["ot_id"] == seed_party[1]["ot_id"]   # still the player's own mon
+    recomputed = fx._gen3_stats(fx.RR_SNOM_BASE, mon, 10)
+    assert {k: mon[k] for k in recomputed} == recomputed
+    parsed = codec.parse_flash(data, cfru=True)
+    g, n, x, y = fx.RR_CERULEAN_HOUSE3_WARP
+    assert parsed["sb1"][0x0C:0x14] == fx._warp(g, n, x, y)
+    assert parsed["sb2"][0x09] & 1 == 1   # CONTINUE_GAME_WARP
+    flag_byte = parsed["sb1"][fx.RR_SB1_FLAGS + fx.FLAG_DID_ZYNX_TRADE_RR // 8]
+    assert (flag_byte >> (fx.FLAG_DID_ZYNX_TRADE_RR % 8)) & 1 == 0   # trade not yet done
+
+
+def test_rr_trade_synth_touches_only_the_rewritten_sectors():
+    """Byte diff confined to the selected slot's own sectors (party[1] + the SaveBlock2 chunk
+    holding specialSaveWarpFlags), same discipline as the evolve kind's own byte-diff test."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_TRADE_SEED}.sav"), "rb") as f:
+        seed = f.read()
+    built, _ = fx.build_rr_synth(seed, "trade")
+    assert len(built) == len(seed)
+    diffs = [i for i in range(len(seed)) if seed[i] != built[i]]
+    assert diffs, "the builder must change at least one byte"
+    parsed = codec.parse_flash(seed, cfru=True)
+    half = parsed["slot"] * codec.NUM_SECTORS_PER_SLOT
+    touched_sectors = {s["index"] for s in parsed["sectors"][half:half + codec.NUM_SECTORS_PER_SLOT]}
+    for offset in diffs:
+        sector_index = offset // codec.SECTOR_SIZE
+        assert sector_index in touched_sectors, (
+            f"byte 0x{offset:X} changed outside the selected slot's own sectors")
+
+
+@pytest.mark.parametrize("break_it", ("empty_slot1", "foreign_ot", "already_traded"))
+def test_rr_trade_synth_refuses_a_bad_seed(break_it):
+    """Same discipline as the FR/LG trade kind (OMP cx-6821246e F5): an empty party slot 1, one
+    owned by someone else, or a seed that already did the ZYNX trade is refused rather than
+    silently building a fixture around it."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    with open(os.path.join(fixtures, f"{RR_TRADE_SEED}.sav"), "rb") as f:
+        seed = f.read()
+    parsed = codec.parse_flash(seed, cfru=True)
+    sb1 = bytearray(parsed["sb1"])
+    spans = fx._rr_write_spans(parsed)
+    patches: dict = {}
+    field = fx._rr_field_patcher(spans, patches, "party[1]")
+    at = codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE   # slot 1
+    if break_it in ("empty_slot1", "foreign_ot"):
+        mon = codec.decode_party_mon(bytes(sb1[at:at + codec.PARTY_MON_SIZE]), rr=True)
+        if break_it == "empty_slot1":
+            mon["species"] = 0
+        else:
+            mon["ot_id"] ^= 0xFFFFFFFF
+        field(codec.RR_SAVEBLOCK1_ADDR + at, codec.encode_party_mon(mon, rr=True))
+        expect = "slot 1 is empty|OT mismatch"
+    else:
+        flag_at = fx.RR_SB1_FLAGS + fx.FLAG_DID_ZYNX_TRADE_RR // 8
+        byte = sb1[flag_at] | (1 << (fx.FLAG_DID_ZYNX_TRADE_RR % 8))
+        field(codec.RR_SAVEBLOCK1_ADDR + flag_at, bytes([byte]))
+        expect = "already done the ZYNX"
+    tampered = bytearray(seed)
+    for offset, value in patches.items():
+        tampered[offset] = value
+    fx._rr_recompute_touched_checksums(parsed, seed, tampered, [])
+    with pytest.raises(ValueError, match=expect):
+        fx.build_rr_synth(bytes(tampered), "trade")

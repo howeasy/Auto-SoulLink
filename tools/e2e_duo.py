@@ -80,8 +80,12 @@ SCENARIOS = {
     "admit_randomized_emerald": {"flags": [], "timeout": 600, "games": ("gen3_emerald",),
         "target": "town", "frames": 1200000, "no_save": ("a", "b"), "gen3_rand": True, "explicit_only": True,
         "scenario_module": "rand_admit", "oracle": "assert_admit_randomized_frlg_saved"},
-    "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg",),
-        "target": "catch_synth", "frames": 2000000, "gen3_rand": True, "explicit_only": True,
+    # E-RAND-CATCH: E<->E reuses Emerald's own pre-existing 20-ball `catch` fixture (the
+    # non-randomized rows' emerald_catch{,_b}.sav) rather than a new SYNTH file -- only FR/LG
+    # needs the R4-LINK SYNTH catch_synth edit (2/4 Poke Balls in the battle save).
+    "link_gen3_rand": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_emerald"),
+        "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch"},
+        "frames": 2000000, "gen3_rand": True, "explicit_only": True, "ball_hunt": True,
         "scenario_module": "rand_link", "oracle": "assert_link_gen3_rand_saved"},
     "trainer_panel_gen3_rand": {"flags": [], "timeout": 600, "games": ("gen3_frlg", "gen3_emerald"),
         "target": "trainer", "frames": 1200000, "gen3_rand": True, "explicit_only": True,
@@ -416,18 +420,25 @@ SCENARIOS = {
     # FR/LG's "town" fixture already carries 2 party mons (unlike Emerald's, which is a single
     # Mudkip for that kind), so B's Emerald side boots "pc" instead (Mudkip + Poochyena, slot 1
     # present) -- the same B-idle fixture boxsync_gen3/whiteout_gen3 already use for gen3_emerald.
-    # card RR-SYNTH: gen3_rr does NOT join this row. The NPC trade needs RR's own in-game trade
-    # table (requested species + received mon) and the trader NPC's map/object-event position,
-    # neither of which is pinned anywhere in this repo (data/games/gen3_rr/profile.json has no
-    # trade-table address, and no map-header/object-event source is cached for RR's map bank).
-    # Guessing either risks shipping a fixture that boots into a wall or trades the wrong mon;
-    # per the card's own instruction this is refused and reported rather than guessed. Someone
-    # with ROM access to RR's relocated trade table (same CFRU-thunk technique used for the
-    # evolution/base-stat/learnset tables above) and a way to read RR's map/event data can pick
-    # this back up.
-    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+    # card RR-NPCTRADE: gen3_rr joins too, now that RR's own trade table + trader position are
+    # pinned (docs/gen3/research/rr_ingame_trades.md, tools/rr_ingame_trades.py). card
+    # RR-NPCTRADE-2: Route2_House/"Reyley" (MR_MIME slot) turned out DEAD on the real RR ROM (its
+    # CFRU-detoured species check reads a runtime table whose index-0 entry is garbage -- doc
+    # section "RR-NPCTRADE-2"), so the fixture targets JYNX/"Dontae" (CeruleanCity_House3)
+    # instead: no badge/checkflag gate either, same map/script relationship to vanilla.
+    # rr_trade_synth.sav (tools/gen3_fixtures.py make-rr-synth --kind trade over rr_battle2.sav,
+    # which build_rr_synth's module comment and the card doc source) makes party[1] a
+    # player-owned Lv10 SNOM (RR species 1164) and warps CONTINUE into CeruleanCity_House3 (7,2)
+    # (2,1), one tile above Dontae (2,2) facing up. B needs 2 party mons for the same link_slot=1
+    # reason as the FR/LG and Emerald legs
+    # above (rr_town.sav/rr_town_b.sav only carry one mon); rr_battle2_b.sav (already committed,
+    # 2 mons) is reused as-is -- the same B-idle substitution boxsync_gen3/whiteout_gen3 already
+    # make for gen3_rr via target_by_game "battle2".
+    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"),
+                       "explicit_only": True,
                        "target": {"a": "trade_synth", "b": "town"},
-                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
+                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"},
+                                          "gen3_rr": {"a": "trade_synth", "b": "battle2"}},
                        "frames": 2000000, "no_save": ("b",),
                        "oracle": "assert_npc_trade_gen3_saved"},
     # B's Emerald side boots "pc" (Mudkip + Poochyena), not "town" (single Mudkip): B's own linked
@@ -491,7 +502,8 @@ SCENARIOS = {
     # the old control label asked for a witness downstream of attackcanceler/tryexplosion, and the
     # attacker's own faint site (counter +1, HP 0, no SLink HP write) after the stamp is one -- a
     # Damp/sleep/flinch cancel produces no self-KO.
-    "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr",),
+    "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900,
+                     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                      "target": "battle", "frames": 1500000,
                      "scenario_module": "linked_faint_active", "active_faint_case": "explode",
                      "oracle": "assert_explode_gen3_saved"},
@@ -1760,7 +1772,12 @@ def active_faint_chain(key, case):
     forbidden = [rf"(?m)^ACTIVE_HOLD {k}\b", rf"(?m)^SWITCHED_OUT {k}\b", rf"(?m)^BENCH_HP0_IN_BATTLE {k}\b",
                  gen3_tx("faint", key), rf"(?m)^FORCED_HP0 {k} .*in_battle=0",
                  r"(?m)^\[client\] .*active faint committed \(press A\)"]
-    return chain + [hp0], ordered, forbidden
+    required = chain + [hp0]
+    if explode:
+        pp = rf"(?m)^EXPLOSION_PP {k} committed=5/5/5/5 ko=(?!5/5/5/5$)[0-5]/[0-5]/[0-5]/[0-5]$"
+        required.append(pp)
+        ordered += [(chain[4], pp), (pp, chain[5])]
+    return required, ordered, forbidden
 
 
 def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, rr=False, limits=None,
@@ -2991,19 +3008,41 @@ def gen3_rand_saved_problems(saved, fixture, *, unchanged_bytes=False):
     return []
 
 
+# pret map_groups: FR/LG Route 1 is (3, 19); Emerald Route 102 is (0, 17) (the same key
+# gen3_rand_encounter_problems already reads from the independent wild_slots probe, and
+# data/games/gen3_emerald/area_map.json "0:17": "route_102").
+GEN3_RAND_HUNT_TABLE = {"firered": ((3, 19), "Route 1"), "leafgreen": ((3, 19), "Route 1"),
+                        "emerald": ((0, 17), "Route 102")}
+
+
 def gen3_rand_capture_problems(saved, key, facts):
     party, boxes = saved
     found = [m for m in party if gen3_key(m) == key]
     problems = []
     if len(found) != 1 or any(gen3_key(m) == key for m in boxes.values()):
         return ["randomized catch not saved exactly once in party"]
-    land = facts["tables"]["wild_encounters"].get((3, 19), [])  # pret map_groups: Route1
+    map_key, area_label = GEN3_RAND_HUNT_TABLE[facts["title"]]
+    land = facts["tables"]["wild_encounters"].get(map_key, [])
     slots = [m for variant in land for m in (variant.get("land") or {}).get("mons", [])]
     if not any(m["species"] == found[0]["species"]
                and min(m["min_level"], m["max_level"]) <= found[0]["level"]
                <= max(m["min_level"], m["max_level"]) for m in slots):
-        problems.append("saved catch is absent from this cartridge's Route 1 land table")
+        problems.append(f"saved catch is absent from this cartridge's {area_label} land table")
     return problems
+
+
+def gen3_rand_catch_note(side, title, path, fixture):
+    """R4-LINK's 20-ball fixture disclosure. FR/LG's catch_synth is a SYNTH ball-count edit
+    (tests/fixtures/gen3/README.md "R4-LINK catch stock"); Emerald's catch fixture predates
+    R4-LINK and needs no edit (same README, E2-FIX-VARIANTS round 3): already 20 balls."""
+    balls = gen3_ball_count(fixture, title)
+    if balls != 20:
+        raise RuntimeError(f"{side}: R4-LINK fixture must have 20 Poke Balls, got {balls}")
+    if title == "emerald":
+        return (f"RAND_CATCH_FIXTURE {side} file={path} sha256={hashlib.sha256(fixture).hexdigest()} "
+                f"PokeBalls={balls} SYNTH=false source=pre-existing_emerald_catch_fixture")
+    return (f"RAND_SYNTH_FIXTURE {side} file={path} sha256={hashlib.sha256(fixture).hexdigest()} "
+            f"PokeBalls={balls} change=quantity_and_section_checksum_only")
 
 
 def gen3_rand_status_probe(server, status, retail=None):
@@ -7658,12 +7697,7 @@ class DuoRun:
             title = self.gcfg["sides"][side][0]
             if self.scenario == "link_gen3_rand":
                 fixture = self._gen3_fixture_bytes(side)
-                balls = gen3_ball_count(fixture, title)
-                if balls != 20:
-                    raise RuntimeError(f"{side}: R4-LINK SYNTH fixture must have 20 Poke Balls, got {balls}")
-                self._pydec_note(f"RAND_SYNTH_FIXTURE {side} file={self._gen3_fixture_path(side)} "
-                                 f"sha256={hashlib.sha256(fixture).hexdigest()} PokeBalls={balls} "
-                                 "change=quantity_and_section_checksum_only")
+                self._pydec_note(gen3_rand_catch_note(side, title, self._gen3_fixture_path(side), fixture))
             label = {"firered": "FireRed", "leafgreen": "LeafGreen", "emerald": "Emerald"}[title]
             suffix = "_b" if title == "emerald" and side == "b" else ""
             path = source / f"{label}_allowed{suffix}.gba"
@@ -7924,7 +7958,7 @@ class DuoRun:
 
     # ── RR-only runner halves (P5, card C5-5) ───────────────────────────────────────────────
     def orchestrate_explode_gen3(self):
-        """explode_gen3 (RR, --explode-mode): link the two party LEADS, release B first so it
+        """explode_gen3 (--explode-mode): link the two party LEADS, release B first so it
         parks in a wild battle with its linked mon active (READY_ACTIVE), then A, which loses its
         own linked lead naturally. Nothing pokes either cartridge; the server's force_explode is
         the only command, and B's receipt must show the engine executing it."""
@@ -8252,8 +8286,22 @@ class DuoRun:
     # 0x9CAE, OT id 1985 -> key 00009CAE:000007C1, species 122). Emerald: RustboroCity_House1's
     # trader, a player Ralts -> his SEEDOT (pret pokeemerald c65e93f2 src/data/trade.h
     # INGAME_TRADE_SEEDOT: personality 0x84, otId 38726 -> key 00000084:00009746, species 298).
+    # card RR-NPCTRADE-2: Route2_House/Reyley (MR_MIME) is DEAD on the real RR ROM -- its
+    # CFRU-detoured species check reads a runtime table (ROM 0x09147C74) whose index-0 entry is
+    # garbage (species=1375, requested=162/Furret), so the trade's own species comparison can
+    # never pass (docs/gen3/research/rr_ingame_trades.md "RR-NPCTRADE-2"). The fixture now targets
+    # JYNX/"Dontae" (CeruleanCity_House3, runtime table idx1, which decodes cleanly). new_key is
+    # NOT vanilla's static sInGameTrades content -- CreateInGameTradePokemonInternal is ALSO
+    # detoured to read the same runtime table, and its personality/otId fields (offset 0x1C/0x10)
+    # were decoded directly from ROM: personality 0x498A2E1D, otId 36728 (0x00008F78), species
+    # Carnivine (RR id 508, offset+4).
     NPC_TRADE_FACTS = {
         "gen3_emerald": {"new_key": "00000084:00009746", "species": 298},
+        # Live 2026-09-27: the received mon's personality was 35DC164E, not the runtime table's
+        # 0x498A2E1D -- RR's detoured CreateInGameTradePokemonInternal generates it at trade time,
+        # so only the OT half of the key is fixed. The oracle takes the key from A's key_change
+        # and holds the saved party and links.json to that same key.
+        "gen3_rr": {"new_key": None, "new_otid": "00008F78", "species": 508},
     }
     NPC_TRADE_DEFAULT = {"new_key": "00009CAE:000007C1", "species": 122}
 
@@ -8270,6 +8318,10 @@ class DuoRun:
         ka = self._link_keys["a"]
         facts = self.NPC_TRADE_FACTS.get(self.game, self.NPC_TRADE_DEFAULT)
         new, species = facts["new_key"], facts["species"]
+        if new is None:
+            hit = re.search(rf'(?m)^TX key_change - .*"new_key":"([0-9A-F]{{8}}:{facts["new_otid"]})"'
+                            rf'.*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"', results["a"] or "")
+            new = hit.group(1) if hit else f"<no npc_trade key_change with OT {facts['new_otid']}>"
         kc = rf'(?m)^TX key_change - .*"new_key":"{new}".*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"'
         problems = gen3_receipt_problems(
             "a", results["a"], required=[r"(?m)^SIGNAL trade_begin ", r"(?m)^SIGNAL trade_done ", kc],
@@ -8691,7 +8743,7 @@ class DuoRun:
     def assert_explode_gen3_saved(self, results):
         """explode_gen3 under owner ruling 19, a qualification row: the P+H carrier's explode
         chain -- keyed force_explode, the Explosion menu skip ending in the hand-off, no input,
-        lastUsedMovePlayer 153 at the KO, the attacker's own faint site -- plus the linked
+        lastUsedMovePlayer 153 and a measured PP drop at the KO, the attacker's own faint site -- plus the linked
         oracle's saved-state half."""
         self.assert_linked_faint_active_gen3_saved(results)
 

@@ -1102,18 +1102,18 @@ def test_world_force_faint_on_a_benched_mon_lands_immediately_with_no_faint_repo
 
 @world_item("34")
 def test_world_force_explode_is_handled_at_least_as_force_faint_on_vanilla_frlg():
-    """FRLG has no menu-skip capability: the pack ships no CHOSEN_MOVE_ADDR, so explode_capable
-    == false (lua/gen3/client.lua:547-548). Its CHOSEN_ACTION_ADDR/BATTLE_COMM_ADDR serve only
-    force_faint's Perish commit (C4-ACTIVE-FAINT-P, client.lua:777). force_explode keeps the
-    active-battler hold ("active battler", client.lua:783, zero bytes) and lands as a bench
-    battle_faint once the mon is switched out."""
+    """FRLG now commits the same engine Explosion contract; HP remains the engine's to change.
+    A later switch-out still lands the established linked bench-faint rule."""
     w = _live()
     w.battle_ok = True
     w.enter_battle([_FOE], active=(0,))
     w.command(cmd="force_explode", key=_KA)
     w.step(3)
-    assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
+    assert w.writes and w.client.battle_pending_count(w.client) == 1
+    assert w._read(0x03004FE0, 4) == 0x0802E33D and w._read(0x02023DC4, 2) == 153
+    assert w._read(w.ram["BATTLE_MONS_ADDR"] + 0x24, 1) == 5 and w.party_hp(0) == 20
     w.set_active([1])
+    w.battle_ok = True  # the engine has returned from the hand-off to a new parked menu
     w.step()
     assert w.party_hp(0) == 0
     # RR (owner ruling 19, G5-EXPLODE-HANDOFF): force_faint on the active battler is mechanism

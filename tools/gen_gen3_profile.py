@@ -55,6 +55,10 @@ STORAGE_HEADER = f"{PRET_PIN}:include/pokemon_storage_system.h"
 # boxes follows u8 currentBox, but BoxPokemon begins with u32 personality:
 # ARM alignment inserts three padding bytes (the header's 0x0001 comment is wrong).
 FRLG_DERIVED = {
+    "BATTLE_STRUCT_MOVE_TARGET_OFF": (0x0C, f"{PRET_PIN}:include/battle.h:373-380 "
+                                     "(BattleStruct.moveTarget; u8 prefix + wrappedMove[8])"),
+    "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": (0x80, f"{PRET_PIN}:include/battle.h:373-412 "
+                                         "(BattleStruct.chosenMovePositions; offsetof verified from prefix)"),
     "EXPERIENCE_TABLE_ENTRY_COUNT": (101, f"{PRET_PIN}:src/data/pokemon/experience_tables.h:18 "
                                     "(gExperienceTables[][MAX_LEVEL + 1])"),
     "MAX_LEVEL": (100, f"{PRET_PIN}:include/constants/pokemon.h:187 (MAX_LEVEL)"),
@@ -142,11 +146,13 @@ FRLG_SYM_ADDR = {
     ("rom", "EXPERIENCE_TABLES_ADDR"): "gExperienceTables",
     ("rom", "BATTLE_MOVES_ADDR"): "gBattleMoves",
     ("rom", "PP_UP_GET_MASK_ADDR"): "gPPUpGetMask",
-    # C4-ACTIVE-FAINT-P (mechanism P). CHOSEN_ACTION_ADDR/BATTLE_COMM_ADDR share RR's names on
-    # purpose; CHOSEN_MOVE_ADDR is deliberately absent, so vanilla stays not explode_capable.
+    # Shared engine action fields. Each title binds its own symbols; EXPLODE-BIND adds the
+    # chosen move and BattleStruct pointer without a companion-patch dependency.
     ("ram", "STATUS3_ADDR"): "gStatuses3",
     ("ram", "DISABLE_STRUCTS_ADDR"): "gDisableStructs",
     ("ram", "CHOSEN_ACTION_ADDR"): "gChosenActionByBattler",
+    ("ram", "CHOSEN_MOVE_ADDR"): "gChosenMoveByBattler",
+    ("ram", "BATTLE_STRUCT_PTR_ADDR"): "gBattleStruct",
     ("ram", "BATTLE_COMM_ADDR"): "gBattleCommunication",
 }
 
@@ -1196,6 +1202,8 @@ EMERALD_SYM_ADDR = {
     ("ram", "BATTLE_RESULTS_ADDR"): ("gBattleResults", False),
     ("ram", "BATTLE_TYPE_ADDR"): ("gBattleTypeFlags", False),
     ("ram", "CHOSEN_ACTION_ADDR"): ("gChosenActionByBattler", False),
+    ("ram", "CHOSEN_MOVE_ADDR"): ("gChosenMoveByBattler", False),
+    ("ram", "BATTLE_STRUCT_PTR_ADDR"): ("gBattleStruct", False),
     ("ram", "DISABLE_STRUCTS_ADDR"): ("gDisableStructs", False),
     ("ram", "ENEMY_BASE"): ("gEnemyParty", False),
     ("ram", "ENEMY_COUNT_ADDR"): ("gEnemyPartyCount", False),
@@ -1239,6 +1247,10 @@ EMERALD_SE_SONGS = {16: ("se_faint", 22, "SE_FAINT"), 17: ("se_flee", 23, "SE_FL
                     32: ("se_failure", 38, "SE_FAILURE"), 102: ("se_shiny", 108, "SE_SHINY")}
 # key -> (value, pret path:lines, identifier the cited lines carry, note)
 EMERALD_DERIVED = {
+    "BATTLE_STRUCT_MOVE_TARGET_OFF": (0x0C, "include/battle.h:354-361", "moveTarget",
+                                     "BattleStruct u8 prefix + wrappedMove[8]"),
+    "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF": (0x80, "include/battle.h:354-392", "chosenMovePositions",
+                                         "offsetof verified from BattleStruct prefix"),
     "BADGE_FIRST_FLAG": (0x867, "include/constants/flags.h:1359", "FLAG_BADGE01_GET",
                          "SYSTEM_FLAGS 0x860 + 7 (flags.h:1348); the E2-ENTRY+BADGE derived "
                          "flag id lua/gen3/reads.lua and tools/gen3_reads_pydec.py derive "

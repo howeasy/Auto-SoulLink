@@ -15,15 +15,35 @@
 -- the closing text until the script sets its own "trade completed" flag. The runner links A's
 -- traded-away mon with B's slot 1. The client must emit key_change reason npc_trade (TradeMons:
 -- trade_begin then trade_done). Whatever the server replies is recorded, not required. B idles.
+--
+-- card RR-NPCTRADE-2: Route2_House/Reyley (MR_MIME, INGAME_TRADE index 0) is DEAD on the real RR
+-- ROM -- GetInGameTradeSpeciesInfo is CFRU-detoured (0x08053a9c -> 0x090A4A2D) to read a SEPARATE
+-- runtime table (ROM 0x09147C74, stride 0x2C) instead of the static sInGameTrades table, and that
+-- table's index 0 decodes to species=1375 (an unassigned RR species id) / requestedSpecies=162
+-- (Furret), not Mr Mime-Galar/Abra -- so the live species check (`goto_if_ne VAR_RESULT,
+-- VAR_0x8009`, Route2_House_EventScript_Reyley) always fails and the trade can never complete
+-- (docs/gen3/research/rr_ingame_trades.md "RR-NPCTRADE-2"). Index 1 (JYNX/"Dontae",
+-- CeruleanCity_House3, group.num 7.2) decodes cleanly (species=508 Carnivine, requested=1164
+-- Snom) and RR's own compiled Dontae script confirms flag 0x024A -- radical_red now targets that
+-- trade instead. Dontae faces UP (vanilla movementType FACE_UP), the OPPOSITE of Reyley/the
+-- Emerald trader (both face DOWN), so the player's stand tile (2,1) needs to face DOWN toward
+-- him, not Up.
 local NPC_TRADE = {
     -- species: {mine (traded away), theirs (received)}; flag: the save's own "trade completed"
     -- bit, at SaveBlock1 offset sb1_flags (FRLG global.h:790 flags[], Emerald pokeemerald
     -- include/global.h "flags" -- gen3_fixtures.py EMERALD_KINDS/build_emerald_seed uses the same
-    -- 0x1270 base to set story flags)
+    -- 0x1270 base to set story flags); face: the direction the player must face to interact
+    -- (default "Up" -- only radical_red's trader faces the other way, see the card note above).
     firered   = {mine = 63,  theirs = 122, flag = 0x248, sb1_flags = 0x0EE0},   -- ABRA -> MR. MIME
     leafgreen = {mine = 63,  theirs = 122, flag = 0x248, sb1_flags = 0x0EE0},
     emerald   = {mine = 392, theirs = 298, flag = 0x99,  sb1_flags = 0x1270},   -- RALTS -> SEEDOT
     -- (Emerald FLAG_RUSTBORO_NPC_TRADE_COMPLETED, pret include/constants/flags.h:175)
+    -- card RR-NPCTRADE-2: RR's JYNX/"Dontae" trade at CeruleanCity_House3 (docs/gen3/research/
+    -- rr_ingame_trades.md "RR-NPCTRADE-2") -- flag 0x24A read directly from RR's compiled Dontae
+    -- script (checkflag 0x024A), same SaveBlock1 flags-array offset as vanilla. species decoded
+    -- from the runtime CFRU trade-info table (ROM 0x09147C74 idx1), not the static sInGameTrades
+    -- table: Snom (1164) requested, Carnivine (508) offered.
+    radical_red = {mine = 1164, theirs = 508, flag = 0x24A, sb1_flags = 0x0EE0, face = "Down"},
 }
 
 local function tap_signals(ctx, kinds)
@@ -63,7 +83,7 @@ return function(ctx)
     if traded_flag(ctx, fx) then return false, "the trade's completion flag is already set" end
     tap_signals(ctx, { trade_begin = true, trade_done = true, trade_evolve_species_store = true })
     ctx.log("READY " .. linked)
-    if not ctx.face("Up") then return false, "could not face the trader" end
+    if not ctx.face(fx.face or "Up") then return false, "could not face the trader" end
     -- talk, read the offer, YES (the default): A on a 16-frame cadence until the party menu is up
     if not ctx.mash_until(function() return ctx.party_menu_up() and ctx.task_live("Task_HandleChooseMonInput") end,
                           60, "A") then

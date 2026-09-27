@@ -610,9 +610,7 @@ function Client.new(p)
     -- ── in-battle writes (owner ruling 2026-09-23: parity with RR on vanilla) ──────
     local explode_capable = num(a.BATTLE_MONS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
                             and num(a.CHOSEN_MOVE_ADDR) and num(a.BATTLE_COMM_ADDR) and true or false
-    -- mechanism P (C4-ACTIVE-FAINT-P): its own flag, so the P fields never flip explode_capable
-    -- (vanilla ships CHOSEN_ACTION/BATTLE_COMM but no CHOSEN_MOVE). RR ships no STATUS3 /
-    -- DISABLE_STRUCTS (CFRU layout OPEN, G5), so it keeps the hold by data, not by title.
+    -- Mechanism P has its own required fields, independent of the Explosion binding.
     local active_faint_capable = num(a.BATTLE_MONS_ADDR) and num(a.STATUS3_ADDR)
                                  and num(a.DISABLE_STRUCTS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
                                  and num(a.BATTLE_COMM_ADDR) and num(d.STATUS3_PERISH_SONG)
@@ -686,8 +684,7 @@ function Client.new(p)
 
     -- The Variant-3 menu skip (archive/gen3-old-client:lua/memory_gba.lua:1303-1345): every move slot of the battler
     -- reads Explosion, and the action-commit state says "already chosen", so the action menu is
-    -- skipped. Addresses come from the pack (RR pins CHOSEN_*/BATTLE_COMM/BATTLE_STRUCT_PTR);
-    -- a pack without them (vanilla FRLG) is not explode_capable and force_explode is a faint.
+    -- skipped. Addresses come from each title's pack; a pack without those facts stays held.
     local function commit_plan(battler, with_moves)
         local plan = {}
         if with_moves then
@@ -711,9 +708,7 @@ function Client.new(p)
         -- the committing state is itself the battle_commit guard (gBattleCommunication[battler]
         -- < STANDBY, the pack's commit_guard.value) and writes.lua re-validates before every write, so only the hand-off may follow it
         plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STANDBY }
-        -- G5-EXPLODE-HANDOFF (owner ruling 19): where the pack proves the Explode+H shape (RR,
-        -- whose parked CFRU menu outlives the commit), the same hand-off as P ends the menu, so
-        -- Explosion fires with no press. FR/LG packs carry no such shape: plan unchanged there.
+        -- The pinned Explode+H shape ends the menu without a press on every bound title.
         local h = policy.handoff_entry and policy:handoff_entry(battler, "explode")
         if h then plan[#plan + 1] = { h[1], h[2], h[3] }; plan.handoff = true end
         return plan
@@ -727,6 +722,10 @@ function Client.new(p)
     -- user survived (Damp). The entry then degrades to the force_faint rule for an active
     -- battler: held until switch-out or battle end. UNVERIFIED on hardware (no emulator lane).
     local function explode_step(e, slot, mon, battler)
+        -- The proved window is controller 0. Never strand a menu with a tail-less commit.
+        if not (policy.handoff_entry and policy:handoff_entry(battler, "explode")) then
+            return "hold", "active battler"
+        end
         local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
         local bhp = io.read_u16(base + R.BATTLE_MON_HP_OFF)
         local pp0 = io.read_u8(base + BATTLE_MON_PP_OFF)
@@ -860,7 +859,10 @@ function Client.new(p)
         local b = battle_now()
         local battler = battler_of(b, slot)
         if battler then
-            if e.cmd == "force_explode" and explode_capable then return explode_step(e, slot, mon, battler) end
+            if e.cmd == "force_explode" and explode_capable and battler == 0
+               and b.battlers_count == 2 and b.is_doubles ~= true then
+                return explode_step(e, slot, mon, battler)
+            end
             -- P is the linked-faint path ONLY (owner 2026-09-23: Explode Mode is untouched, so a
             -- non-capable force_explode keeps its hold below). Singles only: in doubles a partner
             -- B-cancel resets battler 0's commit while the Perish flag stays (scope doc §2.1), and
