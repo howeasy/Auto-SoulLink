@@ -34,6 +34,8 @@ Integration `claude/gen3-integration` @5e001952 in C:/slink-wt/g3-int.
   - explode B mask pinned;
   - the dead savestate path and the tests/e2e/test_duo.py orphan deleted.
 
+**UPDATE (end of session): T2-PUBLISH 1d2a9512 MERGED as integration c04420a9.** Full suite on c04420a9: C:/slink-wt/suite-c04420a9.log (check EXIT 0). Final cuts STARTED on c04420a9: FR/LG in lane C:/slink-wt/g3-lane (log C:/slink-wt/fc-frlg-c04420a9.log, ~100 min, summary docs/gen3/probes/fc_SUMMARY_c04420a9.txt in the lane). Emerald in lane C:/slink-wt/g3-lane2 (log C:/slink-wt/fc-emerald-c04420a9.log, summary fc_SUMMARY_c04420a9_emerald.txt). Copy the lane receipts into g3-int and commit them; triage any FAIL. RR cut waits on RR-DURABLE. OMP review of EXP-X23 shared files: cx-2ce936ca.
+
 **QUEUE (in order):**
 1. **T2-PUBLISH** (Codex Emerald, em-t2 `claude/gen3-emerald-t2` **@1d2a9512**, which already contains integration da089baf and review fixes c8543439): FR/LG/E production UPS + READY, and the Emerald native companion. Emerald UPS sha1 2eef703c...; FR/LG bytes are unchanged. Live PASS at wrap-up: boot/panel/trade/reload; chooser fix (red on the old candidate, green on production); phone events 1/2/3 plus busy/cooldown; locked-device refusal. Its full suite was STILL RUNNING at wrap-up: confirm its exit code 0 before merging.
    - Live PASS set: patch/build/em-live-20260927.json and t2-publish-live-20260927.json.
