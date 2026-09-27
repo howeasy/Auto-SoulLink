@@ -77,7 +77,7 @@ def test_evolution_family_is_a_separate_live_subject(game):
     assert duo.scenario_applies("species_family_gen3", game)
     assert row["flags"] == ["--species-clause"]
     assert row["explicit_only"]
-    assert duo.scenario_attempt_limit("species_family_gen3", game) == 8
+    assert duo.scenario_attempt_limit("species_family_gen3", game) == (16 if game == "gen3_rr" else 8)
     assert callable(getattr(duo.DuoRun, row["oracle"], None))
 
 
@@ -390,11 +390,11 @@ def test_family_oracle_needs_distinct_related_species_and_a_native_reroll(monkey
     fixture = _fixture([evolved, PIDGEY])
     saved = _saved(fixture, 3, [evolved, PIDGEY])
     run, _ = _oracle_stub(monkeypatch, tmp_path, "species_family_gen3", {"a": saved, "b": saved}, fixture,
-        [{"a": {"key": key}, "b": {"key": key}, "status": "alive"}])
+        [{"a": {"key": key, "species": 17}, "b": {"key": key, "species": 17}, "status": "alive"}])
     run._link_keys = {"a": key, "b": key}
     run._clause_facts = {"a": {"16": {"family": 16}, "17": {"family": 16}, "19": {"family": 19}}}
     run._reconnect_events = lambda: [{"type": "reroll"}]
-    receipt = ("FAMILY_ENCOUNTER " + json.dumps({"key": key, "owned": 17, "species": 16, "related": True}) + "\n"
+    receipt = ("FAMILY_ENCOUNTER " + json.dumps({"key": key, "owned": 17, "player": "a", "species": 16, "related": True}) + "\n"
                'RULE_RX {"cmd":"gui_prompt","text":"Dupes clause: Pidgey -- reroll!"}\n'
                'CLAUSE_REROLL {"species":16,"prompt":"Dupes clause: Pidgey -- reroll!"}\n')
     rules.family_oracle(run, {"a": receipt, "b": ""})
@@ -556,12 +556,19 @@ def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_acti
            tap=function() error('unverified facing tap after an unfinished step') end}
       c.face=function(direction) c.faced=direction;return true end
       c.play={step=function() c.inside=true;return true end,wait_scene_settled=function() return true end}
-      c.SP={return_to_grass_origin=function() end}
+      c.flee_incidentals=function(_,fn)
+        c.escaping=true;local ok,why=pcall(fn);c.escaping=false;return ok,why
+      end
+      c.SP={return_to_grass_origin=function()
+        assert(c.escaping,'dead-lead return to grass must not use incidental FIGHT')
+      end}
       c.mash_until=function(p) c.stock=1;c.flag=true;c.session.state.has_pokeballs=true;return p() end
       local real=dofile
       dofile=function(path)
         if path:find('gen3_rr_battle_fixture.lua',1,true) then
-          return {native_ball_gift=function(cp,reward,battle)
+          return {native_ball_gift=function(cp,reward,battle,flee)
+            assert(type(flee)=='function','duo parcel walk must use the proved RUN driver before its reward')
+            c.inside=true;assert(flee());assert(not c.inside and c.stock==0)
             c.stock=10;c.flag=true;c.session.state.has_pokeballs=true
             reward();assert(c.released);battle();battle();return true
           end}
@@ -595,7 +602,9 @@ def test_rr_duo_reuses_the_admitted_checkpoint_instead_of_reloading_environment(
     lua.execute('''G={open=function() error('duo must not reopen the standalone receipt') end,
                          phase=function() end, checkpoint=function() error('stale environment checkpoint') end}
                    client={speedmode=function() end}''')
-    call = lua.execute(prefix + "return cp, title, G.title end; return run_route2")
+    call = lua.execute(prefix + "return cp, title, G.title, duo_route_battle end; return run_route2")
     cp = lua.table_from({"proof": "already admitted by the production driver"})
-    returned, title, helper_title = call(cp, lua.table_from({}))
+    flee = lua.eval("function() return 'native RUN delegate' end")
+    returned, title, helper_title, bound = call(cp, lua.table_from({"flee": flee}))
     assert returned["proof"] == cp["proof"] and title == helper_title == "radical_red"
+    assert bound() == "native RUN delegate"

@@ -1,0 +1,63 @@
+# gen3_final_cut row=explode_gen3_rr_as_a item=§14_P5_RR_duo cut=d9a928d79a99aef33ac923cfbf589cda2715762d
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_rr --scenario explode_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:39:33 cpu=67% emuhawk=0 python=7
+start_utc=2026-09-27T19:39:32Z tracked_clean_before=True
+
+========== scenario: explode_gen3 ==========
+[duo] explode_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d9fe5eb6a0b3ea3dc778162584b9d7169fc3bdb38555f709f217113b33319c4b b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=140ad05c6325180bdc7fae0bb590157310f250fa65c5b8b43b1fb24d6a3ffe2b write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=d9a928d79a99aef33ac923cfbf589cda2715762d
+[duo] server up: tcp=63742 http=63743 data=C:\Users\howar\AppData\Local\Temp\slink_duo_explode_gen3_azu4ybv9
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] timing orchestrate 7.1s
+[duo] timing results 21.4s
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked EBEF11DA:2BDDC8BF)
+[duo] RESULT_LINE b: RESULT: PASS (Explode+H: engine Explosion KO in battle with no input (explode))
+[duo] SAVE_WITNESS_SHA256 inst=a site=2662c404d70223c1290c68b941d947b4485b8f599107ac9dc9a111a70d472d50 file=2662c404d70223c1290c68b941d947b4485b8f599107ac9dc9a111a70d472d50 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=db2659322f451948262d00387441a0bbd0b1f7af61b7ebd78981e6d3588f1d81 file=db2659322f451948262d00387441a0bbd0b1f7af61b7ebd78981e6d3588f1d81 match=true saves=1 counter=3->4 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] linked_faint_active[explode]: engine faint EBEF11DA:2BDDC8BF -> force_explode -> the hand-off commit on active EBEF11DA:D4223740 -> engine KO in battle with no input; memorials saved (last mon kept: a,b)
+[duo] MARKER a: ENGINE_FAINT_SITE frame=5110 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint EBEF11DA:2BDDC8BF {"area_id":"route_1","event":"faint","key":"EBEF11DA:2BDDC8BF","player":"a","seq":152}
+[duo] MARKER a: RX memorialize key=EBEF11DA:2BDDC8BF
+[duo] MARKER a: RX game_over
+[duo] MARKER a: [client] [SLink-gen3] memorialize dropped: last mon after game over EBEF11DA:2BDDC8BF
+[duo] MARKER a: LAST_MON_KEPT EBEF11DA:2BDDC8BF
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_explode_gen3_a_1_witness.bin bytes=131072 saves=1 frame=6750 counter=4
+[duo] MARKER b: READY_ACTIVE EBEF11DA:D4223740 case=explode
+[duo] MARKER b: RX force_explode key=EBEF11DA:D4223740
+[duo] MARKER b: [client] [SLink-gen3] force_explode: menu skip committed slot=0 battler=0 handoff=1
+[duo] MARKER b: ACTIVE_COMMIT EBEF11DA:D4223740 frame=5162 writes=14 attempted=724 handoff=1 status3=0x80000 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/25/35 why="explosion committed" case=explode
+[duo] MARKER b: HANDOFF EBEF11DA:D4223740 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO EBEF11DA:D4223740 frame=5178 in_battle=1 battle_hp=0 status3=0x80000 pp=4/5/5/5 last_move=153 inputs=0 keys=0x0 hp_writes=0 attempted=822 case=explode
+[duo] MARKER b: ACTIVE_FAINT_SITE EBEF11DA:D4223740 frame=6766 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: ACTIVE_OUTCOME EBEF11DA:D4223740 outcome=3 sent_out=nil whiteout_tx=1
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_explode_gen3_b_1_witness.bin bytes=131072 saves=1 frame=8486 counter=4
+[duo] MARKER b: FORCED_HP0 EBEF11DA:D4223740 frame=5178 in_battle=1 battler=1
+[duo] MARKER b: EXPLOSION_PP EBEF11DA:D4223740 committed=5/5/5/5 ko=4/5/5/5
+[duo] MARKER b: RX memorialize key=EBEF11DA:D4223740
+[duo] MARKER b: RX game_over
+[duo] MARKER b: [client] [SLink-gen3] memorialize dropped: last mon after game over EBEF11DA:D4223740
+[duo] MARKER b: LAST_MON_KEPT EBEF11DA:D4223740
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] explode_gen3: a=PASS b=PASS
+
+========== summary ==========
+  explode_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-27T19:40:03Z tracked_clean_after=True classification=pass

@@ -6,15 +6,29 @@ return function(ctx)
     if ctx.player == "a" then
         local mon = key and ctx.find(key)
         if not mon or mon.slot ~= 0 then return false, "family lead not staged" end
-        local f = ctx.D.clause_facts[tostring(mon.species)]
+        local members = ctx.go_value("FAMILY_LINKS")
+        if not members or #members ~= 2 or members[1].player ~= "a" or members[1].key ~= key
+           or members[1].species ~= mon.species or members[2].player ~= "b" then
+            return false, "family linked records missing or mismatched"
+        end
         local cursor = ctx.rx_count()
         if not ctx.hunt("family") then return false, "no family encounter" end
         if not ctx.wild_ready("family") then return false, "family battle never reached its action menu" end
         local species = ctx.enemy_species()
         local other = species and ctx.D.clause_facts[tostring(species)]
-        if not f or not other then return false, "family facts missing" end
-        local related = f.family == other.family
-        ctx.jlog("FAMILY_ENCOUNTER", {key=key, owned=mon.species, species=species, related=related})
+        if not other then return false, "family encounter facts missing" end
+        local matched
+        for _, member in ipairs(members) do
+            local f = ctx.D.clause_facts[tostring(member.species)]
+            if not f then return false, "family linked facts missing" end
+            if not matched and f.family == other.family then matched = member end
+        end
+        local related = matched ~= nil
+        local owner = matched or members[1]
+        local x, y = ctx.G.pos(ctx.cp)
+        ctx.jlog("FAMILY_ENCOUNTER", {key=owner.key, owned=owner.species, player=owner.player,
+                                     species=species, related=related,
+                                     map=ctx.play.map(ctx.cp), x=x, y=y})
         local ok, why = ctx.run_away("family")
         if not ok then return false, why end
         if related then

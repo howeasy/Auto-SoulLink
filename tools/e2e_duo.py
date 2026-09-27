@@ -2,9 +2,9 @@
 """e2e_duo.py — TWO-INSTANCE headless E2E harness for the SLink companion patch.
 
 Runs a throwaway SLink server + two concurrent EmuHawk instances (players a/b), both
-loading savestates from the SAME save (instance B mutates its party OTIDs pre-hello so
-mon keys don't collide in the server's flat key index), then orchestrates a scenario
-via the server's debug HTTP API and waits for both instances' result files.
+booting a battery save seeded from the SAME source (instance B mutates its party OTIDs
+pre-hello so mon keys don't collide in the server's flat key index), then orchestrates a
+scenario via the server's debug HTTP API and waits for both instances' result files.
 
     python tools/e2e_duo.py --scenario faint
     python tools/e2e_duo.py --scenario all --keep-alive
@@ -49,16 +49,15 @@ else:
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
 BIZHAWK_CONFIG = "E:/Howard/Bizhawk/config.ini"
-SAVESTATE_DIR = "E:/Howard/Bizhawk/GBA/State"
 ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 # Where --wire-log parks a run's golden transcripts (tests/fixtures/gen3/wire/README.md).
 WIRE_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3", "wire")
 WT_FWD = REPO.replace("\\", "/")
 
-# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
-# (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
-# Explosion self-faint whites out instead of opening the switch menu), and `games`.
+# Per-scenario knobs: extra server flags, per-side timeout (seconds), fillers (default True;
+# or {"a":…,"b":…} — explode keeps B at ONE mon so the Explosion self-faint whites out
+# instead of opening the switch menu), and `games`.
 #
 # `games` is which titles a scenario applies to. ABSENT MEANS EVERY TITLE — read it through
 # scenarios_for(), never inline.
@@ -166,8 +165,8 @@ SCENARIOS = {
     "gen2_soft_reset": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
                         "no_setup": True, "frames": 216000,
                         "oracle": "assert_gen2_soft_reset_saved", "oracle_kwargs": {}},
-    "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
-    "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    "faint":   {"flags": [], "timeout": 420},
+    "boxsync": {"flags": [], "timeout": 420},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
     # step 3): lua/tests/duo/scenario_gen1_*.lua and gen1_hunt.lua are gone, so every entry that
     # named `("gen1",)` went with them.
@@ -625,7 +624,7 @@ SCENARIOS["species_family_gen3"] = {
     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "explicit_only": True,
     "rule_kind": "family", "target": {"a": "family_synth", "b": "catch_synth"},
     "target_by_game": {"gen3_emerald": {"a": "family", "b": "catch"},
-                       "gen3_rr": {"a": "family_synth", "b": "battle2"}},
+                       "gen3_rr": {"a": "family_synth", "b": "family_galar_synth"}},
     "oracle": "assert_species_family_gen3_saved",
 }
 
@@ -887,6 +886,8 @@ def scenario_attempt_limit(name, game):
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     entry = SCENARIOS.get(name, {})
+    if entry.get("rule_kind") == "family" and scenario_family(game) == "gen3_rr":
+        return 16
     if entry.get("rule_kind") == "gender" and scenario_family(game) == "gen3_rr":
         return 8
     if rng_retry_family(game) and entry.get("rng_attempts"):
@@ -3528,24 +3529,43 @@ class DuoRun:
         `wire_rejected.jsonl` (the tap's bounded sink for lines it could not attribute to a
         real player) is server-side debug evidence, not a per-player transcript -- it is never
         promoted here.
+
+        A player this run did NOT log is left with no transcript at all: its stale golden is
+        removed and this run's data-dir source is named in the print instead. Copying what
+        exists and saying nothing about what does not is what let a FAILING run be read off a
+        PASSING run's transcript (T5, 2026-09-27: native_trade_firered_b_gen3_new.jsonl held a
+        completed trade_done while the failing run's own wire/wire_b.jsonl held none).
         """
         wire = self._wire_dir()
-        if not wire or not os.path.isdir(wire):
+        if not wire:
             return []
-        os.makedirs(WIRE_FIXTURES, exist_ok=True)
+        sources = {}
+        if os.path.isdir(wire):
+            for name in sorted(os.listdir(wire)):
+                if not (name.startswith("wire_") and name.endswith(".jsonl")):
+                    continue
+                player = name[len("wire_"):-len(".jsonl")]
+                if player != "rejected":
+                    sources[player] = os.path.join(wire, name)
+        if sources:
+            os.makedirs(WIRE_FIXTURES, exist_ok=True)
+        # All active Gen 3 rows use the new battery client; non-Gen3 rows keep their game key
+        # (getattr: a unit-test double need not carry a row key).
+        label = "gen3_new" if self.is_gen3_battery else getattr(self, "game", "")
+        # "a" and "b" are the tap's whole per-player set (server/server.py: VALID_PLAYERS), so a
+        # player with no file in this run's dir is one whose golden is now older than the run.
         landed = []
-        for name in sorted(os.listdir(wire)):
-            if not (name.startswith("wire_") and name.endswith(".jsonl")):
-                continue
-            player = name[len("wire_"):-len(".jsonl")]
-            if player == "rejected":
-                continue
-            # All active Gen 3 rows use the new battery client; non-Gen3 rows keep their game key.
-            label = "gen3_new" if self.is_gen3_battery else self.game
+        for player in sorted(set(sources) | {"a", "b"}):
             dest = os.path.join(WIRE_FIXTURES, f"{self.scenario}_{player}_{label}.jsonl")
-            shutil.copyfile(os.path.join(wire, name), dest)
-            print(f"[duo] wire log: {dest}")
-            landed.append(dest)
+            source = sources.get(player) or os.path.join(wire, f"wire_{player}.jsonl")
+            if player in sources:
+                shutil.copyfile(source, dest)
+                print(f"[duo] wire log: {dest}")
+                landed.append(dest)
+            elif os.path.exists(dest):
+                os.remove(dest)
+                print(f"[duo] no wire log for {player} this run: {source} is absent; removed the "
+                      f"stale {dest} (an earlier run's transcript)")
         return landed
 
     def start_server(self):
@@ -3860,17 +3880,13 @@ class DuoRun:
         elif self.gcfg.get("launch_profile") == "gen2":
             from run_gb_gate import GENS
             GENS["gen2"]["config"](self._gen2_plans[inst], Path(cfg_ini))
-        elif self.battery_boot:
+        else:
             import gen1_playthrough as g1
 
             # purergb pins the config to GBC + not-SGB (PLAN A15); the fixture key names the
             # foundation, so the pure row needs nothing else to get it.
             g1.write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst),
                                 purergb=g1.is_purergb(self.gcfg["fixture"][inst]))
-        else:
-            from run_gate import write_gate_config
-
-            write_gate_config(BIZHAWK_CONFIG, cfg_ini)   # rewind off (duo run 61569's crash)
         self._apply_lane_window(cfg_ini)
         self._phase = getattr(self, "_phase", {})
         self._phase[inst] = phase
@@ -3888,7 +3904,8 @@ class DuoRun:
             "game": self.gcfg.get("game", ""),
             "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
             "mutate_otid": inst == "b", "result": result.replace("\\", "/"),
-            "partner_result": self._result_path("b" if inst == "a" else "a").replace("\\", "/"),
+            "partner_result": self._phase_result_path("b" if inst == "a" else "a",
+                self._phase.get("b" if inst == "a" else "a", "initial")).replace("\\", "/"),
             "go_file": self.go_files[inst].replace("\\", "/"),
             "timeout_frames": (lambda f: f[inst] if isinstance(f, dict) else f)(
                 self.cfg.get("frames", self.cfg["timeout"] * 60)),
@@ -3947,10 +3964,7 @@ class DuoRun:
                            native_decline=self.cfg.get("native_decline", False))
                 env = dict(os.environ, **{ENV: self._native_candidate["nonce"]})
                 print(f"[duo] HARNESS_ONLY {ENV}={self._native_candidate['nonce']} side={inst} phase={phase}")
-        if self.gcfg["uses_savestate"]:
-            ss = self.cfg["savestate"]
-            duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
-        elif seed and not self.cfg.get("cold_boot"):
+        if seed and not self.cfg.get("cold_boot"):
             self._seed_instance_save(inst)
         elif self.cfg.get("cold_boot"):
             os.makedirs(self._saveram_dir(inst), exist_ok=True)
@@ -4588,7 +4602,7 @@ class DuoRun:
 
         Freshness is identity here: a rerun (or a crashed attempt re-entered) leaves results,
         phase receipts, attempt archives, witnesses and PYDEC copies from OLDER runs in the same
-        build directory. Gen 2 attempt 1 clears those; later Gen 2 retries retain numbered archives
+        build directory. Gen 2/3 attempt 1 clears those; later retries retain numbered archives
         from this invocation, while clearing all live paths. The current PYDEC file is opened before
         launch and retained. Removals are printed so the log records what was discarded.
         """
@@ -4598,7 +4612,7 @@ class DuoRun:
             if keep and os.path.basename(path) == keep:
                 continue
             archive = re.search(r"_attempt(\d+)_(?:result\.txt|witness\.SaveRAM|exit\.SaveRAM|manifest\.json)$", os.path.basename(path))
-            if (scenario_family(getattr(self, "game", "legacy")) == "gen2_new"
+            if (scenario_family(getattr(self, "game", "legacy")) in ("gen2_new", "gen3_frlg", "gen3_emerald", "gen3_rr")
                     and archive and 0 < int(archive[1]) < getattr(self, "attempt", 1)):
                 continue  # Earlier attempts of THIS invocation remain replayable; attempt 1 clears all.
             os.remove(path)
@@ -4615,8 +4629,8 @@ class DuoRun:
     def wait_keys(self):
         """Both wrappers log MYKEY lines right after savestate+mutation."""
         def both():
-            ka = extract_keys(read_result(self.scenario, "a"))
-            kb = extract_keys(read_result(self.scenario, "b"))
+            ka = extract_keys(self._read_receipt("a"))
+            kb = extract_keys(self._read_receipt("b"))
             return (ka, kb) if ka and kb else None
         ka, kb = self.wait_for("MYKEY lines from both instances", both, 120)
         if set(ka.values()) & set(kb.values()):
@@ -4718,7 +4732,7 @@ class DuoRun:
         `REFUSED <key> (<how>)` is the line the scenario does promise, and it carries the
         full key whenever one was recovered at all.
         """
-        text = read_result(self.scenario, inst) or ""
+        text = self._read_receipt(inst)
         for line in text.splitlines():
             if "CAUGHT " in line:
                 return line.split("CAUGHT ", 1)[1].split()[0]
@@ -5300,7 +5314,7 @@ class DuoRun:
             a, b = self._caught("a"), self._caught("b")
             if a and b:
                 return a, b
-            if any(_has_exact_rng_miss(read_result(self.scenario, inst)) for inst in ("a", "b")):
+            if any(_has_exact_rng_miss(self._read_receipt(inst)) for inst in ("a", "b")):
                 raise GameRngMiss("a cartridge missed its sole ball before the pair formed")
             return None
         a_key, b_key = self.wait_for("both instances to catch a wild mon", both_caught,
@@ -7498,7 +7512,7 @@ class DuoRun:
     def _gen3_mark(self, inst, pattern, what, timeout=None):
         """Wait for a driver marker (a regex over the receipt, multiline)."""
         return self.wait_for(f"{inst}: {what}", lambda: re.search(
-            pattern, read_result(self.scenario, inst) or "", re.M), timeout or self.cfg["timeout"])
+            pattern, self._read_receipt(inst), re.M), timeout or self.cfg["timeout"])
 
     # Per-game-family areas for _gen3_area_control: gen3_frlg's evolve leg walks Viridian's Route 1
     # grass (a defensive superset around it); gen3_emerald's evolve_gen3 leg stands directly on
@@ -7767,8 +7781,11 @@ class DuoRun:
         return orchestrate_release(self)
 
     def orchestrate_species_family_gen3(self):
+        from gen3_clause_rows import family_members
         self._gen3_prelude(link_slot=0)
-        self.go(self._gen3_linked_lines())
+        lines = self._gen3_linked_lines()
+        lines["a"].append("FAMILY_LINKS " + json.dumps(family_members(self), sort_keys=True))
+        self.go(lines)
         self._gen3_mark("a", r"^FAMILY_READY \S+$", "native family encounter and RUN")
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
