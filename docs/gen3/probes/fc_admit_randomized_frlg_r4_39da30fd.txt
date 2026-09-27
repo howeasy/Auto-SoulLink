@@ -1,0 +1,70 @@
+# R4-LIVE physical receipt; cut 39da30fd050671e089420c3a5c5f04e0933715ab
+# Integrated base: c0704a31. Inputs: clean-derived fixture saves (SYNTH).
+# Invocation: python tools/e2e_duo.py --game gen3_frlg --scenario admit_randomized_frlg --lane r4 --keep-data
+# SLINK_GEN3_RAND_ROMS=C:/slink-wt/rand_roms
+# SLINK_STATE_DIR=C:/slink-wt/g3-rfix/.lane/r4/39da30fd/admit_randomized_frlg/state
+# Raw stdout: C:/slink-wt/g3-rfix/.lane/r4/39da30fd/admit_randomized_frlg/stdout.txt SHA256=8824952092280d7c270a321f4e47d927e4db4d5050f17880bbe6376b9d584a9b
+# Each row ran once; no unchanged failing run was retried.
+
+========== scenario: admit_randomized_frlg ==========
+[duo] admit_randomized_frlg: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] RAND_INPUT a SYNTH=clean-derived-save title=firered sha1=c6598b7b0c4a1116d220905e56fd6f00fb1250b6 transport_sha1=d3829ee598aeb730b9e50d3b688665eb899bcebc content_fingerprint=630a4561a1eee5d667a93707ff6680730f8847af6326b05e0e404eb8fc2a5cee
+[duo] RAND_INPUT b SYNTH=clean-derived-save title=leafgreen sha1=ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba transport_sha1=61e5b04cf2d729c37a5b7a95c2165b471201feca content_fingerprint=2931bd90ec9091f7a058078d827512a0b07a1f380fd8f06d06b7bcbce141c938
+[duo] RAND_32B_INPUT equivalent_sha1=6e1927a30d53bfe1916f2edaa32d966c756a864f clean_sha1=41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc SYNTH=one_unused_tail_byte tables_identical=true forbidden_sha1=75c724bd950278093f8ecfb3359b4c1aa24097ff
+[duo] IDENTITY a=firered:rom=0364287fe73aaacc74b9026c27e5ac2d90828c99c77fbd611d71bff5d98f7561:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 b=leafgreen:rom=ae6d50136b5f2834b7ae8e3b30004f9651ab78832816eb0438705c33bb39acb0:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=90b97f77951b2eb64cfb4416c1b93395da6660d649819f9f984e0a1389be2bdc source=39da30fd050671e089420c3a5c5f04e0933715ab
+[duo] server up: tcp=52018 http=52019 data=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\admit_randomized_frlg\state\slink_duo_admit_randomized_frlg_81eeqm8h
+[duo] timing server 0.6s
+[duo] launched a phase=rules_changed seed=True
+[duo] RAND_PROCESS side=a phase=rules_changed pid=34504
+[duo] RAND_VERDICT phase=rules_changed evidence=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\admit_randomized_frlg\state\slink_duo_admit_randomized_frlg_81eeqm8h\rand_rules_changed.json sha256=318d6c03f8e1e35ad8519379f2ca62c80ccf66462a1d02308a36b5583a52c9d8
+[duo] go-file written for a
+[duo] launched a phase=equivalent seed=True
+[duo] RAND_PROCESS side=a phase=equivalent pid=3856
+[duo] launched b phase=clean_partner seed=True
+[duo] RAND_PROCESS side=b phase=clean_partner pid=11128
+[duo] RAND_VERDICT phase=equivalent_pair evidence=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\admit_randomized_frlg\state\slink_duo_admit_randomized_frlg_81eeqm8h\rand_equivalent_pair.json sha256=e63b075c3b3aa6382338a5c127818cdc34bad61274b2112b3da3072aabb8bd4b
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] server up: tcp=52018 http=52019 data=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\admit_randomized_frlg\state\slink_duo_admit_randomized_frlg_81eeqm8h\randomized_pair_r8ptlr9h
+[duo] launched a phase=wrong_rom seed=True
+[duo] RAND_PROCESS side=a phase=wrong_rom pid=33040
+[duo] RAND_VERDICT phase=wrong_rom evidence=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\admit_randomized_frlg\state\slink_duo_admit_randomized_frlg_81eeqm8h\randomized_pair_r8ptlr9h\rand_wrong_rom.json sha256=69ffec71285b94fc57f416f534b22c8ec588c0d0d3249f5171e344e0a0649d1c
+[duo] go-file written for a
+[duo] launched a phase=initial seed=True
+[duo] RAND_PROCESS side=a phase=initial pid=1068
+[duo] launched b phase=mixed_kind seed=True
+[duo] RAND_PROCESS side=b phase=mixed_kind pid=26568
+[duo] RAND_VERDICT phase=mixed_kind evidence=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\admit_randomized_frlg\state\slink_duo_admit_randomized_frlg_81eeqm8h\randomized_pair_r8ptlr9h\rand_mixed_kind.json sha256=830163f7a5f97535c7cf344bd264c1fb3f65a16d85ea6c83a143d449c1a3569c
+[duo] go-file written for b
+[duo] launched b phase=initial seed=True
+[duo] RAND_PROCESS side=b phase=initial pid=24284
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] RAND_VERDICT phase=pair evidence=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\admit_randomized_frlg\state\slink_duo_admit_randomized_frlg_81eeqm8h\randomized_pair_r8ptlr9h\rand_pair.json sha256=5903889f46adfe63e3bc556b8eafc6acac541245bf11c06fce39281532ca4ace
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 5.1s
+[duo] timing results 0.2s
+[duo] RESULT_LINE a: RESULT: PASS (admission leg observed; verdict belongs to server/PYDEC)
+[duo] RESULT_LINE b: RESULT: PASS (admission leg observed; verdict belongs to server/PYDEC)
+[duo] SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] rand pair admitted; other-player/mixed-kind/rule-changed ROMs refused; 32(b) declared-rand clean-equivalent pair effective=clean; flash unchanged
+[duo] timing oracle 0.5s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] admit_randomized_frlg: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-rfix\.lane\r4\39da30fd\admit_randomized_frlg\state\slink_duo_admit_randomized_frlg_81eeqm8h\randomized_pair_r8ptlr9h
+
+========== summary ==========
+  admit_randomized_frlg: PASS (attempt 1 of 1)
+# Evidence C:/slink-wt/g3-rfix/.lane/r4/39da30fd/admit_randomized_frlg/state/slink_duo_admit_randomized_frlg_81eeqm8h/rand_equivalent_pair.json SHA256=e63b075c3b3aa6382338a5c127818cdc34bad61274b2112b3da3072aabb8bd4b
+{"effective_kind": "clean", "hellos": {"a": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "6e1927a30d53bfe1916f2edaa32d966c756a864f", "rom_type": "firered", "table_bytes": 89643, "transport_sha1": "9a973779e2864927aca8c553f11c0ea5764a6a2e"}, "b": {"artifact_kind": "clean", "regions": 0, "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e", "rom_type": "leafgreen", "table_bytes": 0, "transport_sha1": null}}, "identity_errors": {}, "phase": "rand_equivalent_pair", "players": {"a": {"admission": "admitted", "admission_reason": "no randomized-ROM contract for this run", "connected": true, "current_area_id": "viridian_city", "party_keys": ["2D356A90:99DE0D8A", "263620B6:99DE0D8A"], "trainer_name": "JONN"}, "b": {"admission": "admitted", "admission_reason": "no randomized-ROM contract for this run", "connected": true, "current_area_id": "viridian_city", "party_keys": ["BC73F9B0:1C600D89", "F6B6A64D:1C600D89"], "trainer_name": "MAX"}}}
+# Evidence C:/slink-wt/g3-rfix/.lane/r4/39da30fd/admit_randomized_frlg/state/slink_duo_admit_randomized_frlg_81eeqm8h/rand_rules_changed.json SHA256=318d6c03f8e1e35ad8519379f2ca62c80ccf66462a1d02308a36b5583a52c9d8
+{"effective_kind": "", "hellos": {"a": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "75c724bd950278093f8ecfb3359b4c1aa24097ff", "rom_type": "firered", "table_bytes": 89643, "transport_sha1": "54e7701efcc3df0513d79c92477935da6a03e75d"}}, "identity_errors": {}, "phase": "rand_rules_changed", "players": {"a": {"admission": "rejected", "admission_reason": "firered cartridge has randomized evolutions and types/abilities/base stats/growth rates/gender ratios, which SLink does not support (the server rules on pret's tables)", "connected": true, "current_area_id": "", "party_keys": [], "trainer_name": ""}}}
+# Evidence C:/slink-wt/g3-rfix/.lane/r4/39da30fd/admit_randomized_frlg/state/slink_duo_admit_randomized_frlg_81eeqm8h/randomized_pair_r8ptlr9h/rand_mixed_kind.json SHA256=830163f7a5f97535c7cf344bd264c1fb3f65a16d85ea6c83a143d449c1a3569c
+{"effective_kind": "rand", "hellos": {"b": {"artifact_kind": "clean", "regions": 0, "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e", "rom_type": "leafgreen", "table_bytes": 0, "transport_sha1": null}}, "identity_errors": {"b": "Mixed artifact kinds: slot B runs a 'clean' ROM, this run is committed to 'rand'"}, "phase": "rand_mixed_kind", "players": {"b": {"admission": "rejected", "admission_reason": "Mixed artifact kinds: slot B runs a 'clean' ROM, this run is committed to 'rand'", "connected": true, "current_area_id": "", "party_keys": [], "trainer_name": ""}}}
+# Evidence C:/slink-wt/g3-rfix/.lane/r4/39da30fd/admit_randomized_frlg/state/slink_duo_admit_randomized_frlg_81eeqm8h/randomized_pair_r8ptlr9h/rand_pair.json SHA256=5903889f46adfe63e3bc556b8eafc6acac541245bf11c06fce39281532ca4ace
+{"effective_kind": "rand", "hellos": {"a": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "c6598b7b0c4a1116d220905e56fd6f00fb1250b6", "rom_type": "firered", "table_bytes": 89643, "transport_sha1": "d3829ee598aeb730b9e50d3b688665eb899bcebc"}, "b": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba", "rom_type": "leafgreen", "table_bytes": 89643, "transport_sha1": "61e5b04cf2d729c37a5b7a95c2165b471201feca"}}, "identity_errors": {}, "phase": "rand_pair", "players": {"a": {"admission": "admitted", "admission_reason": "cartridge matches the contract", "connected": true, "current_area_id": "viridian_city", "party_keys": ["2D356A90:99DE0D8A", "263620B6:99DE0D8A"], "trainer_name": "JONN"}, "b": {"admission": "admitted", "admission_reason": "cartridge matches the contract", "connected": true, "current_area_id": "viridian_city", "party_keys": ["BC73F9B0:1C600D89", "F6B6A64D:1C600D89"], "trainer_name": "MAX"}}}
+# Evidence C:/slink-wt/g3-rfix/.lane/r4/39da30fd/admit_randomized_frlg/state/slink_duo_admit_randomized_frlg_81eeqm8h/randomized_pair_r8ptlr9h/rand_wrong_rom.json SHA256=69ffec71285b94fc57f416f534b22c8ec588c0d0d3249f5171e344e0a0649d1c
+{"effective_kind": "", "hellos": {"a": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba", "rom_type": "leafgreen", "table_bytes": 89643, "transport_sha1": "61e5b04cf2d729c37a5b7a95c2165b471201feca"}}, "identity_errors": {}, "phase": "rand_wrong_rom", "players": {"a": {"admission": "rejected", "admission_reason": "this is not the cartridge built for player a (reported 2931bd90ec90, expected 630a4561a1ee)", "connected": true, "current_area_id": "", "party_keys": [], "trainer_name": ""}}}

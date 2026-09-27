@@ -1,0 +1,45 @@
+# R4-LIVE physical receipt; cut 39da30fd050671e089420c3a5c5f04e0933715ab
+# Integrated base: c0704a31. Inputs: clean-derived fixture saves (SYNTH).
+# Invocation: python tools/e2e_duo.py --game gen3_frlg --scenario trainer_panel_gen3_rand --lane r4 --keep-data
+# SLINK_GEN3_RAND_ROMS=C:/slink-wt/rand_roms
+# SLINK_STATE_DIR=C:/slink-wt/g3-rfix/.lane/r4/39da30fd/trainer_panel_gen3_rand/state
+# Raw stdout: C:/slink-wt/g3-rfix/.lane/r4/39da30fd/trainer_panel_gen3_rand/stdout.txt SHA256=a64b3962f152aad30e5cc3ad927c50fe1d95be56267d6fe5a90f93b7af535cb0
+# Each row ran once; no unchanged failing run was retried.
+
+========== scenario: trainer_panel_gen3_rand ==========
+[duo] trainer_panel_gen3_rand: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] RAND_INPUT a SYNTH=clean-derived-save title=firered sha1=c6598b7b0c4a1116d220905e56fd6f00fb1250b6 transport_sha1=d3829ee598aeb730b9e50d3b688665eb899bcebc content_fingerprint=630a4561a1eee5d667a93707ff6680730f8847af6326b05e0e404eb8fc2a5cee
+[duo] RAND_INPUT b SYNTH=clean-derived-save title=leafgreen sha1=ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba transport_sha1=61e5b04cf2d729c37a5b7a95c2165b471201feca content_fingerprint=2931bd90ec9091f7a058078d827512a0b07a1f380fd8f06d06b7bcbce141c938
+[duo] IDENTITY a=firered:rom=0364287fe73aaacc74b9026c27e5ac2d90828c99c77fbd611d71bff5d98f7561:fixture=3a0499341f55567fd8699cd41a215723b19fd46e5493fd616f539856d81a387b b=leafgreen:rom=ae6d50136b5f2834b7ae8e3b30004f9651ab78832816eb0438705c33bb39acb0:fixture=9f97460005caedfe12c7fc29f0f08bf6177d341a53994a311ed0758f131e9c77 write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=90b97f77951b2eb64cfb4416c1b93395da6660d649819f9f984e0a1389be2bdc source=39da30fd050671e089420c3a5c5f04e0933715ab
+[duo] server up: tcp=60788 http=60789 data=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\trainer_panel_gen3_rand\state\slink_duo_trainer_panel_gen3_rand_8gt09tv5
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] RAND_PROCESS side=a phase=initial pid=34284
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] RAND_PROCESS side=b phase=initial pid=44408
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] RAND_VERDICT phase=pair evidence=C:\slink-wt\g3-rfix\.lane\r4\39da30fd\trainer_panel_gen3_rand\state\slink_duo_trainer_panel_gen3_rand_8gt09tv5\rand_pair.json sha256=5d8c65293ebc83cd4910a1fda02c7cde46e80ab348c4cff5dc239c7cf317e610
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 4.8s
+[duo] timing results 1.8s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=84335dacf8d9d476e2c7d14c70cc1edcb3e92513331b026521496c3e56a0b97e file=84335dacf8d9d476e2c7d14c70cc1edcb3e92513331b026521496c3e56a0b97e match=true saves=1 counter=5->6 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=673e34f1259bd90965123c49e2323a3ae24c924970532e8c18c32899d2f1582c file=673e34f1259bd90965123c49e2323a3ae24c924970532e8c18c32899d2f1582c match=true saves=1 counter=4->5 rtc=normalized
+[duo] nearby trainer_brief uses each OWN ROM; calc labels empty; saved party/boxes unchanged
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] trainer_panel_gen3_rand: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-rfix\.lane\r4\39da30fd\trainer_panel_gen3_rand\state\slink_duo_trainer_panel_gen3_rand_8gt09tv5
+
+========== summary ==========
+  trainer_panel_gen3_rand: PASS (attempt 1 of 1)
+# Evidence C:/slink-wt/g3-rfix/.lane/r4/39da30fd/trainer_panel_gen3_rand/state/slink_duo_trainer_panel_gen3_rand_8gt09tv5/rand_pair.json SHA256=5d8c65293ebc83cd4910a1fda02c7cde46e80ab348c4cff5dc239c7cf317e610
+{"effective_kind": "rand", "hellos": {"a": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "c6598b7b0c4a1116d220905e56fd6f00fb1250b6", "rom_type": "firered", "table_bytes": 89643, "transport_sha1": "d3829ee598aeb730b9e50d3b688665eb899bcebc"}, "b": {"artifact_kind": "rand", "regions": 5, "rom_sha1": "ba44d685e3c6dcaaad7e5c4adef4ffda23ac55ba", "rom_type": "leafgreen", "table_bytes": 89643, "transport_sha1": "61e5b04cf2d729c37a5b7a95c2165b471201feca"}}, "identity_errors": {}, "phase": "rand_pair", "players": {"a": {"admission": "admitted", "admission_reason": "cartridge matches the contract", "connected": true, "current_area_id": "viridian_forest", "party_keys": ["2D356A90:99DE0D8A", "263620B6:99DE0D8A"], "trainer_name": "JONN"}, "b": {"admission": "admitted", "admission_reason": "cartridge matches the contract", "connected": true, "current_area_id": "viridian_forest", "party_keys": ["BC73F9B0:1C600D89", "F6B6A64D:1C600D89"], "trainer_name": "MAX"}}, "trainer_briefs": {"a": {"area": "viridian_forest", "briefs": {"102": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Rick", "party": [{"level": 6, "species": "Slowking"}, {"level": 6, "species": "Pineco"}]}, "103": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Doug", "party": [{"level": 7, "species": "Xatu"}, {"level": 7, "species": "Houndoom"}, {"level": 7, "species": "Farfetch’d"}]}, "104": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Sammy", "party": [{"level": 9, "species": "Smoochum"}]}, "531": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Anthony", "party": [{"level": 7, "species": "Vaporeon"}, {"level": 8, "species": "Machop"}]}, "532": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Charlie", "party": [{"level": 7, "species": "Umbreon"}, {"level": 7, "species": "Dunsparce"}, {"level": 7, "species": "Metagross"}]}}, "calc_labels": {"102": "", "103": "", "104": "", "531": "", "532": ""}, "kind": "rand"}, "b": {"area": "viridian_forest", "briefs": {"102": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Rick", "party": [{"level": 6, "species": "Beldum"}, {"level": 6, "species": "Cradily"}]}, "103": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Doug", "party": [{"level": 7, "species": "Chansey"}, {"level": 7, "species": "Spinarak"}, {"level": 7, "species": "Mareep"}]}, "104": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Sammy", "party": [{"level": 9, "species": "Larvitar"}]}, "531": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Anthony", "party": [{"level": 7, "species": "Starmie"}, {"level": 8, "species": "Ampharos"}]}, "532": {"area": "viridian_forest", "class": "Bug Catcher", "name": "Charlie", "party": [{"level": 7, "species": "Nidoran-F"}, {"level": 7, "species": "Swinub"}, {"level": 7, "species": "Tropius"}]}}, "calc_labels": {"102": "", "103": "", "104": "", "531": "", "532": ""}, "kind": "rand"}}}
+# Scope: nearby trainer_brief at the Forest fixture; its key-trainer widget is empty by design. No UI-navigation claim.
