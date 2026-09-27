@@ -84,7 +84,7 @@ def test_rand_brief_from_an_ingested_table_has_no_calc_label():
         "class_names": ["", "Leader"],
         "trainers": {BROCK: {"class": 1, "name": "BROCK",
                              "party": [{"species": 74, "level": 12, "moves": [33, 111, 0, 0]}]}},
-    }, "firered")
+    })
     assert table["trainers"][BROCK]["key"] and "calc_label" not in table["trainers"][BROCK]
     rand._rom_trainers = table
     brief = rand.trainer_brief(BROCK)

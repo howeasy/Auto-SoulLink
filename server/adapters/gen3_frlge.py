@@ -137,7 +137,7 @@ if os.path.exists(_rr_priority_path):
         _RR_PRIORITY_POST_CAPS = {k: int(v) for k, v in (_ms.get("post") or {}).items()}
 
 def _load_trainer_table(path: str) -> dict:
-    """Load a pret-generated table with native gTrainers IDs and optional title learnsets."""
+    """Load the runtime trainer presentation from a pret-generated title pack."""
     if not os.path.exists(path):
         return {}
     with open(path, encoding="utf-8") as f:
@@ -146,11 +146,6 @@ def _load_trainer_table(path: str) -> dict:
         "titles": frozenset(raw.get("titles") or ()),
         "trainers": {int(k): v for k, v in (raw.get("trainers") or {}).items()},
         "trainers_by_area": {k: list(v) for k, v in (raw.get("trainers_by_area") or {}).items()},
-        "learnsets": {int(k): [tuple(e) for e in v] for k, v in (raw.get("learnsets") or {}).items()},
-        "learnsets_by_title": {
-            title: {int(k): [tuple(e) for e in v] for k, v in rows.items()}
-            for title, rows in (raw.get("learnsets_by_title") or {}).items()
-        },
     }
 
 
@@ -927,7 +922,7 @@ class Gen3Adapter(GameAdapter):
         title = rom_title(rom)
         tables = decode_verified(rom, title)
         out = _RomTables(self._rom_encounter_tables(tables["wild_encounters"]))
-        out.trainers = self._rom_trainer_table(tables, title)
+        out.trainers = self._rom_trainer_table(tables)
         return out
 
     def refused_rom_content(self, payload: object, *, artifact_kind: str | None = None) -> str:
@@ -988,18 +983,15 @@ class Gen3Adapter(GameAdapter):
                     block[method] = sorted(agg.values(), key=lambda e: (-e["rate"], e["species_id"]))
         return {area: block for area, block in out.items() if block}
 
-    def _rom_trainer_table(self, tables: dict, title: str, *, default_moves_verified: bool = False) -> dict:
+    def _rom_trainer_table(self, tables: dict) -> dict:
         """frlg_trainers.json's shape, from the cartridge: party species, levels, held items and
         custom moves (ruling 31), trainer and class names (UPR can randomize both). Area, key,
         rival and fight_label stay pret's: they come from map scripts, which UPR does not move.
         No calc_label: the FRLG.js setdex describes retail parties (design risk 4). Sparse hello
         reports do not contain level-up learnsets, so they must never infer default moves, even
-        when the report pairs as clean. Only a caller that has separately verified the title's
-        learnsets can opt into the trusted pret projection (RF-2 F4/F5).
+        when the report pairs as clean (RF-2 option B).
         """
         pret = _FRLG_TRAINER_TABLE.get("trainers", {})
-        learnsets = {**_FRLG_TRAINER_TABLE.get("learnsets", {}),
-                     **_FRLG_TRAINER_TABLE.get("learnsets_by_title", {}).get(title, {})}
         classes = tables["class_names"]
         trainers = {}
         for tid, tr in tables["trainers"].items():
@@ -1009,10 +1001,8 @@ class Gen3Adapter(GameAdapter):
                 entry = {"species": self.calc_species(mon["species"]), "level": mon["level"]}
                 if mon.get("held_item"):
                     entry["item"] = self.calc_name("item", self.item_name(mon["held_item"]))
-                if "moves" in mon or default_moves_verified:
-                    moves = mon["moves"] if "moves" in mon else default_moves(
-                        learnsets.get(mon["species"], ()), mon["level"])
-                    entry["moves"] = [self.calc_name("move", self.move_name(m)) for m in moves if m]
+                if "moves" in mon:
+                    entry["moves"] = [self.calc_name("move", self.move_name(m)) for m in mon["moves"] if m]
                 party.append(entry)
             t = {"name": "" if base.get("rival") else _pretty(tr["name"]),
                  "class": classes[tr["class"]] if tr["class"] < len(classes) else "",

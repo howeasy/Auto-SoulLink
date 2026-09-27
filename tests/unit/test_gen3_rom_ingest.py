@@ -9,7 +9,6 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import struct
 from pathlib import Path
 
 import pytest
@@ -162,30 +161,6 @@ def test_clean_ingest_reproduces_pret(title):
              "fingerprint": hashlib.sha1(rom).hexdigest()}
     with pytest.raises(ValueError, match="firered', 'leafgreen"):
         adapter.ingest_rom_content(whole)
-
-
-def _leafgreen_default_party() -> bytes:
-    """SYNTH: repurpose Ben's two default-move slots, retaining the pinned LG rule tables."""
-    raw = bytearray(_clean("leafgreen"))
-    head, _ = gen3_frlge._symbol("leafgreen", "gTrainers")
-    party = struct.unpack_from("<I", raw, head - gen3_rom_tables.ROM_BASE + 89 * 40 + 36)[0]
-    for slot, species in enumerate((410, 51)):  # pret Deoxys and Dugtrio native IDs
-        struct.pack_into("<HH", raw, party - gen3_rom_tables.ROM_BASE + slot * 8 + 2, 17, species)
-    return bytes(raw)
-
-
-def test_leafgreen_default_moves_use_the_payload_title_not_the_run_title():
-    adapter = Gen3Adapter(rom_type="firered", artifact_kind="rand")
-    rom = gen3_frlge.parse_rom_content(_payload(_leafgreen_default_party(), "leafgreen"))
-    title = gen3_frlge.rom_title(rom)
-    tables = gen3_frlge.decode_verified(rom, title)
-    # This fixture is a pinned clean LG ROM with only a trainer-party edit. Its learnsets are
-    # trusted; sparse hello ingestion cannot establish that and does not opt into inference.
-    party = adapter._rom_trainer_table(tables, title, default_moves_verified=True)["trainers"][89]["party"]
-    assert party[0]["moves"] == ["Wrap", "Night Shade", "Teleport", "Knock Off"]
-    assert party[1]["moves"] == ["Scratch", "Growl", "Magnitude", "Dig"]
-    adapter.use_rom_encounters(adapter.ingest_rom_content(_payload(_leafgreen_default_party(), "leafgreen")))
-    assert all("moves" not in mon for mon in adapter.trainer_party(89))
 
 
 @pytest.mark.parametrize("title", TITLES)
