@@ -8291,7 +8291,11 @@ class DuoRun:
     # Carnivine (RR id 508, offset+4).
     NPC_TRADE_FACTS = {
         "gen3_emerald": {"new_key": "00000084:00009746", "species": 298},
-        "gen3_rr": {"new_key": "498A2E1D:00008F78", "species": 508},
+        # Live 2026-09-27: the received mon's personality was 35DC164E, not the runtime table's
+        # 0x498A2E1D -- RR's detoured CreateInGameTradePokemonInternal generates it at trade time,
+        # so only the OT half of the key is fixed. The oracle takes the key from A's key_change
+        # and holds the saved party and links.json to that same key.
+        "gen3_rr": {"new_key": None, "new_otid": "00008F78", "species": 508},
     }
     NPC_TRADE_DEFAULT = {"new_key": "00009CAE:000007C1", "species": 122}
 
@@ -8308,6 +8312,10 @@ class DuoRun:
         ka = self._link_keys["a"]
         facts = self.NPC_TRADE_FACTS.get(self.game, self.NPC_TRADE_DEFAULT)
         new, species = facts["new_key"], facts["species"]
+        if new is None:
+            hit = re.search(rf'(?m)^TX key_change - .*"new_key":"([0-9A-F]{{8}}:{facts["new_otid"]})"'
+                            rf'.*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"', results["a"] or "")
+            new = hit.group(1) if hit else f"<no npc_trade key_change with OT {facts['new_otid']}>"
         kc = rf'(?m)^TX key_change - .*"new_key":"{new}".*"old_key":"{re.escape(ka)}".*"reason":"npc_trade"'
         problems = gen3_receipt_problems(
             "a", results["a"], required=[r"(?m)^SIGNAL trade_begin ", r"(?m)^SIGNAL trade_done ", kc],

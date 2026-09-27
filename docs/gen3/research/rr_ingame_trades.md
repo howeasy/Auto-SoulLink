@@ -260,7 +260,7 @@ identical to Reyley's script. `tools/gen3_fixtures.py`'s `build_rr_synth` trade 
 GROWTH_MEDIUM_FAST, its first level-1 learnset move), warped to CeruleanCity_House3 (2,1),
 facing DOWN (Dontae faces UP -- the opposite of Reyley and the Emerald trader, both of which face
 down onto their stand tile, so the scenario's facing direction is now a per-game fact instead of
-a hardcoded "Up"). The expected post-trade `new_key` is `498A2E1D:00008F78` (the runtime table's
+a hardcoded "Up"). The expected post-trade key's OT half is `00008F78`; the personality is NOT fixed (live 2026-09-27 received 35DC164E, so the decoded 0x498A2E1D is not what the game assigns). Earlier text said `new_key` is `498A2E1D:00008F78` (the runtime table's
 personality/otId for idx1, not the static table's), species Carnivine (RR id 508).
 
 Also fixed in passing: `tools/gen3_fixtures.py`'s `RR_BATTLE_MOVES_ADDR` constant read
