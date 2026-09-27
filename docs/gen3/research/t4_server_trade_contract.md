@@ -161,4 +161,35 @@ plus persisted `links.json` were byte-identical for all five titles:
 | Silver | 4746 | `722e813ce49f2b2bcce35ae9baaf7d29e22feaefb07c454f9edef2690c905e02` |
 
 Targeted trade, Gen 1/2, Gen 3 client, hello and citation regressions: **233 passed in 25.92s**.
-The full unit suite is running; its final result will be appended in the completion receipt.
+
+## Completion receipt — 2026-09-27
+
+Implementation: `2a8f1f0501abe21cd00c62b428c1b22687effb01`, based on `cd5c1697`.
+The source stayed unchanged during the full run. The follow-up receipt also repairs one
+watchdog sentence in `docs/protocol.md`; shifted source citations passed the targeted checker.
+
+```text
+python -m pytest tests/unit -q -p no:randomly -n 4 --dist=loadfile
+15428 passed, 362 skipped in 993.61s (0:16:33)
+Exit code: 0
+```
+
+The full run used Python 3.12, pytest-xdist 3.8.0 (four workers), the pinned local ROMs and
+these local prerequisite bindings:
+
+```text
+SLINK_PRET_SRC=E:/Google Drive/SLink/.cache/pret/pokered
+SLINK_PRET_FIRERED_SRC=E:/Google Drive/SLink/.cache/pret/pokefirered
+SLINK_PURERGB_SRC=E:/Google Drive/SLink/.cache/purergb
+SLINK_RGBDS_BIN=E:/Google Drive/SLink/.cache/build-tools/rgbds-v1.0.3/bin
+SLINK_GEN3_RAND_ROMS=C:/slink-wt/rand_roms
+SLINK_UPR_JAR=E:/Google Drive/SLink/.cache/slink-upr/PokeRandoZX.jar
+PYTHONPATH=C:/slink-wt/g3-rfix/.cache/rf1-test-deps
+```
+
+Ignored ROM/build/fixture prerequisites were copied into this worktree and SHA-256 compared
+to the originals. Clean FR SHA-1: `41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc`; clean LG:
+`574fa542ffebb14be69902d1d36f1ec0a4afd71e`. No ROM, client or producer changes were committed.
+Full output is retained locally at `.cache/t4-full-unit.txt`. The 362 skips are reported as
+skips, not qualification. No emulator ran for this card. Gen 2's prior physical receipts remain
+stale after shared-server changes; the compatibility replay does not renew those receipts.
