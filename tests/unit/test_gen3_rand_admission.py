@@ -41,14 +41,14 @@ def hello(rom_type="firered", kind="rand", **fields):
             "trainer_name": "A", "ot_id": "30B8", "has_pokeballs": True, "party": [], **fields}
 
 
-def randomized_payload(title="firered"):
+def randomized_payload(title="firered", first_species=75):
     """A valid allowed trainer-only edit, with every rule table still pin-matching."""
     from tests.unit.test_gen3_rom_content_lua import symbols
 
     raw = bytearray(_clean(title))
     head = symbols(title, len(raw))["gTrainers"]["address"] - 0x08000000
     party = struct.unpack_from("<I", raw, head + 414 * 40 + 36)[0] - 0x08000000
-    struct.pack_into("<H", raw, party + 4, 75)  # Brock's first mon becomes Graveler.
+    struct.pack_into("<H", raw, party + 4, first_species)  # Default control: Graveler.
     return _payload(bytes(raw), title)
 
 
@@ -141,3 +141,32 @@ async def test_a_contract_does_not_let_rand_bypass_an_unsupported_fingerprint_ho
         response = await send(hello("firered_rr", "rand", rom_content={"unreadable": True}))
     assert response["commands"] == [{"cmd": "noop", "refused": "admission"}]
     assert "randomized" in server.admission["a"]["reason"]
+
+
+@pytest.mark.parametrize("fields", ({}, {"rom_content": {}}, {"rom_content": None}),
+                         ids=("omitted", "empty", "null"))
+@pytest.mark.parametrize("contracted", (False, True), ids=("no-contract", "contract"))
+@pytest.mark.asyncio
+async def test_refused_rand_reconnect_drops_stale_tables_but_keeps_the_partner(tmp_path, fields, contracted):
+    from server.adapters.gen3_frlge import Gen3Adapter
+
+    a_report, b_report = randomized_payload(), randomized_payload("leafgreen", first_species=76)
+    if contracted:
+        fingerprint = Gen3Adapter(rom_type="firered").rom_content_fingerprint
+        Path(tmp_path, "rom_contract.json").write_text(json.dumps({"players": {
+            "a": {"fingerprint": fingerprint(a_report)},
+            "b": {"fingerprint": fingerprint(b_report)},
+        }}), encoding="utf-8")
+    server = SLinkServer(data_dir=str(tmp_path))
+    async with client(server) as send:
+        await send(hello(rom_content=a_report))
+        await send(hello("leafgreen", rom_content=b_report, player="b", trainer_name="B", ot_id="7B0B"))
+        assert server.adapter_for("a").trainer_party(414)[0]["species"] == "Graveler"
+        partner = copy.deepcopy(server.adapter_for("b").trainer_brief(414))
+        assert partner["party"][0]["species"] == "Golem"
+        response = await send(hello(**copy.deepcopy(fields)))
+        assert response["commands"] == [{"cmd": "noop", "refused": "admission"}]
+        assert server.admission["a"]["state"] == "rejected"
+        assert server.adapter_for("a").trainer_brief(414) is None
+        assert server.adapter_for("a").encounter_table("route_1") is None
+        assert server.adapter_for("b").trainer_brief(414) == partner

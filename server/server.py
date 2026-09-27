@@ -797,6 +797,10 @@ class SLinkServer:
         if kind == "rand" or (not self._rom_contract and payload):
             refused = self.adapter.refused_rom_content(payload, artifact_kind=kind)
             if refused:
+                if kind == "rand":
+                    # Unverified reconnects must not display a previous cartridge's tables.
+                    # The caller still rolls back the staged identity/rule state on refusal.
+                    getattr(self, "_player_adapters", {}).pop(player_id, None)
                 return {"state": "rejected", "reason": refused}
         if not self._rom_contract:
             return {"state": "admitted", "reason": "no randomized-ROM contract for this run"}
