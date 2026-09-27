@@ -1074,18 +1074,17 @@ CLEAN_CONTENT_SHA256 = {
 # gSpeciesInfo, as projected by _evolutions_digest/_species_rules_digest.
 # tests/unit/test_gen3_rom_ingest.py re-derives both from the pinned clean dumps.
 _EVOLUTIONS_SHA256 = "cdbbae339af1f2c071349d709d92abae6b5915702f44f51011abc0b472cc7c5d"
-_SPECIES_RULES_SHA256 = "9e78c6f703c9930971ea7eebccf9627d93470c6025c0c3b2d4705493a42c1801"
+_SPECIES_RULES_SHA256 = "06e7f0e7edb350b1c64260af7ec36faf763f53fd0865ef3449e017a20f8b8a4c"
 
-SPECIES_INFO_SIZE = 28   # struct SpeciesInfo, pret include/pokemon.h; gSpeciesInfo is 412 x 28
+SPECIES_INFO_SIZE = gen3_rom_tables.SPECIES_INFO_SIZE
 _CONTENT_HEADS = ("gTrainers", "gWildMonHeaders", "gEvolutionTable", "gSpeciesInfo",
                   "gTrainerClassNames")
 CLASS_NAME_SIZE = 13     # gTrainerClassNames[][TRAINER_CLASS_NAME_LENGTH + 1]
-_DEOXYS = 410
+_DEOXYS = gen3_rom_tables.DEOXYS
 # UPR writes FR's Attack / LG's Defense forme into Deoxys's row: the stats the game already uses
 # (pret src/pokemon.c:1640-1661 sDeoxysBaseStats), HP/Atk/Def/Spe/SpA/SpD. Not a rule change.
-_DEOXYS_NORMAL = bytes((50, 150, 50, 150, 150, 50))
-_DEOXYS_FORME = {"firered": bytes((50, 180, 20, 150, 180, 20)),
-                 "leafgreen": bytes((50, 70, 160, 90, 70, 160))}
+_DEOXYS_NORMAL = gen3_rom_tables.DEOXYS_NORMAL
+_DEOXYS_FORME = gen3_rom_tables.DEOXYS_FORME
 
 
 @cache
@@ -1157,17 +1156,7 @@ def _evolutions_digest(evolutions: dict) -> str:
 
 def _species_rules_digest(raw: bytes, title: str) -> str:
     """Rule fields, permitting UPR to fill only PINNED originally-empty ability slots."""
-    rows = []
-    for i in range(0, len(raw), SPECIES_INFO_SIZE):
-        row = raw[i:i + SPECIES_INFO_SIZE]
-        stats = row[0:6]
-        if i // SPECIES_INFO_SIZE == _DEOXYS and stats == _DEOXYS_FORME[title]:
-            stats = _DEOXYS_NORMAL
-        second = row[23]
-        if i // SPECIES_INFO_SIZE in gen3_rom_tables.FRLG_ZERO_SECOND_ABILITY_SPECIES and second == 0:
-            second = row[22]
-        rows.append(stats + row[6:8] + bytes((row[22], second)))
-    return hashlib.sha256(b"".join(rows)).hexdigest()
+    return hashlib.sha256(gen3_rom_tables.normalised_species_rules(raw, title)).hexdigest()
 
 
 def _pretty(name: str) -> str:
@@ -1185,7 +1174,7 @@ def decode_verified(rom, title: str) -> dict:
         bad.append("evolutions")
     addr, size = _symbol(title, "gSpeciesInfo")
     if _species_rules_digest(reader.read(addr, size, "gSpeciesInfo"), title) != _SPECIES_RULES_SHA256:
-        bad.append("types/abilities/base stats")
+        bad.append("types/abilities/base stats/growth rates")
     if bad:
         raise ForbiddenRomTables(f"{title} cartridge has randomized {' and '.join(bad)}, which "
                                  "SLink does not support (the server rules on pret's tables)")

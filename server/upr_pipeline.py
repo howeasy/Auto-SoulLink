@@ -56,7 +56,13 @@ from server.adapters.gen1_rom_scan import (
     scan,
     scan_base_stats,
 )
-from server.adapters.gen3_rom_tables import gen3_content_fingerprint
+from server.adapters.gen3_rom_tables import (
+    DEOXYS,
+    SPECIES_INFO_SIZE,
+    SPECIES_RULE_BYTES,
+    gen3_content_fingerprint,
+    normalised_species_rules,
+)
 from server.upr_settings import (
     FAMILY_FRLG,
     FAMILY_PURE,
@@ -302,9 +308,6 @@ _GEN3_PACK = os.path.join(_REPO, "data", "games", "gen3_frlg")
 # rule or the calc reads -- base stats 0-5, types 6-7, growth rate 19, abilities 22-23. The
 # catch rate (8) and the held items (12-15) are NOT here: the minimum-catch-rate and the
 # (open, ruling 31) wild-held-item options legitimately rewrite them.
-SPECIES_INFO_SIZE = 28
-SPECIES_RULE_BYTES = (0, 1, 2, 3, 4, 5, 6, 7, 19, 22, 23)
-DEOXYS = 410                      # internal species id (pret include/constants/species.h)
 
 
 def _gen3_pack(name: str) -> dict:
@@ -370,10 +373,8 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
     return bad
 
 
-def _gen3_species_rules(rom: bytes, title: str) -> list[bytes]:
-    from server.adapters.gen3_frlge import _DEOXYS_FORME, _DEOXYS_NORMAL
+def _gen3_species_rules(rom: bytes, title: str) -> bytes:
     from server.adapters.gen3_rom_tables import (
-        FRLG_ZERO_SECOND_ABILITY_SPECIES,
         ROM_BASE,
         SYMBOL_DIR,
     )
@@ -382,22 +383,10 @@ def _gen3_species_rules(rom: bytes, title: str) -> list[bytes]:
     if row is None:
         raise UprPipelineError(f"poke{title}.sym has no gSpeciesInfo symbol")
     base, size = int(row[0], 16) - ROM_BASE, int(row[2], 16)
-    rows = []
-    for species, i in enumerate(range(base, base + size, SPECIES_INFO_SIZE)):
-        rec = bytearray(rom[i + b] for b in SPECIES_RULE_BYTES)
-        # Only originally-empty slots may be filled by UPR. Erasing a pinned
-        # nonzero slot changes GetAbilityBySpecies for an inherited abilityNum=1.
-        if species in FRLG_ZERO_SECOND_ABILITY_SPECIES and rec[-1] == 0:
-            rec[-1] = rec[-2]
-        # Deoxys's six stats are exempt ONLY when they are the title's hardcoded forme (UPR
-        # copies that into its row on every save, Gen3RomHandler.java:796-809; the battle reads
-        # those anyway) -- mirrors server/adapters/gen3_frlge.py's _species_rules_digest, the
-        # other reader of this same normalisation, so there is one definition of "the forme".
-        # Any OTHER change to this row (a real base-stat edit) must still be caught.
-        if species == DEOXYS and bytes(rec[:6]) == _DEOXYS_FORME[title]:
-            rec[:6] = _DEOXYS_NORMAL
-        rows.append(bytes(rec))
-    return rows
+    raw = rom[base:base + size]
+    if len(raw) != size:
+        raise UprPipelineError("gSpeciesInfo is outside the ROM")
+    return normalised_species_rules(raw, title)
 
 
 def gen3_fingerprint_rom(rom: bytes) -> str:

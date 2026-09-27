@@ -57,6 +57,13 @@ TABLE_STRIDES = {
 }
 SYMBOL_DIR = Path(__file__).resolve().parents[2] / "data/gen3/pret"
 RomData = bytes | Mapping[int, bytes]
+SPECIES_INFO_SIZE = 28
+SPECIES_RULE_BYTES = (0, 1, 2, 3, 4, 5, 6, 7, 19, 22, 23)
+DEOXYS = 410
+# pret pokemon.c sDeoxysBaseStats: UPR saves the title's already-used forme into its row.
+DEOXYS_NORMAL = bytes((50, 150, 50, 150, 150, 50))
+DEOXYS_FORME = {"firered": bytes((50, 180, 20, 150, 180, 20)),
+                "leafgreen": bytes((50, 70, 160, 90, 70, 160))}
 
 # Native species IDs whose ORIGINAL second ability is zero in BOTH SHA-1-pinned
 # FR/LG gSpeciesInfo tables (pret c75f3523 src/data/pokemon/species_info.h).
@@ -83,6 +90,29 @@ FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset((
     374, 375, 376, 377, 378, 379, 380, 385, 387, 388, 389, 390, 391, 395, 396,
     397, 398, 399, 400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411,
 ))
+
+
+def normalised_species_rules(raw: bytes, title: str) -> bytes:
+    """The shared Manager/server rule projection of gSpeciesInfo (pret SpeciesInfo).
+
+    Preserve base stats, types, growth rate and both abilities. Only the fork's known
+    Deoxys forme write and ability-1 fill of a pinned originally-empty slot are equivalent
+    to retail. Other fields (e.g. held items and catch rate) are open randomizer options.
+    """
+    if title not in DEOXYS_FORME:
+        raise ValueError(f"unsupported FR/LG title: {title!r}")
+    if not raw or len(raw) % SPECIES_INFO_SIZE:
+        raise ValueError("gSpeciesInfo must contain complete 28-byte records")
+    rows = []
+    for species, offset in enumerate(range(0, len(raw), SPECIES_INFO_SIZE)):
+        row = raw[offset:offset + SPECIES_INFO_SIZE]
+        rules = bytearray(row[b] for b in SPECIES_RULE_BYTES)
+        if species == DEOXYS and row[:6] == DEOXYS_FORME[title]:
+            rules[:6] = DEOXYS_NORMAL
+        if species in FRLG_ZERO_SECOND_ABILITY_SPECIES and row[23] in (0, row[22]):
+            rules[-1] = row[22]
+        rows.append(rules)
+    return b"".join(rows)
 
 
 class _Rom:
