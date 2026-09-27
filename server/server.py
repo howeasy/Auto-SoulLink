@@ -586,6 +586,7 @@ class SLinkServer:
         self.player_area_id: dict[str, str] = {"a": "", "b": ""}  # raw area_id for state lookups
         self.player_ball_count: dict[str, int] = {"a": 0, "b": 0}
         self.player_badges: dict[str, int] = {"a": 0, "b": 0}
+        self.player_gender: dict[str, int | None] = {"a": None, "b": None}
         self.player_kanto_badges: dict[str, int] = {"a": 0, "b": 0}
         self.trainer_name: dict[str, str] = {
             "a": self.state.trainer_names.get("a", ""),
@@ -1006,9 +1007,14 @@ class SLinkServer:
 
         # Resolve briefs.
         briefs: list[tuple[int, dict]] = []
+        player_gender = getattr(self, "player_gender", {}).get(player_id)
         for rt_id in trainer_ids:
             brief = adapter.trainer_brief(rt_id)
             if brief:
+                required = brief.get("required_player_gender")
+                if (type(player_gender) is int and player_gender in (0, 1)
+                        and type(required) is int and required in (0, 1) and required != player_gender):
+                    continue
                 briefs.append((rt_id, brief))
 
         # Bucket by (name, cap_bucket) — candidates for grouping. Then
@@ -2260,6 +2266,8 @@ class SLinkServer:
             # per-player adapter's constructor default, is what a Gen 2 partner's own
             # adapter must carry, including on the very first hello that commits it.
             self._bind_player_adapter(player_id, msg.get("rom_type", ""))
+            gender = msg.get("player_gender")
+            self.player_gender[player_id] = gender if type(gender) is int and gender in (0, 1) else None
             if "ball_count" in msg:
                 self.player_ball_count[player_id] = msg["ball_count"]
             if "badges" in msg:
@@ -2404,6 +2412,8 @@ class SLinkServer:
         elif event == "safe":
             log.debug(f"[{player_id}] safe state")
         elif event == "tick":
+            gender = msg.get("player_gender")
+            self.player_gender[player_id] = gender if type(gender) is int and gender in (0, 1) else None
             if "ball_count" in msg:
                 self.player_ball_count[player_id] = msg["ball_count"]
             if "badges" in msg:
@@ -4877,6 +4887,7 @@ class SLinkServer:
         self.player_area_id = {"a": "", "b": ""}
         self.player_ball_count = {"a": 0, "b": 0}
         self.player_badges = {"a": 0, "b": 0}
+        self.player_gender = {"a": None, "b": None}
         self.player_kanto_badges = {"a": 0, "b": 0}
         self.trainer_name = {"a": "", "b": ""}
         self.pc_boxes = {"a": [], "b": []}

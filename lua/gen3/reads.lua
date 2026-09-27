@@ -532,7 +532,14 @@ function R.new(profile, io, pointers)
         local sb2, why = r.read_sb2()
         if not sb2 then return nil, why end
         local name = io.read_bytes(sb2 + name_off, R.OT_NAME_LEN)
-        return { ot_id = io.read_u32(sb2 + ot_off), name = r.decode_name(name), name_bytes = name }
+        local out = { ot_id = io.read_u32(sb2 + ot_off), name = r.decode_name(name), name_bytes = name }
+        -- Optional title fact. Emerald's generator pins SaveBlock2.playerGender;
+        -- other packs make no claim. Unreadable/unknown values stay absent.
+        if type(d.SB2_PLAYER_GENDER_OFFSET) == "number" then
+            local gender = io.read_u8(sb2 + d.SB2_PLAYER_GENDER_OFFSET)
+            if gender == 0 or gender == 1 then out.player_gender = gender end
+        end
+        return out
     end
 
     -- SaveBlock1.location (struct WarpData, pret include/global.h:392-398,759-762): signed

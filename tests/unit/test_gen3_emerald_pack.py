@@ -46,7 +46,8 @@ def rom() -> bytes:
 # SB1_BADGE_BYTE_OFFSET byte cannot express; BADGE_FIRST_FLAG is the one derived field that
 # is genuinely Emerald-only, carrying the flag id lua/gen3/reads.lua and
 # tools/gen3_reads_pydec.py derive each badge bit from (SB1_BADGE_BYTE_OFFSET stays null).
-EMERALD_ONLY_DERIVED = {"BADGE_FIRST_FLAG"}
+# EMERALD-RIVAL also publishes playerGender here; other packs leave that optional fact absent.
+EMERALD_ONLY_DERIVED = {"BADGE_FIRST_FLAG", "SB2_PLAYER_GENDER_OFFSET"}
 
 
 def test_profile_has_the_firered_key_set_and_provenance(emerald):

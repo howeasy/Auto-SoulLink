@@ -1313,6 +1313,7 @@ EMERALD_DERIVED = {
     "SB1_VARS_OFFSET": (0x139C, "include/global.h:1021", "vars", "struct SaveBlock1"),
     "SB2_ENC_KEY_OFFSET": (0xAC, "include/global.h:532", "encryptionKey", "struct SaveBlock2"),
     "SB2_NAME_OFFSET": (0, "include/global.h:510", "playerName", "struct SaveBlock2"),
+    "SB2_PLAYER_GENDER_OFFSET": (0x08, "include/global.h:511", "playerGender", "struct SaveBlock2; MALE=0/FEMALE=1, include/constants/global.h:113-114"),
     "SB2_OT_ID_OFFSET": (0x0A, "include/global.h:513", "playerTrainerId", "struct SaveBlock2"),
     "SHEDINJA_SPECIES_ID": (303, "include/constants/species.h:309", "SPECIES_SHEDINJA", ""),
     "STATUS3_PERISH_SONG": (0x20, "include/constants/battle.h:162", "STATUS3_PERISH_SONG", ""),

@@ -6,7 +6,7 @@ test_protocol_schema.py pins this table to the server's own dispatch and command
 so the schema tracks server/state.py (the authority), not any one client.
 
 Field types: "str", "int", "bool", "list", "dict", "key" (DDDD:OOOO:SS or PPPPPPPP:OOOOOOOO),
-"hex" (even-length uppercase/lowercase hex), "num" (int or float), "battle_id" (a battle request
+"hex" (even-length uppercase/lowercase hex), "num" (int or float), "player_gender" (integer 0 or 1), "battle_id" (a battle request
 counter: int, never bool, never fractional, 1..2**32-1), "session" (a client-session nonce: hex
 string, 1..16 chars). The last two are validated strictly and never coerced (card C5-10): a
 boolean, fractional or out-of-range counter, or a malformed nonce, is a protocol violation.
@@ -31,7 +31,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
               {"game": "str", "player": "str", "ot_id": "int", "panel": "bool", "panel_abi": "int", "sfx": "bool",
                "patch": "bool",
                "version": "str", "client": "str", "badges": "int", "has_pokeballs": "bool",
-               "trainer_name": "str", "pc_boxes": "list", "pc_boxes_generation": "int",
+               "trainer_name": "str", "player_gender": "player_gender", "pc_boxes": "list", "pc_boxes_generation": "int",
                "area_id": "str", "loc_name": "str",
                "rom_sha1": "str", "caps": "dict", "rom_content": "dict",
                "artifact_kind": "str", "foundation": "str", "trade_prepare": "bool",
@@ -45,7 +45,7 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
                   "opponent_name": "str", "opponent_class": "str", "enemy_party": "list",
                   "is_doubles": "bool", "pc_boxes": "list", "pc_boxes_generation": "int",
                   "ball_count": "int", "badges": "int",
-                  "kanto_badges": "int", "trainer_name": "str"}),
+                  "kanto_badges": "int", "trainer_name": "str", "player_gender": "player_gender"}),
     "safe": ({}, {"pc_boxes": "list", "pc_boxes_generation": "int"}),  # Gen 1/2: the battle-end census; Gen 3 sends none
     "area_enter": ({"area_id": "str"}, {"loc_name": "str"}),
     "capture": ({"key": "key", "area_id": "str"},
@@ -175,6 +175,8 @@ def _check_type(value, kind: str) -> bool:
         return isinstance(value, str) and value in ("committed", "rolled_back", "split", "resolved")
     if kind == "int":
         return isinstance(value, int) and not isinstance(value, bool)
+    if kind == "player_gender":
+        return type(value) is int and value in (0, 1)
     if kind == "num":
         return isinstance(value, (int, float)) and not isinstance(value, bool)
     if kind == "bool":
