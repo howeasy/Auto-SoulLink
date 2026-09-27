@@ -622,6 +622,12 @@ SCENARIOS["species_family_gen3"] = {
                        "gen3_rr": {"a": "family_synth", "b": "family_galar_synth"}},
     "oracle": "assert_species_family_gen3_saved",
 }
+SCENARIOS["shiny_bonus_gen3"] = {
+    "flags": [], "timeout": 2400, "frames": 3000000, "ball_hunt": True, "rng_attempts": 8,
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "explicit_only": True,
+    "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch", "gen3_rr": "battle2"},
+    "oracle": "assert_shiny_bonus_gen3_saved",
+}
 
 
 # No families any more: the `gen1`/`gen1_yellow` pair was the only one, and both titles (and
@@ -7640,6 +7646,14 @@ class DuoRun:
     def assert_species_family_gen3_saved(self, results):
         from gen3_clause_rows import family_oracle
         return family_oracle(self, results)
+
+    def orchestrate_shiny_bonus_gen3(self):
+        from gen3_shiny_rows import orchestrate
+        return orchestrate(self)
+
+    def assert_shiny_bonus_gen3_saved(self, results):
+        from gen3_shiny_rows import saved_oracle
+        return saved_oracle(self, results)
 
     def assert_release_gen3_saved(self, results):
         from gen3_clause_rows import release_oracle

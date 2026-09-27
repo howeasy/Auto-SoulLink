@@ -123,9 +123,9 @@ and termination restricted to owned PIDs. Other workers' emulators remain untouc
 
 | Cell | Scope of this card | Current evidence |
 | --- | --- | --- |
-| C3s shiny/bonus | FR, LG, RR, Emerald | No existing scenario; native carrier under construction on the clause harness. SYNTH setup must be disclosed separately. |
-| C3l PC release | Missing FR/LG/RR receipts; Emerald already passed | Existing C2 FR/LG/RR PASS logs at `d9a928d7` include save-witness hashes and PYDEC PASS. Current-cut binding/retained artifacts under review; no blanket current-HEAD promotion. |
-| C3b ball gate | LG and Emerald; FR already passed | C3 fixes phase paths. First private LG rerun completed native gate/catches/link/saves, then exposed another stale initial-result consumer in `wait_results`; red test reproduces it and the reader is being corrected. This run is FAIL, not PASS. |
+| C3s shiny/bonus | FR, LG, RR, Emerald | Native carrier and saved oracle implemented with 23 MODEL controls. Live qualification pending. One-time wild PID setup is disclosed separately from normal-input captures/bonus linking/saves. |
+| C3l PC release | FR/LG/RR; Emerald already passed | Fresh FR/LG/RR native PC release, partner retirement/memorial, save-witness and PYDEC PASS at `6349ba01`; title-specific receipts below. |
+| C3b ball gate | LG and Emerald; FR already passed | LG and Emerald PASS at clean `6349ba01`: native pre-ball suppression/reward activation, disclosed20-ball second phase, real link and matching final saves. A stale final-result reader was fixed red/green before the accepted runs. |
 | C3r gender/type | RR | Await the FRLG peer's ROM encounter/type catalog composition before live rows. |
 
 C3 also corrected RR base/Galarian evolution families and the family fixture,
@@ -136,3 +136,19 @@ regeneration of the family artifact after extending the species catalog.
 
 Other original cells are historical context, not re-audited by this card.
 Final title-by-row receipts and code cuts will be added as qualification runs finish.
+
+### Accepted live receipts at 6349ba01
+
+- LG gate: `docs/gen3/probes/clause_live_rest_ball_gate_lgfr_6349ba01.txt`.
+- Emerald gate: `docs/gen3/probes/clause_live_rest_ball_gate_emerald_6349ba01.txt`.
+- FR release: `docs/gen3/probes/clause_live_rest_release_gen3_gen3_frlg_6349ba01.txt`.
+- LG release: `docs/gen3/probes/clause_live_rest_release_gen3_gen3_lgfr_6349ba01.txt`.
+- RR release: `docs/gen3/probes/clause_live_rest_release_gen3_gen3_rr_6349ba01.txt`.
+
+The raw receipts, both SaveRAMs, witness dumps and manifests are retained under
+`C:/slink-wt/g3-clause-live-rest/.cache/live/`; server states remain in the
+private `.cache/state/` of the named run checkout. The first LG run exposed
+`wait_results` reading phase-one results; its failed receipt is retained.
+An Emerald run was also refused for an uncommitted LG receipt file (+dirty);
+it was not promoted. The accepted Emerald run uses the separate frozen clean
+checkout `C:/slink-wt/g3-clause-run`, separating development from qualification.
