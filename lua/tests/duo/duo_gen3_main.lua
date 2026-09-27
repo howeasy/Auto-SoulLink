@@ -1347,10 +1347,40 @@ function ctx.catch(label, already_hunted)
     -- misses. The former fall-through let the scene settler throw an unlogged ninth ball.
     local throw_budget = 20
     local throws = 0
+    local saw_faint, switched = false, false
+    local function faint_prompt()
+        if not play.in_battle(cp) then return false end
+        local active = ctx.battler_slot()
+        for _, m in ipairs(ctx.party() or {}) do
+            if m.slot == active and m.hp == 0 then
+                saw_faint = true
+                -- A accepts "Use next Pokemon?"; B declines it and flees
+                -- (outcome 4), before the forced party screen can be observed.
+                return true, "A"
+            end
+        end
+        return false
+    end
+    local function recover_party()
+        saw_faint = true
+        local reserve
+        for _, m in ipairs(ctx.party() or {}) do if m.slot == 1 and m.hp > 0 then reserve = m end end
+        if switched or not reserve then return false, "lead fainted while catching" end
+        local ok, why = ctx.send_out(1)
+        if not ok then return false, "forced catch switch failed: " .. tostring(why) end
+        switched = true
+        return true
+    end
     while throws < throw_budget do
         local turn = SP.verify_fight_cursor(cp, "incidental_battle")
         if turn == nil then break end
-        if turn == "party" then return nil, "a forced party menu came up while catching" end
+        if turn == "party" then
+            local ok, why = recover_party()
+            if not ok then return nil, why end
+            turn = SP.verify_fight_cursor(cp, "incidental_battle")
+            if turn == nil then break end
+            if turn == "party" then return nil, "forced catch switch did not leave the party menu" end
+        end
         -- Only an exhaustion OBSERVED after real throws is the ball RNG (and earns the retry); an
         -- unreadable count or a fixture that starts empty is a harness defect (Codex review of
         -- ad9669b1: read_balls() nil before any throw read as "out-of-balls", retryable).
@@ -1381,9 +1411,12 @@ function ctx.catch(label, already_hunted)
         end
         throws = throws + 1
         log("THREW " .. throws)
-        local r = ctx.await_turn(180, "B")
+        local r = ctx.await_turn(180, "B", faint_prompt)
         if r == "over" then break end
-        if r ~= "action" then return nil, "no decision point after the throw (" .. tostring(r) .. ")" end
+        if r == "party" then
+            local recovered, why = recover_party()
+            if not recovered then return nil, why end
+        elseif r ~= "action" then return nil, "no decision point after the throw (" .. tostring(r) .. ")" end
     end
     if play.in_battle(cp) ~= false then
         -- A budget-exhausting throw can be the fixture's LAST ball: report the RNG-classified
@@ -1402,7 +1435,13 @@ function ctx.catch(label, already_hunted)
     -- mid-catch and the player whited out -- the game's RNG, reported with the Gen 1 standard's
     -- retryable "whiteout" phrase (tools/e2e_duo.py GEN1_RNG_REASON_CLASS "hunt ended whiteout").
     if outcome == B_OUTCOME_LOST then return nil, "whiteout" end
-    if outcome ~= B_OUTCOME_CAUGHT then return nil, "the battle ended with outcome " .. outcome end
+    if outcome ~= B_OUTCOME_CAUGHT then
+        local diagnostic = fmt("the battle ended with outcome %d (ctrl0=0x%08X action_cursor=%d)",
+                               outcome, ctrl0(), memory.read_u8(S.gActionSelectionCursor))
+        log(diagnostic)
+        if saw_faint then return nil, "lead fainted while catching" end
+        return nil, diagnostic
+    end
     -- The client's own capture event names the key: by the time the field settles the server may
     -- already have quarantined (box_mon) or retired (dead zone) the record out of the party.
     local cap = ctx.last_sent("capture")

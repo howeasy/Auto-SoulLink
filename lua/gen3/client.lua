@@ -119,6 +119,14 @@ function Client.new(p)
     local key = reads.key
     local session
     local function send(event, fields) return session.send(event, fields) end
+    local function owe(event, fields)
+        -- INV-CLIENT-2: native removals use the same reply-bound outbox as trade.
+        if not owed then error("durable reports unavailable for " .. event) end
+        for _, report in ipairs(owed.list) do
+            if report.event == event and report.fields.key == fields.key then return end
+        end
+        owed.list[#owed.list + 1] = {event = event, fields = fields}
+    end
     local function eligible() return session ~= nil and session:eligible() end
     local function recovery_hidden()
         return journal and (journal:hidden() or (awaiting_trade_run and journal:has_entries())) or false
@@ -460,10 +468,13 @@ function Client.new(p)
                 send("party_to_box", { key = k, stats = prev.stats })
             elseif now[k] then
                 st.carried[k] = nil                            -- a party shuffle, not a move
-            elseif released then
+            elseif released and released[k] then
                 st.carried[k] = nil
-                log("released " .. k)
             end
+        end
+        for k in pairs(released or {}) do
+            st.known[k], st.alive[k] = nil, nil
+            owe("release", {key = k})
         end
         for k in pairs(now) do
             if not st.party_prev[k] then
@@ -969,6 +980,7 @@ function Client.new(p)
         return overworld_ok()
     end
     function drv.on_reset()
+        st.release_snapshot = nil
         trade_reset_epoch = trade_reset_epoch + 1
         reload_boot_seen = false
         if trade then trade:reset() end
@@ -1128,9 +1140,59 @@ function Client.new(p)
             sig.trade_before = {}
             for _, mon in ipairs(party) do sig.trade_before[mon.slot] = key(mon) end
         end
+        local function release_census()
+            -- Read through this title's profile at the native hooks. The party
+            -- count can still include the purged slot until compaction follows.
+            local party = party_read()
+            if not party then return nil end
+            local census = {}
+            for _, mon in ipairs(party) do
+                if mon.has_species == 1 and mon.species ~= 0 then
+                    local k = key(mon)
+                    if census[k] then return nil end
+                    census[k] = {where = "party", slot = mon.slot}
+                end
+            end
+            for box = 0, (num(d.BOXES_PER_STORE) or 0) - 1 do
+                local mons = call("read_box", box)
+                if not mons then return nil end
+                for _, mon in ipairs(mons) do
+                    if mon.has_species == 1 and mon.species ~= 0 then
+                        local k = key(mon)
+                        if census[k] then return nil end
+                        census[k] = {where = "box", box = box, slot = mon.slot}
+                    end
+                end
+            end
+            return census
+        end
+        local function release_begin(sig)
+            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp}
+        end
+        local function release_done(sig)
+            local before = st.release_snapshot
+            st.release_snapshot = nil
+            -- ReleaseMon entry SP and its pre-pop return SP differ by saved LR.
+            if not before or not before.keys or before.epoch ~= trade_reset_epoch
+               or before.sp ~= sig.sp + 4 then return end
+            local after, gone = release_census(), nil
+            if not after then return end
+            for k in pairs(after) do if not before.keys[k] then return end end
+            for k, location in pairs(before.keys) do
+                if not after[k] then
+                    if gone then return end -- ambiguous removal: no guessed key
+                    gone = {key = k, location = location}
+                end
+            end
+            if gone then
+                sig.release_key, sig.release_source = gone.key, gone.location
+                sig.release_epoch = trade_reset_epoch
+            end
+        end
         sig_src = p.Signals.new(profile, p.sites, io, p.ev,
                                 {battle_begin = close_authority, battle_end = close_authority,
-                                 whiteout = close_authority, trade_begin = capture_trade_before})
+                                 whiteout = close_authority, trade_begin = capture_trade_before,
+                                 pc_release_begin = release_begin, pc_release = release_done})
         return sig_src
     end
 
@@ -1161,7 +1223,10 @@ function Client.new(p)
         elseif k == "mon_given" or k == "pc_move" then f.acquire = true
         elseif PC_KINDS[k] then
             f.pc = true
-            if k == "pc_release" then f.release = true end
+            if k == "pc_release" and sig.release_key and sig.release_epoch == trade_reset_epoch then
+                f.release = f.release or {}
+                f.release[sig.release_key] = true
+            end
         elseif k == "map_load" then f.map = true
         elseif k == "save" then f.save = true
         elseif k == "trade_begin" then                          -- OPEN kind, not PHYSICAL

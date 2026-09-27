@@ -7,6 +7,18 @@ return function(ctx)
     local key = ctx.linked()
     if not key or not ctx.find(key) or ctx.find(key).slot ~= 1 then return false, "LINKED must name party slot 1" end
     if ctx.player == "a" then
+        local source
+        local signals, drain = ctx.session.signals, ctx.session.signals.drain
+        signals.drain = function(self)
+            local out = drain(self)
+            for _, signal in ipairs(out) do
+                if signal.kind == "pc_release" and signal.release_key == key then
+                    source = signal.release_source
+                    ctx.jlog("RELEASE_PREIMAGE", {key=key, source=source})
+                end
+            end
+            return out
+        end
         ctx.walk_to_pc("release")
         if ctx.pc_deposit("first deposit") ~= key or not ctx.observe_boxed(key) then return false, "first deposit readback" end
         if not ctx.wait_sent("party_to_box", key) then return false, "first deposit TX missing" end
@@ -23,6 +35,7 @@ return function(ctx)
         if not ctx.wait_go("ALLOW_RELEASE") then return false, "no PC release permission" end
         local ok, why = ctx.pc_release("release", key)
         if not ok then return false, why end
+        if not source or source.where ~= "box" then return false, "native release lacks a boxed pre-removal snapshot" end
         if not ctx.wait_sent("release", key) then return false, "native release TX missing" end
         ctx.log("RELEASED " .. key)
     else
