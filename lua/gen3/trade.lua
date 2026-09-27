@@ -187,7 +187,15 @@ function T.new(d)
             end
             if witness.save_success == true then
                 if not t.scene_done then return uncertain(t, "save milestone before scene") end
-                t.save_success = true
+                if not t.save_success then
+                    -- A cartridge save witness alone cannot authorize journal retirement.
+                    -- The host must persist SaveRAM before native_saved can release the lease.
+                    local ok, saved = pcall(d.saveram)
+                    if not ok or saved == false then
+                        return uncertain(t, "host SaveRAM flush failed: " .. tostring(saved))
+                    end
+                    t.save_success = true
+                end
             end
             if witness.final_result ~= nil then t.final_result = witness.final_result end
         end

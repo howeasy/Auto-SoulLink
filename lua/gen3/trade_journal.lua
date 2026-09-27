@@ -13,10 +13,10 @@ end
 function J.next_epoch(n)
     if not integer(n,0,U32) then return nil, "invalid trade epoch counter" end
     if n == U32 then return nil, "trade epoch exhausted" end
-    return n + 1
+    return math.tointeger(n) + 1
 end
 local function text(v, max)
-    return type(v) == "string" and #v > 0 and #v <= max and not v:find("%z")
+    return type(v) == "string" and #v > 0 and #v <= max and not v:find("[^ -~]")
 end
 local function hash(s)
     local h = 2166136261
@@ -68,9 +68,9 @@ local function encode(json, s)
         local b, fields = r.binding, {}
         for _, k in ipairs(BINDING_KEYS) do fields[#fields+1] = quote(k) .. ":" .. quote(b[k]) end
         records[i] = '{"binding":{' .. table.concat(fields, ",") .. '},"token":' .. quote(r.token)
-            .. ',"epoch":' .. tostring(r.epoch) .. ',"final":' .. quote(r.final) .. '}'
+            .. ',"epoch":' .. quote(r.epoch) .. ',"final":' .. quote(r.final) .. '}'
     end
-    return '{"schema":1,"revision":' .. tostring(s.revision) .. ',"counter":' .. tostring(s.counter)
+    return '{"schema":1,"revision":' .. quote(s.revision) .. ',"counter":' .. quote(s.counter)
         .. ',"records":[' .. table.concat(records, ",") .. ']}'
 end
 local function frame(body) return tostring(#body) .. ":" .. hash(body) .. ":" .. body .. "\n" end
@@ -106,9 +106,10 @@ J.decode = decode
 
 -- Two durable files, one OS-exclusive guard handle. The append-only log is committed
 -- before its guard seal, and BOTH are flushed before an intent/epoch is returned.
--- A partial append, lost guard/log, or a valid-prefix rollback is therefore ambiguous
--- and refused. Never delete the guard to "repair" an installation. Removing every
--- journal artifact is an operator reset, outside the automatic recovery contract.
+-- A partial append, lost guard/log, or mismatched rollback is therefore ambiguous
+-- and refused. Restoring a mutually consistent older log+guard pair is not detectable
+-- without an external freshness authority. Never delete the guard to "repair" an
+-- installation. Removing every artifact is outside the automatic recovery contract.
 function J.file_store(d)
     local fs, path, json = assert(d.fs), assert(d.path), assert(d.json)
     local function seal(bytes) return MAGIC .. tostring(#bytes) .. ":" .. hash(bytes) .. "\n" end
@@ -229,7 +230,10 @@ function J.new(d)
     local self = {allowed={}, qualified={}}
     local context
     local function failed(why)
-        self.failure = "trade journal: " .. tostring(why)
+        if not self.failure then
+            self.failure = "trade journal: " .. tostring(why)
+            if d.log then pcall(d.log,self.failure) end -- console diagnostics only; never HUD text
+        end
         return nil, self.failure
     end
     local cache_frame
@@ -265,6 +269,8 @@ function J.new(d)
         return answer
     end
     function self:bind(run_id, ot_id)
+        self.qualified = {} -- a newly accepted connection needs fresh local reload evidence
+        if not text(run_id,256) then return nil, "run_id must be nonempty printable ASCII (max 256 bytes)" end
         local b = {rom_sha1=d.rom_sha1, player=d.player, run_id=run_id, ot_id=ot_id}
         if not binding(b) then return nil, "invalid cartridge/player/run binding" end
         if context and not same(context,b) then self.allowed = {} end
@@ -299,9 +305,11 @@ function J.new(d)
         end)
     end
     function self:arm(value, epoch)
-        if not self:ready() or not text(value,256) or not integer(epoch,1,U32) then
+        if not text(value,256) then return nil, "token must be nonempty printable ASCII (max 256 bytes)" end
+        if not self:ready() or not integer(epoch,1,U32) then
             return nil, self.failure or "invalid write-ahead lease"
         end
+        epoch = math.tointeger(epoch)
         return update(function(s)
             assert(epoch <= s.counter, "unallocated trade epoch")
             for _, r in ipairs(s.records) do
@@ -376,7 +384,7 @@ function J.new(d)
         return nil, "unknown journal lease"
     end
     function self:native_saved(value, epoch)
-        -- Called only after trade.lua validates every native save/scene/final milestone.
+        -- Called after every native milestone AND a successful host SaveRAM flush.
         return allow(value,epoch)
     end
     function self:precommit_unchanged(value, epoch)
@@ -396,7 +404,8 @@ function J.new(d)
         return true
     end
     function self:declared(value, epoch)
-        local id = tostring(epoch) .. ":" .. tostring(value)
+        if not integer(epoch,1,U32) then return nil, "invalid recovery declaration epoch" end
+        local id = tostring(math.tointeger(epoch)) .. ":" .. tostring(value)
         if not self.qualified[id] then return nil, "reload proof still required" end
         return allow(value,epoch)
     end

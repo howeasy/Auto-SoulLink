@@ -70,7 +70,7 @@ class Files:
                          create_file=self.create, append_file=self.append)
 
 
-def journal(store, *, fresh=False, run="run-a", player="a", rom="a" * 40):
+def journal(store, *, fresh=False, run="run-a", player="a", rom="a" * 40, logs=None):
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
     codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
@@ -78,7 +78,7 @@ def journal(store, *, fresh=False, run="run-a", player="a", rom="a" * 40):
         assert store.data is None
         store.data = module.initial(codec)
     obj = module.new(lua.table(json=codec, store=lua.table(read=store.read, update=store.update),
-                               rom_sha1=rom, player=player))
+                               rom_sha1=rom, player=player, log=logs.append if logs is not None else None))
     assert obj.bind(obj, run, "12345678") is True
     return lua, module, obj
 
@@ -124,6 +124,26 @@ def test_failed_write_cannot_authorize_a_scene():
     store.fail = True
     assert obj.arm(obj, "t", epoch)[0] is None
     assert obj.hidden(obj) is True and store.data == before
+
+
+@pytest.mark.parametrize("fault", ("read", "write"))
+def test_permanent_journal_fault_logs_its_reason_once_and_stays_closed(fault):
+    store, logs = Store(), []
+    _, _, obj = journal(store, fresh=True, logs=logs)
+    saved = store.data
+    if fault == "read":
+        store.data = "broken"
+        assert obj.hidden(obj) is True
+    else:
+        store.fail = True
+        assert obj.allocate(obj)[0] is None
+    assert len(logs) == 1 and logs[0] == obj.failure
+    assert ("invalid trade journal" if fault == "read" else "durable write failed") in logs[0]
+    store.data, store.fail = saved, False
+    for _ in range(3):
+        assert obj.hidden(obj) is True and obj.ready(obj) is False
+        assert obj.allocate(obj)[0] is None
+    assert len(logs) == 1
 
 
 def test_server_final_is_bookkeeping_and_never_clears_a_reload_barrier():
@@ -226,7 +246,7 @@ def test_reload_needs_boot_and_stable_flash_counter_trainer_party(fault):
 
 
 @pytest.mark.parametrize("fault", (None, "missing_log", "missing_guard", "rollback", "append", "head"))
-def test_disk_store_never_recovers_missing_torn_or_rolled_back_storage_as_empty(fault):
+def test_disk_store_refuses_missing_torn_or_mismatched_rollback(fault):
     files = Files()
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
@@ -319,9 +339,14 @@ def test_a_missing_journal_refuses_native_trade_preparation():
 
 def test_uint32_epoch_boundary_never_wraps_or_resets():
     store = Store()
-    _, module, _ = journal(store, fresh=True)
+    lua, module, _ = journal(store, fresh=True)
     assert module.next_epoch(0) == 1
     assert module.next_epoch(0xFFFFFFFE) == 0xFFFFFFFF
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    maximum = module.next_epoch(float(0xFFFFFFFE))
+    assert lua.eval("math.type")(maximum) == "integer"
+    assert codec.encode(maximum) == "4294967295"
+    assert lua.eval("math.type")(codec.decode(codec.encode(maximum))) == "integer"
     for bad in (0xFFFFFFFF, 0x100000000, -1, True, 1.5):
         assert module.next_epoch(bad)[0] is None
 
@@ -350,6 +375,69 @@ def test_proof_for_another_cartridge_cannot_release_this_journal():
         "ram_before": ram, "ram_after": dict(ram)}, recursive=True))
     assert proof.counter == 7
     assert obj.qualify(obj, proof)[0] is None and obj.hidden(obj) is True
+
+
+@pytest.mark.parametrize("run", ("run-a", "run-b"))
+def test_binding_again_invalidates_previously_qualified_reload_evidence(run):
+    store = Store()
+    lua, module, obj = journal(store, fresh=True)
+    epoch = arm(obj)
+    flash, ram = flash_and_ram()
+    proof = module.verify_reload(lua.table_from({"title": "emerald", "rom_sha1": "a"*40,
+        "boot_seen": True, "flash_before": flash, "flash_after": flash,
+        "ram_before": ram, "ram_after": dict(ram)}, recursive=True))
+    assert obj.qualify(obj, proof) is True
+    assert obj.bind(obj, run, "12345678") is True
+    if run != "run-a":
+        assert obj.bind(obj, "run-a", "12345678") is True
+    assert obj.declared(obj, "t", epoch)[0] is None
+    assert obj.hidden(obj) is True
+
+
+@pytest.mark.parametrize("field", ("run_id", "token"))
+@pytest.mark.parametrize("bad", ("", "bad\x00id", "bad\nid", "bad\tid", "bad\x7fid", "café", b"bad\xffid"))
+def test_server_identifiers_refuse_non_printable_ascii_by_name_without_writing(field, bad):
+    store = Store()
+    _, _, obj = journal(store, fresh=True)
+    epoch = obj.allocate(obj)
+    before = store.data
+    refusal = obj.bind(obj, bad, "12345678") if field == "run_id" else obj.arm(obj, bad, epoch)
+    assert refusal is not True
+    assert refusal[0] is None and field in refusal[1] and "ASCII" in refusal[1]
+    assert store.data == before
+
+
+def test_printable_ascii_identifiers_keep_their_exact_json_escaped_value():
+    store = Store()
+    _, _, obj = journal(store, fresh=True)
+    run, value = 'run !~ "\\', 'token !~ "\\'
+    assert obj.bind(obj, run, "12345678") is True
+    epoch = obj.allocate(obj)
+    assert obj.arm(obj, value, epoch) is True
+    _, _, restarted = journal(store, run=run)
+    assert restarted.outstanding(restarted)[1].token == value
+
+
+@pytest.mark.parametrize("floating", (False, True))
+def test_originating_epoch_round_trips_as_integer_through_journal_and_wire_json(floating):
+    store = Store()
+    _, _, obj = journal(store, fresh=True)
+    allocated = obj.allocate(obj)
+    assert obj.arm(obj, "t", float(allocated) if floating else allocated) is True
+    lua, module, restarted = journal(store)
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    outstanding = restarted.outstanding(restarted)
+    assert lua.eval("math.type")(outstanding[1].epoch) == "integer"
+    wire = codec.decode(codec.encode(outstanding))
+    assert lua.eval("math.type")(wire[1].epoch) == "integer"
+    assert wire[1].epoch == allocated
+    flash, ram = flash_and_ram()
+    proof = module.verify_reload(lua.table_from({"title": "emerald", "rom_sha1": "a"*40,
+        "boot_seen": True, "flash_before": flash, "flash_after": flash,
+        "ram_before": ram, "ram_after": dict(ram)}, recursive=True))
+    assert restarted.qualify(restarted, proof) is True
+    assert restarted.declared(restarted, wire[1].token, wire[1].epoch) is True
+    assert restarted.hidden(restarted) is False
 
 
 @pytest.mark.parametrize("title", ("firered", "leafgreen", "emerald"))

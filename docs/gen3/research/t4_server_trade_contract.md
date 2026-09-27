@@ -346,7 +346,7 @@ matching `trade_outstanding` entries before any recovery evidence.
 Storage uses an append-only sequence of canonical, length/checksum-framed snapshots, plus a
 separate guard seal. An OS-exclusive guard handle serializes writers; the log and guard are each
 flushed with `FileStream.Flush(true)` before an allocation or intent returns. A missing member,
-partial append, bad frame, invalid/duplicate record, sequence rollback, or mismatched seal is a
+partial append, bad frame, invalid/duplicate record, mismatched rollback, or mismatched seal is a
 named failure, never an empty recovered journal. Initial provisioning is allowed only when a
 new guard is created and no log exists; the guard is permanent. Removing all journal artifacts
 is an operator reset outside automatic recovery. The counter never wraps past 0xFFFFFFFF.
@@ -460,3 +460,42 @@ The run used `SLINK_GEN3_ROMS=E:/Google Drive/SLink`,
 `SLINK_PRET_EMERALD_SRC=E:/Google Drive/SLink/.cache/pret/pokeemerald`, and
 `SLINK_HOST_GCC=E:/Google Drive/SLink/.cache/build-tools/w64devkit-2.10.0/w64devkit/bin/gcc.exe`.
 The final receipt commit changes this document only; runtime and test source remain at the tested cut.
+
+## T3-R6 review corrections — SOURCE / MODEL
+
+The native `save_success` milestone now calls the host SaveRAM API through `pcall` before it
+can release an intent via `native_saved`. An unavailable API, exception, or explicit false
+return keeps the journal entry and requires qualified reload, even if an authoritative final
+has already arrived. Duplicate native save milestones do not trigger another flush. The
+ordinary `f.save` observer is independent of this protocol callback; the client MODEL reproduced
+a complete native success with no observer flush before this correction. Player HUD text is
+unchanged. A permanent journal failure logs its original reason to the console once and remains
+fail-closed for that journal instance.
+
+A config without `run_id` now revokes the existing journal binding just like an empty ID;
+failed rebinding also leaves reports and finals withheld. Every bind invalidates previously
+qualified reload evidence. Server-supplied run IDs and tokens must be nonempty printable ASCII,
+with named bind/arm refusals before any journal write. Originating epochs are canonical JSON
+integers, including integral-float API inputs; the restart and wire round-trip tests cover the
+integer/string identity used by recovery declarations.
+
+The rollback claim is deliberately limited to **mismatched rollback**. A mutually consistent
+older log and guard pair passes local validation; no local seal can distinguish that pair from
+the latest state without an external freshness authority. The MODEL counterexample at
+`.cache/t3-r6-paired-rollback.json` restores both genesis files after an intent and observes an
+empty journal and reused epoch. This limitation applies to restore/sync rollback as well as
+deliberate rollback; the journal is not a freshness or anti-tampering guarantee.
+
+The journal remains at the existing install-root path for this correction. Silently switching
+to a battery-adjacent path would orphan existing pending intents and could provision a new empty
+journal. Co-location alone also does not make save/journal backup or sync atomic. A future path
+change needs explicit migration preserving existing records and a defined restore policy.
+
+The host test now mirrors the native DLL search setup in
+[pinned EmuHawk Program.cs](https://github.com/TASEmulators/BizHawk/blob/bdddf4a58aa1a022afb11dc73294a81a5aa7bbd5/src/BizHawk.Client.EmuHawk/Program.cs#L125-L160).
+The old PATH-only harness passed in Codex's PowerShell 7.6.5/.NET 10.0.11 but failed in the
+WindowsApps 7.6.6/.NET 10.0.12 host with `Could not load native lua methods`; both were x64 and
+used the same managed NLua assembly. `SetDllDirectoryW` fixes that loader difference. The test
+executes both discovered hosts, verifies the actual managed NLua and native Lua DLL paths and
+Lua 5.4, and still exercises two fresh processes against the actual file adapter. An installed
+runtime that fails to load remains a test failure, never a blanket skip.
