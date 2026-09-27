@@ -240,8 +240,9 @@ UPS is published by this milestone.
 The subsequent panel composition adds capability bit 1 to the private candidate
 (combined mask 3); the immutable trade-core SHA above remains its baseline.
 READY remains 0 and the receipt remains non-production. This extension is
-SOURCE/MODEL/build evidence only: native UI screenshots, navigation, allocator
-failure recovery and live trade/panel coexistence are not yet qualified.
+SOURCE/MODEL/build plus the bounded native UI run recorded below. Allocator
+failure recovery, pagination, live trade/panel coexistence and server/T3 adapter
+integration are not yet qualified.
 
 Opcode 27 binds INFO.request_seq to the mailbox seq and INFO.session_epoch to
 the mailbox epoch. It validates enabled, 1..6 rows and bounded EOS (including
@@ -266,3 +267,29 @@ native runtime scratch is +0x940. Text stays owned through native UI closure.
 The renderer retains the existing six-row, 27x13-tile panel layout with paired
 rows, status labels and HP bars. Engine addresses and normal-menu behavior are
 pinned to vanilla FR source/symbols; RR v1 code and published UPS are unchanged.
+
+### FR panel live receipt, 2026-09-27
+
+Producer composition `280445a85563cda8d7ea562c7dbd439983fd656a` passed one
+single-cartridge run using the existing town save and the five-row payload
+replayed from the accepted RR receipt
+`docs/gen3/probes/rr_infopanel_gen3_gen3_rr_as_a_f78b533a_r2.txt`.
+This is a disclosed input fixture, not evidence that a current server sent it.
+Only host-owned ABI staging was written; game navigation used normal inputs.
+
+Receipt: `patch/build/panel-live-20260927/panel_receipt.json`, with native log
+`result.txt`, input rows, ROM/build/run identities and Lua driver alongside.
+Candidate ROM SHA256:
+`88a656a7d890832add2d9566fb173acd81f2b32bd4e3d31dea99c59df1d297d4`.
+The private run directory was `.cache/p`; SLINK_STATE_DIR was its `states`
+child. The single owned PID 2148 exited, and the emulator lane was released.
+
+START produced count 8/order `0,1,2,3,4,5,9,6`. Normal cursor presses selected
+SOULLINK. On both openings, Python independently decoded every row and the
+PAGE 1/1 header from the native private snapshot; epoch/request/drawn matched,
+field controls were locked, VRAM changed, and palette RAM was nonblack. A then
+B closed with results 0/127 and released controls. A deliberately corrupted
+readback was rejected by the oracle. No screenshot supplied game facts. Each
+opening used a distinct host request seq (1, then 2); this does not qualify
+same-request reopening or automatic pagination. No server/T3 adapter, duo,
+save-persistence or general heap safety claim follows from this run. READY is 0.
