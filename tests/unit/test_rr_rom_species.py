@@ -60,6 +60,17 @@ def test_production_species_types_exists_for_every_wild_species(rom):
     assert sorted(s for s in ids if species_types(s, is_rr=True) is None) == []
 
 
+def test_production_rr_names_use_the_catalog_without_changing_generic_names():
+    from server.adapters.gen3_frlge import Gen3Adapter
+    from server.pokemon_data import species_name
+
+    names = json.loads((ROOT / "data/games/gen3_frlge/rr_species.json").read_text())
+    adapter = Gen3Adapter(is_rr=True, rom_type="firered_rr")
+    for sid in range(1356,1376):
+        assert adapter.species_name(sid) == names[str(sid)]
+        assert species_name(sid,is_rr=False) == f"#{sid}"
+
+
 def test_every_rom_type_round_trips_through_the_explicit_canonical_conversion(rom):
     from server.pokemon_data import species_types, type_name
     from tools.gen_rr_types import RR_TO_CANONICAL_TYPE, types_from_rom

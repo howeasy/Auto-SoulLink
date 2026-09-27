@@ -164,8 +164,13 @@ Windows checkout/regeneration.
   type and Masquerain312's type order. The empty reserved record920 is not given
   invented types. Generic/non-RR type behavior is unchanged.
 
-No server or Lua consumer source was changed by this catalog card beyond the
-explicit C3 merge. The catalog describes statically selectable tables, including
+- The full gate exposed that `pokemon_data.species_name` still used only the
+  static generic table, emitting `#1356`–`#1375`. The RR-only lookup now consumes
+  the generated catalog. All existing names are unchanged; generic/NatDex names
+  keep their old map. The adapter and calculator name-resolution tests verify
+  every newly named entry, with no new allowlist or weakened assertion.
+
+The catalog describes statically selectable tables, including
 conditional fallback variants. It does not observe a save's current override
 pointer, swarm state or encounter-modifying ability; those limits remain explicit.
 
