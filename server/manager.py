@@ -162,7 +162,8 @@ OPTION_SUPPORT = {
                     "gen1_rby": {"ok": False, "why": "Gen 1 has no gender mechanic, so the clause can never fire."},
                     "gen1_purergb": {"ok": False, "why": "pureRGB has no gender mechanic, so the clause can never fire."}},
     "type_lock": {"all": True},
-    "explode_mode": {"all": False, "why": "Only the Radical Red client handles force_explode.",
+    "explode_mode": {"all": False, "why": "Explode Mode is not supported for this cartridge.",
+                     "rom_types": {title: {"ok": True} for title in ("firered", "leafgreen", "emerald")},
                      "gen1_rby": {"ok": True, "why": "No patch needed — Explosion is move 153 and the choice is a plain RAM write."},
                      "gen1_purergb": {"ok": True, "why": "No patch needed — Explosion is a plain RAM write, same as vanilla Gen 1."},
                      "gen3_frlge_rr": {"ok": True}},
@@ -229,7 +230,8 @@ def option_support(key: str, rom_types: list[str]) -> dict:
         gid = game_id_for_rom_type(rt) if rt else None
         if not gid:
             continue
-        specific = rule.get(gid + ("_rr" if rt.endswith("_rr") else "")) or rule.get(gid)
+        specific = (rule.get("rom_types", {}).get(rt)
+                    or rule.get(gid + ("_rr" if rt.endswith("_rr") else "")) or rule.get(gid))
         decided = specific["ok"] if specific else rule["all"]
         if not decided:
             return {"ok": False, "why": (specific or {}).get("why") or rule.get("why", ""),

@@ -491,7 +491,8 @@ SCENARIOS = {
     # the old control label asked for a witness downstream of attackcanceler/tryexplosion, and the
     # attacker's own faint site (counter +1, HP 0, no SLink HP write) after the stamp is one -- a
     # Damp/sleep/flinch cancel produces no self-KO.
-    "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900, "games": ("gen3_rr",),
+    "explode_gen3": {"flags": ["--explode-mode"], "timeout": 900,
+                     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                      "target": "battle", "frames": 1500000,
                      "scenario_module": "linked_faint_active", "active_faint_case": "explode",
                      "oracle": "assert_explode_gen3_saved"},
@@ -1760,7 +1761,12 @@ def active_faint_chain(key, case):
     forbidden = [rf"(?m)^ACTIVE_HOLD {k}\b", rf"(?m)^SWITCHED_OUT {k}\b", rf"(?m)^BENCH_HP0_IN_BATTLE {k}\b",
                  gen3_tx("faint", key), rf"(?m)^FORCED_HP0 {k} .*in_battle=0",
                  r"(?m)^\[client\] .*active faint committed \(press A\)"]
-    return chain + [hp0], ordered, forbidden
+    required = chain + [hp0]
+    if explode:
+        pp = rf"(?m)^EXPLOSION_PP {k} committed=5/5/5/5 ko=(?!5/5/5/5$)[0-5]/[0-5]/[0-5]/[0-5]$"
+        required.append(pp)
+        ordered += [(chain[4], pp), (pp, chain[5])]
+    return required, ordered, forbidden
 
 
 def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, rr=False, limits=None,
@@ -7924,7 +7930,7 @@ class DuoRun:
 
     # ── RR-only runner halves (P5, card C5-5) ───────────────────────────────────────────────
     def orchestrate_explode_gen3(self):
-        """explode_gen3 (RR, --explode-mode): link the two party LEADS, release B first so it
+        """explode_gen3 (--explode-mode): link the two party LEADS, release B first so it
         parks in a wild battle with its linked mon active (READY_ACTIVE), then A, which loses its
         own linked lead naturally. Nothing pokes either cartridge; the server's force_explode is
         the only command, and B's receipt must show the engine executing it."""
@@ -8691,7 +8697,7 @@ class DuoRun:
     def assert_explode_gen3_saved(self, results):
         """explode_gen3 under owner ruling 19, a qualification row: the P+H carrier's explode
         chain -- keyed force_explode, the Explosion menu skip ending in the hand-off, no input,
-        lastUsedMovePlayer 153 at the KO, the attacker's own faint site -- plus the linked
+        lastUsedMovePlayer 153 and a measured PP drop at the KO, the attacker's own faint site -- plus the linked
         oracle's saved-state half."""
         self.assert_linked_faint_active_gen3_saved(results)
 

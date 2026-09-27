@@ -303,10 +303,10 @@ async def test_the_page_was_drawn_by_the_gen3_adapter_for_this_cartridge(rom_typ
         assert made.adapter._rom_type == rom_type
         assert made.api["players"]["a"]["rom_type"] == rom_type
         assert made.api["players"]["a"]["capabilities"]["game_id"] == "gen3_frlge"
-        # ui_capabilities: RR has the companion panel and Explode Mode, FR has neither.
+        # RR retains the companion panel; the bound vanilla titles also have Explode Mode.
         caps = made.api["players"]["a"]["capabilities"]
         assert caps["info_panel"] is rom_type.endswith("_rr")
-        assert caps["explode_mode"] is rom_type.endswith("_rr")
+        assert caps["explode_mode"] is (rom_type.endswith("_rr") or rom_type in ("firered", "leafgreen", "emerald"))
     finally:
         await made._close()
 

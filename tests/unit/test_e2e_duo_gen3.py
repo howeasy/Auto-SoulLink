@@ -37,7 +37,7 @@ from server.adapters import gen3_codec as codec  # noqa: E402
 GEN3 = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
         "link_gen3", "deadzone_gen3", "reconnect_gen3")
 # P5 (card C5-5): RR-only, added on top of GEN3 above (which now also runs on gen3_rr).
-GEN3_RR_ONLY = ("explode_gen3", "rival_swap_gen3", "native_absent_gen3")
+GEN3_RR_ONLY = ("rival_swap_gen3", "native_absent_gen3")
 OT_A = 0x99DE0D8A
 
 
@@ -892,7 +892,7 @@ def test_every_scenario_has_its_module_and_runner_half():
 
 
 def test_every_rr_only_scenario_has_its_module_oracle_and_runner_half():
-    """P5 (card C5-5): explode_gen3/rival_swap_gen3/native_absent_gen3, on gen3_rr."""
+    """The remaining RR-only carriers have real modules and oracles."""
     row = duo.GAMES["gen3_rr"]
     for name in GEN3_RR_ONLY:
         base = duo.SCENARIOS[name].get("scenario_module") or name[:-len("_gen3")]
@@ -2048,6 +2048,28 @@ def test_explode_runs_on_the_p_h_carrier_as_a_qualification_row():
     required, _, _ = duo.active_faint_chain("K0", "explode")
     assert any("ACTIVE_FAINT_SITE" in r for r in required) and any("last_move=153" in r for r in required)
     assert not (REPO / "lua" / "tests" / "duo" / "scenario_gen3_explode.lua").exists()
+
+
+@pytest.mark.parametrize("game", ("gen3_frlg", "gen3_lgfr", "gen3_emerald"))
+def test_explode_binds_the_vanilla_duo_orientation(game):
+    assert duo.scenario_applies("explode_gen3", game)
+    row = duo.SCENARIOS["explode_gen3"]
+    assert row["flags"] == ["--explode-mode"] and row["active_faint_case"] == "explode"
+    assert row["oracle"] == "assert_explode_gen3_saved" and "control" not in row
+
+
+def test_explode_carrier_requires_an_actual_pp_drop(ph):
+    _, passed, reason, _ = ph("explode", "b", "no_explosion_pp_drop")
+    assert passed is False and "PP" in reason
+
+
+def test_explode_receipt_cannot_omit_or_forge_the_pp_witness(ph):
+    _, passed, _, log = ph("explode", "b")
+    assert passed and "EXPLOSION_PP K0 committed=5/5/5/5 ko=4/5/5/5" in log
+    required, ordered, forbidden = duo.active_faint_chain("K0", "explode")
+    for bad in (re.sub(r"(?m)^EXPLOSION_PP.*\n", "", log),
+                log.replace("ko=4/5/5/5", "ko=5/5/5/5")):
+        assert duo.gen3_receipt_problems("b", bad, required=required, ordered=ordered, forbidden=forbidden)
 
 
 def test_no_driver_pokes_game_memory():
@@ -4000,7 +4022,7 @@ function PH(case, player, fault)
             if fault == "hp_write" then lines[#lines + 1] = { reason = "battle_faint", address = PARTY_HP, len = 2, frame = frame } end
             if fault == "lost_ball" then balls = balls - 1 end
         elseif commit_at and frame == commit_at + 5 and explode and fault ~= "no_boom" then
-            e.last_move, e.pp[1] = 153, 4                         -- the Explosion action runs
+            e.last_move, e.pp[1] = 153, fault == "no_explosion_pp_drop" and 5 or 4
         elseif commit_at and frame == commit_at + 6 then        -- the engine KO
             e.keys, e.battle_hp = 0, 0
             if fault ~= "flag_kept" then e.status3 = e.status3 & ~0x20 end
@@ -4281,7 +4303,7 @@ def test_p_h_rows_are_registered_with_their_cases():
              "linked_faint_active_clean_gen3": ("wild", ("gen3_rr",)),
              "linked_faint_active_lhammer_gen3": ("lhammer", ("gen3_rr",)),
              "linked_faint_active_mega_gen3": ("mega", ("gen3_rr",)),
-             "explode_gen3": ("explode", ("gen3_rr",))}
+             "explode_gen3": ("explode", ("gen3_frlg", "gen3_rr", "gen3_emerald"))}
     for name, (case, games) in cases.items():
         row = duo.SCENARIOS[name]
         assert row.get("active_faint_case", "wild") == case and row["games"] == games, name

@@ -171,11 +171,12 @@ def test_vanilla_storage_and_party_facts(name: str) -> None:
         "BATTLE_MON_STAT_STAGES_OFF",   # C5-6 (tests/unit/test_stat_stages.py)
         # G5-STAGES-COHERENCE (tests/unit/test_stat_stages.py TestStagesCoherence)
         "BATTLE_MON_PERSONALITY_OFF", "BATTLE_MON_OT_ID_OFF", "BATTLE_TYPE_LINK_MASK",
+        "BATTLE_STRUCT_MOVE_TARGET_OFF", "BATTLE_STRUCT_CHOSEN_MOVE_POS_OFF",
     }
     c4_2a_sym_keys = {"ram.TRAINER_OPPONENT_ADDR", "rom.EXPERIENCE_TABLES_ADDR",
                        "rom.BATTLE_MOVES_ADDR", "rom.PP_UP_GET_MASK_ADDR",
                        "ram.STATUS3_ADDR", "ram.DISABLE_STRUCTS_ADDR", "ram.CHOSEN_ACTION_ADDR",
-                       "ram.BATTLE_COMM_ADDR"}
+                       "ram.BATTLE_COMM_ADDR", "ram.CHOSEN_MOVE_ADDR", "ram.BATTLE_STRUCT_PTR_ADDR"}
     for key in c4_2a_derived_keys:
         assert f"derived.{key}" in title["_src"], f"{name}: derived.{key} has no _src citation"
         base_src[f"derived.{key}"] = title["_src"][f"derived.{key}"]

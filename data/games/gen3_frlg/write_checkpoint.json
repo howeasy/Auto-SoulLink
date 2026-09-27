@@ -134,6 +134,93 @@
       },
       "handoff": {
         "address": 50352096,
+        "explode": {
+          "head": [
+            {
+              "address": 33700848,
+              "group": "moves",
+              "name": "move_0",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700872,
+              "group": "moves",
+              "name": "pp_0",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700850,
+              "group": "moves",
+              "name": "move_1",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700873,
+              "group": "moves",
+              "name": "pp_1",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700852,
+              "group": "moves",
+              "name": "move_2",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700874,
+              "group": "moves",
+              "name": "pp_2",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700854,
+              "group": "moves",
+              "name": "move_3",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700875,
+              "group": "moves",
+              "name": "pp_3",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33701244,
+              "name": "chosen_action",
+              "value": 0,
+              "width": 1
+            },
+            {
+              "address": 33701316,
+              "name": "chosen_move",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "name": "chosen_move_position",
+              "offset": 128,
+              "ptr": 33701864,
+              "value": 0,
+              "width": 1
+            },
+            {
+              "name": "move_target",
+              "offset": 12,
+              "ptr": 33701864,
+              "value": 1,
+              "width": 1
+            }
+          ],
+          "source": "pret pokefirered c75f3523: include/battle.h BattleStruct.moveTarget/chosenMovePositions; src/battle_main.c HandleTurnActionSelectionState + HandleAction_UseMove; include/pokemon.h BattlePokemon.moves +0x0C / pp +0x24; profile addresses from this title's .sym; move 153 effect EFFECT_EXPLOSION and PP 5 verified in this title's own gBattleMoves; B_ACTION_USE_MOVE 0, move slot 0, foe target 1"
+        },
         "head": [
           {
             "address": 33701372,
@@ -559,6 +646,93 @@
       },
       "handoff": {
         "address": 50352096,
+        "explode": {
+          "head": [
+            {
+              "address": 33700848,
+              "group": "moves",
+              "name": "move_0",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700872,
+              "group": "moves",
+              "name": "pp_0",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700850,
+              "group": "moves",
+              "name": "move_1",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700873,
+              "group": "moves",
+              "name": "pp_1",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700852,
+              "group": "moves",
+              "name": "move_2",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700874,
+              "group": "moves",
+              "name": "pp_2",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33700854,
+              "group": "moves",
+              "name": "move_3",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "address": 33700875,
+              "group": "moves",
+              "name": "pp_3",
+              "value": 5,
+              "width": 1
+            },
+            {
+              "address": 33701244,
+              "name": "chosen_action",
+              "value": 0,
+              "width": 1
+            },
+            {
+              "address": 33701316,
+              "name": "chosen_move",
+              "value": 153,
+              "width": 2
+            },
+            {
+              "name": "chosen_move_position",
+              "offset": 128,
+              "ptr": 33701864,
+              "value": 0,
+              "width": 1
+            },
+            {
+              "name": "move_target",
+              "offset": 12,
+              "ptr": 33701864,
+              "value": 1,
+              "width": 1
+            }
+          ],
+          "source": "pret pokefirered c75f3523: include/battle.h BattleStruct.moveTarget/chosenMovePositions; src/battle_main.c HandleTurnActionSelectionState + HandleAction_UseMove; include/pokemon.h BattlePokemon.moves +0x0C / pp +0x24; profile addresses from this title's .sym; move 153 effect EFFECT_EXPLOSION and PP 5 verified in this title's own gBattleMoves; B_ACTION_USE_MOVE 0, move slot 0, foe target 1"
+        },
         "head": [
           {
             "address": 33701372,

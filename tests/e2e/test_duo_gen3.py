@@ -22,11 +22,11 @@ sys.path.insert(0, os.path.join(REPO, "tools"))
 
 from e2e_duo import (  # noqa: E402
     EMUHAWK,
-    scenario_target,
     GAMES as RUNNER_GAMES,
     GEN3_FIXTURES,
     SCENARIOS as RUNNER_SCENARIOS,
     scenario_attempt_limit,
+    scenario_target,
 )
 
 pytestmark = [
@@ -71,6 +71,11 @@ def test_gen3_frlg_duo(scenario):
 @pytest.mark.parametrize("scenario", SCENARIOS_LGFR)
 def test_gen3_lgfr_duo(scenario):
     _run_duo(GAME_LGFR, scenario)
+
+
+@pytest.mark.parametrize("game", ("gen3_frlg", "gen3_lgfr", "gen3_emerald"))
+def test_gen3_vanilla_explode_duo(game):
+    _run_duo(game, "explode_gen3")
 
 
 def _run_duo(game, scenario):

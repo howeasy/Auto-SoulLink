@@ -450,7 +450,7 @@ def test_handoff_block_is_the_controller_slot_and_exec_completed(pack: str, titl
     handoff = dict(block["handoff"])
     assert handoff.pop("source")
     assert handoff.pop("head") == HANDOFF_HEAD
-    assert ("explode" in handoff) == (pack == "gen3_rr")        # G5: the RR Explode shape, below
+    assert "explode" in handoff                               # every admitted title carries its own shape
     handoff.pop("explode", None)
     assert handoff == HANDOFF
     ctrl = next(c for c in block["clauses"] if c["name"] == "battle_input_controller")
@@ -500,9 +500,8 @@ def test_frlg_handoff_needs_the_exec_completed_pool_in_the_titles_own_rom(monkey
         at = address - G.ROM_BASE
         return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:] if t == title else rom
     monkeypatch.setattr(G, "load_rom", mutated)
-    out, unverified = G.build_title("gen3_frlg", title, G.PACKS["gen3_frlg"][title][0], ("clean",))
-    assert "handoff" not in out["battle"]
-    assert any(row.startswith("battle.handoff:") for row in unverified)
+    with pytest.raises(SystemExit, match="battle.handoff.*pool"):
+        G.build_title("gen3_frlg", title, G.PACKS["gen3_frlg"][title][0], ("clean",))
 
 
 @pytest.mark.parametrize("pack,title", PACK_TITLES)
@@ -522,8 +521,7 @@ def test_r1_l1_handoff_head_needs_every_p_field_or_the_block_is_dropped(pack, ti
 @pytest.mark.parametrize("address", [0x0802E33C, 0x0802E342, 0x0802E34B])   # push / ldrb gActiveBattler / last prefix byte
 def test_fix1b_frlg_handoff_needs_the_exec_completed_prefix_in_the_titles_own_rom(monkeypatch, title, address) -> None:
     """R1 L7 / G4-PH-FIX1b (red at 4a91daeb): one changed byte in PlayerBufferExecCompleted's first 16
-    bytes (the slot address built from gActiveBattler, pret battle_controller_player.c:188) drops
-    battle.handoff on FR/LG, so the client keeps the A-press path."""
+    bytes now stops the bound Explode build; silently dropping its no-input hand-off is unsafe."""
     rom_or_skip("gen3_frlg", title, "clean")
     real = G.load_rom
 
@@ -532,13 +530,12 @@ def test_fix1b_frlg_handoff_needs_the_exec_completed_prefix_in_the_titles_own_ro
         at = address - G.ROM_BASE
         return rom[:at] + bytes([rom[at] ^ 0xFF]) + rom[at + 1:] if t == title else rom
     monkeypatch.setattr(G, "load_rom", mutated)
-    out, unverified = G.build_title("gen3_frlg", title, G.PACKS["gen3_frlg"][title][0], ("clean",))
-    assert "handoff" not in out["battle"]
-    assert any(row.startswith("battle.handoff:") and "prefix" in row for row in unverified)
+    with pytest.raises(SystemExit, match="battle.handoff.*prefix"):
+        G.build_title("gen3_frlg", title, G.PACKS["gen3_frlg"][title][0], ("clean",))
 
 
 
-# G5-EXPLODE-HANDOFF (owner ruling 19): RR's pack carries the Explode shape; FR/LG's do not.
+# FR/LG and RR share these addresses, independently pinned from their own sources.
 RR_EXPLODE_HEAD = (
     [row for i in range(4) for row in (
         {"name": f"move_{i}", "address": 0x02023BE4 + 0x0C + 2 * i, "width": 2, "value": 153, "group": "moves"},
@@ -549,11 +546,11 @@ RR_EXPLODE_HEAD = (
        {"name": "move_target", "ptr": 0x02023FE8, "offset": 12, "width": 1, "value": 1}])
 
 
-def test_g5_rr_handoff_carries_the_exact_explode_head_and_frlg_none() -> None:
+def test_kanto_packs_carry_the_exact_explode_head() -> None:
     explode = load("gen3_rr")["radical_red"]["battle"]["handoff"]["explode"]
     assert explode["head"] == RR_EXPLODE_HEAD and explode["source"]
     for title in ("firered", "leafgreen"):
-        assert "explode" not in load("gen3_frlg")[title]["battle"]["handoff"]
+        assert load("gen3_frlg")[title]["battle"]["handoff"]["explode"]["head"] == RR_EXPLODE_HEAD
 
 
 def test_g5_rr_explode_head_needs_explosion_pp_5_in_the_rom(monkeypatch) -> None:
