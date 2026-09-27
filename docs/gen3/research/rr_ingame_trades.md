@@ -153,3 +153,117 @@ and a `clone` decode, out of this card's effort budget.**
 - Every other trade needs Mt. Moon (Cerulean), Diglett's Cave/Route access (Underground Path),
   SS Anne progress (Vermilion), Rock Tunnel (Route 11/18 east entrances), or the Cinnabar Lab
   (very late-game), all strictly farther from a fresh save's first warp.
+
+## RR-NPCTRADE-2 (2026-09-27): Route2_House/Reyley is DEAD on the real ROM -- switched to JYNX/Dontae
+
+The live duo row `npc_trade_gen3 --game gen3_rr` mashed A through the whole Reyley interaction
+(offer, YES, party menu, slot-1 pick -- "PICKED slot=1" logged) and then stalled: 240 more A
+presses produced no `key_change` and the trade's completion flag never set, `tasks=[]` at
+timeout (client log `e2e_npc_trade_gen3_a_attempt1_result.txt`, coordinator log
+`rr-npctrade.log`). Root cause, found by disassembling the ROM directly (never assumed from the
+static table above or from vanilla):
+
+**The trader NPC's own script, read straight off the ROM.** Reyley's object event (Route2_House
+group.num 15.1, localId 2) points at a script RELOCATED into CFRU expansion space, not
+vanilla's `event_scripts.s` address:
+
+```
+0x09053591: lock
+0x09053592: faceplayer
+0x09053593: setvar 0x8008, 0x0000        ; INGAME_TRADE_MR_MIME = 0 (trade.h, confirmed unchanged)
+0x09053598: call   0x090535EE            ; EventScript_GetInGameTradeSpeciesInfo (relocated)
+0x0905359D: checkflag 0x0248             ; FLAG_DID_MIMIEN_TRADE -- confirmed, not renumbered
+0x090535A0: goto_if 1, 0x090535FE        ; already traded
+0x090535A6: loadword 0, <offer text>
+0x090535AC: callstd 5                    ; MSGBOX_YESNO
+0x090535AE: cmp_val 0x800D, 0x0000       ; VAR_RESULT == NO
+0x090535B3: goto_if 1, 0x0905A0B         ; decline
+0x090535B9: call   0x09053612            ; EventScript_ChooseMonForInGameTrade
+0x090535BE: cmp_val 0x8004, 0x0006       ; party slot >= PARTY_SIZE
+0x090535C3: goto_if 4, 0x0816AA0B
+0x090535C9: call   0x0905361E            ; EventScript_GetInGameTradeSpecies (chosen mon's species)
+0x090535CE: cmp_var 0x800D, 0x8009       ; chosen species == requested species
+0x090535D3: goto_if 5, 0x0905362E        ; NOT EQUAL -> "that's not the right mon", trade aborts
+0x090535D9: call   0x0905363C            ; EventScript_DoInGameTrade
+...
+```
+
+This is structurally identical to pret's `Route2_House_EventScript_Reyley`. The blocking line is
+`0x090535CE`: it compares the PLAYER's chosen mon species (via the unmodified special
+`GetTradeSpecies`, byte-identical to vanilla) against `VAR_0x8009`, which the CFRU-detoured
+`GetInGameTradeSpeciesInfo` (special id 0xFC) fills in.
+
+**`GetInGameTradeSpeciesInfo`'s detour reads a SEPARATE runtime table, not the static
+`sInGameTrades` table above.** The vanilla function address (0x08053a9c) is a 4-byte thumb thunk
+(`LDR r0,[pc,#0]; BX r0`) into CFRU expansion code at 0x090A4A2D. Disassembling that code:
+
+```
+0x090A4A2C: push {r0,r1,r2,r4,r5,r6,r7,lr}
+0x090A4A32: ldr  r3,[pc,#0x38]     ; r3 = 0x020370C0 = gSpecialVar_0x8004 (pokefirered.sym, confirmed)
+0x090A4A34: ldrh r2,[r3]           ; idx = gSpecialVar_0x8004 (== INGAME_TRADE_MR_MIME == 0, from the script)
+0x090A4A38: muls r3,r2,r3=0x2c     ; idx * 0x2C (44, NOT the vanilla struct's 0x3C/60)
+0x090A4A3A: ldr  r5,[pc,#0x34]     ; table base = 0x09147C74
+0x090A4A3C: adds r5,r5,r3          ; entry = table + idx*44
+0x090A4A3E: ldrh r6,[r5,#0x2a]     ; r6 = requestedSpecies (the RETURN value / VAR_0x8009)
+...
+0x090A4A66: movs r0,r6             ; return requestedSpecies
+```
+
+So the runtime "requested species" comes from ROM 0x09147C74, stride 0x2C, offset+0x2A --
+**a different table from the 0x3C-stride `sInGameTrades`** this doc's table above decodes.
+Decoding entries 0..8 of THIS table (species at offset+4, requestedSpecies at offset+0x2A):
+
+| idx | label (assumed) | species@+4 | requested@+0x2A | matches static table? |
+|---|---|---|---|---|
+| 0 | MR_MIME | 1375 (unassigned RR species id) | 162 (Furret) | **NO** |
+| 1 | JYNX | 508 (Carnivine) | 1164 (Snom) | yes |
+| 2 | NIDORAN | 1167 (Eiscue) | 811 (Carbink) | yes |
+| 3 | FARFETCHD | 1213 (Farfetch'd-Galar) | 948 (Pikipek) | yes |
+| 4 | NIDORINOA | 995 (Mimikyu) | 789 (Aegislash) | yes |
+| 5 | LICKITUNG | 1169 (Morpeko) | 810 (Dedenne) | yes |
+| 6 | ELECTRODE | 848 (Floette Eternal) | 779 (Florges) | yes |
+| 7 | TANGELA | 494 (Chatot) | 198 (Murkrow) | yes |
+| 8 | SEEL | 1356 (unassigned RR species id) | 1302 (Ursaluna) | **NO** |
+
+Index 0 (MR_MIME) and index 8 (SEEL) are garbage at this table -- neither species value is a
+valid RR species (`rr_species.json` has no entry for 1375 or 1356). Since `GetTradeSpecies`
+(the player's chosen mon) can never equal Furret(162), Reyley's own script ALWAYS takes the
+`goto_if 5, NotRequestedMon` branch once a mon is picked -- exactly the observed hang: the
+scenario's `PICKED slot=1` fires, the "that's not the right mon" message plays and the script
+`release`s back to the overworld, no `key_change`/flag ever fires, and `tasks=[]` at timeout is
+just the idle overworld after that message closed. **Route2_House/Reyley (MR_MIME) cannot
+complete an in-game trade on the shipped RR ROM**, independent of SLink.
+
+**`CreateInGameTradePokemonInternal` (the mon-creation half, vanilla 0x08053b48 -> CFRU
+0x090A4AFC) is detoured the same way, confirmed to read the SAME table** (`ldr r7,[pc,#0x1e0]` =
+0x09147C74) and to `SetMonData` every field (IVs, OT name, ability, conditions, sheen, met
+location, species, held item) from it via a long run of `bl 0x90a4d34` calls, each with a
+`MON_DATA_*` id in r1 and `table[idx] + <field offset>` in r2. So the runtime-effective trade
+data for a working index is this table's content, not the static `sInGameTrades` row -- decoding
+idx1 (JYNX) field-by-field against this doc's row above: species (offset+4)=508, requestedSpecies
+(offset+0x2A)=1164, otId (offset+0x10)=36728 -- ALL MATCH. `personality` (offset+0x1C) reads
+0x498A2E1D for idx1, NOT the static table's 0x1c8a2e22 -- cross-checked against idx2/idx6, which
+both also decode 0x498A2E1D at that offset, so RR's CFRU patch gives every trade-in mon this SAME
+fixed personality (a deliberate constant, not per-entry vanilla data); IV bytes (offset+6..+11)
+are `1F 1F 1F 1F 1F 1F` (31/31/31/31/31/31) for every sampled entry too -- RR gives all in-game
+trade-ins perfect IVs, another intentional QoL change, not a decode error.
+
+**Fix**: idx1 (JYNX, `CeruleanCity_House3` group.num 7.2, trader "Dontae") decodes cleanly and
+was independently confirmed via RR's own compiled Dontae script (NOT relocated, still at
+0x0816A9B1): `setvar VAR_0x8008,1` (INGAME_TRADE_JYNX), `checkflag 0x024A`
+(FLAG_DID_ZYNX_TRADE, byte-exact from the ROM, not assumed from vanilla), otherwise structurally
+identical to Reyley's script. `tools/gen3_fixtures.py`'s `build_rr_synth` trade kind, the Lua
+`NPC_TRADE.radical_red` facts (`lua/tests/duo/scenario_gen3_npc_trade.lua`), and
+`tools/e2e_duo.py`'s `NPC_TRADE_FACTS["gen3_rr"]` now target JYNX: party[1] becomes a Lv10 SNOM
+(RR species 1164, RR_BASESTATS_TABLE-decoded stats hp30/atk25/def35/spe20/spa45/spdef30,
+GROWTH_MEDIUM_FAST, its first level-1 learnset move), warped to CeruleanCity_House3 (2,1),
+facing DOWN (Dontae faces UP -- the opposite of Reyley and the Emerald trader, both of which face
+down onto their stand tile, so the scenario's facing direction is now a per-game fact instead of
+a hardcoded "Up"). The expected post-trade `new_key` is `498A2E1D:00008F78` (the runtime table's
+personality/otId for idx1, not the static table's), species Carnivine (RR id 508).
+
+Also fixed in passing: `tools/gen3_fixtures.py`'s `RR_BATTLE_MOVES_ADDR` constant read
+`0x9128CD0`, which doesn't match its own comment ("profile.json ... = 152379856" ==
+`0x091521D0`); the wrong address wasn't previously exercised by any code path (Abra's move/PP
+were hardcoded literals), but decoding move 100 (Teleport) at the CORRECT address gives PP=20
+(matching the existing `RR_TELEPORT_PP`/Abra constants, now removed), confirming the fix.

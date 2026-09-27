@@ -1458,10 +1458,12 @@ def test_rr_trade_synth_fixture_qualifies_rr():
     assert result["ok"], result["message"]
 
 
-def test_rr_trade_synth_party1_decodes_as_owned_abra_lv10():
-    """party[0] (TREECKO) is untouched; party[1] is a player-owned Lv10 ABRA (RR species 63),
-    RR-base-stat-recomputed, full HP, Teleport (the only level-1..10 learnset move, RR's own
-    RR_LEVELUP_LEARNSETS decode) -- the exact fields the npc_trade_gen3 oracle/scenario need."""
+def test_rr_trade_synth_party1_decodes_as_owned_snom_lv10():
+    """party[0] (TREECKO) is untouched; party[1] is a player-owned Lv10 SNOM (RR species 1164,
+    JYNX/"Dontae"'s requested species -- card RR-NPCTRADE-2: Route2_House/Reyley's MR_MIME check
+    is dead on the real RR ROM, docs/gen3/research/rr_ingame_trades.md), RR-base-stat-recomputed,
+    full HP, its first level-1 learnset move (RR's own RR_LEVELUP_LEARNSETS decode) -- the exact
+    fields the npc_trade_gen3 oracle/scenario need."""
     import gen3_fixtures as fx
 
     from server.adapters import gen3_codec as codec
@@ -1474,21 +1476,21 @@ def test_rr_trade_synth_party1_decodes_as_owned_abra_lv10():
         party = codec.rr_party_from_save(data)
     assert party[0] == seed_party[0]   # untouched
     mon = party[1]
-    assert mon["species"] == fx.RR_SPECIES_ABRA
-    assert mon["level"] == 10 and mon["experience"] == fx.RR_ABRA_EXP_LV10
+    assert mon["species"] == fx.RR_SPECIES_SNOM
+    assert mon["level"] == 10 and mon["experience"] == fx.RR_SNOM_EXP_LV10
     assert mon["status"] == 0 and mon["hp"] == mon["max_hp"]
-    assert mon["moves"] == [fx.RR_MOVE_TELEPORT, 0, 0, 0]
-    assert mon["pp"] == [fx.RR_TELEPORT_PP, 0, 0, 0]
+    assert mon["moves"] == [fx.RR_MOVE_SNOM, 0, 0, 0]
+    assert mon["pp"] == [fx.RR_SNOM_MOVE_PP, 0, 0, 0]
     assert mon["personality"] % 25 == 0   # Hardy, same construction as the FR/LG trade kind
     assert mon["ot_id"] == seed_party[1]["ot_id"]   # still the player's own mon
-    recomputed = fx._gen3_stats(fx.RR_ABRA_BASE, mon, 10)
+    recomputed = fx._gen3_stats(fx.RR_SNOM_BASE, mon, 10)
     assert {k: mon[k] for k in recomputed} == recomputed
     parsed = codec.parse_flash(data, cfru=True)
-    g, n, x, y = fx.RR_ROUTE2_HOUSE_WARP
+    g, n, x, y = fx.RR_CERULEAN_HOUSE3_WARP
     assert parsed["sb1"][0x0C:0x14] == fx._warp(g, n, x, y)
     assert parsed["sb2"][0x09] & 1 == 1   # CONTINUE_GAME_WARP
-    flag_byte = parsed["sb1"][fx.RR_SB1_FLAGS + fx.FLAG_DID_MIMIEN_TRADE_RR // 8]
-    assert (flag_byte >> (fx.FLAG_DID_MIMIEN_TRADE_RR % 8)) & 1 == 0   # trade not yet done
+    flag_byte = parsed["sb1"][fx.RR_SB1_FLAGS + fx.FLAG_DID_ZYNX_TRADE_RR // 8]
+    assert (flag_byte >> (fx.FLAG_DID_ZYNX_TRADE_RR % 8)) & 1 == 0   # trade not yet done
 
 
 def test_rr_trade_synth_touches_only_the_rewritten_sectors():
@@ -1517,7 +1519,7 @@ def test_rr_trade_synth_touches_only_the_rewritten_sectors():
 @pytest.mark.parametrize("break_it", ("empty_slot1", "foreign_ot", "already_traded"))
 def test_rr_trade_synth_refuses_a_bad_seed(break_it):
     """Same discipline as the FR/LG trade kind (OMP cx-6821246e F5): an empty party slot 1, one
-    owned by someone else, or a seed that already did the MIMIEN trade is refused rather than
+    owned by someone else, or a seed that already did the ZYNX trade is refused rather than
     silently building a fixture around it."""
     import gen3_fixtures as fx
 
@@ -1541,10 +1543,10 @@ def test_rr_trade_synth_refuses_a_bad_seed(break_it):
         field(codec.RR_SAVEBLOCK1_ADDR + at, codec.encode_party_mon(mon, rr=True))
         expect = "slot 1 is empty|OT mismatch"
     else:
-        flag_at = fx.RR_SB1_FLAGS + fx.FLAG_DID_MIMIEN_TRADE_RR // 8
-        byte = sb1[flag_at] | (1 << (fx.FLAG_DID_MIMIEN_TRADE_RR % 8))
+        flag_at = fx.RR_SB1_FLAGS + fx.FLAG_DID_ZYNX_TRADE_RR // 8
+        byte = sb1[flag_at] | (1 << (fx.FLAG_DID_ZYNX_TRADE_RR % 8))
         field(codec.RR_SAVEBLOCK1_ADDR + flag_at, bytes([byte]))
-        expect = "already done the MIMIEN trade"
+        expect = "already done the ZYNX"
     tampered = bytearray(seed)
     for offset, value in patches.items():
         tampered[offset] = value

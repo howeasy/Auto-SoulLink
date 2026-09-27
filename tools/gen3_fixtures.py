@@ -1716,30 +1716,44 @@ TREECKO_RR_EXP_LV15 = 2034                              # RR_EXP_TABLE[3*256 + 1
 TREECKO_RR_EXP_LV16 = 2535                              # RR_EXP_TABLE[3*256 + 16]
 
 # card RR-NPCTRADE: `--kind trade` for npc_trade_gen3 on gen3_rr. docs/gen3/research/
-# rr_ingame_trades.md is the fact source (RR keeps FireRed's 9 in-game trades at the same
-# map/script/flag locations with the same OT/IV/personality/conditions/sheen -- only species,
-# nickname, requestedSpecies, heldItem were reworked). Route2_House / "Reyley" (MR_MIME slot)
-# is the cheapest: no badge/checkflag gate, earliest map. Below are RR facts, decoded directly
-# from patch/build/slink_RR.gba (same sha1 pin as the rest of this module) or read from the doc
-# -- never assumed from vanilla FR/LG, even where a value happens to match it byte-for-byte
-# (memory: RR data is non-standard).
-RR_SPECIES_ABRA = 63                    # doc trade table: MR_MIME row requestedSpecies (Abra)
-RR_ABRA_BASE = {"hp": 25, "attack": 20, "defense": 15, "speed": 90,
-                "sp_attack": 105, "sp_defense": 55}     # RR_BASESTATS_TABLE + 63*28, decoded direct
-RR_ABRA_GROWTH_RATE = 3                 # MEDIUM_SLOW; same table entry +19 (decoded direct)
-RR_ABRA_EXP_LV10 = 560                  # RR_EXP_TABLE[3*256 + 10] (decoded direct)
-RR_MOVE_TELEPORT, RR_TELEPORT_PP = 100, 20   # RR_LEVELUP_LEARNSETS species 63's only level-1
-                                              # entry (besides move 237, also level 1); PP from
-                                              # RR_BATTLE_MOVES_ADDR entry 100 byte +4 -- both
-                                              # decoded direct against the RR ROM, not copied
-                                              # from vanilla (they happen to equal it)
-RR_BATTLE_MOVES_ADDR = 0x9128CD0        # profile.json "rom".BATTLE_MOVES_ADDR = 152379856
-FLAG_DID_MIMIEN_TRADE_RR = 0x248        # doc: same flag id as vanilla (script bytes confirm RR
-                                         # did not renumber it)
+# rr_ingame_trades.md is the fact source, but card RR-NPCTRADE-2 found that Route2_House's
+# "Reyley" (MR_MIME, INGAME_TRADE index 0) is DEAD on the real RR ROM: GetInGameTradeSpeciesInfo
+# and CreateInGameTradePokemonInternal are CFRU-detoured (thunked to CFRU expansion code) to
+# read a SEPARATE runtime table (ROM 0x09147C74, stride 0x2C/44 bytes, one entry per
+# INGAME_TRADE_* index) instead of the static sInGameTrades table rr_ingame_trades.py decodes --
+# and that table's index 0 (and index 8/SEEL) hold garbage (species=1375, an unassigned RR
+# species id; requestedSpecies=162/Furret, not Abra=63). Index 1 (JYNX/"Dontae",
+# CeruleanCity_House3) decodes cleanly and was cross-checked field-by-field against the runtime
+# table (species/otId/conditions/heldItem all self-consistent across idx1/2/6), so the SYNTH
+# fixture now targets JYNX instead. See docs/gen3/research/rr_ingame_trades.md's "RR-NPCTRADE-2"
+# section for the full script disassembly and table dump. Facts below are decoded directly from
+# patch/build/slink_RR.gba (same sha1 pin as the rest of this module) -- never assumed from
+# vanilla FR/LG or from the static sInGameTrades table (memory: RR data is non-standard).
+RR_SPECIES_SNOM = 1164                  # runtime CFRU trade-info table idx1 (JYNX) offset+0x2A
+                                         # (requestedSpecies), verified against RR's own compiled
+                                         # Dontae script (0x0816A9B1..): setvar VAR_0x8008,1
+                                         # (INGAME_TRADE_JYNX) -> checkflag 0x024A
+RR_SNOM_BASE = {"hp": 30, "attack": 25, "defense": 35, "speed": 20,
+                "sp_attack": 45, "sp_defense": 30}      # RR_BASESTATS_TABLE + 1164*28, decoded direct
+RR_SNOM_GROWTH_RATE = 0                 # MEDIUM_FAST; same table entry +19 (decoded direct)
+RR_SNOM_EXP_LV10 = 1000                 # RR_EXP_TABLE[0*256 + 10] == 10**3 (MEDIUM_FAST closed form)
+RR_MOVE_SNOM, RR_SNOM_MOVE_PP = 181, 25      # RR_LEVELUP_LEARNSETS species 1164's first level-1
+                                              # entry (of two: moves 181 and 419, both level 1);
+                                              # PP from RR_BATTLE_MOVES_ADDR entry 181 byte +4 --
+                                              # both decoded direct against the RR ROM
+RR_BATTLE_MOVES_ADDR = 0x91521D0        # profile.json "rom".BATTLE_MOVES_ADDR = 152379856
+                                         # (a stale 0x9128CD0 literal here previously didn't match
+                                         # its own decimal comment; entry 100 byte+4 now reads 20,
+                                         # matching Teleport's PP, confirming this address)
+FLAG_DID_ZYNX_TRADE_RR = 0x24A          # RR's compiled Dontae script: checkflag 0x024A (byte-exact
+                                         # from patch/build/slink_RR.gba, not assumed from vanilla)
 RR_SB1_FLAGS = 0x0EE0                   # data/games/gen3_rr/profile.json SB1_FLAGS_OFFSET=3808,
                                          # production-tested (old-client M.SB1_FLAGS_OFFSET)
-RR_ROUTE2_HOUSE_WARP = (15, 1, 7, 3)    # doc trader table: Route2_House group.num=15.1, stand
-                                         # tile (7,3) one tile below Reyley (7,2) facing down
+RR_CERULEAN_HOUSE3_WARP = (7, 2, 2, 1)  # CeruleanCity_House3 group.num=7.2; Dontae (localId 1,
+                                         # x=2,y=2) faces UP (movementType 7) -- the player's
+                                         # stand tile is the one Dontae is looking at, (2,1),
+                                         # facing DOWN toward him (opposite of Route2_House's
+                                         # Reyley, who faces down onto a stand tile below him)
 RR_SYNTH_KINDS = ("evolve", "trade")
 
 
@@ -1784,9 +1798,9 @@ def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
         if mon["ot_id"] != own_tid:
             raise ValueError("seed's party[1] is not the player's own mon (OT mismatch); "
                              "the trade fixture needs a player-owned slot 1")
-        flag_byte = parsed["sb1"][RR_SB1_FLAGS + FLAG_DID_MIMIEN_TRADE_RR // 8]
-        if (flag_byte >> (FLAG_DID_MIMIEN_TRADE_RR % 8)) & 1:
-            raise ValueError("the seed has already done the MIMIEN trade")
+        flag_byte = parsed["sb1"][RR_SB1_FLAGS + FLAG_DID_ZYNX_TRADE_RR // 8]
+        if (flag_byte >> (FLAG_DID_ZYNX_TRADE_RR % 8)) & 1:
+            raise ValueError("the seed has already done the ZYNX (JYNX/Dontae) trade")
         old_key = f"{mon['personality']:08X}:{mon['ot_id']:08X}"
         # a fresh non-shiny, Hardy-nature (pid % 25 == 0) personality distinct from the old
         # slot-1 key -- same construction build_frlg_synth's trade kind uses (OMP cx-6821246e
@@ -1795,19 +1809,19 @@ def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
                    if p % 25 == 0 and ((mon["ot_id"] & 0xFFFF) ^ (mon["ot_id"] >> 16)
                                        ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
         mon["personality"] = pid
-        mon.update(species=RR_SPECIES_ABRA, nickname="ABRA", experience=RR_ABRA_EXP_LV10,
-                   level=10, moves=[RR_MOVE_TELEPORT, 0, 0, 0], pp=[RR_TELEPORT_PP, 0, 0, 0],
-                   ability_num=0, **_gen3_stats(RR_ABRA_BASE, mon, 10))
+        mon.update(species=RR_SPECIES_SNOM, nickname="SNOM", experience=RR_SNOM_EXP_LV10,
+                   level=10, moves=[RR_MOVE_SNOM, 0, 0, 0], pp=[RR_SNOM_MOVE_PP, 0, 0, 0],
+                   ability_num=0, **_gen3_stats(RR_SNOM_BASE, mon, 10))
         mon.pop("nickname_raw", None)
         mon["hp"] = mon["max_hp"]
         raw = codec.encode_party_mon(mon, rr=True)
         address = codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE  # slot 1
         field = _rr_field_patcher(spans, patches, "party[1]")
         field(address, raw)
-        g, n, x, y = RR_ROUTE2_HOUSE_WARP
+        g, n, x, y = RR_CERULEAN_HOUSE3_WARP
         field(codec.RR_SAVEBLOCK1_ADDR + 0x0C, _warp(g, n, x, y))       # continueGameWarp
         field(codec.RR_SAVEBLOCK2_ADDR + 0x09, bytes([parsed["sb2"][0x09] | 1]))  # CONTINUE_GAME_WARP
-        manifest.append(f"party[1] {old_key} -> ABRA(RR {RR_SPECIES_ABRA}) Lv10 pid={pid:08X} "
+        manifest.append(f"party[1] {old_key} -> SNOM(RR {RR_SPECIES_SNOM}) Lv10 pid={pid:08X} "
                         f"(the player's OT); continueGameWarp {g}.{n} ({x},{y}) + "
                         "CONTINUE_GAME_WARP")
     new_body = bytearray(seed)
