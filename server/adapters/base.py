@@ -365,6 +365,10 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def refused_trade_recovery(self) -> str:
+        """Named refusal when a foundation cannot interpret these optional fields."""
+        return ""
+
 
 class GamePresentationAdapter(ABC):
     """Interface for game-specific display/UI logic.

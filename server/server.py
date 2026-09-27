@@ -2170,7 +2170,9 @@ class SLinkServer:
                 loc     = msg.get("loc_name", "")
                 party_n = len(msg.get("party", []))
                 log.info(f"[{player_id}] hello rom={rom} area='{area or loc}' party={party_n}")
-                if not self.adapter.supports_trade_recovery():
+                defer_trade_census = self.adapter.supports_trade_recovery() or (
+                    ("party_hidden" in msg or "trade_outstanding" in msg) and self.adapter.refused_trade_recovery())
+                if not defer_trade_census:
                     self._ingest_box_census(player_id, msg)
 
                 # Run state machine first (handles identity lock check).
@@ -2188,7 +2190,7 @@ class SLinkServer:
                                 "REJECTED — wrong save/slot", area or loc)
                 return cmds
 
-            if self.adapter.supports_trade_recovery():
+            if defer_trade_census:
                 self._ingest_box_census(player_id, msg)
 
             # ACCEPTED. The staged rom_type/panel/panel_abi/sfx/adapter are already applied
@@ -2853,6 +2855,10 @@ class SLinkServer:
                     "battle_state":   _enrich_battle_state(pid),
                     "identity_error": s.identity_error.get(pid, ""),
                     "awaiting_save": s.awaiting_save.get(pid, False),  # BURIAL-VISIBLE
+                    **({"trade_recovery": {"hidden": s.party_hidden[pid],
+                                          "pending": s.trade_recovery_pending[pid],
+                                          "problem": s.trade_recovery_errors[pid]}}
+                       if self.adapter.supports_trade_recovery() else {}),
                     # Surfaced rather than only logged: a player whose events are being
                     # dropped needs to be told which cartridge the run expects, otherwise
                     # the game simply appears not to be recording anything.

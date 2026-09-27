@@ -295,6 +295,7 @@ class SoulLinkState:
         self.party_hidden: dict[str, bool] = {"a": False, "b": False}
         # A declared durable-trade lease needs a later visible hello, not a tick.
         self.trade_recovery_pending: dict[str, bool] = {"a": False, "b": False}
+        self.trade_recovery_errors: dict[str, str] = {"a": "", "b": ""}
         # KEY-SCOPE-5: {player: {key: slot}} of the latest and the previous party snapshot (in-memory)
         self.party_slots: dict[str, dict[str, int]] = {}
         self.prev_party_slots: dict[str, dict[str, int]] = {}
@@ -410,6 +411,7 @@ class SoulLinkState:
         """Whether a snapshot is unavailable, independently of its attached data."""
         return self.adapter.supports_trade_recovery() and (
             msg.get("party_hidden") is True
+            or msg.get("event") == "hello" and bool(self._trade_recovery_error(msg))
             or msg.get("event") == "hello" and bool(msg.get("trade_outstanding"))
             or self.trade_recovery_pending[player_id] and msg.get("event") != "hello"
             or self.party_hidden[player_id] and "party" not in msg)
@@ -422,7 +424,8 @@ class SoulLinkState:
         records = msg.get("trade_outstanding", [])
         if not isinstance(records, list) or any(
             not isinstance(r, dict) or not isinstance(r.get("token"), str) or not r["token"]
-            or type(r.get("epoch")) is not int or not 1 <= r["epoch"] <= 0xFFFFFFFF
+            or type(r.get("epoch")) not in (int, float) or not 1 <= r["epoch"] <= 0xFFFFFFFF
+            or r["epoch"] != int(r["epoch"])
             for r in records
         ):
             return "Invalid trade_outstanding: expected token and nonzero uint32 epoch"
@@ -473,7 +476,8 @@ class SoulLinkState:
         if msg.get("key"):
             self._ack_inflight(player_id, msg["key"])
 
-        recovery_hello = event == "hello" and self.adapter.supports_trade_recovery()
+        recovery_hello = event == "hello" and (self.adapter.supports_trade_recovery() or (
+            ("party_hidden" in msg or "trade_outstanding" in msg) and self.adapter.refused_trade_recovery()))
         if not recovery_hello:
             self._tick_pending_trade()  # Gen 3 recovery hellos must pass identity first
 
@@ -616,7 +620,10 @@ class SoulLinkState:
             # Update party size from tick/safe snapshots for paired retrieval checks.
             hidden = self.party_snapshot_withheld(player_id, msg)
             if self.adapter.supports_trade_recovery() and (hidden or "party" in msg):
+                changed = self.party_hidden[player_id] != hidden
                 self.party_hidden[player_id] = hidden
+                if changed:
+                    self._save()
             party = None if hidden else msg.get("party")
             if party is not None:
                 old_size = self.party_size.get(player_id, 0)
@@ -807,6 +814,10 @@ class SoulLinkState:
                 self._save()
                 return
             log.info(f"trade watchdog: abandoning stuck trade (phase {pt.get('phase')}, token {pt.get('token')})")
+            if self.adapter.supports_trade_recovery():
+                for pid in ("a", "b"):
+                    self.queued_commands[pid] = [c for c in self.queued_commands[pid]
+                        if not (c.get("cmd") in ("apply_trade", "apply_prepare") and c.get("token") == pt["token"])]
             self.pending_trade = None
             for pid in ("a", "b"):
                 self.queued_commands[pid].append({
@@ -1030,7 +1041,9 @@ class SoulLinkState:
                 if not self._eligible_trade_pairs(player_id):
                     self.pending_trade = None
                     self.queued_commands[player_id].append({
-                        "cmd": "msgbox", "text": "No linked pair in your party to trade.", "fb": "prompt"})
+                        "cmd": "msgbox", "text": ("Trade paused - party withheld.\nWait for a fresh snapshot."
+                                                  if any(self.party_hidden.values()) else
+                                                  "No linked pair in your party to trade."), "fb": "prompt"})
                     return
                 pt["phase"] = "choosing"
                 self.queued_commands[player_id].append({"cmd": "choose_mon", "token": pt["token"]})
@@ -1112,7 +1125,10 @@ class SoulLinkState:
         """Re-validate at confirm: the players free-roam while the partner deliberates, so the offered
         pair may have fainted/died or been boxed since mon_chosen. Cancels (and says so) if it has."""
         entry = pt["link"]
-        if (any(self.party_hidden.values()) or entry.status != LinkStatus.ALIVE
+        if any(self.party_hidden.values()):
+            self._cancel_trade("Trade canceled - party withheld.\nWait for a fresh snapshot.")
+            return True
+        if (entry.status != LinkStatus.ALIVE
                 or self._trade_key_clash("a", pt["b_key"], pt["a_key"])
                 or pt["a_key"] not in self.party_keys["a"]
                 or pt["b_key"] not in self.party_keys["b"]
@@ -1182,13 +1198,19 @@ class SoulLinkState:
         pt.setdefault("verdict", {"a": None, "b": None})
         if pt["verdict"][player_id] not in (None, "await"):
             return                                      # already decided (a replayed report)
-        if msg.get("uncertain") or not new_key:
+        barred = self.adapter.supports_trade_recovery() and (
+            self.party_hidden[player_id] or self.trade_recovery_pending[player_id]
+            or pt.get("hello_only", {}).get(player_id) or msg.get("after_reset") is True)
+        if msg.get("uncertain") or not new_key or barred:
             # the side cannot vouch (a reset after its commit entry, a native result 2): party evidence
             # decides. Journaled as the watchdog does, once, when the side first declares it.
-            if msg.get("after_reset") is True:
+            if msg.get("after_reset") is True or barred:
                 # MAJOR-5: a native result 2 holds a RAM party no save ever saw; only the
                 # reloaded save (the post-reset hello) is evidence for this side
                 pt.setdefault("hello_only", {})[player_id] = True
+                if self.adapter.supports_trade_recovery():
+                    self.party_hidden[player_id] = self.trade_recovery_pending[player_id] = True
+                    pt["phase"] = "uncertain"
             if pt["verdict"][player_id] is None:
                 pt["verdict"][player_id] = "await"
                 self._record_trade(pt, "uncertain")
@@ -1705,6 +1727,16 @@ class SoulLinkState:
             state._trade_token = int(data.get("trade_token", 0) or 0)
             if data.get("pending_trade"):
                 state._restore_trade(data["pending_trade"])
+            if state.adapter.supports_trade_recovery() and "trade_recovery" in data:
+                recovery = data["trade_recovery"]
+                for pid in ("a", "b"):
+                    row = recovery.get(pid) if isinstance(recovery, dict) else None
+                    valid = (isinstance(row, dict) and type(row.get("pending")) is bool
+                             and type(row.get("hidden")) is bool and isinstance(row.get("problem", ""), str))
+                    state.trade_recovery_pending[pid] = row["pending"] if valid else True
+                    state.party_hidden[pid] = (row["hidden"] if valid else True) or state.trade_recovery_pending[pid]
+                    problem = row.get("problem", "") if valid else "Stored recovery information is unreadable"
+                    state.trade_recovery_errors[pid] = problem if isinstance(problem, str) else "Stored recovery information is unreadable"
             log.info(f"Loaded {len(state.links)} links from {state._links_path}")
         except UnsafeGameMigration:
             # Operator-facing and fatal: this run must not start under either adapter.
@@ -1737,12 +1769,14 @@ class SoulLinkState:
         Only flags mons that are still IN the party with hp == 0 as newly fainted —
         missing-from-party mons may simply be boxed (do not treat as dead).
         """
-        error = self._trade_recovery_error(msg)
-        if error:
-            self.identity_error[player_id] = error
+        refused = (self.adapter.refused_trade_recovery()
+                   if "party_hidden" in msg or "trade_outstanding" in msg else "")
+        if refused:
+            self.identity_error[player_id] = refused
             msg["_rejected"] = True
             self.queued_commands[player_id].append({"cmd": "noop", "refused": "trade_recovery"})
             return
+        error = self._trade_recovery_error(msg)
         hidden = self.party_snapshot_withheld(player_id, msg)
         party = [] if hidden else msg.get("party", [])
 
@@ -1822,12 +1856,34 @@ class SoulLinkState:
             self.latest_battle_requests.pop(player_id, None)
 
         if self.adapter.supports_trade_recovery():
-            records = msg.get("trade_outstanding", [])
-            if records:
+            before_recovery = (self.trade_recovery_pending[player_id], self.party_hidden[player_id],
+                               self.trade_recovery_errors[player_id])
+            records = [] if error else [{"token": r["token"], "epoch": int(r["epoch"])}
+                                        for r in msg.get("trade_outstanding", [])]
+            self.trade_recovery_errors[player_id] = error
+            changed_trade = False
+            if error:
+                self.trade_recovery_pending[player_id] = True
+                pt = self.pending_trade
+                if pt:
+                    self.queued_commands[player_id] = [c for c in self.queued_commands[player_id]
+                        if not (c.get("cmd") in ("apply_trade", "apply_prepare") and c.get("token") == pt["token"])]
+                if pt and pt.get("phase") in ("applying", "uncertain"):
+                    if pt["verdict"].get(player_id) in (None, "await"):
+                        changed_trade = (pt["verdict"].get(player_id) is None or pt["phase"] != "uncertain"
+                                         or not pt.get("hello_only", {}).get(player_id))
+                        pt["verdict"][player_id] = "await"
+                        pt["phase"] = "uncertain"
+                        pt.setdefault("hello_only", {})[player_id] = True
+                        if changed_trade:
+                            self._record_trade(pt, "uncertain")
+            elif records:
                 self._declare_trade_outstanding(player_id, records)
             elif not hidden:
                 self.trade_recovery_pending[player_id] = False
             self.party_hidden[player_id] = hidden
+            if changed_trade or before_recovery != (self.trade_recovery_pending[player_id], hidden, error):
+                self._save()
         if not hidden:
             old_size = self.party_size.get(player_id, 0)
             self.party_size[player_id] = len(party)
@@ -1933,12 +1989,13 @@ class SoulLinkState:
                         {"cmd": "force_faint", "key": key, "nickname": half.nickname or ""})
                     log.warning(f"[{player_id}] hello: dead {key[:8]} alive in party — force_faint before burial")
 
-        # Re-queue any memorials that were not yet confirmed before disconnecting
-        for key in list(self.pending_memorials[player_id]):
-            if not any(c.get("cmd") == "memorialize" and c.get("key") == key
-                       for c in self.queued_commands[player_id]):
-                self.queued_commands[player_id].append({"cmd": "memorialize", "key": key})
-                log.info(f"[{player_id}] reconnect: re-queued memorialize for {key[:8]}")
+        if not hidden:
+            # Re-queue any memorials that were not yet confirmed before disconnecting
+            for key in list(self.pending_memorials[player_id]):
+                if not any(c.get("cmd") == "memorialize" and c.get("key") == key
+                           for c in self.queued_commands[player_id]):
+                    self.queued_commands[player_id].append({"cmd": "memorialize", "key": key})
+                    log.info(f"[{player_id}] reconnect: re-queued memorialize for {key[:8]}")
 
         # Dead/memorial mons in party → re-memorialize (handles script reload case
         # where Lua's memorialized_keys is lost and player retrieved a dead mon).
@@ -4458,6 +4515,11 @@ class SoulLinkState:
             },
         }
         try:
+            if self.adapter.supports_trade_recovery():
+                payload["trade_recovery"] = {
+                    pid: {"pending": self.trade_recovery_pending[pid], "hidden": self.party_hidden[pid],
+                          "problem": self.trade_recovery_errors[pid]}
+                    for pid in ("a", "b")}
             self._atomic_write_json(self._links_path, payload)
             self.save_failed = ""
         except OSError as e:

@@ -441,7 +441,11 @@ class Gen3Adapter(GameAdapter):
         self._artifact_kind = kind or "clean"
 
     def supports_trade_recovery(self) -> bool:
-        return self._is_rr or self._rom_type in ("firered", "leafgreen", "emerald")
+        return self._is_rr or self._rom_type in ("firered", "leafgreen", "emerald", "firered_ap", "leafgreen_ap")
+
+    def refused_trade_recovery(self) -> str:
+        return ("" if self.supports_trade_recovery() else
+                f"Trade recovery extension unavailable for {self._rom_type or 'unbound Gen 3 cartridge'}")
 
     # ── GameRulesAdapter ─────────────────────────────────────────────────
 
