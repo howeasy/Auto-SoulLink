@@ -89,3 +89,48 @@ write. Separate red controls caught missing capability opt-ins, writes in double
 or without a hand-off, missing vanilla carrier registration, and a false-positive
 Explosion KO with no PP consumption. Final unit counts and receipt pins follow
 in the verification receipt committed with this card.
+
+## Final verification receipt
+
+Tested source cut: `22b7980a9bbae1b2335c5cf0104d3ea734a97139` (implementation `2666bd22226349173817bc3e1b8fa764f7b1feae`).
+The final receipt commit changes documentation only. The worktree is `C:/slink-wt/g3-explode`.
+Full `tests/unit`: **11,760 passed, 4,393 skipped, zero failures/errors**, exit 0,
+574.13 seconds. All 23 new binding controls ran without skips, including both compiled
+source-layout controls and all three titles. Skips remain unexecuted evidence.
+
+- Initial production-client controls: **3 failed**, then **3 passed** (FR/LG/E).
+- Capability/window controls: **9 failed / 3 passed**, then **12 passed**.
+- Carrier/PP controls: **5 failed**, then **14 passed** with the related carrier controls.
+- Final focused source/behavior/protocol-citation suite: **32 passed, no skips**.
+- Updated profile/checkpoint/client suite: **379 passed, 22 skipped** (skips remain unexecuted evidence).
+- Scenario selection: **162 passed** after moving Explode into the vanilla shared set and wrappers.
+
+Two early full attempts were stopped while stale RR-only selection/wrapper expectations were
+corrected. They are preserved as `.cache/explode-full.log` and `explode-full2.log`; neither is a
+passing gate. A complete third run then reported 11,758 passed, 4,393 skipped and two stale UI/protocol
+expectations; their updated full test files pass 86 checks. The final full run below is the
+verification cut.
+
+Raw receipt SHA256s:
+
+- `explode-bind-red.xml`: `32297e675749f83bb02aefc1792748e6af89c840a3e36e42f5b1d0f26b27aa3b`.
+- `explode-carrier-red.xml`: `10ca7d6566dfb1982b669f173f4f738ab959031c8bf0f4999ce66d941e4d6462`.
+- `explode-final-focus.xml`: `181292cc7ca2970a218f2723fa99836f8da30a58566a84bf6d54cc64948f64fc`.
+- `explode-full6.xml`: `a2a389c4a79d18dbe92c91e4ac35809e96ce77f7aea1a4fd4b143369d654c550`.
+- `explode-full6.log`: `a75876bebbb7e02f93bdd9a906b4b5faf245881acb9832c516e2429bdba22f21`.
+
+The machine-readable ledger is `.cache/explode-receipt.json`. Profile `--check`, exact FRLG/E
+checkpoint regeneration, scoped Ruff, Lua chunk parsing and `git diff --check` pass. Semantic
+comparison confirms that only `battle.handoff.explode` changed in the vanilla checkpoints.
+RR generated profile/checkpoint contents are unchanged and `patch/src` has no diff.
+
+Full command: `python -m pytest tests/unit -q -p no:randomly --tb=short -o tmp_path_retention_policy=failed --junitxml=.cache/explode-full6.xml`.
+Environment: assignments from `C:/slink-wt/g3-env.sh`, plus
+`SLINK_HOST_GCC=E:/Google Drive/SLink/.cache/build-tools/w64devkit-2.10.0/w64devkit/bin/gcc.exe`.
+Live qualification is still NOT RUN by this card; the commands above remain with the coordinator.
+
+Attempts 4 and 5 were invalidated by C: ENOSPC, not accepted as test gates. Recursive cleanup
+of retained task basetemps was rejected by automatic approval review with the sole reason
+`blocked by policy`; this agent deleted none of those directories. After space was restored
+externally, the final run used default pytest temp with `tmp_path_retention_policy=failed`,
+which removes each passing test's own temporary directory. No E: test-temp location was used.
