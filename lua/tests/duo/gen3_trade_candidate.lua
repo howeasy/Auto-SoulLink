@@ -7,8 +7,8 @@ M.DISCLOSURE = "native NPC/party-chooser/offer carrier: UNTESTED (HARNESS_ONLY s
 local cases = {native_trade_firered=true, native_trade_decline_firered=true}
 local sources = {
     "tools/gen3_trade_duo.py", "tools/e2e_duo.py",
-    "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/signals.lua",
-    "lua/gen3/native.lua", "lua/gen3/safety.lua", "lua/gen3/trade.lua", "lua/gen3/rom_content.lua",
+    "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/client.lua", "lua/gen3/signals.lua",
+    "lua/gen3/native.lua", "lua/gen3/safety.lua", "lua/gen3/trade.lua", "lua/gen3/trade_journal.lua", "lua/gen3/rom_content.lua",
     "lua/tests/duo/gen3_trade_candidate.lua", "lua/tests/duo/duo_gen3_main.lua",
     "lua/tests/duo/scenario_gen3_native_trade.lua",
     "data/games/gen3_frlg/profile.json", "data/games/gen3_frlg/engine_signals.json",
@@ -21,6 +21,8 @@ function M.authorize(manifest, d, env, hash, read, digest)
     assert(d.game == "gen3_fr_trade" and d.title == "firered" and cases[d.scenario], "not a T5 duo row")
     assert(manifest.schema == "slink-fr-trade-duo-v2", "stale T5 manifest: regenerate private packs")
     assert(manifest.production == false and manifest.ready == 0, "not a private READY0 candidate manifest")
+    assert(relative(manifest.journal_path) and manifest.journal_path:sub(-32)==manifest.nonce,
+           "stale T5 manifest: isolated journal missing")
     assert(type(manifest.nonce) == "string" and #manifest.nonce == 32
            and manifest.nonce:match("^%x+$") and env == manifest.nonce, "T5 runner override absent or mismatched")
     hash = tostring(hash or ""):lower()
@@ -50,6 +52,7 @@ function M.new(d, json, manifest, log, manifest_raw)
     local base = manifest.native.BASE
     local prefix = "patch/build/t5_" .. manifest.nonce .. "_" .. d.player .. "_" .. (d.phase or "initial")
     local ordinal, io_, session, parts, g = 0, nil, nil, nil, nil
+    local journal_path = d.wt .. "/" .. manifest.journal_path
     local function emit(kind, fields)
         fields = fields or {}
         fields.kind, fields.side, fields.phase, fields.frame = kind,d.player,d.phase or "initial",emu.framecount()
@@ -76,9 +79,9 @@ function M.new(d, json, manifest, log, manifest_raw)
     local function journal_snapshot()
         local until_ = os.clock()+1
         repeat
-            local guard1 = disk(d.wt.."/slink_gen3_trade.guard")
-            local body = disk(d.wt.."/slink_gen3_trade.log")
-            local guard2 = disk(d.wt.."/slink_gen3_trade.guard")
+            local guard1 = disk(journal_path..".guard")
+            local body = disk(journal_path..".log")
+            local guard2 = disk(journal_path..".guard")
             if guard1 and body and guard1 == guard2 then
                 local hash = 2166136261
                 for i=1,#body do hash=((hash ~ body:byte(i))*16777619)&0xFFFFFFFF end
@@ -104,6 +107,17 @@ function M.new(d, json, manifest, log, manifest_raw)
         -- production:true row is an explicit test projection of a false receipt.
         entry.PACK_FILES.gen3_frlg = manifest.pack_files
         return entry
+    end
+    function self.bind_journal(module)
+        local file_store = module.file_store
+        module.file_store = function(deps)
+            -- Real store/locking/flush implementation, isolated only by its
+            -- harness-owned installation path. Never clear a prior run's log.
+            deps.path = journal_path
+            emit("journal_location",{path=manifest.journal_path,scope="HARNESS_ONLY_RUN"})
+            return file_store(deps)
+        end
+        return module
     end
     function self.before_build(deps)
         io_ = deps.io
@@ -219,6 +233,15 @@ function M.new(d, json, manifest, log, manifest_raw)
             end
         end
         return false
+    end
+    function self.diagnose(label)
+        local journal = io_ and io_.trade_journal
+        local ok,safe,why = pcall(function() return parts.safety:check(nil,"overworld") end)
+        emit("gate_state",{label=label,native=parts.native:mailbox(),
+            journal_ready=journal and journal:ready() or false,
+            journal_hidden=not journal or journal:hidden(),journal_path=manifest.journal_path,
+            field_ready=ok and safe==true,field_reason=tostring(ok and why or safe)})
+        self.snapshot("gate_native")
     end
     emit("override",{environment=M.ENV,value=manifest.nonce,production=false,ready=0,rom_sha1=manifest.rom_sha1,
         source_commit=manifest.source_commit,manifest_sha1=d.native_manifest_sha1,

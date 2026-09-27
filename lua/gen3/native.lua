@@ -452,8 +452,30 @@ function N.new(profile, deps)
         return true
     end
     local function trade_safe()
-        local ok, safe = pcall(function() return deps.trade_safe and deps.trade_safe() == true end)
-        return ok and safe
+        local ok, safe, why = pcall(function()
+            if not deps.trade_safe then return false,"trade field check unavailable" end
+            return deps.trade_safe()
+        end)
+        return ok and safe == true, ok and why or tostring(safe)
+    end
+    local function trade_dispatch_guard(t, valid, deadline, step)
+        -- Ownership, caller authorization and deadlines still expire while a
+        -- transient CPU/field checkpoint is closed. Only that checkpoint waits.
+        if valid then
+            local ok, why, retry = valid()
+            if not ok then return false,why,retry end
+        end
+        if io.framecount() > deadline then return false,"guard:field_expired" end
+        local safe, why = trade_safe()
+        if not safe then
+            why = tostring(why or "overworld checkpoint unavailable")
+            local notice = step .. ": " .. why
+            if t.wait_reason ~= notice then log("[SLink-gen3] trade waiting for " .. notice) end
+            t.wait_reason = notice
+            return false,why,true
+        end
+        t.wait_reason = nil
+        return true
     end
     function self:trade_eligible(mon)
         if not self:trade_capable() or type(mon) ~= "table" then return false end
@@ -575,16 +597,16 @@ function N.new(profile, deps)
         -- and preparation; no text truncation and no party-derived identity.
         little(t.opaque,4,t.epoch,4); little(t.opaque,8,t.visit,4); little(t.opaque,12,(~t.visit)&0xFFFFFFFF,4)
         trade_context = t
+        local deadline = io.framecount()+timeout_for(p.OP_TRADE_PREPARE)
         local job
         job = {op=p.OP_TRADE_PREPARE, args=trade_args(t), stages={},
             valid=function()
-                if trade_context ~= t or not self:trade_capable() or not trade_safe() or not outgoing(t.old_key,t.slot)
+                if trade_context ~= t or not self:trade_capable() or not outgoing(t.old_key,t.slot)
                    then return false, "guard:stale" end
                 local mb = self:mailbox()
                 if not mb or (mb.producer_phase ~= cc.SLINK_PHASE_IDLE and mb.producer_phase ~= cc.SLINK_PHASE_DONE)
                    then return false, "trade producer owned" end
-                if valid then return valid() end
-                return true
+                return trade_dispatch_guard(t,valid,deadline,"prepare")
             end,
             on_publish=function() t.prepare_seq = job.seq end,
             done=function(why)
@@ -625,6 +647,7 @@ function N.new(profile, deps)
     end
     local function trade_transfer(step, cmd, done, valid, progress)
         local t = trade_context
+        local deadline = io.framecount()+timeout_for(step == "scene" and p.OP_TRADE_SCENE or nil)
         if not self:trade_capable() or not t or not self:trade_visit() then return nil, "durable_trade_unavailable" end
         if step == "enemy" then
             local rows = cmd.blobs_hex
@@ -638,9 +661,8 @@ function N.new(profile, deps)
                 if reads.key(mon) == reads.key(incoming) then return nil, "duplicate incoming identity" end
             end
             return enqueue({stages={{p.BLOB_BUF,bytes}}, valid=function()
-                if trade_context ~= t or not self:trade_visit() or not trade_safe() then return false, "guard:stale" end
-                if valid then return valid() end
-                return true
+                if trade_context ~= t or not self:trade_visit() then return false, "guard:stale" end
+                return trade_dispatch_guard(t,valid,deadline,"staging")
             end, done=function(why)
                 if not why then t.incoming = {bytes=bytes,pid=word(bytes,0,4),otid=word(bytes,4,4)} end
                 if done then done(why) end
@@ -651,10 +673,9 @@ function N.new(profile, deps)
         local job
         job = {op=p.OP_TRADE_SCENE, args=trade_args(t), stages={{p.BLOB_BUF,clone(t.incoming.bytes)}},
             valid=function()
-                if trade_context ~= t or not self:trade_visit() or not trade_safe() or not outgoing(t.old_key,t.slot)
+                if trade_context ~= t or not self:trade_visit() or not outgoing(t.old_key,t.slot)
                    then return false, "guard:stale" end
-                if valid then return valid() end
-                return true
+                return trade_dispatch_guard(t,valid,deadline,"scene")
             end,
             on_publish=function() t.scene_seq, t.scene_posted = job.seq, true end,
             observe=function()
@@ -669,6 +690,9 @@ function N.new(profile, deps)
                 return w
             end,
             done=function(why,result,reason)
+                if why and not job.posted then
+                    log("[SLink-gen3] trade scene refused before publication: " .. tostring(why))
+                end
                 -- Completion and progress consume the same coherent snapshot;
                 -- rereading here could turn a torn progress read into an ACK
                 -- success without delivering its save milestone to trade.lua.

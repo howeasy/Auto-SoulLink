@@ -3487,13 +3487,13 @@ class DuoRun:
         Crystal on both sides) resolve to the same gamedb SaveRAM filename and would otherwise
         share one file and stamp on each other.
 
-        Per-scenario, NOT per-run — the path is reused across invocations and nothing cleans
+        Except for cold-boot and native-trade rows, the path is reused across invocations and nothing cleans
         it. That is safe only because `seed_saveram` overwrites the file before every launch,
         which is what actually prevents a crashed run's save leaking into the next one. Do not
         weaken that copy on the assumption this directory is fresh; it isn't.
         """
-        if self.cfg.get("cold_boot"):
-            # A fresh per-run path makes a cold cartridge independent of any older attempt.
+        if self.cfg.get("cold_boot") or self.cfg.get("gen3_native_trade"):
+            # Preserve earlier cold-boot/native-trade batteries, including uncertain saves.
             return os.path.join(self.data_dir, f"saveram_{inst}")
         # Per scenario, instance AND LANE: two lanes on one scenario would otherwise seed and boot
         # from one directory. Seeding still overwrites the file before every launch (that is what
@@ -7549,7 +7549,7 @@ class DuoRun:
 
     def _prepare_native_trade(self):
         from tools import gen3_trade_duo as t5
-        self._native_candidate = t5.prepare(Path(REPO), Path(BUILD) / f"t5_fr_trade_{self.lane}_{self.attempt}")
+        self._native_candidate = t5.prepare(Path(REPO), Path(self.data_dir) / "candidate")
         self._native_initial = {}
         self._pydec_note(f"HARNESS_ONLY {t5.DISCLOSURE}")
         self._pydec_note(f"T5_CANDIDATE rom_sha1={self._native_candidate['rom_sha1']} production=false READY=0")

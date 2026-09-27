@@ -29,10 +29,12 @@ SOURCE_FILES = (
     "tools/e2e_duo.py",
     "lua/gen3/run.lua",
     "lua/gen3/entry.lua",
+    "lua/gen3/client.lua",
     "lua/gen3/signals.lua",
     "lua/gen3/native.lua",
     "lua/gen3/safety.lua",
     "lua/gen3/trade.lua",
+    "lua/gen3/trade_journal.lua",
     "lua/gen3/rom_content.lua",
     "lua/tests/duo/gen3_trade_candidate.lua",
     "lua/tests/duo/duo_gen3_main.lua",
@@ -305,6 +307,9 @@ def prepare(root: Path, directory: Path) -> dict:
         "expected_species": evolution[0][2],
         "fixtures": {},
     }
+    manifest["journal_path"] = (
+        (directory / ("slink_gen3_trade_" + manifest["nonce"])).relative_to(root).as_posix()
+    )
     manifest["pack_sha1"] = {
         name: _sha1_file(root, pack_files[name]) for name in ("profile", "sites", "checkpoint")
     }
@@ -533,6 +538,36 @@ def key(mon: dict) -> str:
     return f"{mon['personality']:08X}:{mon['ot_id']:08X}"
 
 
+def completed_flushes(rows: list[dict], read, *, decline=False, before=None) -> list[tuple]:
+    """Associate each host call with its own flash/native/file snapshots.
+
+    The ordinary save-site handler flushes PREPARE and post-save too. Only a
+    durable native outcome before trade_done qualifies for a successful trade;
+    repeated legitimate flushes must not be mistaken for additional game saves.
+    """
+    out = []
+    limit = rows.index(before) if before is not None else len(rows)
+    for index, row in enumerate(rows[:limit]):
+        if row.get("kind") != "flush":
+            continue
+        if (
+            index < 2
+            or rows[index - 1].get("kind") != "flush_native"
+            or rows[index - 2].get("kind") != "flash"
+        ):
+            raise ValueError("host flush is missing its paired flash/native snapshots")
+        native, flash = rows[index - 1], rows[index - 2]
+        witness = decode_witness(read(native))
+        if decline or (
+            witness["bits"] == 31
+            and witness["result"] == 1
+            and witness["save"] == 1
+            and witness["phase"] == 4
+        ):
+            out.append((row, flash, native))
+    return out
+
+
 def physical_problems(
     root: Path,
     manifest: dict,
@@ -624,8 +659,14 @@ def physical_problems(
                     problems.append(
                         f"saved {named_key} exists {occurrences} times across both cartridges"
                     )
-            flush = one("flush")
-            flash = one("flash")
+            txs = [r for r in initial if r["kind"] == "tx"]
+            done = [r for r in txs if r["message"].get("event") == "trade_done"]
+            flushes = completed_flushes(
+                initial, read, decline=decline, before=done[0] if len(done) == 1 else None
+            )
+            if not flushes:
+                raise ValueError("no qualifying host flush before trade_done")
+            flush, flash, flush_native = flushes[-1]
             qualified, why = codec.qualify_flash(read(flush))
             if not qualified:
                 problems.append(f"{side}: host-flush save is not complete/checksummed: {why}")
@@ -648,8 +689,6 @@ def physical_problems(
                 problems.append(
                     f"{side}: file at host-flush return did not contain traded identities"
                 )
-            txs = [r for r in initial if r["kind"] == "tx"]
-            done = [r for r in txs if r["message"].get("event") == "trade_done"]
             if decline:
                 if any(
                     r["kind"] == "rx"
@@ -695,6 +734,17 @@ def physical_problems(
                         read(scene),
                         read(commit),
                         read(final),
+                        (old["personality"], old["ot_id"]),
+                        (incoming["personality"], incoming["ot_id"]),
+                    )
+                )
+                problems.extend(
+                    f"{side} flush: {problem}"
+                    for problem in witness_problems(
+                        read(prepare),
+                        read(scene),
+                        read(commit),
+                        read(flush_native),
                         (old["personality"], old["ot_id"]),
                         (incoming["personality"], incoming["ot_id"]),
                     )

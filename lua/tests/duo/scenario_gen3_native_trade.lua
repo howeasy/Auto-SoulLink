@@ -10,6 +10,7 @@ return function(ctx)
         return true,"cold reload observed; native carrier UI remains UNTESTED"
     end
     if not ctx.wait_until(function() return h.ready end,120,"server acknowledged native trade capability") then
+        h.diagnose("capability hello")
         return false,"candidate capability hello not acknowledged"
     end
     ctx.log("FR_TRADE_CAPABLE")
@@ -34,7 +35,7 @@ return function(ctx)
             return false
         end,900,"native durable trade and server committed final")
         joypad.set({})
-        if not done then return false,"native/server trade did not commit" end
+        if not done then h.diagnose("native/server final");return false,"native/server trade did not commit" end
     end
     h.capture_final(ctx)
     ctx.log("FR_TRADE_READY_FOR_RELOAD")

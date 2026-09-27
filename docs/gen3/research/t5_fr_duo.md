@@ -1,8 +1,8 @@
 # T5-FR-DUO carrier
 
 This card prepares the first two-client FireRed native trade lane. **No emulator
-was run by this card.** All results below are SOURCE/build/MODEL checks; the
-coordinator owns the physical runs. READY stays 0 and the candidate receipt
+was run by this card.** Implementation checks are SOURCE/build/MODEL; the
+coordinator's later physical failures are recorded separately below. READY stays 0 and the candidate receipt
 stays `production: false`. No UPS is published.
 
 Branch: `codex/gen3-t5-fr-duo`, worktree `C:/slink-wt/g3-t5-fr-duo`.
@@ -41,7 +41,7 @@ recover the SHA1-pinned clean FireRed. An unrelated ROM edit cannot be authorize
 by merely changing a receipt digest. No ROM is committed.
 
 The runner creates a private pack projection under
-`patch/build/t5_fr_trade_<lane>_<attempt>/`, with a unique nonce. It exports
+`patch/build/slink_duo_<scenario>_<random>/candidate/`, with a unique nonce. It exports
 `SLINK_DUO_FR_TRADE_CANDIDATE=<nonce>` only to its own emulator subprocesses.
 The test-only Lua loader requires that nonce, the explicit `gen3_fr_trade` row,
 FireRed, an allowed T5 scenario and the exact cartridge digest. It logs the
@@ -105,7 +105,7 @@ host flush does not issue an in-game save.
 
 Run from a clean checkout of the completed T5 branch. One emulator lane only.
 The candidate build is an offline compiler operation; the following two duo
-commands are the **unrun physical handoff**, once each:
+commands are the coordinator's rerun handoff, once each:
 
 ```powershell
 $env:SLINK_ARMGCC='E:/Google Drive/SLink/patch/vendor/armgcc/xpack-arm-none-eabi-gcc-15.2.1-1.1/bin'
@@ -121,7 +121,7 @@ scenario selections are unchanged. `--list --game gen3_fr_trade` is read-only.
 
 Expected artifacts per row:
 
-- `patch/build/t5_fr_trade_<lane>_1/manifest.json`, private pack files and SYNTH
+- `patch/build/slink_duo_<scenario>_<random>/candidate/manifest.json`, private pack files and SYNTH
   saves; original candidate `patch/build/candidate-firered-trade/receipt.json`.
 - `patch/build/e2e_<scenario>_{a,b}_result.txt` for initial legs and
   `e2e_<scenario>_{a,b}_native_trade_reload_result.txt` for reloads.
@@ -190,7 +190,7 @@ The private candidate built offline with the specified xPack compiler:
 ROM SHA1 `41c66e6b8dceffd295ad8355e3b0a39ecea106f3`, payload SHA256
 `b622049ccc5f4521e96bc8c8db1c31ddfdfdcdffbe2e99362cc476d1015c90d4`.
 Offline preparation recovered the clean-ROM pin, generated both SYNTH saves and
-read evolution target 65 from the ROM. Both live rows remain **UNRUN**, with the
+read evolution target 65 from the ROM. At this cut both live rows were **UNRUN**, with the
 commands and acceptance criteria above handed to the coordinator. No emulator,
 production artifact, READY flag, UPS, or master branch was changed by this card.
 
@@ -217,7 +217,7 @@ full console detail survives. Focused verification: **145 passed, 2 skipped in
 
 Rerun the same two duo commands above from the repair commit. No candidate ROM
 rebuild is needed for this Lua/Python-only fix: each run regenerates its private
-pack. The current physical status is **boot failure observed; rerun pending**.
+pack. At this cut the physical status was **boot failure observed; rerun pending**.
 
 ## Stale-artifact audit and digest binding — 2026-09-27
 
@@ -233,7 +233,7 @@ line-ending preservation; no ROM/save is included. Their real-candidate replay
 reproduces the original 21-site refusal. Regeneration over a copy of that exact
 existing directory replaces the stale data and starts all 21 sites.
 
-Manifest schema v2 now binds private pack files and sixteen relevant source/input
+Manifest schema v2 binds private pack files and relevant source/input
 files by SHA1, plus the source commit. Python verifies the manifest/file digests
 before seeding or launching an emulator. Lua independently verifies the exact
 manifest bytes passed by the runner and rehashes every bound file before selecting
@@ -252,3 +252,82 @@ exact captured-artifact replay, existing-directory regeneration, prelaunch
 refusal before SaveRAM seeding/Popen, runtime source/pack mismatches, current
 bootstrap HUD, ROM transport hashes, entry and scenario registration. Ruff and
 all 305 Lua syntax checks pass. No emulator was launched by this repair.
+
+## Captured native/server failures on 832aaa05 — 2026-09-27
+
+The coordinator's next run passed bootstrap on both sides. The trade run was
+`t5-9f04aefac5ae4fdc998ce50a8be3038a`; its retained directory is
+`patch/build/slink_duo_native_trade_firered_er9r8tdc/`. Exact small native/party
+snapshots, selected wire/events and the unresolved journal are preserved in
+`tests/fixtures/gen3/t5_832_failure/`, with original paths and SHA256 pins in
+`trace.json`. These are captured evidence; tests using them remain MODEL replays.
+
+| Milestone | A | B |
+|---|---:|---:|
+| PREPARE publication | frame 993, seq 1, epoch 6 | frame 995, seq 1, epoch 5 |
+| Native pre-save entry / host flush | 1440 / 1708 | 1440 / 1708 |
+| apply_ready | 1827 | 1827 |
+| apply_trade / incoming staging | 1828 / 1829 | 1862 / 1863 |
+| SCENE / native scene entry | 1830, seq 2 | absent |
+| Native commit / evolution entry | 3649 | absent |
+| Native post-save entry / durable host flush | 5204 / 5472 | absent |
+| trade_done | 5472, received B key, species 65 | 1864, unchanged B key |
+| WITHDRAW | not the failure path | 1865, READY witness still coherent |
+
+A's two host flushes at frame 5472 both carried the coherent successful native
+witness (bits 31, result 1, save 1, received PID/OT matching B). The save counter
+advanced 4 to 6. This proves A reached those milestones, **not** that the duo
+settled or survived cold reload. `links.json` remained uncertain: A's verdict
+was `await`, B's `none`, and neither player had a committed final. A's wire had
+the journal-hidden tick followed by trade_done without a visible HELLO between
+them. The server correctly retained its hidden-party barrier.
+
+B staged the received record but never published SCENE. The exact dispatch
+guard and CPU registers were not captured. Replaying B's captured READY bytes,
+arguments and valid journal lease reproduces its cancellation when one frame's
+field-safety checkpoint is closed. That establishes a real code defect and a
+plausible explanation; it does not establish which physical guard failed.
+
+The subsequent decline run (`t5-dd07256bf70b4df98998676a8868eb91`, retained under
+`patch/build/slink_duo_native_trade_decline_firered_6fakxepx/`) advertised false
+trade capability on both sides. The root journal still held both prior-run t1
+records without terminal finals. Binding a fresh run correctly left that journal
+not-ready and hidden. This was shared harness storage across runs; the old log
+and guard are evidence and must not be deleted to make a new row pass.
+
+The repair makes four bounded changes:
+
+- After a durably completed or proved-unchanged journaled operation, the client
+  requests a visible HELLO before releasing its owed trade_done. Uncertain or
+  failed-flush operations retain the barrier; server rules are unchanged.
+- PREPARE, staging and SCENE wait for a safe dispatch frame, while ownership,
+  authorization and caller/native deadlines remain enforced. A published SCENE
+  is never retried. Waiting/refusal diagnostics preserve the field-check reason.
+- Each runner invocation gets private SaveRAM and a nonce-specific path for the
+  real journal store inside its retained data directory. Both players and their
+  cold reloads share that run's journal. Old evidence remains untouched. The
+  manifest now hashes eighteen source/input files, including client and journal.
+- The flush oracle pairs each host call with its own live flash and native
+  witness. It accepts repeated legitimate post-save flushes and excludes the
+  pre-save flush, while still requiring the bound successful witness, live/file
+  equality, exact two-save counter delta, server final and independent reload.
+
+Captured-byte controls failed before the fixes for visible HELLO ordering,
+single-frame SCENE cancellation and duplicate post-save flush rejection. The
+new tests also preserve the foreign-run journal barrier and enforce expiry.
+Current physical status: **trade failed after A's native save; B's exact guard
+unverified; decline blocked by prior-run journal; repaired reruns pending**.
+Use the same two commands above. No candidate ROM rebuild is needed, and no
+emulator was launched by this repair.
+
+Verification: the eighteen-file client/native/entry/safety/trade/server/harness
+run passed **1,419 tests in 45.12s**, with no skips. Its full output is
+`.cache/t5-832-repair-tests.txt`, SHA256
+`3db01da950439006a0f61c2bd16b337af58139e3d04027f97b2197d26bd74693`.
+After adding the battery-preservation control, the captured/harness/isolation
+run passed **119 tests, 2 skipped in 14.84s**. Both skips are unrelated pureRGB
+build controls in `test_e2e_duo_lane_isolation.py` (builds absent); they are not
+qualification passes. Ruff, all 305 repository Lua parse checks and Lua 5.4
+parsing of all six changed Lua modules pass. The original root journal and guard
+still match the captured hashes. No full-suite rerun or physical pass is claimed
+for this repair.

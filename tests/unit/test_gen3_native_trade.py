@@ -16,7 +16,8 @@ def bizhawk_lua_version(monkeypatch):
 
 
 class TradeNativeWorld(World):
-    def __init__(self, *, capability=1, production=True, title="firered"):
+    def __init__(self, *, capability=1, production=True, title="firered",
+                 player="a", initial_seq=10, epoch=0x12345678):
         super().__init__(abi=2, pack="gen3_frlg")
         self.battle = False
         self.recovery_clear = True
@@ -24,12 +25,12 @@ class TradeNativeWorld(World):
         self.put(self.n["BASE"] + 0x40, capability, 4)
         self.module = self.lua.execute((native_model.ROOT / "lua/gen3/native.lua").read_text())
         self.native = self.module.new(self.lua.table_from(self.profile, recursive=True), self.lua.table(
-            io=self.native_io, writes=self.writes, reads=self.reads, title=title, player="a",
-            production=production, artifact_kind="companion", initial_seq=10,
+            io=self.native_io, writes=self.writes, reads=self.reads, title=title, player=player,
+            production=production, artifact_kind="companion", initial_seq=initial_seq,
             timeout_frames=8, send=lambda *_: None, log=self.logs.append, in_battle=lambda: self.battle,
             trade_recovery_clear=lambda: self.recovery_clear,
             trade_safe=lambda: self.safe and not self.battle))
-        self.native.set_session_epoch(self.native, 0x12345678)
+        self.native.set_session_epoch(self.native, epoch)
         self.service()
         self.old = mon_record(1, 2, species=4)
         self.incoming = mon_record(5, 6, species=7)

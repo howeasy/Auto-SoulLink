@@ -200,3 +200,18 @@ def test_capability_ready_waits_for_a_server_config_after_the_advertised_hello(t
     w.carrier.tx(w.lua.table(event="hello", trade_prepare=True))
     w.command("config", run_id="run")
     assert w.carrier.ready
+
+
+def test_candidate_redirects_only_store_path_and_preserves_real_store_factory(tmp_path):
+    w = Carrier(tmp_path)
+    calls = []
+    sentinel = w.lua.table(real_store=True)
+    module = w.lua.table(file_store=lambda deps: calls.append(deps.path) or sentinel)
+    w.carrier.bind_journal(module)
+    supplied = w.lua.table(
+        path="unchanged-production-root/slink_gen3_trade", fs="real-host-adapter"
+    )
+    got = module.file_store(supplied)
+    assert got.real_store
+    assert calls == [tmp_path.as_posix() + "/patch/build/private/slink_gen3_trade_" + "ab" * 16]
+    assert supplied.fs == "real-host-adapter"

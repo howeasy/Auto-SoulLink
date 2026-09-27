@@ -55,6 +55,30 @@ def test_changed_private_fixture_is_refused_before_seeding(tmp_path):
         run._gen3_fixture_bytes("a")
 
 
+def test_new_native_trade_attempt_preserves_the_previous_attempts_battery(monkeypatch, tmp_path):
+    from tools import e2e_duo as duo
+
+    monkeypatch.setattr(duo, "BUILD", str(tmp_path / "build"))
+    seed = (ROOT / "tests/fixtures/gen3/firered_party_town.sav").read_bytes()
+    previous = t5.codec.split_rtc(
+        (ROOT / "tests/fixtures/gen3/firered_party_town_b.sav").read_bytes()
+    )[0]
+    runs = []
+    for _ in range(2):
+        run = duo.DuoRun(
+            "native_trade_firered",
+            SimpleNamespace(game="gen3_fr_trade", lane="same-lane", idle_jitter=0),
+        )
+        run._native_candidate = {"rom": "candidate.gba"}
+        run._gen3_fixture_bytes = lambda _side: seed
+        runs.append(run)
+    old = Path(runs[0]._seed_instance_save("a"))
+    old.write_bytes(previous)
+    fresh = Path(runs[1]._seed_instance_save("a"))
+    assert fresh != old and old.read_bytes() == previous
+    assert fresh.read_bytes() == t5.codec.split_rtc(seed)[0]
+
+
 def test_t5_result_gate_consumes_reload_receipts_instead_of_initial_pass(monkeypatch):
     from tools import e2e_duo as duo
 
@@ -105,6 +129,7 @@ def test_candidate_launch_exports_override_only_to_its_owned_emulator(monkeypatc
     run = duo.DuoRun("native_trade_firered", args)
     run._native_candidate = {
         "nonce": "ab" * 16,
+        "journal_path": "patch/build/private/slink_gen3_trade_" + "ab" * 16,
         "path": "patch/build/private.json",
         "manifest_sha1": "12" * 20,
         "rom": "patch/build/private.gba",
@@ -223,6 +248,7 @@ def model_manifest():
         "production": False,
         "ready": 0,
         "nonce": "ab" * 16,
+        "journal_path": "patch/build/private/slink_gen3_trade_" + "ab" * 16,
         "rom_sha1": "cd" * 20,
         "rom_md5": "ef" * 16,
         "source_commit": "00" * 20,
@@ -619,6 +645,11 @@ def model_physical_evidence(tmp_path, decline=False):
         else:
             append("omitted_ui", text="Your partner declined.")
         append("flash", binary=final_save, counter=count + (0 if decline else 2))
+        append(
+            "flush_native",
+            binary=bytes(160) if decline else final,
+            counter=count + (0 if decline else 2),
+        )
         append("flush", binary=final_save, counter=count + (0 if decline else 2), status="returned")
         if not decline:
             append(
@@ -678,6 +709,15 @@ def check_model(model, decline=False):
 def test_complete_physical_oracle_has_positive_and_decline_controls(tmp_path, decline):
     model = model_physical_evidence(tmp_path, decline)
     assert check_model(model, decline) == []
+
+
+def test_save_site_and_trade_fsm_flushes_in_the_same_frame_are_both_legitimate(tmp_path):
+    model = model_physical_evidence(tmp_path)
+    rows = model[2]["a"]
+    at = next(i for i, r in enumerate(rows) if r["kind"] == "flush")
+    duplicate = copy.deepcopy(rows[at - 2 : at + 1])
+    rows[at + 1 : at + 1] = duplicate
+    assert check_model(model) == []
 
 
 @pytest.mark.parametrize(

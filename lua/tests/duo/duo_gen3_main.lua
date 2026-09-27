@@ -427,6 +427,9 @@ local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
 do
     dofile = function(path)
         local value = original_dofile(path)
+        if native_candidate and path == ROOT .. "/lua/gen3/trade_journal.lua" then
+            native_candidate.bind_journal(value)
+        end
         if path == ROOT .. "/lua/gen3/entry.lua" then
             if native_candidate then native_candidate.bind_entry(value) end
             local build = value.build

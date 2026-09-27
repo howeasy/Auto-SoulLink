@@ -1,0 +1,1172 @@
+{
+  "source_commit": "832aaa05272b650db904f316390c2cbcf50aaf04",
+  "run_id": "t5-9f04aefac5ae4fdc998ce50a8be3038a",
+  "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+  "snapshots": {
+    "a_0_boot_party.bin": {
+      "sha256": "028de56b7c206c049a51a90d59652cad06121fd507b79528661f007810bd1305",
+      "frame": 778,
+      "kind": "boot_party",
+      "side": "a",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_boot_party_1.bin"
+    },
+    "a_1_prepare.bin": {
+      "sha256": "08eaad16adc3e9cd4ecc85944a2e51d08216d7565cdd8b972015c2a03aa39501",
+      "frame": 993,
+      "kind": "prepare",
+      "side": "a",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_prepare_2.bin"
+    },
+    "a_2_flush_native.bin": {
+      "sha256": "f726135d2c1fd4e0048fed6da619eb0e45866330fc3cab93e02e9704b7f1aa69",
+      "frame": 1708,
+      "kind": "flush_native",
+      "side": "a",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flush_native_5.bin"
+    },
+    "a_3_scene.bin": {
+      "sha256": "af55d5c356078f581c2bf27bb8770c19cc362a611cfdd5b0e37944b122d50402",
+      "frame": 1830,
+      "kind": "scene",
+      "side": "a",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_scene_7.bin"
+    },
+    "a_4_commit.bin": {
+      "sha256": "ee32246dc24f27060f755b7f217958f057cc5ed818681cafaf3c0ba4d3cae92b",
+      "frame": 3649,
+      "kind": "commit",
+      "side": "a",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_commit_11.bin"
+    },
+    "a_5_evolution.bin": {
+      "sha256": "ee32246dc24f27060f755b7f217958f057cc5ed818681cafaf3c0ba4d3cae92b",
+      "frame": 3649,
+      "kind": "evolution",
+      "side": "a",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_evolution_12.bin"
+    },
+    "a_6_flush_native.bin": {
+      "sha256": "a3e0b75f5e7ab62796a87d914be6812c07a99380e45f65e734e917880d688c1f",
+      "frame": 5472,
+      "kind": "flush_native",
+      "side": "a",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flush_native_15.bin"
+    },
+    "a_7_flush_native.bin": {
+      "sha256": "a3e0b75f5e7ab62796a87d914be6812c07a99380e45f65e734e917880d688c1f",
+      "frame": 5472,
+      "kind": "flush_native",
+      "side": "a",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flush_native_18.bin"
+    },
+    "b_0_boot_party.bin": {
+      "sha256": "f1d8f0bc9574c098fc65b98f6506a0750deea3fe81931c2226d037daeced4284",
+      "frame": 778,
+      "kind": "boot_party",
+      "side": "b",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_boot_party_1.bin"
+    },
+    "b_1_prepare.bin": {
+      "sha256": "28ff3d1d11fc913809fc15d5ccd6a632b2e606886d739cc6d51ddbc9422066a5",
+      "frame": 995,
+      "kind": "prepare",
+      "side": "b",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_prepare_2.bin"
+    },
+    "b_2_flush_native.bin": {
+      "sha256": "68a4115009aa4914996caf1fc02079dd8201d7df48f57d5478744c08eb08904a",
+      "frame": 1708,
+      "kind": "flush_native",
+      "side": "b",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_flush_native_5.bin"
+    },
+    "b_3_withdraw.bin": {
+      "sha256": "a434ef85ac44f5ec5ab677c25fbeea82036155cceb51a9900ab10832559e3610",
+      "frame": 1865,
+      "kind": "withdraw",
+      "side": "b",
+      "source_path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_withdraw_7.bin"
+    }
+  },
+  "wire": {
+    "a": [
+      {
+        "dir": "c2s",
+        "t": 2,
+        "conn": 2,
+        "msg": {
+          "area_id": "viridian_city",
+          "artifact_kind": "companion",
+          "badges": 0,
+          "ball_count": 0,
+          "battle_identity": true,
+          "event": "hello",
+          "foundation": "gen3_frlg",
+          "has_pokeballs": false,
+          "in_battle": false,
+          "loc_name": "viridian_city",
+          "ot_id": 2581466506,
+          "party": [
+            {
+              "active": false,
+              "blob_hex": "906A352D8A0DDE99CDCBCFC3CCCEC6BFFF730202C4C9C8C8FFFFFF0078F300001D67EBB4B666EBB41A3BEBB43B67CCB48B67EBB43979F5B41A67EBBD1B67EBB41A67EBB41A3FEE9671DED18E1A67EBB40000000009FF1B001B000E0012000E000C001300",
+              "held_item_id": 0,
+              "hp": 27,
+              "key": "2D356A90:99DE0D8A",
+              "level": 9,
+              "maxHP": 27,
+              "moves": [
+                33,
+                39,
+                145,
+                0
+              ],
+              "nickname": "SQUIRTLE",
+              "pp": [
+                35,
+                30,
+                30,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 0,
+              "species_id": 7,
+              "status_cond": 0
+            },
+            {
+              "active": false,
+              "blob_hex": "B62036268A0DDE99BBBBBBBBBBBBBBBBBBBB0202C4C9C8C8FFFFFF00ABA600001D2DE8BF3C2DE8BF1F2DE8BF7C2DE8BF442DE8BF3C65E8BF3C2DE8BE3C2DE8BF3C2DE8BF3C48EC9D54E5ABB23C2DE8BF0000000004FF1100110008000700090008000800",
+              "held_item_id": 0,
+              "hp": 17,
+              "key": "263620B6:99DE0D8A",
+              "level": 4,
+              "maxHP": 17,
+              "moves": [
+                33,
+                0,
+                0,
+                0
+              ],
+              "nickname": "AAAAAAAAAA",
+              "pp": [
+                35,
+                0,
+                0,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 1,
+              "species_id": 64,
+              "status_cond": 0
+            }
+          ],
+          "pc_boxes": [],
+          "pc_boxes_generation": 1,
+          "player": "a",
+          "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+          "rom_type": "firered",
+          "seq": 1,
+          "trade_prepare": false,
+          "trainer_name": "JONN",
+          "writes_enabled": true
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 4,
+        "conn": 2,
+        "msg": {
+          "area_id": "",
+          "artifact_kind": "companion",
+          "badges": 0,
+          "ball_count": 0,
+          "battle_identity": true,
+          "event": "hello",
+          "foundation": "gen3_frlg",
+          "has_pokeballs": false,
+          "in_battle": false,
+          "loc_name": "viridian_city_mart",
+          "ot_id": 2581466506,
+          "party": [
+            {
+              "active": false,
+              "blob_hex": "906A352D8A0DDE99CDCBCFC3CCCEC6BFFF730202C4C9C8C8FFFFFF0078F300001D67EBB4B666EBB41A3BEBB43B67CCB48B67EBB43979F5B41A67EBBD1B67EBB41A67EBB41A3FEE9671DED18E1A67EBB40000000009FF1B001B000E0012000E000C001300",
+              "held_item_id": 0,
+              "hp": 27,
+              "key": "2D356A90:99DE0D8A",
+              "level": 9,
+              "maxHP": 27,
+              "moves": [
+                33,
+                39,
+                145,
+                0
+              ],
+              "nickname": "SQUIRTLE",
+              "pp": [
+                35,
+                30,
+                30,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 0,
+              "species_id": 7,
+              "status_cond": 0
+            },
+            {
+              "active": false,
+              "blob_hex": "B62036268A0DDE99BBBBBBBBBBBBBBBBBBBB0202C4C9C8C8FFFFFF00ABA600001D2DE8BF3C2DE8BF1F2DE8BF7C2DE8BF442DE8BF3C65E8BF3C2DE8BE3C2DE8BF3C2DE8BF3C48EC9D54E5ABB23C2DE8BF0000000004FF1100110008000700090008000800",
+              "held_item_id": 0,
+              "hp": 17,
+              "key": "263620B6:99DE0D8A",
+              "level": 4,
+              "maxHP": 17,
+              "moves": [
+                33,
+                0,
+                0,
+                0
+              ],
+              "nickname": "AAAAAAAAAA",
+              "pp": [
+                35,
+                0,
+                0,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 1,
+              "species_id": 64,
+              "status_cond": 0
+            }
+          ],
+          "pc_boxes": [],
+          "pc_boxes_generation": 2,
+          "player": "a",
+          "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+          "rom_type": "firered",
+          "seq": 2,
+          "trade_prepare": false,
+          "trainer_name": "JONN",
+          "writes_enabled": true
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 6,
+        "conn": 2,
+        "msg": {
+          "area_id": "viridian_city",
+          "artifact_kind": "companion",
+          "badges": 0,
+          "ball_count": 4,
+          "battle_identity": true,
+          "event": "hello",
+          "foundation": "gen3_frlg",
+          "has_pokeballs": true,
+          "in_battle": false,
+          "loc_name": "viridian_city",
+          "ot_id": 2581466506,
+          "party": [
+            {
+              "active": false,
+              "blob_hex": "906A352D8A0DDE99CDCBCFC3CCCEC6BFFF730202C4C9C8C8FFFFFF0078F300001D67EBB4B666EBB41A3BEBB43B67CCB48B67EBB43979F5B41A67EBBD1B67EBB41A67EBB41A3FEE9671DED18E1A67EBB40000000009FF1B001B000E0012000E000C001300",
+              "held_item_id": 0,
+              "hp": 27,
+              "key": "2D356A90:99DE0D8A",
+              "level": 9,
+              "maxHP": 27,
+              "moves": [
+                33,
+                39,
+                145,
+                0
+              ],
+              "nickname": "SQUIRTLE",
+              "pp": [
+                35,
+                30,
+                30,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 0,
+              "species_id": 7,
+              "status_cond": 0
+            },
+            {
+              "active": false,
+              "blob_hex": "B62036268A0DDE99BBBBBBBBBBBBBBBBBBBB0202C4C9C8C8FFFFFF00ABA600001D2DE8BF3C2DE8BF1F2DE8BF7C2DE8BF442DE8BF3C65E8BF3C2DE8BE3C2DE8BF3C2DE8BF3C48EC9D54E5ABB23C2DE8BF0000000004FF1100110008000700090008000800",
+              "held_item_id": 0,
+              "hp": 17,
+              "key": "263620B6:99DE0D8A",
+              "level": 4,
+              "maxHP": 17,
+              "moves": [
+                33,
+                0,
+                0,
+                0
+              ],
+              "nickname": "AAAAAAAAAA",
+              "pp": [
+                35,
+                0,
+                0,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 1,
+              "species_id": 64,
+              "status_cond": 0
+            }
+          ],
+          "pc_boxes": [],
+          "pc_boxes_generation": 3,
+          "player": "a",
+          "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+          "rom_type": "firered",
+          "seq": 3,
+          "trade_prepare": true,
+          "trainer_name": "JONN",
+          "writes_enabled": true
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 74,
+        "conn": 2,
+        "msg": {
+          "event": "apply_ready",
+          "ok": true,
+          "player": "a",
+          "seq": 37,
+          "token": "t1"
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 76,
+        "conn": 2,
+        "msg": {
+          "area_id": "viridian_city",
+          "badges": 0,
+          "ball_count": 4,
+          "enemy_party": [],
+          "event": "tick",
+          "has_pokeballs": true,
+          "in_battle": false,
+          "is_doubles": false,
+          "is_trainer_battle": false,
+          "loc_name": "viridian_city",
+          "party_hidden": true,
+          "player": "a",
+          "seq": 38,
+          "trainer_name": "JONN"
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 320,
+        "conn": 2,
+        "msg": {
+          "event": "trade_done",
+          "new_key": "263620B6:6621F275",
+          "new_species": 65,
+          "player": "a",
+          "seq": 160,
+          "slot": 1,
+          "token": "t1"
+        }
+      }
+    ],
+    "b": [
+      {
+        "dir": "c2s",
+        "t": 2,
+        "conn": 1,
+        "msg": {
+          "area_id": "viridian_city",
+          "artifact_kind": "companion",
+          "badges": 0,
+          "ball_count": 0,
+          "battle_identity": true,
+          "event": "hello",
+          "foundation": "gen3_frlg",
+          "has_pokeballs": false,
+          "in_battle": false,
+          "loc_name": "viridian_city",
+          "ot_id": 1713500789,
+          "party": [
+            {
+              "active": false,
+              "blob_hex": "906A352D75F22166CDCBCFC3CCCEC6BFFF730202C4C9C8C8BCFFFF0078F30000E298144B4999144BE5C4144BC498334B7498144BC6860A4BE5981442E498144BE598144BE5C011698E212E71E598144B0000000009FF1B001B000E0012000E000C001300",
+              "held_item_id": 0,
+              "hp": 27,
+              "key": "2D356A90:6621F275",
+              "level": 9,
+              "maxHP": 27,
+              "moves": [
+                33,
+                39,
+                145,
+                0
+              ],
+              "nickname": "SQUIRTLE",
+              "pp": [
+                35,
+                30,
+                30,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 0,
+              "species_id": 7,
+              "status_cond": 0
+            },
+            {
+              "active": false,
+              "blob_hex": "B620362675F22166BBBBBBBBBBBBBBBBBBBB0202C4C9C8C8BCFFFF00ABA60000E2D21740C3D21740E0D2174083D21740BBD21740C39A1740C3D21741C3D21740C3D21740C3B71362AB1A544DC3D217400000000004FF1100110008000700090008000800",
+              "held_item_id": 0,
+              "hp": 17,
+              "key": "263620B6:6621F275",
+              "level": 4,
+              "maxHP": 17,
+              "moves": [
+                33,
+                0,
+                0,
+                0
+              ],
+              "nickname": "AAAAAAAAAA",
+              "pp": [
+                35,
+                0,
+                0,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 1,
+              "species_id": 64,
+              "status_cond": 0
+            }
+          ],
+          "pc_boxes": [],
+          "pc_boxes_generation": 1,
+          "player": "b",
+          "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+          "rom_type": "firered",
+          "seq": 1,
+          "trade_prepare": false,
+          "trainer_name": "JONNB",
+          "writes_enabled": true
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 4,
+        "conn": 1,
+        "msg": {
+          "area_id": "",
+          "artifact_kind": "companion",
+          "badges": 0,
+          "ball_count": 0,
+          "battle_identity": true,
+          "event": "hello",
+          "foundation": "gen3_frlg",
+          "has_pokeballs": false,
+          "in_battle": false,
+          "loc_name": "viridian_city_mart",
+          "ot_id": 1713500789,
+          "party": [
+            {
+              "active": false,
+              "blob_hex": "906A352D75F22166CDCBCFC3CCCEC6BFFF730202C4C9C8C8BCFFFF0078F30000E298144B4999144BE5C4144BC498334B7498144BC6860A4BE5981442E498144BE598144BE5C011698E212E71E598144B0000000009FF1B001B000E0012000E000C001300",
+              "held_item_id": 0,
+              "hp": 27,
+              "key": "2D356A90:6621F275",
+              "level": 9,
+              "maxHP": 27,
+              "moves": [
+                33,
+                39,
+                145,
+                0
+              ],
+              "nickname": "SQUIRTLE",
+              "pp": [
+                35,
+                30,
+                30,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 0,
+              "species_id": 7,
+              "status_cond": 0
+            },
+            {
+              "active": false,
+              "blob_hex": "B620362675F22166BBBBBBBBBBBBBBBBBBBB0202C4C9C8C8BCFFFF00ABA60000E2D21740C3D21740E0D2174083D21740BBD21740C39A1740C3D21741C3D21740C3D21740C3B71362AB1A544DC3D217400000000004FF1100110008000700090008000800",
+              "held_item_id": 0,
+              "hp": 17,
+              "key": "263620B6:6621F275",
+              "level": 4,
+              "maxHP": 17,
+              "moves": [
+                33,
+                0,
+                0,
+                0
+              ],
+              "nickname": "AAAAAAAAAA",
+              "pp": [
+                35,
+                0,
+                0,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 1,
+              "species_id": 64,
+              "status_cond": 0
+            }
+          ],
+          "pc_boxes": [],
+          "pc_boxes_generation": 2,
+          "player": "b",
+          "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+          "rom_type": "firered",
+          "seq": 2,
+          "trade_prepare": false,
+          "trainer_name": "JONNB",
+          "writes_enabled": true
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 6,
+        "conn": 1,
+        "msg": {
+          "area_id": "viridian_city",
+          "artifact_kind": "companion",
+          "badges": 0,
+          "ball_count": 4,
+          "battle_identity": true,
+          "event": "hello",
+          "foundation": "gen3_frlg",
+          "has_pokeballs": true,
+          "in_battle": false,
+          "loc_name": "viridian_city",
+          "ot_id": 1713500789,
+          "party": [
+            {
+              "active": false,
+              "blob_hex": "906A352D75F22166CDCBCFC3CCCEC6BFFF730202C4C9C8C8BCFFFF0078F30000E298144B4999144BE5C4144BC498334B7498144BC6860A4BE5981442E498144BE598144BE5C011698E212E71E598144B0000000009FF1B001B000E0012000E000C001300",
+              "held_item_id": 0,
+              "hp": 27,
+              "key": "2D356A90:6621F275",
+              "level": 9,
+              "maxHP": 27,
+              "moves": [
+                33,
+                39,
+                145,
+                0
+              ],
+              "nickname": "SQUIRTLE",
+              "pp": [
+                35,
+                30,
+                30,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 0,
+              "species_id": 7,
+              "status_cond": 0
+            },
+            {
+              "active": false,
+              "blob_hex": "B620362675F22166BBBBBBBBBBBBBBBBBBBB0202C4C9C8C8BCFFFF00ABA60000E2D21740C3D21740E0D2174083D21740BBD21740C39A1740C3D21741C3D21740C3D21740C3B71362AB1A544DC3D217400000000004FF1100110008000700090008000800",
+              "held_item_id": 0,
+              "hp": 17,
+              "key": "263620B6:6621F275",
+              "level": 4,
+              "maxHP": 17,
+              "moves": [
+                33,
+                0,
+                0,
+                0
+              ],
+              "nickname": "AAAAAAAAAA",
+              "pp": [
+                35,
+                0,
+                0,
+                0
+              ],
+              "pp_bonuses": 0,
+              "slot": 1,
+              "species_id": 64,
+              "status_cond": 0
+            }
+          ],
+          "pc_boxes": [],
+          "pc_boxes_generation": 3,
+          "player": "b",
+          "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+          "rom_type": "firered",
+          "seq": 3,
+          "trade_prepare": true,
+          "trainer_name": "JONNB",
+          "writes_enabled": true
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 70,
+        "conn": 1,
+        "msg": {
+          "event": "apply_ready",
+          "ok": true,
+          "player": "b",
+          "seq": 35,
+          "token": "t1"
+        }
+      },
+      {
+        "dir": "c2s",
+        "t": 76,
+        "conn": 1,
+        "msg": {
+          "event": "trade_done",
+          "new_key": "263620B6:6621F275",
+          "new_species": 0,
+          "player": "b",
+          "seq": 38,
+          "slot": 1,
+          "token": "t1"
+        }
+      }
+    ]
+  },
+  "events": {
+    "a": [
+      {
+        "environment": "SLINK_DUO_FR_TRADE_CANDIDATE",
+        "frame": 1,
+        "kind": "override",
+        "manifest_sha1": "5eee8ea51ad41f637bce48eccb4bfbbf0da79dcb",
+        "phase": "initial",
+        "production": false,
+        "ready": 0,
+        "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+        "run_lua_sha1": "e3eebde5570992143898824869d8336b1ff974e6",
+        "side": "a",
+        "sites_sha1": "6cbfc846db691e24b6dac29ec5baaced1dbca558",
+        "source_commit": "832aaa05272b650db904f316390c2cbcf50aaf04",
+        "value": "9f04aefac5ae4fdc998ce50a8be3038a"
+      },
+      {
+        "address": 134547476,
+        "frame": 778,
+        "kind": "hook",
+        "phase": "initial",
+        "side": "a",
+        "symbol": "TradeMons_body"
+      },
+      {
+        "address": 134562880,
+        "frame": 778,
+        "kind": "hook",
+        "phase": "initial",
+        "side": "a",
+        "symbol": "DoInGameTradeScene"
+      },
+      {
+        "address": 135062848,
+        "frame": 778,
+        "kind": "hook",
+        "phase": "initial",
+        "side": "a",
+        "symbol": "TradeEvolutionScene"
+      },
+      {
+        "address": 135111524,
+        "frame": 778,
+        "kind": "hook",
+        "phase": "initial",
+        "side": "a",
+        "symbol": "TrySavingData"
+      },
+      {
+        "count": 2,
+        "counter": 4,
+        "frame": 778,
+        "kind": "boot_party",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_boot_party_1.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 4,
+        "frame": 778,
+        "kind": "boot",
+        "phase": "initial",
+        "production": false,
+        "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+        "side": "a"
+      },
+      {
+        "frame": 910,
+        "kind": "ready",
+        "phase": "initial",
+        "production": false,
+        "side": "a"
+      },
+      {
+        "counter": 4,
+        "frame": 973,
+        "kind": "tx",
+        "message": {
+          "event": "trade_request",
+          "player": "a",
+          "seq": 6
+        },
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 4,
+        "frame": 975,
+        "kind": "tx",
+        "message": {
+          "choice": 0,
+          "event": "menu_result",
+          "player": "a",
+          "seq": 7,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 4,
+        "frame": 977,
+        "kind": "tx",
+        "message": {
+          "event": "mon_chosen",
+          "player": "a",
+          "seq": 8,
+          "slot": 1,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "frame": 992,
+        "kind": "rx",
+        "message": {
+          "cmd": "apply_prepare",
+          "old_key": "263620B6:99DE0D8A",
+          "slot": 1,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 4,
+        "frame": 993,
+        "kind": "prepare",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_prepare_2.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 4,
+        "frame": 1440,
+        "kind": "save_entry",
+        "ordinal": 1,
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_save_entry_3.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 5,
+        "frame": 1708,
+        "kind": "flash",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flash_4.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 5,
+        "frame": 1708,
+        "kind": "flush_native",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flush_native_5.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 5,
+        "frame": 1708,
+        "kind": "flush",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flushed_6.bin",
+        "phase": "initial",
+        "side": "a",
+        "status": "returned"
+      },
+      {
+        "counter": 5,
+        "frame": 1827,
+        "kind": "tx",
+        "message": {
+          "event": "apply_ready",
+          "ok": true,
+          "player": "a",
+          "seq": 37,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "frame": 1828,
+        "kind": "rx",
+        "message": {
+          "blob_hex": "b620362675f22166bbbbbbbbbbbbbbbbbbbb0202c4c9c8c8bcffff00aba60000e2d21740c3d21740e0d2174083d21740bbd21740c39a1740c3d21741c3d21740c3d21740c3b71362ab1a544dc3d217400000000004ff1100110008000700090008000800",
+          "cmd": "apply_trade",
+          "old_key": "263620B6:99DE0D8A",
+          "slot": 1,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 5,
+        "frame": 1830,
+        "kind": "scene",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_scene_7.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "frame": 1830,
+        "guard": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_guard_9.bin",
+        "kind": "journal_intent",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_journal_8.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 5,
+        "frame": 1830,
+        "kind": "scene_enter",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_scene_enter_10.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 5,
+        "frame": 3649,
+        "kind": "commit",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_commit_11.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 5,
+        "frame": 3649,
+        "kind": "evolution",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_evolution_12.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 5,
+        "frame": 5204,
+        "kind": "save_entry",
+        "ordinal": 2,
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_save_entry_13.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 6,
+        "frame": 5472,
+        "kind": "flash",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flash_14.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 6,
+        "frame": 5472,
+        "kind": "flush_native",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flush_native_15.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 6,
+        "frame": 5472,
+        "kind": "flush",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flushed_16.bin",
+        "phase": "initial",
+        "side": "a",
+        "status": "returned"
+      },
+      {
+        "counter": 6,
+        "frame": 5472,
+        "kind": "flash",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flash_17.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 6,
+        "frame": 5472,
+        "kind": "flush_native",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flush_native_18.bin",
+        "phase": "initial",
+        "side": "a"
+      },
+      {
+        "counter": 6,
+        "frame": 5472,
+        "kind": "flush",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flushed_19.bin",
+        "phase": "initial",
+        "side": "a",
+        "status": "returned"
+      },
+      {
+        "counter": 6,
+        "frame": 5472,
+        "kind": "tx",
+        "message": {
+          "event": "trade_done",
+          "new_key": "263620B6:6621F275",
+          "new_species": 65,
+          "player": "a",
+          "seq": 160,
+          "slot": 1,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "a"
+      }
+    ],
+    "b": [
+      {
+        "environment": "SLINK_DUO_FR_TRADE_CANDIDATE",
+        "frame": 1,
+        "kind": "override",
+        "manifest_sha1": "5eee8ea51ad41f637bce48eccb4bfbbf0da79dcb",
+        "phase": "initial",
+        "production": false,
+        "ready": 0,
+        "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+        "run_lua_sha1": "e3eebde5570992143898824869d8336b1ff974e6",
+        "side": "b",
+        "sites_sha1": "6cbfc846db691e24b6dac29ec5baaced1dbca558",
+        "source_commit": "832aaa05272b650db904f316390c2cbcf50aaf04",
+        "value": "9f04aefac5ae4fdc998ce50a8be3038a"
+      },
+      {
+        "address": 134547476,
+        "frame": 778,
+        "kind": "hook",
+        "phase": "initial",
+        "side": "b",
+        "symbol": "TradeMons_body"
+      },
+      {
+        "address": 134562880,
+        "frame": 778,
+        "kind": "hook",
+        "phase": "initial",
+        "side": "b",
+        "symbol": "DoInGameTradeScene"
+      },
+      {
+        "address": 135062848,
+        "frame": 778,
+        "kind": "hook",
+        "phase": "initial",
+        "side": "b",
+        "symbol": "TradeEvolutionScene"
+      },
+      {
+        "address": 135111524,
+        "frame": 778,
+        "kind": "hook",
+        "phase": "initial",
+        "side": "b",
+        "symbol": "TrySavingData"
+      },
+      {
+        "count": 2,
+        "counter": 4,
+        "frame": 778,
+        "kind": "boot_party",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_boot_party_1.bin",
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "counter": 4,
+        "frame": 778,
+        "kind": "boot",
+        "phase": "initial",
+        "production": false,
+        "rom_sha1": "41c66e6b8dceffd295ad8355e3b0a39ecea106f3",
+        "side": "b"
+      },
+      {
+        "frame": 910,
+        "kind": "ready",
+        "phase": "initial",
+        "production": false,
+        "side": "b"
+      },
+      {
+        "counter": 4,
+        "frame": 992,
+        "kind": "tx",
+        "message": {
+          "choice": 1,
+          "event": "menu_result",
+          "player": "b",
+          "seq": 7,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "frame": 994,
+        "kind": "rx",
+        "message": {
+          "cmd": "apply_prepare",
+          "old_key": "263620B6:6621F275",
+          "slot": 1,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "counter": 4,
+        "frame": 995,
+        "kind": "prepare",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_prepare_2.bin",
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "counter": 4,
+        "frame": 1440,
+        "kind": "save_entry",
+        "ordinal": 1,
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_save_entry_3.bin",
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "counter": 5,
+        "frame": 1708,
+        "kind": "flash",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_flash_4.bin",
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "counter": 5,
+        "frame": 1708,
+        "kind": "flush_native",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_flush_native_5.bin",
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "counter": 5,
+        "frame": 1708,
+        "kind": "flush",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_flushed_6.bin",
+        "phase": "initial",
+        "side": "b",
+        "status": "returned"
+      },
+      {
+        "counter": 5,
+        "frame": 1827,
+        "kind": "tx",
+        "message": {
+          "event": "apply_ready",
+          "ok": true,
+          "player": "b",
+          "seq": 35,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "frame": 1862,
+        "kind": "rx",
+        "message": {
+          "blob_hex": "b62036268a0dde99bbbbbbbbbbbbbbbbbbbb0202c4c9c8c8ffffff00aba600001d2de8bf3c2de8bf1f2de8bf7c2de8bf442de8bf3c65e8bf3c2de8be3c2de8bf3c2de8bf3c48ec9d54e5abb23c2de8bf0000000004ff1100110008000700090008000800",
+          "cmd": "apply_trade",
+          "old_key": "263620B6:6621F275",
+          "slot": 1,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "counter": 5,
+        "frame": 1864,
+        "kind": "tx",
+        "message": {
+          "event": "trade_done",
+          "new_key": "263620B6:6621F275",
+          "new_species": 0,
+          "player": "b",
+          "seq": 38,
+          "slot": 1,
+          "token": "t1"
+        },
+        "phase": "initial",
+        "side": "b"
+      },
+      {
+        "counter": 5,
+        "frame": 1865,
+        "kind": "withdraw",
+        "path": "patch/build/t5_9f04aefac5ae4fdc998ce50a8be3038a_b_initial_withdraw_7.bin",
+        "phase": "initial",
+        "side": "b"
+      }
+    ]
+  },
+  "slink_gen3_trade.log": {
+    "sha256": "884c9f7accc23c430bfd1b810f6d4e6c6551a029730a5f44f2f3fb420a9ad0bd"
+  },
+  "slink_gen3_trade.guard": {
+    "sha256": "7722347f220a1a00b0b8e278b0ceb71ec96275fb101d1816314f6c5cea5459a4"
+  },
+  "received_party": {
+    "path": "a_received_party.bin",
+    "sha256": "174af462873efa5448e8544a0dbac18e0b230b8ad93a858df390224392c069ae",
+    "source_path": "patch\\build\\t5_9f04aefac5ae4fdc998ce50a8be3038a_a_initial_flushed_19.bin"
+  }
+}

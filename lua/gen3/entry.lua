@@ -384,7 +384,8 @@ local function build_production(deps, c)
             end,
             in_battle = function() return session and session.driver.in_battle() or false end,
             trade_safe = function()
-                return session ~= nil and not session.driver.in_battle() and safety:check(nil,"overworld") == true
+                if not session or session.driver.in_battle() then return false,"trade field unavailable" end
+                return safety:check(nil,"overworld")
             end,
             trade_recovery_clear = function()
                 local journal = io_.trade_journal

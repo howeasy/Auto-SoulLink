@@ -573,6 +573,13 @@ def test_clean_rom_never_advertises_companion_trade_prepare(pack, title, monkeyp
 
 def server_and_clients_applying(monkeypatch, world, carrier, delay_before_dispatch=0):
     other, other_carrier, _ = durable_client(monkeypatch, player="b", mons=[PARTNER])
+    # The completion path now sends a real visible HELLO. Keep this MODEL
+    # trainer consistent with B's owned fixture instead of relying on reports
+    # that used to bypass a second identity check.
+    other.set_trainer(PARTNER["ot_id"], "B")
+    other_carrier.journal_model.journal.bind(other_carrier.journal_model.journal, "model-run", f"{PARTNER['ot_id']:08X}")
+    other.client.hello_sent = False
+    other.step()
     state = make_state_with_link(KB, KP)
     state.links[0].a.species, state.links[0].b.species = 5, 25
     state.handle_event("a", world.events("hello")[-1])
@@ -718,7 +725,10 @@ def test_accepted_apply_outlives_ready_deadline_without_splitting_pair(monkeypat
     # Replayed production reports from either client cannot commit a second time.
     state.handle_event("a", world.events("trade_done")[-1])
     state.handle_event("b", other.events("trade_done")[-1])
-    assert [(o["token"], o["outcome"]) for o in outcomes] == [(token, "committed")]
+    # A visible HELLO is recorded as checkpoint recovery before its party
+    # evidence settles. Only one terminal commit may result, including replays.
+    assert all(o["outcome"] in ("uncertain", "committed") for o in outcomes)
+    assert [(o["token"], o["outcome"]) for o in outcomes if o["outcome"] != "uncertain"] == [(token, "committed")]
     assert state.trade_problem() is None
 
 

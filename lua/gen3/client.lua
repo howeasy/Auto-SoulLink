@@ -1468,6 +1468,13 @@ function Client.new(p)
                     seed_known(party); rebaseline(party)
                     st.trade_settle_until = io.framecount() + st.trade_limits.settle
                 end
+                -- The write-ahead interval withheld our party from the server.
+                -- Publish the now-durable (or proved unchanged) party before
+                -- releasing trade_done; a hidden tick is never cleared by the
+                -- terminal report itself. Core sends HELLO before owed reports.
+                if t.journaled and journal and journal:ready() and not journal:hidden() then
+                    session.hello_sent = false
+                end
             end})
     end
     C.apply_prepare = function(cmd)

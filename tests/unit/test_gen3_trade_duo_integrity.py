@@ -100,6 +100,17 @@ def test_prepare_overwrites_the_exact_existing_live_pack_and_starts_all_sites(pr
     assert len(hooks) == 21
 
 
+def test_each_preparation_has_an_isolated_journal_and_preserves_prior_evidence(prepared):
+    directory, first = prepared
+    old = ROOT / (first["journal_path"] + ".log")
+    evidence = (ROOT / "tests/fixtures/gen3/t5_832_failure/slink_gen3_trade.log").read_bytes()
+    old.write_bytes(evidence)
+    second = t5.prepare(ROOT, directory)
+    assert second["journal_path"] != first["journal_path"]
+    assert old.read_bytes() == evidence
+    assert not (ROOT / (second["journal_path"] + ".log")).exists()
+
+
 @pytest.mark.parametrize("part", ["manifest", "sites", "source"])
 def test_prelaunch_refuses_changed_file_digest_and_revert_restores_pass(
     prepared, tmp_path, monkeypatch, part
