@@ -325,17 +325,26 @@ python tools/e2e_duo.py --list                # print exactly what `all` would r
 `--scenario all` means "all scenarios that apply to `--game`", not "every key in `SCENARIOS`" —
 the dict now holds Gen 1 and Gen 2 entries too. `scenarios_for()` in `tools/e2e_duo.py` is the
 single source of truth for that question (a scenario with no `games` key applies to every title),
-and `tests/e2e/test_duo.py` imports it rather than hand-rolling a second copy — the two answers
-had drifted apart when it did. `all` **names** what it filtered out rather than silently
+and the Gen 3 wrapper's list is pinned against `scenarios_for()` rather than hand-rolled —
+`tests/unit/test_e2e_duo_scenario_selection.py::test_gen3_rr_selection_is_exactly_the_radical_red_set`
+is the drift guard. `all` **names** what it filtered out rather than silently
 narrowing, because "all passed" over an empty selection is the worst way to report no coverage.
 
 Scenarios: `faint`, `boxsync`, `trade`, `ghost` (runs with `--overworld-presence`), `explode` (runs with `--explode-mode`), `infopanel` (three injected pairs, then drives the native SOULLINK menu end to end: the `link_panel` payload crosses the wire, renders as pairs, opens from the START menu, pages on A and closes on B). Each instance loads a generated stub (`patch/build/duo_{a,b}.lua`) that runs the **real production client** plus a scenario coroutine from `lua/tests/duo/`. Windows-only; needs `E:/Howard/Bizhawk` and the patched ROM.
 
-The pytest wrapper `tests/e2e/test_duo.py` parametrizes the same six scenarios (it derives them from `scenarios_for("gen3_rr")`, so the list cannot drift from the runner's) but is skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
+The pytest wrapper `tests/e2e/test_duo_gen3.py` covers the new client per title — explicit
+`gen3_frlg`, `gen3_lgfr` and `gen3_rr` tuples plus one `gen3_emerald` case, each cross-checked
+against `scenarios_for()` by the unit suite so the list cannot drift from the runner's. It is
+skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
 
 ```bash
-SLINK_E2E=1 pytest tests/e2e/test_duo.py -q   # Gen 3 only; `tests/e2e/` also picks up Gen 1 + Gen 2
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py -q   # Gen 3 only; `tests/e2e/` also picks up Gen 1 + Gen 2
 ```
+
+The savestate-driven wrapper `tests/e2e/test_duo.py` was deleted with the old Gen 3 client
+(`archive/gen3-old-client`). It was already broken: its `_states_for` read a `savestate` key that
+no current scenario declares — only the two retired `faint`/`boxsync` rows ever carried one — so
+every parameter raised `KeyError`.
 
 ### Desync safeguards (Gen 3)
 

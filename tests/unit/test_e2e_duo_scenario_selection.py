@@ -628,9 +628,10 @@ def test_every_game_runs_something(game):
 
 
 def test_savestate_games_are_never_given_a_batteryless_scenario():
-    """This direction IS load-bearing: tests/e2e/test_duo.py KeyErrors in `_states_for` on a
-    scenario with no savestate, so selecting one for Gen 3 breaks collection of the whole
-    module rather than failing a single test.
+    """This direction IS load-bearing: the savestate Gen 3 wrapper that the old client had
+    (`tests/e2e/test_duo.py`, deleted with `archive/gen3-old-client`) read
+    `SCENARIOS[scenario]["savestate"]` directly, so handing a savestate-boot game a scenario
+    that declares none failed every parameter in the module, not one test.
 
     Every current GAMES row battery-boots (the old Gen 3 client's savestate row retired with
     lua/tests/duo/duo_main.lua to tag archive/gen3-old-client, C5-5/46a5f597), so this loop runs

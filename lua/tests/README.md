@@ -38,7 +38,7 @@ BizHawk Lua test scripts. Three families:
   Red as A / Blue as B) or `gen2_new` (Crystal/Gold/Silver pairings).
 
   ```bash
-  SLINK_E2E=1 pytest tests/e2e/test_duo.py -q               # Gen 3
+  SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py -q          # Gen 3
   SLINK_E2E=1 pytest tests/e2e/test_duo_gen1_new.py -q      # Gen 1 (rewritten client, 18 scenarios)
   SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py -q      # Gen 2
   python tools/e2e_duo.py --game gen2_new --scenario link    # one scenario, directly
