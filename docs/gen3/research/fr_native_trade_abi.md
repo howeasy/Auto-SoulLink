@@ -234,3 +234,35 @@ post-save failure. These are MODEL controls. The private FR ARM composition
 build verifies exact clean-ROM and detour anchors. Neither proves a live duo,
 native party chooser behavior, or production admission. READY stays 0 and no
 UPS is published by this milestone.
+
+## Private panel checkpoint extension
+
+The subsequent panel composition adds capability bit 1 to the private candidate
+(combined mask 3); the immutable trade-core SHA above remains its baseline.
+READY remains 0 and the receipt remains non-production. This extension is
+SOURCE/MODEL/build evidence only: native UI screenshots, navigation, allocator
+failure recovery and live trade/panel coexistence are not yet qualified.
+
+Opcode 27 binds INFO.request_seq to the mailbox seq and INFO.session_epoch to
+the mailbox epoch. It validates enabled, 1..6 rows and bounded EOS (including
+the page slot), privately copies the full INFO record, and ACKs acceptance.
+ACK is not DRAWN. Native publishes state 1 while opening, state 2 plus drawn_seq
+after drawing, then state 0 plus closed_seq/result after releasing field controls.
+Result 0 means A/next; 0x7F means B/close; 0xFF denotes allocation failure before
+drawing. Host staging changes cannot mutate the owned display snapshot; an epoch
+or request mismatch suppresses publication into a newer host record.
+
+The normal-field menu gains action 9, SOULLINK, before EXIT only when valid data
+is staged and trade ownership is IDLE/DONE. The builder relocates the two ROM
+tables, preserving all nine original entries (including link-room PLAYER), and
+pins five table references plus the normal-field setup entry. Link/Union Room/
+Safari builders are unchanged. Menu selection opens the current staged request
+without consuming a mailbox job; consumers must observe INFO state transitions,
+including reopenings of the same staged request. The menu's fade is restored
+before starting the field panel.
+
+Private panel state occupies arena+0xA00 through its compile-time checked extent;
+native runtime scratch is +0x940. Text stays owned through native UI closure.
+The renderer retains the existing six-row, 27x13-tile panel layout with paired
+rows, status labels and HP bars. Engine addresses and normal-menu behavior are
+pinned to vanilla FR source/symbols; RR v1 code and published UPS are unchanged.

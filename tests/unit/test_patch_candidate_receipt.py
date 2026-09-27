@@ -26,4 +26,13 @@ def test_private_fr_candidate_discloses_unqualified_heap_clamp(tmp_path):
     assert receipt["arena_static_check"] == "skipped: heap clamp unqualified"
     assert receipt["production"] is False
     assert receipt["ready"] == 0
-    assert receipt["capabilities"] == 1
+    assert receipt["capabilities"] == 3
+    assert len(receipt["panel_detours"]) == 6
+    patched = (ROOT / "patch/build/candidate-firered-trade/probe.gba").read_bytes()
+    clean = rom.read_bytes()
+    for key, size in (("actions",72),("descriptions",36)):
+        table = receipt["panel_tables"][key]
+        start = table["address"] - 0x08000000
+        original = table["original_address"] - 0x08000000
+        assert patched[start:start+size] == clean[original:original+size]
+        assert int.from_bytes(patched[start+size:start+size+4],"little") >= 0x08000000

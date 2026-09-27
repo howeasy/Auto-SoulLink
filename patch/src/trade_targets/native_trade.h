@@ -178,6 +178,9 @@ __attribute__((section(".text.entry"),used)) void slink_native_heap(void *heap,u
     ((void(*)(void *,uint32_t))(SLINK_TARGET_PUT_FIRST_HEADER|1u))(heap,size);
     /* Do not erase transaction state when save/menu code reinitializes gHeap. */
 }
+#if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+#include "native_panel.h"
+#endif
 __attribute__((used)) void slink_native_frame(void)
 {
     if (((NtBool)(SLINK_TARGET_SAVE_FAILED_SCREEN|1u))() || ((NtBool)(SLINK_TARGET_HELP_CALLBACK|1u))()) return;
@@ -187,9 +190,15 @@ __attribute__((used)) void slink_native_frame(void)
         NT_MB->abi_version=SLINK_ABI_VERSION;NT_MB->capabilities=0;
 #elif SLINK_TARGET_READY || defined(SLINK_NATIVE_TRADE_CANDIDATE)
         slink_trade_advertise(NT_MB);
+#if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+        NT_MB->capabilities |= SLINK_CAP_INFO_PANEL;
+#endif
 #else
         NT_MB->signature=SLINK_SIGNATURE;
         NT_MB->abi_version=SLINK_ABI_VERSION;NT_MB->capabilities=0;
+#endif
+#if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+        slink_native_panel_service();
 #endif
         slink_trade_service(NT_STATE,NT_MB,NT_WITNESS,
             (const volatile uint8_t *)(NT_BASE+SLINK_BLOB_OFFSET),&nt_engine);

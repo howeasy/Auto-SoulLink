@@ -135,12 +135,46 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
     if found != [f"{spec['CODE_CANDIDATE']:08x}"]:
         raise ValueError("probe entry is not at the verified payload candidate")
     run([OBJCOPY, "-O", "binary", str(elf), str(binary)])
-    blob = binary.read_bytes()
+    blob = bytearray(binary.read_bytes())
+    panel_detours, panel_tables = [], {}
+    if trade_candidate:
+        symbols = {line.split()[-1]: int(line.split()[0], 16)
+                   for line in symbol_text.splitlines() if len(line.split()) == 3}
+        for key, count, table_key, symbol, additions in (
+            ("actions", 72, "PANEL_ACTION_TABLE", "slink_panel_actions",
+             (symbols["slink_panel_label"], symbols["slink_panel_menu_callback"] | 1)),
+            ("descriptions", 36, "PANEL_DESC_TABLE", "slink_panel_descriptions",
+             (symbols["slink_panel_description"],)),
+        ):
+            offset = symbols[symbol] - spec["CODE_CANDIDATE"]
+            length = count + 4 * len(additions)
+            if offset < 0 or offset + length > len(blob) or any(blob[offset:offset+length]):
+                raise ValueError("panel table placeholder outside payload or not empty")
+            original = spec[table_key] - ROM_BASE
+            blob[offset:offset+count] = clean[original:original+count]
+            for index, word in enumerate(additions):
+                blob[offset+count+4*index:offset+count+4*index+4] = word.to_bytes(4,"little")
+            panel_tables[key] = {"address": symbols[symbol], "original_address": spec[table_key]}
+            refs = spec["PANEL_ACTION_REFS" if key == "actions" else "PANEL_DESC_REFS"]
+            for ref in refs.split(","):
+                address = int(ref, 0)
+                expected = spec[table_key].to_bytes(4,"little")
+                validate_detour(clean,address,expected)
+                panel_detours.append({"address":address,"original":expected.hex(),
+                                      "replacement":symbols[symbol].to_bytes(4,"little").hex()})
+        address = spec["PANEL_NORMAL_MENU"]
+        validate_detour(clean,address,bytes.fromhex(spec["PANEL_NORMAL_BYTES"]))
+        panel_detours.append({"address":address,"original":spec["PANEL_NORMAL_BYTES"],
+                              "replacement":thumb_entry_jump(address,symbols["slink_panel_normal_menu"]).hex()})
     offset = spec["CODE_CANDIDATE"] - ROM_BASE
     if not blob or len(blob) > 0x14000 or clean[offset:offset + len(blob)] != b"\xff" * len(blob):
         raise ValueError("probe payload candidate not free/within linker bound")
     data = bytearray(clean)
     data[offset:offset + len(blob)] = blob
+    for detour in panel_detours:
+        start = detour["address"] - ROM_BASE
+        replacement = bytes.fromhex(detour["replacement"])
+        data[start:start+len(replacement)] = replacement
     hook = spec["HEAP_INIT"] - ROM_BASE
     data[hook:hook + 8] = thumb_entry_jump(spec["HEAP_INIT"], spec["CODE_CANDIDATE"])
     frame_receipt = None
@@ -166,7 +200,8 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
                "target": title, "mode": mode, "ready": spec["READY"],
                "production": False,
                "arena_static_check": "skipped: heap clamp unqualified",
-               "capabilities": 1 if trade_candidate else 0,
+               "capabilities": 3 if trade_candidate else 0,
+               "panel_detours": panel_detours, "panel_tables": panel_tables,
                "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
                "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),
                "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],
