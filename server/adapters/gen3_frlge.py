@@ -1079,11 +1079,14 @@ _WILD_METHODS = (
 CLEAN_CONTENT_SHA256 = {
     "firered": "70693903debc1465942e4f1d5c9fba8cce7e9d03421f978dd359347a49d277ee",
     "leafgreen": "7ef4b95991a71ff59b86bcfa0685d274ed95b8d23929d18e0146ccdb2a53c2d0",
-    "emerald": _emerald_json("species_rules.json").get("clean_content_sha256"),
+    "emerald": gen3_rom_tables.EMERALD_SPECIES_RULES_FACTS["clean_content_sha256"],
 }
 # sha256 of the clean FR and LG (identical) evolution table and of the rule fields of
 # gSpeciesInfo, as projected by _evolutions_digest/_species_rules_digest.
 # tests/unit/test_gen3_rom_ingest.py re-derives both from the pinned clean dumps.
+# Emerald's independently extracted rule/evolution pins currently coincide by design:
+# the fixed fields agree after title-specific Deoxys normalization. Its own facts file
+# remains authoritative; equality is not permission to substitute these FR/LG constants.
 _EVOLUTIONS_SHA256 = "cdbbae339af1f2c071349d709d92abae6b5915702f44f51011abc0b472cc7c5d"
 _SPECIES_RULES_SHA256 = "bece12dddc1d36701f817930d8bb6effbd73213db94bec27ac4b96a70238287f"
 
@@ -1181,9 +1184,9 @@ def decode_verified(rom, title: str) -> dict:
     tables = gen3_rom_tables.decode_rom_tables(rom, title)
     reader = gen3_rom_tables._Rom(rom)
     bad = []
-    facts = _emerald_json("species_rules.json") if title == "emerald" else {}
-    evolutions_pin = facts.get("evolutions_sha256") if title == "emerald" else _EVOLUTIONS_SHA256
-    rules_pin = facts.get("normalised_species_rules_sha256") if title == "emerald" else _SPECIES_RULES_SHA256
+    facts = gen3_rom_tables.EMERALD_SPECIES_RULES_FACTS if title == "emerald" else {}
+    evolutions_pin = facts["evolutions_sha256"] if title == "emerald" else _EVOLUTIONS_SHA256
+    rules_pin = facts["normalised_species_rules_sha256"] if title == "emerald" else _SPECIES_RULES_SHA256
     if _evolutions_digest(tables["evolutions"]) != evolutions_pin:
         bad.append("evolutions")
     addr, size = _symbol(title, "gSpeciesInfo")

@@ -82,10 +82,16 @@ FRLG_ZERO_SECOND_ABILITY_SPECIES = frozenset(_species_rules_facts["zero_second_a
 SPECIES_RULE_BYTES = tuple(row["offset"] for row in _species_rules_facts["bytes"] if row["projected"])
 
 
-@cache
-def _emerald_species_rules_facts() -> dict:
-    path = Path(__file__).resolve().parents[2] / "data/games/gen3_emerald/species_rules.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+_EMERALD_SPECIES_RULES_PATH = Path(__file__).resolve().parents[2] / "data/games/gen3_emerald/species_rules.json"
+with _EMERALD_SPECIES_RULES_PATH.open(encoding="utf-8") as _rules_file:
+    EMERALD_SPECIES_RULES_FACTS = json.load(_rules_file)
+# These are required admission facts, not optional display data. Refuse a broken
+# installation at import instead of leaving a None pin to look like a changed ROM.
+for _pin_name in ("normalised_species_rules_sha256", "evolutions_sha256", "clean_content_sha256"):
+    _pin_value = EMERALD_SPECIES_RULES_FACTS[_pin_name]
+    if (not isinstance(_pin_value, str) or len(_pin_value) != 64
+            or any(c not in "0123456789abcdef" for c in _pin_value)):
+        raise ValueError(f"invalid Emerald species_rules.json {_pin_name}")
 
 
 def normalised_species_rules(raw: bytes, title: str) -> bytes:
@@ -98,7 +104,7 @@ def normalised_species_rules(raw: bytes, title: str) -> bytes:
     if title not in DEOXYS_FORME:
         raise ValueError(f"unsupported Gen 3 title: {title!r}")
     if title == "emerald":
-        facts = _emerald_species_rules_facts()
+        facts = EMERALD_SPECIES_RULES_FACTS
         zero_slots = frozenset(facts["zero_second_ability_species"])
         rule_bytes = tuple(row["offset"] for row in facts["bytes"] if row["projected"])
     else:

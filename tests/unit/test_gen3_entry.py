@@ -277,7 +277,8 @@ def test_admission_table_has_no_duplicate_digest_in_the_shipped_packs():
     assert len(table) > 0
 
 
-def test_admission_refuses_an_ambiguous_rom(tmp_path):
+@pytest.mark.parametrize("other_pack,other_title", (("gen3_frlg", "leafgreen"), ("gen3_emerald", "emerald")))
+def test_admission_refuses_an_ambiguous_rom(tmp_path, other_pack, other_title):
     """Two artifacts that pin the same bytes cannot be told apart, so admission refuses
     instead of picking one. The shipped packs are not ambiguous (see the test above), so
     the branch is exercised against a doctored copy of the pack tree."""
@@ -286,10 +287,11 @@ def test_admission_refuses_an_ambiguous_rom(tmp_path):
     # already covers it (no separate copytree call for it).
     for pack, source in PACKS.items():
         shutil.copytree(source, tmp_path / "data" / "games" / pack)
-    doctored = tmp_path / "data" / "games" / "gen3_frlg" / "engine_signals.json"
+    doctored = tmp_path / "data" / "games" / other_pack / "engine_signals.json"
     blob = json.loads(doctored.read_text(encoding="utf-8"))
-    blob["titles"]["leafgreen"]["artifacts"]["clean"]["sites"] = \
-        blob["titles"]["firered"]["artifacts"]["clean"]["sites"]
+    source = json.loads((PACKS["gen3_frlg"] / "engine_signals.json").read_text(encoding="utf-8"))
+    blob["titles"][other_title]["artifacts"]["clean"]["sites"] = \
+        source["titles"]["firered"]["artifacts"]["clean"]["sites"]
     doctored.write_text(json.dumps(blob), encoding="utf-8")
 
     world = World(pack="gen3_frlg", title="firered", build=False)
@@ -300,7 +302,7 @@ def test_admission_refuses_an_ambiguous_rom(tmp_path):
                           *[rom.get(int(o) + i, 0) for i in range(int(n))]))
     assert got is None
     assert "ambiguous" in why
-    assert "gen3_frlg/firered/clean" in why and "gen3_frlg/leafgreen/clean" in why
+    assert "gen3_frlg/firered/clean" in why and f"{other_pack}/{other_title}/clean" in why
 
 
 def test_named_family_fallback_by_header_code():

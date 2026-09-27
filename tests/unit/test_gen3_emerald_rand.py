@@ -6,6 +6,8 @@ import json
 import os
 import re
 import struct
+import subprocess
+import sys
 from collections import Counter
 from pathlib import Path
 
@@ -267,3 +269,120 @@ def test_pure_pairing_does_not_normalize_foreign_tables_for_emerald(tmp_path):
     server = SLinkServer(data_dir=str(tmp_path))
     server.state.rom_type, server.state.artifact_kind = "emerald", "clean"
     assert "Mixed artifact kinds" in server._mixed_games_error("a", "emerald", "rand", rom_content=report)
+
+
+def test_protocol_describes_emerald_randomized_admission_and_title_aware_pairing():
+    protocol = (ROOT / "docs/protocol.md").read_text(encoding="utf-8")
+    assert protocol.count("randomized FR/LG and Emerald") >= 2
+    assert "pairing_kind_for_title" in protocol
+    assert "Emerald, RR, expansion" not in protocol
+
+
+def test_manager_identification_and_preflight_refuse_emerald_by_name_without_a_rom(tmp_path):
+    from server import upr_pipeline as U
+
+    raw = bytearray(0xC0)
+    raw[0xAC:0xB0] = b"BPEE"
+    source = tmp_path / "emerald.gba"
+    source.write_bytes(raw)
+    info = U.describe_rom(str(source), jar_fork=True)
+    assert info["clean"] is False
+    assert "Emerald randomization is not enabled in Manager" in info["title"]
+    check = U.preflight("", {"a": str(source), "b": str(source)})
+    assert check["ok"] is False
+    assert check["roms"]["a"]["title"] == info["title"]
+    assert b"BPEE" not in U.GEN3_CODES and U.gen3_identify(bytes(raw)) is None
+
+
+def test_manager_provision_surfaces_the_emerald_refusal_before_java(tmp_path, monkeypatch):
+    from server import cartridges, upr_pipeline as U
+
+    raw = bytearray(0xC0)
+    raw[0xAC:0xB0] = b"BPEE"
+    source = tmp_path / "emerald.gba"
+    source.write_bytes(raw)
+    calls = []
+    monkeypatch.setattr(U, "randomize", lambda *a, **kw: calls.append("Java"))
+    with pytest.raises(cartridges.CartridgeError, match="Emerald randomization is not enabled in Manager"):
+        cartridges.provision(str(tmp_path / "run"), {"a": str(source), "b": str(source)},
+                             companion=False, randomize={"settings_path": "unused.rnqs"})
+    assert calls == []
+
+
+@pytest.mark.parametrize("fault", ("missing_file", "missing_pin"))
+def test_emerald_rule_facts_are_required_at_import(fault):
+    # A subprocess isolates the import without replacing the module held by other tests.
+    script = '''
+import io, json
+from pathlib import Path
+path = Path('data/games/gen3_emerald/species_rules.json')
+facts = json.loads(path.read_text())
+original = Path.open
+def opened(self, *args, **kwargs):
+    if self.as_posix().endswith('data/games/gen3_emerald/species_rules.json'):
+        if FAULT == 'missing_file':
+            raise FileNotFoundError('Emerald species_rules fixture absent')
+        facts.pop('evolutions_sha256', None)
+        return io.StringIO(json.dumps(facts))
+    return original(self, *args, **kwargs)
+Path.open = opened
+import server.adapters.gen3_rom_tables
+'''
+    result = subprocess.run([sys.executable, "-c", "FAULT=" + repr(fault) + "\n" + script],
+                            cwd=ROOT, capture_output=True, text=True, timeout=30)
+    assert result.returncode != 0, "missing Emerald rule facts silently survived import"
+    assert ("FileNotFoundError" if fault == "missing_file" else "evolutions_sha256") in result.stderr
+
+
+def test_emerald_pins_are_read_from_its_file_and_drive_rule_refusal(emerald_rom, monkeypatch):
+    from server.adapters import gen3_frlge as A
+
+    facts = json.loads((ROOT / "data/games/gen3_emerald/species_rules.json").read_text())
+    assert facts == R.EMERALD_SPECIES_RULES_FACTS
+    assert A.CLEAN_CONTENT_SHA256["emerald"] == facts["clean_content_sha256"]
+    # The values currently coincide with FR/LG. Poison only the Emerald pin; falling
+    # back to FR/LG would accept this cartridge and fail this control.
+    monkeypatch.setitem(R.EMERALD_SPECIES_RULES_FACTS, "evolutions_sha256", "00" * 32)
+    with pytest.raises(A.ForbiddenRomTables, match="randomized evolutions"):
+        A.decode_verified(emerald_rom, "emerald")
+
+
+def test_emerald_refuses_the_attack_forme_even_though_it_accepts_speed_forme(emerald_rom):
+    from server.adapters.gen3_frlge import ForbiddenRomTables, Gen3Adapter
+
+    assert all(forme != R.DEOXYS_NORMAL for forme in R.DEOXYS_FORME.values())
+    rom = bytearray(emerald_rom)
+    at = symbols("emerald", len(rom))["gSpeciesInfo"]["address"] - R.ROM_BASE + R.DEOXYS * 28
+    rom[at:at + 6] = R.DEOXYS_FORME["firered"]
+    with pytest.raises(ForbiddenRomTables, match="base stats"):
+        Gen3Adapter(rom_type="emerald", artifact_kind="rand").ingest_rom_content(emerald_payload(bytes(rom)))
+
+
+def test_emerald_wild_headers_do_not_map_to_facility_areas(emerald_rom):
+    wild = R.decode_rom_tables(emerald_rom, "emerald")["wild_encounters"]
+    areas = json.loads((ROOT / "data/games/gen3_emerald/area_map.json").read_text())
+    mapped = [areas.get(f"{group}:{number}", "") for group, number in wild]
+    assert not [area for area in mapped if any(word in area for word in ("frontier", "pyramid", "trainer_hill"))]
+    cave = next(key for key in wild if areas.get(f"{key[0]}:{key[1]}") == "altering_cave")
+    assert len(wild[cave]) == 9  # the display uses set 0, not the current runtime selector
+
+
+@pytest.mark.asyncio
+async def test_committed_emerald_rand_rejects_a_firered_report_at_admission(tmp_path, emerald_rom):
+    from server.server import SLinkServer
+    from tests.unit.test_gen3_rand_admission import client, hello
+    from tests.unit.test_gen3_rom_ingest import _clean, _payload
+
+    server = SLinkServer(data_dir=str(tmp_path))
+    changed = bytearray(emerald_rom)
+    head = symbols("emerald", len(changed))["gTrainers"]["address"] - R.ROM_BASE
+    party = struct.unpack_from("<I", changed, head + 265 * 40 + 36)[0] - R.ROM_BASE
+    changed[party + 2] = 42
+    report = _payload(_clean("firered"), "firered")
+    async with client(server) as send:
+        await send(hello("emerald", "rand", rom_content=emerald_payload(bytes(changed))))
+        assert server.admission["a"]["state"] == "admitted" and server.state.artifact_kind == "rand"
+        await send(hello("emerald", "rand", player="b", trainer_name="B", ot_id="7B0B", rom_content=report))
+    assert server.admission["b"]["state"] == "rejected"
+    assert "not an Emerald cartridge report" in server.admission["b"]["reason"]
+    assert not server.state.player_identity.get("b") and not server.party_details["b"]
