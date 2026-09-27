@@ -1,0 +1,418 @@
+{
+  "source_commit": "c75f352304d529f6ba92d4f74b9cf8b5c3810788",
+  "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e",
+  "symbols_sha256": "6a48f1b3f3cabea043074d5d94f16cdf8b727cb529f8eced142beaa410a9ebae",
+  "bindings": {
+    "DETOUR_CANDIDATE": {
+      "symbol": "CallCallbacks",
+      "symbol_address": 134219024,
+      "offset": 10
+    },
+    "HEAP_BASE": {
+      "symbol": "EWRAM_START",
+      "symbol_address": 33554432,
+      "offset": 0
+    },
+    "HEAP_INIT": {
+      "symbol": "InitHeap",
+      "symbol_address": 134228864,
+      "offset": 0
+    },
+    "HEAP_START_PTR": {
+      "symbol": "sHeapStart",
+      "symbol_address": 50334264,
+      "offset": 0
+    },
+    "HEAP_SIZE_PTR": {
+      "symbol": "sHeapSize",
+      "symbol_address": 50334268,
+      "offset": 0
+    },
+    "PUT_FIRST_HEADER": {
+      "symbol": "PutFirstMemBlockHeader",
+      "symbol_address": 134228296,
+      "offset": 0
+    },
+    "ALLOC_INTERNAL": {
+      "symbol": "AllocInternal",
+      "symbol_address": 134228316,
+      "offset": 0
+    },
+    "FREE_INTERNAL": {
+      "symbol": "FreeInternal",
+      "symbol_address": 134228488,
+      "offset": 0
+    },
+    "FRAME_ENTRY": {
+      "symbol": "CallCallbacks",
+      "symbol_address": 134219024,
+      "offset": 0
+    },
+    "SAVE_FAILED_SCREEN": {
+      "symbol": "RunSaveFailedScreen",
+      "symbol_address": 135221488,
+      "offset": 0
+    },
+    "HELP_CALLBACK": {
+      "symbol": "RunHelpSystemCallback",
+      "symbol_address": 135510088,
+      "offset": 0
+    },
+    "GMAIN": {
+      "symbol": "gMain",
+      "symbol_address": 50344176,
+      "offset": 0
+    },
+    "FIELD_CALLBACK": {
+      "symbol": "CB2_Overworld",
+      "symbol_address": 134571444,
+      "offset": 1
+    },
+    "FIELD_LOCK": {
+      "symbol": "sLockFieldControls",
+      "symbol_address": 50335644,
+      "offset": 0
+    },
+    "SCRIPT_SETUP": {
+      "symbol": "ScriptContext_SetupScript",
+      "symbol_address": 134650596,
+      "offset": 0
+    },
+    "TRADE_SCENE": {
+      "symbol": "DoInGameTradeScene",
+      "symbol_address": 134562880,
+      "offset": 0
+    },
+    "ENEMY_PARTY": {
+      "symbol": "gEnemyParty",
+      "symbol_address": 33701932,
+      "offset": 0
+    },
+    "ENEMY_COUNT": {
+      "symbol": "gEnemyPartyCount",
+      "symbol_address": 33701930,
+      "offset": 0
+    },
+    "TRADE_SLOT_VAR": {
+      "symbol": "gSpecialVar_0x8005",
+      "symbol_address": 33779906,
+      "offset": 0
+    },
+    "TRADE_TABLE_VAR": {
+      "symbol": "gSpecialVar_0x8004",
+      "symbol_address": 33779904,
+      "offset": 0
+    },
+    "STR_VAR1": {
+      "symbol": "gStringVar1",
+      "symbol_address": 33692880,
+      "offset": 0
+    },
+    "STR_VAR3": {
+      "symbol": "gStringVar3",
+      "symbol_address": 33692932,
+      "offset": 0
+    },
+    "PLAYER_PARTY": {
+      "symbol": "gPlayerParty",
+      "symbol_address": 33702532,
+      "offset": 0
+    },
+    "PLAYER_COUNT": {
+      "symbol": "gPlayerPartyCount",
+      "symbol_address": 33701929,
+      "offset": 0
+    },
+    "SCRIPT_STATUS": {
+      "symbol": "sGlobalScriptContextStatus",
+      "symbol_address": 50335400,
+      "offset": 0
+    },
+    "AVATAR_TRANSITION": {
+      "symbol": "gPlayerAvatar",
+      "symbol_address": 33779832,
+      "offset": 3
+    },
+    "PALETTE_ACTIVE": {
+      "symbol": "gPaletteFade",
+      "symbol_address": 33782456,
+      "offset": 7
+    },
+    "REMOTE_LINK_PLAYERS": {
+      "symbol": "gReceivedRemoteLinkPlayers",
+      "symbol_address": 50347876,
+      "offset": 0
+    },
+    "LINK_TRANSFERRING": {
+      "symbol": "gLinkTransferringData",
+      "symbol_address": 50344164,
+      "offset": 0
+    },
+    "SPECIAL_RESULT": {
+      "symbol": "gSpecialVar_Result",
+      "symbol_address": 33779920,
+      "offset": 0
+    },
+    "ASK_SAVE": {
+      "symbol": "Field_AskSaveTheGame",
+      "symbol_address": 134674044,
+      "offset": 0
+    },
+    "SAVE_MAP": {
+      "symbol": "SaveMapView",
+      "symbol_address": 134582488,
+      "offset": 0
+    },
+    "SAVE_QUEST": {
+      "symbol": "SaveQuestLogData",
+      "symbol_address": 135341096,
+      "offset": 0
+    },
+    "SAVE_NORMAL": {
+      "symbol": "TrySavingData",
+      "symbol_address": 135111480,
+      "offset": 0
+    },
+    "SAVE_DIALOG_PTR": {
+      "symbol": "sSaveDialogCB",
+      "symbol_address": 50335652,
+      "offset": 0
+    },
+    "SAVE_PRINTING_CB": {
+      "symbol": "SaveDialogCB_PrintSavingDontTurnOffPower",
+      "symbol_address": 134674724,
+      "offset": 1
+    },
+    "SAVE_WRITING_CB": {
+      "symbol": "SaveDialogCB_DoSave",
+      "symbol_address": 134674752,
+      "offset": 1
+    },
+    "GET_MON_DATA": {
+      "symbol": "GetMonData2",
+      "symbol_address": 134478824,
+      "offset": 0
+    },
+    "ITEM_IS_MAIL": {
+      "symbol": "ItemIsMail",
+      "symbol_address": 134840524,
+      "offset": 0
+    },
+    "TRADE_MON": {
+      "symbol": "TradeMons",
+      "symbol_address": 134547468,
+      "offset": 0
+    },
+    "EVO_GETTER": {
+      "symbol": "GetEvolutionTargetSpecies",
+      "symbol_address": 134491844,
+      "offset": 0
+    },
+    "PANEL_NORMAL_MENU": {
+      "symbol": "SetUpStartMenu_NormalField",
+      "symbol_address": 134671792,
+      "offset": 0
+    },
+    "PANEL_APPEND": {
+      "symbol": "AppendToStartMenuItems",
+      "symbol_address": 134671764,
+      "offset": 0
+    },
+    "PANEL_FLAG_GET": {
+      "symbol": "FlagGet",
+      "symbol_address": 134670032,
+      "offset": 0
+    },
+    "PANEL_EXIT": {
+      "symbol": "StartMenuExitCallback",
+      "symbol_address": 134673728,
+      "offset": 0
+    },
+    "PANEL_FADE": {
+      "symbol": "FadeScreen",
+      "symbol_address": 134719468,
+      "offset": 0
+    },
+    "PANEL_ACTION_TABLE": {
+      "symbol": "sStartMenuActionTable",
+      "symbol_address": 138048292,
+      "offset": 0
+    },
+    "PANEL_DESC_TABLE": {
+      "symbol": "sStartMenuDescPointers",
+      "symbol_address": 138048372,
+      "offset": 0
+    },
+    "PANEL_ADD_WINDOW": {
+      "symbol": "AddWindow",
+      "symbol_address": 134233316,
+      "offset": 0
+    },
+    "PANEL_PUT_TILEMAP": {
+      "symbol": "PutWindowTilemap",
+      "symbol_address": 134234016,
+      "offset": 0
+    },
+    "PANEL_BORDER": {
+      "symbol": "SetStdWindowBorderStyle",
+      "symbol_address": 135231272,
+      "offset": 0
+    },
+    "PANEL_PRINT": {
+      "symbol": "AddTextPrinterParameterized4",
+      "symbol_address": 135456124,
+      "offset": 0
+    },
+    "PANEL_WIDTH": {
+      "symbol": "GetStringWidth",
+      "symbol_address": 134242004,
+      "offset": 0
+    },
+    "PANEL_RECT": {
+      "symbol": "FillWindowPixelRect",
+      "symbol_address": 134235000,
+      "offset": 0
+    },
+    "PANEL_COPY": {
+      "symbol": "CopyWindowToVram",
+      "symbol_address": 134233888,
+      "offset": 0
+    },
+    "PANEL_CURSOR": {
+      "symbol": "Menu_InitCursor",
+      "symbol_address": 135329712,
+      "offset": 0
+    },
+    "PANEL_CREATE_TASK": {
+      "symbol": "CreateTask",
+      "symbol_address": 134706204,
+      "offset": 0
+    },
+    "PANEL_INPUT_TASK": {
+      "symbol": "Task_MultichoiceMenu_HandleInput",
+      "symbol_address": 134859884,
+      "offset": 0
+    },
+    "PANEL_TASKS": {
+      "symbol": "gTasks",
+      "symbol_address": 50352272,
+      "offset": 0
+    },
+    "PANEL_DELAY": {
+      "symbol": "sDelay",
+      "symbol_address": 33790344,
+      "offset": 0
+    },
+    "PANEL_BG_COPY": {
+      "symbol": "ScheduleBgCopyTilemapToVram",
+      "symbol_address": 135227260,
+      "offset": 0
+    },
+    "PANEL_SCRIPT_ENABLE": {
+      "symbol": "ScriptContext_Enable",
+      "symbol_address": 134650676,
+      "offset": 0
+    },
+    "CARRIER_OBJECTS": {
+      "symbol": "gObjectEvents",
+      "symbol_address": 33779256,
+      "offset": 0
+    },
+    "CARRIER_AVATAR": {
+      "symbol": "gPlayerAvatar",
+      "symbol_address": 33779832,
+      "offset": 0
+    },
+    "CARRIER_SPAWN": {
+      "symbol": "SpawnSpecialObjectEventParameterized",
+      "symbol_address": 134604848,
+      "offset": 0
+    },
+    "CARRIER_REMOVE": {
+      "symbol": "RemoveObjectEvent",
+      "symbol_address": 134603956,
+      "offset": 0
+    },
+    "CARRIER_CHOOSE": {
+      "symbol": "ChoosePartyMonByMenuType",
+      "symbol_address": 135431040,
+      "offset": 0
+    },
+    "SOUND_SE": {
+      "symbol": "PlaySE",
+      "symbol_address": 134685388,
+      "offset": 0
+    },
+    "SOUND_FANFARE": {
+      "symbol": "PlayFanfare",
+      "symbol_address": 134683744,
+      "offset": 0
+    },
+    "RIVAL_START": {
+      "symbol": "CB2_HandleStartBattle",
+      "symbol_address": 134284552,
+      "offset": 0
+    },
+    "RIVAL_DUMMY": {
+      "symbol": "BeginBattleIntroDummy",
+      "symbol_address": 134292412,
+      "offset": 0
+    },
+    "RIVAL_COMM": {
+      "symbol": "gBattleCommunication",
+      "symbol_address": 33701506,
+      "offset": 0
+    },
+    "RIVAL_MAIN_FUNC": {
+      "symbol": "gBattleMainFunc",
+      "symbol_address": 50352004,
+      "offset": 0
+    },
+    "RIVAL_FLAGS": {
+      "symbol": "gBattleTypeFlags",
+      "symbol_address": 33696588,
+      "offset": 0
+    },
+    "RIVAL_TRAINER": {
+      "symbol": "gTrainerBattleOpponent_A",
+      "symbol_address": 33785518,
+      "offset": 0
+    }
+  },
+  "table_references": {
+    "PANEL_ACTION_REFS": [
+      {
+        "address": 134672284,
+        "symbol": "PrintStartMenuItems",
+        "symbol_address": 134672196,
+        "offset": 88
+      },
+      {
+        "address": 134673268,
+        "symbol": "StartCB_HandleInput",
+        "symbol_address": 134673024,
+        "offset": 244
+      },
+      {
+        "address": 134673400,
+        "symbol": "StartMenuPokedexSanityCheck",
+        "symbol_address": 134673356,
+        "offset": 44
+      }
+    ],
+    "PANEL_DESC_REFS": [
+      {
+        "address": 134672696,
+        "symbol": "DoDrawStartMenu",
+        "symbol_address": 134672412,
+        "offset": 284
+      },
+      {
+        "address": 134673256,
+        "symbol": "StartCB_HandleInput",
+        "symbol_address": 134673024,
+        "offset": 232
+      }
+    ]
+  }
+}

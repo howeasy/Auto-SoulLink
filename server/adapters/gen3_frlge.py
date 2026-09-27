@@ -553,8 +553,8 @@ class Gen3Adapter(GameAdapter):
         return True
 
     def supports_info_panel(self) -> bool:
-        """The native SOULLINK info screen ships in the Radical Red companion patch only."""
-        return self._is_rr
+        """Companion builds carry a native SOULLINK info screen on each Gen 3 title."""
+        return self._is_rr or self._rom_type in ("firered", "leafgreen", "emerald")
 
     def party_blob_size(self) -> int:
         """A full 100-byte boxmon, which is what the client already sends. This is the

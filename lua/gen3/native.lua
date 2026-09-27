@@ -108,9 +108,24 @@ function N.new(profile, deps)
     local array = deps.array or function(t) return t end
     local reads = assert(deps.reads, "Gen 3 read facade required")
     local queue, pending, poisoned, posting = {}, nil, nil, false
-    local trade_context, trade_blocked, trade_wanted_epoch
+    local trade_context, trade_blocked, trade_wanted_epoch, trade_dead_notice
     local trade_binding_job, trade_serial = nil, 0
-    local fr_v2 = v2 and profile.pack == "gen3_frlg"
+    local fr_v2 = v2 and (profile.pack == "gen3_frlg"
+        or (profile.pack == "gen3_emerald" and deps.title == "emerald" and deps.production == true))
+    local frlg_title = (profile.pack == "gen3_frlg" and (deps.title == "firered" or deps.title == "leafgreen"))
+        or (profile.pack == "gen3_emerald" and deps.title == "emerald")
+    local control
+    if fr_v2 and frlg_title and deps.production == true then
+        local c, layout = v2.constants, assert(v2.structs.SlinkControlV2, "CONTROL layout required")
+        assert(layout.size == 16 and c.SLINK_PI_COUNT_WIDTH == 4, "invalid CONTROL layout")
+        for name, expected in pairs({session_epoch={0,4},pi_count={4,4},tn_enable={8,1}}) do
+            local field = assert(layout.fields[name], "missing CONTROL field")
+            assert(field.offset == expected[1] and field.width == expected[2] and field.count == 1,
+                   "invalid CONTROL field: " .. name)
+        end
+        control = {base=p.BASE+c.SLINK_CONTROL_OFFSET,epoch=layout.fields.session_epoch.offset,
+                   counter=layout.fields.pi_count.offset,enable=layout.fields.tn_enable.offset}
+    end
     local call_queued, call_active, call_wanted_epoch
     local call_handshake_job, call_binding_attempts, call_binding_failed = nil, 0, false
     local call_first_posted, call_delivered_at = false, nil
@@ -122,6 +137,7 @@ function N.new(profile, deps)
     local last_frame, was_present, npc_count, panel_drawn
     local npc_enabled, sounds_enabled = false, true
     local panel_rows, panel_page, panel_showing = {}, 0, false
+    local panel_dirty, panel_reopen = false, false
     -- Per-op ACK deadlines, each LONGER than the patch's own timeout for that op so the patch's
     -- ST_FAIL normally wins the race (patch/src/handlers.c drive_ui :1030-1072):
     --   sync ops (acked the frame they run)              1800
@@ -207,7 +223,7 @@ function N.new(profile, deps)
         if value == 0 then
             if session_epoch ~= 0 or poisoned then
                 if fr_v2 and (trade_context or trade_blocked) then
-                    trade_blocked = true
+                    trade_blocked = "trade epoch cleared while owned"
                     poisoned = "trade epoch cleared while owned"
                     abort(poisoned)
                     return nil, poisoned
@@ -218,7 +234,7 @@ function N.new(profile, deps)
                 abort("native epoch cleared")
             end
         elseif session_epoch ~= 0 and value ~= session_epoch then
-            if fr_v2 then trade_blocked = true end
+            if fr_v2 then trade_blocked = "native epoch changed" end
             poisoned = "native epoch changed"
             abort(poisoned)
             return nil, poisoned
@@ -248,7 +264,12 @@ function N.new(profile, deps)
         if fr_v2 and not self:trade_epoch_writable() then return nil, "trade producer owned or unavailable" end
         local bytes = {}
         for i=0,3 do bytes[i+1] = (value >> (8*i)) & 0xFF end
-        return enqueue({handshake=true, stages={{p.BASE + O.session_epoch, bytes}},
+        local stages = {{p.BASE + O.session_epoch, bytes}}
+        if control then
+            stages[#stages+1] = {control.base+control.epoch, clone(bytes)}
+            stages[#stages+1] = {control.base+control.enable, {npc_enabled and 1 or 0}}
+        end
+        return enqueue({handshake=true, stages=stages,
             valid=function() return not fr_v2 or self:trade_epoch_writable(), "trade producer owned or unavailable" end,
             done=function(why) if not why then session_epoch=value end end})
     end
@@ -298,6 +319,10 @@ function N.new(profile, deps)
         local ok, err = pcall(function()
             assert(present() and io.read_u16(p.BASE + O.opcode) == 0,
                    "native changed before dispatch")
+            for _, stage in ipairs(job.stages or {}) do
+                assert(stage[1]+#stage[2] <= p.BASE+O.opcode or stage[1] >= p.BASE+O.opcode+2,
+                       "opcode must be published last, never staged")
+            end
             for _, stage in ipairs(job.stages or {}) do writes:write_bytes(stage[1], stage[2]) end
             if job.op then
                 seq = (seq + 1) % 65536
@@ -306,13 +331,14 @@ function N.new(profile, deps)
                 -- No Lua-side status=BUSY: the patch sets MB->status itself on every ack (OK/FAIL,
                 -- and ST_BUSY for the async ops), and ack_seq = seq-1 below already keeps a stale
                 -- OK of the previous op from reading as this op's completion (completion needs
-                -- ack == seq). Writing BUSY here also made writes.lua's per-byte recheck of the
-                -- native_idle clause (status ~= busy) refuse the rest of the post.
+                -- ack == seq). Writing BUSY here also made writes.lua's per-write-call recheck (the window is frame-bound) of the
+                -- native_idle clause (status ~= busy) refuse the next write call.
                 writes:write_u16(p.BASE + O.ack, (seq + 65535) % 65536)
                 writes:write_u16(p.BASE + O.seq, seq)
                 job.publish_attempted = true -- a sink failure can leave a valid low-byte opcode
                 if job.on_publish then job.on_publish() end
                 writes:write_u16(p.BASE + O.opcode, job.op) -- publish last
+                writes:disarm() -- publication closes the window; no later write call is permitted
                 -- ... and the receipt is the publish's own witness: nothing after it can fail
                 job.posted = true
             end
@@ -416,11 +442,11 @@ function N.new(profile, deps)
         for i=width,1,-1 do value = value * 256 + bytes[offset+i] end
         return value
     end
-    -- FireRed durable trade, contract f4b740f6 / producer 2133349d.
+    -- FR/LG durable trade, ABI2 contract; each admitted title supplies its own bindings.
     -- A beacon is not consent. This binding owns one opaque token/visit and
     -- accepts only coherent, identity- and command-bound native witnesses.
     local function trade_supported()
-        if not fr_v2 or deps.title ~= "firered" or deps.production ~= true or not trade_phase_offset then return false end
+        if not fr_v2 or not frlg_title or deps.production ~= true or not trade_phase_offset then return false end
         local mb = self:mailbox()
         return mb and integer(mb.capabilities, 0xFFFFFFFF)
             and (mb.capabilities & ~call_known_caps) == 0
@@ -431,7 +457,8 @@ function N.new(profile, deps)
         local mb = self:mailbox()
         return mb ~= nil and mb.session_epoch == session_epoch
             and (not trade_wanted_epoch or trade_wanted_epoch == session_epoch)
-            and integer(mb.producer_phase, cc.SLINK_PHASE_DONE)
+            and integer(mb.producer_phase, cc.SLINK_PHASE_UNCERTAIN)
+            and mb.producer_phase ~= cc.SLINK_PHASE_UNCERTAIN
     end
     function self:trade_epoch_writable()
         if not trade_supported() or trade_blocked or trade_context then return false end
@@ -445,14 +472,58 @@ function N.new(profile, deps)
         return mb ~= nil and mb.producer_phase == cc.SLINK_PHASE_IDLE
     end
     function self:bind_trade_session(value)
-        if not fr_v2 or deps.title ~= "firered" or deps.production ~= true
+        if not fr_v2 or not frlg_title or deps.production ~= true
            or not integer(value, 0xFFFFFFFF) or value == 0 or trade_context or trade_blocked then return false end
         trade_wanted_epoch = value
         return true
     end
     local function trade_safe()
-        local ok, safe = pcall(function() return deps.trade_safe and deps.trade_safe() == true end)
-        return ok and safe
+        local ok, safe, why = pcall(function()
+            if not deps.trade_safe then return false,"trade field check unavailable" end
+            return deps.trade_safe()
+        end)
+        return ok and safe == true, ok and why or tostring(safe)
+    end
+    local function trade_dispatch_guard(t, valid, deadline, step)
+        -- Ownership, caller authorization and deadlines still expire while a
+        -- transient CPU/field checkpoint is closed. Only that checkpoint waits.
+        if valid then
+            local ok, why, retry = valid()
+            if not ok then return false,why,retry end
+        end
+        if io.framecount() > deadline then return false,"guard:field_expired" end
+        local safe, why = trade_safe()
+        if not safe then
+            why = tostring(why or "overworld checkpoint unavailable")
+            local notice = step .. ": " .. why
+            if t.wait_reason ~= notice then log("[SLink-gen3] trade waiting for " .. notice) end
+            t.wait_reason = notice
+            return false,why,true
+        end
+        t.wait_reason = nil
+        return true
+    end
+    local function trade_deadline(cmd, op)
+        local deadline = io.framecount()+timeout_for(op)
+        if integer(cmd.dispatch_deadline, 0x1FFFFFFFFFFFFF) then
+            deadline = math.min(deadline,cmd.dispatch_deadline)
+        end
+        return deadline
+    end
+    local function trade_wait_ready(t, job, deadline)
+        local checked
+        return function()
+            local frame = io.framecount()
+            -- Cheap ownership/capability/deadline checks remain per frame.
+            if trade_context ~= t or frame > deadline or not self:trade_capable() then return true end
+            if trade_safe() then return true end -- dispatch revalidates every identity/witness
+            if not checked or frame-checked >= 30 then
+                checked = frame
+                local ok, _, retry = job.valid()
+                if not ok and not retry then return true end
+            end
+            return false -- skip this held job so other native work can drain
+        end
     end
     function self:trade_eligible(mon)
         if not self:trade_capable() or type(mon) ~= "table" then return false end
@@ -574,16 +645,16 @@ function N.new(profile, deps)
         -- and preparation; no text truncation and no party-derived identity.
         little(t.opaque,4,t.epoch,4); little(t.opaque,8,t.visit,4); little(t.opaque,12,(~t.visit)&0xFFFFFFFF,4)
         trade_context = t
+        local deadline = trade_deadline(cmd,p.OP_TRADE_PREPARE)
         local job
         job = {op=p.OP_TRADE_PREPARE, args=trade_args(t), stages={},
             valid=function()
-                if trade_context ~= t or not self:trade_capable() or not trade_safe() or not outgoing(t.old_key,t.slot)
+                if trade_context ~= t or not self:trade_capable() or not outgoing(t.old_key,t.slot)
                    then return false, "guard:stale" end
                 local mb = self:mailbox()
                 if not mb or (mb.producer_phase ~= cc.SLINK_PHASE_IDLE and mb.producer_phase ~= cc.SLINK_PHASE_DONE)
                    then return false, "trade producer owned" end
-                if valid then return valid() end
-                return true
+                return trade_dispatch_guard(t,valid,deadline,"prepare")
             end,
             on_publish=function() t.prepare_seq = job.seq end,
             done=function(why)
@@ -594,10 +665,11 @@ function N.new(profile, deps)
                     local visit = self:trade_visit()
                     if visit then if done then done(nil,visit) end; return end
                 end
-                if job.posted and not t.reconciled then trade_blocked = true end
+                if job.posted and not t.reconciled then trade_blocked = why or "native prepare lacks ready witness" end
                 if not job.posted and trade_context == t then trade_context = nil end
                 if done then done(why or "native prepare lacks ready witness") end
             end}
+        job.ready = trade_wait_ready(t,job,deadline)
         return enqueue(job)
     end
     function self:withdraw_trade(token)
@@ -616,7 +688,7 @@ function N.new(profile, deps)
             done=function(why)
                 local w = job.posted and trade_witness(t,job.seq)
                 if w and w.result == 2 then t.terminal, t.reconciled = 2, true
-                elseif job.posted then trade_blocked = true end
+                elseif job.posted then trade_blocked = why or "native withdrawal lacks unchanged witness" end
                 if why and not t.reconciled then log("[SLink-gen3] trade withdrawal unproved: " .. why) end
             end}
         t.withdraw_job = enqueue(job)
@@ -624,6 +696,7 @@ function N.new(profile, deps)
     end
     local function trade_transfer(step, cmd, done, valid, progress)
         local t = trade_context
+        local deadline = trade_deadline(cmd,step == "scene" and p.OP_TRADE_SCENE or nil)
         if not self:trade_capable() or not t or not self:trade_visit() then return nil, "durable_trade_unavailable" end
         if step == "enemy" then
             local rows = cmd.blobs_hex
@@ -636,24 +709,24 @@ function N.new(profile, deps)
             for _, mon in ipairs(reads.read_party()) do
                 if reads.key(mon) == reads.key(incoming) then return nil, "duplicate incoming identity" end
             end
-            return enqueue({stages={{p.BLOB_BUF,bytes}}, valid=function()
-                if trade_context ~= t or not self:trade_visit() or not trade_safe() then return false, "guard:stale" end
-                if valid then return valid() end
-                return true
+            local job = {stages={{p.BLOB_BUF,bytes}}, valid=function()
+                if trade_context ~= t or not self:trade_visit() then return false, "guard:stale" end
+                return trade_dispatch_guard(t,valid,deadline,"staging")
             end, done=function(why)
                 if not why then t.incoming = {bytes=bytes,pid=word(bytes,0,4),otid=word(bytes,4,4)} end
                 if done then done(why) end
-            end})
+            end}
+            job.ready = trade_wait_ready(t,job,deadline)
+            return enqueue(job)
         end
         if step ~= "scene" or not t.incoming or cmd.token ~= t.token or cmd.old_key ~= t.old_key
            or cmd.visit ~= t.visit or cmd.slot ~= t.slot then return nil, "invalid trade binding" end
         local job
         job = {op=p.OP_TRADE_SCENE, args=trade_args(t), stages={{p.BLOB_BUF,clone(t.incoming.bytes)}},
             valid=function()
-                if trade_context ~= t or not self:trade_visit() or not trade_safe() or not outgoing(t.old_key,t.slot)
+                if trade_context ~= t or not self:trade_visit() or not outgoing(t.old_key,t.slot)
                    then return false, "guard:stale" end
-                if valid then return valid() end
-                return true
+                return trade_dispatch_guard(t,valid,deadline,"scene")
             end,
             on_publish=function() t.scene_seq, t.scene_posted = job.seq, true end,
             observe=function()
@@ -668,22 +741,26 @@ function N.new(profile, deps)
                 return w
             end,
             done=function(why,result,reason)
+                if why and not job.posted then
+                    log("[SLink-gen3] trade scene refused before publication: " .. tostring(why))
+                end
                 -- Completion and progress consume the same coherent snapshot;
                 -- rereading here could turn a torn progress read into an ACK
                 -- success without delivering its save milestone to trade.lua.
                 local w = job.posted and job.observed
                 if job.posted and (not w or w.result == 0 or w.result == 3) then
-                    trade_blocked = true
                     why = why or "native trade terminal witness missing"
+                    trade_blocked = why .. (reason and (": " .. reason) or "")
                 elseif w then t.terminal = w.result end
                 if w and w.result == 2 then why = "native refused" end
                 if done then done(why,result,reason) end
             end}
+        job.ready = trade_wait_ready(t,job,deadline)
         return enqueue(job)
     end
     local function service_trade_binding()
         if not trade_wanted_epoch or session_epoch == trade_wanted_epoch or trade_binding_job
-           or poisoned or trade_blocked or not trade_supported() then return end
+           or poisoned or trade_blocked or trade_context or not trade_supported() then return end
         trade_binding_job = self:set_session_epoch(trade_wanted_epoch)
     end
     local function call_witness()
@@ -892,7 +969,7 @@ function N.new(profile, deps)
     -- CB2_HandleStartBattle (RV_CB2_START_BATTLE), has no pack word, so it stays the patch's alone
     -- (a refusal there is REASON_WINDOW_CLOSED, never a write). A post read open at this frame end
     -- is consumed by the next frame's slink_hook, before the callbacks run (§5.2).
-    local rr = profile.titles and profile.titles.radical_red
+    local rr = profile.titles and profile.titles[deps.title or "radical_red"]
     function self:rival_window_open()
         local ram, rom, der = rr and rr.ram, rr and rr.rom, rr and rr.derived
         if not (ram and rom and der and ram.BATTLE_MAIN_FUNC_ADDR and ram.BATTLE_COMM_ADDR
@@ -951,7 +1028,7 @@ function N.new(profile, deps)
                     reply(why == "native refused" and (reason or "native_refused") or why, nil, reason)
                     return
                 end
-                local ram = assert(profile.titles.radical_red.ram)
+                local ram = assert(rr.ram)
                 local actual = io.read_bytes(ram.ENEMY_BASE, #bytes)
                 for i, b in ipairs(bytes) do
                     if actual[i] ~= b then reply("enemy_readback_failed"); return end
@@ -990,6 +1067,30 @@ function N.new(profile, deps)
     end
 
     local function panel_job(open)
+        if v2 then
+            local c=v2.constants
+            local pages=math.min(255,math.max(1,math.ceil(#panel_rows/c.SLINK_INFO_MAX_LINES)))
+            panel_page=panel_page%pages
+            local text,lines={},0
+            for i=1,256 do text[i]=255 end
+            local function row(slot,value)
+                for i,b in ipairs(encode(value,c.SLINK_INFO_LINE_WIDTH)) do text[slot*32+i]=b end
+            end
+            for i=panel_page*6+1,math.min(#panel_rows,(panel_page+1)*6) do
+                row(lines,tostring(panel_rows[i]):gsub("|","\n"));lines=lines+1
+            end
+            if lines==0 then row(0,"No run data yet");lines=1 end
+            row(7,string.format("PAGE %d/%d",panel_page+1,pages))
+            local epoch,bytes=session_epoch,{}
+            for i=0,3 do bytes[i+1]=(epoch>>(8*i))&255 end
+            local request=(io.read_u16(p.INFO+c.SLINK_INFO_REQUEST_FIELD)%65535)+1
+            return {op=open and p.OP_SHOW_INFO or nil,args={},stages={
+                {p.INFO+c.SLINK_INFO_TEXT_FIELD,text},
+                {p.INFO+c.SLINK_INFO_LINES_FIELD,{lines,panel_page,pages,1}},
+                {p.INFO+c.SLINK_INFO_EPOCH_FIELD,bytes},
+                {p.INFO+c.SLINK_INFO_REQUEST_FIELD,{request&255,request>>8}}},
+                valid=function() return session_epoch==epoch and epoch~=0 and io.read_u8(p.INFO+c.SLINK_INFO_STATE_FIELD)==0,"panel identity/ownership changed" end}
+        end
         local pages = math.max(1, math.ceil(#panel_rows / p.INFO_MAXLINES))
         panel_page = panel_page % pages
         local rows = {}
@@ -1019,12 +1120,31 @@ function N.new(profile, deps)
             end}
     end
     function self:link_panel(cmd)
-        if v2 then return nil, "v2 panel binding unavailable" end
+        if v2 then
+            local mb=self:mailbox()
+            if not mb or (mb.capabilities&v2.constants.SLINK_CAP_INFO_PANEL)==0 then return nil,"native panel absent" end
+            panel_rows,panel_page=clone(cmd.rows or {}),0
+            panel_dirty,panel_reopen=true,false
+            return true
+        end
         panel_rows, panel_page = clone(cmd.rows or {}), 0
         return enqueue(panel_job(false))
     end
     function self:config(cmd)
         if cmd.native_sounds ~= nil then sounds_enabled = cmd.native_sounds == true end
+        if control then
+            if cmd.overworld_presence ~= nil or cmd.pc_trade_npc ~= nil then
+                npc_enabled = cmd.overworld_presence ~= true and cmd.pc_trade_npc ~= false
+            end
+            -- A config commonly arrives before the automatic epoch binding.
+            -- That binding publishes these same CONTROL fields when it is safe.
+            if session_epoch == 0 then return true end
+            local epoch, bytes = session_epoch, {}
+            for i=0,3 do bytes[i+1] = (epoch >> (8*i)) & 255 end
+            return enqueue({stages={{control.base+control.epoch,bytes},
+                                   {control.base+control.enable,{npc_enabled and 1 or 0}}},
+                valid=function() return session_epoch == epoch,"guard:epoch" end})
+        end
         if v2 then return nil, "v2 control binding unavailable" end
         local stages = {}
         if cmd.overworld_presence ~= nil or cmd.pc_trade_npc ~= nil then
@@ -1042,7 +1162,7 @@ function N.new(profile, deps)
         local frame, here = io.framecount(), present()
         local owned_panel = pending and pending.panel
         if (last_frame and frame < last_frame) or (was_present and not here) then
-            if fr_v2 and trade_context and not trade_context.reconciled then trade_blocked = true end
+            if fr_v2 and trade_context and not trade_context.reconciled then trade_blocked = "native reset during owned trade" end
             abort("native reset")
             poisoned, npc_count, panel_drawn, panel_showing = nil, nil, nil, false
             session_epoch = 0
@@ -1052,7 +1172,7 @@ function N.new(profile, deps)
         local epoch_ok, epoch_why = check_epoch()
         if not epoch_ok then return nil, epoch_why end
         if fr_v2 and trade_context and not trade_supported() then
-            trade_blocked, poisoned = true, "trade capability lost"
+            trade_blocked, poisoned = "trade capability lost", "trade capability lost"
             abort(poisoned)
         end
         if pending then
@@ -1088,6 +1208,16 @@ function N.new(profile, deps)
             if wt.check() then table.remove(watches, i); wt.ok()
             elseif io.framecount() >= wt.deadline then table.remove(watches, i); wt.fail() end
         end
+        if control then
+            local counter = io.read_u32(control.base+control.counter)
+            if npc_count ~= nil and ((counter-npc_count)&0xFFFFFFFF) == 1
+               and npc_enabled and io.read_u8(control.base+control.enable) == 1
+               and io.read_u32(control.base+control.epoch) == session_epoch
+               and self:trade_capable() and not self:trade_active() and not pending then
+                send("trade_request", {})
+            end
+            npc_count = counter -- resets/discontinuities re-latch without inventing a talk
+        end
         if not v2 then -- v1 NPC/panel offsets are never inherited by a v2 mailbox
             local counter = io.read_u8(p.PI_COUNT)
             if npc_count ~= nil and counter > npc_count and npc_enabled and not pending then
@@ -1108,6 +1238,20 @@ function N.new(profile, deps)
                         enqueue(panel_job(result == 0 and #panel_rows > p.INFO_MAXLINES))
                     end
                 end
+            end
+        end
+        if v2 then
+            local state=io.read_u8(p.INFO+v2.constants.SLINK_INFO_STATE_FIELD)
+            if panel_showing and state==0 then
+                panel_showing=false
+                if not panel_dirty then
+                    local next_page=io.read_u8(p.INFO+v2.constants.SLINK_INFO_RESULT_FIELD)==0 and #panel_rows>6
+                    panel_page=next_page and panel_page+1 or 0
+                    panel_dirty,panel_reopen=true,next_page
+                end
+            else panel_showing=state~=0 end
+            if panel_dirty and not panel_showing and session_epoch~=0 and not pending and #queue==0 then
+                enqueue(panel_job(panel_reopen));panel_dirty,panel_reopen=false,false
             end
         end
         service_calls()
@@ -1132,6 +1276,10 @@ function N.new(profile, deps)
     local service, advertised_trade = self.service, false
     function self:service()
         local result = table.pack(service(self))
+        if fr_v2 and not trade_dead_notice and (trade_blocked or poisoned) then
+            trade_dead_notice = true
+            log("[SLink-gen3] durable trade unavailable for this session: " .. tostring(trade_blocked or poisoned))
+        end
         local capable = self:trade_capable()
         if capable ~= advertised_trade then
             advertised_trade = capable

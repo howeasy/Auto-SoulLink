@@ -354,6 +354,7 @@ _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
                      "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
                      "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")
 _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
+_GEN3_COMPANION_FILES = ("SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emerald.ups", "gen3_companions.json")
 
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched
 _LAUNCHER_SCRIPTS: set[str] = {
@@ -689,7 +690,7 @@ def build_release(
             # exists, and shipping one would advertise a capability that cannot be there.
             # pureRGB (PLAN M3): the companion source overlay over each pinned pure build,
             # one UPS per title (PureGreen included -- it is a full pure build of its own).
-            for gb_ups in _GB_COMPANION_UPS:
+            for gb_ups in _GB_COMPANION_UPS + _GEN3_COMPANION_FILES:
                 src = REPO_ROOT / "patch" / "dist" / gb_ups
                 if src.exists():
                     zf.write(src, prefix + f"companion/{gb_ups}")

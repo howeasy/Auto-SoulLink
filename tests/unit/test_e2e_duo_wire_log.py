@@ -128,6 +128,68 @@ def test_collection_names_files_by_scenario_and_player(tmp_path, monkeypatch):
         assert json.loads(handle.read())["msg"]["player"] == "a"
 
 
+def _older_run_goldens(fixtures, scenario, players=("a", "b")) -> None:
+    """Seed the golden paths with an EARLIER, passing run's transcripts (T5's stale copy)."""
+    fixtures.mkdir(parents=True, exist_ok=True)
+    for player in players:
+        (fixtures / f"{scenario}_{player}_gen3_new.jsonl").write_text(
+            json.dumps({"dir": "c2s", "t": 1, "msg": {"event": "trade_done"}}) + "\n",
+            encoding="utf-8")
+
+
+def test_a_player_this_run_never_logged_loses_its_older_transcript(tmp_path, monkeypatch, capsys):
+    """A failing run must not leave an earlier PASSING run's transcript readable at its scenario's
+    golden path -- T5 (2026-09-27) found `native_trade_firered_b_gen3_new.jsonl` holding a
+    completed trade_done while the failing run's own `wire/wire_b.jsonl` had none. B never logged
+    here, so B's stale copy is removed and the print names the data dir instead."""
+    fixtures = tmp_path / "fixtures"
+    monkeypatch.setattr(duo, "WIRE_FIXTURES", str(fixtures))
+    run = _run(tmp_path, wire_log=True)
+    run.scenario = "trade_gen3"
+    run.gcfg = duo.GAMES["gen3_rr"]
+    os.makedirs(run._wire_dir())
+    with open(os.path.join(run._wire_dir(), "wire_a.jsonl"), "w", encoding="utf-8") as handle:
+        handle.write(json.dumps({"dir": "c2s", "t": 1, "msg": {"player": "a"}}) + "\n")
+    _older_run_goldens(fixtures, "trade_gen3")
+
+    landed = run.collect_wire_logs()
+
+    a = fixtures / "trade_gen3_a_gen3_new.jsonl"
+    b = fixtures / "trade_gen3_b_gen3_new.jsonl"
+    assert landed == [str(a)]
+    # A did log, so its copy is this run's line, not the older run's trade_done.
+    assert json.loads(a.read_text(encoding="utf-8"))["msg"] == {"player": "a"}
+    assert not b.exists()
+    printed = capsys.readouterr().out
+    assert os.path.join(run._wire_dir(), "wire_b.jsonl") in printed
+    assert str(b) in printed
+
+
+def test_a_run_that_never_opened_the_wire_dir_clears_its_older_transcripts(tmp_path, monkeypatch):
+    """No per-player capture at all (the server wrote no wire dir) must leave neither golden."""
+    fixtures = tmp_path / "fixtures"
+    monkeypatch.setattr(duo, "WIRE_FIXTURES", str(fixtures))
+    run = _run(tmp_path, wire_log=True)
+    run.gcfg = duo.GAMES["gen3_rr"]
+    _older_run_goldens(fixtures, "faint")
+
+    assert not os.path.isdir(run._wire_dir())
+    assert run.collect_wire_logs() == []
+    assert list(fixtures.iterdir()) == []
+
+
+def test_without_the_flag_no_golden_is_ever_removed(tmp_path, monkeypatch):
+    """A run without --wire-log never touches the fixtures, stale or not."""
+    fixtures = tmp_path / "fixtures"
+    monkeypatch.setattr(duo, "WIRE_FIXTURES", str(fixtures))
+    run = _run(tmp_path)
+    run.gcfg = duo.GAMES["gen3_rr"]
+    _older_run_goldens(fixtures, "faint")
+
+    assert run.collect_wire_logs() == []
+    assert len(list(fixtures.iterdir())) == 2
+
+
 # ── the capture itself, over a real socket ───────────────────────────────────
 
 @pytest_asyncio.fixture

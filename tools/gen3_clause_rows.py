@@ -577,7 +577,8 @@ def family_seed(seed, title, rom=None, *, slot=0, species_pair=None):
     from server.adapters import gen3_codec as c
     rom = source_rom(title) if rom is None else rom
     facts = species_facts(rom, title)
-    # RR Zigzagoon is 20% in BOTH own Route1 time tables; Bidoof was day-only.
+    # RR Day has base Zigzagoon288; Night has Galarian1222. The paired row
+    # stages one evolved half for each distinct ROM family (see family_galar).
     species, lower = species_pair or {"firered": (17, 16), "leafgreen": (17, 16),
                                      "emerald": (287, 286), "radical_red": (289, 288)}[title]
     if species == lower or not same_family(facts, species, lower):
@@ -621,19 +622,54 @@ def family_seed(seed, title, rom=None, *, slot=0, species_pair=None):
     return bytes(body), manifest
 
 
+def family_members(run):
+    """Read both actual linked lead records from the disclosed boot fixtures."""
+    import e2e_duo as h
+    members = []
+    for inst in ("a", "b"):
+        mon = run._gen3_fixture_saved(inst)[0][0]
+        key = h.gen3_key(mon)
+        if key != run._link_keys[inst]:
+            raise RuntimeError(f"{inst}: family linked key is not the staged lead")
+        members.append({"player": inst, "key": key, "species": mon["species"]})
+    return members
+
+
+def family_wild_facts(run, encounter):
+    title = run._gen3_title("a")
+    if title != "radical_red":
+        return wild_facts(title, "route_102" if title == "emerald" else "route_1")
+    # RR's Night regional IDs were collapsed by the historical JSON generator.
+    # Read the actual booted cartridge's selector/slot tables. Both periods are
+    # eligible; this row does not pretend to have proved the runtime RTC hour.
+    from rr_rom_encounters import decode_encounters, effective_maps
+    # play.map() emits group*256+number (Route 1 is 3.19 -> 787), not
+    # the dotted label printed by map metadata.
+    if encounter.get("map") != 3 * 256 + 19:
+        raise RuntimeError("RR family encounter was not on Route 1 (3.19)")
+    decoded = decode_encounters((ROOT / run._gen3_rom("a")).read_bytes())
+    return [slot for period in ("Day", "Night") for slot in
+            effective_maps(decoded, period)[(3, 19)]["habitats"]["land"]["slots"]]
+
+
 def family_oracle(run, results):
     import e2e_duo as h
     run._gen3_flush_boundary()
     r = one(results["a"], "FAMILY_ENCOUNTER")
-    fixture = run._gen3_fixture_saved("a")
-    species, key = fixture[0][0]["species"], h.gen3_key(fixture[0][0])
+    # Keep the actual species/location in the aggregate run log even for an
+    # unobserved attempt; the numbered client receipt is retained too.
+    run._pydec_note("FAMILY_ENCOUNTER " + json.dumps(r, sort_keys=True))
+    members = family_members(run)
     facts = own_facts(run, "a")
-    area = "route_102" if run._gen3_title("a") == "emerald" else "route_1"
-    if not any(e["species_id"] == r["species"] for e in wild_facts(run._gen3_title("a"), area)):
+    if not any(e["species_id"] == r["species"] for e in family_wild_facts(run, r)):
         raise RuntimeError("family encounter absent from this title's wild table")
-    related = same_family(facts, species, r["species"])
+    matching = [m for m in members if same_family(facts, m["species"], r["species"])]
+    related = bool(matching)
+    member = matching[0] if matching else members[0]
+    species, key = member["species"], member["key"]
     problems = []
-    if r.get("owned") != species or r.get("key") != key or r.get("related") != related:
+    if (r.get("owned") != species or r.get("key") != key or r.get("related") != related
+            or r.get("player") != member["player"]):
         problems.append("family encounter not bound to the staged cartridge record")
     for inst in ("a", "b"):
         saved, before = run._gen3_saved(inst), run._gen3_fixture_saved(inst)
@@ -644,7 +680,10 @@ def family_oracle(run, results):
                 problems.append(f"{inst}: family row changed record invariants")
         if "RX force_faint" in results[inst] or "RX memorialize" in results[inst] or "TX capture " in results[inst]:
             problems.append(f"{inst}: family row produced a capture/death")
-    run._gen3_one_link("alive")
+    link = run._gen3_one_link("alive")
+    for m in members:
+        if (link.get(m["player"]) or {}).get("species") != m["species"]:
+            problems.append(f"{m['player']}: saved link species differs from the staged family record")
     if problems:
         raise RuntimeError("; ".join(problems))
     if not related:
@@ -658,4 +697,4 @@ def family_oracle(run, results):
     events = run._reconnect_events()
     if not any(e.get("type") == "reroll" for e in events) or any(e.get("type") == "dead_zone" for e in events):
         problems.append("family RUN lacks a durable reroll or dead-zoned the area")
-    run._gen3_raise(problems, f"family: native {r['species']} rerolled against distinct owned {species}; staged link remains alive")
+    run._gen3_raise(problems, f"family: native {r['species']} rerolled against distinct owned {species} on {member['player']}; staged link remains alive")

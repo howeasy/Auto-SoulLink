@@ -1,0 +1,236 @@
+# CLAUSE-LIVE-REST gen3_rr species_family_gen3
+# source: a643a2b6417e7962b34edb1a4b51b0181037589e
+# command: python tools/e2e_duo.py --game gen3_rr --scenario species_family_gen3 --lane clause-rest-family-rr2 --keep-data
+# cwd: C:/slink-wt/g3-clause-run (frozen clean checkout)
+# private state: .cache/state; archived artifacts: C:/slink-wt/g3-clause-live-rest/.cache/live/species_family_gen3_gen3_rr_a643a2b6
+
+
+========== scenario: species_family_gen3 ==========
+[duo] species_family_gen3: attempt 1 of 16
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=a643a2b6417e7962b34edb1a4b51b0181037589e
+[duo] server up: tcp=50399 http=50400 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_hs7mculf
+[duo] timing server 0.6s
+[duo] cleared 9 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_1_witness.bin, e2e_species_family_gen3_a_1_witness_ext.bin, e2e_species_family_gen3_a_attempt1_result.txt, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_1_witness.bin, e2e_species_family_gen3_b_1_witness_ext.bin, e2e_species_family_gen3_b_attempt1_result.txt, e2e_species_family_gen3_b_result.txt, e2e_species_family_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 7.4s
+[duo] timing results 4.2s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=ee152e099cee150562997e97eb0fd79d7cd2aab1c87e07c84f16f7bffcb592fe file=ee152e099cee150562997e97eb0fd79d7cd2aab1c87e07c84f16f7bffcb592fe match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=9232e7249149c22abf653e93dbb74f9b24e38567d639f4c5fe065cfedf9a3dfa file=9232e7249149c22abf653e93dbb74f9b24e38567d639f4c5fe065cfedf9a3dfa match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:2BDDC8BF", "map": 787, "owned": 289, "player": "a", "related": false, "species": 286, "x": 13, "y": 38}
+[duo] timing oracle 0.3s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_hs7mculf
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 2 of 16
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=a643a2b6417e7962b34edb1a4b51b0181037589e
+[duo] server up: tcp=52579 http=52580 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_0nkbxh2l
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_1_witness.bin, e2e_species_family_gen3_a_1_witness_ext.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_1_witness.bin, e2e_species_family_gen3_b_1_witness_ext.bin, e2e_species_family_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 8.5s
+[duo] timing results 4.0s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=58ef55efc39f945e8f71e32b38e7f51833a431eec7bbd81e76e08cfd10dd0f59 file=58ef55efc39f945e8f71e32b38e7f51833a431eec7bbd81e76e08cfd10dd0f59 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=7462629d42c3be29990c0adfd787c95225a5f76975c0f4b3a2a655f2ca240d3f file=7462629d42c3be29990c0adfd787c95225a5f76975c0f4b3a2a655f2ca240d3f match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:2BDDC8BF", "map": 787, "owned": 289, "player": "a", "related": false, "species": 16, "x": 13, "y": 37}
+[duo] timing oracle 0.5s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_0nkbxh2l
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 3 of 16
+[duo] JITTER requested=74 attempt=3
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=a643a2b6417e7962b34edb1a4b51b0181037589e
+[duo] server up: tcp=51801 http=51802 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_fej2rayp
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_2_witness.bin, e2e_species_family_gen3_a_2_witness_ext.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_2_witness.bin, e2e_species_family_gen3_b_2_witness_ext.bin, e2e_species_family_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 7.7s
+[duo] timing results 4.0s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=9944f3f8957fa90a09cc3e7044b4c22d865b3ea8351c45af38394c14f3ecc328 file=9944f3f8957fa90a09cc3e7044b4c22d865b3ea8351c45af38394c14f3ecc328 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=d955a3de769c582d10f7917e69ca94195a95988e14fa823f71ca712e2253f1af file=d955a3de769c582d10f7917e69ca94195a95988e14fa823f71ca712e2253f1af match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:2BDDC8BF", "map": 787, "owned": 289, "player": "a", "related": false, "species": 163, "x": 12, "y": 38}
+[duo] timing oracle 0.4s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_fej2rayp
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 4 of 16
+[duo] JITTER requested=111 attempt=4
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=a643a2b6417e7962b34edb1a4b51b0181037589e
+[duo] server up: tcp=55298 http=55299 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_rknrkwu3
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_3_witness.bin, e2e_species_family_gen3_a_3_witness_ext.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_3_witness.bin, e2e_species_family_gen3_b_3_witness_ext.bin, e2e_species_family_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 9.3s
+[duo] timing results 4.7s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=68dd19710e224dd3700d4a4a269361846de86821b170a6ccc5fdeedf1256eeae file=68dd19710e224dd3700d4a4a269361846de86821b170a6ccc5fdeedf1256eeae match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=e10a67c9eb5852dab18aee14faed303ff9cbb2687c0f312c247edd6da308802f file=e10a67c9eb5852dab18aee14faed303ff9cbb2687c0f312c247edd6da308802f match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:2BDDC8BF", "map": 787, "owned": 289, "player": "a", "related": false, "species": 286, "x": 12, "y": 37}
+[duo] timing oracle 0.4s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_rknrkwu3
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 5 of 16
+[duo] JITTER requested=148 attempt=5
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=a643a2b6417e7962b34edb1a4b51b0181037589e
+[duo] server up: tcp=57014 http=57015 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_1n6mt8s8
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_4_witness.bin, e2e_species_family_gen3_a_4_witness_ext.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_4_witness.bin, e2e_species_family_gen3_b_4_witness_ext.bin, e2e_species_family_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 10.0s
+[duo] timing results 5.5s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=5f904615273c86c239a1618642dc6792e2cd81d5516c9c9892e38f58396742ec file=5f904615273c86c239a1618642dc6792e2cd81d5516c9c9892e38f58396742ec match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=f81eb1f4cf31a4e717edc3966ed69a62db6fe265b1f02685e4dc2a157efe7dca file=f81eb1f4cf31a4e717edc3966ed69a62db6fe265b1f02685e4dc2a157efe7dca match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:2BDDC8BF", "map": 787, "owned": 289, "player": "a", "related": false, "species": 163, "x": 12, "y": 38}
+[duo] timing oracle 0.5s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_1n6mt8s8
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 6 of 16
+[duo] JITTER requested=185 attempt=6
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=a643a2b6417e7962b34edb1a4b51b0181037589e
+[duo] server up: tcp=65360 http=65361 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_z9nj19gn
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_5_witness.bin, e2e_species_family_gen3_a_5_witness_ext.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_5_witness.bin, e2e_species_family_gen3_b_5_witness_ext.bin, e2e_species_family_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 10.2s
+[duo] timing results 4.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=ad423b6f7065e0631ccd1576c9bdadcc32696f7b46e6bf484250c7b9dc270890 file=ad423b6f7065e0631ccd1576c9bdadcc32696f7b46e6bf484250c7b9dc270890 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=4697006d16a909fa247388647a0992348f4c6346235a2cf76013432e3cd3cc29 file=4697006d16a909fa247388647a0992348f4c6346235a2cf76013432e3cd3cc29 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:2BDDC8BF", "map": 787, "owned": 289, "player": "a", "related": false, "species": 566, "x": 12, "y": 37}
+[duo] timing oracle 0.5s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_z9nj19gn
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 7 of 16
+[duo] JITTER requested=222 attempt=7
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=a643a2b6417e7962b34edb1a4b51b0181037589e
+[duo] server up: tcp=63760 http=63761 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_7kfpfwrw
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_6_witness.bin, e2e_species_family_gen3_a_6_witness_ext.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_6_witness.bin, e2e_species_family_gen3_b_6_witness_ext.bin, e2e_species_family_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 11.4s
+[duo] timing results 4.8s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=3ba1d9ec4f7e1f03299bb791d32305bdf93d3a84fc4a44f5a8a3d354d9d5d5fe file=3ba1d9ec4f7e1f03299bb791d32305bdf93d3a84fc4a44f5a8a3d354d9d5d5fe match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=2cfb54b660e874c44079a187a43857144743b73fb472b2eb6a40b3d787d77ce0 file=2cfb54b660e874c44079a187a43857144743b73fb472b2eb6a40b3d787d77ce0 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:2BDDC8BF", "map": 787, "owned": 289, "player": "a", "related": false, "species": 612, "x": 13, "y": 38}
+[duo] timing oracle 0.5s
+[duo] PYDEC: FAIL evolution family not encountered
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_7kfpfwrw
+[duo] species_family_gen3: evolution family not encountered; retrying fresh lane
+[duo] species_family_gen3: attempt 8 of 16
+[duo] JITTER requested=259 attempt=8
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=d997f13cbc1e364f365509583f716eb6f770966cbf06b0fbfe655e35f423ca2f b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=c1ccd465dd49d8ac15c05a762e72f02dd462064ebce321dc7c17e68434dd1c5a write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=a643a2b6417e7962b34edb1a4b51b0181037589e
+[duo] server up: tcp=50497 http=50498 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_d11gdugt
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for species_family_gen3: e2e_species_family_gen3_a_7_witness.bin, e2e_species_family_gen3_a_7_witness_ext.bin, e2e_species_family_gen3_a_result.txt, e2e_species_family_gen3_b_7_witness.bin, e2e_species_family_gen3_b_7_witness_ext.bin, e2e_species_family_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked EBEF11DA:2BDDC8BF <-> EBEF11DA:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 10.1s
+[duo] timing results 4.6s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=238aa0c4c5a5a4368e7c3e831f32a76db03a7f6296ba849b886552d4de854ac6 file=238aa0c4c5a5a4368e7c3e831f32a76db03a7f6296ba849b886552d4de854ac6 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=785ae976942060849bf09d5523c92133372409bc3caedeefada7c9c3b6936cf4 file=785ae976942060849bf09d5523c92133372409bc3caedeefada7c9c3b6936cf4 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] FAMILY_ENCOUNTER {"key": "EBEF11DA:D4223740", "map": 787, "owned": 1223, "player": "b", "related": true, "species": 1222, "x": 13, "y": 37}
+[duo] family: native 1222 rerolled against distinct owned 1223 on b; staged link remains alive
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] species_family_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_species_family_gen3_d11gdugt
+
+========== summary ==========
+  species_family_gen3: PASS (attempt 8 of 16)

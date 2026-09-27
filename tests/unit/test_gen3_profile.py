@@ -615,9 +615,10 @@ def test_admission_flags_and_source_block() -> None:
 
 
 # ── the native (companion) block ─────────────────────────────────────────────────
-def test_native_is_present_only_in_gen3_rr() -> None:
-    assert "native" not in _load("gen3_frlg")
-    assert "native" in _load("gen3_rr")
+def test_native_bindings_keep_rr_abi1_and_publish_vanilla_abi2() -> None:
+    assert _load("gen3_frlg")["native"]["ABI"]==2
+    assert json.loads((REPO/"data/games/gen3_emerald/profile.json").read_text())["native"]["ABI"]==2
+    assert _load("gen3_rr")["native"]["ABI"]==1
 
 
 def test_native_matches_the_mailbox_and_ghost_sources() -> None:

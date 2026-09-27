@@ -51,7 +51,7 @@ def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
             assert contract.require_oracle is True
             assert contract.witness_validator
             assert callable(getattr(DuoRun, contract.witness_validator, None))
-        elif GAMES[game].get("game", game) in ("gen3_frlg", "gen3_rr", "gen3_emerald"):
+        elif GAMES[game].get("game", game) in ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_fr_trade"):
             # the new Gen 3 battery rows take the Gen 1 rule with their own witness
             assert contract.require_oracle is True
             assert contract.witness_validator == GAMES[game]["save_witness"]
@@ -618,34 +618,6 @@ def test_every_game_runs_something(game):
     assert scenarios_for(game), f"no scenario applies to {game}"
 
 
-# NOT asserted, and the reason is worth writing down: `faint` and `boxsync` declare
-# `"savestate": "slink_overworld.State"` and still run on Gen 1 and Gen 2, which have no
-# savestate at all. That is not a contradiction. The launch path branches on the GAME
-# (`DuoRun.battery_boot`, from GAMES[game]["uses_savestate"]), so a scenario's savestate is
-# Gen 3 data that battery-boot titles never read. The first version of this file asserted the
-# tidy-looking invariant instead and failed on three games — the table was right and the test
-# was wrong.
-
-
-def test_savestate_games_are_never_given_a_batteryless_scenario():
-    """This direction IS load-bearing: tests/e2e/test_duo.py KeyErrors in `_states_for` on a
-    scenario with no savestate, so selecting one for Gen 3 breaks collection of the whole
-    module rather than failing a single test.
-
-    Every current GAMES row battery-boots (the old Gen 3 client's savestate row retired with
-    lua/tests/duo/duo_main.lua to tag archive/gen3-old-client, C5-5/46a5f597), so this loop runs
-    zero iterations today and passes vacuously -- it is a guard for a future savestate-boot row,
-    not dead weight: parametrizing over GAMES and skipping the batteryless ones (the previous
-    shape of this test) reported a skip per game instead of asserting nothing had to be skipped.
-    """
-    for game in GAMES:
-        if not GAMES[game]["uses_savestate"]:
-            continue
-        offenders = [n for n in scenarios_for(game) if "savestate" not in SCENARIOS[n]]
-        assert not offenders, (
-            f"{game} loads savestates but would be given scenario(s) that declare none: "
-            f"{offenders}")
-
 
 def test_gen3_rr_selection_is_exactly_the_radical_red_set():
     """Pinned rather than derived, so that widening a `games` tuple by accident has to be an
@@ -859,13 +831,13 @@ GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
                           "linked_faint_active_trainer_gen3")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
 # NAT-LEGS: the FR/LG natural legs (S-8, S-9, S-11), explicit_only (FR-as-A SYNTH fixtures)
-GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3")
+GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3", "shiny_bonus_gen3")
 # card RR-SYNTH/RR-NPCTRADE/CLAUSE-ROWS-G3: evolve_gen3, npc_trade_gen3 and species_family_gen3
 # also name gen3_rr (rr_evolve_synth.sav, rr_trade_synth.sav + RR's runtime in-game trade table,
 # rr_family_synth.sav; docs/gen3/research/rr_ingame_trades.md). poison_faint_gen3 stays refused
 # (RR's DoPoisonFieldEffect is an unconditional no-op stub, no HP mutation to build a fixture
 # around) -- see its comment in tools/e2e_duo.py SCENARIOS.
-GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3")
+GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3", "shiny_bonus_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (

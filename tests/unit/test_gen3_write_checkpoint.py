@@ -393,7 +393,7 @@ def test_native_block_is_the_profile_and_stays_inside_ewram() -> None:
     profile = json.loads((G.ROOT / "data/games/gen3_rr/profile.json").read_text(encoding="utf-8"))
     nat = profile["native"]
     block = load("gen3_rr")["radical_red"]
-    assert "native" not in load("gen3_frlg")["firered"], "FR has no companion arena"
+    assert load("gen3_frlg")["firered"]["native"]["version"]=="gen3-native-v2"
     n = block["native"]
     assert (n["base"], n["sig"], n["abi"], n["info"]) == (nat["BASE"], nat["SIG"], nat["ABI"], nat["INFO"])
     assert (n["opcode_off"], n["status_off"], n["busy"]) == (6, 10, 1)

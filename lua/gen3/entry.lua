@@ -120,7 +120,7 @@ for _, pack in pairs(Entry.PACKS) do
 end
 -- A header-named vanilla family (an unknown-hash cartridge that still says BPRE/BPGE) reads
 -- the clean artifact's pack data; if its bytes really differ, the site check refuses it.
-Entry.BASE_KIND = { named = "clean", rand = "clean" }
+Entry.BASE_KIND = { named = "clean", rand = "clean", rand_companion = "companion" }
 
 -- ── admission ────────────────────────────────────────────────────────────────────────
 
@@ -137,7 +137,7 @@ end
 -- Bootstrap storage is meaningful only for a companion with the durable
 -- witness ABI. RR's admitted ABI1 must not acquire an unbindable journal.
 function Entry.trade_journal_supported(root, json, artifact)
-    if artifact.kind ~= "companion" then return false end
+    if artifact.kind ~= "companion" and artifact.kind ~= "rand_companion" then return false end
     local files = assert(Entry.PACK_FILES[artifact.pack], "unknown pack")
     local full = load_json(json, root .. "/" .. files.profile)
     return type(full.native) == "table" and full.native.ABI == 2
@@ -232,6 +232,7 @@ function Entry.admit(args)
             if m.production == false then return nil, "non-production cartridge is not admitted" end
             local kind = m.kind
             if kind == "clean" and Entry.PACKS[m.pack].randomizable == true then kind = "rand" end
+            if kind == "companion" and Entry.PACKS[m.pack].randomizable == true then kind = "rand_companion" end
             return { pack = m.pack, title = m.title, kind = kind, rom_type = m.rom_type,
                      rom_hash = hash, admitted_by = "anchors" }
         elseif #matches > 1 then
@@ -361,7 +362,8 @@ local function build_production(deps, c)
     -- production metadata; no FR companion is currently shipped/admitted.
     local session   -- not `client`: that is a BizHawk global name (test_gen3_signals BizHawk-globals scan)
     local full_profile = load_json(c.json, c.root .. "/" .. files.profile)
-    local fr_native = pack == "gen3_frlg" and c.title == "firered" and c.production == true
+    local fr_native = ((pack == "gen3_frlg" and (c.title == "firered" or c.title == "leafgreen"))
+        or (pack == "gen3_emerald" and c.title == "emerald")) and c.production == true
         and type(full_profile.native) == "table" and full_profile.native.ABI == 2
     if not native and (pack == "gen3_rr" or fr_native) and c.artifact_kind == "companion"
        and type(full_profile.native) == "table" then
@@ -393,7 +395,8 @@ local function build_production(deps, c)
             end,
             in_battle = function() return session and session.driver.in_battle() or false end,
             trade_safe = function()
-                return session ~= nil and not session.driver.in_battle() and safety:check(nil,"overworld") == true
+                if not session or session.driver.in_battle() then return false,"trade field unavailable" end
+                return safety:check(nil,"overworld")
             end,
             trade_recovery_clear = function()
                 local journal = io_.trade_journal
@@ -426,7 +429,7 @@ local function build_production(deps, c)
         area_map = load_json(c.json, c.root .. "/" .. files.area_map),
         locations = dofile(c.root .. "/" .. files.locations),
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
-        foundation = pack, artifact_kind = c.parts.kind == "rand" and "rand" or c.artifact_kind,
+        foundation = pack, artifact_kind = (c.parts.kind == "rand" or c.parts.kind == "rand_companion") and c.parts.kind or c.artifact_kind,
         native = native, log = deps.log, core = core,
         trade_policy = Entry.PACKS[pack].trade_policy,
         rom_size = deps.rom_size,
@@ -484,9 +487,9 @@ function Entry.build(deps)
                             pack .. "/" .. title .. " ships no artifact of kind " .. artifact_kind)
     if mode == "production" then
         assert(artifact.production ~= false, "non-production cartridge cannot build a production client")
-        if pack == "gen3_frlg" and artifact_kind == "companion" then
-            assert(title == "firered" and artifact.production == true,
-                   "FR companion requires explicit production cartridge metadata")
+        if (pack == "gen3_frlg" or pack == "gen3_emerald") and artifact_kind == "companion" then
+            assert(artifact.production == true,
+                   "vanilla companion requires explicit production cartridge metadata")
         end
     end
     local sites = assert(artifact.sites, "artifact " .. artifact_kind .. " ships no sites")

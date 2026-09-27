@@ -1,51 +1,4 @@
-#if defined(SLINK_ARENA_PROBE)
-/* Diagnostic-only InitHeap replacement, no UPS/admission/capability publication.
- * Source equivalence: pokefirered c75f3523 src/malloc.c:186-191. The builder
- * verifies the complete base and overwritten entry before injecting this probe.
- * Positive mode clamps gHeap; negative mode deliberately leaves its old extent.
- * Both attempt a native allocation that reaches the proposed reservation.
- */
-#include <stdint.h>
-typedef void (*ProbeFirstHeader)(void *, uint32_t);
-typedef void *(*ProbeAllocate)(void *, uint32_t);
-typedef void (*ProbeFree)(void *, void *);
-
-__attribute__((section(".text.entry"), used))
-void slink_heap_probe(void *heap, uint32_t size)
-{
-    uint32_t requested = size;
-    int selected = (uint32_t)heap == SLINK_TARGET_HEAP_BASE && size == SLINK_TARGET_HEAP_SIZE;
-    if (selected && SLINK_ARENA_PROBE == 1) size -= SLINK_TARGET_ARENA_SIZE;
-    *(volatile uint32_t *)SLINK_TARGET_HEAP_START_PTR = (uint32_t)heap;
-    *(volatile uint32_t *)SLINK_TARGET_HEAP_SIZE_PTR = size;
-    ((ProbeFirstHeader)(SLINK_TARGET_PUT_FIRST_HEADER | 1u))(heap, size);
-    if (selected) {
-        volatile uint32_t *canary = (volatile uint32_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0xF00u);
-        for (unsigned i = 0; i < 16; i++) canary[i] = 0xC0DEC0DEu;
-        /* Native FR asserts (does not return) on exhaustion. Allocate the
-         * largest fitting block in each mode, fill it and observe the boundary.
-         * Unclamped mode reaches the candidate arena; clamped mode must not. */
-        void *allocation = ((ProbeAllocate)(SLINK_TARGET_ALLOC_INTERNAL | 1u))(heap, size - 32u);
-        if (allocation) {
-            volatile uint8_t *bytes = allocation;
-            for (uint32_t i = 0; i < size - 32u; i++) bytes[i] = 0xA5u;
-            ((ProbeFree)(SLINK_TARGET_FREE_INTERNAL | 1u))(heap, allocation);
-        }
-        unsigned intact = 1;
-        for (unsigned i = 0; i < 16; i++) if (canary[i] != 0xC0DEC0DEu) intact = 0;
-        volatile uint32_t *receipt = (volatile uint32_t *)SLINK_TARGET_ARENA_CANDIDATE;
-        receipt[1] = SLINK_ARENA_PROBE;
-        receipt[2] = requested;
-        receipt[3] = size;
-        receipt[4] = allocation != 0;
-        receipt[5] = intact;
-        receipt[6] = (uint32_t)allocation;
-        receipt[7] = size - 32u;
-        receipt[0] = 0x32505241u; /* ARP2 completion marker last; not SLNK */
-    }
-}
-#else
-/* SLink companion patch — injected handlers (Thumb, freestanding C).
+#if !defined(SLINK_ARENA_PROBE) && !defined(SLINK_NATIVE_TRADE_PROBE) && !defined(SLINK_NATIVE_COMPANION) /* SLink companion patch — injected handlers (Thumb, freestanding C).
  *
  * Compiled by arm-none-eabi-gcc and linked at CODE_BASE (0x08378CA8) by slink.ld, so
  * slink_hook() sits exactly where the CallCallbacks hook `bl`s to (build.py writes that
@@ -2445,6 +2398,109 @@ void slink_hook(void)
     }
 
     ack(ST_OK, 0);
+}
+
+#elif defined(SLINK_NATIVE_TRADE_PROBE) || defined(SLINK_NATIVE_COMPANION)
+#include "trade_targets/native_trade.h"
+#else /* diagnostic build only; preserve v1 source line citations above */
+/* Diagnostic-only InitHeap replacement, no UPS/admission/capability publication.
+ * Source equivalence: pokefirered c75f3523 src/malloc.c:186-191. The builder
+ * verifies the complete base and overwritten entry before injecting this probe.
+ * Positive mode clamps gHeap; negative mode deliberately leaves its old extent.
+ * Both attempt a native allocation that reaches the proposed reservation.
+ */
+#include <stdint.h>
+typedef void (*ProbeFirstHeader)(void *, uint32_t);
+typedef void *(*ProbeAllocate)(void *, uint32_t);
+typedef void (*ProbeFree)(void *, void *);
+#include "trade_targets/abi.h"
+
+/* Scene census only, not the v2 trade protocol. Host stages an O-33 incoming
+ * record at arena+0x400 and request=1 at +0x40; no ACK/DONE or SLNK beacon.
+ * The three states at +0x44 mean script queued, scene entered, field returned.
+ * Reimplements the original CallCallbacks guards verbatim (main.c:241-250).
+ */
+__attribute__((used))
+void slink_frame_probe(void)
+{
+    typedef uint8_t (*Check)(void);
+    typedef void (*Callback)(void);
+    typedef void (*Setup)(const uint8_t *);
+    if (((Check)(SLINK_TARGET_SAVE_FAILED_SCREEN | 1u))()
+        || ((Check)(SLINK_TARGET_HELP_CALLBACK | 1u))()) return;
+    volatile uint32_t *request = (volatile uint32_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x40u);
+    volatile uint32_t *phase = request + 1;
+    volatile uint32_t *callbacks = (volatile uint32_t *)SLINK_TARGET_GMAIN;
+    volatile uint8_t *incoming = (volatile uint8_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x400u);
+    if (*request == 1 && callbacks[1] == SLINK_TARGET_FIELD_CALLBACK
+        && !*(volatile uint8_t *)SLINK_TARGET_FIELD_LOCK) {
+        volatile uint8_t *enemy = (volatile uint8_t *)SLINK_TARGET_ENEMY_PARTY;
+        for (unsigned i=0;i<100;i++) enemy[i]=incoming[i];
+        *(volatile uint8_t *)SLINK_TARGET_ENEMY_COUNT = 1;
+        *(volatile uint16_t *)SLINK_TARGET_TRADE_SLOT_VAR = 0;
+        *(volatile uint16_t *)SLINK_TARGET_TRADE_TABLE_VAR = 0;
+        volatile uint8_t *script = (volatile uint8_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0x300u);
+        uint32_t function = SLINK_TARGET_TRADE_SCENE | 1u;
+        script[0]=0x23; /* callnative, then waitstate/end */
+        for (unsigned i=0;i<4;i++) script[1+i]=(uint8_t)(function>>(8*i));
+        script[5]=0x27; script[6]=0x02;
+        *request=0; *phase=1;
+        ((Setup)(SLINK_TARGET_SCRIPT_SETUP | 1u))((const uint8_t *)script);
+    }
+    if (*phase == 1 && callbacks[1] != SLINK_TARGET_FIELD_CALLBACK) *phase=2;
+    if (*phase == 2) {
+        slink_copy_name_bounded((volatile uint8_t *)SLINK_TARGET_STR_VAR1,
+            SLINK_TARGET_STR_VAR1_SIZE, incoming+0x14, 7);
+        slink_copy_name_bounded((volatile uint8_t *)SLINK_TARGET_STR_VAR3,
+            SLINK_TARGET_STR_VAR3_SIZE, incoming+0x08, 10);
+        if (callbacks[1] == SLINK_TARGET_FIELD_CALLBACK) *phase=3;
+    }
+    if (callbacks[0]) ((Callback)callbacks[0])();
+    if (callbacks[1]) ((Callback)callbacks[1])();
+}
+
+__attribute__((section(".text.entry"), used))
+void slink_heap_probe(void *heap, uint32_t size)
+{
+    uint32_t requested = size;
+    int selected = (uint32_t)heap == SLINK_TARGET_HEAP_BASE && size == SLINK_TARGET_HEAP_SIZE;
+    if (selected && SLINK_ARENA_PROBE != 2) size -= SLINK_TARGET_ARENA_SIZE;
+    *(volatile uint32_t *)SLINK_TARGET_HEAP_START_PTR = (uint32_t)heap;
+    *(volatile uint32_t *)SLINK_TARGET_HEAP_SIZE_PTR = size;
+    ((ProbeFirstHeader)(SLINK_TARGET_PUT_FIRST_HEADER | 1u))(heap, size);
+    if (selected) {
+        volatile uint32_t *receipt = (volatile uint32_t *)SLINK_TARGET_ARENA_CANDIDATE;
+        receipt[0] = 0; /* diagnostic in progress; exclude stress allocation from scene peaks */
+        receipt[1] = SLINK_ARENA_PROBE;
+        receipt[2] = requested;
+        receipt[3] = size;
+        volatile uint32_t *canary = (volatile uint32_t *)(SLINK_TARGET_ARENA_CANDIDATE + 0xF00u);
+        for (unsigned i = 0; i < 16; i++) canary[i] = 0xC0DEC0DEu;
+        /* Native FR asserts (does not return) on exhaustion. Allocate the
+         * largest fitting block in each mode, fill it and observe the boundary.
+         * Unclamped mode reaches the candidate arena; clamped mode must not. */
+        uint32_t wanted = (SLINK_ARENA_PROBE == 3 ? requested : size) - 32u;
+        /* Mode4 is the actual scene census: do not taint free heap contents
+         * with the allocator stress pattern used by the isolated controls. */
+        void *allocation = 0;
+        if (SLINK_ARENA_PROBE != 4)
+            allocation = ((ProbeAllocate)(SLINK_TARGET_ALLOC_INTERNAL | 1u))(heap, wanted);
+        if (allocation) {
+            volatile uint8_t *bytes = allocation;
+            for (uint32_t i = 0; i < size - 32u; i++) bytes[i] = 0xA5u;
+            ((ProbeFree)(SLINK_TARGET_FREE_INTERNAL | 1u))(heap, allocation);
+        }
+        unsigned intact = 1;
+        for (unsigned i = 0; i < 16; i++) if (canary[i] != 0xC0DEC0DEu) intact = 0;
+        receipt[1] = SLINK_ARENA_PROBE;
+        receipt[2] = requested;
+        receipt[3] = size;
+        receipt[4] = allocation != 0;
+        receipt[5] = intact;
+        receipt[6] = (uint32_t)allocation;
+        receipt[7] = wanted;
+        receipt[0] = 0x32505241u; /* ARP2 completion marker last; not SLNK */
+    }
 }
 
 #endif /* SLINK_ARENA_PROBE */

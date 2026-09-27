@@ -1,0 +1,44 @@
+# gen3_final_cut row=rr_opcode_gates item=G5-GATES-LIVE cut=d9a928d79a99aef33ac923cfbf589cda2715762d
+# lane=C:/slink-wt/g3-lane
+# command: python -m pytest tests/live/test_lua_gates.py -q -p no:randomly -rs   (cwd=C:/slink-wt/g3-lane)
+# env: SLINK_LIVE=1
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:54:20 cpu=54% emuhawk=0 python=4
+start_utc=2026-09-27T19:54:19Z tracked_clean_before=True
+........................F..ssssssssssss[test_lua_gates] ported gates executed: 26/27
+                                                                         [100%]
+================================== FAILURES ===================================
+_____________________ test_gate[test_mailbox_absent.lua] ______________________
+
+gate = 'test_mailbox_absent.lua'
+
+    @pytest.mark.parametrize("gate", _gates())
+    def test_gate(gate):
+>       _run(gate, strict=True)
+
+tests\live\test_lua_gates.py:196: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+gate = 'test_mailbox_absent.lua', strict = True
+
+    def _run(gate, strict):
+        """Run one gate. strict (a PORTED gate under SLINK_LIVE=1): a missing prerequisite FAILS with its
+        reason, so a run in which nothing executed can never read as green (R2 M3). Deferred: skips."""
+        problem = prerequisite_problem(gate)
+        if problem:
+>           (pytest.fail if strict else pytest.skip)(f"{gate}: prerequisite missing — {problem}")
+E           Failed: test_mailbox_absent.lua: prerequisite missing — unpatched ROM missing: Pokemon - Radical Red.gba
+
+tests\live\test_lua_gates.py:169: Failed
+=========================== short test summary info ===========================
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_BATTLE_MESSAGE) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [6] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_MESSAGE; OP_PLAY_FANFARE rides with it) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_MESSAGE) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) (OP_GHOST_SPAWN talk-to-ghost) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) (OP_SPAWN/DESPAWN_PEER_NPC, the ghost's engine NPC) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:206: got empty parameter set for (gate)
+1 failed, 26 passed, 12 skipped in 102.12s (0:01:42)
+exit=1 end_utc=2026-09-27T19:56:03Z tracked_clean_after=True classification=real

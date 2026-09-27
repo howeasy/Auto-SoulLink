@@ -13,6 +13,7 @@
 return {
   ["0:0"] = "petalburg_city",
   ["0:1"] = "slateport_city",
+  ["0:2"] = "mauville_city",
   ["0:5"] = "lilycove_city",
   ["0:6"] = "mossdeep_city",
   ["0:7"] = "sootopolis_city",

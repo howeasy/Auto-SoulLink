@@ -290,7 +290,7 @@ def test_the_retired_gen3_modules_are_not_shipped(archive):
 
 def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_changes(tmp_path):
     """RELEASE-EVIDENCE-TOOLING: each UPS named by data/gen2/overlay_provenance.json lands under
-    companion/ with its published bytes; the Gen 1 / pureRGB / RR companion set is unchanged."""
+    companion/ with its published bytes, alongside the published vanilla Gen 3 companions."""
     import hashlib
     import json
     from pathlib import Path
@@ -305,4 +305,8 @@ def test_with_patch_ships_every_published_gen2_overlay_ups_and_nothing_else_chan
     assert set(companion) - {f"companion/{Path(r['ups']['file']).name}" for r in outputs.values()} == {
         "companion/SLink-RR.ups", "companion/COMPANION_PATCH.md", "companion/SLink-RB-Red.ups",
         "companion/SLink-RB-Blue.ups", "companion/SLink-PureRed.ups", "companion/SLink-PureBlue.ups",
-        "companion/SLink-PureGreen.ups"}
+        "companion/SLink-PureGreen.ups", "companion/SLink-FireRed.ups", "companion/SLink-LeafGreen.ups",
+        "companion/SLink-Emerald.ups", "companion/gen3_companions.json"}
+    native=json.loads(companion["companion/gen3_companions.json"])
+    for row in native["titles"].values():
+        assert hashlib.sha256(companion["companion/"+row["patch"]]).hexdigest()==row["ups_sha256"]

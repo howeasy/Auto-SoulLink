@@ -128,22 +128,23 @@ def test_native_ui_writes_do_not_fake_a_ball_gate_failure(monkeypatch, tmp_path)
 
 
 def test_rr_family_target_exists_in_both_own_time_tables():
-    import json
-    from pathlib import Path
-
     import gen3_clause_rows as rules
     import gen3_fixtures as fx
+    import rr_rom_encounters as wild
 
     from tools.pin_gen3_site import load_rom
     rom = load_rom("rr")
-    seed = (Path(fx.REPO) / "tests/fixtures/gen3/rr_battle2.sav").read_bytes()
-    built, _ = rules.family_seed(seed, "radical_red", rom=rom)
-    owned = codec.rr_party_from_save(built)[0]["species"]
+    directory = Path(fx.REPO) / "tests/fixtures/gen3"
+    owned = {side: codec.rr_party_from_save((directory / name).read_bytes())[0]["species"]
+             for side, name in (("a", "rr_family_synth.sav"), ("b", "rr_family_galar_synth_b.sav"))}
+    assert owned == {"a": 289, "b": 1223}
     facts = rules.species_facts(rom, "radical_red")
-    table = json.loads((Path(fx.REPO) / "data/games/gen3_frlge/rr_encounters.json").read_text())["route_1"]
-    for period in ("Day", "Night"):
-        assert any(e["species_id"] != owned and rules.same_family(facts, owned, e["species_id"])
-                   for e in table[period]), period
+    decoded = wild.decode_encounters(rom)
+    for period, expected in (("Day", {("a", 288)}), ("Night", {("b", 1222)})):
+        slots = wild.effective_maps(decoded, period)[(3, 19)]["habitats"]["land"]["slots"]
+        matches = {(side, slot["species_id"]) for side, species in owned.items() for slot in slots
+                   if slot["species_id"] != species and rules.same_family(facts, species, slot["species_id"])}
+        assert matches == expected
 
 
 def test_rr_gender_branch_has_eight_observation_attempts():
@@ -212,6 +213,7 @@ def test_phase_boundary_verifies_save_and_exit_before_edit_or_reboot(monkeypatch
     run._gen3_title = lambda _: "firered"
     run._pydec_note = lambda line: calls.append("manifest")
     def launch(i, phase, seed):
+        assert run._phase == {"a": "post_flip", "b": "post_flip"}
         assert "witness-and-exit" in calls and phase == "post_flip" and seed
         assert h.gen3_ball_count(run._gen3_fixture_bytes(i), "firered") == 20
         calls.append("launch-"+i)

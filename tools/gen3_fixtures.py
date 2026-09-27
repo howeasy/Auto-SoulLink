@@ -1783,7 +1783,7 @@ RR_CERULEAN_HOUSE3_WARP = (7, 2, 2, 1)  # CeruleanCity_House3 group.num=7.2; Don
                                          # stand tile is the one Dontae is looking at, (2,1),
                                          # facing DOWN toward him (opposite of Route2_House's
                                          # Reyley, who faces down onto a stand tile below him)
-RR_SYNTH_KINDS = ("evolve", "trade", "family", "ball_gate")
+RR_SYNTH_KINDS = ("evolve", "trade", "family", "family_galar", "ball_gate")
 
 
 def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
@@ -1791,9 +1791,10 @@ def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
     Surgical sector patch only (see the module note above); never write_sector."""
     if kind not in RR_SYNTH_KINDS:
         raise ValueError(f"unknown RR synth kind {kind!r}")
-    if kind == "family":
+    if kind in ("family", "family_galar"):
         from gen3_clause_rows import family_seed
-        return family_seed(seed, "radical_red")
+        pair = (1223, 1222) if kind == "family_galar" else (289, 288)
+        return family_seed(seed, "radical_red", species_pair=pair)
     if kind == "ball_gate":
         from gen3_clause_rows import rr_ball_gate_seed
         return rr_ball_gate_seed(seed)

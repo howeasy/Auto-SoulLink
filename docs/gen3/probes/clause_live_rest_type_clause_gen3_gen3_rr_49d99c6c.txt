@@ -1,0 +1,36 @@
+# CLAUSE-LIVE-REST gen3_rr type_clause_gen3
+# source: 49d99c6c4e7509810b8389ab7182965652b28d71
+# command: python tools/e2e_duo.py --game gen3_rr --scenario type_clause_gen3 --lane clause-rest-type-rr --keep-data
+# cwd: C:/slink-wt/g3-clause-run (frozen clean checkout)
+# private state: .cache/state; archived artifacts: C:/slink-wt/g3-clause-live-rest/.cache/live/type_clause_gen3_gen3_rr_49d99c6c
+
+
+========== scenario: type_clause_gen3 ==========
+[duo] type_clause_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=49d99c6c4e7509810b8389ab7182965652b28d71
+[duo] server up: tcp=63749 http=63750 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_type_clause_gen3_okr3bz3i
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 19.8s
+[duo] timing results 3.8s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=61cc4e622eca0cd54ca6ce48a6db74f95c9a974df64ba487686b7d868a1a797c file=61cc4e622eca0cd54ca6ce48a6db74f95c9a974df64ba487686b7d868a1a797c match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=4ee8d68f27bc846720a5854ed968e5e27dd67bd325cbcd1fcca5a3c30a92bd3b file=4ee8d68f27bc846720a5854ed968e5e27dd67bd325cbcd1fcca5a3c30a92bd3b match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] type: B rejected and memorial saved; A quarantined; area retryable
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] type_clause_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_type_clause_gen3_okr3bz3i
+
+========== summary ==========
+  type_clause_gen3: PASS (attempt 1 of 3)

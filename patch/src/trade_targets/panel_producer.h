@@ -1,0 +1,59 @@
+/* Owned native panel lifecycle; no rendering/address assumptions. */
+#ifndef SLINK_PANEL_PRODUCER_H
+#define SLINK_PANEL_PRODUCER_H
+#include "trade_producer.h"
+typedef struct {
+    void *context;
+    int (*safe)(void *);
+    int (*start)(void *,const SlinkInfoV2 *);
+    int (*poll)(void *,uint8_t *); /* 0 opening, 1 drawn, 2 closed */
+} SlinkPanelEngine;
+typedef struct {
+    SlinkInfoV2 snapshot;
+    uint8_t active;
+} SlinkPanelProducer;
+
+static inline int slink_panel_valid(const volatile SlinkInfoV2 *i,uint32_t epoch)
+{
+    if (!epoch || i->session_epoch!=epoch || !i->request_seq || !i->enable
+        || !i->lines || i->lines>SLINK_INFO_MAX_LINES) return 0;
+    for (unsigned row=0;row<SLINK_INFO_ROW_COUNT;row++) {
+        if (row>=i->lines && row!=SLINK_INFO_PAGE_SLOT) continue;
+        unsigned n=0;
+        while (n<SLINK_INFO_LINE_WIDTH && i->text[row][n]!=0xffu) n++;
+        if (n==SLINK_INFO_LINE_WIDTH) return 0;
+    }
+    return 1;
+}
+static inline void slink_panel_service(SlinkPanelProducer *s,volatile SlinkMailboxV2 *m,
+    volatile SlinkInfoV2 *i,const SlinkPanelEngine *e,int menu_open)
+{
+    if (s->active) {
+        uint8_t result=0;
+        int phase=e->poll(e->context,&result);
+        if (m->session_epoch==s->snapshot.session_epoch
+            && i->session_epoch==s->snapshot.session_epoch && i->request_seq==s->snapshot.request_seq) {
+            if (phase==1) { i->drawn_seq=s->snapshot.request_seq;i->state=2; }
+            if (phase==2) { i->result=result;i->closed_seq=s->snapshot.request_seq;i->state=0; }
+        }
+        if (phase==2) s->active=0;
+    }
+    int posted=m->opcode==SLINK_OP_SHOW_INFO;
+    if (!posted && (!menu_open || m->opcode)) return;
+    uint16_t seq=m->seq;
+    if (s->active || !e->safe(e->context) || !slink_panel_valid(i,m->session_epoch)
+        || (posted && i->request_seq!=seq)) {
+        if (posted) tp_ack(m,seq,0,2);
+        return;
+    }
+    const volatile uint8_t *source=(const volatile uint8_t *)i;
+    uint8_t *copy=(uint8_t *)&s->snapshot;
+    for (unsigned n=0;n<sizeof(s->snapshot);n++) copy[n]=source[n];
+    if (!e->start(e->context,&s->snapshot)) {
+        if (posted) tp_ack(m,seq,0,2);
+        return;
+    }
+    s->active=1;i->state=1;
+    if (posted) tp_ack(m,seq,1,0);
+}
+#endif
