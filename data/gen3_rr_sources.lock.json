@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "_readme": "Pins for tools/gen_rr_{species,types,natdex,encounters,sprites,priority_trainers}.py (docs/gen3_requirements.md F-7). Each generator fetches its named source through tools/fetch_rr_sources.py:cached_source(), which verifies the sha256 before returning bytes -- a mismatch is a hard failure, never a silent pass. Populate the cache with `python tools/fetch_rr_sources.py --fetch` (writes to $SLINK_RR_SRC_CACHE, default data/.rr_src_cache/).",
+  "sources": {
+    "funnotbun_species_h": {
+      "kind": "wayback_snapshot",
+      "original_url": "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/species.h",
+      "fetch_url": "https://web.archive.org/web/20241208192650id_/https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/species.h",
+      "sha256": "775bedd9b0afd37b5e62f9d18558302992aa4149dd1150c96033ee04dadf71cd",
+      "note": "funnotbun/funnotbun.github.io no longer exists on GitHub (confirmed 404 via `gh api repos/funnotbun/funnotbun.github.io` and `git ls-remote` on 2026-09-26); the generator's live main-branch fetch can never succeed again. Pinned to a Wayback Machine capture instead. The CDX index shows this file byte-identical (digest YUYPPBYEOOJCVQKELVW5CAKXCTCT4IK2) across every capture from 2023-09-03 through 2026-04-22, so the content predates and survives the repo's deletion -- a stable pin, not a moving one."
+    },
+    "funnotbun_base_stats_c": {
+      "kind": "wayback_snapshot",
+      "original_url": "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/Base_Stats.c",
+      "fetch_url": "https://web.archive.org/web/20241208192651id_/https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/Base_Stats.c",
+      "sha256": "2cd667a4a03079aa3f0674c08206d19b70fef34db0102dd3e23cc9a2f404a470",
+      "note": "Same dead repo as funnotbun_species_h. CDX digest GW4OJ6VZ2IG4S7ABEFPHE3U4E5TOSMSC is identical across every capture 2023-09-03..2025-07-30."
+    },
+    "funnotbun_wild_encounter_tables_c": {
+      "kind": "wayback_snapshot",
+      "original_url": "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/locations/wild_encounter_tables.c",
+      "fetch_url": "https://web.archive.org/web/20241208192652id_/https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/locations/wild_encounter_tables.c",
+      "sha256": "24ebfcda8be7e0fce44cd47165d0acb70154d2e05c825a9480112351c6429ea9",
+      "note": "Same dead repo. CDX digest 3PCAWEJB24UWK4WVP3PCJ3KB3DPEP5V5 identical across every capture 2023-10-12..2026-04-22 -- the newest capture available (2026-04-22, months after the live repo's deletion) still matches, confirming the archive is a faithful, unchanging pin."
+    },
+    "jwowsquared_data_js": {
+      "kind": "github_commit",
+      "repo": "https://github.com/JwowSquared/Radical-Red-Pokedex",
+      "commit": "488a0918194d567b5f7b02c396118d51fb9c81ce",
+      "fetch_url": "https://raw.githubusercontent.com/JwowSquared/Radical-Red-Pokedex/488a0918194d567b5f7b02c396118d51fb9c81ce/data.js",
+      "sha256": "04c9dc94b6a7e3d33f5dcb5e804487466e7a249f4d340cf19853d70f37596df9",
+      "note": "gen_rr_sprites.py already vendors from this repo (the funnotbun sprite source is gone too) but read the moving 'master' ref live. Pinned to master's HEAD commit as of 2026-09-26 (`git ls-remote https://github.com/JwowSquared/Radical-Red-Pokedex.git refs/heads/master`)."
+    },
+    "rr_priority_trainers_sheet_xlsx": {
+      "kind": "google_sheets_xlsx",
+      "original_url": "https://docs.google.com/spreadsheets/d/1ES8L4OzeJ8rCuMWFNvrDaZKArqR7Vys2ytFxjx2pbwE/export?format=xlsx",
+      "fetch_url": "https://docs.google.com/spreadsheets/d/1ES8L4OzeJ8rCuMWFNvrDaZKArqR7Vys2ytFxjx2pbwE/export?format=xlsx",
+      "content_sha256": "a7017938cfca7f8ac2f664277dda0924af479436c61c5ca010e7800ae186d6c2",
+      "note": "Community Google Sheet, no immutable revision URL -- this pins today's (2026-09-26) content snapshot only. NOT a raw-file sha256: two exports of this URL fetched minutes apart, with no sheet edit in between, produced different zip bytes every time (Google's xlsx exporter reorders/rewrites xl/sharedStrings.xml and xl/worksheets/*.xml non-deterministically on every export -- confirmed by unzipping both and diffing). content_sha256 instead hashes openpyxl's (sheet, row, col, repr(value)) cell tuples with data_only=True, which WAS identical across both test fetches. It deliberately excludes the data_only=False formula view (used only for `=IMAGE(...)` trainer-sprite URLs) because that view was NOT stable across the same two fetches either -- ponytail: sprite_url is cosmetic, not worth chasing a stable hash for. A later --fetch will FAIL content_sha256 verification once the community sheet is next edited; that is the pin doing its job. Re-pin deliberately: fetch, diff the parsed roster against the committed one, and only then update this hash."
+    }
+  }
+}

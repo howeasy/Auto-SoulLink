@@ -9,23 +9,34 @@ Usage:
 
 Outputs data/rr_types.json and prints a Python dict literal for pasting into
 pokemon_data.py as SPECIES_TYPES.
+
+Both sources used to be fetched live from funnotbun/funnotbun.github.io,
+which no longer exists on GitHub (confirmed 404, 2026-09-26). This now reads
+byte-for-byte pinned Wayback Machine captures declared in
+data/gen3_rr_sources.lock.json (funnotbun_base_stats_c, funnotbun_species_h).
+See docs/gen3_requirements.md row F-7 and tools/fetch_rr_sources.py.
+
+Usage:
+    python tools/gen_rr_types.py            # regenerate data/rr_types.json
+    python tools/gen_rr_types.py --check     # regenerate in memory and diff
+                                               # against the committed
+                                               # data/games/gen3_frlge/rr_types.json
 """
 
+import argparse
 import json
 import os
 import re
-import urllib.request
+import sys
+from pathlib import Path
 
-BASE_STATS_URL = (
-    "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
-    "/main/data/species/Base_Stats.c"
-)
-SPECIES_H_URL = (
-    "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
-    "/main/data/species/species.h"
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fetch_rr_sources import cached_source  # noqa: E402
+
 OUTPUT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                       "data", "rr_types.json")
+CANONICAL_OUTPUT = Path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) \
+    / "data" / "games" / "gen3_frlge" / "rr_types.json"
 
 # Gen III type constants (from pret/pokefirered include/constants/pokemon.h)
 # CFRU adds TYPE_FAIRY = 0x12 (18)
@@ -40,26 +51,16 @@ TYPE_MAP = {
 }
 
 
-def main():
-    print("Fetching species.h ...")
-    data_h = urllib.request.urlopen(SPECIES_H_URL).read().decode()
+def _parse_species_types(data_h: str, data_bs: str) -> dict[int, tuple[int, int]]:
     name_to_id: dict[str, int] = {}
     for m in re.finditer(r"#define\s+(SPECIES_\w+)\s+0x([0-9A-Fa-f]+)", data_h):
         name, num = m.group(1), int(m.group(2), 16)
         if name not in ("SPECIES_NONE", "SPECIES_EGG") and num > 0:
             name_to_id[name] = num
-    print(f"  Parsed {len(name_to_id)} species IDs from species.h")
 
-    print("Fetching Base_Stats.c (1MB+, may take a moment) ...")
-    data_bs = urllib.request.urlopen(BASE_STATS_URL).read().decode()
-    print(f"  Downloaded {len(data_bs)} bytes")
-
-    # Parse each [SPECIES_XXX] block for .type1 and .type2
     species_types: dict[int, tuple[int, int]] = {}
-    # Split by species blocks
     blocks = re.split(r'\[SPECIES_', data_bs)
     for block in blocks[1:]:  # skip header before first species
-        # Get species name
         name_m = re.match(r'(\w+)\]', block)
         if not name_m:
             continue
@@ -68,7 +69,6 @@ def main():
         if sid is None:
             continue
 
-        # Extract type1 and type2
         t1_m = re.search(r'\.type1\s*=\s*(TYPE_\w+)', block)
         t2_m = re.search(r'\.type2\s*=\s*(TYPE_\w+)', block)
         if not t1_m:
@@ -82,13 +82,36 @@ def main():
             print(f"  WARNING: Unknown type for {sname}: {t1_str}={t1}, {t2_str}={t2}")
             continue
         species_types[sid] = (t1, t2)
+    return species_types
 
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true",
+                        help="Regenerate in memory and diff against the "
+                             f"committed {CANONICAL_OUTPUT}; exit 1 on drift.")
+    args = parser.parse_args()
+
+    data_h = cached_source("funnotbun_species_h").decode("utf-8")
+    data_bs = cached_source("funnotbun_base_stats_c").decode("utf-8")
+    species_types = _parse_species_types(data_h, data_bs)
     print(f"  Parsed types for {len(species_types)} species")
 
-    # Write JSON
     json_out = {str(k): list(v) for k, v in sorted(species_types.items())}
+    regen = json.dumps(json_out, separators=(",", ":"))
+
+    if args.check:
+        committed = CANONICAL_OUTPUT.read_text(encoding="utf-8")
+        if regen == committed:
+            print(f"OK: regenerated output matches {CANONICAL_OUTPUT} byte-for-byte "
+                  f"({len(json_out)} species).")
+            return 0
+        print(f"DRIFT: regenerated output ({len(regen)} bytes) != "
+              f"{CANONICAL_OUTPUT} ({len(committed)} bytes)", file=sys.stderr)
+        return 1
+
     with open(OUTPUT, "w") as f:
-        json.dump(json_out, f, separators=(",", ":"))
+        f.write(regen)
     print(f"Wrote {len(json_out)} entries to {OUTPUT} "
           f"({os.path.getsize(OUTPUT)} bytes)")
 
@@ -122,7 +145,8 @@ def main():
             f.write(f"    {sid}:({t1},{t2}){sep}\n")
         f.write("}\n")
     print(f"\nPython dict written to {py_out}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
