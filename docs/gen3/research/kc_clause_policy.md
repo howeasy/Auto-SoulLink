@@ -92,3 +92,30 @@ The merged focused run passed **623 tests in 7.41s**. Three further interaction 
 clause retirement; with those included, the two card-specific files pass **238 tests in
 5.15s** (108 mutation controls and 130 recovery controls). The final full suite will cover
 this combined cut, including the additional Emerald hidden-empty-hello control.
+
+
+## Final implementation receipt — 2026-09-27
+
+Production/test cut: `46c2f7568a103a1e33a3acfff656f7e5feef193d` (includes R4 and the
+additional Emerald hidden-empty-hello control). Source stayed unchanged during verification.
+
+The first four-worker run ended **1 failed, 15615 passed, 606 skipped in 1105.84s**:
+`test_direct_generator_cli_check_without_pythonpath[gifts]` exceeded its existing 90-second
+subprocess limit. Neither that test nor `tools/gen_gen2_gifts.py` changed. Running all three
+generator CLI checks in isolation passed **3 tests in 103.24s**, with the same per-check limit.
+The failure remains recorded in `.cache/kcc-r35-full-unit.txt`.
+
+The full rerun reduced concurrency; no assertion, timeout or selected test was weakened:
+
+```text
+python -m pytest tests/unit -q -p no:randomly -n 2 --dist=loadfile
+15616 passed, 606 skipped in 1914.68s (0:31:54)
+Exit code: 0
+```
+
+Output: `.cache/kcc-r35-final-full-unit.txt`; SHA-256
+`4615369fec6c3a79ae4a12c7940155e090689ae7dda821f8c0046ce372202b47`.
+Prerequisites used the existing pinned local Gen 1/2/3 ROM/build/pret inputs, trusted UPR JAR,
+and the same environment bindings as the T4 receipts. The 606 skips are reported as skips,
+not physical qualification. No emulator ran and no client/native/READY files were changed.
+Final protocol source-citation checks and `git diff --check` pass.

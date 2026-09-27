@@ -362,3 +362,9 @@ snapshot counters, reconciliation state and presentation. It cannot be interpret
 empty authoritative party. That control and the contrasting visible-empty release control
 pass together (**2 passed in 0.89s**); the combined KC full suite includes the extra control.
 No debug-clear endpoint was added (known limit N2).
+
+
+The final combined R4 + ruling-35 cut `46c2f756` also includes the extra Emerald
+hidden-empty-hello test. Its full two-worker suite passed **15616 tests, 606 skipped,
+zero failures in 1914.68s**; see `kc_clause_policy.md` for the first timeout, unchanged
+generator isolation controls, exact command and output hash. No debug-clear endpoint exists.
