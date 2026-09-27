@@ -5,24 +5,47 @@ local M = {}
 M.ENV = "SLINK_DUO_FR_TRADE_CANDIDATE"
 M.DISCLOSURE = "native NPC/party-chooser/offer carrier: UNTESTED (HARNESS_ONLY selection)"
 local cases = {native_trade_firered=true, native_trade_decline_firered=true}
+local sources = {
+    "tools/gen3_trade_duo.py", "tools/e2e_duo.py",
+    "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/signals.lua",
+    "lua/gen3/native.lua", "lua/gen3/safety.lua", "lua/gen3/trade.lua", "lua/gen3/rom_content.lua",
+    "lua/tests/duo/gen3_trade_candidate.lua", "lua/tests/duo/duo_gen3_main.lua",
+    "lua/tests/duo/scenario_gen3_native_trade.lua",
+    "data/games/gen3_frlg/profile.json", "data/games/gen3_frlg/engine_signals.json",
+    "data/games/gen3_frlg/write_checkpoint.json", "patch/src/trade_targets/abi.h",
+}
 local function relative(path)
     return type(path) == "string" and path:match("^patch/build/[%w_/%-.]+$") and not path:find("..",1,true)
 end
-function M.authorize(manifest, d, env, hash)
+function M.authorize(manifest, d, env, hash, read, digest)
     assert(d.game == "gen3_fr_trade" and d.title == "firered" and cases[d.scenario], "not a T5 duo row")
-    assert(manifest.schema == "slink-fr-trade-duo-v1" and manifest.production == false and manifest.ready == 0,
-           "not a private READY0 candidate manifest")
+    assert(manifest.schema == "slink-fr-trade-duo-v2", "stale T5 manifest: regenerate private packs")
+    assert(manifest.production == false and manifest.ready == 0, "not a private READY0 candidate manifest")
     assert(type(manifest.nonce) == "string" and #manifest.nonce == 32
            and manifest.nonce:match("^%x+$") and env == manifest.nonce, "T5 runner override absent or mismatched")
     hash = tostring(hash or ""):lower()
     assert(hash == manifest.rom_sha1 or hash == manifest.rom_md5, "T5 cartridge differs from candidate manifest")
     for _, name in ipairs({"profile","sites","checkpoint"}) do
         assert(relative(manifest.pack_files[name]), "T5 private pack escaped patch/build")
+        assert(read and digest and manifest.pack_sha1 and
+               digest(read(manifest.pack_files[name])) == manifest.pack_sha1[name], "stale T5 private pack digest: " .. name)
+    end
+    local seen = 0
+    for _ in pairs(manifest.source_sha1 or {}) do seen = seen + 1 end
+    assert(seen == #sources,"stale T5 manifest: missing source digests")
+    for _, path in ipairs(sources) do
+        assert(digest(read(path)) == manifest.source_sha1[path], "stale T5 source digest: " .. path)
     end
     return true
 end
-function M.new(d, json, manifest, log)
-    M.authorize(manifest,d,os.getenv(M.ENV),gameinfo.getromhash())
+function M.new(d, json, manifest, log, manifest_raw)
+    local digest = assert(dofile(d.wt .. "/lua/gen3/rom_content.lua").sha1,"raw byte digest unavailable")
+    assert(type(manifest_raw)=="string" and digest(manifest_raw)==d.native_manifest_sha1,"stale T5 manifest digest")
+    local function read(path)
+        local file = assert(io.open(d.wt .. "/" .. path,"rb"),"T5 bound file unavailable: " .. path)
+        local bytes=file:read("a");file:close();return bytes
+    end
+    M.authorize(manifest,d,os.getenv(M.ENV),gameinfo.getromhash(),read,digest)
     local self = {manifest=manifest, ready=false, finals={}, save_entries=0}
     local base = manifest.native.BASE
     local prefix = "patch/build/t5_" .. manifest.nonce .. "_" .. d.player .. "_" .. (d.phase or "initial")
@@ -197,7 +220,9 @@ function M.new(d, json, manifest, log)
         end
         return false
     end
-    emit("override",{environment=M.ENV,value=manifest.nonce,production=false,ready=0,rom_sha1=manifest.rom_sha1})
+    emit("override",{environment=M.ENV,value=manifest.nonce,production=false,ready=0,rom_sha1=manifest.rom_sha1,
+        source_commit=manifest.source_commit,manifest_sha1=d.native_manifest_sha1,
+        run_lua_sha1=manifest.source_sha1["lua/gen3/run.lua"],sites_sha1=manifest.pack_sha1.sites})
     log("HARNESS_ONLY " .. M.DISCLOSURE)
     return self
 end

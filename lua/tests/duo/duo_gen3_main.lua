@@ -131,8 +131,9 @@ local native_candidate
 if D.native_candidate_manifest then
     native_candidate = guard("HARNESS_ONLY FireRed candidate",function()
         local f = assert(io.open(ROOT .. "/" .. D.native_candidate_manifest,"rb"))
-        local manifest = JSON.decode(f:read("a")); f:close()
-        return load_or_die("/lua/tests/duo/gen3_trade_candidate.lua","candidate carrier").new(D,JSON,manifest,log)
+        local raw = f:read("a"); f:close()
+        local manifest = JSON.decode(raw)
+        return load_or_die("/lua/tests/duo/gen3_trade_candidate.lua","candidate carrier").new(D,JSON,manifest,log,raw)
     end)
 end
 local G = load_or_die("/lua/tests/gen3_boot_check.lua", "gen3_boot_check.lua")

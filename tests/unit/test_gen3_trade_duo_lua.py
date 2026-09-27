@@ -1,12 +1,13 @@
 """Producer-shaped receipts from the real test-only Lua carrier; no emulator."""
 
+import hashlib
 import json
 from pathlib import Path
 
 import pytest
 from lupa import lua54
 
-from tests.unit.test_gen3_trade_duo import model_manifest
+from tests.unit.test_gen3_trade_duo import model_bound_file, model_manifest
 from tools import gen3_trade_duo as t5
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -43,6 +44,11 @@ class Carrier:
                 "TradeEvolutionScene": 0x080CE540,
             },
         )
+        for path in (*manifest["source_sha1"], *manifest["pack_files"].values()):
+            destination = tmp_path / path
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(model_bound_file(path).encode())
+        raw_manifest = json.dumps(manifest)
         d = self.lua.table(
             wt=tmp_path.as_posix(),
             game="gen3_fr_trade",
@@ -52,6 +58,7 @@ class Carrier:
             phase="initial",
             native_battery=self.battery.as_posix(),
             native_decline=decline,
+            native_manifest_sha1=hashlib.sha1(raw_manifest.encode()).hexdigest(),
         )
         g = self.lua.globals()
         g.gameinfo = self.lua.table(getromhash=lambda: manifest["rom_sha1"])
@@ -67,7 +74,11 @@ class Carrier:
         self.json = self.lua.execute((ROOT / "lua/json_codec.lua").read_text())
         module = self.lua.execute((ROOT / "lua/tests/duo/gen3_trade_candidate.lua").read_text())
         self.carrier = module.new(
-            d, self.json, self.lua.table_from(manifest, recursive=True), self.lines.append
+            d,
+            self.json,
+            self.lua.table_from(manifest, recursive=True),
+            self.lines.append,
+            raw_manifest,
         )
 
         def write(address, value, *_):

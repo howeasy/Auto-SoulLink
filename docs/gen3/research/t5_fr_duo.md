@@ -218,3 +218,37 @@ full console detail survives. Focused verification: **145 passed, 2 skipped in
 Rerun the same two duo commands above from the repair commit. No candidate ROM
 rebuild is needed for this Lua/Python-only fix: each run regenerates its private
 pack. The current physical status is **boot failure observed; rerun pending**.
+
+## Stale-artifact audit and digest binding — 2026-09-27
+
+The subsequently supplied files were still the 15:57 UTC `c1debdfd` artifacts,
+not a `3afba0b3` run: the log's IDENTITY line named `c1debdfd`, both manifests
+predated the 16:06 UTC fix, and their nonces/files were unchanged. The coordinator
+confirmed that its rerun wrapper had deadlocked before launching the fix. No
+remaining long-HUD path in the fixed code was established by those old logs.
+
+The exact four private JSON files are preserved under
+`tests/fixtures/gen3/t5_stale_projection/`, with original-byte SHA256 pins and
+line-ending preservation; no ROM/save is included. Their real-candidate replay
+reproduces the original 21-site refusal. Regeneration over a copy of that exact
+existing directory replaces the stale data and starts all 21 sites.
+
+Manifest schema v2 now binds private pack files and sixteen relevant source/input
+files by SHA1, plus the source commit. Python verifies the manifest/file digests
+before seeding or launching an emulator. Lua independently verifies the exact
+manifest bytes passed by the runner and rehashes every bound file before selecting
+the private Entry pack. The existing ROM transport's raw-byte SHA1 implementation
+is reused; its payload behavior is unchanged. Missing/old manifests, changed
+source, changed pack bytes and mismatched stubs fail with named stale-input errors.
+
+`T5_PACK` and each Lua `override` receipt now record source commit, manifest
+digest, `run.lua` digest and site-table digest. The physical oracle requires
+those identities. Existing live commands are unchanged; preparation always
+regenerates the private files and nonce. The old retained directories may remain:
+they cannot pass the new prelaunch/runtime checks as current input.
+
+Verification of this hardening: **324 passed, 2 skipped in 13.20s**, covering
+exact captured-artifact replay, existing-directory regeneration, prelaunch
+refusal before SaveRAM seeding/Popen, runtime source/pack mismatches, current
+bootstrap HUD, ROM transport hashes, entry and scenario registration. Ruff and
+all 305 Lua syntax checks pass. No emulator was launched by this repair.

@@ -67,7 +67,8 @@ def test_t5_result_gate_consumes_reload_receipts_instead_of_initial_pass(monkeyp
     assert run.wait_results() == ("cold reload a\nRESULT: PASS\n", "cold reload b\nRESULT: PASS\n")
 
 
-def test_candidate_launch_exports_override_only_to_its_owned_emulator(monkeypatch, tmp_path):
+@pytest.mark.parametrize("stale", [False, True])
+def test_candidate_launch_exports_override_only_to_its_owned_emulator(monkeypatch, tmp_path, stale):
     from tests.unit.test_e2e_duo_gen3 import _gba_config
     from tools import e2e_duo as duo
 
@@ -92,11 +93,20 @@ def test_candidate_launch_exports_override_only_to_its_owned_emulator(monkeypatc
         return SimpleNamespace(pid=999)
 
     monkeypatch.setattr(duo.subprocess, "Popen", popen)
+    verified = []
+
+    def validate(root, manifest):
+        verified.append(manifest)
+        if stale:
+            raise ValueError("stale T5 private pack digest")
+
+    monkeypatch.setattr(t5, "validate_prepared", validate)
     args = SimpleNamespace(game="gen3_fr_trade", lane="t5model", idle_jitter=0)
     run = duo.DuoRun("native_trade_firered", args)
     run._native_candidate = {
         "nonce": "ab" * 16,
         "path": "patch/build/private.json",
+        "manifest_sha1": "12" * 20,
         "rom": "patch/build/private.gba",
         "rom_sha1": hashlib.sha1(rom.read_bytes()).hexdigest(),
         "fixtures": {
@@ -106,8 +116,14 @@ def test_candidate_launch_exports_override_only_to_its_owned_emulator(monkeypatc
             }
         },
     }
+    if stale:
+        with pytest.raises(ValueError, match="stale T5"):
+            run.launch_instance("a")
+        assert launched == [] and not Path(run._gen3_battery_path("a")).exists()
+        return
     run.launch_instance("a")
     assert launched[0][1]["env"][t5.ENV] == "ab" * 16
+    assert verified == [run._native_candidate]
     assert t5.ENV not in duo.os.environ
     assert Path(run._gen3_battery_path("a")).read_bytes() == save.read_bytes()
     stub = Path(run.stub_path("a")).read_text()
@@ -209,10 +225,25 @@ def model_manifest():
         "nonce": "ab" * 16,
         "rom_sha1": "cd" * 20,
         "rom_md5": "ef" * 16,
+        "source_commit": "00" * 20,
+        "manifest_sha1": "12" * 20,
+        "source_sha1": {
+            path: hashlib.sha1((ROOT / path).read_bytes()).hexdigest() for path in t5.SOURCE_FILES
+        },
+        "pack_sha1": {
+            name: hashlib.sha1(("MODEL " + name).encode()).hexdigest()
+            for name in ("profile", "sites", "checkpoint")
+        },
         "pack_files": {
             n: f"patch/build/private/{n}.json" for n in ("profile", "sites", "checkpoint")
         },
     }
+
+
+def model_bound_file(path):
+    if path in t5.SOURCE_FILES:
+        return (ROOT / path).read_bytes().decode("utf-8")
+    return "MODEL " + Path(path).stem
 
 
 @pytest.mark.parametrize(
@@ -241,7 +272,12 @@ def test_only_explicit_runner_context_can_authorize_candidate(problem):
 
     def call():
         return mod.authorize(
-            lua.table_from(manifest, recursive=True), lua.table_from(args), env, digest
+            lua.table_from(manifest, recursive=True),
+            lua.table_from(args),
+            env,
+            digest,
+            model_bound_file,
+            lambda raw: hashlib.sha1(raw.encode()).hexdigest(),
         )
 
     if problem:
@@ -300,10 +336,12 @@ def test_test_only_projection_builds_the_real_client_and_native_binding(monkeypa
             player="a",
             scenario="native_trade_firered",
             phase="initial",
+            native_manifest_sha1=manifest["manifest_sha1"],
         ),
         json_codec,
         lua.table_from(manifest, recursive=True),
         lambda _: None,
+        (ROOT / manifest["path"]).read_bytes().decode("utf-8"),
     )
     carrier.bind_entry(world.Entry)
     world.io.rom_read = lambda at, n: lua.table(*rom[at : at + n])
@@ -525,6 +563,10 @@ def model_physical_evidence(tmp_path, decline=False):
                 environment=t5.ENV,
                 value=manifest["nonce"],
                 rom_sha1=manifest["rom_sha1"],
+                source_commit=manifest["source_commit"],
+                manifest_sha1=manifest["manifest_sha1"],
+                run_lua_sha1=manifest["source_sha1"]["lua/gen3/run.lua"],
+                sites_sha1=manifest["pack_sha1"]["sites"],
             )
 
         override()

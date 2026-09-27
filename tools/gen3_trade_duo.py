@@ -12,6 +12,7 @@ import hashlib
 import json
 import re
 import struct
+import subprocess
 import uuid
 from pathlib import Path
 
@@ -21,8 +22,26 @@ from tools.gen_gen3_profile import native_abi
 
 ENV = "SLINK_DUO_FR_TRADE_CANDIDATE"
 DISCLOSURE = "native NPC/party-chooser/offer carrier: UNTESTED (HARNESS_ONLY selection)"
-SCHEMA = "slink-fr-trade-duo-v1"
+SCHEMA = "slink-fr-trade-duo-v2"
 ROM_BASE = 0x08000000
+SOURCE_FILES = (
+    "tools/gen3_trade_duo.py",
+    "tools/e2e_duo.py",
+    "lua/gen3/run.lua",
+    "lua/gen3/entry.lua",
+    "lua/gen3/signals.lua",
+    "lua/gen3/native.lua",
+    "lua/gen3/safety.lua",
+    "lua/gen3/trade.lua",
+    "lua/gen3/rom_content.lua",
+    "lua/tests/duo/gen3_trade_candidate.lua",
+    "lua/tests/duo/duo_gen3_main.lua",
+    "lua/tests/duo/scenario_gen3_native_trade.lua",
+    "data/games/gen3_frlg/profile.json",
+    "data/games/gen3_frlg/engine_signals.json",
+    "data/games/gen3_frlg/write_checkpoint.json",
+    "patch/src/trade_targets/abi.h",
+)
 
 
 def read_json(path: Path):
@@ -31,6 +50,34 @@ def read_json(path: Path):
 
 def sha256(raw: bytes) -> str:
     return hashlib.sha256(raw).hexdigest()
+
+
+def _sha1_file(root: Path, relative: str) -> str:
+    path = (root / relative).resolve()
+    if not path.is_relative_to(root.resolve()):
+        raise ValueError("T5 integrity path escaped the lane")
+    return hashlib.sha1(path.read_bytes()).hexdigest()
+
+
+def validate_prepared(root: Path, manifest: dict) -> None:
+    """Refuse stale/tampered files before any emulator can consume them."""
+    if manifest.get("schema") != SCHEMA:
+        raise ValueError("stale T5 manifest: regenerate private packs")
+    if set(manifest.get("source_sha1", {})) != set(SOURCE_FILES):
+        raise ValueError("stale T5 manifest: missing source digests")
+    if set(manifest.get("pack_sha1", {})) != {"profile", "sites", "checkpoint"}:
+        raise ValueError("stale T5 manifest: missing pack digests")
+    if _sha1_file(root, manifest["path"]) != manifest.get("manifest_sha1"):
+        raise ValueError("stale T5 manifest digest")
+    for path, expected in manifest["source_sha1"].items():
+        if _sha1_file(root, path) != expected:
+            raise ValueError(f"stale T5 source digest: {path}")
+    for name, expected in manifest["pack_sha1"].items():
+        if _sha1_file(root, manifest["pack_files"][name]) != expected:
+            raise ValueError(f"stale T5 private pack digest: {name}")
+    head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
+    if head != manifest.get("source_commit"):
+        raise ValueError("stale T5 source commit: regenerate private packs")
 
 
 def candidate_inputs(root: Path) -> tuple[bytes, dict]:
@@ -162,7 +209,9 @@ def private_pack(root: Path, rom: bytes, receipt: dict) -> dict[str, dict]:
         start = site["rom_offset"]
         # signals.lua compares its uppercase hex_of() result verbatim at both
         # startup and fire time; preserve the shipped pack's canonical encoding.
-        site["expected_hex"] = rom[start : start + len(bytes.fromhex(site["expected_hex"]))].hex().upper()
+        site["expected_hex"] = (
+            rom[start : start + len(bytes.fromhex(site["expected_hex"]))].hex().upper()
+        )
     sites["titles"]["firered"]["artifacts"] = {"companion": artifact}
     checkpoint = read_json(root / "data/games/gen3_frlg/write_checkpoint.json")
     cp = checkpoint["firered"]
@@ -256,6 +305,13 @@ def prepare(root: Path, directory: Path) -> dict:
         "expected_species": evolution[0][2],
         "fixtures": {},
     }
+    manifest["pack_sha1"] = {
+        name: _sha1_file(root, pack_files[name]) for name in ("profile", "sites", "checkpoint")
+    }
+    manifest["source_sha1"] = {path: _sha1_file(root, path) for path in SOURCE_FILES}
+    manifest["source_commit"] = subprocess.check_output(
+        ["git", "-C", str(root), "rev-parse", "HEAD"], text=True
+    ).strip()
     symbols = {}
     for line in (root / "data/gen3/pret/pokefirered.sym").read_text().splitlines():
         fields = line.split()
@@ -293,6 +349,8 @@ def prepare(root: Path, directory: Path) -> dict:
     path = directory / "manifest.json"
     path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     manifest["path"] = path.relative_to(root).as_posix()
+    manifest["manifest_sha1"] = _sha1_file(root, manifest["path"])
+    validate_prepared(root, manifest)
     return manifest
 
 
@@ -521,6 +579,11 @@ def physical_problems(
                     or override[0].get("environment") != ENV
                     or override[0].get("value") != manifest["nonce"]
                     or override[0].get("rom_sha1") != manifest["rom_sha1"]
+                    or override[0].get("source_commit") != manifest["source_commit"]
+                    or override[0].get("manifest_sha1") != manifest["manifest_sha1"]
+                    or override[0].get("run_lua_sha1")
+                    != manifest["source_sha1"]["lua/gen3/run.lua"]
+                    or override[0].get("sites_sha1") != manifest["pack_sha1"]["sites"]
                     or DISCLOSURE not in text
                 ):
                     problems.append(f"{side}: HARNESS_ONLY admission/carrier disclosure missing")

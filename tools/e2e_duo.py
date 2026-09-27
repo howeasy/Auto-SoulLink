@@ -3844,10 +3844,12 @@ class DuoRun:
                 codec = gen3_codec()
                 duo.update({"ext_addr": codec.RR_EXT_ADDR, "ext_size": codec.RR_EXT_SIZE})
             if self.cfg.get("gen3_native_trade"):
-                from tools.gen3_trade_duo import ENV
+                from tools.gen3_trade_duo import ENV, validate_prepared
+                validate_prepared(Path(REPO), self._native_candidate)
                 if hashlib.sha1((Path(REPO) / self._native_candidate["rom"]).read_bytes()).hexdigest() != self._native_candidate["rom_sha1"]:
                     raise RuntimeError("T5 candidate changed before emulator launch")
                 duo.update(native_candidate_manifest=self._native_candidate["path"],
+                           native_manifest_sha1=self._native_candidate["manifest_sha1"],
                            native_battery=self._gen3_battery_path(inst).replace("\\", "/"),
                            native_decline=self.cfg.get("native_decline", False))
                 env = dict(os.environ, **{ENV: self._native_candidate["nonce"]})
@@ -7551,6 +7553,8 @@ class DuoRun:
         self._native_initial = {}
         self._pydec_note(f"HARNESS_ONLY {t5.DISCLOSURE}")
         self._pydec_note(f"T5_CANDIDATE rom_sha1={self._native_candidate['rom_sha1']} production=false READY=0")
+        self._pydec_note(f"T5_PACK source={self._native_candidate['source_commit']} manifest_sha1={self._native_candidate['manifest_sha1']} "
+                         f"run_lua_sha1={self._native_candidate['source_sha1']['lua/gen3/run.lua']} sites_sha1={self._native_candidate['pack_sha1']['sites']}")
         self._pydec_note(self._native_candidate["fixture_disclosure"])
 
     def orchestrate_native_trade_firered(self):
