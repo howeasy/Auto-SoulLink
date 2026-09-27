@@ -7337,6 +7337,7 @@ class DuoRun:
     GEN3_AREA_CONTROL_AREAS = {
         "gen3_frlg": ("viridian_city", "route_1", "route_2", "viridian_forest"),
         "gen3_emerald": ("route_102",),
+        "gen3_rr": ("route_1",),   # rr_battle2 / rr_evolve_synth stand in Route 1 grass (map 3.19)
     }
 
     def _gen3_area_control(self):
