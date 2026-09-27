@@ -23,7 +23,15 @@ def cartridges():
         pytest.skip("set SLINK_GEN3_RAND_ROMS for E-RAND-LIVE cartridge controls")
     from tools.gen3_final_cut import STAGED, rom_pins
 
-    clean = (ROOT / STAGED["emerald"]).read_bytes()
+    # absent input = named skip; present-but-wrong = fail (tests/TESTING.md)
+    staged = ROOT / STAGED["emerald"]
+    if not staged.is_file():
+        pytest.skip(f"staged clean Emerald dump absent: {staged}")
+    names = ("Emerald_allowed.gba", "Emerald_allowed_b.gba", "Emerald_widest.gba")
+    missing = [n for n in names if not (Path(folder) / n).is_file()]
+    if missing:
+        pytest.skip(f"randomized Emerald ROMs absent from SLINK_GEN3_RAND_ROMS: {missing}")
+    clean = staged.read_bytes()
     assert hashlib.sha1(clean).hexdigest() == rom_pins(str(ROOT))["emerald"]
     return {"a": (Path(folder) / "Emerald_allowed.gba").read_bytes(),
             "b": (Path(folder) / "Emerald_allowed_b.gba").read_bytes(),
