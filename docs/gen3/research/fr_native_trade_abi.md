@@ -293,3 +293,57 @@ readback was rejected by the oracle. No screenshot supplied game facts. Each
 opening used a distinct host request seq (1, then 2); this does not qualify
 same-request reopening or automatic pagination. No server/T3 adapter, duo,
 save-persistence or general heap safety claim follows from this run. READY is 0.
+
+## T2-FR-CARRIER candidate extension
+
+This adds the accepted RR carrier's existing opcodes and Pokemon-Center NPC
+entry to the private FR composition. It does not add a new offer UX, a raw swap,
+or another save path. The server still supplies menu/offer text and drives the
+selection protocol; native PREPARE consent/save and SCENE remain as above.
+The carrier's native UI/NPC lifecycle requires its own live check; the earlier
+panel receipt does not qualify it. READY remains 0, candidate capability mask 3.
+
+| Opcode | Staging/args | Native completion result[0] |
+| --- | --- | --- |
+| 13 ARM_PEER_INTERACT | args[0]=object-event slot 0..15, args[1]=armed | Immediate ACK; armed resets PI_COUNT to zero as RR does |
+| 17 SHOW_MENU | bounded EOS text in first 256 bytes of TEXT | 1=YES, 0=NO/B |
+| 20 CHOOSE_PARTY_MON | no payload | slot 0..5, 7=cancel |
+| 22 SHOW_CHOICES | MENU: count 1..8 followed by EOS strings, total <=112 bytes; args[0]=with-text; optional TEXT | option index, 127=cancel |
+
+13 requires CONTROL.session_epoch to match the nonzero mailbox epoch, and an
+active target when arming. The target local ID and map identity are captured,
+so a reused object-event slot cannot silently become a new interaction target.
+17/20/22 validate before taking field/script ownership, copy their text/options
+into private storage, set BUSY and clear opcode, and ACK only after native UI
+return to the safe field. Their result meanings match RR. New requests cannot
+replace an owned UI; a changed epoch/sequence cannot inherit its completion.
+Host timeout/poison handling remains required; native ownership is not discarded
+on a guessed UI deadline. Native allocation failure resumes/releases the field
+script before reporting failure. These are carrier results, never trade witnesses.
+
+For the presence-OFF PC-trade entry (PC means Pokemon Center here), stage
+CONTROL.session_epoch at arena+0x800 and TN_ENABLE=1 at arena+0x808. The producer
+spawns the same Oak graphic (0x47), wandering behavior (2), local ID 0xF1 and
+current-coordinate tile (10,9), with range +/-1. The 19 eligible Center 1F map
+IDs are checked against pinned vanilla FR `data/maps/map_groups.json`.
+Presence mode switching remains the host's responsibility; setting TN_ENABLE=0
+removes only this producer's still-matching NPC. Opcode 13 can arm an existing
+peer object, but does not implement the separate ghost spawn/movement opcodes.
+
+Read native PI_COUNT as **u32** at arena+0x804. It increments only for a newly
+pressed A while idle, facing the bound active object on the safe field; the
+producer consumes that A before the engine attempts a missing map-template
+script. It does not display an unsolicited local message. The client converts
+the counter edge into the existing server trade_request flow. No epoch/config
+match, unsafe field, moving player, stale slot or active trade/UI means no edge.
+
+Native calls use vanilla FR `SpawnSpecialObjectEventParameterized` 0x0805E830,
+`RemoveObjectEvent` 0x0805E4B4, and `ChoosePartyMonByMenuType` 0x081283A8 with
+type 3. The builder validates their entry bytes and emits `carrier_bindings`.
+Unlike RR's internal-removal binding, FR's RemoveObjectEvent clears active
+itself. The chooser preserves the engine's return/fade/script-resume callback.
+The owned NPC is removed before party chooser/trade-scene takeover and can
+respawn on safe field return. Private carrier state is arena+0xB40, NPC state
++0xCE0, runtime scratch +0x960; compile-time bounds keep panel and phone storage
+separate. Consumers must retain HARNESS_ONLY selection labeling until the native
+carrier is bound and independently exercised; enum IDs alone prove nothing.

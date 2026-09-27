@@ -179,7 +179,9 @@ __attribute__((section(".text.entry"),used)) void slink_native_heap(void *heap,u
     /* Do not erase transaction state when save/menu code reinitializes gHeap. */
 }
 #if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+static int nc_owned(void);
 #include "native_panel.h"
+#include "native_carrier.h"
 #endif
 __attribute__((used)) void slink_native_frame(void)
 {
@@ -198,6 +200,7 @@ __attribute__((used)) void slink_native_frame(void)
         NT_MB->abi_version=SLINK_ABI_VERSION;NT_MB->capabilities=0;
 #endif
 #if defined(SLINK_NATIVE_TRADE_CANDIDATE)
+        slink_native_carrier_service();
         slink_native_panel_service();
 #endif
         slink_trade_service(NT_STATE,NT_MB,NT_WITNESS,
