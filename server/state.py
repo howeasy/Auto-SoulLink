@@ -1576,14 +1576,20 @@ class SoulLinkState:
                                                 rom_type=state.rom_type)
                 except (KeyError, ImportError):
                     log.warning(f"No adapter for saved game_id={saved_game_id!r}; keeping current adapter")
-            elif effective_rr != getattr(state.adapter, '_is_rr', False):
-                # Adapter game_id matches but is_rr flag differs — recreate
+            elif (effective_rr != getattr(state.adapter, '_is_rr', False)
+                  or getattr(state.adapter, "rom_type", state.rom_type) != state.rom_type):
+                # Adapter game_id matches but is_rr differs, or the adapter reports a rom_type
+                # other than the saved one (one game_id can carry several titles whose data
+                # the rom_type selects) — recreate
                 try:
                     from server.adapters import get_adapter
                     state.adapter = get_adapter(state.adapter.game_id, is_rr=effective_rr,
                                                 rom_type=state.rom_type)
-                except (KeyError, ImportError):
-                    pass
+                except (KeyError, ImportError, ValueError):
+                    # ValueError: a fail-closed adapter refusing the saved rom_type; keep the
+                    # current adapter rather than half-load the run (OMP cx-6ecf4fc8 #2)
+                    log.warning(f"Could not rebuild the adapter for rom_type={state.rom_type!r}; "
+                                "keeping the current adapter")
             saved_names = data.get("trainer_names", {})
             if saved_names:
                 state.trainer_names["a"] = saved_names.get("a", "")

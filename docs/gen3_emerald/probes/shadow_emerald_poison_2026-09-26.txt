@@ -1,0 +1,19 @@
+# Shadow observer beside lua/tests/gen3_scripted_play.lua on BPEE (sha1 f3ae0881...), 2026-09-26
+# lane HEAD=414afb92 tracked-clean=True; fixture tests/fixtures/gen3/emerald_poison.sav sha256=c20c6edd9ca888ab...
+# SLINK_SHADOW=1 SLINK_SHADOW_UNADMITTED=gen3_emerald/emerald (observer-only seam b00a475e, scoped) SLINK_GEN3_PLAY_FROM=emerald_poison_faint SLINK_GEN3_PLAY_STOP_AFTER=emerald_poison_faint
+# runner: C:/slink-wt/emerald-e2/run_play.py (gen3_fixtures._prepare_run/_launch), EmuHawk 2.11.1
+## driver phases
+phase start frame=1 title=emerald
+phase resume frame=1 from=emerald_poison_faint
+phase shadow frame=583 observer started admitted_by=hash
+phase leg-start frame=583 emerald_poison_faint
+phase poison-hp-zero frame=823 (7,17)
+phase poison-fainted frame=823 lead HP 0, status cleared, party 2, still at (7,17)
+phase leg-state-saved frame=823 emerald_poison_faint -> C:/slink-wt/emerald-e2/states_play/slink_em_emerald_poison_faint.State
+phase leg-done frame=823 emerald_poison_faint
+RESULT: PASS reached: emerald_poison_faint | open (skipped):
+## shadow log
+NOTE observer building unadmitted gen3_emerald/emerald
+STATUS frame=583 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=656 kind=poison_hp_before key= address=135239544 callback_address=135239544 cpsr=63 mode=thumb raw_r15=135239546 sp=50363832 thumb=1
+SHADOW t=2 frame=656 kind=poison_faint key= address=135239570 callback_address=135239570 cpsr=63 mode=thumb raw_r15=135239572 sp=50363832 thumb=1

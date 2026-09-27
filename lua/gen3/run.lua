@@ -53,7 +53,10 @@ local ev = {
 }
 
 local ok_hc, header_code = pcall(Entry.header_code, io_.rom_read)
-local admitted, why = Entry.admit({
+-- admit_routed (not the bare Entry.admit): this file is dofile'd directly by the duo harness,
+-- bypassing lua/slink.lua's launcher gate entirely, so the ROUTED/header-only policy must live
+-- here too, not just in the launcher (OMP cx-dbabbd62 -- the duo evidence never proved it).
+local admitted, why = Entry.admit_routed({
     root = ROOT, json = dofile(ROOT .. "/lua/json_codec.lua"),
     rom_hash = gameinfo and gameinfo.getromhash and gameinfo.getromhash() or "",
     rom_read = io_.rom_read, header_code = ok_hc and header_code or "",
@@ -200,12 +203,19 @@ if session_counter then
                                        + math.random(0, 4294967295) + rom_bits) % 4294967296)
 end
 
-local client = Entry.build({
+local ok_build, client = pcall(Entry.build, {
     root = ROOT, mode = "production", io = io_, ev = ev, net = C, hud = H,
     pack = admitted.pack, title = admitted.title, kind = admitted.kind, player = player,
     rom_sha1 = admitted.rom_hash, log = function(t) console.log(t) end,
     battle_nonce_seed = battle_nonce_seed,
 })
+if not ok_build then
+    local msg = "[SLink-gen3] refused to start: " .. tostring(client)
+    console.log(msg)
+    H.show(msg, 255, 80, 80, 600)
+    H.render()
+    return
+end
 local ok, err = pcall(function() client:start() end)
 if not ok then
     local msg = "[SLink-gen3] refused to start: " .. tostring(err)

@@ -1,0 +1,19 @@
+{
+  "schema": "gen3-pret-published-sym-v1",
+  "file": "pokeemerald.sym",
+  "sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc",
+  "bytes": 3561294,
+  "origin": {
+    "url": "https://raw.githubusercontent.com/pret/pokeemerald/symbols/pokeemerald.sym",
+    "symbols_branch_commit": "dba968c67d85caf9595abe12a51ff739d4dc5937",
+    "source_commit": "c65e93f20a5275ab03b07d6f6411096a82a60ffd",
+    "source_commit_note": "pret CI publishes the symbols branch from master; dba968c6 (2026-08-26T10:44Z) follows c65e93f2 (2026-08-26T10:40Z, 'Move StartMonScrollingBgMask ... (#2330)')"
+  },
+  "rom": {
+    "sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
+    "pret_rom_sha1_file": "rom.sha1 @ c65e93f2"
+  },
+  "map": "NOT PUBLISHED by pret; pokeemerald.map needs the CI build (owner push authority) or a .sym-derived span (E1 open question D1)",
+  "fetched": "2026-09-25",
+  "verification": "E1: every consumed symbol re-proven by ROM byte anchors (pin_gen3_site.py) and literal-pool counts"
+}

@@ -33,6 +33,10 @@ data/obs_config.json
 # so contributors without RGBDS can still run pytest).
 /.cache/
 
+# F-7: cache of the pinned Radical Red generator sources (tools/fetch_rr_sources.py);
+# hash-verified and repopulated on demand, not checked in.
+data/.rr_src_cache/
+
 # Lua console tee (per-run debug log written by lua/slink.lua, truncated
 # each boot — not useful in version control)
 slink_lua.log

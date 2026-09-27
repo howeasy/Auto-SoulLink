@@ -912,11 +912,15 @@ def parse_calc_sets(path: Path) -> list[dict]:
     the same shape as parse_boss_sheet.
     """
     if not path.exists():
-        return []
+        raise FileNotFoundError(
+            f"{path}: primary trainer-party source is missing -- this would "
+            f"silently drop every calc-sourced trainer from the roster rather "
+            f"than fail loudly."
+        )
     txt = path.read_text(encoding="utf-8")
     m = re.match(r"\s*var\s+SETDEX_SV\s*=\s*(\{.+\});\s*$", txt, re.S)
     if not m:
-        return []
+        raise ValueError(f"{path}: SETDEX_SV assignment not found/parseable")
     data = json.loads(m.group(1))
     # Invert: trainer_label → [mon, ...]
     raw: dict[str, list[dict]] = defaultdict(list)
@@ -1108,56 +1112,13 @@ def _pick_trainer_id(name_index: dict[str, list[dict]],
     return available[0]["rt_id"]
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--src",
-                        default=str(_REPO_ROOT / "rr_trainers_dump.xlsx"),
-                        help="Path to the downloaded xlsx (default: repo root)")
-    parser.add_argument("--out", default=str(_OUT_PATH),
-                        help=f"Output path (default: {_OUT_PATH})")
-    parser.add_argument("--from-json", action="store_true",
-                        help="No spreadsheet: re-canonicalise the committed roster "
-                             "(--out) through the calc-name table and re-emit it "
-                             "plus slink_priority.js")
-    parser.add_argument("--setdex", action="store_true",
-                        help="Canonicalise the calc's own set files (normal.js, "
-                             "hardcore.js) in place through the calc-name table")
-    args = parser.parse_args()
-
-    if args.setdex:
-        errors = []
-        for path in _CALC_SETDEX_PATHS:
-            keys, values, errs = canonicalise_setdex(path)
-            errors += errs
-            print(f"{path.name}: {keys} species keys renamed, {values} values rewritten")
-        if errors:
-            print("Unresolved:\n  " + "\n  ".join(errors), file=sys.stderr)
-            return 1
-        return 0
-
-    if args.from_json:
-        out = Path(args.out)
-        out_doc = json.loads(out.read_text(encoding="utf-8"))
-        errors = canonicalise_parties(out_doc["parties"])
-        if errors:
-            print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
-                  "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
-            return 1
-        _write_outputs(out_doc, out)
-        return 0
-
-    try:
-        from openpyxl import load_workbook
-    except ImportError:
-        print("openpyxl required: pip install openpyxl", file=sys.stderr)
-        return 1
-
-    src = Path(args.src)
-    if not src.exists():
-        print(f"Source xlsx not found: {src}", file=sys.stderr)
-        return 1
-
-    print(f"Loading {src}…")
+def _build_roster(src: Path) -> tuple[dict, list[str]]:
+    """Parse `src` (the RR trainer spreadsheet xlsx) into (out_doc, errors) --
+    the roster doc gen_rr_priority_trainers.py writes to
+    rr_priority_trainers.json, and any calc-name errors from
+    canonicalise_parties(). Split out of main() so --check can regenerate
+    into memory without touching the committed output or the calc set files."""
+    from openpyxl import load_workbook
     # Two views: data_only=True evaluates formulas (so we read computed
     # level/move values); the formula-form view exposes raw `=IMAGE("url")`
     # cells so we can pull trainer sprite URLs.
@@ -1550,17 +1511,108 @@ def main() -> int:
     }
 
     errors = canonicalise_parties(parties)
-    if errors:
-        print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
-              "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
-        return 1
-    _write_outputs(out_doc, Path(args.out))
     print(f"  trainers_by_area : {len(trainers_by_area)} areas")
     print(f"  unmatched        : {len(unmatched)}")
     if unmatched[:10]:
         print("  first 10 unmatched:")
         for u in unmatched[:10]:
             print(f"    - {u}")
+    return out_doc, errors
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--src", default=None,
+                        help="Path to a downloaded xlsx, overriding the pinned "
+                             "cache (data/gen3_rr_sources.lock.json's "
+                             "rr_priority_trainers_sheet_xlsx) -- NOT hash-"
+                             "verified; default is the pinned cache.")
+    parser.add_argument("--out", default=str(_OUT_PATH),
+                        help=f"Output path (default: {_OUT_PATH})")
+    parser.add_argument("--from-json", action="store_true",
+                        help="No spreadsheet: re-canonicalise the committed roster "
+                             "(--out) through the calc-name table and re-emit it "
+                             "plus slink_priority.js")
+    parser.add_argument("--setdex", action="store_true",
+                        help="Canonicalise the calc's own set files (normal.js, "
+                             "hardcore.js) in place through the calc-name table")
+    parser.add_argument("--check", action="store_true",
+                        help="No writes: parse the pinned spreadsheet "
+                             "(data/gen3_rr_sources.lock.json's "
+                             "rr_priority_trainers_sheet_xlsx, fetched via "
+                             "tools/fetch_rr_sources.py) and diff the roster "
+                             "against the committed --out; exit 1 on drift.")
+    args = parser.parse_args()
+
+    if args.setdex:
+        errors = []
+        for path in _CALC_SETDEX_PATHS:
+            keys, values, errs = canonicalise_setdex(path)
+            errors += errs
+            print(f"{path.name}: {keys} species keys renamed, {values} values rewritten")
+        if errors:
+            print("Unresolved:\n  " + "\n  ".join(errors), file=sys.stderr)
+            return 1
+        return 0
+
+    if args.from_json:
+        out = Path(args.out)
+        out_doc = json.loads(out.read_text(encoding="utf-8"))
+        errors = canonicalise_parties(out_doc["parties"])
+        if errors:
+            print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
+                  "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
+            return 1
+        _write_outputs(out_doc, out)
+        return 0
+
+    try:
+        import openpyxl  # noqa: F401
+    except ImportError:
+        print("openpyxl required: pip install openpyxl", file=sys.stderr)
+        return 1
+
+    if args.check or args.src is None:
+        from fetch_rr_sources import cached_source_path
+        src = cached_source_path("rr_priority_trainers_sheet_xlsx")
+        if args.src is not None:
+            print(f"NOTE: --src {args.src!r} ignored -- --check always reads "
+                  f"the pinned cache.", file=sys.stderr)
+    else:
+        print(f"WARNING: --src {args.src} overrides the pinned cache "
+              f"(data/gen3_rr_sources.lock.json's "
+              f"rr_priority_trainers_sheet_xlsx) -- its content is NOT hash-"
+              f"verified against the pin.", file=sys.stderr)
+        src = Path(args.src)
+        if not src.exists():
+            print(f"Source xlsx not found: {src}", file=sys.stderr)
+            return 1
+
+    out_doc, errors = _build_roster(src)
+    if errors:
+        print("Names the calc doesn't know (map them in _SHEET_CALC_NAMES or "
+              "calc_names.json):\n  " + "\n  ".join(errors), file=sys.stderr)
+        return 1
+
+    if args.check:
+        out = Path(args.out)
+        regen = json.dumps(out_doc, indent=2, ensure_ascii=False)
+        committed = out.read_text(encoding="utf-8")
+        if regen == committed:
+            print(f"OK: regenerated roster matches {out} byte-for-byte "
+                  f"({len(out_doc['parties'])} trainers). Note: this only checks "
+                  f"the JSON roster, not the calc/slink_priority.js supplement.")
+            return 0
+        from fetch_rr_sources import diff_snippet
+        print(f"DRIFT: regenerated roster ({len(regen)} bytes) != "
+              f"{out} ({len(committed)} bytes) -- the pinned spreadsheet snapshot "
+              "no longer reproduces the committed roster (see the lock file's "
+              "rr_priority_trainers_sheet_xlsx note: this is a community-edited "
+              "Google Sheet with no immutable revision).", file=sys.stderr)
+        print(diff_snippet(committed, regen), file=sys.stderr)
+        return 1
+
+    _write_outputs(out_doc, Path(args.out))
     return 0
 
 

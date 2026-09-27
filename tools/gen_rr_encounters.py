@@ -5,7 +5,7 @@ tools/gen_rr_encounters.py — Generate RR encounter tables from funnotbun's wil
 Usage:
     python tools/gen_rr_encounters.py
 
-Fetches wild_encounter_tables.c from funnotbun's GitHub repository and outputs:
+Fetches wild_encounter_tables.c and outputs:
     data/games/gen3_frlge/rr_encounters.json
 
 Format:
@@ -15,18 +15,29 @@ Methods: Day, Night, Surfing, Rock Smash, Old Rod, Good Rod, Super Rod
 (Raid encounters are excluded.)
 
 Encounter rates match funnotbun's regexLocations.js returnRarity() logic.
+
+The source used to be fetched live from funnotbun/funnotbun.github.io, which
+no longer exists on GitHub (confirmed 404, 2026-09-26). This now reads a
+byte-for-byte pinned Wayback Machine capture declared in
+data/gen3_rr_sources.lock.json (funnotbun_wild_encounter_tables_c). See
+docs/gen3_requirements.md row F-7 and tools/fetch_rr_sources.py.
+
+Usage:
+    python tools/gen_rr_encounters.py            # regenerate rr_encounters.json
+    python tools/gen_rr_encounters.py --check     # regenerate in memory and
+                                                    # diff against the committed
+                                                    # rr_encounters.json
 """
 
+import argparse
 import json
 import os
 import re
 import sys
-import urllib.request
+from pathlib import Path
 
-SOURCE_URL = (
-    "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io"
-    "/main/data/locations/wild_encounter_tables.c"
-)
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "data", "games", "gen3_frlge"))
@@ -336,15 +347,14 @@ def parse_encounters(
 
 # ── Entry point ───────────────────────────────────────────────────────────────
 
-def main() -> None:
-    print(f"Fetching: {SOURCE_URL}")
-    try:
-        with urllib.request.urlopen(SOURCE_URL, timeout=30) as resp:
-            text = resp.read().decode("utf-8")
-    except Exception as exc:
-        print(f"ERROR fetching source: {exc}", file=sys.stderr)
-        sys.exit(1)
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true",
+                        help="Regenerate in memory and diff against the "
+                             f"committed {OUTPUT_PATH}; exit 1 on drift.")
+    args = parser.parse_args()
 
+    text = cached_source("funnotbun_wild_encounter_tables_c").decode("utf-8")
     print(f"Loaded {len(text):,} bytes — parsing encounters…")
 
     known_ids = _build_known_area_ids(AREA_MAP_PATH)
@@ -360,6 +370,19 @@ def main() -> None:
     )
     print(f"Parsed {n_entries} encounter entries across {n_areas} areas.")
 
+    regen = json.dumps(encounters, ensure_ascii=False, indent=2)
+
+    if args.check:
+        committed = Path(OUTPUT_PATH).read_text(encoding="utf-8")
+        if regen == committed:
+            print(f"OK: regenerated output matches {OUTPUT_PATH} byte-for-byte "
+                  f"({n_entries} entries across {n_areas} areas).")
+            return 0
+        print(f"DRIFT: regenerated output ({len(regen)} bytes) != "
+              f"{OUTPUT_PATH} ({len(committed)} bytes)\n"
+              f"{diff_snippet(committed, regen)}", file=sys.stderr)
+        return 1
+
     # Report unresolved species (species_id == 0) for diagnostics
     unresolved: list[str] = []
     for methods in encounters.values():
@@ -374,9 +397,10 @@ def main() -> None:
 
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
-        json.dump(encounters, f, ensure_ascii=False, indent=2)
+        f.write(regen)
     print(f"Wrote: {OUTPUT_PATH}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

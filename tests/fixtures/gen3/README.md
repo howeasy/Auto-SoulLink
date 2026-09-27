@@ -9,8 +9,10 @@ Python codec described in `docs/gen3/PLAN.md` §5.5 and derived per
 ## Naming
 
 `<pack>_<scene>[_b].sav`, e.g. `rr_town.sav`. `<pack>` is `rr` (Radical Red
-companion) or `fr`/`lg` (vanilla FireRed/LeafGreen; `make-fr`
-builds `firered_town.sav`, see below). `_b` marks a distinct-OT
+companion), `fr`/`lg` (vanilla FireRed/LeafGreen; `make-fr`
+builds `firered_town.sav`, see below), or `emerald` (the `gen3_emerald`
+pack, its own foundation — pairs only with `emerald`; e.g. `emerald_town.sav`,
+`emerald_battle.sav`). `_b` marks a distinct-OT
 derivation of the `a`-side fixture (`derive-b`), used for the harness's B
 player. Every committed file is exactly 131072 bytes (0x20000, the flash
 body with any optional 16-byte mGBA RTC suffix already stripped by
@@ -21,6 +23,12 @@ body with any optional 16-byte mGBA RTC suffix already stripped by
 | Fixture | Source | Date | sha256 |
 |---|---|---|---|
 | `rr_town.sav` | `E:/Howard/Bizhawk/GBA/SaveRAM/slink RR.SaveRAM` (source sha256 `bb0c514ba045d2710529b7e03b31d56d62e5aca8eaa29f89005b628166150edc`), built from `patch/build/slink_RR.gba` (the existing companion-patched RR battery save `tools/mkstates.py` also drives, `tools/mkstates.py:100-150`) | 2026-09-21 | `b4b991f623c969eeb5c3d06ef54ef2da73cda62b4759a2c730aece7c18def9a3` |
+| `firered_party_evolve_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind evolve` from `firered_party_battle.sav` (SYNTH: slot-0 Squirtle Lv15, EXP 2534 (one short of Lv16), Lv15 stats); NAT-LEGS a2fa1f94, receipts `docs/gen3/probes/fc_evolve_gen3_fr_as_a_a2fa1f94.txt` | 2026-09-26 | `c87d50de4613d5f50c2c8e30d177975882d5c821487a748345f746a65dc418b0` |
+| `firered_party_trade_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind trade` from `firered_party_town.sav` (SYNTH: slot 1 = player-owned Hardy-nature Lv10 ABRA (fresh PID); continue-game warp to Route2_House (7,3) below the NPC trader; trade flag clear); NAT-LEGS a2fa1f94, **regenerated** NAT-LEGS-2 (OMP cx-6821246e F3: the old build computed ABRA's stats from the pre-trade mon's personality, one Defense point off), receipts `docs/gen3/probes/fc_npc_trade_gen3_fr_as_a_95876c55.txt` | 2026-09-26 | `9d1d0ea46ddab394f92e727cbc43e20389528fecb212404ce706dccc983b080a` |
+| `firered_party_poison_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind poison` from `firered_party_town.sav` (SYNTH: slot-0 Squirtle at 1 HP, poisoned); NAT-LEGS a2fa1f94, receipts `docs/gen3/probes/fc_poison_faint_gen3_fr_as_a_a2fa1f94.txt` | 2026-09-26 | `1f50a04f0c812451f8b159582f4e03a7d1a1ce07de7ebd016a25fdd67a928833` |
+| `leafgreen_party_evolve_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind evolve` from `leafgreen_party_battle.sav` (SYNTH: slot-0 Squirtle Lv15, EXP 2534 (one short of Lv16), Lv15 stats); NAT-LEGS-2 (LG-as-A), receipts `docs/gen3/probes/fc_evolve_gen3_lg_as_a_95876c55.txt` | 2026-09-26 | `9750057a29a9e1d8e2c0c096a3bd2bb9ec4d268d2ccadfd6c7da37b015cd1d81` |
+| `leafgreen_party_trade_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind trade` from `leafgreen_party_town.sav` (SYNTH: slot 1 = player-owned Hardy-nature Lv10 ABRA (fresh PID); continue-game warp to Route2_House (7,3) below the NPC trader; trade flag clear); NAT-LEGS-2 (LG-as-A), receipts `docs/gen3/probes/fc_npc_trade_gen3_lg_as_a_95876c55.txt` | 2026-09-26 | `c8a0673feb51d7f73e6c21eb0be3626cfc45c444bd7321b49726a59e5f259dc7` |
+| `leafgreen_party_poison_synth.sav` | `tools/gen3_fixtures.py make-frlg-synth --kind poison` from `leafgreen_party_town.sav` (SYNTH: slot-0 Squirtle at 1 HP, poisoned); NAT-LEGS-2 (LG-as-A), receipts `docs/gen3/probes/fc_poison_faint_gen3_lg_as_a_95876c55.txt` | 2026-09-26 | `169ea72f231969c12d8c77fd0638e5156bb24538beda059446bbb4c4fdb0a300` |
 
 `rr_town_b.sav` was **attempted and refused**: `derive-b --rr` always
 refuses (see `tools/gen3_fixtures.py:RR_DERIVE_REFUSAL`) because the
@@ -539,3 +547,196 @@ build, both RUN), saves in-game and re-verifies the tile. Built by the same `_pr
 - No `_b`: B boots `rr_battle2_b.sav` (its party is the swap source).
 - The rival it meets: coord script 0x081682AB -> `trainerbattle 9` with gTrainers 0x149/0x14A/0x14B
   by `VAR_STARTER_MON` (0x4031 == 0 here -> 0x14B = 331, an `_RR_RIVAL_TRAINER_IDS` member).
+
+## emerald_{town,battle,trainer}{,_b}.sav (cards E1-FIX, E1-FIX-2) — SYNTH seed, native re-save, built live 2026-09-25
+
+**Provenance: O-33 SYNTH setup, disclosed.** `tools/gen3_fixtures.py make-emerald` builds a flash
+save from pret facts (pokeemerald c65e93f2), cold-boots it on vanilla Emerald (sha1 `f3ae0881…`)
+→ CONTINUE → in-game SAVE, and keeps **the game's own re-save** as the fixture. The seed sets
+`SaveBlock2.specialSaveWarpFlags = CONTINUE_GAME_WARP`, so CONTINUE runs pret's warp-in
+(`CB2_ContinueSavedGame` → `WarpIntoMap` → `CB2_LoadMap`, `src/overworld.c:1739-1746`); the game
+clears the flag and writes SaveBlock1 itself (map view, object-event table). The build refuses a
+re-save that still carries the flag, stands anywhere but the kind's tile, changed the party, or
+lost the Poké Balls (`emerald_fixture_problems`; `boot-check --title emerald` runs the same check
+on its flushed save). The `_b` file is `derive-b --title emerald` over the `a`
+file (OT identity only), exactly as for FR/LG.
+
+What the seed carries (everything else is zero, as `ClearSav1`/`NewGameInitData` leave it):
+- SaveBlock2: name `EMER`, male, trainer id `0x20250925`, text speed MID, encryption key 0.
+- SaveBlock1: `pos`/`location`/`continueGameWarp` = the kind's tile (warp id -1), `mapLayoutId`,
+  `lastHealLocation` = Oldale (6,17), money 3000, one party mon, and the flags
+  `EventScript_ResetAllMapFlags` sets (`data/scripts/new_game.inc:115`) plus
+  `FLAG_SYS_POKEMON_GET`, `FLAG_ADVENTURE_STARTED` (unblocks Oldale's west exit),
+  `FLAG_RECEIVED_POTION_OLDALE`, `FLAG_VISITED_OLDALE_TOWN`, `FLAG_HIDE_OLDALE_TOWN_RIVAL`,
+  `FLAG_HIDE_ROUTE_103_RIVAL`.
+- Bag (card E1-FIX-2): **5 Poké Balls** (`ITEM_POKE_BALL` 4) in `bagPocket_PokeBalls[0]`
+  (SaveBlock1 +0x650), the same count for town, battle and trainer, so the client's
+  `has_pokeballs` latches and faint / party-sync scenarios can run (FR's battle fixture has 4).
+  The quantity is stored XOR the low 16 bits of `SaveBlock2.encryptionKey` (`src/item.c:26-34`);
+  the seed's key is 0, CONTINUE re-keys it (`MoveSaveBlocks_ResetHeap`, `src/load_save.c:127-131`),
+  and `emerald_ball_pocket` reads it back through the saved key.
+- Party: Mudkip Lv5 (species 283), Hardy, male, IVs 15, EVs 0, Tackle/Growl, 20/20 HP, OT
+  `EMER`, met Route 101 at Lv5 in a Poké Ball, personality `0x4D55444B`.
+- Storage: box names `BOX1`..`BOX14`, default wallpapers, no mons.
+
+**Not in the seed (story state is NOT coherent beyond Oldale/Route 102):** no Pokédex
+(`FLAG_SYS_POKEDEX_GET` unset, dex empty), no bag items besides the Poké Balls, no PC items, all
+story vars 0 (Littleroot, Route 101 and Route 103 scenes may fire if a run walks there), berry
+trees empty, RTC/clock not set.
+
+**Still SYNTH after the game's re-save.** The re-save rewrites these through the game's own
+code, but every value is the seed's, not one a played game produced:
+- SaveBlock2: player name, gender, trainer id, options (text speed) — the `encryptionKey` is the
+  one exception the game changes (it re-rolls it on CONTINUE and re-encrypts money and the bag);
+- the Pokédex (empty);
+- money (3000);
+- flags and vars;
+- gameStats (seeded zero; only the counters the boot and save themselves bump move);
+- the bag (the 5 Poké Balls, nothing else);
+- the Mudkip's OT, met location/level/game, ball, friendship and ability bit.
+
+Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
+`816d33b8e856ccb8fcf84b45f799495a6cfb00d77677ce7ce152cfbe21e7aca5`, battle
+`6ad42abbfd481978b237a4f2d3bc92eb4fb1dfdf97eba74572e7b4b0dfcc35a9`, trainer
+`f6f301bc99c778e35aebef796093465d178397893430ae99063e4c07326f596e`.
+
+| Fixture | Map (group.num) | Tile | Why this tile | sha256 |
+|---|---|---|---|---|
+| `emerald_town.sav` | Oldale Town (0.10) | (6,17) | heal location, one Up step into the Pokémon Center door (6,16); towns have no wild encounters | `f447ce7aaf87cf81e1cdd0bf13bd81cad615214abaf335fc9d91a4dede38f80a` |
+| `emerald_town_b.sav` | same | same | `derive-b` | `17a34da61d32eb9c9e4fb5f8b6bd881245b5afa3213b369ebb71ac808f1043ec` |
+| `emerald_battle.sav` | Route 102 (0.17) | (21,16) | `MB_TALL_GRASS` in the (19..25,16..17) patch; no trainer faces it | `4080d499a0ca51a6c593be5062f5a8aa74014acffadee33541985bfa617c1b5f` |
+| `emerald_battle_b.sav` | same | same | `derive-b` | `61cefb43740759b677d886752a0ab46c67e25798f2666f5dde5c615fc4fc4b50` |
+| `emerald_trainer.sav` | Route 102 (0.17) | (32,16) | one Right step onto (33,16), inside Youngster Calvin's sight line (he stands at (33,14) facing down, sight 3) | `1fe754336ddba75b2a1cb77b7864d2eae7137e8d7412bf55724f7db4cb1593e6` |
+| `emerald_trainer_b.sav` | same | same | `derive-b` | `ca108972081f3c01000d34822adccdbb02cec9e436a8fc31091ab8c450b40fb6` |
+| `emerald_pc.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; party Mudkip Lv5 + Poochyena Lv3, box 1 slots 0/1 Zigzagoon Lv3 / Wurmple Lv3 (E2-FIX-VARIANTS; rebuilt 2026-09-26 with ability_num 0 for single-ability species) | `c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab` |
+| `emerald_pc_b.sav` | same | same | `derive-b --title emerald` over `emerald_pc.sav` (card E4-DUO): `EMERB` #DFDAF6DA, both party mons and both boxed mons re-keyed; the B side of the E<->E duos that link the slot-1 mon (faint_cmd/reconnect/boxsync/linked_faint_active_gen3 on `gen3_emerald`). No separate `boot-check`: every one of those live duos booted it, saved in-game (counter 2->3) and passed its witness (`docs/gen3_emerald/probes/duo_e4_*`) | `75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6` |
+| `emerald_lowhp.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv5 at 1 HP (E2-FIX-VARIANTS) | `c57422d3fbb8732f5fea8d2bd3275a5bc2edf58563edab669550afbff7cea07b` |
+| `emerald_badges.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; badge flags 0x867-0x86A (FLAG_BADGE01..04_GET, flags.h:1359-1362) set in the SYNTH seed, straddling flag bytes 0x10C/0x10D (E2-BADGES); a save the game cannot produce (4 badges, no story progress) that exists only to prove the badge read | `04d4c5dddd8f8aeef14982a34a654936fe5fb8f1a517d529c483991de803ca4f` |
+| `emerald_catch.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; 20 Poké Balls (E2-FIX-VARIANTS r3) | `592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0` |
+| `emerald_catch_b.sav` | same | same | `derive-b --title emerald` over `emerald_catch.sav` (EG4-RC ball risk): `EMERB` #DFDAF6DA, the party mon re-keyed -- the B side of the deadzone_gen3/link_gen3 ball hunts on `gen3_emerald`, so a real half never runs the fixture out of its 5-ball `battle` allotment | `cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b` |
+| `emerald_evolve.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv15 at EXP 2534 (one short of Lv16), moves Tackle/Growl/Water Gun + a free slot (E2-FIX-VARIANTS r3) | `244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd` |
+| `emerald_poison.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; Mudkip Lv5 poisoned at 1 HP + Poochyena Lv3 (E2-FIX-VARIANTS r3) | `c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0` |
+| `emerald_gift.sav` | Lavaridge Town (0.12) | (4,8) | below the egg woman (LavaridgeTown_EventScript_EggWoman, giveegg WYNAUT); FLAG_RECEIVED_LAVARIDGE_EGG clear (E2-FIX-VARIANTS r3) | `7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552` |
+
+The first six: slot 0, counter 2, one Mudkip Lv5 (the pc/lowhp variants: see their section; both built by `make-emerald --kind pc|lowhp`, 2026-09-26, the game's own re-save kept HP=1 and the two boxed mons); `a` side `EMER` #20250925, `_b` side `EMERB`
+#DFDAF6DA; 5 Poké Balls. Each passed `qualify --title emerald` and a physical `boot-check --title
+emerald` (counter 2→3, party unchanged, tile unchanged, `emerald_fixture_problems` empty). Receipt:
+`docs/gen3_emerald/probes/fixtures_2026-09-25b.txt` (the pre-ball build:
+`fixtures_2026-09-25.txt`). Every tile, map id, layout id, starter fact, story flag id and
+bag offset is re-derived from pret by `tests/unit/test_gen3_fixture_qualify_emerald.py`, which
+also pins the seed and fixture sha256s above.
+
+```
+SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py make-emerald --kind town --out tests/fixtures/gen3/emerald_town.sav
+python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_town.sav tests/fixtures/gen3/emerald_town_b.sav
+python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_pc.sav tests/fixtures/gen3/emerald_pc_b.sav
+python tools/gen3_fixtures.py derive-b --title emerald tests/fixtures/gen3/emerald_catch.sav tests/fixtures/gen3/emerald_catch_b.sav
+python tools/gen3_fixtures.py qualify --title emerald tests/fixtures/gen3/emerald_*.sav
+SLINK_GEN3_FIXTURE_RUNS=C:/slink-wt/emerald-fix python tools/gen3_fixtures.py boot-check --title emerald --rom "<path to Emerald.gba>" --fixture tests/fixtures/gen3/emerald_town.sav
+```
+
+`--title emerald` on `boot-check` runs `lua/tests/gen3_emerald_boot_check.lua` (Emerald's
+`gMenuCallback` START menu, every address read from `data/gen3/pret/pokeemerald.sym`) and seeds the
+battery under the gamedb name `Pokemon - Emerald Version (USA, Europe).SaveRAM`; it refuses `--rr`,
+and it runs `emerald_fixture_problems` for the kind the fixture's filename names
+(`emerald_<kind>[_b].sav`), or prints that it did not.
+`SLINK_GEN3_FIXTURE_RUNS` moves the per-run SaveRAM directories off Drive (MAX_PATH).
+`make-emerald` needs the pret checkout (`.cache/pret/pokeemerald`, or `$SLINK_PRET_EMERALD`).
+
+### emerald_pc.sav / emerald_lowhp.sav (card E2-FIX-VARIANTS) — two more SYNTH kinds, built 2026-09-26
+
+Same `make-emerald` machinery and provenance as above (O-33 SYNTH, disclosed); these two kinds are
+additive to `EMERALD_KINDS` and do not change the town/battle/trainer seeds' bytes (pinned by
+`tests/unit/test_gen3_emerald_fixture_qualify.py` against their source-cut sha256). Committed as
+`emerald_pc.sav`/`emerald_lowhp.sav` (sha256 in the table above); the coordinator's native re-save
+kept HP=1 and both boxed mons exactly as seeded, confirming the †UNVERIFIED note below. This
+section documents what the SYNTH seed carries and `emerald_fixture_problems` checks for each, for
+the E2-LEGS scripted-play worker.
+
+- **`pc`** — same map/tile as `town` (Oldale Town 0.10, (6,17)). Party count 2: slot 0 the usual
+  Mudkip Lv5 starter (unchanged), slot 1 a **SYNTH Poochyena Lv3** (species 286, Hardy,
+  IVs 15, EVs 0, only `TACKLE` known — it hasn't reached Lv5's `HOWL` yet), both at full HP with
+  valid checksums, OT `EMER`, no HMs, no mail. Storage box 1 (index 0): slot 0 a SYNTH Zigzagoon
+  Lv3 (species 288, `TACKLE`+`GROWL`), slot 1 a SYNTH Wurmple Lv3 (species 290,
+  `TACKLE`+`STRING_SHOT`) — both valid-checksum `BoxPokemon` records (no party tail: their level
+  is `GetLevelFromMonExp` over `experience` = `level**3`, `GROWTH_MEDIUM_FAST`). Every other box
+  slot (including box[0] slot 2, where a PC deposit would land) is the zero-init empty
+  `BoxPokemon`. `PokemonStorage.currentBox` is untouched, so 0. 5 Poké Balls, as today.
+- **`lowhp`** — same map/tile as `battle` (Route 102 grass 0.17, (21,16)). Party count 1: the
+  same Mudkip Lv5 starter, byte-identical except `hp` (party tail +0x56) forced to **1**; `max_hp`
+  and every substruct byte (so the checksum) are untouched. `moves[0]` is still `TACKLE` (pp 35,
+  full) for the faint leg's damaging move. 5 Poké Balls, as today.
+- Both kinds carry the same `lastHealLocation` as every other kind: Oldale Town (0,10,6,17)
+  (`EMERALD_HEAL`, independent of the kind's own tile) — `DoWhiteOut`'s landing spot for the
+  `lowhp` whiteout leg.
+- `emerald_fixture_problems(body, "pc")` checks the party (species/level/checksum for both slots)
+  and box[0] slots 0/1 (species/level/checksum) instead of the one-Mudkip rule; it also refuses
+  any other box slot being occupied. `emerald_fixture_problems(body, "lowhp")` checks the one
+  Mudkip and additionally refuses `hp != 1`. The one-Mudkip rule is unchanged for
+  town/battle/trainer.
+- **What the game's own re-save could plausibly change and this build does not control for:**
+  CONTINUE re-keys `SaveBlock2.encryptionKey` (as for every kind) but that never touches HP or box
+  data; nothing else on the CONTINUE→save path recalculates stats or clears storage, so both
+  kinds' native re-save is expected to reproduce the seed's HP/box contents unchanged. This is
+  reasoned from `src/load_save.c` and `src/pokemon_storage_system.c`, not from a physical run —
+  the coordinator's `boot-check --title emerald` on the flushed save is the actual signer.
+
+### emerald_evolve.sav / emerald_poison.sav / emerald_gift.sav / emerald_catch.sav (card E2-FIX-VARIANTS round 3)
+
+Same `make-emerald` machinery and provenance as above; additive to `EMERALD_KINDS`, and
+town/battle/trainer/pc/lowhp/badges stay byte-identical (pinned in
+`tests/unit/test_gen3_emerald_fixture_qualify.py`'s `UNCHANGED_SEED_SHA256`). Built on the
+coordinator's lane 2026-09-26 (`8ae455a0`); the game's own re-save keeps HP 1 / PSN / EXP / 20 balls.
+
+- **`evolve`** -- same map/tile as `battle` (Route 102 grass 0.17, (21,16)). Party count 1: a
+  **SYNTH Mudkip stored at Lv15**, EXP = `EXP_MEDIUM_SLOW(16) - 1` = 2534 (one short of
+  `SPECIES_MUDKIP`'s own `{EVO_LEVEL, 16, SPECIES_MARSHTOMP}` threshold,
+  pokeemerald c65e93f2 `src/data/pokemon/evolution.h:129`), full HP, valid checksum. Moves
+  `TACKLE`/`GROWL`/`WATER_GUN` only -- deliberately 3 of 4 slots, not Mudkip's natural Lv15 set
+  (which would also include Lv6's `MUD_SLAP`): `GiveMoveToBoxMon` (`src/pokemon.c:2939-2955`)
+  only raises the delete-a-move Yes/No prompt once all 4 slots are full, and Marshtomp's own
+  Lv16 move `MUD_SHOT` (`level_up_learnsets.h:3700`) would otherwise force that extra leg input.
+  Any wild win's EXP gain (always >=1) crosses the threshold and evolves the mon on the spot.
+- **`poison`** -- same map/tile as `town` (Oldale Town 0.10, (6,17)). Party count 2: slot 0 the
+  usual Mudkip Lv5 starter with `status = STATUS1_POISON` (`0x08`,
+  `include/constants/battle.h:117`) and `hp` forced to 1 (`max_hp`/stats/checksum untouched);
+  slot 1 a healthy full-HP **SYNTH Poochyena Lv3** (same builder as the `pc` kind's second slot),
+  so a field-poison faint doesn't white out. Verified in `src/field_poison.c:120-154`
+  (`DoPoisonFieldEffect`): Emerald's field poison decrements HP every 4th step
+  (`src/field_control_avatar.c:637-660` `UpdatePoisonStepCounter`, `VAR_POISON_STEP_COUNTER`
+  already 0 by the seed's zero-init) and **can bring HP to 0 and faint the mon**
+  (`if (hp == 0 || --hp == 0) numFainted++;`) -- unlike Gen 4+, which floors field poison at 1 HP.
+- **`gift`** -- LavaridgeTown (group 0, num 12), player at (4,8), one step S of the EggWoman
+  object event at (4,7) (`MOVEMENT_TYPE_FACE_DOWN`, `OBJ_EVENT_GFX_EXPERT_F`,
+  `data/maps/LavaridgeTown/map.json`). Talking to her runs
+  `LavaridgeTown_EventScript_EggWoman` (`data/maps/LavaridgeTown/scripts.inc:232-247`): a
+  Yes/No box, a party-full check, then `giveegg SPECIES_WYNAUT` (360) ->
+  `ScrCmd_giveegg` -> `ScriptGiveEgg` -> `GiveMonToPlayer` (`src/script_pokemon_util.c:85-94`,
+  matching the `mon_given` engine site in `docs/gen3_emerald/engine_sites.md`). The **fewest-SYNTH-flags**
+  gift site found: the script's only prior-state gate is `FLAG_RECEIVED_LAVARIDGE_EGG` (left
+  clear by the seed); `VAR_LAVARIDGE_TOWN_STATE` is already 0 (so the unrelated rival
+  Go-Goggles `ON_FRAME` scene doesn't fire) and `FLAG_HIDE_LAVARIDGE_TOWN_RIVAL` is already set
+  by the baseline `emerald_new_game_flags()` (`data/scripts/new_game.inc:233`, part of
+  `EventScript_ResetAllMapFlags`'s own `setflag` block) -- no extra SYNTH flags needed. Party:
+  Mudkip Lv5 only (count 1, room for the egg). Leg input: face the EggWoman (Up), talk (A),
+  answer the Yes/No box (A if YES is the default cursor -- †UNVERIFIED, not run on hardware).
+- **`catch`** -- coordinator add-on, same map/tile as `battle`. Identical Mudkip Lv5 party;
+  the only difference is **20 Poke Balls** instead of 5, so five straight native misses against
+  a wild target (~0.56 miss chance per throw at `catchRate` 255, per the coordinator's live
+  evidence) can't false-fail the catch leg (~1e-5 at 20 balls vs. a plausible event at 5).
+- `emerald_fixture_problems` checks: `evolve` -- species/level/checksum plus
+  `experience == EVOLVE_EXP`; `poison` -- both party slots' species/level/checksum plus
+  Mudkip's `status`/`hp` and Poochyena's healthy full HP; `gift`/`catch` fall under the
+  unchanged one-Mudkip rule (`catch` additionally needs 20 balls, not 5); giving the egg itself
+  is the scripted leg's own native action, not something the `gift` seed or its re-save produces.
+- **†UNVERIFIED** (reasoned from pret source, not a physical run): that `poison`'s HP/status and
+  `evolve`'s EXP survive the CONTINUE->save round trip unchanged (same reasoning as the pc/lowhp
+  note above); the player's post-CONTINUE facing direction for the `gift` leg's first input; and
+  that the Yes/No box's default cursor lands on YES.
+
+```
+python tools/gen3_fixtures.py make-emerald --kind evolve --out tests/fixtures/gen3/emerald_evolve.sav
+python tools/gen3_fixtures.py make-emerald --kind poison --out tests/fixtures/gen3/emerald_poison.sav
+python tools/gen3_fixtures.py make-emerald --kind gift --out tests/fixtures/gen3/emerald_gift.sav
+python tools/gen3_fixtures.py make-emerald --kind catch --out tests/fixtures/gen3/emerald_catch.sav
+```

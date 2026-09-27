@@ -1,8 +1,10 @@
-# Gen 3 Game Data (FRLG + Emerald + Radical Red)
+# Gen 3 Game Data (FRLG + Radical Red)
 
 Data files for Gen 3 Pokémon games (Game Boy Advance).
-Naming convention: `gen3_frlge` covers FireRed, LeafGreen, and Emerald;
-the Radical Red CFRU hack runs on top of FireRed.
+Naming convention: `gen3_frlge` historically covered FireRed, LeafGreen, and Emerald;
+the Radical Red CFRU hack runs on top of FireRed. Emerald now has its own admitted
+`gen3_emerald` pack (`data/games/gen3_emerald/`, pairs only E<->E) with its own area map
+and data files — this shared directory's area map and `rr_*.json` tables cover FRLG/RR only.
 
 ## Status
 
@@ -35,6 +37,6 @@ and Radical Red 4.1 (CFRU). All other gens model their patterns on this one.
 - Mon identity: `PID:OTID` (32-bit personality + 32-bit OT ID, hex format).
 - Shiny: `(otid_lo ^ otid_hi ^ pid_lo ^ pid_hi) < 8`.
 - Platform: Game Boy Advance — mGBA core in BizHawk. Memory domain: "System Bus" / "EWRAM" depending on read.
-- Variants: `firered` / `leafgreen` / `emerald` (vanilla), `firered_ap` / `leafgreen_ap` (Archipelago), `firered_rr` (Radical Red CFRU).
-- Memorial box: Box 14 (Emerald) / configurable per profile.
+- Variants: `firered` / `leafgreen` (vanilla), `firered_ap` / `leafgreen_ap` (Archipelago), `firered_rr` (Radical Red CFRU). Emerald is its own pack (`data/games/gen3_emerald/`), not a variant here.
+- Memorial box: the last box, derived per profile as `BOXES_PER_STORE - 1` (`lua/gen3/boxes.lua`): Box 14 on FR/LG and Emerald, Box 25 on Radical Red.
 - CFRU box format: compressed BoxPokemon with no encryption — distinct from vanilla's 80-byte struct.

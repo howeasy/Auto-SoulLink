@@ -81,10 +81,33 @@ function N.new(profile, deps)
     end
     function self:trade_active() return false end -- apply_trade belongs to the trade card
     function self:hello_fields() return {} end -- no invented wire capability fields
-
+    -- V1 has no epoch/visit-bound save witness and must not advertise durable trade.
+    -- The v2 binding replaces this only when all witness checks are implemented.
+    function self:trade_capable() return false end
+    -- Typed unavailable adapter until a qualified v2 binding supplies coherent witnesses.
+    function self:trade_visit() return nil, "durable_trade_unavailable" end
+    function self:trade_eligible(_mon) return false end
+    function self:trade_authorized(_token, _old_key) return false end
+    function self:prepare_trade(_cmd, done, _valid)
+        if done then done("durable_trade_unavailable") end
+        return nil, "durable_trade_unavailable"
+    end
+    function self:withdraw_trade(_token) return nil, "durable_trade_unavailable" end
     local function finish(job, why, result, reason)
         if job.done then job.done(why, result, reason) end
     end
+    function self:cancel(handle)
+        for i, job in ipairs(queue) do
+            if job == handle then
+                table.remove(queue, i)
+                job.cancelled = true
+                finish(job, "guard:stale")
+                return true
+            end
+        end
+        return false -- published operations belong to the cartridge; never erase one
+    end
+
     local function abort(why)
         local active, waiting = pending, queue
         pending, queue = nil, {}
@@ -157,6 +180,7 @@ function N.new(profile, deps)
                 -- native_idle clause (status ~= busy) refuse the rest of the post.
                 writes:write_u16(p.BASE + O.ack, (seq + 65535) % 65536)
                 writes:write_u16(p.BASE + O.seq, seq)
+                job.publish_attempted = true -- a sink failure can leave a valid low-byte opcode
                 writes:write_u16(p.BASE + O.opcode, job.op) -- publish last
                 -- ... and the receipt is the publish's own witness: nothing after it can fail
                 job.posted = true
@@ -223,7 +247,11 @@ function N.new(profile, deps)
     -- valid (optional): a dispatch-time guard, called by service() immediately before this job is
     -- dispatched (same frame-end callback, CPU stopped); false, why drops the job with done(why).
     -- The trade FSM uses it to re-locate the offered mon at the moment a slot op actually posts.
-    function self:transfer(step, cmd, done, valid)
+    function self:transfer(step, cmd, done, valid, progress)
+        if step == "scene" and not self:trade_capable() then
+            if done then done("durable_trade_unavailable") end
+            return nil, "durable_trade_unavailable"
+        end
         local op, args, stages = nil, {}, {}
         if step == "scene" or step == "party" then
             if not integer(cmd.slot, 5) then return nil, "invalid party slot" end
@@ -236,18 +264,20 @@ function N.new(profile, deps)
                 return nil, "invalid blobs"
             end
             local bytes = {}
+            local mon_size = reads.PARTY_MON_SIZE
+            if not integer(mon_size, 600) or mon_size == 0 then return nil, "invalid mon size" end
             for _, hex in ipairs(rows) do
-                if type(hex) ~= "string" or #hex ~= 200 or hex:find("[^%x]") then
+                if type(hex) ~= "string" or #hex ~= 2 * mon_size or hex:find("[^%x]") then
                     return nil, "invalid blobs"
                 end
-                for i = 1, 200, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
+                for i = 1, 2 * mon_size, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
             end
             stages = {{p.BLOB_BUF, bytes}}
             if step == "party" then
                 op, args = assert(p.OP_SET_PARTY_MON), {cmd.slot, cmd.bump and 1 or 0}
             else op, args = assert(p.OP_SET_ENEMY_PARTY), {#rows} end
         else return nil, "unsupported transfer step" end
-        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid})
+        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid, progress=progress})
     end
     -- G5-RR-RIVAL: the patch's rival-swap window W1 (docs/gen3/research/rival_swap_refresh_window.md
     -- §5), mirrored from patch/src/handlers.c's OP_RIVAL_SWAP check (OMP F4): gBattleCommunication[0]
@@ -426,11 +456,8 @@ function N.new(profile, deps)
             elseif frame - job.started >= timeout_for(job.op) then
                 -- Never reuse a timed-out slot: opcode==0 can mean an async handler
                 -- still owns it. A reset/absent beacon is the recovery boundary.
-                -- RECORDED LIMIT (C5-6a): the poison also blocks any recovery post, so a trade
-                -- whose OP_SET_ENEMY_PARTY stage timed out cannot post its OP_SET_PARTY_MON
-                -- silent-swap fallback; the trade FSM reads the slot back and reports it as it is.
-                -- A safe recovery post would need to know whether the patch still owns the timed-
-                -- out op, and nothing in the ABI says so, so none is attempted.
+                -- Poison blocks further posts. Durable trade treats a possibly committed
+                -- operation as uncertain; neither raw replacement nor RAM readback repairs it.
                 poisoned = "native timeout"; abort(poisoned)
             end
         end

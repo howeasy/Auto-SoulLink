@@ -1,0 +1,194 @@
+X1-PROBE / XF-2 and reference XF-3 extraction - 2026-09-26
+
+Scope
+-----
+Worktree C:/slink-wt/em-x1, branch claude/gen3-emerald-x1, following 35d32eed.
+Compiler-produced facts, independent ROM/.sym/.elf checks, and reference data
+extraction only. No emulator, runtime/write-gate, engine-site semantic, RC, or
+XG1 sign-off claim. No push/merge. No writes to em-x or the repo root checkout.
+VM writes confined to /home/howard/slink-exp/x1-probe-20260926; existing builder
+source and output read in place under /home/howard/slink-exp.
+
+Inputs
+------
+Expansion source: rh-hideout/pokeemerald-expansion expansion/1.17.0,
+e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7, tracked source clean.
+Build ROM SHA1: 28877d733492299599f2b8fff50493109d72653c (32 MiB).
+ROM SHA256: 08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39
+ELF SHA256: 179a5c91932727433593bf33c327f4671501bb6d179becd468bee73ea80aa89b
+MAP SHA256: c957564542361f56661478f1ffa6967893d5ae26bfb7e6be84bffa0899017c08
+SYM SHA256: ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e
+All four hashes and lengths are checked against the builder receipt before use.
+
+Original local input: em-x/.cache/expansion-output/linux1. Coordinator moved it
+to em-x/.cache/expansion-output/pre-signoff/linux1 during this card, while
+rebuilding receipts with the expected-ROM pin. Artifact bytes are unchanged.
+This card retains the original receipt and its compiler status='provisional'
+as provenance; it does not silently rewrite that into owner approval.
+Our hash-verified local copy: .cache/expansion-output/reference (gitignored).
+Remote original builder root:
+  /home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/bedf3701743a4053b72b1128e68acd65
+Source beneath it: .cache/expansion/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7
+Artifacts beneath it: .cache/expansion-output/reference
+
+Compiler/pipeline evidence
+-------------------------
+Compiler: arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009, /usr/bin.
+Driver SHA256: 38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59
+CC1 SHA256: 1d284dd98e80e416ad199f5a2e24df5e704b43c0afd15ee3a34357dc46d8c5c0
+tools/gen_expansion_facts.py:160 onward queries the pinned Makefile directly
+with the receipt's BUILD=emerald DEBUG=0 RELEASE=0 LTO=0 TEST=0 variables.
+The captured CPP/CPPFLAGS/PREPROC/ASSETS_DIR_NAME/CC1/CFLAGS/AS/ASFLAGS and exact
+argv vectors plus executable hashes are embedded in both generated JSON files.
+CPPFLAGS: -iquote include -Wno-trigraphs -DMODERN=1 -DTESTING=0 -DEMERALD -std=gnu17
+ABI flags include -mthumb -mthumb-interwork -O2 -mabi=apcs-gnu -mtune=arm7tdmi
+-march=armv4t; NO -fshort-enums was added. Full warnings/defines are captured,
+not retyped. Same CPP -> preproc -> CC1 -> assembler pipeline and assembly
+alignment suffix as expansion Makefile:159-170,184-190,471-474.
+
+tools/expansion_offsets.c:14-29 emits static USED u32 sizeof/offsetof/array
+element-size data and full struct objects with one bitfield set to -1.
+Only -Woverflow is suppressed around deliberate all-ones assignments; no ABI
+flag is changed. gen_expansion_facts reads ELF32 ARM object data, not DWARF or
+runtime output. Each zero baseline must actually be zero; each initializer must
+be a contiguous, nonempty mask; overlaps and relocations fail. Per-bitfield
+initializer hashes, exact offset/width/shift/bits/masks are retained in facts.
+Source hashes use UTF-8/LF normalization to survive Git CRLF checkouts.
+
+Probe source normalized SHA256:
+  5e490746b30e832dbaf45c123af760a2e527106113db07d3961670c30f34cd24
+Probe object SHA256:
+  de9db63c71119e8a20b06f744f35a7c43b695687c6f2367341d6ad82df9e4a53
+Preprocessed source SHA256:
+  046d63840a4e3e3c33d2effda9ce937482a16c1881e0a0db486f2eafb8711cea
+Object/assembly/preprocessed source/compile.json remain under the VM work dir;
+local object and manifest are in .cache/x1-probe. None is committed.
+
+Selected exact facts (full inventory is in facts.json)
+-----------------------------------------------------
+Struct sizes in bytes:
+  SaveBlock1=15568 (0x3cd0), SaveBlock2=3884 (0xf2c)
+  Bag=744 (0x2e8), ItemSlot=4
+  BoxPokemon=80, Pokemon=100, PokemonSubstruct0/1/2/3=12
+  BattlePokemon=140, Volatiles=48
+  SpeciesInfo=264, MoveInfo=64, ItemInfo=48, AbilityInfo=28, Evolution=12
+  PokemonStorage=34144 (0x8560), Main=1084 (0x43c)
+  SaveBlock1ASLR=15696, SaveBlock2ASLR=4012, PokemonStorageASLR=34272
+
+Required anchors: Bag.size == 0x848-0x560; SaveBlock1.flags == 0x1270;
+Pokemon.size == 100 and gParties.size == 4*6*100 == 0x960. All pass.
+33 total compiler/ROM/symbol checks pass, including table sizes, exact ELF/.sym
+symbol agreement, GF table pointers/save sizes/party/flags/vars, RHH counts,
+gMain/gBattleMons/gParties/gPartiesCount and ASLR wrapper symbol sizes.
+
+SaveBlock1: location.mapGroup=4, location.mapNum=5, playerPartyCount=0x234,
+playerParty=0x238, bag=0x560, pokeblocks=0x848, flags=0x1270, vars=0x139c.
+SaveBlock2: playerName=0 (8 bytes), playerTrainerId=0x0a (4 bytes), encryptionKey=0xac.
+BattlePokemon: hp=42, level=44, maxHP=46, item=48, pp=37, types=34 (3 bytes),
+statStages=24 (8 bytes), personality=76, status1=80, volatiles=84, otId=132.
+Volatiles.perishSongTimer: offset30, 2 bits at shift2, byte mask0x0c.
+Main: callback2=4, state=0x438, inBattle at0x439/shift1/mask0x02.
+PokemonStorage: boxes=4, boxNames=0x8344, fusions=0x83d0.
+The source comment boxes=0x0001 is stale (include/pokemon_storage_system.h:23);
+the compiler's 4 agrees with the later boxNames and total wrapper symbol sizes.
+Party addresses are derived from gParties/gPartiesCount and compiler constants:
+  player party0x02031b64, opponent A0x02031dbc;
+  player count0x02031b54, opponent A count0x02031b55.
+No RAM pointer global was mistaken for the count byte. Source: pokemon.h:729-744;
+pokemon.c:100-110.
+
+Source-supported exceptions and unavailable names
+------------------------------------------------
+gPokemonStorage is struct PokemonStorageASLR, not struct PokemonStorage.
+Source include/load_save.h:24-26; src/load_save.c:37. Wrapper contains 128 extra
+ASLR bytes. The probe emits both sizes and checks the wrapper against .sym/.elf.
+Saveblock globals use the analogous wrappers (load_save.h:14-22).
+
+gSpeciesInfo has 1574 physical entries, while RHH numSpecies and NUM_SPECIES are
+1573: SPECIES_EGG == NUM_SPECIES, with a graphics-only trailing initializer.
+Source constants/species.h:1697-1698; src/data/pokemon/species_info.h:163-176.
+Table size check is sizeof(SpeciesInfo)*(SPECIES_EGG+1); extractor count remains
+exactly RHH.numSpecies. No Egg name is fabricated.
+
+Species1435 (SPECIES_LUGIA_SHADOW, constants/species.h:1548) has no initializer
+in src/data/pokemon/species_info, and all264 ROM bytes are zero. The generator
+records zero_records:[1435] in the ROM-bound layout. Extraction verifies every
+byte, retains the row/count, and exports name:null, reserved_zero_record:true,
+and the actual zero numeric fields. It does not decode unterminated zero text
+as a real name or silently treat a nonzero corrupt record as reserved.
+
+MOVES_COUNT=848, MOVES_COUNT_ALL=935. gMovesInfo size checks use935 physical
+entries; the requested pack extracts the RHH movesCount848. All counts come
+from compiler constants/RHH, not assumed vanilla values.
+
+ItemInfo has NO battleEffect member (include/item.h:69-90); actual effect pointer
+and battleUsage offsets are emitted, and the missing name is explicitly recorded.
+gStatuses3/gDisableStructs/gTrainerBattleOpponent_A/BattleIntroGetMonsData/
+GiveMonToPlayer are absent in the reference symbol table; they are listed as
+unavailable, not carried as null profile addresses. TryStorePartyMonInBox and
+ReleaseMon are also absent; selecting/pinning replacement runtime sites is open.
+
+Extraction and generated artifacts
+----------------------------------
+Committed home: data/games/gen3_exp/28877d73/{layout.json,facts.json}.
+Layout is extractor schema1 and contains no hand-derived struct offsets.
+facts.json contains 22 structs, 108 ordinary fields, 90 bitfields and the
+constants inventory (including all Substruct0/1/3 bitfields), provenance and
+independent checks.
+Reference extraction: 1573 species, 848 moves, 874 items, 319 abilities;
+each output list length equals its RHH count. 695 raw evolution edges.
+EVO_NONE=0 is retained in raw edges but excluded from evolution-family unions;
+EVOLUTIONS_END=65535. Both constants come from the probe (constants/pokemon.h:272,325).
+max_entries=256 is a fail-closed reader safety cap, NOT a claimed engine limit.
+No per-field full expansion source-table oracle is claimed; vanilla CONTROL
+remains the independent source oracle and is still zero-diff on every table.
+
+Generated Linux file SHA256s:
+  layout.json b4889ebc6cd132e1a97306c808cffe9ed2ecfd1db5883589e68cb64cd3f54ac0
+  facts.json  fb1ae82ac7e43022cd8924703188079edd6e3f7cc479ca1cfa8918afd6f11249
+Canonical extracted pack-data SHA256 (sorted JSON, UTF-8, metadata included):
+  8183f46962804117f19ca407c0bfbdbee595f3475653530d0991da78a3006401
+Local gitignored CLI output .cache/x1-expansion.json raw SHA256:
+  200628c4927b05be00298379c04e86db02cbda6496629342ca6ccb338dd66987
+Offline Windows regeneration using the same .o and receipt reproduces both
+parsed JSON documents exactly. Raw files differ only by LF vs CRLF, so no
+cross-platform byte-identity claim is made. No ROM/data-pack dump is committed.
+
+Review fixes carried from X1-EXTRACT (OMP cx-6fe9b277, coordinator verified)
+------------------------------------------------------------------------
+F2: source/ROM-independent vanilla-without-RHH fixture. Revert/mutation removed
+the no-RHH return branch: test failed (exit1); restoration passed (exit0).
+Log .cache/x1-f2-revert.log; test_synthetic_vanilla_without_rhh.
+F3: prefer0x100-0x400 but search the entire ROM and require unique RHHEXP;
+outside-window and duplicate tests pass. Missing required RHH is named.
+F4: gSpeciesNames/gMoveNames symbol sizes checked; bad-size falsifiers pass.
+F5: UnicodeDecodeError/KeyError/IndexError become ExtractionError, with ROM-free
+tests for non-ASCII GF name, missing symbols and bad source evolution index.
+F6: expansion CLI without --layout names that flag; --check refuses expansion
+before source reads or extraction. Both early-refusal tests pass.
+F8: redundant explicit expansion cache ignore removed; /.cache/ still covers it.
+Existing Emerald skip wording preserved. New optional reference checks reuse
+X0's 'no local reference build output present' fragment.
+
+Verification and reproduction
+-----------------------------
+Focused suite: 67 passed, 0 skipped in 4.49 s, including real artifact/object tests.
+Ruff on both tools and both unit files: all checks passed. git diff --check passed.
+Vanilla --check after these changes: every source table diff0, effective Emerald
+overlay diffs0; .cache/x1-control-after-probe.json byte-identical to X1-EXTRACT's
+.cache/x1-control.json. Original receipt still records its bounded baseline.
+Broad subset: 3757 passed, 76 skipped, 10901 deselected in 124.89 s; exit 0.
+No X1 test skipped. Same 72 missing artifact/tool/fixture skips and four
+intentional battery-save scenario skips as the preceding CONTROL run; no
+runtime qualification inferred. Full log: .cache/x1-probe-subset.log.
+
+VM compile command (paths expanded from the Input section):
+  python3 ~/slink-exp/x1-probe-20260926/tools/gen_expansion_facts.py --source SOURCE --artifacts ARTIFACTS --work-dir ~/slink-exp/x1-probe-20260926/work --output ~/slink-exp/x1-probe-20260926/output
+Local offline regeneration:
+  python tools/gen_expansion_facts.py --source .cache/expansion-src --artifacts .cache/expansion-output/reference --work-dir .cache/x1-probe --object .cache/x1-probe/probe.o --output .cache/x1-offline
+Local reference extraction:
+  python tools/extract_expansion_data.py --rom .cache/expansion-output/reference/pokeemerald.gba --source .cache/expansion-src --layout data/games/gen3_exp/28877d73/layout.json --output .cache/x1-expansion.json
+Tests (SLINK_EMERALD_ROM set to the owner's vanilla dump; reference artifacts
+and probe object at the gitignored defaults above):
+  python -m pytest tests/unit/test_extract_expansion_data.py tests/unit/test_gen_expansion_facts.py -q -p no:randomly
+  python -m pytest tests/unit -q -p no:randomly -k "extract or gen3 or gen_expansion_facts" -rs

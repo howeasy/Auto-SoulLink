@@ -1,0 +1,12 @@
+NOTE observer building unadmitted gen3_emerald/emerald
+STATUS frame=583 registered=21 rejected=0 dropped=0 pending=0 failed=nil handler_error=nil
+SHADOW t=1 frame=764 kind=battle_begin key= address=134440800 callback_address=134440800 cpsr=536870975 mode=thumb raw_r15=134440802 sp=50363932 thumb=1
+STATUS frame=1183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=584
+STATUS frame=1783 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1164
+STATUS frame=2383 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=1744
+STATUS frame=2983 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2344
+STATUS frame=3583 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=2924
+STATUS frame=4183 registered=21 rejected=0 dropped=0 pending=1 failed=nil handler_error=nil frame_control=3524
+SHADOW t=2 frame=4492 kind=mon_given key= address=134657162 callback_address=134657162 cpsr=1073741887 mode=thumb raw_r15=134657164 sp=50363852 thumb=1
+SHADOW t=3 frame=4492 kind=capture_wild key= address=134571730 callback_address=134571730 cpsr=1073741887 mode=thumb raw_r15=134571732 sp=50363868 thumb=1
+SHADOW t=4 frame=4534 kind=battle_end key= address=134471656 callback_address=134471656 cpsr=-2147483585 mode=thumb raw_r15=134471658 sp=50363904 thumb=1

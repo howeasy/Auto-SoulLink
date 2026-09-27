@@ -1,0 +1,44 @@
+# gen3_final_cut row=npc_trade_gen3_fr_as_a item=NAT-LEGS-2 cut=95876c55adbaffa9e5a1390695b9da9833c16e72
+# lane=C:/slink-wt/g3-nat
+# command: C:\Users\howar\AppData\Local\Programs\Python\Python312\python.exe tools/e2e_duo.py --game gen3_frlg --scenario npc_trade_gen3   (cwd=C:/slink-wt/g3-nat)
+# env: SLINK_STATE_DIR=C:/slink-wt/g3-nat/.lane/st3_npc_trade_gen3_fr_as_a SLINK_PRET_FIRERED_SRC=E:/Google Drive/SLink/.cache/pret/pokefirered
+# verdict: PASS
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T21:23:01 cpu=74% emuhawk=0 python=10
+start_utc=2026-09-27T01:22:59Z tracked_clean_before=True
+
+========== scenario: npc_trade_gen3 ==========
+[duo] npc_trade_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=9d1d0ea46ddab394f92e727cbc43e20389528fecb212404ce706dccc983b080a b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=ac9e1cb38d684720766751abcc4d71b5b5b9f8df82942ce534399e4a5438c846 profile.json=001955b24da2be48824e359f9cbe84eb603e6b969eef2be2a71b048a28c3de65 source=95876c55adbaffa9e5a1390695b9da9833c16e72
+[duo] server up: tcp=51843 http=51844 data=C:\Users\howar\AppData\Local\Temp\slink_duo_npc_trade_gen3__m57n2j5
+[duo] timing server 0.6s
+[duo] cleared 6 stale artifact(s) for npc_trade_gen3: e2e_npc_trade_gen3_a_1_witness.bin, e2e_npc_trade_gen3_a_attempt1_result.txt, e2e_npc_trade_gen3_a_result.txt, e2e_npc_trade_gen3_b_attempt1_result.txt, e2e_npc_trade_gen3_b_result.txt, e2e_npc_trade_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 41425243:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 5.7s
+[duo] timing results 12.5s
+[duo] RESULT_LINE a: RESULT: PASS (traded 41425243:99DE0D8A -> 00009CAE:000007C1)
+[duo] RESULT_LINE b: RESULT: PASS (idled while A traded)
+[duo] SAVE_WITNESS_SHA256 inst=a site=b25de20916bf8111049d980241491a92cc1106319bed66fd2133cb03317d1cbd file=b25de20916bf8111049d980241491a92cc1106319bed66fd2133cb03317d1cbd match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] npc_trade: 41425243:99DE0D8A -> 00009CAE:000007C1 key_change npc_trade emitted after trade_done; server reply (recorded, not judged): ['RX key_change_rejected', '[client] [SLink-gen3] key_change rejected: box census unavailable 41425243:99DE0D8A']; links.json [('alive', '41425243:99DE0D8A', 'F6B6A64D:1C600D89')]
+[duo] MARKER a: SIGNAL trade_begin frame=3185 address=0x0805080C
+[duo] MARKER a: SIGNAL trade_done frame=3185 address=0x080508CA
+[duo] MARKER a: TX key_change - {"event":"key_change","new_key":"00009CAE:000007C1","new_nickname":"MIMIEN","new_species":122,"old_key":"41425243:99DE0D8A","player":"a","reason":"npc_trade","seq":93}
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] npc_trade_gen3: a=PASS b=PASS
+
+========== summary ==========
+  npc_trade_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-27T01:23:20Z tracked_clean_after=True classification=pass

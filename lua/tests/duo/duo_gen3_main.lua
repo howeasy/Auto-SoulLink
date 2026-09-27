@@ -26,8 +26,10 @@ assert(D and D.wt and D.player and D.scenario and D.result, "SLINK_DUO not confi
 -- P5 (card C5-5): "gen3_rr" is the battery-boot RR row (tools/e2e_duo.py GAMES), sharing
 -- this driver with "gen3_frlg" -- everything below that reads a per-title pack/checkpoint path
 -- or symbol table branches on D.title ("radical_red" vs firered/leafgreen), not on D.game.
-assert(D.game == "gen3_frlg" or D.game == "gen3_rr",
-       "duo_gen3_main only serves game gen3_frlg/gen3_rr, got " .. tostring(D.game))
+-- E4: "gen3_emerald" is the battery-boot Emerald row (E<->E); its pack, .sym and START/save
+-- flows are selected by D.title == "emerald" below.
+assert(D.game == "gen3_frlg" or D.game == "gen3_rr" or D.game == "gen3_emerald",
+       "duo_gen3_main only serves game gen3_frlg/gen3_rr/gen3_emerald, got " .. tostring(D.game))
 assert(D.title, "SLINK_DUO.title missing (the GAMES row's sides)")
 
 local ROOT = D.wt
@@ -141,7 +143,8 @@ local title = D.title
 -- predicate and RAM/derived offsets -- RR's 25-box layout in particular, gen3_codec commit
 -- 62887460). Every OTHER read in this file goes through `cp`/`profile`, so this one branch is
 -- the whole of the pack selection.
-local pack = title == "radical_red" and "gen3_rr" or "gen3_frlg"
+-- E4: the one title -> pack table, shared with the scripted helpers (emerald -> gen3_emerald).
+local pack = assert(SP.PROFILE_PACK_BY_TITLE[title], "no profile pack for title " .. tostring(title))
 local cp_rel = "data/games/" .. pack .. "/write_checkpoint.json"
 local cp = guard("checkpoint for title '" .. title .. "' in " .. cp_rel, function()
     local doc = read_json(cp_rel)
@@ -266,6 +269,17 @@ else
         end
         local missing = {}
         for _, n in ipairs(SYMS) do if not S[n] then missing[#missing + 1] = n end end
+        if title == "emerald" and #missing > 0 then
+            -- E4: FR/LG-only START-menu/save-dialog/bag names (pokeemerald rebuilt those menus,
+            -- src/start_menu.c, src/item_menu.c) are ABSENT, not guessed: reading one raises by
+            -- name at the point of use (fail closed), the rr_symbols rule. Emerald's own START/
+            -- save flow is gen3_scripted_play.lua EMH.save_via_menu (pokeemerald.sym names).
+            log("SYMS_ABSENT emerald " .. table.concat(missing, ","))
+            setmetatable(S, { __index = function(_, k)
+                error("symbol " .. tostring(k) .. " is absent from pokeemerald.sym (FR/LG-only name)", 2)
+            end })
+            missing = {}
+        end
         assert(#missing == 0,
                "pret symbol(s) missing from " .. path .. ": " .. table.concat(missing, ", "))
     end)
@@ -1293,7 +1307,11 @@ function ctx.run_away(label)
 end
 
 --- Grass hunt from the pinned Route 1 square (gen3_scripted_play hunt_encounter).
-function ctx.hunt(label) return SP.hunt_encounter(cp, label, 40) end
+--- E4: Emerald hunts Route 102's pinned grass loop (gen3_scripted_play.lua EMH, proven at E2).
+function ctx.hunt(label)
+    if title == "emerald" then return SP.EMH.hunt(cp, label, 40) end
+    return SP.hunt_encounter(cp, label, 40)
+end
 
 local boot_keys = {}
 --- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
@@ -1319,14 +1337,19 @@ function ctx.catch(label)
         end
         local ok, why = ctx.choose_action(ACTION_BAG)
         if not ok then return nil, why end
-        -- Live link_gen3 FR, throw 2: the bag REMEMBERS the POKEBALLS pocket (gBagMenuState is
-        -- EWRAM, OPEN_BAG_LAST), so the helper's pocket steer -- whose Right + 40-frame idle hid
-        -- the open fade on throw 1 -- was skipped, its selecting A landed during the fade and was
-        -- dropped, and gSpecialVar_ItemId kept GoToBagMenu's ITEM_NONE (item_menu.c:340).
-        if not ctx.wait_until(ctx.bag_input_ready, 20, "the battle bag to take input") then
-            return nil, "the battle bag never took input"
+        if title == "emerald" then
+            -- E4: Emerald's heap gBagMenu/gBagPosition bag (EMH.throw_ball waits for input itself)
+            if not SP.EMH.throw_ball(cp, label) then return nil, "the Emerald ball throw failed" end
+        else
+            -- Live link_gen3 FR, throw 2: the bag REMEMBERS the POKEBALLS pocket (gBagMenuState is
+            -- EWRAM, OPEN_BAG_LAST), so the helper's pocket steer -- whose Right + 40-frame idle hid
+            -- the open fade on throw 1 -- was skipped, its selecting A landed during the fade and was
+            -- dropped, and gSpecialVar_ItemId kept GoToBagMenu's ITEM_NONE (item_menu.c:340).
+            if not ctx.wait_until(ctx.bag_input_ready, 20, "the battle bag to take input") then
+                return nil, "the battle bag never took input"
+            end
+            SP.throw_pokeball_from_bag(cp, label)
         end
-        SP.throw_pokeball_from_bag(cp, label)
         throws = throws + 1
         log("THREW " .. throws)
         local r = ctx.await_turn(180, "B")
@@ -1447,9 +1470,20 @@ local function reversed(name, as)
     SP.PATHS[as] = { map = p.map, from = { p.to[1], p.to[2] }, to = { p.from[1], p.from[2] }, dirs = dirs }
 end
 reversed("pokecenter_entrance_to_pc", "pc_to_pokecenter_entrance")   -- the same tiles, walked back
+if title == "emerald" then reversed("em_oldale_center_to_pc", "em_pc_to_center_door") end
 
 --- Route 1 grass origin -> facing the Viridian Pokemon Center PC (the viridian_pc leg's walk).
 function ctx.walk_to_pc(label)
+    if title == "emerald" then
+        -- E4: from the pc fixture's own Oldale tile (6,17) into the Center (emerald_enter_pc's
+        -- door, (6,16) -> 2.2 (7,8)), then gen3_scripted_play.lua's em_oldale_center_to_pc path
+        local ok, why = play.enter_warp(cp, "Up", 20)
+        if not ok then error(label .. ": the Oldale Center door never fired a warp: " .. tostring(why)) end
+        SP.verify_destination(cp, label, { group = 2, num = 2, x = 7, y = 8 })
+        play.follow(cp, "em_oldale_center_to_pc", label)
+        G.tap("Up", 2, 13)
+        return
+    end
     SP.return_to_grass_origin(cp, label)
     play.follow(cp, "route1_grass_to_north_edge", label)
     SP.warp_to(cp, "Up", 30, SP.DEST.viridian_south, label .. " Route1->Viridian")
@@ -1461,6 +1495,14 @@ end
 
 --- The PC -> the Route 1 grass origin (Center door, Viridian, Route 1 north to south).
 function ctx.walk_pc_to_grass(label)
+    if title == "emerald" then
+        -- E4c: the PC -> the Center door landing (7,8) -> out through Oldale's door; the exit
+        -- lands on (6,17), the pinned `from` of the Route 103 walk ctx.hunt takes next
+        play.follow(cp, "em_pc_to_center_door", label)
+        local ok, why = play.enter_warp(cp, "Down", 20)
+        if not ok then error(label .. ": the Oldale Center exit never fired a warp: " .. tostring(why)) end
+        return
+    end
     play.follow(cp, "pc_to_pokecenter_entrance", label)
     SP.warp_to(cp, "Down", 30, SP.DEST.center_exit, label .. " Center exit")
     -- G5-RR-WHITEOUT: this is the whiteout_gen3 stall site on RR -- an RR-only object near the
@@ -1483,7 +1525,15 @@ function ctx.pc_deposit(label)
     if #after ~= #before - 1 then return nil, fmt("party %d -> %d after the deposit", #before, #after) end
     local left = {}
     for _, m in ipairs(after) do left[m.key] = true end
-    for _, m in ipairs(before) do if not left[m.key] then return m.key end end
+    for _, m in ipairs(before) do
+        if not left[m.key] then
+            -- E4: where it landed (the Emerald pc fixture's box 0 already holds two mons), so the
+            -- withdraw takes that slot back; FR/LG/RR's empty box 0 gives slot 0 as before
+            local at = ctx.locate(m.key)
+            ctx.deposited_slot = at and at.box and tonumber(at.box:match("^0:(%d+)$")) or 0
+            return m.key
+        end
+    end
     return nil, "no key left the party"
 end
 
@@ -1492,7 +1542,10 @@ function ctx.pc_withdraw(label)
     local before = ctx.party() or {}
     local PC = SP.PC
     G.tap("Up", 2, 13)
-    PC.open(cp, label); PC.mode(label, 0); PC.popup(label, 0, 0, 0)
+    local slot = ctx.deposited_slot or 0
+    PC.open(cp, label); PC.mode(label, 0)
+    if slot > 0 then SP.EMH.box_cursor(label, slot) end
+    PC.popup(label, 0, slot, 0)
     PC.select(label, S.Task_WithdrawMon | 1); PC.withdraw(label); PC.leave(cp, label)
     local after = ctx.party() or {}
     local had = {}
@@ -1509,7 +1562,8 @@ function ctx.save(tag)
     end
     local dom = G.flash_domain()
     if not dom then return false, "no flash memory domain" end
-    local ok, before, after, why = G.save_via_menu(cp, dom)
+    -- E4: Emerald's gMenuCallback START menu (gen3_scripted_play.lua EMH, proven at E2)
+    local ok, before, after, why = (title == "emerald" and SP.EMH.save_via_menu or G.save_via_menu)(cp, dom)
     if not ok then return false, "SAVE failed: " .. tostring(why) end
     log(fmt("SAVE_WITNESS %s counter=%d->%d", tag, before, after))
     ctx.frames(30)
@@ -1519,8 +1573,10 @@ end
 -- ── boot: battery -> CONTINUE -> field, then the production hello ───────────────────────
 -- Guarded too (card C4-GUARD): a raise inside the boot is the same silent hang as a load-time
 -- one -- the driver never reaches MYKEY, so a bare raise here writes no RESULT either.
-local reached_field = guard("boot to field from the battery save",
-                            function() return G.boot_to_field(cp, 9000) end)
+local reached_field = guard("boot to field from the battery save", function()
+    -- E4: Emerald boots A-only (EMH.boot_to_field, the gen3_emerald_boot_check.lua rule)
+    return (title == "emerald" and SP.EMH.boot_to_field or G.boot_to_field)(cp, 9000)
+end)
 if not reached_field then
     G.shot(D.scenario .. "_" .. D.player .. "_bootfail")
     finish(false, "never reached the field from the battery save")

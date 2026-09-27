@@ -1,0 +1,69 @@
+duo instance b scenario=deadzone_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:62517 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player b -> 127.0.0.1:62517 (rom ea5352f8)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:62517
+[client] [SLink] TCP connected to 127.0.0.1:62517
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","par
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 618
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 618
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 1443
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 1443
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 1443
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 1443
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 1443
+[client] [SLink-gen3] write native 0x0203FDCC +10 frame 1443
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 1443
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 1443
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 1443
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 1443
+JITTER requested=0 applied=0 attempt=1
+[client] [gen3] phase encounter-found frame=1736 deadzone b: cycle 2 mid-step Left at (13,38)
+[client] [gen3] phase battle-state-saved frame=1736 E:/Howard/Bizhawk/GBA/State/slink_fr_battle.State
+THREW 1
+TX capture FC450F9B:D4223740 {"area_id":"route_1","event":"capture","held_item_id":0,"hp":15,"is_egg":false,"key":"FC450F9B:D4223740","level":3,"maxHP":15,"nickname":"Rattata","player":"b","seq":92,"species_id":19}
+RX force_faint key=FC450F9B:D4223740
+RX memorialize key=FC450F9B:D4223740
+RX play_sound
+RX hud_show text=[x] DZ: Rattata
+TX safe - {"event":"safe","player":"b","seq":95}
+[client] [SLink-gen3] write overworld 0x020243A2 +2 frame 3401
+FAINTED FC450F9B:D4223740 frame=3401 in_battle=0 battler=0
+[client] [SLink-gen3] write overworld 0x02024638 +58 frame 3402
+[client] [SLink-gen3] write overworld 0x0202434C +100 frame 3402
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 3402
+TX memorialize_done FC450F9B:D4223740 {"box":24,"event":"memorialize_done","key":"FC450F9B:D4223740","player":"b","seq":97}
+CAUGHT FC450F9B:D4223740
+RETIRED FC450F9B:D4223740
+[client] [gen3] phase save-menu frame=3460 counter=4
+[client] [gen3] phase save-dialog frame=3607 row=4
+[client] [gen3] phase saved frame=3670 counter=4->5
+[client] [gen3] phase slot-complete frame=4525 sectors=14/14
+SAVE_WITNESS_DUMP path=patch/build/e2e_deadzone_gen3_b_1_witness.bin bytes=131072 saves=1 frame=4554 counter=5
+SAVE_WITNESS_EXT path=patch/build/e2e_deadzone_gen3_b_1_witness_ext.bin bytes=8160 saves=1
+SAVE_WITNESS deadzone counter=4->5
+WRITES 25
+RESULT: PASS (dead-zone capture FC450F9B:D4223740 retired)

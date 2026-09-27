@@ -195,6 +195,45 @@
         }
       },
       "rom_sha1": "41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc",
+      "rom_tables": {
+        "gEvolutionTable": {
+          "address": 136681300,
+          "count": 412,
+          "size": 16480,
+          "stride": 40
+        },
+        "gSpeciesInfo": {
+          "address": 136660868,
+          "count": 412,
+          "size": 11536,
+          "stride": 28
+        },
+        "gTrainerClassNames": {
+          "address": 136570200,
+          "count": 107,
+          "size": 1391,
+          "stride": 13
+        },
+        "gTrainers": {
+          "address": 136571592,
+          "count": 743,
+          "size": 29720,
+          "stride": 40
+        },
+        "gWildMonHeaders": {
+          "address": 138190008,
+          "count": 133,
+          "size": 2660,
+          "stride": 20
+        }
+      },
+      "rom_tables_provenance": {
+        "gEvolutionTable": "pret/pokefirered@c75f3523 gEvolutionTable; data/gen3/pret/pokefirered.sym:27393",
+        "gSpeciesInfo": "pret/pokefirered@c75f3523 gSpeciesInfo; data/gen3/pret/pokefirered.sym:26981",
+        "gTrainerClassNames": "pret/pokefirered@c75f3523 gTrainerClassNames; data/gen3/pret/pokefirered.sym:26688",
+        "gTrainers": "pret/pokefirered@c75f3523 gTrainers; data/gen3/pret/pokefirered.sym:26689",
+        "gWildMonHeaders": "pret/pokefirered@c75f3523 gWildMonHeaders; data/gen3/pret/pokefirered.sym:33296"
+      },
       "rom_thumb": [
         "BATTLE_INTRO_GET_MONS_DATA_ADDR",
         "BEGIN_BATTLE_INTRO_ADDR",
@@ -412,6 +451,45 @@
         }
       },
       "rom_sha1": "574fa542ffebb14be69902d1d36f1ec0a4afd71e",
+      "rom_tables": {
+        "gEvolutionTable": {
+          "address": 136681268,
+          "count": 412,
+          "size": 16480,
+          "stride": 40
+        },
+        "gSpeciesInfo": {
+          "address": 136660832,
+          "count": 412,
+          "size": 11536,
+          "stride": 28
+        },
+        "gTrainerClassNames": {
+          "address": 136570164,
+          "count": 107,
+          "size": 1391,
+          "stride": 13
+        },
+        "gTrainers": {
+          "address": 136571556,
+          "count": 743,
+          "size": 29720,
+          "stride": 40
+        },
+        "gWildMonHeaders": {
+          "address": 138189556,
+          "count": 133,
+          "size": 2660,
+          "stride": 20
+        }
+      },
+      "rom_tables_provenance": {
+        "gEvolutionTable": "pret/pokefirered@c75f3523 gEvolutionTable; data/gen3/pret/pokeleafgreen.sym:27395",
+        "gSpeciesInfo": "pret/pokefirered@c75f3523 gSpeciesInfo; data/gen3/pret/pokeleafgreen.sym:26983",
+        "gTrainerClassNames": "pret/pokefirered@c75f3523 gTrainerClassNames; data/gen3/pret/pokeleafgreen.sym:26690",
+        "gTrainers": "pret/pokefirered@c75f3523 gTrainers; data/gen3/pret/pokeleafgreen.sym:26691",
+        "gWildMonHeaders": "pret/pokefirered@c75f3523 gWildMonHeaders; data/gen3/pret/pokeleafgreen.sym:33298"
+      },
       "rom_thumb": [
         "BATTLE_INTRO_GET_MONS_DATA_ADDR",
         "BEGIN_BATTLE_INTRO_ADDR",

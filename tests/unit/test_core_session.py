@@ -699,7 +699,9 @@ def test_r3_a_replayed_ack_with_our_alias_migrates_the_queued_command():
     w.q.push(w.q, w.lua.table_from({"cmd": "memorialize", "key": OLD}))
     w.command(cmd="key_change_ack", old_key=OLD, new_key=NEW, migrated=False)
     w.step()
-    assert [str(w.q["items"][i].key) for i in range(1, w.q.size(w.q) + 1)] == [NEW]
+    # KC-RETRY MAJOR-1: the force_faint for OLD resolves through the pending alias and is queued
+    # (it used to be dropped as "key not in party"); the ack migrates both queued commands
+    assert [str(w.q["items"][i].key) for i in range(1, w.q.size(w.q) + 1)] == [NEW, NEW]
 
 
 def test_r3_codex1_no_alias_an_unrelated_new_key_in_the_party_is_never_evidence():

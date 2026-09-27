@@ -8,10 +8,12 @@ restatement of it -- run against the real pinned hashes in `data/games/gen3_{frl
 engine_signals.json`.
 
 Route (owner rulings 2026-09-23, docs/gen3/PLAN.md §0; docs/gen3/research/
-p4_gen1_contract_map.md §3.6; C5-6 / owner ruling 24): a cartridge admitted as pack `gen3_frlg`
-or `gen3_rr` by HASH or ANCHORS goes to `lua/gen3/run.lua`. The old client is archived (tag
-archive/gen3-old-client): header-only admissions, Emerald and any other GBA cartridge are
-refused by name, never handed to `game_detect`.
+p4_gen1_contract_map.md §3.6; C5-6 / owner ruling 24; EG4 prep, docs/gen3_emerald/PLAN.md §5 E3
+row): a cartridge admitted as pack `gen3_frlg`, `gen3_rr` or `gen3_emerald` by HASH or ANCHORS
+goes to `lua/gen3/run.lua`. The old client is archived (tag archive/gen3-old-client):
+header-only admissions (an unpinned hack or a bad dump that merely says BPRE/BPGE/BPEE), the
+Archipelago builds, and any other GBA cartridge are refused by name, never handed to
+`game_detect`.
 """
 from __future__ import annotations
 
@@ -41,6 +43,7 @@ _FR_CLEAN_SHA1 = _sha1("gen3_frlg", "firered", "clean")
 _LG_CLEAN_SHA1 = _sha1("gen3_frlg", "leafgreen", "clean")
 _RR_CLEAN_SHA1 = _sha1("gen3_rr", "radical_red", "clean")
 _RR_COMPANION_SHA1 = _sha1("gen3_rr", "radical_red", "companion")
+_EMERALD_CLEAN_SHA1 = _sha1("gen3_emerald", "emerald", "clean")
 
 
 def _rom_gba(header_code: str = "\0\0\0\0", size: int = 0x200) -> bytes:
@@ -154,8 +157,20 @@ def test_an_unknown_bpre_hash_admitted_by_header_is_refused_by_name():
         _run_launcher("GBA", _rom_gba(header_code="BPRE"), rom_hash="f" * 40)
 
 
-def test_emerald_is_refused_by_name():
-    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge: Pokemon Emerald"):
+def test_a_clean_emerald_sha1_reaches_the_new_gen3_client():
+    """EG4: Emerald joined the routed set (barrier 1, lua/slink.lua's old by-name BPEE
+    refusal, removed; barrier 2, Entry.ROUTED, gained gen3_emerald)."""
+    loaded = _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash=_EMERALD_CLEAN_SHA1)
+    assert _NEW_GEN3_CLIENT in loaded, loaded
+    assert _OLD_GEN3_CLIENT not in loaded, loaded
+
+
+def test_an_unknown_bpee_hash_admitted_by_header_is_refused_by_name():
+    """Mirrors test_an_unknown_bpre_hash_admitted_by_header_is_refused_by_name above: an
+    Emerald build with no pinned hash and no matching anchors still admits by its header code
+    alone (admitted_by == 'header') and is refused, not routed -- an unpinned Emerald hack is
+    no more supported post-EG4 than an unpinned FR/LG hack was before it."""
+    with pytest.raises(lupa.LuaError, match="Unsupported Gen 3 cartridge.*not a pinned cartridge"):
         _run_launcher("GBA", _rom_gba(header_code="BPEE"), rom_hash="f" * 40)
 
 

@@ -57,13 +57,25 @@ end
 --   header_code  GBA header game code -> title, for the named-family fallback only. RR is a
 --                FireRed hack and carries FireRed's code, so it takes no part: an RR build
 --                with an unknown hash is admitted by anchors or not at all.
+-- trade_policy is host protocol policy, in frames. APPLY gets its own dispatch
+-- budget; native owns the timeout once a scene has actually been published.
 Entry.PACKS = {
     gen3_frlg = {
+        randomizable = true, -- R0; Emerald gets its own E-bind later, never inherited
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { firered = "firered", leafgreen = "leafgreen" },
         header_code = { BPRE = "firered", BPGE = "leafgreen" },
     },
     gen3_rr = {
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { radical_red = "firered_rr" },
+    },
+    -- Registered so the packs/admission tables build and the hash is recognized (E2-ENTRY);
+    -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
+    gen3_emerald = {
+        trade_policy = {prepare_frames=600, apply_frames=1800},
+        rom_type = { emerald = "emerald" },
+        header_code = { BPEE = "emerald" },
     },
 }
 -- Every pack file Entry.build/Entry.admit reads, as literal repo-relative paths: the release
@@ -86,11 +98,20 @@ Entry.PACK_FILES = {
         area_map = "data/games/gen3_frlge/area_map.json",
         locations = "data/games/gen3_frlge/gen3_frlge_locations.lua",
     },
+    -- Emerald keeps its own area map/locations (E1-PACK): it is not a FRLG map hack.
+    gen3_emerald = {
+        profile = "data/games/gen3_emerald/profile.json",
+        sites = "data/games/gen3_emerald/engine_signals.json",
+        checkpoint = "data/games/gen3_emerald/write_checkpoint.json",
+        area_map = "data/games/gen3_emerald/area_map.json",
+        locations = "data/games/gen3_emerald/gen3_emerald_locations.lua",
+    },
 }
 -- Which packs lua/slink.lua's Gen 3 route sends to the rewritten client. The route reads this
--- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6): every admitted pack
--- is routed, and anything else on a GBA core is refused by the launcher.
-Entry.ROUTED = { gen3_frlg = true, gen3_rr = true }
+-- table; the launcher keeps no copy of it. gen3_rr joined at G5 (C5-6), gen3_emerald at EG4
+-- (owner ruling 24): every admitted pack is routed, and anything else on a GBA core is
+-- refused by the launcher.
+Entry.ROUTED = { gen3_frlg = true, gen3_rr = true, gen3_emerald = true }
 
 Entry.ROM_TYPE = {}
 for _, pack in pairs(Entry.PACKS) do
@@ -98,7 +119,7 @@ for _, pack in pairs(Entry.PACKS) do
 end
 -- A header-named vanilla family (an unknown-hash cartridge that still says BPRE/BPGE) reads
 -- the clean artifact's pack data; if its bytes really differ, the site check refuses it.
-Entry.BASE_KIND = { named = "clean" }
+Entry.BASE_KIND = { named = "clean", rand = "clean" }
 
 -- ── admission ────────────────────────────────────────────────────────────────────────
 
@@ -197,7 +218,9 @@ function Entry.admit(args)
         local matches = Entry.anchor_matches(args)
         if #matches == 1 then
             local m = matches[1]
-            return { pack = m.pack, title = m.title, kind = m.kind, rom_type = m.rom_type,
+            local kind = m.kind
+            if kind == "clean" and Entry.PACKS[m.pack].randomizable == true then kind = "rand" end
+            return { pack = m.pack, title = m.title, kind = kind, rom_type = m.rom_type,
                      rom_hash = hash, admitted_by = "anchors" }
         elseif #matches > 1 then
             local names = {}
@@ -214,6 +237,29 @@ function Entry.admit(args)
         end
     end
     return nil, "header " .. code .. " is not an admitted Gen 3 cartridge: hash " .. hash
+end
+
+-- Entry.admit_routed(args) -- Entry.admit plus the LAUNCHER's own policy: a header-only
+-- admission (an unpinned hack or a bad dump that merely says BPRE/BPGE/BPEE) and a pack not
+-- (yet) in Entry.ROUTED are both refused here, never routed. This is the ONE place every
+-- caller enforces that policy -- lua/slink.lua and lua/gen3/run.lua both call it -- so a
+-- caller that dofiles run.lua directly (the duo harness, tests/unit) is held to the same gate
+-- the real launcher is. Before this, run.lua called Entry.admit alone and never re-checked
+-- ROUTED/admitted_by, so the duo evidence never actually exercised the launcher's refusal
+-- (OMP cx-dbabbd62).
+-- Returns the same shape as Entry.admit, or nil, reason.
+function Entry.admit_routed(args)
+    local admitted, why = Entry.admit(args)
+    if not admitted then return nil, why end
+    if admitted.admitted_by == "header" then
+        return nil, "this " .. tostring(admitted.title) .. " build (header "
+                    .. tostring(args.header_code) .. ") is not a pinned cartridge -- "
+                    .. "Archipelago builds and unknown hacks are not supported yet"
+    end
+    if not Entry.ROUTED[admitted.pack] then
+        return nil, "the " .. tostring(admitted.pack) .. " pack is not yet routed to the Gen 3 client"
+    end
+    return admitted
 end
 
 -- The GBA cartridge header: 12-byte game title at $A0, 4-byte game code at $AC (GBATEK 3.2).
@@ -336,13 +382,20 @@ local function build_production(deps, c)
         })
     end
     session = L("lua/gen3/client.lua").new({
+        Trade = L("lua/gen3/trade.lua"), owed_reports = L("lua/owed_reports.lua"),
         reads = reads, R = c.Reads, profile = c.profile, sites = c.sites, Signals = c.Signals,
         writes = writes, boxes = boxes, policy = policy, net = assert(deps.net, "deps.net required"),
         hud = assert(deps.hud, "deps.hud required"), json = c.json, io = io_, ev = c.ev,
         area_map = load_json(c.json, c.root .. "/" .. files.area_map),
         locations = dofile(c.root .. "/" .. files.locations),
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
-        foundation = pack, artifact_kind = c.artifact_kind, native = native, log = deps.log, core = core,
+        foundation = pack, artifact_kind = c.parts.kind == "rand" and "rand" or c.artifact_kind,
+        native = native, log = deps.log, core = core,
+        trade_policy = Entry.PACKS[pack].trade_policy,
+        rom_size = deps.rom_size,
+        rom_content_new = deps.rom_content_new or function(tbl, rom_io)
+            return L("lua/gen3/rom_content.lua").new(tbl, rom_io)
+        end,
         -- the battle request nonce seed (card C5-10b): the bootstrap's entropy, or the harness
         -- seam for determinism. Client.new validates it and mints NO identity without it.
         -- the env seam wins over the bootstrap so a harness can pin a session deterministically
@@ -350,6 +403,9 @@ local function build_production(deps, c)
         -- the m4a fact (SE1 player / gSoundInfo pointer, field offsets) lives in the checkpoint
         -- pack's sound block, the same block safety's sound clauses judge: one source of truth
         sound = wc.sound,
+        -- title facts the client must not hard-code (E3-CLIENT): the committed battle state
+        -- (safety's own commit_guard) and the gift areas; the client fails closed without them
+        commit_guard = wc.battle and wc.battle.commit_guard, gift_areas = wc.gift_areas,
     })
     local parts = c.parts
     parts.writes, parts.boxes, parts.safety, parts.policy, parts.native = writes, boxes, safety, policy, native
@@ -375,8 +431,16 @@ function Entry.build(deps)
 
     local profile = assert(load_json(json, root .. "/" .. files.profile).titles[title],
                            "unknown title " .. title .. " in " .. pack)
-    assert(profile.admitted ~= false,
+    -- The one exception (Gen 3 grant 2026-09-26, Emerald EG2): an OBSERVER build of an
+    -- unadmitted title when the caller names exactly that "<pack>/<title>". Observer parts carry
+    -- no writer, native or net; production never honours it, whatever the environment says.
+    local observe_unadmitted = profile.admitted == false and mode == "observer"
+        and deps.allow_unadmitted == pack .. "/" .. title
+    assert(profile.admitted ~= false or observe_unadmitted,
            title .. " is a known but unadmitted Gen 3 title in " .. pack)
+    if observe_unadmitted then
+        (deps.log or function() end)("[SLink-gen3] OBSERVER building unadmitted " .. pack .. "/" .. title)
+    end
     local title_sites = assert(load_json(json, root .. "/" .. files.sites).titles[title],
                                "pack " .. pack .. " ships no engine sites for " .. title)
     local artifact = assert(title_sites.artifacts[artifact_kind],

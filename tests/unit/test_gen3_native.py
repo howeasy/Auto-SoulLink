@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class World:
-    def __init__(self, present=True, initial_seq=0, kind="companion"):
+    def __init__(self, present=True, initial_seq=0, kind="companion", scene_capability_model=False):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.profile = json.loads((ROOT / "data/games/gen3_rr/profile.json").read_text())
         self.n = self.profile["native"]
@@ -51,6 +51,9 @@ class World:
             timeout_frames=5, send=lambda event, fields: self.events.append((event, fields)),
             in_battle=lambda: self.battle,
             panel_closed=lambda: (True, self.panel_result)))
+        if scene_capability_model:
+            # Queue/receipt MODEL only; this does not qualify a shipped v2 binding.
+            self.native.trade_capable = lambda *_: True
 
     def put(self, address, value, size=1):
         for i in range(size):
@@ -143,7 +146,7 @@ def test_refused_ui_has_the_exact_cancel_result(operation, cancel):
 
 def test_a_published_job_carries_its_own_dispatch_receipt():
     """The job table IS the handle: queued -> no flag, published -> the flag. Nothing infers it."""
-    w = World()
+    w = World(scene_capability_model=True)
     handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *_: None)
     assert handle["posted"] is None                              # queued, not posted
     w.service()
@@ -151,8 +154,64 @@ def test_a_published_job_carries_its_own_dispatch_receipt():
     assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]   # the publish the receipt names
 
 
-def test_a_job_queued_behind_another_carries_no_receipt_yet():
+def test_partial_opcode_publication_is_distinct_from_no_dispatch():
+    class InterruptedWorld(World):
+        def write(self, address, value, *_):
+            if address == self.n["BASE"] + 7:
+                raise RuntimeError("high opcode byte failed")
+            super().write(address, value)
+
+    w = InterruptedWorld(scene_capability_model=True)
+    results = []
+    handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *args: results.append(args))
+    w.service()
+    assert handle["posted"] is None
+    assert handle["publish_attempted"] is True
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]
+    assert results[0][0] == "native dispatch interrupted"
+
+
+def test_shipped_native_declares_the_complete_trade_transport_interface():
     w = World()
+    for method in ("trade_visit", "trade_eligible", "trade_authorized", "prepare_trade", "withdraw_trade", "cancel", "transfer"):
+        assert w.native[method] is not None, method
+    arity = w.lua.eval('function(f) return debug.getinfo(f, "u").nparams end')
+    assert arity(w.native.transfer) == 6  # self, step, cmd, done, guard, milestone callback
+    assert w.native.trade_capable(w.native) is False
+
+
+@pytest.mark.parametrize("with_progress", [False, True])
+def test_shipped_native_refuses_scene_without_durable_capability(with_progress):
+    w = World()
+    results = []
+    progress = (lambda *_: None) if with_progress else None
+    result = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
+                               lambda *args: results.append(args), None, progress)
+    assert result == (None, "durable_trade_unavailable")
+    w.service()
+    assert results == [("durable_trade_unavailable",)] and w.output == []
+
+
+def test_progress_argument_does_not_block_unrelated_enemy_staging():
+    w = World()
+    handle = w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 100)),
+                               lambda *_: None, None, lambda *_: None)
+    assert not isinstance(handle, tuple)
+    w.service()
+    assert handle.posted is True
+
+
+def test_transfer_blob_length_uses_the_reads_facade_record_size():
+    w = World()
+    w.reads.PARTY_MON_SIZE = 80  # MODEL alternate record geometry, not a cartridge claim
+    handle = w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 80)), lambda *_: None)
+    assert not isinstance(handle, tuple)
+    w.service()
+    assert handle.posted is True
+
+
+def test_a_job_queued_behind_another_carries_no_receipt_yet():
+    w = World(scene_capability_model=True)
     first = w.native.play_sound(w.native, 25)
     second = w.native.transfer(w.native, "scene", w.lua.table(slot=0), lambda *_: None)
     w.service()
@@ -176,7 +235,7 @@ def test_a_held_arm_sets_no_receipt_and_leaves_the_job_queued():
 
 
 def test_a_job_dropped_by_its_guard_carries_no_receipt():
-    w = World()
+    w = World(scene_capability_model=True)
     seen = []
     handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
                                lambda why, _r, _reason=None: seen.append(why),
@@ -205,7 +264,7 @@ def test_the_codex_counterexample_a_completion_write_does_not_receipt_a_refused_
         holder["write"](w.writes)
         w.writes.disarm(w.writes)
 
-    w = World()
+    w = World(scene_capability_model=True)
     # writes.lua type-checks the allow predicate, and lupa hands a Python callable over as
     # userdata (not "function"), so the writer's predicate -- and the write itself, which needs
     # an explicit self when called from Python -- go through Lua.
@@ -589,6 +648,7 @@ def test_per_op_timeouts_outlast_the_patch_own_deadline(op, frames):
     elif op == "OP_CHOOSE_PARTY_MON":
         native.choose_mon(native, L.table(token="t"))
     else:
+        native.trade_capable = lambda *_: True  # scene timeout MODEL, not binding admission
         assert native.transfer(native, "scene", L.table(slot=0), lambda *_: None)
     native.service(native)
     assert w.read(w.n["BASE"] + 6, 2) == w.n[op]

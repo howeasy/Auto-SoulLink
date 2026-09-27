@@ -2,7 +2,7 @@
   slink_gen3.lua — SLink Gen 3 Launcher
   ======================================
   Load this script in BizHawk's Lua Console to start SLink
-  for Gen 3 games (FireRed, LeafGreen, Radical Red).
+  for Gen 3 games (FireRed, LeafGreen, Radical Red, Emerald).
 
   Configure host/port/player below, then load this file.
   The launcher sets up the environment and starts the Gen 3 client.

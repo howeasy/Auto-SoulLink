@@ -55,7 +55,7 @@ here would make the profile disagree with what the client compares.
 | `firered` | `vanilla` | yes | `41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc` |
 | `leafgreen` | `vanilla` | yes | `574fa542ffebb14be69902d1d36f1ec0a4afd71e` |
 | `firered_ap` | `ap` | **no** | — |
-| `emerald` | `emerald` | **no** | — |
+| `emerald` | `emerald` | **no** (superseded, see below) | — |
 
 ### LeafGreen divergence is UNVERIFIED
 
@@ -69,7 +69,11 @@ do not verify the remaining legacy addresses.
 
 ### Unadmitted titles
 
-`firered_ap` (Archipelago) and `emerald` are carried verbatim so no data from the old client's
-table is lost (PLAN §5.1: "`emerald`/`ap` profiles remain in the packs as unadmitted titles").
-`admitted: false` is the machine-readable form of that; the client refuses them by name.
-Their addresses were never re-verified for this pack and carry no ROM hash.
+`firered_ap` (Archipelago) is carried verbatim so no data from the old client's table is lost
+(PLAN §5.1: "`emerald`/`ap` profiles remain in the packs as unadmitted titles"). `admitted: false`
+is the machine-readable form of that; the client refuses it by name. Its addresses were never
+re-verified for this pack and carry no ROM hash.
+
+The `emerald` stub here is superseded by the real `gen3_emerald` pack
+(`data/games/gen3_emerald/`), admitted on its own on this release candidate; this stub's removal
+is tracked in the Emerald plan (`docs/gen3_emerald/PLAN.md`).

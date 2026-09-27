@@ -101,24 +101,24 @@ def test_native_messages_is_disabled_for_every_game(tmp_path):
 
 
 def test_unadmitted_gen3_variants_carry_the_suffix():
-    """Archipelago FRLG and Emerald are not admitted by the Gen 3 client yet (owner
-    2026-09-23, docs/gen3/PLAN.md §14.1). Their labels carry a 'not admitted' suffix
-    so players know they cannot start a SLink with them. Vanilla gen3 and gen3_rr are
+    """Archipelago FRLG is not admitted by the Gen 3 client yet (owner 2026-09-23,
+    docs/gen3/PLAN.md §14.1); its label carries a 'not admitted' suffix so players know they
+    cannot start a SLink with it. Vanilla gen3, gen3_rr and gen3_e (Emerald, EG4) are all
     admitted and have no such suffix."""
     labels = GAME_LABELS
     assert "not admitted by the SLink client yet" in labels["gen3_ap"]
-    for game in ("gen3_e",):
-        assert "not admitted by the SLink client yet" in labels[game]
     assert "not admitted by the SLink client yet" not in labels["gen3"]
     assert "not admitted by the SLink client yet" not in labels["gen3_rr"]
+    assert "not admitted by the SLink client yet" not in labels["gen3_e"]
 
 
 def test_new_run_form_marks_exactly_the_unadmitted_games():
     """The template greys a chip from this flag (manager.html :disabled="g.unadmitted"), derived
-    from UNADMITTED_GAMES, so the chips and the handle_new refusal cannot drift apart."""
+    from UNADMITTED_GAMES, so the chips and the handle_new refusal cannot drift apart. gen3_e
+    (Emerald) left UNADMITTED_GAMES at EG4; only the Archipelago FRLG build remains."""
     from server.manager import UNADMITTED_GAMES, new_run_form
     flagged = {g["key"] for g in new_run_form()["games"] if g["unadmitted"]}
-    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap", "gen3_e"}
+    assert flagged == set(UNADMITTED_GAMES) == {"gen3_ap"}
 
 
 def test_gen4_and_gen5_are_not_offered_in_the_manager():
