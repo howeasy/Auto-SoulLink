@@ -1133,19 +1133,29 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
         run._check_bizhawk_paths()
 
 
-@pytest.mark.parametrize("name,kind,link_slot", (
-    ("evolve_gen3", "evolve", 0), ("npc_trade_gen3", "trade", 1), ("poison_faint_gen3", "poison", 0)))
-def test_nat_legs_rows_are_wired(name, kind, link_slot, monkeypatch):
+@pytest.mark.parametrize("name,kind,link_slot,games", (
+    ("evolve_gen3", "evolve", 0, ("gen3_frlg",)),
+    # NAT-LEGS-3: npc_trade_gen3/poison_faint_gen3 also run E<->E on gen3_emerald, target_by_game
+    # swapping the FR/LG "_synth" fixture stem for Emerald's own naming (emerald_trade.sav,
+    # emerald_poison.sav); evolve_gen3 stays FR/LG-only (its oracle hardcodes WARTORTLE species 8,
+    # not Emerald's Mudkip -> Marshtomp -- out of this card's lease).
+    ("npc_trade_gen3", "trade", 1, ("gen3_frlg", "gen3_emerald")),
+    ("poison_faint_gen3", "poison", 0, ("gen3_frlg", "gen3_emerald"))))
+def test_nat_legs_rows_are_wired(name, kind, link_slot, games, monkeypatch):
     """NAT-LEGS: explicit_only (never in `--scenario all` on either FR-as-A `gen3_frlg` or
     LG-as-A `gen3_lgfr`, card NAT-LEGS-2), A boots the committed SYNTH fixture, B idles on town,
     and the orchestrator links `link_slot`. Fixture byte-reproduction is checked separately below
     (once per title, since `orchestrate_*` doesn't care which title is behind "a")."""
     row = SCENARIOS[name]
-    assert row["games"] == ("gen3_frlg",) and row["explicit_only"] is True
+    assert row["games"] == games and row["explicit_only"] is True
     assert row["target"] == {"a": f"{kind}_synth", "b": "town"}
+    if "gen3_emerald" in games:
+        assert row["target_by_game"]["gen3_emerald"] == {"a": kind, "b": "town"}
     assert row["oracle"] == f"assert_{name}_saved" and callable(getattr(DuoRun, row["oracle"]))
     for game in ("gen3_frlg", "gen3_lgfr"):
         assert name not in scenarios_for(game) and scenario_applies(name, game)
+    if "gen3_emerald" in games:
+        assert name not in scenarios_for("gen3_emerald") and scenario_applies(name, "gen3_emerald")
     assert os.path.isfile(os.path.join(REPO, "lua", "tests", "duo", f"scenario_gen3_{name[:-5]}.lua"))
     run = DuoRun.__new__(DuoRun)
     calls = []

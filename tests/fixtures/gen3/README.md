@@ -617,6 +617,7 @@ Seed sha256 (`build_emerald_seed`, pinned by the unit test): town
 | `emerald_evolve.sav` | Route 102 (0.17) | (21,16) | same tile as `emerald_battle.sav`; Mudkip Lv15 at EXP 2534 (one short of Lv16), moves Tackle/Growl/Water Gun + a free slot (E2-FIX-VARIANTS r3) | `244763cb77a8b230ff863daed4bd63a2a8e80103f419a04f13a7ba372b390dbd` |
 | `emerald_poison.sav` | Oldale Town (0.10) | (6,17) | same tile as `emerald_town.sav`; Mudkip Lv5 poisoned at 1 HP + Poochyena Lv3 (E2-FIX-VARIANTS r3) | `c20c6edd9ca888ab5cd7eaa57b5a8b3b441255e4315ca1cd200c52e222baa9f0` |
 | `emerald_gift.sav` | Lavaridge Town (0.12) | (4,8) | below the egg woman (LavaridgeTown_EventScript_EggWoman, giveegg WYNAUT); FLAG_RECEIVED_LAVARIDGE_EGG clear (E2-FIX-VARIANTS r3) | `7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552` |
+| `emerald_trade.sav` | RustboroCity_House1 (11.10) | (6,5) | one step S of the Trader NPC (6,4); party Mudkip Lv5 + a player-owned Ralts Lv7 (INGAME_TRADE_SEEDOT's requestedSpecies); NAT-LEGS-3, receipts `docs/gen3/probes/fc_npc_trade_gen3_emerald_a1c5e5c4.txt` | `9dff9cf03d160ff07d06ed98779e0713eeae0e8f091e0f0e29ac6d99a0edbba8` |
 
 The first six: slot 0, counter 2, one Mudkip Lv5 (the pc/lowhp variants: see their section; both built by `make-emerald --kind pc|lowhp`, 2026-09-26, the game's own re-save kept HP=1 and the two boxed mons); `a` side `EMER` #20250925, `_b` side `EMERB`
 #DFDAF6DA; 5 Poké Balls. Each passed `qualify --title emerald` and a physical `boot-check --title
@@ -739,4 +740,34 @@ python tools/gen3_fixtures.py make-emerald --kind evolve --out tests/fixtures/ge
 python tools/gen3_fixtures.py make-emerald --kind poison --out tests/fixtures/gen3/emerald_poison.sav
 python tools/gen3_fixtures.py make-emerald --kind gift --out tests/fixtures/gen3/emerald_gift.sav
 python tools/gen3_fixtures.py make-emerald --kind catch --out tests/fixtures/gen3/emerald_catch.sav
+```
+
+### emerald_trade.sav (card NAT-LEGS-3: Emerald's npc_trade_gen3 leg)
+
+Same `make-emerald` machinery and provenance as above; additive to `EMERALD_KINDS`, and every
+other kind's bytes are unchanged. Built and boot-checked 2026-09-27 (`RESULT: PASS counter 1 -> 2
+map=11.10 pos=(6,5)`).
+
+- **`trade`** -- RustboroCity_House1 (map group 11, num 10), player at (6,5), one step S of the
+  Trader NPC (`OBJ_EVENT_GFX_CAMPER` at (6,4), `MOVEMENT_TYPE_FACE_LEFT`,
+  `data/maps/RustboroCity_House1/map.json`). Talking to him runs
+  `RustboroCity_House1_EventScript_Trader` (`data/maps/RustboroCity_House1/scripts.inc`):
+  `INGAME_TRADE_SEEDOT` (pokeemerald c65e93f2 `src/data/trade.h:985-1001`) -- his SEEDOT for a
+  player-owned `SPECIES_RALTS` (392), the trade's `requestedSpecies`. Rustboro (the second city)
+  is the earliest of the four Emerald in-game trades reachable (RustboroCity_House1, FortreeCity_
+  House1, PacifidlogTown_House3 and the postgame BattleFrontier_Lounge6), and the leg needs the
+  fewest scripted inputs: face Up (turns/bumps toward the NPC), A (talk), A (YES), pick the party
+  Ralts, A/A through the trade scene. Party count 2: slot 0 the usual Mudkip Lv5 starter
+  (unchanged), slot 1 a **SYNTH Ralts Lv7** (species 392, Hardy, IVs 15, `GROWL`+`CONFUSION`,
+  `ability_num = pid & 1` since Ralts has two abilities unlike the other SYNTH mons here), full
+  HP, valid checksum, OT `EMER`, no held item, no mail.
+- `emerald_fixture_problems(body, "trade")` checks both party slots' species/level/checksum
+  (Mudkip Lv5 + Ralts Lv7); the trade itself is the native `npc_trade_gen3` leg's own action, not
+  something this seed or its re-save produces.
+- **†UNVERIFIED** (reasoned from pret source, not a physical run beyond the boot-check's own
+  re-save): the player's post-CONTINUE facing direction for the first scripted input, and that the
+  trade's Yes/No box default cursor lands on YES (same caveat as `gift`).
+
+```
+python tools/gen3_fixtures.py make-emerald --kind trade --out tests/fixtures/gen3/emerald_trade.sav
 ```

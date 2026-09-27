@@ -58,6 +58,7 @@ FIXTURE_SHA256 = {
     "emerald_gift.sav": "7a6a712d87e339794a2a29735e1f320a3e55e6d06961180a3d41d687aa86d552",
     "emerald_catch.sav": "592d9986b28e24f9c4ad01873969a4e3ec0fb2f36f336f9e824f40ec78277fb0",
     "emerald_catch_b.sav": "cc67e15574cd70e204425ba3d754a1e20adfb3208f5aa36855a7e43f49cea48b",
+    "emerald_trade.sav": "9dff9cf03d160ff07d06ed98779e0713eeae0e8f091e0f0e29ac6d99a0edbba8",
 }
 
 
@@ -98,7 +99,7 @@ def test_committed_emerald_fixture_is_a_game_resave_on_its_tile(kind, suffix):
     assert len(body) == codec.FLASH_SIZE
     assert fx.emerald_fixture_problems(body, kind) == []
     r = fx.qualify_one(body, rr=False, title=EM)
-    assert r["ok"] and r["counter"] == 2 and len(r["party"]) == (2 if kind in ("pc", "poison") else 1)
+    assert r["ok"] and r["counter"] == 2 and len(r["party"]) == (2 if kind in ("pc", "poison", "trade") else 1)
 
 
 @pytest.mark.parametrize("kind", sorted(FIXTURE_B_KINDS))

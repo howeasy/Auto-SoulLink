@@ -951,6 +951,13 @@ EMERALD_KINDS = {
     # coordinator add-on, round 3: same tile as "battle" -- 20 Poke Balls so five straight
     # native misses (~0.56 miss chance each at Mudkip's catchRate 255) can't false-fail the leg
     "catch": ("Route102", 0, 17, 18, 21, 16),
+    # card NAT-LEGS-3 (Emerald parity): one step S of RustboroCity_House1's Trader NPC
+    # (OBJ_EVENT_GFX_CAMPER at (6,4), data/maps/RustboroCity_House1/map.json), so the scripted leg
+    # is one Up (faces/bumps the NPC) + one A (talk, choose YES, pick the party RALTS) --
+    # INGAME_TRADE_SEEDOT: SEEDOT for a player-owned SPECIES_RALTS (pret pokeemerald c65e93f2
+    # src/data/trade.h:985-1001, data/maps/RustboroCity_House1/scripts.inc). Map group/num 11/10,
+    # LAYOUT_RUSTBORO_CITY_HOUSE1 = layout id 97 (data/maps/map_groups.json, data/layouts/layouts.json).
+    "trade": ("RustboroCity_House1", 11, 10, 97, 6, 5),
 }
 # FLAG_BADGE01_GET..FLAG_BADGE04_GET (pret include/constants/flags.h:1359-1362): 0x867 is byte
 # 0x10C bit 7 and 0x868..0x86A are byte 0x10D bits 0-2, so the set straddles a flag byte
@@ -1110,6 +1117,48 @@ def _evolve_mon(ot_name: str, tid: int) -> dict:
     }
 
 
+# card NAT-LEGS-3: the "trade" kind's second party mon -- SPECIES_RALTS, the mon
+# RustboroCity_House1's trader (INGAME_TRADE_SEEDOT) asks for (requestedSpecies, src/data/trade.h).
+# pokeemerald c65e93f2 src/data/pokemon/species_info.h:11069-11095: base 28/25/25/40/45/35,
+# genderRatio PERCENT_FEMALE(50) = 127, friendship 35, growthRate GROWTH_SLOW (EXP_SLOW(n) =
+# 5*n^3/4, experience_tables.h:4) -- NOT medium-fast/slow like `_synth_mon`/`_evolve_mon`, so it
+# gets its own builder. Two abilities (SYNCHRONIZE/TRACE, species_info.h:11093), so a real
+# CreateBoxMon randomizes ability_num on `pid & 1` (src/pokemon.c:2296-2300), unlike the
+# single-ability mons `_synth_mon` builds. Lv7 moves: GROWL (Lv1) + CONFUSION (Lv6)
+# (level_up_learnsets.h:5318-5321; battle_moves.h pp 40/25).
+RALTS = {"species": 392, "name": "RALTS", "gender_ratio": 127, "friendship": 35,
+         "base": {"hp": 28, "attack": 25, "defense": 25, "speed": 40,
+                  "sp_attack": 45, "sp_defense": 35},
+         "moves": [45, 93, 0, 0], "pp": [40, 25, 0, 0]}
+TRADE_LEVEL = 7
+TRADE_EXP = 5 * TRADE_LEVEL ** 3 // 4   # EXP_SLOW(7)
+
+
+def _trade_mon(ot_name: str, tid: int) -> dict:
+    """The "trade" kind's Lv7 Ralts: Hardy-nature (pid % 25 == 0), non-shiny, same PID-search
+    shape as `_evolve_mon`/`emerald_starter`."""
+    pid = next(p for p in itertools.count(0x52414C54)
+               if p % 25 == 0
+               and ((tid & 0xFFFF) ^ (tid >> 16) ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+    lv = TRADE_LEVEL
+    stats = {k: (2 * b + STARTER_IV) * lv // 100 + 5 for k, b in RALTS["base"].items()}
+    stats["hp"] = (2 * RALTS["base"]["hp"] + STARTER_IV) * lv // 100 + lv + 10
+    return {
+        "personality": pid, "ot_id": tid, "nickname": RALTS["name"], "language": LANGUAGE_ENGLISH,
+        "is_bad_egg": 0, "has_species": 1, "is_egg_flag": 0, "block_box_rs": 0, "flags_unused": 0,
+        "ot_name": ot_name, "markings": 0, "unknown": 0,
+        "species": RALTS["species"], "held_item": 0, "experience": TRADE_EXP,
+        "pp_bonuses": 0, "friendship": RALTS["friendship"], "growth_filler": 0,
+        "moves": list(RALTS["moves"]), "pp": list(RALTS["pp"]),
+        "evs": dict.fromkeys(RALTS["base"], 0), "contest": [0] * 6,
+        "pokerus": 0, "met_location": MAPSEC_ROUTE_101, "met_level": lv,
+        "met_game": VERSION_EMERALD, "pokeball": ITEM_POKE_BALL, "ot_gender": 0,
+        "ivs": dict.fromkeys(RALTS["base"], STARTER_IV),
+        "is_egg": 0, "ability_num": pid & 1, "ribbons": 0,
+        "status": 0, "level": lv, "mail": 0xFF, "max_hp": stats["hp"], **stats,
+    }
+
+
 def pret_emerald() -> Path:
     """The pokeemerald checkout: $SLINK_PRET_EMERALD, else <root>/.cache/pret/pokeemerald for this
     repo root and the checkout a worktree belongs to (the _rom_candidates search)."""
@@ -1200,7 +1249,7 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
     sb1[0x0C:0x14] = _warp(group, num, x, y)      # continueGameWarp, :988
     sb1[0x1C:0x24] = _warp(*EMERALD_HEAL)         # lastHealLocation, :990 (SetLastHealLocationWarp)
     sb1[0x32:0x34] = layout_id.to_bytes(2, "little")   # mapLayoutId, :997 (0 = a NULL layout)
-    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 2 if kind in ("pc", "poison") else 1
+    sb1[codec.SB1_PARTY_COUNT_OFFSET_EMERALD] = 2 if kind in ("pc", "poison", "trade") else 1
     start = codec.SB1_PARTY_OFFSET_EMERALD
     if kind == "evolve":
         # card E2-FIX-VARIANTS round 3: a distinct Lv15 Mudkip, one EXP short of evolving
@@ -1224,6 +1273,10 @@ def build_emerald_seed(kind: str, flags: list[int]) -> bytes:
         poochyena = _synth_mon(POOCHYENA, BOX1_LEVEL, 0x504F4F43, name, tid, party=True)
         at = start + codec.PARTY_MON_SIZE
         sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(poochyena)
+    elif kind == "trade":
+        # card NAT-LEGS-3: second party slot, the Lv7 Ralts RustboroCity_House1's trader asks for
+        at = start + codec.PARTY_MON_SIZE
+        sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(_trade_mon(name, tid))
     sb1[0x490:0x494] = EMERALD_MONEY.to_bytes(4, "little")   # money, :1002
     # bagPocket_PokeBalls[0]; SetBagItemQuantity stores `quantity ^ encryptionKey` (src/item.c:31-34)
     balls = EMERALD_CATCH_BALLS if kind == "catch" else EMERALD_BALLS
@@ -1344,6 +1397,12 @@ def emerald_fixture_problems(body: bytes, kind: str) -> list[str]:
             if party[1]["status"] != 0 or party[1]["hp"] != party[1]["max_hp"]:
                 problems.append(f"party[1] (Poochyena) is not healthy at full HP: "
                                 f"status={party[1]['status']:#x} hp={party[1]['hp']}/{party[1]['max_hp']}")
+    elif kind == "trade":
+        # card NAT-LEGS-3: still Mudkip + a healthy Lv7 Ralts -- the trade itself is the native leg
+        want = [(MUDKIP["species"], STARTER_LEVEL, True), (RALTS["species"], TRADE_LEVEL, True)]
+        got = [(m["species"], m["level"], m["checksum_ok"]) for m in party]
+        if got != want:
+            problems.append(f"party is not [Lv{STARTER_LEVEL} Mudkip, Lv{TRADE_LEVEL} Ralts]: {party}")
     else:
         if [(m["species"], m["level"], m["checksum_ok"]) for m in party] != [(MUDKIP["species"],
                                                                               STARTER_LEVEL, True)]:
