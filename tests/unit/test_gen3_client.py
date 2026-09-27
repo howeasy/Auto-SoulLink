@@ -450,6 +450,48 @@ def test_npc_trade_preimage_survives_a_map_signal_between_swap_and_done():
     assert [(m["old_key"], m["new_key"]) for m in w.events("key_change")] == [(KB, key_of(C, 0x9999))]
 
 
+def test_shared_client_forwards_existing_server_phone_content_without_consuming_the_command(monkeypatch):
+    from tests.unit.test_state import make_state_with_link
+
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "00000007ABCDEF01")
+    calls, epochs = [], []
+
+    def binder(lua):
+        # MODEL command seam on the admitted companion harness. Native Emerald
+        # capability/ABI/record gates are independently exercised in test_gen3_native.
+        return lua.table(service=lambda *_: True, idle=lambda *_: True,
+                         trade_capable=lambda *_: False,
+                         bind_match_call_session=lambda _, epoch: epochs.append(epoch),
+                         request_match_call=lambda _, tag, data: calls.append((tag, lua_to_py(data))))
+
+    w = World("gen3_rr", "radical_red", "companion", native=binder)
+    w.set_party(party(A, B))
+    w.step_to(60)
+    state = make_state_with_link("PARTNER:1", KA)
+    state.trainer_names = {"a": "BOB", "b": "RED"}
+    state.links[0].a.species, state.links[0].a.nickname = 392, "RALTS"
+    state.links[0].b.species, state.links[0].b.nickname = 298, "DOTS"
+    state.handle_event("a", {"event": "faint", "key": "PARTNER:1"})
+    command = next(c for c in state.queued_commands["b"] if c.get("phone") == "fallen")
+    w.command(**command)
+    w.step(3)
+    assert epochs == [7]
+    assert calls == [("fallen", {"trainer_name": "BOB",
+                                 "caller_mon": {"species_id": 392, "nickname": "RALTS"},
+                                 "receiver_mon": {"species_id": 298, "nickname": "DOTS"}})]
+    assert w.party_hp(0) == 0  # the original force_faint still runs
+
+
+def test_clean_client_does_not_forward_phone_tags_to_an_injected_binder():
+    calls = []
+    w = World(native=lambda lua: lua.table(request_match_call=lambda *args: calls.append(args)))
+    w.set_party(party(A, B))
+    w.step_to(60)
+    w.command(cmd="msgbox", text="same message", phone="first_link")
+    w.step()
+    assert calls == []
+
+
 # ── in-battle writes (owner ruling 2026-09-23) ────────────────────────────────────────────
 
 def test_a_bench_faint_lands_immediately_and_its_faint_is_not_reported():

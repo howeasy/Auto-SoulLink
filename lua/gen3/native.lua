@@ -17,6 +17,7 @@
 -- readback) or a panel/NPC callback can write through the same sink in the same
 -- service() call while the caller's own job is refused at its guard.
 local N = {}
+local CALL_IDS = {fallen=1, dead_zone=2, first_link=3}
 local O = {abi=4, opcode=6, seq=8, status=10, ack=12, reason=14, args=16, result=48}
 local BUSY, OK, FAIL = 1, 2, 3
 -- ST_FAIL reason words (patch/src/handlers.c owns the numbering; ADDRESSES.md lists both sides).
@@ -77,6 +78,9 @@ function N.new(profile, deps)
     local array = deps.array or function(t) return t end
     local reads = assert(deps.reads, "Gen 3 read facade required")
     local queue, pending, poisoned, posting = {}, nil, nil, false
+    local call_queued, call_active, call_wanted_epoch
+    local call_first_posted, call_delivered_at = false, nil
+    local log = deps.log or function() end
     -- post-conditions awaited after an ACK (the rival swap's engine snapshot)
     local watches, SNAPSHOT_FRAMES = {}, 600
     local seq = deps.initial_seq or 0
@@ -165,6 +169,7 @@ function N.new(profile, deps)
     local function abort(why)
         local active, waiting = pending, queue
         pending, queue = nil, {}
+        call_queued, call_active = nil, nil -- no replay across a native reset/freshness loss
         if active then finish(active, why) end
         for _, job in ipairs(waiting) do finish(job, why) end
     end
@@ -274,6 +279,7 @@ function N.new(profile, deps)
                 writes:write_u16(p.BASE + O.ack, (seq + 65535) % 65536)
                 writes:write_u16(p.BASE + O.seq, seq)
                 job.publish_attempted = true -- a sink failure can leave a valid low-byte opcode
+                if job.on_publish then job.on_publish() end
                 writes:write_u16(p.BASE + O.opcode, job.op) -- publish last
                 -- ... and the receipt is the publish's own witness: nothing after it can fail
                 job.posted = true
@@ -289,6 +295,187 @@ function N.new(profile, deps)
         if job.op then job.started = io.framecount(); pending = job
         else finish(job) end
         return true
+    end
+
+    -- Soul Link Match Call mirrors gen2/phone.lua's optional tags and scheduling.
+    -- The native Emerald producer owns the contact, text and safe UI entry.
+    local cc = v2 and v2.constants
+    local call_known_caps = 0
+    for name, value in pairs(cc or {}) do
+        if name:match("^SLINK_CAP_") then call_known_caps = call_known_caps | value end
+    end
+    local call_record_fields, call_witness_fields
+    if v2 then
+        local function layout(name, size, expected)
+            local shape = assert(v2.structs[name], "missing call ABI structure")
+            assert(shape.size == size, "invalid call ABI size")
+            local out = {}
+            for name_, spec in pairs(expected) do
+                local field = assert(shape.fields[name_], "missing call ABI field")
+                assert(field.offset == spec[1] and field.width == spec[2] and field.count == spec[3],
+                       "invalid call ABI field: " .. name_)
+                out[name_] = field.offset
+            end
+            return out
+        end
+        call_record_fields = layout("SlinkCallRecordV2", 36, {
+            event={0,1,1}, has_names={1,1,1}, caller_species={2,2,1}, receiver_species={4,2,1},
+            trainer={6,1,8}, caller_nick={14,1,11}, receiver_nick={25,1,11}})
+        call_witness_fields = layout("SlinkCallWitnessV2", 32, {
+            session_epoch={0,4,1}, seq={4,2,1}, revision={6,2,1}, phase={8,1,1},
+            event={9,1,1}, reason={10,2,1}, armed_frame={12,4,1}, delivered_frame={16,4,1}})
+    end
+    local function call_supported()
+        if not v2 or profile.pack ~= "gen3_emerald" then return false end
+        local mb = self:mailbox()
+        local caps = mb and mb.capabilities
+        return integer(caps, 0xFFFFFFFF) and (caps & ~call_known_caps) == 0
+               and (caps & cc.SLINK_CAP_MATCH_CALL) ~= 0
+    end
+    function self:match_call_capable()
+        if not call_supported() or poisoned or session_epoch == 0 then return false end
+        local mb = self:mailbox()
+        return mb ~= nil and mb.session_epoch == session_epoch
+    end
+    function self:bind_match_call_session(value)
+        if not v2 or profile.pack ~= "gen3_emerald" or deps.artifact_kind ~= "companion"
+           or not integer(value, 0xFFFFFFFF) or value == 0 then return false end
+        if call_wanted_epoch ~= value then call_queued, call_active = nil, nil end
+        call_wanted_epoch = value
+        return true
+    end
+    local function call_name(text, size)
+        if type(text) ~= "string" then return nil end
+        local out = {}
+        for glyph in text:gmatch(utf8.charpattern) do
+            local code = reads.charmap.codes[glyph]
+            if integer(code, 0xF6) and #out < size - 1 then out[#out+1] = code end
+        end
+        if #out == 0 then return nil end
+        while #out < size do out[#out+1] = 0xFF end
+        return out
+    end
+    local function call_record(id, data)
+        local row, rf = {}, call_record_fields
+        for i=1,36 do row[i] = i > rf.trainer and 0xFF or 0 end
+        row[rf.event+1] = id
+        local trainer = type(data) == "table" and call_name(data.trainer_name, 8)
+        if not trainer then return row end
+        row[rf.has_names+1] = 1
+        for i, b in ipairs(trainer) do row[rf.trainer+i] = b end
+        for _, item in ipairs({{"caller_mon", "caller_species", "caller_nick"},
+                               {"receiver_mon", "receiver_species", "receiver_nick"}}) do
+            local mon = type(data[item[1]]) == "table" and data[item[1]] or {}
+            local species = integer(mon.species_id, 0xFFFF) and mon.species_id > 0 and mon.species_id or 0
+            row[rf[item[2]]+1], row[rf[item[2]]+2] = species & 0xFF, species >> 8
+            for i, b in ipairs(call_name(mon.nickname, 11) or {}) do row[rf[item[3]]+i] = b end
+        end
+        return row
+    end
+    local function word(bytes, offset, width)
+        local value = 0
+        for i=width,1,-1 do value = value * 256 + bytes[offset+i] end
+        return value
+    end
+    local function call_witness()
+        local wf = call_witness_fields
+        local base = p.BASE + cc.SLINK_CALL_WITNESS_OFFSET
+        local ok, witness = pcall(function()
+            local before = io.read_u16(base + wf.revision)
+            local raw = io.read_bytes(base, 32)
+            local after = io.read_u16(base + wf.revision)
+            if before ~= after or before % 2 ~= 0 or word(raw, wf.revision, 2) ~= before then return nil end
+            if before == 0 then
+                for i=1,32 do if raw[i] ~= 0 then return nil end end
+                return {revision=0, phase=cc.SLINK_CALL_EMPTY}
+            end
+            return {revision=before, epoch=word(raw,wf.session_epoch,4), seq=word(raw,wf.seq,2),
+                phase=raw[wf.phase+1], event=raw[wf.event+1], reason=word(raw,wf.reason,2),
+                delivered_frame=word(raw,wf.delivered_frame,4)}
+        end)
+        return ok and witness or nil
+    end
+    local function call_slot_free(w)
+        return w and (w.phase == cc.SLINK_CALL_EMPTY or w.phase == cc.SLINK_CALL_REFUSED
+                      or w.phase == cc.SLINK_CALL_COMPLETE)
+    end
+    local function call_args(id)
+        local args = {}
+        for i=1,32 do args[i] = 0 end
+        args[1] = id
+        return args
+    end
+    function self:request_match_call(name, data)
+        local id = CALL_IDS[name]
+        if not id or not self:match_call_capable() or (id == CALL_IDS.first_link and call_first_posted) then return false end
+        local row = call_record(id, data) -- own a snapshot; newest equal priority wins
+        if call_active and not call_active.job.posted and not call_active.job.publish_attempted then
+            if id <= call_active.id then
+                call_active.id = id
+                call_active.job.args = call_args(id)
+                call_active.job.stages[1][2] = row
+            end
+        elseif not call_queued or id <= call_queued.id then
+            call_queued = {id=id, row=row}
+        end
+        return true
+    end
+    local function service_calls()
+        if not call_supported() or poisoned then call_queued, call_active = nil, nil; return end
+        if call_wanted_epoch and session_epoch ~= call_wanted_epoch then
+            self:set_session_epoch(call_wanted_epoch)
+            return
+        end
+        if not self:match_call_capable() then call_queued, call_active = nil, nil; return end
+        local now = io.framecount()
+        if call_active then
+            local active = call_active
+            if active.epoch ~= session_epoch then call_queued, call_active = nil, nil; return end
+            if not active.acked then return end
+            local w = call_witness()
+            if not w or w.revision == active.before_revision or w.epoch ~= active.epoch
+               or w.seq ~= active.job.seq or w.event ~= active.id then return end
+            if w.phase == cc.SLINK_CALL_DELIVERED or w.phase == cc.SLINK_CALL_COMPLETE then
+                if not active.delivered then
+                    active.delivered, call_delivered_at = true, now -- emulator frames, as Gen 2
+                    log("[SLink-gen3] match call " .. active.id .. " delivered")
+                end
+                if w.phase == cc.SLINK_CALL_COMPLETE then call_active = nil end
+            elseif w.phase == cc.SLINK_CALL_REFUSED then
+                log("[SLink-gen3] match call refused: " .. tostring(w.reason))
+                call_active = nil
+            end
+            return
+        end
+        if not call_queued or not self:idle() or #queue ~= 0 then return end
+        if call_delivered_at and now >= call_delivered_at
+           and now - call_delivered_at < cc.SLINK_CALL_COOLDOWN_FRAMES then return end
+        if not call_slot_free(call_witness()) then return end
+        local next_call = call_queued
+        local active = {id=next_call.id, epoch=session_epoch}
+        call_active, call_queued = active, nil
+        active.job = enqueue({op=p.OP_MATCH_CALL, args=call_args(active.id),
+            stages={{p.BASE + cc.SLINK_TEXT_OFFSET, next_call.row}},
+            ready=function()
+                return call_active ~= active or call_slot_free(call_witness())
+            end,
+            valid=function()
+                if call_active ~= active or not self:match_call_capable() or active.epoch ~= session_epoch then
+                    return false, "guard:stale"
+                end
+                local w = call_witness()
+                if not call_slot_free(w) then return false, "call UI still owned", true end
+                active.before_revision = w.revision
+                return true
+            end,
+            on_publish=function()
+                if active.id == CALL_IDS.first_link then call_first_posted = true end
+            end,
+            done=function(why)
+                if call_active ~= active then return end
+                if why then call_active = nil else active.acked = true end
+            end})
+        if not active.job and call_active == active then call_active = nil end
     end
 
     function self:play_sound(id)
@@ -589,6 +776,7 @@ function N.new(profile, deps)
                 end
             end
         end
+        service_calls()
         if not self:idle() or #queue == 0 then return true end
         -- a job whose `ready` says "not yet" (a staged rival swap waiting for its window) stays
         -- queued and does not block the jobs behind it

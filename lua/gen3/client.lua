@@ -154,6 +154,14 @@ function Client.new(p)
             session_nonce = nil
         end
     end
+    if native and p.artifact_kind == "companion" and native.bind_match_call_session and session_nonce then
+        -- The production nonce's first word is the persisted session counter.
+        -- Short explicit harness seeds are also u32s; never invent an epoch.
+        local epoch_seed = #session_nonce == 16 and session_nonce:sub(1,8)
+                           or (#session_nonce <= 8 and session_nonce or nil)
+        local epoch = epoch_seed and tonumber(epoch_seed, 16)
+        if epoch and epoch > 0 then native:bind_match_call_session(epoch) end
+    end
     local battle_seq = 0
     -- RIVAL AUTHORITY (C5-11c BLOCKER 2). The battle that may accept a rival swap, as the immutable
     -- {session, battle_id, trainer_id} triple. It is opened when this client ANNOUNCES a battle
@@ -1630,6 +1638,15 @@ function Client.new(p)
     session = core.Session.new({ net = transport, json = json, hud = hud, log = sink, tag = TAG,
                                  player = p.player, game = drv, identity = Id, deferred = Q })
     session.driver, session.state = drv, st
+    if native and p.artifact_kind == "companion" and native.request_match_call then
+        local base_command = session.handle_command
+        function session:handle_command(cmd)
+            -- Same optional tag seam as gen2/client.lua: the original command
+            -- still runs, and unsupported cartridges silently ignore the tag.
+            if cmd.cmd ~= "noop" and cmd.phone ~= nil then native:request_match_call(cmd.phone, cmd.phone_data) end
+            return base_command(self, cmd)
+        end
+    end
     local base_send = session.send
     session.send = function(a, b, c)
         local event = (a == session) and b or a
