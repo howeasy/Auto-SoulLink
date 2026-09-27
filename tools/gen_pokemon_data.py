@@ -466,7 +466,7 @@ def build_gender_ratio(raw: dict[int, str]) -> dict[int, int]:
 # ── EVO_FAMILY ──────────────────────────────────────────────────────────────
 
 def build_evo_family(raw: dict[int, str]) -> dict[int, int]:
-    """Build EVO_FAMILY mapping evolved→base using CFRU IDs."""
+    """Generic CFRU chains; RR uses gen_rr_evolutions.py's own-ROM artifact."""
     name_to_id: dict[str, int] = {v: k for k, v in raw.items()}
 
     def _id(name: str) -> int:
@@ -1014,6 +1014,16 @@ def generate_module(species_names: dict[int, str],
     parts.append('"""')
     parts.append("")
 
+    parts.append('''\
+import json as _family_json
+from pathlib import Path as _FamilyPath
+
+_rr_family_path = _FamilyPath(__file__).resolve().parents[1] / "data/games/gen3_rr/evolution_families.json"
+_RR_EVO_FAMILY = {int(k): v for k, v in _family_json.loads(
+    _rr_family_path.read_text(encoding="utf-8"))["families"].items()}
+del _family_json, _FamilyPath, _rr_family_path
+''')
+
     # SPECIES_NAMES
     parts.append(_fmt_dict_int_str(
         "SPECIES_NAMES", species_names,
@@ -1110,12 +1120,13 @@ def to_national(cfru_id: int) -> int:
 
     # base_form function
     parts.append('''\
-def base_form(species_id: int) -> int:
+def base_form(species_id: int, is_rr: bool = True) -> int:
     """Return the base-form species ID for any mon in an evolution chain.
 
-    Single-stage mons and base forms return themselves.
+    RR uses its own ROM graph; other titles retain the generic CFRU chains.
     """
-    return EVO_FAMILY.get(species_id, species_id)''')
+    families = _RR_EVO_FAMILY if is_rr else EVO_FAMILY
+    return families.get(species_id, species_id)''')
     parts.append("")
 
     return "\n".join(parts)
