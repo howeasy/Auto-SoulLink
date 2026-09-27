@@ -80,6 +80,7 @@ function Client.new(p)
     local trade
     local owed = p.owed_reports and p.owed_reports.new() or nil
     local trade_epoch, trade_connected = 0, false
+    local trade_reset_epoch = 0
     local trade_report_epochs = setmetatable({}, {__mode="k"})
     local a, d = profile.ram, profile.derived
     local arr = json.array
@@ -948,6 +949,7 @@ function Client.new(p)
         return overworld_ok()
     end
     function drv.on_reset()
+        trade_reset_epoch = trade_reset_epoch + 1
         if trade then trade:reset() end
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
@@ -1081,6 +1083,7 @@ function Client.new(p)
             if had then log("rival authority closed by " .. tostring(sig and sig.kind)) end
         end
         local function capture_trade_before(sig)
+            sig.trade_reset_epoch = trade_reset_epoch
             local party, why = party_read()
             if not party then
                 log("NPC trade preimage unavailable: " .. tostring(why))
@@ -1128,7 +1131,7 @@ function Client.new(p)
         elseif k == "map_load" then f.map = true
         elseif k == "save" then f.save = true
         elseif k == "trade_begin" then                          -- OPEN kind, not PHYSICAL
-            st.trade = sig.trade_before
+            st.trade = sig.trade_reset_epoch == trade_reset_epoch and sig.trade_before or nil
         elseif k == "trade_done" then f.trade = true            -- OPEN kind, not PHYSICAL
         end
         -- evolve_species_store / trade_evolve_species_store (OPEN, not PHYSICAL): a Gen 3

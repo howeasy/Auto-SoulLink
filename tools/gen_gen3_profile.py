@@ -1555,7 +1555,7 @@ def main() -> int:
     args = ap.parse_args()
     try:
         return _generate_profiles(args)
-    except (ValueError, OSError) as exc:
+    except (ValueError, OSError, subprocess.SubprocessError) as exc:
         print(str(exc), file=sys.stderr)
         return 1
 

@@ -18,6 +18,9 @@ class World:
             from tools.gen_gen3_profile import native_abi
             self.n["ABI"], self.n["abi_v2"] = 2, native_abi()
             self.n["BASE"] = 0x0201B000  # private MODEL arena; no admitted v2 profile
+            self.n.update({name.removeprefix("SLINK_"): value
+                           for name, value in self.n["abi_v2"]["constants"].items()
+                           if name.startswith("SLINK_OP_")})
         if mutate_native is not None:
             mutate_native(self.n)
         self.ram = self.profile["titles"]["radical_red"]["ram"]
@@ -127,6 +130,11 @@ def test_v2_rejects_shifted_mailbox_fields_before_any_io(field):
 def test_v2_rejects_opcodes_that_disagree_with_the_canonical_abi(opcode, value):
     with pytest.raises(lupa.LuaError, match="v2 opcode mismatch"):
         World(abi=2, mutate_native=lambda native: native.update({opcode: value}))
+
+
+def test_v2_rejects_an_omitted_canonical_opcode():
+    with pytest.raises(lupa.LuaError, match="v2 opcode missing"):
+        World(abi=2, mutate_native=lambda native: native.pop("OP_MATCH_CALL"))
 
 
 @pytest.mark.parametrize("epoch", [0, -1, 1.5, 0x100000000])

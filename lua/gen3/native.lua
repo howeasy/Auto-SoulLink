@@ -59,6 +59,11 @@ function N.new(profile, deps)
                 assert(type(expected) == "number" and value == expected, "v2 opcode mismatch: " .. name)
             end
         end
+        for name, value in pairs(c) do
+            if name:match("^SLINK_OP_") then
+                assert(p[name:sub(7)] == value, "v2 opcode missing: " .. name)
+            end
+        end
         -- These words have different legacy RR meanings. Name them only for v2.
         for symbol, name in pairs({SLINK_REASON_UNCERTAIN="uncertain",
             SLINK_REASON_IDENTITY="identity", SLINK_REASON_CLIENT_TOO_OLD="client_too_old"}) do
