@@ -291,6 +291,10 @@ class SoulLinkState:
         # the key_change self-report proof. In-memory only: a stale observation must never waive a
         # collision after a restart (every connection re-helloes).
         self.party_key_census: dict[str, dict[str, int]] = {}
+        # T4: retained snapshots remain displayable while the client withholds RAM.
+        self.party_hidden: dict[str, bool] = {"a": False, "b": False}
+        # A declared durable-trade lease needs a later visible hello, not a tick.
+        self.trade_recovery_pending: dict[str, bool] = {"a": False, "b": False}
         # KEY-SCOPE-5: {player: {key: slot}} of the latest and the previous party snapshot (in-memory)
         self.party_slots: dict[str, dict[str, int]] = {}
         self.prev_party_slots: dict[str, dict[str, int]] = {}
@@ -402,6 +406,59 @@ class SoulLinkState:
 
     # ── public API ───────────────────────────────────────────────────────────
 
+    def party_snapshot_withheld(self, player_id: str, msg: dict) -> bool:
+        """Whether a snapshot is unavailable, independently of its attached data."""
+        return self.adapter.supports_trade_recovery() and (
+            msg.get("party_hidden") is True
+            or msg.get("event") == "hello" and bool(msg.get("trade_outstanding"))
+            or self.trade_recovery_pending[player_id] and msg.get("event") != "hello"
+            or self.party_hidden[player_id] and "party" not in msg)
+
+    def _trade_recovery_error(self, msg: dict) -> str:
+        if not self.adapter.supports_trade_recovery():
+            return ""
+        if "party_hidden" in msg and type(msg["party_hidden"]) is not bool:
+            return "Invalid party_hidden: expected boolean"
+        records = msg.get("trade_outstanding", [])
+        if not isinstance(records, list) or any(
+            not isinstance(r, dict) or not isinstance(r.get("token"), str) or not r["token"]
+            or type(r.get("epoch")) is not int or not 1 <= r["epoch"] <= 0xFFFFFFFF
+            for r in records
+        ):
+            return "Invalid trade_outstanding: expected token and nonzero uint32 epoch"
+        return ""
+
+    def _declare_trade_outstanding(self, player_id: str, records: list) -> None:
+        """Record uncertainty after identity acceptance; a journal is never party evidence."""
+        self.trade_recovery_pending[player_id] = True
+        pt = self.pending_trade
+        if not pt or pt.get("phase") not in ("applying", "uncertain", "conflict"):
+            return
+        epochs = [r["epoch"] for r in records if r["token"] == pt["token"]]
+        if not epochs:
+            return  # an older token cannot change this trade
+        self.queued_commands[player_id] = [
+            c for c in self.queued_commands[player_id]
+            if not (c.get("cmd") in ("apply_trade", "apply_prepare")
+                    and c.get("token") == pt["token"])]
+        saved = pt.setdefault("recovery_epochs", {}).setdefault(player_id, [])
+        changed = False
+        for epoch in epochs:
+            if epoch not in saved:
+                saved.append(epoch)  # opaque identity; never a numeric ordering comparison
+                changed = True
+        if pt["verdict"].get(player_id) in (None, "await"):
+            if pt["verdict"].get(player_id) is None:
+                pt["verdict"][player_id] = "await"
+                pt["phase"] = "uncertain"
+                self._record_trade(pt, "uncertain")
+                changed = True
+            if not pt.setdefault("hello_only", {}).get(player_id):
+                pt["hello_only"][player_id] = True
+                changed = True
+        if changed:
+            self._save()
+
     def handle_event(self, player_id: str, msg: dict) -> list[dict]:
         """
         Process one event from player_id.
@@ -416,16 +473,26 @@ class SoulLinkState:
         if msg.get("key"):
             self._ack_inflight(player_id, msg["key"])
 
-        self._tick_pending_trade()    # free the single trade slot if a side abandoned it (link untouched)
+        recovery_hello = event == "hello" and self.adapter.supports_trade_recovery()
+        if not recovery_hello:
+            self._tick_pending_trade()  # Gen 3 recovery hellos must pass identity first
 
         if self._refuse_ambiguous(player_id, msg):
             pass                                        # KEY-SCOPE-3: which of two mons? refused
         elif self._hold_for_trade(player_id, msg):
             pass                                        # replayed once the trade settles
         elif event == "hello":
+            queued_before = len(self.queued_commands[player_id])
             self._handle_hello(player_id, msg)           # runs this hello's trade evidence too
+            if recovery_hello and msg.get("_rejected"):
+                # A wrong-save/malformed hello must not receive a previously queued APPLY.
+                refused = self.queued_commands[player_id][queued_before:]
+                del self.queued_commands[player_id][queued_before:]
+                return refused or [{"cmd": "noop", "refused": "identity"}]
             if not msg.get("_rejected"):
                 self.trade_prepare[player_id] = msg.get("trade_prepare") is True
+                if recovery_hello:
+                    self._tick_pending_trade()
         elif event == "area_enter":
             self._handle_area_enter(player_id, msg)
         elif event == "ghost_pos":
@@ -547,7 +614,10 @@ class SoulLinkState:
             if msg.get("has_pokeballs") is True:
                 self.pokeballs_obtained[player_id] = True
             # Update party size from tick/safe snapshots for paired retrieval checks.
-            party = msg.get("party")
+            hidden = self.party_snapshot_withheld(player_id, msg)
+            if self.adapter.supports_trade_recovery() and (hidden or "party" in msg):
+                self.party_hidden[player_id] = hidden
+            party = None if hidden else msg.get("party")
             if party is not None:
                 old_size = self.party_size.get(player_id, 0)
                 self.party_size[player_id] = len(party)
@@ -649,7 +719,8 @@ class SoulLinkState:
         LIVE link whose partner half is in the partner's party (blobs cached for both) — i.e. the only
         mons that may be traded. Sorted by party slot. This is the linked-pair invariant's source set."""
         partner = _partner(player_id)
-        if self.trade_blocked[player_id] or self.trade_blocked[partner]:
+        if (self.trade_blocked[player_id] or self.trade_blocked[partner]
+                or self.party_hidden[player_id] or self.party_hidden[partner]):
             return []
         par_blobs = self.partner_blobs.get(partner, [])
         out = []
@@ -1041,7 +1112,7 @@ class SoulLinkState:
         """Re-validate at confirm: the players free-roam while the partner deliberates, so the offered
         pair may have fainted/died or been boxed since mon_chosen. Cancels (and says so) if it has."""
         entry = pt["link"]
-        if (entry.status != LinkStatus.ALIVE
+        if (any(self.party_hidden.values()) or entry.status != LinkStatus.ALIVE
                 or self._trade_key_clash("a", pt["b_key"], pt["a_key"])
                 or pt["a_key"] not in self.party_keys["a"]
                 or pt["b_key"] not in self.party_keys["b"]
@@ -1252,6 +1323,10 @@ class SoulLinkState:
         pt["new"] = {pid: tuple(v) if v else None for pid, v in (pt.get("new") or {}).items()}
         pt.setdefault("verdict", {"a": None, "b": None})
         self.pending_trade = pt
+        if self.adapter.supports_trade_recovery():
+            for pid in ("a", "b"):
+                if pt.get("recovery_epochs", {}).get(pid):
+                    self.party_hidden[pid] = self.trade_recovery_pending[pid] = True
         if pt.get("phase") == "applying":
             pt["phase"] = "uncertain"
             for pid in ("a", "b"):
@@ -1662,7 +1737,14 @@ class SoulLinkState:
         Only flags mons that are still IN the party with hp == 0 as newly fainted —
         missing-from-party mons may simply be boxed (do not treat as dead).
         """
-        party = msg.get("party", [])
+        error = self._trade_recovery_error(msg)
+        if error:
+            self.identity_error[player_id] = error
+            msg["_rejected"] = True
+            self.queued_commands[player_id].append({"cmd": "noop", "refused": "trade_recovery"})
+            return
+        hidden = self.party_snapshot_withheld(player_id, msg)
+        party = [] if hidden else msg.get("party", [])
 
         # ── Identity lock ── (before anything about this hello is adopted: a wrong save must
         # leave party_size / the blob cache exactly as they were)
@@ -1673,6 +1755,11 @@ class SoulLinkState:
         # rejected as WRONG SAVE. A client that reports `ot_id` is telling us what the save
         # says; only fall back to the mon key for clients that do not.
         incoming_ot = str(msg.get("ot_id") or "").strip() or None
+        if hidden and not incoming_ot:
+            self.identity_error[player_id] = "Withheld party requires explicit trainer identity"
+            msg["_rejected"] = True
+            self.queued_commands[player_id].append({"cmd": "noop", "refused": "identity"})
+            return
         if not incoming_ot and party:
             first_key = party[0].get("key", "")
             incoming_ot = self.adapter.parse_ot_id(first_key)
@@ -1734,65 +1821,73 @@ class SoulLinkState:
             # manual inject to inherit.
             self.latest_battle_requests.pop(player_id, None)
 
-        old_size = self.party_size.get(player_id, 0)
-        self.party_size[player_id] = len(party)
-        log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
-        # Rival Team Swap: refresh the per-player blob cache from the same
-        # snapshot.  Each party entry carries blob_hex (200 chars) from
-        # build_party_snapshot — see archive/gen3-old-client:lua/clients/gen3_frlge_client.lua.
-        self._ingest_party_blobs(player_id, party)
+        if self.adapter.supports_trade_recovery():
+            records = msg.get("trade_outstanding", [])
+            if records:
+                self._declare_trade_outstanding(player_id, records)
+            elif not hidden:
+                self.trade_recovery_pending[player_id] = False
+            self.party_hidden[player_id] = hidden
+        if not hidden:
+            old_size = self.party_size.get(player_id, 0)
+            self.party_size[player_id] = len(party)
+            log.debug(f"[PARTY] player={player_id}  party_size {old_size} → {len(party)}  (hello)")
+            # Rival Team Swap: refresh the per-player blob cache from the same
+            # snapshot.  Each party entry carries blob_hex (200 chars) from
+            # build_party_snapshot — see archive/gen3-old-client:lua/clients/gen3_frlge_client.lua.
+            self._ingest_party_blobs(player_id, party)
 
-        # Accept pokéballs status from Lua (M.hasPokeballs() reads actual bag).
-        # If the field is absent (old client), fall back to non-empty party heuristic.
-        has_pokeballs = msg.get("has_pokeballs")
-        if has_pokeballs is True or has_pokeballs is None and party:
-            self.pokeballs_obtained[player_id] = True
+            # Accept pokéballs status from Lua (M.hasPokeballs() reads actual bag).
+            # If the field is absent (old client), fall back to non-empty party heuristic.
+            has_pokeballs = msg.get("has_pokeballs")
+            if has_pokeballs is True or has_pokeballs is None and party:
+                self.pokeballs_obtained[player_id] = True
 
-        # Rebuild party_keys from the snapshot
-        self._has_helld.add(player_id)
-        # A new hello from player_id means a fresh session start for that player.
-        # Discard the partner from _has_helld so any events arriving before the partner's
-        # hello use the optimistic path (exec_box_mon is idempotent if key not in party).
-        # This prevents stale party_keys from the previous session blocking sync commands.
-        self._has_helld.discard(_partner(player_id))
-        self.party_keys[player_id] = {
-            m["key"] for m in party if m.get("maxHP", 0) > 0
-        }
-        # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
-        # slot when a reconnect happens before the Lua sends the faint event back).
-        for _k in list(self.party_keys[player_id]):
-            _e = self.entry_for(player_id, _k)
-            if (_e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
-                    or _k in self.ambiguous_keys[player_id]):
-                self.party_keys[player_id].discard(_k)
+            # Rebuild party_keys from the snapshot
+            self._has_helld.add(player_id)
+            # A new hello from player_id means a fresh session start for that player.
+            # Discard the partner from _has_helld so any events arriving before the partner's
+            # hello use the optimistic path (exec_box_mon is idempotent if key not in party).
+            # This prevents stale party_keys from the previous session blocking sync commands.
+            self._has_helld.discard(_partner(player_id))
+            self.party_keys[player_id] = {
+                m["key"] for m in party if m.get("maxHP", 0) > 0
+            }
+            # Strip dead/memorial mons that may have been re-added (e.g. hp=0 mon still in party
+            # slot when a reconnect happens before the Lua sends the faint event back).
+            for _k in list(self.party_keys[player_id]):
+                _e = self.entry_for(player_id, _k)
+                if (_e and _e.status in (LinkStatus.DEAD, LinkStatus.MEMORIAL)
+                        or _k in self.ambiguous_keys[player_id]):
+                    self.party_keys[player_id].discard(_k)
 
-        # Re-quarantine: if any pending (unlinked) captures are in the party,
-        # remove from party_keys and re-queue box_mon so they go back to the box.
-        # Safety: never quarantine if it would leave the player with no alive mons.
-        alive_keys = {m["key"] for m in party if m.get("hp", 0) > 0}
-        quarantined = set()
-        for area_id, players in self.pending_captures.items():
-            cap = players.get(player_id)
-            if cap and cap.key in self.party_keys[player_id]:
-                remaining_alive = alive_keys - quarantined - {cap.key}
-                if not remaining_alive:
-                    log.info(f"[{player_id}] skip re-quarantine: {cap.key[:8]} (no alive mons would remain)")
-                    continue
-                quarantined.add(cap.key)
-                self.party_keys[player_id].discard(cap.key)
-                self.queued_commands[player_id].append({"cmd": "box_mon", "key": cap.key})
-                log.info(f"[{player_id}] re-quarantine on hello: {cap.key[:8]} (pending in {area_id})")
+            # Re-quarantine: if any pending (unlinked) captures are in the party,
+            # remove from party_keys and re-queue box_mon so they go back to the box.
+            # Safety: never quarantine if it would leave the player with no alive mons.
+            alive_keys = {m["key"] for m in party if m.get("hp", 0) > 0}
+            quarantined = set()
+            for area_id, players in self.pending_captures.items():
+                cap = players.get(player_id)
+                if cap and cap.key in self.party_keys[player_id]:
+                    remaining_alive = alive_keys - quarantined - {cap.key}
+                    if not remaining_alive:
+                        log.info(f"[{player_id}] skip re-quarantine: {cap.key[:8]} (no alive mons would remain)")
+                        continue
+                    quarantined.add(cap.key)
+                    self.party_keys[player_id].discard(cap.key)
+                    self.queued_commands[player_id].append({"cmd": "box_mon", "key": cap.key})
+                    log.info(f"[{player_id}] re-quarantine on hello: {cap.key[:8]} (pending in {area_id})")
 
-        # Invariant review MAJOR-2: a hello that settles a pending trade must do so BEFORE its
-        # own deaths are routed, so they follow the swapped link.
-        pt = self.pending_trade
-        if pt and pt.get("phase") == "applying" and pt.get("verdict", {}).get(player_id, "") is None:
-            # A fresh hello while this side never reported: a Lua reload lost its owed trade_done.
-            # The hello is sent only at the checkpoint, never inside the trade scene, so its party
-            # is evidence now rather than after the watchdog.
-            pt["verdict"][player_id] = "await"
-            self._record_trade(pt, "uncertain")
-        self._trade_evidence(player_id, party, from_hello=True)
+            # Invariant review MAJOR-2: a hello that settles a pending trade must do so BEFORE its
+            # own deaths are routed, so they follow the swapped link.
+            pt = self.pending_trade
+            if pt and pt.get("phase") == "applying" and pt.get("verdict", {}).get(player_id, "") is None:
+                # A fresh hello while this side never reported: a Lua reload lost its owed trade_done.
+                # The hello is sent only at the checkpoint, never inside the trade scene, so its party
+                # is evidence now rather than after the watchdog.
+                pt["verdict"][player_id] = "await"
+                self._record_trade(pt, "uncertain")
+            self._trade_evidence(player_id, party, from_hello=True)
 
         for m in party:
             key = m.get("key", "")
@@ -1935,7 +2030,7 @@ class SoulLinkState:
         # then re-queue party_mon + rebuild_start for any still-outstanding
         # keys so the auto-rebuild resumes seamlessly.
         rb = self.rebuild_pending.get(player_id)
-        if rb:
+        if rb and not hidden:
             queued_keys = list(rb.get("queued_keys", []))
             restored = set(rb.get("restored_keys", set()))
             party_now = self.party_keys[player_id]
