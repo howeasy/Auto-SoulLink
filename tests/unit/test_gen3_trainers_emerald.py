@@ -81,6 +81,23 @@ def test_roxanne():
         (f"Rematch {n}", "route_104") for n in range(1, 5)]
 
 
+def test_wattson_is_filed_under_mauville_city_not_route_110():
+    # [TRAINER_WATTSON] = 267 (+ 4 rematch tiers 778-781). Owner ruling 28 RC defect: Mauville City
+    # has no wild encounters of its own (unlike e.g. Petalburg/Lilycove), so it was missing from
+    # area_map.json entirely and Wattson's gym warped straight past it to the nearest wild-linked
+    # neighbour, Route 110 -- same "nearest-area rule" mechanism test_roxanne documents for
+    # Rustboro, but Mauville has NO trainers of its own outside the gym, so misfiling them under
+    # Route 110 hides them from that route's real trainers. Scoped to Mauville only (the flagged
+    # city); Rustboro/Fortree/Littleroot/Oldale/Fallarbor/Verdanturf have the identical area_map
+    # gap and are a separate owner call.
+    for tid in (267, 778, 779, 780, 781):
+        t = TRAINERS[str(tid)]
+        assert t["name"] == "Wattson"
+        assert t["area"] == "mauville_city", (tid, t["area"])
+    area_map = json.loads(GAME["area_map"].read_text(encoding="utf-8"))
+    assert "mauville_city" in area_map.values()
+
+
 def test_wallace_is_the_champion_and_steven_is_not():
     # Emerald's Champion is Wallace (TRAINER_CLASS_CHAMPION, 335); Steven (804) is a RIVAL-class
     # {PKMN} TRAINER fought postgame in Meteor Falls
