@@ -120,3 +120,41 @@ def test_default_moves_match_the_rom_learnsets(title):
            if gen.default_moves(rom[sp], lv) != gen.default_moves(ours.get(sp, []), lv)]
     assert bad == []
     assert len(rom) == 412
+
+
+TABLES = {"firered": DATA, "leafgreen": DATA,
+          "emerald": json.loads((ROOT / "data/games/gen3_emerald/emerald_trainers.json").read_text(encoding="utf-8"))}
+
+
+@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald"])
+def test_parties_match_the_rom(title):
+    """Every generated party against the clean ROM gTrainers: species, level, held item, and the
+    explicit moves or, for a default-moves party, GiveBoxMonInitialMoveset over the ROM's own
+    gLevelUpLearnsets. pret's one-line RS dummy parties (`= {DUMMY_TRAINER_MON};`, _IV, _STARMIE)
+    are emitted empty while the ROM holds the placeholder mons: those are only counted."""
+    from server.adapters.gen3_frlge import Gen3Adapter
+    from server.adapters.gen3_rom_tables import decode_trainers
+
+    rom = clean_rom(title)
+    ls = rom_learnsets(rom, title)
+    names = Gen3Adapter(is_rr=False, rom_type=title)
+    addr, size = symbol(title, "gTrainers")
+    table = TABLES[title]["trainers"]
+    dummies, bad = 0, []
+    for tid, tr in decode_trainers(rom, addr, size // 40).items():
+        ours = table[str(tid)]["party"]
+        if not ours and tr["party"]:
+            dummies += 1
+            continue
+        want = []
+        for mon in tr["party"]:
+            moves = mon["moves"] if "moves" in mon else gen.default_moves(ls[mon["species"]], mon["level"])
+            entry = {"species": names.calc_species(mon["species"]), "level": mon["level"]}
+            if mon.get("held_item"):
+                entry["item"] = names.calc_name("item", names.item_name(mon["held_item"]))
+            entry["moves"] = [names.calc_name("move", names.move_name(m)) for m in moves if m]
+            want.append(entry)
+        if want != ours:
+            bad.append(tid)
+    assert bad == []
+    assert dummies == {"firered": 103, "leafgreen": 103, "emerald": 0}[title]

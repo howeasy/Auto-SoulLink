@@ -41,8 +41,9 @@ Facts and where they come from (all pret, never Radical Red):
             RIVAL (May, Brendan, Wally, Steven), MAGMA_LEADER, AQUA_LEADER, MAGMA_ADMIN,
             AQUA_ADMIN (the team bosses and admins, as Giovanni and the Rocket admins in FR/LG).
             Key trainers carry level_cap (their highest party level) and, for starter-dependent
-            or rematch fights, fight_label: "Rival has <starter>"; FR/LG "Rematch"; Emerald
-            "Rematch <n>" for the _<n+1> tier.
+            or rematch fights, fight_label: "Rival has <starter>" (the starter whose evolution
+            line is in the party; the constant suffix names the rival's starter in FR/LG but the
+            player's in Emerald); FR/LG "Rematch"; Emerald "Rematch <n>" for the _<n+1> tier.
   calc_label the setdex trainer key (text before " | ") whose fight has exactly this party's
             species/level set; failing that, the key naming this trainer that shares the most of
             it (the setdex splits a fight with a repeated species over "(1)"/"(2)" keys).
@@ -371,6 +372,16 @@ def build(root: Path, area_map_path: Path | None = None, setdex_path: Path | Non
     tmaps = trainer_maps(root, maps)
     exact, by_key = setdex_fights(load_setdex(setdex_path or g["setdex"]))
 
+    evos = {sp: set(re.findall(r"SPECIES_\w+", body)) for sp, body in re.findall(
+        r"\[(SPECIES_\w+)\]\s*=\s*\{(.*?)\}\},", read(root / "src/data/pokemon/evolution.h"), re.S)}
+    lines = {}                                            # starter -> its evolution line
+    for s in g["starters"]:
+        line, todo = set(), [f"SPECIES_{s}"]
+        while todo:
+            line.add(sp := todo.pop())
+            todo += evos.get(sp, set()) - line
+        lines[s] = line
+
     rows = parse_trainers(root)
     area = {}
     for row in rows:
@@ -416,7 +427,11 @@ def build(root: Path, area_map_path: Path | None = None, setdex_path: Path | Non
         if key and party and "area" in t:
             t["key"] = True
             t["level_cap"] = max(p["level"] for p in party)
-            label = next((f"Rival has {s.title()}" for s in g["starters"] if row["const"].endswith("_" + s)), "")
+            label = ""
+            if any(row["const"].endswith("_" + s) for s in g["starters"]):
+                # FR/LG's suffix names the rival's starter, Emerald's the PLAYER's: read the party
+                mine = {m["species"] for m in parties[row["party"]]}
+                (label,) = [f"Rival has {s.title()}" for s in g["starters"] if lines[s] & mine]
             label = " · ".join(filter(None, [g["rematch_label"](row["const"], row["class"]), label]))
             if label:
                 t["fight_label"] = label
