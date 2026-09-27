@@ -7978,6 +7978,16 @@ class DuoRun:
         reply = re.findall(r"(?m)^RX .*$|^\[client\] \[SLink-gen3\] key_change .*$", tail)[:4]
         rows = [(e.get("status"), (e.get("a") or {}).get("key"), (e.get("b") or {}).get("key"))
                 for e in self._links_json()]
+        # OMP cx-6821246e F2: `rows` used to be printed only, never asserted. Named and checked so
+        # a future flip is deliberate: on THIS cut the census key_change is rejected (not retried),
+        # so the persisted pair stays alive under A's OLD key, B's unchanged. The day the census
+        # retry lands and the server accepts the new key, this must be updated on purpose.
+        kb = self._link_keys["b"]
+        expected_rows = [("alive", ka, kb)]
+        if rows != expected_rows:
+            problems.append(f"a: server links.json is {rows}, expected {expected_rows} "
+                            f"(a rejected npc_trade key_change should leave the pair alive under "
+                            f"A's OLD key)")
         self._gen3_raise(problems, f"npc_trade: {ka} -> {new} key_change npc_trade emitted after "
                                    f"trade_done; server reply (recorded, not judged): {reply}; "
                                    f"links.json {rows}")

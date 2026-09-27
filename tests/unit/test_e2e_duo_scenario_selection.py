@@ -1182,3 +1182,60 @@ def _assert_frlg_synth_reproduces(pack, kind, seed_scene):
         built, _ = fx.build_frlg_synth(f.read(), kind)
     with open(os.path.join(fixtures, f"{pack}_party_{kind}_synth.sav"), "rb") as f:
         assert f.read() == built
+
+
+@pytest.mark.parametrize("pack", ("firered", "leafgreen"))
+def test_nat_legs_trade_synth_abra_stats_match_its_own_personality(pack):
+    """OMP cx-6821246e F3: build_frlg_synth's trade branch used to fold `personality=pid` into the
+    same `mon.update(..., **_gen3_stats(ABRA_BASE, mon, 10))` call that computes stats from `mon`
+    -- a kwarg is evaluated before the call it's passed to runs, so stats were computed from the
+    OLD (pre-trade) party[1] mon's personality, not the new ABRA's. Recomputing stats from the
+    SAVED record's own decoded personality must equal what's stored -- an independent check that
+    doesn't just compare two runs of the same (possibly still-buggy) builder."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    path = os.path.join(REPO, "tests", "fixtures", "gen3", f"{pack}_party_trade_synth.sav")
+    with open(path, "rb") as f:
+        parsed = codec.parse_flash(f.read())
+    at = codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE   # slot 1
+    mon = codec.decode_party_mon(bytes(parsed["sb1"][at:at + codec.PARTY_MON_SIZE]))
+    assert mon["species"] == fx.SPECIES_ABRA and mon["personality"] % 25 == 0   # Hardy, per F3
+    recomputed = fx._gen3_stats(fx.ABRA_BASE, mon, 10)
+    assert {k: mon[k] for k in recomputed} == recomputed
+
+
+@pytest.mark.parametrize("break_it", ("empty_slot1", "foreign_ot"))
+def test_nat_legs_trade_synth_refuses_a_seed_with_no_owned_slot1_mon(break_it):
+    """OMP cx-6821246e F5: the builder must assert its own seed for the `trade` kind, not just
+    trust it -- an empty party slot 1, or one owned by someone other than the save's own trainer,
+    is refused instead of silently building a trade fixture around garbage."""
+    import gen3_fixtures as fx
+
+    from server.adapters import gen3_codec as codec
+
+    seed_path = os.path.join(REPO, "tests", "fixtures", "gen3", "firered_party_town.sav")
+    with open(seed_path, "rb") as f:
+        seed = f.read()
+    parsed = codec.parse_flash(seed)
+    sb1 = bytearray(parsed["sb1"])
+    at = codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE   # slot 1
+    mon = codec.decode_party_mon(bytes(sb1[at:at + codec.PARTY_MON_SIZE]))
+    if break_it == "empty_slot1":
+        mon["species"] = 0
+    else:
+        mon["ot_id"] ^= 0xFFFFFFFF
+    sb1[at:at + codec.PARTY_MON_SIZE] = codec.encode_party_mon(mon)
+    layout = codec.slot_layout()
+    base = codec.NUM_SECTORS_PER_SLOT * parsed["slot"]
+    objects = {"sb2": bytes(parsed["sb2"]), "sb1": bytes(sb1), "storage": bytes(parsed["storage"])}
+    tampered = bytearray(seed)
+    for entry in layout:
+        phys = next(s["index"] for s in parsed["sectors"][base:base + codec.NUM_SECTORS_PER_SLOT]
+                    if s["id"] == entry["id"])
+        chunk = objects[entry["object"]][entry["offset"]:entry["offset"] + entry["size"]]
+        tampered[phys * codec.SECTOR_SIZE:(phys + 1) * codec.SECTOR_SIZE] = \
+            codec.write_sector(chunk, entry["id"], parsed["counter"], layout)
+    with pytest.raises(ValueError, match="slot 1 is empty|OT mismatch"):
+        fx.build_frlg_synth(bytes(tampered), "trade")
