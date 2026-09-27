@@ -28,6 +28,24 @@ def _hello(pid, **extra):
             "trade_prepare": True, **extra}
 
 
+@pytest.mark.parametrize("title,opted_in", [("firered", True), ("emerald", True),
+                                            ("firered_rr", True), ("Red", False), ("Crystal", False)])
+def test_config_exposes_existing_run_id_only_to_recovery_clients(tmp_path, title, opted_in):
+    srv = SLinkServer(data_dir=str(tmp_path), run_id="run_journal_42")
+    commands = srv._dispatch("a", _hello("a", rom_type=title, artifact_kind="clean", party=[]))
+    config = next(c for c in commands if c["cmd"] == "config")
+    if opted_in:
+        assert config["run_id"] == "run_journal_42"
+    else:
+        assert "run_id" not in config
+
+
+def test_unmanaged_config_does_not_invent_a_run_identity(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    config = next(c for c in srv._dispatch("a", _hello("a")) if c["cmd"] == "config")
+    assert config["run_id"] == ""
+
+
 def _server(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     for pid in ("a", "b"):
@@ -381,6 +399,137 @@ def test_partner_confirm_names_the_withheld_party(tmp_path):
     assert srv.state.pending_trade is None
     assert any("party withheld" in c.get("text", "") for c in commands)
     assert not any("no longer available" in c.get("text", "") for c in commands)
+
+
+@pytest.mark.parametrize("traded,verdict", [(True, "committed"), (False, "rolled_back")])
+def test_final_settlement_sends_bookkeeping_receipt_to_both_sides(tmp_path, traded, verdict):
+    srv, _entry, token = _applying(tmp_path)
+    replies = {}
+    for pid in ("a", "b"):
+        donor = ("b" if pid == "a" else "a") if traded else pid
+        replies[pid] = srv._dispatch(pid, {"event": "trade_done", "token": token,
+                                           "new_key": KEYS[donor], "new_species": _mon(donor)["species_id"]})
+    replies["a"] += srv._dispatch("a", {"event": "tick"})
+    for pid in ("a", "b"):
+        assert [c for c in replies[pid] if c["cmd"] == "trade_final"] == [
+            {"cmd": "trade_final", "token": token, "verdict": verdict}]
+    saved = json.loads((tmp_path / "links.json").read_text())
+    assert saved["trade_finals"] == {
+        pid: [{"token": token, "verdict": verdict}] for pid in ("a", "b")}
+
+
+@pytest.mark.parametrize("action", ["commit", "rollback", "split"])
+def test_admin_final_receipt_preserves_barrier_and_replays_after_restart(tmp_path, action):
+    srv, _entry, token = _applying(tmp_path)
+    for pid, epoch in (("a", 11), ("b", 22)):
+        srv._dispatch(pid, _hello(pid, trade_outstanding=[{"token": token, "epoch": epoch}]))
+    sides = {"a": "traded", "b": "none"} if action == "split" else None
+    assert srv.state.resolve_trade(token, "adopt" if sides else action, sides) == (True, "")
+    for pid, epoch in (("a", 11), ("b", 22)):
+        commands = srv._dispatch(pid, {"event": "tick"})
+        assert {"cmd": "trade_final", "token": token, "epoch": epoch, "verdict": "resolved"} in commands
+        assert srv.state.party_hidden[pid] and srv.state.trade_recovery_pending[pid]
+    restarted = SLinkServer(data_dir=str(tmp_path), run_id="run_journal_42")
+    for _ in range(2):
+        commands = restarted._dispatch("a", _hello("a", trade_outstanding=[{"token": token, "epoch": 11}]))
+        receipt = {"cmd": "trade_final", "token": token, "epoch": 11, "verdict": "resolved"}
+        assert commands.count(receipt) == 1
+        assert next(i for i,c in enumerate(commands) if c["cmd"] == "config") < commands.index(receipt)
+        assert restarted.state.party_hidden["a"] and restarted.state.trade_recovery_pending["a"]
+
+
+def test_direct_split_emits_split_bookkeeping_receipts(tmp_path):
+    srv, _entry, token = _applying(tmp_path)
+    srv.state._split_trade(srv.state.pending_trade, "a")
+    for pid in ("a", "b"):
+        assert {"cmd": "trade_final", "token": token, "verdict": "split"} in srv._dispatch(pid, {"event": "tick"})
+
+
+def test_final_history_is_bounded_and_replay_is_per_side(tmp_path):
+    srv = _server(tmp_path)
+    saved = json.loads((tmp_path / "links.json").read_text())
+    limit = srv.state.TRADE_FINAL_LIMIT
+    saved["trade_finals"] = {
+        "a": [{"token": f"old-{i}", "verdict": "committed"} for i in range(limit + 1)],
+        "b": [{"token": "only-b", "verdict": "rolled_back"}]}
+    (tmp_path / "links.json").write_text(json.dumps(saved))
+    srv, _entry, token = _applying(tmp_path)
+    for pid in ("a", "b"):
+        srv._dispatch(pid, {"event": "trade_done", "token": token, "new_key": KEYS[pid], "new_species": 0})
+    restarted = SLinkServer(data_dir=str(tmp_path))
+    assert len(restarted.state.trade_finals["a"]) == limit
+    assert "old-0" not in restarted.state.trade_finals["a"] and "old-1" not in restarted.state.trade_finals["a"]
+    records = [{"token": value, "epoch": 17} for value in ("old-0", "old-1", "only-b", token, "unknown", token)]
+    commands = restarted._dispatch("a", _hello("a", trade_outstanding=records))
+    assert [c for c in commands if c["cmd"] == "trade_final"] == [
+        {"cmd": "trade_final", "token": token, "verdict": "rolled_back", "epoch": 17}]
+    assert restarted.state.party_hidden["a"]
+    commands = restarted._dispatch("b", _hello("b", trade_outstanding=[{"token": "only-b", "epoch": 19}]))
+    assert {"cmd": "trade_final", "token": "only-b", "epoch": 19, "verdict": "rolled_back"} in commands
+
+
+def test_no_final_receipt_before_final_record_is_durable(tmp_path, monkeypatch):
+    srv, _entry, token = _applying(tmp_path)
+    write = srv.state._atomic_write_json
+    def fail(*_args):
+        raise OSError("write unavailable")
+    monkeypatch.setattr(srv.state, "_atomic_write_json", fail)
+    for pid in ("a", "b"):
+        commands = srv._dispatch(pid, {"event": "trade_done", "token": token,
+                                      "new_key": KEYS[pid], "new_species": 0})
+        assert not any(c["cmd"] == "trade_final" for c in commands)
+    assert srv.state.save_failed and srv.state.pending_trade is None
+    disk = json.loads((tmp_path / "links.json").read_text())
+    assert not disk.get("trade_finals", {}).get("a")
+    monkeypatch.setattr(srv.state, "_atomic_write_json", write)
+    commands = srv._dispatch("a", _hello("a", trade_outstanding=[{"token": token, "epoch": 7}]))
+    assert {"cmd": "trade_final", "token": token, "epoch": 7, "verdict": "rolled_back"} in commands
+    assert not srv.state.save_failed and srv.state.party_hidden["a"]
+
+
+def test_wrong_save_cannot_receive_queued_or_replayed_final_receipt(tmp_path):
+    srv, _entry, token = _applying(tmp_path)
+    for pid in ("a", "b"):
+        srv._dispatch(pid, {"event": "trade_done", "token": token, "new_key": KEYS[pid], "new_species": 0})
+    commands = srv._dispatch("a", _hello("a", ot_id="WRONG", trade_outstanding=[{"token": token, "epoch": 7}]))
+    assert not any(c["cmd"] == "trade_final" for c in commands)
+    assert srv.state.identity_error["a"]
+    commands = srv._dispatch("a", _hello("a", trade_outstanding=[{"token": token, "epoch": 7}]))
+    assert [c for c in commands if c["cmd"] == "trade_final"] == [
+        {"cmd": "trade_final", "token": token, "epoch": 7, "verdict": "rolled_back"}]
+
+
+def test_old_final_receipt_does_not_settle_a_new_trade_or_clear_recovery(tmp_path):
+    srv, entry, old_token = _applying(tmp_path)
+    for pid in ("a", "b"):
+        srv._dispatch(pid, {"event": "trade_done", "token": old_token, "new_key": KEYS[pid], "new_species": 0})
+        srv._dispatch(pid, _hello(pid))
+    srv._dispatch("a", {"event": "trade_request"})
+    token = srv.state.pending_trade["token"]
+    srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0})
+    srv._dispatch("a", {"event": "mon_chosen", "token": token, "slot": 0})
+    srv._dispatch("b", {"event": "menu_result", "token": token, "choice": 1})
+    for pid in ("a", "b"):
+        srv._dispatch(pid, {"event": "apply_ready", "token": token, "ok": True})
+    commands = srv._dispatch("a", _hello("a", party=[_mon("b")],
+                                         trade_outstanding=[{"token": old_token, "epoch": 5}]))
+    assert {"cmd": "trade_final", "token": old_token, "epoch": 5, "verdict": "rolled_back"} in commands
+    assert srv.state.pending_trade["token"] == token
+    assert srv.state.pending_trade["verdict"] == {"a": None, "b": None}
+    assert (entry.a.key, entry.b.key) == (KEYS["a"], KEYS["b"])
+    assert srv.state.party_hidden["a"] and srv.state.trade_recovery_pending["a"]
+
+
+def test_final_receipt_is_one_way_bookkeeping_with_a_bounded_epoch():
+    from tests.unit import protocol_schema as schema
+    assert "trade_final" not in schema.ACKS and "trade_final" not in schema.DEFERRED
+    for verdict in ("committed", "rolled_back", "split", "resolved"):
+        assert not schema.validate_command({"cmd": "trade_final", "token": "t1", "verdict": verdict})
+        assert not schema.validate_command({"cmd": "trade_final", "token": "t1", "verdict": verdict,
+                                            "epoch": 0xFFFFFFFF})
+    for fields in ({"token": ""}, {"verdict": "await"}, {"epoch": True}, {"epoch": 0},
+                   {"epoch": 1.5}, {"epoch": None}, {"epoch": 2**32}):
+        assert schema.validate_command({"cmd": "trade_final", "token": "t1", "verdict": "committed", **fields})
 
 
 def _legacy_trace(path, title, decorated, rejected=False):

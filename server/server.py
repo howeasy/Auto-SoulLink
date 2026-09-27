@@ -2057,6 +2057,18 @@ class SLinkServer:
             for index, mon in enumerate(party) if mon.get("key")
         }
 
+    def _with_run_identity(self, commands: list) -> list:
+        """Bind recovery clients to the existing run; an unmanaged run has no fabricated ID."""
+        if self.adapter.supports_trade_recovery():
+            for command in commands:
+                if command.get("cmd") == "config":
+                    command["run_id"] = self._run_id or ""
+            if any(c.get("cmd") == "config" for c in commands):
+                # A fresh client must learn the run binding before retiring journal records.
+                commands = [c for c in commands if c.get("cmd") != "trade_final"] + [
+                    c for c in commands if c.get("cmd") == "trade_final"]
+        return commands
+
     def _dispatch(self, player_id: str, msg: dict) -> list:
         event = msg.get("event", "unknown")
         # enemy_party is client JSON read by every battle view: keep only a list of objects.
@@ -2191,7 +2203,7 @@ class SLinkServer:
                 _rollback_hello()
                 self._log_event(player_id, "hello",
                                 "REJECTED — wrong save/slot", area or loc)
-                return cmds
+                return self._with_run_identity(cmds)
 
             if defer_trade_census:
                 self._ingest_box_census(player_id, msg)
@@ -2286,7 +2298,7 @@ class SLinkServer:
                 self.battle_state[player_id]["is_trainer_battle"] = bool(msg["is_trainer_battle"])
             if "enemy_party" in msg:
                 self.battle_state[player_id]["enemy_party"] = msg["enemy_party"]
-            return cmds
+            return self._with_run_identity(cmds)
         elif event == "area_enter":
             area = msg.get("area_id", "")
             loc  = msg.get("loc_name", "")
@@ -2617,7 +2629,7 @@ class SLinkServer:
                                         f"{'⚠' if _kind == 'violation' else '🔁'} {_prompt_text}", _area_id)
 
         self._emit_obs_triggers(player_id, msg, cmds, _pre_area_state, _pre_battle)
-        return cmds
+        return self._with_run_identity(cmds)
 
 
     def _emit_obs_triggers(self, player_id: str, msg: dict, cmds: list,

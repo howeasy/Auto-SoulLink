@@ -296,6 +296,7 @@ class SoulLinkState:
         # A declared durable-trade lease needs a later visible hello, not a tick.
         self.trade_recovery_pending: dict[str, bool] = {"a": False, "b": False}
         self.trade_recovery_errors: dict[str, str] = {"a": "", "b": ""}
+        self.trade_finals: dict[str, dict[str, dict]] = {"a": {}, "b": {}}
         # KEY-SCOPE-5: {player: {key: slot}} of the latest and the previous party snapshot (in-memory)
         self.party_slots: dict[str, dict[str, int]] = {}
         self.prev_party_slots: dict[str, dict[str, int]] = {}
@@ -772,6 +773,7 @@ class SoulLinkState:
     # Because the link is only mutated ATOMICALLY in _handle_trade_done (once BOTH sides report), an
     # abort here can never leave the link half-swapped — it just frees the slot.
     TRADE_WATCHDOG_EVENTS = 4000
+    TRADE_FINAL_LIMIT = 256
     # Ticks to suppress party-key drift reconciliation on each side after a trade completes, while the
     # clients' party snapshots settle (prevents the post-trade spurious "Unbox" party_mon).
     TRADE_SETTLE_TICKS = 12
@@ -1291,8 +1293,10 @@ class SoulLinkState:
             log.info(f"trade {pt['token']} did not happen on either side — rolled back")
             self._record_trade(pt, "rolled_back")
             self.pending_trade = None
+            self._remember_trade_final(pt, "rolled_back")
             self._replay_trade_events(pt)
             self._save()
+            self._announce_trade_final(pt)
             for pid in ("a", "b"):
                 self.queued_commands[pid].append({
                     "cmd": "msgbox", "text": "Trade did not go through.", "fb": "prompt"})
@@ -1369,6 +1373,39 @@ class SoulLinkState:
         if self.on_trade_outcome:
             self.on_trade_outcome(dict(self.trade_last))
 
+    def _remember_trade_final(self, pt: dict, verdict: str) -> None:
+        """Bookkeeping only. Call after settlement, before its durable state write."""
+        if not self.adapter.supports_trade_recovery():
+            return
+        verdict = pt.get("final_verdict", verdict)
+        for pid in ("a", "b"):
+            finals = self.trade_finals[pid]
+            finals.setdefault(pt["token"], {"token": pt["token"], "verdict": verdict})
+            while len(finals) > self.TRADE_FINAL_LIMIT:
+                del finals[next(iter(finals))]
+
+    def _queue_trade_final(self, player_id: str, token: str, epoch: int | None = None) -> None:
+        if not self.adapter.supports_trade_recovery() or self.save_failed:
+            return  # never retire the client's journal before the ledger is durable
+        final = self.trade_finals[player_id].get(token)
+        if not final:
+            return
+        queued = self.queued_commands[player_id]
+        prior = [c for c in queued if c.get("cmd") == "trade_final" and c.get("token") == token]
+        if epoch is None and prior:
+            return
+        queued[:] = [c for c in queued if not (c in prior and ("epoch" not in c or c["epoch"] == epoch))]
+        command = {"cmd": "trade_final", "token": token, "verdict": final["verdict"]}
+        if epoch is not None:
+            command["epoch"] = epoch
+        queued.append(command)
+
+    def _announce_trade_final(self, pt: dict) -> None:
+        for pid in ("a", "b"):
+            epochs = pt.get("recovery_epochs", {}).get(pid) or [None]
+            for epoch in epochs:
+                self._queue_trade_final(pid, pt["token"], epoch)
+
     def trade_problem(self) -> dict | None:
         """The uncertain/conflicted trade for the status page, or None."""
         pt = self.pending_trade
@@ -1427,14 +1464,18 @@ class SoulLinkState:
                                          if not (c.get("cmd") in ("apply_trade", "apply_prepare")
                                                  and c.get("token") == pt["token"])]
         pt["problem"] = f"resolved by admin: {action}"
+        if self.adapter.supports_trade_recovery():
+            pt["final_verdict"] = "resolved"
         log.warning(f"trade {pt['token']} {pt['problem']} (verdict {v}) -> {sides}")
         if sides["a"] == sides["b"] == "traded":
             self._commit_trade(pt)
         elif sides["a"] == sides["b"] == "none":
             self._record_trade(pt, "rolled_back")
             self.pending_trade = None
+            self._remember_trade_final(pt, "rolled_back")
             self._replay_trade_events(pt)
             self._save()
+            self._announce_trade_final(pt)
         else:
             self._split_trade(pt, "a" if sides["a"] == "traded" else "b")
         return True, ""
@@ -1463,11 +1504,13 @@ class SoulLinkState:
             self.party_keys[taker].add(nk)
         clash = self._index_traded(pt, entry)
         self.pending_trade = None
+        self._remember_trade_final(pt, "split")
         self._replay_trade_events(pt)
         self._retire_traded_clash(entry, clash)
         self._save()
         log.warning(f"trade {pt['token']} split: {taker} holds a copy {nk}, its {old} is gone")
         self._record_trade(pt, "split")
+        self._announce_trade_final(pt)
         self._trade_settle_ticks[taker] = self.TRADE_SETTLE_TICKS
 
     def _load_mon_stats(self, saved: dict) -> dict:
@@ -1571,11 +1614,13 @@ class SoulLinkState:
                 "cmd": "msgbox", "text": f"Traded {gives} for {gets}!",
                 "r": 100, "g": 255, "b": 160, "frames": 300})
         self.pending_trade = None
+        self._remember_trade_final(pt, "committed")
         self._replay_trade_events(pt)                   # MAJOR-2: after the swap, against the real holders
         self._retire_traded_clash(entry, clash)
         self._save()
         log.info(f"trade complete (token {pt['token']})")
         self._record_trade(pt, "committed")
+        self._announce_trade_final(pt)
         # Arm the post-trade settle window on BOTH sides: the swap is party↔party, so suppress the
         # drift reconciler while each client's party read settles (no spurious "Unbox" party_mon).
         self._trade_settle_ticks = {"a": self.TRADE_SETTLE_TICKS, "b": self.TRADE_SETTLE_TICKS}
@@ -1737,6 +1782,17 @@ class SoulLinkState:
                     state.party_hidden[pid] = (row["hidden"] if valid else True) or state.trade_recovery_pending[pid]
                     problem = row.get("problem", "") if valid else "Stored recovery information is unreadable"
                     state.trade_recovery_errors[pid] = problem if isinstance(problem, str) else "Stored recovery information is unreadable"
+            if state.adapter.supports_trade_recovery():
+                saved_finals = data.get("trade_finals", {})
+                for pid in ("a", "b"):
+                    rows = saved_finals.get(pid, []) if isinstance(saved_finals, dict) else []
+                    for row in rows if isinstance(rows, list) else []:
+                        if (isinstance(row, dict) and isinstance(row.get("token"), str) and row["token"]
+                                and isinstance(row.get("verdict"), str)
+                                and row["verdict"] in ("committed", "rolled_back", "split", "resolved")
+                                and (not state.pending_trade or row["token"] != state.pending_trade["token"])):
+                            state.trade_finals[pid][row["token"]] = {"token": row["token"], "verdict": row["verdict"]}
+                    state.trade_finals[pid] = dict(list(state.trade_finals[pid].items())[-state.TRADE_FINAL_LIMIT:])
             log.info(f"Loaded {len(state.links)} links from {state._links_path}")
         except UnsafeGameMigration:
             # Operator-facing and fatal: this run must not start under either adapter.
@@ -2114,6 +2170,10 @@ class SoulLinkState:
         # Re-send game_over if the run was already over before this reconnect
         if self.run_over:
             self.queued_commands[player_id].append({"cmd": "game_over"})
+
+        if self.adapter.supports_trade_recovery() and not error:
+            for record in records:
+                self._queue_trade_final(player_id, record["token"], record["epoch"])
 
     def _adapter_for(self, player_id: str):
         return self.player_adapter_for(player_id) if self.player_adapter_for else self.adapter
@@ -4520,6 +4580,7 @@ class SoulLinkState:
                     pid: {"pending": self.trade_recovery_pending[pid], "hidden": self.party_hidden[pid],
                           "problem": self.trade_recovery_errors[pid]}
                     for pid in ("a", "b")}
+                payload["trade_finals"] = {pid: list(self.trade_finals[pid].values()) for pid in ("a", "b")}
             self._atomic_write_json(self._links_path, payload)
             self.save_failed = ""
         except OSError as e:

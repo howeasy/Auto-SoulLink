@@ -30,7 +30,8 @@ query/offer/eligible-mask protocol remains unchanged.
 
 ## A. Admin resolution does not authorize unsaved RAM
 
-Admin `resolve_trade` queues no terminal client command. There **is** a server-driven lease
+At the base cut, admin `resolve_trade` queued no terminal client command. T4-R3 now adds
+a bookkeeping-only `trade_final` receipt; it does not clear a reload/hidden barrier. There **is** a server-driven lease
 command, `withdraw_trade`, in the applying watchdog (`server/state.py:715-720` at the base;
 Gen 1 `lua/gen1/client.lua:2128-2135`, Gen 2 `lua/gen2/client.lua:799-807`). Admin resolution
 deliberately does not reuse it. Withdrawal can cancel an unpicked APPLY; it cannot make an
@@ -239,4 +240,90 @@ wrong-save/rejected-hello sequence receipts are:
 | Gold | 5059 | `401051be4090e7f99122869cb0253d0aadfd29d206c16ac083f63eaf053e2b2d` |
 | Silver | 5061 | `d46e948859ead03b7b1c34b725f68a3769402f10601fa303e201c1687a3d9c91` |
 
-R2 full-suite result and commit identifiers will be appended in the completion receipt.
+R2 implementation: `f78c1b064c7f0118b33e8b9f9d2c69c9bb202af8`.
+Macro-import follow-up: `ca98393e742785813a037c7ef18a7ac3f0eca9f5`.
+
+
+R2 first full run at `f78c1b06`: **3 failed, 15449 passed, 362 skipped in 902.40s**.
+All three failures were existing accessibility tests importing `_board.html` macros without
+`status`. The new banner called `status.players.items()` during that import. A separate
+follow-up guards the banner with `status is defined and status.players is defined`; no test
+was weakened. Accessibility + existing trade banners + T4 controls: **90 passed in 3.90s**.
+The required full rerun is recorded separately; the failing output remains in
+`.cache/t4-r2-full-unit.txt`.
+
+
+## R2 final completion receipt — 2026-09-27
+
+The full rerun used the same prerequisite bindings as the R1 receipt above and the source at
+`ca98393e`. Neither the original R1 implementation nor its receipt was amended.
+
+```text
+python -m pytest tests/unit -q -p no:randomly -n 4 --dist=loadfile
+15452 passed, 362 skipped in 891.96s (0:14:51)
+Exit code: 0
+```
+
+Full output: `.cache/t4-r2-final-full-unit.txt`.
+SHA-256: `0faa7ecafa8aa37d39f247676b73923eb265568817cd70fd8a9e6fe442ee1645`.
+The first failed full-run output is retained separately. Final targeted controls: 61 in the
+T4 test file; 197 trade/state/client/board tests; 90 accessibility/banner/T4 tests after the
+macro-import fix. Final source-citation and whitespace checks pass. No client/producer or READY
+change was made, and no physical trade qualification is claimed.
+
+
+## T4-R3: finalized-token bookkeeping
+
+Added on the coordinator's 2026-09-27 instruction after T4-R2; Emerald-2 consumes this shape.
+
+- TCP `config` adds `run_id` only for `supports_trade_recovery()` adapters, passing through
+  the server's existing `_run_id`. An unmanaged server sends an empty string; it does not
+  invent a shared or random identity. The client must require a nonempty ID before binding
+  a durable journal. This is the existing run label, not a new reset/rollback nonce.
+- `trade_final {token, epoch?, verdict}` is one-way bookkeeping, not a native write command.
+  Natural paired settlement uses `committed` / `rolled_back`; a direct split uses `split`;
+  explicit admin resolution uses `resolved` regardless of its selected link outcome.
+- Each side retains its newest **256** final tokens and verdicts in `links.json.trade_finals`.
+  The terminal record is added before the settlement save. Receipts are queued only after
+  a successful save, never on an unpersisted final. Unknown/evicted/malformed records do not
+  become final merely because the client asks about them.
+- A recovery hello listing a known-final token receives that side's receipt with its validated,
+  normalized epoch echoed. The run's `config` precedes final receipts. Repeated declarations
+  coalesce duplicate receipts. Wrong-save hellos do not receive queued or replayed finals.
+- Neither remembering nor sending a final changes `party_hidden`, `trade_recovery_pending`,
+  `hello_only`, or a pending trade's verdict. An old final receipt cannot settle a new trade.
+  The client may retire the journal's bookkeeping entry, but must retain any separately
+  required durable reload barrier until independently qualified recovery.
+- Gen 1/2 emit no `run_id` extension or `trade_final`, persist no final ledger, and retain
+  identical command/state bytes. All ten normal/rejected-hello replays still match the original
+  `cd5c1697` modules and the hashes in the R1/R2 tables above.
+
+R3 controls in `test_gen3_trade_server.py`: configuration opt-in and unmanaged identity;
+committed/rolled-back/admin/direct-split receipts; epoch-preserving restart replay without
+barrier release; per-side retention/eviction; save failure suppressing premature receipts;
+wrong-save and old-token isolation; and one-way command/schema validation. The protocol
+schema exposes the new config field and command and the already-agreed recovery hello fields.
+Client/native/READY files remain unchanged. Full verification follows in the R3 receipt.
+
+R3 targeted verification: **269 passed in 6.24s** across trade/state/client, wire schema,
+hello, board and accessibility tests. Final source citations and whitespace checks pass;
+the full suite will be recorded against the committed R3 cut.
+
+
+## R3 completion receipt — 2026-09-27
+
+Implementation: `2cf0c3b276cbf71015914c237cfb175f34de28b4`. The full run used the same
+pinned local prerequisite bindings as R1/R2, with source unchanged throughout:
+
+```text
+python -m pytest tests/unit -q -p no:randomly -n 4 --dist=loadfile
+15469 passed, 362 skipped in 911.62s (0:15:11)
+Exit code: 0
+```
+
+Full output: `.cache/t4-r3-full-unit.txt`; SHA-256
+`28e618abce4232923f75e8614d98b6c3adf691f8b80c30900415f556558677f3`.
+The T4 test file now has 78 controls; the combined targeted suite passed 269 tests.
+Both normal and rejected-hello traces remain byte-identical to `cd5c1697` for all five GB
+titles; managed-run config controls separately verify omission of `run_id` for Gen 1/2.
+No client/producer/READY change or physical qualification is part of this card.
