@@ -44,7 +44,17 @@ Integration `claude/gen3-integration` @5e001952 in C:/slink-wt/g3-int.
    - Option (a): the owner runs `git -C C:/slink-wt/g3-rrdur merge --no-ff <integration head>`.
    - Option (b): the owner approves merging claude/gen3-rr-durable into integration after T2, then a fresh worker continues from integration.
    - Remaining work: the Lua RR binding (isolated durable descriptor per Emerald's ruling P1-P4), the UPS rebuild + re-pin, porting 3 live tests off the refused opcodes 16/18/21, the native_absent_gen3 redesign (apply_prepare-based), and the live RR trade/decline/native_absent rows.
-3. **EXP-X23** (Opus subagent, C:/slink-wt/g3-exp `claude/gen3-exp-x23`): expansion X2/X3, then the XG1 request draft. Read its handback; XG1/XG2 are owner gates (XG2: the shinyModifier shared-state decision).
+3. **EXP-X23** (Opus subagent, C:/slink-wt/g3-exp `claude/gen3-exp-x23` **@1932c787**, base 4fa041bf, full suite 12427/0 at 7c550558): expansion X2+X3 done.
+   - Live: faint_cmd, boxsync, whiteout and link_gen3 PASS on gen3_exp. faint_cmd and boxsync must be re-run at the final cut.
+   - linked_faint_active is not run on gen3_exp: no in-battle faint plan yet for the expansion battle structs (XG3).
+   - Drafts: docs/gen3_emerald/XG1_request_draft.md and XG2_request_draft.md.
+   - OWNER DECISIONS (XG2 section 6):
+     (1) shinyModifier: A carry it (touches shared state.py, so a Gen 2 re-sweep), B record it as a limit, C B now and A in X4. The worker recommends C.
+     (2) accept the exp_*.sav SYNTH fixtures;
+     (3) gen3_exp registered but unrouted;
+     (4) the second compiler probe as the source of harness facts.
+   - It touches the shared lua/gen3 safety/reads/client/entry and server/adapters. Merge after T2, run the full suite, OMP review, ping Gen 2.
+   - Needs gitignored inputs: .cache/expansion-output/reference (the build from hgbox), the .cache/expansion-src junction, and .cache/x1-probe/probe.o.
 4. **Final cuts** per title: `python tools/gen3_final_cut.py --cut <sha> --title frlg|rr|emerald --lane C:/slink-wt/g3-lane`.
 5. **Landing prep:** refresh `claude/gen3-landing-prep` (C:/slink-wt/rv-land) against master, ping Gen 2, then ONE landing request to the owner.
 
