@@ -912,11 +912,15 @@ def parse_calc_sets(path: Path) -> list[dict]:
     the same shape as parse_boss_sheet.
     """
     if not path.exists():
-        return []
+        raise FileNotFoundError(
+            f"{path}: primary trainer-party source is missing -- this would "
+            f"silently drop every calc-sourced trainer from the roster rather "
+            f"than fail loudly."
+        )
     txt = path.read_text(encoding="utf-8")
     m = re.match(r"\s*var\s+SETDEX_SV\s*=\s*(\{.+\});\s*$", txt, re.S)
     if not m:
-        return []
+        raise ValueError(f"{path}: SETDEX_SV assignment not found/parseable")
     data = json.loads(m.group(1))
     # Invert: trainer_label → [mon, ...]
     raw: dict[str, list[dict]] = defaultdict(list)
@@ -1518,9 +1522,11 @@ def _build_roster(src: Path) -> tuple[dict, list[str]]:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--src",
-                        default=str(_REPO_ROOT / "rr_trainers_dump.xlsx"),
-                        help="Path to the downloaded xlsx (default: repo root)")
+    parser.add_argument("--src", default=None,
+                        help="Path to a downloaded xlsx, overriding the pinned "
+                             "cache (data/gen3_rr_sources.lock.json's "
+                             "rr_priority_trainers_sheet_xlsx) -- NOT hash-"
+                             "verified; default is the pinned cache.")
     parser.add_argument("--out", default=str(_OUT_PATH),
                         help=f"Output path (default: {_OUT_PATH})")
     parser.add_argument("--from-json", action="store_true",
@@ -1566,10 +1572,17 @@ def main() -> int:
         print("openpyxl required: pip install openpyxl", file=sys.stderr)
         return 1
 
-    if args.check:
+    if args.check or args.src is None:
         from fetch_rr_sources import cached_source_path
         src = cached_source_path("rr_priority_trainers_sheet_xlsx")
+        if args.src is not None:
+            print(f"NOTE: --src {args.src!r} ignored -- --check always reads "
+                  f"the pinned cache.", file=sys.stderr)
     else:
+        print(f"WARNING: --src {args.src} overrides the pinned cache "
+              f"(data/gen3_rr_sources.lock.json's "
+              f"rr_priority_trainers_sheet_xlsx) -- its content is NOT hash-"
+              f"verified against the pin.", file=sys.stderr)
         src = Path(args.src)
         if not src.exists():
             print(f"Source xlsx not found: {src}", file=sys.stderr)
@@ -1590,11 +1603,13 @@ def main() -> int:
                   f"({len(out_doc['parties'])} trainers). Note: this only checks "
                   f"the JSON roster, not the calc/slink_priority.js supplement.")
             return 0
+        from fetch_rr_sources import diff_snippet
         print(f"DRIFT: regenerated roster ({len(regen)} bytes) != "
               f"{out} ({len(committed)} bytes) -- the pinned spreadsheet snapshot "
               "no longer reproduces the committed roster (see the lock file's "
               "rr_priority_trainers_sheet_xlsx note: this is a community-edited "
               "Google Sheet with no immutable revision).", file=sys.stderr)
+        print(diff_snippet(committed, regen), file=sys.stderr)
         return 1
 
     _write_outputs(out_doc, Path(args.out))

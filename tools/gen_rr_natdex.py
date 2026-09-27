@@ -24,12 +24,13 @@ Usage:
 """
 
 import argparse
+import ast
 import re
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fetch_rr_sources import cached_source  # noqa: E402
+from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 POKEMON_DATA_PATH = _REPO_ROOT / "server" / "pokemon_data.py"
@@ -465,12 +466,21 @@ def _build_rr_to_nat(data: str) -> tuple[dict[int, int], list[tuple[int, str]]]:
 
 
 def _committed_cfru_to_national() -> dict[int, int]:
-    """Parse the CFRU_TO_NATIONAL dict literal out of pokemon_data.py."""
+    """Parse the CFRU_TO_NATIONAL dict literal out of pokemon_data.py.
+
+    Uses ast rather than a regex over "\\n}" -- a lazy regex like that stops
+    at the first line that's just a closing brace, which is fragile against
+    anything added to the file later (a nested literal, a trailing comment).
+    ast.literal_eval on the assignment's own AST node can't run past the
+    dict's real end.
+    """
     text = POKEMON_DATA_PATH.read_text(encoding="utf-8")
-    m = re.search(r"CFRU_TO_NATIONAL: dict\[int, int\] = \{(.*?)\n\}", text, re.S)
-    if not m:
-        raise ValueError(f"CFRU_TO_NATIONAL not found in {POKEMON_DATA_PATH}")
-    return {int(k): int(v) for k, v in re.findall(r"(\d+):(\d+)", m.group(1))}
+    tree = ast.parse(text, filename=str(POKEMON_DATA_PATH))
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+                and node.target.id == "CFRU_TO_NATIONAL"):
+            return ast.literal_eval(node.value)
+    raise ValueError(f"CFRU_TO_NATIONAL not found in {POKEMON_DATA_PATH}")
 
 
 def main() -> int:
@@ -499,6 +509,11 @@ def main() -> int:
               file=sys.stderr)
         print(f"  regen-side sample: {list(only_regen.items())[:10]}", file=sys.stderr)
         print(f"  committed-side sample: {list(only_committed.items())[:10]}", file=sys.stderr)
+
+        def _fmt(d: dict[int, int]) -> str:
+            return "".join(f"{k}:{v}\n" for k, v in sorted(d.items()))
+
+        print(diff_snippet(_fmt(committed), _fmt(rr_to_nat)), file=sys.stderr)
         return 1
 
     if unmapped:

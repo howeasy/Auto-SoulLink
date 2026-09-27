@@ -37,7 +37,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fetch_rr_sources import cached_source  # noqa: E402
+from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "data", "games", "gen3_frlge"))
@@ -379,7 +379,8 @@ def main() -> int:
                   f"({n_entries} entries across {n_areas} areas).")
             return 0
         print(f"DRIFT: regenerated output ({len(regen)} bytes) != "
-              f"{OUTPUT_PATH} ({len(committed)} bytes)", file=sys.stderr)
+              f"{OUTPUT_PATH} ({len(committed)} bytes)\n"
+              f"{diff_snippet(committed, regen)}", file=sys.stderr)
         return 1
 
     # Report unresolved species (species_id == 0) for diagnostics
