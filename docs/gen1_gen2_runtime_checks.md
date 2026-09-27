@@ -173,7 +173,7 @@ SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py -q                    # two-in
 `--scenario all` is filtered by `--game` and names what it drops, so `--game gen2_new
 --scenario all` runs exactly `link` and `gen2_faint` above, across the Crystal/Gold/Silver
 pairings. It did not always: the per-scenario `games` key sat in the runner declared,
-documented and read by nothing but `tests/e2e/test_duo.py`, so `all` expanded to the whole
+documented and read by nothing but the old Gen 3 savestate wrapper (now deleted), so `all` expanded to the whole
 table and launched Gen 3-only scenarios against a Game Boy, where they died on a savestate no
 GB fixture has. `scenarios_for()` is now the single source of truth for that question and
 `tests/unit/test_e2e_duo_scenario_selection.py` pins it. To see the selection without booting

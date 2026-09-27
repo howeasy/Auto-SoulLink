@@ -696,6 +696,25 @@ def generate_emerald(check=False, *, source=None, output_dir=None, expansion=Fal
             )
         area_map[key] = area_id
 
+    # E5-CITYLINK (owner ruling 28 RC defect): MauvilleCity has no wild encounters of its own
+    # (unlike Petalburg/Lilycove etc.), so the wild loop above never gives it a named area, and
+    # trainer_maps.area_of_map()'s BFS (tools/gen_gen3_trainers.py) walks straight past Wattson's
+    # gym to the nearest wild-linked neighbour, Route 110, instead of stopping at Mauville City --
+    # the only city in the game with no trainers of its own outside the gym, so this hid the gym
+    # trainers inside Route 110's list entirely. Scoped to the one flagged city (not every town
+    # missing a wild-encounter entry): Rustboro/Fortree/Littleroot/Oldale/Fallarbor/Verdanturf have
+    # the identical gap and are a separate owner call.
+    if not expansion:
+        key = key_of_folder["MauvilleCity"]
+        if key not in area_map:
+            area_id = area_id_for(id_of_folder["MauvilleCity"])
+            identity = mapsec_of_folder["MauvilleCity"]
+            prior = _area_identity.setdefault(area_id, identity)
+            if prior != identity:
+                raise ValueError(f"MauvilleCity backfill: area_id {area_id!r} ({identity}) "
+                                 f"collides with {prior!r} already claimed there")
+            area_map[key] = area_id
+
     # E3-GIFTLINK: every statics.json map gets a NAMED area, as FR/LG's gift and legendary maps
     # do (route_4_pokecenter / navel_rock), else the client sends "" and the server drops it.
     #   static  -> its MAPSEC area (the wild rule above; a Sky Pillar floor joins sky_pillar)

@@ -90,6 +90,16 @@ GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_
                "gen3": "gen3_frlg", "gen3_e": "gen3_emerald"}
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
                 "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald"}
+# Owner ruling 37 (2026-09-27): a Radical Red run cannot be randomized at all. It is absent
+# from GAME_FAMILY above, which the UI honours (randomizer_games), but _game_family() then
+# answers None and `handle_cartridges` SKIPPED its "this run is X; these are Y cartridges"
+# refusal -- so a Radical Red run accepted a randomization request, ran Java, and recorded
+# randomized cartridges. The table makes the refusal explicit and by name instead of relying
+# on the absence that caused it. Randomized FireRed / LeafGreen / Emerald are untouched.
+NON_RANDOMIZABLE_GAMES = {
+    "gen3_rr": ("Randomized Radical Red is not supported in this release; "
+                "the randomizer supports FireRed / LeafGreen / Emerald"),
+}
 
 
 def _game_family(game: str | None) -> str | None:
@@ -1423,6 +1433,10 @@ class RunManager:
         run = _find_run(runs, run_id)
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        # A run whose game cannot be randomized is refused by name, before any ROM is read
+        # or any jar is resolved -- the request itself is what ruling 37 removes.
+        if refused := NON_RANDOMIZABLE_GAMES.get(run.get("game") or ""):
+            return web.json_response({"ok": False, "error": refused}, status=400)
         try:
             body = await request.json()
         except Exception:

@@ -618,34 +618,6 @@ def test_every_game_runs_something(game):
     assert scenarios_for(game), f"no scenario applies to {game}"
 
 
-# NOT asserted, and the reason is worth writing down: `faint` and `boxsync` declare
-# `"savestate": "slink_overworld.State"` and still run on Gen 1 and Gen 2, which have no
-# savestate at all. That is not a contradiction. The launch path branches on the GAME
-# (`DuoRun.battery_boot`, from GAMES[game]["uses_savestate"]), so a scenario's savestate is
-# Gen 3 data that battery-boot titles never read. The first version of this file asserted the
-# tidy-looking invariant instead and failed on three games — the table was right and the test
-# was wrong.
-
-
-def test_savestate_games_are_never_given_a_batteryless_scenario():
-    """This direction IS load-bearing: tests/e2e/test_duo.py KeyErrors in `_states_for` on a
-    scenario with no savestate, so selecting one for Gen 3 breaks collection of the whole
-    module rather than failing a single test.
-
-    Every current GAMES row battery-boots (the old Gen 3 client's savestate row retired with
-    lua/tests/duo/duo_main.lua to tag archive/gen3-old-client, C5-5/46a5f597), so this loop runs
-    zero iterations today and passes vacuously -- it is a guard for a future savestate-boot row,
-    not dead weight: parametrizing over GAMES and skipping the batteryless ones (the previous
-    shape of this test) reported a skip per game instead of asserting nothing had to be skipped.
-    """
-    for game in GAMES:
-        if not GAMES[game]["uses_savestate"]:
-            continue
-        offenders = [n for n in scenarios_for(game) if "savestate" not in SCENARIOS[n]]
-        assert not offenders, (
-            f"{game} loads savestates but would be given scenario(s) that declare none: "
-            f"{offenders}")
-
 
 def test_gen3_rr_selection_is_exactly_the_radical_red_set():
     """Pinned rather than derived, so that widening a `games` tuple by accident has to be an

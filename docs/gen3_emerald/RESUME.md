@@ -64,8 +64,11 @@ remote) without the owner's explicit approval. Scope = "match or beat Gen 1/2" (
   in two EmuHawks, then load lua/slink.lua.
 - **Queue:** XC4 trainer sets; Emerald trainer binding after Gen 3; E-bind randomized
   (pokeemerald rom_tables, strides verified); T4 adapter (after Gen 3 gen3_frlge.py); T5 duos;
-  DUO-SAVESTATE-CLEANUP; legacy emerald stub deletion; the Gen 2 ping before any master batch
-  (server.py debug-area change 401974cc).
+  the Gen 2 ping before any master batch (server.py debug-area change 401974cc).
+  Retired as DONE 2026-09-27: DUO-SAVESTATE-CLEANUP (the savestate Gen 3 wrapper
+  `tests/e2e/test_duo.py` is deleted, and the runner's only remaining `savestate` rows are the
+  retired `faint`/`boxsync`); legacy emerald stub deletion (no `emerald` key remains in
+  `data/games/gen3_frlg/profile.json`).
 - **Combined next:** the owner decided (2026-09-26) that the remaining Gen 3 work runs under ONE orchestrator. Start from docs/gen3_emerald/HANDOFF_combined_gen3_2026-09-26.md + the Gen 3 half (docs/gen3/HANDOFF_combined_gen3_2026-09-26.md @ 17988de4); the paste-ready prompt is docs/gen3_emerald/HANDOFF_PROMPT_combined_gen3_2026-09-26.md. Lane head b5eca942 (XC1-XC3 merged); T2 c00fda11; T3 R1 fixes uncommitted.
 
 ## CHECKPOINT 6 (2026-09-26 ~19:45Z, owner wrap-up at the EG4 request): resume here
@@ -100,10 +103,11 @@ remote) without the owner's explicit approval. Scope = "match or beat Gen 1/2" (
   cx-7d33cf12 fixes queued: 32-bit OT contract, category .get, debug area fallback), x3 8c1d0966
   (harness title syms; regenerate provenance after x1 facts). XG1 request after those merge.
   Owner decision at XG2: expansion shinyModifier needs a shared state.py change.
-- **Queue:** X2-ADAPTER-FIX, DUO-SAVESTATE-CLEANUP (old-client savestate path), legacy `emerald`
-  stub deletion (multi-file), PREMASTER-GEN1-GATE (full Gen 1 unit lane; 300 s timeout in a
+- **Queue:** X2-ADAPTER-FIX, PREMASTER-GEN1-GATE (full Gen 1 unit lane; 300 s timeout in a
   sandbox run), Gen 1/Gen 3 owners review the allow-list commits, E6 open (class assertion,
   identical-team misfile). Guide checkpoint (RC_MASTER_GUIDE.md) lists every worker.
+  Retired as DONE 2026-09-27: DUO-SAVESTATE-CLEANUP (old-client savestate path) and the legacy
+  `emerald` stub deletion.
 - **Before master:** batch with Gen 2 (server/** changed), tell Gen 3 the pack hashes moved.
 
 ## CHECKPOINT 5 (2026-09-26 ~16:45Z, E4 done; owner pause after 3 h): resume here
@@ -147,8 +151,9 @@ remote) without the owner's explicit approval. Scope = "match or beat Gen 1/2" (
   - unknown-hash BPEE with all 21 anchors admits as clean and routes (signed at EG3 section 2;
     FR/LG/RR policy). OMP cx-136573c0 F3 suggests hash-only for Emerald: owner decision.
   - Emerald calc (Emerald.js) becomes reachable at EG4; not pret-checked (plan E6).
-  - gen3_frlg/profile.json legacy `emerald` stub still read by test_gen3_entry.py
-    test_build_refuses_an_unadmitted_title (PLAN section 2 schedules its deletion).
+  - RESOLVED, nothing to carry: the `gen3_frlg/profile.json` legacy `emerald` stub is gone (that
+    file has no `emerald` key) and `test_gen3_entry.py::test_build_refuses_an_unadmitted_title`
+    now refuses `firered_ap`; Emerald is a first-class `gen3_emerald` pack in `Entry.PACKS`.
   - lua/gen3/run.lua re-admits without the ROUTED / header re-check slink.lua does (Gen 3 client
     file, pre-existing): route to the Gen 3 lane or fix at EG4.
   - tools/gen_gen3_write_checkpoint.py UNADMITTED_PACKS stays a generation grouping (moving
@@ -156,8 +161,9 @@ remote) without the owner's explicit approval. Scope = "match or beat Gen 1/2" (
   - README release-candidate row: add Emerald's final-cut counts.
   - tests/live/test_gen3_shadow_gates.py (named in the E2 plan row) does not exist; the final
     cut uses tools/gen3_shadow_negatives.py over the committed manifest.
-- **Other findings (not ours to fix here):** `tools/e2e_duo.py` GAMES has a dead duplicate
-  `"gen3_rr"` key (old-client row overridden; ruff F601, on master); the client logs
+- **Other findings (not ours to fix here):** RESOLVED — the `tools/e2e_duo.py` `GAMES` dead
+  duplicate `"gen3_rr"` key (old-client row overridden; ruff F601) is gone; `GAMES` carries one
+  `gen3_rr` row (`tools/e2e_duo.py:2729`). Still open: the client logs
   `unhandled command dead_keys` on FR and Emerald; `tests/fixtures/gen3/README.md` says
   emerald_pc mons are in "box 1" (decode says box 0); UI capabilities fixture drift from the
   Gen 2 rename -- DONE by the Gen 2 lane on local master 7b91fd14 (new test

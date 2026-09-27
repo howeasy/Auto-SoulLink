@@ -1,0 +1,20 @@
+# gen3_final_cut row=linked_faint_active_clean_gen3_rr_as_a item=§14_P5_RR_duo cut=d9a928d79a99aef33ac923cfbf589cda2715762d
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_rr --scenario linked_faint_active_clean_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:47:15 cpu=24% emuhawk=0 python=4
+start_utc=2026-09-27T19:47:14Z tracked_clean_before=True
+
+========== scenario: linked_faint_active_clean_gen3 ==========
+[duo] linked_faint_active_clean_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] PYDEC: FAIL Pokemon - Radical Red.gba not found at the repo root or any parent, and no staged patch/build/gen3_Pokemon_-_Radical_Red.gba
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_clean_gen3_k8h3sp7m
+[duo] linked_faint_active_clean_gen3: attempt 1 aborted — FileNotFoundError: Pokemon - Radical Red.gba not found at the repo root or any parent, and no staged patch/build/gen3_Pokemon_-_Radical_Red.gba
+
+========== summary ==========
+  linked_faint_active_clean_gen3: FAIL (attempt 1 of 1) — FileNotFoundError: Pokemon - Radical Red.gba not found at the repo root or any parent, and no staged patch/build/gen3_Pokemon_-_Radical_Red.gba
+exit=1 end_utc=2026-09-27T19:47:16Z tracked_clean_after=True classification=real
