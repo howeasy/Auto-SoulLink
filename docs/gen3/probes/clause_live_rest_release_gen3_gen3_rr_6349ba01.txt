@@ -1,0 +1,39 @@
+# CLAUSE-LIVE-REST gen3_rr release_gen3
+# source: 6349ba018c26fd700579d12ce6ce6a9971124152
+# command: python tools/e2e_duo.py --game gen3_rr --scenario release_gen3 --lane clause-rest-release-rr --keep-data
+# cwd: C:/slink-wt/g3-clause-run (frozen clean checkout)
+# private state: .cache/state; archived artifacts: C:/slink-wt/g3-clause-live-rest/.cache/live/release_gen3_gen3_rr_6349ba01
+
+
+========== scenario: release_gen3 ==========
+[duo] release_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=2095c79f7dce1ec09b46d74ecd2b8c5fca4ff7fcd5ed219dd4f16c36fd008ae2 profile.json=228ba2a005b25e172fbde4885958188b22893bdac4fb50e133fe2bf0dafd50a3 source=6349ba018c26fd700579d12ce6ce6a9971124152
+[duo] server up: tcp=53750 http=53751 data=C:\slink-wt\g3-clause-run\.cache\state\slink_duo_release_gen3_7qylxofm
+[duo] timing server 1.1s
+[duo] cleared 7 stale artifact(s) for release_gen3: e2e_release_gen3_a_1_witness.bin, e2e_release_gen3_a_attempt1_result.txt, e2e_release_gen3_a_result.txt, e2e_release_gen3_b_1_witness.bin, e2e_release_gen3_b_attempt1_result.txt, e2e_release_gen3_b_result.txt, e2e_release_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 32.8s
+[duo] timing results 7.7s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=5b8c664c8872658d1789fab7e42a9da5cc88d3203583c818b15a09b4d7741127 file=5b8c664c8872658d1789fab7e42a9da5cc88d3203583c818b15a09b4d7741127 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=8bb84be1b535d62de2af60153b5d0498620e308375179685ce0309b8b1da928a file=8bb84be1b535d62de2af60153b5d0498620e308375179685ce0309b8b1da928a match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] release: native PC removal F56D8C1D:2BDDC8BF; boxed partner F56D8C1D:D4223740 retired and memorial saved
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] release_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-clause-run\.cache\state\slink_duo_release_gen3_7qylxofm
+
+========== summary ==========
+  release_gen3: PASS (attempt 1 of 1)

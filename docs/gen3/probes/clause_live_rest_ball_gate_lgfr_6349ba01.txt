@@ -1,0 +1,53 @@
+# CLAUSE-LIVE-REST C3b LG-as-A
+# source: 6349ba018c26fd700579d12ce6ce6a9971124152
+# command: python tools/e2e_duo.py --game gen3_lgfr --scenario ball_gate_gen3 --lane clause-rest-lg2 --keep-data
+# cwd: C:/slink-wt/g3-clause-live-rest
+# private state: .cache/state; immutable local artifacts: .cache/live/lg_ball_pass_6349ba01
+# SYNTH setup: pre-ball fixture and disclosed post-native-reward20-ball phase; native behaviour and saved oracle qualify the row.
+
+
+========== scenario: ball_gate_gen3 ==========
+[duo] ball_gate_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=4b48978785397477a53a868a817373b992afb86df6cfa54d9b0d2cd3ff45a5b0 b=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=2d6a46ed4367f0b676b4efc222b63b813632ee487937c78ae41b879d63a0b6a7 write_checkpoint.json=11dd57184a8f9f79483e9175bd870efe0cef183211cbc7ba93d520fbedfd33ca profile.json=bc642c4cc12a9df0b0d34bebca13ea6ee62108df03a296738797deae15b0e77e source=6349ba018c26fd700579d12ce6ce6a9971124152
+[duo] server up: tcp=62318 http=62319 data=C:\slink-wt\g3-clause-live-rest\.cache\state\slink_duo_ball_gate_gen3_jvgeezto
+[duo] timing server 1.2s
+[duo] cleared 9 stale artifact(s) for ball_gate_gen3: e2e_ball_gate_gen3_a_1_witness.bin, e2e_ball_gate_gen3_a_attempt1_result.txt, e2e_ball_gate_gen3_a_post_flip_result.txt, e2e_ball_gate_gen3_a_result.txt, e2e_ball_gate_gen3_b_1_witness.bin, e2e_ball_gate_gen3_b_attempt1_result.txt, e2e_ball_gate_gen3_b_post_flip_result.txt, e2e_ball_gate_gen3_b_result.txt, e2e_ball_gate_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=BC73F9B0:1C600D89 b=2D356A90:99DE0D8A
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] SAVE_WITNESS_SHA256 inst=a site=d3a645bacb1726ca5c53df51c9edc503a38e8c8f6604acd5861edeffa076fba8 file=d3a645bacb1726ca5c53df51c9edc503a38e8c8f6604acd5861edeffa076fba8 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=695ebdc3823b2715706cafed6b6b7c5eeb470272fb8e717c4ed1b0ad5e1f57d4 file=695ebdc3823b2715706cafed6b6b7c5eeb470272fb8e717c4ed1b0ad5e1f57d4 match=true saves=1 counter=7->8 rtc=normalized
+[duo] {"after": 20, "before": 1, "checksum_offset": 86006, "label": "SYNTH post-flip stock", "quantity_offset": 82994, "sha256": "d8b2052ced3e7376483e21c8e8f6407aebe11fb4171f8b8ded7e248cb7dd7d49", "source_sha256": "3a3b2ad7f9a4bddae321cde43b75c0eb442052f046a7e443bb773e2b9a03ccf5", "title": "leafgreen"}
+[duo] {"after": 20, "before": 1, "checksum_offset": 40950, "label": "SYNTH post-flip stock", "quantity_offset": 37938, "sha256": "407423036027a5e4aef7102778f48218196631cbb27401868cb0b6caf38a1524", "source_sha256": "dda3b59fd2c234905cb36b102f256f08d136f63dc30cd57e56935cb71f30e256", "title": "firered"}
+[duo] launched a phase=post_flip seed=True
+[duo] launched b phase=post_flip seed=True
+[duo] keys: a=BC73F9B0:1C600D89 b=2D356A90:99DE0D8A
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=F0D71DA5:1C600D89 b=09F19CCB:99DE0D8A
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): F0D71DA5:1C600D89 <-> 09F19CCB:99DE0D8A on viridian_forest, alive
+[duo] timing orchestrate 107.6s
+[duo] timing results 6.0s
+[duo] RESULT_LINE a: RESULT: PASS (caught F0D71DA5:1C600D89)
+[duo] RESULT_LINE b: RESULT: PASS (caught 09F19CCB:99DE0D8A)
+[duo] SAVE_WITNESS_SHA256 inst=a site=f8ea7fb8ae92d6371d9105d5e1bfc79eea9c647e59b5641afe9d84f11d3a846d file=f8ea7fb8ae92d6371d9105d5e1bfc79eea9c647e59b5641afe9d84f11d3a846d match=true saves=1 counter=5->6 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=039d354415a4abcdd11b6eb955626a144031e6cfc39028474e11bbea40227b35 file=039d354415a4abcdd11b6eb955626a144031e6cfc39028474e11bbea40227b35 match=true saves=1 counter=8->9 rtc=normalized
+[duo] BAG_BALLS baseline=20 final=14 throws=6 inst=a native_grant=0
+[duo] BAG_BALLS baseline=20 final=17 throws=3 inst=b native_grant=0
+[duo] link: F0D71DA5:1C600D89 <-> 09F19CCB:99DE0D8A alive on viridian_forest and saved once in each party
+[duo] ball gate: pre-ball native faint suppressed; native reward activates; post-ball real catch/link saved
+[duo] timing oracle 0.9s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] ball_gate_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\g3-clause-live-rest\.cache\state\slink_duo_ball_gate_gen3_jvgeezto
+
+========== summary ==========
+  ball_gate_gen3: PASS (attempt 1 of 8)

@@ -473,7 +473,7 @@ log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, 
 -- ── context ──────────────────────────────────────────────────────────────────────────────
 local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G = G, SP = SP,
               play = play, cp = cp, reader = reader, sym = S, title = title, session = session,
-              finished = FINISHED, emulator = emu }
+              finished = FINISHED, emulator = emu, enemy_base = profile.ram.ENEMY_BASE }
 ctx.native_candidate = native_candidate
 
 function ctx.jlog(tag, value) log(tag .. " " .. JSON.encode(value)) end
