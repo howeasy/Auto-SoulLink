@@ -7,10 +7,11 @@ Regenerate with tools/extract_expansion_data.py --rom <reference.gba>
 --layout data/games/gen3_exp/28877d73/layout.json
 --output data/games/gen3_exp/28877d73/data.json; add --check for read-only comparison.
 
-Recorded limits: encounter/trainer/area/static-policy packs and ability prose
-are not extracted. Explicit gift_ events work; no unproved fixed-gift exemption
-is inherited from vanilla. Sprites use National Dex base art, not form art.
-This adapter only READS expansion data/records.
+Recorded limits: encounter-table/area/static-policy packs and ability prose are
+not extracted (trainer panels ARE, since XC4/XC4b -- see below). Explicit gift_
+events work; no unproved fixed-gift exemption is inherited from vanilla.
+Sprites use National Dex base art, not form art. This adapter only READS
+expansion data/records.
 
 Calc: calc_profile()/calc_name()/calc_stats() (XC1-XC3,
 docs/gen3_emerald/research/expansion_calc_design_2026-09-26.md §4) run this
@@ -22,13 +23,16 @@ of names have no gen-9 calc equivalent at all (homebrew abilities,
 Mega Stones -- Gen 9 has no Mega Evolution) and stay unresolved by design;
 see tools/gen_expansion_calc_names.py's EXPECTED_UNRESOLVED.
 
-Trainer panels (XC4b): trainer_info/trainers_for_area/trainer_party/trainer_brief read
-data/games/gen3_exp/28877d73/gen3_exp_trainers.json, the same generator's other output --
-gTrainers-indexed (wire trainer_id, no offset), key trainers flagged for the dashboard's
-Upcoming Key Trainers panel (gym leaders, Elite Four, Champion, the rival, Team Aqua/Magma
-leaders and admins). See tools/gen_gen3_exp_trainers.py's docstring for extraction rules and
-known gaps (no Vs Seeker rematch-tier area beyond same-identity inheritance; generic/repeated
-trainer names group in the Prep tab the same way FRLG's/Emerald's vendored sets already do).
+Trainer panels (XC4b): trainer_info/trainers_for_area/trainer_party/trainer_brief lazy-load
+data/games/gen3_exp/28877d73/gen3_exp_trainers.json (_load_trainers_pack(), a process-wide
+functools.cache -- calc_profile()/calc_name() and a Manager render never touch this pack), the
+same generator's other output -- gTrainers-indexed (wire trainer_id, no offset), key trainers
+flagged for the dashboard's Upcoming Key Trainers panel (gym leaders, Elite Four, Champion, the
+rival, Team Aqua/Magma leaders and admins). A Vs Seeker rematch tier's area comes from the
+pinned source's own gRematchTable, never a same-(class,name) guess; trainer_brief's calc_label
+is the Prep tab base name (unique per trainer id -- see tools/gen_gen3_exp_trainers.py's
+compute_bases()), read by server.py's _calc_trainer_label() to label a live enemy row. See
+tools/gen_gen3_exp_trainers.py's docstring for extraction rules and the remaining known gaps.
 
 Shiny product gap: src/pokemon.c:2480-2483 at e8bd1cd7 applies
 ((PID_hi ^ PID_lo ^ OT_hi ^ OT_lo) < SHINY_ODDS) ^ shinyModifier;
@@ -44,12 +48,14 @@ keep the SID.
 """
 from __future__ import annotations
 
+import functools
 import json
 import re
 from html import escape
 from pathlib import Path
 
 from . import gen3_codec
+from .base import humanize_area_id
 from .gen3_frlge import Gen3Adapter, _parse_pid_otid_key
 
 ROM_SHA1 = "28877d733492299599f2b8fff50493109d72653c"
@@ -58,6 +64,25 @@ PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/data.
 CONFIG_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/config.json"
 CALC_NAMES_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/calc_names.json"
 TRAINERS_PACK = Path(__file__).resolve().parents[2] / "data/games/gen3_exp/28877d73/gen3_exp_trainers.json"
+_SOURCES_LOCK = Path(__file__).resolve().parents[2] / "data/gen3_exp_sources.lock.json"
+
+
+@functools.cache
+def _load_trainers_pack() -> tuple[dict[int, dict], dict[str, list[int]]]:
+    """Lazy, process-wide-cached load of gen3_exp_trainers.json: calc_profile()/calc_name() and
+    a Manager render construct Gen3ExpansionAdapter far more often than anything touches a
+    trainer panel, so __init__ must not parse this ~40k-line pack every time (OMP cx-081c78d3
+    F8). Fails closed the first time anything DOES need it: a pack whose source.commit doesn't
+    match the pinned data/gen3_exp_sources.lock.json is a stale/wrong pack, never served quietly
+    (OMP cx-081c78d3 F7)."""
+    raw = json.loads(TRAINERS_PACK.read_text(encoding="utf-8"))
+    lock = json.loads(_SOURCES_LOCK.read_text(encoding="utf-8"))
+    if raw.get("source", {}).get("commit") != lock["source"]["commit"]:
+        raise ValueError(
+            f"{TRAINERS_PACK} source.commit does not match the pin in {_SOURCES_LOCK}")
+    trainers = {int(k): v for k, v in raw["trainers"].items()}
+    trainers_by_area = {k: list(v) for k, v in raw["trainers_by_area"].items()}
+    return trainers, trainers_by_area
 # include/constants/pokemon.h:5-28 at e8bd1cd7; NOT vanilla's zero-based types.
 TYPE_NAMES = ("None", "Normal", "Fighting", "Flying", "Poison", "Ground", "Rock", "Bug",
               "Ghost", "Steel", "???", "Fire", "Water", "Grass", "Electric", "Psychic",
@@ -129,9 +154,7 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         self._abilities = {row["id"]: row for row in data["abilities"]}
         self._config_macros = json.loads(CONFIG_PACK.read_text(encoding="utf-8"))["macros"]
         self._calc_names = json.loads(CALC_NAMES_PACK.read_text(encoding="utf-8"))
-        _raw_trainers = json.loads(TRAINERS_PACK.read_text(encoding="utf-8"))
-        self._trainers = {int(k): v for k, v in _raw_trainers["trainers"].items()}
-        self._trainers_by_area = {k: list(v) for k, v in _raw_trainers["trainers_by_area"].items()}
+        # Trainer pack: NOT read here -- see _load_trainers_pack()'s docstring (OMP cx-081c78d3 F8).
 
     @property
     def game_id(self):
@@ -174,7 +197,10 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         return False
 
     def area_display_name(self, area_id):
-        return area_id or ""  # No vanilla overrides or an invented expansion area catalog.
+        # No vanilla overrides or an invented expansion area catalog -- just the same
+        # words-at-every-seam fallback every other adapter with no name table falls back to
+        # (OMP cx-081c78d3 F6; e.g. gen3_frlge.area_display_name).
+        return humanize_area_id(area_id) if area_id else ""
 
     def gender_from_key(self, key, species_id):
         # src/pokemon.c:1805-1818; species.genderRatio is extracted, including forms.
@@ -244,26 +270,32 @@ class Gen3ExpansionAdapter(Gen3Adapter):
         return None
 
     def trainer_info(self, trainer_id):
-        tr = self._trainers.get(trainer_id)
+        trainers, _ = _load_trainers_pack()
+        tr = trainers.get(trainer_id)
         return (tr["name"], tr["class"]) if tr else ("", "")
 
     def trainers_for_area(self, area_id):
         if not area_id:
             return []
-        return list(self._trainers_by_area.get(area_id, []))
+        _, trainers_by_area = _load_trainers_pack()
+        return list(trainers_by_area.get(area_id, []))
 
     def trainer_party(self, trainer_id):
-        tr = self._trainers.get(trainer_id)
+        trainers, _ = _load_trainers_pack()
+        tr = trainers.get(trainer_id)
         return [dict(m) for m in tr["party"]] if tr else []
 
     def trainer_brief(self, trainer_id):
-        tr = self._trainers.get(trainer_id)
+        trainers, _ = _load_trainers_pack()
+        tr = trainers.get(trainer_id)
         if not tr or not tr["party"]:
             return None
         out = {"name": tr["name"], "class": tr["class"], "party": [dict(m) for m in tr["party"]],
                "area": tr.get("area", "")}
         if isinstance(tr.get("level_cap"), int):
             out["level_cap"] = tr["level_cap"]
+        if tr.get("calc_label"):
+            out["calc_label"] = tr["calc_label"]
         return out
 
     def milestone_cap_for_fight_label(self, fight_label):

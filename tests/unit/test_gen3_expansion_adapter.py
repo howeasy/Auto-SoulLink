@@ -59,6 +59,9 @@ def test_reference_presentation_and_explicit_unsupported_surfaces():
     # XC4: trainer panels now come from the pinned build's gTrainers (Sawyer = TRAINER_SAWYER_1)
     assert [m["species"] for m in a.trainer_party(1)] == ["Geodude"] and a.trainer_brief(1)["area"] == "jagged_pass"
     assert a.trainer_info(1) == ("Sawyer", "Hiker")
+    assert a.trainer_brief(1)["calc_label"] == "Hiker Sawyer"  # F5: setdex base string
+    assert a.area_display_name("mt_pyre") == "Mt Pyre"  # F6: humanize_area_id fallback, no table
+    assert a.area_display_name("") == ""
     assert a.rival_trainer_ids() == set()
     assert not a.supports_info_panel() and not a.supports_explode_mode()
     assert not a.native_trade_ui()
