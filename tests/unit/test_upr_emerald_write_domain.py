@@ -191,3 +191,29 @@ def test_facility_mutation_can_pass_content_checks_but_never_the_manager_audit(t
     P._check_content_gen3(str(source), str(output))  # these facility bytes are outside the sparse client report
     with pytest.raises(P.UprPipelineError, match="outside the write domain.*frontier"):
         W.check_output(str(source), str(output), {}, jar=jar)
+
+
+def test_emerald_wild_domain_is_exactly_the_encounter_slot_arrays(model, clean):
+    """The wild walk stops at gWildMonHeaders' terminator and admits only *Mons slot arrays."""
+    syms = W._syms("emerald")
+    (hdr, size), = [(a, n) for a, n, name in syms if name == "gWildMonHeaders"]
+    wild = W._ranges(model["titles"]["emerald"]["domains"]["wild"])
+    arrays = [(a, a + n) for a, n, name in syms if name.endswith("Mons")]
+    assert all(any(a <= s and e <= b for a, b in arrays) for s, e in wild)
+    assert not any(hdr <= s < hdr + size for s, _e in wild)
+    assert clean[hdr + size - 20:hdr + size - 18] == bytes((0xFF, 0xFF))   # the walk terminator ends the symbol
+    end = max(e for _s, e in wild)
+    out = bytearray(clean)
+    out[end] ^= 1
+    assert W.audit("emerald", clean, bytes(out), {"wild"}, model)["stray"] == [end]
+
+
+@pytest.mark.parametrize("domain", ("base_stats", "frontier"))
+def test_a_forbidden_domain_cannot_be_enabled(model, clean, domain):
+    with pytest.raises(ValueError, match="forbidden write domain"):
+        W.audit("emerald", clean, clean, {domain}, model)
+
+
+def test_no_title_admits_another_titles_rom(model, clean):
+    with pytest.raises(ValueError, match="not the pinned dump"):
+        W.audit("emerald", bytes(len(clean)), clean, {"wild"}, model)

@@ -196,6 +196,9 @@ def audit(title: str, clean: bytes, out: bytes, enabled: set[str], model: dict |
     unknown = set(enabled) - set(domains)
     if unknown:
         raise ValueError(f"unknown write domain(s): {sorted(unknown)}")
+    forbidden = set(enabled) & set(model.get("forbidden_domains", ()))
+    if forbidden:
+        raise ValueError(f"forbidden write domain(s) cannot be enabled: {sorted(forbidden)}")
     changed = changed_offsets(clean, out)
     comps = [(d, c) for d in enabled for c in domains[d]]
     fixed = _merge(s for _d, c in comps if not c.get("packed") for s in _ranges([c]))
@@ -545,6 +548,8 @@ def build_title(title: str, clean: bytes, ini: dict, ips: dict[str, bytes]) -> d
             p = rom.ptr(o + 4 + 4 * k)
             if rom.ok(p) and clean[p] != 0:
                 d = rom.ptr(p + 4)
+                # an allowlist builder fails closed: a slot pointer off the ROM means the walk left the table
+                assert rom.ok(d) and d + 4 * n <= len(clean), f"wild header {o:#x} slot {k} points off the ROM"
                 wild.append((d, d + 4 * n))
         o += 20
     D["wild"] = [_comp("encounter slots (level, level, species) of every wild table",
