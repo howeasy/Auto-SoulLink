@@ -52,13 +52,16 @@ enum { OP_PING = 1, OP_FORCE_FAINT = 2, OP_FORCE_MOVE = 3, OP_CREATE_MON = 4,
                                      battle writes target slots; mirrors Lua M.memorializeMon). */
        OP_SHOW_INFO = 27,         /* §6 SOULLINK info screen from the lines staged in SlinkInfo;
                                      async, result[0] = 0 (A) / 0x7F (B) — the pagination signal */
-       OP_RIVAL_SWAP = 28 };      /* C5-11a: the RIVAL SWAP's own opcode. Same BLOB_BUF staging and
+       OP_RIVAL_SWAP = 28,        /* C5-11a: the RIVAL SWAP's own opcode. Same BLOB_BUF staging and
                                      byte-copy basis as OP_SET_ENEMY_PARTY (16), but with the
                                      consumption-time window check + trainer context that must NOT
                                      apply to 16: the field trade stages with 16 and then runs
                                      OP_TRADE_SCENE (see that case's comment), so a window check on
                                      16 would reject every trade. See docs/gen3/research/
                                      rival_swap_refresh_window.md §5.3. */
+       /* RR-DURABLE: served by the shared durable producer through rr_trade_relay.h (with
+        * OP_TRADE_SCENE 21), never by the v1 switch. Numbers are abi.h's (asserted below). */
+       OP_TRADE_PREPARE = 29, OP_TRADE_WITHDRAW = 30, OP_TRADE_STATUS = 31 };
 enum { ST_BUSY = 1, ST_OK = 2, ST_FAIL = 3 };
 
 /* Mailbox `reason` values for a ST_FAIL ack. 1..3 are used inline by the older cases in the
@@ -1902,6 +1905,11 @@ __attribute__((naked, used)) void slink_start_menu_redraw(void)
  * against the ROM for this card). The old v1 raw trade-scene path (OP_TRADE_SCENE ack on field
  * return) is gone: opcode 21 now always belongs to the producer. */
 #include "rr_trade_relay.h"
+_Static_assert((int)OP_TRADE_SCENE == (int)SLINK_OP_TRADE_SCENE
+               && (int)OP_TRADE_PREPARE == (int)SLINK_OP_TRADE_PREPARE
+               && (int)OP_TRADE_WITHDRAW == (int)SLINK_OP_TRADE_WITHDRAW
+               && (int)OP_TRADE_STATUS == (int)SLINK_OP_TRADE_STATUS,
+               "RR v1 trade opcode numbers are the producer's");
 #define RT_BASE          0x0203FE50u   /* shadow SlinkMailboxV2; +0x40 caps, +0x44 epoch, +0x48 phase */
 #define RT_WITNESS_ADDR  (RT_BASE + SLINK_WITNESS_OFFSET)
 #define RT_STATE_ADDR    (RT_BASE + 0xA0u)

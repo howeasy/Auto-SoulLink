@@ -331,7 +331,7 @@ def test_rr_rom_anchor_mutation_refuses_the_facts(anchor):
 
 
 @pytest.mark.parametrize("path,digest", [
-    (REPO / "patch/build/slink_RR.gba", "7a3867499d66eb3621e0e7dde43bd033fc679f01"),
+    (REPO / "patch/build/slink_RR.gba", "da579690db7d6933a0952a1f490312842793f71a"),
     (pathlib.Path("E:/Google Drive/SLink/Pokemon - Radical Red.gba"),
      "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
 ])
@@ -648,6 +648,7 @@ def test_native_matches_the_mailbox_and_ghost_sources() -> None:
         "OP_TRADE_SCENE": 21, "OP_WITHDRAW_MON": 25, "PI_COUNT": 0x0203F8D3,
         "SIG": 0x4B4E4C53, "SPRITES_BASE": 0x0202063C, "SW": 0x0203F840,
         "TEXT_BUF": 0x0203F900, "TN_ENABLE": 0x0203F8D4, "TRADE_BASE": 0x0203FE50,
+        "OP_TRADE_PREPARE": 29, "OP_TRADE_WITHDRAW": 30, "OP_TRADE_STATUS": 31,
     }
     assert native == want
     # the ABI anchors the card names, spelled out so a silent regex drift is caught

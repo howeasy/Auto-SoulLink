@@ -86,3 +86,37 @@ def test_only_explicit_production_fr_companion_constructs_the_trade_binding(entr
     assert w._read(model.n["BASE"] + 0x44, 4) == 0x12345678, (serviced, w.logs)
     assert parts.native.trade_capable(parts.native) is True
     assert client.hello_sent is False, "the bound capability must be advertised after the initial hello"
+
+
+@pytest.mark.parametrize("production", [True, None])
+def test_rr_production_companion_binds_its_durable_descriptor(entry_model_tree, production, monkeypatch):
+    """RR-DURABLE: the admitted RR companion binds the trade epoch into its shadow block
+    (native.TRADE_BASE + 0x44, never the ABI1 mailbox's +0x44 SwapState) when production is
+    explicit; without it the companion still builds (ABI1) but never trades."""
+    monkeypatch.delenv("SLINK_GEN3_BATTLE_NONCE", raising=False)
+    root = entry_model_tree
+
+    def mark(obj):
+        rows = obj["titles"]["radical_red"]["artifacts"]["companion"]
+        rows.pop("production", None)
+        if production is not None:
+            rows["production"] = production
+    edit_json(root / "data/games/gen3_rr/engine_signals.json", mark)
+    w = entry_model.World(pack="gen3_rr", title="radical_red", build=False)
+    n = json.loads((root / "data/games/gen3_rr/profile.json").read_text(encoding="utf-8"))["native"]
+    w.io.trade_journal = w.lua.table(ready=lambda *_: True, hidden=lambda *_: False,
+                                    outstanding=lambda *_: w.lua.table(), has_entries=lambda *_: False)
+    client, parts = entry_model._production(w, root=root.as_posix(), kind="companion",
+                                            battle_nonce_seed="1234567800000001")
+    w.poke(n["BASE"], n["SIG"].to_bytes(4, "little"))
+    w.poke(n["BASE"] + 4, b"\x01\x00")
+    w.poke(n["TRADE_BASE"] + 0x40, b"\x01\x00\x00\x00")
+    parts.safety.check = lambda *_: True
+    parts.safety.snapshot = lambda *_: w.lua.table()
+    parts.policy.check = lambda *_: True
+    w.io.write_u8 = lambda a, v, *_: w.poke(a, bytes([v]))
+    parts.native.service(parts.native)
+    bound = w._read(n["TRADE_BASE"] + 0x44, 4)
+    assert w._read(n["BASE"] + 0x44, 4) == 0
+    assert (bound, parts.native.trade_capable(parts.native)) == (
+        (0x12345678, True) if production else (0, False))

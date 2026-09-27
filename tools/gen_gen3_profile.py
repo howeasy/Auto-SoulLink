@@ -207,7 +207,7 @@ RR_DERIVED = {
 # were read from the admitted companion SHA1 below and checked against clean RR.
 # Keep complete reader bodies + literal pools, so a pointer alone is not evidence
 # for which field is being accessed. No Capstone dependency in the generator.
-RR_WITNESS_SHA1 = "7a3867499d66eb3621e0e7dde43bd033fc679f01"
+RR_WITNESS_SHA1 = "da579690db7d6933a0952a1f490312842793f71a"
 RR_ROM_ANCHORS = {
     "controller_exec_marker": (0x17248,
         "00b50006030e0848006802210840002810d0064a06499800401801680907106808431060"
@@ -656,6 +656,7 @@ MAILBOX_OPCODES = (
     "OP_SHOW_MENU", "OP_SET_PARTY_MON", "OP_PLAY_SE", "OP_CHOOSE_PARTY_MON", "OP_TRADE_SCENE",
     "OP_SHOW_CHOICES", "OP_SHOW_BATTLE_MESSAGE", "OP_DEPOSIT_MON", "OP_WITHDRAW_MON",
     "OP_MEMORIALIZE", "OP_SHOW_INFO", "OP_RIVAL_SWAP",
+    "OP_TRADE_PREPARE", "OP_TRADE_WITHDRAW", "OP_TRADE_STATUS",   # RR-DURABLE producer opcodes
 )
 
 # `#define NAME <literal>` or the pointer-cast form `#define NAME ((Type *)<literal>)`.

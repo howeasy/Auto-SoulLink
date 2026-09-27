@@ -1,4 +1,6 @@
-"""RR ABI1 stays outside the unqualified durable-trade contract."""
+"""RR-DURABLE: the RR companion joins the durable-trade contract through its isolated
+descriptor (native.TRADE_BASE); only an undeclared (old-UPS) client keeps the named refusal."""
+import json
 from pathlib import Path
 
 from lupa import LuaRuntime
@@ -12,7 +14,9 @@ from tests.unit.test_gen3_client import KB, A, B, party
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def test_real_rr_bootstrap_does_not_construct_a_trade_journal():
+def test_real_rr_bootstrap_constructs_the_trade_journal():
+    """The durable descriptor (profile native.TRADE_BASE) makes the RR companion's journal
+    meaningful: the real bootstrap block constructs it (its store fails closed here, no CLR)."""
     lua = LuaRuntime()
     entry = lua.execute((ROOT / "lua/gen3/entry.lua").read_text())
     g = lua.globals()
@@ -21,13 +25,29 @@ def test_real_rr_bootstrap_does_not_construct_a_trade_journal():
     g.player = "a"
     g.console = lua.table(log=lambda *_: None)
     g.io_ = lua.table()
-    # Execute the actual production construction block. Opening its store or
-    # constructing the journal is a failure; no CLR/filesystem adapter is needed.
     source = (ROOT / "lua/gen3/run.lua").read_text()
     start = source.index("-- <<< durable trade storage <<<") + len("-- <<< durable trade storage <<<")
     end = source.index("\nlocal ok_build", start)
     lua.execute(source[start:end])
-    assert g.io_.trade_journal is None
+    assert g.io_.trade_journal is not None
+    assert g.io_.trade_journal.ready(g.io_.trade_journal) is False   # unbound + no store: closed
+
+
+def test_journal_support_needs_the_durable_descriptor(tmp_path):
+    lua = LuaRuntime()
+    entry = lua.execute((ROOT / "lua/gen3/entry.lua").read_text())
+    json_codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    rr = lua.table(kind="companion", pack="gen3_rr")
+    assert entry.trade_journal_supported(ROOT.as_posix(), json_codec, rr) is True
+    assert entry.trade_journal_supported(ROOT.as_posix(), json_codec, lua.table(kind="clean", pack="gen3_rr")) is False
+    # the same pack without the block (an old-UPS profile) is ABI1 only: no journal
+    import shutil
+    shutil.copytree(ROOT / "data/games/gen3_rr", tmp_path / "data/games/gen3_rr")
+    profile = tmp_path / "data/games/gen3_rr/profile.json"
+    doc = json.loads(profile.read_text(encoding="utf-8"))
+    del doc["native"]["TRADE_BASE"]
+    profile.write_text(json.dumps(doc), encoding="utf-8")
+    assert entry.trade_journal_supported(tmp_path.as_posix(), json_codec, rr) is False
 
 
 def test_rr_server_opts_into_recovery_and_names_the_refusal_only_for_undeclared_clients(tmp_path):
@@ -50,7 +70,9 @@ def test_rr_server_opts_into_recovery_and_names_the_refusal_only_for_undeclared_
     assert [c["cmd"] for c in commands] == ["show_choices"]
 
 
-def test_rr_no_journal_has_no_withholding_and_rejects_trade_without_writes():
+def test_rr_without_durable_trade_has_no_withholding_and_rejects_trade_without_writes():
+    """A client whose native is not durable-capable (the old UPS: zero tail) declares no
+    trade_prepare, withholds nothing, and refuses a stray apply_trade without a write."""
     w = World("gen3_rr", "radical_red", "companion")
     w.set_party(party(A, B))
     w.step_to(60)
