@@ -11,6 +11,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import re
 import struct
 from collections import Counter
 from pathlib import Path
@@ -22,6 +24,21 @@ HEADER_SIZE = 20
 HABITATS = (("land", 4, 12), ("water", 8, 5), ("rock_smash", 12, 5), ("fishing", 16, 10))
 LOADS = {"Night": (0x090C356E, 0x4A24), "Day": (0x090C3590, 0x4A1D),
          "Fallback": (0x090C2668, 0x4C1C)}
+
+
+def default_rom_path() -> Path:
+    explicit = os.environ.get("SLINK_RR_ROM")
+    return Path(explicit) if explicit else Path(os.environ.get("SLINK_GEN3_ROMS", ROOT)) / "Pokemon - Radical Red.gba"
+
+
+def client_area_labels(root: Path = ROOT) -> tuple[dict[str, str], dict[str, str]]:
+    """Existing client routing/display keys, not a source of encounter game facts."""
+    directory = root / "data/games/gen3_frlge"
+    coarse = json.loads((directory / "area_map.json").read_text(encoding="utf-8"))
+    fine = dict(re.findall(r'\["(\d+:\d+)"\]\s*=\s*"([^"]+)"',
+                           (directory / "gen3_frlge_locations.lua").read_text(encoding="utf-8")))
+    fallback = {key: value for key, value in fine.items() if key not in coarse}
+    return {**fine, **coarse}, fallback
 
 
 def load_rom(path: Path) -> bytes:
@@ -125,6 +142,131 @@ def effective_maps(decoded: dict, period: str) -> dict[tuple[int, int], dict]:
     return out
 
 
+def effective_variants(decoded: dict, period: str) -> list[dict]:
+    """All statically selectable fallback variants, with primary habitats taking precedence."""
+    primary = {(r["map_group"], r["map_num"]): r for r in decoded["tables"][period]}
+    fallbacks = {}
+    for row in decoded["tables"]["Fallback"]:
+        fallbacks.setdefault((row["map_group"], row["map_num"]), []).append(row)
+    out = []
+    for key in sorted(primary.keys() | fallbacks.keys()):
+        for variant, fallback in enumerate(fallbacks.get(key, [{}])):
+            habitats = {}
+            for kind, _, _ in HABITATS:
+                info = primary.get(key, {}).get("habitats", {}).get(kind)
+                source = period
+                header = primary.get(key, {}).get("address")
+                if info is None:
+                    info = fallback.get("habitats", {}).get(kind)
+                    source, header = "Fallback", fallback.get("address")
+                if info is not None:
+                    habitats[kind] = {**info, "selected_from": source, "header_address": header}
+            out.append({"map_group": key[0], "map_num": key[1], "variant": variant, "habitats": habitats})
+    return out
+
+
+def slot_rates(rom: bytes) -> dict[str, list[int]]:
+    """Read RR's own chooser CMP immediates; each tested interval is immediate+1."""
+    def widths(addresses):
+        out = []
+        for address in addresses:
+            word = int.from_bytes(_read(rom, address, 2, "RR slot probability"), "little")
+            if word & 0xF800 != 0x2800:
+                raise ValueError(f"RR chooser CMP changed at {address:#x}")
+            out.append((word & 255)+1)
+        return out
+
+    land = widths([0x08082760, 0x08082770, 0x08082780, 0x08082790, 0x080827A0,
+                   0x080827B0, 0x080827C0, 0x080827D0, 0x080827E0, 0x080827F0])
+    # The final comparisons to98/99 split the two remaining land slots and final fish slot.
+    if _read(rom, 0x080827F8, 2, "land tail") != b"\x62\x29" or _read(rom, 0x080828EA, 2, "fish tail") != b"\x63\x29":
+        raise ValueError("RR chooser tail changed")
+    land += [99-sum(land), 1]
+    water = widths([0x0808281E, 0x0808282E, 0x0808283E, 0x0808284E])
+    water += [100-sum(water)]
+    old = widths([0x0808288E])
+    old += [100-sum(old)]
+    good = widths([0x08082896, 0x080828A4, 0x080828B2])
+    super_ = widths([0x080828BA, 0x080828C8, 0x080828D6, 0x080828E4])
+    super_ += [100-sum(super_)]
+    rates = {"land": land, "water": water, "rock_smash": water, "Old Rod": old, "Good Rod": good, "Super Rod": super_}
+    if any(sum(values) != 100 or min(values) <= 0 for values in rates.values()):
+        raise ValueError("RR chooser intervals are not a probability distribution")
+    return rates
+
+
+def build_catalog(rom: bytes, area_map: dict[str, str], names: dict[int, str], labels=None) -> tuple[dict, dict]:
+    """ROM owns all encounter facts; names/optional labels are display metadata."""
+    decoded, rates = decode_encounters(rom), slot_rates(rom)
+    labels = labels or {}
+    periods = {"Day": {}, "Night": {}}
+    unmapped, empty = set(), set()
+    for period in periods:
+        seen = {}
+        for row in effective_variants(decoded, period):
+            map_key = f"{row['map_group']}:{row['map_num']}"
+            area = area_map.get(map_key)
+            if not area:
+                unmapped.add(map_key)
+                continue
+            for kind, info in row["habitats"].items():
+                for slot in info["slots"]:
+                    sid, index = slot["species_id"], slot["slot"]
+                    if sid == 0:
+                        empty.add(slot["address"])
+                        continue
+                    if sid not in names:
+                        raise ValueError(f"RR encounter {map_key}/{kind}/{index}: unnamed species {sid}")
+                    method = {"land": "land", "water": "Surfing", "rock_smash": "Rock Smash"}.get(kind)
+                    rate = rates[kind][index] if kind != "fishing" else None
+                    if kind == "fishing":
+                        method = "Old Rod" if index < 2 else "Good Rod" if index < 5 else "Super Rod"
+                        rate = rates[method][index - (0 if index < 2 else 2 if index < 5 else 5)]
+                    source = {"map": map_key, "period": period, "fallback_variant": row["variant"],
+                              "habitat": kind,
+                              "header_address": info["header_address"], "selected_from": info["selected_from"],
+                              "info_address": info["info_address"], "slots_address": info["slots_address"],
+                              "encounter_rate": info["encounter_rate"], "slot": index,
+                              "address": slot["address"], "raw_hex": slot["raw_hex"]}
+                    unique = (area, method, slot["address"])
+                    if unique in seen:
+                        seen[unique]["sources"].append(source)
+                        continue
+                    entry = {"name": labels.get(sid, names[sid]), "species_id": sid, "rate": rate,
+                             "min_level": slot["min_level"], "max_level": slot["max_level"]}
+                    item = {"entry": entry, "sources": [source]}
+                    seen[unique] = item
+                    periods[period].setdefault(area, {}).setdefault(method, []).append(item)
+    out, proofs = {}, {}
+    for area in sorted(periods["Day"].keys() | periods["Night"].keys()):
+        methods, evidence = {}, {}
+        day, night = periods["Day"].get(area, {}), periods["Night"].get(area, {})
+        for method in ("land", "Surfing", "Old Rod", "Good Rod", "Super Rod", "Rock Smash"):
+            a, b = day.get(method, []), night.get(method, [])
+            if not a and not b:
+                continue
+            if method != "land" and [r["entry"] for r in a] == [r["entry"] for r in b]:
+                methods[method] = [r["entry"] for r in a]
+                evidence[method] = [x["sources"]+y["sources"] for x, y in zip(a, b, strict=True)]
+            else:
+                for period, rows in (("Day", a), ("Night", b)):
+                    if rows:
+                        label = period if method == "land" else period+" "+method
+                        methods[label] = [r["entry"] for r in rows]
+                        evidence[label] = [r["sources"] for r in rows]
+        out[area], proofs[area] = methods, evidence
+    return out, {"schema": "rr-rom-encounters-v1", "rom_sha1": decoded["rom_sha1"],
+                 "heads": decoded["heads"], "rates": rates,
+                 "field_sources": {"species_id": "RR ROM WildPokemon+2",
+                                   "min_level": "RR ROM WildPokemon+0", "max_level": "RR ROM WildPokemon+1",
+                                   "rate": "RR ROM chooser instruction intervals",
+                                   "name": "display metadata only: pinned community label or species catalog"},
+                 "unmapped_maps": sorted(unmapped), "excluded_none_slot_addresses": sorted(empty),
+                 "runtime_limits": ["gWildDataSwitch overrides and swarms are not inferred",
+                                    "fallback variants are possibilities, not an observation of the active variable"],
+                 "entries": proofs}
+
+
 def primary_area_slots(decoded: dict, area_map: dict[str, str]) -> dict:
     """Project primary override slots by the server's coarse area/method keys.
 
@@ -180,6 +322,32 @@ def catalog_diff(decoded: dict, area_map: dict[str, str], catalog: dict) -> dict
             "unmapped_primary_maps": [list(key) for key in unmapped], "mismatches": mismatches}
 
 
+def full_catalog_diff(rom: bytes, area_map: dict[str, str], catalog: dict) -> dict:
+    """Compare all shipped game-fact fields against the complete ROM selection model."""
+    decoded = decode_encounters(rom)
+    ids = {s["species_id"] for rows in decoded["tables"].values() for h in rows
+           for info in h["habitats"].values() for s in info["slots"] if s["species_id"]}
+    expected, _ = build_catalog(rom, area_map, {sid: str(sid) for sid in ids})
+    by_area = {}
+
+    def values(rows):
+        return [(r["species_id"], r["min_level"], r["max_level"], r["rate"]) for r in rows]
+
+    for area in sorted(expected.keys() | catalog.keys()):
+        methods = {}
+        a, b = expected.get(area, {}), catalog.get(area, {})
+        for method in sorted(a.keys() | b.keys()):
+            want, got = values(a.get(method, [])), values(b.get(method, []))
+            if want != got:
+                methods[method] = {"rom_count": len(want), "catalog_count": len(got),
+                                   "rom_slots": want, "catalog_slots": got}
+        by_area[area] = {"rom_count": sum(map(len, a.values())), "catalog_count": sum(map(len, b.values())),
+                         "matched": not methods, "differences": methods}
+    return {"rom_sha1": decoded["rom_sha1"], "fields": ["species_id", "min_level", "max_level", "rate"],
+            "mismatched_areas": sum(not row["matched"] for row in by_area.values()),
+            "mismatched_methods": sum(len(row["differences"]) for row in by_area.values()), "areas": by_area}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--rom", type=Path, required=True)
@@ -187,18 +355,19 @@ def main() -> int:
     parser.add_argument("--catalog", type=Path, help="compare a generated encounter catalog")
     parser.add_argument("--diff-output", type=Path, help="write the complete catalog comparison")
     args = parser.parse_args()
-    decoded = decode_encounters(load_rom(args.rom))
+    rom = load_rom(args.rom)
+    decoded = decode_encounters(rom)
     if args.output:
         args.output.parent.mkdir(parents=True, exist_ok=True)
         args.output.write_text(json.dumps(decoded, indent=2)+"\n", encoding="utf-8")
     if args.catalog:
-        area_map = json.loads((ROOT / "data/games/gen3_frlge/area_map.json").read_text())
-        diff = catalog_diff(decoded, area_map, json.loads(args.catalog.read_text(encoding="utf-8")))
+        area_map, _ = client_area_labels()
+        diff = full_catalog_diff(rom, area_map, json.loads(args.catalog.read_text(encoding="utf-8")))
         if args.diff_output:
             args.diff_output.parent.mkdir(parents=True, exist_ok=True)
             args.diff_output.write_text(json.dumps(diff, indent=2)+"\n", encoding="utf-8")
-        print(f"Catalog comparison: {diff['mismatched_methods']} area/method differences; "
-              f"{len(diff['unmapped_primary_maps'])} primary map(s) have no coarse area key")
+        print(f"Catalog comparison: {diff['mismatched_methods']} method differences "
+              f"in {diff['mismatched_areas']} areas")
     print(json.dumps({"rom_sha1": decoded["rom_sha1"], "heads": decoded["heads"],
                       "header_counts": {name: len(rows) for name, rows in decoded["tables"].items()},
                       "slot_counts": {name: sum(len(h["slots"]) for r in rows for h in r["habitats"].values())

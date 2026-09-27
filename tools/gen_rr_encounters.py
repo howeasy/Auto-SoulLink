@@ -1,35 +1,18 @@
 #!/usr/bin/env python3
-"""
-tools/gen_rr_encounters.py — Generate RR encounter tables from funnotbun's wild_encounter_tables.c.
+"""Generate the complete RR encounter catalog from the pinned cartridge.
 
-Usage:
-    python tools/gen_rr_encounters.py
+Species, min/max levels, slot probabilities and map/time selection come from
+RR ROM tables/code. The pinned community C snapshot is display-label metadata
+only; it cannot change a slot's numeric identity or gameplay values.
 
-Fetches wild_encounter_tables.c and outputs:
-    data/games/gen3_frlge/rr_encounters.json
-
-Format:
-    {area_id: {method: [{name, species_id, rate, min_level, max_level}]}}
-
-Methods: Day, Night, Surfing, Rock Smash, Old Rod, Good Rod, Super Rod
-(Raid encounters are excluded.)
-
-Encounter rates match funnotbun's regexLocations.js returnRarity() logic.
-
-The source used to be fetched live from funnotbun/funnotbun.github.io, which
-no longer exists on GitHub (confirmed 404, 2026-09-26). This now reads a
-byte-for-byte pinned Wayback Machine capture declared in
-data/gen3_rr_sources.lock.json (funnotbun_wild_encounter_tables_c). See
-docs/gen3_requirements.md row F-7 and tools/fetch_rr_sources.py.
-
-Usage:
-    python tools/gen_rr_encounters.py            # regenerate rr_encounters.json
-    python tools/gen_rr_encounters.py --check     # regenerate in memory and
-                                                    # diff against the committed
-                                                    # rr_encounters.json
+python tools/gen_rr_encounters.py --rom RR.gba [--check]
+SLINK_RR_ROM or SLINK_GEN3_ROMS supplies the default ROM path.
+Outputs the existing area->method->entries JSON plus a ROM provenance sidecar.
+The legacy community parser below remains only for historical audit/reproduction.
 """
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -39,12 +22,19 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
 from gen_rr_species import to_display as species_table_name  # noqa: E402
+from rr_rom_encounters import (  # noqa: E402
+    build_catalog,
+    client_area_labels,
+    default_rom_path,
+    load_rom,
+)
 
 _SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR = os.path.normpath(os.path.join(_SCRIPT_DIR, "..", "data", "games", "gen3_frlge"))
 OUTPUT_PATH = os.path.join(_DATA_DIR, "rr_encounters.json")
 AREA_MAP_PATH = os.path.join(_DATA_DIR, "area_map.json")
 SPECIES_PATH = os.path.join(_DATA_DIR, "rr_species.json")
+PROVENANCE_PATH = Path(_SCRIPT_DIR).parent / "data" / "gen3_rr_encounters_rom.json"
 
 # ── Method label overrides ────────────────────────────────────────────────────
 
@@ -349,18 +339,29 @@ def parse_encounters(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--rom", type=Path, default=default_rom_path(), help="pinned RR ROM (or SLINK_RR_ROM)")
     parser.add_argument("--check", action="store_true",
                         help="Regenerate in memory and diff against the "
                              f"committed {OUTPUT_PATH}; exit 1 on drift.")
     args = parser.parse_args()
 
     text = cached_source("funnotbun_wild_encounter_tables_c").decode("utf-8")
-    print(f"Loaded {len(text):,} bytes — parsing encounters…")
-
-    known_ids = _build_known_area_ids(AREA_MAP_PATH)
+    print(f"Loaded {len(text):,} bytes of pinned display-label metadata.")
     name_to_id = _build_name_to_id(SPECIES_PATH)
-
-    encounters = parse_encounters(text, known_ids, name_to_id)
+    labels = {}
+    for const in sorted(set(re.findall(r"\bSPECIES_\w+", text))):
+        sid = _resolve_species_id(const, name_to_id)
+        if sid:
+            labels.setdefault(sid, _species_display_name(const))
+    names = {int(sid): name for sid, name in json.loads(Path(SPECIES_PATH).read_text(encoding="utf-8")).items()}
+    area_map, fine_fallback = client_area_labels()
+    encounters, provenance = build_catalog(load_rom(args.rom), area_map, names, labels)
+    provenance["display_label_source_sha256"] = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    provenance["species_catalog_sha256"] = hashlib.sha256(Path(SPECIES_PATH).read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+    provenance["area_map_sha256"] = hashlib.sha256(Path(AREA_MAP_PATH).read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+    locations = Path(_DATA_DIR) / "gen3_frlge_locations.lua"
+    provenance["locations_sha256"] = hashlib.sha256(locations.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+    provenance["fine_location_keys"] = {key: value for key, value in fine_fallback.items() if value in encounters}
 
     n_areas = len(encounters)
     n_entries = sum(
@@ -371,10 +372,11 @@ def main() -> int:
     print(f"Parsed {n_entries} encounter entries across {n_areas} areas.")
 
     regen = json.dumps(encounters, ensure_ascii=False, indent=2)
+    proof = json.dumps(provenance, indent=2)+"\n"
 
     if args.check:
         committed = Path(OUTPUT_PATH).read_text(encoding="utf-8")
-        if regen == committed:
+        if regen == committed and PROVENANCE_PATH.exists() and PROVENANCE_PATH.read_text(encoding="utf-8") == proof:
             print(f"OK: regenerated output matches {OUTPUT_PATH} byte-for-byte "
                   f"({n_entries} entries across {n_areas} areas).")
             return 0
@@ -383,21 +385,10 @@ def main() -> int:
               f"{diff_snippet(committed, regen)}", file=sys.stderr)
         return 1
 
-    # Report unresolved species (species_id == 0) for diagnostics
-    unresolved: list[str] = []
-    for methods in encounters.values():
-        for entries in methods.values():
-            for e in entries:
-                if e["species_id"] == 0 and e["name"] not in unresolved:
-                    unresolved.append(e["name"])
-    if unresolved:
-        print(f"Note: {len(unresolved)} species constants unresolved to ID "
-              f"(will display without sprite): {', '.join(sorted(unresolved)[:20])}"
-              f"{'…' if len(unresolved) > 20 else ''}")
-
     os.makedirs(os.path.dirname(OUTPUT_PATH), exist_ok=True)
-    with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
+    with open(OUTPUT_PATH, "w", encoding="utf-8", newline="\n") as f:
         f.write(regen)
+    PROVENANCE_PATH.write_text(proof, encoding="utf-8", newline="\n")
     print(f"Wrote: {OUTPUT_PATH}")
     return 0
 

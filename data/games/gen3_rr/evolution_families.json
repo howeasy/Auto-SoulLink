@@ -1,26 +1,14 @@
 {
   "source_rom_sha1": "964f951a0fdaf209e4ea1344883ef0d557bb3a80",
-  "species_catalog_sha256": "530bdd87d305f82bedb13866e2e5d8a5c64b3cec35e75001669f71f4f7533c8c",
+  "species_catalog_sha256": "66fed5a2fbb8bd1b0f809c106cf3e6a7d1ad69ab23e4e20883783dd915850dfe",
   "table_address": 159177136,
   "slots": 16,
   "entry_size": 8,
-  "table_sha256": "fce16ba3c76cde18c46a1d422e8430cb7b8a7ad398db5e5323bfdb7accfc805a",
-  "species_count": 1335,
+  "table_sha256": "0d02741d5117d49a31f6347557d9157f1650debf78c22a2746380b1e3301dc75",
+  "species_count": 1349,
   "edge_count": 735,
-  "wild_ids_outside_catalog": [
-    1356,
-    1361,
-    1362,
-    1371
-  ],
-  "reachable_ids_outside_catalog": [
-    1356,
-    1361,
-    1362,
-    1363,
-    1369,
-    1371
-  ],
+  "wild_ids_outside_catalog": [],
+  "reachable_ids_outside_catalog": [],
   "families": {
     "1": 1,
     "2": 1,
@@ -1352,10 +1340,24 @@
     "1354": 1354,
     "1355": 1355,
     "1356": 1356,
+    "1357": 1357,
+    "1358": 1358,
+    "1359": 1359,
+    "1360": 1360,
     "1361": 1361,
     "1362": 1361,
     "1363": 1132,
+    "1364": 1364,
+    "1365": 1365,
+    "1366": 1366,
+    "1367": 1367,
+    "1368": 1368,
     "1369": 1176,
-    "1371": 1132
+    "1370": 1370,
+    "1371": 1132,
+    "1372": 1372,
+    "1373": 1373,
+    "1374": 1374,
+    "1375": 1375
   }
 }

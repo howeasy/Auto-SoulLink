@@ -92,6 +92,10 @@ def test_generator_check_against_cache(script):
         # dependency -- a fresh env without it gets a named skip here, never
         # a raw ImportError failure.
         pytest.importorskip("openpyxl")
+    if script in ("tools/gen_rr_species.py", "tools/gen_rr_encounters.py", "tools/gen_rr_types.py"):
+        from tools.rr_rom_encounters import default_rom_path
+        if not default_rom_path().exists():
+            pytest.skip("ROM-authoritative RR generation requires SLINK_RR_ROM or SLINK_GEN3_ROMS")
     for name in sorted(_cached_source_names(script)):
         try:
             rrfetch.cached_source(name, allow_fetch=False)
