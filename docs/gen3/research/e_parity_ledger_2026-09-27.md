@@ -123,10 +123,10 @@ and termination restricted to owned PIDs. Other workers' emulators remain untouc
 
 | Cell | Scope of this card | Current evidence |
 | --- | --- | --- |
-| C3s shiny/bonus | FR, LG, RR, Emerald | Native carrier and saved oracle implemented with 23 MODEL controls. Live qualification pending. One-time wild PID setup is disclosed separately from normal-input captures/bonus linking/saves. |
+| C3s shiny/bonus | FR, LG, RR, Emerald | All four title-as-A cells LIVE/PYDEC PASS. One-time wild PID setup is disclosed; all four catches, both pair formations and saves use native input/production events. Emerald passed on attempt2 after a native whiteout on attempt1. See the title-specific receipts and `clause_live_rest_2026-09-27.md`. |
 | C3l PC release | FR/LG/RR; Emerald already passed | Fresh FR/LG/RR native PC release, partner retirement/memorial, save-witness and PYDEC PASS at `6349ba01`; title-specific receipts below. |
-| C3b ball gate | LG and Emerald; FR already passed | LG and Emerald PASS at clean `6349ba01`: native pre-ball suppression/reward activation, disclosed20-ball second phase, real link and matching final saves. A stale final-result reader was fixed red/green before the accepted runs. |
-| C3r gender/type | RR | Await the FRLG peer's ROM encounter/type catalog composition before live rows. |
+| C3b ball gate | LG and Emerald; FR already passed | LG and Emerald PASS at clean `6349ba01`: native pre-ball suppression/reward activation, disclosed20-ball second phase, real link and matching final saves. A stale final-result reader was fixed red/green before the accepted runs. The older RR receipt was FAIL, so RR was rerun and also PASS at `49d99c6c`. |
+| C3r species/gender/type/family | RR | RR gender PASS attempt4/8 and type PASS attempt1/3 at `49d99c6c`. RR species/dupes PASS attempt3/8 and evolution family PASS attempt8/16 at `a643a2b6`. Family observed native Galarian Zigzagoon1222 against B's evolved Galarian Linoone1223. An earlier family attempt exposed an oracle map-shape bug (numeric787 vs text3.19), fixed red/green before the accepted run. Other title/rule combinations are outside this card's new live receipts. |
 
 C3 also corrected RR base/Galarian evolution families and the family fixture,
 retained retry evidence, and added 16 RR family attempts. Its full gate was
@@ -135,7 +135,8 @@ The RR encounter peer owns the separate ROM-authoritative catalog and the
 regeneration of the family artifact after extending the species catalog.
 
 Other original cells are historical context, not re-audited by this card.
-Final title-by-row receipts and code cuts will be added as qualification runs finish.
+Final title-by-row receipts and code cuts are listed in
+`docs/gen3/research/clause_live_rest_2026-09-27.md`.
 
 ### Accepted live receipts at 6349ba01
 
@@ -144,6 +145,11 @@ Final title-by-row receipts and code cuts will be added as qualification runs fi
 - FR release: `docs/gen3/probes/clause_live_rest_release_gen3_gen3_frlg_6349ba01.txt`.
 - LG release: `docs/gen3/probes/clause_live_rest_release_gen3_gen3_lgfr_6349ba01.txt`.
 - RR release: `docs/gen3/probes/clause_live_rest_release_gen3_gen3_rr_6349ba01.txt`.
+- RR ball gate: `docs/gen3/probes/clause_live_rest_ball_gate_gen3_gen3_rr_49d99c6c.txt`.
+- RR gender and type: `docs/gen3/probes/clause_live_rest_gender_clause_gen3_gen3_rr_49d99c6c.txt` and `clause_live_rest_type_clause_gen3_gen3_rr_49d99c6c.txt`.
+- RR family: `docs/gen3/probes/clause_live_rest_species_family_gen3_gen3_rr_a643a2b6.txt`.
+- RR species/dupes: `docs/gen3/probes/clause_live_rest_species_clause_gen3_gen3_rr_a643a2b6.txt`.
+- FR/LG/RR/Emerald shiny bonus: `docs/gen3/probes/clause_live_rest_shiny_bonus_gen3_gen3_{frlg,lgfr,rr}_49d99c6c.txt` and `clause_live_rest_shiny_bonus_gen3_gen3_emerald_a643a2b6.txt`.
 
 The raw receipts, both SaveRAMs, witness dumps and manifests are retained under
 `C:/slink-wt/g3-clause-live-rest/.cache/live/`; server states remain in the
@@ -152,3 +158,9 @@ private `.cache/state/` of the named run checkout. The first LG run exposed
 An Emerald run was also refused for an uncommitted LG receipt file (+dirty);
 it was not promoted. The accepted Emerald run uses the separate frozen clean
 checkout `C:/slink-wt/g3-clause-run`, separating development from qualification.
+
+Final combined-code unit run: **12611 passed / 4244 skipped / zero failures**;
+all 154 selected clause, reader, shiny and citation controls ran with no skip.
+The first full run identified 11 stale `docs/protocol.md` offsets after the
+integrated `state.py` changes; the citations were repaired and the final full
+rerun exited 0. See `clause_live_rest_2026-09-27.md` for the evidence boundary.
