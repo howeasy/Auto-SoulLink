@@ -187,3 +187,30 @@ def test_pc_main_menu_rows_come_from_the_builds_compiled_enum():
     assert "withdraw = k.OPTION_WITHDRAW, deposit = k.OPTION_DEPOSIT, move_mons = k.OPTION_MOVE_MONS" in lua
     duo = (ROOT / "lua/tests/duo/duo_gen3_main.lua").read_text(encoding="utf-8")
     assert "PC.mode(label, 0)" not in duo and "PC.mode(label, 1)" not in duo
+
+
+def test_whiteout_respawns_are_the_roms_own_tables():
+    """The expansion build whites out INTO a heal location's respawn map (OW_WHITEOUT_CUTSCENE
+    >= GEN_4, src/overworld.c:744-756): the generator's source-derived table must equal the ROM's
+    sHealLocations / sWhiteoutRespawnHealCenterMapIdxs (read through the build's own .sym)."""
+    k, rows = HARNESS["constants"], HARNESS["whiteout_respawns"]
+    assert k["OW_WHITEOUT_CUTSCENE"] >= k["GEN_4"] and len(rows) == k["NUM_HEAL_LOCATIONS"] - 1
+    oldale = next(r for r in rows if r["id"] == "HEAL_LOCATION_OLDALE_TOWN")
+    assert oldale["heal"] == [0, 10, 6, 17] and oldale["respawn"] == [2, 2, 7, 4]
+    art = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS", ROOT / ".cache/expansion-output/reference"))
+    if not (art / "pokeemerald.gba").is_file():
+        pytest.skip("reference ROM absent")
+    rom, syms = (art / "pokeemerald.gba").read_bytes(), {}
+    for line in (art / "pokeemerald.sym").read_text().splitlines():
+        parts = line.split()
+        if len(parts) == 4:
+            syms.setdefault(parts[3], int(parts[0], 16) - 0x08000000)
+    heal = HARNESS["structs"]["HealLocation"]
+    for i, row in enumerate(rows):
+        at = syms["sHealLocations"] + i * heal["size"]
+        g, n = struct.unpack_from("<bb", rom, at + heal["fields"]["mapGroup"]["offset"])
+        x = struct.unpack_from("<H", rom, at + heal["fields"]["x"]["offset"])[0]
+        y = struct.unpack_from("<H", rom, at + heal["fields"]["y"]["offset"])[0]
+        assert [g, n, x, y] == row["heal"], row["id"]
+        assert list(struct.unpack_from("<4H", rom, syms["sWhiteoutRespawnHealCenterMapIdxs"] + i * 8)) \
+            == row["respawn"], row["id"]

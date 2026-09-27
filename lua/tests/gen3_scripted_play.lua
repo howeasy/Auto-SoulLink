@@ -202,6 +202,21 @@ local function whiteout_destination(cp, checkpoint)
     local raw = checkpoint or last_heal_checkpoint(cp)
     if not raw then return nil end
     local group, num, warp, x, y = raw.group, raw.num, raw.warp, raw.x, raw.y
+    if TITLE == Syms.EXP_TITLE and warp == 255 then
+        -- X3: the expansion reference build whites out INTO the heal location's respawn map
+        -- (OW_WHITEOUT_CUTSCENE >= GEN_4: src/overworld.c:744-756, heal_location.c:88-105), a
+        -- table generated from its src/data/heal_locations.json (harness_facts.json
+        -- whiteout_respawns, checked against the ROM's own arrays by test_gen3_fixture_exp.py).
+        local f = assert(io.open(WT .. "/data/games/gen3_exp/28877d73/harness_facts.json", "rb"))
+        local rows = JSON.decode(f:read("a")).whiteout_respawns
+        f:close()
+        for _, row in ipairs(rows) do
+            local h, r = row.heal, row.respawn
+            if h[1] == group and h[2] == num and h[3] == x and h[4] == y and r then
+                return {group = r[1], num = r[2], x = r[3], y = r[4]}
+            end
+        end
+    end
     if Syms.emerald_engine(TITLE) and warp == 255 then
         -- E4-DUO-2: Emerald has no interior projection. pret pokeemerald c65e93f2
         -- src/overworld.c:357-366 DoWhiteOut -> SetWarpDestinationToLastHealLocation (:665-668)

@@ -8804,6 +8804,14 @@ class DuoRun:
         group, num = int.from_bytes(sb1[0x1C:0x1D], "little", signed=True), int.from_bytes(
             sb1[0x1D:0x1E], "little", signed=True)
         x, y = (int.from_bytes(sb1[at:at + 2], "little", signed=True) for at in (0x20, 0x22))
+        if self._gen3_title(inst) == GEN3_EXP_TITLE:
+            # X3: the expansion build whites out INTO the heal location's respawn map
+            # (OW_WHITEOUT_CUTSCENE >= GEN_4), harness_facts.json whiteout_respawns
+            facts = os.path.join(REPO, "data", "games", GEN3_PACKS[GEN3_EXP_TITLE], "harness_facts.json")
+            with open(facts, encoding="utf-8") as handle:
+                rows = json.load(handle)["whiteout_respawns"]
+            row = next(r for r in rows if r["heal"] == [group, num, x, y] and "respawn" in r)
+            group, num, x, y = row["respawn"]
         return rf"map={group}\.{num} at=\({x},{y}\)"
 
     def _gen3_whiteout_control(self) -> str:

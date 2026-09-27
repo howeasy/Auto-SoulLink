@@ -126,3 +126,13 @@ def test_battle_geometry_is_the_builds_compiler_facts_and_vanilla_is_unchanged()
     assert "if title == TITLES.EXP_TITLE then" in src and "st.BattlePokemon, st.MoveInfo.bitfields.power" in src
     for literal in ("S.gBattleMons + 0x28", "base + 0x24 + slot", "+ 0x58 + 0x28"):
         assert literal not in src, literal
+
+
+def test_the_whiteout_landing_is_the_oldale_center_respawn_not_the_outdoor_tile():
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.gcfg, run.cfg, run.game = dict(duo.GAMES["gen3_exp"]), dict(duo.SCENARIOS["whiteout_gen3"]), "gen3_exp"
+    assert run._gen3_fixture_heal_tile("a") == r"map=2\.2 at=\(7,4\)"
+    emerald = duo.DuoRun.__new__(duo.DuoRun)
+    emerald.gcfg, emerald.cfg, emerald.game = (dict(duo.GAMES["gen3_emerald"]),
+                                               dict(duo.SCENARIOS["whiteout_gen3"]), "gen3_emerald")
+    assert emerald._gen3_fixture_heal_tile("a") == r"map=0\.10 at=\(6,17\)"

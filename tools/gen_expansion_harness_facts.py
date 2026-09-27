@@ -42,6 +42,33 @@ def pc_options_enum(source: Path) -> dict:
             "text": m[0], "sha256": gf.sha(m[0].encode())}
 
 
+def whiteout_respawns(source: Path) -> list[dict]:
+    """Where a whiteout lands, per heal location, from the pinned source data: the heal tile
+    (src/data/heal_locations.json) and, when it names a respawn_map, the respawn tile the build
+    generates into sWhiteoutRespawnHealCenterMapIdxs (src/data/heal_locations.json.txt: respawn_x/y,
+    else DEFAULT_POKEMON_CENTER_X/Y). Map ids resolve through data/maps/map_groups.json. Index i is
+    heal location id i + 1 (the generated arrays' [id - 1] order)."""
+    import re
+    groups = json.loads((source / "data/maps/map_groups.json").read_text(encoding="utf-8"))
+    ids = {}
+    for g, group in enumerate(groups["group_order"]):
+        for n, name in enumerate(groups[group]):
+            map_id = json.loads((source / "data/maps" / name / "map.json").read_text(encoding="utf-8"))["id"]
+            ids[map_id] = (g, n)
+    template = (source / "src/data/heal_locations.json.txt").read_text(encoding="utf-8")
+    default = {axis: int(re.search(rf"#define DEFAULT_POKEMON_CENTER_{axis.upper()} (\d+)", template)[1])
+               for axis in ("x", "y")}
+    rows = []
+    for loc in json.loads((source / "src/data/heal_locations.json").read_text(encoding="utf-8"))["heal_locations"]:
+        row = {"id": loc["id"], "heal": [*ids[loc["map"]], loc["x"], loc["y"]]}
+        if "respawn_map" in loc:
+            row["respawn"] = [*ids[loc["respawn_map"]], loc.get("respawn_x", default["x"]),
+                              loc.get("respawn_y", default["y"])]
+            row["respawn_npc"] = loc.get("respawn_npc")
+        rows.append(row)
+    return rows
+
+
 def build(source: Path, artifacts: Path, work: Path) -> dict:
     env = os.environ.copy()
     env["PATH"] = "/usr/bin:/bin"
@@ -62,6 +89,7 @@ def build(source: Path, artifacts: Path, work: Path) -> dict:
     facts = gf.parse_probe(gf.elf_symbols(obj.read_bytes(), "x1_"))
     return {"schema": 1, "evidence": "SOURCE/COMPILER only; harness facts, no runtime qualification",
             "rom_sha1": ROM_SHA1, "source_commit": gf.PIN, **facts,
+            "whiteout_respawns": whiteout_respawns(source),
             "provenance": {"probe_sha256": gf.source_sha(PROBE), "pc_options_enum": pc_enum,
                            "object_sha256": manifest["object_sha256"],
                            "preprocessed_sha256": manifest["preprocessed_sha256"],
