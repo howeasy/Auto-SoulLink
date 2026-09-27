@@ -38,6 +38,7 @@ import json
 import struct
 from bisect import bisect_right
 from collections.abc import Mapping
+from functools import cache
 from pathlib import Path
 
 from .gen3_codec import decode_name
@@ -141,12 +142,14 @@ class _Rom:
         return b"".join(chunks)
 
 
+@cache
 def table_symbols(title: str, *, symbol_dir: Path = SYMBOL_DIR) -> dict:
     """Read this title's three table symbols and derive counts from their sizes.
 
     ``count`` includes TRAINER_NONE, species zero, and the wild-header sentinel.
     A caller with relocated table heads may use the lower-level decoders, passing
     the new address and count explicitly; this helper describes the pinned heads.
+    The pinned file is immutable; callers must not mutate the cached mapping.
     """
     if title not in ("firered", "leafgreen"):
         raise ValueError(f"unsupported FR/LG title: {title!r}")
