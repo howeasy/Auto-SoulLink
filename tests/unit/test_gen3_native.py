@@ -168,6 +168,24 @@ def test_partial_opcode_publication_is_distinct_from_no_dispatch():
     assert results[0][0] == "native dispatch interrupted"
 
 
+def test_shipped_native_declares_the_complete_trade_transport_interface():
+    w = World()
+    for method in ("trade_visit", "trade_eligible", "trade_authorized", "prepare_trade", "withdraw_trade", "cancel", "transfer"):
+        assert w.native[method] is not None, method
+    arity = w.lua.eval('function(f) return debug.getinfo(f, "u").nparams end')
+    assert arity(w.native.transfer) == 6  # self, step, cmd, done, guard, milestone callback
+    assert w.native.trade_capable(w.native) is False
+
+
+def test_transfer_blob_length_uses_the_reads_facade_record_size():
+    w = World()
+    w.reads.PARTY_MON_SIZE = 80  # MODEL alternate record geometry, not a cartridge claim
+    handle = w.native.transfer(w.native, "enemy", w.lua.table(blobs_hex=w.lua.table("00" * 80)), lambda *_: None)
+    assert not isinstance(handle, tuple)
+    w.service()
+    assert handle.posted is True
+
+
 def test_a_job_queued_behind_another_carries_no_receipt_yet():
     w = World()
     first = w.native.play_sound(w.native, 25)

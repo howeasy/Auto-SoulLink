@@ -950,12 +950,13 @@ def test_p_draw_edge_today_an_end_of_turn_foe_ko_plus_our_last_mons_perish_ko_is
 
 # ── command seams ───────────────────────────────────────────────────────────────────────
 
-def test_apply_trade_on_frlg_writes_nothing_and_replies_nothing():
+def test_apply_trade_on_frlg_writes_nothing_and_reports_unchanged():
     w = live()
     n = len(w.sent)
     w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
     w.step(3)
-    assert w.writes == [] and [m["event"] for m in w.sent[n:] if m["event"] != "tick"] == []
+    assert w.writes == []
+    assert [m["event"] for m in w.sent[n:] if m["event"] != "tick"] == ["trade_done", "menu_result"]
 
 
 @pytest.mark.parametrize("name,extra,event,field,value", [
@@ -1885,12 +1886,12 @@ def test_trade_partner_declining_the_confirm_writes_no_party_byte_and_completes_
     trade_writes_are_native_only(w)
 
 
-def test_trade_on_rr_clean_has_no_trade_path_writes_nothing_and_completes_nothing():
+def test_trade_on_rr_clean_has_no_trade_path_and_reports_unchanged():
     w = live("gen3_rr", "radical_red", "clean")
     assert w.parts.native is None
     apply(w, w.encode(PARTNER).hex().upper())
     w.step(5)
-    assert w.writes == [] and w.events("trade_done") == []
+    assert w.writes == [] and w.events("trade_done")[-1]["new_key"] == KB
 
 
 
@@ -2545,4 +2546,3 @@ def test_every_pack_maps_every_sound_id_the_server_and_session_send():
             if isinstance(block, dict) and "sound" in block:
                 mapped = {int(k) for k in block["sound"]["se_ids"]}
                 assert wire <= mapped, (pack, title, sorted(wire - mapped))
-

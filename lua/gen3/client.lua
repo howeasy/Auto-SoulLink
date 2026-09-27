@@ -79,6 +79,8 @@ function Client.new(p)
     local core = assert(p.core, "core")
     local trade
     local owed = p.owed_reports and p.owed_reports.new() or nil
+    local trade_epoch, trade_connected = 0, false
+    local trade_report_epochs = setmetatable({}, {__mode="k"})
     local a, d = profile.ram, profile.derived
     local arr = json.array
     local area_map, locations = p.area_map or {}, p.locations or {}
@@ -949,6 +951,7 @@ function Client.new(p)
         -- battle RAM still says; a queued job must not ride it (reducer lifecycle or not)
         rival_authority = nil
     end
+    function drv.on_disconnect() trade_connected = false end
 
     -- One read-only cartridge snapshot per session, including cached failure. The Gen 3
     -- reader owns bounds/pointer walking; this hook only binds table metadata and transport.
@@ -977,6 +980,9 @@ function Client.new(p)
     end
     -- No wire side effect here (no area_enter, no banner): hello is the connection's first line.
     function drv.hello_fields()
+        if not trade_connected and p.net.connected() then
+            trade_epoch, trade_connected = trade_epoch + 1, true
+        end
         local party = party_read() or {}
         update_frozen(party)
         rescan_boxes()
@@ -1352,12 +1358,29 @@ function Client.new(p)
         st.trade_unresolved = trade:uncertainties()
     end
     if native and p.Trade and owed and p.artifact_kind == "companion" then
+        local trade_policy = assert(p.trade_policy, "pack trade policy required")
         trade = p.Trade.new({native=native, frame=io.framecount, eligible=eligible,
+            log=log, hud=hud,
+            epoch=function() return trade_epoch end,
+            prepare_frames=trade_policy.prepare_frames, apply_frames=trade_policy.apply_frames,
             ready_to_send=function() return session and session.hello_sent and p.net.connected() end,
             clear=function() return not in_battle() and overworld_ok() end,
             party=party_read, key=key, capacity=d.PARTY_CAPACITY or 6, mon_size=R.PARTY_MON_SIZE,
-            send=function(event, fields)
+            decode_blob=function(hex)
+                local bytes = {}
+                for i=1,#hex,2 do bytes[#bytes+1] = tonumber(hex:sub(i,i+1),16) end
+                return reads.decode_party_mon(bytes)
+            end,
+            report_pending=function(epoch, value)
+                for _, row in ipairs(owed.list) do
+                    if row.event == "trade_done" and row.fields.token == value
+                       and trade_report_epochs[row.fields] == epoch then return true end
+                end
+                return false
+            end,
+            send=function(event, fields, epoch)
                 if event == "trade_done" then
+                    trade_report_epochs[fields] = epoch
                     owed.list[#owed.list+1] = {event=event, fields=fields}
                     return true
                 end
@@ -1388,7 +1411,17 @@ function Client.new(p)
     end
     C.apply_trade = function(cmd)
         if trade and trade:capable() then trade:apply(cmd); sync_trade()
-        else log("apply_trade refused: durable native trade unavailable") end
+        else
+            log("apply_trade refused: durable native trade unavailable")
+            if type(cmd.token) == "string" and cmd.token ~= "" and type(cmd.old_key) == "string" and cmd.old_key ~= "" then
+                local fields = {token=cmd.token, slot=cmd.slot, new_key=cmd.old_key, new_species=0}
+                local cancel = {token=cmd.token, choice=0, withdraw=true}
+                if owed then
+                    owed.list[#owed.list+1] = {event="trade_done", fields=fields}
+                    owed.list[#owed.list+1] = {event="menu_result", fields=cancel}
+                else send("trade_done", fields); send("menu_result", cancel) end
+            end
+        end
         return true
     end
     C.withdraw_trade = function(cmd)
@@ -1401,8 +1434,12 @@ function Client.new(p)
             local refresh=false
             owed:step(p.net.connected(), session.hello_sent == true, function(event, fields)
                 local sent=send(event,fields)
+                local epoch = trade_report_epochs[fields]
                 if sent and event == "trade_done" and fields.uncertain and fields.after_reset
-                   and trade and trade:reloaded(fields.token) then refresh=true end
+                   and trade and trade:reloaded(fields.token, epoch) then
+                    trade:allow_reload_evidence(fields.token, epoch)
+                    refresh=true
+                end
                 return sent
             end)
             -- Server only consumes a hello AFTER the uncertainty declaration. This second

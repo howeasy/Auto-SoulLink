@@ -57,18 +57,23 @@ end
 --   header_code  GBA header game code -> title, for the named-family fallback only. RR is a
 --                FireRed hack and carries FireRed's code, so it takes no part: an RR build
 --                with an unknown hash is admitted by anchors or not at all.
+-- trade_policy is host protocol policy, in frames. APPLY gets its own dispatch
+-- budget; native owns the timeout once a scene has actually been published.
 Entry.PACKS = {
     gen3_frlg = {
         randomizable = true, -- R0; Emerald gets its own E-bind later, never inherited
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { firered = "firered", leafgreen = "leafgreen" },
         header_code = { BPRE = "firered", BPGE = "leafgreen" },
     },
     gen3_rr = {
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { radical_red = "firered_rr" },
     },
     -- Registered so the packs/admission tables build and the hash is recognized (E2-ENTRY);
     -- joined Entry.ROUTED at EG4 (docs/gen3_emerald/PLAN.md §5 E3 row, owner ruling 24).
     gen3_emerald = {
+        trade_policy = {prepare_frames=600, apply_frames=1800},
         rom_type = { emerald = "emerald" },
         header_code = { BPEE = "emerald" },
     },
@@ -386,6 +391,7 @@ local function build_production(deps, c)
         player = deps.player, rom_type = c.parts.rom_type, rom_sha1 = deps.rom_sha1 or c.parts.rom_hash,
         foundation = pack, artifact_kind = c.parts.kind == "rand" and "rand" or c.artifact_kind,
         native = native, log = deps.log, core = core,
+        trade_policy = Entry.PACKS[pack].trade_policy,
         rom_size = deps.rom_size,
         rom_content_new = deps.rom_content_new or function(tbl, rom_io)
             return L("lua/gen3/rom_content.lua").new(tbl, rom_io)

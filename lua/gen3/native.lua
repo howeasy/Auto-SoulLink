@@ -84,6 +84,15 @@ function N.new(profile, deps)
     -- V1 has no epoch/visit-bound save witness and must not advertise durable trade.
     -- The v2 binding replaces this only when all witness checks are implemented.
     function self:trade_capable() return false end
+    -- Typed unavailable adapter until a qualified v2 binding supplies coherent witnesses.
+    function self:trade_visit() return nil, "durable_trade_unavailable" end
+    function self:trade_eligible(_mon) return false end
+    function self:trade_authorized(_token, _old_key) return false end
+    function self:prepare_trade(_cmd, done, _valid)
+        if done then done("durable_trade_unavailable") end
+        return nil, "durable_trade_unavailable"
+    end
+    function self:withdraw_trade(_token) return nil, "durable_trade_unavailable" end
     local function finish(job, why, result, reason)
         if job.done then job.done(why, result, reason) end
     end
@@ -238,7 +247,11 @@ function N.new(profile, deps)
     -- valid (optional): a dispatch-time guard, called by service() immediately before this job is
     -- dispatched (same frame-end callback, CPU stopped); false, why drops the job with done(why).
     -- The trade FSM uses it to re-locate the offered mon at the moment a slot op actually posts.
-    function self:transfer(step, cmd, done, valid)
+    function self:transfer(step, cmd, done, valid, progress)
+        if progress ~= nil and not self:trade_capable() then
+            if done then done("durable_trade_unavailable") end
+            return nil, "durable_trade_unavailable"
+        end
         local op, args, stages = nil, {}, {}
         if step == "scene" or step == "party" then
             if not integer(cmd.slot, 5) then return nil, "invalid party slot" end
@@ -251,18 +264,20 @@ function N.new(profile, deps)
                 return nil, "invalid blobs"
             end
             local bytes = {}
+            local mon_size = reads.PARTY_MON_SIZE
+            if not integer(mon_size, 600) or mon_size == 0 then return nil, "invalid mon size" end
             for _, hex in ipairs(rows) do
-                if type(hex) ~= "string" or #hex ~= 200 or hex:find("[^%x]") then
+                if type(hex) ~= "string" or #hex ~= 2 * mon_size or hex:find("[^%x]") then
                     return nil, "invalid blobs"
                 end
-                for i = 1, 200, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
+                for i = 1, 2 * mon_size, 2 do bytes[#bytes + 1] = tonumber(hex:sub(i, i + 1), 16) end
             end
             stages = {{p.BLOB_BUF, bytes}}
             if step == "party" then
                 op, args = assert(p.OP_SET_PARTY_MON), {cmd.slot, cmd.bump and 1 or 0}
             else op, args = assert(p.OP_SET_ENEMY_PARTY), {#rows} end
         else return nil, "unsupported transfer step" end
-        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid})
+        return enqueue({op=op, args=args, stages=stages, done=done, valid=valid, progress=progress})
     end
     -- G5-RR-RIVAL: the patch's rival-swap window W1 (docs/gen3/research/rival_swap_refresh_window.md
     -- §5), mirrored from patch/src/handlers.c's OP_RIVAL_SWAP check (OMP F4): gBattleCommunication[0]
