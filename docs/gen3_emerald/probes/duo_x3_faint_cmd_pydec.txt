@@ -1,0 +1,15 @@
+attempt 1 of 1
+IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=a2614dcbbf7a291e0b39c89b0d58920433741d422056e58d710b058c79088e0b profile.json=0fc90a0e8e26560d82e6699397c66c2033115fb59aa4d4e7997ab08edab51c9f source=27bd720f4082d8e42a40bbf92f208916573a4f12
+RESULT_LINE a: RESULT: PASS (memorialized 504F4F4D:20250925)
+RESULT_LINE b: RESULT: PASS (memorialized 504F4F4D:DFDAF6DA)
+SAVE_WITNESS_SHA256 inst=a site=630c8e20ec4ce895170944f384cd273242ccf417991933c1143e1b20de6105b9 file=630c8e20ec4ce895170944f384cd273242ccf417991933c1143e1b20de6105b9 match=true saves=1 counter=2->3 rtc=normalized
+SAVE_WITNESS_SHA256 inst=b site=dd192e839d3a27d88399e4cf75924e92e7517d78e858b3d9000ba6b76441839e file=dd192e839d3a27d88399e4cf75924e92e7517d78e858b3d9000ba6b76441839e match=true saves=1 counter=3->4 rtc=normalized
+faint_cmd: 504F4F4D:20250925 and 504F4F4D:DFDAF6DA saved once each in box 14; B's HP 0 came from an overworld-armed write
+MARKER a: RX memorialize key=504F4F4D:20250925
+MARKER a: TX memorialize_done 504F4F4D:20250925 {"box":13,"event":"memorialize_done","key":"504F4F4D:20250925","player":"a","seq":12}
+MARKER b: RX force_faint key=504F4F4D:DFDAF6DA
+MARKER b: FORCED_HP0 504F4F4D:DFDAF6DA frame=962 in_battle=0 battler=0
+MARKER b: RX memorialize key=504F4F4D:DFDAF6DA
+MARKER b: TX memorialize_done 504F4F4D:DFDAF6DA {"box":13,"event":"memorialize_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":16}
+MARKER b: [client] [SLink-gen3] write overworld 0x02031C1E +2 frame 962
+PYDEC: PASS asserted scenario facts
