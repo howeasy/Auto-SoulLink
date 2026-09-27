@@ -3874,12 +3874,7 @@ class DuoRun:
             f.write(f'SLINK_PLAYER = "{inst}"\n')
             f.write("SLINK_DUO = {\n")
             for k, v in duo.items():
-                if isinstance(v, str):
-                    f.write(f'  {k} = "{v}",\n')
-                elif isinstance(v, bool):
-                    f.write(f"  {k} = {str(v).lower()},\n")
-                else:
-                    f.write(f"  {k} = {v},\n")
+                f.write(f"  {k} = {lua_literal(v)},\n")
             f.write("}\n")
             f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
         if self.gcfg.get("launch_profile") == "gen2" and self.scenario in GEN2_TRADE_SCENARIOS:
@@ -9097,6 +9092,22 @@ def summary_lines(results, game):
         lines.append(f"  {name}: {'PASS' if ok else 'FAIL'} "
                      f"(attempt {attempt} of {scenario_attempt_limit(name, game)}){reason}")
     return lines
+
+
+def lua_literal(v) -> str:
+    """A Python value as a Lua literal for the SLINK_DUO stub: strings quoted, bools lowercase,
+    dicts as string-keyed tables (the Lua side indexes clause_facts by tostring(species)), lists
+    as sequences. Dicts/lists used to be written with Python repr -- a Lua syntax error that
+    stopped both EmuHawk instances at load (CLAUSE-ROWS-G3 live, 2026-09-27)."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, str):
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"[{lua_literal(str(k))}] = {lua_literal(x)}" for k, x in v.items()) + "}"
+    if isinstance(v, (list, tuple)):
+        return "{" + ", ".join(lua_literal(x) for x in v) + "}"
+    return str(v)
 
 
 def scenario_target(entry, game):
