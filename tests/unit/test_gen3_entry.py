@@ -562,7 +562,7 @@ def test_a_native_reply_reaches_the_wire_through_the_production_build():
 
 
 def test_build_refuses_an_unadmitted_title():
-    world = World(pack="gen3_frlg", title="emerald", build=False)
+    world = World(pack="gen3_frlg", title="firered_ap", build=False)
     with pytest.raises(lupa.LuaError, match="unadmitted Gen 3 title"):
         world.Entry.build(world.deps())
 

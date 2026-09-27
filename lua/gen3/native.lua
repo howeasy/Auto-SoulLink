@@ -34,6 +34,30 @@ end
 
 function N.new(profile, deps)
     local p = assert(profile.native, "profile.native required")
+    assert(p.ABI == 1 or p.ABI == 2, "unsupported native ABI")
+    local v2 = p.ABI == 2 and assert(p.abi_v2, "generated v2 ABI required") or nil
+    local offsets, fail_reasons = clone(O), clone(FAIL_REASONS)
+    if v2 then
+        local c = assert(v2.constants, "v2 constants required")
+        assert(c.SLINK_ABI_VERSION == p.ABI and c.SLINK_SIGNATURE == p.SIG, "v2 identity mismatch")
+        local fields = assert(v2.structs.SlinkMailboxV2.fields, "v2 mailbox layout required")
+        for alias, spec in pairs({abi={"abi_version",2,1}, opcode={"opcode",2,1},
+            seq={"seq",2,1}, status={"status",2,1}, ack={"ack_seq",2,1}, reason={"reason",2,1},
+            args={"args",1,32}, result={"result",1,16},
+            capabilities={"capabilities",4,1}, session_epoch={"session_epoch",4,1}}) do
+            local field = assert(fields[spec[1]], "missing v2 mailbox field")
+            assert(integer(field.offset, v2.structs.SlinkMailboxV2.size - field.width * field.count)
+                   and field.width == spec[2] and field.count == spec[3], "invalid v2 mailbox field")
+            offsets[alias] = field.offset
+        end
+        -- These words have different legacy RR meanings. Name them only for v2.
+        for symbol, name in pairs({SLINK_REASON_UNCERTAIN="uncertain",
+            SLINK_REASON_IDENTITY="identity", SLINK_REASON_CLIENT_TOO_OLD="client_too_old"}) do
+            fail_reasons[assert(c[symbol], "missing v2 failure reason")] = name
+        end
+    end
+    local O = offsets
+    local session_epoch = 0
     local io, writes = assert(deps.io), assert(deps.writes)
     local send = assert(deps.send, "send(event, fields) required")
     local array = deps.array or function(t) return t end
@@ -63,11 +87,23 @@ function N.new(profile, deps)
     local self = {}
 
     local function present()
-        if profile.pack ~= "gen3_rr" or deps.artifact_kind ~= "companion" then return false end
+        if (not v2 and profile.pack ~= "gen3_rr") or deps.artifact_kind ~= "companion" then return false end
         local ok, value = pcall(function()
             return io.read_u32(p.BASE) == p.SIG and io.read_u16(p.BASE + O.abi) == p.ABI
         end)
         return ok and value == true
+    end
+    function self:mailbox()
+        if not present() then return nil, "native absent" end
+        local fields = {abi=p.ABI, opcode=io.read_u16(p.BASE + O.opcode),
+            seq=io.read_u16(p.BASE + O.seq), status=io.read_u16(p.BASE + O.status),
+            ack_seq=io.read_u16(p.BASE + O.ack), reason=io.read_u16(p.BASE + O.reason)}
+        fields.reason_name = fail_reasons[fields.reason]
+        if v2 then
+            fields.capabilities = io.read_u32(p.BASE + O.capabilities)
+            fields.session_epoch = io.read_u32(p.BASE + O.session_epoch)
+        end
+        return fields
     end
     function self:idle()
         if poisoned or pending or panel_showing then return false end
@@ -75,7 +111,7 @@ function N.new(profile, deps)
         local ok, value = pcall(function()
             return io.read_u16(p.BASE + O.opcode) == 0
                    and (posting or io.read_u16(p.BASE + O.status) ~= BUSY)
-                   and io.read_u8(p.INFO + 1) == io.read_u8(p.INFO + 2)
+                   and (v2 ~= nil or io.read_u8(p.INFO + 1) == io.read_u8(p.INFO + 2))
         end)
         return ok and value == true
     end
@@ -117,10 +153,22 @@ function N.new(profile, deps)
     local function enqueue(job)
         if not present() then finish(job, "native absent"); return nil, "native absent" end
         if poisoned then finish(job, poisoned); return nil, poisoned end
+        if v2 and not job.handshake and session_epoch == 0 then
+            finish(job, "client_too_old"); return nil, "client_too_old"
+        end
         if #queue >= 64 then finish(job, "native queue full"); return nil, "native queue full" end
         queue[#queue + 1] = job
         -- the job IS the handle: `job.posted` is this job's dispatch receipt (see the header)
         return job
+    end
+    function self:set_session_epoch(value)
+        if not v2 then return nil, "unsupported native ABI" end
+        if not integer(value, 0xFFFFFFFF) or value == 0 then return nil, "invalid session epoch" end
+        if pending or #queue > 0 or not self:idle() then return nil, "native busy" end
+        local bytes = {}
+        for i=0,3 do bytes[i+1] = (value >> (8*i)) & 0xFF end
+        return enqueue({handshake=true, stages={{p.BASE + O.session_epoch, bytes}},
+            done=function(why) if not why then session_epoch=value end end})
     end
     local function encode(text, limit)
         local out = {}
@@ -413,11 +461,13 @@ function N.new(profile, deps)
             end}
     end
     function self:link_panel(cmd)
+        if v2 then return nil, "v2 panel binding unavailable" end
         panel_rows, panel_page = clone(cmd.rows or {}), 0
         return enqueue(panel_job(false))
     end
     function self:config(cmd)
         if cmd.native_sounds ~= nil then sounds_enabled = cmd.native_sounds == true end
+        if v2 then return nil, "v2 control binding unavailable" end
         local stages = {}
         if cmd.overworld_presence ~= nil or cmd.pc_trade_npc ~= nil then
             npc_enabled = cmd.overworld_presence ~= true and cmd.pc_trade_npc ~= false
@@ -436,9 +486,14 @@ function N.new(profile, deps)
         if (last_frame and frame < last_frame) or (was_present and not here) then
             abort("native reset")
             poisoned, npc_count, panel_drawn, panel_showing = nil, nil, nil, false
+            session_epoch = 0
         end
         last_frame, was_present = frame, here
         if not here then return nil, "native absent" end
+        if v2 and session_epoch ~= 0 and io.read_u32(p.BASE + O.session_epoch) ~= session_epoch then
+            poisoned = "native epoch changed"
+            abort(poisoned)
+        end
         if pending then
             local job = pending
             local opcode = io.read_u16(p.BASE + O.opcode)
@@ -452,7 +507,7 @@ function N.new(profile, deps)
                 local reason = status == FAIL and io.read_u16(p.BASE + O.reason) or nil
                 pending = nil -- consume receipt BEFORE any next post can rewrite it
                 finish(job, status == FAIL and "native refused" or nil, result,
-                       reason and FAIL_REASONS[reason] or nil)
+                       reason and fail_reasons[reason] or nil)
             elseif frame - job.started >= timeout_for(job.op) then
                 -- Never reuse a timed-out slot: opcode==0 can mean an async handler
                 -- still owns it. A reset/absent beacon is the recovery boundary.
@@ -467,23 +522,25 @@ function N.new(profile, deps)
             if wt.check() then table.remove(watches, i); wt.ok()
             elseif io.framecount() >= wt.deadline then table.remove(watches, i); wt.fail() end
         end
-        local counter = io.read_u8(p.PI_COUNT)
-        if npc_count ~= nil and counter > npc_count and npc_enabled and not pending then
-            send("trade_request", {})
-        end
-        npc_count = counter -- backwards counters re-latch; never synthesize an interaction
-        local drawn = io.read_u8(p.INFO + 2)
-        if panel_drawn ~= nil and drawn ~= panel_drawn and not owned_panel then
-            panel_showing = true
-        end
-        panel_drawn = drawn
-        if panel_showing and deps.panel_closed then
-            local closed, result = deps.panel_closed()
-            if closed then
-                panel_showing = false
-                if not pending then
-                    panel_page = result == 0 and panel_page + 1 or 0
-                    enqueue(panel_job(result == 0 and #panel_rows > p.INFO_MAXLINES))
+        if not v2 then -- v1 NPC/panel offsets are never inherited by a v2 mailbox
+            local counter = io.read_u8(p.PI_COUNT)
+            if npc_count ~= nil and counter > npc_count and npc_enabled and not pending then
+                send("trade_request", {})
+            end
+            npc_count = counter -- backwards counters re-latch; never synthesize an interaction
+            local drawn = io.read_u8(p.INFO + 2)
+            if panel_drawn ~= nil and drawn ~= panel_drawn and not owned_panel then
+                panel_showing = true
+            end
+            panel_drawn = drawn
+            if panel_showing and deps.panel_closed then
+                local closed, result = deps.panel_closed()
+                if closed then
+                    panel_showing = false
+                    if not pending then
+                        panel_page = result == 0 and panel_page + 1 or 0
+                        enqueue(panel_job(result == 0 and #panel_rows > p.INFO_MAXLINES))
+                    end
                 end
             end
         end

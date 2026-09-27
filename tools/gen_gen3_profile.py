@@ -14,8 +14,8 @@ verified against patch/build/slink_RR.gba whenever that local witness exists.
 Packs (PLAN §4, §5.1):
     data/games/gen3_frlg/profile.json   titles firered, leafgreen (admitted; both read the
                                         `vanilla` table today) + the unadmitted titles
-                                        firered_ap (`.ap`) and emerald (`.emerald`), copied
-                                        verbatim so no data is lost
+                                        firered_ap (`.ap`). Emerald lives only in its
+                                        own pret-derived pack.
     data/games/gen3_rr/profile.json     title radical_red (`.radical_red`) + a `native` block
                                         for kind `companion`: the companion-patch mailbox ABI and
                                         the ghost/object-event addresses, sourced from the patch's
@@ -36,6 +36,7 @@ Packs (PLAN §4, §5.1):
 from __future__ import annotations
 
 import argparse
+import ast
 import hashlib
 import json
 import pathlib
@@ -438,7 +439,6 @@ PACKS = {
         ("firered", "vanilla", True),
         ("leafgreen", "vanilla", True),
         ("firered_ap", "ap", False),
-        ("emerald", "emerald", False),
     ],
     "gen3_rr": [
         ("radical_red", "radical_red", True),
@@ -667,7 +667,101 @@ def _c_define(text: str, cname: str) -> tuple[int, int]:
     return (int(lit, 16) if lit[:2].lower() == "0x" else int(lit)), m.start()
 
 
-def native_block() -> dict:
+ABI_SRC = "patch/src/trade_targets/abi.h"
+V2_TARGETS = ("firered", "leafgreen", "emerald", "radical_red")
+
+
+def _abi_number(expression: str, constants: dict[str, int]) -> int:
+    """Evaluate only the integer-expression subset used by the canonical C ABI."""
+    expression = re.sub(r"\b(0x[0-9a-fA-F]+|\d+)[uUlL]+\b", r"\1", expression)
+    tree = ast.parse(expression.strip(), mode="eval")
+
+    def number(node):
+        if isinstance(node, ast.Constant) and type(node.value) is int:
+            return node.value
+        if isinstance(node, ast.Name) and node.id in constants:
+            return constants[node.id]
+        if isinstance(node, ast.BinOp):
+            left, right = number(node.left), number(node.right)
+            operations = {ast.Add: lambda: left + right, ast.Sub: lambda: left - right,
+                          ast.Mult: lambda: left * right, ast.LShift: lambda: left << right,
+                          ast.BitOr: lambda: left | right, ast.BitAnd: lambda: left & right}
+            if type(node.op) in operations:
+                return operations[type(node.op)]()
+        raise ValueError(f"unsupported ABI expression: {expression}")
+
+    return number(tree.body)
+
+
+def native_abi() -> dict:
+    """Read v2 constants and naturally aligned fixed-width structs from abi.h.
+
+    This is layout evidence only, never a title binding or a READY assertion.
+    Unknown declarations fail instead of silently moving subsequent fields.
+    """
+    source = (REPO / ABI_SRC).read_text(encoding="utf-8")
+    text = re.sub(r"/\*.*?\*/|//[^\n]*",
+                  lambda m: "\n" * m[0].count("\n"), source, flags=re.S)
+    constants, structs, citations = {}, {}, {}
+    declarations = [(m.start(), m[1], m[2]) for m in re.finditer(
+        r"^[ \t]*#define[ \t]+(SLINK_[A-Z0-9_]+)[ \t]+([^\n]+)", text, re.M)]
+    for enum in re.finditer(r"\benum\s+\w+\s*\{([^}]+)\}", text):
+        for row in re.finditer(r"(SLINK_[A-Z0-9_]+)\s*=\s*([^,]+)", enum[1]):
+            declarations.append((enum.start(1) + row.start(), row[1], row[2]))
+    for offset, name, expression in sorted(declarations):
+        constants[name] = _abi_number(expression, constants)
+        citations[name] = f"{ABI_SRC}:{_line_of(text, offset)} ({name})"
+    for struct in re.finditer(r"typedef\s+struct\s*\{([^}]+)\}\s*(\w+)\s*;", text):
+        fields, offset, alignment = {}, 0, 1
+        for declaration in struct[1].split(";"):
+            declaration = declaration.strip()
+            if not declaration:
+                continue
+            match = re.fullmatch(r"uint(8|16|32)_t\s+(.+)", declaration, re.S)
+            if not match:
+                raise ValueError(f"unsupported ABI declaration: {declaration}")
+            width = int(match[1]) // 8
+            alignment = max(alignment, width)
+            for field in match[2].split(","):
+                field = field.strip()
+                parsed = re.fullmatch(r"(\w+)((?:\s*\[[^\]]+\])*)", field)
+                if not parsed:
+                    raise ValueError(f"unsupported ABI declaration: {declaration}")
+                count = 1
+                for dimension in re.findall(r"\[([^\]]+)\]", parsed[2]):
+                    size = _abi_number(dimension, constants)
+                    if size <= 0:
+                        raise ValueError(f"unsupported ABI array size: {dimension}")
+                    count *= size
+                offset = (offset + width - 1) // width * width
+                if parsed[1] in fields:
+                    raise ValueError(f"duplicate ABI field: {parsed[1]}")
+                fields[parsed[1]] = {"offset": offset, "width": width, "count": count}
+                offset += width * count
+        structs[struct[2]] = {"size": (offset + alignment - 1) // alignment * alignment,
+                             "fields": fields}
+        citations[struct[2]] = f"{ABI_SRC}:{_line_of(text, struct.start())} ({struct[2]})"
+    if constants.get("SLINK_ABI_VERSION") != 2 or "SlinkMailboxV2" not in structs:
+        raise ValueError("unsupported companion ABI")
+    return {"constants": constants, "structs": structs, "_src": citations,
+            "source_sha256": hashlib.sha256((REPO / ABI_SRC).read_bytes()).hexdigest()}
+
+
+def native_block(title: str | None = None) -> dict | None:
+    if title is not None:
+        if title not in V2_TARGETS:
+            raise ValueError(f"unknown companion target: {title}")
+        native_abi()  # validate the sole v2 layout source even while a target is held
+        path = f"patch/src/trade_targets/{title}.h"
+        text = (REPO / path).read_text(encoding="utf-8")
+        ready = re.search(r"^#define SLINK_TARGET_READY\s+(\w+)", text, re.M)
+        if not ready:
+            raise ValueError(f"missing READY gate: {path}")
+        if _abi_number(ready[1], {}) == 0:
+            return None
+        raise ValueError(f"no qualified v2 binding for {title}")
+    # The published RR UPS is still v1. Never replace its values/citations with
+    # the unqualified v2 header merely because its source is now available.
     values: dict[str, int] = {}
     src: dict[str, str] = {}
     text = (REPO / HANDLERS_SRC).read_text(encoding="utf-8", errors="replace")
@@ -1313,6 +1407,8 @@ def main() -> int:
     # build_emerald() on a bad .sym) must not leave a partial set of profile.json files on disk;
     # nothing below this point writes until every maker above has already succeeded.
     try:
+        for title in V2_TARGETS:
+            native_block(title)
         rendered = {pack: render(make()) for pack, make in makers}
     except ValueError as exc:
         print(str(exc), file=sys.stderr)
