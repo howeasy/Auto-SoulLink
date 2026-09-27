@@ -35,18 +35,17 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
 - **RR-ENC-FORMS (FRLG d675eb3f)** and **CLAUSE-LIVE-REST (Emerald-2 2bd8a7eb):** 14 live clause receipts (docs/gen3/research/clause_live_rest_2026-09-27.md).
 - **UI-QUAL**, **EXP-X23 (expansion X2+X3)**, and 10 OMP small tasks.
 
-**IN FLIGHT at handoff:**
-- **RR-DURABLE** (Claude Opus subagent, C:/slink-wt/g3-rrdur branch `claude/gen3-rr-durable`; integration c04420a9 merged in as e0975691 with owner authorization).
-  - It will write its handback to docs/gen3/research/rr_durable_handback.md on that branch. READ IT.
-  - Remaining work, if not finished:
-    - the Lua RR binding (an isolated durable descriptor per Codex Emerald's rulings P1-P4);
-    - the UPS rebuild + re-pin;
-    - porting test_live_tradescene/setpartymon/enemyparty_route off opcodes 16/18/21;
-    - the native_absent_gen3 redesign (apply_prepare-based);
-    - live trade/trade_decline/native_absent on gen3_rr;
-    - the full suite.
-  - Then merge it into integration and run the RR final cut (`--title rr`).
-- **Until RR-DURABLE lands, RR native trade is refused by name, deliberately** (server supports_trade_recovery False for firered_rr).
+**RR-DURABLE MERGED as 5c8bc45d** (claude/gen3-rr-durable @75b4900b). Read docs/gen3/research/rr_durable_handback.md.
+- Live PASS on gen3_rr at source 0c444561: trade_gen3, trade_decline_gen3, native_absent_gen3 (redesigned), plus the live gates test_live_tradescene/setpartymon/enemyparty_route. The branch suite was 12731/0.
+- New RR companion UPS: md5 70e7e746e573a2d00df5d3ef41d19d61, sha1 da579690db7d6933a0952a1f490312842793f71a. It must be staged as patch/build/slink_RR.gba in any checkout (g3-int is staged; the old build was kept as slink_RR.gba.old-7a386749).
+- On merge the coordinator re-pinned COMPANION_EXTRA_REFS for MOVE_CTRL_THUNK to 0x08379D84.
+- The full suite on the merged integration was STILL RUNNING at handoff: C:/slink-wt/suite-rrdur-int.log. Check its EXIT is 0.
+- Still owed:
+  - (a) an RR final-cut sweep on this head (`--title rr`); the other RR rows' receipts are from the old companion;
+  - (b) physical RR reset-between-saves recovery (only unit-proven);
+  - (c) radical_red.h still says READY 0 (unused on the ABI1 path);
+  - (d) ping Gen 2 (server/*.py changed).
+- RR native trade is no longer refused except for an old UPS without the witness.
 
 **Owner decisions still open:**
 1. Expansion XG1/XG2 (docs/gen3_emerald/XG1_request_draft.md, XG2_request_draft.md §6):
