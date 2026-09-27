@@ -104,10 +104,11 @@ function T.new(d)
         emit("trade_done", result, t.epoch)
         if active == t then active = nil end
         if prepared == t then prepared = nil end
+        local reconciled = not t.journaled
         if t.journaled and journal and (not may_commit(t) or t.precommit_proved) then
-            journal:precommit_unchanged(t.token,t.journal_epoch)
+            reconciled = journal:precommit_unchanged(t.token,t.journal_epoch) == true
         end
-        if t.precommit_proved and native.trade_reconciled then native:trade_reconciled(t.token) end
+        if reconciled and t.precommit_proved and native.trade_reconciled then native:trade_reconciled(t.token) end
         if native.withdraw_trade then native:withdraw_trade(t.token) end
         if d.completed then d.completed(t, false) end
     end

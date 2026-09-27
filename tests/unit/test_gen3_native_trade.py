@@ -455,3 +455,16 @@ def test_unchanged_scene_can_retire_write_ahead_only_with_bound_native_proof():
         {"token": "server-token", "slot": 0, "new_key": w.old_key, "new_species": 0}]
     assert not w.journal.hidden(w.journal)
     assert not any(name == "saveram" for name, _ in w.trace)
+
+
+def test_unchanged_native_ownership_stays_closed_when_journal_is_unreadable():
+    w = ProtocolWorld()
+    w.start_protocol()
+    w.journal_model.data = "MODEL torn journal"
+    w.witness(bits=17, result=2)
+    w.ack(status=3)
+    w.service()
+    w.trade.tick(w.trade)
+    assert w.journal.hidden(w.journal)
+    assert not w.trade.capable(w.trade)
+    assert w.native.trade_active(w.native), "native DONE is not reconciled while its journal is unreadable"

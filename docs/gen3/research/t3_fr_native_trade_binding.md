@@ -112,3 +112,10 @@ OK: 303 Lua files parsed cleanly
 
 Full-suite receipt will be appended after the committed implementation is run
 with `C:/slink-wt/g3-env.sh`.
+
+Follow-up control: a torn/unreadable journal after a proved UNCHANGED result
+already kept the protocol closed, but initially released native DONE ownership.
+The red control reproduced that gap. Native reconciliation now also requires
+`journal:precommit_unchanged(...) == true`. The final focused suite is **319
+passed in 7.00s**. The first full-suite attempt was interrupted at 10% to add
+this guard; it is not counted as a completed verification run.
