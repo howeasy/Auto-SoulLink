@@ -70,7 +70,7 @@ class TradeWorld:
             return True
 
         module = self.lua.execute((ROOT / "lua/gen3/trade.lua").read_text())
-        self.trade = module.new(self.lua.table(
+        self.deps = self.lua.table(
             native=native, frame=lambda: self.frame, eligible=lambda: self.connected,
             ready_to_send=lambda: self.connected, clear=lambda: True, capacity=6, mon_size=100,
             prepare_frames=600, apply_frames=1800, epoch=lambda: self.epoch,
@@ -78,7 +78,8 @@ class TradeWorld:
             decode_blob=lambda _: self.lua.table_from(self.incoming), log=self.logs.append,
             hud=self.lua.table(show=lambda text, *_: self.hud_messages.append(str(text))),
             party=lambda: self.lua.table_from(self.rows, recursive=True), key=lambda m: m.key,
-            send=send))
+            send=send)
+        self.trade = module.new(self.deps)
 
     def command(self, method, **fields):
         return getattr(self.trade, method)(self.trade, self.lua.table_from(fields))
@@ -144,8 +145,8 @@ def test_commit_and_scene_completion_without_native_save_is_uncertain_not_succes
     job["done"](None, 0, None)
     world.tick()
     results = [f for n, f in world.events if n == "trade_done"]
-    assert results == [{"token": "t", "uncertain": True}]
-    assert world.trade.hide_party(world.trade) is False
+    assert results == [{"token": "t", "uncertain": True, "after_reset": True}]
+    assert world.trade.hide_party(world.trade) is True
 
 
 def test_only_native_commit_scene_and_save_plus_final_readback_can_succeed():
@@ -199,7 +200,7 @@ def test_native_failure_never_queues_raw_party_replacement():
     world.tick()
     assert [j["step"] for j in world.jobs] == ["enemy", "scene"]
     assert [f for n, f in world.events if n == "trade_done"] == [
-        {"token": "t", "uncertain": True}]
+        {"token": "t", "uncertain": True, "after_reset": True}]
 
 
 def test_post_save_without_tokened_final_result_is_not_success():
@@ -210,6 +211,8 @@ def test_post_save_without_tokened_final_result_is_not_success():
     job["done"](None, 0, None)
     world.tick()
     assert not [f for n, f in world.events if n == "trade_done" and "new_key" in f]
+    assert [f for n, f in world.events if n == "trade_done"] == [{"token": "t", "uncertain": True}]
+    assert world.trade.hide_party(world.trade) is False
 
 
 def test_interrupted_scene_publication_is_not_claimed_unchanged():
@@ -225,7 +228,7 @@ def test_interrupted_scene_publication_is_not_claimed_unchanged():
     scene["done"]("native dispatch interrupted", 0, None)
     world.tick()
     assert [f for n, f in world.events if n == "trade_done"] == [
-        {"token": "t", "uncertain": True}]
+        {"token": "t", "uncertain": True, "after_reset": True}]
 
 
 def test_prepare_replay_cannot_extend_expired_readiness():
@@ -350,11 +353,11 @@ class CartridgeModel:
         job["done"](None, 0, None)
 
 
-def durable_client(monkeypatch):
+def durable_client(monkeypatch, player="a", mons=None):
     monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "0000BEEF")
     carrier = CartridgeModel()
-    world = World("gen3_rr", "radical_red", "companion", native=carrier)
-    world.set_party(party(A, B))
+    world = World("gen3_rr", "radical_red", "companion", player=player, native=carrier)
+    world.set_party(party(A, B) if mons is None else mons)
     world.step_to(60)
     assert world.events("hello")[0]["trade_prepare"] is True
     return world, carrier, world.encode(PARTNER).hex().upper()
@@ -402,7 +405,25 @@ def test_client_uncertainty_survives_disconnect_and_reset_hello_order(monkeypatc
     assert world.events("trade_done")[-1]["token"] == "t"
 
 
-def test_nonreset_uncertainty_keeps_party_visible_for_reconciliation(monkeypatch):
+@pytest.mark.parametrize("save_success", [False, True])
+def test_frame_rollback_requires_post_declaration_reload_hello(monkeypatch, save_success):
+    world, carrier, blob = durable_client(monkeypatch)
+    start_client_trade(world, carrier, blob)
+    carrier.jobs[-1]["progress"](carrier.lua.table(
+        commit_entered=True, scene_done=True, save_success=save_success))
+    swap_in_partner(world)  # MODEL contents after the unknown-provenance load
+    start = len(world.sent)
+    world.frame = 1
+    world.step(3)
+    messages = world.sent[start:]
+    report = next(m for m in messages if m["event"] == "trade_done")
+    assert report["uncertain"] is True and report["after_reset"] is True
+    hellos = [m for m in messages if m["event"] == "hello"]
+    assert len(hellos) == 2 and hellos[0]["party"] == []
+    assert KP in {m["key"] for m in hellos[1]["party"]}
+
+
+def test_unsaved_uncertainty_hides_party_across_reconnect_without_reset(monkeypatch):
     world, carrier, blob = durable_client(monkeypatch)
     start_client_trade(world, carrier, blob)
     swap_in_partner(world)
@@ -413,8 +434,8 @@ def test_nonreset_uncertainty_keeps_party_visible_for_reconciliation(monkeypatch
     world.step()
     world.connected = True
     world.step()
-    assert KP in {m["key"] for m in world.events("hello")[-1]["party"]}
-    assert "pc_boxes" in world.events("hello")[-1]
+    assert world.events("hello")[-1]["party"] == []
+    assert "pc_boxes" not in world.events("hello")[-1]
 
 
 def test_waiting_unposted_trade_does_not_hide_an_ordinary_acquisition(monkeypatch):
@@ -467,7 +488,7 @@ def test_late_received_ram_cannot_upgrade_uncertainty_to_success():
     for _ in range(20):
         world.tick()
     assert [f for n, f in world.events if n == "trade_done"] == [
-        {"token": "t", "uncertain": True}]
+        {"token": "t", "uncertain": True, "after_reset": True}]
 
 
 def test_clean_artifact_cannot_advertise_an_injected_companion(monkeypatch):
@@ -505,34 +526,51 @@ def test_clean_rom_never_advertises_companion_trade_prepare(pack, title, monkeyp
     assert world.events("hello")[0]["trade_prepare"] is False
 
 
-def server_and_client_applying(world, carrier, blob, delay_before_dispatch=0):
+def server_and_clients_applying(monkeypatch, world, carrier, delay_before_dispatch=0):
+    other, other_carrier, _ = durable_client(monkeypatch, player="b", mons=[PARTNER])
     state = make_state_with_link(KB, KP)
     state.links[0].a.species, state.links[0].b.species = 5, 25
     state.handle_event("a", world.events("hello")[-1])
-    state.handle_event("b", {"event": "hello", "ot_id": "00009999", "trainer_name": "Blue", "trade_prepare": True,
-                             "party": [{"slot": 0, "key": KP, "species_id": 25, "level": 5, "hp": 20, "maxHP": 20, "blob_hex": blob}]})
+    state.handle_event("b", other.events("hello")[-1])
+    # MODEL menu choices only. From PREPARE onward both clients consume the
+    # server's commands and produce their own readiness and terminal reports.
     token = _offer_and_pick(state, slot=1)
-    state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
+    b_commands = state.handle_event("b", {"event": "menu_result", "token": token, "choice": 1})
+    a_commands = state.handle_event("a", {"event": "noop"})
     assert state.pending_trade["phase"] == "preparing"
-    world.command(cmd="apply_prepare", token=token, old_key=KB, slot=1)
+    world.command(**next(c for c in a_commands if c["cmd"] == "apply_prepare"))
+    other.command(**next(c for c in b_commands if c["cmd"] == "apply_prepare"))
     world.step()
+    other.step()
     state.handle_event("a", world.events("apply_ready")[-1])
-    state.handle_event("b", {"event": "apply_ready", "token": token, "ok": True})
+    b_commands = state.handle_event("b", other.events("apply_ready")[-1])
     assert state.pending_trade["phase"] == "applying"
-    state.handle_event("b", {"event": "trade_done", "token": token, "slot": 0, "new_key": KB, "new_species": 5})
-    commands = state.handle_event("a", {"event": "noop"})
-    world.command(**next(c for c in commands if c["cmd"] == "apply_trade"))
+    a_commands = state.handle_event("a", {"event": "noop"})
+    world.command(**next(c for c in a_commands if c["cmd"] == "apply_trade"))
+    other.command(**next(c for c in b_commands if c["cmd"] == "apply_trade"))
+    other.step(2)
+    other_carrier.ack()
+    other.step()
+    other.set_party([party(A, B)[1]])
+    start_b = len(other.sent)
+    other_carrier.ack(commit_entered=True, scene_done=True, save_success=True, final_result="committed")
+    other.step()
+    for message in other.sent[start_b:]:
+        state.handle_event("b", message)
+    assert other.events("trade_done")[-1]["new_key"] == KB
+    assert state.pending_trade["verdict"] == {"a": None, "b": "traded"}
+    assert (state.links[0].a.key, state.links[0].b.key) == (KB, KP)
     world.step()
     world.frame += delay_before_dispatch
     world.step()
     carrier.ack()
     world.step()
-    return state, token
+    return state, token, other
 
 
-def test_nonreset_uncertainty_cross_wire_settles_on_next_real_tick(monkeypatch):
-    world, carrier, blob = durable_client(monkeypatch)
-    state, token = server_and_client_applying(world, carrier, blob)
+def test_unsaved_uncertainty_cross_wire_waits_for_post_reset_hello(monkeypatch):
+    world, carrier, _ = durable_client(monkeypatch)
+    state, token, _other = server_and_clients_applying(monkeypatch, world, carrier)
     start = len(world.sent)
     swap_in_partner(world)
     carrier.ack(commit_entered=True, scene_done=True)
@@ -540,14 +578,25 @@ def test_nonreset_uncertainty_cross_wire_settles_on_next_real_tick(monkeypatch):
     for message in world.sent[start:]:
         state.handle_event("a", message)
     report = next(m for m in world.sent[start:] if m["event"] == "trade_done")
-    assert report["token"] == token and report["uncertain"] is True and "after_reset" not in report
+    assert report["token"] == token and report["uncertain"] is True and report["after_reset"] is True
+    assert state.pending_trade is not None
+    assert state.pending_trade["verdict"]["a"] == "await"
+    assert (state.links[0].a.key, state.links[0].b.key) == (KB, KP)
+    assert all(not m.get("party") for m in world.sent[start:] if m["event"] == "tick")
+    # MODEL reload contains the received mon. Only the post-declaration hello is evidence.
+    start = len(world.sent)
+    world.client.driver.on_reset()
+    world.client.hello_sent = False
+    world.step(3)
+    for message in world.sent[start:]:
+        state.handle_event("a", message)
     assert state.pending_trade is None
     assert (state.links[0].a.key, state.links[0].b.key) == (KP, KB)
 
 
 def test_reset_uncertainty_cross_wire_settles_on_post_declaration_hello(monkeypatch):
-    world, carrier, blob = durable_client(monkeypatch)
-    state, token = server_and_client_applying(world, carrier, blob)
+    world, carrier, _ = durable_client(monkeypatch)
+    state, token, _other = server_and_clients_applying(monkeypatch, world, carrier)
     carrier.jobs[-1]["progress"](carrier.lua.table(commit_entered=True))
     world.connected = False
     world.client.driver.on_reset()
@@ -609,8 +658,10 @@ def test_uncertainty_surfaces_player_text_and_reason_once():
 
 
 def test_accepted_apply_outlives_ready_deadline_without_splitting_pair(monkeypatch):
-    world, carrier, blob = durable_client(monkeypatch)
-    state, _token = server_and_client_applying(world, carrier, blob, delay_before_dispatch=601)
+    world, carrier, _ = durable_client(monkeypatch)
+    state, token, other = server_and_clients_applying(monkeypatch, world, carrier, delay_before_dispatch=601)
+    outcomes = []
+    state.on_trade_outcome = outcomes.append
     start = len(world.sent)
     swap_in_partner(world)
     carrier.ack(commit_entered=True, scene_done=True, save_success=True, final_result="committed")
@@ -619,26 +670,115 @@ def test_accepted_apply_outlives_ready_deadline_without_splitting_pair(monkeypat
         state.handle_event("a", message)
     assert state.pending_trade is None
     assert (state.links[0].a.key, state.links[0].b.key) == (KP, KB)
+    # Replayed production reports from either client cannot commit a second time.
+    state.handle_event("a", world.events("trade_done")[-1])
+    state.handle_event("b", other.events("trade_done")[-1])
+    assert [(o["token"], o["outcome"]) for o in outcomes] == [(token, "committed")]
+    assert state.trade_problem() is None
 
 
-def test_expired_accepted_apply_is_uncertain_not_a_unilateral_certain_none():
+@pytest.mark.parametrize("phase", ["wait", "queued_stage", "queued_scene"])
+def test_expired_apply_before_scene_publication_reports_certain_unchanged(phase):
     world = TradeWorld()
     world.prepare()
     world.command("apply", token="t", old_key=world.rows[0]["key"], slot=0, blob_hex="05" * 100)
+    if phase != "wait":
+        world.tick()
+    if phase == "queued_scene":
+        stage = world.jobs[-1]
+        world.dispatch(stage)
+        stage["done"](None, 0, None)
     world.frame += 1801
+    if phase != "wait":
+        job = world.jobs[-1]
+        ok, reason = job["valid"]()
+        assert ok is False
+        job["done"](reason, 0, None)
     world.tick()
-    assert [f for n, f in world.events if n == "trade_done"] == [{"token": "t", "uncertain": True}]
+    assert [f for n, f in world.events if n == "trade_done"] == [
+        {"token": "t", "slot": 0, "new_key": world.rows[0]["key"], "new_species": 0}]
+    assert all(not j["handle"].posted for j in world.jobs if j["step"] == "scene")
+    assert world.trade.state(world.trade) == (None, None)
+
+
+def test_withdrawal_drains_posted_staging_before_releasing_trade_ownership():
+    world = TradeWorld()
+    world.prepare()
+    world.command("apply", token="t", old_key=world.rows[0]["key"], slot=0, blob_hex="05" * 100)
+    world.tick()
+    stage = world.jobs[-1]
+    world.dispatch(stage)
+    world.command("withdraw", token="t")
+    world.tick()
+    assert world.trade.state(world.trade)[0].phase == "draining"
+    assert not [f for n, f in world.events if n == "trade_done"]
+    world.command("prepare", token="u", old_key=world.rows[0]["key"], slot=0)
+    assert world.events[-1] == ("apply_ready", {"token": "u", "ok": False})
+    stage["done"](None, 0, None)
+    world.tick()
+    assert [j["step"] for j in world.jobs] == ["enemy"]
+    assert world.trade.state(world.trade) == (None, None)
+    assert [f for n, f in world.events if n == "trade_done"] == [
+        {"token": "t", "slot": 0, "new_key": world.rows[0]["key"], "new_species": 0}]
+    world.command("prepare", token="u", old_key=world.rows[0]["key"], slot=0)
+    assert world.events[-1] == ("apply_ready", {"token": "u", "ok": True})
 
 
 def test_partner_key_comes_from_the_read_facade_not_duplicate_blob_parsing():
     world = TradeWorld()
-    world.incoming["key"] = "00000099:00000088"
-    job = world.start()
-    world.progress(job, commit_entered=True, scene_done=True, save_success=True, final_result="committed")
-    world.rows[0] = dict(world.incoming)
-    job["done"](None, 0, None)
+    profile = json.loads((ROOT / "data/games/gen3_rr/profile.json").read_text())["titles"]["radical_red"]
+    reads_module = world.lua.execute((ROOT / "lua/gen3/reads.lua").read_text(encoding="utf-8"))
+    reads = reads_module.new(world.lua.table_from(profile, recursive=True), world.lua.table(
+        read_u8=lambda _: 0, read_u16=lambda _: 0, read_u32=lambda _: 0,
+        read_bytes=lambda _, n: world.lua.table_from([0] * n)))
+    blob = gw.codec.encode_party_mon(PARTNER, rr=True).hex().upper()
+    decoded = []
+
+    def decode(hex_blob):
+        mon = reads.decode_party_mon(world.lua.table_from(bytes.fromhex(hex_blob)))
+        decoded.append(mon)
+        return mon
+
+    # Deliberately distinct facade projection: decoding still consumes the real
+    # blob, but a second PID/OTID parser in trade.lua cannot synthesize this key.
+    world.deps.decode_blob = decode
+    world.deps.key = lambda mon: mon.key or "facade/" + reads.key(mon)
+    world.prepare()
+    world.command("apply", token="t", slot=0, old_key=world.rows[0]["key"], blob_hex=blob)
     world.tick()
-    assert [f for n, f in world.events if n == "trade_done"][-1]["new_key"] == world.incoming["key"]
+    stage = world.jobs[-1]
+    world.dispatch(stage)
+    stage["done"](None, 0, None)
+    scene = world.jobs[-1]
+    world.dispatch(scene)
+    world.progress(scene, commit_entered=True, scene_done=True, save_success=True, final_result="committed")
+    assert len(decoded) == 1 and reads.key(decoded[0]) == KP and decoded[0].species == 25
+    world.rows[0] = dict(lua_to_py(decoded[0]), slot=0)
+    scene["done"](None, 0, None)
+    world.tick()
+    assert [f for n, f in world.events if n == "trade_done"][-1]["new_key"] == "facade/" + KP
+
+
+@pytest.mark.parametrize("fault", ["decode", "eligible", "key"])
+def test_apply_facade_exception_reports_unchanged_and_releases_prepared(fault):
+    world = TradeWorld()
+    world.prepare()
+
+    def fail(*_):
+        raise RuntimeError("incoming facade failure")
+
+    if fault == "decode":
+        world.deps.decode_blob = fail
+    elif fault == "eligible":
+        world.native.trade_eligible = lambda _, mon: fail() if mon.key == world.incoming["key"] else True
+    else:
+        world.deps.key = lambda mon: fail() if mon.key == world.incoming["key"] else mon.key
+    world.command("apply", token="t", slot=0, old_key=world.rows[0]["key"], blob_hex="05" * 100)
+    world.tick()
+    assert world.trade.state(world.trade) == (None, None)
+    assert world.jobs == []
+    assert [f for n, f in world.events if n == "trade_done"] == [
+        {"token": "t", "slot": 0, "new_key": world.rows[0]["key"], "new_species": 0}]
 
 
 def test_reissued_text_token_in_new_epoch_does_not_hit_old_retirement():
@@ -665,17 +805,28 @@ def test_epoch_change_keeps_unanswered_report_and_blocks_ambiguous_token_reuse()
     assert world.events[-1] == ("apply_ready", {"token": "t", "ok": True})
 
 
-def test_same_text_token_has_independent_uncertainty_in_each_epoch():
+def test_acknowledged_unsaved_uncertainty_keeps_reset_barrier_across_epochs():
     world = TradeWorld()
     old_scene = world.start()
     old_scene["done"]("native timeout", 0, None)
     world.tick()
     world.epoch, world.visit["id"] = 2, 8
+    world.prepare()
+    assert world.events[-1] == ("apply_ready", {"token": "t", "ok": False})
+    assert world.trade.hide_party(world.trade) is True
+    # Delivery is not evidence of a native save. A later reset must re-declare
+    # this old epoch's uncertainty even when no transport report is outstanding.
+    world.trade.reset(world.trade)
+    world.tick()
+    assert world.trade.reloaded(world.trade, "t", 1) is True
+    assert world.trade.hide_party(world.trade) is True
+    world.trade.allow_reload_evidence(world.trade, "t", 1)
+    assert world.trade.hide_party(world.trade) is False
     scene = world.start()
     world.progress(scene, commit_entered=True)
     world.trade.reset(world.trade)
     world.tick()
-    assert world.trade.reloaded(world.trade, "t", 1) is False
+    assert world.trade.reloaded(world.trade, "t", 1) is True
     assert world.trade.reloaded(world.trade, "t", 2) is True
     world.trade.allow_reload_evidence(world.trade, "t", 1)
     assert world.trade.hide_party(world.trade) is True
@@ -701,10 +852,18 @@ def test_client_reconnect_reuses_token_only_after_old_report_is_acknowledged(mon
     world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
     world.step()
     assert world.events("apply_ready")[-1]["ok"] is False
-    # One response has already arrived on this connection (the prepare command).
-    # Reply to all other observed outbound lines, including the replayed report.
-    unanswered = len(world.sent) - before_reconnect - 1
-    world.replies.extend(json.dumps({"commands": []}) for _ in range(unanswered))
+    connection_lines = world.sent[before_reconnect:]
+    assert connection_lines[0]["event"] == "hello"
+    report_index = next(i for i, m in enumerate(connection_lines)
+                        if m["event"] == "trade_done" and m["token"] == "t")
+    assert report_index > 0 and connection_lines[report_index]["new_key"] == KB
+    # The prepare command above answered line 0 (hello). Respond in order only
+    # through the specifically identified replay, not every outstanding line.
+    for message in connection_lines[1:report_index]:
+        assert message["event"] != "trade_done"
+        world.replies.append(json.dumps({"commands": []}))
+        world.step()
+    world.replies.append(json.dumps({"commands": []}))  # ACK this exact report line
     world.step()
     world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
     world.step()

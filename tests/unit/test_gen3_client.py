@@ -1860,14 +1860,6 @@ PARTNER2 = mon_record(0x66666666, 0x00008888, species=26, nickname="RAI")
 KP2 = key_of(0x66666666, 0x00008888)
 
 
-def _unresolve_by_a_stage_seq_overwrite(w, blob, token, old_key=KB, slot=1):
-    apply(w, blob, old_key=old_key, slot=slot, token=token)
-    w.step(2)
-    w.poke_int(NATIVE["BASE"] + MB["seq"], 0xBEEF, 2)           # the stage ACK channel is lost
-    w.step(3)
-    assert w.client.state.trade_unresolved[token] is not None
-
-
 
 
 

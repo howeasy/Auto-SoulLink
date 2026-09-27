@@ -79,6 +79,19 @@ function T.new(d)
     end
     local function unchanged(t)
         if retired_for(t.epoch, t.token) then return end
+        t.phase = "withdrawing" -- invalidate queued callbacks before cancel can call them
+        if t.prepare_job then native:cancel(t.prepare_job) end
+        if t.scene_job then native:cancel(t.scene_job) end
+        if t.stage_job and not t.stage_done then
+            t.phase = "draining"
+            local cancelled = native:cancel(t.stage_job)
+            if retired_for(t.epoch, t.token) then return end -- synchronous cancellation callback
+            if not cancelled and not t.stage_done
+               and (t.stage_job.posted or t.stage_job.publish_attempted) then
+                return -- native still owns staging; its ACK/abort callback retires this lease
+            end
+            t.stage_done = true
+        end
         if t.prepare_pending then emit("apply_ready", {token=t.token, ok=false}, t.epoch) end
         local result = {token=t.token, slot=t.slot, new_key=t.old_key, new_species=0}
         bucket(retired, t.epoch)[t.token] = result
@@ -91,8 +104,11 @@ function T.new(d)
     local function declare_uncertain(t, why)
         t.phase, t.why = "uncertain", why
         bucket(uncertain_records, t.epoch)[t.token] = t
-        local declaration = t.reload_seen and "reset" or "live"
-        local fields = {token=t.token, uncertain=true, after_reset=t.reload_seen or nil}
+        -- An acknowledged report does not make possibly unsaved RAM durable.
+        -- Keep this barrier until a real reset and a post-declaration hello.
+        t.requires_reload = t.requires_reload or t.reload_seen or (may_commit(t) and not t.save_success)
+        local declaration = t.reload_seen and "reset" or (t.requires_reload and "unsaved" or "live")
+        local fields = {token=t.token, uncertain=true, after_reset=t.requires_reload or nil}
         if t.declared ~= declaration then
             t.declared = declaration
             emit("trade_done", fields, t.epoch)
@@ -158,8 +174,6 @@ function T.new(d)
             function(why)
                 if active ~= t or t.scene_attempt ~= attempt or t.phase ~= "scene" then return end
                 if why == "guard:moved" then return post_scene(t) end
-                if why == "guard:apply_expired" then return uncertain(t, "apply dispatch deadline elapsed") end
-                if why == "guard:epoch" then return uncertain(t, "connection changed before apply dispatch") end
                 if why then
                     if may_commit(t) then return uncertain(t, why) end
                     return unchanged(t)
@@ -180,7 +194,7 @@ function T.new(d)
     function self:prepare(cmd)
         if not token(cmd.token) then return end
         local epoch = d.epoch()
-        if not self:capable() or not d.eligible() then
+        if not self:capable() or not d.eligible() or self:hide_party() then
             emit("apply_ready", {token=cmd.token, ok=false}); flush(); return
         end
         if prior_report_pending(epoch, cmd.token) then
@@ -234,8 +248,6 @@ function T.new(d)
     function self:withdraw(cmd)
         if prepared and prepared.token == cmd.token then
             local t = prepared
-            t.phase = "withdrawing"
-            if t.prepare_job then native:cancel(t.prepare_job) end
             unchanged(t)
         end
         local t = active
@@ -243,9 +255,6 @@ function T.new(d)
             if may_commit(t) then
                 uncertain(t, "withdrawal after possible commit")
             else
-                t.phase = "withdrawing"
-                if t.stage_job then native:cancel(t.stage_job) end
-                if t.scene_job then native:cancel(t.scene_job) end
                 unchanged(t)
             end
         end
@@ -254,8 +263,6 @@ function T.new(d)
     function self:reset(reloaded)
         if prepared then
             local t = prepared
-            t.phase = "withdrawing"
-            if t.prepare_job then native:cancel(t.prepare_job) end
             unchanged(t)
         end
         local t = active
@@ -263,15 +270,13 @@ function T.new(d)
             t.reload_seen = reloaded ~= false
             declare_uncertain(t, "reset after possible commit")
         elseif t then
-            t.phase = "withdrawing"
-            if t.stage_job then native:cancel(t.stage_job) end
-            if t.scene_job then native:cancel(t.scene_job) end
             unchanged(t)
         end
         if reloaded ~= false then
             for epoch, records in pairs(uncertain_records) do
                 for value, record in pairs(records) do
-                    if not record.reload_seen and report_pending(epoch, value) then
+                    if not record.reload_seen and ((record.requires_reload and not record.evidence_allowed)
+                       or report_pending(epoch, value)) then
                         record.reload_seen = true
                         declare_uncertain(record, "reset after uncertainty")
                     end
@@ -286,20 +291,25 @@ function T.new(d)
         if previous then emit("trade_done", previous); flush(); return end
         if not t or t.phase ~= "prepared" or active or t.token ~= cmd.token or t.old_key ~= cmd.old_key then return end
         if t.epoch ~= d.epoch() then unchanged(t); flush(); return end
-        local v = visit()
-        local mon, party = locate(t.old_key)
-        if not v or v.id ~= t.visit or not mon or d.frame() > t.prepare_deadline then unchanged(t); flush(); return end
-        if type(cmd.blob_hex) ~= "string" or #cmd.blob_hex ~= 2*d.mon_size or cmd.blob_hex:find("[^%x]") then
-            unchanged(t); flush(); return
-        end
-        local ok, incoming = pcall(d.decode_blob, cmd.blob_hex)
-        if not ok or type(incoming) ~= "table" or incoming.checksum_ok == false
-           or not native:trade_eligible(incoming) then unchanged(t); flush(); return end
-        t.partner_key = d.key(incoming)
-        if not token(t.partner_key) then unchanged(t); flush(); return end
-        for _, m in ipairs(party) do
-            if d.key(m) == t.partner_key then unchanged(t); flush(); return end
-        end
+        -- Every facade call is preflight: a decoder, identity or eligibility error
+        -- must retire the preparation rather than strand it without a response.
+        local ok, mon, party, partner_key = pcall(function()
+            local v = visit()
+            local outgoing, rows = locate(t.old_key)
+            if not v or v.id ~= t.visit or not outgoing or d.frame() > t.prepare_deadline then return end
+            if type(cmd.blob_hex) ~= "string" or #cmd.blob_hex ~= 2*d.mon_size or cmd.blob_hex:find("[^%x]") then return end
+            local incoming = d.decode_blob(cmd.blob_hex)
+            if type(incoming) ~= "table" or incoming.checksum_ok == false
+               or not native:trade_eligible(incoming) then return end
+            local incoming_key = d.key(incoming)
+            if not token(incoming_key) then return end
+            for _, m in ipairs(rows) do
+                if d.key(m) == incoming_key then return end
+            end
+            return outgoing, rows, incoming_key
+        end)
+        if not ok or not mon then unchanged(t); flush(); return end
+        t.partner_key = partner_key
         t.party_count = #party
         t.slot, t.blob_hex, t.phase = mon.slot, cmd.blob_hex, "wait"
         -- Acceptance starts a separate dispatch budget. A published scene is then owned
@@ -313,14 +323,14 @@ function T.new(d)
         if prepared and prepared.prepare_deadline and d.frame() > prepared.prepare_deadline then unchanged(prepared); flush() end
         local t = active
         if not t or t.phase ~= "wait" then return end
-        if t.epoch ~= d.epoch() then uncertain(t, "connection changed before apply dispatch"); flush(); return end
-        if d.frame() > t.apply_deadline then uncertain(t, "apply dispatch deadline elapsed"); flush(); return end
+        if t.epoch ~= d.epoch() or d.frame() > t.apply_deadline then unchanged(t); flush(); return end
         if not d.eligible() or not d.clear() then return end
         t.phase = "stage"
         t.stage_job = native:transfer("enemy", {blobs_hex={t.blob_hex}}, function(why)
-            if active ~= t or t.phase ~= "stage" then return end
-            if why == "guard:apply_expired" then return uncertain(t, "apply dispatch deadline elapsed") end
-            if why == "guard:epoch" then return uncertain(t, "connection changed before apply dispatch") end
+            if active ~= t then return end
+            t.stage_done = true
+            if t.phase == "draining" then return unchanged(t) end
+            if t.phase ~= "stage" then return end
             if why then unchanged(t) else post_scene(t) end
         end, function()
             if active == t and t.epoch ~= d.epoch() then return false, "guard:epoch" end
@@ -334,7 +344,7 @@ function T.new(d)
     function self:hide_party()
         for _, records in pairs(uncertain_records) do
             for _, t in pairs(records) do
-                if t.reload_seen and not t.evidence_allowed then return true end
+                if t.requires_reload and not t.evidence_allowed then return true end
             end
         end
         return false
@@ -347,7 +357,6 @@ function T.new(d)
         local record = (uncertain_records[epoch or d.epoch()] or {})[value]
         return record and record.reload_seen == true or false
     end
-    function self:uncertainties() return uncertain_records end
     function self:capable() return native.trade_capable and native:trade_capable() == true end
     function self:state()
         if active then

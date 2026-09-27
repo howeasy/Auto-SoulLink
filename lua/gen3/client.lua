@@ -181,7 +181,6 @@ function Client.new(p)
         has_pokeballs = false, last_area = nil, trade = nil, sound_frame = nil, sound_logged = {},
         baselined = false, seen_count = nil, observe_at = nil,
         trade_apply = nil, trade_settle_until = 0,
-        trade_unresolved = {},   -- token-bound uncertainty journal; never upgraded from RAM alone
         trade_limits = { settle = 30 },
         bframe = nil, bcache = nil,
     }
@@ -945,8 +944,6 @@ function Client.new(p)
         st.opp_seen, st.pre_announced_id = nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
         st.trade_apply, st.trade_settle_until = nil, 0
-        -- Native reset ends a hardware lease, never the token-bound report owed to the server.
-        st.trade_unresolved = trade and trade:uncertainties() or st.trade_unresolved
         -- C5-11d MAJOR 3: the battle the authority named is gone with the save, whatever the
         -- battle RAM still says; a queued job must not ride it (reducer lifecycle or not)
         rival_authority = nil
@@ -1355,7 +1352,6 @@ function Client.new(p)
         if not trade then return end
         local active, prepared = trade:state()
         st.trade_apply = active or prepared
-        st.trade_unresolved = trade:uncertainties()
     end
     if native and p.Trade and owed and p.artifact_kind == "companion" then
         local trade_policy = assert(p.trade_policy, "pack trade policy required")
@@ -1578,7 +1574,7 @@ function Client.new(p)
     drv.pre_pump = function()
         if owed then owed:step(p.net.connected(), false, send) end
         if trade_frame and io.framecount() < trade_frame then
-            if trade then trade:reset(false); sync_trade() end
+            if trade then trade:reset(); sync_trade() end
             session.hello_sent = false
         end
         trade_frame = io.framecount()
