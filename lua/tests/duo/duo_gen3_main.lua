@@ -547,7 +547,8 @@ function ctx.party()
     for _, m in ipairs(mons) do
         out[#out + 1] = { slot = m.slot, key = reader.key(m), hp = m.hp, max_hp = m.max_hp,
                           species = m.species, level = m.level, experience = m.experience, status = m.status,
-                          moves = m.moves, pp = m.pp }
+                          moves = m.moves, pp = m.pp, is_egg = m.is_egg,
+                          is_egg_flag = m.is_egg_flag, friendship = m.friendship }
     end
     return out
 end
