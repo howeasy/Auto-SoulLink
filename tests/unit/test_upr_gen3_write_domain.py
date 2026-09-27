@@ -3,7 +3,8 @@ data/games/gen3_frlg/upr_write_domains.json) -- pureRGB's T6 standard for Gen 3:
 settings write nothing, enabled settings write only inside their domains, 0 stray bytes.
 
 The model rows run everywhere. The ROM rows skip by name when the pinned clean dumps, the
-Manager-made outputs ($SLINK_GEN3_RAND_ROMS) or the pinned fork jar + Java are absent; a
+Manager-made outputs ($SLINK_GEN3_RAND_ROMS), pinned fork jar + Java, or JDK for the seeded
+probe (SLINK_JDK_BIN or the repository's bootstrapped JDK) are absent; a
 present-but-wrong clean dump fails, and with $SLINK_GEN3_ROMS set, a run where EVERY ROM row
 skipped fails (the module teardown guard).
 """
@@ -14,6 +15,7 @@ import json
 import os
 import shutil
 import subprocess
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -282,7 +284,33 @@ def test_widest_output_strays_are_named_by_the_forbidden_settings(title):
     assert {"types", "abilities", "base_stats", "evolutions", "movesets", "type_chart"} <= set(r["named"])
 
 
-def _run_fork(tmp_path: Path, title: str, spec: dict) -> tuple[bytes, bytes, dict]:
+@cache
+def _seeded_probe(jar: str) -> Path:
+    """Use the existing probe's explicit Randomizer.randomize(..., seed) entry point.
+
+    The stock CLI has no seed option. Derive a Gen 3-only probe in the private cache;
+    neither the production JAR nor the existing Gen 1 probe is edited. No test downloads.
+    """
+    from tools._build_tools_bootstrap import _find_jdk_bin
+
+    override = os.environ.get("SLINK_JDK_BIN")
+    jdk = _find_jdk_bin(Path(override)) if override else _find_jdk_bin(ROOT / ".cache/build-tools/jdk-17")
+    if jdk is None:
+        _rom_skip("fixed-seed fork controls need a JDK; set SLINK_JDK_BIN or bootstrap the repository JDK")
+    source = (ROOT / "tools/upr_probe/SlinkProbe.java").read_text(encoding="utf-8")
+    source = source.replace("Gen1RomHandler", "Gen3RomHandler").replace("SlinkProbe", "Gen3DomainProbe")
+    digest = hashlib.sha256(source.encode() + Path(jar).read_bytes()).hexdigest()[:16]
+    out = ROOT / ".cache/upr-probe-gen3" / f"{digest}-{os.getpid()}"
+    out.mkdir(parents=True, exist_ok=True)
+    path = out / "Gen3DomainProbe.java"
+    path.write_text(source, encoding="utf-8")
+    javac = jdk / ("javac.exe" if os.name == "nt" else "javac")
+    subprocess.run([str(javac), "--release", "8", "-encoding", "UTF-8", "-cp", str(jar),
+                    "-d", str(out), str(path)], check=True, capture_output=True, timeout=60)
+    return out
+
+
+def _run_fork(tmp_path: Path, title: str, spec: dict, *, seed: int | None = None) -> tuple[bytes, bytes, dict]:
     jar = _jar()
     if not shutil.which("java"):
         _rom_skip("java not on PATH")
@@ -290,8 +318,17 @@ def _run_fork(tmp_path: Path, title: str, spec: dict) -> tuple[bytes, bytes, dic
     src, settings, out = tmp_path / f"{title}.gba", tmp_path / "s.rnqs", tmp_path / f"{title}_out.gba"
     src.write_bytes(clean)
     settings.write_bytes(U.build_spec(spec, family=FRLG))
-    subprocess.run(["java", "-jar", jar, "cli", "-s", str(settings), "-i", str(src), "-o", str(out), "-l"],
+    # Gen3RomHandler.java:4270-4273 can select the original PC Potion. A fresh random
+    # seed made the strict own-byte oracle fail by chance. Pin each (title, spec) to a
+    # stable 48-bit seed; all isolation cases still MUST change every enabled domain.
+    if seed is None:
+        case = json.dumps([title, spec], sort_keys=True, separators=(",", ":")).encode()
+        seed = int.from_bytes(hashlib.sha256(b"gen3-domain-isolation-v1\n" + case).digest()[:6], "big")
+    probe = _seeded_probe(jar)
+    subprocess.run(["java", "-cp", str(jar) + os.pathsep + str(probe), "Gen3DomainProbe", "run",
+                    "-s", str(settings), "-i", str(src), "-o", str(out), "-seed", str(seed), "-l"],
                    check=True, capture_output=True, timeout=300)
+    assert f"Random Seed: {seed}" in Path(f"{out}.log").read_text(encoding="utf-8")
     return clean, out.read_bytes(), _log_spec(Path(f"{out}.log"))
 
 
@@ -329,6 +366,22 @@ def _assert_tight(title: str, clean: bytes, out: bytes, enabled: set[str]):
         own = W._merge(W._ranges(domains[d]))
         assert any(W._inside(own, i) and not W._inside(others, i) for i in changed), (
             f"{d} is enabled by {sorted(enabled)} but received no byte of its own: a widened domain")
+
+
+def test_fixed_seed_replays_the_pc_potion_identity_without_weakening_tightness(tmp_path):
+    """The historical failing draw must stay reproducible, not pass by RNG luck."""
+    spec = {**_off_spec(), "pc_potion": True}
+    outputs = []
+    for name in ("first", "second"):
+        folder = tmp_path / name
+        folder.mkdir()
+        clean, out, effective = _run_fork(folder, "firered", spec, seed=35976796681422)
+        assert clean[0x402220:0x402222] == out[0x402220:0x402222] == b"\x0d\x00"
+        assert W.audit("firered", clean, out, W.domains_for_spec(effective))["stray"] == []
+        with pytest.raises(AssertionError, match="pc_potion.*received no byte"):
+            _assert_tight("firered", clean, out, W.domains_for_spec(effective))
+        outputs.append(out)
+    assert outputs[0] == outputs[1]
 
 
 def _isolation_cases():
