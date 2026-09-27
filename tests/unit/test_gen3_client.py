@@ -387,6 +387,129 @@ def test_npc_trade_without_a_readable_entry_preimage_does_not_guess_from_cached_
     assert any("NPC trade preimage unavailable" in line for line in w.logs)
 
 
+def test_save_cleared_reset_discards_queued_npc_trade_preimage():
+    w = live(pids=(A, B))
+    w.fire("trade_begin")
+    w.set_party([])
+    w.set_trainer(0)
+    w.client.validate(w.client)  # production save-cleared path, before signal drain
+    w.set_trainer(OT)
+    w.set_party([mon_record(A, OT), mon_record(C, 0x9999, species=122)])
+    w.fire("trade_done")
+    w.step(3)
+    assert w.events("key_change") == []
+    w.fire("trade_begin")
+    w.set_party([mon_record(A, OT), mon_record(0x44444444, 0x8888, species=25)])
+    w.fire("trade_done")
+    w.step()
+    assert [(m["old_key"], m["new_key"]) for m in w.events("key_change")] == [
+        (key_of(C, 0x9999), "44444444:00008888")]
+
+
+@pytest.mark.parametrize("size,slot", [(size, slot) for size in range(1, 7) for slot in range(size)])
+def test_emerald_npc_trade_maps_each_slot_and_party_size(monkeypatch, size, slot):
+    from tests.unit import gen3_world as gw
+
+    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
+    w = World("gen3_emerald", "emerald", "clean")
+    mons = [mon_record(A + i, OT, species=283) for i in range(size)]
+    w.set_party(mons)
+    w.step_to(60)
+    w.regs["R0"], w.regs["R1"] = slot, 0
+    w.fire("trade_begin")
+    mons[slot] = mon_record(C, 0x9999, species=298)
+    w.set_party(mons)
+    w.fire("trade_done")
+    w.step()
+    assert [(m["old_key"], m["new_key"], m["reason"]) for m in w.events("key_change")] == [
+        (key_of(A + slot, OT), key_of(C, 0x9999), "npc_trade")]
+
+
+def test_cancelled_npc_trade_is_replaced_by_the_second_preimage():
+    w = live(pids=(A, B))
+    w.fire("trade_begin")
+    w.step()  # no completion for this observation
+    w.set_party([mon_record(A, OT), mon_record(0x44444444, OT)])
+    w.fire("trade_begin")
+    w.set_party([mon_record(A, OT), mon_record(C, 0x9999, species=122)])
+    w.fire("trade_done")
+    w.step()
+    assert [(m["old_key"], m["new_key"]) for m in w.events("key_change")] == [
+        ("44444444:0000ABCD", key_of(C, 0x9999))]
+
+
+def test_npc_trade_preimage_survives_a_map_signal_between_swap_and_done():
+    w = live(pids=(A, B))
+    w.fire("trade_begin")
+    w.step()
+    w.set_party([mon_record(A, OT), mon_record(C, 0x9999, species=122)])
+    w.fire("map_load")
+    w.step()
+    w.fire("trade_done")
+    w.step()
+    assert [(m["old_key"], m["new_key"]) for m in w.events("key_change")] == [(KB, key_of(C, 0x9999))]
+
+
+def test_shared_client_forwards_existing_server_phone_content_without_consuming_the_command(monkeypatch):
+    from tests.unit.test_state import make_state_with_link
+
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "00000007ABCDEF01")
+    calls, epochs = [], []
+
+    def binder(lua):
+        # MODEL command seam on the admitted companion harness. Native Emerald
+        # capability/ABI/record gates are independently exercised in test_gen3_native.
+        return lua.table(service=lambda *_: True, idle=lambda *_: True,
+                         trade_capable=lambda *_: False,
+                         bind_match_call_session=lambda _, epoch: epochs.append(epoch),
+                         request_match_call=lambda _, tag, data: calls.append((tag, lua_to_py(data))))
+
+    w = World("gen3_rr", "radical_red", "companion", native=binder)
+    w.set_party(party(A, B))
+    w.step_to(60)
+    state = make_state_with_link("PARTNER:1", KA)
+    state.trainer_names = {"a": "BOB", "b": "RED"}
+    state.links[0].a.species, state.links[0].a.nickname = 392, "RALTS"
+    state.links[0].b.species, state.links[0].b.nickname = 298, "DOTS"
+    state.handle_event("a", {"event": "faint", "key": "PARTNER:1"})
+    command = next(c for c in state.queued_commands["b"] if c.get("phone") == "fallen")
+    w.command(**command)
+    w.step(3)
+    assert epochs == [7]
+    assert calls == [("fallen", {"trainer_name": "BOB",
+                                 "caller_mon": {"species_id": 392, "nickname": "RALTS"},
+                                 "receiver_mon": {"species_id": 298, "nickname": "DOTS"}})]
+    assert w.party_hp(0) == 0  # the original force_faint still runs
+
+
+def test_clean_client_does_not_forward_phone_tags_to_an_injected_binder():
+    calls = []
+    w = World(native=lambda lua: lua.table(request_match_call=lambda *args: calls.append(args)))
+    w.set_party(party(A, B))
+    w.step_to(60)
+    w.command(cmd="msgbox", text="same message", phone="first_link")
+    w.step()
+    assert calls == []
+
+
+def test_phone_forwarding_error_never_drops_the_original_force_faint(monkeypatch):
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "00000007ABCDEF01")
+
+    def binder(lua):
+        def failed(*_):
+            raise RuntimeError("synthetic phone path failure")
+        return lua.table(service=lambda *_: True, idle=lambda *_: True,
+                         trade_capable=lambda *_: False, request_match_call=failed)
+
+    w = World("gen3_rr", "radical_red", "companion", native=binder)
+    w.set_party(party(A, B))
+    w.step_to(60)
+    w.command(cmd="force_faint", key=KA, phone="fallen")
+    w.step(3)
+    assert w.party_hp(0) == 0
+    assert any("match_call request failed" in line for line in w.logs)
+
+
 # ── in-battle writes (owner ruling 2026-09-23) ────────────────────────────────────────────
 
 def test_a_bench_faint_lands_immediately_and_its_faint_is_not_reported():
