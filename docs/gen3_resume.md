@@ -1,8 +1,79 @@
-# Gen 3 resume note (updated 2026-09-27, checkpoint 24: WRAP-UP; integration green; finish-the-RC queue below)
+# Gen 3 resume note (updated 2026-09-27, checkpoint 25: HANDOFF TO CODEX as coordinator)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.
 
-## CURRENT STATE (2026-09-27, checkpoint 24): wrap-up. Owner asked to finish the RC; the session ended on the owner's 30-minute call.
+## CURRENT STATE (2026-09-27, checkpoint 25): HANDOFF. The owner hands coordination of the remaining Gen 3 work to Codex.
+
+**Read first:**
+- this section;
+- the AGENT_CHECKPOINT in C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md (workers gen3-*, emerald-*);
+- the register C:/Users/howar/.claude/hooks/slink/WORKTREE_REGISTER.md.
+
+**Integration:** `claude/gen3-integration` in C:/slink-wt/g3-int, head after this doc commit (b091ff27 = code; later commits are receipts/docs only).
+- Full unit suite at b091ff27: **13480 passed / 0 failed** (C:/slink-wt/suite-b091ff27.log).
+- Env: `source C:/slink-wt/g3-env.sh`.
+- NOTHING is on master. Landing needs the owner's explicit approval; ping Gen 2 first (shared server/*.py, lua/core/session.lua and more changed).
+
+**Final cuts:**
+- **Emerald @b091ff27: 24/24 PASS** (docs/gen3/probes/fc_SUMMARY_b091ff27_emerald.txt).
+- **FR/LG @c04420a9: 42/43.** The only failure was release_gate_quick, from stale FR/LG/E profile.json. That was fixed in ca54bb42 (regenerated; the ABI source sha had moved in the T2 merge).
+- **Gate rerun @b091ff27:** 0 failed, but the gate counts 31 UNEXPLAINED SKIPS as failure. All are inputs missing from the lane checkout C:/slink-wt/g3-lane:
+  - (a) the T5 private candidate builds patch/build/candidate-{firered,leafgreen}-trade (tests/unit/test_gen3_trade_duo*.py);
+  - (b) the expansion build syms .cache/expansion-output/reference/pokeemerald.sym (test_gen3_title_syms_exp.py);
+  - (c) the RR source cache from `python tools/fetch_rr_sources.py` (test_gen3_rr_generators.py).
+- **NEXT CARD:** stage these via tools/gen3_final_cut.py UNPINNED_INPUTS (same pattern as the RR clean ROM fix 0e10ebd0), or record owner-accepted skips.
+  - Then rerun `python tools/gen3_final_cut.py --cut <head> --title frlg --lane C:/slink-wt/g3-lane --master C:/slink-wt/g3-lane-master --rows release_gate_quick`.
+  - Ideally run the full FR/LG cut at the final head.
+
+**Merged into integration this session (all live-proven where marked):**
+- **T5 native FR/LG trade duo:** 4/4 live PASS in both directions @5eed16cc.
+  - Fixes: the held apply_prepare, the baton wait, the hidden-HELLO recovery.
+  - Scripts: C:/slink-wt/run_t5native2.sh, run_t5frlg.sh, run_t5lgfr.sh.
+- **T2-PUBLISH (Codex Emerald 1d2a9512):** FR/LG/E production UPS + READY 1, and the Emerald native companion (panel/sound/carrier/rival/trade/Match Call).
+  - Single-cart production smokes PASS (em-t2/patch/build/t2-publish-live-20260927.json).
+  - OMP reviews cx-6db186a8 and cx-38e266e5 were dispositioned by Emerald.
+- **RR-ENC-FORMS (FRLG d675eb3f)** and **CLAUSE-LIVE-REST (Emerald-2 2bd8a7eb):** 14 live clause receipts (docs/gen3/research/clause_live_rest_2026-09-27.md).
+- **UI-QUAL**, **EXP-X23 (expansion X2+X3)**, and 10 OMP small tasks.
+
+**IN FLIGHT at handoff:**
+- **RR-DURABLE** (Claude Opus subagent, C:/slink-wt/g3-rrdur branch `claude/gen3-rr-durable`; integration c04420a9 merged in as e0975691 with owner authorization).
+  - It will write its handback to docs/gen3/research/rr_durable_handback.md on that branch. READ IT.
+  - Remaining work, if not finished:
+    - the Lua RR binding (an isolated durable descriptor per Codex Emerald's rulings P1-P4);
+    - the UPS rebuild + re-pin;
+    - porting test_live_tradescene/setpartymon/enemyparty_route off opcodes 16/18/21;
+    - the native_absent_gen3 redesign (apply_prepare-based);
+    - live trade/trade_decline/native_absent on gen3_rr;
+    - the full suite.
+  - Then merge it into integration and run the RR final cut (`--title rr`).
+- **Until RR-DURABLE lands, RR native trade is refused by name, deliberately** (server supports_trade_recovery False for firered_rr).
+
+**Owner decisions still open:**
+1. Expansion XG1/XG2 (docs/gen3_emerald/XG1_request_draft.md, XG2_request_draft.md §6):
+   - the shinyModifier (A/B/C; the worker recommends C);
+   - accept the exp_*.sav SYNTH fixtures;
+   - gen3_exp registered-but-unrouted, including the server-side route asymmetry (OMP cx-2ce936ca finding 1: the server routes emerald_expansion_28877d73 while the client refuses; refuse server-side like crystal_ap, or route both halves together);
+   - the second compiler probe as the source of harness facts.
+2. Whether to fix the same "town has no wild map → trainers filed under a neighbouring route" gap for 6 more Emerald towns (Rustboro/Roxanne, Fortree/Winona, Littleroot, Oldale, Fallarbor, Verdanturf). Mauville was fixed.
+3. ONE landing request for FR/LG/E (and RR once durable trade is green), after the landing-prep refresh (`claude/gen3-landing-prep`, C:/slink-wt/rv-land) against master plus the Gen 2 ping.
+
+**Owner rulings this session:**
+- 36: no phone on FR/LG/RR (Emerald Match Call stays).
+- 37: randomized RR is out of this RC (the Manager refuses by name, 0d323677).
+- The owner authorized merges as needed ("Just merge what you need").
+
+**Low-priority follow-ups (recorded, not started):**
+- EXP-X23 review items 2-6 (see checkpoint 24 below);
+- T5 review F5 (a production:true fixture under tests/fixtures/gen3/t5_stale_projection);
+- the HUD raw-key nickname fallback in lua/gen3/client.lua (nick_label).
+
+**Worker/peer rules that stay in force** (see memory):
+- Codex live threads: Emerald 01a0dec7, Emerald-2 01a0ded3, FRLG 01a0df52. Notes to them go by steer.
+- Headless OMP cannot run shell. Verify and commit every OMP delivery yourself.
+- Private SLINK_STATE_DIR per emulator run; kill only your own EmuHawk PIDs.
+- Receipts bind to their source cut; never relabel them.
+
+## Earlier state (checkpoint 24): wrap-up. Owner asked to finish the RC; the session ended on the owner's 30-minute call.
 
 Integration `claude/gen3-integration` @5e001952 in C:/slink-wt/g3-int.
 - The previous head, e588540d, was full-suite GREEN: 13353 passed / 0 failed.
