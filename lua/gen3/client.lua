@@ -469,8 +469,11 @@ function Client.new(p)
                 st.known[k] = true
                 if m.hp and m.hp > 0 then st.alive[k] = true end
                 session.identity:begin_alias(old, k, m, party, io.framecount())
-                send("key_change", { old_key = old, new_key = k, reason = "npc_trade",
-                                     new_species = m.species, new_nickname = m.nickname })
+                -- KEY-SCOPE-5: kept on the alias so a retryable refusal can resend this exact
+                -- message once a newer complete box census has gone out (core/session.lua).
+                session.identity.pending.msg = { old_key = old, new_key = k, reason = "npc_trade",
+                                                 new_species = m.species, new_nickname = m.nickname }
+                send("key_change", session.identity.pending.msg)
             end
         end
     end
@@ -901,6 +904,10 @@ function Client.new(p)
     drv.read_party = party_read
     drv.in_battle = in_battle
     drv.battle_write = battle_write
+    -- KEY-SCOPE-5: the core's key_change retry hook -- st.box_generation only bumps on a
+    -- complete rescan, so it doubles as the raw generation counter core/session.lua needs.
+    drv.box_generation = function() return st.box_generation, st.boxes_ok end
+    drv.rescan_boxes = rescan_boxes
     function drv.party_borrowed()
         local party = party_read()
         if party then update_frozen(party) end

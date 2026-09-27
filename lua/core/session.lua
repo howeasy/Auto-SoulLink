@@ -24,7 +24,10 @@
 --     (pcall'd, before the deferred run: Gen 1's trade_tick); play_sound(gen3_se_id);
 --     commands = { [name] = fn(cmd) -> consumed? }; battle_write(entry, slot, mon, ending)
 --       -> "done" | "hold", why | nil; party_borrowed() -> bool (a borrowed party is in RAM:
---     a force_* whose key is not in it is HELD, not dropped).
+--     a force_* whose key is not in it is HELD, not dropped); box_generation() -> gen, complete
+--       (KEY-SCOPE-5: the Gen 1/2 client's own raw generation counter and whether the last scan
+--       was complete -- enables a retryable key_change refusal to be resent); rescan_boxes()
+--       (requested once on a "box census unavailable" refusal).
 --
 -- Nothing semantic precedes hello (docs/protocol.md §9 item 4): an event emitted while the
 -- connection has not sent its hello yet (a frame hook, a hello_fields side effect) is held in
@@ -55,6 +58,10 @@ local Session = { TICK_INTERVAL = 30, VALIDATE_EVERY = 60, MAX_INVALID = 5, PEND
 local CANCEL = { show_choices = { "menu_result", "choice", 127 }, show_menu = { "menu_result", "choice", 0 },
                  choose_mon = { "mon_chosen", "slot", 7 } }
 local DEFERRED_CMDS = { box_mon = true, party_mon = true, memorialize = true }
+-- KEY-SCOPE-5: key_change refusals that retire nothing (lua/gen1/client.lua Client.RETRYABLE_REJECTIONS,
+-- reason strings verbatim). The alias stays, and the change is re-sent after the next complete box
+-- census; every other reason is terminal (U5).
+local RETRYABLE_REJECTIONS = { ["box census unavailable"] = true, ["ambiguous key (trade clash)"] = true }
 
 local function hud_color(cmd)
     if type(cmd.color) == "table" then return cmd.color[1], cmd.color[2], cmd.color[3], cmd.duration end
@@ -290,6 +297,17 @@ function Session.new(p)
             self.resolved_areas[cmd.area_id] = nil
         elseif c == "key_change_ack" then
             if not apply_ack(cmd) then self.ack_pending[#self.ack_pending + 1] = cmd end
+        elseif c == "key_change_rejected" and RETRYABLE_REJECTIONS[cmd.reason] then
+            -- KEY-SCOPE-5: nothing was retired; the alias stays and the change is re-sent after the
+            -- next complete box census (a census refusal asks for that census now). Console only --
+            -- the player sees no refusal for a change that is still in flight (HUD is player-facing
+            -- only, owner ruling 2026-09-25).
+            local a = identity.pending
+            if a and a.old_key == cmd.old_key then
+                a.retry_gen = game.box_generation and (game.box_generation()) or nil
+                if cmd.reason == "box census unavailable" and game.rescan_boxes then game.rescan_boxes() end
+            end
+            log("key_change refused (will retry): " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
         elseif c == "key_change_rejected" then
             identity:reject(cmd.old_key, game.read_party())
             log("key_change rejected: " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
@@ -310,6 +328,19 @@ function Session.new(p)
         end
     end
 
+    -- KEY-SCOPE-5: a change refused for a retryable reason goes out again once a complete box
+    -- census NEWER than the refusal has gone out (mirrors lua/gen1/client.lua resend_refused_change).
+    local function resend_refused_change()
+        local a = identity.pending
+        if a and a.retry_gen and game.box_generation then
+            local gen, complete = game.box_generation()
+            if complete and gen and gen > a.retry_gen then
+                a.retry_gen = nil
+                send("key_change", a.msg)
+            end
+        end
+    end
+
     -- ── hello / tick ───────────────────────────────────────────────────────────────
     function self:send_hello()
         local f = game.hello_fields() or {}
@@ -324,6 +355,7 @@ function Session.new(p)
     function self:send_tick()
         local f = game.tick_fields()
         if f then send("tick", f) end
+        resend_refused_change()
     end
 
     -- PLAN §5.4: a stuck hold is diagnosable -- what, why, since when -- from the CONSOLE, never
