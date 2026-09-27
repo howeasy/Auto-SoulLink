@@ -2347,11 +2347,14 @@ def gen3_trade_chain(inst, ka, kb, decline):
             rx("apply_prepare"), rx("apply_trade"), tx("trade_done"), r"(?m)^TRADED "]
     gets = kb if inst == "a" else ka
     gives = ka if inst == "a" else kb
-    chain += [rx("apply_prepare"), tx("apply_ready", '"ok":true'), rx("apply_trade"),
-              tx("trade_done", f'"new_key":"{re.escape(gets)}"'), r"(?m)^RX msgbox text=Traded ",
+    done = tx("trade_done", f'"new_key":"{re.escape(gets)}"')
+    chain += [rx("apply_prepare"), tx("apply_ready", '"ok":true'), rx("apply_trade"), done,
               rf"(?m)^TRADED gave={re.escape(gives)} got={re.escape(gets)} "]
-    return talked + chain, list(zip(chain, chain[1:], strict=False)), never + [
-        tx("apply_ready", '"ok":false'), tx("trade_done", '"uncertain":true')]
+    # the server's commit notice follows BOTH trade_done reports, so it may land after this
+    # side's own TRADED read-back (live receipt, RR-DURABLE trade_gen3): ordered after trade_done only
+    notice = r"(?m)^RX msgbox text=Traded "
+    return (talked + chain + [notice], list(zip(chain, chain[1:], strict=False)) + [(done, notice)],
+            never + [tx("apply_ready", '"ok":false'), tx("trade_done", '"uncertain":true')])
 
 
 def gen3_panel_text(raw: bytes) -> str:

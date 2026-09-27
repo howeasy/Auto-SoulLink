@@ -248,6 +248,14 @@ def test_trade_chain_positive_and_negative():
                     good + f"\nREFUSED_UNAVAILABLE reason={REFUSAL}",
                     good + "\n[client] [SLink-gen3] apply_trade refused: durable native trade unavailable"):
             assert duo.gen3_receipt_problems(inst, bad, req, forb, order), bad
+    # live RR-DURABLE trade_gen3: TRADED (this side's read-back) before the server's notice
+    for inst, good in (("a", _receipt_a()), ("b", _receipt_b())):
+        req, order, forb = duo.gen3_trade_chain(inst, KA, KB, False)
+        lines = good.split("\n")
+        live = "\n".join(lines[:-2] + [lines[-1], lines[-2]])
+        assert duo.gen3_receipt_problems(inst, live, req, forb, order) == []
+        early = "\n".join([lines[-2]] + lines[:-2] + [lines[-1]])       # notice before trade_done
+        assert duo.gen3_receipt_problems(inst, early, req, forb, order)
     for inst, good in (("a", _receipt_a(True)), ("b", _receipt_b(True))):
         req, order, forb = duo.gen3_trade_chain(inst, KA, KB, True)
         assert duo.gen3_receipt_problems(inst, good, req, forb, order) == []
