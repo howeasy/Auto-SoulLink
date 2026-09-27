@@ -7,7 +7,8 @@ from server.adapters.gen3_rom_tables import table_symbols
 
 SYMS = ("08000100 g 00000028 gTrainers\n"
         "08000200 g 00000014 gWildMonHeaders\n"
-        "08000300 g 00000028 gEvolutionTable\n")
+        "08000300 g 00000028 gEvolutionTable\n"
+        "08000500 g 0000001c gSpeciesInfo\n")
 
 
 @pytest.mark.parametrize("title", ("firered", "leafgreen"))

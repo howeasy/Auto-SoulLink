@@ -374,19 +374,14 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
 
 
 def _gen3_species_rules(rom: bytes, title: str) -> bytes:
-    from server.adapters.gen3_rom_tables import (
-        ROM_BASE,
-        SYMBOL_DIR,
-    )
-    with open(os.path.join(SYMBOL_DIR, f"poke{title}.sym"), encoding="utf-8") as f:
-        row = next((line.split() for line in f if line.rstrip().endswith(" gSpeciesInfo")), None)
-    if row is None:
-        raise UprPipelineError(f"poke{title}.sym has no gSpeciesInfo symbol")
-    base, size = int(row[0], 16) - ROM_BASE, int(row[2], 16)
-    raw = rom[base:base + size]
-    if len(raw) != size:
-        raise UprPipelineError("gSpeciesInfo is outside the ROM")
-    return normalised_species_rules(raw, title)
+    from server.adapters import gen3_rom_tables
+
+    try:
+        head = gen3_rom_tables.table_symbols(title, symbol_dir=gen3_rom_tables.SYMBOL_DIR)["gSpeciesInfo"]
+        raw = gen3_rom_tables._Rom(rom).read(head["address"], head["size"], "gSpeciesInfo")
+        return normalised_species_rules(raw, title)
+    except (OSError, ValueError, TypeError, KeyError) as exc:
+        raise UprPipelineError(f"gSpeciesInfo could not be read: {exc}") from exc
 
 
 def gen3_fingerprint_rom(rom: bytes) -> str:

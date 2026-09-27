@@ -51,14 +51,15 @@ EVOLUTION_SIZE = 8
 EVOS_PER_MON = 5
 PARTY_SIZES = (8, 16, 8, 16)  # flags: custom moves=1, held item=2
 WILD_COUNTS = {"land": 12, "water": 5, "rock_smash": 5, "fishing": 10}
+SPECIES_INFO_SIZE = 28
 TABLE_STRIDES = {
     "gTrainers": TRAINER_SIZE,
     "gWildMonHeaders": WILD_HEADER_SIZE,
     "gEvolutionTable": EVOLUTION_SIZE * EVOS_PER_MON,
+    "gSpeciesInfo": SPECIES_INFO_SIZE,
 }
 SYMBOL_DIR = Path(__file__).resolve().parents[2] / "data/gen3/pret"
 RomData = bytes | Mapping[int, bytes]
-SPECIES_INFO_SIZE = 28
 DEOXYS = 410
 # pret pokemon.c sDeoxysBaseStats: UPR saves the title's already-used forme into its row.
 DEOXYS_NORMAL = bytes((50, 150, 50, 150, 150, 50))
@@ -144,7 +145,7 @@ class _Rom:
 
 @cache
 def table_symbols(title: str, *, symbol_dir: Path = SYMBOL_DIR) -> dict:
-    """Read this title's three table symbols and derive counts from their sizes.
+    """Read this title's table symbols and derive counts from their validated sizes.
 
     ``count`` includes TRAINER_NONE, species zero, and the wild-header sentinel.
     A caller with relocated table heads may use the lower-level decoders, passing
