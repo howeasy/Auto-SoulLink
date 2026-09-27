@@ -1714,7 +1714,33 @@ TREECKO_RR_GROWTH_RATE = 3                              # GROWTH_MEDIUM_SLOW; sa
 TREECKO_RR_EVOLVE_LEVEL = 16                            # RR_EVO_TABLE species 277 slot 0
 TREECKO_RR_EXP_LV15 = 2034                              # RR_EXP_TABLE[3*256 + 15]
 TREECKO_RR_EXP_LV16 = 2535                              # RR_EXP_TABLE[3*256 + 16]
-RR_SYNTH_KINDS = ("evolve",)
+
+# card RR-NPCTRADE: `--kind trade` for npc_trade_gen3 on gen3_rr. docs/gen3/research/
+# rr_ingame_trades.md is the fact source (RR keeps FireRed's 9 in-game trades at the same
+# map/script/flag locations with the same OT/IV/personality/conditions/sheen -- only species,
+# nickname, requestedSpecies, heldItem were reworked). Route2_House / "Reyley" (MR_MIME slot)
+# is the cheapest: no badge/checkflag gate, earliest map. Below are RR facts, decoded directly
+# from patch/build/slink_RR.gba (same sha1 pin as the rest of this module) or read from the doc
+# -- never assumed from vanilla FR/LG, even where a value happens to match it byte-for-byte
+# (memory: RR data is non-standard).
+RR_SPECIES_ABRA = 63                    # doc trade table: MR_MIME row requestedSpecies (Abra)
+RR_ABRA_BASE = {"hp": 25, "attack": 20, "defense": 15, "speed": 90,
+                "sp_attack": 105, "sp_defense": 55}     # RR_BASESTATS_TABLE + 63*28, decoded direct
+RR_ABRA_GROWTH_RATE = 3                 # MEDIUM_SLOW; same table entry +19 (decoded direct)
+RR_ABRA_EXP_LV10 = 560                  # RR_EXP_TABLE[3*256 + 10] (decoded direct)
+RR_MOVE_TELEPORT, RR_TELEPORT_PP = 100, 20   # RR_LEVELUP_LEARNSETS species 63's only level-1
+                                              # entry (besides move 237, also level 1); PP from
+                                              # RR_BATTLE_MOVES_ADDR entry 100 byte +4 -- both
+                                              # decoded direct against the RR ROM, not copied
+                                              # from vanilla (they happen to equal it)
+RR_BATTLE_MOVES_ADDR = 0x9128CD0        # profile.json "rom".BATTLE_MOVES_ADDR = 152379856
+FLAG_DID_MIMIEN_TRADE_RR = 0x248        # doc: same flag id as vanilla (script bytes confirm RR
+                                         # did not renumber it)
+RR_SB1_FLAGS = 0x0EE0                   # data/games/gen3_rr/profile.json SB1_FLAGS_OFFSET=3808,
+                                         # production-tested (old-client M.SB1_FLAGS_OFFSET)
+RR_ROUTE2_HOUSE_WARP = (15, 1, 7, 3)    # doc trader table: Route2_House group.num=15.1, stand
+                                         # tile (7,3) one tile below Reyley (7,2) facing down
+RR_SYNTH_KINDS = ("evolve", "trade")
 
 
 def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
@@ -1727,12 +1753,14 @@ def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
         raise ValueError(f"seed does not qualify: {report['message']}")
     parsed = codec.parse_flash(seed, cfru=True)
     party = codec.rr_party_from_save(seed)
-    mon = dict(party[0])
-    if mon["species"] != SPECIES_TREECKO_RR:
-        raise ValueError(f"seed party[0] is species {mon['species']}, not TREECKO "
-                         f"(RR species id {SPECIES_TREECKO_RR})")
     manifest = []
+    spans = _rr_write_spans(parsed)
+    patches: dict[int, int] = {}
     if kind == "evolve":
+        mon = dict(party[0])
+        if mon["species"] != SPECIES_TREECKO_RR:
+            raise ValueError(f"seed party[0] is species {mon['species']}, not TREECKO "
+                             f"(RR species id {SPECIES_TREECKO_RR})")
         level = TREECKO_RR_EVOLVE_LEVEL - 1
         mon.update(experience=TREECKO_RR_EXP_LV16 - 1, level=level,
                    **_gen3_stats(TREECKO_RR_BASE, mon, level))
@@ -1742,11 +1770,46 @@ def build_rr_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
                         f"{TREECKO_RR_EXP_LV16}, RR's own MEDIUM_SLOW table) stats recomputed "
                         f"from RR base stats, hp={mon['hp']}/{mon['max_hp']}; RR's learnset has "
                         f"no level-{TREECKO_RR_EVOLVE_LEVEL} entry, so no move-learn prompt")
-    raw = codec.encode_party_mon(mon, rr=True)
-    address = codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_OFFSET  # slot 0
-    spans = _rr_write_spans(parsed)
-    patches: dict[int, int] = {}
-    _rr_field_patcher(spans, patches, "party[0]")(address, raw)
+        raw = codec.encode_party_mon(mon, rr=True)
+        address = codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_OFFSET  # slot 0
+        _rr_field_patcher(spans, patches, "party[0]")(address, raw)
+    else:  # trade
+        # OMP cx-6821246e F5 precedent (build_frlg_synth): refuse a seed with no owned mon in
+        # the slot this kind trades away, rather than encoding an empty/foreign record.
+        if len(party) < 2 or not party[1]["species"]:
+            raise ValueError(f"seed's party slot 1 is empty (party has {len(party)} mons); "
+                             "trade needs an owned mon there")
+        own_tid = int.from_bytes(parsed["sb2"][0xA:0xE], "little")
+        mon = dict(party[1])
+        if mon["ot_id"] != own_tid:
+            raise ValueError("seed's party[1] is not the player's own mon (OT mismatch); "
+                             "the trade fixture needs a player-owned slot 1")
+        flag_byte = parsed["sb1"][RR_SB1_FLAGS + FLAG_DID_MIMIEN_TRADE_RR // 8]
+        if (flag_byte >> (FLAG_DID_MIMIEN_TRADE_RR % 8)) & 1:
+            raise ValueError("the seed has already done the MIMIEN trade")
+        old_key = f"{mon['personality']:08X}:{mon['ot_id']:08X}"
+        # a fresh non-shiny, Hardy-nature (pid % 25 == 0) personality distinct from the old
+        # slot-1 key -- same construction build_frlg_synth's trade kind uses (OMP cx-6821246e
+        # F3: computed BEFORE the stats kwarg, so **_gen3_stats reads the NEW nature).
+        pid = next(p for p in itertools.count(0x41425241)
+                   if p % 25 == 0 and ((mon["ot_id"] & 0xFFFF) ^ (mon["ot_id"] >> 16)
+                                       ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+        mon["personality"] = pid
+        mon.update(species=RR_SPECIES_ABRA, nickname="ABRA", experience=RR_ABRA_EXP_LV10,
+                   level=10, moves=[RR_MOVE_TELEPORT, 0, 0, 0], pp=[RR_TELEPORT_PP, 0, 0, 0],
+                   ability_num=0, **_gen3_stats(RR_ABRA_BASE, mon, 10))
+        mon.pop("nickname_raw", None)
+        mon["hp"] = mon["max_hp"]
+        raw = codec.encode_party_mon(mon, rr=True)
+        address = codec.RR_SAVEBLOCK1_ADDR + codec.SB1_PARTY_OFFSET + codec.PARTY_MON_SIZE  # slot 1
+        field = _rr_field_patcher(spans, patches, "party[1]")
+        field(address, raw)
+        g, n, x, y = RR_ROUTE2_HOUSE_WARP
+        field(codec.RR_SAVEBLOCK1_ADDR + 0x0C, _warp(g, n, x, y))       # continueGameWarp
+        field(codec.RR_SAVEBLOCK2_ADDR + 0x09, bytes([parsed["sb2"][0x09] | 1]))  # CONTINUE_GAME_WARP
+        manifest.append(f"party[1] {old_key} -> ABRA(RR {RR_SPECIES_ABRA}) Lv10 pid={pid:08X} "
+                        f"(the player's OT); continueGameWarp {g}.{n} ({x},{y}) + "
+                        "CONTINUE_GAME_WARP")
     new_body = bytearray(seed)
     for offset, value in patches.items():
         new_body[offset] = value

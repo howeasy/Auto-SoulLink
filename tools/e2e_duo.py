@@ -420,18 +420,22 @@ SCENARIOS = {
     # FR/LG's "town" fixture already carries 2 party mons (unlike Emerald's, which is a single
     # Mudkip for that kind), so B's Emerald side boots "pc" instead (Mudkip + Poochyena, slot 1
     # present) -- the same B-idle fixture boxsync_gen3/whiteout_gen3 already use for gen3_emerald.
-    # card RR-SYNTH: gen3_rr does NOT join this row. The NPC trade needs RR's own in-game trade
-    # table (requested species + received mon) and the trader NPC's map/object-event position,
-    # neither of which is pinned anywhere in this repo (data/games/gen3_rr/profile.json has no
-    # trade-table address, and no map-header/object-event source is cached for RR's map bank).
-    # Guessing either risks shipping a fixture that boots into a wall or trades the wrong mon;
-    # per the card's own instruction this is refused and reported rather than guessed. Someone
-    # with ROM access to RR's relocated trade table (same CFRU-thunk technique used for the
-    # evolution/base-stat/learnset tables above) and a way to read RR's map/event data can pick
-    # this back up.
-    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald"), "explicit_only": True,
+    # card RR-NPCTRADE: gen3_rr joins too, now that RR's own trade table + trader position are
+    # pinned (docs/gen3/research/rr_ingame_trades.md, tools/rr_ingame_trades.py). Route2_House /
+    # "Reyley" (MR_MIME slot) is the cheapest trade: no badge/checkflag gate, same map/script as
+    # vanilla, only species/nickname/requestedSpecies/heldItem reworked. rr_trade_synth.sav
+    # (tools/gen3_fixtures.py make-rr-synth --kind trade over rr_battle2.sav, which build_rr_synth's
+    # module comment and the card doc source) makes party[1] a player-owned Lv10 ABRA (RR species
+    # 63) and warps CONTINUE into Route2_House (15.1) (7,3), one tile below Reyley (7,2) facing
+    # down. B needs 2 party mons for the same link_slot=1 reason as the FR/LG and Emerald legs
+    # above (rr_town.sav/rr_town_b.sav only carry one mon); rr_battle2_b.sav (already committed,
+    # 2 mons) is reused as-is -- the same B-idle substitution boxsync_gen3/whiteout_gen3 already
+    # make for gen3_rr via target_by_game "battle2".
+    "npc_trade_gen3": {"flags": [], "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"),
+                       "explicit_only": True,
                        "target": {"a": "trade_synth", "b": "town"},
-                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"}},
+                       "target_by_game": {"gen3_emerald": {"a": "trade", "b": "pc"},
+                                          "gen3_rr": {"a": "trade_synth", "b": "battle2"}},
                        "frames": 2000000, "no_save": ("b",),
                        "oracle": "assert_npc_trade_gen3_saved"},
     # B's Emerald side boots "pc" (Mudkip + Poochyena), not "town" (single Mudkip): B's own linked
@@ -8273,8 +8277,13 @@ class DuoRun:
     # 0x9CAE, OT id 1985 -> key 00009CAE:000007C1, species 122). Emerald: RustboroCity_House1's
     # trader, a player Ralts -> his SEEDOT (pret pokeemerald c65e93f2 src/data/trade.h
     # INGAME_TRADE_SEEDOT: personality 0x84, otId 38726 -> key 00000084:00009746, species 298).
+    # card RR-NPCTRADE: RR keeps vanilla's OT/IV/personality/sheen data for MR_MIME (only species/
+    # nickname/requestedSpecies/heldItem reworked, docs/gen3/research/rr_ingame_trades.md), so
+    # new_key is byte-identical to NPC_TRADE_DEFAULT's -- only species differs (RR's Mr Mime-Galar,
+    # rr_species.json id 1216, not vanilla's Mr. Mime 122).
     NPC_TRADE_FACTS = {
         "gen3_emerald": {"new_key": "00000084:00009746", "species": 298},
+        "gen3_rr": {"new_key": "00009CAE:000007C1", "species": 1216},
     }
     NPC_TRADE_DEFAULT = {"new_key": "00009CAE:000007C1", "species": 122}
 

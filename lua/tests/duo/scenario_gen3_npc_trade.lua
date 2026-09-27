@@ -24,6 +24,12 @@ local NPC_TRADE = {
     leafgreen = {mine = 63,  theirs = 122, flag = 0x248, sb1_flags = 0x0EE0},
     emerald   = {mine = 392, theirs = 298, flag = 0x99,  sb1_flags = 0x1270},   -- RALTS -> SEEDOT
     -- (Emerald FLAG_RUSTBORO_NPC_TRADE_COMPLETED, pret include/constants/flags.h:175)
+    -- card RR-NPCTRADE: RR's own Route2_House/Reyley trade (docs/gen3/research/
+    -- rr_ingame_trades.md) -- same flag id and SaveBlock1 flags-array offset as vanilla (the doc
+    -- confirms flags.h wasn't renumbered, and data/games/gen3_rr/profile.json's
+    -- SB1_FLAGS_OFFSET=3808=0x0EE0 is the same production-tested offset), only species reworked:
+    -- ABRA (63) -> Mr Mime-Galar (1216, rr_species.json).
+    radical_red = {mine = 63, theirs = 1216, flag = 0x248, sb1_flags = 0x0EE0},
 }
 
 local function tap_signals(ctx, kinds)
