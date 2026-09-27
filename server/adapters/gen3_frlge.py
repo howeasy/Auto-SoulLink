@@ -844,15 +844,20 @@ class Gen3Adapter(GameAdapter):
         out.trainers = self._rom_trainer_table(tables)
         return out
 
-    def refused_rom_content(self, payload: dict) -> str:
+    def refused_rom_content(self, payload: object, *, artifact_kind: str | None = None) -> str:
+        kind = self._artifact_kind if artifact_kind is None else artifact_kind
         if self._is_rr:
-            return ""
+            return "randomized cartridges are supported only for FireRed/LeafGreen" if kind == "rand" else ""
+        if kind == "rand" and not payload:
+            return "randomized FR/LG hello is missing rom_content; cartridge rules cannot be verified"
         try:
             rom = parse_rom_content(payload)
             decode_verified(rom, rom_title(rom))
         except ForbiddenRomTables as exc:
             return str(exc)
-        except Exception:                             # noqa: BLE001 - malformed: ingest's job
+        except Exception as exc:                      # noqa: BLE001 - failed proof must refuse rand
+            if kind == "rand":
+                return f"randomized FR/LG rom_content could not be verified: {exc}"
             return ""
         return ""
 

@@ -463,12 +463,14 @@ class GamePresentationAdapter(ABC):
         """
         return None
 
-    def refused_rom_content(self, payload: dict) -> str:
+    def refused_rom_content(self, payload: object, *, artifact_kind: str | None = None) -> str:
         """Why a player's cartridge must be refused even when no contract binds the run, or "".
 
         For a READABLE cartridge the server cannot rule on (its rule tables were randomized):
-        admitting it would apply the shipped rules to a game that no longer has them. A
-        malformed report is not a refusal -- ingest marks that player's data unavailable.
+        admitting it would apply the shipped rules to a game that no longer has them.
+        `artifact_kind` is the candidate hello's declared kind, before the run commits it.
+        Foundations may require a complete report for selected kinds. The base hook is
+        unchanged for foundations that do not impose a ROM-content admission requirement.
         """
         return ""
 

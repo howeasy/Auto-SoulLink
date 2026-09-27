@@ -793,10 +793,12 @@ class SLinkServer:
         Returns the admission record; never raises. A player who cannot be admitted is not
         an error condition, it is a run that has not started for them yet.
         """
-        if not self._rom_contract:
-            refused = msg.get("rom_content") and self.adapter.refused_rom_content(msg["rom_content"])
+        payload, kind = msg.get("rom_content"), msg.get("artifact_kind", "clean")
+        if kind == "rand" or (not self._rom_contract and payload):
+            refused = self.adapter.refused_rom_content(payload, artifact_kind=kind)
             if refused:
                 return {"state": "rejected", "reason": refused}
+        if not self._rom_contract:
             return {"state": "admitted", "reason": "no randomized-ROM contract for this run"}
         if self._rom_contract.get("unreadable"):
             return {"state": "rejected", "reason": "this run's rom_contract.json could not be read"}
