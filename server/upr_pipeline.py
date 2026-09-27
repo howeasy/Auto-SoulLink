@@ -371,7 +371,11 @@ def gen3_site_mismatches(rom: bytes, title: str) -> list[str]:
 
 def _gen3_species_rules(rom: bytes, title: str) -> list[bytes]:
     from server.adapters.gen3_frlge import _DEOXYS_FORME, _DEOXYS_NORMAL
-    from server.adapters.gen3_rom_tables import ROM_BASE, SYMBOL_DIR
+    from server.adapters.gen3_rom_tables import (
+        FRLG_ZERO_SECOND_ABILITY_SPECIES,
+        ROM_BASE,
+        SYMBOL_DIR,
+    )
     with open(os.path.join(SYMBOL_DIR, f"poke{title}.sym"), encoding="utf-8") as f:
         row = next((line.split() for line in f if line.rstrip().endswith(" gSpeciesInfo")), None)
     if row is None:
@@ -380,9 +384,9 @@ def _gen3_species_rules(rom: bytes, title: str) -> list[bytes]:
     rows = []
     for species, i in enumerate(range(base, base + size, SPECIES_INFO_SIZE)):
         rec = bytearray(rom[i + b] for b in SPECIES_RULE_BYTES)
-        # UPR writes ability 2 = ability 1 where the game has none (Gen3RomHandler.java:1322-1324);
-        # the game reads a 0 second ability as the first (pret CreateBoxMon), so it is the same.
-        if rec[-1] == 0:
+        # Only originally-empty slots may be filled by UPR. Erasing a pinned
+        # nonzero slot changes GetAbilityBySpecies for an inherited abilityNum=1.
+        if species in FRLG_ZERO_SECOND_ABILITY_SPECIES and rec[-1] == 0:
             rec[-1] = rec[-2]
         # Deoxys's six stats are exempt ONLY when they are the title's hardcoded forme (UPR
         # copies that into its row on every save, Gen3RomHandler.java:796-809; the battle reads

@@ -1053,15 +1053,17 @@ def _evolutions_digest(evolutions: dict) -> str:
 
 
 def _species_rules_digest(raw: bytes, title: str) -> str:
-    """Base stats, types and abilities of every row. An empty second ability counts as the
-    first (UPR fills it so; the game's pick is the same), and Deoxys's forme row as normal."""
+    """Rule fields, permitting UPR to fill only PINNED originally-empty ability slots."""
     rows = []
     for i in range(0, len(raw), SPECIES_INFO_SIZE):
         row = raw[i:i + SPECIES_INFO_SIZE]
         stats = row[0:6]
         if i // SPECIES_INFO_SIZE == _DEOXYS and stats == _DEOXYS_FORME[title]:
             stats = _DEOXYS_NORMAL
-        rows.append(stats + row[6:8] + bytes((row[22], row[23] or row[22])))
+        second = row[23]
+        if i // SPECIES_INFO_SIZE in gen3_rom_tables.FRLG_ZERO_SECOND_ABILITY_SPECIES and second == 0:
+            second = row[22]
+        rows.append(stats + row[6:8] + bytes((row[22], second)))
     return hashlib.sha256(b"".join(rows)).hexdigest()
 
 
