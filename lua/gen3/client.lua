@@ -717,7 +717,7 @@ function Client.new(p)
         if not hp then return nil end
         local plan = { { hp, 2, 0 } }
         if battler and num(a.BATTLE_MONS_ADDR) then
-            plan[2] = { a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF, 2, 0 }
+            plan[2] = { a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE + reads.BATTLE_MON_HP_OFF, 2, 0 }
         end
         return plan
     end
@@ -728,7 +728,7 @@ function Client.new(p)
     local function commit_plan(battler, with_moves)
         local plan = {}
         if with_moves then
-            local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
+            local base = a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE
             for i = 0, 3 do
                 plan[#plan + 1] = { base + BATTLE_MON_MOVES_OFF + i * 2, 2, MOVE_EXPLOSION }
                 plan[#plan + 1] = { base + BATTLE_MON_PP_OFF + i, 1, EXPLODE_PP }
@@ -766,8 +766,8 @@ function Client.new(p)
         if not (policy.handoff_entry and policy:handoff_entry(battler, "explode")) then
             return "hold", "active battler"
         end
-        local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
-        local bhp = io.read_u16(base + R.BATTLE_MON_HP_OFF)
+        local base = a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE
+        local bhp = io.read_u16(base + reads.BATTLE_MON_HP_OFF)
         local pp0 = io.read_u8(base + BATTLE_MON_PP_OFF)
         local comm = io.read_u8(a.BATTLE_COMM_ADDR + battler)
         local ex = e.explode
@@ -863,7 +863,7 @@ function Client.new(p)
 
     local function active_faint_step(e, mon, battler, b)
         if not STANDBY then return "hold", "pack has no battle.commit_guard.value" end
-        local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF)
+        local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE + reads.BATTLE_MON_HP_OFF)
         if e.perish and bhp == 0 then
             hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
             return "done"

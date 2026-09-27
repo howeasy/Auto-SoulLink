@@ -1536,6 +1536,7 @@ def build_expansion(context):
     for key, type_name, member in (
         ("BASESTATS_GROWTH_RATE_OFFSET", "SpeciesInfo", "growthRate"), ("BATTLE_MOVE_PP_OFFSET", "MoveInfo", "pp"),
         ("BATTLE_MON_OT_ID_OFF", "BattlePokemon", "otId"), ("BATTLE_MON_PERSONALITY_OFF", "BattlePokemon", "personality"),
+        ("BATTLE_MON_HP_OFF", "BattlePokemon", "hp"),
         ("BATTLE_RESULTS_PLAYER_FAINTS_OFF", "BattleResults", "playerFaintCounter"),
         ("BATTLE_RESULTS_FOE_FAINTS_OFF", "BattleResults", "opponentFaintCounter"),
         ("BOX_DATA_OFFSET", "PokemonStorage", "boxes"), ("GMAIN_CB2_OFFSET", "Main", "callback2"),
