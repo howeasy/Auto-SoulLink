@@ -3,11 +3,14 @@ import re
 import struct
 from pathlib import Path
 
+import pytest
+
 from tests.unit.test_patch_targets import build
 
 
-def test_fr_entry_gate_replays_exact_verified_bytes_and_resumes_after_them():
-    spec = build.target_spec("firered")
+@pytest.mark.parametrize("title",("firered","leafgreen"))
+def test_entry_gate_replays_exact_verified_bytes_and_resumes_after_them(title):
+    spec = build.target_spec(title)
     for symbol, code in (("TRADE_MON","TRADE_GATE_ASM"),("EVO_GETTER","EVO_GATE_ASM")):
         asm=spec[code]
         words=asm.split(".hword ",1)[1].split("\n",1)[0].split(",")
@@ -17,14 +20,15 @@ def test_fr_entry_gate_replays_exact_verified_bytes_and_resumes_after_them():
     assert spec["SCRIPT_IDLE"]==2  # pret script.c:21-23, not zero/running
 
 
-def test_fr_carrier_calls_match_pinned_vanilla_symbols():
+@pytest.mark.parametrize("title,symfile",(("firered","pokefirered.sym"),("leafgreen","pokeleafgreen.sym")))
+def test_carrier_calls_match_pinned_vanilla_symbols(title,symfile):
     root = Path(__file__).resolve().parents[2]
     symbols = {}
-    for line in (root / "data/gen3/pret/pokefirered.sym").read_text().splitlines():
+    for line in (root / "data/gen3/pret" / symfile).read_text().splitlines():
         words = line.split()
         if len(words) == 4:
             symbols[words[3]] = int(words[0],16)
-    spec = build.target_spec("firered")
+    spec = build.target_spec(title)
     for field, symbol in (("CARRIER_SPAWN","SpawnSpecialObjectEventParameterized"),
                           ("CARRIER_REMOVE","RemoveObjectEvent"),
                           ("CARRIER_CHOOSE","ChoosePartyMonByMenuType"),

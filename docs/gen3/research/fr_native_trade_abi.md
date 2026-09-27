@@ -473,8 +473,8 @@ CLIENT_TOO_OLD=13 for zero epoch. There is no raw fallback.
 The client still owns server session/battle_id equality, queued-payload freshness
 and response correlation from `rival_swap_refresh_window.md`. Native W1+trainer
 matching is not proof of that per-battle request identity. No new battle_id ABI
-field is invented here. This extension currently has SOURCE/MODEL/build evidence
-only; a leased natural trainer-battle check remains required. READY stays 0.
+field is invented here. The initial extension had SOURCE/MODEL/build evidence;
+the bounded natural trainer-battle check is recorded below. READY stays 0.
 
 ### FR Rival W1 live receipt, 2026-09-27
 
@@ -503,3 +503,36 @@ This is a real Rick trainer battle with replayed team data, not a live-server,
 duo, automatic story-rival, battle-finish or save-persistence qualification.
 Only normal inputs triggered/advanced gameplay; writes were confined to the
 owned request/config/staging ABI. No screenshots supplied facts. READY stays 0.
+
+## LeafGreen candidate binding extension
+
+The same producer composition now builds privately for LeafGreen using its own
+`patch/src/trade_targets/leafgreen.h` and linker script. Base identity is BPGE
+revision0, SHA1 `574fa542ffebb14be69902d1d36f1ec0a4afd71e`, as pinned in
+`data/gen3_sources.lock.json`. Payload candidate is `0x08EB0E14`; arena candidate
+is the same computed heap carve-out `0x0201B000`, still unqualified.
+
+`leafgreen_bindings.json` records 75 symbol+offset derivations and five menu-table
+references against the independently hashed `pokeleafgreen.sym`. Shared layout
+constants come from the same locked pret source, not an assumed address delta.
+Fourteen pointer values differ from FR. Examples:
+
+| Binding | FR | LG |
+| --- | --- | --- |
+| RunSaveFailedScreen | `080F5118` | `080F50F0` |
+| RunHelpSystemCallback | `0813B870` | `0813B848` |
+| TrySavingData | `080DA364` | `080DA338` |
+| SaveQuestLogData | `08112450` | `08112428` |
+| ChoosePartyMonByMenuType | `081283A8` | `08128380` |
+| Menu_InitCursor | `0810F7D8` | `0810F7B0` |
+| Start-menu action table | `083A7344` | `083A7324` |
+
+Every byte anchor is read from the exact LG ROM; replayed trade/evolution
+prologues are additionally required to match the audited instruction shape.
+The private builder verifies original detours, call anchors, relocated table
+references, linked entry and FF payload range, and emits its own receipt at
+`patch/build/candidate-leafgreen-trade/receipt.json`. It does not publish UPS.
+FR-only allocator probe modes remain FR-only; permitting an LG private candidate
+does not admit the heap carve-out or inherit FR physical receipts. LG READY=0,
+production=false, capability mask23 for the test composition. Native LG trade,
+carrier/panel, sound and rival lifecycle checks remain to be leased and run.

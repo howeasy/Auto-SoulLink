@@ -106,8 +106,8 @@ def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
     """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
     if trade_candidate and mode != "trade":
         raise ValueError("trade candidate requires trade composition")
-    if title != "firered":
-        raise ValueError("arena probe currently has only FireRed source bindings")
+    if title != "firered" and not (title == "leafgreen" and trade_candidate):
+        raise ValueError("diagnostics require FireRed; private candidates support FireRed/LeafGreen")
     clean = Path(rom_path).read_bytes()
     spec = validate_base(title, clean)
     carrier_bindings, sound_bindings, rival_bindings = {}, {}, {}
@@ -334,7 +334,7 @@ def main():
     ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
     ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
     ap.add_argument("--trade-candidate", action="store_true",
-                    help="private FR ABI v2 trade ROM, capability enabled; READY/UPS publication unchanged")
+                    help="private FR/LG ABI v2 candidate ROM; READY/UPS publication unchanged")
     ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census", "trade"),
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
