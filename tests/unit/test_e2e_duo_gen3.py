@@ -2738,7 +2738,9 @@ memory = { read_u8 = function() return 1 end }
 reader = { read_balls = function() if BALLS then return { ball_count = BALLS } end end }
 log = function() end
 boot_keys = {}
-play = { wait_scene_settled = function() return true end }
+-- in_battle defaults true: the realistic budget-exhaustion case (R4-DRIVER-2, OMP cx-d84db30c)
+-- is the LAST ball missing and the wild Pokemon still up, not the battle already having ended.
+play = { wait_scene_settled = function() return true end, in_battle = function() return true end }
 SP = { verify_fight_cursor = function() return "fight" end,
        throw_pokeball_from_bag = function() THROWS = THROWS + 1; BALLS = BALLS - 1 end }
 ctx = { hunt = function() return true end, choose_action = function() return true end,
@@ -2765,6 +2767,12 @@ def catch_model():
     ("0", "{ true }", "FINAL"),                             # a fixture that starts empty
     ("2", "{ false, 'no escape' }", "FINAL"),               # exhausted, then the escape failed
     ("2", "{ true }", "CAUSE_RNG"),                         # the real RNG: two thrown, both missed
+    # R4-DRIVER-2 (OMP cx-d84db30c): the 20th throw is also the LAST ball. The old exit branch
+    # reported the unconditional "capture throw budget exhausted (20)" before ever checking the
+    # pocket, and e2e_duo.py's classify_gen1_result only retries "hunt ended out-of-balls" --
+    # every other reason is FINAL, so this run was never retried though it is pure ball RNG.
+    ("20", "{ true }", "CAUSE_RNG"),                        # 20 stocked, 20 thrown, pocket empty
+    ("25", "{ true }", "FINAL"),                            # budget hit with balls still left
 ])
 def test_only_an_observed_ball_exhaustion_is_the_rng(catch_model, balls, ran, want):
     catch_model.execute(f"BALLS = {balls}; RAN = {ran}")
@@ -2773,6 +2781,22 @@ def test_only_an_observed_ball_exhaustion_is_the_rng(catch_model, balls, ran, wa
     assert key is None and duo.classify_gen1_result(text) == want, text
     assert duo.retryable_gen1_rng("gen3_frlg", {"a": text, "b": "RESULT: PASS (x)"}, 1, 3) == (
         want == "CAUSE_RNG")
+
+
+def test_the_loop_exiting_normally_still_reaches_the_settle_and_outcome_check(catch_model):
+    """R4-DRIVER-2 item 2: the model previously had no `play.in_battle`, so no case ever reached
+    the post-loop code a normal ("over") exit takes -- only the mid-loop early returns were
+    covered. A catch attempt that resolves before the budget must still settle and read the
+    battle outcome, not report a ball-budget/RNG reason."""
+    catch_model.execute("""
+        BALLS = 2
+        AWAIT_N = 0
+        ctx.await_turn = function() AWAIT_N = AWAIT_N + 1; if AWAIT_N == 1 then return "over" end
+                                     return "action" end
+        play.in_battle = function() return false end
+    """)
+    key, why = catch_model.globals().CATCH()
+    assert key is None and why == "the battle ended with outcome 1", why
 
 
 def test_the_attempt_jitter_lands_after_go(tmp_path):

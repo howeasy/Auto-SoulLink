@@ -419,9 +419,12 @@ def test_wait_scene_settled_requires_consecutive_quiet_frames(lua, world):
 
 
 def test_wait_scene_settled_gives_up_within_its_budget(lua, world):
+    """R4-DRIVER-2 item 3: budget exhaustion now carries a reason string too, not a bare False,
+    so a refusal is legible in receipts the same way the battle-guard refusals are."""
     play = _bind(lua)
     lua.execute("W.preds.scene_quiet = false")
-    assert play.wait_scene_settled(None, 50, None, 30) is False
+    result = play.wait_scene_settled(None, 50, None, 30)
+    assert isinstance(result, tuple) and result[0] is False and "50" in result[1], result
 
 
 def test_wait_scene_settled_honours_an_extra_ground_truth_predicate(lua, world):
