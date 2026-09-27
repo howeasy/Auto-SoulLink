@@ -470,9 +470,11 @@ class Gen3Adapter(GameAdapter):
         self._artifact_kind = kind or "clean"
 
     def supports_trade_recovery(self) -> bool:
-        return not self._is_rr and self._rom_type in ("firered", "leafgreen", "emerald", "firered_ap", "leafgreen_ap")
+        return self._rom_type in ("firered", "leafgreen", "emerald", "firered_ap", "leafgreen_ap", "firered_rr")
 
     def trade_unavailable_reason(self) -> str:
+        # RR-DURABLE: only an RR client that did not declare hello trade_prepare (the old ABI1
+        # UPS, which has no save witness) is refused by name; state.py applies that condition.
         return "Trade unavailable for Radical Red in this build." if self._is_rr else ""
 
     def refused_trade_recovery(self) -> str:

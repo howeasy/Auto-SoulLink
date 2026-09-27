@@ -29,7 +29,7 @@ def _hello(pid, **extra):
 
 
 @pytest.mark.parametrize("title,opted_in", [("firered", True), ("emerald", True),
-                                            ("firered_rr", False), ("Red", False), ("Crystal", False)])
+                                            ("firered_rr", True), ("Red", False), ("Crystal", False)])
 def test_config_exposes_existing_run_id_only_to_recovery_clients(tmp_path, title, opted_in):
     srv = SLinkServer(data_dir=str(tmp_path), run_id="run_journal_42")
     commands = srv._dispatch("a", _hello("a", rom_type=title, artifact_kind="clean", party=[]))
