@@ -12,7 +12,8 @@ function W.new(deps)
     local window
     -- `attempted` counts every byte handed to the sink, incremented BEFORE the external write:
     -- a sink that throws on byte k leaves attempted >= k, so a caller can tell "nothing was
-    -- written" (unchanged) from "RAM may have changed" (moved) even when no log receipt exists.
+    -- written" (unchanged) from "RAM may have changed" (moved). A partial receipt records
+    -- confirmed returns separately from attempted bytes; a throwing byte may have landed.
     local self = {log = {}, attempted = 0}
     function self:disarm() window = nil end
     function self:arm(reason, allow, args)
@@ -40,14 +41,22 @@ function W.new(deps)
         local ok, why = safety:check(window.snapshot, window.reason, window.args)
         assert(ok == true, why)
         -- No reads/callbacks between final revalidation and the first write.
-        for i = 1, n do
-            self.attempted = self.attempted + 1
-            deps.io.write_u8(addr + i - 1, copy[i], "System Bus")
-        end
         local record = {reason = window.reason, address = addr, len = n, frame = window.frame,
             why = window.reason, addr = addr, n = n}
+        local attempted, completed = 0, 0
+        local wrote, err = pcall(function()
+            for i = 1, n do
+                self.attempted, attempted = self.attempted + 1, i
+                deps.io.write_u8(addr + i - 1, copy[i], "System Bus")
+                completed = i
+            end
+        end)
+        if not wrote then
+            record.partial, record.attempted, record.completed, record.error = true, attempted, completed, tostring(err)
+        end
         self.log[#self.log + 1] = record
         if deps.log then deps.log(record) end
+        if not wrote then error(err, 0) end
     end
     -- G4-PH (docs/gen3/research/rr_active_faint_parity_scope_2026-09-23.md §3.3): a whole plan,
     -- {{addr, width, value}, ...}, validated ONCE. A plan ending in the controller hand-off has
@@ -77,20 +86,26 @@ function W.new(deps)
         local landed = 0
         local wok, err = pcall(function()
             for i, job in ipairs(jobs) do
+                job.attempted, job.completed = 0, 0
                 for k, byte in ipairs(job.bytes) do
                     self.attempted = self.attempted + 1
+                    job.attempted = k
                     deps.io.write_u8(job.addr + k - 1, byte, "System Bus")
+                    job.completed = k
                 end
                 landed = i
             end
         end)
         -- receipts after the last byte (no callbacks mid-plan), but for every entry that fully
-        -- landed even when the sink failed part-way (R1 L9); `attempted` covers the partial one
-        for i = 1, landed do
+        -- landed plus an explicitly uncertain partial entry if the sink threw.
+        for i = 1, landed + (wok and 0 or 1) do
             local job = jobs[i]
             local n = #job.bytes
             local record = {reason = window.reason, address = job.addr, len = n, frame = window.frame,
                 why = window.reason, addr = job.addr, n = n}
+            if i > landed then
+                record.partial, record.attempted, record.completed, record.error = true, job.attempted, job.completed, tostring(err)
+            end
             self.log[#self.log + 1] = record
             if deps.log then deps.log(record) end
         end

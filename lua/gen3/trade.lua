@@ -205,7 +205,8 @@ function T.new(d)
                 t.precommit_proved = true
             end
         end
-        t.scene_job = native:transfer("scene", {slot=t.slot, token=t.token, old_key=t.old_key, visit=t.visit},
+        t.scene_job = native:transfer("scene", {slot=t.slot, token=t.token, old_key=t.old_key,
+            visit=t.visit, dispatch_deadline=t.apply_deadline},
             function(why, result_code, reason)
                 if active ~= t or t.scene_attempt ~= attempt or t.phase ~= "scene" then return end
                 if why == "guard:moved" then return post_scene(t) end
@@ -238,15 +239,23 @@ function T.new(d)
             end, progress)
         if not t.scene_job and active == t and t.phase == "scene" then unchanged(t) end
     end
+    -- A valid prepare that arrives while the native side is briefly busy (still leaving the
+    -- chooser, a queued job, the field checkpoint not yet reached) waits up to prepare_frames
+    -- instead of refusing: T5 LG->FR 2026-09-27 answered ok=false for "native not authorized"
+    -- 187 frames after its own mon_chosen and the server cancelled the whole trade.
+    local held = nil
+    local function refuse(cmd, why)   -- every apply_ready ok=false names its reason once
+        if d.log then d.log("apply_prepare refused: " .. why) end
+        emit("apply_ready", {token=cmd.token, ok=false}); flush()
+    end
     function self:prepare(cmd)
         if not token(cmd.token) then return end
+        if held and held.cmd.token == cmd.token then return end
         local epoch = d.epoch()
-        if not self:capable() or not d.eligible() or self:hide_party() then
-            emit("apply_ready", {token=cmd.token, ok=false}); flush(); return
-        end
-        if prior_report_pending(epoch, cmd.token) then
-            emit("apply_ready", {token=cmd.token, ok=false}); flush(); return
-        end
+        if not self:capable() then return refuse(cmd, "not trade-capable") end
+        if not d.eligible() then return refuse(cmd, "not eligible") end
+        if self:hide_party() then return refuse(cmd, "party hidden") end
+        if prior_report_pending(epoch, cmd.token) then return refuse(cmd, "prior report pending") end
         if prepared and prepared.token == cmd.token and prepared.epoch == epoch then
             local t = prepared
             if t.phase == "preparing" and t.old_key == cmd.old_key then return end
@@ -258,15 +267,21 @@ function T.new(d)
         end
         if native.prepare_trade then
             local mon = locate(cmd.old_key)
-            if not mon or active or prepared or retired_for(epoch, cmd.token) or not native.trade_authorized
-               or not native:trade_authorized(cmd.token, cmd.old_key) then
-                emit("apply_ready", {token=cmd.token, ok=false}); flush(); return
+            if not mon then return refuse(cmd, "old_key not in party") end
+            if active or prepared then return refuse(cmd, "another trade in flight") end
+            if retired_for(epoch, cmd.token) then return refuse(cmd, "token retired") end
+            if not native.trade_authorized then return refuse(cmd, "native not authorized") end
+            if not native:trade_authorized(cmd.token, cmd.old_key) then
+                if held then return refuse(cmd, "another prepare held") end
+                held = {cmd=cmd, epoch=epoch, deadline=d.frame() + d.prepare_frames}
+                return
             end
             local t = {token=cmd.token, epoch=epoch, old_key=cmd.old_key, slot=mon.slot, phase="preparing", prepare_pending=true}
             t.journal_epoch = journal:allocate()
-            if not t.journal_epoch then emit("apply_ready", {token=cmd.token, ok=false}); flush(); return end
+            if not t.journal_epoch then return refuse(cmd, "journal allocate failed") end
             prepared = t
-            t.prepare_job = native:prepare_trade({token=t.token, slot=t.slot, old_key=t.old_key}, function(why, w)
+            t.prepare_job = native:prepare_trade({token=t.token, slot=t.slot, old_key=t.old_key,
+                dispatch_deadline=d.frame()+d.prepare_frames}, function(why, w)
                 if prepared ~= t or t.phase ~= "preparing" then return end
                 if t.epoch ~= d.epoch() then unchanged(t); flush(); return end
                 if why or type(w) ~= "table" or w.accepted ~= true or w.pre_saved ~= true or w.apply_open ~= true
@@ -370,6 +385,14 @@ function T.new(d)
     end
     function self:tick()
         flush()
+        if held then
+            local h = held
+            if h.epoch ~= d.epoch() or d.frame() > h.deadline then
+                held = nil; refuse(h.cmd, "native not authorized")
+            elseif native:trade_authorized(h.cmd.token, h.cmd.old_key) then
+                held = nil; self:prepare(h.cmd)
+            end
+        end
         if prepared and prepared.epoch ~= d.epoch() then unchanged(prepared); flush() end
         if prepared and prepared.prepare_deadline and d.frame() > prepared.prepare_deadline then unchanged(prepared); flush() end
         local t = active
@@ -377,7 +400,7 @@ function T.new(d)
         if t.epoch ~= d.epoch() or d.frame() > t.apply_deadline then unchanged(t); flush(); return end
         if not d.eligible() or not d.clear() then return end
         t.phase = "stage"
-        t.stage_job = native:transfer("enemy", {blobs_hex={t.blob_hex}}, function(why)
+        t.stage_job = native:transfer("enemy", {blobs_hex={t.blob_hex}, dispatch_deadline=t.apply_deadline}, function(why)
             if active ~= t then return end
             t.stage_done = true
             if t.phase == "draining" then return unchanged(t) end

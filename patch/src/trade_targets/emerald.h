@@ -17,4 +17,14 @@
 #define SLINK_TARGET_ARENA_BASE 0u
 #define SLINK_TARGET_ARENA_SIZE 0x1000u
 #define SLINK_TARGET_READY 0u
+/* SOURCE-only callback contract: entry contains a PC-relative load. A future
+ * native composition must relocate it and continue the original two callbacks.
+ * No Emerald candidate build path is enabled by these declarations. */
+#define SLINK_TARGET_FRAME_REPLAY_REQUIRED 1u
+#define SLINK_TARGET_FRAME_ENTRY 0x0800051Cu
+#define SLINK_TARGET_FRAME_BYTES "10b5074c20680028"
+#define SLINK_TARGET_FRAME_RESUME 0x08000525u
+#define SLINK_TARGET_FRAME_GMAIN_LITERAL 0x0800053Cu
+#define SLINK_TARGET_GMAIN 0x030022C0u
+#define SLINK_TARGET_FRAME_REPLAY_ASM "push {r4,lr}\n ldr r4,=0x030022c0\n ldr r0,[r4]\n cmp r0,#0\n ldr r3,=0x08000525\n bx r3\n"
 #endif

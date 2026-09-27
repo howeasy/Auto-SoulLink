@@ -45,15 +45,16 @@ def test_nonproduction_identity_is_refused_even_if_pinned(entry_model_tree, mode
         assert admitted is None and "non-production" in why
 
 
+@pytest.mark.parametrize("title", ["firered", "leafgreen"])
 @pytest.mark.parametrize("production", [True, None, False])
-def test_only_explicit_production_fr_companion_constructs_the_trade_binding(entry_model_tree, production, monkeypatch):
+def test_only_explicit_production_fr_companion_constructs_the_trade_binding(entry_model_tree, production, monkeypatch, title):
     monkeypatch.delenv("SLINK_GEN3_BATTLE_NONCE", raising=False)
     root = entry_model_tree
     model = TradeNativeWorld()
     edit_json(root / "data/games/gen3_frlg/profile.json", lambda obj: obj.update(native=model.n))
 
     def companion(obj):
-        rows = obj["titles"]["firered"]["artifacts"]
+        rows = obj["titles"][title]["artifacts"]
         rows["companion"] = copy.deepcopy(rows["clean"])
         rows["companion"].update(rom_sha1="ab"*20, rom_md5="cd"*16)
         if production is not None:
@@ -61,8 +62,8 @@ def test_only_explicit_production_fr_companion_constructs_the_trade_binding(entr
     edit_json(root / "data/games/gen3_frlg/engine_signals.json", companion)
     edit_json(root / "data/games/gen3_frlg/write_checkpoint.json", lambda obj: [
         anchor["expected_hex"].update(companion=anchor["expected_hex"]["clean"])
-        for anchor in obj["firered"]["anchors"].values()])
-    w = entry_model.World(pack="gen3_frlg", title="firered", build=False)
+        for anchor in obj[title]["anchors"].values()])
+    w = entry_model.World(pack="gen3_frlg", title=title, build=False)
     if production is not True:
         with pytest.raises(lua54.LuaError, match="production"):
             entry_model._production(w, root=root.as_posix(), kind="companion")

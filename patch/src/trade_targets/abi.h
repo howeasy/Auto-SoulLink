@@ -73,9 +73,20 @@ enum SlinkStatus { SLINK_ST_BUSY = 1, SLINK_ST_OK = 2, SLINK_ST_FAIL = 3 };
  * establish the client's actual version. A nonzero mismatched epoch is IDENTITY.
  */
 enum SlinkFailureReason {
+    SLINK_REASON_BAD_ARGS = 2,
+    SLINK_REASON_WINDOW_CLOSED = 8,
     SLINK_REASON_UNCERTAIN = 11,
     SLINK_REASON_IDENTITY = 12,
-    SLINK_REASON_CLIENT_TOO_OLD = 13
+    SLINK_REASON_CLIENT_TOO_OLD = 13,
+    SLINK_REASON_WITHDRAW_TOO_LATE = 14,
+    SLINK_REASON_SLOTS_UNVIABLE = 15,
+    SLINK_REASON_CALL_BUSY = 16,
+    SLINK_REASON_CALL_UNAVAILABLE = 17,
+    SLINK_REASON_CALL_COOLDOWN = 18
+};
+enum SlinkProducerPhase {
+    SLINK_PHASE_IDLE = 0, SLINK_PHASE_PRE_SAVE = 1, SLINK_PHASE_READY = 2,
+    SLINK_PHASE_SCENE = 3, SLINK_PHASE_DONE = 4, SLINK_PHASE_UNCERTAIN = 5
 };
 enum SlinkTradeMilestone {
     SLINK_PRE_SAVE_OK = 0, SLINK_COMMIT_ENTERED = 1,
@@ -106,7 +117,8 @@ typedef struct {
     uint8_t result[16];             /* 0x30 */
     uint32_t capabilities;          /* 0x40: only implemented/qualified features */
     uint32_t session_epoch;         /* 0x44: client handshake; zero unarmed, reset clears */
-    uint32_t reserved[2];           /* 0x48 */
+    uint32_t producer_phase;        /* 0x48: native-only atomic phase, not epoch-retagged */
+    uint32_t reserved;              /* 0x4C */
 } SlinkMailboxV2;
 
 /* Every milestone shares immutable epoch/visit/token identity and has its own
@@ -198,7 +210,8 @@ typedef struct {
  * to its live epoch, token, visit and per-milestone command sequences. This is
  * not evidence of an actual flash write; producer tests/probes must establish it. */
 static inline int slink_trade_success_is_durable(const SlinkTradeWitnessV2 *w,
-                                                uint16_t prepare_seq, uint16_t scene_seq)
+                                                uint16_t prepare_seq, uint16_t scene_seq,
+                                                uint32_t expected_pid, uint32_t expected_otid)
 {
     if (w->milestone_seq[SLINK_PRE_SAVE_OK] != prepare_seq) return 0;
     for (unsigned i = SLINK_COMMIT_ENTERED; i <= SLINK_FINAL_RESULT; i++)
@@ -207,7 +220,8 @@ static inline int slink_trade_success_is_durable(const SlinkTradeWitnessV2 *w,
         && (w->visit_flags & (SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT))
             == (SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT)
         && (w->milestones & SLINK_SUCCESS_MILESTONES) == SLINK_SUCCESS_MILESTONES
-        && w->save_status == SLINK_SAVE_OK;
+        && w->save_status == SLINK_SAVE_OK
+        && w->received_pid == expected_pid && w->received_otid == expected_otid;
 }
 
 /* Native strings have a bounded source field even when its last byte is not
@@ -225,6 +239,7 @@ static inline void slink_copy_name_bounded(volatile uint8_t *destination, uint32
     destination[i] = 0xFFu;
 }
 
+_Static_assert(offsetof(SlinkMailboxV2, producer_phase) == 0x48, "producer phase ABI offset");
 _Static_assert(sizeof(SlinkMailboxV2) == 0x50, "mailbox ABI size");
 _Static_assert(offsetof(SlinkMailboxV2, capabilities) == 0x40, "capability ABI offset");
 _Static_assert(sizeof(SlinkTradeWitnessV2) == 0x50, "witness ABI size");

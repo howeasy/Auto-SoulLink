@@ -573,6 +573,13 @@ def test_clean_rom_never_advertises_companion_trade_prepare(pack, title, monkeyp
 
 def server_and_clients_applying(monkeypatch, world, carrier, delay_before_dispatch=0):
     other, other_carrier, _ = durable_client(monkeypatch, player="b", mons=[PARTNER])
+    # The completion path now sends a real visible HELLO. Keep this MODEL
+    # trainer consistent with B's owned fixture instead of relying on reports
+    # that used to bypass a second identity check.
+    other.set_trainer(PARTNER["ot_id"], "B")
+    other_carrier.journal_model.journal.bind(other_carrier.journal_model.journal, "model-run", f"{PARTNER['ot_id']:08X}")
+    other.client.hello_sent = False
+    other.step()
     state = make_state_with_link(KB, KP)
     state.links[0].a.species, state.links[0].b.species = 5, 25
     state.handle_event("a", world.events("hello")[-1])
@@ -718,7 +725,10 @@ def test_accepted_apply_outlives_ready_deadline_without_splitting_pair(monkeypat
     # Replayed production reports from either client cannot commit a second time.
     state.handle_event("a", world.events("trade_done")[-1])
     state.handle_event("b", other.events("trade_done")[-1])
-    assert [(o["token"], o["outcome"]) for o in outcomes] == [(token, "committed")]
+    # A visible HELLO is recorded as checkpoint recovery before its party
+    # evidence settles. Only one terminal commit may result, including replays.
+    assert all(o["outcome"] in ("uncertain", "committed") for o in outcomes)
+    assert [(o["token"], o["outcome"]) for o in outcomes if o["outcome"] != "uncertain"] == [(token, "committed")]
     assert state.trade_problem() is None
 
 
@@ -913,3 +923,31 @@ def test_client_reconnect_reuses_token_only_after_old_report_is_acknowledged(mon
     world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
     world.step()
     assert world.events("apply_ready")[-1]["ok"] is True
+
+
+def test_a_briefly_unauthorized_native_prepare_is_held_not_refused():
+    """T5 LG->FR 2026-09-27: apply_prepare arrived while the native side was still busy
+    ("native not authorized") and the terminal ok=false cancelled the whole trade. A valid
+    prepare waits up to prepare_frames for authorization, then proceeds."""
+    world = TradeWorld()
+    ready = {"ok": False}
+    pending = []
+    world.native.trade_authorized = lambda *_: ready["ok"]
+    world.native.prepare_trade = lambda _, cmd, done, valid: pending.append((cmd, done, valid)) or world.lua.table()
+    world.prepare()
+    world.tick(); world.tick()
+    assert world.events == [] and pending == []
+    ready["ok"] = True
+    world.tick()
+    assert len(pending) == 1 and world.events == []
+
+
+def test_a_prepare_that_never_gets_authorized_still_refuses_at_the_deadline():
+    world = TradeWorld()
+    world.native.trade_authorized = lambda *_: False
+    world.native.prepare_trade = lambda *_: world.lua.table()
+    world.prepare()
+    assert world.events == []
+    world.frame += 601
+    world.tick()
+    assert world.events[-1] == ("apply_ready", {"token": "t", "ok": False})

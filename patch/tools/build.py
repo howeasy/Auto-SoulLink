@@ -102,41 +102,126 @@ def thumb_entry_jump(address, destination):
     return bytes.fromhex("004b1847") + (destination | 1).to_bytes(4, "little")
 
 
-def build_arena_probe(title, rom_path, mode):
-    """Private diagnostic ROM only. Never writes dist, UPS or a production beacon."""
-    if title != "firered":
-        raise ValueError("arena probe currently has only FireRed source bindings")
+def build_arena_probe(title, rom_path, mode, *, trade_candidate=False):
+    """Private ROM only; candidate advertises implemented trade but cannot publish UPS."""
+    if trade_candidate and mode != "trade":
+        raise ValueError("trade candidate requires trade composition")
+    if title != "firered" and not (title == "leafgreen" and trade_candidate):
+        raise ValueError("diagnostics require FireRed; private candidates support FireRed/LeafGreen")
     clean = Path(rom_path).read_bytes()
     spec = validate_base(title, clean)
+    carrier_bindings, sound_bindings, rival_bindings = {}, {}, {}
+    if trade_candidate:
+        for key in ("CARRIER_SPAWN", "CARRIER_REMOVE", "CARRIER_CHOOSE"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            carrier_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
+        for key in ("SOUND_SE", "SOUND_FANFARE"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            sound_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
+        for key in ("RIVAL_START", "RIVAL_DUMMY"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+            rival_bindings[key] = {"address": spec[key], "bytes": spec[key+"_BYTES"]}
     validate_detour(clean, spec["HEAP_INIT"], bytes.fromhex(spec["HEAP_INIT_BYTES"]))
-    out = Path(BUILD) / f"arena-{title}-{mode}"
+    if mode in ("census", "trade"):
+        validate_detour(clean, spec["FRAME_ENTRY"], bytes.fromhex(spec["FRAME_BYTES"]))
+    if mode == "trade":
+        for key in ("TRADE_MON", "EVO_GETTER"):
+            validate_detour(clean, spec[key], bytes.fromhex(spec[key+"_BYTES"]))
+    out = Path(BUILD) / (f"candidate-{title}-trade" if trade_candidate else f"arena-{title}-{mode}")
     out.mkdir(parents=True, exist_ok=True)
     header = Path(SRC) / "trade_targets" / f"{title}.h"
     obj, elf, binary = out / "probe.o", out / "probe.elf", out / "probe.bin"
-    run([GCC, *CFLAGS, f"-DSLINK_ARENA_PROBE={1 if mode == 'positive' else 2}",
+    flag = "-DSLINK_NATIVE_TRADE_PROBE=1" if mode == "trade" else (
+        f"-DSLINK_ARENA_PROBE={ {'positive':1,'negative':2,'exhaustion':3,'census':4}[mode]}")
+    if trade_candidate:
+        flag = "-DSLINK_NATIVE_TRADE_CANDIDATE=1"
+    entry = "slink_native_heap" if mode == "trade" else "slink_heap_probe"
+    run([GCC, *CFLAGS, flag,
          "-include", str(header), "-c", os.path.join(SRC, "handlers.c"), "-o", str(obj)])
-    run([LD, "-T", str(header.with_suffix(".ld")), "-e", "slink_heap_probe",
+    run([LD, "-T", str(header.with_suffix(".ld")), "-e", entry,
          "--no-warn-rwx-segments", str(obj), "-o", str(elf)])
-    found = [line.split()[0] for line in run([NM, str(elf)]).splitlines()
-             if line.split()[-1:] == ["slink_heap_probe"]]
+    symbol_text = run([NM, str(elf)])
+    found = [line.split()[0] for line in symbol_text.splitlines()
+             if line.split()[-1:] == [entry]]
     if found != [f"{spec['CODE_CANDIDATE']:08x}"]:
         raise ValueError("probe entry is not at the verified payload candidate")
     run([OBJCOPY, "-O", "binary", str(elf), str(binary)])
-    blob = binary.read_bytes()
+    blob = bytearray(binary.read_bytes())
+    panel_detours, panel_tables = [], {}
+    if trade_candidate:
+        symbols = {line.split()[-1]: int(line.split()[0], 16)
+                   for line in symbol_text.splitlines() if len(line.split()) == 3}
+        for key, count, table_key, symbol, additions in (
+            ("actions", 72, "PANEL_ACTION_TABLE", "slink_panel_actions",
+             (symbols["slink_panel_label"], symbols["slink_panel_menu_callback"] | 1)),
+            ("descriptions", 36, "PANEL_DESC_TABLE", "slink_panel_descriptions",
+             (symbols["slink_panel_description"],)),
+        ):
+            offset = symbols[symbol] - spec["CODE_CANDIDATE"]
+            length = count + 4 * len(additions)
+            if offset < 0 or offset + length > len(blob) or any(blob[offset:offset+length]):
+                raise ValueError("panel table placeholder outside payload or not empty")
+            original = spec[table_key] - ROM_BASE
+            blob[offset:offset+count] = clean[original:original+count]
+            for index, word in enumerate(additions):
+                blob[offset+count+4*index:offset+count+4*index+4] = word.to_bytes(4,"little")
+            panel_tables[key] = {"address": symbols[symbol], "original_address": spec[table_key]}
+            refs = spec["PANEL_ACTION_REFS" if key == "actions" else "PANEL_DESC_REFS"]
+            for ref in refs.split(","):
+                address = int(ref, 0)
+                expected = spec[table_key].to_bytes(4,"little")
+                validate_detour(clean,address,expected)
+                panel_detours.append({"address":address,"original":expected.hex(),
+                                      "replacement":symbols[symbol].to_bytes(4,"little").hex()})
+        address = spec["PANEL_NORMAL_MENU"]
+        validate_detour(clean,address,bytes.fromhex(spec["PANEL_NORMAL_BYTES"]))
+        panel_detours.append({"address":address,"original":spec["PANEL_NORMAL_BYTES"],
+                              "replacement":thumb_entry_jump(address,symbols["slink_panel_normal_menu"]).hex()})
     offset = spec["CODE_CANDIDATE"] - ROM_BASE
     if not blob or len(blob) > 0x14000 or clean[offset:offset + len(blob)] != b"\xff" * len(blob):
         raise ValueError("probe payload candidate not free/within linker bound")
     data = bytearray(clean)
     data[offset:offset + len(blob)] = blob
+    for detour in panel_detours:
+        start = detour["address"] - ROM_BASE
+        replacement = bytes.fromhex(detour["replacement"])
+        data[start:start+len(replacement)] = replacement
     hook = spec["HEAP_INIT"] - ROM_BASE
     data[hook:hook + 8] = thumb_entry_jump(spec["HEAP_INIT"], spec["CODE_CANDIDATE"])
+    frame_receipt = None
+    if mode in ("census", "trade"):
+        frame = next(int(line.split()[0], 16) for line in symbol_text.splitlines()
+                     if line.split()[-1:] == ["slink_native_frame" if mode=="trade" else "slink_frame_probe"])
+        offset = spec["FRAME_ENTRY"] - ROM_BASE
+        data[offset:offset+8] = thumb_entry_jump(spec["FRAME_ENTRY"], frame)
+        frame_receipt = {"address": spec["FRAME_ENTRY"], "original": spec["FRAME_BYTES"],
+                         "replacement": data[offset:offset+8].hex()}
+    trade_detours = []
+    if mode == "trade":
+        for key, symbol in (("TRADE_MON","slink_native_trade_gate"), ("EVO_GETTER","slink_native_evolution_gate")):
+            destination = next(int(line.split()[0],16) for line in symbol_text.splitlines()
+                               if line.split()[-1:] == [symbol])
+            offset = spec[key]-ROM_BASE
+            data[offset:offset+8] = thumb_entry_jump(spec[key],destination)
+            trade_detours.append({"address":spec[key],"original":spec[key+"_BYTES"],
+                                  "replacement":data[offset:offset+8].hex(),"symbol":symbol})
     rom = out / "probe.gba"
     rom.write_bytes(data)
-    receipt = {"status": "UNQUALIFIED_DIAGNOSTIC_ONLY", "target": title, "mode": mode,
+    receipt = {"status": "UNQUALIFIED_TRADE_CANDIDATE" if trade_candidate else "UNQUALIFIED_DIAGNOSTIC_ONLY",
+               "target": title, "mode": mode, "ready": spec["READY"],
+               "production": False,
+               "arena_static_check": "skipped: heap clamp unqualified",
+               "capabilities": 23 if trade_candidate else 0,
+               "panel_detours": panel_detours, "panel_tables": panel_tables,
+               "carrier_bindings": carrier_bindings,
+               "sound_bindings": sound_bindings,
+               "rival_bindings": rival_bindings,
                "base_sha1": hashlib.sha1(clean).hexdigest(), "sha1": hashlib.sha1(data).hexdigest(),
                "payload_sha256": hashlib.sha256(blob).hexdigest(), "payload_bytes": len(blob),
                "detour": spec["HEAP_INIT"], "original": spec["HEAP_INIT_BYTES"],
                "replacement": data[hook:hook + 8].hex(), "arena_candidate": spec["ARENA_CANDIDATE"],
+               "frame_detour": frame_receipt,
+               "trade_detours": trade_detours,
                "compiler": run([GCC, "--version"])}
     (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
     print(f"DIAGNOSTIC ONLY: {rom} (no UPS, no qualification)")
@@ -248,7 +333,9 @@ def main():
     ap.add_argument("--target", choices=TARGET_NAMES, default="radical_red")
     ap.add_argument("--abi-version", type=int, choices=(1, 2), default=1)
     ap.add_argument("--describe", action="store_true", help="print target candidates; does not build/admit")
-    ap.add_argument("--arena-probe", choices=("positive", "negative"),
+    ap.add_argument("--trade-candidate", action="store_true",
+                    help="private FR/LG ABI v2 candidate ROM; READY/UPS publication unchanged")
+    ap.add_argument("--arena-probe", choices=("positive", "negative", "exhaustion", "census", "trade"),
                     help="private unqualified heap-reservation diagnostic; never publishes a patch")
     ap.add_argument("--rom", default=DEFAULT_RR)
     ap.add_argument("--no-verify-md5", action="store_true")
@@ -260,6 +347,14 @@ def main():
                          "emitted UPS is byte-identical to the committed dist/SLink-RR.ups. "
                          "Touches nothing in the tree.")
     args = ap.parse_args()
+    if args.trade_candidate:
+        if args.arena_probe or args.check or args.describe or args.no_verify_md5:
+            ap.error("trade candidate cannot combine with probes/check/describe/verification bypass")
+        try:
+            build_arena_probe(args.target, args.rom, "trade", trade_candidate=True)
+        except (ValueError, OSError) as error:
+            ap.error(str(error))
+        return 0
     if args.describe:
         print(json.dumps(target_spec(args.target), indent=2))
         return 0
@@ -283,7 +378,13 @@ def main():
     except (ValueError, OSError) as error:
         ap.error(str(error))
     committed_ups = os.path.join(DIST, "SLink-RR.ups")
-    tmp = tempfile.mkdtemp(prefix="slink-build-") if args.check else None
+    tmp = None
+    if args.check:
+        parent = Path(PATCH) / "build"
+        if parent.resolve() != Path(PATCH).resolve() / "build":
+            ap.error("redirected build directory refused")
+        parent.mkdir(parents=True, exist_ok=True)
+        tmp = tempfile.mkdtemp(prefix="slink-build-", dir=parent)
     if args.check:
         if not os.path.exists(committed_ups):
             sys.exit(f"--check: no committed patch at {committed_ups}")
@@ -415,7 +516,10 @@ def main():
     if args.check:
         with open(committed_ups, "rb") as f:
             want = f.read()
-        shutil.rmtree(tmp, ignore_errors=True)
+        resolved = Path(tmp).resolve()
+        if resolved.parent != Path(PATCH).resolve() / "build" or not resolved.name.startswith("slink-build-"):
+            sys.exit(f"refusing cleanup outside owned build directory: {resolved}")
+        shutil.rmtree(resolved)
         if ups != want:
             sys.exit(f"CHECK FAIL: rebuilt UPS ({len(ups)} B, md5 "
                      f"{hashlib.md5(ups).hexdigest()}) != committed "
