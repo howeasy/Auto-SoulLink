@@ -357,6 +357,18 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def supports_trade_recovery(self) -> bool:
+        """Accept withheld snapshots and outstanding trade leases on hello.
+
+        This opts into a wire protocol, not native trade capability. Other clients
+        retain their existing snapshot and reconciliation behavior.
+        """
+        return False
+
+    def refused_trade_recovery(self) -> str:
+        """Named refusal when a foundation cannot interpret these optional fields."""
+        return ""
+
 
 class GamePresentationAdapter(ABC):
     """Interface for game-specific display/UI logic.
