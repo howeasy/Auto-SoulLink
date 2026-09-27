@@ -17,6 +17,10 @@ inside the allowlist derived from the INI entry for the categories that were ena
                  write the fork re-cases byte-for-byte, fork revision 3)
 
     python tools/upr_write_domain_diff.py --clean ROM --out ROM --title purered --enable wild [--enable ...]
+    python tools/upr_write_domain_diff.py --clean FR.gba --out OUT.gba --title firered --log OUT.gba.log
+
+Gen 3 mode (firered / leafgreen): server/upr_gen3_write_domain.py against
+data/games/gen3_frlg/upr_write_domains.json (card R3-F3).
 
 Usable as a library too: ``allowlist(title, rom, categories)`` and ``audit(...)``.
 """
@@ -303,14 +307,51 @@ def audit(title: str, clean: bytes, out: bytes, categories: set[str], ini: pathl
     return {"changed": len(changed), "allowed": len(allowed), "stray": stray}
 
 
+GEN3_TITLES = ("firered", "leafgreen")
+
+
+def main_gen3(args) -> int:
+    """Gen 3 mode (card R3-F3): FR/LG against data/games/gen3_frlg/upr_write_domains.json.
+    Domains come from --enable, or from the settings string of the output's UPR --log."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from server.upr_gen3_write_domain import audit, domains_for_spec, load_model
+    model = load_model()
+    enabled = {"baseline", *args.enable}
+    if args.log:
+        from server.upr_settings import FAMILY_FRLG, parse_settings_string, spec_from_parsed
+        lines = pathlib.Path(args.log).read_text(encoding="utf-8-sig").splitlines()
+        setting = next(ln.split(": ", 1)[1] for ln in lines if ln.startswith("Settings String:"))
+        enabled |= domains_for_spec(spec_from_parsed(parse_settings_string(setting), FAMILY_FRLG))
+    known = set(model["titles"][args.title]["domains"])
+    if bad := enabled - known:
+        print(f"unknown Gen 3 domain(s): {sorted(bad)}; known: {sorted(known)}")
+        return 2
+    clean, out = pathlib.Path(args.clean).read_bytes(), pathlib.Path(args.out).read_bytes()
+    r = audit(args.title, clean, out, enabled, model)
+    print(f"enabled={r['enabled']} changed={r['changed']} stray={len(r['stray'])}")
+    for d, n in sorted(r["named"].items()):
+        print(f"  OUTSIDE, in {d}: {n} byte(s)")
+    for i in r["stray"][:40]:
+        print(f"  OUTSIDE 0x{i:06X}: {clean[i]:02X} -> {out[i]:02X}")
+    print("WRITE DOMAIN OK" if not r["stray"] else "WRITE DOMAIN VIOLATED")
+    return 0 if not r["stray"] else 1
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--clean", required=True)
     ap.add_argument("--out", required=True)
-    ap.add_argument("--title", default="purered", choices=sorted(SECTION))
-    ap.add_argument("--enable", action="append", default=[], choices=list(DOMAINS))
+    ap.add_argument("--title", default="purered", choices=sorted(SECTION) + list(GEN3_TITLES))
+    ap.add_argument("--enable", action="append", default=[],
+                    help=f"Gen 1: one of {list(DOMAINS)}; Gen 3: a domain of upr_write_domains.json")
+    ap.add_argument("--log", help="Gen 3 only: the output's UPR log; its settings string picks the domains")
     ap.add_argument("--ini", default=str(INI))
     args = ap.parse_args()
+    if args.title in GEN3_TITLES:
+        return main_gen3(args)
+    if bad := set(args.enable) - set(DOMAINS):
+        ap.error(f"unknown Gen 1 domain(s) {sorted(bad)}; choose from {list(DOMAINS)}")
     clean, out = pathlib.Path(args.clean).read_bytes(), pathlib.Path(args.out).read_bytes()
     if len(clean) != len(out):
         print(f"length differs: {len(clean)} vs {len(out)}")
