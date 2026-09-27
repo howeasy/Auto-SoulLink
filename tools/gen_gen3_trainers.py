@@ -30,7 +30,8 @@ Facts and where they come from (all pret, never Radical Red):
   area      the map whose script runs the trainerbattle (every TRAINER_* on the line but the
             TRAINER_BATTLE_* mode, so `trainerbattle TRAINER_BATTLE_SET_TRAINER_A,
             TRAINER_MAXIE_MOSSDEEP` counts; data/maps/*/scripts.inc directly, or a
-            data/scripts/*.inc label named by a map's object event), then the nearest map over
+            data/scripts/*.inc label named by a map's object event), including the opponent
+            arguments of expansion's multi-battle macros, then the nearest map over
             warps/connections that the area map knows. The client keeps the last known area
             while it stands in an unmapped map (a gym, a hideout floor), and that is the town or
             dungeon it walked in from. Rematch tiers take their base trainer's area (FR/LG
@@ -290,8 +291,18 @@ def map_jsons(root: Path) -> dict[str, dict]:
     return {p.parent.name: json.loads(read(p)) for p in sorted((root / "data/maps").glob("*/map.json"))}
 
 
+# expansion e8bd1cd7: asm/macros/battle_frontier/battle_tower.inc:121-160 and
+# asm/macros/event.inc:2674-2682. Zero-based opponent slots only: loss text and
+# partner ids are not opponents. multi_wild/multi_do (and fixed variants) have none.
+_MULTI_TRAINER_ARGS = {
+    "multi_2_vs_2": (0, 2), "multi_fixed_2_vs_2": (0, 2),
+    "multi_2_vs_1": (0,), "multi_fixed_2_vs_1": (0,),
+    "setmultitrainerbattle": (0, 2),
+}
+
+
 def trainer_maps(root: Path, maps: dict[str, dict]) -> dict[str, set[str]]:
-    """TRAINER_* -> {MAP_*} whose script runs its trainerbattle."""
+    """TRAINER_* -> {MAP_*} whose script battles that opponent."""
     by_label: dict[str, set[str]] = {}
     out: dict[str, set[str]] = {}
     for inc in sorted([*(root / "data/maps").glob("*/scripts.inc"), *(root / "data/scripts").glob("*.inc")]):
@@ -302,9 +313,16 @@ def trainer_maps(root: Path, maps: dict[str, dict]) -> dict[str, set[str]]:
             if m:
                 label = m[1]
                 continue
-            if not re.match(r"\s*trainerbattle\w*\s", line):
+            if re.match(r"\s*trainerbattle\w*\s", line):
+                trainers = re.findall(r"\bTRAINER_(?!BATTLE_)\w+", line)
+            elif (command := re.match(r"\s*(\w+)\s+(.+)", line)) and command[1] in _MULTI_TRAINER_ARGS:
+                args = [arg.strip() for arg in command[2].split("@", 1)[0].split(",")]
+                trainers = [args[i] for i in _MULTI_TRAINER_ARGS[command[1]]
+                            if i < len(args) and re.fullmatch(r"TRAINER_(?!BATTLE_)\w+", args[i])
+                            and args[i] != "TRAINER_NONE"]
+            else:
                 continue
-            for tr in re.findall(r"\bTRAINER_(?!BATTLE_)\w+", line):
+            for tr in trainers:
                 if owner:
                     out.setdefault(tr, set()).add(owner)
                 elif label:
