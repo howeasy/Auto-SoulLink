@@ -8901,6 +8901,7 @@
           "ability": "Oblivious"
         }
       ],
+      "area": "route_112",
       "calc_label": "Kindler Cole"
     },
     "202": {
@@ -8949,6 +8950,7 @@
           "ability": "Magma Armor"
         }
       ],
+      "area": "route_112",
       "calc_label": "Kindler Jeff"
     },
     "203": {
@@ -8977,6 +8979,7 @@
           "ability": "Oblivious"
         }
       ],
+      "area": "route_112",
       "calc_label": "Kindler Axle"
     },
     "204": {
@@ -9005,6 +9008,7 @@
           "ability": "Magma Armor"
         }
       ],
+      "area": "route_112",
       "calc_label": "Kindler Jace"
     },
     "205": {
@@ -9033,6 +9037,7 @@
           "ability": "Magma Armor"
         }
       ],
+      "area": "route_112",
       "calc_label": "Kindler Keegan"
     },
     "206": {
@@ -23363,6 +23368,7 @@
           "ability": "Oblivious"
         }
       ],
+      "area": "route_112",
       "calc_label": "Hiker Eli"
     },
     "502": {
@@ -24260,6 +24266,7 @@
       "area": "route_103",
       "key": true,
       "level_cap": 5,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer Brendan"
     },
     "521": {
@@ -24331,6 +24338,7 @@
       "area": "route_110",
       "key": true,
       "level_cap": 20,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer Brendan (2)"
     },
     "522": {
@@ -24402,6 +24410,7 @@
       "area": "route_119",
       "key": true,
       "level_cap": 31,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer Brendan (3)"
     },
     "523": {
@@ -24432,6 +24441,7 @@
       "area": "route_103",
       "key": true,
       "level_cap": 5,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer Brendan (4)"
     },
     "524": {
@@ -24503,6 +24513,7 @@
       "area": "route_110",
       "key": true,
       "level_cap": 20,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer Brendan (5)"
     },
     "525": {
@@ -24574,6 +24585,7 @@
       "area": "route_119",
       "key": true,
       "level_cap": 31,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer Brendan (6)"
     },
     "526": {
@@ -24604,6 +24616,7 @@
       "area": "route_103",
       "key": true,
       "level_cap": 5,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer Brendan (7)"
     },
     "527": {
@@ -24675,6 +24688,7 @@
       "area": "route_110",
       "key": true,
       "level_cap": 20,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer Brendan (8)"
     },
     "528": {
@@ -24746,6 +24760,7 @@
       "area": "route_119",
       "key": true,
       "level_cap": 31,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer Brendan (9)"
     },
     "529": {
@@ -24776,6 +24791,7 @@
       "area": "route_103",
       "key": true,
       "level_cap": 5,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer May"
     },
     "530": {
@@ -24847,6 +24863,7 @@
       "area": "route_110",
       "key": true,
       "level_cap": 20,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer May (2)"
     },
     "531": {
@@ -24918,6 +24935,7 @@
       "area": "route_119",
       "key": true,
       "level_cap": 31,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer May (3)"
     },
     "532": {
@@ -24948,6 +24966,7 @@
       "area": "route_103",
       "key": true,
       "level_cap": 5,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer May (4)"
     },
     "533": {
@@ -25019,6 +25038,7 @@
       "area": "route_110",
       "key": true,
       "level_cap": 20,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer May (5)"
     },
     "534": {
@@ -25090,6 +25110,7 @@
       "area": "route_119",
       "key": true,
       "level_cap": 31,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer May (6)"
     },
     "535": {
@@ -25120,6 +25141,7 @@
       "area": "route_103",
       "key": true,
       "level_cap": 5,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer May (7)"
     },
     "536": {
@@ -25191,6 +25213,7 @@
       "area": "route_110",
       "key": true,
       "level_cap": 20,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer May (8)"
     },
     "537": {
@@ -25262,6 +25285,7 @@
       "area": "route_119",
       "key": true,
       "level_cap": 31,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer May (9)"
     },
     "538": {
@@ -28272,6 +28296,7 @@
       "area": "route_104",
       "key": true,
       "level_cap": 15,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer Brendan (10)"
     },
     "593": {
@@ -28323,6 +28348,7 @@
       "area": "route_104",
       "key": true,
       "level_cap": 15,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer Brendan (11)"
     },
     "594": {
@@ -28641,6 +28667,7 @@
       "area": "route_104",
       "key": true,
       "level_cap": 15,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer Brendan (12)"
     },
     "600": {
@@ -28692,6 +28719,7 @@
       "area": "route_104",
       "key": true,
       "level_cap": 15,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer May (10)"
     },
     "601": {
@@ -31257,6 +31285,7 @@
           "ability": "Color Change"
         }
       ],
+      "area": "route_112",
       "calc_label": "Cooltrainer Gerald"
     },
     "649": {
@@ -31334,6 +31363,7 @@
           "ability": "Pure Power"
         }
       ],
+      "area": "route_112",
       "calc_label": "Battle Girl Danielle"
     },
     "651": {
@@ -31741,6 +31771,7 @@
       "area": "victory_road",
       "key": true,
       "level_cap": 48,
+      "fight_label": "Rematch 1",
       "calc_label": "Pokémon Trainer Wally (3)"
     },
     "658": {
@@ -31851,6 +31882,7 @@
       ],
       "key": true,
       "level_cap": 51,
+      "fight_label": "Rematch 2",
       "area": "victory_road",
       "calc_label": "Pokémon Trainer Wally (4)"
     },
@@ -31962,6 +31994,7 @@
       ],
       "key": true,
       "level_cap": 54,
+      "fight_label": "Rematch 3",
       "area": "victory_road",
       "calc_label": "Pokémon Trainer Wally (5)"
     },
@@ -32073,6 +32106,7 @@
       ],
       "key": true,
       "level_cap": 57,
+      "fight_label": "Rematch 4",
       "area": "victory_road",
       "calc_label": "Pokémon Trainer Wally (6)"
     },
@@ -32165,6 +32199,7 @@
       "area": "lilycove_city",
       "key": true,
       "level_cap": 34,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer Brendan (13)"
     },
     "662": {
@@ -32256,6 +32291,7 @@
       "area": "lilycove_city",
       "key": true,
       "level_cap": 34,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer Brendan (14)"
     },
     "663": {
@@ -32347,6 +32383,7 @@
       "area": "lilycove_city",
       "key": true,
       "level_cap": 34,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer Brendan (15)"
     },
     "664": {
@@ -32438,6 +32475,7 @@
       "area": "lilycove_city",
       "key": true,
       "level_cap": 34,
+      "fight_label": "Rival has Treecko",
       "calc_label": "Pokémon Trainer May (11)"
     },
     "665": {
@@ -32529,6 +32567,7 @@
       "area": "lilycove_city",
       "key": true,
       "level_cap": 34,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer May (12)"
     },
     "666": {
@@ -32620,6 +32659,7 @@
       "area": "lilycove_city",
       "key": true,
       "level_cap": 34,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer May (13)"
     },
     "667": {
@@ -37275,6 +37315,7 @@
       "area": "route_104",
       "key": true,
       "level_cap": 15,
+      "fight_label": "Rival has Torchic",
       "calc_label": "Pokémon Trainer May (14)"
     },
     "769": {
@@ -37326,6 +37367,7 @@
       "area": "route_104",
       "key": true,
       "level_cap": 15,
+      "fight_label": "Rival has Mudkip",
       "calc_label": "Pokémon Trainer May (15)"
     },
     "770": {
@@ -37418,6 +37460,7 @@
       ],
       "key": true,
       "level_cap": 37,
+      "fight_label": "Rematch 1",
       "area": "route_104",
       "calc_label": "Leader Roxanne Rematch 1"
     },
@@ -37531,6 +37574,7 @@
       ],
       "key": true,
       "level_cap": 42,
+      "fight_label": "Rematch 2",
       "area": "route_104",
       "calc_label": "Leader Roxanne Rematch 2"
     },
@@ -37644,6 +37688,7 @@
       ],
       "key": true,
       "level_cap": 47,
+      "fight_label": "Rematch 3",
       "area": "route_104",
       "calc_label": "Leader Roxanne Rematch 3"
     },
@@ -37777,6 +37822,7 @@
       ],
       "key": true,
       "level_cap": 52,
+      "fight_label": "Rematch 4",
       "area": "route_104",
       "calc_label": "Leader Roxanne Rematch 4"
     },
@@ -37870,6 +37916,7 @@
       ],
       "key": true,
       "level_cap": 37,
+      "fight_label": "Rematch 1",
       "area": "dewford_town",
       "calc_label": "Leader Brawly Rematch 1"
     },
@@ -37963,6 +38010,7 @@
       ],
       "key": true,
       "level_cap": 42,
+      "fight_label": "Rematch 2",
       "area": "dewford_town",
       "calc_label": "Leader Brawly Rematch 2"
     },
@@ -38076,6 +38124,7 @@
       ],
       "key": true,
       "level_cap": 47,
+      "fight_label": "Rematch 3",
       "area": "dewford_town",
       "calc_label": "Leader Brawly Rematch 3"
     },
@@ -38209,6 +38258,7 @@
       ],
       "key": true,
       "level_cap": 52,
+      "fight_label": "Rematch 4",
       "area": "dewford_town",
       "calc_label": "Leader Brawly Rematch 4"
     },
@@ -38302,6 +38352,7 @@
       ],
       "key": true,
       "level_cap": 40,
+      "fight_label": "Rematch 1",
       "area": "route_110",
       "calc_label": "Leader Wattson Rematch 1"
     },
@@ -38415,6 +38466,7 @@
       ],
       "key": true,
       "level_cap": 45,
+      "fight_label": "Rematch 2",
       "area": "route_110",
       "calc_label": "Leader Wattson Rematch 2"
     },
@@ -38528,6 +38580,7 @@
       ],
       "key": true,
       "level_cap": 50,
+      "fight_label": "Rematch 3",
       "area": "route_110",
       "calc_label": "Leader Wattson Rematch 3"
     },
@@ -38661,6 +38714,7 @@
       ],
       "key": true,
       "level_cap": 55,
+      "fight_label": "Rematch 4",
       "area": "route_110",
       "calc_label": "Leader Wattson Rematch 4"
     },
@@ -38755,6 +38809,7 @@
       ],
       "key": true,
       "level_cap": 40,
+      "fight_label": "Rematch 1",
       "area": "route_112",
       "calc_label": "Leader Flannery Rematch 1"
     },
@@ -38869,6 +38924,7 @@
       ],
       "key": true,
       "level_cap": 45,
+      "fight_label": "Rematch 2",
       "area": "route_112",
       "calc_label": "Leader Flannery Rematch 2"
     },
@@ -39003,6 +39059,7 @@
       ],
       "key": true,
       "level_cap": 50,
+      "fight_label": "Rematch 3",
       "area": "route_112",
       "calc_label": "Leader Flannery Rematch 3"
     },
@@ -39137,6 +39194,7 @@
       ],
       "key": true,
       "level_cap": 55,
+      "fight_label": "Rematch 4",
       "area": "route_112",
       "calc_label": "Leader Flannery Rematch 4"
     },
@@ -39230,6 +39288,7 @@
       ],
       "key": true,
       "level_cap": 45,
+      "fight_label": "Rematch 1",
       "area": "petalburg_city",
       "calc_label": "Leader Norman Rematch 1"
     },
@@ -39343,6 +39402,7 @@
       ],
       "key": true,
       "level_cap": 50,
+      "fight_label": "Rematch 2",
       "area": "petalburg_city",
       "calc_label": "Leader Norman Rematch 2"
     },
@@ -39456,6 +39516,7 @@
       ],
       "key": true,
       "level_cap": 55,
+      "fight_label": "Rematch 3",
       "area": "petalburg_city",
       "calc_label": "Leader Norman Rematch 3"
     },
@@ -39589,6 +39650,7 @@
       ],
       "key": true,
       "level_cap": 60,
+      "fight_label": "Rematch 4",
       "area": "petalburg_city",
       "calc_label": "Leader Norman Rematch 4"
     },
@@ -39702,6 +39764,7 @@
       ],
       "key": true,
       "level_cap": 45,
+      "fight_label": "Rematch 1",
       "area": "route_119",
       "calc_label": "Leader Winona Rematch 1"
     },
@@ -39835,6 +39898,7 @@
       ],
       "key": true,
       "level_cap": 50,
+      "fight_label": "Rematch 2",
       "area": "route_119",
       "calc_label": "Leader Winona Rematch 2"
     },
@@ -39968,6 +40032,7 @@
       ],
       "key": true,
       "level_cap": 55,
+      "fight_label": "Rematch 3",
       "area": "route_119",
       "calc_label": "Leader Winona Rematch 3"
     },
@@ -40101,6 +40166,7 @@
       ],
       "key": true,
       "level_cap": 60,
+      "fight_label": "Rematch 4",
       "area": "route_119",
       "calc_label": "Leader Winona Rematch 4"
     },
@@ -40215,6 +40281,7 @@
       ],
       "key": true,
       "level_cap": 50,
+      "fight_label": "Rematch 1",
       "area": "mossdeep_city",
       "calc_label": "Leader Tate&Liza Rematch 1"
     },
@@ -40349,6 +40416,7 @@
       ],
       "key": true,
       "level_cap": 55,
+      "fight_label": "Rematch 2",
       "area": "mossdeep_city",
       "calc_label": "Leader Tate&Liza Rematch 2"
     },
@@ -40483,6 +40551,7 @@
       ],
       "key": true,
       "level_cap": 60,
+      "fight_label": "Rematch 3",
       "area": "mossdeep_city",
       "calc_label": "Leader Tate&Liza Rematch 3"
     },
@@ -40617,6 +40686,7 @@
       ],
       "key": true,
       "level_cap": 65,
+      "fight_label": "Rematch 4",
       "area": "mossdeep_city",
       "calc_label": "Leader Tate&Liza Rematch 4"
     },
@@ -40730,6 +40800,7 @@
       ],
       "key": true,
       "level_cap": 51,
+      "fight_label": "Rematch 1",
       "area": "sootopolis_city",
       "calc_label": "Leader Juan Rematch 1"
     },
@@ -40843,6 +40914,7 @@
       ],
       "key": true,
       "level_cap": 56,
+      "fight_label": "Rematch 2",
       "area": "sootopolis_city",
       "calc_label": "Leader Juan Rematch 2"
     },
@@ -40976,6 +41048,7 @@
       ],
       "key": true,
       "level_cap": 61,
+      "fight_label": "Rematch 3",
       "area": "sootopolis_city",
       "calc_label": "Leader Juan Rematch 3"
     },
@@ -41109,6 +41182,7 @@
       ],
       "key": true,
       "level_cap": 66,
+      "fight_label": "Rematch 4",
       "area": "sootopolis_city",
       "calc_label": "Leader Juan Rematch 4"
     },
@@ -44231,8 +44305,6 @@
           "ability": "Blaze"
         }
       ],
-      "key": true,
-      "level_cap": 5,
       "calc_label": "Pokémon Trainer Red"
     },
     "852": {
@@ -44260,8 +44332,6 @@
           "ability": "Overgrow"
         }
       ],
-      "key": true,
-      "level_cap": 5,
       "calc_label": "Pokémon Trainer Leaf"
     },
     "853": {
