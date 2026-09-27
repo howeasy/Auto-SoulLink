@@ -367,8 +367,16 @@ SCENARIOS = {
                              "oracle": "assert_save_then_write_gen3_saved"},
     # NAT-LEGS: the three FR/LG natural legs (docs/gen3_requirements.md S-8, S-9, S-11). A boots
     # a DISCLOSED O-33 SYNTH edit of a party fixture (tools/gen3_fixtures.py make-frlg-synth,
-    # firered_party_<kind>_synth.sav); only the behaviour under test runs natively, on ordinary
-    # buttons. explicit_only: FR as A only (no LG synth fixture), never part of `--scenario all`.
+    # {firered,leafgreen}_party_<kind>_synth.sav); only the behaviour under test runs natively,
+    # on ordinary buttons. explicit_only: never part of `--scenario all`. `games` names the
+    # gen3_frlg family only (scenario_applies resolves `gen3_lgfr` through its family, same as
+    # every other shared FR/LG row, e.g. center_controls_gen3): `--game gen3_lgfr` runs these
+    # too (card NAT-LEGS-2, LG-as-A), each game's own `sides` mapping formatting `target` against
+    # the right title's fixture stem. The three scenario_gen3_*.lua modules are title-agnostic
+    # (ctx.player, not ROM version). LeafGreen's Route 2 trade (INGAME_TRADE_MR_MIME) has no
+    # FIRERED/LEAFGREEN #if branch in pret pokefirered (src/data/ingame_trades.h, pin c75f3523):
+    # ABRA -> MR. MIME is the same on both titles, so the LG-as-A trade leg reuses MR_MIME/ABRA
+    # unchanged.
     #   evolve       a Route 1 wild win levels the Lv15 Squirtle to 16 and evolves it; the tick
     #                publishes WARTORTLE to the linked half (S-8 evolve_species_store)
     #   npc_trade    Reyley's Route 2 house trade (ABRA -> MR. MIME); the client emits key_change
@@ -7970,6 +7978,16 @@ class DuoRun:
         reply = re.findall(r"(?m)^RX .*$|^\[client\] \[SLink-gen3\] key_change .*$", tail)[:4]
         rows = [(e.get("status"), (e.get("a") or {}).get("key"), (e.get("b") or {}).get("key"))
                 for e in self._links_json()]
+        # OMP cx-6821246e F2: `rows` used to be printed only, never asserted. Named and checked so
+        # a future flip is deliberate: on THIS cut the census key_change is rejected (not retried),
+        # so the persisted pair stays alive under A's OLD key, B's unchanged. The day the census
+        # retry lands and the server accepts the new key, this must be updated on purpose.
+        kb = self._link_keys["b"]
+        expected_rows = [("alive", ka, kb)]
+        if rows != expected_rows:
+            problems.append(f"a: server links.json is {rows}, expected {expected_rows} "
+                            f"(a rejected npc_trade key_change should leave the pair alive under "
+                            f"A's OLD key)")
         self._gen3_raise(problems, f"npc_trade: {ka} -> {new} key_change npc_trade emitted after "
                                    f"trade_done; server reply (recorded, not judged): {reply}; "
                                    f"links.json {rows}")

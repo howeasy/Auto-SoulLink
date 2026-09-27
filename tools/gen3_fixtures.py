@@ -1479,12 +1479,28 @@ def build_frlg_synth(seed: bytes, kind: str) -> tuple[bytes, list[str]]:
         flag = sb1[FRLG_SB1_FLAGS + FLAG_DID_MIMIEN_TRADE // 8] >> (FLAG_DID_MIMIEN_TRADE % 8) & 1
         if flag:
             raise ValueError("the seed has already done the MIMIEN trade")
+        # OMP cx-6821246e F5: refuse a seed that has no owned mon in the slot this kind trades away.
+        count = sb1[codec.SB1_PARTY_COUNT_OFFSET]
+        if count < 2 or not party[1]["species"]:
+            raise ValueError(f"seed's party slot 1 is empty (party_count={count}); "
+                             "trade needs an owned mon there")
+        own_tid = int.from_bytes(sb2[0xA:0xE], "little")
+        if party[1]["ot_id"] != own_tid:
+            raise ValueError("seed's party[1] is not the player's own mon (OT mismatch); "
+                             "the trade fixture needs a player-owned slot 1")
         mon, slot = dict(party[1]), 1
-        # a fresh non-shiny personality with ability bit 0, so the key is not the old slot-1 key
+        # a fresh non-shiny, Hardy-nature (pid % 25 == 0, matching _synth_mon/_evolve_mon/
+        # emerald_starter's own convention) personality, distinct from the old slot-1 key. OMP
+        # cx-6821246e F3: personality is set FIRST and separately -- **_gen3_stats(ABRA_BASE, mon,
+        # 10) is a kwarg to mon.update(...), evaluated before that call runs, so folding
+        # `personality=pid` into the same .update() computed stats from the OLD (pre-trade)
+        # personality's nature instead of the new one. The Hardy pid also makes the nature branch
+        # a no-op either way, so this can never silently regress the same way again.
         pid = next(p for p in itertools.count(0x41425241)
-                   if p & 1 == 0 and ((mon["ot_id"] & 0xFFFF) ^ (mon["ot_id"] >> 16)
-                                      ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
-        mon.update(personality=pid, species=SPECIES_ABRA, nickname="ABRA", experience=_exp_medium_slow(10),
+                   if p % 25 == 0 and ((mon["ot_id"] & 0xFFFF) ^ (mon["ot_id"] >> 16)
+                                       ^ (p & 0xFFFF) ^ (p >> 16)) >= 8)
+        mon["personality"] = pid
+        mon.update(species=SPECIES_ABRA, nickname="ABRA", experience=_exp_medium_slow(10),
                    level=10, moves=[MOVE_TELEPORT, 0, 0, 0], pp=[TELEPORT_PP, 0, 0, 0], ability_num=0,
                    **_gen3_stats(ABRA_BASE, mon, 10))
         mon.pop("nickname_raw", None)
