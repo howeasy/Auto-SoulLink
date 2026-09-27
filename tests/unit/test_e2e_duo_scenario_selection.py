@@ -855,6 +855,8 @@ GEN3_FRLG_ONLY_SCENARIOS = ("center_controls_gen3", "save_then_write_gen3",
                           "trainer_bench_gen3", "active_end_gen3",
                           "linked_faint_active_trainer_gen3")
 GEN3_FRLG_ROWS = ("gen3_frlg", "gen3_lgfr")
+# NAT-LEGS: the FR/LG natural legs (S-8, S-9, S-11), explicit_only (FR-as-A SYNTH fixtures)
+GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (
@@ -905,7 +907,8 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         if game not in GEN3_FRLG_ROWS + ("gen3_rr", "gen3_emerald"):
             assert not set(scenarios_for(game)) & set(GEN3_RR_SCENARIOS), game
     for name in SCENARIOS:
-        if name not in GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + tuple(duo_module.GEN3_RAND_SCENARIOS):
+        if name not in (GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + GEN3_NAT_SCENARIOS
+                        + tuple(duo_module.GEN3_RAND_SCENARIOS)):
             assert not scenario_applies(name, "gen3_frlg"), name
         if name not in GEN3_RR_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name
@@ -1128,3 +1131,33 @@ def test_bizhawk_path_guard_refuses_a_save_path_near_max_path(tmp_path):
     run._gen2_plans["a"]["directory"] = "C:/" + "d" * 240
     with pytest.raises(RuntimeError, match="path too long for BizHawk"):
         run._check_bizhawk_paths()
+
+
+@pytest.mark.parametrize("name,kind,link_slot", (
+    ("evolve_gen3", "evolve", 0), ("npc_trade_gen3", "trade", 1), ("poison_faint_gen3", "poison", 0)))
+def test_nat_legs_rows_are_wired(name, kind, link_slot, monkeypatch):
+    """NAT-LEGS: FR-only, explicit_only (never in `--scenario all`, never on gen3_lgfr's LG-as-A
+    side, which has no synth fixture), A boots the committed SYNTH fixture the builder reproduces
+    byte for byte from its pinned seed, B idles on town, and the orchestrator links `link_slot`."""
+    import gen3_fixtures as fx
+
+    row = SCENARIOS[name]
+    assert row["games"] == ("gen3_frlg",) and row["explicit_only"] is True
+    assert row["target"] == {"a": f"{kind}_synth", "b": "town"}
+    assert row["oracle"] == f"assert_{name}_saved" and callable(getattr(DuoRun, row["oracle"]))
+    assert name not in scenarios_for("gen3_frlg") and scenario_applies(name, "gen3_frlg")
+    assert os.path.isfile(os.path.join(REPO, "lua", "tests", "duo", f"scenario_gen3_{name[:-5]}.lua"))
+    fixtures = os.path.join(REPO, "tests", "fixtures", "gen3")
+    seed = "firered_party_battle.sav" if kind == "evolve" else "firered_party_town.sav"
+    with open(os.path.join(fixtures, seed), "rb") as f:
+        built, _ = fx.build_frlg_synth(f.read(), kind)
+    with open(os.path.join(fixtures, f"firered_party_{kind}_synth.sav"), "rb") as f:
+        assert f.read() == built
+    run = DuoRun.__new__(DuoRun)
+    calls = []
+    monkeypatch.setattr(run, "_gen3_prelude", lambda link_slot=None: calls.append(link_slot), raising=False)
+    monkeypatch.setattr(run, "_gen3_area_control", lambda: calls.append("area"), raising=False)
+    monkeypatch.setattr(run, "_gen3_linked_lines", lambda: {}, raising=False)
+    monkeypatch.setattr(run, "go", lambda lines=None: calls.append("go"), raising=False)
+    getattr(run, f"orchestrate_{name}")()
+    assert calls == [link_slot] + (["area"] if kind == "evolve" else []) + ["go"]
