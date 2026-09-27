@@ -160,13 +160,15 @@ def private_pack(root: Path, rom: bytes, receipt: dict) -> dict[str, dict]:
     )
     for site in artifact["sites"].values():
         start = site["rom_offset"]
-        site["expected_hex"] = rom[start : start + len(bytes.fromhex(site["expected_hex"]))].hex()
+        # signals.lua compares its uppercase hex_of() result verbatim at both
+        # startup and fire time; preserve the shipped pack's canonical encoding.
+        site["expected_hex"] = rom[start : start + len(bytes.fromhex(site["expected_hex"]))].hex().upper()
     sites["titles"]["firered"]["artifacts"] = {"companion": artifact}
     checkpoint = read_json(root / "data/games/gen3_frlg/write_checkpoint.json")
     cp = checkpoint["firered"]
     for anchor in cp["anchors"].values():
         start = anchor["rom_offset"]
-        anchor["expected_hex"]["companion"] = rom[start : start + anchor["length"]].hex()
+        anchor["expected_hex"]["companion"] = rom[start : start + anchor["length"]].hex().upper()
     cp["native"] = {
         "version": "gen3-native-v2",
         "base": base,

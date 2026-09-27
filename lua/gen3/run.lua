@@ -15,6 +15,7 @@ package.path = ROOT .. "/lua/?.lua;" .. package.path
 local Entry = dofile(ROOT .. "/lua/gen3/entry.lua")
 local C = require("connector")
 local H = require("hud")
+local START_REFUSED = "SLINK COULD NOT START - SEE LOG"
 
 local host = SLINK_HOST or os.getenv("SLINK_HOST") or "127.0.0.1"
 local port = tonumber(SLINK_PORT or os.getenv("SLINK_PORT") or 54321)
@@ -68,7 +69,7 @@ if not admitted then
     local msg = "[SLink-gen3] refused: " .. tostring(why)
     console.log(msg)
     H.init({ screen_w = 240, screen_h = 160 })
-    H.show(msg, 255, 80, 80, 600)
+    H.show(START_REFUSED, 255, 80, 80, 600)
     H.render()
     return
 end
@@ -349,7 +350,7 @@ local ok_build, client = pcall(Entry.build, {
 if not ok_build then
     local msg = "[SLink-gen3] refused to start: " .. tostring(client)
     console.log(msg)
-    H.show(msg, 255, 80, 80, 600)
+    H.show(START_REFUSED, 255, 80, 80, 600)
     H.render()
     return
 end
@@ -357,7 +358,7 @@ local ok, err = pcall(function() client:start() end)
 if not ok then
     local msg = "[SLink-gen3] refused to start: " .. tostring(err)
     console.log(msg)
-    H.show(msg, 255, 80, 80, 600)
+    H.show(START_REFUSED, 255, 80, 80, 600)
     H.render()
     return
 end

@@ -323,6 +323,22 @@ def test_test_only_projection_builds_the_real_client_and_native_binding(monkeypa
     assert not parts.native.trade_capable(parts.native), (
         "metadata never substitutes for the cartridge beacon"
     )
+    client.start(client)
+    assert len(world.registered) == len(list(parts.sites.keys())), (
+        "startup must arm every projected engine site"
+    )
+    # The repair must not weaken byte verification. A real byte mismatch still
+    # refuses before arming; reverting it permits the same complete startup.
+    client.stop(client)
+    world.registered.clear()
+    original = parts.sites.battle_begin.expected_hex
+    parts.sites.battle_begin.expected_hex = f"{int(original[:2], 16) ^ 1:02X}" + original[2:]
+    with pytest.raises(lua54.LuaError, match="engine sites differ from the ROM: battle_begin"):
+        client.start(client)
+    assert world.registered == []
+    parts.sites.battle_begin.expected_hex = original
+    client.start(client)
+    assert len(world.registered) == len(list(parts.sites.keys()))
 
 
 def test_candidate_receipt_cannot_whitelist_an_unrelated_rom_change(tmp_path):

@@ -193,3 +193,28 @@ Offline preparation recovered the clean-ROM pin, generated both SYNTH saves and
 read evolution target 65 from the ROM. Both live rows remain **UNRUN**, with the
 commands and acceptance criteria above handed to the coordinator. No emulator,
 production artifact, READY flag, UPS, or master branch was changed by this card.
+
+## Coordinator boot refusal and repair — 2026-09-27
+
+The coordinator ran both rows from `c1debdfd`. Both sides refused before MYKEY:
+`engine sites differ from the ROM` named all 21 sites. No native trade or save
+path was exercised. Receipts are in `C:/slink-wt/t5-trade.log`,
+`C:/slink-wt/t5-decline.log` and the per-side initial files under `patch/build/`.
+
+The candidate and all projected binary bytes were correct. The projection used
+Python's lowercase `.hex()`, while `signals.lua` compares its uppercase
+`hex_of()` result verbatim. The prior model test built the client but did not
+call `client:start()`, so it missed that validation boundary. The expanded test
+reproduced the exact 21-site refusal on the real candidate; changing only the
+projection to canonical uppercase armed all 21 hooks. A one-byte negative
+control still refuses startup, and reverting it restores startup.
+
+The bootstrap's admission/build/start refusal HUD now says only
+`SLINK COULD NOT START - SEE LOG`; the complete diagnostic remains on the
+console. Tests drive all three real bootstrap failure branches and verify the
+full console detail survives. Focused verification: **145 passed, 2 skipped in
+7.67s**. This is a MODEL repair, not a physical pass.
+
+Rerun the same two duo commands above from the repair commit. No candidate ROM
+rebuild is needed for this Lua/Python-only fix: each run regenerates its private
+pack. The current physical status is **boot failure observed; rerun pending**.
