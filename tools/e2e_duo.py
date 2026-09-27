@@ -6939,8 +6939,8 @@ class DuoRun:
 
     def wait_results(self):
         def both():
-            ra = read_result(self.artifact_name, "a")
-            rb = read_result(self.artifact_name, "b")
+            ra = self._read_receipt("a")
+            rb = self._read_receipt("b")
             if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
                 return ra, rb
             return None

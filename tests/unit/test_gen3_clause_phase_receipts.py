@@ -49,6 +49,21 @@ def test_python_catch_and_key_pollers_read_the_current_phase(monkeypatch, tmp_pa
     assert run._caught("a") == "NEW_a" and run._caught("b") == "NEW_b"
 
 
+def test_final_result_wait_passes_current_phase_receipts_to_the_oracle(monkeypatch, tmp_path):
+    run = run_for(monkeypatch, tmp_path)
+    run._phase = {"a": "post_flip", "b": "post_flip"}
+    run.wait_for = lambda _, predicate, timeout: predicate()
+    for side in ("a", "b"):
+        Path(run._result_path(side)).write_text('BALL_FLIP {"balls":1}\nRESULT: PASS\n')
+        Path(run._phase_result_path(side, "post_flip")).write_text('BALL_STOCK_READY {"balls":20}\n')
+    assert run.wait_results() is None  # old PASS cannot finish a still-running new phase
+    for side in ("a", "b"):
+        with Path(run._phase_result_path(side, "post_flip")).open("a") as receipt:
+            receipt.write(f"CAUGHT NEW_{side}\nRESULT: PASS\n")
+    results = run.wait_results()
+    assert all("BALL_STOCK_READY" in text and "BALL_FLIP" not in text for text in results)
+
+
 def test_gen3_retry_preserves_prior_numbered_receipts_but_a_new_run_clears_them(monkeypatch, tmp_path):
     run = run_for(monkeypatch, tmp_path, attempt=2)
     old = tmp_path / "e2e_ball_gate_gen3_a_attempt1_result.txt"
