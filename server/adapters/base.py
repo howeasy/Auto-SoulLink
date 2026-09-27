@@ -330,9 +330,8 @@ class GameRulesAdapter(ABC):
 
     @classmethod
     def supports_randomized(cls, rom_type: str) -> bool:
-        """Whether this title has a randomized-cartridge binding. Existing foundations keep
-        their admission policy unless they explicitly restrict supported titles."""
-        return True
+        """Opt in only when this title has a supported randomized-cartridge binding."""
+        return False
 
     @classmethod
     def pairing_kind_for(cls, kind: str, rom_content: object) -> str:

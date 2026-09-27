@@ -486,6 +486,24 @@ _FOUNDATION_ABSENT = object()
 _KNOWN_ARTIFACT_KINDS = frozenset({"clean", "overlay", "rand", "rand_overlay", "named", "companion"})
 
 
+def _randomized_binding_error(rom_type, kind, committed_rom_type, committed_kind, *, candidate_class=None) -> str:
+    """Both halves of the run identity require an explicit randomized-title binding."""
+    from server.adapters import GameRulesAdapter, adapter_class_for_rom_type
+
+    for title, declared, prefix, cls in (
+        (rom_type, kind, "", candidate_class),
+        (committed_rom_type, committed_kind, "committed run: ", None),
+    ):
+        if declared not in ("rand", "rand_overlay") or (prefix and not title):
+            continue
+        cls = cls or (adapter_class_for_rom_type(title) if isinstance(title, str) else None) or GameRulesAdapter
+        supports = getattr(cls, "supports_randomized", None)
+        if not callable(supports) or not supports(title):
+            return (f"{prefix}randomized cartridges are not supported for {title}: "
+                    "no randomized-ROM binding")
+    return ""
+
+
 def prompt_event_type(text: str) -> str | None:
     """The events-log row a capture reply's gui_prompt stands for: "violation", "reroll" or None.
 
@@ -767,10 +785,9 @@ class SLinkServer:
         if artifact_kind not in _KNOWN_ARTIFACT_KINDS:
             return (f"Bad artifact_kind for slot {player_id.upper()}: {artifact_kind!r} is not "
                     f"a known kind (expected one of {sorted(_KNOWN_ARTIFACT_KINDS)})")
-        cls = adapter_class_for_rom_type(rom_type) or GameRulesAdapter
-        if artifact_kind in ("rand", "rand_overlay") and not cls.supports_randomized(rom_type):
-            return (f"randomized cartridges are not supported for {rom_type}: "
-                    "no randomized-ROM binding")
+        if refused := _randomized_binding_error(
+                rom_type, artifact_kind, self.state.rom_type, self.state.artifact_kind):
+            return refused
         want = foundation_for_rom_type(self.state.rom_type) if self.state.rom_type else ""
         if want and got != want:
             return (f"Mixed games: slot {player_id.upper()} runs {got}, "
@@ -798,14 +815,17 @@ class SLinkServer:
         an error condition, it is a run that has not started for them yet.
         """
         payload, kind = msg.get("rom_content"), msg.get("artifact_kind", "clean")
-        if kind in ("rand", "rand_overlay") or (not self._rom_contract and payload):
+        refused = _randomized_binding_error(
+            msg.get("rom_type", self.state.rom_type), kind, self.state.rom_type, self.state.artifact_kind,
+            candidate_class=type(self.adapter))
+        if not refused and (kind in ("rand", "rand_overlay") or (not self._rom_contract and payload)):
             refused = self.adapter.refused_rom_content(payload, artifact_kind=kind)
-            if refused:
-                if kind in ("rand", "rand_overlay"):
-                    # Unverified reconnects must not display a previous cartridge's tables.
-                    # The caller still rolls back the staged identity/rule state on refusal.
-                    getattr(self, "_player_adapters", {}).pop(player_id, None)
-                return {"state": "rejected", "reason": refused}
+        if refused:
+            if kind in ("rand", "rand_overlay"):
+                # Unverified reconnects must not display a previous cartridge's tables.
+                # The caller still rolls back the staged identity/rule state on refusal.
+                getattr(self, "_player_adapters", {}).pop(player_id, None)
+            return {"state": "rejected", "reason": refused}
         if not self._rom_contract:
             return {"state": "admitted", "reason": "no randomized-ROM contract for this run"}
         if self._rom_contract.get("unreadable"):
