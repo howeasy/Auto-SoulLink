@@ -28,7 +28,7 @@ assert(D and D.wt and D.player and D.scenario and D.result, "SLINK_DUO not confi
 -- or symbol table branches on D.title ("radical_red" vs firered/leafgreen), not on D.game.
 -- E4: "gen3_emerald" is the battery-boot Emerald row (E<->E); its pack, .sym and START/save
 -- flows are selected by D.title == "emerald" below.
-assert(D.game == "gen3_frlg" or D.game == "gen3_rr" or D.game == "gen3_emerald",
+assert(D.game == "gen3_frlg" or D.game == "gen3_rr" or D.game == "gen3_emerald" or D.game == "gen3_fr_trade",
        "duo_gen3_main only serves game gen3_frlg/gen3_rr/gen3_emerald, got " .. tostring(D.game))
 assert(D.title, "SLINK_DUO.title missing (the GAMES row's sides)")
 
@@ -127,6 +127,14 @@ local function guard(label, fn)
 end
 
 local JSON = load_or_die("/lua/json_codec.lua", "json_codec.lua")
+local native_candidate
+if D.native_candidate_manifest then
+    native_candidate = guard("HARNESS_ONLY FireRed candidate",function()
+        local f = assert(io.open(ROOT .. "/" .. D.native_candidate_manifest,"rb"))
+        local manifest = JSON.decode(f:read("a")); f:close()
+        return load_or_die("/lua/tests/duo/gen3_trade_candidate.lua","candidate carrier").new(D,JSON,manifest,log)
+    end)
+end
 local G = load_or_die("/lua/tests/gen3_boot_check.lua", "gen3_boot_check.lua")
 SLINK_GEN3_TITLE = D.title   -- the scripted helpers read their per-title addresses from this (C4-LG)
 local SP = load_or_die("/lua/tests/gen3_scripted_play.lua", "gen3_scripted_play.lua")   -- helpers only; never run()
@@ -146,11 +154,13 @@ local title = D.title
 -- E4: the one title -> pack table, shared with the scripted helpers (emerald -> gen3_emerald).
 local pack = assert(SP.PROFILE_PACK_BY_TITLE[title], "no profile pack for title " .. tostring(title))
 local cp_rel = "data/games/" .. pack .. "/write_checkpoint.json"
+if native_candidate then cp_rel = native_candidate.manifest.pack_files.checkpoint end
 local cp = guard("checkpoint for title '" .. title .. "' in " .. cp_rel, function()
     local doc = read_json(cp_rel)
     return assert(doc[title], cp_rel .. " has no entry for title '" .. title .. "'")
 end)
 local profile_rel = "data/games/" .. pack .. "/profile.json"
+if native_candidate then profile_rel = native_candidate.manifest.pack_files.profile end
 local profile = guard("profile for title '" .. title .. "' in " .. profile_rel, function()
     local doc = read_json(profile_rel)
     return assert(doc.titles and doc.titles[title], profile_rel .. " has no titles." .. title)
@@ -395,6 +405,7 @@ local raw_send = C.send
 C.send = function(line)
     local ok, msg = pcall(JSON.decode, line)
     local name = ok and type(msg) == "table" and type(msg.event) == "string" and msg.event or "?"
+    if native_candidate and ok and type(msg)=="table" then native_candidate.tx(msg) end
     seen_tx[name] = (seen_tx[name] or 0) + 1
     if name ~= "tick" then
         local key = ok and type(msg) == "table" and type(msg.key) == "string" and msg.key or "-"
@@ -416,9 +427,11 @@ do
     dofile = function(path)
         local value = original_dofile(path)
         if path == ROOT .. "/lua/gen3/entry.lua" then
+            if native_candidate then native_candidate.bind_entry(value) end
             local build = value.build
-            value.build = function(...)
-                local client, parts = build(...)
+            value.build = function(deps,...)
+                if native_candidate then native_candidate.before_build(deps) end
+                local client, parts = build(deps,...)
                 battle_parts = parts
                 return client, parts
             end
@@ -431,6 +444,7 @@ dofile = original_dofile
 if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun)) end
 local session = SLINK_GEN3_CLIENT
 if not session then finish(false, "run.lua built no client: " .. tostring(refused or "no reason logged")) end
+if native_candidate then native_candidate.attach(session,battle_parts) end
 local raw_handle = session.handle_command
 session.handle_command = function(self, cmd)
     local c = type(cmd) == "table" and type(cmd.cmd) == "string" and cmd.cmd or "?"
@@ -445,6 +459,7 @@ session.handle_command = function(self, cmd)
         wrong_save_hud = true
         log("WRONG_SAVE_HUD " .. text)
     end
+    if native_candidate then return native_candidate.command(cmd,function(command) return raw_handle(self,command) end) end
     return raw_handle(self, cmd)
 end
 log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, D.player,
@@ -454,6 +469,7 @@ log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, 
 local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G = G, SP = SP,
               play = play, cp = cp, reader = reader, sym = S, title = title, session = session,
               finished = FINISHED, emulator = emu }
+ctx.native_candidate = native_candidate
 
 function ctx.frames(n) for _ = 1, n do emu.frameadvance() end end
 --- pred() each frame until truthy (its value) or `secs` of wall clock pass (nil, logged).

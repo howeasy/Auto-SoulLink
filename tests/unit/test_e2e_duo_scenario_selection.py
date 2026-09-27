@@ -51,7 +51,7 @@ def test_family_evidence_contracts_are_explicit_and_aliases_share_one():
             assert contract.require_oracle is True
             assert contract.witness_validator
             assert callable(getattr(DuoRun, contract.witness_validator, None))
-        elif GAMES[game].get("game", game) in ("gen3_frlg", "gen3_rr", "gen3_emerald"):
+        elif GAMES[game].get("game", game) in ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_fr_trade"):
             # the new Gen 3 battery rows take the Gen 1 rule with their own witness
             assert contract.require_oracle is True
             assert contract.witness_validator == GAMES[game]["save_witness"]

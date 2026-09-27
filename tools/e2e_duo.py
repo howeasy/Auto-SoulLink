@@ -531,6 +531,12 @@ SCENARIOS = {
     # infopanel: the SOULLINK START-row panel; the oracle decodes the drawn bytes with the Python
     # charmap. Both RR menu shapes: rr_town{,_b} (pre-Pokedex, 6 stock rows) and, as infopanel_dex,
     # rr_battle2{,_b} (Pokedex owned, 7 stock rows; the shape the old count==6 splice skipped).
+    "native_trade_firered": {"flags": [], "timeout": 1800, "games": ("gen3_fr_trade",),
+        "target": "town", "frames": 2500000, "gen3_native_trade": True,
+        "scenario_module": "native_trade", "oracle": "assert_native_trade_firered"},
+    "native_trade_decline_firered": {"flags": [], "timeout": 1800, "games": ("gen3_fr_trade",),
+        "target": "town", "frames": 2500000, "gen3_native_trade": True,
+        "native_decline": True, "scenario_module": "native_trade", "oracle": "assert_native_trade_firered"},
     "trade_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",), "target": "battle2",
                    "frames": 2500000, "oracle": "assert_trade_gen3_saved"},
     "trade_decline_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",), "target": "battle2",
@@ -587,7 +593,7 @@ SCENARIOS = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr", "gen3_emerald")
+OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_fr_trade")
 
 
 def is_pure_pairing(game) -> bool:
@@ -2354,6 +2360,7 @@ FAMILY_EVIDENCE = {
     "gen3_frlg": EvidenceContract("check_save_witness_gen3", require_oracle=True),
     "gen3_rr": EvidenceContract("check_save_witness_gen3", require_oracle=True),
     "gen3_emerald": EvidenceContract("check_save_witness_gen3", require_oracle=True),
+    "gen3_fr_trade": EvidenceContract("check_native_trade_witness", require_oracle=True),
 }
 
 
@@ -2622,6 +2629,12 @@ GAMES = {
     # worker's saves are firered_party_{town,battle}{,_b}.sav. B is LeafGreen (the G4 FR<->LG pairing). `oracle_required`: a
     # scenario with no saved-state oracle FAILS here, the Gen 1 rule; `save_witness` is the
     # method _run_oracle runs first.
+    "gen3_fr_trade": {
+        "main": "lua/tests/duo/duo_gen3_main.lua", "game": "gen3_fr_trade", "play": "gen3_fixtures",
+        "sides": {"a": ("firered", "firered_party_{target}"), "b": ("firered", "firered_party_{target}_b")},
+        "uses_savestate": False, "scenario_prefix": "gen3_", "oracle_required": True,
+        "save_witness": "check_native_trade_witness",
+    },
     "gen3_frlg": {
         "main": "lua/tests/duo/duo_gen3_main.lua",
         "game": "gen3_frlg",
@@ -3103,9 +3116,9 @@ class DuoRun:
         self.is_gen1 = self.game.startswith("gen1")
         self.tcp_port = free_port()
         self.http_port = free_port()
-        if self.cfg.get("gen3_rand"):
+        if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade"):
             os.makedirs(BUILD, exist_ok=True)
-        data_parent = BUILD if self.cfg.get("gen3_rand") else None
+        data_parent = BUILD if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade") else None
         if self.cfg.get("gen3_rand") and os.environ.get("SLINK_STATE_DIR"):
             data_parent = Path(os.environ["SLINK_STATE_DIR"]).resolve()
             if not data_parent.is_relative_to(Path(REPO).resolve()):
@@ -3187,6 +3200,8 @@ class DuoRun:
         return self.gcfg["sides"][inst][0]
 
     def _gen3_fixture_path(self, inst) -> str:
+        if getattr(self, "cfg", {}).get("gen3_native_trade"):
+            return str(Path(REPO) / self._native_candidate["fixtures"][inst]["path"])
         stem = self.gcfg["sides"][inst][1].format(target=self._target_for(inst))
         return os.path.join(GEN3_FIXTURES, stem + ".sav")
 
@@ -3211,6 +3226,8 @@ class DuoRun:
 
         import gen3_fixtures
 
+        if self.cfg.get("gen3_native_trade"):
+            return self._native_candidate["rom"]
         if self.cfg.get("gen3_rand"):
             if not getattr(self, "_rand_current", None):
                 raise RuntimeError("randomized ROM preflight has not run")
@@ -3235,6 +3252,9 @@ class DuoRun:
     def _gen3_battery_path(self, inst) -> str:
         title = self._gen3_title(inst)
         row = GEN3_TITLES[title]
+        if self.cfg.get("gen3_native_trade"):
+            import gen3_fixtures
+            return os.path.join(self._saveram_dir(inst), gen3_fixtures.saveram_name(self._gen3_rom(inst)))
         if self.cfg.get("gen3_rand"):
             import gen3_fixtures
 
@@ -3268,7 +3288,10 @@ class DuoRun:
 
     def _gen3_fixture_bytes(self, inst) -> bytes:
         with open(self._gen3_fixture_path(inst), "rb") as handle:
-            return handle.read()
+            body = handle.read()
+        if getattr(self, "cfg", {}).get("gen3_native_trade") and hashlib.sha256(body).hexdigest() != self._native_candidate["fixtures"][inst]["sha256"]:
+            raise RuntimeError(f"{inst}: T5 fixture changed before seeding/oracle")
+        return body
 
     @property
     def _gen3_rr(self) -> bool:
@@ -3403,6 +3426,8 @@ class DuoRun:
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
                "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
+        if self.cfg.get("gen3_native_trade"):
+            cmd += ["--run-id", "t5-"+self._native_candidate["nonce"]]
         wire = self._wire_dir()
         if wire:
             cmd += ["--wire-log", wire]
@@ -3818,6 +3843,15 @@ class DuoRun:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
                 duo.update({"ext_addr": codec.RR_EXT_ADDR, "ext_size": codec.RR_EXT_SIZE})
+            if self.cfg.get("gen3_native_trade"):
+                from tools.gen3_trade_duo import ENV
+                if hashlib.sha1((Path(REPO) / self._native_candidate["rom"]).read_bytes()).hexdigest() != self._native_candidate["rom_sha1"]:
+                    raise RuntimeError("T5 candidate changed before emulator launch")
+                duo.update(native_candidate_manifest=self._native_candidate["path"],
+                           native_battery=self._gen3_battery_path(inst).replace("\\", "/"),
+                           native_decline=self.cfg.get("native_decline", False))
+                env = dict(os.environ, **{ENV: self._native_candidate["nonce"]})
+                print(f"[duo] HARNESS_ONLY {ENV}={self._native_candidate['nonce']} side={inst} phase={phase}")
         if self.gcfg["uses_savestate"]:
             ss = self.cfg["savestate"]
             duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
@@ -3860,6 +3894,8 @@ class DuoRun:
         print(f"[duo] launched {inst} phase={phase} seed={seed}")
         if self.cfg.get("gen3_rand"):
             self._pydec_note(f"RAND_PROCESS side={inst} phase={phase} pid={p.pid}")
+        if self.cfg.get("gen3_native_trade"):
+            self._pydec_note(f"T5_PROCESS side={inst} phase={phase} pid={p.pid}")
         return p
 
     def terminate_instance(self, inst):
@@ -6855,8 +6891,11 @@ class DuoRun:
 
     def wait_results(self):
         def both():
-            ra = read_result(self.artifact_name, "a")
-            rb = read_result(self.artifact_name, "b")
+            if self.cfg.get("gen3_native_trade"):
+                ra, rb = self._read_receipt("a"), self._read_receipt("b")
+            else:
+                ra = read_result(self.artifact_name, "a")
+                rb = read_result(self.artifact_name, "b")
             if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
                 return ra, rb
             return None
@@ -6899,7 +6938,7 @@ class DuoRun:
                     os.remove(path)
         self.collect_wire_logs()  # the source lives under the data dir; copy before it goes
         if (passed and not self.args.keep_data and self.scenario not in GEN2_TRADE_SCENARIOS
-                and not self.cfg.get("gen3_rand")):
+                and not self.cfg.get("gen3_rand") and not self.cfg.get("gen3_native_trade")):
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
             print(f"[duo] data dir kept: {self.data_dir}")
@@ -7505,6 +7544,61 @@ class DuoRun:
         self._gen3_mark("b", rf"^MIRROR_WITHDRAWN {re.escape(kb)}\b", "mirrored party_mon withdraw")
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
+
+    def _prepare_native_trade(self):
+        from tools import gen3_trade_duo as t5
+        self._native_candidate = t5.prepare(Path(REPO), Path(BUILD) / f"t5_fr_trade_{self.lane}_{self.attempt}")
+        self._native_initial = {}
+        self._pydec_note(f"HARNESS_ONLY {t5.DISCLOSURE}")
+        self._pydec_note(f"T5_CANDIDATE rom_sha1={self._native_candidate['rom_sha1']} production=false READY=0")
+        self._pydec_note(self._native_candidate["fixture_disclosure"])
+
+    def orchestrate_native_trade_firered(self):
+        self._gen3_prelude(link_slot=1)
+        for inst in "ab":
+            self._gen3_mark(inst, r"^FR_TRADE_CAPABLE$", "acknowledged T5 capability")
+        self.go(self._gen3_linked_lines())
+        for inst in "ab":
+            self._gen3_mark(inst, r"^FR_TRADE_READY_FOR_RELOAD$", "native trade/decline finished")
+        for inst in "ab":
+            self._append_reconnect_marker(inst, "RELOAD")
+        for inst in "ab":
+            self.wait_for(f"{inst} initial T5 terminal receipt", lambda i=inst: terminal_result(self._read_receipt(i)), 120)
+            self._native_initial[inst] = self._read_receipt(inst)
+            if "RESULT: PASS" not in self._native_initial[inst]:
+                raise RuntimeError(f"{inst}: T5 initial leg failed")
+            self.emu_by_inst[inst].wait(timeout=30)
+        # Preserve the saved relationship before restart, then cold boot both
+        # instances from their own flushed battery without copying a fixture.
+        self._native_document = self._reconnect_document()
+        for inst in "ab":
+            peer = "b" if inst == "a" else "a"
+            expected = self._link_keys[inst if self.cfg.get("native_decline") else peer]
+            self.launch_instance(inst, phase="native_trade_reload", seed=False, expected_key=expected)
+        for inst in "ab":
+            self.wait_for(f"{inst} T5 cold reload completed", lambda i=inst: terminal_result(self._read_receipt(i)), 180)
+            if "RESULT: PASS" not in self._read_receipt(inst):
+                raise RuntimeError(f"{inst}: T5 cold reload failed")
+        self._live_complete[self.scenario] = True
+
+    orchestrate_native_trade_decline_firered = orchestrate_native_trade_firered
+
+    def _native_trade_problems(self, results):
+        from tools import gen3_trade_duo as t5
+        self._gen3_flush_boundary()
+        if not self._live_complete.get(self.scenario):
+            return ["T5 cold reload leg was not launched"]
+        return t5.physical_problems(Path(REPO), self._native_candidate, self._native_initial, results,
+                                   self._native_document, {i: self._gen3_fixture_saved(i) for i in "ab"},
+                                   {i: self._gen3_saved(i) for i in "ab"}, decline=self.cfg.get("native_decline", False))
+
+    def check_native_trade_witness(self, results):
+        self._gen3_raise(self._native_trade_problems(results),
+                        "T5 native/flush/save/reload witness chain verified from cartridge bytes")
+
+    def assert_native_trade_firered(self, results):
+        self._gen3_raise(self._native_trade_problems(results),
+                        "T5 HARNESS_ONLY selection: native outcome, server settlement, pair migration and cold reload verified")
 
     def orchestrate_trade_gen3(self):
         """The RR PC trade NPC, driven only by the two cartridges: link the slot-1 mons (server
@@ -8834,7 +8928,7 @@ class DuoRun:
 
     def _live_ok(self) -> bool:
         """True when every live leg this scenario needs ran to completion."""
-        if getattr(self, "cfg", {}).get("gen3_rand"):
+        if getattr(self, "cfg", {}).get("gen3_rand") or getattr(self, "cfg", {}).get("gen3_native_trade"):
             return bool(self._live_complete.get(self.scenario))
         if self.scenario not in LIVE_LEG_SCENARIOS:
             return True
@@ -8858,6 +8952,8 @@ class DuoRun:
                 self._clear_attempt_artifacts()  # startup waits must not see an older RESULT
             if self.cfg.get("gen3_rand"):
                 self._prepare_gen3_rand()
+            if self.cfg.get("gen3_native_trade"):
+                self._prepare_native_trade()
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
             if self.is_gen3_battery:
