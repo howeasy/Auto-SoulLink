@@ -54,6 +54,7 @@
         "derived.SB2_ENC_KEY_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:532 (encryptionKey; struct SaveBlock2)",
         "derived.SB2_NAME_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:510 (playerName; struct SaveBlock2)",
         "derived.SB2_OT_ID_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:513 (playerTrainerId; struct SaveBlock2)",
+        "derived.SB2_PLAYER_GENDER_OFFSET": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/global.h:511 (playerGender; struct SaveBlock2; MALE=0/FEMALE=1, include/constants/global.h:113-114)",
         "derived.SHEDINJA_SPECIES_ID": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/species.h:309 (SPECIES_SHEDINJA)",
         "derived.STATUS3_PERISH_SONG": "pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/constants/battle.h:162 (STATUS3_PERISH_SONG)",
         "derived.TASK_STRUCT_SIZE": "data/gen3/pret/pokeemerald.sym:980 gTasks 0x280 bytes / 16; pret/pokeemerald@c65e93f20a5275ab03b07d6f6411096a82a60ffd:include/task.h:8 (NUM_TASKS)",
@@ -152,6 +153,7 @@
         "SB2_ENC_KEY_OFFSET": 172,
         "SB2_NAME_OFFSET": 0,
         "SB2_OT_ID_OFFSET": 10,
+        "SB2_PLAYER_GENDER_OFFSET": 8,
         "SHEDINJA_SPECIES_ID": 303,
         "STATUS3_PERISH_SONG": 32,
         "TASK_STRUCT_SIZE": 40

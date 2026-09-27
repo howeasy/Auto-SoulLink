@@ -71,6 +71,14 @@ WT_FWD = REPO.replace("\\", "/")
 # --game: Gen 3-only scenarios were run against a Game Boy, where they died on the savestate
 # they declare and no GB fixture has.
 SCENARIOS = {
+    "gift_gen3": {"flags": ["--species-clause", "--gender-clause", "--type-clause"],
+        "timeout": 1200, "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"),
+        "target": "gift_synth", "frames": 2000000, "explicit_only": True,
+        "scenario_module": "gift_egg", "acquisition_kind": "gift", "oracle": "assert_gift_egg_gen3_saved"},
+    "egg_hatch_gen3": {"flags": [], "timeout": 1800,
+        "games": ("gen3_frlg", "gen3_emerald", "gen3_rr"), "target": "hatch_synth",
+        "frames": 2500000, "explicit_only": True, "scenario_module": "gift_egg",
+        "acquisition_kind": "hatch", "oracle": "assert_gift_egg_gen3_saved"},
     # FRLG-R4: clean-derived saves are disclosed SYNTH. Dependency preflight
     # refuses these rows before any server/emulator launch until CR-R1/CR-R2 and
     # server ingest are committed. Exactly one attempt; no borrowed vanilla PASS.
@@ -588,6 +596,39 @@ SCENARIOS = {
 }
 
 
+for _rule in ("species", "gender", "type"):
+    SCENARIOS[f"{_rule}_clause_gen3"] = {
+        "flags": [f"--{_rule}-clause"], "timeout": 2400, "frames": 3000000,
+        "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "ball_hunt": True,
+        "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch", "gen3_rr": "battle2"},
+        "scenario_module": "clause", "rule_kind": _rule, "oracle": f"assert_{_rule}_clause_gen3_saved",
+    }
+SCENARIOS["release_gen3"] = {
+    "flags": [], "timeout": 2400, "frames": 3000000,
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    "target": {"a": "battle", "b": "town"},
+    "target_by_game": {"gen3_emerald": "pc", "gen3_rr": "battle2"},
+    "oracle": "assert_release_gen3_saved",
+}
+SCENARIOS["ball_gate_gen3"] = {
+    "flags": [], "timeout": 2400, "frames": 3000000,
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    "ball_hunt": True, "rng_attempts": 8,
+    "target": "ball_gate_synth", "target_by_game": {"gen3_emerald": "ball_gate"},
+    "hunt_area_by_game": {"gen3_frlg": "viridian_forest", "gen3_lgfr": "viridian_forest",
+                          "gen3_emerald": "rusturf_tunnel", "gen3_rr": "route_1"},
+    "oracle": "assert_ball_gate_gen3_saved",
+}
+SCENARIOS["species_family_gen3"] = {
+    "flags": ["--species-clause"], "timeout": 1800, "frames": 2500000,
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "explicit_only": True,
+    "rule_kind": "family", "target": {"a": "family_synth", "b": "catch_synth"},
+    "target_by_game": {"gen3_emerald": {"a": "family", "b": "catch"},
+                       "gen3_rr": {"a": "family_synth", "b": "battle2"}},
+    "oracle": "assert_species_family_gen3_saved",
+}
+
+
 # No families any more: the `gen1`/`gen1_yellow` pair was the only one, and both titles (and
 # their scenario drivers) were deleted in the same step. `games` matching is exact.
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
@@ -712,6 +753,8 @@ GEN1_RNG_REASON_CLASS = {
     # starter): the walk-back whiteout is the game's RNG, same shape as poison's starter KO,
     # so a whole-run retry is the right response (seen in the duo-pairs lane, linked_faint_bench).
     "hunt ended whiteout": "CAUSE_RNG",
+    "hunt ended lead fainted while catching": "CAUSE_RNG",
+    "link_new prerequisite failed: hunt ended lead fainted while catching": "CAUSE_RNG",
     "link_new prerequisite failed: hunt ended whiteout": "CAUSE_RNG",
     # poison_new's two forest legs (duo_gen1_main.lua:2352,2385): the poisoning is a race
     # between the wild table and the starter's HP, so both outcomes are the game's RNG and a
@@ -734,6 +777,8 @@ GEN1_RNG_REASON_CLASS = {
     # type_clause_new: the verdict wait saw the partner finish first -- its only ball missed
     # (duo_gen1_main.lua type-clause body). Only a retry when the partner's miss is CAUSE_RNG.
     "no type-clause verdict (partner-gone)": "CONSEQUENCE",
+    "no gender-clause verdict (partner-gone)": "CONSEQUENCE",
+    "no species-clause verdict (partner-gone)": "CONSEQUENCE",
     # species_clause_new's own budget phrase: B's battle cap (8) exhausted by duplicates. The
     # reroll observation and the hunt's RNG budget are the same attempts, so this one is
     # retryable on ANY attempt (see retryable_gen1_rng), unlike the ball miss.
@@ -788,7 +833,7 @@ EXPLODE_KO_MISS = "RNG: the wild foe knocked the linked mon out before EXPLOSION
 LATE_ATTEMPT_RNG = (SPECIES_BUDGET_MISS, EXPLODE_KO_MISS)
 
 
-def retryable_gen1_rng(game, results, attempt, limit=2):
+def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     """May these receipts restart one whole gen1_new run?
 
     Attempt 1 is the original rule: a CAUSE_RNG on one side and nothing worse than CONSEQUENCE
@@ -813,6 +858,11 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
         return False
     if not all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS", None) for c in classes):
         return False
+    # CLAUSE-FIX: preserve the zero-ball -> native pickup proof and its one-ball
+    # catch honestly. Only this row gets the disclosed eight-attempt RNG budget;
+    # no runtime bag write, changed activation, or retry for a harness failure.
+    if scenario == "ball_gate_gen3" and SCENARIOS[scenario].get("rng_attempts") == limit:
+        return True
     # Owner 2026-09-18: a ball miss (and any other CAUSE_RNG) earns TWO whole-run retries, not
     # one -- four full runner passes each lost a different scenario to a second consecutive
     # roll (species double miss, poison double KO) with no defect behind it.
@@ -836,6 +886,10 @@ def scenario_attempt_limit(name, game):
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     entry = SCENARIOS.get(name, {})
+    if rng_retry_family(game) and entry.get("rng_attempts"):
+        return entry["rng_attempts"]
+    if entry.get("rule_kind") in ("species", "family"):
+        return 8
     if entry.get("battle_window_case"):
         return 2 if entry["battle_window_case"] == "trainer_bench" else 1
     # a cold boot replays one fixed NEW GAME: nothing to retry (ball_gate_new)
@@ -3305,6 +3359,9 @@ class DuoRun:
         {target: area} map read with A's fixture target -- gen3_emerald: battle -> route_102, pc ->
         route_103). Only the Kanto families (and a bare unit-stub run) default to Route 1: any
         other row that reaches a hunt-area oracle without naming its grass fails loud."""
+        override = (getattr(self, "cfg", None) or {}).get("hunt_area_by_game", {})
+        if override:
+            return override[self.game]
         row = getattr(self, "gcfg", None) or {}
         if "hunt_area" in row:
             area = row["hunt_area"]
@@ -3839,6 +3896,12 @@ class DuoRun:
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
+            if self.cfg.get("rule_kind"):
+                from gen3_clause_rows import own_facts
+                duo.update(rule_kind=self.cfg["rule_kind"], clause_facts=own_facts(self, inst))
+            if self.cfg.get("acquisition_kind"):
+                from gen3_gift_egg_rows import own_facts
+                duo.update(acquisition_kind=self.cfg["acquisition_kind"], acquisition_facts=own_facts(self, inst))
             if self._gen3_rr:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
@@ -3867,12 +3930,7 @@ class DuoRun:
             f.write(f'SLINK_PLAYER = "{inst}"\n')
             f.write("SLINK_DUO = {\n")
             for k, v in duo.items():
-                if isinstance(v, str):
-                    f.write(f'  {k} = "{v}",\n')
-                elif isinstance(v, bool):
-                    f.write(f"  {k} = {str(v).lower()},\n")
-                else:
-                    f.write(f"  {k} = {v},\n")
+                f.write(f"  {k} = {lua_literal(v)},\n")
             f.write("}\n")
             f.write(f'dofile("{WT_FWD}/{self.gcfg["main"]}")\n')
         if self.gcfg.get("launch_profile") == "gen2" and self.scenario in GEN2_TRADE_SCENARIOS:
@@ -7604,6 +7662,58 @@ class DuoRun:
         self._gen3_raise(self._native_trade_problems(results),
                         "T5 HARNESS_ONLY selection: native outcome, server settlement, pair migration and cold reload verified")
 
+    def orchestrate_species_clause_gen3(self):
+        from gen3_clause_rows import orchestrate_clause
+        return orchestrate_clause(self, helpers=sys.modules[__name__])
+
+    def orchestrate_gift_gen3(self):
+        from gen3_gift_egg_rows import orchestrate
+        return orchestrate(self)
+
+    orchestrate_egg_hatch_gen3 = orchestrate_gift_gen3
+
+    def assert_gift_egg_gen3_saved(self, results):
+        from gen3_gift_egg_rows import saved_oracle
+        return saved_oracle(self, results)
+
+    orchestrate_gender_clause_gen3 = orchestrate_species_clause_gen3
+    orchestrate_type_clause_gen3 = orchestrate_species_clause_gen3
+
+    def assert_clause_gen3_saved(self, results):
+        from gen3_clause_rows import clause_oracle
+        return clause_oracle(self, results)
+
+    assert_species_clause_gen3_saved = assert_clause_gen3_saved
+    assert_gender_clause_gen3_saved = assert_clause_gen3_saved
+    assert_type_clause_gen3_saved = assert_clause_gen3_saved
+
+    def orchestrate_ball_gate_gen3(self):
+        from gen3_clause_rows import orchestrate_ball_gate
+        return orchestrate_ball_gate(self)
+
+    def assert_ball_gate_gen3_saved(self, results):
+        from gen3_clause_rows import ball_gate_oracle
+        return ball_gate_oracle(self, results)
+
+    def orchestrate_release_gen3(self):
+        from gen3_clause_rows import orchestrate_release
+        return orchestrate_release(self)
+
+    def orchestrate_species_family_gen3(self):
+        self._gen3_prelude(link_slot=0)
+        self.go(self._gen3_linked_lines())
+        self._gen3_mark("a", r"^FAMILY_READY \S+$", "native family encounter and RUN")
+        for inst in ("a", "b"):
+            self._append_reconnect_marker(inst, "SAVE")
+
+    def assert_species_family_gen3_saved(self, results):
+        from gen3_clause_rows import family_oracle
+        return family_oracle(self, results)
+
+    def assert_release_gen3_saved(self, results):
+        from gen3_clause_rows import release_oracle
+        return release_oracle(self, results)
+
     def orchestrate_trade_gen3(self):
         """The RR PC trade NPC, driven only by the two cartridges: link the slot-1 mons (server
         staging), name each side's partner key, GO. A talks to the NPC and answers the server's
@@ -8745,7 +8855,7 @@ class DuoRun:
         match = re.search(gen3_tx(event, key) + r".*\"" + field + r"\":(\"[^\"]*\"|-?\d+)", text or "")
         return json.loads(match.group(1)) if match else None
 
-    def assert_link_gen3_saved(self, results):
+    def assert_link_gen3_saved(self, results, *, native_ball_grant=0):
         """D-1 persisted on FRLG: one ALIVE route_1 pair of the two real captures; each capture is
         in its saved party exactly once (appended, boxed nowhere, species as sent), and each
         saved POKe BALLS pocket is the fixture's minus the throws that half logged."""
@@ -8762,9 +8872,9 @@ class DuoRun:
                                               rr=self._gen3_rr, limits=self._gen3_limits(inst))
             throws = len(re.findall(r"(?m)^THREW \d+", text or ""))
             title = self._gen3_title(inst)
-            before = gen3_ball_count(self._gen3_fixture_bytes(inst), title)
+            before = gen3_ball_count(self._gen3_fixture_bytes(inst), title) + native_ball_grant
             after = gen3_ball_count(self._gen3_flushed(inst), title)
-            self._pydec_note(f"BAG_BALLS baseline={before} final={after} throws={throws} inst={inst}")
+            self._pydec_note(f"BAG_BALLS baseline={before} final={after} throws={throws} inst={inst} native_grant={native_ball_grant}")
             if throws < 1 or after != before - throws:
                 problems.append(f"{inst}: saved {after} Poke Balls; the fixture had {before} and "
                                 f"the driver logged {throws} throw(s)")
@@ -8972,7 +9082,7 @@ class DuoRun:
             except GameRngMiss:
                 ra, rb = self.wait_results()
                 if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, self.attempt,
-                                          scenario_attempt_limit(self.scenario, self.game)):
+                                          scenario_attempt_limit(self.scenario, self.game), scenario=self.scenario):
                     raise  # an unrelated failed half is never a game-RNG retry
             else:
                 with self._timed("results"):
@@ -9112,6 +9222,22 @@ def summary_lines(results, game):
         lines.append(f"  {name}: {'PASS' if ok else 'FAIL'} "
                      f"(attempt {attempt} of {scenario_attempt_limit(name, game)}){reason}")
     return lines
+
+
+def lua_literal(v) -> str:
+    """A Python value as a Lua literal for the SLINK_DUO stub: strings quoted, bools lowercase,
+    dicts as string-keyed tables (the Lua side indexes clause_facts by tostring(species)), lists
+    as sequences. Dicts/lists used to be written with Python repr -- a Lua syntax error that
+    stopped both EmuHawk instances at load (CLAUSE-ROWS-G3 live, 2026-09-27)."""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, str):
+        return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    if isinstance(v, dict):
+        return "{" + ", ".join(f"[{lua_literal(str(k))}] = {lua_literal(x)}" for k, x in v.items()) + "}"
+    if isinstance(v, (list, tuple)):
+        return "{" + ", ".join(lua_literal(x) for x in v) + "}"
+    return str(v)
 
 
 def scenario_target(entry, game):
@@ -9268,6 +9394,11 @@ def run_scenario_with_rng_retry(name, args):
             receipts = {inst: read_result(artifact, inst) for inst in ("a", "b")}
             _archive_attempt(artifact, attempt, receipts)
             reason = f"{type(exc).__name__}: {exc}"
+            if SCENARIOS[name].get("rule_kind"):
+                from gen3_clause_rows import ClauseUnobserved
+                if isinstance(exc, ClauseUnobserved) and attempt < limit:
+                    print(f"[duo] {name}: {exc}; retrying fresh lane")
+                    continue
             if name in GEN2_CLAUSE_SCENARIOS and scenario_family(args.game) == "gen2_new":
                 oracle = importlib.import_module("gen2_duo_oracles")
                 if isinstance(exc, oracle.ClauseUnobserved) and attempt < limit:
@@ -9317,7 +9448,7 @@ def run_scenario_with_rng_retry(name, args):
                 print(f"[duo] {name}: restarting the whole T2 attempt with fresh server and seeds")
                 continue
             return ok, attempt
-        if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
+        if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit, scenario=name):
             # A re-run that only went looking for the reroll branch and then lost the game's
             # RNG (a ball miss past its retries) does not undo the PASS it re-ran; a real
             # (FINAL) failure still fails. The attempt-1 rule is the "RNG-shaped" test.

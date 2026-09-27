@@ -2754,7 +2754,9 @@ def test_an_own_sync_failure_never_retries_with_a_partner_ball_miss(lua):
 
 _CATCH_MODEL = r"""
 BALLS, THROWS, RAN = nil, 0, { true }
-S = { gBattleOutcome = 0x10 }
+S = { gBattleOutcome = 0x10, gActionSelectionCursor = 0x11 }
+ctrl0 = function() return 0x12345679 end
+fmt = string.format
 B_OUTCOME_CAUGHT, ACTION_BAG = 7, 1
 memory = { read_u8 = function() return 1 end }
 reader = { read_balls = function() if BALLS then return { ball_count = BALLS } end end }
@@ -2818,7 +2820,7 @@ def test_the_loop_exiting_normally_still_reaches_the_settle_and_outcome_check(ca
         play.in_battle = function() return false end
     """)
     key, why = catch_model.globals().CATCH()
-    assert key is None and why == "the battle ended with outcome 1", why
+    assert key is None and why == "the battle ended with outcome 1 (ctrl0=0x12345679 action_cursor=1)", why
 
 
 def test_the_attempt_jitter_lands_after_go(tmp_path):
@@ -5180,6 +5182,14 @@ def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():
     assert ball_hunts, "no ball_hunt scenario lists gen3_emerald -- test is vacuous"
     for name, entry in ball_hunts:
         target = duo.scenario_target(entry, "gen3_emerald")
+        if name == "ball_gate_gen3":
+            # This row must START with zero balls: acquiring the first native
+            # reward is itself under test. Its full faint/reward/catch oracle
+            # checks the actual debit; every ordinary hunt keeps the >=20 rule.
+            assert target == "ball_gate"
+            assert entry["hunt_area_by_game"]["gen3_emerald"] == "rusturf_tunnel"
+            assert entry["oracle"] == "assert_ball_gate_gen3_saved"
+            continue
         assert target in row["hunt_area"], f"{name}: hunt_area names no {target!r} target"
         body = (REPO / f"tests/fixtures/gen3/emerald_{target}.sav").read_bytes()
         balls = sum(qty for item, qty in gen3_fixtures.emerald_ball_pocket(body)

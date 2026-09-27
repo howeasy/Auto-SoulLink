@@ -802,6 +802,15 @@ class Gen3Adapter(GameAdapter):
         for k in ("level_cap", "fight_label", "calc_label"):
             if tr.get(k):
                 out[k] = tr[k]
+        if self._emerald:
+            # pokeemerald c65e93f2 Route103/scripts.inc:22-24 and
+            # Route110/scripts.inc:386-388: MALE -> May, FEMALE -> Brendan.
+            # UPR preserves these script identities even when names change.
+            const = tr.get("const", "")
+            if const.startswith("TRAINER_MAY_"):
+                out["required_player_gender"] = 0
+            elif const.startswith("TRAINER_BRENDAN_"):
+                out["required_player_gender"] = 1
         return out
 
     def item_name(self, item_id: int) -> str:

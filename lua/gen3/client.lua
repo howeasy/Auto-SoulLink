@@ -119,6 +119,14 @@ function Client.new(p)
     local key = reads.key
     local session
     local function send(event, fields) return session.send(event, fields) end
+    local function owe(event, fields)
+        -- INV-CLIENT-2: native removals use the same reply-bound outbox as trade.
+        if not owed then error("durable reports unavailable for " .. event) end
+        for _, report in ipairs(owed.list) do
+            if report.event == event and report.fields.key == fields.key then return end
+        end
+        owed.list[#owed.list + 1] = {event = event, fields = fields}
+    end
     local function eligible() return session ~= nil and session:eligible() end
     local function recovery_hidden()
         return journal and (journal:hidden() or (awaiting_trade_run and journal:has_entries())) or false
@@ -185,7 +193,8 @@ function Client.new(p)
     local rival_authority = nil
     local sig_src = nil          -- the signal source drv.start armed; its health gates the authority
     local st = {
-        known = {},        -- every key this save has shown us (party + boxes): acquisitions are NEW keys
+        known = {},        -- already acquired non-egg keys (party + boxes)
+        eggs = {},         -- observed eggs stay pending until the native hatch signal
         alive = {},        -- keys last seen with hp > 0: a faint is alive -> hp 0 at a faint site
         commanded = {},    -- keys WE zeroed: their faint is not reported (old client force_fainted_keys)
         party_prev = {},   -- key -> { slot, level, max_hp } at the last settle (PC diff baseline)
@@ -356,8 +365,15 @@ function Client.new(p)
         observe_hp(party)
     end
     local function seed_known(party)
-        for _, m in ipairs(party) do st.known[key(m)] = true end
-        for _, e in ipairs(st.box_cache) do st.known[e.key] = true end
+        for _, m in ipairs(party) do
+            local k = key(m)
+            if m.is_egg == 1 then st.eggs[k] = true
+            elseif not st.eggs[k] then st.known[k] = true end
+        end
+        for _, e in ipairs(st.box_cache) do
+            if e.is_egg == 1 then st.eggs[e.key] = true
+            elseif not st.eggs[e.key] then st.known[e.key] = true end
+        end
     end
     local function mark_commanded(k)
         st.commanded[k], st.alive[k] = true, nil
@@ -409,7 +425,9 @@ function Client.new(p)
         local found = false
         for _, m in ipairs(party) do
             local k = key(m)
-            if not st.known[k] then
+            if m.is_egg == 1 then st.eggs[k] = true end
+            -- O-15: eggs are acquired at native hatch, never at GiveEgg.
+            if not st.known[k] and not st.eggs[k] and m.is_egg == 0 and m.is_bad_egg == 0 then
                 st.known[k], found = true, true
                 resolve_area()
                 send("capture", { key = k, area_id = area_id, species_id = m.species, level = m.level,
@@ -421,7 +439,10 @@ function Client.new(p)
         -- party full: the mon went to the PC (SendMonToPC)
         rescan_boxes()
         local fresh = {}
-        for _, e in ipairs(st.box_cache) do if not st.known[e.key] then fresh[#fresh + 1] = e end end
+        for _, e in ipairs(st.box_cache) do
+            if e.is_egg == 1 then st.eggs[e.key] = true end
+            if not st.known[e.key] and not st.eggs[e.key] and e.is_egg == 0 then fresh[#fresh + 1] = e end
+        end
         for _, e in ipairs(fresh) do st.known[e.key] = true end
         if #fresh == 1 then
             local e = fresh[1]
@@ -439,6 +460,20 @@ function Client.new(p)
         elseif #fresh > 1 then
             -- more than one unknown boxed key cannot be attributed to this acquisition
             log("acquisition: " .. #fresh .. " new boxed keys, none reported (ambiguous)")
+        end
+    end
+
+    local function settle_hatches(hatches)
+        for _, m in ipairs(hatches or {}) do
+            local k = key(m)
+            st.eggs[k] = nil
+            if not st.known[k] then
+                st.known[k] = true
+                send("capture", { key = k, area_id = "gift_daycare", species_id = m.species,
+                                  level = m.level, hp = m.hp, maxHP = m.max_hp,
+                                  nickname = m.nickname, held_item_id = m.held_item,
+                                  is_egg = false, gift = true })
+            end
         end
     end
 
@@ -460,15 +495,19 @@ function Client.new(p)
                 send("party_to_box", { key = k, stats = prev.stats })
             elseif now[k] then
                 st.carried[k] = nil                            -- a party shuffle, not a move
-            elseif released then
+            elseif released and released[k] then
                 st.carried[k] = nil
-                log("released " .. k)
             end
+        end
+        for k in pairs(released or {}) do
+            st.known[k], st.alive[k] = nil, nil
+            owe("release", {key = k})
         end
         for k in pairs(now) do
             if not st.party_prev[k] then
                 if st.known[k] then send("box_to_party", { key = k, area_id = area_id })
-                else st.known[k] = true end                    -- the PC cannot create a mon
+                elseif now[k].is_egg == 1 then st.eggs[k] = true
+                elseif not st.eggs[k] then st.known[k] = true end -- eggs still await native hatch
             end
         end
     end
@@ -594,6 +633,7 @@ function Client.new(p)
         if trading then st.trade = nil end
         if not st.frozen and not trading then
             if f.faint or f.battle_end or f.whiteout then settle_faints(party, area_id) end
+            settle_hatches(f.hatches)
             if f.acquire then settle_acquisitions(party, area_id, f.caught or (st.battle and st.battle.caught)) end
             if f.pc then settle_pc(party, area_id, f.release) end
             if f.trade then settle_trade(party) end
@@ -969,6 +1009,8 @@ function Client.new(p)
         return overworld_ok()
     end
     function drv.on_reset()
+        st.release_snapshot = nil
+        st.eggs = {}
         trade_reset_epoch = trade_reset_epoch + 1
         reload_boot_seen = false
         if trade then trade:reset() end
@@ -1051,7 +1093,7 @@ function Client.new(p)
             f.battle_identity = true
         end
         local t = trainer()
-        if t then f.ot_id, f.trainer_name = t.ot_id, t.name end
+        if t then f.ot_id, f.trainer_name, f.player_gender = t.ot_id, t.name, t.player_gender end
         if native and native.hello_fields then
             for k, v in pairs(native:hello_fields() or {}) do f[k] = v end
         end
@@ -1088,7 +1130,7 @@ function Client.new(p)
             f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), gen
         end
         local t = trainer()
-        if t then f.trainer_name = t.name end
+        if t then f.trainer_name, f.player_gender = t.name, t.player_gender end
         return f
     end
 
@@ -1128,9 +1170,74 @@ function Client.new(p)
             sig.trade_before = {}
             for _, mon in ipairs(party) do sig.trade_before[mon.slot] = key(mon) end
         end
+        local function release_census()
+            -- Read through this title's profile at the native hooks. The party
+            -- count can still include the purged slot until compaction follows.
+            local party = party_read()
+            if not party then return nil end
+            local census = {}
+            for _, mon in ipairs(party) do
+                if mon.has_species == 1 and mon.species ~= 0 then
+                    local k = key(mon)
+                    if census[k] then return nil end
+                    census[k] = {where = "party", slot = mon.slot}
+                end
+            end
+            for box = 0, (num(d.BOXES_PER_STORE) or 0) - 1 do
+                local mons = call("read_box", box)
+                if not mons then return nil end
+                for _, mon in ipairs(mons) do
+                    if mon.has_species == 1 and mon.species ~= 0 then
+                        local k = key(mon)
+                        if census[k] then return nil end
+                        census[k] = {where = "box", box = box, slot = mon.slot}
+                    end
+                end
+            end
+            return census
+        end
+        local function release_begin(sig)
+            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp}
+        end
+        local function release_done(sig)
+            local before = st.release_snapshot
+            st.release_snapshot = nil
+            -- ReleaseMon entry SP and its pre-pop return SP differ by saved LR.
+            if not before or not before.keys or before.epoch ~= trade_reset_epoch
+               or before.sp ~= sig.sp + 4 then return end
+            local after, gone = release_census(), nil
+            if not after then return end
+            for k in pairs(after) do if not before.keys[k] then return end end
+            for k, location in pairs(before.keys) do
+                if not after[k] then
+                    if gone then return end -- ambiguous removal: no guessed key
+                    gone = {key = k, location = location}
+                end
+            end
+            if gone then
+                sig.release_key, sig.release_source = gone.key, gone.location
+                sig.release_epoch = trade_reset_epoch
+            end
+        end
+        local function capture_hatch(sig)
+            -- All pinned AddHatchedMonToParty returns leave the mon pointer in R5.
+            -- Read AT the completed mutation, before later callbacks can move the party.
+            local base, ptr = call("party_base"), sig.point and sig.point.R5
+            local party = party_read()
+            if not base or not ptr or not party then return end
+            for _, mon in ipairs(party) do
+                if ptr == base + mon.slot * R.PARTY_MON_SIZE and mon.species ~= 0 and mon.is_egg == 0
+                   and mon.is_bad_egg == 0 and mon.checksum_ok ~= false then
+                    sig.hatch_mon, sig.hatch_epoch = mon, trade_reset_epoch
+                    return
+                end
+            end
+        end
         sig_src = p.Signals.new(profile, p.sites, io, p.ev,
                                 {battle_begin = close_authority, battle_end = close_authority,
-                                 whiteout = close_authority, trade_begin = capture_trade_before})
+                                 whiteout = close_authority, trade_begin = capture_trade_before,
+                                 pc_release_begin = release_begin, pc_release = release_done,
+                                 hatch = capture_hatch})
         return sig_src
     end
 
@@ -1159,9 +1266,15 @@ function Client.new(p)
             f.acquire, f.caught = true, true
             if st.battle then st.battle.caught = true end
         elseif k == "mon_given" or k == "pc_move" then f.acquire = true
+        elseif k == "hatch" and sig.hatch_mon and sig.hatch_epoch == trade_reset_epoch then
+            f.hatches = f.hatches or {}
+            f.hatches[#f.hatches + 1] = sig.hatch_mon
         elseif PC_KINDS[k] then
             f.pc = true
-            if k == "pc_release" then f.release = true end
+            if k == "pc_release" and sig.release_key and sig.release_epoch == trade_reset_epoch then
+                f.release = f.release or {}
+                f.release[sig.release_key] = true
+            end
         elseif k == "map_load" then f.map = true
         elseif k == "save" then f.save = true
         elseif k == "trade_begin" then                          -- OPEN kind, not PHYSICAL

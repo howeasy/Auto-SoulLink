@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "db7180293c75bfc0b75a50b3b5142f01f9570cf0faac82222b793a869edc301e",
+  "sha256": "637cd32cd6bccc8387a3c75fc52169efa2d1d520a435e35f568cc1c3bf4d78b7",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -174,6 +174,32 @@
               "rom_offset": 1306,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
               "symbol": "CallCallbacks (control only)"
+            },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "RR ROM 08046D60 body; capture 08046E0A after its CalculateMonStats call. R5 is the completed hatchling. RR CB2_EggHatch_0 calls this body at 080471D4; the body, entry, tail and caller were read independently in both RR artifacts. Require an aligned party record, non-egg/non-Bad-Egg; publish once in gift_daycare.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "replaces": "AddHatchedMonToParty (RR in-place)",
+              "rom_offset": 290302,
+              "rr_body": {
+                "address": 134507872,
+                "boundary_hex": "00B503480078FFF7",
+                "entry_hex": "30B585B00006000E03AC462121706421",
+                "extent_estimate": 192,
+                "extent_evidence": "RR body ends at 08046E20: return at +0xB0, three data words +0xB4..BF; next ScriptHatchMon entry pinned."
+              },
+              "source": "cfru_inplace",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty (RR in-place)"
             },
             "map_load": {
               "address": 134571884,
@@ -738,6 +764,32 @@
               "rom_offset": 1306,
               "source": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/main.c#L241-L251",
               "symbol": "CallCallbacks (control only)"
+            },
+            "hatch": {
+              "address": 134508030,
+              "capture_contract": "RR ROM 08046D60 body; capture 08046E0A after its CalculateMonStats call. R5 is the completed hatchling. RR CB2_EggHatch_0 calls this body at 080471D4; the body, entry, tail and caller were read independently in both RR artifacts. Require an aligned party record, non-egg/non-Bad-Egg; publish once in gift_daycare.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 290144
+              },
+              "expected_hex": "281CFDF76AFA281CF7F739FB05B030BC",
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "replaces": "AddHatchedMonToParty (RR in-place)",
+              "rom_offset": 290302,
+              "rr_body": {
+                "address": 134507872,
+                "boundary_hex": "00B503480078FFF7",
+                "entry_hex": "30B585B00006000E03AC462121706421",
+                "extent_estimate": 192,
+                "extent_evidence": "RR body ends at 08046E20: return at +0xB0, three data words +0xB4..BF; next ScriptHatchMon entry pinned."
+              },
+              "source": "cfru_inplace",
+              "source_url": "https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678",
+              "symbol": "AddHatchedMonToParty (RR in-place)"
             },
             "map_load": {
               "address": 134571884,

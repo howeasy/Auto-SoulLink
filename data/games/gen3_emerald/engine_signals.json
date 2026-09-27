@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_emerald",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "1101219caf2c70480adb99770b94548df857710635f43cbfbd074344370f1402",
+  "sha256": "f806a3cb62599d4691fef9ab6c320d6e0ac524e7985094d8753e5553f1aee7e6",
   "titles": {
     "emerald": {
       "artifacts": {
@@ -182,6 +182,33 @@
               "rom_offset": 1308,
               "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/main.c#L188-L195",
               "symbol": "CallCallbacks"
+            },
+            "hatch": {
+              "address": 134681942,
+              "capture_contract": "AddHatchedMonToParty +0xAA after MonRestorePP and CalculateMonStats; R5 = completed hatchling. Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; O-15 publishes one gift_daycare capture at hatch, never at GiveEgg.",
+              "capture_offset": 12,
+              "context": {
+                "expected_hex": "30B585B00006000E03AC462121706421",
+                "rom_offset": 464056
+              },
+              "expected_hex": "281CFDF7E4F9281CF7F7D5FB05B030BC",
+              "function": {
+                "address": 134681784,
+                "anchor_offset": 158,
+                "capture_offset": 170,
+                "size": 192,
+                "size_evidence": "verified_vanilla_symbol",
+                "symbol": "AddHatchedMonToParty",
+                "symbol_source": "data/gen3/pret/pokeemerald.sym:3987",
+                "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5"
+              ],
+              "rom_offset": 464214,
+              "source": "https://github.com/pret/pokeemerald/blob/c65e93f20a5275ab03b07d6f6411096a82a60ffd/src/egg_hatch.c#L358-L397",
+              "symbol": "AddHatchedMonToParty"
             },
             "map_load": {
               "address": 134766596,

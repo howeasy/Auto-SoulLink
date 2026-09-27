@@ -16,11 +16,11 @@ PACK = ROOT / "data/games/gen3_emerald"
 ROM = Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba")
 ROM_SHA1 = "f3ae088181bf583e55daf962a92bb46f4f1d07b7"
 PRET = Path("E:/Google Drive/SLink/.cache/pret/pokeemerald")
-# the 21 FR site kinds (data/games/gen3_frlg/engine_signals.json firered clean)
+# the 22 FR site kinds, including native hatch (same vocabulary; own Emerald pins)
 KINDS = {"frame_control", "battle_begin", "battle_end", "faint", "capture_wild", "mon_given",
          "pc_move", "whiteout", "map_load", "evolve_species_store", "trade_evolve_species_store",
          "trade_begin", "trade_done", "save", "poison_hp_before", "poison_faint", "pc_deposit",
-         "pc_withdraw", "pc_box_place", "pc_release_begin", "pc_release"}
+         "pc_withdraw", "pc_box_place", "pc_release_begin", "pc_release", "hatch"}
 
 
 def _json(path: Path) -> dict:
@@ -46,7 +46,8 @@ def rom() -> bytes:
 # SB1_BADGE_BYTE_OFFSET byte cannot express; BADGE_FIRST_FLAG is the one derived field that
 # is genuinely Emerald-only, carrying the flag id lua/gen3/reads.lua and
 # tools/gen3_reads_pydec.py derive each badge bit from (SB1_BADGE_BYTE_OFFSET stays null).
-EMERALD_ONLY_DERIVED = {"BADGE_FIRST_FLAG"}
+# EMERALD-RIVAL also publishes playerGender here; other packs leave that optional fact absent.
+EMERALD_ONLY_DERIVED = {"BADGE_FIRST_FLAG", "SB2_PLAYER_GENDER_OFFSET"}
 
 
 def test_profile_has_the_firered_key_set_and_provenance(emerald):
@@ -178,6 +179,7 @@ def test_resolver_refuses_a_corrupted_entry(rom):
 # target is additionally cross-checked against the callee's own .sym address (pokeemerald.sym),
 # never a bare literal, so a pret symbol move repins this table instead of silently drifting.
 CAPTURE_INSTRUCTIONS = {
+    "hatch": ("add", "sp, #0x14", None),
     "frame_control": ("push", "{r4, lr}", None),
     "battle_begin": ("push", "{lr}", None),
     "battle_end": ("bl", "#0x8000540", "SetMainCallback2"),

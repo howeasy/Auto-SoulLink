@@ -153,6 +153,11 @@ CANDIDATES = [
 # C2-3b: offsets are relative to independently resolved FR/LG function symbols.
 # Literal anchors were separately read and disassembled in BOTH admitted ROMs.
 BINDINGS = {
+    "hatch": {
+        "function": "AddHatchedMonToParty", "anchor_offset": 0x9E, "capture": 12,
+        "anchors": {"fr": "281CFDF76AFA281CF7F739FB05B030BC", "lg": "281CFDF76AFA281CF7F739FB05B030BC"},
+        "entries": {"fr": "30B585B00006000E03AC462121706421", "lg": "30B585B00006000E03AC462121706421"},
+    },
     "frame_control": {
         "function": "CallCallbacks",
         "anchor_offset": 10,
@@ -429,6 +434,11 @@ BINDINGS = {
 }
 
 BOUND_CONTRACTS = {
+    "hatch": ("src/daycare.c#L1639-L1678",
+        "AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. "
+        "R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, "
+        "non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. "
+        "Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.", ["R5"]),
     "faint": ("src/battle_script_commands.c#L2831-L2905",
         "Battle opcode 0x19. At function +0x11C after the PLAYER counter increment/store "
         "(+0x11A); saturated counter skips the store but reaches this same point. Player-side, "
@@ -552,6 +562,12 @@ def output_path(pack: str) -> Path:
 # RR-only binary bindings. All constants were independently checked in both ROMs.
 # Unlike vanilla reference_size, these are explicit ESTIMATES with boundary bytes.
 RR_BODIES = {
+    # Both RR artifacts independently inspected: native hatch body stays in place.
+    "hatch": {name: {
+        "origin": None, "target": 0x08046D60, "anchor_offset": 0x9E, "capture": 12,
+        "pattern": "281CFDF76AFA281CF7F739FB05B030BC", "entry": "30B585B00006000E03AC462121706421",
+        "extent": 0xC0, "boundary": "00B503480078FFF7",
+    } for name in ("rr", "rr_companion")},
     "faint": {
         "rr": {
             "origin": None,
@@ -690,6 +706,13 @@ RR_BODIES = {
     }
 }
 RR_CONTRACTS = {
+    "hatch": {"replaces": "AddHatchedMonToParty (RR in-place)",
+        "source_path": "src/daycare.c#L1639-L1678", "source_root": PRET, "point": ["R5"],
+        "contract": "RR ROM 08046D60 body; capture 08046E0A after its CalculateMonStats call. "
+                    "R5 is the completed hatchling. RR CB2_EggHatch_0 calls this body at 080471D4; "
+                    "the body, entry, tail and caller were read independently in both RR artifacts. "
+                    "Require an aligned party record, non-egg/non-Bad-Egg; publish once in gift_daycare.",
+        "extent": "RR body ends at 08046E20: return at +0xB0, three data words +0xB4..BF; next ScriptHatchMon entry pinned."},
     "faint": {
         "replaces": "Cmd_tryfaintmon (opcode 0x19 dead; capture moved to opcode 0x1B cleanup)",
         "source_path": "src/general_bs_commands.c#L1392-L1433",
@@ -833,7 +856,7 @@ def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
         site = make_site(rom, at, data, capture_offset=b["capture"],
                          symbol=contract["replaces"], point=contract["point"])
         site.update(source="cfru_detour" if detour else "cfru_inplace",
-                    source_url=CFRU + contract["source_path"], replaces=contract["replaces"],
+                    source_url=contract.get("source_root", CFRU) + contract["source_path"], replaces=contract["replaces"],
                     capture_contract=contract["contract"],
                     context={"rom_offset": flat, "expected_hex": b["entry"]},
                     rr_body={"address": target, "extent_estimate": b["extent"],
@@ -1070,6 +1093,11 @@ EMERALD_DOC = ROOT / "docs/gen3_emerald/engine_sites.md"
 # kind -> (function, anchor_offset, capture, anchor hex @function+anchor_offset,
 #          entry hex @function+0, pret source, point, capture contract)
 EMERALD_BINDINGS = {
+    "hatch": ("AddHatchedMonToParty", 0x9E, 12, "281CFDF7E4F9281CF7F7D5FB05B030BC",
+        "30B585B00006000E03AC462121706421", "src/egg_hatch.c#L358-L397", ["R5"],
+        "AddHatchedMonToParty +0xAA after MonRestorePP and CalculateMonStats; R5 = completed hatchling. "
+        "Snapshot that aligned party record, require non-egg/non-Bad-Egg and valid checksum; "
+        "O-15 publishes one gift_daycare capture at hatch, never at GiveEgg."),
     "frame_control": ("CallCallbacks", 0x0, 0, "10B5074C2068002801D0E6F2D3FD6068",
         "10B5074C2068002801D0E6F2D3FD6068", "src/main.c#L188-L195", ["R15", "CPSR"],
         "Emerald CallCallbacks has no save-failed/help-screen gate (FR 0800051A sits after one); "

@@ -40,14 +40,16 @@ GAME = "gen3_frlg"
 SCENARIOS = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "whiteout_gen3",
              "link_gen3", "deadzone_gen3", "reconnect_gen3", "explode_gen3", "center_controls_gen3",
              "save_then_write_gen3", "trainer_bench_gen3", "active_end_gen3",
-             "linked_faint_active_whiteout_gen3", "linked_faint_active_trainer_gen3")
+             "linked_faint_active_whiteout_gen3", "linked_faint_active_trainer_gen3",
+             "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "release_gen3", "ball_gate_gen3")
 # G4 item 2a on LeafGreen: the same family with LG as A (C4-6m), for the A-side Center receipts
 GAME_LGFR = "gen3_lgfr"
 SCENARIOS_LGFR = ("whiteout_gen3", "center_controls_gen3", "save_then_write_gen3",
                   "trainer_bench_gen3", "active_end_gen3", "explode_gen3",
                   # G4-PH: the P+H subject is B, so LG-as-A puts FireRed under the commit
                   "linked_faint_active_gen3", "linked_faint_active_whiteout_gen3",
-                  "linked_faint_active_trainer_gen3")
+                  "linked_faint_active_trainer_gen3", "species_clause_gen3", "gender_clause_gen3",
+                  "type_clause_gen3", "release_gen3", "ball_gate_gen3")
 
 
 def deadline_for(scenario):
@@ -110,7 +112,8 @@ SCENARIOS_RR = ("faint_cmd_gen3", "linked_faint_active_gen3", "boxsync_gen3", "w
                 "explode_gen3", "rival_swap_gen3", "rival_swap_real_gen3", "native_absent_gen3",
                 "linked_faint_active_whiteout_gen3", "linked_faint_active_clean_gen3", "faint_cmd_clean_gen3",
                 "linked_faint_active_lhammer_gen3", "linked_faint_active_mega_gen3",
-                "trade_gen3", "trade_decline_gen3", "infopanel_gen3", "infopanel_dex_gen3")
+                "trade_gen3", "trade_decline_gen3", "infopanel_gen3", "infopanel_dex_gen3",
+                "species_clause_gen3", "gender_clause_gen3", "type_clause_gen3", "release_gen3", "ball_gate_gen3")
 
 
 def deadline_for_rr(scenario):
