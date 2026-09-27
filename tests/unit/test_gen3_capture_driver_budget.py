@@ -12,7 +12,8 @@ def _capture_model(catch_on=0, stock=20):
     body = source[source.index("function ctx.catch("):source.index("--- Keep choosing a no-damage move")]
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     lua.execute('''
-        title="firered"; cp={}; S={gBattleOutcome=0}; ACTION_BAG=1; B_OUTCOME_CAUGHT=7
+        title="firered"; cp={}; S={gBattleOutcome=0,gActionSelectionCursor=1}; ACTION_BAG=1; B_OUTCOME_CAUGHT=7
+        fmt=string.format; ctrl0=function() return 0x12345679 end
         spent=0; in_battle=true; settled_in_battle=false; boot_keys={}; logs={}
         log=function(s) logs[#logs+1]=s end
         ctx={hunt=function() return true end, balls=function() return stock-spent end,
@@ -23,6 +24,7 @@ def _capture_model(catch_on=0, stock=20):
                  return "action"
              end,
              last_sent=function() return {key="caught"} end, party=function() return {} end,
+             battler_slot=function() return 0 end,
              run_away=function() in_battle=false; return true end}
         SP={verify_fight_cursor=function() return in_battle and "action" or nil end,
             throw_pokeball_from_bag=function() spent=spent+1 end}
@@ -71,3 +73,43 @@ def test_capture_of_an_observed_encounter_does_not_hunt_again():
     lua = _capture_model(catch_on=1)
     lua.globals().ctx.hunt = lua.eval('function() error("a second hunt discarded the observed foe") end')
     assert lua.globals().ctx.catch("already at the native battle menu", True) == "caught"
+
+
+def test_lead_faint_answers_use_next_yes_switches_and_keeps_throwing():
+    lua = _capture_model(catch_on=3)
+    lua.execute('''
+        switched=0
+        ctx.party=function() return {{slot=0,hp=spent>0 and 0 or 10},{slot=1,hp=20}} end
+        ctx.battler_slot=function() return switched end
+        ctx.send_out=function(slot) assert(slot==1); switched=1; return true end
+        ctx.await_turn=function(_,button,policy)
+            if spent==1 then
+                local handled,key=policy()
+                assert(handled and key=="A", "B would decline Use next Pokemon and flee")
+                return "party"
+            end
+            if spent==3 then in_battle=false; return "over" end
+            return "action"
+        end
+    ''')
+    assert lua.globals().ctx.catch("lead faint replay") == "caught"
+    assert lua.globals().switched == 1 and lua.globals().spent == 3
+
+
+def test_forced_party_seen_before_a_throw_is_recovered():
+    lua = _capture_model(catch_on=1)
+    lua.execute('''
+        switched=0
+        ctx.party=function() return {{slot=0,hp=0},{slot=1,hp=20}} end
+        ctx.send_out=function(slot) assert(slot==1); switched=1; return true end
+        SP.verify_fight_cursor=function() return switched==0 and "party" or "action" end
+    ''')
+    assert lua.globals().ctx.catch("party already up") == "caught"
+    assert lua.globals().switched == 1
+
+
+def test_outcome_failure_includes_controller_and_action_cursor():
+    lua = _capture_model(catch_on=1)
+    lua.globals().memory.read_u8 = lua.eval("function(address) return address==0 and 4 or 2 end")
+    key, why = lua.globals().ctx.catch("unexpected flee")
+    assert key is None and why == "the battle ended with outcome 4 (ctrl0=0x12345679 action_cursor=2)"

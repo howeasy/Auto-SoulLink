@@ -185,9 +185,13 @@ def release_oracle(run, results):
     problems += h.gen3_memorial_problems("b", run._gen3_saved("b"), run._gen3_fixture_saved("b"),
                                        kb, run._gen3_memorial_box(), rr=run._gen3_rr,
                                        limits=run._gen3_limits("b"))
+    source = one(results["a"], "RELEASE_PREIMAGE")
+    if source.get("key") != ka or (source.get("source") or {}).get("where") != "box":
+        problems.append("release must name the native boxed pre-removal key")
     chains = {
         "a": [h.gen3_tx("party_to_box", ka), h.gen3_tx("box_to_party", ka),
-              rf"(?m)^SECOND_DEPOSITED {re.escape(ka)}$", h.gen3_tx("release", ka), rf"(?m)^RELEASED {re.escape(ka)}$"],
+              rf"(?m)^SECOND_DEPOSITED {re.escape(ka)}$", r"(?m)^RELEASE_PREIMAGE ",
+              h.gen3_tx("release", ka), rf"(?m)^RELEASED {re.escape(ka)}$"],
         "b": [rf"(?m)^MIRROR_DEPOSITED {re.escape(kb)}$", rf"(?m)^MIRROR_WITHDRAWN {re.escape(kb)}$",
               rf"(?m)^MIRROR_SECOND_DEPOSITED {re.escape(kb)}$", h.gen3_rx("force_faint", kb),
               h.gen3_rx("memorialize", kb), h.gen3_tx("memorialize_done", kb)],

@@ -277,6 +277,8 @@ def _release_case(monkeypatch, tmp_path):
     run._gen3_fixture_bytes = lambda i: fa if i == "a" else fb
     results = {"a": f"TX party_to_box {ka} {{}}\nTX box_to_party {ka} {{}}\nTX party_to_box {ka} {{}}\nSECOND_DEPOSITED {ka}\nTX release {ka} {{}}\nRELEASED {ka}\n",
                "b": f"MIRROR_DEPOSITED {kb}\nMIRROR_WITHDRAWN {kb}\nMIRROR_SECOND_DEPOSITED {kb}\nRX force_faint key={kb}\nRX memorialize key={kb}\nTX memorialize_done {kb} {{}}\n"}
+    preimage = "RELEASE_PREIMAGE " + json.dumps({"key": ka, "source": {"where": "box", "box": 0, "slot": 0}}) + "\n"
+    results["a"] = results["a"].replace(f"TX release {ka}", preimage + f"TX release {ka}")
     return rules, run, results, notes
 
 
@@ -284,6 +286,13 @@ def test_release_oracle_accepts_native_boxed_partner_memorial_without_party_hp(m
     rules, run, results, notes = _release_case(monkeypatch, tmp_path)
     rules.release_oracle(run, results)
     assert "boxed partner" in notes[-1]
+
+
+def test_release_oracle_requires_boxed_native_preimage(monkeypatch, tmp_path):
+    rules, run, results, _ = _release_case(monkeypatch, tmp_path)
+    results["a"] = results["a"].replace('"where": "box"', '"where": "party"')
+    with pytest.raises(RuntimeError, match="boxed pre-removal"):
+        rules.release_oracle(run, results)
 
 
 def test_release_oracle_requires_the_second_native_deposit_tx(monkeypatch, tmp_path):

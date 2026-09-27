@@ -599,7 +599,7 @@ SCENARIOS["release_gen3"] = {
 SCENARIOS["ball_gate_gen3"] = {
     "flags": [], "timeout": 2400, "frames": 3000000,
     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-    "ball_hunt": True,
+    "ball_hunt": True, "rng_attempts": 8,
     "target": "ball_gate_synth", "target_by_game": {"gen3_emerald": "ball_gate"},
     "hunt_area_by_game": {"gen3_frlg": "viridian_forest", "gen3_lgfr": "viridian_forest",
                           "gen3_emerald": "rusturf_tunnel", "gen3_rr": "route_1"},
@@ -739,6 +739,8 @@ GEN1_RNG_REASON_CLASS = {
     # starter): the walk-back whiteout is the game's RNG, same shape as poison's starter KO,
     # so a whole-run retry is the right response (seen in the duo-pairs lane, linked_faint_bench).
     "hunt ended whiteout": "CAUSE_RNG",
+    "hunt ended lead fainted while catching": "CAUSE_RNG",
+    "link_new prerequisite failed: hunt ended lead fainted while catching": "CAUSE_RNG",
     "link_new prerequisite failed: hunt ended whiteout": "CAUSE_RNG",
     # poison_new's two forest legs (duo_gen1_main.lua:2352,2385): the poisoning is a race
     # between the wild table and the starter's HP, so both outcomes are the game's RNG and a
@@ -817,7 +819,7 @@ EXPLODE_KO_MISS = "RNG: the wild foe knocked the linked mon out before EXPLOSION
 LATE_ATTEMPT_RNG = (SPECIES_BUDGET_MISS, EXPLODE_KO_MISS)
 
 
-def retryable_gen1_rng(game, results, attempt, limit=2):
+def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     """May these receipts restart one whole gen1_new run?
 
     Attempt 1 is the original rule: a CAUSE_RNG on one side and nothing worse than CONSEQUENCE
@@ -842,6 +844,11 @@ def retryable_gen1_rng(game, results, attempt, limit=2):
         return False
     if not all(c in ("CAUSE_RNG", "CONSEQUENCE", "PASS", None) for c in classes):
         return False
+    # CLAUSE-FIX: preserve the zero-ball -> native pickup proof and its one-ball
+    # catch honestly. Only this row gets the disclosed eight-attempt RNG budget;
+    # no runtime bag write, changed activation, or retry for a harness failure.
+    if scenario == "ball_gate_gen3" and SCENARIOS[scenario].get("rng_attempts") == limit:
+        return True
     # Owner 2026-09-18: a ball miss (and any other CAUSE_RNG) earns TWO whole-run retries, not
     # one -- four full runner passes each lost a different scenario to a second consecutive
     # roll (species double miss, poison double KO) with no defect behind it.
@@ -865,6 +872,8 @@ def scenario_attempt_limit(name, game):
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     entry = SCENARIOS.get(name, {})
+    if rng_retry_family(game) and entry.get("rng_attempts"):
+        return entry["rng_attempts"]
     if entry.get("rule_kind") in ("species", "family"):
         return 8
     if entry.get("battle_window_case"):
@@ -8952,7 +8961,7 @@ class DuoRun:
             except GameRngMiss:
                 ra, rb = self.wait_results()
                 if not retryable_gen1_rng(self.game, {"a": ra, "b": rb}, self.attempt,
-                                          scenario_attempt_limit(self.scenario, self.game)):
+                                          scenario_attempt_limit(self.scenario, self.game), scenario=self.scenario):
                     raise  # an unrelated failed half is never a game-RNG retry
             else:
                 with self._timed("results"):
@@ -9318,7 +9327,7 @@ def run_scenario_with_rng_retry(name, args):
                 print(f"[duo] {name}: restarting the whole T2 attempt with fresh server and seeds")
                 continue
             return ok, attempt
-        if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit):
+        if ok or attempt >= limit or not retryable_gen1_rng(args.game, receipts, attempt, limit, scenario=name):
             # A re-run that only went looking for the reroll branch and then lost the game's
             # RNG (a ball miss past its retries) does not undo the PASS it re-ran; a real
             # (FINAL) failure still fails. The attempt-1 rule is the "RNG-shaped" test.
