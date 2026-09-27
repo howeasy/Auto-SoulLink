@@ -8304,17 +8304,15 @@ class DuoRun:
         return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
 
     def orchestrate_native_absent_gen3(self):
-        """PLAN P5's clean-vs-companion RR control, with a VALID operation (Codex C4-6b finding 6;
-        the trade port landed at 78908fe8): B boots rom_kind=clean, A the companion build. Each
-        side is sent a well-formed apply_trade -- its slot-1 key as old_key, the PARTNER
-        fixture's slot-1 party record as blob_hex. The companion must stage it natively (the
-        stage op ACKed, the trade FSM past "stage"); the clean cartridge must refuse it and write
-        nothing."""
+        """PLAN P5's clean-vs-companion RR control (Codex C4-6b finding 6), redesigned for the
+        durable trade (RR-DURABLE): B boots rom_kind=clean, A the companion build. Each side is
+        sent the same well-formed apply_prepare -- its slot-1 key as old_key. The companion must
+        answer ok only after its NATIVE pre-save (PREPARE posted, the native save dialog, READY);
+        the clean cartridge must answer ok:false and write nothing."""
         ka, kb = self._gen3_prelude()
         self.go()
-        for inst, own, partner in (("a", ka, "b"), ("b", kb, "a")):
-            self.queue_command(inst, {"cmd": "apply_trade", "slot": 1, "old_key": own[1],
-                                      "blob_hex": self._gen3_party_record_hex(partner, 1),
+        for inst, own in (("a", ka), ("b", kb)):
+            self.queue_command(inst, {"cmd": "apply_prepare", "slot": 1, "old_key": own[1],
                                       "token": f"native_absent_{inst}"})
         self._native_absent_keys = {"a": ka[1], "b": kb[1]}
 
@@ -9070,29 +9068,27 @@ class DuoRun:
                                    "identity-less team was refused with stale_battle_id")
 
     def assert_native_absent_gen3_saved(self, results):
-        """native_absent_gen3: the same valid apply_trade, two outcomes. A (companion): the client
-        queued it, wrote through the armed native window, and the stage op completed (NATIVE_
-        STAGED: the FSM left "stage"). B (clean): the client's refusal line, no native write, zero
-        writes. Neither side saves."""
-        ka, kb = self._native_absent_keys["a"], self._native_absent_keys["b"]
+        """native_absent_gen3 (RR-DURABLE): the same valid apply_prepare, two outcomes. A
+        (companion): a native write AFTER the command (the PREPARE post; the link panel may write
+        native before it), the native pre-save (gSaveCounter advanced), the producer READY, and
+        apply_ready ok:true. B (clean): apply_ready ok:false, no write at all. Neither side saves."""
         native_write = r"(?m)^\[client\] \[SLink-gen3\] write native "
-        queued = rf"(?m)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued"
-        staged = r"(?m)^NATIVE_STAGED phase=\S+ writes=[1-9]"
-        # the trade's own native write FOLLOWS the queued line: the companion's link panel
-        # (RX link_panel) legitimately writes native before any trade arrives (live 156a521f),
-        # so the first `write native` line proves nothing about the trade
-        trade_write = (rf"(?ms)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued.*?"
-                       r"^\[client\] \[SLink-gen3\] write native .*?^NATIVE_STAGED phase=\S+ writes=[1-9]")
+        prepared = r"(?m)^NATIVE_PREPARED phase=2 writes=[1-9]"
+        after_cmd = r"(?ms)^RX apply_prepare\b.*?^\[client\] \[SLink-gen3\] write native "
+        ready_ok = r'(?m)^TX apply_ready - .*"ok":true'
         problems = gen3_receipt_problems(
-            "a", results["a"], required=[r"(?m)^RX apply_trade\b", queued, native_write, staged, trade_write])
-        refused = (rf"(?m)^\[client\] \[SLink-gen3\] apply_trade refused: no trade path on this "
-                   rf"cartridge \(nothing written\) {re.escape(kb)}")
+            "a", results["a"], required=[r"(?m)^RX apply_prepare\b", after_cmd, ready_ok, prepared],
+            forbidden=[r'(?m)^TX apply_ready - .*"ok":false'])
+        m = re.search(r"(?m)^PRESAVE_COUNTER before=(\d+) after=(\d+)$", results["a"])
+        if not m or int(m[2]) <= int(m[1]):
+            problems.append("a: the native pre-save never advanced gSaveCounter "
+                            f"({m[0] if m else 'no PRESAVE_COUNTER line'})")
         problems += gen3_receipt_problems(
-            "b", results["b"], required=[r"(?m)^RX apply_trade\b", refused, r"(?m)^WRITES 0$",
-                                         r"(?m)^PROBE_SETTLED writes=0$"],
-            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write "])
-        self._gen3_raise(problems, "native_absent: the companion staged the valid trade natively; "
-                                   "the clean cartridge refused it and wrote nothing")
+            "b", results["b"], required=[r"(?m)^RX apply_prepare\b", r'(?m)^TX apply_ready - .*"ok":false',
+                                         r"(?m)^WRITES 0$", r"(?m)^PROBE_SETTLED writes=0$"],
+            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write ", r'"ok":true'])
+        self._gen3_raise(problems, "native_absent: the companion answered the valid prepare only after "
+                                   "its native pre-save; the clean cartridge refused it and wrote nothing")
 
     def _run_oracle(self, results):
         """Revalidate the family contract and run its injected evidence stages.
