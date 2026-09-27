@@ -158,9 +158,16 @@ The three NAT-LEGS kinds (evolve/npc_trade/poison_faint -- S-8/S-9/S-11 in
   `settle_trade`/`st.trade` bookkeeping never emits the `npc_trade` key_change (240 frames of
   mashing A time out with the flag already true and 0 key_change sent). This is a bug in shared
   client code, outside the NAT-LEGS-3 card's lease; reported for its owner to fix and re-run.
-- **evolve_gen3:** not attempted. Its oracle (`assert_evolve_gen3_saved`) hardcodes species 8
-  (WARTORTLE) for FR/LG's Squirtle -> Wartortle; Emerald's own SYNTH fixture (`emerald_evolve.sav`,
-  Mudkip -> Marshtomp) would need a species-aware oracle rewrite, out of this card's lease.
+- **evolve_gen3 ✓ (NAT-LEGS-4):** PASS. `assert_evolve_gen3_saved` and `scenario_gen3_evolve.lua`
+  were made species-aware (`EVOLVE_FACTS`/the `EVOLVE` table, keyed by game/title) instead of a
+  Wartortle-only constant, and the row's `target_by_game` now points Emerald at the already-committed
+  `emerald_evolve.sav` (SYNTH Lv15 Mudkip one EXP short of Lv16, card E2-FIX-VARIANTS round 3; B
+  idles on the already-committed `emerald_town_b.sav`). The wild win, level-up and evolution scene
+  ran natively (`SIGNAL evolve_species_store`, no `key_change`); the server's `links.json` half read
+  species 284 (MARSHTOMP) and A saved a Lv16 Marshtomp under the same key. `_gen3_area_control` (the
+  no_catch dead-zone guard) was hardcoded to FR/LG's Kanto areas; made per-game-family and pointed at
+  `route_102` for Emerald. Receipt `docs/gen3/probes/fc_evolve_gen3_emerald_58a4f1fe.txt`; FR/LG
+  re-run clean at the same cut (`fc_evolve_gen3_fr_as_a_58a4f1fe.txt`).
 
 ### EG4 candidate final cut (2026-09-26; `claude/gen3-emerald-rc2`)
 
