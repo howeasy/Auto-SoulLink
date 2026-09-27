@@ -151,3 +151,11 @@ server final, link migration and cold reload. Lua producer-shaped tests exercise
 the actual observer and offer bridge without an emulator. Full-suite results
 will be recorded after the committed cut is tested with `g3-env.sh` and
 `-o tmp_path_retention_policy=failed`.
+
+The first full gate stopped on the producer merge's stale RR profile `_src`
+citations (7,525 passed, 1,202 skipped before fail-fast). Regenerating profiles
+changed only RR's 58 source-line references: a recursive comparison excluding
+`_src`/`source` proved every gameplay value identical, and the FR/LG and Emerald
+profiles were byte-equivalent as data. All 78 profile tests and the generated
+write-checkpoint check then passed. This metadata repair is kept separate from
+the carrier implementation.
