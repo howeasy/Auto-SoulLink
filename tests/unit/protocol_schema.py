@@ -35,9 +35,11 @@ EVENTS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
                "area_id": "str", "loc_name": "str",
                "rom_sha1": "str", "caps": "dict", "rom_content": "dict",
                "artifact_kind": "str", "foundation": "str", "trade_prepare": "bool",
+               "party_hidden": "bool", "trade_outstanding": "list",
                # card C5-10b capability declaration
                "battle_identity": "bool"}),
     "tick": ({}, {"has_pokeballs": "bool", "party": "list", "area_id": "str", "loc_name": "str",
+                  "party_hidden": "bool",
                   "trade_blocked": "bool", "awaiting_save": "bool",
                   "in_battle": "bool", "is_trainer_battle": "bool", "trainer_id": "int",
                   "opponent_name": "str", "opponent_class": "str", "enemy_party": "list",
@@ -124,7 +126,7 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "unresolve_area": ({"area_id": "str"}, {}),
     "dead_keys": ({"keys": "list"}, {}),  # INV-CLIENT-2: every accepted hello; the GB clients REPLACE their re-zero set
     "config": ({}, {"overworld_presence": "bool", "native_messages": "bool", "native_sounds": "bool",
-                    "battle_calc": "bool", "pc_trade_npc": "bool"}),
+                    "battle_calc": "bool", "pc_trade_npc": "bool", "run_id": "str"}),
     "rebuild_start": ({"text": "str", "keys": "list"}, {}),
     "rebuild_done": ({}, {}),
     "replace_rival_team": ({"trainer_id": "int", "n": "int", "blobs_hex": "list"},
@@ -138,6 +140,7 @@ COMMANDS: dict[str, tuple[dict[str, str], dict[str, str]]] = {
     "apply_prepare": ({"token": "str", "slot": "int", "old_key": "key"}, {}),
     # MAJOR-4: the applying watchdog asks a silent prepared side to pull an unpicked APPLY
     "withdraw_trade": ({"token": "str"}, {}),
+    "trade_final": ({"token": "nonempty_str", "verdict": "trade_verdict"}, {"epoch": "epoch"}),
     "ghost_pos": ({}, {}),
     "link_panel": ({"rows": "list"}, {}),
     # one-way replies to key_change (docs/protocol.md §5): no ACKS row, nothing to answer
@@ -166,6 +169,10 @@ DEFERRED = {"box_mon", "party_mon", "memorialize", "apply_trade"}
 def _check_type(value, kind: str) -> bool:
     if kind == "str":
         return isinstance(value, str)
+    if kind == "nonempty_str":
+        return isinstance(value, str) and bool(value)
+    if kind == "trade_verdict":
+        return isinstance(value, str) and value in ("committed", "rolled_back", "split", "resolved")
     if kind == "int":
         return isinstance(value, int) and not isinstance(value, bool)
     if kind == "num":
@@ -180,7 +187,8 @@ def _check_type(value, kind: str) -> bool:
         return isinstance(value, str) and bool(KEY_RE.fullmatch(value))
     if kind == "hex":
         return isinstance(value, str) and bool(HEX_RE.fullmatch(value)) and len(value) > 0
-    if kind == "battle_id":
+    if kind in ("battle_id", "epoch"):
+        # Distinct domains: a trade epoch is an opaque originating lease, not a battle ID.
         return isinstance(value, int) and not isinstance(value, bool) and 0 < value < 2 ** 32
     if kind == "session":
         return isinstance(value, str) and 0 < len(value) <= 16 and bool(SESSION_RE.fullmatch(value))
@@ -198,7 +206,7 @@ def _validate(kind_word: str, name: str, table: dict, msg: dict, *, extra_ok: bo
         elif not _check_type(msg[field], ftype):
             problems.append(f"{name}: {field!r} should be {ftype}, got {msg[field]!r}")
     for field, ftype in optional.items():
-        if field in msg and msg[field] is not None and not _check_type(msg[field], ftype):
+        if field in msg and (msg[field] is not None or ftype == "epoch") and not _check_type(msg[field], ftype):
             problems.append(f"{name}: {field!r} should be {ftype}, got {msg[field]!r}")
     for left, right in PAIRED_FIELDS:
         if (left in msg) != (right in msg):

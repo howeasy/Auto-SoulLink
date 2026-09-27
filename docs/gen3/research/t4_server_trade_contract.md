@@ -30,7 +30,8 @@ query/offer/eligible-mask protocol remains unchanged.
 
 ## A. Admin resolution does not authorize unsaved RAM
 
-Admin `resolve_trade` queues no terminal client command. There **is** a server-driven lease
+At the base cut, admin `resolve_trade` queued no terminal client command. T4-R3 now adds
+a bookkeeping-only `trade_final` receipt; it does not clear a reload/hidden barrier. There **is** a server-driven lease
 command, `withdraw_trade`, in the applying watchdog (`server/state.py:715-720` at the base;
 Gen 1 `lua/gen1/client.lua:2128-2135`, Gen 2 `lua/gen2/client.lua:799-807`). Admin resolution
 deliberately does not reuse it. Withdrawal can cancel an unpicked APPLY; it cannot make an
@@ -269,3 +270,41 @@ The first failed full-run output is retained separately. Final targeted controls
 T4 test file; 197 trade/state/client/board tests; 90 accessibility/banner/T4 tests after the
 macro-import fix. Final source-citation and whitespace checks pass. No client/producer or READY
 change was made, and no physical trade qualification is claimed.
+
+
+## T4-R3: finalized-token bookkeeping
+
+Added on the coordinator's 2026-09-27 instruction after T4-R2; Emerald-2 consumes this shape.
+
+- TCP `config` adds `run_id` only for `supports_trade_recovery()` adapters, passing through
+  the server's existing `_run_id`. An unmanaged server sends an empty string; it does not
+  invent a shared or random identity. The client must require a nonempty ID before binding
+  a durable journal. This is the existing run label, not a new reset/rollback nonce.
+- `trade_final {token, epoch?, verdict}` is one-way bookkeeping, not a native write command.
+  Natural paired settlement uses `committed` / `rolled_back`; a direct split uses `split`;
+  explicit admin resolution uses `resolved` regardless of its selected link outcome.
+- Each side retains its newest **256** final tokens and verdicts in `links.json.trade_finals`.
+  The terminal record is added before the settlement save. Receipts are queued only after
+  a successful save, never on an unpersisted final. Unknown/evicted/malformed records do not
+  become final merely because the client asks about them.
+- A recovery hello listing a known-final token receives that side's receipt with its validated,
+  normalized epoch echoed. The run's `config` precedes final receipts. Repeated declarations
+  coalesce duplicate receipts. Wrong-save hellos do not receive queued or replayed finals.
+- Neither remembering nor sending a final changes `party_hidden`, `trade_recovery_pending`,
+  `hello_only`, or a pending trade's verdict. An old final receipt cannot settle a new trade.
+  The client may retire the journal's bookkeeping entry, but must retain any separately
+  required durable reload barrier until independently qualified recovery.
+- Gen 1/2 emit no `run_id` extension or `trade_final`, persist no final ledger, and retain
+  identical command/state bytes. All ten normal/rejected-hello replays still match the original
+  `cd5c1697` modules and the hashes in the R1/R2 tables above.
+
+R3 controls in `test_gen3_trade_server.py`: configuration opt-in and unmanaged identity;
+committed/rolled-back/admin/direct-split receipts; epoch-preserving restart replay without
+barrier release; per-side retention/eviction; save failure suppressing premature receipts;
+wrong-save and old-token isolation; and one-way command/schema validation. The protocol
+schema exposes the new config field and command and the already-agreed recovery hello fields.
+Client/native/READY files remain unchanged. Full verification follows in the R3 receipt.
+
+R3 targeted verification: **269 passed in 6.24s** across trade/state/client, wire schema,
+hello, board and accessibility tests. Final source citations and whitespace checks pass;
+the full suite will be recorded against the committed R3 cut.
