@@ -15,6 +15,9 @@ binding for the admitted artifact. Resolving `native.BASE` from that target's
 `SLINK_TARGET_ARENA_BASE` is an **open prerequisite**: all shipped target BASE macros are
 currently zero, and a diagnostic candidate must not be substituted. The binding also
 needs the matching per-title entry/safety routing and capability qualification.
+The qualified-target emitter must also include **every** `SLINK_OP_*` key from the
+canonical ABI. That positive READY=1 emitter and its synthetic control remain an open
+prerequisite; the current function deliberately refuses READY=1 rather than guessing a base.
 
 R4 checks pin every mailbox field used by the client, compare profile opcodes with
 the canonical `abi.h` enum, and compare Python layout facts with host-C

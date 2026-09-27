@@ -362,16 +362,17 @@ There is no `hud` command; the name is `hud_show`.
 Optional `phone:str` tag (O-29, `docs/gen2/reviews/P4_5_PHONE_CALLS_PLAN_2026-09-23.md` §3): the
 partner's `force_faint`/`force_explode` from a battle death carries `"fallen"` (never an
 `identity_lost` retirement), both dead-zone `msgbox`es carry `"dead_zone"`, and both "linked!"
-`msgbox`es of the run's first two-sided link carry `"first_link"`. Only the Gen 2 client acts on it
-(`lua/gen2/phone.lua`, a Pokégear call on a cartridge advertising `SLINK_CAP_PHONE`); every other
-client ignores the key.
+`msgbox`es of the run's first two-sided link carry `"first_link"`. Gen 2 consumes it through
+`lua/gen2/phone.lua` on a cartridge advertising `SLINK_CAP_PHONE`. The Emerald v2 consumer in
+`lua/gen3/native.lua` uses `SLINK_CAP_MATCH_CALL` and a bound epoch; its production binding is
+still held until the Emerald companion qualifies. FR/LG, RR, and unpatched clients ignore it.
 
 Optional `phone_data:dict` (PHONE-NAMES), only beside a `phone` tag and relative to the receiver:
 `{trainer_name:str, caller_mon?:{species_id:int, nickname?:str}, receiver_mon?:{species_id:int, nickname?:str}}`.
 The caller is the other player. `fallen` carries the caller's fainted mon and the receiver's linked
 mon, `first_link` the two newly linked mons, `dead_zone` the trainer name only. Each recipient gets
-its own object. When the caller has no trainer name the server omits `phone_data`, and the Gen 2
-client then rings the fixed-text call.
+its own object. When the caller has no trainer name the server omits `phone_data`, and the
+consuming Gen 2 or Emerald v2 client uses the fixed-text call.
 
 ### 5.0 Gen 1 LINK PANEL mailbox (Red/Blue companion patch)
 

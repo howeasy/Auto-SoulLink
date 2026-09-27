@@ -1643,7 +1643,10 @@ function Client.new(p)
         function session:handle_command(cmd)
             -- Same optional tag seam as gen2/client.lua: the original command
             -- still runs, and unsupported cartridges silently ignore the tag.
-            if cmd.cmd ~= "noop" and cmd.phone ~= nil then native:request_match_call(cmd.phone, cmd.phone_data) end
+            if cmd.cmd ~= "noop" and cmd.phone ~= nil then
+                local ok, why = pcall(native.request_match_call, native, cmd.phone, cmd.phone_data)
+                if not ok then log("match_call request failed: " .. tostring(why)) end
+            end
             return base_command(self, cmd)
         end
     end

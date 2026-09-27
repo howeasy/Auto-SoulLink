@@ -18,6 +18,7 @@
 -- service() call while the caller's own job is refused at its guard.
 local N = {}
 local CALL_IDS = {fallen=1, dead_zone=2, first_link=3}
+local CALL_BIND_ATTEMPTS = 3
 local O = {abi=4, opcode=6, seq=8, status=10, ack=12, reason=14, args=16, result=48}
 local BUSY, OK, FAIL = 1, 2, 3
 -- ST_FAIL reason words (patch/src/handlers.c owns the numbering; ADDRESSES.md lists both sides).
@@ -79,6 +80,7 @@ function N.new(profile, deps)
     local reads = assert(deps.reads, "Gen 3 read facade required")
     local queue, pending, poisoned, posting = {}, nil, nil, false
     local call_queued, call_active, call_wanted_epoch
+    local call_handshake_job, call_binding_attempts, call_binding_failed = nil, 0, false
     local call_first_posted, call_delivered_at = false, nil
     local log = deps.log or function() end
     -- post-conditions awaited after an ACK (the rival swap's engine snapshot)
@@ -300,6 +302,10 @@ function N.new(profile, deps)
     -- Soul Link Match Call mirrors gen2/phone.lua's optional tags and scheduling.
     -- The native Emerald producer owns the contact, text and safe UI entry.
     local cc = v2 and v2.constants
+    local call_title = profile.titles and profile.titles.emerald
+    local species_table = call_title and call_title.rom_tables and call_title.rom_tables.gSpeciesInfo
+    local species_count = species_table and species_table.count
+    local call_species_limit = integer(species_count, 0x10000) and species_count > 1 and species_count - 1 or 0
     local call_known_caps = 0
     for name, value in pairs(cc or {}) do
         if name:match("^SLINK_CAP_") then call_known_caps = call_known_caps | value end
@@ -334,6 +340,7 @@ function N.new(profile, deps)
     end
     function self:match_call_capable()
         if not call_supported() or poisoned or session_epoch == 0 then return false end
+        if call_binding_failed or (call_wanted_epoch and call_wanted_epoch ~= session_epoch) then return false end
         local mb = self:mailbox()
         return mb ~= nil and mb.session_epoch == session_epoch
     end
@@ -341,6 +348,8 @@ function N.new(profile, deps)
         if not v2 or profile.pack ~= "gen3_emerald" or deps.artifact_kind ~= "companion"
            or not integer(value, 0xFFFFFFFF) or value == 0 then return false end
         if call_wanted_epoch ~= value then call_queued, call_active = nil, nil end
+        if call_handshake_job then self:cancel(call_handshake_job); call_handshake_job = nil end
+        call_binding_attempts, call_binding_failed = 0, false
         call_wanted_epoch = value
         return true
     end
@@ -366,7 +375,7 @@ function N.new(profile, deps)
         for _, item in ipairs({{"caller_mon", "caller_species", "caller_nick"},
                                {"receiver_mon", "receiver_species", "receiver_nick"}}) do
             local mon = type(data[item[1]]) == "table" and data[item[1]] or {}
-            local species = integer(mon.species_id, 0xFFFF) and mon.species_id > 0 and mon.species_id or 0
+            local species = integer(mon.species_id, call_species_limit) and mon.species_id > 0 and mon.species_id or 0
             row[rf[item[2]]+1], row[rf[item[2]]+2] = species & 0xFF, species >> 8
             for i, b in ipairs(call_name(mon.nickname, 11) or {}) do row[rf[item[3]]+i] = b end
         end
@@ -386,8 +395,10 @@ function N.new(profile, deps)
             local after = io.read_u16(base + wf.revision)
             if before ~= after or before % 2 ~= 0 or word(raw, wf.revision, 2) ~= before then return nil end
             if before == 0 then
-                for i=1,32 do if raw[i] ~= 0 then return nil end end
-                return {revision=0, phase=cc.SLINK_CALL_EMPTY}
+                if raw[wf.phase+1] == cc.SLINK_CALL_EMPTY then
+                    return {revision=0, phase=cc.SLINK_CALL_EMPTY}
+                end
+                return nil
             end
             return {revision=before, epoch=word(raw,wf.session_epoch,4), seq=word(raw,wf.seq,2),
                 phase=raw[wf.phase+1], event=raw[wf.event+1], reason=word(raw,wf.reason,2),
@@ -423,9 +434,21 @@ function N.new(profile, deps)
     local function service_calls()
         if not call_supported() or poisoned then call_queued, call_active = nil, nil; return end
         if call_wanted_epoch and session_epoch ~= call_wanted_epoch then
-            self:set_session_epoch(call_wanted_epoch)
+            if call_binding_failed then return end
+            if call_binding_attempts >= CALL_BIND_ATTEMPTS then
+                if call_handshake_job then self:cancel(call_handshake_job); call_handshake_job = nil end
+                call_binding_failed = true
+                log("[SLink-gen3] match call handshake exhausted; explicit rebind required")
+                return
+            end
+            call_binding_attempts = call_binding_attempts + 1
+            -- Epoch is only a host field write, not native acceptance. Never
+            -- displace an old UI's owned record/witness while attempting it.
+            if not call_slot_free(call_witness()) then return end
+            if not call_handshake_job then call_handshake_job = self:set_session_epoch(call_wanted_epoch) end
             return
         end
+        call_handshake_job, call_binding_attempts = nil, 0
         if not self:match_call_capable() then call_queued, call_active = nil, nil; return end
         local now = io.framecount()
         if call_active then
@@ -433,7 +456,7 @@ function N.new(profile, deps)
             if active.epoch ~= session_epoch then call_queued, call_active = nil, nil; return end
             if not active.acked then return end
             local w = call_witness()
-            if not w or w.revision == active.before_revision or w.epoch ~= active.epoch
+            if not w or w.revision == 0 or w.revision == active.before_revision or w.epoch ~= active.epoch
                or w.seq ~= active.job.seq or w.event ~= active.id then return end
             if w.phase == cc.SLINK_CALL_DELIVERED or w.phase == cc.SLINK_CALL_COMPLETE then
                 if not active.delivered then

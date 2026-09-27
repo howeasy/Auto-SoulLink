@@ -36,7 +36,8 @@ T2 confirmed these semantics against `patch/src/trade_targets/abi.h` at `7660760
 - `OP_MATCH_CALL` uses `args[0]=event` (fallen=1, dead_zone=2, first_link=3), other args zero.
   The 36-byte `SlinkCallRecordV2` is staged at `BASE+TEXT_OFFSET` before opcode publication.
 - Trainer and nickname fields are bounded, glyph-only, and terminated with 0xFF. Species are
-  u16, not Gen 2 bytes. Missing usable trainer data clears names and selects the generic call.
+  u16 bounded by the pack's species table, not Gen 2 bytes. Missing usable trainer data clears
+  names and selects the generic call.
   The receiver nickname is transported because the ABI includes it; it does not change
   the Gen 2 receiver-species wording.
 - `has_names=1` means a usable trainer, not that both mons are present. Zero species means
@@ -51,11 +52,18 @@ T2 confirmed these semantics against `patch/src/trade_targets/abi.h` at `7660760
   A foreign-epoch open UI blocks a new record and is never attributed to the current host.
 - Native retains old open-UI text through host epoch rollover and preserves its cooldown.
   Real game reset clears pending native state; neither side replays the old call.
+- An occupied-slot refusal may use a prompt mailbox FAIL without replacing the older owned
+  record/witness. It refuses only the new request and provides no delivery evidence.
 
 ## Binding and evidence limits
 
 The client binds a nonzero u32 from the existing bootstrap session-counter word; an absent
 or unusable seed invents no epoch. The native queue owns the handshake and all staging.
+This handshake is a host field write, not a native acknowledgement. Automatic attempts require
+a coherent free call slot, are limited to three attempts, and stop with a named log on exhaustion.
+Explicit rebind repeats the ownership checks. Acknowledged handshake/producer acceptance is a
+separate T2 prerequisite; matching readback alone does not prove native acceptance. Phone-path
+errors are logged without dropping the original tagged command.
 The production generator still emits no READY=1 v2 binding; BASE resolution and qualified
 per-title entry/safety routing remain prerequisites in `T3_NATIVE_V2_STATUS.md`.
 

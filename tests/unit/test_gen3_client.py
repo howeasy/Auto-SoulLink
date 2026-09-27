@@ -492,6 +492,24 @@ def test_clean_client_does_not_forward_phone_tags_to_an_injected_binder():
     assert calls == []
 
 
+def test_phone_forwarding_error_never_drops_the_original_force_faint(monkeypatch):
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "00000007ABCDEF01")
+
+    def binder(lua):
+        def failed(*_):
+            raise RuntimeError("synthetic phone path failure")
+        return lua.table(service=lambda *_: True, idle=lambda *_: True,
+                         trade_capable=lambda *_: False, request_match_call=failed)
+
+    w = World("gen3_rr", "radical_red", "companion", native=binder)
+    w.set_party(party(A, B))
+    w.step_to(60)
+    w.command(cmd="force_faint", key=KA, phone="fallen")
+    w.step(3)
+    assert w.party_hp(0) == 0
+    assert any("match_call request failed" in line for line in w.logs)
+
+
 # ── in-battle writes (owner ruling 2026-09-23) ────────────────────────────────────────────
 
 def test_a_bench_faint_lands_immediately_and_its_faint_is_not_reported():

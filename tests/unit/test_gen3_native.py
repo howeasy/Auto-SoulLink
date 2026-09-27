@@ -35,6 +35,7 @@ class World:
         self.bus = {}
         self.frame = 10
         self.events = []
+        self.logs = []
         self.output = []
         self.safe = True
         self.check_native_idle = False
@@ -69,6 +70,7 @@ class World:
             io=io, writes=self.writes, reads=self.reads, initial_seq=initial_seq,
             artifact_kind=kind,
             timeout_frames=5, send=lambda event, fields: self.events.append((event, fields)),
+            log=self.logs.append,
             in_battle=lambda: self.battle,
             panel_closed=lambda: (True, self.panel_result)))
         if scene_capability_model:
@@ -321,6 +323,7 @@ def test_match_call_stages_bounded_u16_record_before_publishing_opcode():
     assert [a for a, _ in w.output[-2:]] == [w.n["BASE"] + 6, w.n["BASE"] + 7]
     assert w.read(w.n["BASE"] + 6, 2) == 32
     assert w.native.trade_capable(w.native) is False
+    assert all(a < w.n["BASE"] + 0xE00 for a, _ in w.output), "native-owned record/witness was written"
 
 
 @pytest.mark.parametrize("data", [None, {}, {"trainer_name": "\u2603"}])
@@ -351,6 +354,56 @@ def test_match_call_never_invents_an_epoch_without_a_session_binding():
     assert request_call(w) is False
     w.service()
     assert w.output == []
+
+
+def test_match_call_species_are_bounded_by_the_pack_species_table():
+    w = match_call_world()
+    request_call(w, data={**CALL_DATA, "caller_mon": {"species_id": 412}, "receiver_mon": {"species_id": 65535}})
+    w.service()
+    assert w.raw(w.n["TEXT_BUF"] + 2, 4) == bytes(4)
+
+
+def test_empty_zero_revision_witness_does_not_require_erased_stale_fields():
+    w = match_call_world()
+    call_witness(w, 0, epoch=999, seq=123, event=3, revision=0, delivered_frame=555)
+    request_call(w)
+    w.service()
+    assert len(call_posts(w)) == 1
+
+
+def test_automatic_match_call_handshake_stops_after_bounded_unsafe_attempts():
+    w = World(abi=2, pack="gen3_emerald")
+    w.put(w.n["BASE"] + 0x40, 0x40, 4)
+    w.safe = False
+    w.native.bind_match_call_session(w.native, 7)
+    for _ in range(10):
+        w.service()
+    w.safe = True
+    for _ in range(10):
+        w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 0 and w.output == []
+    assert sum("match call handshake exhausted" in line for line in w.logs) == 1
+    w.native.bind_match_call_session(w.native, 7)  # explicit recovery
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 7
+
+
+def test_automatic_epoch_write_never_displaces_an_old_open_call():
+    w = World(abi=2, pack="gen3_emerald")
+    w.put(w.n["BASE"] + 0x40, 0x40, 4)
+    w.put(w.n["BASE"] + 0x44, 6, 4)
+    call_witness(w, 2, epoch=6, seq=55, event=1, revision=2)
+    w.native.bind_match_call_session(w.native, 7)
+    for _ in range(10):
+        w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 6 and w.output == []
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    assert w.output == [], "rebind must repeat the ownership check"
+    call_witness(w, 4, epoch=6, seq=55, event=1, revision=4)
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    assert w.read(w.n["BASE"] + 0x44, 4) == 7
 
 
 def call_posts(w):
@@ -453,6 +506,22 @@ def test_match_call_refusal_starts_no_gap():
     assert len(call_posts(w)) == 2
 
 
+def test_occupied_slot_fail_ack_does_not_attribute_the_older_owned_witness():
+    w = match_call_world()
+    request_call(w, "fallen")
+    w.service()
+    call_witness(w, 2, epoch=6, seq=55, event=1, revision=2)
+    w.ack(status=3)  # prompt refusal; producer preserves the older UI's witness
+    w.service()
+    request_call(w, "dead_zone")
+    w.service()
+    assert len(call_posts(w)) == 1
+    assert not any("delivered" in line for line in w.logs)
+    call_witness(w, 4, epoch=6, seq=55, event=1, revision=4)
+    w.service()
+    assert len(call_posts(w)) == 2
+
+
 def test_match_call_priority_and_newest_equal_record_win_before_posting():
     w = match_call_world()
     w.safe = False
@@ -477,6 +546,35 @@ def test_match_call_first_link_is_once_even_across_capability_loss():
     w.frame += 20000
     w.service()
     assert request_call(w, "first_link") is False
+
+
+@pytest.mark.parametrize("failure,burned", [("stage", False), ("publish", True)])
+def test_first_link_once_flag_burns_only_when_publication_is_attempted(failure, burned):
+    class FailingCallWorld(World):
+        fault = None
+
+        def write(self, address, value, *_):
+            target = self.n["TEXT_BUF"] + 5 if self.fault == "stage" else self.n["BASE"] + 7
+            if self.fault and address == target:
+                raise RuntimeError("synthetic call write failure")
+            super().write(address, value)
+
+    w = FailingCallWorld(abi=2, pack="gen3_emerald")
+    w.put(w.n["BASE"] + 0x40, 0x40, 4)
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    w.fault = failure
+    request_call(w, "first_link")
+    w.service()
+    w.fault = None
+    w.put(w.n["BASE"] + 6, 0, 2)
+    w.put(w.n["BASE"] + 10, 0, 2)
+    w.put(w.n["BASE"] + 0x44, 0, 4)
+    w.native.bind_match_call_session(w.native, 7)
+    w.service()
+    assert w.native.match_call_capable(w.native) is True
+    assert request_call(w, "first_link") is (not burned)
+    assert request_call(w, "fallen") is True
 
 
 def test_match_call_drops_queued_and_inflight_on_native_reset_without_replay():
