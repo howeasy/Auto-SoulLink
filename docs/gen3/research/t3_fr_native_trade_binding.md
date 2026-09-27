@@ -119,3 +119,38 @@ The red control reproduced that gap. Native reconciliation now also requires
 `journal:precommit_unchanged(...) == true`. The final focused suite is **319
 passed in 7.00s**. The first full-suite attempt was interrupted at 10% to add
 this guard; it is not counted as a completed verification run.
+
+
+## Completion receipt — 2026-09-27
+
+Implementation: `69c811d7141b9bf8ba0eb4bbdf94df7ba471577e`; journal ownership
+follow-up: `d1dd6c51c55d69f4347b0918856de8700041226c`.
+Source stayed at the latter commit throughout the completed full run.
+
+```text
+source /c/slink-wt/g3-env.sh
+python -m pytest tests/unit -q -p no:randomly -n 2 --dist=loadfile --maxfail=1
+14889 passed, 1521 skipped in 1193.78s (0:19:53)
+Exit code: 0
+```
+
+The run used process-local `TEMP`, `TMP`, and `TMPDIR` set to
+`D:/slink-wt/g3-t3-bind-fr-test-temp`, with pytest's default temporary-directory
+management (no `--basetemp`). Two earlier attempts on C: were invalidated by
+ENOSPC and are not counted as verification. The source worktree stayed at
+`C:/slink-wt/g3-t3-bind-fr`; no branch/worktree move occurred. The independent
+client regression also passed **204 tests in 8.43s** after disk recovery.
+
+The parallel runner loaded pytest-xdist from the then-existing per-lane cache
+`C:/slink-wt/g3-rfix/.cache/rf1-test-deps` via `PYTHONPATH`. Owner cleanup removed
+that old worktree after the workers started; reproduction requires pytest-xdist
+in the test environment. The coordinator subsequently directed
+`-o tmp_path_retention_policy=failed` for future invocations; it arrived during
+this already-running gate and was not retroactively applied.
+
+Full output: `.cache/t3-bind-fr-full-unit.txt`; SHA-256
+`1503b5d1620572987a545c9b38760b17ff96fd00cd466e5f347ccc514fb8f043`.
+The two new test files contain **94 controls**. The final focused run passed
+**319 tests**. Skips remain skips; none of these results qualifies a live trade,
+a physical save/reload, arena safety, or production READY. No producer,
+`client.lua`, profile, manifest, or master changes were made.
