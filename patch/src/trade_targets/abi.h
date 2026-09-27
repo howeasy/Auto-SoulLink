@@ -68,6 +68,15 @@ enum SlinkCapability {
     SLINK_CAP_MATCH_CALL = 1u << 6  /* Emerald only; absent => no phone writes */
 };
 enum SlinkStatus { SLINK_ST_BUSY = 1, SLINK_ST_OK = 2, SLINK_ST_FAIL = 3 };
+/* ABI v2 reasons only: RR v1 has legacy meanings for 11/12. Decode by ABI.
+ * CLIENT_TOO_OLD means session_epoch is zero (no v2 handshake); it does not
+ * establish the client's actual version. A nonzero mismatched epoch is IDENTITY.
+ */
+enum SlinkFailureReason {
+    SLINK_REASON_UNCERTAIN = 11,
+    SLINK_REASON_IDENTITY = 12,
+    SLINK_REASON_CLIENT_TOO_OLD = 13
+};
 enum SlinkTradeMilestone {
     SLINK_PRE_SAVE_OK = 0, SLINK_COMMIT_ENTERED = 1,
     SLINK_SCENE_EVOLUTION_DONE = 2, SLINK_POST_SAVE_OK = 3,

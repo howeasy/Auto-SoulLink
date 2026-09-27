@@ -48,6 +48,9 @@ def test_abi_success_requires_native_post_save(tmp_path):
         pytest.skip("host C compiler absent; set SLINK_HOST_GCC")
     source = tmp_path / "abi.c"
     source.write_text('''#include "abi.h"
+_Static_assert(SLINK_REASON_UNCERTAIN == 11, "v2 uncertain reason");
+_Static_assert(SLINK_REASON_IDENTITY == 12, "v2 identity reason");
+_Static_assert(SLINK_REASON_CLIENT_TOO_OLD == 13, "v2 unarmed client reason");
 int main(void) {
     SlinkTradeWitnessV2 w = {0};
     w.visit_flags = SLINK_VISIT_ACCEPTED | SLINK_PRE_SAVE_CONSENT;
