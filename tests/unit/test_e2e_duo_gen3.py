@@ -4600,6 +4600,69 @@ def test_linked_faint_active_masks_growth_for_the_natural_side_only(ph, monkeypa
     assert calls == list(_LFA_TRAINED_MASK[case])
 
 
+def test_the_explode_case_gives_b_no_turn_to_win_on(ph, monkeypatch, tmp_path):
+    """EXPLODE-B-MASK: `active_faint_chain`'s explode branch pins a bare `outcome=\d+`
+    (e2e_duo.py:1818-1819 -- the foe usually falls with the user, so the aftermath may be a win, a
+    send-out, a whiteout or a draw), which reads like a window where B's linked mon could win a
+    battle and bank EXP before its forced KO. It cannot, so `trained` stays narrow:
+      * the explode case falls through `enter` to the SAME `ctx.hunt` as wild
+        (scenario_gen3_linked_faint_active.lua:280), and hunt_encounter walks with enc=false
+        (gen3_scripted_play.lua:1182-1187) -- the first encounter IS the parked battle, never an
+        incidental fight run to a win;
+      * the chain REQUIRES the PARTY HP word at 0 in the faint site (e2e_duo.py:1812-1813) with
+        inputs=0 keys=0x0 across commit->KO (:1810-1811): the mon is fainted IN THE PARTY before
+        the battle ends, and the exp path reads that word -- "Our dead mon gets no further exp",
+        PROVEN against `src/battle_script_commands.c:3282` and the level-up refresh's
+        non-zero-HP guard (`docs/gen3/research/active_faint_in_battle_scope_2026-09-23.md:63,75,250`);
+      * the Explosion plan writes the BATTLE mon's moves/PP (lua/gen3/client.lua:731-735), never
+        the party record, so `moves` is the fixture's here too. The Explosion can hand EXP to a
+        BENCH mon sent out after the KO (the same doc's Explode costs, :163-164), and the oracle
+        only diffs the memorial record of `key`, so that is not B's linked mon.
+    Red on both edges: a receipt whose party HP word is nonzero is refused, and a B memorial record
+    with grown experience is refused -- widening `trained` to the explode case would pass it."""
+    ok, passed, msg, log = ph("explode", "b")
+    assert ok and passed is True, (msg, log)
+    assert re.search(r"^ACTIVE_KO K0 .* last_move=153 inputs=0 keys=0x0 hp_writes=0 attempted=\d+ case=explode$",
+                     log, re.M), log
+    assert re.search(r"^ACTIVE_FAINT_SITE K0 .* battle_hp=0 party_hp=0 counter=0->1$", log, re.M), log
+    required, ordered, forbidden = duo.active_faint_chain("K0", "explode")
+    assert duo.gen3_receipt_problems("b", log, required=required, ordered=ordered, forbidden=forbidden) == [], log
+    assert duo.gen3_receipt_problems("b", log.replace("party_hp=0", "party_hp=128"), required=required,
+                                     ordered=ordered, forbidden=forbidden)
+
+    fixture = _fixture([STARTER, PIDGEY])
+    k = _key(STARTER)
+    grown = _mon(STARTER["personality"], party=False)
+    grown["experience"] = 1261
+    link = [{"a": {"key": k}, "b": {"key": k}, "status": "memorial", "cause": "battle"}]
+
+    def run_for(record):
+        saved = _saved(fixture, 3, [PIDGEY], {(13, 0): record})
+        run, _ = _oracle_stub(monkeypatch, tmp_path, "explode_gen3", {"a": saved, "b": saved}, fixture, link)
+        run._link_keys = {"a": k, "b": k}
+        (tmp_path / "slink.log").write_text(f"[a] faint → force_explode b:{k}\nfully memorialized\n",
+                                           encoding="utf-8")
+        return run
+
+    _, _, _, log_b = ph("explode", "b")
+    receipts = {
+        "a": f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n"
+             f"SAVE_WITNESS_DUMP path=p\n",
+        "b": log_b.replace("K0", k) + f"TX memorialize_done {k} {{}}\n",
+    }
+    real = duo.gen3_memorial_problems
+    calls = []
+    monkeypatch.setattr(duo, "gen3_memorial_problems",
+                        lambda inst, *a, **kw: calls.append((inst, kw.get("trained"))) or [])
+    run_for(_mon(STARTER["personality"], party=False)).assert_explode_gen3_saved(receipts)
+    assert ("a", True) in calls     # A fights naturally in every case, explode included
+    assert ("b", False) in calls    # B's mon is engine-fainted before any EXP award
+
+    monkeypatch.setattr(duo, "gen3_memorial_problems", real)
+    with pytest.raises(RuntimeError, match="differs from the fixture"):
+        run_for(grown).assert_explode_gen3_saved(receipts)
+
+
 def test_linked_faint_active_oracle_keeps_the_last_mon_on_both_sides(ph, monkeypatch, tmp_path):
     """R4 on RR's one-mon rr_battle.sav: A's natural faint and B's Perish KO both leave the lone
     linked mon in its party after game_over (ruling 21); no deposit, link DEAD, no memorial."""
