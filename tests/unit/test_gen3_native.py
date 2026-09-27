@@ -256,16 +256,25 @@ def test_shipped_native_declares_the_complete_trade_transport_interface():
     assert w.native.trade_capable(w.native) is False
 
 
-@pytest.mark.parametrize("with_progress", [False, True])
-def test_shipped_native_refuses_scene_without_durable_capability(with_progress):
+def test_shipped_native_refuses_durable_scene_without_capability():
     w = World()
     results = []
-    progress = (lambda *_: None) if with_progress else None
     result = w.native.transfer(w.native, "scene", w.lua.table(slot=0),
-                               lambda *args: results.append(args), None, progress)
+                               lambda *args: results.append(args), None, lambda *_: None)
     assert result == (None, "durable_trade_unavailable")
     w.service()
     assert results == [("durable_trade_unavailable",)] and w.output == []
+
+
+def test_shipped_v1_scene_probe_without_progress_returns_and_posts_a_job():
+    """Proxy for lua/tests/test_live_tradescene.lua's direct transport call."""
+    w = World()
+    assert w.native.trade_capable(w.native) is False
+    handle = w.native.transfer(w.native, "scene", w.lua.table(slot=0))
+    assert not isinstance(handle, tuple) and handle is not None
+    w.service()
+    assert handle.posted is True
+    assert w.read(w.n["BASE"] + 6, 2) == w.n["OP_TRADE_SCENE"]
 
 
 def test_progress_argument_does_not_block_unrelated_enemy_staging():

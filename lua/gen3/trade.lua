@@ -7,8 +7,12 @@ local function copy(t)
     for k, v in pairs(t) do out[k] = v end
     return out
 end
+-- No current abi.h reason guarantees that SCENE failed before mutation.
+-- Admission here requires a T2 guarantee; tests may inject MODEL-only reasons.
+local PRECOMMIT_REFUSALS = {}
 function T.new(d)
     local native = assert(d.native)
+    local precommit_refusals = copy(d.precommit_refusal_reasons or PRECOMMIT_REFUSALS)
     assert(type(d.prepare_frames) == "number" and d.prepare_frames > 0 and d.prepare_frames % 1 == 0,
            "pack prepare deadline required")
     assert(type(d.apply_frames) == "number" and d.apply_frames > 0 and d.apply_frames % 1 == 0,
@@ -171,11 +175,20 @@ function T.new(d)
             if witness.final_result ~= nil then t.final_result = witness.final_result end
         end
         t.scene_job = native:transfer("scene", {slot=t.slot, token=t.token, old_key=t.old_key, visit=t.visit},
-            function(why)
+            function(why, result_code, reason)
                 if active ~= t or t.scene_attempt ~= attempt or t.phase ~= "scene" then return end
                 if why == "guard:moved" then return post_scene(t) end
                 if why then
-                    if may_commit(t) then return uncertain(t, why) end
+                    local named_refusal = why == "native refused" and token(reason)
+                    if named_refusal and precommit_refusals[reason] == true and not t.commit_entered then
+                        return unchanged(t)
+                    end
+                    if may_commit(t) then
+                        if named_refusal then
+                            why = why .. ": " .. reason .. " (result " .. tostring(result_code) .. ")"
+                        end
+                        return uncertain(t, why)
+                    end
                     return unchanged(t)
                 end
                 result(t)
@@ -260,26 +273,24 @@ function T.new(d)
         end
         flush()
     end
-    function self:reset(reloaded)
+    function self:reset()
         if prepared then
             local t = prepared
             unchanged(t)
         end
         local t = active
         if t and may_commit(t) then
-            t.reload_seen = reloaded ~= false
+            t.reload_seen = true
             declare_uncertain(t, "reset after possible commit")
         elseif t then
             unchanged(t)
         end
-        if reloaded ~= false then
-            for epoch, records in pairs(uncertain_records) do
-                for value, record in pairs(records) do
-                    if not record.reload_seen and ((record.requires_reload and not record.evidence_allowed)
-                       or report_pending(epoch, value)) then
-                        record.reload_seen = true
-                        declare_uncertain(record, "reset after uncertainty")
-                    end
+        for epoch, records in pairs(uncertain_records) do
+            for value, record in pairs(records) do
+                if not record.reload_seen and ((record.requires_reload and not record.evidence_allowed)
+                   or report_pending(epoch, value)) then
+                    record.reload_seen = true
+                    declare_uncertain(record, "reset after uncertainty")
                 end
             end
         end

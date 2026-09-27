@@ -296,7 +296,9 @@ function N.new(profile, deps)
     -- dispatched (same frame-end callback, CPU stopped); false, why drops the job with done(why).
     -- The trade FSM uses it to re-locate the offered mon at the moment a slot op actually posts.
     function self:transfer(step, cmd, done, valid, progress)
-        if step == "scene" and not self:trade_capable() then
+        -- Direct scene probes exercise the legacy transport without claiming
+        -- durable completion. The FSM's milestone path still requires capability.
+        if step == "scene" and progress ~= nil and not self:trade_capable() then
             if done then done("durable_trade_unavailable") end
             return nil, "durable_trade_unavailable"
         end

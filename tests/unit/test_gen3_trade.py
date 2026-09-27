@@ -31,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[2]
 class TradeWorld:
     """ABI-independent cartridge boundary; it publishes explicit typed milestones."""
 
-    def __init__(self):
+    def __init__(self, precommit_refusal_reasons=None):
         self.lua = lupa.LuaRuntime(unpack_returned_tuples=True)
         self.frame = 100
         self.epoch = 1
@@ -79,6 +79,8 @@ class TradeWorld:
             hud=self.lua.table(show=lambda text, *_: self.hud_messages.append(str(text))),
             party=lambda: self.lua.table_from(self.rows, recursive=True), key=lambda m: m.key,
             send=send)
+        if precommit_refusal_reasons is not None:
+            self.deps.precommit_refusal_reasons = self.lua.table_from(precommit_refusal_reasons)
         self.trade = module.new(self.deps)
 
     def command(self, method, **fields):
@@ -179,6 +181,20 @@ def test_reset_keeps_committed_token_and_owes_uncertainty_after_hello():
     assert not [f for n, f in world.events if n == "trade_done" and "new_key" in f]
 
 
+def test_reset_has_no_nonreload_parameter_or_false_bypass():
+    world = TradeWorld()
+    arity = world.lua.eval('function(f) return debug.getinfo(f, "u").nparams end')
+    assert arity(world.trade.reset) == 1  # self only; no reset(false) mode
+    job = world.start()
+    world.progress(job, commit_entered=True)
+    world.trade.reset(world.trade, False)  # Lua ignores surplus args, never weakens reset
+    world.tick()
+    assert world.trade.reloaded(world.trade, "t", world.epoch) is True
+    assert world.trade.hide_party(world.trade) is True
+    assert [f for n, f in world.events if n == "trade_done"] == [
+        {"token": "t", "uncertain": True, "after_reset": True}]
+
+
 def test_reset_before_unpicked_commit_withdraws_without_late_dispatch():
     world = TradeWorld()
     world.prepare()
@@ -201,6 +217,29 @@ def test_native_failure_never_queues_raw_party_replacement():
     assert [j["step"] for j in world.jobs] == ["enemy", "scene"]
     assert [f for n, f in world.events if n == "trade_done"] == [
         {"token": "t", "uncertain": True, "after_reset": True}]
+
+
+@pytest.mark.parametrize("allow,committed,why,reason,unchanged", [
+    (True, False, "native refused", "model_pre_commit_refused", True),
+    (True, False, "native refused", "identity", False),
+    (True, True, "native refused", "model_pre_commit_refused", False),
+    (True, False, "native timeout", "model_pre_commit_refused", False),
+    (False, False, "native refused", "model_pre_commit_refused", False),
+], ids=["listed", "unlisted", "contradictory-commit", "timeout", "production-empty"])
+def test_scene_refusal_uses_only_explicit_precommit_guarantees(allow, committed, why, reason, unchanged):
+    # MODEL-only name. T2 has not defined any production pre-commit guarantee.
+    world = TradeWorld(precommit_refusal_reasons={"model_pre_commit_refused": True} if allow else None)
+    job = world.start()
+    if committed:
+        world.progress(job, commit_entered=True)
+    job["done"](why, 7, reason)
+    world.tick()
+    expected = ({"token": "t", "slot": 0, "new_key": world.rows[0]["key"], "new_species": 0}
+                if unchanged else {"token": "t", "uncertain": True, "after_reset": True})
+    assert [f for n, f in world.events if n == "trade_done"] == [expected]
+    assert world.trade.hide_party(world.trade) is (not unchanged)
+    if not unchanged and why == "native refused":
+        assert len(world.logs) == 1 and reason in world.logs[0] and "result 7" in world.logs[0]
 
 
 def test_post_save_without_tokened_final_result_is_not_success():
