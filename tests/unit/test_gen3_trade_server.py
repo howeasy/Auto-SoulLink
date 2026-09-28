@@ -28,6 +28,13 @@ def _hello(pid, **extra):
             "trade_prepare": True, **extra}
 
 
+# The expansion is REFUSED in production (ruling 39), so the two cases below -- which are
+# about the adapter's trade-recovery surface, not about admission -- can only reach it
+# through the logged TEST-ONLY route the gen3_exp duo lane opens. The refusal itself, and
+# that route, are pinned in test_gen3_expansion_refusal.py, which owns the fixture.
+from tests.unit.test_gen3_expansion_refusal import expansion_routed  # noqa: F401,E402
+
+
 @pytest.mark.parametrize("title,opted_in", [("firered", True), ("emerald", True),
                                             ("firered_rr", True), ("Red", False), ("Crystal", False)])
 def test_config_exposes_existing_run_id_only_to_recovery_clients(tmp_path, title, opted_in):
@@ -383,6 +390,7 @@ def test_ap_adapter_consumes_recovery_extension(tmp_path, title):
     assert not srv.party_details["a"]
 
 
+@pytest.mark.usefixtures("expansion_routed")
 def test_expansion_adapter_refuses_unsupported_recovery_extension_by_name(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))
     msg = _hello("a", rom_type="emerald_expansion_28877d73", party_hidden=True)
@@ -586,6 +594,7 @@ def test_emerald_hidden_empty_hello_is_not_an_empty_party_or_ball_gate_signal(tm
     assert not state.pokeballs_obtained["a"] and state.party_size["a"] == 1
 
 
+@pytest.mark.usefixtures("expansion_routed")
 def test_recovery_capability_refusal_is_not_reported_as_wrong_save(tmp_path):
     from server.board import connection_state
     srv = SLinkServer(data_dir=str(tmp_path))

@@ -13,6 +13,11 @@ from server.adapters.gen4_hgsspt import Gen4Adapter
 from server.manager import _calc_profile_for_run
 from server.server import SLinkServer
 
+# The expansion is REFUSED in production (ruling 39), so the one case below that resolves a
+# run's profile THROUGH the routing table runs inside the logged TEST-ONLY route. The adapter's
+# own calc_profile() needs no seam -- the refusal is about admission, not about the numbers.
+from tests.unit.test_gen3_expansion_refusal import expansion_routed  # noqa: F401,E402
+
 
 def test_rr_adapter_calc_profile():
     assert Gen3Adapter(is_rr=True).calc_profile() == {"gen": 9, "dex": "rr"}
@@ -193,6 +198,8 @@ async def test_calc_tab_shown_for_rr(tmp_path):
     finally:
         await close()
 
+
+@pytest.mark.usefixtures("expansion_routed")
 def test_calc_profile_for_run_expansion_vs_expansion_shows_the_calc():
     """XC1-XC3 wiring check: two expansion adapters agree on gen+dex through
     shared_calc_profile/manager._calc_profile_for_run with zero changes to

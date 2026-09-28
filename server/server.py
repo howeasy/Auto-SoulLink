@@ -5557,8 +5557,14 @@ async def main(host: str, port: int, http_port: int, reset: bool = False,
                native_messages: bool = False, native_sounds: bool = False,
                battle_calc: bool = True, pc_trade_npc: bool = True,
                manager_port: int = 0, verbose: bool = False,
-               wire_log: str = None):
+               wire_log: str = None, test_only_route: list = None):
     _configure_logging(data_dir, verbose)
+    # TEST-ONLY ROUTES (ruling 39). A server process routes only what it was told to: absent
+    # the flag the registry answers for itself and refuses everything an owner ruling refuses.
+    # Each route it IS told to open is logged by set_test_only_routes with production:false, so
+    # a run that used the seam can never be read as a production one.
+    from server.adapters import set_test_only_routes
+    set_test_only_routes(test_only_route or ())
     if reset:
         links_path = os.path.join(data_dir, "links.json") if data_dir else LINKS_PATH
         if os.path.exists(links_path):
@@ -5665,7 +5671,13 @@ if __name__ == "__main__":
     parser.add_argument("--wire-log",     default=None, metavar="DIR",
                         help="Capture every TCP line to DIR/wire_<player>.jsonl (debug/characterization)")
     parser.add_argument("--allow-host",   action="append", default=[], metavar="NAME",
-        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
+                        help="Extra Host name the web UI answers to, e.g. a tunnel name or '*.<tailnet>.ts.net' (repeatable; also SLINK_ALLOWED_HOSTS)")
+    parser.add_argument("--test-only-route", action="append", default=[], metavar="ROM_TYPE",
+                        help="TEST-ONLY: route a ruling-refused rom_type in THIS process "
+                             "(repeatable). The gen3_exp duos use it for the Emerald expansion, "
+                             "which every production server refuses by name (ruling 39). No "
+                             "client message, run registry or Manager row can set it, and each "
+                             "route it opens is logged with production:false")
     args = parser.parse_args()
     allow_hosts(args.allow_host)
     asyncio.run(main(args.host, args.port, args.http_port, args.reset, args.data_dir, args.run_id,
@@ -5681,4 +5693,5 @@ if __name__ == "__main__":
                      pc_trade_npc=args.pc_trade_npc,
                      manager_port=args.manager_port,
                      verbose=args.verbose,
-                     wire_log=args.wire_log))
+                     wire_log=args.wire_log,
+                     test_only_route=args.test_only_route))

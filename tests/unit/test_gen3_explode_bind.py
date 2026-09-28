@@ -59,7 +59,10 @@ def test_title_explode_capability_agrees_with_the_manager(title):
     assert option_support("explode_mode", [title, title])["ok"] is True
 
 
-@pytest.mark.parametrize("title", ("firered_ap", "emerald_expansion_28877d73", "crystal"))
+# The expansion was the third negative control here. Ruling 39 refuses that cartridge by
+# name, so it can never become a Manager run and this gate is never asked about it -- see
+# tests/unit/test_gen3_expansion_refusal.py.
+@pytest.mark.parametrize("title", ("firered_ap", "crystal"))
 def test_explode_opt_in_does_not_enable_other_cartridges(title):
     from server.manager import option_support
 

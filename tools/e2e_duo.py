@@ -2818,6 +2818,13 @@ GAMES = {
         "scenario_prefix": "gen3_",
         "oracle_required": True,
         "save_witness": "check_save_witness_gen3",
+        # The SERVER's half of the same TEST-ONLY seam, for the same reason and the same
+        # receipt rule (ruling 39): production refuses this rom_type by name, so the server
+        # has to be told to route it, and the only process told is this one. It is a CLI
+        # flag, not an env var, so no other lane sharing this machine's environment can
+        # inherit it; no game row but this one carries one, and the run fails unless the
+        # server's own log carries the `production:false` line it logs on startup.
+        "server_rom_routes": ["--test-only-route", GEN3_EXP_TITLE],
     },
 }
 
@@ -3562,6 +3569,11 @@ class DuoRun:
                "--data-dir", self.data_dir, "--run-id",
                ("t5-" + self._native_candidate["nonce"]) if self.cfg.get("gen3_native_trade")
                else self._server_run_id] + self.cfg["flags"] + self.args.server_flags
+        # A game row may ask the server for a TEST-ONLY route (the expansion, ruling 39) --
+        # after --server-flags and before --wire-log, so the wire-log pair stays the tail the
+        # argv tests pin. getattr: a unit test builds a DuoRun with only the fields its own
+        # case reads, and a run with no row carries no routes at all.
+        cmd += list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
         wire = self._wire_dir()
         if wire:
             cmd += ["--wire-log", wire]
@@ -3632,6 +3644,42 @@ class DuoRun:
             stderr=subprocess.STDOUT)
         self.wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
+        self._require_test_only_route_receipt()
+
+    def _require_test_only_route_receipt(self, timeout: float = 15):
+        """The TEST-ONLY route this row asked for must be VISIBLE in the run's own evidence.
+
+        The server logs every route it is told to open with `production:false` (see
+        server/adapters/__init__.py set_test_only_routes), and this run copies that exact line
+        into the pydec receipt that ships with the attempt, so a receipt can always be read
+        for whether the cartridge was routed or merely admitted. It is CHECKED, not assumed: a
+        run whose server never logged the seam it was launched with did not test what it
+        claims to, and fails here instead of passing quietly. A row with no routes is silent.
+        """
+        routes = list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
+        if not routes:
+            return []
+        log_path = os.path.join(self.data_dir, "server.log")
+        deadline = time.time() + timeout
+        while True:
+            try:
+                with open(log_path, encoding="utf-8", errors="replace") as handle:
+                    text = handle.read()
+            except OSError:
+                text = ""
+            line = next((row for row in text.splitlines() if "TEST-ONLY route of" in row), "")
+            if line or time.time() >= deadline:
+                break
+            time.sleep(0.2)
+        if not line:
+            raise RuntimeError(
+                f"{getattr(self, 'game', '?')}: the server logged no TEST-ONLY route, but this "
+                f"row launched it with {' '.join(routes)} — this run cannot be a receipt")
+        note = (f"TEST_ONLY_ROUTE game={getattr(self, 'game', '?')} "
+                f"argv={' '.join(routes)} production:false server={line}")
+        print(f"[duo] {note}")
+        self._pydec_note(note)
+        return [line]
 
     def _saveram_dir(self, inst: str) -> str:
         """A SaveRAM directory unique to this SCENARIO and this instance.

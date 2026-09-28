@@ -9,16 +9,24 @@ from server.adapters import (
 )
 from server.adapters.base import GamePresentationAdapter, GameRulesAdapter
 
+# The expansion is REFUSED in production (ruling 39). The cases below that put its rom_type on
+# the wire therefore run inside the logged TEST-ONLY route the gen3_exp duo lane opens; the
+# refusal, and that route's own boundary, are pinned in test_gen3_expansion_refusal.py.
+from tests.unit.test_gen3_expansion_refusal import expansion_routed  # noqa: F401,E402
+
 ROM_TYPE = "emerald_expansion_28877d73"
 
 
-def test_reference_build_routes_to_its_own_pack():
+def test_reference_build_is_registered_but_unrouted():
+    """Ruling 39: the adapter class and its pack are here, and the cartridge routes to
+    nothing. The refusal and the TEST-ONLY route that re-opens it for the duo lane are
+    pinned in tests/unit/test_gen3_expansion_refusal.py."""
     adapter = get_adapter("gen3_exp", rom_type=ROM_TYPE)
     assert isinstance(adapter, (GameRulesAdapter, GamePresentationAdapter))
     assert adapter.game_id == "gen3_exp"
     assert adapter.rom_type == ROM_TYPE
-    assert game_id_for_rom_type(ROM_TYPE) == "gen3_exp"
-    assert foundation_for_rom_type(ROM_TYPE) == "gen3_exp"
+    assert game_id_for_rom_type(ROM_TYPE) is None
+    assert foundation_for_rom_type(ROM_TYPE) is None
     assert variant_label(ROM_TYPE) == "Emerald Expansion 1.17.0 (28877d73)"
     # Bulbasaur, Pikachu and Pound in pinned include/constants + src/data tables.
     assert adapter.species_name(1) == "Bulbasaur"
@@ -230,6 +238,7 @@ def test_expansion_party_layout_matches_facts_json_bitfields():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("other", ["emerald", "firered", "leafgreen", "firered_rr"])
 @pytest.mark.parametrize("exp_first", [True, False])
+@pytest.mark.usefixtures("expansion_routed")
 async def test_expansion_refuses_mixed_foundations_without_mutating_run(tmp_path, other, exp_first):
     from server.server import SLinkServer
     from tests.unit.test_mixed_foundations import _hello, _refused, _session, _snapshot
@@ -247,6 +256,7 @@ async def test_expansion_refuses_mixed_foundations_without_mutating_run(tmp_path
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("expansion_routed")
 async def test_reference_pairs_with_itself_and_unknown_build_stays_unrouted(tmp_path):
     from server.server import SLinkServer
     from tests.unit.test_mixed_foundations import _hello, _refused, _session

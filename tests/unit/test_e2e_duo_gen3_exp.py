@@ -2,6 +2,7 @@
 duo driver's TEST-ONLY admission seam (lua/tests/duo/duo_gen3_main.lua test_admission_codec)."""
 from __future__ import annotations
 
+import argparse
 import json
 import os
 import re
@@ -17,6 +18,60 @@ import e2e_duo as duo  # noqa: E402
 EXP = "emerald_expansion_28877d73"
 DRIVER = REPO / "lua" / "tests" / "duo" / "duo_gen3_main.lua"
 CORE = ("faint_cmd_gen3", "link_gen3", "whiteout_gen3", "boxsync_gen3")
+
+
+def _run(**over):
+    """A DuoRun with the fields the server argv and the receipt check read."""
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.scenario = "boxsync_gen3"
+    run.cfg = dict(duo.SCENARIOS["boxsync_gen3"])
+    run.game = "gen3_exp"
+    run.gcfg = dict(duo.GAMES["gen3_exp"])
+    run.tcp_port, run.http_port = 54321, 8080
+    run.data_dir = over.pop("data_dir", "data")
+    run.args = argparse.Namespace(server_flags=[], wire_log=False)
+    run._server_run_id = "seam-model"
+    run._pydec_path = over.pop("pydec", None)
+    return run
+
+
+def test_only_this_row_asks_the_server_for_a_test_only_route():
+    """Ruling 39's server half is a PROCESS flag on the expansion row and nowhere else, so no
+    other lane -- and no Manager-spawned run -- can inherit the seam from this machine's
+    shared environment."""
+    assert duo.GAMES["gen3_exp"]["server_rom_routes"] == ["--test-only-route", EXP]
+    assert [g for g, row in duo.GAMES.items() if row.get("server_rom_routes")] == ["gen3_exp"]
+
+
+def test_the_server_argv_carries_the_seam_flag_after_the_run_flags():
+    run = _run()
+    cmd = run.server_cmd()
+    assert cmd[-2:] == ["--test-only-route", EXP]
+    plain = _run()
+    plain.gcfg = {}
+    assert "--test-only-route" not in plain.server_cmd()
+
+
+def test_the_receipt_needs_the_servers_own_production_false_line(tmp_path):
+    """The seam is CHECKED, not assumed: a run whose server never logged the route it was
+    launched with did not test what it claims, so it fails instead of passing quietly. The
+    line it does find is copied into the attempt's pydec receipt."""
+    run = _run(data_dir=str(tmp_path), pydec=str(tmp_path / "pydec.txt"))
+    with pytest.raises(RuntimeError, match="logged no TEST-ONLY route"):
+        run._require_test_only_route_receipt(timeout=0)
+    logged = ("2026-09-27 12:00:00,000 [WARNING] server.adapters: TEST-ONLY route of "
+              f"{EXP} -> gen3_exp enabled (production refuses it by name; production:false)")
+    (tmp_path / "server.log").write_text("SLink TCP server listening on 127.0.0.1:1\n" + logged,
+                                         encoding="utf-8")
+    assert run._require_test_only_route_receipt(timeout=0) == [logged]
+    receipt = (tmp_path / "pydec.txt").read_text(encoding="utf-8")
+    assert "TEST_ONLY_ROUTE game=gen3_exp" in receipt and "production:false" in receipt
+
+
+def test_a_row_with_no_routes_never_reads_a_server_log(tmp_path):
+    run = _run(data_dir=str(tmp_path))
+    run.gcfg = {}
+    assert run._require_test_only_route_receipt() == []
 
 
 def test_the_active_faint_row_is_not_claimed_without_a_perish_plan():
