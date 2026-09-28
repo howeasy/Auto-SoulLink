@@ -2,6 +2,10 @@
 
 Written 2026-09-27 by the combined Gen 3 coordinator (claude 30c21a7a) at the owner's request: "Get us ready for one more session to close this all out." The next coordinator is Codex, per the owner's handoff. Follow this top to bottom. Every step names its exit evidence.
 
+## Latest closeout handoff — 2026-09-28
+
+Read [CLOSEOUT_2026-09-28.md](CLOSEOUT_2026-09-28.md) first. Runtime cut `ddf6ebd8`: FR/LG 43/43, Emerald 24/24, RR 27/28; exact-head expansion wild active faint PASS. Integration and landing full suites exit 0 with documented skips. RR ball-gate harness candidate remains physically unexercised in its new recovery branch, and an earlier journal-lock failure remains open. No master landing or approval. The detailed sections below retain earlier planning/history and are superseded where the handoff states a later result.
+
 ## Closeout execution update — 2026-09-28
 
 The current run started from `ea1d0d66` on `claude/gen3-integration`. Local master remains `abc6bf28`; landing still needs the separate owner approval below.
