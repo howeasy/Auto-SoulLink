@@ -87,6 +87,14 @@ def gender(facts, species, key):
     return "female" if ratio == 254 or (int(key.split(":")[0], 16) & 255) < ratio else "male"
 
 
+def type_overlap(facts_a, species_a, facts_b, species_b):
+    """The two booted ROMs' type intersection; an unknown species cannot be accepted."""
+    try:
+        return bool(set(facts_a[str(species_a)]["types"]) & set(facts_b[str(species_b)]["types"]))
+    except KeyError as exc:
+        raise ValueError(f"unproven type species {exc.args[0]}") from exc
+
+
 def rows(text, tag):
     return [json.loads(raw) for raw in re.findall(r"^" + re.escape(tag) + r" (\{.*\})$", text or "", re.M)]
 
@@ -96,6 +104,35 @@ def one(text, tag):
     if len(found) != 1:
         raise RuntimeError(f"expected exactly one {tag}, got {len(found)}")
     return found[0]
+
+
+def verify_type_hunt(receipt, facts_a, species_a, facts_b):
+    """Every skipped foe was nonmatching and escaped; the caught foe matches."""
+    encounters = rows(receipt, "CLAUSE_ENCOUNTER")
+    runs = rows(receipt, "CLAUSE_TYPE_RUN")
+    if not 1 <= len(encounters) <= 8:
+        raise RuntimeError("type hunt encounter count outside 1..8")
+    if len(runs) != len(encounters) - 1:
+        raise RuntimeError("type hunt missing or extra RUN observation")
+    if rows(receipt, "CLAUSE_REROLL"):
+        raise RuntimeError("type hunt reported a species reroll")
+    encounter_pos = [m.start() for m in re.finditer(r"^CLAUSE_ENCOUNTER \{", receipt, re.M)]
+    run_pos = [m.start() for m in re.finditer(r"^CLAUSE_TYPE_RUN \{", receipt, re.M)]
+    for i, encounter in enumerate(encounters):
+        species = encounter.get("species")
+        overlap = type_overlap(facts_a, species_a, facts_b, species)
+        if i < len(encounters) - 1 and overlap:
+            raise RuntimeError("type hunt RUN predecessor is not nonoverlap")
+        if (encounter.get("n") != i + 1 or encounter.get("dupe") is not False
+                or encounter.get("type_overlap") is not overlap):
+            raise RuntimeError("type hunt overlap observation disagrees with ROM facts")
+        if i < len(encounters) - 1:
+            if (runs[i].get("n") != i + 1 or runs[i].get("species") != species
+                    or not encounter_pos[i] < run_pos[i] < encounter_pos[i + 1]):
+                raise RuntimeError("type hunt RUN observation is not between encounters")
+        elif not overlap:
+            raise RuntimeError("type hunt final encounter lacks overlap")
+    return encounters[-1]["species"]
 
 
 def release_membership(saved, fixture, released, key_of):
@@ -299,8 +336,11 @@ def clause_oracle(run, results):
         if not rerolls:
             raise ClauseUnobserved("species reroll unobserved")
         return
-    expected = (bool(set(facts["a"][str(caps["a"]["species_id"])]["types"]) &
-                     set(facts["b"][str(caps["b"]["species_id"])]["types"])) if kind == "type" else
+    if kind == "type":
+        final_species = verify_type_hunt(results["b"], facts["a"], caps["a"]["species_id"], facts["b"])
+        if final_species != caps["b"]["species_id"]:
+            raise RuntimeError("type hunt final encounter differs from captured species")
+    expected = (type_overlap(facts["a"], caps["a"]["species_id"], facts["b"], caps["b"]["species_id"]) if kind == "type" else
                 gender(facts["a"], caps["a"]["species_id"], keys["a"]) in ("male", "female") and
                 gender(facts["a"], caps["a"]["species_id"], keys["a"]) == gender(facts["b"], caps["b"]["species_id"], keys["b"]))
     if not expected:
