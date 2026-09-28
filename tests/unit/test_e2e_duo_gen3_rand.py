@@ -346,6 +346,8 @@ def test_dependency_gate_reads_committed_sources_and_blocks_before_launch(monkey
 
 
 def test_randomized_run_artifacts_stay_under_the_worktree_build_directory(monkeypatch, tmp_path):
+    # Exercise DuoRun's default BUILD path even when a release lane isolates state globally.
+    monkeypatch.delenv("SLINK_STATE_DIR", raising=False)
     build = tmp_path / "patch" / "build"
     monkeypatch.setattr(duo, "BUILD", str(build))
     monkeypatch.setattr(duo, "free_port", lambda: 50000)
