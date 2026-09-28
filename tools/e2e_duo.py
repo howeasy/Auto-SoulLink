@@ -2529,6 +2529,9 @@ def rr_reset_wire_problems(rows, token):
     if len(matches) != 1:
         return [f"server wire has {len(matches)} token-bound A after-reset report(s), expected one"]
     request = matches[0]
+    if (type(request.get("t")) is not int or request["t"] <= 0
+            or type(request.get("conn")) is not int or request["conn"] <= 0):
+        return ["server wire after-reset report lacks positive request/connection identity"]
     if not any(row.get("dir") == "s2c" and row.get("req") == request.get("t")
                and row.get("conn") == request.get("conn") for row in rows):
         return ["server wire has no response paired to A's after-reset report"]
