@@ -551,6 +551,7 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
                         kind=g3["kind"], clean=g3["pinned"],
                         variant=GEN3_TITLE_WORDS[g3["title"]])
             info["title"] = f"{info['variant']} · {KIND_WORDS.get(g3['kind'], g3['kind'])}"
+            return info
         gen2_title = _gen2_clean_sha1s().get(info["sha1"])
         if gen2_title:
             info["family"], info["kind"], info["clean"] = FAMILY_GEN2, "clean", True
