@@ -194,8 +194,8 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
                     return nil
                 end
                 -- Only this caller won the permanent birth record. A transient rename/share
-                -- failure must not strand that record forever. Keep retrying the SAME prepared
-                -- generation, without allowing any later caller to initialise the counter.
+                -- failure gets a bounded retry of the SAME prepared generation. Exhaustion
+                -- remains fail-closed; no later caller may initialise the counter.
                 local published = false
                 for _ = 1, 3000 do
                     if rename_file(tmp, baton) then published = true; break end
