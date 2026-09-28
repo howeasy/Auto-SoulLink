@@ -1032,7 +1032,8 @@ def _new_a_hellos(problems, events_before, events_after):
             if row.get("type") == "hello" and row.get("player") == "a"]
 
 
-def reconnect_same_problems(before, after, events_before, events_after, linked_key, ot_id):
+def reconnect_same_problems(before, after, events_before, events_after, linked_key, ot_id,
+                            allow_accepted_refreshes=False):
     """Public/persisted C-2 facts; empty means a safe same-save reconnect."""
     problems = []
     a = (after.get("status", {}).get("players") or {}).get("a") or {}
@@ -1050,7 +1051,11 @@ def reconnect_same_problems(before, after, events_before, events_after, linked_k
     if _event_counts(events_before) != _event_counts(events_after):
         problems.append("a " + "/".join(RECONNECT_GAMEPLAY_EVENTS) + " count changed")
     new_hellos = _new_a_hellos(problems, events_before, events_after)
-    if len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected ("):
+    if allow_accepted_refreshes:
+        if not new_hellos or any(not row.get("text", "").startswith("Connected (")
+                                 for row in new_hellos):
+            problems.append("A did not add only accepted reconnect hellos")
+    elif len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected ("):
         problems.append("A did not add exactly one accepted reconnect hello")
     return problems
 
@@ -8474,16 +8479,19 @@ class DuoRun:
             (s := self._status()) and (a := s["players"]["a"]).get("connected")
             and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])),
             60)
-        old_hellos = sum(row.get("type") == "hello" and row.get("player") == "a"
-                         for row in baseline["events"])
-        self.wait_for("durable accepted reconnect hello", lambda: sum(
-            row.get("type") == "hello" and row.get("player") == "a"
-            for row in self._reconnect_events()) == old_hellos + 1, 30)
+        def accepted_reconnect_hello():
+            problems = []
+            new_hellos = _new_a_hellos(problems, baseline["events"], self._reconnect_events())
+            return (not problems and bool(new_hellos)
+                    and all(row.get("text", "").startswith("Connected (") for row in new_hellos))
+
+        self.wait_for("durable accepted reconnect hello", accepted_reconnect_hello, 30)
         same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
                       "status": self._status() or {}}
         problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
                                            same_after["events"], self._link_keys["a"],
-                                           baseline["links"]["player_identity"]["a"]["ot_id"])
+                                           baseline["links"]["player_identity"]["a"]["ot_id"],
+                                           allow_accepted_refreshes=True)
         problems += gen3_receipt_problems("a same_save", text(same_path), forbidden=(
             r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
         if problems:
