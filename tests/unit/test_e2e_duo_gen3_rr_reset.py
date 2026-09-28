@@ -127,3 +127,17 @@ def test_server_wire_must_respond_to_same_token_bound_after_reset_report():
                                         if k not in ("req", "conn")}], "t1")
     assert duo.rr_reset_wire_problems([{**request, "msg": {**request["msg"], "token": "other"}},
                                        response], "t1")
+
+
+def test_reset_oracle_loads_the_real_gen3_codec_before_flash_checks():
+    class StopOracle(Exception):
+        pass
+
+    run = object.__new__(duo.DuoRun)
+
+    def reached_flush():
+        raise StopOracle
+
+    run._gen3_flush_boundary = reached_flush
+    with pytest.raises(StopOracle):
+        run.assert_rr_trade_reset_saved({})

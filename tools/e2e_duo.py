@@ -8115,7 +8115,7 @@ class DuoRun:
 
     def assert_rr_trade_reset_saved(self, results):
         """Independent native flash, reload and server outcome at the clean exit boundary."""
-        from tools import gen3_codec as codec
+        codec = gen3_codec()
 
         self._gen3_flush_boundary()
         problems = []
