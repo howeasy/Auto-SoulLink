@@ -1,0 +1,162 @@
+duo instance a scenario=trade_reset_commit_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:61922 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:61922 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=a -> 127.0.0.1:61922
+[client] [SLink] TCP connected to 127.0.0.1:61922
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:2BDDC8BF
+PARTY slot=1 key=F56D8C1D:2BDDC8BF species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 620
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 620
+[client] [SLink-gen3] write native 0x0203FE94 +4 frame 621
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+JITTER requested=0 applied=0 attempt=1
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 624
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 624
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+[client] [gen3] phase encounter frame=1022 #1 during step Up at (12,26)
+ENGINE_FAINT_SITE frame=2449 active=1 battler0_slot=0 battle_hp=19 party_hp=19 counter=0
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":3,"player":"a","seq":77,"species_id":288}
+TX safe - {"event":"safe","player":"a","seq":78}
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2810
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 2810
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 2810
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2810
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2810
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2810
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 2810
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2810
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2810
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2810
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2810
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [gen3] phase encounter-done frame=2908 #1 resolved at (12,26)
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [gen3] phase encounter frame=3420 #2 during step Up at (16,8)
+ENGINE_FAINT_SITE frame=4455 active=1 battler0_slot=0 battle_hp=16 party_hp=16 counter=0
+TX safe - {"event":"safe","player":"a","seq":138}
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [gen3] phase encounter-done frame=4674 #2 resolved at (16,8)
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"a","seq":151}
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_pokemon_center_1f","player":"a","seq":166}
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+AT_NPC npc_oe=7
+[client] [SLink-gen3] trade reload held: ...nk-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+TX trade_request - {"event":"trade_request","player":"a","seq":184}
+RX show_choices text=OAK: Took you long enough.
+BB is waiting. Make it quick.
+[client] [SLink-gen3] write native 0x0203FC90 +15 frame 5871
+[client] [SLink-gen3] write native 0x0203F900 +57 frame 5871
+[client] [SLink-gen3] write native 0x0203F810 +1 frame 5871
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 5871
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 5871
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 5871
+TALKED npc=(3,2) player=(3,3) facing=Up pi_count=0->1
+TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":187,"token":"t1"}
+CHOSE_TRADE
+RX choose_mon
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 5927
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 5927
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 5927
+PARTY_CURSOR 0,1 party_count=2
+TX mon_chosen - {"event":"mon_chosen","player":"a","seq":192,"slot":1,"token":"t1"}
+CHOSE_MON slot=1 key=F56D8C1D:2BDDC8BF
+TRACE wait frame=6055 cb2=0811EBA1 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED callback2,field_controls_locked,palette_fade_active,script_context_status
+RX hud_show text=Trade offer sent - waiting for partner...
+TRACE wait frame=6068 cb2=080567DD sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED callback2,field_controls_locked,script_context_status
+TRACE wait frame=6069 cb2=08056809 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED callback2,field_controls_locked,script_context_status
+TRACE wait frame=6084 cb2=080565B5 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED field_controls_locked,palette_fade_active,script_context_status
+RX apply_prepare
+TRACE prepare frame=6144 cb2=080565B5 sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED field_controls_locked,script_context_status
+TRACE prepare frame=6145 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=preparing
+TRACE_REFUSED 
+[client] [SLink-gen3] write native 0x0203F810 +32 frame 6146
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 6146
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 6146
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 6146
+TRACE prepare frame=6147 cb2=080565B5 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=preparing
+TRACE_REFUSED field_controls_locked,script_context_status,cpu
+SAVE_WITNESS_DUMP path=patch/build/e2e_trade_reset_commit_gen3_a_1_witness.bin bytes=131072 saves=1 frame=7113 counter=5
+SAVE_WITNESS_EXT path=patch/build/e2e_trade_reset_commit_gen3_a_1_witness_ext.bin bytes=8160 saves=1
+TRACE prepare frame=7177 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=preparing
+TRACE_REFUSED 
+TX apply_ready - {"event":"apply_ready","ok":true,"player":"a","seq":232,"token":"t1"}
+TRACE prepare frame=7178 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=prepared
+TRACE_REFUSED 
+RX apply_trade
+TRACE wait frame=7180 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=stage
+TRACE_REFUSED 
+[client] [SLink-gen3] write native 0x0203FA00 +100 frame 7181
+TRACE scene frame=7181 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED 
+[client] [SLink-gen3] write native 0x0203FA00 +100 frame 7182
+[client] [SLink-gen3] write native 0x0203F810 +32 frame 7182
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 7182
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 7182
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 7182
+RESET_COMMIT_ENTERED {"bits":3,"counter_after":5,"counter_before":4,"epoch":2,"frame":7183,"old_key":"F56D8C1D:2BDDC8BF","pre_seq":3,"revision":10,"scene_seq":4,"side":"a","token":"t1","visit":1,"witness_path":"C:/slink-wt/rr-reset-commit-dev-b1e/patch/build/e2e_trade_reset_commit_gen3_a_commit_native_witness.bin"}
+RESET_PARTIAL_COMMIT_EXIT {"bits":3,"counter_after":5,"counter_before":4,"epoch":2,"frame":7183,"old_key":"F56D8C1D:2BDDC8BF","pre_seq":3,"revision":10,"scene_seq":4,"side":"a","token":"t1","visit":1,"witness_path":"C:/slink-wt/rr-reset-commit-dev-b1e/patch/build/e2e_trade_reset_commit_gen3_a_commit_native_witness.bin"}
+WRITES 47
+RESULT: FAIL (EXPECTED_RESET_PARTIAL_COMMIT)
