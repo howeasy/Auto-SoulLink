@@ -1,0 +1,262 @@
+# gen3_final_cut row=type_clause_gen3_rr_as_a item=§14_P5_RR_duo cut=7265cd745ecc75c567328d7e51c34bcad0fe09f8
+# lane=C:/slink-wt/g3-lane3
+# command: python tools/e2e_duo.py --game gen3_rr --scenario type_clause_gen3   (cwd=C:/slink-wt/g3-lane3)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T23:26:06 cpu=93% emuhawk=3 python=15
+start_utc=2026-09-28T03:26:05Z tracked_clean_before=True
+
+========== scenario: type_clause_gen3 ==========
+[duo] type_clause_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=7265cd745ecc75c567328d7e51c34bcad0fe09f8
+[duo] server up: tcp=53906 http=53907 data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3__lno1zsc
+[duo] timing server 0.6s
+[duo] cleared 9 stale artifact(s) for type_clause_gen3: e2e_type_clause_gen3_a_1_witness.bin, e2e_type_clause_gen3_a_1_witness_ext.bin, e2e_type_clause_gen3_a_attempt1_result.txt, e2e_type_clause_gen3_a_result.txt, e2e_type_clause_gen3_b_1_witness.bin, e2e_type_clause_gen3_b_1_witness_ext.bin, e2e_type_clause_gen3_b_attempt1_result.txt, e2e_type_clause_gen3_b_result.txt, e2e_type_clause_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 15.7s
+[duo] RESULT_LINE a: RESULT: FAIL (no type-clause verdict (partner-gone))
+[duo] RESULT_LINE b: RESULT: FAIL (RNG: type first encounter has no overlap)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] type_clause_gen3: a=FAIL b=FAIL
+--- type_clause_gen3 a result ---
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+[client] [gen3] phase encounter-found frame=941 clause: cycle 3 mid-step Down at (13,37)
+[client] [gen3] phase battle-state-saved frame=941 C:/slink-wt/g3-lane3-state/slink_fr_battle.State
+CLAUSE_ENCOUNTER {"dupe":false,"n":1,"species":1020}
+THREW 1
+TX capture 3BB93C3B:2BDDC8BF {"area_id":"route_1","event":"capture","held_item_id":135,"hp":17,"is_egg":false,"key":"3BB93C3B:2BDDC8BF","level":4,"maxHP":17,"nickname":"Rattata","player":"a","seq":67,"species_id":1020,"stats":{"attack":10,"defense":9,"level":4,"maxHP":17,"pp1":25,"pp2":30,"pp3":30,"pp4":0,"spAtk":7,"spDef":9,"speed":12}}
+RX box_mon key=3BB93C3B:2BDDC8BF
+RULE_RX {"cmd":"box_mon","key":"3BB93C3B:2BDDC8BF"}
+TX safe - {"event":"safe","player":"a","seq":69}
+[client] [SLink-gen3] write overworld 0x02029318 +58 frame 2577
+[client] [SLink-gen3] write overworld 0x0202434C +100 frame 2577
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 2577
+TX stats_cache 3BB93C3B:2BDDC8BF {"event":"stats_cache","key":"3BB93C3B:2BDDC8BF","player":"a","seq":71,"stats":{"attack":10,"defense":9,"level":4,"maxHP":17,"pp1":25,"pp2":30,"pp3":30,"pp4":0,"spAtk":7,"spDef":9,"speed":12}}
+CAUGHT 3BB93C3B:2BDDC8BF
+PENDING_CAPTURE {"area_id":"route_1","event":"capture","held_item_id":135,"hp":17,"is_egg":false,"key":"3BB93C3B:2BDDC8BF","level":4,"maxHP":17,"nickname":"Rattata","player":"a","seq":67,"species_id":1020,"stats":{"attack":10,"defense":9,"level":4,"maxHP":17,"pp1":25,"pp2":30,"pp3":30,"pp4":0,"spAtk":7,"spDef":9,"speed":12}}
+WRITES 19
+RESULT: FAIL (no type-clause verdict (partner-gone))
+--- type_clause_gen3 b result ---
+RULE_RX {"battle_calc":true,"cmd":"config","native_messages":false,"native_sounds":false,"overworld_presence":false,"pc_trade_npc":true,"run_id":"duo-c49c3154355448119a7b2b71cd024191"}
+RX dead_keys
+RULE_RX {"cmd":"dead_keys","keys":{}}
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+RX link_panel
+RULE_RX {"cmd":"link_panel","rows":["No linked pairs yet","Pairs alive|0/0","Dead zones|0","Badges|0/8"]}
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+RX hud_show text=Partner caught Rattata in Route 1
+RULE_RX {"b":255,"cmd":"hud_show","frames":300,"g":180,"r":100,"text":"Partner caught Rattata in Route 1"}
+A_PENDING {"area_id":"route_1","event":"capture","held_item_id":135,"hp":17,"is_egg":false,"key":"3BB93C3B:2BDDC8BF","level":4,"maxHP":17,"nickname":"Rattata","player":"a","seq":67,"species_id":1020,"stats":{"attack":10,"defense":9,"level":4,"maxHP":17,"pp1":25,"pp2":30,"pp3":30,"pp4":0,"spAtk":7,"spDef":9,"speed":12}}
+[client] [gen3] phase encounter-found frame=3225 clause: cycle 5 mid-step Down at (13,37)
+[client] [gen3] phase battle-state-saved frame=3225 C:/slink-wt/g3-lane3-state/slink_fr_battle.State
+CLAUSE_ENCOUNTER {"dupe":false,"n":1,"species":1208,"type_overlap":false}
+WRITES 16
+RESULT: FAIL (RNG: type first encounter has no overlap)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3__lno1zsc
+[duo] type_clause_gen3: B's first wild foe shared no type with A; restarting attempt 2 of 8 with a fresh server, run directory and SaveRAM seeds
+[duo] type_clause_gen3: attempt 2 of 8
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=7265cd745ecc75c567328d7e51c34bcad0fe09f8
+[duo] server up: tcp=53515 http=53516 data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_6nk70rwo
+[duo] timing server 1.2s
+[duo] cleared 2 stale artifact(s) for type_clause_gen3: e2e_type_clause_gen3_a_result.txt, e2e_type_clause_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 15.1s
+[duo] RESULT_LINE a: RESULT: FAIL (no type-clause verdict (partner-gone))
+[duo] RESULT_LINE b: RESULT: FAIL (RNG: type first encounter has no overlap)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] type_clause_gen3: a=FAIL b=FAIL
+--- type_clause_gen3 a result ---
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=37 applied=37 attempt=2
+[client] [gen3] phase encounter-found frame=857 clause: cycle 2 mid-step Left at (13,38)
+[client] [gen3] phase battle-state-saved frame=857 C:/slink-wt/g3-lane3-state/slink_fr_battle.State
+CLAUSE_ENCOUNTER {"dupe":false,"n":1,"species":612}
+THREW 1
+TX capture EB1F98F1:2BDDC8BF {"area_id":"route_1","event":"capture","held_item_id":0,"hp":16,"is_egg":false,"key":"EB1F98F1:2BDDC8BF","level":3,"maxHP":16,"nickname":"Scraggy","player":"a","seq":72,"species_id":612,"stats":{"attack":11,"defense":10,"level":3,"maxHP":16,"pp1":30,"pp2":20,"pp3":15,"pp4":0,"spAtk":8,"spDef":9,"speed":8}}
+RX box_mon key=EB1F98F1:2BDDC8BF
+RULE_RX {"cmd":"box_mon","key":"EB1F98F1:2BDDC8BF"}
+TX safe - {"event":"safe","player":"a","seq":74}
+[client] [SLink-gen3] write overworld 0x02029318 +58 frame 2730
+[client] [SLink-gen3] write overworld 0x0202434C +100 frame 2730
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 2730
+TX stats_cache EB1F98F1:2BDDC8BF {"event":"stats_cache","key":"EB1F98F1:2BDDC8BF","player":"a","seq":77,"stats":{"attack":11,"defense":10,"level":3,"maxHP":16,"pp1":30,"pp2":20,"pp3":15,"pp4":0,"spAtk":8,"spDef":9,"speed":8}}
+CAUGHT EB1F98F1:2BDDC8BF
+PENDING_CAPTURE {"area_id":"route_1","event":"capture","held_item_id":0,"hp":16,"is_egg":false,"key":"EB1F98F1:2BDDC8BF","level":3,"maxHP":16,"nickname":"Scraggy","player":"a","seq":72,"species_id":612,"stats":{"attack":11,"defense":10,"level":3,"maxHP":16,"pp1":30,"pp2":20,"pp3":15,"pp4":0,"spAtk":8,"spDef":9,"speed":8}}
+WRITES 19
+RESULT: FAIL (no type-clause verdict (partner-gone))
+--- type_clause_gen3 b result ---
+RX dead_keys
+RULE_RX {"cmd":"dead_keys","keys":{}}
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+RX link_panel
+RULE_RX {"cmd":"link_panel","rows":["No linked pairs yet","Pairs alive|0/0","Dead zones|0","Badges|0/8"]}
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=37 applied=37 attempt=2
+RX hud_show text=Partner caught Scraggy in Route 1
+RULE_RX {"b":255,"cmd":"hud_show","frames":300,"g":180,"r":100,"text":"Partner caught Scraggy in Route 1"}
+A_PENDING {"area_id":"route_1","event":"capture","held_item_id":0,"hp":16,"is_egg":false,"key":"EB1F98F1:2BDDC8BF","level":3,"maxHP":16,"nickname":"Scraggy","player":"a","seq":72,"species_id":612,"stats":{"attack":11,"defense":10,"level":3,"maxHP":16,"pp1":30,"pp2":20,"pp3":15,"pp4":0,"spAtk":8,"spDef":9,"speed":8}}
+[client] [gen3] phase encounter-found frame=3256 clause: cycle 3 mid-step Right at (12,37)
+[client] [gen3] phase battle-state-saved frame=3256 C:/slink-wt/g3-lane3-state/slink_fr_battle.State
+CLAUSE_ENCOUNTER {"dupe":false,"n":1,"species":163,"type_overlap":false}
+WRITES 16
+RESULT: FAIL (RNG: type first encounter has no overlap)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_6nk70rwo
+[duo] type_clause_gen3: B's first wild foe shared no type with A; restarting attempt 3 of 8 with a fresh server, run directory and SaveRAM seeds
+[duo] type_clause_gen3: attempt 3 of 8
+[duo] JITTER requested=74 attempt=3
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=7265cd745ecc75c567328d7e51c34bcad0fe09f8
+[duo] server up: tcp=57211 http=57212 data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_00f7em_g
+[duo] timing server 1.0s
+[duo] cleared 2 stale artifact(s) for type_clause_gen3: e2e_type_clause_gen3_a_result.txt, e2e_type_clause_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 14.5s
+[duo] RESULT_LINE a: RESULT: FAIL (no type-clause verdict (partner-gone))
+[duo] RESULT_LINE b: RESULT: FAIL (RNG: type first encounter has no overlap)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] type_clause_gen3: a=FAIL b=FAIL
+--- type_clause_gen3 a result ---
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=74 applied=74 attempt=3
+[client] [gen3] phase encounter-found frame=917 clause: cycle 3 mid-step Right at (12,37)
+[client] [gen3] phase battle-state-saved frame=917 C:/slink-wt/g3-lane3-state/slink_fr_battle.State
+CLAUSE_ENCOUNTER {"dupe":false,"n":1,"species":298}
+THREW 1
+TX capture 64234AC4:2BDDC8BF {"area_id":"route_1","event":"capture","held_item_id":0,"hp":18,"is_egg":false,"key":"64234AC4:2BDDC8BF","level":4,"maxHP":18,"nickname":"Seedot","player":"a","seq":67,"species_id":298,"stats":{"attack":9,"defense":10,"level":4,"maxHP":18,"pp1":10,"pp2":30,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":8}}
+RX box_mon key=64234AC4:2BDDC8BF
+RULE_RX {"cmd":"box_mon","key":"64234AC4:2BDDC8BF"}
+TX safe - {"event":"safe","player":"a","seq":70}
+[client] [SLink-gen3] write overworld 0x02029318 +58 frame 2595
+[client] [SLink-gen3] write overworld 0x0202434C +100 frame 2595
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 2595
+TX stats_cache 64234AC4:2BDDC8BF {"event":"stats_cache","key":"64234AC4:2BDDC8BF","player":"a","seq":72,"stats":{"attack":9,"defense":10,"level":4,"maxHP":18,"pp1":10,"pp2":30,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":8}}
+CAUGHT 64234AC4:2BDDC8BF
+PENDING_CAPTURE {"area_id":"route_1","event":"capture","held_item_id":0,"hp":18,"is_egg":false,"key":"64234AC4:2BDDC8BF","level":4,"maxHP":18,"nickname":"Seedot","player":"a","seq":67,"species_id":298,"stats":{"attack":9,"defense":10,"level":4,"maxHP":18,"pp1":10,"pp2":30,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":8}}
+WRITES 19
+RESULT: FAIL (no type-clause verdict (partner-gone))
+--- type_clause_gen3 b result ---
+RX dead_keys
+RULE_RX {"cmd":"dead_keys","keys":{}}
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+RX link_panel
+RULE_RX {"cmd":"link_panel","rows":["No linked pairs yet","Pairs alive|0/0","Dead zones|0","Badges|0/8"]}
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=74 applied=74 attempt=3
+RX hud_show text=Partner caught Seedot in Route 1
+RULE_RX {"b":255,"cmd":"hud_show","frames":300,"g":180,"r":100,"text":"Partner caught Seedot in Route 1"}
+A_PENDING {"area_id":"route_1","event":"capture","held_item_id":0,"hp":18,"is_egg":false,"key":"64234AC4:2BDDC8BF","level":4,"maxHP":18,"nickname":"Seedot","player":"a","seq":67,"species_id":298,"stats":{"attack":9,"defense":10,"level":4,"maxHP":18,"pp1":10,"pp2":30,"pp3":0,"pp4":0,"spAtk":8,"spDef":8,"speed":8}}
+[client] [gen3] phase encounter-found frame=3160 clause: cycle 3 mid-step Up at (12,38)
+[client] [gen3] phase battle-state-saved frame=3160 C:/slink-wt/g3-lane3-state/slink_fr_battle.State
+CLAUSE_ENCOUNTER {"dupe":false,"n":1,"species":16,"type_overlap":false}
+WRITES 16
+RESULT: FAIL (RNG: type first encounter has no overlap)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_00f7em_g
+[duo] type_clause_gen3: B's first wild foe shared no type with A; restarting attempt 4 of 8 with a fresh server, run directory and SaveRAM seeds
+[duo] type_clause_gen3: attempt 4 of 8
+[duo] JITTER requested=111 attempt=4
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=7265cd745ecc75c567328d7e51c34bcad0fe09f8
+[duo] server up: tcp=50864 http=50865 data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_cxfdyt02
+[duo] timing server 1.0s
+[duo] cleared 2 stale artifact(s) for type_clause_gen3: e2e_type_clause_gen3_a_result.txt, e2e_type_clause_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 19.9s
+[duo] timing results 4.2s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=4e385f3fadb518c3a6bbfbf60a9da90b213dbea5a4f1356cc250c580e3f79f9c file=4e385f3fadb518c3a6bbfbf60a9da90b213dbea5a4f1356cc250c580e3f79f9c match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=d32e86b470d1bb2bfbea346eb3c17b35c4193173a7ac6584aa27f806563e0443 file=d32e86b470d1bb2bfbea346eb3c17b35c4193173a7ac6584aa27f806563e0443 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] type: B rejected and memorial saved; A quarantined; area retryable
+[duo] timing oracle 0.5s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] type_clause_gen3: a=PASS b=PASS
+
+========== summary ==========
+  type_clause_gen3: PASS (attempt 4 of 8)
+exit=0 end_utc=2026-09-28T03:27:23Z tracked_clean_after=True classification=pass

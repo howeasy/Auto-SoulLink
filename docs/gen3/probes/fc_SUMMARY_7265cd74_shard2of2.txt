@@ -1,0 +1,35 @@
+# G4 final cut 7265cd745ecc75c567328d7e51c34bcad0fe09f8 -- tools/gen3_final_cut.py summary (written 2026-09-28T03:31:32Z)
+# RUN 27 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | states_firered_town | §1.1 build | PASS | 1 | fc_states_firered_town_7265cd74.txt |
+| 2 | states_firered_battle | §1.1 build | PASS | 1 | fc_states_firered_battle_7265cd74.txt |
+| 3 | states_firered_trainer | §1.1 build | PASS | 1 | fc_states_firered_trainer_7265cd74.txt |
+| 4 | states_leafgreen_town | §1.1 build | PASS | 1 | fc_states_leafgreen_town_7265cd74.txt |
+| 5 | states_leafgreen_battle | §1.1 build | PASS | 1 | fc_states_leafgreen_battle_7265cd74.txt |
+| 6 | states_leafgreen_trainer | §1.1 build | PASS | 1 | fc_states_leafgreen_trainer_7265cd74.txt |
+| 7 | tutorials_firered | §1.2 build | PASS | 1 | fc_tutorials_firered_7265cd74.txt |
+| 8 | tutorials_leafgreen | §1.2 build | PASS | 1 | fc_tutorials_leafgreen_7265cd74.txt |
+| 9 | faint_cmd_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_faint_cmd_gen3_fr_as_a_7265cd74.txt |
+| 10 | link_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_link_gen3_fr_as_a_7265cd74.txt |
+| 11 | deadzone_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_deadzone_gen3_fr_as_a_7265cd74.txt |
+| 12 | whiteout_gen3_fr_as_a | §4 item2a | PASS | 1 | fc_whiteout_gen3_fr_as_a_7265cd74.txt |
+| 13 | whiteout_gen3_lg_as_a | §4 item2a | PASS | 1 | fc_whiteout_gen3_lg_as_a_7265cd74.txt |
+| 14 | linked_faint_active_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_gen3_fr_as_a_7265cd74.txt |
+| 15 | linked_faint_active_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_gen3_lg_as_a_7265cd74.txt |
+| 16 | active_end_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_active_end_gen3_lg_as_a_7265cd74.txt |
+| 17 | linked_faint_active_whiteout_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_whiteout_gen3_fr_as_a_7265cd74.txt |
+| 18 | linked_faint_active_trainer_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_trainer_gen3_lg_as_a_7265cd74.txt |
+| 19 | checkpoint_firered | §6 item3 | PASS | 1 | fc_checkpoint_firered_7265cd74.txt |
+| 20 | checkpoint_leafgreen | §6 item3 | PASS | 1 | fc_checkpoint_leafgreen_7265cd74.txt |
+| 21 | save_then_write_gen3_fr_as_a | §7 save-rows | PASS | 1 | fc_save_then_write_gen3_fr_as_a_7265cd74.txt |
+| 22 | bootcheck_firered_party_town_b | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_town_b_7265cd74.txt |
+| 23 | bootcheck_firered_party_battle | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_battle_7265cd74.txt |
+| 24 | bootcheck_firered_party_battle_b | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_battle_b_7265cd74.txt |
+| 25 | bootcheck_leafgreen_party_town | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_town_7265cd74.txt |
+| 26 | bootcheck_leafgreen_party_battle_b | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_battle_b_7265cd74.txt |
+| 27 | release_gate_quick | §11 gate | FAIL exit=1 | 1 | fc_release_gate_quick_7265cd74.txt |
+| 28 | probe_gates | §11 gate | PASS | 1 | fc_probe_gates_7265cd74.txt |
+
+OVERALL: FAIL (27/28 rows)
