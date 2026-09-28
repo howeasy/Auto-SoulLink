@@ -2514,13 +2514,19 @@ def rr_reset_link_problems(case, keys, staged, initial, final):
     old = lambda row: (row.get("a") or {}).get("key") == keys["a"] and (row.get("b") or {}).get("key") == keys["b"]  # noqa: E731
     new = lambda row: (row.get("a") or {}).get("key") == keys["b"] and (row.get("b") or {}).get("key") == keys["a"]  # noqa: E731
     problems = []
-    if sum(old(row) for row in staged) != 1:
+    baseline = [row for row in staged if old(row)]
+    if (len(baseline) != 1 or not baseline[0].get("area_id")
+            or sum(row.get("area_id") == baseline[0]["area_id"] for row in staged) != 1
+            or baseline[0].get("status") != "alive"):
         problems.append("RR reset lacks exactly one staged pre-trade server link")
     if case == "commit":
-        if initial != staged:
-            problems.append("commit interruption changed persisted links before reload")
-        if final != staged:
-            problems.append("commit reload changed persisted links")
+        if len(baseline) == 1:
+            original = baseline[0]
+            for label, rows in (("interruption", initial), ("reload", final)):
+                same_area = [row for row in rows if row.get("area_id") == original.get("area_id")]
+                if (len(same_area) != 1 or same_area[0] != original
+                        or sum(old(row) for row in rows) != 1 or any(new(row) for row in rows)):
+                    problems.append(f"commit {label} changed the staged linked pair")
     elif case == "success":
         if sum(new(row) for row in final) != 1:
             problems.append("native-success reset lacks persisted server re-key")
@@ -2561,6 +2567,31 @@ def rr_reset_wire_problems(rows, token):
     if not any(row.get("dir") == "s2c" and row.get("req") == request.get("t")
                and row.get("conn") == request.get("conn") for row in rows):
         return ["server wire has no response paired to A's after-reset report"]
+    return []
+
+
+def rr_reset_b_consumed_problems(rows, token, partner_key, document):
+    """B's real native report reached the server, even if done.b was not re-saved."""
+    matches = [row for row in rows if row.get("dir") == "c2s"
+               and (row.get("msg") or {}).get("event") == "trade_done"
+               and (row.get("msg") or {}).get("token") == token
+               and (row.get("msg") or {}).get("new_key") == partner_key
+               and (row.get("msg") or {}).get("uncertain") is not True]
+    if len(matches) != 1:
+        return ["server wire lacks exactly one B native trade_done for the token/partner"]
+    request = matches[0]
+    if (type(request.get("t")) is not int or request["t"] <= 0
+            or type(request.get("conn")) is not int or request["conn"] <= 0
+            or not any(row.get("dir") == "s2c" and row.get("req") == request["t"]
+                       and row.get("conn") == request["conn"] for row in rows)):
+        return ["server wire lacks B's paired native trade_done response"]
+    pending = (document or {}).get("pending_trade") or {}
+    received = (pending.get("new") or {}).get("b")
+    if (pending.get("token") != token or pending.get("phase") not in ("applying", "uncertain")
+            or (pending.get("verdict") or {}).get("b") != "traded"
+            or not isinstance(received, (list, tuple)) or not received
+            or received[0] != partner_key):
+        return ["server has no persisted B native-trade outcome for the token"]
     return []
 
 
@@ -8078,8 +8109,9 @@ class DuoRun:
         remaining = max(0, getattr(self, "_run_deadline", float("inf")) - time.time())
         return wait_for(description, guarded, min(timeout, remaining))
 
-    def _rr_reset_wire_rows(self):
-        path = Path(self._wire_dir(), "wire_a.jsonl")
+    def _rr_reset_wire_rows(self, inst="a"):
+        assert inst in ("a", "b")
+        path = Path(self._wire_dir(), f"wire_{inst}.jsonl")
         if not path.is_file():
             return []
         try:
@@ -8092,6 +8124,8 @@ class DuoRun:
         self._gen3_prelude(link_slot=1)
         keys = dict(self._link_keys)
         self._rr_reset_links_staged = self._links_json()
+        Path(self.data_dir, "rr_reset_staged_links.json").write_text(
+            json.dumps(self._rr_reset_links_staged, sort_keys=True), encoding="utf-8")
         lines = self._gen3_linked_lines()
         for inst in "ab":
             lines[inst].append(f"PARTNER {keys['b' if inst == 'a' else 'a']}")
@@ -8119,9 +8153,9 @@ class DuoRun:
                 r"^RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE ({.*})$",
                 self._read_receipt("b"), re.M), self.cfg["timeout"])
             token = json.loads(marker[1])["token"]
-            self._rr_reset_wait_commit_initial("server consumed B's native trade_done", lambda: (
-                (pending := self._reconnect_document().get("pending_trade") or {}).get("token") == token
-                and (pending.get("done") or {}).get("b") is True), 120)
+            self._rr_reset_wait_commit_initial("server consumed B's native trade_done", lambda:
+                not rr_reset_b_consumed_problems(self._rr_reset_wire_rows("b"), token,
+                                                  keys["a"], self._reconnect_document()), 120)
             self._append_reconnect_marker("b", "RESET_EXIT")
         initial = {}
         for inst in "ab":
@@ -8206,6 +8240,10 @@ class DuoRun:
         problems += rr_reset_initial_receipt_problems(initial, case, keys)
         problems += rr_reset_link_problems(case, keys, self._rr_reset_links_staged,
                                            self._rr_reset_links_before, self._links_json())
+        staged_path = Path(self.data_dir, "rr_reset_staged_links.json")
+        if (not staged_path.is_file()
+                or json.loads(staged_path.read_text(encoding="utf-8")) != self._rr_reset_links_staged):
+            problems.append("staged pre-GO server link archive missing or changed")
         problems += rr_reset_pending_problems(case, self._rr_reset_expected["a"]["token"],
                                               self._reconnect_document())
         if case == "commit":

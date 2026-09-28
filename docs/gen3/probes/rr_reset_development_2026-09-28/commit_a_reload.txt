@@ -1,0 +1,73 @@
+duo instance a scenario=trade_reset_commit_gen3 phase=rr_reset_reload title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:61922 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player a -> 127.0.0.1:61922 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=a -> 127.0.0.1:61922
+[client] [SLink] TCP connected to 127.0.0.1:61922
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"viridian_city_pokem
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"viridian_city_pokem
+TX trade_done - {"after_reset":true,"event":"trade_done","player":"a","seq":3,"token":"t1","uncertain":true}
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"viridian_city_pokem
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 527
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 527
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+RX link_panel
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 528
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 528
+RX msgbox text=TRADE ERROR - party mismatch.
+See the status page.
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 529
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 529
+[client] [SLink-gen3] write native 0x0203FD6C +23 frame 529
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 529
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 529
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 529
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 529
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 529
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 529
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 529
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 529
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 530
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 530
+[client] [SLink-gen3] write native 0x0203FE94 +4 frame 531
+TX hello - {"area_id":"","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"viridian_city_pokem
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 534
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 534
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 543
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 543
+[client] [SLink-gen3] write native 0x0203FD6C +23 frame 543
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 543
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 543
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 543
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 543
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 543
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 543
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 543
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 543
+[client] [gen3] phase field frame=579 map=(5,4)
+MYKEY 0 EBEF11DA:2BDDC8BF
+PARTY slot=0 key=EBEF11DA:2BDDC8BF species=277 level=7 hp=16/24
+MYKEY 1 F56D8C1D:2BDDC8BF
+PARTY slot=1 key=F56D8C1D:2BDDC8BF species=1324 level=4 hp=18/18
+booted frame=579 map=map=1284 at=(3,3) balls=9
+RESET_RELOADED {"counter":5,"key":"F56D8C1D:2BDDC8BF","side":"a"}
+RESET_AFTER_RESET {"counter":5,"side":"a","token":"t1"}
+JITTER requested=0 applied=0 attempt=1
+WRITES 31
+RESULT: PASS (cold-reloaded expected native save without runner SAVE)

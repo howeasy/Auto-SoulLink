@@ -4,9 +4,9 @@ Written 2026-09-27 by the combined Gen 3 coordinator (claude 30c21a7a) at the ow
 
 ## Latest closeout handoff — 2026-09-28
 
-Read [CLOSEOUT_2026-09-28.md](CLOSEOUT_2026-09-28.md) first. Runtime cut `ddf6ebd8`: FR/LG 43/43, Emerald 24/24, RR 27/28; exact-head expansion wild active faint PASS. Integration and landing full suites exit 0 with documented skips. RR ball-gate harness candidate remains physically unexercised in its new recovery branch, and an earlier journal-lock failure remains open. No master landing or approval. The detailed sections below retain earlier planning/history and are superseded where the handoff states a later result.
+Read [CLOSEOUT_2026-09-28.md](CLOSEOUT_2026-09-28.md) first. Non-expansion development fixes and their targeted physical proofs are complete; exact frozen qualification remains pending. Refresh landing prep first, freeze one candidate, then run all title cuts, standalone units, full Gen 3 and Gen 1 gates, the additional RR contention/success-reload/commit-interruption rows, and independent final reviews against that candidate. Keep distinct private ROOTs for the two reset rows: the interrupted row deliberately retains a pending journal. No master landing or approval. The detailed sections below preserve earlier planning/history and are superseded by the handoff.
 
-## Closeout execution update — 2026-09-28
+## Earlier closeout execution history — 2026-09-28
 
 The current run started from `ea1d0d66` on `claude/gen3-integration`. Local master remains `abc6bf28`; landing still needs the separate owner approval below.
 

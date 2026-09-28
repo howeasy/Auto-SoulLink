@@ -1,0 +1,157 @@
+duo instance b scenario=trade_reset_success_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:56071 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player b -> 127.0.0.1:56071 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:56071
+[client] [SLink] TCP connected to 127.0.0.1:56071
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=546 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=1324 level=4 hp=18/18
+booted frame=546 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 621
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 621
+[client] [SLink-gen3] write native 0x0203FE94 +4 frame 622
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 623
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 623
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 632
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 632
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=0 applied=0 attempt=1
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 663
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 663
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 663
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 663
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 663
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 663
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 663
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 663
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 663
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 663
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 3633
+[client] [SLink-gen3] write native 0x0203FD4C +28 frame 3633
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 3633
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 3633
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 3633
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 3633
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 3633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 3633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 3633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 3633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 3633
+RX show_menu text=Trade your Aaaaaaaaaa for Aaaaaaaaaa?
+[client] [SLink-gen3] write native 0x0203F900 +38 frame 5583
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 5583
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 5583
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 5583
+TX menu_result - {"choice":1,"event":"menu_result","player":"b","seq":170,"token":"t1"}
+ACCEPTED choice=1
+TRACE wait frame=5602 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED 
+RX apply_prepare
+TRACE wait frame=5603 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=preparing
+TRACE_REFUSED 
+[client] [SLink-gen3] write native 0x0203F810 +32 frame 5604
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 5604
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 5604
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 5604
+TRACE prepare frame=5605 cb2=080565B5 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=preparing
+TRACE_REFUSED field_controls_locked,script_context_status,cpu
+SAVE_WITNESS_DUMP path=patch/build/e2e_trade_reset_success_gen3_b_1_witness.bin bytes=131072 saves=1 frame=6489 counter=5
+SAVE_WITNESS_EXT path=patch/build/e2e_trade_reset_success_gen3_b_1_witness_ext.bin bytes=8160 saves=1
+TRACE prepare frame=6555 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=preparing
+TRACE_REFUSED 
+TX apply_ready - {"event":"apply_ready","ok":true,"player":"b","seq":204,"token":"t1"}
+TRACE prepare frame=6556 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=prepared
+TRACE_REFUSED 
+RX apply_trade
+TRACE wait frame=6872 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=stage
+TRACE_REFUSED 
+[client] [SLink-gen3] write native 0x0203FA00 +100 frame 6873
+TRACE scene frame=6873 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=arm-proof
+TRACE_REFUSED 
+TRACE scene frame=6874 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED 
+[client] [SLink-gen3] write native 0x0203FA00 +100 frame 6875
+[client] [SLink-gen3] write native 0x0203F810 +32 frame 6875
+[client] [SLink-gen3] write native 0x0203F80C +2 frame 6875
+[client] [SLink-gen3] write native 0x0203F808 +2 frame 6875
+[client] [SLink-gen3] write native 0x0203F806 +2 frame 6875
+TRACE scene frame=6876 cb2=080565B5 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED field_controls_locked,palette_fade_active,script_context_status
+TRACE scene frame=6898 cb2=080505CD sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED callback2,field_controls_locked,script_context_status
+TRACE scene frame=6909 cb2=08050949 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED callback2,field_controls_locked,script_context_status
+TRACE scene frame=8697 cb2=080567DD sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED callback2,field_controls_locked,script_context_status
+TRACE scene frame=8698 cb2=08056809 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED callback2,field_controls_locked,script_context_status
+TRACE scene frame=8709 cb2=080565B5 sc2=1 ctx=1 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED field_controls_locked,palette_fade_active,script_context_status
+TRACE scene frame=8733 cb2=080565B5 sc2=1 ctx=0 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED field_controls_locked,script_context_status
+TRACE scene frame=8734 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=scene
+TRACE_REFUSED 
+SAVE_WITNESS_DUMP path=patch/build/e2e_trade_reset_success_gen3_b_1_witness.bin bytes=131072 saves=2 frame=9658 counter=6
+SAVE_WITNESS_EXT path=patch/build/e2e_trade_reset_success_gen3_b_1_witness_ext.bin bytes=8160 saves=2
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_
+TX trade_done - {"event":"trade_done","new_key":"F56D8C1D:2BDDC8BF","new_species":1324,"player":"b","seq":309,"slot":1,"token":"t1"}
+TRACE scene frame=9660 cb2=080565B5 sc2=0 ctx=2 beacon=1 count=2 inbattle=0 phase=nil
+TRACE_REFUSED 
+TRADED gave=F56D8C1D:D4223740 got=F56D8C1D:2BDDC8BF slot=1 species=1324 level=4
+RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE {"bits":31,"counter_after":6,"counter_before":4,"epoch":1,"final_seq":3,"frame":9660,"new_key":"F56D8C1D:2BDDC8BF","old_key":"F56D8C1D:D4223740","pre_seq":2,"revision":16,"scene_seq":3,"side":"b","token":"t1","visit":1,"witness_path":"C:/slink-wt/rr-reset-success-dev-3383/patch/build/e2e_trade_reset_success_gen3_b_success_native_witness.bin"}
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+RX link_panel
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 9662
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 9662
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 9663
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 9663
+[client] [SLink-gen3] write native 0x0203FD6C +25 frame 9663
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 9663
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 9663
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 9663
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 9663
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 9663
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 9663
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 9663
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 9663
+RX play_sound
+RX msgbox text=Traded Aaaaaaaaaa for Aaaaaaaaaa!
+RX trade_final
+RX link_panel
+RESET_NATIVE_SUCCESS_EXIT {"bits":31,"counter_after":6,"counter_before":4,"epoch":1,"final_seq":3,"frame":9660,"new_key":"F56D8C1D:2BDDC8BF","old_key":"F56D8C1D:D4223740","pre_seq":2,"revision":16,"scene_seq":3,"side":"b","token":"t1","visit":1,"witness_path":"C:/slink-wt/rr-reset-success-dev-3383/patch/build/e2e_trade_reset_success_gen3_b_success_native_witness.bin"}
+WRITES 64
+RESULT: FAIL (EXPECTED_NATIVE_SUCCESS_NO_MANUAL_SAVE)

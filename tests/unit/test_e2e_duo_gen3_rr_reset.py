@@ -85,11 +85,26 @@ def test_reset_cleanup_refuses_forced_emulator_termination(monkeypatch):
 
 def test_commit_server_link_must_match_pretrade_baseline_even_before_reload():
     keys = {"a": A, "b": B}
-    staged = [{"a": {"key": A}, "b": {"key": B}, "status": "alive"}]
-    rekeyed = [{"a": {"key": B}, "b": {"key": A}, "status": "alive"}]
+    staged = [{"area_id": "duo", "a": {"key": A}, "b": {"key": B}, "status": "alive"}]
+    rekeyed = [{"area_id": "duo", "a": {"key": B}, "b": {"key": A}, "status": "alive"}]
+    incidental = {"area_id": "route_1", "a": None, "b": None, "status": "dead",
+                  "cause": "dead_zone"}
     assert duo.rr_reset_link_problems("commit", keys, staged, staged, staged) == []
+    assert duo.rr_reset_link_problems("commit", keys, staged,
+                                       staged + [incidental], staged + [incidental]) == []
     assert duo.rr_reset_link_problems("commit", keys, staged, rekeyed, rekeyed)
     assert duo.rr_reset_link_problems("commit", keys, rekeyed, rekeyed, rekeyed)
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged,
+                                       staged + rekeyed)
+    assert duo.rr_reset_link_problems("commit", keys, staged, [], staged)
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged + staged, staged)
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged,
+                                       staged + [{**staged[0], "area_id": "other"}])
+    assert duo.rr_reset_link_problems("commit", keys, staged,
+                                       [{**staged[0], "status": "dead"}], staged)
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged,
+                                       [{**staged[0], "a": {"key": A, "level": 99}}])
+    assert duo.rr_reset_link_problems("commit", keys, staged + rekeyed, staged, staged)
     assert duo.rr_reset_link_problems("success", keys, staged, rekeyed, rekeyed) == []
 
 
@@ -130,6 +145,23 @@ def test_server_wire_must_respond_to_same_token_bound_after_reset_report():
                                        response], "t1")
 
 
+def test_b_native_done_consumption_accepts_persisted_verdict_after_early_return():
+    wire = [{"dir": "c2s", "t": 600, "conn": 2,
+             "msg": {"event": "trade_done", "token": "t1", "new_key": A}},
+            {"dir": "s2c", "t": 601, "conn": 2, "req": 600, "msg": {"commands": []}}]
+    pending = {"pending_trade": {"phase": "applying", "token": "t1",
+                                 "done": {"a": False, "b": False},
+                                 "new": {"a": None, "b": [A, 1324]},
+                                 "verdict": {"a": None, "b": "traded"}}}
+    assert duo.rr_reset_b_consumed_problems(wire, "t1", A, pending) == []
+    assert duo.rr_reset_b_consumed_problems(wire[:1], "t1", A, pending)
+    assert duo.rr_reset_b_consumed_problems(wire, "other", A, pending)
+    assert duo.rr_reset_b_consumed_problems(wire, "t1", B, pending)
+    assert duo.rr_reset_b_consumed_problems(wire, "t1", A, {"pending_trade": None})
+    assert duo.rr_reset_b_consumed_problems(wire, "t1", A, {"pending_trade": {
+        **pending["pending_trade"], "new": {"b": [B, 1324]}}})
+
+
 def test_reset_oracle_loads_the_real_gen3_codec_before_flash_checks():
     class StopOracle(Exception):
         pass
@@ -145,10 +177,11 @@ def test_reset_oracle_loads_the_real_gen3_codec_before_flash_checks():
 
 
 @pytest.mark.parametrize("settled", [False, True])
-def test_success_host_releases_clean_exit_only_after_server_rekey(settled):
+def test_success_host_releases_clean_exit_only_after_server_rekey(settled, tmp_path):
     run = object.__new__(duo.DuoRun)
     run.scenario = "trade_reset_success_gen3"
     run.cfg = {"reset_case": "success"}
+    run.data_dir = str(tmp_path)
     events = []
 
     def prelude(*, link_slot):
@@ -183,12 +216,14 @@ def test_success_host_releases_clean_exit_only_after_server_rekey(settled):
         run.orchestrate_trade_reset_success_gen3()
     assert events == (["GO", "NATIVE_a", "NATIVE_b", "SERVER_CHECK", "EXIT_a", "EXIT_b"]
                       if settled else ["GO", "NATIVE_a", "NATIVE_b", "SERVER_CHECK"])
+    assert json.loads((tmp_path / "rr_reset_staged_links.json").read_text()) == run._rr_reset_links_staged
 
 
-def test_commit_host_waits_for_b_despite_a_expected_partial_result(monkeypatch):
+def test_commit_host_waits_for_b_despite_a_expected_partial_result(monkeypatch, tmp_path):
     run = object.__new__(duo.DuoRun)
     run.scenario = "trade_reset_commit_gen3"
     run.cfg = {"reset_case": "commit", "timeout": 1800}
+    run.data_dir = str(tmp_path)
     run._gen3_prelude = lambda *, link_slot: setattr(run, "_link_keys", {"a": A, "b": B})
     run._gen3_linked_lines = lambda: {"a": [], "b": []}
     run._links_json = lambda: [{"a": {"key": A}, "b": {"key": B}}]
@@ -198,7 +233,13 @@ def test_commit_host_waits_for_b_despite_a_expected_partial_result(monkeypatch):
     run.wait_for = lambda *_args: pytest.fail("expected A FAIL must not abort B/server wait")
     run._read_receipt = lambda inst: (_initial()["a"] if inst == "a" else
                                       'RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE {"token":"t1"}\n')
-    run._reconnect_document = lambda: {"pending_trade": {"token": "t1", "done": {"b": True}}}
+    run._reconnect_document = lambda: {"pending_trade": {
+        "phase": "applying", "token": "t1", "verdict": {"b": "traded"},
+        "new": {"b": [A, 1324]}}}
+    run._rr_reset_wire_rows = lambda inst: [
+        {"dir": "c2s", "t": 17, "conn": 2,
+         "msg": {"event": "trade_done", "token": "t1", "new_key": A}},
+        {"dir": "s2c", "t": 18, "conn": 2, "req": 17}]
     waited = []
 
     def plain_wait(description, predicate, _timeout):
