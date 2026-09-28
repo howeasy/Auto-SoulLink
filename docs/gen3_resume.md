@@ -1,3 +1,9 @@
+# Current resume — 2026-09-28 closeout
+
+Authoritative current state: [Gen 3 closeout handoff](gen3/CLOSEOUT_2026-09-28.md). Work is committed on `claude/gen3-integration`; master remains `abc6bf28`, unapproved for landing. Runtime cut `ddf6ebd8` passed FR/LG 43/43 and Emerald 24/24, but RR is 27/28. Separate harness `24639818` passed ball gate without exercising its new recovery branch; do not promote it to a frozen-cut pass. Journal-lock liveness remains open. Exact-head expansion wild active-faint PASS and source-only wild tables are integrated; expansion stays unrouted. Unit and landing suites exit 0 with explicit prerequisite skips. See the handoff for receipts, precise SHAs, separate landing merge repair, and next bounded cards.
+
+The prior resume material below is historical unless explicitly retained by that handoff.
+
 # Gen 3 resume note (updated 2026-09-27, checkpoint 26: ALL GATES SIGNED; one closeout session left -- follow docs/gen3/CLOSEOUT_RUNBOOK.md)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.

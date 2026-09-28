@@ -70,6 +70,21 @@ end
 -- json null decodes to a table sentinel: only a number is an address
 local function num(v) return type(v) == "number" and v or nil end
 
+-- A death banner names a mon for the player. Several server death paths send a blank
+-- nickname (server/state.py), and a decoded record may itself have an empty or space-only
+-- name. "" is truthy in Lua: it used to blank the banner and mask a valid record nickname.
+-- The first non-blank candidate wins, with the command still outranking the record. A decoded
+-- mon always has a string nickname, so the old raw-key fallback was unreachable on that path;
+-- a nameless mon now gets generic text. No species is guessed here.
+local NO_NAME = "Your Pokemon"
+local function hud_name(...)
+    for i = 1, select("#", ...) do
+        local candidate = select(i, ...)
+        if type(candidate) == "string" and candidate:find("%S") then return candidate end
+    end
+    return NO_NAME
+end
+
 function Client.new(p)
     local reads, R, profile = assert(p.reads, "reads"), assert(p.R, "R"), assert(p.profile, "profile")
     local writes, policy, boxes = assert(p.writes, "writes"), assert(p.policy, "policy"), p.boxes
@@ -78,6 +93,7 @@ function Client.new(p)
     local trade
     local journal = io.trade_journal
     local trade_run_id, trade_run_ot
+    local pending_trade_finals = {}
     local awaiting_trade_run = journal and not journal:ready() or false
     local reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
     local owed = p.owed_reports and p.owed_reports.new() or nil
@@ -795,7 +811,7 @@ function Client.new(p)
         end
         if ex and bhp == 0 then
             e.explode = nil
-            hud.show("!! " .. (mon.nickname or key(mon)) .. " BOOM!", 255, 80, 80, 360)
+            hud.show("!! " .. hud_name(mon.nickname) .. " BOOM!", 255, 80, 80, 360)
             return "done"
         end
         if ex and pp0 < EXPLODE_PP then
@@ -886,7 +902,7 @@ function Client.new(p)
         if not STANDBY then return "hold", "pack has no battle.commit_guard.value" end
         local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE + reads.BATTLE_MON_HP_OFF)
         if e.perish and bhp == 0 then
-            hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
+            hud.show("!! " .. hud_name(e.nickname, mon.nickname) .. " fainted", 255, 80, 80, 360)
             return "done"
         end
         -- the carrier's contract (W2, G4-PH): e.why is exactly "active faint committed" after a
@@ -941,7 +957,7 @@ function Client.new(p)
         local ok, why = armed_write("battle_faint", plan)
         if not ok then return "hold", why end                  -- C4-B: refusal = hold, not defer
         mark_commanded(k)
-        hud.show("!! " .. (e.nickname or mon.nickname or k) .. " KO'd", 255, 80, 80, 360)
+        hud.show("!! " .. hud_name(e.nickname, mon.nickname) .. " KO'd", 255, 80, 80, 360)
         return "done"
     end
 
@@ -1492,6 +1508,7 @@ function Client.new(p)
             -- so a stale doubles bit would refuse a singles swap here.
             if not eligible() then
                 log("replace_rival_team: session not eligible (writes paused); nothing staged")
+                refuse("writes_paused")
             elseif native and native.replace_rival_team then
                 log("replace_rival_team staged for the window (battle " .. tostring(ra.battle_id) .. ")")
                 native:replace_rival_team(cmd, function(epoch)
@@ -1534,6 +1551,7 @@ function Client.new(p)
                 refuse(why)
             elseif not eligible() then
                 log("replace_rival_team: session not eligible (writes paused); nothing staged")
+                refuse("writes_paused")
             elseif native and native.replace_rival_team then
                 native:replace_rival_team(cmd, rival_epoch_guard)
             else
@@ -1658,9 +1676,16 @@ function Client.new(p)
         return true
     end
     C.trade_final = function(cmd)
-        if journal and (awaiting_trade_run or not journal:ready()) then return true end
-        if trade then trade:server_final(cmd)
-        elseif journal then journal:final(cmd.token,cmd.epoch,cmd.verdict) end
+        if journal and (awaiting_trade_run or (not journal:ready() and not journal.busy)) then return true end
+        local ok, why
+        if trade then ok, why = trade:server_final(cmd)
+        elseif journal then ok, why = journal:final(cmd.token,cmd.epoch,cmd.verdict) end
+        if why == "trade journal lock busy" then
+            pending_trade_finals[#pending_trade_finals+1] = {
+                token=cmd.token, epoch=cmd.epoch, verdict=cmd.verdict,
+                run_id=trade_run_id, ot_id=trade_run_ot,
+            }
+        end
         return true
     end
     drv.after_receive = function()
@@ -1852,6 +1877,18 @@ function Client.new(p)
     end
     local trade_frame
     drv.pre_pump = function()
+        local pending = pending_trade_finals[1]
+        if pending and p.net.connected() and not awaiting_trade_run then
+            if pending.run_id ~= trade_run_id or pending.ot_id ~= trade_run_ot then
+                table.remove(pending_trade_finals,1) -- a different run cannot inherit this final
+                log("pending trade_final discarded: server run/trainer binding changed")
+            elseif journal and (journal:ready() or journal.busy) then
+                local _, why
+                if trade then _, why = trade:server_final(pending)
+                else _, why = journal:final(pending.token,pending.epoch,pending.verdict) end
+                if why ~= "trade journal lock busy" then table.remove(pending_trade_finals,1) end
+            end
+        end
         if owed then owed:step(p.net.connected(), false, send) end
         if trade_frame and io.framecount() < trade_frame then
             if trade then trade:reset(); sync_trade() end

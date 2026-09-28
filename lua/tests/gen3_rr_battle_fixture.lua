@@ -35,6 +35,7 @@ local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
 assert(WT, "SLINK_ROOT unset — launch via tools/gen3_fixtures.py _launch")
 local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")
 local PL = dofile(WT .. "/lua/tests/playlib.lua")
+local Edge = dofile(WT .. "/lua/tests/gen3_rr_route2_edge.lua")
 local JSON = dofile(WT .. "/lua/json_codec.lua")
 local Reads = dofile(WT .. "/lua/gen3/reads.lua")
 
@@ -490,7 +491,27 @@ local function run_route2(existing_cp, duo_hooks)
         G.shot("stuck"); G.finish(false, "route2: not back on Route1: " .. play.where(cp)); return
     end
     play.follow(cp, "route1_north_edge_to_south_edge", "route2")
-    local ok5, why6 = play.enter_warp(cp, "Down", 30)
+    local ok5, why6 = Edge.cross({
+        state = function()
+            local x, y = H.pos(cp)
+            local cb2 = G.pred(cp, "callback2")
+            local tasks, task = {}, cp.tasks
+            for i = 0, (task.count or 16) - 1 do
+                local at = task.address + i * task.struct_size
+                if memory.read_u8(at + task.is_active_offset) ~= 0 then
+                    tasks[#tasks + 1] = string.format("%d:%08X",
+                        i, memory.read_u32_le(at + task.func_offset))
+                end
+            end
+            return {map = H.map(cp), x = x, y = y, field = play.on_field(cp),
+                    battle = play.in_battle(cp), callback2 = string.format("%08X", cb2),
+                    tasks = table.concat(tasks, ",")}
+        end,
+        fight_through = function() return play.fight_through(cp, 1200) end,
+        settle = function() return play.wait_scene_settled(cp, 1800) end,
+        enter_warp = function() return play.enter_warp(cp, "Down", 30) end,
+        log = function(line) G.phase("route2-edge", line) end,
+    })
     if not ok5 then G.shot("stuck"); G.finish(false, "route2 Route1->Pallet: " .. tostring(why6)); return end
     if H.map(cp) ~= 3 * 256 + 0 then
         G.shot("stuck"); G.finish(false, "route2: not on Pallet Town: " .. play.where(cp)); return

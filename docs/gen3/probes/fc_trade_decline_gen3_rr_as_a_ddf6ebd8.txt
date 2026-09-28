@@ -1,0 +1,50 @@
+# gen3_final_cut row=trade_decline_gen3_rr_as_a item=§14_P5_RR_duo cut=ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d
+# lane=C:/slink-wt/close-final-rr
+# command: python tools/e2e_duo.py --game gen3_rr --scenario trade_decline_gen3   (cwd=C:/slink-wt/close-final-rr)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T23:31:14 cpu=45% emuhawk=2 python=12
+start_utc=2026-09-28T03:31:13Z tracked_clean_before=True
+
+========== scenario: trade_decline_gen3 ==========
+[duo] trade_decline_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d
+[duo] server up: tcp=62048 http=62049 data=C:\Users\howar\AppData\Local\Temp\slink_duo_trade_decline_gen3_y1xrrb81
+[duo] timing server 0.7s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 12.7s
+[duo] timing results 3.6s
+[duo] RESULT_LINE a: RESULT: PASS (declined; nothing moved)
+[duo] RESULT_LINE b: RESULT: PASS (declined; nothing moved)
+[duo] SAVE_WITNESS_SHA256 inst=a site=259786957f6b759f0a190dcb4541c9f7e8a76c8b5b94cd6ef124b9709758bd3c file=259786957f6b759f0a190dcb4541c9f7e8a76c8b5b94cd6ef124b9709758bd3c match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=6c9b7fb29988f60428aa9537245572f7e1f94457b1599ddf68b9d49f3d4f9770 file=6c9b7fb29988f60428aa9537245572f7e1f94457b1599ddf68b9d49f3d4f9770 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] trade_decline_gen3: offer F56D8C1D:2BDDC8BF for F56D8C1D:D4223740 declined with B; no apply_prepare/apply_trade, both saves hold their fixture party, link unchanged
+[duo] MARKER a: TALKED npc=(2,3) player=(3,3) facing=Left pi_count=0->1
+[duo] MARKER a: TX trade_request - {"event":"trade_request","player":"a","seq":71}
+[duo] MARKER a: RX show_choices text=OAK: Took you long enough.
+[duo] MARKER a: TX menu_result - {"choice":0,"event":"menu_result","player":"a","seq":74,"token":"t1"}
+[duo] MARKER a: RX choose_mon
+[duo] MARKER a: TX mon_chosen - {"event":"mon_chosen","player":"a","seq":79,"slot":1,"token":"t1"}
+[duo] MARKER a: RX msgbox text=Your partner declined the trade.
+[duo] MARKER b: RX show_menu text=Trade your Aaaaaaaaaa for Aaaaaaaaaa?
+[duo] MARKER b: TX menu_result - {"choice":0,"event":"menu_result","player":"b","seq":81,"token":"t1"}
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] trade_decline_gen3: a=PASS b=PASS
+
+========== summary ==========
+  trade_decline_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-28T03:31:32Z tracked_clean_after=True classification=pass

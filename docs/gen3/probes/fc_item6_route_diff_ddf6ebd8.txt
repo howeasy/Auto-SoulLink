@@ -1,0 +1,104 @@
+# gen3_final_cut row=item6_route_diff item=§10_item6 cut=ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d
+# lane=C:/slink-wt/close-final-frlg1
+# command: python tools/gen3_final_cut.py item6 --branch C:/slink-wt/close-final-frlg1 --master C:/slink-wt/close-final-master   (cwd=C:\slink-wt\close-final)
+# env: (none)
+# verdict: PASS
+# inputs: input:patch/build/gen1_blue.gb=2a951313c2640e8c2cb21f25d1db019ae6245d9c7121f754fa61afd7bee6452d input:patch/build/gen1_red.gb=5ca7ba01642a3b27b0cc0b5349b52792795b62d3ed977e98a09390659af96b7b input:patch/build/gen1_yellow.gbc=8cbaa499397e4f1a679c992ea9382a2dd7942ab398b48c19829c2d9529de47bf input:patch/build/gen2_crystal.gbc=d6702e353dcbe2d2c69183046c878ef13a0dae4006e8cdff521cca83dd1582fe input:patch/gen1/build/slink.sym=fa9572935fcae7ebea9dc9947cf0b092df51b6f4b82ef9995f5daf0b181e3ea4 input:patch/gen1/build/slink_blue.gb=25f9e71ff0589a6dae9ae43f568ed318052919880989538c43037a3e02e59060 input:patch/gen1/build/slink_red.gb=ecd3c871c5c48721d11610afee95cddc39ee8648ec0531535dd9a75a92e54c74
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T23:22:59 cpu=88% emuhawk=4 python=16
+start_utc=2026-09-28T03:22:58Z tracked_clean_before=True
+
+[item6] gen1_ordering on master (abc6bf28)  $ python -m pytest tests/unit/test_zz_item6_gen1_ordering_scratch.py -q -p no:randomly
+..                                                                       [100%]
+2 passed in 0.93s
+
+
+[item6] gen1_ordering on branch (ddf6ebd8)  $ python -m pytest tests/unit/test_zz_item6_gen1_ordering_scratch.py -q -p no:randomly
+..                                                                       [100%]
+2 passed in 1.06s
+
+
+[item6] gen1_sfx_town on master (abc6bf28)  $ python -m pytest tests/live/test_gen1_gates.py::test_gen1_sfx_matrix -k town -q -p no:randomly -rs
+..                                                                       [100%]
+2 passed, 2 deselected in 10.43s
+
+
+[item6] gen1_sfx_town on branch (ddf6ebd8)  $ python -m pytest tests/live/test_gen1_gates.py::test_gen1_sfx_matrix -k town -q -p no:randomly -rs
+..                                                                       [100%]
+2 passed, 2 deselected in 11.41s
+
+
+[item6] gen2_legacy_faint on master (abc6bf28)  $ python tools/e2e_duo.py --game gen2 --scenario faint
+usage: e2e_duo.py [-h]
+                  [--game {gen1_new,gen1_pure,gen1_pure_green,gen1_pure_overlay,gen2_crystal_gold,gen2_gold_silver,gen2_new,gen3_frlg,gen3_lgfr,gen3_rr}]
+                  [--scenario {trainer_bench_gen3,active_end_gen3,gen2_trade_decline_new,gen2_trade_evolve,gen2_trade_new,gen2_trade_refuse_item,gen2_trade_reset_commit,gen2_trade_reset_wait,gen2_trade_timeout,link,gen2_faint,gen2_whiteout,gen2_pc_ops,gen2_changebox,gen2_poison,gen2_whiteout_rebuild,gen2_boxed_capture,gen2_gift,gen2_egg_hatch,gen2_npc_trade,gen2_evolution,gen2_ball_gate,gen2_faint_active,gen2_faint_active_trainer,gen2_admit_wrong_rom,gen2_reconnect,gen2_type_clause,gen2_gender_clause,gen2_species_clause,gen2_soft_reset,faint,boxsync,link_new,deadzone_new,linked_faint_bench_new,linked_faint_active_new,linked_faint_bench_battle_new,explode_bench_battle_new,reconnect_new,ball_gate_new,trade_new,soft_reset_new,trade_decline_new,explode_new,pc_ops_new,changebox_new,whiteout_new,type_clause_new,species_clause_new,poison_new,rival_swap_new,admit_randomized_new,faint_cmd_gen3,linked_faint_active_gen3,linked_faint_active_whiteout_gen3,linked_faint_active_trainer_gen3,boxsync_gen3,whiteout_gen3,center_controls_gen3,save_then_write_gen3,link_gen3,deadzone_gen3,reconnect_gen3,explode_gen3,rival_swap_gen3,rival_swap_real_gen3,native_absent_gen3,trade_gen3,trade_decline_gen3,infopanel_gen3,infopanel_dex_gen3,linked_faint_active_clean_gen3,faint_cmd_clean_gen3,linked_faint_active_lhammer_gen3,linked_faint_active_mega_gen3,all}]
+                  [--keep-alive] [--keep-data] [--lane LANE]
+                  [--speed-percent SPEED_PERCENT] [--idle-jitter IDLE_JITTER]
+                  [--wrong-save WRONG_SAVE]
+                  [--server-flags [SERVER_FLAGS ...]] [--wire-log] [--list]
+e2e_duo.py: error: argument --game: invalid choice: 'gen2' (choose from gen1_new, gen1_pure, gen1_pure_green, gen1_pure_overlay, gen2_crystal_gold, gen2_gold_silver, gen2_new, gen3_frlg, gen3_lgfr, gen3_rr)
+
+
+[item6] gen2_legacy_faint on branch (ddf6ebd8)  $ python tools/e2e_duo.py --game gen2 --scenario faint
+usage: e2e_duo.py [-h]
+                  [--game {gen1_new,gen1_pure,gen1_pure_green,gen1_pure_overlay,gen2_crystal_gold,gen2_gold_silver,gen2_new,gen3_emerald,gen3_exp,gen3_fr_trade,gen3_frlg,gen3_lg_trade,gen3_lgfr,gen3_rr}]
+                  [--scenario {gift_gen3,egg_hatch_gen3,admit_randomized_frlg,admit_randomized_emerald,link_gen3_rand,trainer_panel_gen3_rand,trainer_bench_gen3,active_end_gen3,gen2_trade_decline_new,gen2_trade_evolve,gen2_trade_new,gen2_trade_refuse_item,gen2_trade_reset_commit,gen2_trade_reset_wait,gen2_trade_timeout,link,gen2_faint,gen2_whiteout,gen2_pc_ops,gen2_changebox,gen2_poison,gen2_whiteout_rebuild,gen2_boxed_capture,gen2_gift,gen2_egg_hatch,gen2_npc_trade,gen2_evolution,gen2_ball_gate,gen2_faint_active,gen2_faint_active_trainer,gen2_admit_wrong_rom,gen2_reconnect,gen2_type_clause,gen2_gender_clause,gen2_species_clause,gen2_soft_reset,faint,boxsync,link_new,deadzone_new,linked_faint_bench_new,linked_faint_active_new,linked_faint_bench_battle_new,explode_bench_battle_new,reconnect_new,ball_gate_new,trade_new,soft_reset_new,trade_decline_new,explode_new,pc_ops_new,changebox_new,whiteout_new,type_clause_new,species_clause_new,poison_new,rival_swap_new,admit_randomized_new,faint_cmd_gen3,linked_faint_active_gen3,linked_faint_active_whiteout_gen3,linked_faint_active_trainer_gen3,boxsync_gen3,whiteout_gen3,center_controls_gen3,save_then_write_gen3,evolve_gen3,npc_trade_gen3,poison_faint_gen3,link_gen3,deadzone_gen3,reconnect_gen3,explode_gen3,rival_swap_gen3,rival_swap_real_gen3,native_absent_gen3,native_trade_firered,native_trade_decline_firered,trade_gen3,trade_decline_gen3,infopanel_gen3,infopanel_dex_gen3,linked_faint_active_clean_gen3,faint_cmd_clean_gen3,linked_faint_active_lhammer_gen3,linked_faint_active_mega_gen3,species_clause_gen3,gender_clause_gen3,type_clause_gen3,release_gen3,ball_gate_gen3,species_family_gen3,shiny_bonus_gen3,all}]
+                  [--keep-alive] [--keep-data] [--lane LANE]
+                  [--speed-percent SPEED_PERCENT] [--idle-jitter IDLE_JITTER]
+                  [--wrong-save WRONG_SAVE]
+                  [--server-flags [SERVER_FLAGS ...]] [--wire-log] [--list]
+e2e_duo.py: error: argument --game: invalid choice: 'gen2' (choose from gen1_new, gen1_pure, gen1_pure_green, gen1_pure_overlay, gen2_crystal_gold, gen2_gold_silver, gen2_new, gen3_emerald, gen3_exp, gen3_fr_trade, gen3_frlg, gen3_lg_trade, gen3_lgfr, gen3_rr)
+
+
+[item6] gen2_legacy_boxsync on master (abc6bf28)  $ python tools/e2e_duo.py --game gen2 --scenario boxsync
+usage: e2e_duo.py [-h]
+                  [--game {gen1_new,gen1_pure,gen1_pure_green,gen1_pure_overlay,gen2_crystal_gold,gen2_gold_silver,gen2_new,gen3_frlg,gen3_lgfr,gen3_rr}]
+                  [--scenario {trainer_bench_gen3,active_end_gen3,gen2_trade_decline_new,gen2_trade_evolve,gen2_trade_new,gen2_trade_refuse_item,gen2_trade_reset_commit,gen2_trade_reset_wait,gen2_trade_timeout,link,gen2_faint,gen2_whiteout,gen2_pc_ops,gen2_changebox,gen2_poison,gen2_whiteout_rebuild,gen2_boxed_capture,gen2_gift,gen2_egg_hatch,gen2_npc_trade,gen2_evolution,gen2_ball_gate,gen2_faint_active,gen2_faint_active_trainer,gen2_admit_wrong_rom,gen2_reconnect,gen2_type_clause,gen2_gender_clause,gen2_species_clause,gen2_soft_reset,faint,boxsync,link_new,deadzone_new,linked_faint_bench_new,linked_faint_active_new,linked_faint_bench_battle_new,explode_bench_battle_new,reconnect_new,ball_gate_new,trade_new,soft_reset_new,trade_decline_new,explode_new,pc_ops_new,changebox_new,whiteout_new,type_clause_new,species_clause_new,poison_new,rival_swap_new,admit_randomized_new,faint_cmd_gen3,linked_faint_active_gen3,linked_faint_active_whiteout_gen3,linked_faint_active_trainer_gen3,boxsync_gen3,whiteout_gen3,center_controls_gen3,save_then_write_gen3,link_gen3,deadzone_gen3,reconnect_gen3,explode_gen3,rival_swap_gen3,rival_swap_real_gen3,native_absent_gen3,trade_gen3,trade_decline_gen3,infopanel_gen3,infopanel_dex_gen3,linked_faint_active_clean_gen3,faint_cmd_clean_gen3,linked_faint_active_lhammer_gen3,linked_faint_active_mega_gen3,all}]
+                  [--keep-alive] [--keep-data] [--lane LANE]
+                  [--speed-percent SPEED_PERCENT] [--idle-jitter IDLE_JITTER]
+                  [--wrong-save WRONG_SAVE]
+                  [--server-flags [SERVER_FLAGS ...]] [--wire-log] [--list]
+e2e_duo.py: error: argument --game: invalid choice: 'gen2' (choose from gen1_new, gen1_pure, gen1_pure_green, gen1_pure_overlay, gen2_crystal_gold, gen2_gold_silver, gen2_new, gen3_frlg, gen3_lgfr, gen3_rr)
+
+
+[item6] gen2_legacy_boxsync on branch (ddf6ebd8)  $ python tools/e2e_duo.py --game gen2 --scenario boxsync
+usage: e2e_duo.py [-h]
+                  [--game {gen1_new,gen1_pure,gen1_pure_green,gen1_pure_overlay,gen2_crystal_gold,gen2_gold_silver,gen2_new,gen3_emerald,gen3_exp,gen3_fr_trade,gen3_frlg,gen3_lg_trade,gen3_lgfr,gen3_rr}]
+                  [--scenario {gift_gen3,egg_hatch_gen3,admit_randomized_frlg,admit_randomized_emerald,link_gen3_rand,trainer_panel_gen3_rand,trainer_bench_gen3,active_end_gen3,gen2_trade_decline_new,gen2_trade_evolve,gen2_trade_new,gen2_trade_refuse_item,gen2_trade_reset_commit,gen2_trade_reset_wait,gen2_trade_timeout,link,gen2_faint,gen2_whiteout,gen2_pc_ops,gen2_changebox,gen2_poison,gen2_whiteout_rebuild,gen2_boxed_capture,gen2_gift,gen2_egg_hatch,gen2_npc_trade,gen2_evolution,gen2_ball_gate,gen2_faint_active,gen2_faint_active_trainer,gen2_admit_wrong_rom,gen2_reconnect,gen2_type_clause,gen2_gender_clause,gen2_species_clause,gen2_soft_reset,faint,boxsync,link_new,deadzone_new,linked_faint_bench_new,linked_faint_active_new,linked_faint_bench_battle_new,explode_bench_battle_new,reconnect_new,ball_gate_new,trade_new,soft_reset_new,trade_decline_new,explode_new,pc_ops_new,changebox_new,whiteout_new,type_clause_new,species_clause_new,poison_new,rival_swap_new,admit_randomized_new,faint_cmd_gen3,linked_faint_active_gen3,linked_faint_active_whiteout_gen3,linked_faint_active_trainer_gen3,boxsync_gen3,whiteout_gen3,center_controls_gen3,save_then_write_gen3,evolve_gen3,npc_trade_gen3,poison_faint_gen3,link_gen3,deadzone_gen3,reconnect_gen3,explode_gen3,rival_swap_gen3,rival_swap_real_gen3,native_absent_gen3,native_trade_firered,native_trade_decline_firered,trade_gen3,trade_decline_gen3,infopanel_gen3,infopanel_dex_gen3,linked_faint_active_clean_gen3,faint_cmd_clean_gen3,linked_faint_active_lhammer_gen3,linked_faint_active_mega_gen3,species_clause_gen3,gender_clause_gen3,type_clause_gen3,release_gen3,ball_gate_gen3,species_family_gen3,shiny_bonus_gen3,all}]
+                  [--keep-alive] [--keep-data] [--lane LANE]
+                  [--speed-percent SPEED_PERCENT] [--idle-jitter IDLE_JITTER]
+                  [--wrong-save WRONG_SAVE]
+                  [--server-flags [SERVER_FLAGS ...]] [--wire-log] [--list]
+e2e_duo.py: error: argument --game: invalid choice: 'gen2' (choose from gen1_new, gen1_pure, gen1_pure_green, gen1_pure_overlay, gen2_crystal_gold, gen2_gold_silver, gen2_new, gen3_emerald, gen3_exp, gen3_fr_trade, gen3_frlg, gen3_lg_trade, gen3_lgfr, gen3_rr)
+
+
+[item6] gen2_legacy_memorialize on master (abc6bf28)  $ python tools/e2e_duo.py --game gen2 --scenario memorialize
+usage: e2e_duo.py [-h]
+                  [--game {gen1_new,gen1_pure,gen1_pure_green,gen1_pure_overlay,gen2_crystal_gold,gen2_gold_silver,gen2_new,gen3_frlg,gen3_lgfr,gen3_rr}]
+                  [--scenario {trainer_bench_gen3,active_end_gen3,gen2_trade_decline_new,gen2_trade_evolve,gen2_trade_new,gen2_trade_refuse_item,gen2_trade_reset_commit,gen2_trade_reset_wait,gen2_trade_timeout,link,gen2_faint,gen2_whiteout,gen2_pc_ops,gen2_changebox,gen2_poison,gen2_whiteout_rebuild,gen2_boxed_capture,gen2_gift,gen2_egg_hatch,gen2_npc_trade,gen2_evolution,gen2_ball_gate,gen2_faint_active,gen2_faint_active_trainer,gen2_admit_wrong_rom,gen2_reconnect,gen2_type_clause,gen2_gender_clause,gen2_species_clause,gen2_soft_reset,faint,boxsync,link_new,deadzone_new,linked_faint_bench_new,linked_faint_active_new,linked_faint_bench_battle_new,explode_bench_battle_new,reconnect_new,ball_gate_new,trade_new,soft_reset_new,trade_decline_new,explode_new,pc_ops_new,changebox_new,whiteout_new,type_clause_new,species_clause_new,poison_new,rival_swap_new,admit_randomized_new,faint_cmd_gen3,linked_faint_active_gen3,linked_faint_active_whiteout_gen3,linked_faint_active_trainer_gen3,boxsync_gen3,whiteout_gen3,center_controls_gen3,save_then_write_gen3,link_gen3,deadzone_gen3,reconnect_gen3,explode_gen3,rival_swap_gen3,rival_swap_real_gen3,native_absent_gen3,trade_gen3,trade_decline_gen3,infopanel_gen3,infopanel_dex_gen3,linked_faint_active_clean_gen3,faint_cmd_clean_gen3,linked_faint_active_lhammer_gen3,linked_faint_active_mega_gen3,all}]
+                  [--keep-alive] [--keep-data] [--lane LANE]
+                  [--speed-percent SPEED_PERCENT] [--idle-jitter IDLE_JITTER]
+                  [--wrong-save WRONG_SAVE]
+                  [--server-flags [SERVER_FLAGS ...]] [--wire-log] [--list]
+e2e_duo.py: error: argument --game: invalid choice: 'gen2' (choose from gen1_new, gen1_pure, gen1_pure_green, gen1_pure_overlay, gen2_crystal_gold, gen2_gold_silver, gen2_new, gen3_frlg, gen3_lgfr, gen3_rr)
+
+
+[item6] gen2_legacy_memorialize on branch (ddf6ebd8)  $ python tools/e2e_duo.py --game gen2 --scenario memorialize
+usage: e2e_duo.py [-h]
+                  [--game {gen1_new,gen1_pure,gen1_pure_green,gen1_pure_overlay,gen2_crystal_gold,gen2_gold_silver,gen2_new,gen3_emerald,gen3_exp,gen3_fr_trade,gen3_frlg,gen3_lg_trade,gen3_lgfr,gen3_rr}]
+                  [--scenario {gift_gen3,egg_hatch_gen3,admit_randomized_frlg,admit_randomized_emerald,link_gen3_rand,trainer_panel_gen3_rand,trainer_bench_gen3,active_end_gen3,gen2_trade_decline_new,gen2_trade_evolve,gen2_trade_new,gen2_trade_refuse_item,gen2_trade_reset_commit,gen2_trade_reset_wait,gen2_trade_timeout,link,gen2_faint,gen2_whiteout,gen2_pc_ops,gen2_changebox,gen2_poison,gen2_whiteout_rebuild,gen2_boxed_capture,gen2_gift,gen2_egg_hatch,gen2_npc_trade,gen2_evolution,gen2_ball_gate,gen2_faint_active,gen2_faint_active_trainer,gen2_admit_wrong_rom,gen2_reconnect,gen2_type_clause,gen2_gender_clause,gen2_species_clause,gen2_soft_reset,faint,boxsync,link_new,deadzone_new,linked_faint_bench_new,linked_faint_active_new,linked_faint_bench_battle_new,explode_bench_battle_new,reconnect_new,ball_gate_new,trade_new,soft_reset_new,trade_decline_new,explode_new,pc_ops_new,changebox_new,whiteout_new,type_clause_new,species_clause_new,poison_new,rival_swap_new,admit_randomized_new,faint_cmd_gen3,linked_faint_active_gen3,linked_faint_active_whiteout_gen3,linked_faint_active_trainer_gen3,boxsync_gen3,whiteout_gen3,center_controls_gen3,save_then_write_gen3,evolve_gen3,npc_trade_gen3,poison_faint_gen3,link_gen3,deadzone_gen3,reconnect_gen3,explode_gen3,rival_swap_gen3,rival_swap_real_gen3,native_absent_gen3,native_trade_firered,native_trade_decline_firered,trade_gen3,trade_decline_gen3,infopanel_gen3,infopanel_dex_gen3,linked_faint_active_clean_gen3,faint_cmd_clean_gen3,linked_faint_active_lhammer_gen3,linked_faint_active_mega_gen3,species_clause_gen3,gender_clause_gen3,type_clause_gen3,release_gen3,ball_gate_gen3,species_family_gen3,shiny_bonus_gen3,all}]
+                  [--keep-alive] [--keep-data] [--lane LANE]
+                  [--speed-percent SPEED_PERCENT] [--idle-jitter IDLE_JITTER]
+                  [--wrong-save WRONG_SAVE]
+                  [--server-flags [SERVER_FLAGS ...]] [--wire-log] [--list]
+e2e_duo.py: error: argument --game: invalid choice: 'gen2' (choose from gen1_new, gen1_pure, gen1_pure_green, gen1_pure_overlay, gen2_crystal_gold, gen2_gold_silver, gen2_new, gen3_emerald, gen3_exp, gen3_fr_trade, gen3_frlg, gen3_lg_trade, gen3_lgfr, gen3_rr)
+
+
+[item6] case                  master  branch
+[item6] gen1_ordering         PASS    PASS
+[item6] gen1_sfx_town         PASS    PASS
+[item6] gen2_legacy_faint     FAIL    FAIL
+[item6] gen2_legacy_boxsync   FAIL    FAIL
+[item6] gen2_legacy_memorializeFAIL    FAIL
+RESULT: PASS no case regressed vs master
+exit=0 end_utc=2026-09-28T03:23:31Z tracked_clean_after=True classification=pass

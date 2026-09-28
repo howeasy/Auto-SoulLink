@@ -838,6 +838,8 @@ GEN3_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "poison_faint_gen3", "spe
 # (RR's DoPoisonFieldEffect is an unconditional no-op stub, no HP mutation to build a fixture
 # around) -- see its comment in tools/e2e_duo.py SCENARIOS.
 GEN3_RR_NAT_SCENARIOS = ("evolve_gen3", "npc_trade_gen3", "species_family_gen3", "gift_gen3", "egg_hatch_gen3", "shiny_bonus_gen3")
+GEN3_RR_EXPLICIT_SCENARIOS = ("trade_reset_commit_gen3", "trade_reset_success_gen3",
+                              "trade_lock_probe_gen3")
 
 
 @pytest.mark.parametrize("name,module,target", (
@@ -896,7 +898,7 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         if name not in (GEN3_FRLG_SCENARIOS + GEN3_FRLG_ONLY_SCENARIOS + GEN3_NAT_SCENARIOS
                         + tuple(duo_module.GEN3_RAND_SCENARIOS)):
             assert not scenario_applies(name, "gen3_frlg"), name
-        if name not in GEN3_RR_SCENARIOS + GEN3_RR_NAT_SCENARIOS:
+        if name not in GEN3_RR_SCENARIOS + GEN3_RR_NAT_SCENARIOS + GEN3_RR_EXPLICIT_SCENARIOS:
             assert not scenario_applies(name, "gen3_rr"), name
     for name in GEN3_FRLG_SCENARIOS:
         # Shared rows also name gen3_emerald (E<->E), appended, never renamed.
@@ -911,6 +913,8 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
             8 if name in ("gender_clause_gen3", "type_clause_gen3") else expected), name
     assert set(scenarios_for("gen3_emerald")) == set(GEN3_FRLG_SCENARIOS) - {
         "linked_faint_active_whiteout_gen3"}
+    for name in GEN3_RR_EXPLICIT_SCENARIOS:
+        assert SCENARIOS[name]["games"] == ("gen3_rr",) and SCENARIOS[name]["explicit_only"] is True
     assert set(scenarios_for("gen3_exp")) == {"faint_cmd_gen3", "link_gen3", "whiteout_gen3",
                                               "boxsync_gen3", "linked_faint_active_gen3"}
     assert {n for n in GEN3_FRLG_SCENARIOS if SCENARIOS[n].get("ball_hunt")} == {
