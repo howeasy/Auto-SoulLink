@@ -114,7 +114,7 @@ def test_reload_requires_saved_key_and_matching_after_reset_report():
       c.wait_until=function(pred) return pred() end
       c.save=function() c.saves=c.saves+1 end
       local ok=F.reload(c,{counter=function() return 5 end,
-        require_after_reset=true,token='t1'})
+        expected_counter=5,require_after_reset=true,token='t1'})
       assert(ok==true)
       return c
     ''')
@@ -135,8 +135,19 @@ def test_reload_cannot_accept_wrong_key_or_uncertain_token():
           c.wait_until=function(pred) return pred() end
           c.save=function() c.saves=c.saves+1 end
           local ok=F.reload(c,{{counter=function() return 5 end,
-            require_after_reset=true,token='{token}'}})
+            expected_counter=5,require_after_reset=true,token='{token}'}})
           assert(ok==false)
           return c
         ''')
         assert state["saves"] == 0
+
+
+def test_reload_fails_closed_without_initial_native_counter():
+    assert _run('''
+      local c={D={expected_key='11223344:55667788'},player='a'}
+      c.party=function() return {{key='11223344:55667788'}} end
+      c.jlog=function() end
+      local ok=F.reload(c,{counter=function() return 5 end})
+      assert(ok==false)
+      return true
+    ''')

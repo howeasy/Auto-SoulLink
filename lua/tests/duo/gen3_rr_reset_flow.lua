@@ -70,8 +70,8 @@ function F.reload(ctx, d)
     for _, mon in ipairs(party) do if mon.key == key then found = found + 1 end end
     if found ~= 1 then return false, "reset battery does not hold expected key exactly once" end
     local counter = d.counter and d.counter()
-    if type(counter) ~= "number" or counter < 0
-       or (d.expected_counter and counter ~= d.expected_counter) then
+    if type(d.expected_counter) ~= "number" or d.expected_counter < 0
+       or type(counter) ~= "number" or counter ~= d.expected_counter then
         return false, "reset flash counter unavailable or changed"
     end
     marker(ctx, "RESET_RELOADED", {side=ctx.player, key=key, counter=counter})
