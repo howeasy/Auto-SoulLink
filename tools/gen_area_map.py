@@ -583,6 +583,23 @@ _EMERALD_DIVE_HOST = {
     "MAP_UNDERWATER_ROUTE126": "MAP_ROUTE126",
 }
 
+# E5-CITYLINK: Hoenn towns that have no wild encounters of their own, so the wild loop above
+# never names them. Unnamed, trainer_maps.area_of_map()'s BFS (tools/gen_gen3_trainers.py) walks
+# straight out of the town to the nearest wild-linked neighbour -- which is how Mauville's gym
+# landed under route_110 (ruling 28) and Rustboro's under route_104 (ruling 40). Each is listed
+# by pret FOLDER name; the mapGroup:mapNum key, MAPSEC and area_id stay derived from pret
+# (map_groups.json + region_map_sections.json), never written here. A pret rename raises KeyError
+# rather than silently dropping a town. The trailing comment is the derived key for review only.
+_EMERALD_WILD_LESS_TOWNS = (
+    "MauvilleCity",     # 0:2  MAPSEC_MAUVILLE_CITY    -> mauville_city
+    "RustboroCity",     # 0:3  MAPSEC_RUSTBORO_CITY    -> rustboro_city
+    "FortreeCity",      # 0:4  MAPSEC_FORTREE_CITY     -> fortree_city
+    "LittlerootTown",   # 0:9  MAPSEC_LITTLEROOT_TOWN  -> littleroot_town
+    "OldaleTown",       # 0:10 MAPSEC_OLDALE_TOWN      -> oldale_town
+    "FallarborTown",    # 0:13 MAPSEC_FALLARBOR_TOWN   -> fallarbor_town
+    "VerdanturfTown",   # 0:14 MAPSEC_VERDANTURF_TOWN  -> verdanturf_town
+)
+
 
 def _write_or_check(path, content, check, newline=None):
     """check=False: write `content` to `path` (creating parent dirs), same open() `newline` mode
@@ -696,22 +713,23 @@ def generate_emerald(check=False, *, source=None, output_dir=None, expansion=Fal
             )
         area_map[key] = area_id
 
-    # E5-CITYLINK (owner ruling 28 RC defect): MauvilleCity has no wild encounters of its own
-    # (unlike Petalburg/Lilycove etc.), so the wild loop above never gives it a named area, and
-    # trainer_maps.area_of_map()'s BFS (tools/gen_gen3_trainers.py) walks straight past Wattson's
-    # gym to the nearest wild-linked neighbour, Route 110, instead of stopping at Mauville City --
-    # the only city in the game with no trainers of its own outside the gym, so this hid the gym
-    # trainers inside Route 110's list entirely. Scoped to the one flagged city (not every town
-    # missing a wild-encounter entry): Rustboro/Fortree/Littleroot/Oldale/Fallarbor/Verdanturf have
-    # the identical gap and are a separate owner call.
+    # E5-CITYLINK (owner ruling 28 RC defect, widened by ruling 40): a town with no wild
+    # encounters of its own -- unlike Petalburg/Lilycove, which have their own grass -- is never
+    # named by the wild loop, so the client's area lookup misses it and the trainer generator's
+    # BFS walks out of town to the nearest mapped neighbour. Mauville first (Wattson's gym filed
+    # under Route 110, hiding it from Route 110's real trainers), then ruling 40's six towns.
+    # Scoped to the named towns rather than every wild-less map: the set is an owner ruling, and
+    # a test re-derives it from pret so a source update cannot drift it unnoticed.
     if not expansion:
-        key = key_of_folder["MauvilleCity"]
-        if key not in area_map:
-            area_id = area_id_for(id_of_folder["MauvilleCity"])
-            identity = mapsec_of_folder["MauvilleCity"]
+        for town in _EMERALD_WILD_LESS_TOWNS:
+            key = key_of_folder[town]
+            if key in area_map:
+                continue
+            area_id = area_id_for(id_of_folder[town])
+            identity = mapsec_of_folder[town]
             prior = _area_identity.setdefault(area_id, identity)
             if prior != identity:
-                raise ValueError(f"MauvilleCity backfill: area_id {area_id!r} ({identity}) "
+                raise ValueError(f"{town} backfill: area_id {area_id!r} ({identity}) "
                                  f"collides with {prior!r} already claimed there")
             area_map[key] = area_id
 
