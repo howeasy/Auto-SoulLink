@@ -96,6 +96,13 @@ def test_commit_server_link_must_match_pretrade_baseline_even_before_reload():
     assert duo.rr_reset_link_problems("commit", keys, rekeyed, rekeyed, rekeyed)
     assert duo.rr_reset_link_problems("commit", keys, staged, staged,
                                        staged + rekeyed)
+    assert duo.rr_reset_link_problems("commit", keys, staged, [], staged)
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged + staged, staged)
+    assert duo.rr_reset_link_problems("commit", keys, staged,
+                                       [{**staged[0], "status": "dead"}], staged)
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged,
+                                       [{**staged[0], "a": {"key": A, "level": 99}}])
+    assert duo.rr_reset_link_problems("commit", keys, staged + rekeyed, staged, staged)
     assert duo.rr_reset_link_problems("success", keys, staged, rekeyed, rekeyed) == []
 
 

@@ -2512,6 +2512,7 @@ def rr_reset_link_problems(case, keys, staged, initial, final):
     problems = []
     baseline = [row for row in staged if old(row)]
     if (len(baseline) != 1 or not baseline[0].get("area_id")
+            or sum(row.get("area_id") == baseline[0]["area_id"] for row in staged) != 1
             or baseline[0].get("status") != "alive"):
         problems.append("RR reset lacks exactly one staged pre-trade server link")
     if case == "commit":
