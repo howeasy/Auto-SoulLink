@@ -91,14 +91,11 @@ C.init(host, port)
 -- no process id, so the unique part is a per-install counter, allocated here. It lives at the
 -- INSTALL ROOT (ROOT, next to slink_lua.log), because a player's release has no patch/build/.
 --
--- WHY IT IS UNIQUE (C5-11d BLOCKER 1). The counter file is a BATON: to allocate, a caller RENAMES
--- it to a name of its own, reads n, and publishes n+1 as a fresh file renamed into the baton's
--- place (the taken file stays intact until then, so a failed write never truncates the counter).
--- os.rename is C rename(), and on Windows and POSIX alike only ONE rename can consume a given
--- source name: the loser gets ENOENT. So at most one caller holds the baton at a time -- by
--- construction, not by a re-read that another writer can race (the old lock file was opened "w",
--- so two owners could each read their own token back; Codex's interleaving gave both callers 10).
--- This part needs no non-replacing rename, so it holds on Linux too.
+-- WHY IT IS UNIQUE. An OS-exclusive .lock handle serializes the ENTIRE allocation transaction.
+-- Inside that guard, a caller renames the baton to a private name, reads n, and publishes n+1
+-- from a fresh file; a failed write does not truncate the old counter. Installed Windows NLua
+-- demonstrated that two concurrent C os.rename calls can both report success for the baton
+-- while only one private destination survives, so rename alone is not an ownership proof.
 --
 -- FIRST CREATION is the one step where the OSes differ, because a missing baton is ambiguous
 -- (never created, or held by someone right now). A baton is created only when the baton AND the
@@ -111,13 +108,15 @@ C.init(host, port)
 --     atomically on a local filesystem) and the winner is the token on the FIRST line, which no
 --     later append can change. The one non-structural step: two first-ever claimants in the same
 --     instant must draw distinct tokens (wall second + CPU clock + a 31-bit draw).
--- The birth record is never removed, so after the first run a missing baton only ever means "held"
--- (or a holder crashed mid-hold): wait, then fail closed. Nothing ever recreates it.
+-- The birth record is never removed, so a missing baton after birth may mean a holder, a crashed
+-- holder, or a winner that died before publishing generation zero: wait, then fail closed.
+-- Nothing ever recreates it.
 --
 -- FAIL CLOSED (C5-11d MAJOR 2). nil means the client mints no identity, declares no capability and
 -- refuses every rival command. nil is returned for: a baton still missing after the bounded wait;
 -- an unreadable, empty, non-integral or out-of-range baton, or a write, flush, close or rename that
--- does not report success (in every case the baton is put back as found). There is no
+-- does not report success (the old baton is restored when its rename succeeds; a failed restore
+-- remains fail-closed and needs operator inspection). There is no
 -- restart-at-1 path: the only initialisation is the won birth above.
 --
 -- RECOVERY (owner action, never automatic; Codex REV4): inspect EVERY generation artifact before
@@ -127,7 +126,25 @@ C.init(host, port)
 -- choice is unambiguous; never pick an arbitrary .baton.* file, never restore an older generation
 -- (that reissues a value), and never remove slink_gen3_session.born. Every temporary name assumes
 -- distinct tokens: a same-token collision on POSIX can replace another caller's held file.
-local function next_session_counter(root, open_file, remove_file, spin, rename_file, windows)
+-- On the installed Windows Lua runtime, two concurrent os.rename calls can both report success
+-- for one baton source while only one private destination survives. The permanent .lock file is
+-- only an OS-exclusive MUTEX around this existing transaction; .born/.baton remain the freshness
+-- authority. An old client that ignores .lock must not run beside an updated one on one install.
+local function acquire_session_guard(path)
+    if not luanet or not luanet.import_type then return nil, "unavailable" end
+    local ok, stream = pcall(function()
+        local File = assert(luanet.import_type("System.IO.File"))
+        local Mode = assert(luanet.import_type("System.IO.FileMode"))
+        local Access = assert(luanet.import_type("System.IO.FileAccess"))
+        local Share = assert(luanet.import_type("System.IO.FileShare"))
+        return File.Open(path,Mode.OpenOrCreate,Access.ReadWrite,Share.None)
+    end)
+    if ok then return stream end
+    local known, code = pcall(function() return stream.InnerException.HResult end)
+    if known and (code == -2147024864 or code == -2147024863) then return nil, "busy" end
+    return nil, "unavailable" -- ACL, absent parent, or unavailable CLR: never create a new counter
+end
+local function next_session_counter(root, open_file, remove_file, spin, rename_file, windows, acquire_guard)
     open_file, remove_file, rename_file = open_file or io.open, remove_file or os.remove,
                                           rename_file or os.rename
     if windows == nil then windows = package.config:sub(1, 1) == "\\" end
@@ -165,55 +182,70 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
         return s ~= nil and s:match("^[^\n]*") == token
     end
 
-    local birth_checked = false
-    -- 3000 spins = ~15 s at the default 5 ms. The first winner publishes .born before .baton;
-    -- the other emulator can observe that gap while startup is slow under load. The old 1000
-    -- spins (~5 s) made that second window permanently lose trade capability for this session.
-    -- A crashed holder still fails closed after the bound; no caller recreates a born baton.
-    for _ = 1, 3000 do
-        local took, _, errno = rename_file(baton, mine)
-        if took then
-            local s = get(mine)
-            local n = s and s:match("^%d+$") and tonumber(s)
-            local nxt = mine .. ".next"
-            if n and n < 4294967295 and put(nxt, tostring(n + 1)) and rename_file(nxt, baton) then
-                remove_file(mine)
-                return n + 1
+    local function allocate_under_guard()
+        local birth_checked = false
+        -- 3000 spins = ~15 s at the default 5 ms. The first winner publishes .born before .baton;
+        -- the other emulator can observe that gap while startup is slow under load. The old 1000
+        -- spins (~5 s) made that second window permanently lose trade capability for this session.
+        -- A crashed holder still fails closed after the bound; no caller recreates a born baton.
+        for _ = 1, 3000 do
+            local took, _, errno = rename_file(baton, mine)
+            if took then
+                local s = get(mine)
+                local n = s and s:match("^%d+$") and tonumber(s)
+                local nxt = mine .. ".next"
+                if n and n < 4294967295 and put(nxt, tostring(n + 1)) and rename_file(nxt, baton) then
+                    remove_file(mine)
+                    return n + 1
+                end
+                remove_file(nxt)
+                rename_file(mine, baton)               -- put it back as found: fail closed, no reset
+                return nil
             end
-            remove_file(nxt)
-            rename_file(mine, baton)               -- put it back as found: fail closed, no reset
-            return nil
-        end
-        if errno == ENOENT and not birth_checked then
-            birth_checked = true
-            local _, born_errno = get(born)
-            if born_errno == ENOENT and won_birth() then
-                local tmp = base .. ".new." .. token
-                if not put(tmp, "0") then
-                    remove_file(tmp)
-                    return nil
-                end
-                -- Only this caller won the permanent birth record. A transient rename/share
-                -- failure gets a bounded retry of the SAME prepared generation. Exhaustion
-                -- remains fail-closed; no later caller may initialise the counter.
-                local published = false
-                for _ = 1, 3000 do
-                    if rename_file(tmp, baton) then published = true; break end
-                    spin()
-                end
-                if not published then
-                    remove_file(tmp)
-                    return nil
+            if errno == ENOENT and not birth_checked then
+                birth_checked = true
+                local _, born_errno = get(born)
+                if born_errno == ENOENT and won_birth() then
+                    local tmp = base .. ".new." .. token
+                    if not put(tmp, "0") then
+                        remove_file(tmp)
+                        return nil
+                    end
+                    -- Only this caller won the permanent birth record. A transient rename/share
+                    -- failure gets a bounded retry of the SAME prepared generation. Exhaustion
+                    -- remains fail-closed; no later caller may initialise the counter.
+                    local published = false
+                    for _ = 1, 3000 do
+                        if rename_file(tmp, baton) then published = true; break end
+                        spin()
+                    end
+                    if not published then
+                        remove_file(tmp)
+                        return nil
+                    end
                 end
             end
+            spin()
         end
-        spin()
+        return nil
     end
-    return nil
+    local guard, why = (acquire_guard or acquire_session_guard)(base .. ".lock")
+    if not guard then return nil, why end
+    local ok, value = pcall(allocate_under_guard)
+    local released = pcall(function() guard:Dispose() end)
+    if not ok or not released then return nil, "unavailable" end
+    return value
 end
 -- <<< session counter <<<
 
-local session_counter = next_session_counter(ROOT)
+local session_counter, counter_reason
+-- A sharing collision is retried only after BizHawk advances a frame, so both windows keep
+-- progressing while the other owns the lock. No loser ever recreates a born baton.
+for _ = 1, 600 do
+    session_counter, counter_reason = next_session_counter(ROOT, nil, nil, function() emu.frameadvance() end)
+    if session_counter or counter_reason ~= "busy" then break end
+    emu.frameadvance()
+end
 if not session_counter then
     console.log("[SLink-gen3] session counter unavailable (slink_gen3_session.baton held or unreadable at the install root); native trade is off this session")
 end

@@ -72,6 +72,10 @@ class _FS:
     def __init__(self, windows=False, files=None):
         self.windows = windows
         self.files = {k: _Inode(v) if isinstance(v, str) else v for k, v in (files or {}).items()}
+        self.guard = threading.Lock()
+        self.guard_seen = False
+        self.guard_deny = False
+        self.guard_fail_close = False
         self.fail: set[str] = set()          # "write" / "flush" / "close": every handle reports it
         self.deny: set[str] = set()          # paths whose open AND rename fail with EACCES
         self.opened: list[str] = []
@@ -79,7 +83,23 @@ class _FS:
     def text(self, path):
         return self.files[path].text if path in self.files else None
 
-    def api(self, on_read=None, on_open_miss=None):
+    def acquire_guard(self, path):
+        assert path == f"{ROOT}/slink_gen3_session.lock"
+        self.guard_seen = True
+        if self.guard_deny:
+            return None, "unavailable"
+        if not self.guard.acquire(blocking=False):
+            return None, "busy"
+
+        class Handle:
+            def Dispose(_self):
+                self.guard.release()
+                if self.guard_fail_close:
+                    raise OSError("guard close failed")
+
+        return Handle()
+
+    def api(self, on_read=None, on_open_miss=None, on_rename=None):
         """(open, remove, rename) as one process sees them; the hooks let a test pause it."""
         fs = self
 
@@ -141,6 +161,8 @@ class _FS:
             if fs.windows and dst in fs.files:
                 return None, f"{dst}: File exists", EEXIST
             fs.files[dst] = fs.files.pop(src)
+            if on_rename:
+                on_rename(src, dst)
             return True
 
         return open_, remove, rename
@@ -157,7 +179,7 @@ def _no_spin():
 
 def _allocate(fs, fn=None, **hooks):
     open_, remove, rename = fs.api(**hooks)
-    return (fn or _counter())(ROOT, open_, remove, _no_spin, rename, fs.windows)
+    return (fn or _counter())(ROOT, open_, remove, _no_spin, rename, fs.windows, fs.acquire_guard)
 
 
 OS = pytest.mark.parametrize("windows", [True, False], ids=["windows", "posix"])
@@ -169,6 +191,7 @@ def test_the_counter_increments_and_writes_at_the_install_root(windows):
     assert [_allocate(fs) for _ in range(3)] == [1, 2, 3]
     assert fs.text(BATON) == "3"
     assert set(fs.files) == {BATON, BORN}, "a clean allocation leaves only the baton and the record"
+    assert fs.guard_seen and not fs.guard.locked()
     assert all(p.startswith(f"{ROOT}/") for p in fs.opened)
     assert not any("patch" in p or "build" in p for p in fs.opened), (
         "the counter must not live under patch/build/: a player's release has no such directory, "
@@ -214,9 +237,9 @@ def test_c511d_codex_interleaving_two_processes_never_get_the_same_value(windows
         return {"on_read": lambda text: pause() if text == "9" else None}
 
     a, b = _run_paused(fs, at_nine, lambda: _allocate(fs))
-    got = [v for v in (a, b) if v is not None]
+    got = [v for v in (a, b) if isinstance(v, int)]
     assert len(got) == len(set(got)), f"both processes were handed {got[0]}"
-    assert a == 10 and b is None
+    assert a == 10 and b == (None, "busy")
     assert fs.text(BATON) == "10"
 
 
@@ -232,7 +255,8 @@ def test_c511d_the_first_ever_race_creates_exactly_one_baton(windows):
         return {"on_open_miss": lambda path: pause() if path == BORN else None}
 
     a, b = _run_paused(fs, at_birth_check, lambda: _allocate(fs))
-    assert (a, b) == (2, 1)
+    assert (a, b) == (1, (None, "busy")), "B must wait outside A's exclusive guard"
+    assert _allocate(fs) == 2
     assert fs.text(BATON) == "2"
 
 
@@ -301,11 +325,29 @@ def test_an_unwritable_install_root_fails_closed():
     assert BATON not in fs.files
 
 
+def test_guard_acquisition_error_never_initialises_a_fresh_install():
+    fs = _FS(True)
+    fs.guard_deny = True
+    assert _allocate(fs) == (None, "unavailable")
+    assert BATON not in fs.files and BORN not in fs.files
+
+
+def test_guard_release_error_burns_a_value_but_never_exposes_it():
+    fs = _FS(True)
+    fs.guard_fail_close = True
+    assert _allocate(fs) == (None, "unavailable")
+    assert fs.text(BATON) == "1" and not fs.guard.locked()
+    fs.guard_fail_close = False
+    assert _allocate(fs) == 2
+
+
 def test_run_lua_still_uses_the_counter_and_fails_closed_without_a_seed():
     """The call site, not just the helper: the seed must be built from the counter, and it must
     be absent when the counter is nil."""
     src = RUN_LUA.read_text(encoding="utf-8")
-    assert "local session_counter = next_session_counter(ROOT)" in src
+    assert "session_counter, counter_reason = next_session_counter(ROOT" in src
+    assert 'if session_counter or counter_reason ~= "busy" then break end' in src
+    assert "emu.frameadvance()" in src
     assert "if session_counter then" in src
     assert "local battle_nonce_seed = nil" in src
 
@@ -413,7 +455,7 @@ def test_a_slow_holder_is_waited_out_not_failed_closed(windows):
             fs.files[BATON] = _Inode("41")            # A publishes its n+1
 
     open_, remove, rename = fs.api()
-    assert _counter()(ROOT, open_, remove, slow_holder, rename, fs.windows) == 42
+    assert _counter()(ROOT, open_, remove, slow_holder, rename, fs.windows, fs.acquire_guard) == 42
 
 
 @OS
@@ -430,7 +472,7 @@ def test_first_birth_waits_for_a_slow_publisher(windows):
 
     open_, remove, rename = fs.api()
     assert _counter()(ROOT, open_, remove, publish_after_slow_first_start,
-                      rename, fs.windows) == 2
+                      rename, fs.windows, fs.acquire_guard) == 2
     assert fs.text(BATON) == "2"
 
 
@@ -447,7 +489,7 @@ def test_birth_winner_retries_a_transient_baton_publish_failure(windows):
             return None, "temporarily busy", EACCES
         return rename(src, dst)
 
-    assert _counter()(ROOT, open_, remove, _no_spin, transient_rename, windows) == 1
+    assert _counter()(ROOT, open_, remove, _no_spin, transient_rename, windows, fs.acquire_guard) == 1
     assert failed and fs.text(BATON) == "1"
     assert _allocate(fs) == 2
 
@@ -462,14 +504,14 @@ def test_exhausted_birth_publish_stays_fail_closed(windows):
             return None, "persistently busy", EACCES
         return rename(src, dst)
 
-    assert _counter()(ROOT, open_, remove, _no_spin, blocked_publish, windows) is None
+    assert _counter()(ROOT, open_, remove, _no_spin, blocked_publish, windows, fs.acquire_guard) is None
     assert BORN in fs.files and BATON not in fs.files
     assert _allocate(fs) is None, "a later caller must never reset the birth generation"
     assert BATON not in fs.files
 
 
-def test_first_birth_winner_publishes_after_the_loser_waits_past_old_bound():
-    """Two live Lua runtimes: A owns .born but pauses before .baton, then B waits >1000 spins."""
+def test_first_birth_winner_publishes_after_a_contending_client_yields():
+    """Two live Lua runtimes: A owns the guard while paused after .born; B gets typed busy."""
     fs = _FS(True)
     born, resume, finished = threading.Event(), threading.Event(), threading.Event()
     out = {}
@@ -484,24 +526,31 @@ def test_first_birth_winner_publishes_after_the_loser_waits_past_old_bound():
 
     def run_a():
         try:
-            out["a"] = _counter()(ROOT, open_a, remove_a, _no_spin, rename_a, True)
+            out["a"] = _counter()(ROOT, open_a, remove_a, _no_spin, rename_a, True, fs.acquire_guard)
         finally:
             finished.set()
 
     thread = threading.Thread(target=run_a, daemon=True)
     thread.start()
     assert born.wait(5)
-    spins = []
-
-    def wait_then_release_winner():
-        spins.append(1)
-        if len(spins) == 1500:
-            resume.set()
-            assert finished.wait(5)
-
     open_b, remove_b, rename_b = fs.api()
-    b = _counter()(ROOT, open_b, remove_b, wait_then_release_winner, rename_b, True)
+    b = _counter()(ROOT, open_b, remove_b, _no_spin, rename_b, True, fs.acquire_guard)
+    assert b == (None, "busy")
+    resume.set()
     thread.join(5)
     assert not thread.is_alive()
-    assert (out["a"], b) == (1, 2)
+    assert out["a"] == 1 and _allocate(fs) == 2
     assert fs.text(BATON) == "2"
+
+
+@OS
+def test_guard_serializes_claim_through_the_private_read_and_publish(windows):
+    fs = _FS(windows, {BATON: "0", BORN: "first-run\n"})
+
+    def after_claim(pause):
+        return {"on_rename": lambda src, dst: pause() if src == BATON and dst.startswith(BATON + ".") else None}
+
+    a, b = _run_paused(fs, after_claim, lambda: _allocate(fs))
+    assert (a, b) == (1, (None, "busy"))
+    assert _allocate(fs) == 2 and fs.text(BATON) == "2"
+    assert not fs.guard.locked()
