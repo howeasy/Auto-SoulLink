@@ -2564,6 +2564,31 @@ def rr_reset_wire_problems(rows, token):
     return []
 
 
+def rr_reset_b_consumed_problems(rows, token, partner_key, document):
+    """B's real native report reached the server, even if done.b was not re-saved."""
+    matches = [row for row in rows if row.get("dir") == "c2s"
+               and (row.get("msg") or {}).get("event") == "trade_done"
+               and (row.get("msg") or {}).get("token") == token
+               and (row.get("msg") or {}).get("new_key") == partner_key
+               and (row.get("msg") or {}).get("uncertain") is not True]
+    if len(matches) != 1:
+        return ["server wire lacks exactly one B native trade_done for the token/partner"]
+    request = matches[0]
+    if (type(request.get("t")) is not int or request["t"] <= 0
+            or type(request.get("conn")) is not int or request["conn"] <= 0
+            or not any(row.get("dir") == "s2c" and row.get("req") == request["t"]
+                       and row.get("conn") == request["conn"] for row in rows)):
+        return ["server wire lacks B's paired native trade_done response"]
+    pending = (document or {}).get("pending_trade") or {}
+    received = (pending.get("new") or {}).get("b")
+    if (pending.get("token") != token or pending.get("phase") not in ("applying", "uncertain")
+            or (pending.get("verdict") or {}).get("b") != "traded"
+            or not isinstance(received, (list, tuple)) or not received
+            or received[0] != partner_key):
+        return ["server has no persisted B native-trade outcome for the token"]
+    return []
+
+
 def gen3_trade_chain(inst, ka, kb, decline):
     """(required, ordered, forbidden) receipt regexes for one side of the NPC trade (RR-DURABLE):
     the server's native menus, then on YES the durable round on BOTH sides -- apply_prepare ->
@@ -8078,8 +8103,9 @@ class DuoRun:
         remaining = max(0, getattr(self, "_run_deadline", float("inf")) - time.time())
         return wait_for(description, guarded, min(timeout, remaining))
 
-    def _rr_reset_wire_rows(self):
-        path = Path(self._wire_dir(), "wire_a.jsonl")
+    def _rr_reset_wire_rows(self, inst="a"):
+        assert inst in ("a", "b")
+        path = Path(self._wire_dir(), f"wire_{inst}.jsonl")
         if not path.is_file():
             return []
         try:
@@ -8119,9 +8145,9 @@ class DuoRun:
                 r"^RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE ({.*})$",
                 self._read_receipt("b"), re.M), self.cfg["timeout"])
             token = json.loads(marker[1])["token"]
-            self._rr_reset_wait_commit_initial("server consumed B's native trade_done", lambda: (
-                (pending := self._reconnect_document().get("pending_trade") or {}).get("token") == token
-                and (pending.get("done") or {}).get("b") is True), 120)
+            self._rr_reset_wait_commit_initial("server consumed B's native trade_done", lambda:
+                not rr_reset_b_consumed_problems(self._rr_reset_wire_rows("b"), token,
+                                                  keys["a"], self._reconnect_document()), 120)
             self._append_reconnect_marker("b", "RESET_EXIT")
         initial = {}
         for inst in "ab":
