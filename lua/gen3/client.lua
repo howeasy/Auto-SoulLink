@@ -70,6 +70,21 @@ end
 -- json null decodes to a table sentinel: only a number is an address
 local function num(v) return type(v) == "number" and v or nil end
 
+-- A death banner names a mon for the player. Several server death paths send a blank
+-- nickname (server/state.py), and a decoded record may itself have an empty or space-only
+-- name. "" is truthy in Lua: it used to blank the banner and mask a valid record nickname.
+-- The first non-blank candidate wins, with the command still outranking the record. A decoded
+-- mon always has a string nickname, so the old raw-key fallback was unreachable on that path;
+-- a nameless mon now gets generic text. No species is guessed here.
+local NO_NAME = "Your Pokemon"
+local function hud_name(...)
+    for i = 1, select("#", ...) do
+        local candidate = select(i, ...)
+        if type(candidate) == "string" and candidate:find("%S") then return candidate end
+    end
+    return NO_NAME
+end
+
 function Client.new(p)
     local reads, R, profile = assert(p.reads, "reads"), assert(p.R, "R"), assert(p.profile, "profile")
     local writes, policy, boxes = assert(p.writes, "writes"), assert(p.policy, "policy"), p.boxes
@@ -795,7 +810,7 @@ function Client.new(p)
         end
         if ex and bhp == 0 then
             e.explode = nil
-            hud.show("!! " .. (mon.nickname or key(mon)) .. " BOOM!", 255, 80, 80, 360)
+            hud.show("!! " .. hud_name(mon.nickname) .. " BOOM!", 255, 80, 80, 360)
             return "done"
         end
         if ex and pp0 < EXPLODE_PP then
@@ -886,7 +901,7 @@ function Client.new(p)
         if not STANDBY then return "hold", "pack has no battle.commit_guard.value" end
         local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE + reads.BATTLE_MON_HP_OFF)
         if e.perish and bhp == 0 then
-            hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
+            hud.show("!! " .. hud_name(e.nickname, mon.nickname) .. " fainted", 255, 80, 80, 360)
             return "done"
         end
         -- the carrier's contract (W2, G4-PH): e.why is exactly "active faint committed" after a
@@ -941,7 +956,7 @@ function Client.new(p)
         local ok, why = armed_write("battle_faint", plan)
         if not ok then return "hold", why end                  -- C4-B: refusal = hold, not defer
         mark_commanded(k)
-        hud.show("!! " .. (e.nickname or mon.nickname or k) .. " KO'd", 255, 80, 80, 360)
+        hud.show("!! " .. hud_name(e.nickname, mon.nickname) .. " KO'd", 255, 80, 80, 360)
         return "done"
     end
 
