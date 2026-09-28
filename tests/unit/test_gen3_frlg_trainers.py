@@ -207,7 +207,7 @@ def test_board_panel_renders_fr_key_trainers():
 
 
 @pytest.mark.parametrize("tid,area,name,levels", (
-    (265, "route_104", "Roxanne", [12, 12, 15]),
+    (265, "rustboro_city", "Roxanne", [12, 12, 15]),
     (272, "sootopolis_city", "Juan", [41, 41, 43, 43, 46]),
 ))
 def test_emerald_trainers_and_panel_use_the_emerald_table(tid, area, name, levels):
