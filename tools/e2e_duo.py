@@ -553,6 +553,10 @@ SCENARIOS = {
     "trade_decline_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",), "target": "battle2",
                            "frames": 2500000, "scenario_module": "trade",
                            "oracle": "assert_trade_decline_gen3_saved"},
+    "trade_lock_probe_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
+                               "target": "battle2", "frames": 2500000, "explicit_only": True,
+                               "journal_lock_probe": True, "scenario_module": "trade_lock_probe",
+                               "oracle": "assert_trade_lock_probe_gen3_saved"},
     # RR physical durability: native pre-save/commit interruption and native-success
     # cold reload. The FINAL phase has no save; the initial phase's native save(s) are
     # checked separately against immutable battery/journal copies by the reset oracle.
@@ -7320,7 +7324,7 @@ class DuoRun:
             self._archive_native_receipts()
         if (passed and not self.args.keep_data and self.scenario not in GEN2_TRADE_SCENARIOS
                 and not self.cfg.get("gen3_rand") and not self.cfg.get("gen3_native_trade")
-                and not self.cfg.get("rr_reset_trade")):
+                and not self.cfg.get("rr_reset_trade") and not self.cfg.get("journal_lock_probe")):
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
             print(f"[duo] data dir kept: {self.data_dir}")
@@ -8256,6 +8260,9 @@ class DuoRun:
 
     orchestrate_trade_decline_gen3 = orchestrate_trade_gen3
 
+    def orchestrate_trade_lock_probe_gen3(self):
+        return importlib.import_module("gen3_journal_probe").orchestrate(self)
+
     def orchestrate_infopanel_gen3(self):
         """Every slot pair both fixtures hold (up to two), linked only after A's receipt shows the
         RX tee is in place, so the link_panel the server sends next is the one A records and draws."""
@@ -8297,6 +8304,9 @@ class DuoRun:
                                    f"durable native pre-save/scene/post-save both sides; saved a holds "
                                    f"{kb}, b holds {ka} (partner records intact), links.json re-keyed, "
                                    f"each key once")
+
+    def assert_trade_lock_probe_gen3_saved(self, results):
+        return importlib.import_module("gen3_journal_probe").saved_oracle(self, results)
 
     def assert_trade_decline_gen3_saved(self, results):
         ka, kb, problems = self._gen3_trade_facts(results, traded=False)
