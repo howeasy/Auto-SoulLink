@@ -907,7 +907,8 @@ def test_gen3_frlg_keys_do_not_leak_and_nothing_leaks_in():
         # the ball-RNG retry (card C4-6g): only the halves that throw Poke Balls retry
         expected = 8 if name in ("species_clause_gen3", "ball_gate_gen3") else 3 if SCENARIOS[name].get("ball_hunt") else 1
         assert scenario_attempt_limit(name, "gen3_frlg") == expected, name
-        assert scenario_attempt_limit(name, "gen3_rr") == (8 if name == "gender_clause_gen3" else expected), name
+        assert scenario_attempt_limit(name, "gen3_rr") == (
+            8 if name in ("gender_clause_gen3", "type_clause_gen3") else expected), name
     assert set(scenarios_for("gen3_emerald")) == set(GEN3_FRLG_SCENARIOS) - {
         "linked_faint_active_whiteout_gen3"}
     assert set(scenarios_for("gen3_exp")) == {"faint_cmd_gen3", "link_gen3", "whiteout_gen3",
