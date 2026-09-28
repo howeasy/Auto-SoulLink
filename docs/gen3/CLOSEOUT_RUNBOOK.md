@@ -159,3 +159,31 @@ Remove merged worktrees. On this Drive setup, unlink junctions first (`os.path.i
 Candidates: em-t2, g3-exp, g3-uiq, g3-rrfc, g3-rrdur, g3-t5-fr-duo, o-*, g3-clause-live-rest, g3-clause-run, g3-rr-enc-forms, g3-lane2, g3-lane3. Keep g3-int, g3-lane, g3-lane-master and rv-land until the owner closes the RC.
 
 Update `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (the checkpoint) and `WORKTREE_REGISTER.md` at every transition.
+
+## HANDOFF 2026-09-28 (Claude, token-limited stop): read this first
+
+Codex died mid-turn ~11:44 local time, deep into a second closeout window. I (Claude, resumed after the "ping") picked up, verified, and froze a new candidate. **I stopped for token budget, not because anything is blocked.** Five background OS processes are still running independently of any session and will finish on their own -- just collect their output.
+
+### What I verified is real (not just claimed in the prior closeout doc)
+- `c8d66f6f` (RR ball-edge recovery), `13028cf9` (session-counter race fix), `53412bb2` (journal-lock retry fix) are all confirmed ancestors of integration HEAD.
+- Re-ran `linked_faint_active_lhammer_gen3` live on the frozen candidate: **PASS a/b**, no lock-contention failure (was the open "journal liveness" finding). Receipt committed: `docs/gen3/probes/journal_lhammer_126ff87b/run.txt`.
+- Spot-checked the Emerald six-towns fix is in the actual data files (`401da78f`), confirming the closeout doc's "Completed implementation" claims are trustworthy, not just prose.
+- Killed nothing myself (the process-kill classifier blocked me on 3 orphaned `server.server` duo processes; owner command below).
+
+### Frozen candidate: `5a67e3f6` (integration), `38c68769` (landing-prep, merged clean, no conflicts)
+
+### RUNNING NOW -- background OS processes, will complete unattended
+1. **Full unit suite** on `5a67e3f6`: `C:/slink-wt/suite-126ff87b.log` -- was at 66%, zero failures so far.
+2. **Gen1 release gate `--quick`** (regression check, non-emulator lanes only) on `5a67e3f6`: `C:/slink-wt/gen1-gate-quick-5a67e3f6.log`.
+3. **FR/LG final cut** fresh on `5a67e3f6`, lane `C:/slink-wt/g3-lane` (state `g3-lane-state`): `C:/slink-wt/fc-frlg-5a67e3f6.log`. ~100 min total.
+4. **Emerald final cut** fresh on `5a67e3f6`, lane `C:/slink-wt/g3-lane2` (state `g3-lane2-state`): `C:/slink-wt/fc-emerald-5a67e3f6.log`. ~15 min total.
+5. **RR final cut** fresh on `5a67e3f6`, lane `C:/slink-wt/g3-lane3` (state `g3-lane3-state`): `C:/slink-wt/fc-rr-5a67e3f6.log`. ~30 min total. **Expect this one to actually pass now**: the prior 02ba8ed1 cut's two live failures (`reconnect_gen3_rr_as_a` timeout, `type_clause_gen3_rr_as_a` unobserved) match two of the "Completed implementation" fixes (reconnect HELLO handling, RR type-nonoverlap retry) that are now in this candidate.
+
+**Next session: just read these five log files.** If all green (or only the pre-known `linked_faint_active_mega_gen3_*` owner-signed skip), the qualification chain from the closeout doc's own "Resume" checklist (items 1-2) is DONE and item 4 (final cuts) is DONE. What's left is purely landing mechanics.
+
+### Still needed before asking the owner to land
+- **Ping Gen 2 again.** Files changed since the last Gen2 ACK: `server/state.py`, `server/server.py`, `server/adapters/__init__.py`, `server/adapters/gen3_expansion.py`, `lua/core/deferred.lua`. The prior ACK is stale.
+- Kill the 3 orphaned duo-server processes (classifier-blocked me): `taskkill //F //PID 29084 //PID 21764 //PID 2036`.
+- Master stays `abc6bf28`, untouched. Landing needs the owner's own explicit yes (ruling 41) -- nothing here changes that.
+- Worktree/branch sprawl (~90 worktrees, ~50 `codex/close-*|core-*|rr-reset-*|review-*` branches from the recursive dev/diag/review fan-out): 64 confirmed merged into integration, 8 master-only, ~40 not literal ancestors but spot-checks show their content already landed via different commits on the mainline (likely dead-end duplicate lanes). NOT deleted this session -- too much to verify safely on a token budget. Do a dedicated cleanup pass once landing is decided, using the ancestor-check script pattern above (`git merge-base --is-ancestor <head> <target>` per worktree) rather than trusting branch names.
+- Expansion (ruling 42, parallel track): untouched by me, still exactly where Codex's closeout doc left it (unrouted, XG3 open). Not blocking.
