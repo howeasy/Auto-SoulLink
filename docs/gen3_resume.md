@@ -47,14 +47,14 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
   - (d) ping Gen 2 (server/*.py changed).
 - RR native trade is no longer refused except for an old UPS without the witness.
 
-**Owner decisions still open:**
-1. Expansion XG1/XG2 (docs/gen3_emerald/XG1_request_draft.md, XG2_request_draft.md §6):
-   - the shinyModifier (A/B/C; the worker recommends C);
-   - accept the exp_*.sav SYNTH fixtures;
-   - gen3_exp registered-but-unrouted, including the server-side route asymmetry (OMP cx-2ce936ca finding 1: the server routes emerald_expansion_28877d73 while the client refuses; refuse server-side like crystal_ap, or route both halves together);
-   - the second compiler probe as the source of harness facts.
-2. Whether to fix the same "town has no wild map → trainers filed under a neighbouring route" gap for 6 more Emerald towns (Rustboro/Roxanne, Fortree/Winona, Littleroot, Oldale, Fallarbor, Verdanturf). Mauville was fixed.
-3. ONE landing request for FR/LG/E (and RR once durable trade is green), after the landing-prep refresh (`claude/gen3-landing-prep`, C:/slink-wt/rv-land) against master plus the Gen 2 ping.
+**Owner rulings 2026-09-27 (answered in chat; these are decisions, NOT XG1/XG2 gate signatures, which still need an explicit "yes"):**
+- **38 (expansion shiny, XG2 option C):** record the shinyModifier as a known limit for the reference build now; carrying it (shared state.py/base.py/client) is the FIRST card of X4. No shared server change now.
+- **39 (expansion admission):** accept the exp_*.sav SYNTH fixtures and gen3_exp registered-but-unrouted, AND refuse emerald_expansion_28877d73 server-side by name (add it to server/adapters/__init__.py _REFUSED_ROM_TYPES, as crystal_ap is) until it is routed. The duo harness's test-only admission seam must still work, i.e. use a test-only server override too. CARD for Codex.
+- **40 (Emerald towns):** fix all six: Rustboro/Roxanne, Fortree/Winona, Littleroot, Oldale, Fallarbor, Verdanturf.
+  - File each town's trainers, including gym leaders, under the town itself, sourced from pret, using the same E5-CITYLINK backfill as Mauville in tools/gen_area_map.py.
+  - Update test_roxanne, which pins the old route_104 filing, then regenerate area_map/emerald_trainers/gen3_emerald_areas.
+  - CARD for Codex.
+- **41 (landing scope):** ONE landing of FR/LG/Emerald/RR together, once the FR/LG gate inputs are staged and the RR final cut passes on the rebuilt companion. The expansion code rides along unrouted, per ruling 39. Ping Gen 2 first; then ask the owner for the landing.
 
 **Owner rulings this session:**
 - 36: no phone on FR/LG/RR (Emerald Match Call stays).
