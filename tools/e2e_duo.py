@@ -793,6 +793,9 @@ GEN1_RNG_REASON_CLASS = {
     # reroll observation and the hunt's RNG budget are the same attempts, so this one is
     # retryable on ANY attempt (see retryable_gen1_rng), unlike the ball miss.
     "RNG: the species hunt met only duplicates within its battle budget": "CAUSE_RNG",
+    # RR type clause: the first natural B foe may share no type with A. Leave the battle
+    # unfinished and retry fresh; RUN would send no_catch and dead-zone A's pending area.
+    "RNG: type first encounter has no overlap": "CAUSE_RNG",
     # explode_new: battle HP hit 0 before the coerced EXPLOSION could be committed. Same shape:
     # the game's RNG, not a driver fault, so a whole-run retry is the right response.
     "RNG: the wild foe knocked the linked mon out before EXPLOSION": "CAUSE_RNG",
@@ -873,6 +876,10 @@ def retryable_gen1_rng(game, results, attempt, limit=2, *, scenario=None):
     # no runtime bag write, changed activation, or retry for a harness failure.
     if scenario == "ball_gate_gen3" and SCENARIOS[scenario].get("rng_attempts") == limit:
         return True
+    if (scenario == "type_clause_gen3" and scenario_family(game) == "gen3_rr" and limit == 8
+            and "RESULT: FAIL (RNG: type first encounter has no overlap)" in
+            (results.get("b") or "").splitlines()):
+        return True
     # Owner 2026-09-18: a ball miss (and any other CAUSE_RNG) earns TWO whole-run retries, not
     # one -- four full runner passes each lost a different scenario to a second consecutive
     # roll (species double miss, poison double KO) with no defect behind it.
@@ -899,6 +906,8 @@ def scenario_attempt_limit(name, game):
     if entry.get("rule_kind") == "family" and scenario_family(game) == "gen3_rr":
         return 16
     if entry.get("rule_kind") == "gender" and scenario_family(game) == "gen3_rr":
+        return 8
+    if entry.get("rule_kind") == "type" and scenario_family(game) == "gen3_rr":
         return 8
     if rng_retry_family(game) and entry.get("rng_attempts"):
         return entry["rng_attempts"]
@@ -9687,8 +9696,11 @@ def run_scenario_with_rng_retry(name, args):
                     handle.write(line + "\n")
                 return True, unobserved_pass
             return ok, attempt
-        print(f"[duo] {name}: the cartridge's only ball missed; restarting attempt "
-              f"{attempt + 1} of {limit} with a fresh server, run directory and SaveRAM seeds")
+        why = ("B's first wild foe shared no type with A" if name == "type_clause_gen3" and
+               "RESULT: FAIL (RNG: type first encounter has no overlap)" in
+               (receipts.get("b") or "").splitlines() else "the cartridge's only ball missed")
+        print(f"[duo] {name}: {why}; restarting attempt {attempt + 1} of {limit} "
+              "with a fresh server, run directory and SaveRAM seeds")
     return False, limit
 
 

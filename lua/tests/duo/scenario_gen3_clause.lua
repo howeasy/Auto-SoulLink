@@ -28,7 +28,25 @@ return function(ctx)
         local other = pending and fact(ctx, pending.species_id)
         if pending and not other then return false, "unproven pending species" end
         local dupe = kind == "species" and other and f.family == other.family or false
-        ctx.jlog("CLAUSE_ENCOUNTER", {n=n, species=species, dupe=dupe})
+        local encounter = {n=n, species=species, dupe=dupe}
+        if kind == "type" and ctx.rr and pending then
+            if type(f.types) ~= "table" or #f.types ~= 2
+               or type(other.types) ~= "table" or #other.types ~= 2 then
+                return false, "unproven wild/pending types"
+            end
+            local overlap = false
+            for _, a in ipairs(f.types) do
+                for _, b in ipairs(other.types) do if a == b then overlap = true end end
+            end
+            encounter.type_overlap = overlap
+            ctx.jlog("CLAUSE_ENCOUNTER", encounter)
+            -- RUN would finish the wild battle and send no_catch. With A already pending, the
+            -- server would permanently dead-zone this area. End this attempt inside the battle;
+            -- the runner can retry from fresh batteries with a different idle jitter.
+            if not overlap then return false, "RNG: type first encounter has no overlap" end
+        else
+            ctx.jlog("CLAUSE_ENCOUNTER", encounter)
+        end
         if dupe then
             local fled, flee_why = ctx.run_away("duplicate")
             if not fled then return false, "duplicate RUN: " .. tostring(flee_why) end

@@ -299,6 +299,14 @@ def clause_oracle(run, results):
         if not rerolls:
             raise ClauseUnobserved("species reroll unobserved")
         return
+    if kind == "type" and run._gen3_rr:
+        met_b = rows(results["b"], "CLAUSE_ENCOUNTER")
+        if len(met_b) != 1 or met_b[0].get("type_overlap") is not True:
+            raise RuntimeError("RR type clause lacks ROM-matched first encounter")
+        if re.search(r"^TX no_catch\b", results["b"], re.M) or rows(results["b"], "CLAUSE_TYPE_RUN"):
+            raise RuntimeError("RR type clause must not RUN or send no_catch before capture")
+        if any(e.get("type") == "dead_zone" for e in run._reconnect_events()):
+            raise RuntimeError("RR type clause created a dead zone")
     expected = (bool(set(facts["a"][str(caps["a"]["species_id"])]["types"]) &
                      set(facts["b"][str(caps["b"]["species_id"])]["types"])) if kind == "type" else
                 gender(facts["a"], caps["a"]["species_id"], keys["a"]) in ("male", "female") and

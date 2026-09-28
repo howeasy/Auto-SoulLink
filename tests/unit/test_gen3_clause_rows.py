@@ -118,6 +118,62 @@ def test_type_oracle_checks_real_saves_and_actual_rule_facts(monkeypatch, tmp_pa
     assert notes and "B rejected" in notes[-1]
 
 
+def test_type_nonoverlap_stops_before_run_or_capture():
+    from lupa import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    scenario = lua.execute("return dofile('lua/tests/duo/scenario_gen3_clause.lua')")
+    ctx = lua.execute('''
+      local c={player='b',rr=true,D={rule_kind='type',clause_facts={
+        ['16']={types={0,2}},['25']={types={13,13}}}},runs=0,catches=0}
+      c.wait_go=function() return true end
+      c.go_value=function() return {key='A',species_id=16,area_id='route_1'} end
+      c.partner_done=function() return false end
+      c.wait_until=function(p) return p() end
+      c.rx_count=function() return 0 end
+      c.hunt=function() return true end
+      c.wild_ready=function() return true end
+      c.enemy_species=function() return 25 end
+      c.run_away=function() c.runs=c.runs+1;return true end
+      c.catch=function() c.catches=c.catches+1;return 'B' end
+      c.jlog=function() end
+      c.log=function() end
+      c.last_sent=function() return {key='B'} end
+      c.received=function() return 0 end
+      c.rx_after=function() return nil end
+      return c
+    ''')
+    ok, why = scenario(ctx)
+    assert ok is False and why == "RNG: type first encounter has no overlap"
+    assert (ctx["runs"], ctx["catches"]) == (0, 0)
+
+
+def test_type_no_overlap_rng_retry_is_exact_and_rr_scoped():
+    reason = "RNG: type first encounter has no overlap"
+    b = f"RESULT: FAIL ({reason})\n"
+    a = "RESULT: FAIL (no type-clause verdict (partner-gone))\n"
+    assert duo.scenario_attempt_limit("type_clause_gen3", "gen3_rr") == 8
+    assert duo.retryable_gen1_rng("gen3_rr", {"a": a, "b": b}, 3, 8, scenario="type_clause_gen3")
+    assert not duo.retryable_gen1_rng("gen3_rr", {"a": a, "b": b.replace(reason, "type mismatch")}, 3, 8,
+                                      scenario="type_clause_gen3")
+    assert not duo.retryable_gen1_rng("gen3_frlg", {"a": a, "b": b}, 3, 8,
+                                      scenario="type_clause_gen3")
+
+
+def test_rr_type_oracle_refuses_unmatched_first_foe_and_no_catch(monkeypatch, tmp_path):
+    rules, run, results, _, _ = _type_case(monkeypatch, tmp_path)
+    monkeypatch.setattr(type(run), "_gen3_rr", property(lambda _: True))
+    with pytest.raises(RuntimeError, match="ROM-matched first encounter"):
+        rules.clause_oracle(run, results)
+    results["b"] = results["b"].replace('"dupe": false}', '"dupe": false, "type_overlap": true}')
+    results["b"] += "TX no_catch - {}\n"
+    with pytest.raises(RuntimeError, match="no_catch"):
+        rules.clause_oracle(run, results)
+    results["b"] = results["b"].replace("TX no_catch - {}\n", "")
+    run._reconnect_events = lambda: [{"type": "dead_zone"}]
+    with pytest.raises(RuntimeError, match="dead zone"):
+        rules.clause_oracle(run, results)
+
+
 def test_clause_oracle_requires_the_independently_observed_pending_key(monkeypatch, tmp_path):
     rules, run, results, _, _ = _type_case(monkeypatch, tmp_path)
     run._clause_pending = {"key": "wrong", "species": 16}
