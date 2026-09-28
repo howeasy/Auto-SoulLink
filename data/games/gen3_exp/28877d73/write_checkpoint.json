@@ -133,7 +133,36 @@
         "value": 4,
         "width": 1
       },
-      "commit_hold": "OPEN: argument-taking controller ABI, Volatiles Perish mechanism and last-ball shortcut are not qualified for a commit handoff; the vanilla head is not copied.",
+      "commit_hold": "HOLD: only the exact battler-0 Perish+controller handoff plan is proved; other battle commits remain refused.",
+      "handoff": {
+        "address": 50340844,
+        "head": [
+          {
+            "address": 33555790,
+            "name": "perish_status",
+            "set": 128,
+            "width": 1
+          },
+          {
+            "address": 33555810,
+            "keep": 243,
+            "name": "perish_timer",
+            "width": 1
+          },
+          {
+            "address": 33555100,
+            "name": "no_op_action",
+            "value": 13,
+            "width": 1
+          }
+        ],
+        "source": "expansion@e8bd1cd7:src/battle_end_turn.c:1000-1013; data/battle_scripts_1.s:3486-3492; src/battle_controller_player.c:154-180; compiler BattlePokemon.volatiles/Volatiles.perishSong/perishSongTimer; ROM PlayerBufferExecCompleted prefix+pool +0x70/+0x74/+0x80",
+        "stride": 4,
+        "symbol": "gBattlerControllerFuncs",
+        "value": 134586889,
+        "value_symbol": "PlayerBufferExecCompleted",
+        "width": 4
+      },
       "version": "gen3-battle-v1"
     },
     "cpu": {
@@ -158,7 +187,7 @@
     },
     "gift_areas": [],
     "open": {
-      "battle_handoff": "new controller ABI and Volatiles mechanism",
+      "battle_handoff": "source and ROM handoff shape bound; natural-play Perish KO pending",
       "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"
     },
     "pointers": {
@@ -380,7 +409,7 @@
       "version": "gen3-sound-v1"
     },
     "source": {
-      "facts_sha256": "51e6bd19accdde52703a655f91bbe5af181c1aa9bf7784ad0386dea9dd5b03c2",
+      "facts_sha256": "9f3691e0d7439f1947428101c2e0d0b50d08725d72711a30155766268becc4bf",
       "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
       "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
       "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"

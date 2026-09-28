@@ -118,7 +118,7 @@ A(BattlePokemon, nickname); F(BattlePokemon, ppBonuses); A(BattlePokemon, otName
 F(BattlePokemon, experience); F(BattlePokemon, personality); F(BattlePokemon, status1);
 F(BattlePokemon, volatiles); F(BattlePokemon, otId);
 B(BattlePokemon, metLevel); B(BattlePokemon, isShiny); F(BattlePokemon, affectionHearts);
-SZ(Volatiles); B(Volatiles, perishSongTimer);
+SZ(Volatiles); B(Volatiles, perishSong); B(Volatiles, perishSongTimer);
 
 SZ(SpeciesInfo);
 F(SpeciesInfo, baseHP); F(SpeciesInfo, baseAttack); F(SpeciesInfo, baseDefense);

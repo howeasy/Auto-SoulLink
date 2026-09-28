@@ -1323,6 +1323,53 @@ def render(value: dict) -> str:
     return json.dumps(value, indent=2, sort_keys=True) + "\n"
 
 
+def expansion_handoff(context):
+    """The expansion's Perish+controller tail, from its compiler object and exact ROM."""
+    from tools.gen_gen3_profile import expansion_symbol
+
+    types, const = context["facts"]["structs"], context["facts"]["constants"]
+    def symbol(name, obj=None):
+        return expansion_symbol(context, name, obj)
+    controller = symbol("gBattlerControllerFuncs")
+    completed = symbol("PlayerBufferExecCompleted", "src/battle_controller_player.o")
+    run_command = symbol("PlayerBufferRunCommand", "src/battle_controller_player.o")
+    exec_flags = symbol("gBattleControllerExecFlags")
+    if controller["size"] != 16 or completed["size"] < 0x84:
+        raise ValueError("expansion handoff controller slot/function size changed")
+    offset = completed["address"] - ROM_BASE
+    body = context["rom"][offset:offset + completed["size"]]
+    # The first instructions store the caller's u8 battler index into
+    # gBattlerControllerFuncs[battler]; the following pool pins that slot and
+    # PlayerBufferRunCommand|1. A symbol-name match alone is insufficient.
+    if body[:16] != bytes.fromhex("1b4b00061b4a10b5040e800dc2501a4b"):
+        raise ValueError("expansion PlayerBufferExecCompleted ROM prefix changed")
+    for at, word in ((0x70, controller["address"]),
+                     (0x74, run_command["address"] | 1),
+                     (0x80, exec_flags["address"])):
+        if int.from_bytes(body[at:at + 4], "little") != word:
+            raise ValueError(f"expansion PlayerBufferExecCompleted pool +{at:#x} changed")
+    battle = types["BattlePokemon"]
+    volatiles = types["Volatiles"]["bitfields"]
+    flag, timer = volatiles["perishSong"], volatiles["perishSongTimer"]
+    if flag["width"] != 1 or flag["bits"] != 1 or timer["width"] != 1 or timer["bits"] != 2:
+        raise ValueError("expansion Perish compiler lanes changed")
+    base = symbol("gBattleMons")["address"] + battle["fields"]["volatiles"]["offset"]
+    return {"symbol": "gBattlerControllerFuncs", "address": controller["address"],
+            "stride": 4, "width": 4, "value_symbol": "PlayerBufferExecCompleted",
+            "value": completed["address"] | 1,
+            "head": [
+                {"name": "perish_status", "address": base + flag["offset"],
+                 "width": 1, "set": int(flag["mask"], 16)},
+                {"name": "perish_timer", "address": base + timer["offset"],
+                 "width": 1, "keep": 0xFF ^ int(timer["mask"], 16)},
+                {"name": "no_op_action", "address": symbol("gChosenActionByBattler")["address"],
+                 "width": 1, "value": const["B_ACTION_NOTHING_FAINTED"]}],
+            "source": ("expansion@e8bd1cd7:src/battle_end_turn.c:1000-1013; "
+                       "data/battle_scripts_1.s:3486-3492; src/battle_controller_player.c:154-180; "
+                       "compiler BattlePokemon.volatiles/Volatiles.perishSong/perishSongTimer; "
+                       "ROM PlayerBufferExecCompleted prefix+pool +0x70/+0x74/+0x80")}
+
+
 def build_expansion(context):
     """Bind expansion's clauses from its own symbols/compiler facts; never borrow CPU proof."""
     sys.path.insert(0, str(ROOT))
@@ -1437,11 +1484,12 @@ def build_expansion(context):
         "tasks": tasks,
         "cpu": json.loads(json.dumps(EXP_CPU)),
         "battle": {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard,
-                   "commit_hold": "OPEN: argument-taking controller ABI, Volatiles Perish mechanism and last-ball shortcut are not qualified for a commit handoff; the vanilla head is not copied."},
+                   "handoff": expansion_handoff(context),
+                   "commit_hold": "HOLD: only the exact battler-0 Perish+controller handoff plan is proved; other battle commits remain refused."},
         "pointers": {name: {"symbol": name, "address": symbol(name)["address"], "source": "build .sym"}
                      for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr")},
         "sound": sound, "gift_areas": [],
-        "open": {"battle_handoff": "new controller ABI and Volatiles mechanism",
+        "open": {"battle_handoff": "source and ROM handoff shape bound; natural-play Perish KO pending",
                  "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"},
     }}
 

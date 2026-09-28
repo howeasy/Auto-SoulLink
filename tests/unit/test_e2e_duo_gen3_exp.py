@@ -74,15 +74,16 @@ def test_a_row_with_no_routes_never_reads_a_server_log(tmp_path):
     assert run._require_test_only_route_receipt() == []
 
 
-def test_the_active_faint_row_is_not_claimed_without_a_perish_plan():
-    """Hold fallback until XG3: the pack carries none of the Perish+hand-off inputs the client's
-    active_faint_capable needs, so an active battler's force_faint is held, never committed."""
+def test_the_active_faint_row_is_not_claimed_before_the_live_perish_gate():
+    """A source/ROM-bound handoff is not a physical Perish+KO receipt."""
     derived = json.loads((REPO / "data/games/gen3_exp/28877d73/profile.json").read_text())["titles"][EXP]
     assert not {"STATUS3_ADDR", "DISABLE_STRUCTS_ADDR"} & set(derived["ram"])
     assert not {"STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE"} & set(derived["derived"])
     assert "gen3_exp" not in duo.SCENARIOS["linked_faint_active_gen3"]["games"]
     cp = json.loads((REPO / "data/games/gen3_exp/28877d73/write_checkpoint.json").read_text())[EXP]
-    assert "handoff" not in cp["battle"] and cp["battle"]["commit_hold"].startswith("OPEN")
+    assert cp["battle"]["handoff"]["head"][0]["name"] == "perish_status"
+    assert cp["battle"]["commit_hold"].startswith("HOLD")
+    assert "natural-play Perish KO pending" in cp["open"]["battle_handoff"]
 
 
 def test_the_row_runs_the_core_loop_rows_on_its_own_fixtures():

@@ -1555,6 +1555,8 @@ def build_expansion(context):
         ("BASESTATS_GROWTH_RATE_OFFSET", "SpeciesInfo", "growthRate"), ("BATTLE_MOVE_PP_OFFSET", "MoveInfo", "pp"),
         ("BATTLE_MON_OT_ID_OFF", "BattlePokemon", "otId"), ("BATTLE_MON_PERSONALITY_OFF", "BattlePokemon", "personality"),
         ("BATTLE_MON_HP_OFF", "BattlePokemon", "hp"),
+        ("BATTLE_MON_MOVES_OFF", "BattlePokemon", "moves"),
+        ("BATTLE_MON_PP_OFF", "BattlePokemon", "pp"),
         ("BATTLE_RESULTS_PLAYER_FAINTS_OFF", "BattleResults", "playerFaintCounter"),
         ("BATTLE_RESULTS_FOE_FAINTS_OFF", "BattleResults", "opponentFaintCounter"),
         ("BOX_DATA_OFFSET", "PokemonStorage", "boxes"), ("GMAIN_CB2_OFFSET", "Main", "callback2"),
@@ -1567,6 +1569,18 @@ def build_expansion(context):
         put(key, types[type_name]["fields"][member]["offset"], f"structs.{type_name}.fields.{member}.offset")
     put("SB1_BALL_POCKET_OFFSET", types["SaveBlock1"]["fields"]["bag"]["offset"] + types["Bag"]["fields"]["pokeBalls"]["offset"], "SaveBlock1.bag + Bag.pokeBalls")
     put("BATTLE_MON_STAT_STAGES_OFF", types["BattlePokemon"]["fields"]["statStages"]["offset"] + const["STAT_ATK"], "BattlePokemon.statStages + constants.STAT_ATK")
+    volatiles_off = types["BattlePokemon"]["fields"]["volatiles"]["offset"]
+    perish = types["Volatiles"]["bitfields"]["perishSong"]
+    timer = types["Volatiles"]["bitfields"]["perishSongTimer"]
+    if perish["width"] != 1 or timer["width"] != 1:
+        raise ValueError("expansion Perish fields must each occupy a single-byte reader lane")
+    put("BATTLE_MON_PERISH_FLAG_OFF", volatiles_off + perish["offset"],
+        "BattlePokemon.volatiles + Volatiles.perishSong compiler bitfield")
+    put("BATTLE_MON_PERISH_FLAG_MASK", int(perish["mask"], 16), "Volatiles.perishSong compiler mask")
+    put("BATTLE_MON_PERISH_TIMER_OFF", volatiles_off + timer["offset"],
+        "BattlePokemon.volatiles + Volatiles.perishSongTimer compiler bitfield")
+    put("BATTLE_MON_PERISH_TIMER_KEEP", 0xFF ^ int(timer["mask"], 16),
+        "complement of Volatiles.perishSongTimer compiler mask in its u8 lane")
     put("EXPERIENCE_TABLE_ENTRY_COUNT", const["MAX_LEVEL"] + 1, "constants.MAX_LEVEL + 1")
     flag = types["Main"]["bitfields"]["inBattle"]
     put("GMAIN_INBATTLE_OFFSET", flag["offset"], "structs.Main.bitfields.inBattle.offset")
