@@ -90,12 +90,13 @@ document alone would have clobbered live state.
 is gone the next feature must reuse a buffer or fragment; say so here rather than letting it be
 discovered the expensive way.
 
-**The tail is runtime-proven free, not inferred.** `lua/tests/test_live_ewramtail.lua` paints all
-700 bytes of `0x0203FD44..0x0203FFFF` with a per-address pattern and watches them across seven
-savestates and 5,100 frames of mashed input (overworld, Pokécenter, a door warp, battle, the
-action/move menus), with a detector self-check each scene — it clobbers the mailbox beacon and
-requires the frame hook to restore it, so the watch cannot silently pass while blind. Zero bytes
-changed. This matters because the *static* argument for the region was wrong twice: "above CFRU's
+**The tail was runtime-proven free before allocation, not inferred.** The original
+`lua/tests/test_live_ewramtail.lua` painted all 700 bytes of `0x0203FD44..0x0203FFFF` and
+watched them across seven savestates and 5,100 frames of mashed input. It found zero changes.
+After SlinkInfo and RR-DURABLE claimed their blocks, the gate watches the remaining 159 bytes
+at `0x0203FF61..0x0203FFFF`. Its detector self-check clobbers the mailbox beacon and requires
+the frame hook to restore it, so the watch cannot silently pass while blind. This matters because
+the *static* argument for the region was wrong twice: "above CFRU's
 highest known symbol" is an incomplete list, and a ROM literal-pool scan offered as backup turned
 out to be measuring coincidental word matches inside PCM and graphics data, not literal pools.
 
