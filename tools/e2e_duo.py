@@ -2499,6 +2499,18 @@ def rr_reset_link_problems(case, keys, staged, initial, final):
     return problems
 
 
+def rr_reset_pending_problems(case, token, document):
+    """Require the server to persist receipt of the uncertain after-reset report."""
+    pending = (document or {}).get("pending_trade") or {}
+    if case == "success":
+        return ["native-success reset left a pending server trade"] if pending else []
+    if (pending.get("token") != token or pending.get("phase") != "uncertain"
+            or (pending.get("hello_only") or {}).get("a") is not True
+            or (pending.get("verdict") or {}).get("a") != "await"):
+        return ["server did not persist A's token-bound hello-only uncertainty"]
+    return []
+
+
 def gen3_trade_chain(inst, ka, kb, decline):
     """(required, ordered, forbidden) receipt regexes for one side of the NPC trade (RR-DURABLE):
     the server's native menus, then on YES the durable round on BOTH sides -- apply_prepare ->
@@ -8054,6 +8066,11 @@ class DuoRun:
                           terminal_result(self._read_receipt(i)), 240)
             if "RESULT: PASS" not in self._read_receipt(inst):
                 raise RuntimeError(f"{inst}: RR cold reload failed")
+        if self.cfg["reset_case"] == "commit":
+            token = self._rr_reset_expected["a"]["token"]
+            wait_for("persisted RR after-reset uncertainty",
+                     lambda: not rr_reset_pending_problems("commit", token,
+                                                           self._reconnect_document()), 30)
         self._live_complete[self.scenario] = True
 
     orchestrate_trade_reset_success_gen3 = orchestrate_trade_reset_commit_gen3
@@ -8072,6 +8089,8 @@ class DuoRun:
         problems += rr_reset_initial_receipt_problems(initial, case, keys)
         problems += rr_reset_link_problems(case, keys, self._rr_reset_links_staged,
                                            self._rr_reset_links_before, self._links_json())
+        problems += rr_reset_pending_problems(case, self._rr_reset_expected["a"]["token"],
+                                              self._reconnect_document())
         archive = Path(self.data_dir, "rr_reset_initial")
         for inst in "ab":
             before = self._rr_reset_before[inst]

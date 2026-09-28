@@ -90,3 +90,16 @@ def test_commit_server_link_must_match_pretrade_baseline_even_before_reload():
     assert duo.rr_reset_link_problems("commit", keys, staged, rekeyed, rekeyed)
     assert duo.rr_reset_link_problems("commit", keys, rekeyed, rekeyed, rekeyed)
     assert duo.rr_reset_link_problems("success", keys, staged, rekeyed, rekeyed) == []
+
+
+def test_server_must_persist_token_bound_hello_only_uncertainty():
+    pending = {"pending_trade": {"token": "t1", "phase": "uncertain",
+                                 "hello_only": {"a": True}, "verdict": {"a": "await"}}}
+    assert duo.rr_reset_pending_problems("commit", "t1", pending) == []
+    assert duo.rr_reset_pending_problems("commit", "t1", {"pending_trade": None})
+    for changed in ({"token": "other"}, {"phase": "applying"},
+                    {"hello_only": {"a": False}}, {"verdict": {"a": None}}):
+        row = {**pending["pending_trade"], **changed}
+        assert duo.rr_reset_pending_problems("commit", "t1", {"pending_trade": row})
+    assert duo.rr_reset_pending_problems("success", "t1", {"pending_trade": None}) == []
+    assert duo.rr_reset_pending_problems("success", "t1", pending)
