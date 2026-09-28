@@ -184,10 +184,10 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
 
     local function allocate_under_guard()
         local birth_checked = false
-        -- 3000 spins = ~15 s at the default 5 ms. The first winner publishes .born before .baton;
-        -- the other emulator can observe that gap while startup is slow under load. The old 1000
-        -- spins (~5 s) made that second window permanently lose trade capability for this session.
-        -- A crashed holder still fails closed after the bound; no caller recreates a born baton.
+        -- The OS guard serializes updated clients' birth and baton transactions. This bounded
+        -- loop remains for a legacy holder that removed the baton without taking .lock; in
+        -- production, spin advances an emulator frame instead of burning CPU. A crashed holder
+        -- or birth winner still fails closed after the bound; no caller recreates a born baton.
         for _ = 1, 3000 do
             local took, _, errno = rename_file(baton, mine)
             if took then
