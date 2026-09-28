@@ -439,7 +439,7 @@ function T.new(d)
         if held then
             local h = held
             if h.epoch ~= d.epoch() or d.frame() > h.deadline then
-                held = nil; refuse(h.cmd, "native not authorized")
+                held = nil; refuse(h.cmd, h.journal_busy and "trade journal lock busy" or "native not authorized")
             elseif h.journal_busy or native:trade_authorized(h.cmd.token, h.cmd.old_key) then
                 held = nil; self:prepare(h.cmd,h.deadline)
             end
@@ -448,7 +448,9 @@ function T.new(d)
         if prepared and prepared.prepare_deadline and d.frame() > prepared.prepare_deadline then unchanged(prepared); flush() end
         local t = active
         if t and (t.phase == "precommit-proof" or t.phase == "save-proof" or t.phase == "arm-proof") then
-            if t.epoch ~= d.epoch() then uncertain(t, "session epoch changed before journal proof")
+            if t.epoch ~= d.epoch() then
+                if t.phase == "arm-proof" then unchanged(t) -- no intent or scene was published
+                else uncertain(t, "session epoch changed before journal proof") end
             elseif t.phase == "arm-proof" and d.frame() > t.apply_deadline then unchanged(t)
             elseif t.phase == "arm-proof" then post_scene(t)
             elseif t.phase == "precommit-proof" then unchanged(t)

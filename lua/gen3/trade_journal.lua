@@ -322,7 +322,9 @@ function J.new(d)
         return false
     end
     function self:allocate()
-        if not self:ready() then return nil, self.failure or "run identity not bound" end
+        if not self:ready() then
+            return nil, self.failure or (self.busy and "trade journal lock busy") or "run identity not bound"
+        end
         return update(function(s)
             local next_value, why = J.next_epoch(s.counter)
             assert(next_value,why)
@@ -332,8 +334,9 @@ function J.new(d)
     end
     function self:arm(value, epoch)
         if not text(value,256) then return nil, "token must be nonempty printable ASCII (max 256 bytes)" end
-        if not self:ready() or not integer(epoch,1,U32) then
-            return nil, self.failure or "invalid write-ahead lease"
+        if not integer(epoch,1,U32) then return nil, "invalid write-ahead lease" end
+        if not self:ready() then
+            return nil, self.failure or (self.busy and "trade journal lock busy") or "invalid write-ahead lease"
         end
         epoch = math.tointeger(epoch)
         return update(function(s)
