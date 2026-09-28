@@ -151,3 +151,32 @@ def test_reload_fails_closed_without_initial_native_counter():
       assert(ok==false)
       return true
     ''')
+
+
+def test_initial_reset_waits_for_go_before_reading_partner_file():
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    lua.globals().SLINK_ROOT = "TEST_ROOT"
+    source = (ROOT / "lua/tests/duo/scenario_gen3_trade_reset.lua").read_text(encoding="utf-8")
+    lua.execute('''
+      local ready=false
+      dofile=function(path)
+        if path:find('json_codec') then return {decode=function() return {native={TRADE_BASE=123}} end} end
+        if path:find('gen3_rr_reset_flow') then return {initial=function() return true,'entered trade' end} end
+        if path:find('gen3_rr_reset_witness') then return {} end
+        return function() end
+      end
+      memory={read_u32_le=function() return 4 end}
+      io.open=function(path)
+        if path:find('profile.json') then return {read=function() return '{}' end,close=function() end} end
+        assert(ready,'partner file opened before GO')
+        return {lines=function() local once=false;return function()
+          if once then return nil end;once=true;return 'PARTNER AABBCCDD:00112233'
+        end end,close=function() end}
+      end
+      ctx={rr=true,phase='initial',D={reset_case='success',go_file='TEST_ROOT/go'},player='a',
+        G={flash_domain=function() return 'FLASH' end,save_counter=function() return 4 end},
+        wait_go=function() ready=true;return true end,
+        linked=function() assert(ready);return '11223344:55667788' end}
+    ''')
+    scenario = lua.execute(source)
+    assert scenario(lua.globals().ctx) == (True, "entered trade")
