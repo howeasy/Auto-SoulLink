@@ -130,6 +130,23 @@ def test_server_wire_must_respond_to_same_token_bound_after_reset_report():
                                        response], "t1")
 
 
+def test_b_native_done_consumption_accepts_persisted_verdict_after_early_return():
+    wire = [{"dir": "c2s", "t": 600, "conn": 2,
+             "msg": {"event": "trade_done", "token": "t1", "new_key": A}},
+            {"dir": "s2c", "t": 601, "conn": 2, "req": 600, "msg": {"commands": []}}]
+    pending = {"pending_trade": {"phase": "applying", "token": "t1",
+                                 "done": {"a": False, "b": False},
+                                 "new": {"a": None, "b": [A, 1324]},
+                                 "verdict": {"a": None, "b": "traded"}}}
+    assert duo.rr_reset_b_consumed_problems(wire, "t1", A, pending) == []
+    assert duo.rr_reset_b_consumed_problems(wire[:1], "t1", A, pending)
+    assert duo.rr_reset_b_consumed_problems(wire, "other", A, pending)
+    assert duo.rr_reset_b_consumed_problems(wire, "t1", B, pending)
+    assert duo.rr_reset_b_consumed_problems(wire, "t1", A, {"pending_trade": None})
+    assert duo.rr_reset_b_consumed_problems(wire, "t1", A, {"pending_trade": {
+        **pending["pending_trade"], "new": {"b": [B, 1324]}}})
+
+
 def test_reset_oracle_loads_the_real_gen3_codec_before_flash_checks():
     class StopOracle(Exception):
         pass
@@ -198,7 +215,13 @@ def test_commit_host_waits_for_b_despite_a_expected_partial_result(monkeypatch):
     run.wait_for = lambda *_args: pytest.fail("expected A FAIL must not abort B/server wait")
     run._read_receipt = lambda inst: (_initial()["a"] if inst == "a" else
                                       'RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE {"token":"t1"}\n')
-    run._reconnect_document = lambda: {"pending_trade": {"token": "t1", "done": {"b": True}}}
+    run._reconnect_document = lambda: {"pending_trade": {
+        "phase": "applying", "token": "t1", "verdict": {"b": "traded"},
+        "new": {"b": [A, 1324]}}}
+    run._rr_reset_wire_rows = lambda inst: [
+        {"dir": "c2s", "t": 17, "conn": 2,
+         "msg": {"event": "trade_done", "token": "t1", "new_key": A}},
+        {"dir": "s2c", "t": 18, "conn": 2, "req": 17}]
     waited = []
 
     def plain_wait(description, predicate, _timeout):
