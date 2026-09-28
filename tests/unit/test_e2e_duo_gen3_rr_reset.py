@@ -141,3 +141,44 @@ def test_reset_oracle_loads_the_real_gen3_codec_before_flash_checks():
     run._gen3_flush_boundary = reached_flush
     with pytest.raises(StopOracle):
         run.assert_rr_trade_reset_saved({})
+
+
+@pytest.mark.parametrize("settled", [False, True])
+def test_success_host_releases_clean_exit_only_after_server_rekey(settled):
+    run = object.__new__(duo.DuoRun)
+    run.scenario = "trade_reset_success_gen3"
+    run.cfg = {"reset_case": "success"}
+    events = []
+
+    def prelude(*, link_slot):
+        assert link_slot == 1
+        run._link_keys = {"a": A, "b": B}
+
+    run._gen3_prelude = prelude
+    run._gen3_linked_lines = lambda: {"a": [], "b": []}
+    run._links_json = lambda: [{"a": {"key": A}, "b": {"key": B}}]
+    run.go = lambda lines: events.append("GO")
+    run._gen3_mark = lambda inst, *_args: events.append(f"NATIVE_{inst}")
+    run._reconnect_document = lambda: {
+        "pending_trade": None if settled else {"token": "t1"},
+        "links": [{"a": {"key": B if settled else A},
+                   "b": {"key": A if settled else B}}],
+    }
+
+    def wait_for_server(_desc, predicate, _timeout):
+        events.append("SERVER_CHECK")
+        if not predicate():
+            raise TimeoutError("server has not settled")
+
+    def release(inst, marker):
+        assert marker == "RESET_EXIT"
+        events.append(f"EXIT_{inst}")
+        if inst == "b":
+            raise StopIteration
+
+    run.wait_for = wait_for_server
+    run._append_reconnect_marker = release
+    with pytest.raises(StopIteration if settled else TimeoutError):
+        run.orchestrate_trade_reset_success_gen3()
+    assert events == (["GO", "NATIVE_a", "NATIVE_b", "SERVER_CHECK", "EXIT_a", "EXIT_b"]
+                      if settled else ["GO", "NATIVE_a", "NATIVE_b", "SERVER_CHECK"])

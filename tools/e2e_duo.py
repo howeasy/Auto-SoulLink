@@ -8047,6 +8047,32 @@ class DuoRun:
         for inst in "ab":
             lines[inst].append(f"PARTNER {keys['b' if inst == 'a' else 'a']}")
         self.go(lines)
+        if self.cfg["reset_case"] == "success":
+            for inst in "ab":
+                self._gen3_mark(inst, r"^RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE ",
+                                "native post-save before clean exit")
+            # The Lua client queues trade_done asynchronously. Keep both games
+            # pumping until the server has consumed both real reports and
+            # durably re-keyed; only then release their ordinary client.exit.
+            def rekeyed():
+                doc = self._reconnect_document()
+                return (not doc.get("pending_trade") and any(
+                    (row.get("a") or {}).get("key") == keys["b"]
+                    and (row.get("b") or {}).get("key") == keys["a"]
+                    for row in doc.get("links") or []))
+            self.wait_for("server settled both native trade_done reports", rekeyed, 120)
+            for inst in "ab":
+                self._append_reconnect_marker(inst, "RESET_EXIT")
+        else:
+            self._gen3_mark("a", r"^RESET_PARTIAL_COMMIT_EXIT ",
+                            "A clean commit-window interruption")
+            marker = self._gen3_mark("b", r"^RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE ({.*})$",
+                                     "B native post-save before clean exit")
+            token = json.loads(marker[1])["token"]
+            self.wait_for("server consumed B's native trade_done", lambda: (
+                (pending := self._reconnect_document().get("pending_trade") or {}).get("token") == token
+                and (pending.get("done") or {}).get("b") is True), 120)
+            self._append_reconnect_marker("b", "RESET_EXIT")
         initial = {}
         for inst in "ab":
             initial[inst] = wait_for(
@@ -8097,18 +8123,21 @@ class DuoRun:
             self._rr_reset_expected = getattr(self, "_rr_reset_expected", {})
             self._rr_reset_expected[inst] = {"token": marker["token"], "counter": marker["counter_after"]}
             self.launch_instance(inst, phase="rr_reset_reload", seed=False, expected_key=expected)
-        for inst in "ab":
-            self.wait_for(f"{inst} RR native battery reload", lambda i=inst:
-                          terminal_result(self._read_receipt(i)), 240)
-            if "RESULT: PASS" not in self._read_receipt(inst):
-                raise RuntimeError(f"{inst}: RR cold reload failed")
         if self.cfg["reset_case"] == "commit":
+            self._gen3_mark("a", r"^RESET_AFTER_RESET ",
+                            "A qualified production after-reset report")
             token = self._rr_reset_expected["a"]["token"]
             wait_for("server response to RR after-reset report",
                      lambda: not rr_reset_wire_problems(self._rr_reset_wire_rows(), token), 30)
             wait_for("persisted RR after-reset uncertainty",
                      lambda: not rr_reset_pending_problems("commit", token,
                                                            self._reconnect_document()), 30)
+            self._append_reconnect_marker("a", "RESET_RELOAD_EXIT")
+        for inst in "ab":
+            self.wait_for(f"{inst} RR native battery reload", lambda i=inst:
+                          terminal_result(self._read_receipt(i)), 240)
+            if "RESULT: PASS" not in self._read_receipt(inst):
+                raise RuntimeError(f"{inst}: RR cold reload failed")
         self._live_complete[self.scenario] = True
 
     orchestrate_trade_reset_success_gen3 = orchestrate_trade_reset_commit_gen3

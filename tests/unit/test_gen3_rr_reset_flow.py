@@ -61,14 +61,18 @@ def test_missing_commit_marker_never_becomes_an_expected_interruption():
 
 def test_native_success_exits_at_save_gate_without_manual_save():
     state = _run('''
-      local c={logs={},sent_done=1,saves=0,traded=0}
+      local c={logs={},sent_done=1,saves=0,traded=0,exit_waits=0}
       c.log=function(s) c.logs[#c.logs+1]=s end
       c.sent=function(name) return name=='trade_done' and c.sent_done or 0 end
       c.last_sent=function(name)
         if name=='trade_done' then return {token='t1',new_key='AABBCCDD:00112233'} end
       end
       c.wait_until=function(pred) return pred() end
-      c.wait_go=function(marker) if marker=='SAVE' then c.saves=c.saves+1 end;return true end
+      c.wait_go=function(marker)
+        if marker=='SAVE' then c.saves=c.saves+1 end
+        if marker=='RESET_EXIT' then c.exit_waits=c.exit_waits+1 end
+        return true
+      end
       local function trade(ctx)
         ctx.wait_until(function() return ctx.sent('trade_done')>0 end,900,'trade_done')
         c.traded=c.traded+1
@@ -82,7 +86,7 @@ def test_native_success_exits_at_save_gate_without_manual_save():
       assert(ok==false and why=='EXPECTED_NATIVE_SUCCESS_NO_MANUAL_SAVE')
       return c
     ''')
-    assert (state["traded"], state["saves"]) == (1, 0)
+    assert (state["traded"], state["saves"], state["exit_waits"]) == (1, 0, 1)
 
 
 def test_uncertain_trade_done_cannot_satisfy_success_control():
@@ -103,6 +107,26 @@ def test_uncertain_trade_done_cannot_satisfy_success_control():
     assert state["saves"] == 0
 
 
+def test_native_success_cannot_exit_before_host_confirms_server_settlement():
+    state = _run('''
+      local c={exit_waits=0}
+      c.log=function() end
+      c.sent=function() return 1 end
+      c.last_sent=function() return {token='t1',new_key='AABBCCDD:00112233'} end
+      c.wait_until=function(pred) return pred() end
+      c.wait_go=function(marker)
+        if marker=='RESET_EXIT' then c.exit_waits=c.exit_waits+1 end
+        return false
+      end
+      local function trade(ctx) ctx.wait_go('SAVE');return false,'runner never released SAVE' end
+      local ok,why=F.initial(c,{trade_driver=trade,stop_before_manual_save=true,
+        validate_success=function(report) return {token=report.token,bits=31} end})
+      assert(ok==false and why=='reset native success exit not released')
+      return c
+    ''')
+    assert state["exit_waits"] == 1
+
+
 def test_reload_requires_saved_key_and_matching_after_reset_report():
     state = _run('''
       local c={D={expected_key='11223344:55667788'},player='a',logs={},saves=0}
@@ -112,6 +136,7 @@ def test_reload_requires_saved_key_and_matching_after_reset_report():
         if name=='trade_done' then return {token='t1',uncertain=true,after_reset=true} end
       end
       c.wait_until=function(pred) return pred() end
+      c.wait_go=function(marker) assert(marker=='RESET_RELOAD_EXIT');return true end
       c.save=function() c.saves=c.saves+1 end
       local ok=F.reload(c,{counter=function() return 5 end,
         expected_counter=5,require_after_reset=true,token='t1'})
@@ -121,6 +146,24 @@ def test_reload_requires_saved_key_and_matching_after_reset_report():
     assert state["saves"] == 0
     assert [state["logs"][i]["tag"] for i in range(1, len(state["logs"]) + 1)] == [
         "RESET_RELOADED", "RESET_AFTER_RESET"]
+
+
+def test_after_reset_cannot_exit_before_host_confirms_server_consumption():
+    state = _run('''
+      local c={D={expected_key='11223344:55667788'},player='a',exit_waits=0}
+      c.jlog=function() end
+      c.party=function() return {{key='11223344:55667788'}} end
+      c.last_sent=function() return {token='t1',uncertain=true,after_reset=true} end
+      c.wait_until=function(pred) return pred() end
+      c.wait_go=function(marker)
+        assert(marker=='RESET_RELOAD_EXIT');c.exit_waits=c.exit_waits+1;return false
+      end
+      local ok,why=F.reload(c,{counter=function() return 5 end,expected_counter=5,
+        require_after_reset=true,token='t1'})
+      assert(ok==false and why=='reset recovery exit not released')
+      return c
+    ''')
+    assert state["exit_waits"] == 1
 
 
 def test_reload_cannot_accept_wrong_key_or_uncertain_token():

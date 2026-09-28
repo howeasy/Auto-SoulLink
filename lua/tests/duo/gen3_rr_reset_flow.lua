@@ -11,7 +11,7 @@ end
 function F.initial(ctx, d)
     assert(type(d.trade_driver) == "function", "RR trade driver required")
     local wait, go = ctx.wait_until, ctx.wait_go
-    local interrupted, completed = nil, nil
+    local interrupted, completed, exit_released = nil, nil, false
     ctx.wait_until = function(pred, secs, what)
         if what == "trade_done" and d.interrupt then
             return wait(function()
@@ -36,6 +36,9 @@ function F.initial(ctx, d)
                 if proof then
                     completed = proof
                     marker(ctx, "RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE", proof)
+                    -- Keep the normal frame pump alive until the host sees the
+                    -- server consume/settle the real trade_done. No game SAVE.
+                    exit_released = go("RESET_EXIT", 1200) and true or false
                 end
             end
             return false -- never allow a runner SAVE in this scenario
@@ -53,6 +56,7 @@ function F.initial(ctx, d)
         return false, "EXPECTED_RESET_PARTIAL_COMMIT"
     end
     if completed then
+        if not exit_released then return false, "reset native success exit not released" end
         if ok or ctx.sent("trade_done") == 0 then
             return false, "reset native-success phase lacked a concrete trade_done"
         end
@@ -83,6 +87,9 @@ function F.reload(ctx, d)
         end, 180, "production after_reset trade_done")
         if not report then return false, "production after_reset uncertainty missing or wrong token" end
         marker(ctx, "RESET_AFTER_RESET", {side=ctx.player, token=report.token, counter=counter})
+        if not ctx.wait_go("RESET_RELOAD_EXIT", 1200) then
+            return false, "reset recovery exit not released"
+        end
     end
     return true, "cold-reloaded expected native save without runner SAVE"
 end
