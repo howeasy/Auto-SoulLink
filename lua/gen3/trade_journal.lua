@@ -399,11 +399,20 @@ function J.new(d)
     end
     local function allow(value, epoch)
         local s = read()
-        if not s then return nil, self.failure end
+        if not s then return nil, self.failure or (self.busy and "trade journal lock busy") end
         for _, r in ipairs(s.records) do
             if same(r.binding,context) and r.token == value and r.epoch == epoch then
-                self.allowed[record_id(r)] = true
-                if r.final ~= "" then return self:final(value,epoch,r.final) end
+                local id = record_id(r)
+                if r.final ~= "" then
+                    -- The terminal write may contend after this read. Do not expose the party
+                    -- until that retirement is durably committed under its own guard hold.
+                    local was_allowed = self.allowed[id]
+                    self.allowed[id] = true
+                    local ok, why = self:final(value,epoch,r.final)
+                    if ok ~= true then self.allowed[id] = was_allowed; return ok, why end
+                    return true
+                end
+                self.allowed[id] = true
                 return true
             end
         end

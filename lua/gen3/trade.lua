@@ -83,20 +83,35 @@ function T.new(d)
         if not v or v.id == nil or v.accepted ~= true or v.pre_saved ~= true or v.apply_open ~= true then return nil end
         return v
     end
+    local uncertain -- the journal refusal path below must report uncertainty, not certain unchanged
     local function unchanged(t)
         if retired_for(t.epoch, t.token) then return end
-        t.phase = "withdrawing" -- invalidate queued callbacks before cancel can call them
-        if t.prepare_job then native:cancel(t.prepare_job) end
-        if t.scene_job then native:cancel(t.scene_job) end
-        if t.stage_job and not t.stage_done then
-            t.phase = "draining"
-            local cancelled = native:cancel(t.stage_job)
-            if retired_for(t.epoch, t.token) then return end -- synchronous cancellation callback
-            if not cancelled and not t.stage_done
-               and (t.stage_job.posted or t.stage_job.publish_attempted) then
-                return -- native still owns staging; its ACK/abort callback retires this lease
+        if t.phase ~= "precommit-proof" then
+            t.phase = "withdrawing" -- invalidate queued callbacks before cancel can call them
+            if t.prepare_job then native:cancel(t.prepare_job) end
+            if t.scene_job then native:cancel(t.scene_job) end
+            if t.stage_job and not t.stage_done then
+                t.phase = "draining"
+                local cancelled = native:cancel(t.stage_job)
+                if retired_for(t.epoch, t.token) then return end -- synchronous cancellation callback
+                if not cancelled and not t.stage_done
+                   and (t.stage_job.posted or t.stage_job.publish_attempted) then
+                    return -- native still owns staging; its ACK/abort callback retires this lease
+                end
+                t.stage_done = true
             end
-            t.stage_done = true
+        end
+        local reconciled = not t.journaled
+        if t.journaled and journal and (not may_commit(t) or t.precommit_proved) then
+            local ok, why = journal:precommit_unchanged(t.token,t.journal_epoch)
+            if why == "trade journal lock busy" then
+                t.phase = "precommit-proof" -- no certain result until the guard is rechecked
+                return
+            end
+            reconciled = ok == true
+        end
+        if t.journaled and not reconciled then
+            return uncertain(t, "durable precommit journal unavailable")
         end
         if t.prepare_pending then emit("apply_ready", {token=t.token, ok=false}, t.epoch) end
         local result = {token=t.token, slot=t.slot, new_key=t.old_key, new_species=0}
@@ -104,10 +119,6 @@ function T.new(d)
         emit("trade_done", result, t.epoch)
         if active == t then active = nil end
         if prepared == t then prepared = nil end
-        local reconciled = not t.journaled
-        if t.journaled and journal and (not may_commit(t) or t.precommit_proved) then
-            reconciled = journal:precommit_unchanged(t.token,t.journal_epoch) == true
-        end
         if reconciled and t.precommit_proved and native.trade_reconciled then native:trade_reconciled(t.token) end
         if native.withdraw_trade then native:withdraw_trade(t.token) end
         if d.completed then d.completed(t, false) end
@@ -132,7 +143,7 @@ function T.new(d)
             if d.hud then d.hud.show("TRADE UNCERTAIN - CHECK PARTY", 255, 64, 64, 600) end
         end
     end
-    local function uncertain(t, why)
+    uncertain = function(t, why)
         if active == t then declare_uncertain(t, why) end
     end
     local function result(t)
@@ -154,7 +165,15 @@ function T.new(d)
         if not got or old or got.is_egg == 1 or got.is_bad_egg == 1 or got.checksum_ok == false then
             return uncertain(t, "saved result does not match received identity")
         end
-        if not journal or journal:native_saved(t.token,t.journal_epoch) ~= true then
+        if not journal then
+            return uncertain(t, "durable journal result unavailable")
+        end
+        local saved, why = journal:native_saved(t.token,t.journal_epoch)
+        if saved ~= true then
+            if why == "trade journal lock busy" then
+                t.phase = "save-proof" -- native save is already witnessed; retry without another RAM write
+                return
+            end
             return uncertain(t, "durable journal result unavailable")
         end
         if native.trade_reconciled then native:trade_reconciled(t.token) end
@@ -396,6 +415,13 @@ function T.new(d)
         if prepared and prepared.epoch ~= d.epoch() then unchanged(prepared); flush() end
         if prepared and prepared.prepare_deadline and d.frame() > prepared.prepare_deadline then unchanged(prepared); flush() end
         local t = active
+        if t and (t.phase == "precommit-proof" or t.phase == "save-proof") then
+            if t.epoch ~= d.epoch() then uncertain(t, "session epoch changed before journal proof")
+            elseif t.phase == "precommit-proof" then unchanged(t)
+            else result(t) end
+            flush()
+            return
+        end
         if not t or t.phase ~= "wait" then return end
         if t.epoch ~= d.epoch() or d.frame() > t.apply_deadline then unchanged(t); flush(); return end
         if not d.eligible() or not d.clear() then return end

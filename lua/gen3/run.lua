@@ -241,11 +241,20 @@ local function trade_file_adapter(import_type)
     local Reader = assert(import_type("System.IO.StreamReader"))
     local Writer = assert(import_type("System.IO.StreamWriter"))
     -- NLua wraps CLR exceptions from File.Open in LuaScriptException. Its printed message
-    -- contains an opaque number; the inner HResult is the stable Win32 sharing/lock verdict.
+    -- contains an opaque number; the inner exception preserves the actual Win32 verdict.
+    local function lock_cause(err)
+        local ok, kind, code, message = pcall(function()
+            local inner = err.InnerException
+            return tostring(inner:GetType().FullName), tonumber(inner.HResult), tostring(inner.Message)
+        end)
+        if ok then return kind, code, message end
+        return nil, nil, tostring(err)
+    end
     local function lock_contention(err)
-        local ok, code = pcall(function() return err.InnerException.HResult end)
-        return ok and (code == -2147024864 or code == -2147024863 -- sharing/lock violation (32/33)
-                       or code == -2147024816 or code == -2147024713) -- CreateNew exists (80/183)
+        local _, code = lock_cause(err)
+        -- Sharing/lock violation (32/33), or CreateNew seeing an existing guard (80/183).
+        return code == -2147024864 or code == -2147024863
+            or code == -2147024816 or code == -2147024713
     end
     local function finish(stream, fn)
         local ok, result = pcall(fn)
@@ -274,7 +283,10 @@ local function trade_file_adapter(import_type)
             if lock_contention(stream) then
                 return nil,false,"busy" -- next emulator frame retries; no journal bytes were touched
             end
-            error("exclusive trade journal lock unavailable: " .. tostring(stream))
+            local kind, code, message = lock_cause(stream)
+            message = tostring(message):gsub("[\r\n]", " ")
+            error(string.format("exclusive trade journal lock unavailable: guard=%s type=%s hresult=%s message=%s",
+                                tostring(path), tostring(kind or "unknown"), tostring(code or "unknown"), message))
         end,
         close=function(stream) stream:Dispose(); return true end,
         read_handle=function(stream)

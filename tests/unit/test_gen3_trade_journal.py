@@ -157,6 +157,29 @@ def test_server_final_is_bookkeeping_and_never_clears_a_reload_barrier():
     assert restarted.hidden(restarted) is True
 
 
+def test_busy_final_retirement_cannot_mark_native_save_allowed_early():
+    store = Store()
+    _, _, obj = journal(store, fresh=True)
+    epoch = arm(obj)
+    assert obj.final(obj, "t", epoch, "resolved") is True
+    original = obj.final
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    obj.final = busy_once
+    assert obj.native_saved(obj, "t", epoch)[0] is None
+    assert obj.hidden(obj) is True
+    assert len(obj.state.records) == 1
+    assert obj.native_saved(obj, "t", epoch) is True
+    assert obj.hidden(obj) is False
+    assert len(obj.state.records) == 0
+
+
 def test_independent_writers_allocate_unique_monotonic_epochs():
     store = Store()
     _, _, one = journal(store, fresh=True)
@@ -340,6 +363,68 @@ def test_writer_contention_retries_later_without_spending_an_epoch():
     frame[0] += 1
     assert b.allocate(b) == 2
     assert a.allocate(a) == 3
+
+
+def test_busy_precommit_proof_does_not_publish_unchanged_until_retried():
+    world, journal, _ = journaled_trade_world()
+    world.deps.precommit_refusal_reasons = world.lua.table_from({"model_pre_commit_refused": True})
+    world.trade = world.lua.execute((ROOT / "lua/gen3/trade.lua").read_text()).new(world.deps)
+    scene = world.start()
+    original = journal.precommit_unchanged
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.precommit_unchanged = busy_once
+    scene["done"]("native refused", 7, "model_pre_commit_refused")
+    assert not [fields for event, fields in world.events if event == "trade_done"]
+    assert journal.hidden(journal) is True
+    world.tick()
+    assert len(seen) >= 2
+    assert len([fields for event, fields in world.events if event == "trade_done"]) == 1
+    assert journal.hidden(journal) is False
+
+
+def test_permanent_precommit_journal_failure_never_claims_certain_unchanged():
+    world, journal, _ = journaled_trade_world()
+    world.deps.precommit_refusal_reasons = world.lua.table_from({"model_pre_commit_refused": True})
+    world.trade = world.lua.execute((ROOT / "lua/gen3/trade.lua").read_text()).new(world.deps)
+    scene = world.start()
+    journal.precommit_unchanged = lambda *_: (None, "trade journal: durable write failed")
+    scene["done"]("native refused", 7, "model_pre_commit_refused")
+    world.tick()
+    reports = [fields for event, fields in world.events if event == "trade_done"]
+    assert len(reports) == 1 and reports[0].get("uncertain") is True
+    assert journal.hidden(journal) is True
+
+
+def test_saved_result_waiting_on_guard_cannot_commit_in_a_new_session_epoch():
+    world, journal, _ = journaled_trade_world()
+    scene = world.start()
+    original = journal.native_saved
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.native_saved = busy_once
+    world.progress(scene, commit_entered=True, scene_done=True, save_success=True,
+                   final_result="committed")
+    world.received()
+    scene["done"](None, 0, None)
+    assert not [fields for event, fields in world.events if event == "trade_done"]
+    world.epoch += 1
+    world.tick()
+    reports = [fields for event, fields in world.events if event == "trade_done"]
+    assert len(reports) == 1 and reports[0].get("uncertain") is True
+    assert journal.hidden(journal) is True
 
 
 def test_unavailable_guard_for_a_non_contention_reason_stays_fail_closed():

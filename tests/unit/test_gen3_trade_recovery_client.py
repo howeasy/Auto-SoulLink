@@ -52,6 +52,57 @@ def test_terminal_server_bookkeeping_does_not_unhide_unsaved_ram(monkeypatch):
     assert world.events("tick")[-1].get("party_hidden") is True
 
 
+@pytest.mark.parametrize("busy_before_command", (False, True))
+def test_busy_terminal_notification_is_retried_after_the_next_frame(monkeypatch, busy_before_command):
+    world, carrier = uncertain_client(monkeypatch)
+    journal = carrier.journal_model.journal
+    record = journal.outstanding(journal)[1]
+    original = journal.final
+    if busy_before_command:
+        original_ready = journal.ready
+        journal.busy = True
+        journal.ready = lambda self: False if self.busy else original_ready(self)
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        journal.busy = None
+        return original(self, *args)
+
+    journal.final = busy_once
+    world.replies.append(json.dumps({"commands": [
+        {"cmd": "trade_final", "token": "t", "epoch": record.epoch, "verdict": "resolved"}]}))
+    world.step(2)
+    assert len(seen) >= 2, "a one-frame busy must not drop the terminal notification"
+    assert journal.state.records[1].final == "resolved"
+    assert journal.hidden(journal) is True  # bookkeeping never proves saved RAM
+
+
+def test_busy_post_save_journal_result_retries_without_uncertain_report(monkeypatch):
+    world, carrier, blob = durable_client(monkeypatch)
+    start_client_trade(world, carrier, blob)
+    journal = carrier.journal_model.journal
+    original = journal.native_saved
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.native_saved = busy_once
+    swap_in_partner(world)
+    carrier.ack(commit_entered=True, scene_done=True, save_success=True, final_result="committed")
+    world.step(2)
+    assert len(seen) >= 2, "the saved result must wait for a fresh journal read"
+    assert not [m for m in world.events("trade_done") if m.get("uncertain")]
+    assert world.events("trade_done")[-1].get("new_key")
+    assert journal.hidden(journal) is False
+
+
 @pytest.mark.parametrize("fault", (None, "raises", "false", "missing"))
 def test_native_save_flushes_host_before_a_final_can_retire_the_intent(monkeypatch, fault):
     world, carrier, blob = durable_client(monkeypatch)
