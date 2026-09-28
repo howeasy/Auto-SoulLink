@@ -2500,14 +2500,34 @@ def rr_reset_link_problems(case, keys, staged, initial, final):
 
 
 def rr_reset_pending_problems(case, token, document):
-    """Require the server to persist receipt of the uncertain after-reset report."""
+    """Require token-bound server recovery or its durable visible-hello successor."""
     pending = (document or {}).get("pending_trade") or {}
     if case == "success":
         return ["native-success reset left a pending server trade"] if pending else []
-    if (pending.get("token") != token or pending.get("phase") != "uncertain"
+    phase = pending.get("phase")
+    verdict = pending.get("verdict") or {}
+    if (pending.get("token") != token
             or (pending.get("hello_only") or {}).get("a") is not True
-            or (pending.get("verdict") or {}).get("a") != "await"):
-        return ["server did not persist A's token-bound hello-only uncertainty"]
+            or not ((phase == "uncertain" and verdict.get("a") == "await")
+                    or (phase == "conflict" and verdict.get("a") == "none"
+                        and verdict.get("b") == "traded" and pending.get("problem")))):
+        return ["server lacks A's token-bound uncertainty or its durable split-trade successor"]
+    return []
+
+
+def rr_reset_wire_problems(rows, token):
+    """A server response paired to A's after-reset report proves its consumption."""
+    matches = [row for row in rows if row.get("dir") == "c2s"
+               and (row.get("msg") or {}).get("event") == "trade_done"
+               and (row.get("msg") or {}).get("token") == token
+               and (row.get("msg") or {}).get("uncertain") is True
+               and (row.get("msg") or {}).get("after_reset") is True]
+    if len(matches) != 1:
+        return [f"server wire has {len(matches)} token-bound A after-reset report(s), expected one"]
+    request = matches[0]
+    if not any(row.get("dir") == "s2c" and row.get("req") == request.get("t")
+               and row.get("conn") == request.get("conn") for row in rows):
+        return ["server wire has no response paired to A's after-reset report"]
     return []
 
 
@@ -3715,7 +3735,7 @@ class DuoRun:
 
     def _wire_dir(self):
         """This run's server-side wire-log directory, or None when --wire-log is absent."""
-        if not getattr(self.args, "wire_log", False):
+        if not getattr(self.args, "wire_log", False) and not self.cfg.get("rr_reset_trade"):
             return None
         return os.path.join(self.data_dir, "wire")
 
@@ -3760,6 +3780,10 @@ class DuoRun:
         PASSING run's transcript (T5, 2026-09-27: native_trade_firered_b_gen3_new.jsonl held a
         completed trade_done while the failing run's own wire/wire_b.jsonl held none).
         """
+        if getattr(self, "cfg", {}).get("rr_reset_trade"):
+            # Reset receipts keep their private server wire beside the immutable
+            # battery/journal archive; never promote this partial row to a golden.
+            return []
         wire = self._wire_dir()
         if not wire:
             return []
@@ -8002,6 +8026,15 @@ class DuoRun:
 
     orchestrate_native_trade_decline_firered = orchestrate_native_trade_firered
 
+    def _rr_reset_wire_rows(self):
+        path = Path(self._wire_dir(), "wire_a.jsonl")
+        if not path.is_file():
+            return []
+        try:
+            return [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+        except (OSError, ValueError) as exc:
+            raise RuntimeError(f"RR reset server wire unreadable: {path}: {exc}") from exc
+
     def orchestrate_trade_reset_commit_gen3(self):
         """Cold boot the same native battery after a clean commit-window exit."""
         self._gen3_prelude(link_slot=1)
@@ -8068,6 +8101,8 @@ class DuoRun:
                 raise RuntimeError(f"{inst}: RR cold reload failed")
         if self.cfg["reset_case"] == "commit":
             token = self._rr_reset_expected["a"]["token"]
+            wait_for("server response to RR after-reset report",
+                     lambda: not rr_reset_wire_problems(self._rr_reset_wire_rows(), token), 30)
             wait_for("persisted RR after-reset uncertainty",
                      lambda: not rr_reset_pending_problems("commit", token,
                                                            self._reconnect_document()), 30)
@@ -8091,6 +8126,9 @@ class DuoRun:
                                            self._rr_reset_links_before, self._links_json())
         problems += rr_reset_pending_problems(case, self._rr_reset_expected["a"]["token"],
                                               self._reconnect_document())
+        if case == "commit":
+            problems += rr_reset_wire_problems(self._rr_reset_wire_rows(),
+                                                self._rr_reset_expected["a"]["token"])
         archive = Path(self.data_dir, "rr_reset_initial")
         for inst in "ab":
             before = self._rr_reset_before[inst]

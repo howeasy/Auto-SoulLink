@@ -96,6 +96,10 @@ def test_server_must_persist_token_bound_hello_only_uncertainty():
     pending = {"pending_trade": {"token": "t1", "phase": "uncertain",
                                  "hello_only": {"a": True}, "verdict": {"a": "await"}}}
     assert duo.rr_reset_pending_problems("commit", "t1", pending) == []
+    conflict = {"pending_trade": {**pending["pending_trade"], "phase": "conflict",
+                                  "verdict": {"a": "none", "b": "traded"},
+                                  "problem": "split native outcome"}}
+    assert duo.rr_reset_pending_problems("commit", "t1", conflict) == []
     assert duo.rr_reset_pending_problems("commit", "t1", {"pending_trade": None})
     for changed in ({"token": "other"}, {"phase": "applying"},
                     {"hello_only": {"a": False}}, {"verdict": {"a": None}}):
@@ -103,3 +107,19 @@ def test_server_must_persist_token_bound_hello_only_uncertainty():
         assert duo.rr_reset_pending_problems("commit", "t1", {"pending_trade": row})
     assert duo.rr_reset_pending_problems("success", "t1", {"pending_trade": None}) == []
     assert duo.rr_reset_pending_problems("success", "t1", pending)
+    assert duo.rr_reset_pending_problems("commit", "t1", {"pending_trade": {
+        **conflict["pending_trade"], "problem": ""}})
+
+
+def test_server_wire_must_respond_to_same_token_bound_after_reset_report():
+    request = {"dir": "c2s", "t": 17, "conn": 2,
+               "msg": {"event": "trade_done", "token": "t1", "uncertain": True,
+                       "after_reset": True}}
+    response = {"dir": "s2c", "t": 18, "conn": 2, "req": 17,
+                "msg": {"commands": []}}
+    assert duo.rr_reset_wire_problems([request, response], "t1") == []
+    assert duo.rr_reset_wire_problems([request], "t1")
+    assert duo.rr_reset_wire_problems([request, {**response, "req": 16}], "t1")
+    assert duo.rr_reset_wire_problems([request, {**response, "conn": 3}], "t1")
+    assert duo.rr_reset_wire_problems([{**request, "msg": {**request["msg"], "token": "other"}},
+                                       response], "t1")
