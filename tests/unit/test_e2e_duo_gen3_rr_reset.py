@@ -1,6 +1,7 @@
 """RR reset carrier falsifiers: interruption is a partial phase, never trade success."""
 
 import json
+import re
 from types import SimpleNamespace
 
 import pytest
@@ -141,3 +142,91 @@ def test_reset_oracle_loads_the_real_gen3_codec_before_flash_checks():
     run._gen3_flush_boundary = reached_flush
     with pytest.raises(StopOracle):
         run.assert_rr_trade_reset_saved({})
+
+
+@pytest.mark.parametrize("settled", [False, True])
+def test_success_host_releases_clean_exit_only_after_server_rekey(settled):
+    run = object.__new__(duo.DuoRun)
+    run.scenario = "trade_reset_success_gen3"
+    run.cfg = {"reset_case": "success"}
+    events = []
+
+    def prelude(*, link_slot):
+        assert link_slot == 1
+        run._link_keys = {"a": A, "b": B}
+
+    run._gen3_prelude = prelude
+    run._gen3_linked_lines = lambda: {"a": [], "b": []}
+    run._links_json = lambda: [{"a": {"key": A}, "b": {"key": B}}]
+    run.go = lambda lines: events.append("GO")
+    run._gen3_mark = lambda inst, *_args: events.append(f"NATIVE_{inst}")
+    run._reconnect_document = lambda: {
+        "pending_trade": None if settled else {"token": "t1"},
+        "links": [{"a": {"key": B if settled else A},
+                   "b": {"key": A if settled else B}}],
+    }
+
+    def wait_for_server(_desc, predicate, _timeout):
+        events.append("SERVER_CHECK")
+        if not predicate():
+            raise TimeoutError("server has not settled")
+
+    def release(inst, marker):
+        assert marker == "RESET_EXIT"
+        events.append(f"EXIT_{inst}")
+        if inst == "b":
+            raise StopIteration
+
+    run.wait_for = wait_for_server
+    run._append_reconnect_marker = release
+    with pytest.raises(StopIteration if settled else TimeoutError):
+        run.orchestrate_trade_reset_success_gen3()
+    assert events == (["GO", "NATIVE_a", "NATIVE_b", "SERVER_CHECK", "EXIT_a", "EXIT_b"]
+                      if settled else ["GO", "NATIVE_a", "NATIVE_b", "SERVER_CHECK"])
+
+
+def test_commit_host_waits_for_b_despite_a_expected_partial_result(monkeypatch):
+    run = object.__new__(duo.DuoRun)
+    run.scenario = "trade_reset_commit_gen3"
+    run.cfg = {"reset_case": "commit", "timeout": 1800}
+    run._gen3_prelude = lambda *, link_slot: setattr(run, "_link_keys", {"a": A, "b": B})
+    run._gen3_linked_lines = lambda: {"a": [], "b": []}
+    run._links_json = lambda: [{"a": {"key": A}, "b": {"key": B}}]
+    run.go = lambda _lines: None
+    run._gen3_mark = lambda inst, *_args: True if inst == "a" else pytest.fail(
+        "B marker must not use self.wait_for after A's expected FAIL")
+    run.wait_for = lambda *_args: pytest.fail("expected A FAIL must not abort B/server wait")
+    run._read_receipt = lambda inst: (_initial()["a"] if inst == "a" else
+                                      'RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE {"token":"t1"}\n')
+    run._reconnect_document = lambda: {"pending_trade": {"token": "t1", "done": {"b": True}}}
+    waited = []
+
+    def plain_wait(description, predicate, _timeout):
+        waited.append(description)
+        return predicate()
+
+    monkeypatch.setattr(duo, "wait_for", plain_wait)
+
+    def release(inst, marker):
+        assert inst == "b" and marker == "RESET_EXIT"
+        raise StopIteration
+
+    run._append_reconnect_marker = release
+    with pytest.raises(StopIteration):
+        run.orchestrate_trade_reset_commit_gen3()
+    assert len(waited) == 2
+    assert re.search(r"native post-save|consumed B", " ".join(waited))
+
+
+def test_commit_phase_wait_rejects_unexpected_a_or_b_failure(monkeypatch):
+    run = object.__new__(duo.DuoRun)
+    run._link_keys = {"a": A, "b": B}
+    run._process_exited = lambda _inst: False
+    monkeypatch.setattr(duo, "wait_for", lambda _desc, pred, _timeout: pred())
+    good_a = _initial()["a"]
+    for a, b in ((good_a.replace("EXPECTED_RESET_PARTIAL_COMMIT", "unexpected"), ""),
+                 (good_a.replace('"bits": 3', '"bits": 31'), ""),
+                 (good_a, "RESULT: FAIL (B native save failed)\n")):
+        run._read_receipt = lambda inst, aa=a, bb=b: aa if inst == "a" else bb
+        with pytest.raises(RuntimeError):
+            run._rr_reset_wait_commit_initial("B's marker", lambda: None, 10)
