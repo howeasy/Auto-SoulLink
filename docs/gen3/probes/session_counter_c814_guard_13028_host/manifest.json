@@ -1,0 +1,105 @@
+{
+  "artifacts": {
+    "new_held/a.trace": {
+      "bytes": 2612,
+      "sha256": "91b963d574b9fd36b07664c48d18fee8c25474326489101afdecedcca3115da4",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-046\\a.trace"
+    },
+    "new_held/b.trace": {
+      "bytes": 1515,
+      "sha256": "99bd04000841d5d21f1518e952001eebb24e89cf0f561bb5d5c4978cf2dafffc",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-046\\b.trace"
+    },
+    "new_held/held": {
+      "bytes": 7,
+      "sha256": "d79d3458a58877cd8e48c18ebaf4c27b9d5c1a9cb5dfbdac769a7a21d8a1022e",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-046\\held"
+    },
+    "new_held/release": {
+      "bytes": 7,
+      "sha256": "a4d451ec23463726f72c43d64c710968f6b602cd653b4de8adee1b556240a829",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-046\\release"
+    },
+    "new_held/slink_gen3_session.baton": {
+      "bytes": 1,
+      "sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-046\\slink_gen3_session.baton"
+    },
+    "new_held/slink_gen3_session.born": {
+      "bytes": 26,
+      "sha256": "0f6832e3fb7406c0abc69051b3745ca43668b7a56ab9580b0c34236b921d12d9",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-046\\slink_gen3_session.born"
+    },
+    "new_held/slink_gen3_session.lock": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-046\\slink_gen3_session.lock"
+    },
+    "new_pair/a.trace": {
+      "bytes": 2621,
+      "sha256": "a74d31df61a643fc21e00c1c2fb102addeb27c6c87ad2a3490c993680e8119f4",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-045\\a.trace"
+    },
+    "new_pair/b.trace": {
+      "bytes": 1247,
+      "sha256": "a56578f3c2e6b0c1ec97f69ad13d0a8c439b9f13a7fbfcb0961b81046601d8dd",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-045\\b.trace"
+    },
+    "new_pair/slink_gen3_session.baton": {
+      "bytes": 1,
+      "sha256": "d4735e3a265e16eee03f59718b9b5d03019c07d8b6c51f90da3a666eec13ab35",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-045\\slink_gen3_session.baton"
+    },
+    "new_pair/slink_gen3_session.born": {
+      "bytes": 27,
+      "sha256": "c04bc9bb4da124165199880c0862d587b2d86e224c81dfb135f4cb2cd1245459",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-045\\slink_gen3_session.born"
+    },
+    "new_pair/slink_gen3_session.lock": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-045\\slink_gen3_session.lock"
+    },
+    "old_fail/a.trace": {
+      "bytes": 1676,
+      "sha256": "6809cdb7616c3c7053e8d49df68430eae0daa6bddc8f274036825d485e612e2a",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-025\\a.trace"
+    },
+    "old_fail/b.trace": {
+      "bytes": 2465,
+      "sha256": "950e410f00735abbd01a330e18add98fe5eaf3388e47f4e86a5bcf657e5de9e5",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-025\\b.trace"
+    },
+    "old_fail/slink_gen3_session.baton": {
+      "bytes": 1,
+      "sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-025\\slink_gen3_session.baton"
+    },
+    "old_fail/slink_gen3_session.born": {
+      "bytes": 27,
+      "sha256": "13968fc0efd2119870d5b0da9ef2274de5b899f9be5129d51c728c05d453cb22",
+      "source": "C:\\slink-wt\\counter-host-runs\\run-025\\slink_gen3_session.born"
+    }
+  },
+  "boundary": "Two installed NLua processes on fresh local filesystem roots. No EmuHawk or cartridge was run. Mixed old/new clients sharing one install root are unqualified.",
+  "command_shape": "pwsh -NoProfile -File C:/slink-wt/session-counter-run.ps1 -Root C:/slink-wt/counter-host-runs/run-NNN -Side <a|b> -Trace C:/slink-wt/counter-host-runs/run-NNN/<side>.trace (both processes launched concurrently by Python; new_held A used -HoldAfterClaim -Held <marker> -Release <marker>)",
+  "guarded_run_lua_sha256": "9767e56a8909ab69e567dc2f325809aeb7dce53449a61c63967f81cf60a9ee27",
+  "guarded_source_commit": "13028cf943642123de47ef545ea3afb6c6144f09",
+  "host": {
+    "lua54_dll": "E:\\Howard\\Bizhawk\\dll\\lua54.dll",
+    "lua54_sha256": "4786e0df4caf120e3bedf0b6dda260525df2187c66ded220a21a53ace76b0501",
+    "nlua_dll": "E:\\Howard\\Bizhawk\\dll\\NLua.dll",
+    "nlua_sha256": "f413017bfc7a37dfcaeb6e6c24812fd12ceb2b4b107a066512ed28c13010b234",
+    "repeatable_guarded_test": "tests/unit/test_gen3_session_counter_host.py invokes tools/gen3_session_counter_host_probe.ps1",
+    "shell": "pwsh -NoProfile",
+    "trace_wrapper_at_capture": "C:/slink-wt/session-counter-run.ps1 (scratch diagnostic wrapper; its exact historical bytes were not retained)"
+  },
+  "kind": "INSTALLED_NLUA_HOST_MODEL_NOT_EMULATOR_PHYSICAL",
+  "old_run_lua_sha256": "160f6e4026d1274d4646d19e5e8d26095f8b27d4a3843ec3257fea9c656fd194",
+  "old_source_commit": "c814fdd0e6b2ec38054b72931a8a2e94f3835f17",
+  "results": {
+    "new_held": "run-046: A paused after successful claim before read, B observed two busy guard acquisitions; after release A=1, B=2, baton=2",
+    "new_pair": "run-045: A=1, B=2, baton=2",
+    "old_fail": "run-025: A=nil, B=1, baton=1; distinct tokens; both os.rename claims reported success; A private destination absent immediately"
+  }
+}
