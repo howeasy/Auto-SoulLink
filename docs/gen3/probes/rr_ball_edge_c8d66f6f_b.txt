@@ -1,0 +1,135 @@
+duo instance b scenario=ball_gate_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:60373 (non-blocking)…
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player b -> 127.0.0.1:60373 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:60373
+[client] [SLink] TCP connected to 127.0.0.1:60373
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=529 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=1/22
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=453 level=25 hp=82/82
+booted frame=529 map=map=787 at=(12,37) balls=0
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":false,"in_battle":false,"loc_name":"route1","ot
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":false,"in_battle":false,"loc_name":"route1","ot
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 602
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 602
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 603
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 603
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 603
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 603
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 603
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 603
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 603
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 603
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 603
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 604
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 604
+[client] [SLink-gen3] write native 0x0203FE94 +4 frame 605
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":0,"battle_identity":true,"event":"hello","foundation":"gen3_rr","has_pokeballs":false,"in_battle":false,"loc_name":"route1","ot
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 608
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 608
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=111 applied=111 attempt=1
+[client] [gen3] phase encounter-found frame=1024 pre-ball: cycle 4 mid-step Right at (12,37)
+[client] [gen3] phase battle-state-saved frame=1024 C:/slink-wt/close-ball-gate-c8-j111-state/slink_fr_battle.State
+LOSE EBEF11DA:D4223740 status_move_slot=1
+BALL_NATIVE_HP0 EBEF11DA:D4223740 frame=3821 in_battle=1 battler=1
+ENGINE_FAINT_SITE frame=3870 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+TX faint EBEF11DA:D4223740 {"area_id":"route_1","event":"faint","key":"EBEF11DA:D4223740","player":"b","seq":114}
+SENT_OUT slot=1 battler_slot=1
+TX safe - {"event":"safe","player":"b","seq":134}
+BALL_PRE_ENCOUNTER species=566 outcome=4
+BALL_FAINT {"hp":0,"key":"EBEF11DA:D4223740","sent":1,"site":{"active":0,"battle_hp":0,"battler0_slot":0,"counter":1,"frame":3870,"party_hp":0}}
+BALL_PRE {"active":false,"attempted":0,"balls":0}
+[client] [gen3] phase start frame=4758 title=radical_red
+[client] [gen3] phase seeded frame=4758 counter=3
+[client] [gen3] phase party frame=4758 [1] species=277 level=6 hp=0/22 [2] species=453 level=25 hp=82/82
+[client] [gen3] phase encounter frame=5158 #1 during step Up at (12,26)
+TX safe - {"event":"safe","player":"b","seq":175}
+BALL_PARCEL_FLEE {"balls":0,"outcome":4}
+[client] [gen3] phase encounter-done frame=5761 #1 resolved at (12,26)
+[client] [gen3] phase encounter frame=6273 #2 during step Up at (16,8)
+TX safe - {"event":"safe","player":"b","seq":214}
+BALL_PARCEL_FLEE {"balls":0,"outcome":4}
+[client] [gen3] phase encounter-done frame=6875 #2 resolved at (16,8)
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"b","seq":224}
+TX area_enter - {"area_id":"","event":"area_enter","loc_name":"viridian_city_mart","player":"b","seq":248}
+[client] [gen3] phase mart-entered frame=7781 map=1283 at=(4,7)
+[client] [gen3] phase parcel-received frame=8164 VAR_MART=1
+TX area_enter - {"area_id":"viridian_city","event":"area_enter","loc_name":"viridian_city","player":"b","seq":276}
+TX area_enter - {"area_id":"route_1","event":"area_enter","loc_name":"route1","player":"b","seq":300}
+[client] [gen3] phase encounter frame=9715 #1 during step Down at (16,17)
+TX safe - {"event":"safe","player":"b","seq":333}
+BALL_PARCEL_FLEE {"balls":0,"outcome":4}
+[client] [gen3] phase encounter-done frame=10317 #1 resolved at (16,17)
+[client] [gen3] phase encounter frame=10877 #2 during step Down at (8,34)
+TX safe - {"event":"safe","player":"b","seq":373}
+BALL_PARCEL_FLEE {"balls":0,"outcome":4}
+[client] [gen3] phase encounter-done frame=11480 #2 resolved at (8,34)
+[client] [gen3] phase route2-edge frame=11624 ROUTE2_EDGE before map=787 pos=(12,39) field=true battle=false callback2=080565B5 tasks=0:08079E0D,1:0806E811,2:0806E83D
+TX area_enter - {"area_id":"pallet_town","event":"area_enter","loc_name":"pallet_town","player":"b","seq":382}
+TX area_enter - {"area_id":"oaks_lab","event":"area_enter","loc_name":"pallet_town_professor_oaks_lab","player":"b","seq":397}
+[client] [gen3] phase lab-entered frame=12064 map=1027 at=(6,12)
+[client] [gen3] phase parcel-delivered frame=13665 VAR_MART=2 dex=1 balls=10
+BALL_PICKUP {"after":true,"before":false,"flag":2089}
+BALL_FLIP {"active":true,"balls":10}
+TX area_enter - {"area_id":"pallet_town","event":"area_enter","loc_name":"pallet_town","player":"b","seq":584}
+TX area_enter - {"area_id":"route_1","event":"area_enter","loc_name":"route1","player":"b","seq":600}
+[client] [gen3] phase back-at-grass-origin frame=18129 map=787 at=(12,37)
+[client] [gen3] phase encounter-found frame=18321 link: cycle 2 mid-step Left at (13,38)
+THREW 1
+RX hud_show text=Partner caught Mienfoo in Route 1
+TX capture D9CF101C:D4223740 {"area_id":"route_1","event":"capture","held_item_id":139,"hp":19,"is_egg":false,"key":"D9CF101C:D4223740","level":4,"maxHP":19,"nickname":"Pansear","player":"b","seq":656,"species_id":566,"stats":{"attack":10,"defense":10,"level":4,"maxHP":19,"pp1":35,"pp2":10,"pp3":30,"pp4":0,"spAtk":9,"spDef":11,"speed":11}}
+RX play_sound
+RX msgbox text=Mienfoo and Pansear linked!
+RX party_mon key=D9CF101C:D4223740
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 19728
+[client] [SLink-gen3] write native 0x0203FD4C +26 frame 19728
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 19728
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 19728
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 19728
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 19728
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 19728
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 19728
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 19728
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 19728
+TX safe - {"event":"safe","player":"b","seq":658}
+TX sync_retrieve_done D9CF101C:D4223740 {"event":"sync_retrieve_done","key":"D9CF101C:D4223740","player":"b","seq":661}
+BALL_POST_CATCH {"key":"D9CF101C:D4223740"}
+CAUGHT D9CF101C:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277
+PARTY slot=1 key=F56D8C1D:D4223740 species=453
+PARTY slot=2 key=D9CF101C:D4223740 species=566
+[client] [gen3] phase save-menu frame=19983 counter=3
+[client] [gen3] phase save-dialog frame=20130 row=4
+[client] [gen3] phase saved frame=20193 counter=3->4
+[client] [gen3] phase slot-complete frame=21076 sectors=14/14
+SAVE_WITNESS_DUMP path=patch/build/e2e_ball_gate_gen3_b_1_witness.bin bytes=131072 saves=1 frame=21107 counter=4
+SAVE_WITNESS_EXT path=patch/build/e2e_ball_gate_gen3_b_1_witness_ext.bin bytes=8160 saves=1
+SAVE_WITNESS link counter=3->4
+WRITES 35
+RESULT: PASS (caught D9CF101C:D4223740)
