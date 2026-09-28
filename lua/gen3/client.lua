@@ -97,6 +97,7 @@ function Client.new(p)
     local pending_apply_trade
     local awaiting_trade_run = journal and not journal:ready() or false
     local reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
+    local reload_witness_live = false
     local owed = p.owed_reports and p.owed_reports.new() or nil
     local trade_epoch, trade_connected = 0, false
     local trade_reset_epoch = 0
@@ -1021,6 +1022,7 @@ function Client.new(p)
         if reads.read_sb2 and not reads.read_sb2() then return false, "save blocks not set" end
         local t = trainer()
         if t and t.ot_id == 0 and #party == 0 then return false, "pre-game (title/new game)" end
+        reload_witness_live = true
         return true
     end
     function drv.save_cleared()
@@ -1050,7 +1052,10 @@ function Client.new(p)
         st.release_snapshot = nil
         st.eggs = {}
         trade_reset_epoch = trade_reset_epoch + 1
-        reload_boot_seen = false
+        -- Pre-CONTINUE validation can see OT=0 after a real cleared boot interval.
+        -- That is still the same boot episode. A save clear after live play revokes
+        -- its earlier witness; a subsequent cleared interval may establish a new one.
+        if reload_witness_live then reload_boot_seen = false end
         if trade then trade:reset() end
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
@@ -1944,6 +1949,7 @@ function Client.new(p)
             if empty then reload_empty_frames = reload_empty_frames + 1
             elseif reload_empty_frames >= 2 then
                 reload_boot_seen, reload_empty_frames = true, 0
+                reload_witness_live = false
             else reload_empty_frames = 0 end
             if reload_boot_seen and trade and journal:ready() and journal:hidden()
                and not st.frozen and not in_battle() and io.trade_reload_proof
