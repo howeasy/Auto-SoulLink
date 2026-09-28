@@ -197,7 +197,7 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
                 -- failure must not strand that record forever. Keep retrying the SAME prepared
                 -- generation, without allowing any later caller to initialise the counter.
                 local published = false
-                for _ = 1, 200 do
+                for _ = 1, 3000 do
                     if rename_file(tmp, baton) then published = true; break end
                     spin()
                 end

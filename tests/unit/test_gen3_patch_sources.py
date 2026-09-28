@@ -434,9 +434,10 @@ def test_first_birth_waits_for_a_slow_publisher(windows):
     assert fs.text(BATON) == "2"
 
 
-def test_birth_winner_retries_a_transient_baton_publish_failure():
+@OS
+def test_birth_winner_retries_a_transient_baton_publish_failure(windows):
     """Only the recorded birth winner may retry publishing the initial generation."""
-    fs = _FS(True)
+    fs = _FS(windows)
     open_, remove, rename = fs.api()
     failed = []
 
@@ -446,9 +447,25 @@ def test_birth_winner_retries_a_transient_baton_publish_failure():
             return None, "temporarily busy", EACCES
         return rename(src, dst)
 
-    assert _counter()(ROOT, open_, remove, _no_spin, transient_rename, True) == 1
+    assert _counter()(ROOT, open_, remove, _no_spin, transient_rename, windows) == 1
     assert failed and fs.text(BATON) == "1"
     assert _allocate(fs) == 2
+
+
+@OS
+def test_exhausted_birth_publish_stays_fail_closed(windows):
+    fs = _FS(windows)
+    open_, remove, rename = fs.api()
+
+    def blocked_publish(src, dst):
+        if dst == BATON and ".new." in src:
+            return None, "persistently busy", EACCES
+        return rename(src, dst)
+
+    assert _counter()(ROOT, open_, remove, _no_spin, blocked_publish, windows) is None
+    assert BORN in fs.files and BATON not in fs.files
+    assert _allocate(fs) is None, "a later caller must never reset the birth generation"
+    assert BATON not in fs.files
 
 
 def test_first_birth_winner_publishes_after_the_loser_waits_past_old_bound():
