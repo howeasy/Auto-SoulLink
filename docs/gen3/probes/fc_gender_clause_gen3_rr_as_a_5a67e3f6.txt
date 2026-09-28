@@ -1,0 +1,67 @@
+# gen3_final_cut row=gender_clause_gen3_rr_as_a item=§14_P5_RR_duo cut=5a67e3f62144ffe604c9e34e4ac668fbe81c0150
+# lane=C:/slink-wt/g3-lane4
+# command: python tools/e2e_duo.py --game gen3_rr --scenario gender_clause_gen3   (cwd=C:/slink-wt/g3-lane4)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-28T15:28:22 cpu=25% emuhawk=0 python=4
+start_utc=2026-09-28T19:28:20Z tracked_clean_before=True
+
+========== scenario: gender_clause_gen3 ==========
+[duo] gender_clause_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=5a67e3f62144ffe604c9e34e4ac668fbe81c0150
+[duo] server up: tcp=55263 http=55264 data=C:\Users\howar\AppData\Local\Temp\slink_duo_gender_clause_gen3_5agj74ab
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 18.5s
+[duo] timing results 4.0s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=511aabd9537305e21611eb8086b29672af14350ae159bd1ef66c2016f720ccff file=511aabd9537305e21611eb8086b29672af14350ae159bd1ef66c2016f720ccff match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=9b945d59963292b11ae1ebb9869cb46fd7d16d7e01043835940ddf6f4d7be952 file=9b945d59963292b11ae1ebb9869cb46fd7d16d7e01043835940ddf6f4d7be952 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] BAG_BALLS baseline=9 final=8 throws=1 inst=a native_grant=0
+[duo] BAG_BALLS baseline=9 final=8 throws=1 inst=b native_grant=0
+[duo] link: 9A496463:2BDDC8BF <-> 57DE15B1:D4223740 alive on route_1 and saved once in each party
+[duo] timing oracle 0.3s
+[duo] PYDEC: FAIL gender clause unobserved
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_gender_clause_gen3_5agj74ab
+[duo] gender_clause_gen3: gender clause unobserved; retrying fresh lane
+[duo] gender_clause_gen3: attempt 2 of 8
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=5a67e3f62144ffe604c9e34e4ac668fbe81c0150
+[duo] server up: tcp=63132 http=63133 data=C:\Users\howar\AppData\Local\Temp\slink_duo_gender_clause_gen3_o_j_9ttp
+[duo] timing server 1.0s
+[duo] cleared 6 stale artifact(s) for gender_clause_gen3: e2e_gender_clause_gen3_a_1_witness.bin, e2e_gender_clause_gen3_a_1_witness_ext.bin, e2e_gender_clause_gen3_a_result.txt, e2e_gender_clause_gen3_b_1_witness.bin, e2e_gender_clause_gen3_b_1_witness_ext.bin, e2e_gender_clause_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 18.2s
+[duo] timing results 4.0s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=6d659894d1ddb1cac765f2443dcc31cf6bc4b50adfa0d5f0ac378137b4fc6b5b file=6d659894d1ddb1cac765f2443dcc31cf6bc4b50adfa0d5f0ac378137b4fc6b5b match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=22d73aec9f6260f39816ca12a5315dbef3f489699778090022b761194af840b6 file=22d73aec9f6260f39816ca12a5315dbef3f489699778090022b761194af840b6 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] gender: B rejected and memorial saved; A quarantined; area retryable
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] gender_clause_gen3: a=PASS b=PASS
+
+========== summary ==========
+  gender_clause_gen3: PASS (attempt 2 of 8)
+exit=0 end_utc=2026-09-28T19:29:10Z tracked_clean_after=True classification=pass

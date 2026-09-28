@@ -1,0 +1,114 @@
+# gen3_final_cut row=type_clause_gen3_rr_as_a item=§14_P5_RR_duo cut=5a67e3f62144ffe604c9e34e4ac668fbe81c0150
+# lane=C:/slink-wt/g3-lane3
+# command: python tools/e2e_duo.py --game gen3_rr --scenario type_clause_gen3   (cwd=C:/slink-wt/g3-lane3)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-28T15:07:14 cpu=28% emuhawk=0 python=4
+start_utc=2026-09-28T19:07:13Z tracked_clean_before=True
+
+========== scenario: type_clause_gen3 ==========
+[duo] type_clause_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=5a67e3f62144ffe604c9e34e4ac668fbe81c0150
+[duo] server up: tcp=53496 http=53497 data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_ft8zj21g
+[duo] timing server 0.6s
+[duo] cleared 18 stale artifact(s) for type_clause_gen3: e2e_type_clause_gen3_a_4_witness.bin, e2e_type_clause_gen3_a_4_witness_ext.bin, e2e_type_clause_gen3_a_attempt1_result.txt, e2e_type_clause_gen3_a_attempt2_result.txt, e2e_type_clause_gen3_a_attempt3_result.txt, e2e_type_clause_gen3_a_attempt4_result.txt, e2e_type_clause_gen3_a_result.txt, e2e_type_clause_gen3_b_4_witness.bin, e2e_type_clause_gen3_b_4_witness_ext.bin, e2e_type_clause_gen3_b_attempt1_result.txt, e2e_type_clause_gen3_b_attempt2_result.txt, e2e_type_clause_gen3_b_attempt3_result.txt, e2e_type_clause_gen3_b_attempt4_result.txt, e2e_type_clause_gen3_b_result.txt, e2e_type_clause_gen3_pydec_attempt1_result.txt, e2e_type_clause_gen3_pydec_attempt2_result.txt, e2e_type_clause_gen3_pydec_attempt3_result.txt, e2e_type_clause_gen3_pydec_attempt4_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 18.4s
+[duo] RESULT_LINE a: RESULT: FAIL (no type-clause verdict (partner-gone))
+[duo] RESULT_LINE b: RESULT: FAIL (RNG: type first encounter has no overlap)
+[duo] PYDEC: FAIL client RESULT before saved-state oracle
+[duo] type_clause_gen3: a=FAIL b=FAIL
+--- type_clause_gen3 a result ---
+[client] [SLink-gen3] write overworld 0x02029318 +58 frame 2545
+[client] [SLink-gen3] write overworld 0x0202434C +100 frame 2545
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 2545
+TX stats_cache 3BB93C3B:2BDDC8BF {"event":"stats_cache","key":"3BB93C3B:2BDDC8BF","player":"a","seq":70,"stats":{"attack":10,"defense":9,"level":4,"maxHP":17,"pp1":25,"pp2":30,"pp3":30,"pp4":0,"spAtk":7,"spDef":9,"speed":12}}
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+CAUGHT 3BB93C3B:2BDDC8BF
+PENDING_CAPTURE {"area_id":"route_1","event":"capture","held_item_id":0,"hp":17,"is_egg":false,"key":"3BB93C3B:2BDDC8BF","level":4,"maxHP":17,"nickname":"Rattata","player":"a","seq":66,"species_id":19,"stats":{"attack":10,"defense":9,"level":4,"maxHP":17,"pp1":25,"pp2":30,"pp3":30,"pp4":0,"spAtk":7,"spDef":9,"speed":12}}
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane3/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+WRITES 19
+RESULT: FAIL (no type-clause verdict (partner-gone))
+--- type_clause_gen3 b result ---
+RULE_RX {"battle_calc":true,"cmd":"config","native_messages":false,"native_sounds":false,"overworld_presence":false,"pc_trade_npc":true,"run_id":"duo-1016b62b6522474fa3fdc0b12a47f24a"}
+RX dead_keys
+RULE_RX {"cmd":"dead_keys","keys":{}}
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+RX link_panel
+RULE_RX {"cmd":"link_panel","rows":["No linked pairs yet","Pairs alive|0/0","Dead zones|0","Badges|0/8"]}
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+RX hud_show text=Partner caught Rattata in Route 1
+RULE_RX {"b":255,"cmd":"hud_show","frames":300,"g":180,"r":100,"text":"Partner caught Rattata in Route 1"}
+A_PENDING {"area_id":"route_1","event":"capture","held_item_id":0,"hp":17,"is_egg":false,"key":"3BB93C3B:2BDDC8BF","level":4,"maxHP":17,"nickname":"Rattata","player":"a","seq":66,"species_id":19,"stats":{"attack":10,"defense":9,"level":4,"maxHP":17,"pp1":25,"pp2":30,"pp3":30,"pp4":0,"spAtk":7,"spDef":9,"speed":12}}
+[client] [gen3] phase encounter-found frame=2841 clause: cycle 2 mid-step Left at (13,38)
+[client] [gen3] phase battle-state-saved frame=2841 C:/slink-wt/g3-lane3-state/slink_fr_battle.State
+CLAUSE_ENCOUNTER {"dupe":false,"n":1,"species":672,"type_overlap":false}
+WRITES 16
+RESULT: FAIL (RNG: type first encounter has no overlap)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_ft8zj21g
+[duo] type_clause_gen3: B's first wild foe shared no type with A; restarting attempt 2 of 8 with a fresh server, run directory and SaveRAM seeds
+[duo] type_clause_gen3: attempt 2 of 8
+[duo] JITTER requested=37 attempt=2
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=5a67e3f62144ffe604c9e34e4ac668fbe81c0150
+[duo] server up: tcp=57174 http=57175 data=C:\Users\howar\AppData\Local\Temp\slink_duo_type_clause_gen3_mo_wlc0a
+[duo] timing server 1.0s
+[duo] cleared 2 stale artifact(s) for type_clause_gen3: e2e_type_clause_gen3_a_result.txt, e2e_type_clause_gen3_b_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 27.6s
+[duo] timing results 6.9s
+[duo] RESULT_LINE a: RESULT: PASS
+[duo] RESULT_LINE b: RESULT: PASS
+[duo] SAVE_WITNESS_SHA256 inst=a site=ee538172504fbb75260af35f981427b30e2767273113602dfd16384f3f4cb2a1 file=ee538172504fbb75260af35f981427b30e2767273113602dfd16384f3f4cb2a1 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=a74b7c340ea3f56be228e43ab4612dce264c98ee82f130b9f11e9e9bdd373b06 file=a74b7c340ea3f56be228e43ab4612dce264c98ee82f130b9f11e9e9bdd373b06 match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] type: B rejected and memorial saved; A quarantined; area retryable
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] type_clause_gen3: a=PASS b=PASS
+
+========== summary ==========
+  type_clause_gen3: PASS (attempt 2 of 8)
+exit=0 end_utc=2026-09-28T19:08:10Z tracked_clean_after=True classification=pass
