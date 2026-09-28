@@ -1,0 +1,22 @@
+# G4 final cut ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d -- tools/gen3_final_cut.py summary (written 2026-09-28T03:23:31Z)
+# RUN 15 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | boxsync_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_boxsync_gen3_fr_as_a_ddf6ebd8.txt |
+| 2 | reconnect_gen3_fr_as_a | §2-3 item1-2 | PASS | 1 | fc_reconnect_gen3_fr_as_a_ddf6ebd8.txt |
+| 3 | center_controls_gen3_fr_as_a | §4 item2a | PASS | 1 | fc_center_controls_gen3_fr_as_a_ddf6ebd8.txt |
+| 4 | center_controls_gen3_lg_as_a | §4 item2a | PASS | 1 | fc_center_controls_gen3_lg_as_a_ddf6ebd8.txt |
+| 5 | active_end_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_active_end_gen3_fr_as_a_ddf6ebd8.txt |
+| 6 | linked_faint_active_whiteout_gen3_lg_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_whiteout_gen3_lg_as_a_ddf6ebd8.txt |
+| 7 | linked_faint_active_trainer_gen3_fr_as_a | §5 item2b | PASS | 1 | fc_linked_faint_active_trainer_gen3_fr_as_a_ddf6ebd8.txt |
+| 8 | save_then_write_gen3_lg_as_a | §7 save-rows | PASS | 1 | fc_save_then_write_gen3_lg_as_a_ddf6ebd8.txt |
+| 9 | bootcheck_firered_party_town | §8 item4 | PASS | 1 | fc_bootcheck_firered_party_town_ddf6ebd8.txt |
+| 10 | bootcheck_leafgreen_party_town_b | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_town_b_ddf6ebd8.txt |
+| 11 | bootcheck_leafgreen_party_battle | §8 item4 | PASS | 1 | fc_bootcheck_leafgreen_party_battle_ddf6ebd8.txt |
+| 12 | zip_build | §9 item5 | PASS | 1 | fc_zip_build_ddf6ebd8.txt |
+| 13 | zip_check | §9 item5 | PASS | 1 | fc_zip_check_ddf6ebd8.txt |
+| 14 | zip_boot_firered | §9 item5 | PASS | 1 | fc_zip_boot_firered_ddf6ebd8.txt |
+| 15 | item6_route_diff | §10 item6 | PASS | 1 | fc_item6_route_diff_ddf6ebd8.txt |
+
+OVERALL: PASS (15/15 rows)

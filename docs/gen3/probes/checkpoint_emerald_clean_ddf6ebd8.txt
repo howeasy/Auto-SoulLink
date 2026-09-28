@@ -1,0 +1,66 @@
+# probe_gen3_checkpoint.lua title=emerald kind=clean lane=ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d tracked_clean_before=True tracked_clean_after=True tracked_clean=True
+# script=lua/tests/probe_gen3_checkpoint.lua sha256(git blob, LF)=cb853304c2ee62f55cd45fc6efc47c28a0cec5a8659a47eeadb40551ac91f8f1
+# rom=patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba sha1=f3ae088181bf583e55daf962a92bb46f4f1d07b7
+# SLINK_STATE_DIR=C:/slink-wt/g3-lane2/patch/build/gen3_probe_states_c4p2/emerald
+# SLINK_CHECKPOINT_ROWS=
+# invocation: SLINK_GEN3_CHECKPOINT=C:/slink-wt/g3-lane2/data/games/gen3_emerald/write_checkpoint.json SLINK_GEN3_TITLE=emerald SLINK_GEN3_KIND=clean python tools/run_gate.py lua/tests/probe_gen3_checkpoint.lua --rom "patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba" --timeout 1200
+phase probe-state frame=733 idle terminal=field_idle_300
+PROBE idle PASS sampled=300 true=281 false=19 irq=19 non_irq_sampled=281 non_irq_true=281 floor=30 terminal=field_idle_300 reached=true R15=134219980 CPSR=63 frame=1033 frames=300 clauses=cpu:19 verdict=positive rate reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:130: CPU outside parked checkpoint
+phase probe-state frame=733 walking terminal=position_changed_120
+PROBE walking PASS sampled=120 true=118 false=2 irq=2 non_irq_sampled=118 non_irq_true=118 terminal=position_changed_120 reached=true R15=134219978 CPSR=1610612799 frame=853 frames=120 clauses=cpu:2 verdict=- reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:130: CPU outside parked checkpoint
+phase probe-state frame=766 start_menu terminal=field_controls_locked
+PROBE start_menu PASS sampled=120 true=0 false=120 irq=2 non_irq_sampled=118 non_irq_true=0 terminal=field_controls_locked reached=true R15=134219980 CPSR=63 frame=886 frames=120 clauses=cpu:2,field_controls_locked:120,task:120 verdict=- reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:105: forbidden state: field_controls_locked
+phase probe-state frame=793 dialog terminal=start_menu_save_callback_under_live_task
+PROBE dialog PASS sampled=120 true=0 false=120 irq=5 non_irq_sampled=115 non_irq_true=0 terminal=start_menu_save_callback_under_live_task reached=true R15=134219976 CPSR=1610612799 frame=913 frames=120 clauses=cpu:7,field_controls_locked:120,task:120 verdict=- reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:105: forbidden state: field_controls_locked
+phase probe-state frame=913 save terminal=new_counter_partial_slot_then_14_sectors
+PROBE save PASS sampled=246 true=0 false=246 irq=37 non_irq_sampled=209 non_irq_true=0 terminal=new_counter_partial_slot_then_14_sectors reached=true R15=28 CPSR=146 frame=1565 frames=653 clauses=cpu:246,field_controls_locked:246,task:246 verdict=- reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:105: forbidden state: field_controls_locked
+phase probe-state frame=1513 battle terminal=in_battle_mask_nonzero
+PROBE battle PASS sampled=120 true=0 false=120 irq=8 non_irq_sampled=112 non_irq_true=0 terminal=in_battle_mask_nonzero reached=true R15=134219980 CPSR=63 frame=1633 frames=120 clauses=callback1:120,callback2:120,cpu:8,field_controls_locked:120,in_battle:120 verdict=- reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:105: forbidden state: callback1
+phase probe-state frame=733 fade terminal=palette_fade_active_then_map_changed
+PROBE fade PASS sampled=74 true=0 false=74 irq=4 non_irq_sampled=70 non_irq_true=0 terminal=palette_fade_active_then_map_changed reached=true R15=134219982 CPSR=1073741887 frame=888 frames=158 clauses=cpu:32,field_controls_locked:74,palette_fade_active:74,task:74 verdict=- reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:105: forbidden state: field_controls_locked
+phase probe-state frame=1070 script_running terminal=script_context_not_shutdown_60
+PROBE script_running PASS sampled=123 true=0 false=123 irq=3 non_irq_sampled=120 non_irq_true=0 terminal=script_context_not_shutdown_60 reached=true R15=134219984 CPSR=1610612799 frame=1216 frames=146 clauses=cpu:3,field_controls_locked:123,script_context_status:123,task:121 verdict=- note=witness=same_byte_as_script_context_status,independent_read_path,not_independent_evidence reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:105: forbidden state: field_controls_locked
+phase probe-state frame=950 center_idle terminal=center_1f_idle_300
+PROBE center_idle PASS sampled=300 true=290 false=10 irq=10 non_irq_sampled=290 non_irq_true=290 floor=30 terminal=center_1f_idle_300 reached=true R15=134219984 CPSR=1610612799 frame=1250 frames=300 clauses=cpu:10 verdict=positive rate note=Oldale Center 1F: CableClub_OnResume leaves the Union Room background tasks running reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:130: CPU outside parked checkpoint
+phase probe-state frame=950 map_popup terminal=Task_MapNamePopUpWindow_live_field_settled
+PROBE map_popup PASS sampled=133 true=115 false=18 irq=18 non_irq_sampled=115 non_irq_true=115 floor=30 terminal=Task_MapNamePopUpWindow_live_field_settled reached=true R15=134219976 CPSR=1610612799 frame=1237 frames=288 clauses=cpu:18 verdict=positive rate note=exit the Center: the warp into Oldale (show_map_name) starts the popup; sampled while the popup task is live and the field is settled reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:130: CPU outside parked checkpoint
+phase probe-state frame=1513 battle_input_wild terminal=battle_main_func==HandleTurnActionSelectionState and gBattleCommunication[0]==1
+PROBE battle_input_wild PASS sampled=180 true=180 false=0 irq=10 non_irq_sampled=170 non_irq_true=170 floor=60 terminal=battle_main_func==HandleTurnActionSelectionState and gBattleCommunication[0]==1 reached=true R15=134219982 CPSR=1073741887 frame=1693 frames=180 clauses=- verdict=positive rate note=wild encounter parked at the action menu; no input reason=-
+phase probe-state frame=2205 battle_input_trainer terminal=battle_main_func==HandleTurnActionSelectionState and gBattleCommunication[0]==1
+PROBE battle_input_trainer PASS sampled=180 true=180 false=0 irq=6 non_irq_sampled=174 non_irq_true=174 floor=60 terminal=battle_main_func==HandleTurnActionSelectionState and gBattleCommunication[0]==1 reached=true R15=134219982 CPSR=1073741887 frame=2385 frames=180 clauses=- verdict=positive rate note=trainer battle parked at the action menu (gBattleTypeFlags & BATTLE_TYPE_TRAINER); battler 0 is uncommitted so the guard holds. RR holds battle_commit: see battle_commit_held_rr reason=-
+phase probe-state frame=1513 battle_move_menu terminal=gBattleCommunication[0]==2
+PROBE battle_move_menu PASS sampled=315 true=0 false=315 irq=17 non_irq_sampled=298 non_irq_true=0 terminal=gBattleCommunication[0]==2 reached=true R15=134219980 CPSR=63 frame=1829 frames=316 clauses=battle_comm_0:315,battle_input_controller:315 verdict=- note=A on FIGHT opens the move submenu (STATE_WAIT_ACTION_CASE_CHOSEN) reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:213: forbidden state: battle_comm_0
+phase probe-state frame=1513 battle_animation terminal=gBattleControllerExecFlags~=0 and gBattlerControllerFuncs[0]~=HandleInputChooseAction
+PROBE battle_animation PASS sampled=201 true=0 false=201 irq=16 non_irq_sampled=185 non_irq_true=0 terminal=gBattleControllerExecFlags~=0 and gBattlerControllerFuncs[0]~=HandleInputChooseAction reached=true R15=134219976 CPSR=1610612799 frame=1755 frames=242 clauses=battle_comm_0:201,battle_exec_flags_input:66,battle_input_controller:201,battle_main_func:186 verdict=- note=two A presses commit a move; the animation holds the exec flags. Not on RR: the RR pack has no gBattleControllerExecFlags address (reported UNVERIFIED) reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:213: forbidden state: battle_main_func
+phase probe-state frame=943 battle_intro terminal=gBattleMainFunc ~= HandleTurnActionSelectionState
+PROBE battle_intro PASS sampled=180 true=0 false=180 irq=12 non_irq_sampled=168 non_irq_true=0 terminal=gBattleMainFunc ~= HandleTurnActionSelectionState reached=true R15=134219980 CPSR=63 frame=1123 frames=180 clauses=battle_comm_0:180,battle_engine_loaded:28,battle_exec_flags_input:179,battle_input_controller:180,battle_main_func:180 verdict=- note=battle intro parked before the first action menu reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:213: forbidden state: battle_main_func
+phase probe-state frame=1567 battle_over terminal=gBattleOutcome~=0
+PROBE battle_over PASS sampled=180 true=0 false=180 irq=5 non_irq_sampled=175 non_irq_true=0 terminal=gBattleOutcome~=0 reached=true R15=134219976 CPSR=1610612799 frame=1747 frames=180 clauses=battle_comm_0:180,battle_input_controller:180,battle_main_func:180,battle_outcome_open:180 verdict=- note=the state saved after a resolved battle reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:213: forbidden state: battle_main_func
+phase probe-state frame=1513 battle_commit_state3 terminal=gBattleCommunication[0]>=3
+PROBE battle_commit_state3 PASS sampled=417 true=0 false=417 irq=33 non_irq_sampled=384 non_irq_true=0 terminal=gBattleCommunication[0]>=3 reached=true R15=134219976 CPSR=1610612799 frame=1947 frames=468 clauses=battle_comm_0:417,battle_commit_guard:417,battle_exec_flags_input:259,battle_input_controller:417,battle_main_func:415 verdict=- note=the commit guard: a committed battler (FR/LG 3/4, Emerald 4/5) must refuse the Variant-3 pre-fill reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:213: forbidden state: battle_main_func
+phase probe-state frame=733 native_absent terminal=no native block in this pack
+PROBE native_absent PASS sampled=180 true=0 false=180 irq=14 non_irq_sampled=166 non_irq_true=0 terminal=no native block in this pack reached=true R15=134219976 CPSR=1610612799 frame=913 frames=180 clauses=native_present:180 verdict=- note=the reason must refuse on a build with no companion reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:441: native bytes belong to the companion artifact
+phase probe-state frame=733 sound_driver terminal=m4a SE1 ident == ID_NUMBER
+PROBE sound_driver PASS sampled=180 true=180 false=0 irq=14 non_irq_sampled=166 non_irq_true=166 floor=60 terminal=m4a SE1 ident == ID_NUMBER reached=true R15=134219976 CPSR=1610612799 frame=913 frames=180 clauses=- verdict=positive rate note=the sound reason on a live driver; native_busy is model-only (the probe posts no op) reason=-
+phase probe-state frame=943 battle_intro_field terminal=in_battle_mask_nonzero
+PROBE battle_intro_field PASS sampled=180 true=0 false=180 irq=12 non_irq_sampled=168 non_irq_true=0 terminal=in_battle_mask_nonzero reached=true R15=134219980 CPSR=63 frame=1123 frames=180 clauses=callback1:161,callback2:180,cpu:16,field_controls_locked:180,in_battle:180,palette_fade_active:6,task:153 verdict=- note=wild battle, first in_battle frame (before the action menu); overworld reason reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:105: forbidden state: callback1
+phase probe-state frame=2205 trainer_battle_field terminal=in_battle_mask_nonzero
+PROBE trainer_battle_field PASS sampled=180 true=0 false=180 irq=6 non_irq_sampled=174 non_irq_true=0 terminal=in_battle_mask_nonzero reached=true R15=134219982 CPSR=1073741887 frame=2385 frames=180 clauses=callback1:180,callback2:180,cpu:6,field_controls_locked:180,in_battle:180,script_context_status:180 verdict=- note=Youngster Calvin parked at the action menu; overworld reason reason=C:/slink-wt/g3-lane2/lua/gen3/safety.lua:105: forbidden state: callback1
+PROBE pc_menu SKIP not selected for emerald/clean
+PROBE battle_faint_prompt SKIP not selected for emerald/clean
+PROBE battle_link SKIP not selected for emerald/clean
+PROBE native_idle_field SKIP not selected for emerald/clean
+PROBE native_idle_battle SKIP not selected for emerald/clean
+PROBE bw_n1_action_draw SKIP not selected for emerald/clean
+PROBE bw_n4_bag SKIP not selected for emerald/clean
+PROBE bw_n5_party SKIP not selected for emerald/clean
+PROBE bw_n6_summary SKIP not selected for emerald/clean
+PROBE bw_n7_switch SKIP not selected for emerald/clean
+PROBE bw_n9_run SKIP not selected for emerald/clean
+PROBE bw_u1_oldman SKIP not selected for emerald/clean
+PROBE bw_u2_pokedude SKIP not selected for emerald/clean
+PROBE bw_n8_item SKIP not selected for emerald/clean
+PROBE battle_commit_held_rr SKIP not selected for emerald/clean
+WRITE_SURFACE none (predicate-only probe) native_idle=opcode_queue_only
+FRAMES spent=5272 budget=90000
+RESULT: PASS all checkpoint controls
