@@ -2479,6 +2479,32 @@ def rr_reset_initial_receipt_problems(receipts, case, keys):
     return problems
 
 
+def rr_reset_partial_a_problems(receipt, old_key):
+    """Only the named, internally bound A interruption may remain terminal while B runs."""
+    if terminal_result(receipt) != "RESULT: FAIL (EXPECTED_RESET_PARTIAL_COMMIT)":
+        return ["A did not make the exact expected partial exit"]
+    rows = []
+    for tag in ("RESET_COMMIT_ENTERED", "RESET_PARTIAL_COMMIT_EXIT"):
+        found = re.findall(rf"^{tag} (\{{.*\}})$", receipt, re.M)
+        if len(found) != 1:
+            return [f"A needs one {tag} witness"]
+        try:
+            rows.append(json.loads(found[0]))
+        except ValueError:
+            return [f"A {tag} witness is malformed"]
+    first, last = rows
+    if not isinstance(first, dict) or first != last or first.get("old_key") != old_key:
+        return ["A partial witnesses disagree or name another key"]
+    if (first.get("bits") != 3 or not first.get("token")
+            or type(first.get("counter_before")) is not int
+            or type(first.get("counter_after")) is not int
+            or first["counter_after"] != first["counter_before"] + 1):
+        return ["A partial witness lacks the native pre-save/commit window"]
+    if "TX trade_done " in receipt or re.search(r"^TRADED\b", receipt, re.M):
+        return ["A partial exit falsely claimed trade completion"]
+    return []
+
+
 def rr_reset_link_problems(case, keys, staged, initial, final):
     """The staged pair is the independent pre-trade server baseline."""
     old = lambda row: (row.get("a") or {}).get("key") == keys["a"] and (row.get("b") or {}).get("key") == keys["b"]  # noqa: E731
@@ -8029,6 +8055,25 @@ class DuoRun:
 
     orchestrate_native_trade_decline_firered = orchestrate_native_trade_firered
 
+    def _rr_reset_wait_commit_initial(self, description, predicate, timeout):
+        """Wait past A's validated partial FAIL, but never past another terminal failure."""
+        def guarded():
+            a, b = (self._read_receipt(inst) for inst in "ab")
+            a_result, b_result = terminal_result(a), terminal_result(b)
+            if a_result:
+                problems = rr_reset_partial_a_problems(a, self._link_keys["a"])
+                if problems:
+                    raise RuntimeError("; ".join(problems))
+            if b_result and b_result.startswith("RESULT: FAIL"):
+                raise RuntimeError(f"B failed before {description}: {b_result}")
+            for inst, result in (("a", a_result), ("b", b_result)):
+                if self._process_exited(inst) and not result:
+                    raise RuntimeError(f"{inst} exited without a result before {description}")
+            return predicate()
+
+        remaining = max(0, getattr(self, "_run_deadline", float("inf")) - time.time())
+        return wait_for(description, guarded, min(timeout, remaining))
+
     def _rr_reset_wire_rows(self):
         path = Path(self._wire_dir(), "wire_a.jsonl")
         if not path.is_file():
@@ -8066,10 +8111,11 @@ class DuoRun:
         else:
             self._gen3_mark("a", r"^RESET_PARTIAL_COMMIT_EXIT ",
                             "A clean commit-window interruption")
-            marker = self._gen3_mark("b", r"^RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE ({.*})$",
-                                     "B native post-save before clean exit")
+            marker = self._rr_reset_wait_commit_initial("B native post-save before clean exit", lambda: re.search(
+                r"^RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE ({.*})$",
+                self._read_receipt("b"), re.M), self.cfg["timeout"])
             token = json.loads(marker[1])["token"]
-            self.wait_for("server consumed B's native trade_done", lambda: (
+            self._rr_reset_wait_commit_initial("server consumed B's native trade_done", lambda: (
                 (pending := self._reconnect_document().get("pending_trade") or {}).get("token") == token
                 and (pending.get("done") or {}).get("b") is True), 120)
             self._append_reconnect_marker("b", "RESET_EXIT")
