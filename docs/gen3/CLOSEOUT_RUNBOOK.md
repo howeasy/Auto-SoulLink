@@ -187,3 +187,16 @@ Codex died mid-turn ~11:44 local time, deep into a second closeout window. I (Cl
 - Master stays `abc6bf28`, untouched. Landing needs the owner's own explicit yes (ruling 41) -- nothing here changes that.
 - Worktree/branch sprawl (~90 worktrees, ~50 `codex/close-*|core-*|rr-reset-*|review-*` branches from the recursive dev/diag/review fan-out): 64 confirmed merged into integration, 8 master-only, ~40 not literal ancestors but spot-checks show their content already landed via different commits on the mainline (likely dead-end duplicate lanes). NOT deleted this session -- too much to verify safely on a token budget. Do a dedicated cleanup pass once landing is decided, using the ancestor-check script pattern above (`git merge-base --is-ancestor <head> <target>` per worktree) rather than trusting branch names.
 - Expansion (ruling 42, parallel track): untouched by me, still exactly where Codex's closeout doc left it (unrouted, XG3 open). Not blocking.
+
+## HANDOFF 2 — 2026-09-28, token-limited stop, final state
+
+Candidate `5a67e3f6` (integration), `38c68769` (landing-prep). Full unit suite **13759/0 PASS**. Gen1 gate: real Gen1 lanes now clean (fixed missing ROMs/pret clones this worktree was missing) -- 2 unrelated Emerald-generator tests need a fuller pokeemerald clone, out of scope.
+
+**Final cuts, same candidate:**
+- FR/LG: **43/43 PASS**
+- Emerald: **24/24 PASS**
+- RR: **24/28**. 4 real failures, none in trade/durable/reconnect/counter/journal (all confirmed fixed): `linked_faint_active_whiteout_gen3_rr_as_a`, `boxsync_gen3_rr_as_a`, `species_clause_gen3_rr_as_a` (only 1 of its 8 retry attempts observed -- may self-resolve), `release_gen3_rr_as_a`. Last two look like the same PC-storage-menu-timing class. Not triaged. Full trail of how I got a clean signal (contention -> stale lane state -> stale-receipt refusal) is in the commit message of the receipts commit right before this one -- read it if you rerun these, so you don't repeat the same three dead ends.
+
+**Runner gotcha worth knowing:** `gen3_final_cut.py` refuses to re-execute ANY row that already has a receipt file for the exact `--cut` sha, regardless of `--resume`/`--rows`. To force a genuine rerun you must delete the stale `docs/gen3/probes/fc_<row>_<cut8>.txt` first. Combine with a fresh lane if the prior failure could have left dirty runtime state (mid-trade saves, guard files) -- reusing a lane that just failed a live row is not safe by default.
+
+**Next step:** triage the 4 RR rows (or accept as a named limit if the owner is fine landing RR with them open -- they're PC-menu edge cases, not the durable-trade work this whole effort was about). Then: fresh Gen2 ping (shared files changed again), the process-kill I couldn't do, the worktree cleanup pass, and the landing request. Everything else from Handoff 1 above still applies unchanged.
