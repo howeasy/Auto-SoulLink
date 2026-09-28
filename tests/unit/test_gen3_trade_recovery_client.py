@@ -464,6 +464,35 @@ def recovering_pair(tmp_path, monkeypatch, corrupt=False):
     return world, restored, server, entry, token, epoch, pump
 
 
+def test_cold_boot_witness_survives_pre_continue_save_clear_validation(tmp_path, monkeypatch):
+    from tests.unit.gen3_world import SB1_ADDR, SB2_ADDR, mon_record
+
+    world, _model, _server, _entry, _token, _epoch, _pump = recovering_pair(tmp_path, monkeypatch)
+    called = []
+    world.io.trade_reload_proof = lambda *_: called.append(True)
+    world.set_party([])
+    world.poke_int(world.ram["SB1_PTR_ADDR"], 0, 4)
+    world.poke_int(world.ram["SB2_PTR_ADDR"], 0, 4)
+    world.step(2)  # observed cold boot with cleared SaveBlocks and party
+    world.poke_int(world.ram["SB1_PTR_ADDR"], SB1_ADDR, 4)
+    world.poke_int(world.ram["SB2_PTR_ADDR"], SB2_ADDR, 4)
+    world.set_trainer(0, "")
+    world.step_to(120)  # core validation sees OT=0 and calls on_reset before CONTINUE
+    before_live = len(called)  # a pre-field probe cannot qualify an empty saved party
+    world.set_trainer(17, "A")
+    world.set_party([mon_record(1, 0x11, species=1)])
+    world.step(35)
+    assert len(called) > before_live, "the early witness must survive pre-continue OT=0 validation"
+    world.set_party([])
+    world.set_trainer(0, "")
+    world.step_to(180)  # a later save clear after live play must revoke the old witness
+    after_clear = len(called)
+    world.set_trainer(17, "A")
+    world.set_party([mon_record(1, 0x11, species=1)])
+    world.step(35)
+    assert len(called) == after_clear, "a later clear needs a new observed boot episode"
+
+
 def install_battery_readback(world, model, path):
     from server.adapters import gen3_codec as C
     from tests.unit.gen3_world import SB1_ADDR, SB2_ADDR
