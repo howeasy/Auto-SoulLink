@@ -1,5 +1,7 @@
 # Gen 3 (P5) Radical Red RC cutover gate request — G5 evidence assembly
 
+> **SIGNED 2026-09-27 by the owner in chat: "All gates are signed."** (Recorded by the combined Gen 3 coordinator, claude 30c21a7a. This covers every pending Gen 3 gate: G4, G5, EG4, XG1 and XG2. It is not approval of the master landing, which needs its own explicit owner approval, ruling 41.)
+
 **Status: G5 is ready for the owner's signature.** RR is live on the new client, and the frozen-cut
 RR final pass has now run: `tools/gen3_final_cut.py --title rr` PASSed **19/19 rows** at cut
 `a2985d5a` (`docs/gen3/probes/fc_SUMMARY_a2985d5a_rr.txt`, committed `622aa7f5`; §1a) — the 15 RR

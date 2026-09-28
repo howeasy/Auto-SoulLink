@@ -1,5 +1,7 @@
 # XG1 request: expansion reference build facts (draft, 2026-09-27)
 
+> **SIGNED 2026-09-27 by the owner in chat: "All gates are signed."** (Recorded by the combined Gen 3 coordinator, claude 30c21a7a. This covers every pending Gen 3 gate: G4, G5, EG4, XG1 and XG2. It is not approval of the master landing, which needs its own explicit owner approval, ruling 41.)
+
 - **Branch:** `claude/gen3-exp-x23` (worktree `C:/slink-wt/g3-exp`), base integration `4fa041bf`.
   Local only: not pushed or merged.
 - **Plan:** `docs/gen3_emerald/PLAN.md` X1 row ("Build + facts" → **XG1** facts signed).

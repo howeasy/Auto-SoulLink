@@ -158,7 +158,13 @@ UNPINNED_INPUTS = ["Pokemon - Crystal Version (USA).gbc",
                    # profile/route/tutorial tests, and since EXPLODE-BIND the Emerald write
                    # checkpoint generator); only these four, not all ~630 MB of .cache/pret
                    ".cache/pret/pokered/", ".cache/pret/pokefirered/", ".cache/pret/pokecrystal/",
-                   ".cache/pret/pokeemerald/"]
+                   ".cache/pret/pokeemerald/",
+                   # release_gate_quick counts a skip as a failure: the T5 private candidate builds
+                   # (tests/unit/test_gen3_trade_duo*.py), the pinned expansion reference build
+                   # (test_gen3_title_syms_exp.py) and the fetched RR sources
+                   # (test_gen3_rr_generators.py; `python tools/fetch_rr_sources.py`)
+                   "patch/build/candidate-firered-trade/", "patch/build/candidate-leafgreen-trade/",
+                   ".cache/expansion-output/", "data/.rr_src_cache/"]
 GITIGNORED_INPUTS = list(PINNED_INPUTS) + UNPINNED_INPUTS
 ITEM6_INPUTS = [p for p in UNPINNED_INPUTS if not p.endswith("/")]   # the Gen 1/2 dumps and builds
 
