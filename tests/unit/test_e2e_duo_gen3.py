@@ -4325,7 +4325,7 @@ def test_active_faint_chain_is_red_on_the_old_hold_and_a_press(ph, mutate, probl
 
 
 def test_p_h_rows_are_registered_with_their_cases():
-    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr", "gen3_emerald")),
+    cases = {"linked_faint_active_gen3": ("wild", ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp")),
              "linked_faint_active_whiteout_gen3": ("whiteout", ("gen3_frlg", "gen3_rr")),
              "linked_faint_active_trainer_gen3": ("trainer", ("gen3_frlg",)),
              "active_end_gen3": ("command", ("gen3_frlg",)),
@@ -4628,7 +4628,7 @@ def test_linked_faint_active_masks_growth_for_the_natural_side_only(ph, monkeypa
 
 
 def test_the_explode_case_gives_b_no_turn_to_win_on(ph, monkeypatch, tmp_path):
-    """EXPLODE-B-MASK: `active_faint_chain`'s explode branch pins a bare `outcome=\d+`
+    r"""EXPLODE-B-MASK: `active_faint_chain`'s explode branch pins a bare `outcome=\d+`
     (e2e_duo.py:1818-1819 -- the foe usually falls with the user, so the aftermath may be a win, a
     send-out, a whiteout or a draw), which reads like a window where B's linked mon could win a
     battle and bank EXP before its forced KO. It cannot, so `trained` stays narrow:
