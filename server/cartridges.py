@@ -27,7 +27,8 @@ def _vanilla_target(data: bytes) -> dict:
     if target is None:
         # patcher.TARGETS deliberately excludes Yellow: it has zero free WRAM.
         raise CartridgeError(
-            "no companion patch for this cartridge (Yellow has zero free WRAM); "
+            "no companion patch for this cartridge (Red, Blue and Gold/Silver/Crystal have one; "
+            "Yellow has zero free WRAM); "
             "turn Companion off or choose a supported cartridge")
     return target
 

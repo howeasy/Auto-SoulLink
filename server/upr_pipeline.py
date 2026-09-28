@@ -558,7 +558,7 @@ def describe_rom(path: str, jar_fork: bool) -> dict:
             info["title"] = f"{info['variant']} · {KIND_WORDS['clean']}"
             return info
         if len(rom) != GEN1_ROM_SIZE:
-            info["clean"], info["title"] = False, "not a Gen 1 cartridge"
+            info["clean"], info["title"] = False, "not a recognised cartridge (need a clean Red/Blue/Yellow or US Gold/Silver/Crystal 1.0 dump)"
             return info
         ident = identify(rom)
         # Which contract the cartridge belongs to: a pure pair and a vanilla pair are
