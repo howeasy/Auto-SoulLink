@@ -1,8 +1,19 @@
-# Gen 3 resume note (updated 2026-09-27, checkpoint 25: HANDOFF TO CODEX as coordinator)
+# Gen 3 resume note (updated 2026-09-27, checkpoint 26: ALL GATES SIGNED; one closeout session left -- follow docs/gen3/CLOSEOUT_RUNBOOK.md)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.
 
-## CURRENT STATE (2026-09-27, checkpoint 25): HANDOFF. The owner hands coordination of the remaining Gen 3 work to Codex.
+## CURRENT STATE (2026-09-27, checkpoint 26): all gates signed; ONE closeout session left
+
+**Follow `docs/gen3/CLOSEOUT_RUNBOOK.md` top to bottom.** Summary:
+- The owner signed every pending gate ("All gates are signed."): G4, G5, EG4, XG1, XG2. Each doc has a dated line.
+- The landing still needs its own owner approval (ruling 41: one FR/LG/E/RR landing).
+- Integration 02ba8ed1+ holds everything. The runner now stages the T5 candidates, the expansion build and the RR source cache.
+- Started at handoff on cut 02ba8ed1, for the next session to collect:
+  - FR/LG release_gate_quick rerun (C:/slink-wt/fc-frlg-gate-02ba8ed1.log);
+  - RR final cut on the new companion (lane C:/slink-wt/g3-lane3, C:/slink-wt/fc-rr-02ba8ed1.log).
+- Remaining cards: EXP-REFUSE (ruling 39) and EMERALD-TOWNS (ruling 40). Then freeze a cut, run all three final cuts, do landing prep, ping Gen 2, and ask the owner for the landing.
+
+## Earlier state (checkpoint 25): HANDOFF. The owner hands coordination of the remaining Gen 3 work to Codex.
 
 **Read first:**
 - this section;
