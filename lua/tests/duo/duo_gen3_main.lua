@@ -311,8 +311,12 @@ if title == TITLES.EXP_TITLE then
     BM = guard("expansion battle geometry (facts.json)", function()
         local st = read_json("data/games/gen3_exp/28877d73/facts.json").structs
         local b, pw = st.BattlePokemon, st.MoveInfo.bitfields.power
+        local flag = st.Volatiles.bitfields.perishSong
+        assert(flag.width == 1 and flag.bits == 1, "expansion Perish flag compiler lane changed")
         return { size = b.size, moves = b.fields.moves.offset, pp = b.fields.pp.offset,
                  hp = b.fields.hp.offset,
+                 perish_off = b.fields.volatiles.offset + flag.offset,
+                 perish_mask = assert(tonumber(flag.mask)),
                  power = { off = pw.offset, width = pw.width, shift = pw.shift, mask = (1 << pw.bits) - 1 } }
     end)
 end
@@ -389,7 +393,9 @@ local faint_sites = {}
 local function faint_site_now()
     local slot = memory.read_u16_le(S.gBattlerPartyIndexes, "System Bus")
     local base = reader.party_base()
-    return { frame = emu.framecount(), active = memory.read_u8(S.gActiveBattler, "System Bus"),
+    local active = title == TITLES.EXP_TITLE and (emu.getregister("R4") & 0xFF)
+                   or memory.read_u8(S.gActiveBattler, "System Bus")
+    return { frame = emu.framecount(), active = active,
              battler0_slot = slot, battle_hp = memory.read_u16_le(S.gBattleMons + BM.hp, "System Bus"),
              party_hp = base and memory.read_u16_le(base + slot * 100 + 0x56, "System Bus") or -1,
              counter = memory.read_u8(S.gBattleResults, "System Bus") }
@@ -426,7 +432,14 @@ event.on_bus_exec = function(fn, addr, name, ...)
         fn = function(...)
             local before = pending_count()
             fire(...)
-            if validated(before, "faint") then
+            local signal, why = validated(before, "faint")
+            if title == TITLES.EXP_TITLE then
+                log(fmt("XG3_FAINT_HOOK frame=%d r4=%d counter=%d pending=%d->%d result=%s",
+                        emu.framecount(), emu.getregister("R4") & 0xFF,
+                        memory.read_u8(S.gBattleResults, "System Bus"), before, pending_count(),
+                        signal and "accepted" or tostring(why)))
+            end
+            if signal then
                 -- read INSIDE the callback: at Cmd_tryfaintmon +0x11C the counter store is done and
                 -- datahpupdate's party write has completed (scripts wait on the exec flags)
                 local f = faint_site_now()
@@ -881,6 +894,8 @@ function ctx.battle_outcome() return memory.read_u8(S.gBattleOutcome) end
 
 -- ── P+H engine oracles (scenario_gen3_linked_faint_active.lua) ─────────────────────────────
 ctx.rr = title == "radical_red"
+ctx.perish_mask = BM.perish_mask or 0x20
+ctx.perish_label = BM.perish_off and "BattlePokemon.volatiles.perishSong" or "gStatuses3[0]"
 function ctx.inputs() return presses end
 function ctx.press(buttons) joypad.set(buttons) end
 function ctx.faint_sites() return faint_sites end
@@ -910,7 +925,8 @@ function ctx.engine_sample(slot)
              ctrl0 = u32(S.gBattlerControllerFuncs), exec = u32(S.gBattleControllerExecFlags),
              keys = u16(S.gMain + 0x28), battler0_slot = u16(S.gBattlerPartyIndexes),
              battle_hp = u16(bm + BM.hp), pp = { u8(bm + BM.pp), u8(bm + BM.pp + 1), u8(bm + BM.pp + 2), u8(bm + BM.pp + 3) },
-             status3 = u32(S.gStatuses3), counter = u8(S.gBattleResults), last_move = u16(S.gBattleResults + 0x22),
+             status3 = BM.perish_off and u8(bm + BM.perish_off) or u32(S.gStatuses3),
+             counter = u8(S.gBattleResults), last_move = u16(S.gBattleResults + 0x22),
              outcome = u8(S.gBattleOutcome), party_hp = base and u16(base + slot * 100 + 0x56) or -1 }
 end
 --- The client's own trade FSM phase (lua/gen3/client.lua st.trade_apply.phase), nil when idle.

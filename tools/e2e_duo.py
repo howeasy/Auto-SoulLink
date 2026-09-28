@@ -335,14 +335,12 @@ SCENARIOS = {
     # A1 and R1 (RR companion): mechanism P+H on the wild battle (active_faint_case "wild").
     # `target_by_game` (scenario_target): RR's rr_battle.sav holds ONE mon and no balls, so R1's
     # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
-    # X3: not on gen3_exp -- the expansion build replaced gStatuses3/gDisableStructs with struct
-    # Volatiles and the controller ABI, so its pack proves no Perish+hand-off plan and the client
-    # HOLDS an active battler's force_faint until it leaves battle (lua/gen3/client.lua
-    # active_faint_capable); P+H is re-derived at XG3 (docs/gen3_emerald/PLAN.md X3 row).
+    # XG3: the expansion's compiler-probed Volatiles head and ROM-bound controller handoff
+    # are exercised by this row; production routing remains separately gated.
     "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
-                                 "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+                                 "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
                                  "target": "battle",
-                                 "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"},
+                                 "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"},
                                  "frames": 2500000,
                                  "oracle": "assert_linked_faint_active_gen3_saved"},
     # A1 (i) and R4: B's linked mon is its only mon -- a hand deposit of the slot-1 mon on FR/LG,

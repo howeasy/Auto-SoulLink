@@ -50,7 +50,6 @@
 -- whiteout case) keeps its slot after game_over: its memorialize is dropped, logged LAST_MON_KEPT.
 local fmt = string.format
 local SLOT, BENCH = 0, 1
-local PERISH = 0x20                    -- STATUS3_PERISH_SONG, include/constants/battle.h:138
 local OUTCOME_LOST, OUTCOME_RAN = 2, 4 -- include/constants/battle.h
 local PLAN_ENTRIES = 5                 -- status3, perish timer, chosen action, comm, hand-off
 local RR_BALL_ID = 0x0203AD30          -- rr_active_faint_parity_scope §3.1 (the L-throw's store)
@@ -63,6 +62,8 @@ local function hexbytes(t) local o = {} for i, v in ipairs(t) do o[i] = fmt("%d"
 local function observe(ctx, key, slot, hammer, explode, case)
     local o = {}
     local H = ctx.handoff
+    local PERISH = ctx.perish_mask or 0x20
+    local perish_label = ctx.perish_label or "gStatuses3[0]"
     local w0, att0, in0, site0 = #ctx.write_lines(), ctx.attempted(), ctx.inputs(), #ctx.faint_sites()
     local hp_addr = ctx.hp_addrs(slot)
     local l_held = false
@@ -123,7 +124,7 @@ local function observe(ctx, key, slot, hammer, explode, case)
                     if s.pp[i] ~= 5 then return fail("Explosion commit PP was not initialized to 5") end
                 end
             else
-                if s.status3 & PERISH == 0 then return fail("gStatuses3[0] lacks the Perish flag after the commit") end
+                if s.status3 & PERISH == 0 then return fail(perish_label .. " lacks the Perish flag after the commit") end
                 if not (e and e.perish and e.handoff and e.why == "active faint committed") then
                     return fail("the entry is not a handed-off Perish commit: why=" .. tostring(e and e.why))
                 end
