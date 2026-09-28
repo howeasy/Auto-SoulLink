@@ -40,6 +40,26 @@ def test_new_off_field_ui_after_first_press_gets_one_retry():
     assert (state["backs"], state["warps"], state["map"]) == (1, 2, 768)
 
 
+def test_new_battle_during_crossing_is_fled_before_one_retry():
+    state = _drive('''
+      local c={map=787,x=12,y=39,field=true,battle=false,callback2=0x080565B5,
+               tasks='',backs=0,fights=0,warps=0}
+      local io={state=function() return c end,
+        leave_menu=function() c.backs=c.backs+1 end,
+        fight_through=function() c.fights=c.fights+1;c.battle=false;c.field=true;return true end,
+        settle=function() return true end,
+        enter_warp=function() c.warps=c.warps+1
+          if c.warps==1 then c.battle=true;c.field=false;c.callback2=0x08011101
+            return false,'map never changed from 787' end
+          c.map=768;return true end,
+        log=function() end}
+      local ok=Edge.cross(io)
+      assert(ok==true)
+      return c
+    ''')
+    assert (state["fights"], state["backs"], state["warps"], state["map"]) == (1, 0, 2, 768)
+
+
 def test_wrong_edge_or_live_battle_refuses_without_input():
     for x, battle in ((11, False), (12, True)):
         result = _drive(f'''

@@ -44,10 +44,16 @@ function M.cross(io)
     if ok then return true end
     local after = io.state()
     io.log("ROUTE2_EDGE first-crossing-failed " .. tostring(detail) .. " " .. describe(after))
-    -- A menu that appeared while Down was being pressed may consume the entire warp budget.
-    -- Retry ONCE only if the callback is now off-field at the same edge; a field-stable
-    -- unchanged map is a real navigation failure and is returned unchanged.
-    if not at_edge(after) or after.battle or after.field then return false, detail end
+    -- A wild encounter can start on the tall-grass connection tile while Down is being
+    -- pressed. The route binding's normal flee policy owns this battle; the map/position
+    -- and field callbacks must settle again before ONE renewed crossing press.
+    if not at_edge(after) or after.field then return false, detail end
+    if after.battle then
+        io.log("ROUTE2_EDGE crossing battle " .. describe(after))
+        if not io.fight_through() or not io.settle() then
+            return false, "incidental battle at Route 1 south edge did not settle"
+        end
+    end
     ready, why = settle_ui("after-failed-crossing")
     if not ready then return false, why end
     io.log("ROUTE2_EDGE retrying one natural Down crossing")
