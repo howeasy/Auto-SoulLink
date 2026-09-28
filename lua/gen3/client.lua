@@ -433,7 +433,8 @@ function Client.new(p)
                 resolve_area()
                 send("capture", { key = k, area_id = area_id, species_id = m.species, level = m.level,
                                   hp = m.hp, maxHP = m.max_hp, nickname = m.nickname,
-                                  held_item_id = m.held_item, is_egg = m.is_egg == 1, gift = gift or nil })
+                                  held_item_id = m.held_item, is_egg = m.is_egg == 1,
+                                  stats = stats_of(m), gift = gift or nil })
             end
         end
         if found then return end
@@ -473,7 +474,7 @@ function Client.new(p)
                 send("capture", { key = k, area_id = "gift_daycare", species_id = m.species,
                                   level = m.level, hp = m.hp, maxHP = m.max_hp,
                                   nickname = m.nickname, held_item_id = m.held_item,
-                                  is_egg = false, gift = true })
+                                  is_egg = false, stats = stats_of(m), gift = true })
             end
         end
     end

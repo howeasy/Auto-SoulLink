@@ -196,6 +196,21 @@ FULL_STATS = {"level": 5, "maxHP": 20, "attack": 11, "defense": 12, "speed": 13,
               "spDef": 15, "pp1": 35, "pp2": 30, "pp3": 0, "pp4": 0}
 
 
+@pytest.mark.parametrize("pack,title", [("gen3_frlg", "firered"), ("gen3_rr", "radical_red")])
+def test_party_capture_carries_full_stats_before_a_link_can_request_retrieval(pack, title):
+    """The server may link two captures before box_mon sends its later stats_cache."""
+    w = live(pack, title)
+    w.set_balls(5)
+    w.step(30)
+    w.enter_battle([FOE])
+    w.set_party(party(A, B, C))
+    w.fire("capture_wild")
+    w.fire("mon_given")
+    w.step()
+    (cap,) = w.events("capture")
+    assert cap["key"] == KC and cap["stats"] == FULL_STATS
+
+
 def test_a_catch_with_a_full_party_is_a_boxed_capture():
     w = live(pids=(A, B))
     w.enter_battle([mon_record(C, OT, species=19)])            # the wild mon, as caught
