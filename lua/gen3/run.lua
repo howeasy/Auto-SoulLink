@@ -166,10 +166,11 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
     end
 
     local birth_checked = false
-    -- 1000 spins = ~5 s at the default 5 ms: two emulators launched together on one install (a
-    -- duo, a player with two windows) must wait out a slow holder, not fail closed. 100 (0.5 s)
-    -- starved the second of a T5 duo on 2026-09-27, which then never advertised trade.
-    for _ = 1, 1000 do
+    -- 12000 spins = ~60 s at the default 5 ms. The first winner publishes .born before .baton;
+    -- the other emulator can observe that gap while startup is slow under load. The old 1000
+    -- spins (~5 s) made that second window permanently lose trade capability for this session.
+    -- A crashed holder still fails closed after the bound; no caller recreates a born baton.
+    for _ = 1, 12000 do
         local took, _, errno = rename_file(baton, mine)
         if took then
             local s = get(mine)

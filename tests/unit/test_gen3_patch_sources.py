@@ -414,3 +414,21 @@ def test_a_slow_holder_is_waited_out_not_failed_closed(windows):
 
     open_, remove, rename = fs.api()
     assert _counter()(ROOT, open_, remove, slow_holder, rename, fs.windows) == 42
+
+
+@OS
+def test_first_birth_waits_for_a_slow_publisher(windows):
+    """The permanent birth record can appear before the new baton. A second emulator that
+    starts during that gap must survive more than the old five-second/1000-spin bound."""
+    fs = _FS(windows, {BORN: "first-run\n"})
+    spins = []
+
+    def publish_after_slow_first_start():
+        spins.append(1)
+        if len(spins) == 1500:
+            fs.files[BATON] = _Inode("1")
+
+    open_, remove, rename = fs.api()
+    assert _counter()(ROOT, open_, remove, publish_after_slow_first_start,
+                      rename, fs.windows) == 2
+    assert fs.text(BATON) == "2"
