@@ -85,11 +85,17 @@ def test_reset_cleanup_refuses_forced_emulator_termination(monkeypatch):
 
 def test_commit_server_link_must_match_pretrade_baseline_even_before_reload():
     keys = {"a": A, "b": B}
-    staged = [{"a": {"key": A}, "b": {"key": B}, "status": "alive"}]
-    rekeyed = [{"a": {"key": B}, "b": {"key": A}, "status": "alive"}]
+    staged = [{"area_id": "duo", "a": {"key": A}, "b": {"key": B}, "status": "alive"}]
+    rekeyed = [{"area_id": "duo", "a": {"key": B}, "b": {"key": A}, "status": "alive"}]
+    incidental = {"area_id": "route_1", "a": None, "b": None, "status": "dead",
+                  "cause": "dead_zone"}
     assert duo.rr_reset_link_problems("commit", keys, staged, staged, staged) == []
+    assert duo.rr_reset_link_problems("commit", keys, staged,
+                                       staged + [incidental], staged + [incidental]) == []
     assert duo.rr_reset_link_problems("commit", keys, staged, rekeyed, rekeyed)
     assert duo.rr_reset_link_problems("commit", keys, rekeyed, rekeyed, rekeyed)
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged,
+                                       staged + rekeyed)
     assert duo.rr_reset_link_problems("success", keys, staged, rekeyed, rekeyed) == []
 
 

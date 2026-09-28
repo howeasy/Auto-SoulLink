@@ -2510,13 +2510,17 @@ def rr_reset_link_problems(case, keys, staged, initial, final):
     old = lambda row: (row.get("a") or {}).get("key") == keys["a"] and (row.get("b") or {}).get("key") == keys["b"]  # noqa: E731
     new = lambda row: (row.get("a") or {}).get("key") == keys["b"] and (row.get("b") or {}).get("key") == keys["a"]  # noqa: E731
     problems = []
-    if sum(old(row) for row in staged) != 1:
+    baseline = [row for row in staged if old(row)]
+    if (len(baseline) != 1 or not baseline[0].get("area_id")
+            or baseline[0].get("status") != "alive"):
         problems.append("RR reset lacks exactly one staged pre-trade server link")
     if case == "commit":
-        if initial != staged:
-            problems.append("commit interruption changed persisted links before reload")
-        if final != staged:
-            problems.append("commit reload changed persisted links")
+        if len(baseline) == 1:
+            original = baseline[0]
+            for label, rows in (("interruption", initial), ("reload", final)):
+                same_area = [row for row in rows if row.get("area_id") == original.get("area_id")]
+                if len(same_area) != 1 or same_area[0] != original or any(new(row) for row in rows):
+                    problems.append(f"commit {label} changed the staged linked pair")
     elif case == "success":
         if sum(new(row) for row in final) != 1:
             problems.append("native-success reset lacks persisted server re-key")
