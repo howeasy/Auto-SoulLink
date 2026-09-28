@@ -65,6 +65,7 @@ Read this first after compaction. Authority: the owner-approved plan `docs/gen3/
   - File each town's trainers, including gym leaders, under the town itself, sourced from pret, using the same E5-CITYLINK backfill as Mauville in tools/gen_area_map.py.
   - Update test_roxanne, which pins the old route_104 filing, then regenerate area_map/emerald_trainers/gen3_emerald_areas.
   - CARD for Codex.
+- **42 (expansion, 2026-09-27): PARALLEL TRACK.** The closeout session also starts the expansion XG3 / data / calc cards in their own lanes (CLOSEOUT_RUNBOOK §2b). Finished work lands unrouted; routing waits for XG3 + calc + data. The FR/LG/E/RR landing does not wait.
 - **41 (landing scope):** ONE landing of FR/LG/Emerald/RR together, once the FR/LG gate inputs are staged and the RR final cut passes on the rebuilt companion. The expansion code rides along unrouted, per ruling 39. Ping Gen 2 first; then ask the owner for the landing.
 
 **Owner rulings this session:**

@@ -53,6 +53,32 @@ These can run in parallel: one Codex thread or subagent each, in their own workt
 
 Exit: each card is merged into integration, and the full unit suite exits 0.
 
+## 2b. PARALLEL: the Emerald expansion track (owner ruling 42, 2026-09-27)
+
+The owner chose a parallel track. The closeout session starts the expansion's remaining work alongside §1-§5 in its own worktrees and lanes. Whatever finishes and passes review merges into integration and lands **unrouted**: the server refuses it by name (ruling 39) and the client keeps it out of `Entry.ROUTED`. **Routing waits** until XG3, the calc and the encounter/trainer data are all done. The landing (§5) must NOT wait on this track.
+
+Setup:
+- Base: a fresh branch off integration, e.g. `claude/gen3-exp-xg3` in `C:/slink-wt/g3-exp2`.
+- Stage the gitignored inputs:
+  - `.cache/expansion-output/reference`, already in g3-int; the build itself comes from hgbox;
+  - `.cache/expansion-src` as a junction to `SLINK_EXPANSION_SRC`;
+  - `.cache/x1-probe/probe.o` from hgbox.
+- Duo runs: `python tools/e2e_duo.py --game gen3_exp --scenario <row> --lane <x>` with a private `SLINK_STATE_DIR`.
+- Sources:
+  - the handback in `docs/gen3_emerald/XG2_request_draft.md`, the Appendix "X3 progress";
+  - OMP review cx-2ce936ca follow-ups in `docs/gen3_resume.md` checkpoint 24.
+
+Cards, in dependency order. Each gets a failing test first, facts come from the expansion source at the pin or the built ROM/.sym, and each merges only after an OMP review of shared files.
+1. **XG3-FAINT:** derive the in-battle linked-faint plan (the Perish KO + hand-off) for the expansion's 140-byte BattlePokemon from its compiler facts, and add `battle.handoff` to `data/games/gen3_exp/28877d73/write_checkpoint.json`. Make `BATTLE_MON_MOVES_OFF`/`PP_OFF` pack-driven (review item 2). Live row: `linked_faint_active_gen3` on gen3_exp.
+2. **XG3-SITES:** observer receipts per engine-site kind. Resolve the three OPEN PC sites (pc_deposit, pc_release_begin, pc_release; their functions are inlined, so hook the caller or the inlined span).
+3. **XG3-GIFTS:** the gift/static census from the expansion source, plus the gift/egg live rows.
+4. **XG3-FC:** `tools/gen3_final_cut.py --title exp` (the rows plus zip build/boot). Rerun faint_cmd and boxsync at the final cut.
+5. **EXP-DATA:** wild encounter and trainer tables for the reference build (today `encounter_table`/`trainers_for_area` return empty, a recorded limit). Trainer panels, Upcoming Key Trainers and Prep are mandatory for an RC (ruling 28).
+6. **EXP-CALC:** the expansion battle calc (owner: IN the expansion RC). Coordinate with the calc lane on master (`docs/calc_multigen/HANDOFF.md`).
+7. **Later, not this session:** routing both halves together (the reverse of ruling 39); X4, the onboarding recipe on one owner-picked open-source hack, whose first card is carrying the shinyModifier (ruling 38).
+
+Worker suggestion: with up to 3 subagents, run XG3-FAINT (Opus, needs the emulator) and EXP-DATA (Sonnet, source-only) in parallel with the closeout. XG3-SITES/GIFTS go to a Codex thread. Headless OMP handles reviews and small tasks, but can't run a shell: verify and commit its work yourself.
+
 ## 3. Freeze the cut and run the three final cuts
 
 1. Freeze: record the integration sha as `CUT`. Run `python -m pytest -q -p no:cacheprovider tests/unit` and check its exit code on its own; don't pipe it into a commit.
