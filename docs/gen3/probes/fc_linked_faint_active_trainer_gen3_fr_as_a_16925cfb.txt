@@ -1,0 +1,59 @@
+# gen3_final_cut row=linked_faint_active_trainer_gen3_fr_as_a item=§5_item2b cut=16925cfb55665e88877947f289e2850da81c0821
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario linked_faint_active_trainer_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T22:37:48 cpu=49% emuhawk=2 python=12
+start_utc=2026-09-28T02:37:46Z tracked_clean_before=True
+
+========== scenario: linked_faint_active_trainer_gen3 ==========
+[duo] linked_faint_active_trainer_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=9f97460005caedfe12c7fc29f0f08bf6177d341a53994a311ed0758f131e9c77 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=16925cfb55665e88877947f289e2850da81c0821
+[duo] server up: tcp=56487 http=56488 data=C:\Users\howar\AppData\Local\Temp\slink_duo_linked_faint_active_trainer_gen3_6c814f5e
+[duo] timing server 0.6s
+[duo] cleared 7 stale artifact(s) for linked_faint_active_trainer_gen3: e2e_linked_faint_active_trainer_gen3_a_1_witness.bin, e2e_linked_faint_active_trainer_gen3_a_attempt1_result.txt, e2e_linked_faint_active_trainer_gen3_a_result.txt, e2e_linked_faint_active_trainer_gen3_b_1_witness.bin, e2e_linked_faint_active_trainer_gen3_b_attempt1_result.txt, e2e_linked_faint_active_trainer_gen3_b_result.txt, e2e_linked_faint_active_trainer_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 2D356A90:99DE0D8A <-> BC73F9B0:1C600D89
+[duo] BATTLE_WINDOW_AREA_CONTROL server_only=linked areas=viridian_city,route_1,route_2,viridian_forest encounter_rules=not_qualified
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] timing orchestrate 15.8s
+[duo] timing results 63.6s
+[duo] RESULT_LINE a: RESULT: PASS (natural faint of the active linked 2D356A90:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (trainer))
+[duo] SAVE_WITNESS_SHA256 inst=a site=a7fd2ab45ef61860fb28ca80fb7ce249d890e7eb8349cb506461ef14402c1491 file=a7fd2ab45ef61860fb28ca80fb7ce249d890e7eb8349cb506461ef14402c1491 match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=ea21f86062596ed3bd33cbbc56b8b9634450416d571bb7a8a27bdf9c2ca015f5 file=ea21f86062596ed3bd33cbbc56b8b9634450416d571bb7a8a27bdf9c2ca015f5 match=true saves=1 counter=4->5 rtc=normalized
+[duo] linked_faint_active[trainer]: engine faint 2D356A90:99DE0D8A -> force_faint -> the hand-off commit on active BC73F9B0:1C600D89 -> engine KO in battle with no input; memorials saved (last mon kept: none)
+[duo] MARKER a: ENGINE_FAINT_SITE frame=9082 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+[duo] MARKER a: TX faint 2D356A90:99DE0D8A {"area_id":"route_1","event":"faint","key":"2D356A90:99DE0D8A","player":"a","seq":289}
+[duo] MARKER a: TX memorialize_done 2D356A90:99DE0D8A {"box":13,"event":"memorialize_done","key":"2D356A90:99DE0D8A","player":"a","seq":367}
+[duo] MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_trainer_gen3_a_1_witness.bin bytes=131072 saves=1 frame=12320 counter=8
+[duo] MARKER b: READY_ACTIVE BC73F9B0:1C600D89 case=trainer
+[duo] MARKER b: RX force_faint key=BC73F9B0:1C600D89
+[duo] MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 BC73F9B0:1C600D89
+[duo] MARKER b: ACTIVE_COMMIT BC73F9B0:1C600D89 frame=8732 writes=5 attempted=41 handoff=1 status3=0x20 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/30/40 why="active faint committed" case=trainer
+[duo] MARKER b: HANDOFF BC73F9B0:1C600D89 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+[duo] MARKER b: ACTIVE_KO BC73F9B0:1C600D89 frame=9585 in_battle=1 battle_hp=0 status3=0x0 pp=35/30/30/40 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=41 case=trainer
+[duo] MARKER b: ACTIVE_FAINT_SITE BC73F9B0:1C600D89 frame=9585 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+[duo] MARKER b: SENT_OUT slot=1 battler_slot=1
+[duo] MARKER b: ACTIVE_OUTCOME BC73F9B0:1C600D89 outcome=1 sent_out=1 whiteout_tx=0
+[duo] MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_trainer_gen3_b_1_witness.bin bytes=131072 saves=1 frame=18249 counter=5
+[duo] MARKER b: FORCED_HP0 BC73F9B0:1C600D89 frame=9585 in_battle=1 battler=1
+[duo] MARKER b: TX memorialize_done BC73F9B0:1C600D89 {"box":13,"event":"memorialize_done","key":"BC73F9B0:1C600D89","player":"b","seq":567}
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] linked_faint_active_trainer_gen3: a=PASS b=PASS
+
+========== summary ==========
+  linked_faint_active_trainer_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-28T02:39:09Z tracked_clean_after=True classification=pass

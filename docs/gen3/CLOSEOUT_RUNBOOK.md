@@ -13,9 +13,11 @@ The current run started from `ea1d0d66` on `claude/gen3-integration`. Local mast
 - RR capture: the original `sync_retrieve_failed` said `missing stats`. Party catch and hatch now send full stats before a link can queue retrieval; catch/hatch controls fail on the old payload and 210 focused tests pass. A fresh RR link passed, but that catch receipt does not physically qualify hatch.
 - Session initialization: the birth winner retries its own initial publish, and wait bounds are about 15 seconds. Real two-runtime interleavings plus exhaustion controls pass (35 tests, zero compiler skips). Permanent crash/ACL failure still fails closed; no loser recreates a counter. Busy waiting and manual recovery remain limitations.
 - Reconnect: Gen 3 permits multiple newly accepted capability HELLOs, while rejecting any failed refresh and retaining identity/link/party/gameplay checks. The Gen 1 exactly-one default remains. Focused 21 tests pass.
-- RR type clause: all three earlier catches had nonoverlapping ROM-derived types. B now uses normal RUN inputs to seek an overlapping type, at most eight encounters; the oracle verifies every skipped candidate and the final caught species. Exhaustion remains a nonqualifying failure.
+- RR type clause: a nonmatching first B encounter now aborts while still in battle, before RUN/no_catch; the runner retries a fresh server and fresh seeded batteries, at most eight attempts. The oracle requires one overlapping first encounter and no no_catch/dead-zone evidence. The earlier within-attempt RUN hunt was reverted because it could close the pending area.
 
-The final cut and full suite are the next gates. FR/LG uses the runner's existing two-shard plan (~51 minutes each), with isolated lane and state directories. Expansion XG3 work remains separate until reviewed; it never delays the core cut or changes production routing.
+First cut `16925cfb`: Emerald 24/24, RR 28/28, FR/LG 42/43. The release unit gate and standalone suite found a stale Roxanne area assertion and stale generated expansion harness facts/layout hashes; both are fixed in the correction. RR happened to find overlap on its first encounter, so that PASS did not exercise the unsafe RUN branch. Receipts are retained in `docs/gen3/probes/*16925cfb*.txt`. The corrected cut must rerun the complete validation.
+
+FR/LG uses the runner's existing two-shard plan (~51 minutes each), with isolated lane and state directories. Expansion XG3 work remains separate until reviewed; it never delays the core cut or changes production routing.
 
 ## 0. Ground truth before you start
 
@@ -99,8 +101,8 @@ Cards, in dependency order. Each gets a failing test first, facts come from the 
 2. **XG3-SITES:** observer receipts per engine-site kind. Resolve the three OPEN PC sites (pc_deposit, pc_release_begin, pc_release; their functions are inlined, so hook the caller or the inlined span).
 3. **XG3-GIFTS:** the gift/static census from the expansion source, plus the gift/egg live rows.
 4. **XG3-FC:** `tools/gen3_final_cut.py --title exp` (the rows plus zip build/boot). Rerun faint_cmd and boxsync at the final cut.
-5. **EXP-DATA:** wild encounter and trainer tables for the reference build (today `encounter_table`/`trainers_for_area` return empty, a recorded limit). Trainer panels, Upcoming Key Trainers and Prep are mandatory for an RC (ruling 28).
-6. **EXP-CALC:** the expansion battle calc (owner: IN the expansion RC). Coordinate with the calc lane on master (`docs/calc_multigen/HANDOFF.md`).
+5. **EXP-DATA:** trainer tables/panels and Prep sets are built (XC4/XC4b, SOURCE/MODEL). Wild tables remain a separate candidate: `codex/close-exp-wild` must model the header generator's EMERALD/FIRERED/LEAFGREEN conditionals and record Altering Cave set-0 scope before integration. Compiled-ROM wild readback is still OPEN. Trainer panels, Upcoming Key Trainers and Prep are mandatory for an RC (ruling 28).
+6. **EXP-CALC:** profile, names, stats and trainer sets are built; XC5 live calc validation remains OPEN, as do warnings for unsupported ability/item mappings. Coordinate with the calc lane on master (`docs/calc_multigen/HANDOFF.md`). Do not report SOURCE/MODEL implementation as physical qualification.
 7. **Later, not this session:** routing both halves together (the reverse of ruling 39); X4, the onboarding recipe on one owner-picked open-source hack, whose first card is carrying the shinyModifier (ruling 38).
 
 Worker suggestion: with up to 3 subagents, run XG3-FAINT (Opus, needs the emulator) and EXP-DATA (Sonnet, source-only) in parallel with the closeout. XG3-SITES/GIFTS go to a Codex thread. Headless OMP handles reviews and small tasks, but can't run a shell: verify and commit its work yourself.

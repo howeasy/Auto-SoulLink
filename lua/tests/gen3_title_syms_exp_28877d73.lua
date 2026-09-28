@@ -9,8 +9,8 @@ return {
     rom_sha1 = "28877d733492299599f2b8fff50493109d72653c",
     source_commit = "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
     symbol_sha256 = "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e",
-    facts_sha256 = "9007f602cac72510a782e04594486504580a91d237c08b40948feed5ed5bc7e1",
-    layout_sha256 = "ecd4900d06350590c2fc18728977c34f9762dd9da71d1c418339062b9ea1739f",
+    facts_sha256 = "cc236cf7209dcd17f7a4d0b4d1a1ab93aa935734e6a5b6de53553ae49ffcba0f",
+    layout_sha256 = "0cd53adcefbaac0a56de1231173ea6cdd9abd1849f10066dc86c809deb621357",
     entries = {
         ACTION_CURSOR_ADDR = { address = 0x2000248, symbol = "gActionSelectionCursor", occurrence = 0x0, offset = 0x0, thumb = false, symbol_line = 0x53, symbol_size = 0x4, status = "SOURCE", source = "pokeemerald.sym:83 gActionSelectionCursor[0]" },
         ACTIVE_BATTLER_ADDR = { address = nil, source = "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7 src/battle_controller_player.c:234 takes enum BattlerId battler; no gActiveBattler symbol", status = "nil" },

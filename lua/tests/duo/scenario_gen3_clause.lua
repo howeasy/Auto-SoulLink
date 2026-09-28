@@ -18,7 +18,7 @@ return function(ctx)
         ctx.jlog("A_PENDING", pending)
     end
     local key, why, rerolls = nil, nil, 0
-    for n = 1, ((kind == "species" or kind == "type") and ctx.player == "b" and 8 or 1) do
+    for n = 1, (kind == "species" and ctx.player == "b" and 8 or 1) do
         local cursor = ctx.rx_count()
         if not ctx.hunt("clause") then return false, "hunt ended no wild encounter" end
         if not ctx.wild_ready("clause") then return false, "wild battle never reached its action menu" end
@@ -28,18 +28,25 @@ return function(ctx)
         local other = pending and fact(ctx, pending.species_id)
         if pending and not other then return false, "unproven pending species" end
         local dupe = kind == "species" and other and f.family == other.family or false
-        local type_overlap = false
-        if kind == "type" and pending then
-            if type(f.types) ~= "table" or type(other.types) ~= "table" then
+        local encounter = {n=n, species=species, dupe=dupe}
+        if kind == "type" and ctx.rr and pending then
+            if type(f.types) ~= "table" or #f.types ~= 2
+               or type(other.types) ~= "table" or #other.types ~= 2 then
                 return false, "unproven wild/pending types"
             end
+            local overlap = false
             for _, a in ipairs(f.types) do
-                for _, b in ipairs(other.types) do if a == b then type_overlap = true end end
+                for _, b in ipairs(other.types) do if a == b then overlap = true end end
             end
+            encounter.type_overlap = overlap
+            ctx.jlog("CLAUSE_ENCOUNTER", encounter)
+            -- RUN would finish the wild battle and send no_catch. With A already pending, the
+            -- server would permanently dead-zone this area. End this attempt inside the battle;
+            -- the runner can retry from fresh batteries with a different idle jitter.
+            if not overlap then return false, "RNG: type first encounter has no overlap" end
+        else
+            ctx.jlog("CLAUSE_ENCOUNTER", encounter)
         end
-        local encounter = {n=n, species=species, dupe=dupe}
-        if kind == "type" and pending then encounter.type_overlap = type_overlap end
-        ctx.jlog("CLAUSE_ENCOUNTER", encounter)
         if dupe then
             local fled, flee_why = ctx.run_away("duplicate")
             if not fled then return false, "duplicate RUN: " .. tostring(flee_why) end
@@ -47,20 +54,13 @@ return function(ctx)
             if not received then return false, "no dupes-clause prompt after RUN" end
             ctx.jlog("CLAUSE_REROLL", {n=n, species=species, prompt=received.text})
             rerolls = rerolls + 1
-        elseif kind == "type" and ctx.player == "b" and not type_overlap then
-            local fled, flee_why = ctx.run_away("type nonoverlap")
-            if not fled then return false, "type nonoverlap RUN: " .. tostring(flee_why) end
-            ctx.jlog("CLAUSE_TYPE_RUN", {n=n, species=species})
         else
             key, why = ctx.catch("clause", true)
             if not key then return false, "hunt ended " .. tostring(why) end
             break
         end
     end
-    if not key then
-        if kind == "type" then return false, "RNG: no type overlap in 8 natural encounters" end
-        return false, "RNG: the species hunt met only duplicates within its battle budget"
-    end
+    if not key then return false, "RNG: the species hunt met only duplicates within its battle budget" end
     ctx.log("CAUGHT " .. key)
     local cap = ctx.last_sent("capture")
     if not cap or cap.key ~= key then return false, "native capture has no production TX" end
