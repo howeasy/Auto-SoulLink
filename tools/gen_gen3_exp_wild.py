@@ -46,10 +46,16 @@ not #define (tools/gen_gen3_exp_trainers.py's enum_values; tools/gen_gen3_wild.p
 parser returns {} here). An unresolved SPECIES_* macro is fatal, never dropped. Display names come
 from Gen3ExpansionAdapter itself, so a wild row is spelled the way the rest of the board spells it.
 
-Multiple sets for one map take the FIRST in file order; the rest are listed in alt_sets_skipped.
-That is the same rule the live-ROM path applies to a repointed map (Altering Cave's
-VAR_ALTERING_CAVE_WILD_SET -- that macro does not exist at this pin, so nothing at runtime selects
-a later set, but a fork that added one would still get "set 0" rather than a merged smear).
+Multiple active sets for one map take the FIRST in file order; the rest are listed in
+alt_sets_skipped. This is a set-0-only projection: include/constants/vars.h defines
+VAR_ALTERING_CAVE_WILD_SET and src/wild_encounter.c:GetCurrentMapWildMonHeaderId can select a
+later Altering Cave set at runtime. That variable-dependent table remains outside this card.
+
+The source's own wild_encounters_to_header.py emits #ifdef EMERALD/FIRERED/LEAFGREEN around
+each entry (its WriteEncounters/WritePokemonHeaders). The reference build uses EMERALD. We invoke
+that pinned assembler into memory and retain only entries whose mon declarations it emits inside
+an active EMERALD block; FR/LG source variants do not become Emerald encounters merely because
+their map id exists in this expansion area map.
 
 Why the aggregation is not Gen3Adapter._rom_encounter_tables: that helper resolves its area map
 from its own `title`/`self._rom_type`, which can only ever be the vanilla FRLG or the vanilla
@@ -84,7 +90,10 @@ Limits, each checked at this pin, none of them a guess:
 from __future__ import annotations
 
 import argparse
+import importlib.util
+import io
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -202,8 +211,46 @@ def check_rates(plan) -> None:
             "refusing to ship invented chance weights -- reconcile the two first")
 
 
+def emerald_compiled_labels(src: Path, data: dict, group: dict) -> set[str]:
+    """Use the pinned build's header assembler to identify EMERALD-active wild entries."""
+    makefile = read(src / "Makefile")
+    if not re.search(r"(?m)^GAME_VERSION\s*\?=\s*EMERALD\s*$", makefile):
+        raise SystemExit("reference build is no longer Makefile's EMERALD default")
+    tool = src / "tools/wild_encounters/wild_encounters_to_header.py"
+    spec = importlib.util.spec_from_file_location("pinned_wild_header", tool)
+    if spec is None or spec.loader is None:
+        raise SystemExit(f"cannot load pinned wild header assembler: {tool}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    config = module.Config(src / "include/config/overworld.h", src / "include/constants/rtc.h", data)
+    emitted = io.StringIO()
+    module.WildEncounterAssembler(emitted, data, config).WriteEncounters()
+    active, declarations = [], set()
+    for line in emitted.getvalue().splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#ifdef "):
+            active.append(stripped.removeprefix("#ifdef ") == "EMERALD")
+        elif stripped == "#endif":
+            if not active:
+                raise SystemExit("pinned wild header has unmatched #endif")
+            active.pop()
+        elif active and all(active):
+            match = re.match(r"const struct WildPokemon (\w+)\[\] =", stripped)
+            if match:
+                declarations.add(match.group(1))
+    if active:
+        raise SystemExit("pinned wild header has unterminated #ifdef")
+    habitats = {field["type"] for field in group["fields"]}
+    labels = {entry["base_label"] for entry in group["encounters"]
+              if any(f"{entry['base_label']}_{habitat.title().replace('_', '')}" in declarations
+                     for habitat in habitats if habitat in entry)}
+    if not labels:
+        raise SystemExit("pinned header assembler emitted no EMERALD-active map wild tables")
+    return labels
+
+
 def build_wild(src: Path, plan, positions: dict[str, tuple[int, int]]
-               ) -> tuple[dict, list[str], list[str]]:
+               , active_labels: set[str]) -> tuple[dict, list[str], list[str]]:
     """src/data/wild_encounters.json -> {(group, num): {method: [(rate, mon), ...]}}: the exact
     shape gen3_rom_tables.decode_wild_encounters() produces from a live ROM, so the reduction
     below is the one that already runs for randomized carts and RR. Returns (wild, unmapped map
@@ -213,6 +260,8 @@ def build_wild(src: Path, plan, positions: dict[str, tuple[int, int]]
     unmapped: list[str] = []
     alt_sets: list[str] = []
     for entry in group["encounters"]:
+        if entry["base_label"] not in active_labels:
+            continue
         pos = positions.get(entry["map"])
         if pos is None:
             unmapped.append(entry["map"])
@@ -286,7 +335,9 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> dict:
     """Return the expansion_encounters.json dict."""
     # Refuse a stale area map before anything reads "group:num" (see _check_area_map_digest).
     _check_area_map_digest(src, area_map_path)
-    plan = habitat_plan(map_group(json.loads(read(src / WILD_JSON)))["fields"])
+    wild_data = json.loads(read(src / WILD_JSON))
+    group = map_group(wild_data)
+    plan = habitat_plan(group["fields"])
     check_rates(plan)
     species = enum_values(read(src / "include/constants/species.h"), "SPECIES_")
     if not species:
@@ -296,7 +347,8 @@ def build(src: Path, area_map_path: Path = AREA_MAP) -> dict:
     _check_map_keys_unique(src, keys)
     positions = {map_id: tuple(int(part) for part in key.split(":"))
                  for map_id, key in keys.items()}
-    wild, unmapped, alt_sets = build_wild(src, plan, positions)
+    wild, unmapped, alt_sets = build_wild(src, plan, positions,
+                                         emerald_compiled_labels(src, wild_data, group))
     area_map = json.loads(read(area_map_path))
     # A map that resolved a position but whose group:num has no area_map.json entry is dropped by
     # the reduction; name it rather than losing it quietly (same reporting gen_gen3_wild.py does).

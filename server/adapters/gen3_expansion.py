@@ -44,7 +44,10 @@ do not call it ROM-verified. Slot weights are the pin's own `encounter_rates`/`g
 cross-checked against gen3_frlge._WILD_METHODS; map -> area_id is the same area_map.json the
 client resolves, so the pack cannot disagree with it. Still not represented here, by their own
 docs as runtime overrides rather than rate tables: gWildFeebas, the Sootopolis legendary
-encounter check, and map scripts' fixed encounters. See the generator's docstring for the
+encounter check, and map scripts' fixed encounters. Altering Cave's
+VAR_ALTERING_CAVE_WILD_SET can select a later active table; this pack shows only set 0 and
+reports the skipped set. FR/LG-conditional source tables are excluded from this Emerald build.
+See the generator's docstring for the
 config facts that bound the card (WE_OW_ENCOUNTERS FALSE, OW_TIME_OF_DAY_ENCOUNTERS FALSE,
 the never-populated fifth hiddenMonsInfo pointer).
 

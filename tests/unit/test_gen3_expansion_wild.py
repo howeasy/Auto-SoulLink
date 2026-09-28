@@ -38,6 +38,8 @@ never a silent pass.
 """
 from __future__ import annotations
 
+import importlib.util
+import io
 import json
 import os
 import re
@@ -147,6 +149,35 @@ def _pin_wild(src: Path) -> dict:
     return _wild_group(json.loads((src / _WILD_JSON).read_text(encoding="utf-8")))
 
 
+def _compiled_labels(src: Path) -> set[str]:
+    """Read EMERALD-active mon declarations from the pin's own emitted C header."""
+    data = json.loads((src / _WILD_JSON).read_text(encoding="utf-8"))
+    tool = src / "tools/wild_encounters/wild_encounters_to_header.py"
+    spec = importlib.util.spec_from_file_location("wild_header_control", tool)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    config = module.Config(src / "include/config/overworld.h", src / "include/constants/rtc.h", data)
+    out = io.StringIO()
+    module.WildEncounterAssembler(out, data, config).WriteEncounters()
+    active, declared = [], set()
+    for raw in out.getvalue().splitlines():
+        line = raw.strip()
+        if line.startswith("#ifdef "):
+            active.append(line == "#ifdef EMERALD")
+        elif line == "#endif":
+            active.pop()
+        elif active and all(active):
+            match = re.match(r"const struct WildPokemon (\w+)\[\] =", line)
+            if match:
+                declared.add(match.group(1))
+    labels = set()
+    for entry in _wild_group(data)["encounters"]:
+        if any(name.startswith(entry["base_label"] + "_") for name in declared):
+            labels.add(entry["base_label"])
+    return labels
+
+
 def _pin_plan(src: Path) -> list[tuple[str, list[tuple[str, list[int]]]]]:
     """[(habitat, [(method, [slot rates])]), ...] from the pin's own `fields` block.
 
@@ -181,7 +212,10 @@ def _pin_cells(src: Path) -> dict[tuple[str, str], list[tuple[str, int, int, int
                  for map_id, key in map_keys(src).items()}
     plan = _pin_plan(src)                   # once: the wild JSON is ~1.5 MB, re-read per map is not
     first_set: dict[tuple[int, int], dict] = {}
+    active_labels = _compiled_labels(src)
     for entry in _pin_wild(src)["encounters"]:
+        if entry["base_label"] not in active_labels:
+            continue
         pos = positions.get(entry["map"])
         if pos is None or pos in first_set:
             continue                        # unmapped, or a later set for the same map: not "set 0"
@@ -479,7 +513,10 @@ def test_unmapped_and_skipped_sets_are_reported_not_silently_dropped():
     positions = {map_id: tuple(int(p) for p in key.split(":"))
                  for map_id, key in map_keys(src).items()}
     seen, alt, unmapped = set(), [], []
+    active_labels = _compiled_labels(src)
     for entry in _pin_wild(src)["encounters"]:
+        if entry["base_label"] not in active_labels:
+            continue
         pos = positions.get(entry["map"])
         if pos is None:
             unmapped.append(entry["map"])
@@ -514,6 +551,17 @@ def test_only_the_map_group_is_extracted_and_the_build_declares_no_others():
     overworld = (src / "include/config/overworld.h").read_text(encoding="utf-8")
     assert re.search(r"#define\s+OW_TIME_OF_DAY_ENCOUNTERS\s+FALSE", overworld), \
         "time-of-day tables now compiled in?"
+
+
+def test_compiled_out_frlg_variant_is_not_an_emerald_encounter():
+    """The pinned header tool wraps Viridian Forest's source rows in FR/LG conditionals."""
+    src = _need_source()
+    entries = [e for e in _pin_wild(src)["encounters"] if e["map"] == "MAP_VIRIDIAN_FOREST"]
+    assert {e["base_label"] for e in entries} == {
+        "sViridianForest_FireRed", "sViridianForest_LeafGreen"}
+    assert not {e["base_label"] for e in entries} & _compiled_labels(src)
+    assert "viridian_forest" not in _pack()["encounters"]
+    assert "route_101" in _pack()["encounters"]  # an EMERALD-active positive control
 
 
 def test_no_time_of_day_suffix_and_no_hidden_habitat_in_the_pin():
