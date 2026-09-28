@@ -439,7 +439,7 @@ State lives in `SoulLinkState.pending_trade` (one slot for the whole run, `state
 
 ### 6.2 `apply_trade` client obligations
 
-1. `apply_prepare` verifies the current key, native visit, eligibility and a durable journal epoch. A journal lock busy result holds the same prepare until its deadline and retries; it does not turn into `apply_ready{ok:false}` merely because another process briefly owns the guard (`lua/gen3/trade.lua:275-364`, `lua/gen3/run.lua:245-293`).
+1. `apply_prepare` verifies the current key, native visit, eligibility and a durable journal epoch. A journal lock busy result holds the same prepare until its deadline and retries; it does not turn into `apply_ready{ok:false}` merely because another process briefly owns the guard (`lua/gen3/trade.lua:275-364`, `lua/gen3/run.lua:277-325`).
 2. `apply_trade` re-locates `old_key` in the current party, checks the incoming blob and native trade eligibility, then waits for a clear field. It never silently substitutes a raw party-slot write for a native scene (`lua/gen3/trade.lua:404-478`).
 3. A native scene may post only after the write-ahead journal arm succeeds. A busy arm retains its allocated epoch and retries before publication; a busy saved-result guard retries the same already-witnessed result. Neither retries the scene nor fabricates a certain outcome (`lua/gen3/trade.lua:149-210,437-478`).
 4. `trade_done{token,slot,new_key,new_species}` follows the native commit/scene/save witnesses, independent party readback and durable journal result. If proof cannot be established after the no-return boundary, the client reports uncertainty and withholds an unsupported success (`lua/gen3/trade.lua:149-190`, `lua/gen3/client.lua:1596-1637`).
