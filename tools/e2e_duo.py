@@ -1060,7 +1060,8 @@ def reconnect_same_problems(before, after, events_before, events_after, linked_k
     return problems
 
 
-def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, events_after):
+def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, events_after,
+                             allow_rejected_refreshes=False):
     """C-1: only the rejected hello event is allowed; the link file is byte-identical."""
     problems = []
     a = (status.get("players") or {}).get("a") or {}
@@ -1074,7 +1075,11 @@ def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, e
         problems.append("a rejected save changed a " + "/".join(RECONNECT_GAMEPLAY_EVENTS)
                         + " count")
     new_hellos = _new_a_hellos(problems, events_before, events_after)
-    if len(new_hellos) != 1 or new_hellos[0].get("text") != "REJECTED — wrong save/slot":
+    if allow_rejected_refreshes:
+        if not new_hellos or any(row.get("text") != "REJECTED — wrong save/slot"
+                                 for row in new_hellos):
+            problems.append("A did not add only WRONG SAVE rejection hellos")
+    elif len(new_hellos) != 1 or new_hellos[0].get("text") != "REJECTED — wrong save/slot":
         problems.append("A did not add exactly one WRONG SAVE rejection hello")
     return problems
 
@@ -3565,6 +3570,9 @@ class DuoRun:
 
     def server_cmd(self):
         """Manager-equivalent run identity, stable across this run's reconnects."""
+        if any(flag == "--test-only-route" or flag.startswith("--test-only-route=")
+               for flag in self.args.server_flags):
+            raise ValueError("TEST-ONLY route is reserved for the configured game row")
         if not getattr(self, "_server_run_id", None):
             self._server_run_id = "duo-" + uuid.uuid4().hex
         cmd = [sys.executable, "-m", "server.server",
@@ -3664,6 +3672,10 @@ class DuoRun:
         routes = list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
         if not routes:
             return []
+        if len(routes) != 2 or routes[0] != "--test-only-route":
+            raise RuntimeError(f"malformed configured TEST-ONLY route: {routes!r}")
+        expected = (f"TEST-ONLY route of {routes[1]} -> {self.game} enabled "
+                    "(production refuses it by name; production:false)")
         log_path = os.path.join(self.data_dir, "server.log")
         deadline = time.time() + timeout
         while True:
@@ -3672,7 +3684,9 @@ class DuoRun:
                     text = handle.read()
             except OSError:
                 text = ""
-            line = next((row for row in text.splitlines() if "TEST-ONLY route of" in row), "")
+            line = next((row for row in text.splitlines()
+                         if row.partition("TEST-ONLY route of ")[2] ==
+                         expected[len("TEST-ONLY route of "):]), "")
             if line or time.time() >= deadline:
                 break
             time.sleep(0.2)
@@ -8501,6 +8515,10 @@ class DuoRun:
         self._append_reconnect_marker("a", "A_DONE_SAME")
         self.wait_for("same-save A phase PASS", lambda: "RESULT: PASS" in text(same_path), 60)
         self.emu_by_inst["a"].wait(timeout=30)
+        late_problems = gen3_receipt_problems("a same_save after PASS", text(same_path), forbidden=(
+            r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
+        if late_problems:
+            raise RuntimeError("C-2 same-save reconnect late command: " + "; ".join(late_problems))
         self._same_save_artifact = os.path.join(BUILD, f"e2e_{self.scenario}_a_same.SaveRAM")
         with open(self._same_save_artifact, "wb") as handle:
             handle.write(self._gen3_flushed("a"))
@@ -8520,7 +8538,8 @@ class DuoRun:
         problems = reconnect_wrong_problems(before_wrong_bytes,
                                             Path(self.data_dir, "links.json").read_bytes(),
                                             self._status() or {}, before_wrong_events,
-                                            self._reconnect_events())
+                                            self._reconnect_events(),
+                                            allow_rejected_refreshes=True)
         if problems:
             raise RuntimeError("C-1 wrong-save refusal failed: " + "; ".join(problems))
         self._pydec_note(f"C-1 wrong OT {other_ot} rejected; links.json byte-identical, no "

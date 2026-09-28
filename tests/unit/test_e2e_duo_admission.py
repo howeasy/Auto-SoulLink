@@ -336,6 +336,24 @@ def test_wrong_save_reconnect_only_adds_a_rejected_hello():
                    _with_new_events(rejected, {"player": "a", "type": "no_catch", "text": "bad"})))
 
 
+def test_gen3_wrong_save_allows_only_rejected_capability_refreshes():
+    _before, _after, events = _reconnect_snapshots()
+    status = {"players": {"a": {"identity_error": "Identity mismatch for slot A: wrong OT"},
+                          "b": {"connected": True}}}
+    rejected = _with_new_events(events, *[
+        {"player": "a", "type": "hello", "text": "REJECTED — wrong save/slot"}
+        for _ in range(3)
+    ])
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, rejected,
+                                        allow_rejected_refreshes=True) == []
+    accepted = _with_new_events(rejected,
+                                {"player": "a", "type": "hello", "text": "Connected (firered_rr, 2 mons)"})
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, accepted,
+                                        allow_rejected_refreshes=True)
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, events,
+                                        allow_rejected_refreshes=True)
+
+
 def test_missing_second_ot_red_save_is_named_and_nonpassing(runner, tmp_path):
     runner._pydec_path = str(tmp_path / "reconnect_pydec.txt")
     runner._wrong_save_missing()
