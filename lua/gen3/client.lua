@@ -1876,9 +1876,10 @@ function Client.new(p)
     local trade_frame
     drv.pre_pump = function()
         local pending = pending_trade_finals[1]
-        if pending and not awaiting_trade_run then
+        if pending and p.net.connected() and not awaiting_trade_run then
             if pending.run_id ~= trade_run_id or pending.ot_id ~= trade_run_ot then
                 table.remove(pending_trade_finals,1) -- a different run cannot inherit this final
+                log("pending trade_final discarded: server run/trainer binding changed")
             elseif journal and (journal:ready() or journal.busy) then
                 local _, why
                 if trade then _, why = trade:server_final(pending)

@@ -80,6 +80,40 @@ def test_busy_terminal_notification_is_retried_after_the_next_frame(monkeypatch,
     assert journal.hidden(journal) is True  # bookkeeping never proves saved RAM
 
 
+@pytest.mark.parametrize("rebound_run", ("model-run", "another-run"))
+def test_queued_terminal_survives_disconnect_only_for_its_bound_run(monkeypatch, rebound_run):
+    world, carrier = uncertain_client(monkeypatch)
+    journal = carrier.journal_model.journal
+    record = journal.outstanding(journal)[1]
+    world.replies.append(json.dumps({"commands": [{"cmd": "config", "run_id": "model-run"}]}))
+    world.step()
+    original = journal.final
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.final = busy_once
+    world.replies.append(json.dumps({"commands": [
+        {"cmd": "trade_final", "token": "t", "epoch": record.epoch, "verdict": "resolved"}]}))
+    world.step()
+    assert journal.state.records[1].final == ""
+    world.connected = False
+    world.step(2)
+    assert journal.state.records[1].final == "", "a disconnected client cannot consume the queued final"
+    world.connected = True
+    world.replies.append(json.dumps({"commands": [{"cmd": "config", "run_id": rebound_run}]}))
+    world.step(2)
+    if rebound_run == "model-run":
+        assert journal.state.records[1].final == "resolved" and len(seen) >= 2
+    else:
+        assert journal.state.records[1].final == ""
+        assert any("pending trade_final discarded" in line for line in world.logs)
+
+
 def test_busy_post_save_journal_result_retries_without_uncertain_report(monkeypatch):
     world, carrier, blob = durable_client(monkeypatch)
     start_client_trade(world, carrier, blob)

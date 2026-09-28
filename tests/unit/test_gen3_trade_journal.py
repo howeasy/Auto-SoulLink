@@ -427,6 +427,96 @@ def test_saved_result_waiting_on_guard_cannot_commit_in_a_new_session_epoch():
     assert journal.hidden(journal) is True
 
 
+@pytest.mark.parametrize("busy_at_capability", (False, True))
+def test_busy_prepare_allocation_waits_without_refusal_or_duplicate_epoch(busy_at_capability):
+    world, journal, store = journaled_trade_world()
+    original = journal.allocate
+    seen = []
+
+    def busy_once(self):
+        seen.append(True)
+        if len(seen) == 1 and not busy_at_capability:
+            return None, "trade journal lock busy"
+        return original(self)
+
+    journal.allocate = busy_once
+    if busy_at_capability:
+        original_ready = journal.ready
+        journal.busy = True
+        journal.ready = lambda self: False if self.busy else original_ready(self)
+    world.prepare()
+    assert not [fields for event, fields in world.events if event == "apply_ready"]
+    journal.busy = None
+    world.tick()
+    assert len(seen) >= (1 if busy_at_capability else 2)
+    assert [fields for event, fields in world.events if event == "apply_ready"] == [
+        {"token": "t", "ok": True}]
+    assert journal.state.counter == 1 and store.writes == 1
+
+
+def test_busy_prepare_keeps_its_original_deadline_and_never_spends_an_epoch_after_expiry():
+    world, journal, store = journaled_trade_world()
+    journal.allocate = lambda *_: (None, "trade journal lock busy")
+    world.prepare()
+    assert not [fields for event, fields in world.events if event == "apply_ready"]
+    world.frame += world.deps.prepare_frames + 1
+    world.tick()
+    assert [fields for event, fields in world.events if event == "apply_ready"] == [
+        {"token": "t", "ok": False}]
+    assert journal.state.counter == 0 and store.writes == 0 and world.jobs == []
+
+
+def test_busy_intent_arm_retries_without_duplicate_native_staging():
+    world, journal, _ = journaled_trade_world()
+    world.prepare()
+    world.command("apply", token="t", old_key=world.rows[0]["key"], slot=0, blob_hex="05" * 100)
+    world.tick()
+    stage = world.jobs[-1]
+    world.dispatch(stage)
+    original = journal.arm
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.arm = busy_once
+    stage["done"](None, 0, None)
+    assert [job["step"] for job in world.jobs] == ["enemy"]
+    assert not [fields for event, fields in world.events if event == "trade_done"]
+    world.tick()
+    assert len(seen) >= 2
+    assert [job["step"] for job in world.jobs] == ["enemy", "scene"]
+    assert journal.state.counter == 1 and len(journal.state.records) == 1
+
+
+def test_saved_result_identity_is_latched_before_a_busy_journal_ack():
+    world, journal, _ = journaled_trade_world()
+    scene = world.start()
+    original = journal.native_saved
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.native_saved = busy_once
+    world.progress(scene, commit_entered=True, scene_done=True, save_success=True,
+                   final_result="committed")
+    world.received()
+    scene["done"](None, 0, None)
+    assert not [fields for event, fields in world.events if event == "trade_done"]
+    world.rows[0] = {"key": "later:unrelated", "slot": 0, "species": 1, "hp": 20}
+    world.tick()
+    reports = [fields for event, fields in world.events if event == "trade_done"]
+    assert reports == [{"token": "t", "slot": 0, "new_key": "00000005:00000006", "new_species": 65}]
+    assert journal.hidden(journal) is False
+
+
 def test_unavailable_guard_for_a_non_contention_reason_stays_fail_closed():
     files = Files()
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)

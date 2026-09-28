@@ -150,20 +150,26 @@ function T.new(d)
         if not (t.commit_entered and t.scene_done and t.save_success and t.final_result == "committed") then
             return uncertain(t, "native completion lacks commit/scene/save witnesses")
         end
-        local party, got, old = d.party(), nil, false
-        if type(party) ~= "table" or #party ~= t.party_count then
-            return uncertain(t, "final party unreadable or count changed")
-        end
-        for _, mon in ipairs(party) do
-            local k = d.key(mon)
-            if k == t.partner_key then
-                if got then return uncertain(t, "received identity duplicated") end
-                got = mon
+        local proof = t.saved_result
+        if not proof then
+            local party, got, old = d.party(), nil, false
+            if type(party) ~= "table" or #party ~= t.party_count then
+                return uncertain(t, "final party unreadable or count changed")
             end
-            if k == t.old_key then old = true end
-        end
-        if not got or old or got.is_egg == 1 or got.is_bad_egg == 1 or got.checksum_ok == false then
-            return uncertain(t, "saved result does not match received identity")
+            for _, mon in ipairs(party) do
+                local k = d.key(mon)
+                if k == t.partner_key then
+                    if got then return uncertain(t, "received identity duplicated") end
+                    got = mon
+                end
+                if k == t.old_key then old = true end
+            end
+            if not got or old or got.is_egg == 1 or got.is_bad_egg == 1 or got.checksum_ok == false then
+                return uncertain(t, "saved result does not match received identity")
+            end
+            proof = {party=party, got=got,
+                     fields={token=t.token, slot=got.slot, new_key=d.key(got), new_species=got.species}}
+            t.saved_result = proof -- complete post-save identity proof, latched before a busy guard retry
         end
         if not journal then
             return uncertain(t, "durable journal result unavailable")
@@ -177,10 +183,10 @@ function T.new(d)
             return uncertain(t, "durable journal result unavailable")
         end
         if native.trade_reconciled then native:trade_reconciled(t.token) end
-        local fields = {token=t.token, slot=got.slot, new_key=d.key(got), new_species=got.species}
+        local fields = proof.fields
         bucket(retired, t.epoch)[t.token], active = fields, nil
         emit("trade_done", fields, t.epoch)
-        if d.completed then d.completed(t, true, party, got) end
+        if d.completed then d.completed(t, true, proof.party, proof.got) end
     end
     local post_scene
     post_scene = function(t)
@@ -190,6 +196,10 @@ function T.new(d)
         if not t.journaled then
             local ok, why = journal:arm(t.token,t.journal_epoch)
             if ok ~= true then
+                if why == "trade journal lock busy" then
+                    t.phase = "arm-proof" -- the allocated epoch is kept; no scene has been posted
+                    return
+                end
                 if d.log then d.log("trade write-ahead refused: " .. tostring(why)) end
                 return unchanged(t)
             end
@@ -267,13 +277,24 @@ function T.new(d)
         if d.log then d.log("apply_prepare refused: " .. why) end
         emit("apply_ready", {token=cmd.token, ok=false}); flush()
     end
-    function self:prepare(cmd)
+    local function hold_journal(cmd, epoch, deadline)
+        if held then return refuse(cmd, "another prepare held") end
+        held = {cmd=cmd, epoch=epoch, deadline=deadline, journal_busy=true}
+    end
+    function self:prepare(cmd, deadline)
         if not token(cmd.token) then return end
         if held and held.cmd.token == cmd.token then return end
         local epoch = d.epoch()
-        if not self:capable() then return refuse(cmd, "not trade-capable") end
+        deadline = deadline or d.frame() + d.prepare_frames
+        if not self:capable() then
+            if journal and journal.busy then return hold_journal(cmd,epoch,deadline) end
+            return refuse(cmd, "not trade-capable")
+        end
         if not d.eligible() then return refuse(cmd, "not eligible") end
-        if self:hide_party() then return refuse(cmd, "party hidden") end
+        if self:hide_party() then
+            if journal and journal.busy then return hold_journal(cmd,epoch,deadline) end
+            return refuse(cmd, "party hidden")
+        end
         if prior_report_pending(epoch, cmd.token) then return refuse(cmd, "prior report pending") end
         if prepared and prepared.token == cmd.token and prepared.epoch == epoch then
             local t = prepared
@@ -292,15 +313,19 @@ function T.new(d)
             if not native.trade_authorized then return refuse(cmd, "native not authorized") end
             if not native:trade_authorized(cmd.token, cmd.old_key) then
                 if held then return refuse(cmd, "another prepare held") end
-                held = {cmd=cmd, epoch=epoch, deadline=d.frame() + d.prepare_frames}
+                held = {cmd=cmd, epoch=epoch, deadline=deadline}
                 return
             end
             local t = {token=cmd.token, epoch=epoch, old_key=cmd.old_key, slot=mon.slot, phase="preparing", prepare_pending=true}
-            t.journal_epoch = journal:allocate()
-            if not t.journal_epoch then return refuse(cmd, "journal allocate failed") end
+            local allocated, why = journal:allocate()
+            if not allocated then
+                if why == "trade journal lock busy" then return hold_journal(cmd,epoch,deadline) end
+                return refuse(cmd, "journal allocate failed")
+            end
+            t.journal_epoch = allocated
             prepared = t
             t.prepare_job = native:prepare_trade({token=t.token, slot=t.slot, old_key=t.old_key,
-                dispatch_deadline=d.frame()+d.prepare_frames}, function(why, w)
+                dispatch_deadline=deadline}, function(why, w)
                 if prepared ~= t or t.phase ~= "preparing" then return end
                 if t.epoch ~= d.epoch() then unchanged(t); flush(); return end
                 if why or type(w) ~= "table" or w.accepted ~= true or w.pre_saved ~= true or w.apply_open ~= true
@@ -322,10 +347,13 @@ function T.new(d)
         local v, mon = visit(), locate(cmd.old_key)
         local ok = v ~= nil and mon ~= nil and active == nil and prepared == nil and retired_for(epoch, cmd.token) == nil
         if ok then
-            local durable_epoch = journal:allocate()
-            if not durable_epoch then emit("apply_ready", {token=cmd.token, ok=false}); flush(); return end
+            local durable_epoch, why = journal:allocate()
+            if not durable_epoch then
+                if why == "trade journal lock busy" then return hold_journal(cmd,epoch,deadline) end
+                emit("apply_ready", {token=cmd.token, ok=false}); flush(); return
+            end
             prepared = {token=cmd.token, epoch=epoch, old_key=cmd.old_key, slot=mon.slot, visit=v.id, phase="prepared",
-                        prepare_deadline=d.frame() + d.prepare_frames, journal_epoch=durable_epoch}
+                        prepare_deadline=deadline, journal_epoch=durable_epoch}
         end
         emit("apply_ready", {token=cmd.token, ok=ok})
         flush()
@@ -408,15 +436,17 @@ function T.new(d)
             local h = held
             if h.epoch ~= d.epoch() or d.frame() > h.deadline then
                 held = nil; refuse(h.cmd, "native not authorized")
-            elseif native:trade_authorized(h.cmd.token, h.cmd.old_key) then
-                held = nil; self:prepare(h.cmd)
+            elseif h.journal_busy or native:trade_authorized(h.cmd.token, h.cmd.old_key) then
+                held = nil; self:prepare(h.cmd,h.deadline)
             end
         end
         if prepared and prepared.epoch ~= d.epoch() then unchanged(prepared); flush() end
         if prepared and prepared.prepare_deadline and d.frame() > prepared.prepare_deadline then unchanged(prepared); flush() end
         local t = active
-        if t and (t.phase == "precommit-proof" or t.phase == "save-proof") then
+        if t and (t.phase == "precommit-proof" or t.phase == "save-proof" or t.phase == "arm-proof") then
             if t.epoch ~= d.epoch() then uncertain(t, "session epoch changed before journal proof")
+            elseif t.phase == "arm-proof" and d.frame() > t.apply_deadline then unchanged(t)
+            elseif t.phase == "arm-proof" then post_scene(t)
             elseif t.phase == "precommit-proof" then unchanged(t)
             else result(t) end
             flush()
