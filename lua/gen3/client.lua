@@ -1508,6 +1508,7 @@ function Client.new(p)
             -- so a stale doubles bit would refuse a singles swap here.
             if not eligible() then
                 log("replace_rival_team: session not eligible (writes paused); nothing staged")
+                refuse("writes_paused")
             elseif native and native.replace_rival_team then
                 log("replace_rival_team staged for the window (battle " .. tostring(ra.battle_id) .. ")")
                 native:replace_rival_team(cmd, function(epoch)
@@ -1550,6 +1551,7 @@ function Client.new(p)
                 refuse(why)
             elseif not eligible() then
                 log("replace_rival_team: session not eligible (writes paused); nothing staged")
+                refuse("writes_paused")
             elseif native and native.replace_rival_team then
                 native:replace_rival_team(cmd, rival_epoch_guard)
             else

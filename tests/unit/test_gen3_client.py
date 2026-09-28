@@ -1376,10 +1376,15 @@ def test_blocker_a_paused_session_stages_no_rival_swap():
     w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
               session=session, battle_id=bid)
     w.step(5)
-    assert w.writes == [] and w.events("rival_team_replaced") == []
+    assert w.writes == []
+    (reply,) = w.events("rival_team_replaced")
+    assert (reply["trainer_id"], reply["species_ids"], reply["error"]) == (
+        5, [], "writes_paused"
+    )
     w.client.writes_enabled, w.client.gate_revoked = True, False
     w.step(3)
     assert native_writes(w) == [], "nothing was queued while paused, so nothing stale posts later"
+    assert len(w.events("rival_team_replaced")) == 1
 
 
 def test_minor1_a_native_owned_prompt_is_answered_exactly_once():
