@@ -70,7 +70,7 @@ There is no `capture(battle)`/`capture(box)`/`capture(gift)` split — it is one
 | `** NEW ENCOUNTER **  <location>` (yellow) | `area_enter` into an unresolved route, Pokéball gate open, not a gift area |
 | `WHITED OUT` (red) | `whiteout` |
 | `Nuzlocke Start!` | `has_pokeballs` first latches true (not on a reconnect resume) |
-| `!! <nickname> KO'd`, `!! <nickname> fainted`, `!! <nickname> BOOM!` (red) | The client wrote a battle faint, committed the Perish-Song active-battler faint, or committed Explode Mode's forced Explosion |
+| `!! <nickname> KO'd`, `!! <nickname> fainted`, `!! <nickname> BOOM!` (red) | The client wrote a battle faint, committed the Perish-Song active-battler faint, or committed Explode Mode's forced Explosion; a missing or blank name displays `Your Pokemon` instead of an identity key |
 | `TRADE UNRESOLVED: <why>` (orange) | The native link-trade FSM parked without resolving |
 | Any other `hud_show`/`msgbox` text | Server-driven (`server/state.py`) — wrong-save banner, dead-zone/linked/duplicate-capture notices, trade prompts, etc. Sent as plain text, not glyph-decorated |
 

@@ -56,9 +56,9 @@ local FAILED = { box_mon = "box_mon_failed", party_mon = "sync_retrieve_failed",
 
 local EXEC = { "arm", "disarm", "faint_slot", "deposit", "withdraw", "memorialize" }
 
-local function nick_label(key, nickname)
-    if nickname and nickname ~= "" then return nickname end
-    return key and key:sub(1, 8) or "?"
+local function nick_label(_key, nickname)
+    if type(nickname) == "string" and nickname:find("%S") then return nickname end
+    return "Your Pokemon"
 end
 
 local function default_stats(m) return { level = m.level, maxHP = m.max_hp } end

@@ -140,6 +140,24 @@ def test_one_command_per_frame():
     assert q.calls("faint_slot") == [("faint_slot", 0), ("faint_slot", 1)] and q.size() == 0
 
 
+@pytest.mark.parametrize("nickname,expected", [
+    (None, "!! Your Pokemon KO'd"),
+    ("", "!! Your Pokemon KO'd"),
+    ("   ", "!! Your Pokemon KO'd"),
+    ("SPARKY", "!! SPARKY KO'd"),
+])
+def test_deferred_faint_banner_never_exposes_a_key(nickname, expected):
+    q = Queue()
+    cmd = {"cmd": "force_faint", "key": A}
+    if nickname is not None:
+        cmd["nickname"] = nickname
+    q.push(**cmd)
+    q.run()
+    assert q.calls("faint_slot") == [("faint_slot", 0)]
+    assert q.hud == [expected]
+    assert A not in q.hud[0] and A[:8] not in q.hud[0]
+
+
 def test_a_closed_gate_runs_nothing_keeps_the_queue_and_reports_the_hold():
     q = Queue()
     q.gate = (False, "not at the overworld checkpoint")
