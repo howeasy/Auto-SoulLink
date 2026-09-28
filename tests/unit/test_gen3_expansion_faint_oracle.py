@@ -32,12 +32,42 @@ def test_hp_lost_mask_is_the_compiler_bitfield_and_refuses_drift(tmp_path):
     ({"unknown": None}, ["incomplete"]),
 ])
 def test_memorial_only_accepts_exact_engine_hp_loss(after, problems):
-    found = oracle.memorial_hp_lost_problems({"unknown": 0, "max_hp": 20}, after)
+    found = oracle.memorial_hp_lost_problems({"unknown": 0}, after, source_hp=0, source_max_hp=20)
     assert len(found) == len(problems)
     assert all(expected in actual for expected, actual in zip(problems, found, strict=True))
 
 
+def test_raw_prewrite_hp_distinguishes_a_healed_from_a_still_fainted():
+    before = {"unknown": 0}
+    assert oracle.memorial_hp_lost_problems(before, {"unknown": 0}, source_hp=20, source_max_hp=20) == []
+    assert oracle.memorial_hp_lost_problems(before, {"unknown": 20}, source_hp=0, source_max_hp=20) == []
+    assert oracle.memorial_hp_lost_problems(before, {"unknown": 20}, source_hp=20, source_max_hp=20)
+    assert oracle.memorial_hp_lost_problems(before, {"unknown": 0}, source_hp=0, source_max_hp=20)
+    assert oracle.memorial_hp_lost_problems(before, {"unknown": 0}, source_hp=20, source_max_hp=20,
+                                            require_zero=True)
+    assert oracle.memorial_hp_lost_problems(before, {"unknown": 0}, source_hp=0, source_max_hp=0)
+
+
 KEY = "4D55444B:20250925"
+SOURCE = (f"RX memorialize key={KEY}\n"
+          f"XG3_MEMORIAL_SOURCE {KEY} frame=24496 slot=0 hp=0 max_hp=20 attempted=281\n"
+          f"TX memorialize_done {KEY} {{}}\n")
+
+
+@pytest.mark.parametrize("text,valid", [
+    (SOURCE, True),
+    (SOURCE.replace("attempted=281", "attempted=0"), False),
+    (SOURCE.replace("TX memorialize_done", "TX other"), False),
+    (SOURCE.replace("RX memorialize", "RX other"), False),
+    (SOURCE + SOURCE, False),
+    (SOURCE.replace("hp=0 max_hp=20", "hp=20 max_hp=20"), True),
+])
+def test_memorial_source_must_be_one_successful_write_between_rx_and_ack(text, valid):
+    source, problems = oracle.memorial_source(text, KEY)
+    assert (source is not None) is valid
+    assert (not problems) is valid
+
+
 NATURAL = (f"LOSE {KEY} status_move_slot=1\n"
            f"FORCED_HP0 {KEY} frame=24495 in_battle=1 battler=1\n"
            f"LINKED_FAINTED {KEY}\n"

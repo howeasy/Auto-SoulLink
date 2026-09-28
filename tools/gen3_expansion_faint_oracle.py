@@ -21,19 +21,38 @@ def hp_lost_mask(facts_path: Path = FACTS) -> int:
     return mask
 
 
-def memorial_hp_lost_problems(before: dict, after: dict, *, expected_hp: int = 0) -> list[str]:
-    """A boxed faint records maxHP-currentHP; its other `unknown` bits must stay fixed."""
+def memorial_source(text: str, key: str) -> tuple[tuple[int, int] | None, list[str]]:
+    """Read the single keyed pre-write party snapshot tied to a successful memorial write."""
+    k = re.escape(key)
+    pattern = (rf"(?m)^XG3_MEMORIAL_SOURCE {k} frame=\d+ slot=\d+ hp=(\d+) "
+               rf"max_hp=(\d+) attempted=([1-9]\d*)$")
+    hits = list(re.finditer(pattern, text))
+    if len(hits) != 1:
+        return None, [f"expansion memorial source for {key} has {len(hits)} successful writes, want one"]
+    rx = re.search(rf"(?m)^RX memorialize key={k}$", text)
+    ack = re.search(rf"(?m)^TX memorialize_done {k}(?=\s|$)", text)
+    if not rx or not ack or not rx.start() < hits[0].start() < ack.start():
+        return None, [f"expansion memorial source for {key} is not between RX and acknowledgement"]
+    return (int(hits[0].group(1)), int(hits[0].group(2))), []
+
+
+def memorial_hp_lost_problems(before: dict, after: dict, *, source_hp: int,
+                              source_max_hp: int, require_zero: bool = False) -> list[str]:
+    """A boxed faint records the raw pre-write maxHP-currentHP; other bits stay fixed."""
     mask = hp_lost_mask()
     old, new = before.get("unknown"), after.get("unknown")
-    max_hp = before.get("max_hp")
-    if not all(isinstance(x, int) for x in (old, new, max_hp, expected_hp)):
+    if not all(isinstance(x, int) for x in (old, new, source_hp, source_max_hp)):
         return ["expansion hpLost witness is incomplete"]
-    loss = max_hp - expected_hp
-    if not 0 <= loss <= mask:
+    if not 0 < source_max_hp <= 65535 or not 0 <= source_hp <= source_max_hp:
+        return ["expansion memorial source HP/maxHP is invalid"]
+    if require_zero and source_hp != 0:
+        return [f"expansion B memorial source HP is {source_hp}, not the proved KO 0"]
+    loss = source_max_hp - source_hp
+    if loss > mask:
         return [f"expansion hpLost {loss} is outside the compiler lane"]
     problems = []
     if new & mask != loss:
-        problems.append(f"expansion hpLost is {new & mask}, expected {loss} from maxHP {max_hp} and HP {expected_hp}")
+        problems.append(f"expansion hpLost is {new & mask}, expected {loss} from raw maxHP {source_max_hp} and HP {source_hp}")
     if new & ~mask != old & ~mask:
         problems.append("expansion BoxPokemon flags outside hpLost changed")
     return problems

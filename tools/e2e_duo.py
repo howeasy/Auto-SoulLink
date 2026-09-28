@@ -1935,7 +1935,7 @@ def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, 
 
 def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, limits=None,
                            battled=False, trained=False, captured=None,
-                           expansion_hplost_zero=False):
+                           expansion_memorial_source=None, expansion_require_zero=False):
     """`key` left the party for exactly one slot of the memorial box; nothing else moved. The
     memorial record must be valid for the cartridge and, when the fixture carried the mon, keep
     every invariant field of the record it was cut from (friendship only if it `battled`, the
@@ -1957,11 +1957,13 @@ def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, l
         mutable = (GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
                    | (GEN3_TRAINED_MUTABLE if trained else set()))
         now = boxes[where[0]]
-        if was and expansion_hplost_zero:
+        if was and expansion_memorial_source:
             # Expansion BoxPokemon embeds hpLost in `unknown`'s low 14 bits. The engine's
             # MON_DATA_HP write on the proved B Perish KO makes it maxHP-0; keep both high
             # bits (including shinyModifier) invariant. This is narrower than ignoring unknown.
-            hp_problems = exp_faint_oracle.memorial_hp_lost_problems(was, now)
+            hp_problems = exp_faint_oracle.memorial_hp_lost_problems(
+                was, now, source_hp=expansion_memorial_source[0],
+                source_max_hp=expansion_memorial_source[1], require_zero=expansion_require_zero)
             problems += [f"{label}: {problem}" for problem in hp_problems]
             if not hp_problems:
                 mutable = mutable | {"unknown"}
@@ -8873,10 +8875,15 @@ class DuoRun:
                 # moves when the case gives it real turns first (the "trainer" case, PREP_LEVEL).
                 # PYDEC FAIL on the RR final cut (d9a928d7): the memorial for A's key differed in
                 # experience because this mask never covered A's own natural growth.
+                source = None
+                if self.game == "gen3_exp":
+                    source, source_problems = exp_faint_oracle.memorial_source(results[inst], key)
+                    problems += [f"{inst}: {problem}" for problem in source_problems]
                 problems += gen3_memorial_problems(inst, saved, fixture, key, box, rr=self._gen3_rr,
                                                    limits=self._gen3_limits(inst), battled=True,
                                                    trained=inst == "a" or case == "trainer",
-                                                   expansion_hplost_zero=self.game == "gen3_exp" and inst == "b")
+                                                   expansion_memorial_source=source,
+                                                   expansion_require_zero=self.game == "gen3_exp" and inst == "b")
                 done = gen3_tx("memorialize_done", key)
                 marks[inst] = ([done], [(done, r"(?m)^SAVE_WITNESS_DUMP ")], [])
         req_a, ord_a, forb_a = marks["a"]

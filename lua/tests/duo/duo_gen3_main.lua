@@ -317,6 +317,8 @@ if title == TITLES.EXP_TITLE then
                  hp = b.fields.hp.offset,
                  perish_off = b.fields.volatiles.offset + flag.offset,
                  perish_mask = assert(tonumber(flag.mask)),
+                 party = { size = st.Pokemon.size, hp = st.Pokemon.fields.hp.offset,
+                           max_hp = st.Pokemon.fields.maxHP.offset },
                  power = { off = pw.offset, width = pw.width, shift = pw.shift, mask = (1 << pw.bits) - 1 } }
     end)
 end
@@ -526,6 +528,35 @@ if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun))
 local session = SLINK_GEN3_CLIENT
 if not session then finish(false, "run.lua built no client: " .. tostring(refused or "no reason logged")) end
 if native_candidate then native_candidate.attach(session,battle_parts) end
+if D.game == "gen3_exp" and D.scenario == "linked_faint_active_gen3" and battle_parts.boxes then
+    local boxes, original = battle_parts.boxes, battle_parts.boxes.memorialize
+    boxes.memorialize = function(self, key, hint)
+        -- Snapshot raw party bytes at the actual memorial transaction, before its first write.
+        -- boxes.memorialize does not advance a frame; only a successful new write logs a marker.
+        local source, base = nil, reader.party_base()
+        local count = memory.read_u8(profile.ram.PARTY_COUNT_ADDR, "System Bus")
+        if base and count <= 6 then
+            for slot = 0, count - 1 do
+                local at = base + slot * BM.party.size
+                local found = fmt("%08X:%08X", memory.read_u32_le(at, "System Bus"),
+                                  memory.read_u32_le(at + 4, "System Bus"))
+                if found == key then
+                    source = {slot = slot, hp = memory.read_u16_le(at + BM.party.hp, "System Bus"),
+                              max_hp = memory.read_u16_le(at + BM.party.max_hp, "System Bus")}
+                    break
+                end
+            end
+        end
+        local before = battle_parts.writes.attempted
+        local ok, why = original(self, key, hint)
+        local written = battle_parts.writes.attempted - before
+        if ok and source and written > 0 then
+            log(fmt("XG3_MEMORIAL_SOURCE %s frame=%d slot=%d hp=%d max_hp=%d attempted=%d", key,
+                    emu.framecount(), source.slot, source.hp, source.max_hp, written))
+        end
+        return ok, why
+    end
+end
 local raw_handle = session.handle_command
 session.handle_command = function(self, cmd)
     local c = type(cmd) == "table" and type(cmd.cmd) == "string" and cmd.cmd or "?"
