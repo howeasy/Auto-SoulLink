@@ -121,5 +121,9 @@ def test_server_wire_must_respond_to_same_token_bound_after_reset_report():
     assert duo.rr_reset_wire_problems([request], "t1")
     assert duo.rr_reset_wire_problems([request, {**response, "req": 16}], "t1")
     assert duo.rr_reset_wire_problems([request, {**response, "conn": 3}], "t1")
+    assert duo.rr_reset_wire_problems([{k: v for k, v in request.items()
+                                        if k not in ("t", "conn")},
+                                       {k: v for k, v in response.items()
+                                        if k not in ("req", "conn")}], "t1")
     assert duo.rr_reset_wire_problems([{**request, "msg": {**request["msg"], "token": "other"}},
                                        response], "t1")
