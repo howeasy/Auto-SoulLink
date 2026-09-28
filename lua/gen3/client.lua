@@ -45,8 +45,6 @@ local Client = {}
 -- CFRU keeps the same layout, and so does pret/pokeemerald@c65e93f2 (include/pokemon.h:219-231 hp
 -- at 0x56, :268 moves, :281 pp; include/constants/moves.h:157; include/battle.h:27).
 local PARTY_HP_OFF = 0x56            -- struct Pokemon.hp (u16)
-local BATTLE_MON_MOVES_OFF = 0x0C    -- BattlePokemon.moves[4] (u16 each)
-local BATTLE_MON_PP_OFF = 0x24       -- BattlePokemon.pp[4] (u8 each)
 local MOVE_EXPLOSION = 153           -- include/constants/moves.h
 local EXPLODE_PP = 5                 -- Explosion's PP, so a PP drop proves the move executed
 -- CFRU action-commit values (archive/gen3-old-client:lua/memory_gba.lua:1318-1345, production-tested on RR):
@@ -88,6 +86,10 @@ function Client.new(p)
     local trade_report_epochs = setmetatable({}, {__mode="k"})
     local owed_hold = nil       -- the reason the last owed report is held, logged once per hold
     local a, d = profile.ram, profile.derived
+    -- Expansion BattlePokemon is 140 bytes and places pp at +37. Older packs predate these
+    -- geometry keys; retain their established offsets until their profiles carry the keys.
+    local BATTLE_MON_MOVES_OFF = d.BATTLE_MON_MOVES_OFF or 0x0C
+    local BATTLE_MON_PP_OFF = d.BATTLE_MON_PP_OFF or 0x24
     local arr = json.array
     local area_map, locations = p.area_map or {}, p.locations or {}
     local sink = p.log or function() end
@@ -653,11 +655,17 @@ function Client.new(p)
     local explode_capable = num(a.BATTLE_MONS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
                             and num(a.CHOSEN_MOVE_ADDR) and num(a.BATTLE_COMM_ADDR) and true or false
     -- Mechanism P has its own required fields, independent of the Explosion binding.
-    local active_faint_capable = num(a.BATTLE_MONS_ADDR) and num(a.STATUS3_ADDR)
+    local expansion_perish = num(a.BATTLE_MONS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
+                             and num(a.BATTLE_COMM_ADDR) and num(d.BATTLE_MON_PERISH_FLAG_OFF)
+                             and num(d.BATTLE_MON_PERISH_FLAG_MASK) and num(d.BATTLE_MON_PERISH_TIMER_OFF)
+                             and num(d.BATTLE_MON_PERISH_TIMER_KEEP) and num(d.B_ACTION_NOTHING_FAINTED)
+                             and policy.handoff_entry and policy:handoff_entry(0) and true or false
+    local vanilla_perish = num(a.BATTLE_MONS_ADDR) and num(a.STATUS3_ADDR)
                                  and num(a.DISABLE_STRUCTS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
                                  and num(a.BATTLE_COMM_ADDR) and num(d.STATUS3_PERISH_SONG)
                                  and num(d.DISABLE_STRUCT_SIZE) and num(d.DISABLE_STRUCT_PERISH_TIMER_OFF)
                                  and num(d.B_ACTION_NOTHING_FAINTED) and true or false
+    local active_faint_capable = expansion_perish or vanilla_perish
 
     -- one armed window, one reason, one allow set; returns true or nil, why
     -- args: what the reason's clause set needs (battle_commit: {battler}; sound: {player, track})
@@ -826,16 +834,27 @@ function Client.new(p)
     -- The engine then ends the menu itself: no A press on any title, and CFRU's parked menu (the
     -- RR L-throw) is gone. Without the block the plan is P alone and the player presses A once.
     local function perish_plan(battler)
-        local s3 = a.STATUS3_ADDR + battler * 4
-        local timer = a.DISABLE_STRUCTS_ADDR + battler * d.DISABLE_STRUCT_SIZE + d.DISABLE_STRUCT_PERISH_TIMER_OFF
-        local plan = {
-            { s3, 4, io.read_u32(s3) | d.STATUS3_PERISH_SONG },
-            -- timer 0 (low nibble); the high nibble is kept, as the engine's own decrement does
-            { timer, 1, io.read_u8(timer) & 0xF0 },
-            { a.CHOSEN_ACTION_ADDR + battler, 1, d.B_ACTION_NOTHING_FAINTED },
-            -- comm is the battle_commit guard: only the hand-off may follow it
-            { a.BATTLE_COMM_ADDR + battler, 1, STANDBY },
-        }
+        local plan
+        if expansion_perish then
+            local base = a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE
+            local status = base + d.BATTLE_MON_PERISH_FLAG_OFF
+            local timer = base + d.BATTLE_MON_PERISH_TIMER_OFF
+            plan = {
+                { status, 1, io.read_u8(status) | d.BATTLE_MON_PERISH_FLAG_MASK },
+                { timer, 1, io.read_u8(timer) & d.BATTLE_MON_PERISH_TIMER_KEEP },
+            }
+        else
+            local s3 = a.STATUS3_ADDR + battler * 4
+            local timer = a.DISABLE_STRUCTS_ADDR + battler * d.DISABLE_STRUCT_SIZE + d.DISABLE_STRUCT_PERISH_TIMER_OFF
+            plan = {
+                { s3, 4, io.read_u32(s3) | d.STATUS3_PERISH_SONG },
+                -- timer 0 (low nibble); the high nibble is kept, as the engine's own decrement does
+                { timer, 1, io.read_u8(timer) & 0xF0 },
+            }
+        end
+        plan[#plan + 1] = { a.CHOSEN_ACTION_ADDR + battler, 1, d.B_ACTION_NOTHING_FAINTED }
+        -- comm is the battle_commit guard: only the hand-off may follow it
+        plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STANDBY }
         local h = policy.handoff_entry and policy:handoff_entry(battler)
         if h then plan[#plan + 1] = { h[1], h[2], h[3] }; plan.handoff = true end
         return plan

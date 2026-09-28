@@ -11,6 +11,7 @@ Live, BizHawk 2.11.1 / mGBA HLE BIOS, ROM 28877d73 on exp_town.sav / exp_center.
 Values re-typed here, not read from the pack.
 """
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,53 @@ IRQ_CPSR, INTRWAIT_LR = 0x20000092, 0x1F8
 
 def exp_pack():
     return json.loads((ROOT / "data/games/gen3_exp/28877d73/write_checkpoint.json").read_text())[EXP]
+
+
+def test_the_expansion_perish_handoff_admits_only_the_exact_five_writes():
+    pack = exp_pack()
+    h, guard = pack["battle"]["handoff"], pack["battle"]["commit_guard"]
+    w = world(0x0817AB3A, BUSY, pack=pack)
+    g = w.lua.globals()
+    g.put(h["head"][0]["address"], 0x04, 1)
+    g.put(h["head"][1]["address"], 0xAC, 1)
+    good = [[h["head"][0]["address"], 1, 0x84],
+            [h["head"][1]["address"], 1, 0xA0],
+            [h["head"][2]["address"], 1, 13],
+            [guard["address"], 1, guard["value"]],
+            [h["address"], 4, h["value"]]]
+    assert w.check_reason("battle_commit", {"battler": 0, "plan": good})[0]
+    for bad in (good[:-1], [[good[0][0], 1, 0x04]] + good[1:],
+                good[:1] + [[good[1][0], 1, 0xAC]] + good[2:]):
+        assert not w.check_reason("battle_commit", {"battler": 0, "plan": bad})[0]
+
+
+def test_client_perish_plan_uses_expansion_geometry_and_preserves_other_volatile_bits():
+    """Exercise the actual nested plan function against the expansion pack's compiler offsets."""
+    src = (ROOT / "lua/gen3/client.lua").read_text(encoding="utf-8")
+    body = re.search(r"(?ms)^    local function perish_plan\(battler\).*?^    end$", src)
+    assert body
+    p = json.loads((ROOT / "data/games/gen3_exp/28877d73/profile.json").read_text())["titles"][EXP]
+    h = exp_pack()["battle"]["handoff"]
+    lua = world(0x0817AB3A, BUSY).lua
+    g = lua.globals()
+    g.a = lua.table_from(p["ram"], recursive=True)
+    g.d = lua.table_from(p["derived"], recursive=True)
+    g.reads = lua.table_from({"BATTLE_MON_SIZE": p["derived"]["BATTLE_MON_SIZE"]})
+    g.STANDBY = exp_pack()["battle"]["commit_guard"]["value"]
+    g.expansion_perish = True
+    g.policy = lua.table_from({"handoff_entry": lambda _self, _b: lua.table_from(
+        [h["address"], h["width"], h["value"]])})
+    g.io = lua.table_from({"read_u8": lambda address: {h["head"][0]["address"]: 0x04,
+                                                       h["head"][1]["address"]: 0xAC}.get(address, 0),
+                           "read_u32": lambda _address: 0})
+    fn = lua.execute(body.group(0) + "\nreturn perish_plan")
+    plan = fn(0)
+    assert [[plan[i][j] for j in (1, 2, 3)] for i in range(1, len(plan) + 1)] == [
+        [h["head"][0]["address"], 1, 0x84], [h["head"][1]["address"], 1, 0xA0],
+        [h["head"][2]["address"], 1, 13],
+        [exp_pack()["battle"]["commit_guard"]["address"], 1, 4],
+        [h["address"], 4, h["value"]]]
+    assert plan.handoff is True
 
 
 def world(r15, cpsr, r14=0xA4, pack=None):

@@ -1,4 +1,7 @@
 """Reference-build adapter contract; literals checked against expansion e8bd1cd7."""
+import json
+from pathlib import Path
+
 import pytest
 
 from server.adapters import (
@@ -62,7 +65,10 @@ def test_reference_presentation_and_explicit_unsupported_surfaces():
     assert a.calc_nature("00000000:00000000") == "Hardy"
     assert a.calc_name("species", "Mr. Mime") == "Mr. Mime"
     assert a.calc_name("species", "Aegislash") == "Aegislash-Shield"
-    assert a.encounter_table("route_101") is None
+    wild = json.loads((Path(__file__).resolve().parents[2] /
+                       "data/games/gen3_exp/28877d73/expansion_encounters.json").read_text(encoding="utf-8"))
+    assert a.encounter_table("route_101") == wild["encounters"]["route_101"]
+    assert a.encounter_table("__unknown_area__") is None
     assert a.trainers_for_area("route_101") == []
     # XC4: trainer panels now come from the pinned build's gTrainers (Sawyer = TRAINER_SAWYER_1)
     assert [m["species"] for m in a.trainer_party(1)] == ["Geodude"] and a.trainer_brief(1)["area"] == "jagged_pass"

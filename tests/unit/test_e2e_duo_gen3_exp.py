@@ -74,12 +74,13 @@ def test_a_row_with_no_routes_never_reads_a_server_log(tmp_path):
     assert run._require_test_only_route_receipt() == []
 
 
-def test_the_active_faint_row_is_not_claimed_before_the_live_perish_gate():
-    """A source/ROM-bound handoff is not a physical Perish+KO receipt."""
+def test_the_active_faint_row_uses_the_expansion_perish_geometry():
+    """The opted-in duo row must use the expansion's exact pack and compiler fields."""
     derived = json.loads((REPO / "data/games/gen3_exp/28877d73/profile.json").read_text())["titles"][EXP]
     assert not {"STATUS3_ADDR", "DISABLE_STRUCTS_ADDR"} & set(derived["ram"])
     assert not {"STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE"} & set(derived["derived"])
-    assert "gen3_exp" not in duo.SCENARIOS["linked_faint_active_gen3"]["games"]
+    assert "gen3_exp" in duo.SCENARIOS["linked_faint_active_gen3"]["games"]
+    assert duo.SCENARIOS["linked_faint_active_gen3"]["target_by_game"]["gen3_exp"] == "pc"
     cp = json.loads((REPO / "data/games/gen3_exp/28877d73/write_checkpoint.json").read_text())[EXP]
     assert cp["battle"]["handoff"]["head"][0]["name"] == "perish_status"
     assert cp["battle"]["commit_hold"].startswith("HOLD")
