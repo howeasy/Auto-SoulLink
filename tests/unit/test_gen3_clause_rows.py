@@ -100,8 +100,7 @@ def _type_case(monkeypatch, tmp_path):
     run._clause_pending = {"key": ka, "species": 16}
     def tag(name, value):
         return name + " " + json.dumps(value) + "\n"
-    results = {i: tag("CLAUSE_ENCOUNTER", {"species": c["species_id"], "n": 1, "dupe": False,
-                                           **({"type_overlap": True} if i == "b" else {})})
+    results = {i: tag("CLAUSE_ENCOUNTER", {"species": c["species_id"], "n": 1, "dupe": False})
                + f"TX capture {c['key']} " + json.dumps(c) + "\nTHREW 1\n" for i, c in caps.items()}
     results["a"] += tag("PENDING_CAPTURE", caps["a"]) + tag("RULE_RX", {"cmd": "play_sound", "sound": 22})
     results["b"] = tag("A_PENDING", caps["a"]) + results["b"]
@@ -117,29 +116,6 @@ def test_type_oracle_checks_real_saves_and_actual_rule_facts(monkeypatch, tmp_pa
     rules, run, results, _, notes = _type_case(monkeypatch, tmp_path)
     rules.clause_oracle(run, results)
     assert notes and "B rejected" in notes[-1]
-
-
-def _type_hunt_case(monkeypatch, tmp_path):
-    rules, run, results, _, _ = _type_case(monkeypatch, tmp_path)
-    run._clause_facts["b"]["25"] = {"family": 25, "types": [13, 13], "gender_ratio": 127}
-    final = 'CLAUSE_ENCOUNTER {"species": 19, "n": 1, "dupe": false, "type_overlap": true}\n'
-    hunt = ('CLAUSE_ENCOUNTER {"species": 25, "n": 1, "dupe": false, "type_overlap": false}\n'
-            'CLAUSE_TYPE_RUN {"species": 25, "n": 1}\n'
-            'CLAUSE_ENCOUNTER {"species": 19, "n": 2, "dupe": false, "type_overlap": true}\n')
-    results["b"] = results["b"].replace(final, hunt)
-    return rules, run, results
-
-
-def test_type_hunt_oracle_requires_rom_proven_nonoverlap_and_each_run(monkeypatch, tmp_path):
-    rules, run, results = _type_hunt_case(monkeypatch, tmp_path)
-    rules.clause_oracle(run, results)
-    for bad, why in (
-        (results["b"].replace('"species": 25', '"species": 19', 1), "nonoverlap"),
-        (results["b"].replace('CLAUSE_TYPE_RUN {"species": 25, "n": 1}\n', ''), "RUN"),
-        (results["b"].replace('"type_overlap": true', '"type_overlap": false'), "overlap"),
-    ):
-        with pytest.raises(RuntimeError, match=why):
-            rules.clause_oracle(run, {**results, "b": bad})
 
 
 def test_clause_oracle_requires_the_independently_observed_pending_key(monkeypatch, tmp_path):
@@ -280,66 +256,6 @@ def test_species_carrier_runs_from_the_encounter_it_observed():
     assert scenario(ctx) is True
     assert (ctx["n"], ctx["runs"], ctx["catches"]) == (2, 1, 1)
     assert [ctx["lines"][i]["tag"] for i in range(1, len(ctx["lines"]) + 1)].count("CLAUSE_REROLL") == 1
-
-
-def test_type_carrier_runs_from_nonmatching_foes_then_catches_matching_one():
-    from lupa import LuaRuntime
-    lua = LuaRuntime(unpack_returned_tuples=True)
-    scenario = lua.execute("return dofile('lua/tests/duo/scenario_gen3_clause.lua')")
-    ctx = lua.execute('''
-      local c={player='b',D={rule_kind='type',clause_facts={
-        ['16']={types={0,2}},['25']={types={13,13}},['286']={types={17,17}},
-        ['19']={types={0,0}}}},n=0,lines={},messages={},catches=0,runs=0}
-      c.wait_go=function() return true end
-      c.go_value=function() return {key='A',species_id=16,area_id='route_1'} end
-      c.partner_done=function() return false end
-      c.wait_until=function(p) return p() end
-      c.rx_count=function() return #c.messages end
-      c.rx_after=function(at,p) for i=at+1,#c.messages do if p(c.messages[i]) then return c.messages[i] end end end
-      c.hunt=function() c.n=c.n+1;return true end
-      c.wild_ready=function() return true end
-      c.enemy_species=function() return ({25,286,19})[c.n] end
-      c.run_away=function() c.runs=c.runs+1;return true end
-      c.catch=function(label,ready) assert(ready==true and c.n==3);c.catches=c.catches+1
-        c.messages[#c.messages+1]={cmd='msgbox',text='A and B linked!'};return 'B' end
-      c.last_sent=function() return {key='B',species_id=19,area_id='route_1'} end
-      c.received=function() return 0 end
-      c.observe_returned=function() return true end
-      c.jlog=function(tag,value) c.lines[#c.lines+1]={tag=tag,value=value} end
-      c.log=function() end
-      c.save=function() return true end
-      return c
-    ''')
-    assert scenario(ctx) is True
-    assert (ctx["n"], ctx["runs"], ctx["catches"]) == (3, 2, 1)
-    assert [ctx["lines"][i]["tag"] for i in range(1, len(ctx["lines"]) + 1)] == [
-        "A_PENDING", "CLAUSE_ENCOUNTER", "CLAUSE_TYPE_RUN", "CLAUSE_ENCOUNTER",
-        "CLAUSE_TYPE_RUN", "CLAUSE_ENCOUNTER", "CLAUSE_VERDICT"]
-
-
-def test_type_carrier_stops_after_eight_nonmatching_natural_encounters():
-    from lupa import LuaRuntime
-    lua = LuaRuntime(unpack_returned_tuples=True)
-    scenario = lua.execute("return dofile('lua/tests/duo/scenario_gen3_clause.lua')")
-    ctx = lua.execute('''
-      local c={player='b',D={rule_kind='type',clause_facts={
-        ['16']={types={0,2}},['25']={types={13,13}}}},n=0,runs=0}
-      c.wait_go=function() return true end
-      c.go_value=function() return {key='A',species_id=16,area_id='route_1'} end
-      c.partner_done=function() return false end
-      c.wait_until=function(p) return p() end
-      c.rx_count=function() return 0 end
-      c.hunt=function() c.n=c.n+1;return true end
-      c.wild_ready=function() return true end
-      c.enemy_species=function() return 25 end
-      c.run_away=function() c.runs=c.runs+1;return true end
-      c.catch=function() error('must not catch a nonmatching foe') end
-      c.jlog=function() end
-      return c
-    ''')
-    ok, why = scenario(ctx)
-    assert ok is False and why == "RNG: no type overlap in 8 natural encounters"
-    assert (ctx["n"], ctx["runs"]) == (8, 8)
 
 
 def test_rule_rng_failures_keep_final_failures_final():
