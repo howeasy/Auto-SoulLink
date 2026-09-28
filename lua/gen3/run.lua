@@ -15,6 +15,7 @@ package.path = ROOT .. "/lua/?.lua;" .. package.path
 local Entry = dofile(ROOT .. "/lua/gen3/entry.lua")
 local C = require("connector")
 local H = require("hud")
+local START_REFUSED = "SLINK COULD NOT START - SEE LOG"
 
 local host = SLINK_HOST or os.getenv("SLINK_HOST") or "127.0.0.1"
 local port = tonumber(SLINK_PORT or os.getenv("SLINK_PORT") or 54321)
@@ -68,7 +69,7 @@ if not admitted then
     local msg = "[SLink-gen3] refused: " .. tostring(why)
     console.log(msg)
     H.init({ screen_w = 240, screen_h = 160 })
-    H.show(msg, 255, 80, 80, 600)
+    H.show(START_REFUSED, 255, 80, 80, 600)
     H.render()
     return
 end
@@ -165,7 +166,11 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
     end
 
     local birth_checked = false
-    for _ = 1, 100 do
+    -- 3000 spins = ~15 s at the default 5 ms. The first winner publishes .born before .baton;
+    -- the other emulator can observe that gap while startup is slow under load. The old 1000
+    -- spins (~5 s) made that second window permanently lose trade capability for this session.
+    -- A crashed holder still fails closed after the bound; no caller recreates a born baton.
+    for _ = 1, 3000 do
         local took, _, errno = rename_file(baton, mine)
         if took then
             local s = get(mine)
@@ -184,7 +189,19 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
             local _, born_errno = get(born)
             if born_errno == ENOENT and won_birth() then
                 local tmp = base .. ".new." .. token
-                if not (put(tmp, "0") and rename_file(tmp, baton)) then
+                if not put(tmp, "0") then
+                    remove_file(tmp)
+                    return nil
+                end
+                -- Only this caller won the permanent birth record. A transient rename/share
+                -- failure gets a bounded retry of the SAME prepared generation. Exhaustion
+                -- remains fail-closed; no later caller may initialise the counter.
+                local published = false
+                for _ = 1, 3000 do
+                    if rename_file(tmp, baton) then published = true; break end
+                    spin()
+                end
+                if not published then
                     remove_file(tmp)
                     return nil
                 end
@@ -197,6 +214,9 @@ end
 -- <<< session counter <<<
 
 local session_counter = next_session_counter(ROOT)
+if not session_counter then
+    console.log("[SLink-gen3] session counter unavailable (slink_gen3_session.baton held or unreadable at the install root); native trade is off this session")
+end
 local battle_nonce_seed = nil
 if session_counter then
     math.randomseed(os.time() + math.floor(os.clock() * 1000))
@@ -285,7 +305,7 @@ end
 
 local function trade_live_snapshot(io_, profile, layout)
     local a, d = profile.ram, profile.derived
-    local sb1, sb2 = io_.read_u32(a.SB1_PTR_ADDR), io_.read_u32(a.SB2_PTR_ADDR)
+    local sb1, sb2 = io_.read_u32(layout.sb1_ptr or a.SB1_PTR_ADDR), io_.read_u32(layout.sb2_ptr or a.SB2_PTR_ADDR)
     assert(sb1 >= 0x02000000 and sb1 < 0x02040000 and sb2 >= 0x02000000 and sb2 < 0x02040000,
            "live save blocks unavailable")
     local count = io_.read_u8(a.PARTY_COUNT_ADDR)
@@ -298,9 +318,10 @@ local function trade_live_snapshot(io_, profile, layout)
 end
 -- <<< durable trade storage <<<
 
-if admitted.kind == "companion" then
+local recovery_json = dofile(ROOT .. "/lua/json_codec.lua")
+if Entry.trade_journal_supported(ROOT, recovery_json, admitted) then
     local Journal = dofile(ROOT .. "/lua/gen3/trade_journal.lua")
-    local json = dofile(ROOT .. "/lua/json_codec.lua")
+    local json = recovery_json
     local ok, store = pcall(function()
         assert(luanet and luanet.import_type, "CLR durability adapter unavailable")
         luanet.load_assembly("BizHawk.Emulation.Common")
@@ -349,7 +370,7 @@ local ok_build, client = pcall(Entry.build, {
 if not ok_build then
     local msg = "[SLink-gen3] refused to start: " .. tostring(client)
     console.log(msg)
-    H.show(msg, 255, 80, 80, 600)
+    H.show(START_REFUSED, 255, 80, 80, 600)
     H.render()
     return
 end
@@ -357,7 +378,7 @@ local ok, err = pcall(function() client:start() end)
 if not ok then
     local msg = "[SLink-gen3] refused to start: " .. tostring(err)
     console.log(msg)
-    H.show(msg, 255, 80, 80, 600)
+    H.show(START_REFUSED, 255, 80, 80, 600)
     H.render()
     return
 end

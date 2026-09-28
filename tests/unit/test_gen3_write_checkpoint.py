@@ -393,7 +393,7 @@ def test_native_block_is_the_profile_and_stays_inside_ewram() -> None:
     profile = json.loads((G.ROOT / "data/games/gen3_rr/profile.json").read_text(encoding="utf-8"))
     nat = profile["native"]
     block = load("gen3_rr")["radical_red"]
-    assert "native" not in load("gen3_frlg")["firered"], "FR has no companion arena"
+    assert load("gen3_frlg")["firered"]["native"]["version"]=="gen3-native-v2"
     n = block["native"]
     assert (n["base"], n["sig"], n["abi"], n["info"]) == (nat["BASE"], nat["SIG"], nat["ABI"], nat["INFO"])
     assert (n["opcode_off"], n["status_off"], n["busy"]) == (6, 10, 1)
@@ -405,6 +405,10 @@ def test_native_block_is_the_profile_and_stays_inside_ewram() -> None:
         assert s1 + n1 <= s2, "arena spans overlap"
     assert any(s["key"] == "BASE" and s["size"] == 64 for s in n["spans"])
     assert any(s["key"] == "BLOB_BUF" and s["size"] == 600 for s in n["spans"])
+    # RR-DURABLE: of the shadow trade block only its session_epoch word is host-written
+    # (capabilities/producer_phase/witness are native-only)
+    assert {"key": "TRADE_BASE", "start": nat["TRADE_BASE"] + 0x44, "size": 4,
+            "what": "RR-DURABLE shadow session_epoch (the only host-written word of the durable block)"} in n["spans"]
 
 
 @pytest.mark.parametrize("pack,title", PACK_TITLES)

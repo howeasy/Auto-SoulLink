@@ -396,3 +396,112 @@ def test_the_rival_opcode_is_file_scope_in_the_handler():
     body = src[hook_start:hook_start + hook_end]
     assert "static void stage_enemy_party" not in body, "stage_enemy_party must be at file scope"
     assert src.index("static void stage_enemy_party") < hook_start
+
+
+@OS
+def test_a_slow_holder_is_waited_out_not_failed_closed(windows):
+    """T5 native_trade_firered 2026-09-27 (OMP cx-6616a9f2): two EmuHawks launch 0.1 s apart on
+    one install; the holder took longer than the old 100 x 5 ms bound, so B got nil, never bound a
+    trade session and silently never advertised trade. A holder that publishes after 150 spins
+    (0.75 s at the default 5 ms) must still hand B the next value."""
+    fs = _FS(windows, {BORN: "first-run\n"})          # baton absent = held by A right now
+    spins = []
+
+    def slow_holder():
+        spins.append(1)
+        if len(spins) == 150:
+            fs.files[BATON] = _Inode("41")            # A publishes its n+1
+
+    open_, remove, rename = fs.api()
+    assert _counter()(ROOT, open_, remove, slow_holder, rename, fs.windows) == 42
+
+
+@OS
+def test_first_birth_waits_for_a_slow_publisher(windows):
+    """The permanent birth record can appear before the new baton. A second emulator that
+    starts during that gap must survive more than the old five-second/1000-spin bound."""
+    fs = _FS(windows, {BORN: "first-run\n"})
+    spins = []
+
+    def publish_after_slow_first_start():
+        spins.append(1)
+        if len(spins) == 1500:
+            fs.files[BATON] = _Inode("1")
+
+    open_, remove, rename = fs.api()
+    assert _counter()(ROOT, open_, remove, publish_after_slow_first_start,
+                      rename, fs.windows) == 2
+    assert fs.text(BATON) == "2"
+
+
+@OS
+def test_birth_winner_retries_a_transient_baton_publish_failure(windows):
+    """Only the recorded birth winner may retry publishing the initial generation."""
+    fs = _FS(windows)
+    open_, remove, rename = fs.api()
+    failed = []
+
+    def transient_rename(src, dst):
+        if dst == BATON and ".new." in src and not failed:
+            failed.append(True)
+            return None, "temporarily busy", EACCES
+        return rename(src, dst)
+
+    assert _counter()(ROOT, open_, remove, _no_spin, transient_rename, windows) == 1
+    assert failed and fs.text(BATON) == "1"
+    assert _allocate(fs) == 2
+
+
+@OS
+def test_exhausted_birth_publish_stays_fail_closed(windows):
+    fs = _FS(windows)
+    open_, remove, rename = fs.api()
+
+    def blocked_publish(src, dst):
+        if dst == BATON and ".new." in src:
+            return None, "persistently busy", EACCES
+        return rename(src, dst)
+
+    assert _counter()(ROOT, open_, remove, _no_spin, blocked_publish, windows) is None
+    assert BORN in fs.files and BATON not in fs.files
+    assert _allocate(fs) is None, "a later caller must never reset the birth generation"
+    assert BATON not in fs.files
+
+
+def test_first_birth_winner_publishes_after_the_loser_waits_past_old_bound():
+    """Two live Lua runtimes: A owns .born but pauses before .baton, then B waits >1000 spins."""
+    fs = _FS(True)
+    born, resume, finished = threading.Event(), threading.Event(), threading.Event()
+    out = {}
+    open_a, remove_a, rename_a_raw = fs.api()
+
+    def rename_a(src, dst):
+        result = rename_a_raw(src, dst)
+        if dst == BORN and result is True:
+            born.set()
+            assert resume.wait(5)
+        return result
+
+    def run_a():
+        try:
+            out["a"] = _counter()(ROOT, open_a, remove_a, _no_spin, rename_a, True)
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=run_a, daemon=True)
+    thread.start()
+    assert born.wait(5)
+    spins = []
+
+    def wait_then_release_winner():
+        spins.append(1)
+        if len(spins) == 1500:
+            resume.set()
+            assert finished.wait(5)
+
+    open_b, remove_b, rename_b = fs.api()
+    b = _counter()(ROOT, open_b, remove_b, wait_then_release_winner, rename_b, True)
+    thread.join(5)
+    assert not thread.is_alive()
+    assert (out["a"], b) == (1, 2)
+    assert fs.text(BATON) == "2"

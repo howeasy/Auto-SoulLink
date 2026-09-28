@@ -28,7 +28,9 @@ local NAMES = {
 local function load_syms()
     local want, out = {}, {}
     for _, n in ipairs(NAMES) do want[n] = true end
-    for line in io.lines(WT .. "/data/gen3/pret/pokeemerald.sym") do
+    -- SLINK_BOOT_SYM: another pokeemerald-engine build's own .sym (make-exp passes the
+    -- expansion reference build's; its start menu and save callbacks keep these names)
+    for line in io.lines(os.getenv("SLINK_BOOT_SYM") or (WT .. "/data/gen3/pret/pokeemerald.sym")) do
         local addr, name = line:match("^(%x+) %a+ %x+ (%S+)$")
         if addr and want[name] then out[name] = tonumber(addr, 16) end
     end
@@ -133,7 +135,7 @@ local function save_via_menu(domain)
         pulse("A", i)
         if i % 16 ~= 0 then return false end
         after = G.save_counter(domain)
-        return after > before
+        return G.counter_advanced(before, after)   -- rejects a torn mid-write read (gen3_boot_check.lua)
     end)
     if not moved then return false, before, "the save counter never advanced" end
     G.phase("saved", string.format("counter=%d->%d", before, after))

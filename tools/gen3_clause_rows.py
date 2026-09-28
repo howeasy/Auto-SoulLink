@@ -87,6 +87,14 @@ def gender(facts, species, key):
     return "female" if ratio == 254 or (int(key.split(":")[0], 16) & 255) < ratio else "male"
 
 
+def type_overlap(facts_a, species_a, facts_b, species_b):
+    """The two booted ROMs' type intersection; an unknown species cannot be accepted."""
+    try:
+        return bool(set(facts_a[str(species_a)]["types"]) & set(facts_b[str(species_b)]["types"]))
+    except KeyError as exc:
+        raise ValueError(f"unproven type species {exc.args[0]}") from exc
+
+
 def rows(text, tag):
     return [json.loads(raw) for raw in re.findall(r"^" + re.escape(tag) + r" (\{.*\})$", text or "", re.M)]
 
@@ -96,6 +104,35 @@ def one(text, tag):
     if len(found) != 1:
         raise RuntimeError(f"expected exactly one {tag}, got {len(found)}")
     return found[0]
+
+
+def verify_type_hunt(receipt, facts_a, species_a, facts_b):
+    """Every skipped foe was nonmatching and escaped; the caught foe matches."""
+    encounters = rows(receipt, "CLAUSE_ENCOUNTER")
+    runs = rows(receipt, "CLAUSE_TYPE_RUN")
+    if not 1 <= len(encounters) <= 8:
+        raise RuntimeError("type hunt encounter count outside 1..8")
+    if len(runs) != len(encounters) - 1:
+        raise RuntimeError("type hunt missing or extra RUN observation")
+    if rows(receipt, "CLAUSE_REROLL"):
+        raise RuntimeError("type hunt reported a species reroll")
+    encounter_pos = [m.start() for m in re.finditer(r"^CLAUSE_ENCOUNTER \{", receipt, re.M)]
+    run_pos = [m.start() for m in re.finditer(r"^CLAUSE_TYPE_RUN \{", receipt, re.M)]
+    for i, encounter in enumerate(encounters):
+        species = encounter.get("species")
+        overlap = type_overlap(facts_a, species_a, facts_b, species)
+        if i < len(encounters) - 1 and overlap:
+            raise RuntimeError("type hunt RUN predecessor is not nonoverlap")
+        if (encounter.get("n") != i + 1 or encounter.get("dupe") is not False
+                or encounter.get("type_overlap") is not overlap):
+            raise RuntimeError("type hunt overlap observation disagrees with ROM facts")
+        if i < len(encounters) - 1:
+            if (runs[i].get("n") != i + 1 or runs[i].get("species") != species
+                    or not encounter_pos[i] < run_pos[i] < encounter_pos[i + 1]):
+                raise RuntimeError("type hunt RUN observation is not between encounters")
+        elif not overlap:
+            raise RuntimeError("type hunt final encounter lacks overlap")
+    return encounters[-1]["species"]
 
 
 def release_membership(saved, fixture, released, key_of):
@@ -176,9 +213,11 @@ def release_oracle(run, results):
     was = {h.gen3_key(m): m for m in fixture[0]}
     for mon in saved[0]:
         key = h.gen3_key(mon)
-        if key in was and h.gen3_record_diff(was[key], mon, run._gen3_rr,
-                                           h.GEN3_RECORD_MUTABLE | h.GEN3_ACTIVITY_MUTABLE):
-            problems.append(f"release changed surviving {key}")
+        if key in was:
+            changed = h.gen3_consumed_ok(h.gen3_record_diff(was[key], mon, run._gen3_rr,
+                h.GEN3_RECORD_MUTABLE | h.GEN3_ACTIVITY_MUTABLE | h.GEN3_TRAINED_MUTABLE), battled=True)
+            if changed:
+                problems.append(f"release changed surviving {key}: {changed}")
     for pos, mon in fixture[1].items():
         if pos in saved[1] and h.gen3_record_diff(mon, saved[1][pos], run._gen3_rr, set()):
             problems.append(f"release changed unrelated box {pos}")
@@ -297,8 +336,11 @@ def clause_oracle(run, results):
         if not rerolls:
             raise ClauseUnobserved("species reroll unobserved")
         return
-    expected = (bool(set(facts["a"][str(caps["a"]["species_id"])]["types"]) &
-                     set(facts["b"][str(caps["b"]["species_id"])]["types"])) if kind == "type" else
+    if kind == "type":
+        final_species = verify_type_hunt(results["b"], facts["a"], caps["a"]["species_id"], facts["b"])
+        if final_species != caps["b"]["species_id"]:
+            raise RuntimeError("type hunt final encounter differs from captured species")
+    expected = (type_overlap(facts["a"], caps["a"]["species_id"], facts["b"], caps["b"]["species_id"]) if kind == "type" else
                 gender(facts["a"], caps["a"]["species_id"], keys["a"]) in ("male", "female") and
                 gender(facts["a"], caps["a"]["species_id"], keys["a"]) == gender(facts["b"], caps["b"]["species_id"], keys["b"]))
     if not expected:
@@ -425,7 +467,7 @@ def rr_ball_gate_seed(seed):
         body[offset] = value
     manifest = ["SYNTH RR lead HP1/status0, native rr_battle2 reserve copied into party[1]; pre-parcel story/pocket untouched"]
     fx._rr_recompute_touched_checksums(parsed, seed, body, manifest)
-    result, family_manifest = family_seed(bytes(body), "radical_red", slot=1)
+    result, family_manifest = family_seed(bytes(body), "radical_red", slot=1, species_pair=(453, 452))
     return result, manifest + family_manifest
 
 
@@ -446,14 +488,22 @@ def orchestrate_ball_gate(run):
         run._gen3_mark(inst, r"^BALL_FLIP (\{.*\})$", "native first ball")
     run.wait_for("both server gates activated by real bag reads", lambda: all(
         (run._status() or {}).get("players", {}).get(i, {}).get("nuzlocke_active") is True for i in ("a", "b")), 120)
-    for inst in ("a", "b"):
-        run._append_reconnect_marker(inst, "CAPTURE")
+    if run.cfg.get("post_flip_stock") and not run._gen3_rr:
+        from gen3_ball_phases import transition
+        transition(run)
+    else:
+        for inst in ("a", "b"):
+            run._append_reconnect_marker(inst, "CAPTURE")
     run.assert_link_new()
 
 
 def ball_gate_oracle(run, results):
     import e2e_duo as h
     run._gen3_flush_boundary()
+    phased = run.cfg.get("post_flip_stock") and not run._gen3_rr
+    if phased:
+        from gen3_ball_phases import verify
+        results = verify(run, results)
     problems = []
     pre_status = getattr(run, "_ball_pre_status", None) or {}
     if any(pre_status.get("players", {}).get(i, {}).get("nuzlocke_active") is not False or
@@ -471,6 +521,8 @@ def ball_gate_oracle(run, results):
         cap = captures[inst]
         if cap.get("key") != caught.get("key") or cap.get("area_id") != run._hunt_area:
             problems.append(f"{inst}: post-activation catch not bound to its native area/key")
+        initial_bytes = run._ball_phases[inst]["fixture"] if phased else run._gen3_fixture_bytes(inst)
+        gate_saved = run._ball_phases[inst]["saved"] if phased else run._gen3_flushed(inst)
         fixture = run._gen3_fixture_saved(inst)
         lead = h.gen3_key(fixture[0][0])
         site = faint.get("site") or {}
@@ -495,8 +547,11 @@ def ball_gate_oracle(run, results):
             problems.append(f"{inst}: native reward flag transition missing")
         if not text.index("BALL_PRE ") < text.index("BALL_PICKUP ") < text.index("BALL_FLIP "):
             problems.append(f"{inst}: native gate phases out of order")
-        if pre.get("balls") != 0 or pre.get("active") is not False or pre.get("attempted") != 0:
-            problems.append(f"{inst}: pre-ball gate or no-write witness failed")
+        # attempted includes native HUD/panel mailbox bytes on RR. Gate proof is
+        # the real zero pocket, closed client/server gate, native faint and absence
+        # of capture/death commands below, not a ban on unrelated UI writes.
+        if pre.get("balls") != 0 or pre.get("active") is not False:
+            problems.append(f"{inst}: pre-ball gate was not closed at zero Balls")
         if flip.get("balls") != expected or flip.get("active") is not True:
             problems.append(f"{inst}: native reward/activation mismatch")
         encounters = re.findall(r"^BALL_PRE_ENCOUNTER species=(\d+) outcome=4$", text, re.M)
@@ -510,12 +565,13 @@ def ball_gate_oracle(run, results):
         if re.search(r"^TX (?:capture|no_catch|release) ", prefix, re.M) or "RX force_faint" in text or "RX memorialize" in text:
             problems.append(f"{inst}: pre-ball action emitted an encounter/death consequence")
         throws = len(re.findall(r"^THREW \d+$", text, re.M))
-        if (h.gen3_ball_count(run._gen3_fixture_bytes(inst), title) != 0 or throws < 1
-                or h.gen3_ball_count(run._gen3_flushed(inst), title) != expected - throws):
+        if (h.gen3_ball_count(initial_bytes, title) != 0 or throws < 1
+                or (phased and h.gen3_ball_count(gate_saved, title) != expected)
+                or h.gen3_ball_count(run._gen3_flushed(inst), title) != (20 if phased else expected) - throws):
             problems.append(f"{inst}: independent saved Ball counts disagree")
         codec = h.gen3_codec()
         flag_at = (0x1270 if title == "emerald" else 0xEE0) + flag // 8
-        for image, want in ((run._gen3_fixture_bytes(inst), 0), (run._gen3_flushed(inst), 1)):
+        for image, want in ((initial_bytes, 0), (gate_saved, 1)):
             parsed = codec.parse_flash(codec.split_rtc(image)[0], cfru=run._gen3_rr, title=h.gen3_codec_title(title))
             if (parsed["sb1"][flag_at] >> (flag % 8)) & 1 != want:
                 problems.append(f"{inst}: saved reward flag does not prove native acquisition")
@@ -523,16 +579,24 @@ def ball_gate_oracle(run, results):
         if ([h.gen3_key(m) for m in saved[0]] != [h.gen3_key(m) for m in fixture[0]] + [caught["key"]]
                 or saved[1] != fixture[1]):
             problems.append(f"{inst}: gate test changed owned membership or boxes")
-        for before, after in zip(fixture[0], saved[0], strict=False):
-            if h.gen3_record_diff(before, after, run._gen3_rr, h.GEN3_RECORD_MUTABLE | h.GEN3_ACTIVITY_MUTABLE):
-                problems.append(f"{inst}: gate test changed a record invariant")
+        by_key = {h.gen3_key(m): m for m in saved[0]}
+        for before in fixture[0]:
+            key = h.gen3_key(before)
+            after = by_key.get(key)
+            if after is None:
+                problems.append(f"{inst}: gate test lost owned {key}")
+                continue
+            changed = h.gen3_consumed_ok(h.gen3_record_diff(before, after, run._gen3_rr,
+                h.GEN3_RECORD_MUTABLE | h.GEN3_ACTIVITY_MUTABLE | h.GEN3_TRAINED_MUTABLE), battled=True)
+            if changed:
+                problems.append(f"{inst}: gate test changed a record invariant {key}: {changed}")
     if len(run._links_json()) != 1 or any(e.get("type") == "dead_zone" for e in run._reconnect_events()):
         problems.append("post-ball catch did not leave exactly one durable link or produced a dead zone")
     # The accepted link oracle binds both real capture events to the one alive
     # persisted pair, complete saved party/box reads and the native throw debit.
     if problems:
         raise RuntimeError("; ".join(problems))
-    run.assert_link_gen3_saved(results, native_ball_grant=10 if run._gen3_rr else 1)
+    run.assert_link_gen3_saved(results, native_ball_grant=0 if phased else 10 if run._gen3_rr else 1)
     run._gen3_raise([], "ball gate: pre-ball native faint suppressed; native reward activates; post-ball real catch/link saved")
 
 
@@ -542,7 +606,7 @@ def source_rom(title):
     return (Path(os.environ.get("SLINK_GEN3_ROMS", ROOT)) / names[title]).read_bytes()
 
 
-def family_seed(seed, title, rom=None, *, slot=0):
+def family_seed(seed, title, rom=None, *, slot=0, species_pair=None):
     """Disclosed evolved lead; the lower-family wild encounter/RUN remains native.
 
     Uses the same sector writers as the accepted builders, including surgical
@@ -553,7 +617,10 @@ def family_seed(seed, title, rom=None, *, slot=0):
     from server.adapters import gen3_codec as c
     rom = source_rom(title) if rom is None else rom
     facts = species_facts(rom, title)
-    species, lower = {"firered": (17, 16), "leafgreen": (17, 16), "emerald": (287, 286), "radical_red": (453, 452)}[title]
+    # RR Day has base Zigzagoon288; Night has Galarian1222. The paired row
+    # stages one evolved half for each distinct ROM family (see family_galar).
+    species, lower = species_pair or {"firered": (17, 16), "leafgreen": (17, 16),
+                                     "emerald": (287, 286), "radical_red": (289, 288)}[title]
     if species == lower or not same_family(facts, species, lower):
         raise ValueError("family fixture's distinct species are not related in this ROM")
     rr = title == "radical_red"
@@ -595,19 +662,54 @@ def family_seed(seed, title, rom=None, *, slot=0):
     return bytes(body), manifest
 
 
+def family_members(run):
+    """Read both actual linked lead records from the disclosed boot fixtures."""
+    import e2e_duo as h
+    members = []
+    for inst in ("a", "b"):
+        mon = run._gen3_fixture_saved(inst)[0][0]
+        key = h.gen3_key(mon)
+        if key != run._link_keys[inst]:
+            raise RuntimeError(f"{inst}: family linked key is not the staged lead")
+        members.append({"player": inst, "key": key, "species": mon["species"]})
+    return members
+
+
+def family_wild_facts(run, encounter):
+    title = run._gen3_title("a")
+    if title != "radical_red":
+        return wild_facts(title, "route_102" if title == "emerald" else "route_1")
+    # RR's Night regional IDs were collapsed by the historical JSON generator.
+    # Read the actual booted cartridge's selector/slot tables. Both periods are
+    # eligible; this row does not pretend to have proved the runtime RTC hour.
+    from rr_rom_encounters import decode_encounters, effective_maps
+    # play.map() emits group*256+number (Route 1 is 3.19 -> 787), not
+    # the dotted label printed by map metadata.
+    if encounter.get("map") != 3 * 256 + 19:
+        raise RuntimeError("RR family encounter was not on Route 1 (3.19)")
+    decoded = decode_encounters((ROOT / run._gen3_rom("a")).read_bytes())
+    return [slot for period in ("Day", "Night") for slot in
+            effective_maps(decoded, period)[(3, 19)]["habitats"]["land"]["slots"]]
+
+
 def family_oracle(run, results):
     import e2e_duo as h
     run._gen3_flush_boundary()
     r = one(results["a"], "FAMILY_ENCOUNTER")
-    fixture = run._gen3_fixture_saved("a")
-    species, key = fixture[0][0]["species"], h.gen3_key(fixture[0][0])
+    # Keep the actual species/location in the aggregate run log even for an
+    # unobserved attempt; the numbered client receipt is retained too.
+    run._pydec_note("FAMILY_ENCOUNTER " + json.dumps(r, sort_keys=True))
+    members = family_members(run)
     facts = own_facts(run, "a")
-    area = "route_102" if run._gen3_title("a") == "emerald" else "route_1"
-    if not any(e["species_id"] == r["species"] for e in wild_facts(run._gen3_title("a"), area)):
+    if not any(e["species_id"] == r["species"] for e in family_wild_facts(run, r)):
         raise RuntimeError("family encounter absent from this title's wild table")
-    related = same_family(facts, species, r["species"])
+    matching = [m for m in members if same_family(facts, m["species"], r["species"])]
+    related = bool(matching)
+    member = matching[0] if matching else members[0]
+    species, key = member["species"], member["key"]
     problems = []
-    if r.get("owned") != species or r.get("key") != key or r.get("related") != related:
+    if (r.get("owned") != species or r.get("key") != key or r.get("related") != related
+            or r.get("player") != member["player"]):
         problems.append("family encounter not bound to the staged cartridge record")
     for inst in ("a", "b"):
         saved, before = run._gen3_saved(inst), run._gen3_fixture_saved(inst)
@@ -618,7 +720,10 @@ def family_oracle(run, results):
                 problems.append(f"{inst}: family row changed record invariants")
         if "RX force_faint" in results[inst] or "RX memorialize" in results[inst] or "TX capture " in results[inst]:
             problems.append(f"{inst}: family row produced a capture/death")
-    run._gen3_one_link("alive")
+    link = run._gen3_one_link("alive")
+    for m in members:
+        if (link.get(m["player"]) or {}).get("species") != m["species"]:
+            problems.append(f"{m['player']}: saved link species differs from the staged family record")
     if problems:
         raise RuntimeError("; ".join(problems))
     if not related:
@@ -632,4 +737,4 @@ def family_oracle(run, results):
     events = run._reconnect_events()
     if not any(e.get("type") == "reroll" for e in events) or any(e.get("type") == "dead_zone" for e in events):
         problems.append("family RUN lacks a durable reroll or dead-zoned the area")
-    run._gen3_raise(problems, f"family: native {r['species']} rerolled against distinct owned {species}; staged link remains alive")
+    run._gen3_raise(problems, f"family: native {r['species']} rerolled against distinct owned {species} on {member['player']}; staged link remains alive")

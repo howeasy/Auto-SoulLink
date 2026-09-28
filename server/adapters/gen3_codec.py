@@ -581,6 +581,13 @@ CHUNK_SIZE_CFRU = 0x0FF0
 # ---------------------------------------------------------------------------
 TITLE_FRLG = "frlg"
 TITLE_EMERALD = "emerald"
+# pokeemerald-expansion reference build (expansion/1.17.0 e8bd1cd7, ROM 28877d73): the
+# same 14-section skeleton, but its own sizes -- data/games/gen3_exp/28877d73/facts.json
+# (the build's offsetof probe): SaveBlock2 3884, SaveBlock1 15568, PokemonStorage 34144
+# (vanilla + fusions[4]); party at SaveBlock1 +0x234/+0x238 as in Emerald. Records are
+# masked bitfields, so party/box decodes need the build's layout (profile.derived).
+# test_gen3_codec_expansion.py binds every number here to facts.json.
+TITLE_EXPANSION = "emerald_expansion_28877d73"
 
 SAVEBLOCK2_SIZE_EMERALD = 0x0F2C
 SAVEBLOCK1_SIZE_EMERALD = 0x3D88
@@ -590,10 +597,12 @@ SB1_PARTY_OFFSET_EMERALD = 0x238
 _TITLE_SAVE_SIZES = {
     TITLE_FRLG: (SAVEBLOCK2_SIZE, SAVEBLOCK1_SIZE),
     TITLE_EMERALD: (SAVEBLOCK2_SIZE_EMERALD, SAVEBLOCK1_SIZE_EMERALD),
+    TITLE_EXPANSION: (3884, 15568),
 }
+_TITLE_STORAGE_SIZES = {TITLE_EXPANSION: 34144}   # every other title: STORAGE_SIZE
 # A codec title or a client rom_type (server/adapters/__init__.py) names the layout.
 _TITLE_ALIASES = {"frlg": TITLE_FRLG, "firered": TITLE_FRLG, "leafgreen": TITLE_FRLG,
-                  "emerald": TITLE_EMERALD}
+                  "emerald": TITLE_EMERALD, TITLE_EXPANSION: TITLE_EXPANSION}
 
 
 def _title(title: str, *, cfru: bool = False) -> str:
@@ -615,12 +624,13 @@ def slot_layout(chunk_size: int = CHUNK_SIZE_VANILLA,
     min(sizeof(object) - offset, chunk_size).  The same macro with
     chunk_size=0xFF0 reproduces CFRU's literal table (flash_save.md §3).
     ``title`` only changes the SaveBlock1/2 object sizes -- Storage is
-    identical across titles (pokemon_storage_system.h)."""
-    sb2_size, sb1_size = _TITLE_SAVE_SIZES[_title(title)]
+    identical across vanilla titles (pokemon_storage_system.h); expansion's is bigger."""
+    title = _title(title)
+    sb2_size, sb1_size = _TITLE_SAVE_SIZES[title]
     objects = (
         ("sb2", sb2_size, 0, 0),
         ("sb1", sb1_size, 1, 4),
-        ("storage", STORAGE_SIZE, 5, 13),
+        ("storage", _TITLE_STORAGE_SIZES.get(title, STORAGE_SIZE), 5, 13),
     )
     layout = []
     for name, total, first_id, last_id in objects:
@@ -752,7 +762,7 @@ def parse_flash(image: bytes, cfru: bool = False, title: str = TITLE_FRLG) -> di
     base = NUM_SECTORS_PER_SLOT * slot
     blocks = {"sb2": bytearray(sb2_size),
               "sb1": bytearray(sb1_size),
-              "storage": bytearray(STORAGE_SIZE)}
+              "storage": bytearray(_TITLE_STORAGE_SIZES.get(title, STORAGE_SIZE))}
     rotation = None
     for i in range(NUM_SECTORS_PER_SLOT):   # src/save.c#L440-L464
         sector = sectors[base + i]
@@ -827,12 +837,25 @@ PARTY_CAPACITY = 6
 _TITLE_PARTY_OFFSETS = {
     TITLE_FRLG: (SB1_PARTY_COUNT_OFFSET, SB1_PARTY_OFFSET),
     TITLE_EMERALD: (SB1_PARTY_COUNT_OFFSET_EMERALD, SB1_PARTY_OFFSET_EMERALD),
+    TITLE_EXPANSION: (SB1_PARTY_COUNT_OFFSET_EMERALD, SB1_PARTY_OFFSET_EMERALD),
 }
 
 
-def party_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> list[dict]:
-    """Decode party using the title's disk layout; qualify_flash is a separate gate."""
+def _record_layout(title: str, layout: dict | None) -> dict:
+    """The masked-record layout a title's party/box decode needs: none for vanilla, and
+    for expansion the build's own (a vanilla decode of an expansion record reads the new
+    bit lanes as species/moves/experience, so it is refused rather than guessed)."""
+    if title == TITLE_EXPANSION and not layout:
+        raise ValueError("expansion records need the build's layout (profile.derived)")
+    return validate_expansion_layout(layout)
+
+
+def party_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG,
+                    layout: dict | None = None) -> list[dict]:
+    """Decode party using the title's disk layout; qualify_flash is a separate gate.
+    ``layout`` is an expansion build's masked-record layout (required for that title)."""
     title = _title(title, cfru=rr)
+    layout = _record_layout(title, layout)
     if rr:
         return rr_party_from_save(image)
     sb1 = parse_flash(image, title=title)["sb1"]
@@ -841,13 +864,15 @@ def party_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> 
     out = []
     for slot in range(count):
         start = party_off + slot * PARTY_MON_SIZE
-        out.append(decode_party_mon(sb1[start:start + PARTY_MON_SIZE]))
+        out.append(decode_party_mon_masked(sb1[start:start + PARTY_MON_SIZE], layout=layout))
     return out
 
 
-def boxes_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> list[list[dict]]:
+def boxes_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG,
+                    layout: dict | None = None) -> list[list[dict]]:
     """Decode vanilla's 14 boxes or RR's 25 scattered compressed boxes."""
-    _title(title, cfru=rr)
+    title = _title(title, cfru=rr)
+    layout = _record_layout(title, layout)
     if rr:
         return rr_boxes_from_save(image)
     storage = parse_flash(image, title=title)["storage"]
@@ -856,7 +881,7 @@ def boxes_from_save(image: bytes, rr: bool = False, title: str = TITLE_FRLG) -> 
         slots = []
         for slot in range(MONS_PER_BOX):
             start = BOX_DATA_OFFSET + (box * MONS_PER_BOX + slot) * BOX_MON_SIZE
-            slots.append(decode_box_mon(storage[start:start + BOX_MON_SIZE]))
+            slots.append(decode_box_mon_masked(storage[start:start + BOX_MON_SIZE], layout=layout))
         boxes.append(slots)
     return boxes
 

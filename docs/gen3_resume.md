@@ -1,8 +1,202 @@
-# Gen 3 resume note (updated 2026-09-27, checkpoint 22: COMBINED Gen 3 orchestrator; integration branch green)
+# Gen 3 resume note (updated 2026-09-27, checkpoint 26: ALL GATES SIGNED; one closeout session left -- follow docs/gen3/CLOSEOUT_RUNBOOK.md)
 
 Read this first after compaction. Authority: the owner-approved plan `docs/gen3/PLAN.md` (rev 5, §6 phases, §14 dispatch, §14.1 gate ledger) and the sole work ledger, the `AGENT_CHECKPOINT` block in `C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md` (it moved out of the retired gen1 sweep worktree). Requirements ledger: `docs/gen3_requirements.md`.
 
-## CURRENT STATE (2026-09-27, checkpoint 22, combined orchestrator)
+## CURRENT STATE (2026-09-27, checkpoint 26): all gates signed; ONE closeout session left
+
+**Follow `docs/gen3/CLOSEOUT_RUNBOOK.md` top to bottom.** Summary:
+- The owner signed every pending gate ("All gates are signed."): G4, G5, EG4, XG1, XG2. Each doc has a dated line.
+- The landing still needs its own owner approval (ruling 41: one FR/LG/E/RR landing).
+- Integration 02ba8ed1+ holds everything. The runner now stages the T5 candidates, the expansion build and the RR source cache.
+- Started at handoff on cut 02ba8ed1, for the next session to collect:
+  - FR/LG release_gate_quick rerun (C:/slink-wt/fc-frlg-gate-02ba8ed1.log);
+  - RR final cut on the new companion (lane C:/slink-wt/g3-lane3, C:/slink-wt/fc-rr-02ba8ed1.log).
+- Remaining cards: EXP-REFUSE (ruling 39) and EMERALD-TOWNS (ruling 40). Then freeze a cut, run all three final cuts, do landing prep, ping Gen 2, and ask the owner for the landing.
+
+## Earlier state (checkpoint 25): HANDOFF. The owner hands coordination of the remaining Gen 3 work to Codex.
+
+**Read first:**
+- this section;
+- the AGENT_CHECKPOINT in C:/Users/howar/.claude/hooks/slink/RC_MASTER_GUIDE.md (workers gen3-*, emerald-*);
+- the register C:/Users/howar/.claude/hooks/slink/WORKTREE_REGISTER.md.
+
+**Integration:** `claude/gen3-integration` in C:/slink-wt/g3-int, head after this doc commit (b091ff27 = code; later commits are receipts/docs only).
+- Full unit suite at b091ff27: **13480 passed / 0 failed** (C:/slink-wt/suite-b091ff27.log).
+- Env: `source C:/slink-wt/g3-env.sh`.
+- NOTHING is on master. Landing needs the owner's explicit approval; ping Gen 2 first (shared server/*.py, lua/core/session.lua and more changed).
+
+**Final cuts:**
+- **Emerald @b091ff27: 24/24 PASS** (docs/gen3/probes/fc_SUMMARY_b091ff27_emerald.txt).
+- **FR/LG @c04420a9: 42/43.** The only failure was release_gate_quick, from stale FR/LG/E profile.json. That was fixed in ca54bb42 (regenerated; the ABI source sha had moved in the T2 merge).
+- **Gate rerun @b091ff27:** 0 failed, but the gate counts 31 UNEXPLAINED SKIPS as failure. All are inputs missing from the lane checkout C:/slink-wt/g3-lane:
+  - (a) the T5 private candidate builds patch/build/candidate-{firered,leafgreen}-trade (tests/unit/test_gen3_trade_duo*.py);
+  - (b) the expansion build syms .cache/expansion-output/reference/pokeemerald.sym (test_gen3_title_syms_exp.py);
+  - (c) the RR source cache from `python tools/fetch_rr_sources.py` (test_gen3_rr_generators.py).
+- **NEXT CARD:** stage these via tools/gen3_final_cut.py UNPINNED_INPUTS (same pattern as the RR clean ROM fix 0e10ebd0), or record owner-accepted skips.
+  - Then rerun `python tools/gen3_final_cut.py --cut <head> --title frlg --lane C:/slink-wt/g3-lane --master C:/slink-wt/g3-lane-master --rows release_gate_quick`.
+  - Ideally run the full FR/LG cut at the final head.
+
+**Merged into integration this session (all live-proven where marked):**
+- **T5 native FR/LG trade duo:** 4/4 live PASS in both directions @5eed16cc.
+  - Fixes: the held apply_prepare, the baton wait, the hidden-HELLO recovery.
+  - Scripts: C:/slink-wt/run_t5native2.sh, run_t5frlg.sh, run_t5lgfr.sh.
+- **T2-PUBLISH (Codex Emerald 1d2a9512):** FR/LG/E production UPS + READY 1, and the Emerald native companion (panel/sound/carrier/rival/trade/Match Call).
+  - Single-cart production smokes PASS (em-t2/patch/build/t2-publish-live-20260927.json).
+  - OMP reviews cx-6db186a8 and cx-38e266e5 were dispositioned by Emerald.
+- **RR-ENC-FORMS (FRLG d675eb3f)** and **CLAUSE-LIVE-REST (Emerald-2 2bd8a7eb):** 14 live clause receipts (docs/gen3/research/clause_live_rest_2026-09-27.md).
+- **UI-QUAL**, **EXP-X23 (expansion X2+X3)**, and 10 OMP small tasks.
+
+**RR-DURABLE MERGED as 5c8bc45d** (claude/gen3-rr-durable @75b4900b). Read docs/gen3/research/rr_durable_handback.md.
+- Live PASS on gen3_rr at source 0c444561: trade_gen3, trade_decline_gen3, native_absent_gen3 (redesigned), plus the live gates test_live_tradescene/setpartymon/enemyparty_route. The branch suite was 12731/0.
+- New RR companion UPS: md5 70e7e746e573a2d00df5d3ef41d19d61, sha1 da579690db7d6933a0952a1f490312842793f71a. It must be staged as patch/build/slink_RR.gba in any checkout (g3-int is staged; the old build was kept as slink_RR.gba.old-7a386749).
+- On merge the coordinator re-pinned COMPANION_EXTRA_REFS for MOVE_CTRL_THUNK to 0x08379D84.
+- The full suite on the merged integration PASSED: **13507 passed / 0 failed** (C:/slink-wt/suite-rrdur-int.log).
+- Still owed:
+  - (a) an RR final-cut sweep on this head (`--title rr`); the other RR rows' receipts are from the old companion;
+  - (b) physical RR reset-between-saves recovery (only unit-proven);
+  - (c) radical_red.h still says READY 0 (unused on the ABI1 path);
+  - (d) ping Gen 2 (server/*.py changed).
+- RR native trade is no longer refused except for an old UPS without the witness.
+
+**Owner rulings 2026-09-27 (answered in chat; these are decisions, NOT XG1/XG2 gate signatures, which still need an explicit "yes"):**
+- **38 (expansion shiny, XG2 option C):** record the shinyModifier as a known limit for the reference build now; carrying it (shared state.py/base.py/client) is the FIRST card of X4. No shared server change now.
+- **39 (expansion admission):** accept the exp_*.sav SYNTH fixtures and gen3_exp registered-but-unrouted, AND refuse emerald_expansion_28877d73 server-side by name (add it to server/adapters/__init__.py _REFUSED_ROM_TYPES, as crystal_ap is) until it is routed. The duo harness's test-only admission seam must still work, i.e. use a test-only server override too. CARD for Codex.
+- **40 (Emerald towns):** fix all six: Rustboro/Roxanne, Fortree/Winona, Littleroot, Oldale, Fallarbor, Verdanturf.
+  - File each town's trainers, including gym leaders, under the town itself, sourced from pret, using the same E5-CITYLINK backfill as Mauville in tools/gen_area_map.py.
+  - Update test_roxanne, which pins the old route_104 filing, then regenerate area_map/emerald_trainers/gen3_emerald_areas.
+  - CARD for Codex.
+- **42 (expansion, 2026-09-27): PARALLEL TRACK.** The closeout session also starts the expansion XG3 / data / calc cards in their own lanes (CLOSEOUT_RUNBOOK §2b). Finished work lands unrouted; routing waits for XG3 + calc + data. The FR/LG/E/RR landing does not wait.
+- **41 (landing scope):** ONE landing of FR/LG/Emerald/RR together, once the FR/LG gate inputs are staged and the RR final cut passes on the rebuilt companion. The expansion code rides along unrouted, per ruling 39. Ping Gen 2 first; then ask the owner for the landing.
+
+**Owner rulings this session:**
+- 36: no phone on FR/LG/RR (Emerald Match Call stays).
+- 37: randomized RR is out of this RC (the Manager refuses by name, 0d323677).
+- The owner authorized merges as needed ("Just merge what you need").
+
+**Low-priority follow-ups (recorded, not started):**
+- EXP-X23 review items 2-6 (see checkpoint 24 below);
+- T5 review F5 (a production:true fixture under tests/fixtures/gen3/t5_stale_projection);
+- the HUD raw-key nickname fallback in lua/gen3/client.lua (nick_label).
+
+**Worker/peer rules that stay in force** (see memory):
+- Codex live threads: Emerald 01a0dec7, Emerald-2 01a0ded3, FRLG 01a0df52. Notes to them go by steer.
+- Headless OMP cannot run shell. Verify and commit every OMP delivery yourself.
+- Private SLINK_STATE_DIR per emulator run; kill only your own EmuHawk PIDs.
+- Receipts bind to their source cut; never relabel them.
+
+## Earlier state (checkpoint 24): wrap-up. Owner asked to finish the RC; the session ended on the owner's 30-minute call.
+
+Integration `claude/gen3-integration` @5e001952 in C:/slink-wt/g3-int.
+- The previous head, e588540d, was full-suite GREEN: 13353 passed / 0 failed.
+- The final suite on 5e001952 ran at wrap-up; its log is C:/slink-wt/suite-5e001952.log. Check that its EXIT is 0 before anything else.
+- Nothing is on master. Landing needs the owner's explicit approval, and Gen 2 must be pinged first: server/state.py, server/manager.py, lua/core/session.lua and more changed.
+
+**MERGED this session:**
+- **T5:** native FR/LG trade duo. 4/4 live PASS in both directions at 5eed16cc.
+  - Root cause of the flaky non-commit: apply_prepare answered ok=false with "native not authorized" while the native side was briefly busy.
+  - The fix holds the prepare for up to prepare_frames.
+  - Also merged: the baton wait of 0.5 s → 5 s plus a give-up log (646586fd), and the hidden-HELLO recovery now runs without a native part.
+- **RR-ENC-FORMS + C3 (FRLG d675eb3f):**
+  - RR wild encounters, names and types all come from the ROM: 81 locations / 3745 slots, names through 1375.
+  - The regional-form family is fixed.
+- **CLAUSE-LIVE-REST (Emerald-2, 2bd8a7eb):** 14 new live clause receipts. Table: docs/gen3/research/clause_live_rest_2026-09-27.md.
+  - Shiny exception, via a disclosed SYNTH PID rekey: FR/LG/RR/E.
+  - Pre-ball gate: LG/E/RR.
+  - PC release: FR/LG/RR.
+  - RR gender/type/species/family.
+- **UI-QUAL:** Emerald's Mauville Gym is filed under Mauville City, and there are per-title trainer panel tests.
+  - OPEN proposal (not an owner ruling): the same area gap in 6 more Emerald towns (Rustboro/Roxanne, Fortree/Winona, ...), chip task_aba67c79. Ask the owner.
+- **10 OMP small tasks:**
+  - the RR randomize refusal (ruling 37);
+  - HUD player-facing text;
+  - the stale wire log;
+  - RR poison N/A pinned from ROM;
+  - vanilla catalog falsifiers;
+  - memorial mask tests;
+  - explode B mask pinned;
+  - the dead savestate path and the tests/e2e/test_duo.py orphan deleted.
+
+**UPDATE (end of session): T2-PUBLISH 1d2a9512 MERGED as integration c04420a9.** Full suite on c04420a9: C:/slink-wt/suite-c04420a9.log (check EXIT 0). Final cuts STARTED on c04420a9: FR/LG in lane C:/slink-wt/g3-lane (log C:/slink-wt/fc-frlg-c04420a9.log, ~100 min, summary docs/gen3/probes/fc_SUMMARY_c04420a9.txt in the lane). Emerald in lane C:/slink-wt/g3-lane2 (log C:/slink-wt/fc-emerald-c04420a9.log, summary fc_SUMMARY_c04420a9_emerald.txt). Copy the lane receipts into g3-int and commit them; triage any FAIL. RR cut waits on RR-DURABLE. OMP review of EXP-X23 shared files: cx-2ce936ca.
+
+**QUEUE (in order):**
+1. **T2-PUBLISH** (Codex Emerald, em-t2 `claude/gen3-emerald-t2` **@1d2a9512**, which already contains integration da089baf and review fixes c8543439): FR/LG/E production UPS + READY, and the Emerald native companion. Emerald UPS sha1 2eef703c...; FR/LG bytes are unchanged. Live PASS at wrap-up: boot/panel/trade/reload; chooser fix (red on the old candidate, green on production); phone events 1/2/3 plus busy/cooldown; locked-device refusal. Its full suite was STILL RUNNING at wrap-up: confirm its exit code 0 before merging.
+   - Live PASS set: patch/build/em-live-20260927.json and t2-publish-live-20260927.json.
+   - The OMP review findings for trade/save (cx-6db186a8) and Match Call (cx-38e266e5) are fixed per Emerald's report.
+   - Get its final sha + suite exit, merge it, rerun the full suite and the citation test.
+2. **RR-DURABLE** (Opus subagent, C:/slink-wt/g3-rrdur `claude/gen3-rr-durable`, commits b912c710..f2eb0802): **BLOCKED ON THE OWNER.**
+   - The auto-mode classifier denied the worker's `git merge` of a37ebb44 into its branch. The coordinator did NOT run it for the worker.
+   - Option (a): the owner runs `git -C C:/slink-wt/g3-rrdur merge --no-ff <integration head>`.
+   - Option (b): the owner approves merging claude/gen3-rr-durable into integration after T2, then a fresh worker continues from integration.
+   - Remaining work: the Lua RR binding (isolated durable descriptor per Emerald's ruling P1-P4), the UPS rebuild + re-pin, porting 3 live tests off the refused opcodes 16/18/21, the native_absent_gen3 redesign (apply_prepare-based), and the live RR trade/decline/native_absent rows.
+3. **EXP-X23** (Opus subagent, C:/slink-wt/g3-exp `claude/gen3-exp-x23` **@1932c787**, base 4fa041bf, full suite 12427/0 at 7c550558): expansion X2+X3 done.
+   - Live: faint_cmd, boxsync, whiteout and link_gen3 PASS on gen3_exp. faint_cmd and boxsync must be re-run at the final cut.
+   - linked_faint_active is not run on gen3_exp: no in-battle faint plan yet for the expansion battle structs (XG3).
+   - Drafts: docs/gen3_emerald/XG1_request_draft.md and XG2_request_draft.md.
+   - OWNER DECISIONS (XG2 section 6):
+     (1) shinyModifier: A carry it (touches shared state.py, so a Gen 2 re-sweep), B record it as a limit, C B now and A in X4. The worker recommends C.
+     (2) accept the exp_*.sav SYNTH fixtures;
+     (3) gen3_exp registered but unrouted;
+     (4) the second compiler probe as the source of harness facts.
+   - It touches the shared lua/gen3 safety/reads/client/entry and server/adapters. Merge after T2, run the full suite, OMP review, ping Gen 2.
+   - OMP review cx-2ce936ca: no FR/LG/RR/E behaviour change in the shared hunks. Follow-ups:
+     (1) the server routes emerald_expansion_28877d73→gen3_exp (server/adapters/__init__.py:41,88,186,238; pre-existing on integration) while the client refuses it. Decide with the XG1 "registered but unrouted" ruling: refuse server-side like crystal_ap, or route both halves together.
+     (2) client.lua BATTLE_MON_MOVES_OFF/PP_OFF are still literals while stride/HP are pack-driven (latent: the expansion has no battle.handoff, so it is unreachable).
+     (3) boxes_from_save under-reads the expansion storage tail (fusions, 540 B).
+     (4) test_gen3_exp_reads lacks a gen3_rr row.
+     (5) tests/fixtures/gen3/README.md:37-38 is stale about rr=True.
+     (6) the safety IRQ exception keys on pack.title; key it on pack identity or bios_sha1.
+   - Needs gitignored inputs: .cache/expansion-output/reference (the build from hgbox), the .cache/expansion-src junction, and .cache/x1-probe/probe.o.
+4. **Final cuts** per title: `python tools/gen3_final_cut.py --cut <sha> --title frlg|rr|emerald --lane C:/slink-wt/g3-lane`.
+5. **Landing prep:** refresh `claude/gen3-landing-prep` (C:/slink-wt/rv-land) against master, ping Gen 2, then ONE landing request to the owner.
+
+**Owner rulings:**
+- 36: no Soul Link phone on FR/LG/RR (Emerald Match Call stays unless the owner says otherwise).
+- 37: randomized RR is out of this RC.
+
+## Earlier state (checkpoint 23): owner "Finish the scope" / "Lets finish this RC"
+
+Integration `claude/gen3-integration` @646586fd in C:/slink-wt/g3-int. The full unit suite at 4fa041bf was 13044 passed / 0 failed. Nothing is on master; landing needs the owner's explicit approval, and Gen 2 must be pinged first (server/lua shared).
+Resources (owner): at most 3 subagents; unlimited headless OMP for reviews, tests and small code; Codex threads Emerald 01a0dec7, Emerald-2 01a0ded3 and FRLG 01a0df52, reached by `delivery=steer`.
+
+**Merge order into integration (each: full unit suite + OMP review; live rows where named):**
+1. **T5** native FR/LG trade duo: `codex/gen3-t5-fr-duo` @a37ebb44 (C:/slink-wt/g3-t5-fr-duo). Integration 646586fd is already merged into it; targeted tests 1628/0.
+   - Before the fix: 3/4 live rows PASS. The one fail, "capability hello not acknowledged", has its root cause fixed in 646586fd (the baton waited 0.5 s; now 5 s plus a log line).
+   - Rerun script: C:/slink-wt/run_t5native2.sh; logs C:/slink-wt/t5native*.log. OMP review cx-be726e1a.
+2. **RR-ENC-FORMS + C3** (FRLG): `codex/gen3-rr-enc-forms` @d1231c5a.
+   - The ROM-authoritative RR encounter catalog: 81 locations / 3745 slots, drift 0.
+   - Names through 1375; types converted RR23 -> canonical 18.
+   - The RR family generator: 1349 species / 735 edges.
+   - Wait for FRLG's full-gate reply (cx-0a61f1b1).
+3. **T2-PUBLISH** (Codex Emerald, em-t2 `claude/gen3-emerald-t2`): FR/LG/E production UPS + READY on top of T5.
+   - Emerald native PASS set: em-t2/patch/build/em-live-20260927.json.
+   - OMP review cx-ec1254e4.
+4. **RR-DURABLE** (Opus subagent, C:/slink-wt/g3-rrdur `claude/gen3-rr-durable`): RR save witness, making RR native trade available.
+   - Must also fold OMP cx-bfa0a588 F1/F4 into the trade oracle: typed refusal msgbox (no `phone` tag), forbid msgbox on B.
+   - Live: trade/trade_decline/native_absent on gen3_rr.
+5. **UI-QUAL** (Sonnet, C:/slink-wt/g3-uiq): the Emerald rival by player gender, Mauville Gym area, per-title trainer/upcoming/prep tests; then a coordinator browser check.
+6. **EXP-X23** (Opus, C:/slink-wt/g3-exp): expansion X2/X3, then the XG1 request draft. XG2 needs an owner decision on the shinyModifier shared-state change.
+7. **CLAUSE-LIVE-REST** (Emerald-2):
+   - live rows: shiny exception (O-33 disclosed PID rekey), PC release, pre-ball gate LG/E, RR gender/type;
+   - ledger docs/gen3/research/e_parity_ledger_2026-09-27.md on its branch.
+
+**Then:**
+- the final cut per title: `python tools/gen3_final_cut.py --cut <sha> --title frlg|rr|emerald --lane C:/slink-wt/g3-lane`;
+- refresh the landing-prep branch `claude/gen3-landing-prep` (C:/slink-wt/rv-land) against current master;
+- ping Gen 2;
+- ask the owner for ONE landing;
+- signatures only on the owner's explicit "yes".
+
+**Owner rulings 2026-09-27 (in chat):** (36) "No phone" -- no Soul Link phone on FR/LG/RR (the parity cells are closed as ruled out; Emerald Match Call, already built, pending owner confirmation that it stays); (37) "RR not in scope for rando" -- randomized Radical Red is OUT of this RC (ruling 29 stays for FR/LG/Emerald).
+- (a) the Soul Link phone on FR/LG/RR: none has a native phone and ruling 30's companion list has none, so it is treated as Emerald-only (Match Call) unless the owner says otherwise;
+- (b) randomized Radical Red: ruling 29 says randomized Gen 3 is in scope, but UPR cannot randomize CFRU. Is it in scope, and from what source?
+
+RR fc at 0e10ebd0 after fixes:
+- faint_cmd_clean, linked_faint_active_clean and rr_opcode_gates PASS;
+- native_absent FAILs only because RR trade is refused, and turns green with RR-DURABLE;
+- whiteout, linked_faint_active and trade/trade_decline PASS in g3-rrfc (merged);
+- species_clause and ball_gate RR wait on items 2 and 7.
+
+## Earlier state (checkpoint 22, combined orchestrator)
 
 - Integration `claude/gen3-integration` (C:/slink-wt/g3-int) head 66184e35: full suite 13013 passed / 0 failed. Env: `source C:/slink-wt/g3-env.sh` (now also SLINK_JDK_BIN, SLINK_UPR_JAR, SLINK_EXPANSION_SRC, SLINK_HOST_GCC, SLINK_PRET_EMERALD). pytest.ini keeps tmp_path only for failures (C: filled twice from ~7 GB/run retention).
 - Merged since checkpoint 21: T4 server trade contract (+R3/R4), ruling 35 NPC-trade clause retirement (all gens), T3-R5/R6 Emerald client recovery, E-MGR randomizer write domain (+fixes), TG-MULTI, RR-SYNTH + RR NPC trade, E-RAND-CATCH, UI mocks per title, WILD-VANILLA (pret wild tables for clean FR/LG/E), EXPLODE-BIND (FR/LG/E), EMERALD-RIVAL (per-player gender filter), CLAUSE-ROWS-G3 + CLAUSE-FIX, GIFT-EGG-ROWS-G3 (O-15 applied to Gen 3: hatch = gift_daycare capture), calc Prep deep-link race fix, T3-BIND-FR (FR native trade client).

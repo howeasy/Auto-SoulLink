@@ -1,0 +1,11 @@
+# G4 final cut 0e10ebd07ef1f3e3bed223066406ab5ac0992727 -- tools/gen3_final_cut.py summary (written 2026-09-27T20:04:48Z)
+# RUN 3 / CARRIED 0 / CACHED 0 / FAIL 1
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | native_absent_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_native_absent_gen3_rr_as_a_0e10ebd0.txt |
+| 2 | linked_faint_active_clean_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_clean_gen3_rr_as_a_0e10ebd0.txt |
+| 3 | faint_cmd_clean_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_faint_cmd_clean_gen3_rr_as_a_0e10ebd0.txt |
+| 4 | rr_opcode_gates | G5-GATES-LIVE | PASS | 1 | fc_rr_opcode_gates_0e10ebd0.txt |
+
+OVERALL: FAIL (3/4 rows)

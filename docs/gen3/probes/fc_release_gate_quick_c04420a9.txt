@@ -1,0 +1,82 @@
+# gen3_final_cut row=release_gate_quick item=§11_gate cut=c04420a95ea4f535d6bc1fe5bccadea7ce981645
+# lane=C:/slink-wt/g3-lane
+# command: python tools/verify_gen3_release.py --quick   (cwd=C:/slink-wt/g3-lane)
+# env: SLINK_ARMGCC=E:/Google Drive/SLink\patch\vendor\armgcc\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T19:17:26 cpu=43% emuhawk=0 python=4
+start_utc=2026-09-27T23:17:25Z tracked_clean_before=True
+Gen 3 release gate — 5 lanes
+
+[ .. ] unit
+  skips with no entry in ALLOWED_SKIPS:
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:56: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:73: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:79: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:103: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:136: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:176: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:221: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:231: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:238: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:256: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:282: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_native_carrier_duo.py:121: private firered native carrier candidate absent
+    - SKIPPED [1] tests\unit\test_gen3_native_carrier_duo.py:121: private leafgreen native carrier candidate absent
+    - SKIPPED [1] tests\unit\test_gen3_rom_content_lua.py:286: UPR scratch FireRed_allowed.gba absent: C:\Users\howar\AppData\Local\Temp\claude\E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45\30c21a7a-9a9b-44db-b573-10e09226bcc8\scratchpad\FireRed_allowed.gba
+    - SKIPPED [1] tests\unit\test_gen3_rom_content_lua.py:286: UPR scratch LeafGreen_allowed.gba absent: C:\Users\howar\AppData\Local\Temp\claude\E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45\30c21a7a-9a9b-44db-b573-10e09226bcc8\scratchpad\LeafGreen_allowed.gba
+    - SKIPPED [1] tests\unit\test_gen3_rom_ingest.py:261: Manager-made pair absent: C:\slink-wt\rand_roms\r3_run (set SLINK_GEN3_RAND_ROMS)
+    - SKIPPED [2] tests\unit\test_gen3_rr_generators.py:103: funnotbun_species_h not cached (run `python tools/fetch_rr_sources.py`): funnotbun_species_h: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\funnotbun_species_h (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+    - SKIPPED [1] tests\unit\test_gen3_rr_generators.py:103: funnotbun_base_stats_c not cached (run `python tools/fetch_rr_sources.py`): funnotbun_base_stats_c: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\funnotbun_base_stats_c (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+    - SKIPPED [1] tests\unit\test_gen3_rr_generators.py:103: funnotbun_wild_encounter_tables_c not cached (run `python tools/fetch_rr_sources.py`): funnotbun_wild_encounter_tables_c: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\funnotbun_wild_encounter_tables_c (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+    - SKIPPED [1] tests\unit\test_gen3_rr_generators.py:103: jwowsquared_data_js not cached (run `python tools/fetch_rr_sources.py`): jwowsquared_data_js: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\jwowsquared_data_js (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+    - SKIPPED [1] tests\unit\test_gen3_rr_generators.py:103: rr_priority_trainers_sheet_xlsx not cached (run `python tools/fetch_rr_sources.py`): rr_priority_trainers_sheet_xlsx: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\rr_priority_trainers_sheet_xlsx.xlsx (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+    - SKIPPED [1] tests\unit\test_gen3_title_syms_exp.py:92: pinned expansion build symbols absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.sym
+    - SKIPPED [2] tests\unit\test_gen3_trade_duo.py:335: T5 private FR candidate build absent
+    - SKIPPED [2] tests\unit\test_gen3_trade_duo.py:365: T5 private FR candidate build absent
+    - SKIPPED [1] tests\unit\test_gen3_trade_duo.py:430: T5 private FR candidate build absent
+    - SKIPPED [1] tests\unit\test_gen3_trade_duo_integrity.py:30: T5 private FR candidate build absent
+    - SKIPPED [1] tests\unit\test_gen3_trade_duo_integrity.py:82: T5 private FR candidate build absent
+    - SKIPPED [1] tests\unit\test_gen3_trade_duo_integrity.py:108: T5 private FR candidate build absent
+    - SKIPPED [3] tests\unit\test_gen3_trade_duo_integrity.py:119: T5 private FR candidate build absent
+PED [1] tests\unit\test_gen3_exp_pack.py:221: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:231: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:238: local copyrighted ROMs absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.gba
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:256: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:282: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+SKIPPED [1] tests\unit\test_gen3_native_carrier_duo.py:121: private firered native carrier candidate absent
+SKIPPED [1] tests\unit\test_gen3_native_carrier_duo.py:121: private leafgreen native carrier candidate absent
+SKIPPED [1] tests\unit\test_gen3_rom_content_lua.py:286: UPR scratch FireRed_allowed.gba absent: C:\Users\howar\AppData\Local\Temp\claude\E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45\30c21a7a-9a9b-44db-b573-10e09226bcc8\scratchpad\FireRed_allowed.gba
+SKIPPED [1] tests\unit\test_gen3_rom_content_lua.py:286: UPR scratch LeafGreen_allowed.gba absent: C:\Users\howar\AppData\Local\Temp\claude\E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45\30c21a7a-9a9b-44db-b573-10e09226bcc8\scratchpad\LeafGreen_allowed.gba
+SKIPPED [1] tests\unit\test_gen3_rom_ingest.py:261: Manager-made pair absent: C:\slink-wt\rand_roms\r3_run (set SLINK_GEN3_RAND_ROMS)
+SKIPPED [2] tests\unit\test_gen3_rr_generators.py:103: funnotbun_species_h not cached (run `python tools/fetch_rr_sources.py`): funnotbun_species_h: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\funnotbun_species_h (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+SKIPPED [1] tests\unit\test_gen3_rr_generators.py:103: funnotbun_base_stats_c not cached (run `python tools/fetch_rr_sources.py`): funnotbun_base_stats_c: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\funnotbun_base_stats_c (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+SKIPPED [1] tests\unit\test_gen3_rr_generators.py:103: funnotbun_wild_encounter_tables_c not cached (run `python tools/fetch_rr_sources.py`): funnotbun_wild_encounter_tables_c: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\funnotbun_wild_encounter_tables_c (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+SKIPPED [1] tests\unit\test_gen3_rr_generators.py:103: jwowsquared_data_js not cached (run `python tools/fetch_rr_sources.py`): jwowsquared_data_js: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\jwowsquared_data_js (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+SKIPPED [1] tests\unit\test_gen3_rr_generators.py:103: rr_priority_trainers_sheet_xlsx not cached (run `python tools/fetch_rr_sources.py`): rr_priority_trainers_sheet_xlsx: not cached at C:\slink-wt\g3-lane\data\.rr_src_cache\rr_priority_trainers_sheet_xlsx.xlsx (run tools/fetch_rr_sources.py first, or set SLINK_RR_SRC_CACHE)
+SKIPPED [1] tests\unit\test_gen3_title_syms_exp.py:92: pinned expansion build symbols absent: C:\slink-wt\g3-lane\.cache\expansion-output\reference\pokeemerald.sym
+SKIPPED [2] tests\unit\test_gen3_trade_duo.py:335: T5 private FR candidate build absent
+SKIPPED [2] tests\unit\test_gen3_trade_duo.py:365: T5 private FR candidate build absent
+SKIPPED [1] tests\unit\test_gen3_trade_duo.py:430: T5 private FR candidate build absent
+SKIPPED [1] tests\unit\test_gen3_trade_duo_integrity.py:30: T5 private FR candidate build absent
+SKIPPED [1] tests\unit\test_gen3_trade_duo_integrity.py:82: T5 private FR candidate build absent
+SKIPPED [1] tests\unit\test_gen3_trade_duo_integrity.py:108: T5 private FR candidate build absent
+SKIPPED [3] tests\unit\test_gen3_trade_duo_integrity.py:119: T5 private FR candidate build absent
+3 failed, 4647 passed, 34 skipped, 1 warning in 187.12s (0:03:07)
+
+[FAIL] unit               4647 passed, 34 skipped (29 unexplained), 3 failed, 0 xfailed, 0 deselected  (189s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] pins
+[PASS] pins               exit 0  (0s)
+[ .. ] profile-generated
+stale (run tools/gen_gen3_profile.py): data/games/gen3_frlg/profile.json, data/games/gen3_emerald/profile.json
+
+[FAIL] profile-generated  exit 1  (1s)
+[ .. ] shadow-negatives-emerald
+[PASS] shadow-negatives-emerald exit 0  (0s)
+
+GATE FAILED — unit, profile-generated
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
+exit=1 end_utc=2026-09-27T23:20:38Z tracked_clean_after=True classification=real

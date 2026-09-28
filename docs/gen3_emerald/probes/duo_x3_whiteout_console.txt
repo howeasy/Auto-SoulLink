@@ -1,0 +1,56 @@
+
+========== scenario: whiteout_gen3 ==========
+[duo] whiteout_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=002f84a81dc8e20defc63ff6c7ea6fb88ed45eef9425099deea5dc15e257f0a0 profile.json=3fc3d78f074cca9fb89c587af351c4911d4a636d2908373229d13604dfe6b471 source=532109551e78e41b1c6731a33e9cd4cb521aae0e
+[duo] server up: tcp=54431 http=54432 data=C:\Users\howar\AppData\Local\Temp\slink_duo_whiteout_gen3__r3kdqv0
+[duo] timing server 1.1s
+[duo] cleared 6 stale artifact(s) for whiteout_gen3: e2e_whiteout_gen3_a_attempt1_result.txt, e2e_whiteout_gen3_a_result.txt, e2e_whiteout_gen3_b_1_witness.bin, e2e_whiteout_gen3_b_attempt1_result.txt, e2e_whiteout_gen3_b_result.txt, e2e_whiteout_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] BOTH_BOXED appended for both halves; the server's party_keys dropped 504F4F4D:20250925 and 504F4F4D:DFDAF6DA
+[duo] queued for a: {'cmd': 'box_mon', 'key': '504F4F4D:20250925'}
+[duo] timing orchestrate 48.9s
+[duo] timing results 2.4s
+[duo] RESULT_LINE a: RESULT: PASS (pair 504F4F4D:20250925 rebuilt after the whiteout; the write landed at the healed landing 2.2 (7,4))
+[duo] RESULT_LINE b: RESULT: PASS (pair 504F4F4D:DFDAF6DA rebuilt after the whiteout)
+[duo] SAVE_WITNESS_SHA256 inst=a site=563746cddb6514fefce5929fed34f80f59afff8b86263b3f9254824f21b2e9f9 file=563746cddb6514fefce5929fed34f80f59afff8b86263b3f9254824f21b2e9f9 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=8d8e1637810135e4931ee4310ed3d1623031ced40aa0b1e7ed9383fa1713f294 file=8d8e1637810135e4931ee4310ed3d1623031ced40aa0b1e7ed9383fa1713f294 match=true saves=1 counter=3->4 rtc=normalized
+[duo] whiteout: A whited out, the pair 504F4F4D:20250925 / 504F4F4D:DFDAF6DA was rebuilt from both PCs and saved in party, still alive
+[duo] MARKER a: BOXED_OBSERVED 504F4F4D:20250925 box=0:2
+[duo] MARKER a: TX whiteout - {"event":"whiteout","player":"a","seq":401}
+[duo] MARKER a: RX party_mon key=504F4F4D:20250925
+[duo] MARKER a: TX sync_retrieve_done 504F4F4D:20250925 {"event":"sync_retrieve_done","key":"504F4F4D:20250925","player":"a","seq":446}
+[duo] MARKER a: RX rebuild_done
+[duo] MARKER a: RETURNED_OBSERVED 504F4F4D:20250925 slot=1
+[duo] MARKER a: RX rebuild_start text=REBUILDING: POOCHYENA
+[duo] MARKER a: WHITED_OUT at map=514 at=(7,4)
+[duo] MARKER a: LANDING_STATE map=2.2 at=(7,4) frame=12302 tasks=[0814C255,0814B2DD,0814B36D,0814B30D,0822EBC9,08144775] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x0817AB3A,CPSR=0x6000003F,R14=0x0817906D] ptrs=[gPokemonStoragePtr=0x0200791C,gSaveBlock1Ptr=0x0200FEFC,gSaveBlock2Ptr=0x02013C4C] preds=[callback1=0x81930A1,callback2=0x8195BFD,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] healed=4D55444B:20250925=20/20 overworld_writes_before=0
+[duo] MARKER a: WRITE_AT_LANDING map=2.2 at=(7,4) frame=13635 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x0817AB3E,CPSR=0x6000003F,R14=0x0817AB2B] ptrs=[gPokemonStoragePtr=0x0200791C,gSaveBlock1Ptr=0x0200FEFC,gSaveBlock2Ptr=0x02013C4C] preds=[callback1=0x81930A1,callback2=0x8195BFD,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0] | keyed 504F4F4D:20250925 slot=1 record=0x02031BC8+100@13635 | ack map=2.2 at=(7,4) frame=13693 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,08173CA1,0822DEED] storage_state=-1 script_status=2 result=2 menu_cursor=0 cpu=[R15=0x0817AB3E,CPSR=0x6000003F,R14=0x0817AB2B] ptrs=[gPokemonStoragePtr=0x0200791C,gSaveBlock1Ptr=0x0200FEFC,gSaveBlock2Ptr=0x02013C4C] preds=[callback1=0x81930A1,callback2=0x8195BFD,field_controls_locked=0x0,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: CONTROL_LIVE start_menu 504F4F4D:20250925 map=2.2 at=(7,4) frame=14680 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,0820D2BD,08173CA1,0822DEED] storage_state=-1 script_status=2 result=2 menu_cursor=3 cpu=[R15=0x0817AB3C,CPSR=0x6000003F,R14=0x0817AB2B] ptrs=[gPokemonStoragePtr=0x0200791C,gSaveBlock1Ptr=0x0200FEFC,gSaveBlock2Ptr=0x02013C4C] preds=[callback1=0x81930A1,callback2=0x8195BFD,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER a: RX box_mon key=504F4F4D:20250925
+[duo] MARKER a: CONTROL_REFUSED start_menu box_mon 504F4F4D:20250925 clause=field_controls_locked held_frames=600 attempted=0 writes=0 bytes=unchanged map=2.2 at=(7,4) frame=15362 tasks=[0814C1B5,0814B2DD,0814B36D,0814B30D,0822EBC9,0820D2BD,08173CA1,0822DEED] storage_state=-1 script_status=2 result=2 menu_cursor=3 cpu=[R15=0x0000001C,CPSR=0x60000092,R14=0x0817AB3C!] ptrs=[gPokemonStoragePtr=0x0200791C,gSaveBlock1Ptr=0x0200FEFC,gSaveBlock2Ptr=0x02013C4C] preds=[callback1=0x81930A1,callback2=0x8195BFD,field_controls_locked=0x1!,in_battle=0x0,link_callback=0x0,link_players_received=0x0,link_transferring=0x0,palette_fade_active=0x0,script_context_status=0x2,soft_reset_disabled=0x0]
+[duo] MARKER b: RX box_mon key=504F4F4D:DFDAF6DA
+[duo] MARKER b: TX stats_cache 504F4F4D:DFDAF6DA {"event":"stats_cache","key":"504F4F4D:DFDAF6DA","player":"b","seq":55,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+[duo] MARKER b: BOXED_OBSERVED 504F4F4D:DFDAF6DA box=0:2
+[duo] MARKER b: RX party_mon key=504F4F4D:DFDAF6DA
+[duo] MARKER b: TX sync_retrieve_done 504F4F4D:DFDAF6DA {"event":"sync_retrieve_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":647}
+[duo] MARKER b: RETURNED_OBSERVED 504F4F4D:DFDAF6DA slot=1
+[duo] timing oracle 0.5s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] whiteout_gen3: a=PASS b=PASS
+
+========== summary ==========
+  whiteout_gen3: PASS (attempt 1 of 1)
+EXIT 0

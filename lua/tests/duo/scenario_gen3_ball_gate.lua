@@ -43,6 +43,20 @@ end
 
 return function(ctx)
     if not ctx.wait_go() then return false, "no go-file" end
+    if ctx.D.ball_stock_phase and ctx.D.phase == "post_flip" then
+        if ctx.balls() ~= 20 or ctx.session.state.has_pokeballs ~= true then
+            return false, "post-flip SYNTH stock was not read back"
+        end
+        ctx.jlog("BALL_STOCK_READY", {balls=ctx.balls(), active=ctx.session.state.has_pokeballs})
+        ctx.hunt = function() return hunt(ctx) end
+        local catch = ctx.catch
+        ctx.catch = function(label)
+            local key, why = catch(label)
+            if key then ctx.jlog("BALL_POST_CATCH", {key=key}) end
+            return key, why
+        end
+        return dofile(ctx.D.wt .. "/lua/tests/duo/scenario_gen3_link.lua")(ctx)
+    end
     if ctx.balls() ~= 0 or ctx.session.state.has_pokeballs ~= false then return false, "pre-ball fixture gate already active" end
     local flag = ctx.title == "radical_red" and 0x829 or ctx.title == "emerald" and 1048 or 342
     local flag_before = ctx.game_flag(flag)
@@ -73,14 +87,29 @@ return function(ctx)
         end
         ctx.jlog("BALL_PICKUP", {flag=flag, before=flag_before, after=ctx.game_flag(flag)})
         ctx.jlog("BALL_FLIP", {balls=ctx.balls(), active=ctx.session.state.has_pokeballs})
-        if not ctx.wait_go("CAPTURE") then ctx.fail("no post-ball capture release") end
+        if not ctx.wait_go(ctx.D.ball_stock_phase and "SAVE_GATE" or "CAPTURE") then
+            ctx.fail("no post-ball phase release")
+        end
     end
     if ctx.title == "radical_red" then
-        ctx.SP.return_to_grass_origin(ctx.cp, "pre-ball")
+        -- The lead has just fainted. This short re-anchor can itself encounter
+        -- a wild mon before the parcel helper is loaded; never inherit FIGHT.
+        local walked, walk_why = ctx.flee_incidentals("pre-ball return", function()
+            ctx.SP.return_to_grass_origin(ctx.cp, "pre-ball")
+        end)
+        if not walked then return false, "pre-ball return RUN failed: " .. tostring(walk_why) end
         local rr = dofile(ctx.D.wt .. "/lua/tests/gen3_rr_battle_fixture.lua")
         -- Catch the first encounter on the return from Oak; a setup flee here
         -- would dead-zone the first legal area before the intended catch.
-        if not rr.native_ball_gift(ctx.cp, reward, catch_current) then return false, "RR native parcel reward failed" end
+        local function flee_before_reward()
+            local ok, why = ctx.run_away("parcel before first Ball")
+            if not ok then ctx.fail("pre-ball parcel RUN failed: " .. tostring(why)) end
+            ctx.jlog("BALL_PARCEL_FLEE", {outcome=ctx.battle_outcome(), balls=ctx.balls()})
+            return true
+        end
+        if not rr.native_ball_gift(ctx.cp, reward, catch_current, flee_before_reward) then
+            return false, "RR native parcel reward failed"
+        end
     else
         local x = ctx.G.pos(ctx.cp)
         if ctx.title == "emerald" and x ~= 3 then ctx.play.step(ctx.cp, "Left", 6148, true, false) end
@@ -89,11 +118,14 @@ return function(ctx)
             local ran, why = ctx.run_away("pre-ball return")
             if not ran then return false, why end
         end
-        ctx.G.tap(ctx.title == "emerald" and "Up" or "Right", 3, 16)
+        if not ctx.face(ctx.title == "emerald" and "Up" or "Right") then
+            return false, "native Ball pickup facing was not confirmed"
+        end
         if not ctx.mash_until(function() return ctx.balls() == 1 end, 120, "A") then return false, "native item-ball pickup did not grant one Ball" end
         if not ctx.play.wait_scene_settled(ctx.cp, 1800) then return false, "native item-ball text did not settle" end
         reward()
     end
+    if ctx.D.ball_stock_phase then return ctx.save("native_gate") end
     ctx.catch = function(label)
         if not caught then
             local why

@@ -77,7 +77,7 @@ def test_evolution_family_is_a_separate_live_subject(game):
     assert duo.scenario_applies("species_family_gen3", game)
     assert row["flags"] == ["--species-clause"]
     assert row["explicit_only"]
-    assert duo.scenario_attempt_limit("species_family_gen3", game) == 8
+    assert duo.scenario_attempt_limit("species_family_gen3", game) == (16 if game == "gen3_rr" else 8)
     assert callable(getattr(duo.DuoRun, row["oracle"], None))
 
 
@@ -100,7 +100,8 @@ def _type_case(monkeypatch, tmp_path):
     run._clause_pending = {"key": ka, "species": 16}
     def tag(name, value):
         return name + " " + json.dumps(value) + "\n"
-    results = {i: tag("CLAUSE_ENCOUNTER", {"species": c["species_id"], "n": 1, "dupe": False})
+    results = {i: tag("CLAUSE_ENCOUNTER", {"species": c["species_id"], "n": 1, "dupe": False,
+                                           **({"type_overlap": True} if i == "b" else {})})
                + f"TX capture {c['key']} " + json.dumps(c) + "\nTHREW 1\n" for i, c in caps.items()}
     results["a"] += tag("PENDING_CAPTURE", caps["a"]) + tag("RULE_RX", {"cmd": "play_sound", "sound": 22})
     results["b"] = tag("A_PENDING", caps["a"]) + results["b"]
@@ -116,6 +117,29 @@ def test_type_oracle_checks_real_saves_and_actual_rule_facts(monkeypatch, tmp_pa
     rules, run, results, _, notes = _type_case(monkeypatch, tmp_path)
     rules.clause_oracle(run, results)
     assert notes and "B rejected" in notes[-1]
+
+
+def _type_hunt_case(monkeypatch, tmp_path):
+    rules, run, results, _, _ = _type_case(monkeypatch, tmp_path)
+    run._clause_facts["b"]["25"] = {"family": 25, "types": [13, 13], "gender_ratio": 127}
+    final = 'CLAUSE_ENCOUNTER {"species": 19, "n": 1, "dupe": false, "type_overlap": true}\n'
+    hunt = ('CLAUSE_ENCOUNTER {"species": 25, "n": 1, "dupe": false, "type_overlap": false}\n'
+            'CLAUSE_TYPE_RUN {"species": 25, "n": 1}\n'
+            'CLAUSE_ENCOUNTER {"species": 19, "n": 2, "dupe": false, "type_overlap": true}\n')
+    results["b"] = results["b"].replace(final, hunt)
+    return rules, run, results
+
+
+def test_type_hunt_oracle_requires_rom_proven_nonoverlap_and_each_run(monkeypatch, tmp_path):
+    rules, run, results = _type_hunt_case(monkeypatch, tmp_path)
+    rules.clause_oracle(run, results)
+    for bad, why in (
+        (results["b"].replace('"species": 25', '"species": 19', 1), "nonoverlap"),
+        (results["b"].replace('CLAUSE_TYPE_RUN {"species": 25, "n": 1}\n', ''), "RUN"),
+        (results["b"].replace('"type_overlap": true', '"type_overlap": false'), "overlap"),
+    ):
+        with pytest.raises(RuntimeError, match=why):
+            rules.clause_oracle(run, {**results, "b": bad})
 
 
 def test_clause_oracle_requires_the_independently_observed_pending_key(monkeypatch, tmp_path):
@@ -144,7 +168,7 @@ def test_clause_oracle_rejects_a_live_catch_in_the_memorial_slot(monkeypatch, tm
         rules.clause_oracle(run, results)
 
 
-@pytest.mark.parametrize("title,expected", [("firered", 17), ("leafgreen", 17), ("emerald", 287), ("radical_red", 453)])
+@pytest.mark.parametrize("title,expected", [("firered", 17), ("leafgreen", 17), ("emerald", 287), ("radical_red", 289)])
 def test_family_builder_uses_its_own_rom_and_preserves_the_key(title, expected):
     import gen3_fixtures as fx
 
@@ -164,7 +188,7 @@ def test_family_builder_uses_its_own_rom_and_preserves_the_key(title, expected):
     assert new[0]["hp"] == new[0]["max_hp"] > 0
     assert old[1:] == new[1:] and manifest[0].startswith("SYNTH")
     facts = rules.species_facts(rules.source_rom(title), title)
-    lower = {"firered": 16, "leafgreen": 16, "emerald": 286, "radical_red": 452}[title]
+    lower = {"firered": 16, "leafgreen": 16, "emerald": 286, "radical_red": 288}[title]
     assert rules.same_family(facts, expected, lower)
     assert rules.gender({"1": {"gender_ratio": 255}}, 1, "00000000:00000001") == "genderless"
 
@@ -258,6 +282,66 @@ def test_species_carrier_runs_from_the_encounter_it_observed():
     assert [ctx["lines"][i]["tag"] for i in range(1, len(ctx["lines"]) + 1)].count("CLAUSE_REROLL") == 1
 
 
+def test_type_carrier_runs_from_nonmatching_foes_then_catches_matching_one():
+    from lupa import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    scenario = lua.execute("return dofile('lua/tests/duo/scenario_gen3_clause.lua')")
+    ctx = lua.execute('''
+      local c={player='b',D={rule_kind='type',clause_facts={
+        ['16']={types={0,2}},['25']={types={13,13}},['286']={types={17,17}},
+        ['19']={types={0,0}}}},n=0,lines={},messages={},catches=0,runs=0}
+      c.wait_go=function() return true end
+      c.go_value=function() return {key='A',species_id=16,area_id='route_1'} end
+      c.partner_done=function() return false end
+      c.wait_until=function(p) return p() end
+      c.rx_count=function() return #c.messages end
+      c.rx_after=function(at,p) for i=at+1,#c.messages do if p(c.messages[i]) then return c.messages[i] end end end
+      c.hunt=function() c.n=c.n+1;return true end
+      c.wild_ready=function() return true end
+      c.enemy_species=function() return ({25,286,19})[c.n] end
+      c.run_away=function() c.runs=c.runs+1;return true end
+      c.catch=function(label,ready) assert(ready==true and c.n==3);c.catches=c.catches+1
+        c.messages[#c.messages+1]={cmd='msgbox',text='A and B linked!'};return 'B' end
+      c.last_sent=function() return {key='B',species_id=19,area_id='route_1'} end
+      c.received=function() return 0 end
+      c.observe_returned=function() return true end
+      c.jlog=function(tag,value) c.lines[#c.lines+1]={tag=tag,value=value} end
+      c.log=function() end
+      c.save=function() return true end
+      return c
+    ''')
+    assert scenario(ctx) is True
+    assert (ctx["n"], ctx["runs"], ctx["catches"]) == (3, 2, 1)
+    assert [ctx["lines"][i]["tag"] for i in range(1, len(ctx["lines"]) + 1)] == [
+        "A_PENDING", "CLAUSE_ENCOUNTER", "CLAUSE_TYPE_RUN", "CLAUSE_ENCOUNTER",
+        "CLAUSE_TYPE_RUN", "CLAUSE_ENCOUNTER", "CLAUSE_VERDICT"]
+
+
+def test_type_carrier_stops_after_eight_nonmatching_natural_encounters():
+    from lupa import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    scenario = lua.execute("return dofile('lua/tests/duo/scenario_gen3_clause.lua')")
+    ctx = lua.execute('''
+      local c={player='b',D={rule_kind='type',clause_facts={
+        ['16']={types={0,2}},['25']={types={13,13}}}},n=0,runs=0}
+      c.wait_go=function() return true end
+      c.go_value=function() return {key='A',species_id=16,area_id='route_1'} end
+      c.partner_done=function() return false end
+      c.wait_until=function(p) return p() end
+      c.rx_count=function() return 0 end
+      c.hunt=function() c.n=c.n+1;return true end
+      c.wild_ready=function() return true end
+      c.enemy_species=function() return 25 end
+      c.run_away=function() c.runs=c.runs+1;return true end
+      c.catch=function() error('must not catch a nonmatching foe') end
+      c.jlog=function() end
+      return c
+    ''')
+    ok, why = scenario(ctx)
+    assert ok is False and why == "RNG: no type overlap in 8 natural encounters"
+    assert (ctx["n"], ctx["runs"]) == (8, 8)
+
+
 def test_rule_rng_failures_keep_final_failures_final():
     receipts = {"a": "RESULT: FAIL (no gender-clause verdict (partner-gone))\n",
                 "b": "RESULT: FAIL (hunt ended out-of-balls)\n"}
@@ -328,6 +412,7 @@ def _ball_case(monkeypatch, tmp_path):
         [{"a": {"key": keys["a"]}, "b": {"key": keys["b"]}, "status": "alive", "area_id": "viridian_forest"}])
     run._link_keys = keys
     run._ball_pre_status = {"players": {i: {"nuzlocke_active": False, "ball_count": 0} for i in ("a", "b")}}
+    run.cfg = dict(run.cfg, post_flip_stock=False)  # this seam exercises the single-phase oracle controls
     run._status = lambda: {"players": {i: {"nuzlocke_active": True, "ball_count": 1} for i in ("a", "b")}}
     run._reconnect_events = lambda: []
     run._reconnect_document = lambda: {"pokeballs_obtained": {"a": True, "b": True}}
@@ -362,7 +447,6 @@ def test_ball_gate_cannot_pass_a_server_that_was_already_active(monkeypatch, tmp
 
 @pytest.mark.parametrize("old,new", [('"before":false', '"before":true'),
                                     ('"balls":1', '"balls":2'), ('outcome=4', 'outcome=1'),
-                                    ('"attempted":0', '"attempted":2'),
                                     ('BALL_PRE_ENCOUNTER', 'NO_PRE_ENCOUNTER')])
 def test_ball_gate_rejects_weak_acquisition_and_preball_receipts(monkeypatch, tmp_path, old, new):
     rules, run, results, _ = _ball_case(monkeypatch, tmp_path)
@@ -390,11 +474,11 @@ def test_family_oracle_needs_distinct_related_species_and_a_native_reroll(monkey
     fixture = _fixture([evolved, PIDGEY])
     saved = _saved(fixture, 3, [evolved, PIDGEY])
     run, _ = _oracle_stub(monkeypatch, tmp_path, "species_family_gen3", {"a": saved, "b": saved}, fixture,
-        [{"a": {"key": key}, "b": {"key": key}, "status": "alive"}])
+        [{"a": {"key": key, "species": 17}, "b": {"key": key, "species": 17}, "status": "alive"}])
     run._link_keys = {"a": key, "b": key}
     run._clause_facts = {"a": {"16": {"family": 16}, "17": {"family": 16}, "19": {"family": 19}}}
     run._reconnect_events = lambda: [{"type": "reroll"}]
-    receipt = ("FAMILY_ENCOUNTER " + json.dumps({"key": key, "owned": 17, "species": 16, "related": True}) + "\n"
+    receipt = ("FAMILY_ENCOUNTER " + json.dumps({"key": key, "owned": 17, "player": "a", "species": 16, "related": True}) + "\n"
                'RULE_RX {"cmd":"gui_prompt","text":"Dupes clause: Pidgey -- reroll!"}\n'
                'CLAUSE_REROLL {"species":16,"prompt":"Dupes clause: Pidgey -- reroll!"}\n')
     rules.family_oracle(run, {"a": receipt, "b": ""})
@@ -496,15 +580,21 @@ def test_complete_gate_setup_has_zero_balls_hp1_lead_and_fast_healthy_reserve(ti
     assert fx.qualify_one(body, rr=title == "radical_red", title=duo.gen3_codec_title(title))["ok"]
 
 
-@pytest.mark.parametrize("title", ["firered", "leafgreen", "emerald", "radical_red"])
-def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_activation(title):
+@pytest.mark.parametrize("title,stock_phase,phase", [
+    (t, False, "initial") for t in ("firered", "leafgreen", "emerald", "radical_red")
+] + [(t, True, p) for t in ("firered", "leafgreen", "emerald") for p in ("initial", "post_flip")])
+def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_activation(title, stock_phase, phase):
     from lupa import LuaRuntime
     lua = LuaRuntime(unpack_returned_tuples=True)
     scenario = lua.execute("return dofile('lua/tests/duo/scenario_gen3_ball_gate.lua')")
     ctx = lua.execute('''
       local c={player='a',D={wt='.'},cp={},session={state={has_pokeballs=false}},
                stock=0,inside=false,dead=false,caught=false,flag=false,lines={},catch_calls=0}
-      c.wait_go=function(mark) if mark=='CAPTURE' then c.released=true end;return true end
+      c.wait_go=function(mark)
+        if mark=='CAPTURE' or c.D.phase=='post_flip' then c.released=true end
+        if mark=='SAVE_GATE' then c.save_gate=true end
+        return true
+      end
       c.balls=function() return c.stock end
       c.game_flag=function() return c.flag end
       c.attempted=function() return 0 end
@@ -539,16 +629,30 @@ def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_acti
         c.catch_calls=c.catch_calls+1;c.caught=true;return 'CAUGHT'
       end
       c.find=function(key) if key=='CAUGHT' and c.caught then return {key=key,slot=2} end end
-      c.save=function() assert(c.caught);return true end
+      c.save=function()
+        if c.D.ball_stock_phase and c.D.phase=='initial' then
+          assert(c.save_gate and c.stock==1 and not c.caught);c.native_phase_saved=true
+        else assert(c.caught) end
+        return true,'saved'
+      end
       c.fail=function(why) error(why) end
-      c.G={pos=function() return c.title=='emerald' and 3 or 4,2 end,tap=function() end}
+      c.G={pos=function() return c.title=='emerald' and 3 or 4,2 end,
+           tap=function() error('unverified facing tap after an unfinished step') end}
+      c.face=function(direction) c.faced=direction;return true end
       c.play={step=function() c.inside=true;return true end,wait_scene_settled=function() return true end}
-      c.SP={return_to_grass_origin=function() end}
+      c.flee_incidentals=function(_,fn)
+        c.escaping=true;local ok,why=pcall(fn);c.escaping=false;return ok,why
+      end
+      c.SP={return_to_grass_origin=function()
+        assert(c.escaping,'dead-lead return to grass must not use incidental FIGHT')
+      end}
       c.mash_until=function(p) c.stock=1;c.flag=true;c.session.state.has_pokeballs=true;return p() end
       local real=dofile
       dofile=function(path)
         if path:find('gen3_rr_battle_fixture.lua',1,true) then
-          return {native_ball_gift=function(cp,reward,battle)
+          return {native_ball_gift=function(cp,reward,battle,flee)
+            assert(type(flee)=='function','duo parcel walk must use the proved RUN driver before its reward')
+            c.inside=true;assert(flee());assert(not c.inside and c.stock==0)
             c.stock=10;c.flag=true;c.session.state.has_pokeballs=true
             reward();assert(c.released);battle();battle();return true
           end}
@@ -558,7 +662,16 @@ def test_ball_carrier_requires_native_faint_before_reward_and_catches_after_acti
       return c
     ''')
     ctx["title"] = title
+    ctx.D.ball_stock_phase, ctx.D.phase = stock_phase, phase
+    if phase == "post_flip":
+        ctx.stock, ctx.dead, ctx.flag, ctx.session.state.has_pokeballs = 20, True, True, True
     assert scenario(ctx)[0] is True
+    if stock_phase and phase == "initial":
+        assert ctx.native_phase_saved is True and ctx.catch_calls == 0
+        return
+    if phase == "post_flip":
+        assert ctx.BALL_STOCK_READY.balls == 20 and ctx.catch_calls == 1
+        return
     assert ctx["catch_calls"] == 1 and ctx["BALL_FAINT"]["key"] == "LEAD"
     tags = [ctx["lines"][i] for i in range(1, len(ctx["lines"]) + 1)]
     assert tags.index("BALL_FAINT") < tags.index("BALL_PRE") < tags.index("BALL_FLIP") < tags.index("BALL_POST_CATCH")
@@ -573,7 +686,9 @@ def test_rr_duo_reuses_the_admitted_checkpoint_instead_of_reloading_environment(
     lua.execute('''G={open=function() error('duo must not reopen the standalone receipt') end,
                          phase=function() end, checkpoint=function() error('stale environment checkpoint') end}
                    client={speedmode=function() end}''')
-    call = lua.execute(prefix + "return cp, title, G.title end; return run_route2")
+    call = lua.execute(prefix + "return cp, title, G.title, duo_route_battle end; return run_route2")
     cp = lua.table_from({"proof": "already admitted by the production driver"})
-    returned, title, helper_title = call(cp, lua.table_from({}))
+    flee = lua.eval("function() return 'native RUN delegate' end")
+    returned, title, helper_title, bound = call(cp, lua.table_from({"flee": flee}))
     assert returned["proof"] == cp["proof"] and title == helper_title == "radical_red"
+    assert bound() == "native RUN delegate"

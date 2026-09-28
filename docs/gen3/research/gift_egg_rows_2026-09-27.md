@@ -7,7 +7,7 @@ is disclosed setup, not a native gift/hatch result or a live qualification.
 
 O-15 (`docs/gen2/PLAN.md`, `GEN2_BINDING_PLAN.md`) applies to Gen 3: an egg is
 not an acquisition at GiveEgg. Native hatch publishes exactly one
-`capture{gift=true,is_egg=false,area_id="gift_daycare",key=<hatchling key>}`.
+`capture{gift=true,is_egg=false,area_id="gift_daycare",key=<hatchling key>,stats=<full party stats>}`.
 Booted eggs and withdrawn boxed eggs stay pending. `mon_given` does not acquire
 an egg whose hatch has not completed. The hatch hook reads the completed mon
 at fire time, checks the aligned party pointer, secure egg/Bad Egg bits and

@@ -92,6 +92,16 @@ GAME_FAMILY = {"gen1": "gen1_rby", "gen1_ap": "gen1_rby", "gen1_purergb": "gen1_
 FAMILY_WORDS = {"gen1_rby": "vanilla Red / Blue / Yellow", "gen1_purergb": "pureRGB",
                 "gen2_gsc": "Gold / Silver / Crystal",
                 "gen3_frlg": "FireRed / LeafGreen", "gen3_emerald": "Emerald"}
+# Owner ruling 37 (2026-09-27): a Radical Red run cannot be randomized at all. It is absent
+# from GAME_FAMILY above, which the UI honours (randomizer_games), but _game_family() then
+# answers None and `handle_cartridges` SKIPPED its "this run is X; these are Y cartridges"
+# refusal -- so a Radical Red run accepted a randomization request, ran Java, and recorded
+# randomized cartridges. The table makes the refusal explicit and by name instead of relying
+# on the absence that caused it. Randomized FireRed / LeafGreen / Emerald are untouched.
+NON_RANDOMIZABLE_GAMES = {
+    "gen3_rr": ("Randomized Radical Red is not supported in this release; "
+                "the randomizer supports FireRed / LeafGreen / Emerald"),
+}
 
 
 def _game_family(game: str | None) -> str | None:
@@ -136,7 +146,8 @@ def _legacy_cartridges(run: dict) -> dict | None:
 
 # The titles the SLink companion exists for (a UPS in patch/dist, a target in
 # server/patcher.py). Yellow is absent on purpose: it has no free WRAM for the mailbox.
-COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen", "Crystal", "Gold", "Silver")
+COMPANION_TITLES = ("Red", "Blue", "PureRed", "PureBlue", "PureGreen", "Crystal", "Gold", "Silver",
+                    "FireRed", "LeafGreen", "Emerald")
 
 # Run options: what each does, in the form's own words, and which cartridges can honour
 # it. Reasons are shown on the option that is greyed, so "off" and "impossible" look
@@ -171,13 +182,15 @@ OPTION_SUPPORT = {
                      "gen2_gsc": {"ok": True},
                      "gen3_frlge_rr": {"ok": True}},
     "rival_team_swap": {"all": False, "why": "Needs the companion patch — gEnemyParty is encrypted.",
+                        "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                         "gen1_rby": {"ok": True, "why": "No patch needed — the Gen 1 enemy party is plaintext."},
                         "gen1_purergb": {"ok": True, "why": "No patch needed — pureRGB's enemy party is plaintext, same as vanilla Gen 1."},
                         "gen2_gsc": {"ok": True},
                         "gen3_frlge_rr": {"ok": True}},
     "overworld_presence": {"all": False, "why": "Deferred until after this release (docs/gen3/TODO.md)."},
     "native_messages": {"all": False, "why": "Disabled for this release (post-RC; docs/gen3/TODO.md)."},
-    "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB, Gen 2 Gold/Silver/Crystal).",
+    "native_sounds": {"all": False, "why": "Needs a companion patch with a native sound path (Radical Red, Gen 1 Red/Blue, pureRGB, Gen 2 Gold/Silver/Crystal, FireRed/LeafGreen/Emerald).",
+                      "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                       "gen1_rby": {"ok": True},
                       "gen1_purergb": {"ok": True},
                       "gen2_gsc": {"ok": True},
@@ -190,6 +203,7 @@ OPTION_SUPPORT = {
     # `always`: the cartridge trades this way whether or not the switch is on -- the form
     # shows the row greyed AND checked, so it does not read as "no trade NPC here".
     "pc_trade_npc": {"all": False, "why": "This switch turns off Radical Red's Pokémon-Center trade NPC — other games have no NPC it could turn off.",
+                     "rom_types": {title:{"ok":True} for title in ("firered","leafgreen","emerald")},
                      "gen1_rby": {"ok": False, "always": True, "why": "Gen 1 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen1_purergb": {"ok": False, "always": True, "why": "pureRGB trades at the Pokémon Center's Cable Club receptionist: the companion overlay makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
                      "gen2_gsc": {"ok": False, "always": True, "why": "Gen 2 trades at the Pokémon Center's Cable Club receptionist: the companion patch makes it the cartridge's own counter, otherwise the Lua HUD offers the trade. Always on, nothing to switch off."},
@@ -1430,6 +1444,10 @@ class RunManager:
         run = _find_run(runs, run_id)
         if run is None:
             return web.json_response({"ok": False, "error": "Run not found"}, status=404)
+        # A run whose game cannot be randomized is refused by name, before any ROM is read
+        # or any jar is resolved -- the request itself is what ruling 37 removes.
+        if refused := NON_RANDOMIZABLE_GAMES.get(run.get("game") or ""):
+            return web.json_response({"ok": False, "error": refused}, status=400)
         try:
             body = await request.json()
         except Exception:

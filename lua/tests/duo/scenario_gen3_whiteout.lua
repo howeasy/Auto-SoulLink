@@ -50,7 +50,7 @@ local function a_side(ctx, linked)
     -- E4c: Emerald's DoWhiteOut (pret pokeemerald overworld.c:357-366) heals in C and warps
     -- straight to lastHealLocation, OUTDOORS (Oldale 0.10 (6,17)): no Center, so no Union Room
     -- background set to require; the landing instead proves the heal (every party mon at max HP).
-    local em = ctx.title == "emerald"
+    local em = ctx.emerald_engine
     local land                                          -- { line, missing, snap, ow, healed }
     ctx.watch(function()
         if ctx.sent("whiteout") == 0 or not at(ctx, dest) then return false end
@@ -195,10 +195,10 @@ local function nurse_control(ctx, linked, dest)
     -- its positive menu witness is Emerald's own (EMH.menu_ready: Task_ShowStartMenu live and
     -- gMenuCallback == HandleStartMenuInput, pret pokeemerald start_menu.c:561-575), not FR's
     -- sStartMenuWindowId address.
-    if ctx.rr or ctx.title == "emerald" then
+    if ctx.rr or ctx.emerald_engine then
         local G, cp = ctx.G, ctx.cp
         local function locked() return not G.pred_ok(cp, "field_controls_locked") end
-        local witness = ctx.title == "emerald" and ctx.SP.EMH.menu_ready or function() return start_menu_open(ctx) end
+        local witness = ctx.emerald_engine and ctx.SP.EMH.menu_ready or function() return start_menu_open(ctx) end
         local function menu_open() return locked() and witness() end
         if not ctx.wait_until(function() return not locked() end, 10, "the field free before START") then
             return false, "control: the field was never free to open START"
@@ -263,7 +263,7 @@ return function(ctx)
         if not ok then return false, why end
     end
     local where = "; the write landed in the Center"
-    if dest and ctx.title == "emerald" then
+    if dest and ctx.emerald_engine then
         where = (dest.group == 0 and dest.num == 10) and "; the write landed at the healed Oldale landing"
             or fmt("; the write landed at the healed landing %d.%d (%d,%d)", dest.group, dest.num, dest.x, dest.y)
     end

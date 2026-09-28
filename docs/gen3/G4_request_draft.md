@@ -1,5 +1,7 @@
 # Gen 3 (P4) FRLG RC cutover gate request — G4 evidence assembly
 
+> **SIGNED 2026-09-27 by the owner in chat: "All gates are signed."** (Recorded by the combined Gen 3 coordinator, claude 30c21a7a. This covers every pending Gen 3 gate: G4, G5, EG4, XG1 and XG2. It is not approval of the master landing, which needs its own explicit owner approval, ruling 41.)
+
 **Status: G4 is ready for the owner's signature.** The frozen-cut final pass ran at `a2985d5a`
 and PASSed all 43 rows (`docs/gen3/probes/fc_SUMMARY_a2985d5a.txt`, §1a) — every item this draft
 tracked as REHEARSED (2b's P+H rows, item 3's probe rows, item 4's cold boots, item 5's zip boot)

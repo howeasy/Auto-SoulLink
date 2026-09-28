@@ -1,0 +1,34 @@
+
+========== scenario: link_gen3 ==========
+[duo] link_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=e6d88d7f323380857eed807d1c200996e29d2a60fbc9f74cbfb2eb86d770d07a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=345301e7a0c69ead2d6ebebe610a35f30359eedcbd16ad4ac9c5edbed58875b0 write_checkpoint.json=002f84a81dc8e20defc63ff6c7ea6fb88ed45eef9425099deea5dc15e257f0a0 profile.json=3fc3d78f074cca9fb89c587af351c4911d4a636d2908373229d13604dfe6b471 source=c1b5c738d23b4c713d37dab4c3d6a73e5cb642a0
+[duo] server up: tcp=55910 http=55911 data=C:\Users\howar\AppData\Local\Temp\slink_duo_link_gen3_r8teoyxo
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] real captures: a=BE8CEE7D:20250925 b=FB193BE2:DFDAF6DA
+[duo] ENCOUNTER LINK FROM REAL PLAY (new client): BE8CEE7D:20250925 <-> FB193BE2:DFDAF6DA on route_102, alive
+[duo] timing orchestrate 11.1s
+[duo] timing results 2.0s
+[duo] RESULT_LINE a: RESULT: PASS (caught BE8CEE7D:20250925)
+[duo] RESULT_LINE b: RESULT: PASS (caught FB193BE2:DFDAF6DA)
+[duo] SAVE_WITNESS_SHA256 inst=a site=1739e030aa1f58e4496a61baacf5c43012734b4627cf8a82eedcec3a80734b78 file=1739e030aa1f58e4496a61baacf5c43012734b4627cf8a82eedcec3a80734b78 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=cdc5c02684e3c7a91ce880a8cfcfd74dce133f8838ceb065a948f41e919c6bb1 file=cdc5c02684e3c7a91ce880a8cfcfd74dce133f8838ceb065a948f41e919c6bb1 match=true saves=1 counter=3->4 rtc=normalized
+[duo] BAG_BALLS baseline=20 final=19 throws=1 inst=a native_grant=0
+[duo] BAG_BALLS baseline=20 final=19 throws=1 inst=b native_grant=0
+[duo] link: BE8CEE7D:20250925 <-> FB193BE2:DFDAF6DA alive on route_102 and saved once in each party
+[duo] timing oracle 0.5s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] link_gen3: a=PASS b=PASS
+
+========== summary ==========
+  link_gen3: PASS (attempt 1 of 3)
+EXIT 0

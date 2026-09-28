@@ -1,5 +1,7 @@
 # EG4 request: Emerald release candidate (2026-09-26)
 
+> **SIGNED 2026-09-27 by the owner in chat: "All gates are signed."** (Recorded by the combined Gen 3 coordinator, claude 30c21a7a. This covers every pending Gen 3 gate: G4, G5, EG4, XG1 and XG2. It is not approval of the master landing, which needs its own explicit owner approval, ruling 41.)
+
 **Status: DRAFT — not signed.** Signing needs an explicit owner "yes" in chat.
 
 - **Branch:** `claude/gen3-emerald-rc2` (local only: not pushed, not on master) =

@@ -28,12 +28,17 @@ def test_the_no_patch_generations_are_allowed_and_say_so(key):
     assert "no patch" in s["why"].lower(), s
 
 
-@pytest.mark.parametrize("key", ["battle_calc", "pc_trade_npc"])
+@pytest.mark.parametrize("key", ["battle_calc"])
 def test_the_radical_red_only_features_are_greyed_elsewhere(key):
     """The other half of the same honesty: a Gen 1 player switching these on gets nothing,
     so they cannot be switched on."""
     assert not option_support(key, GEN1)["ok"]
     assert option_support(key, RR)["ok"]
+
+
+def test_rr_trade_npc_is_available_with_the_durable_delta():
+    """RR-DURABLE: the witness UPS trades; only an old-UPS client is refused, by the server."""
+    assert option_support("pc_trade_npc", RR)["ok"] is True
 
 
 def test_overworld_presence_is_greyed_everywhere_while_deferred():

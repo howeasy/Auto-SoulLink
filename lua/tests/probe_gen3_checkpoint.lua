@@ -1003,8 +1003,8 @@ function P.run()
         assert(before >= 0, "no baseline flash counter")
         row = begin(5,function()
             local counter = G.save_counter(domain)
-            if counter > before then after = counter end
-            return counter > before and G.sectors_at(domain,counter) < 14
+            if G.counter_advanced(before, counter) then after = counter end
+            return G.counter_advanced(before, counter) and G.sectors_at(domain,counter) < 14
         end)
         local complete = false
         for i=1,7000 do

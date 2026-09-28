@@ -9,16 +9,24 @@ from server.adapters import (
 )
 from server.adapters.base import GamePresentationAdapter, GameRulesAdapter
 
+# The expansion is REFUSED in production (ruling 39). The cases below that put its rom_type on
+# the wire therefore run inside the logged TEST-ONLY route the gen3_exp duo lane opens; the
+# refusal, and that route's own boundary, are pinned in test_gen3_expansion_refusal.py.
+from tests.unit.test_gen3_expansion_refusal import expansion_routed  # noqa: F401,E402
+
 ROM_TYPE = "emerald_expansion_28877d73"
 
 
-def test_reference_build_routes_to_its_own_pack():
+def test_reference_build_is_registered_but_unrouted():
+    """Ruling 39: the adapter class and its pack are here, and the cartridge routes to
+    nothing. The refusal and the TEST-ONLY route that re-opens it for the duo lane are
+    pinned in tests/unit/test_gen3_expansion_refusal.py."""
     adapter = get_adapter("gen3_exp", rom_type=ROM_TYPE)
     assert isinstance(adapter, (GameRulesAdapter, GamePresentationAdapter))
     assert adapter.game_id == "gen3_exp"
     assert adapter.rom_type == ROM_TYPE
-    assert game_id_for_rom_type(ROM_TYPE) == "gen3_exp"
-    assert foundation_for_rom_type(ROM_TYPE) == "gen3_exp"
+    assert game_id_for_rom_type(ROM_TYPE) is None
+    assert foundation_for_rom_type(ROM_TYPE) is None
     assert variant_label(ROM_TYPE) == "Emerald Expansion 1.17.0 (28877d73)"
     # Bulbasaur, Pikachu and Pound in pinned include/constants + src/data tables.
     assert adapter.species_name(1) == "Bulbasaur"
@@ -230,6 +238,7 @@ def test_expansion_party_layout_matches_facts_json_bitfields():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("other", ["emerald", "firered", "leafgreen", "firered_rr"])
 @pytest.mark.parametrize("exp_first", [True, False])
+@pytest.mark.usefixtures("expansion_routed")
 async def test_expansion_refuses_mixed_foundations_without_mutating_run(tmp_path, other, exp_first):
     from server.server import SLinkServer
     from tests.unit.test_mixed_foundations import _hello, _refused, _session, _snapshot
@@ -247,6 +256,7 @@ async def test_expansion_refuses_mixed_foundations_without_mutating_run(tmp_path
 
 
 @pytest.mark.asyncio
+@pytest.mark.usefixtures("expansion_routed")
 async def test_reference_pairs_with_itself_and_unknown_build_stays_unrouted(tmp_path):
     from server.server import SLinkServer
     from tests.unit.test_mixed_foundations import _hello, _refused, _session
@@ -450,3 +460,54 @@ def test_trainer_party_and_brief_are_deep_copies_not_shared_with_the_cached_pack
     brief = a.trainer_brief(1)
     brief["party"][0]["ivs"]["hp"] = 999
     assert a.trainer_brief(1)["party"][0]["ivs"]["hp"] == 0
+
+
+def test_every_base_contract_method_has_a_decided_expansion_answer():
+    """X2 (docs/gen3_emerald/PLAN.md X2 row): the full GameRulesAdapter/GamePresentationAdapter
+    surface (server/adapters/base.py) on the reference build. Every public method is listed
+    here, so a new base method fails this test until someone decides what expansion answers."""
+    import inspect
+
+    from server.adapters import base
+
+    a = get_adapter("gen3_exp", rom_type=ROM_TYPE)
+    decided = {
+        # rules
+        "game_id", "is_gift_area", "is_fixed_species_gift", "is_daycare_area", "gift_link_area",
+        "is_egg_pickup_area", "evo_family", "gender_from_key", "species_types", "is_shiny",
+        "parse_ot_id", "is_valid_mon_key", "species_name", "type_name", "rival_trainer_ids",
+        "party_blob_size", "supports_abilities", "status_token", "info_panel_width",
+        "reports_box_census", "supports_info_panel", "supports_explode_mode", "set_artifact_kind",
+        "pairing_kind", "supports_randomized", "pairing_kind_for", "native_trade_ui",
+        "supports_trade_recovery", "trade_unavailable_reason", "refused_trade_recovery",
+        # presentation
+        "sprite_html", "ability_name", "ability_description", "trainer_info", "item_name",
+        "area_display_name", "to_national_dex", "gender_symbol", "form_sprite_id",
+        "form_sprite_url", "rom_content_fingerprint", "ingest_rom_content", "refused_rom_content",
+        "encounter_table", "trainers_for_area", "trainer_party", "trainer_brief", "calc_name",
+        "calc_species", "calc_profile", "calc_nature", "calc_stats", "sprite_src", "move_name",
+        "move_data", "stat_stage_labels", "mons_per_box", "memorial_box_index", "gym_badge_slugs",
+    }
+    surface = {name for cls in (base.GameRulesAdapter, base.GamePresentationAdapter, base.GameAdapter)
+               for name, _ in inspect.getmembers(cls) if not name.startswith("_")}
+    assert surface == decided
+
+    # the answers not already pinned by the tests above
+    assert not a.is_egg_pickup_area("gift_lavaridge_town")   # no extracted static/egg policy
+    assert a.supports_abilities() and a.info_panel_width() == 0
+    assert not a.reports_box_census()
+    assert not a.supports_randomized(ROM_TYPE)
+    assert a.pairing_kind_for("clean", None) == "clean"
+    assert not a.supports_trade_recovery() and a.refused_trade_recovery()
+    assert a.calc_species(258) == "Mudkip"
+    assert a.form_sprite_url(258) is None
+    assert a.gender_symbol("female") == "\u2640"
+    assert a.stat_stage_labels()[0] == "ATK" and a.mons_per_box == 30
+    # Randomized content is not bound for expansion: the server must never run the vanilla
+    # Gen 3 table decoder over an expansion cartridge report (it would raise, and
+    # _ingest_rom_content would then mark the player's encounter data unavailable).
+    report = {"tables": []}
+    assert a.rom_content_fingerprint(report) is None
+    assert a.ingest_rom_content(report) is None
+    assert a.refused_rom_content(None, artifact_kind="rand")
+    assert a.refused_rom_content(None, artifact_kind="clean") == ""

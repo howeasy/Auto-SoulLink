@@ -196,6 +196,8 @@ RR_DERIVED = {
     # the same id as pret's SPECIES_SHEDINJA (FRLG_DERIVED above).
     "SHEDINJA_SPECIES_ID": (303, 'data/games/gen3_frlge/rr_species.json:"303"="Shedinja" '
                             "(RR species table; CFRU keeps this id unrenumbered)"),
+    "SB2_NAME_OFFSET": (0x00, "archive/gen3-old-client:lua/memory_gba.lua:721-725 (old-client RR profile, "
+                        "production-tested: M.readTrainerName decodes playerName generically at SB2+0)"),
     "BATTLE_MON_STAT_STAGES_OFF": (0x19, "archive/gen3-old-client:lua/memory_gba.lua:402-406 (old-client RR profile, "
                                    "production-tested: M.readStatStages; CFRU puts type3 at "
                                    "+0x18, so ATK..EVA start at +0x19)"),
@@ -205,7 +207,7 @@ RR_DERIVED = {
 # were read from the admitted companion SHA1 below and checked against clean RR.
 # Keep complete reader bodies + literal pools, so a pointer alone is not evidence
 # for which field is being accessed. No Capstone dependency in the generator.
-RR_WITNESS_SHA1 = "7a3867499d66eb3621e0e7dde43bd033fc679f01"
+RR_WITNESS_SHA1 = "da579690db7d6933a0952a1f490312842793f71a"
 RR_ROM_ANCHORS = {
     "controller_exec_marker": (0x17248,
         "00b50006030e0848006802210840002810d0064a06499800401801680907106808431060"
@@ -635,7 +637,7 @@ MAILBOX_C_SYMBOL = {
     "BATTLE_NOTIF": "BN", "TN_ENABLE": "TN", "CALC_OFF": "SLINK_CALC_OFF", "INFO": "SI",
     "INFO_MAXLINES": "INFO_ROWS", "INFO_PAGESLOT": "INFO_PAGE_SLOT", "INFO_BAR_W": "BAR_W",
     "EVR": "EV", "GH": "GH", "GHOST_PAL_BUF": "GHOST_PAL_BUF", "GPLAYER_AVATAR": "gPlayerAvatar",
-    "SW": "SW", "EV_PLAYER_FAINT": "EV_PLAYER_FAINT", "EV_FOE_FAINT": "EV_FOE_FAINT",
+    "SW": "SW", "TRADE_BASE": "RT_BASE", "EV_PLAYER_FAINT": "EV_PLAYER_FAINT", "EV_FOE_FAINT": "EV_FOE_FAINT",
     "EV_OUTCOME": "EV_OUTCOME", "EV_PARTY_ADD": "EV_PARTY_ADD", "EV_EVOLVE": "EV_EVOLVE",
 }
 # ghost/object-event addresses (post-RC feature; kept for the same byte-identical reason as
@@ -654,6 +656,7 @@ MAILBOX_OPCODES = (
     "OP_SHOW_MENU", "OP_SET_PARTY_MON", "OP_PLAY_SE", "OP_CHOOSE_PARTY_MON", "OP_TRADE_SCENE",
     "OP_SHOW_CHOICES", "OP_SHOW_BATTLE_MESSAGE", "OP_DEPOSIT_MON", "OP_WITHDRAW_MON",
     "OP_MEMORIALIZE", "OP_SHOW_INFO", "OP_RIVAL_SWAP",
+    "OP_TRADE_PREPARE", "OP_TRADE_WITHDRAW", "OP_TRADE_STATUS",   # RR-DURABLE producer opcodes
 )
 
 # `#define NAME <literal>` or the pointer-cast form `#define NAME ((Type *)<literal>)`.
@@ -765,7 +768,7 @@ def native_block(title: str | None = None) -> dict | None:
     if title is not None:
         if title not in V2_TARGETS:
             raise ValueError(f"unknown companion target: {title}")
-        native_abi()  # validate the sole v2 layout source even while a target is held
+        abi = native_abi()
         path = f"patch/src/trade_targets/{title}.h"
         text = (REPO / path).read_text(encoding="utf-8")
         ready = re.search(r"^#define SLINK_TARGET_READY\s+(\w+)", text, re.M)
@@ -773,7 +776,19 @@ def native_block(title: str | None = None) -> dict | None:
             raise ValueError(f"missing READY gate: {path}")
         if _abi_number(ready[1], {}) == 0:
             return None
-        raise ValueError(f"no qualified v2 binding for {title}")
+        constants = abi["constants"]
+        base, base_off = _c_define(text, "SLINK_TARGET_ARENA_BASE")
+        native = {"BASE":base,"SIG":constants["SLINK_SIGNATURE"],"ABI":2,"abi_v2":abi}
+        native.update({name.removeprefix("SLINK_"):value for name,value in constants.items()
+                       if name.startswith("SLINK_OP_")})
+        for name, offset in (("BLOB_BUF","SLINK_BLOB_OFFSET"),("TEXT_BUF","SLINK_TEXT_OFFSET"),
+                             ("MENU_BUF","SLINK_MENU_OFFSET"),("INFO","SLINK_INFO_OFFSET")):
+            native[name]=base+constants[offset]
+        native.update(INFO_LINEW=32,INFO_MAXLINES=constants["SLINK_INFO_MAX_LINES"],
+                      INFO_PAGESLOT=constants["SLINK_INFO_PAGE_SLOT"],PI_COUNT=base+0x804,TN_ENABLE=base+0x808)
+        native["_src"]={name:f"{ABI_SRC} (canonical ABI2 layout); {path}:{_line_of(text,base_off)} (reserved arena)"
+                        for name in native if name!="abi_v2"}
+        return native
     # The published RR UPS is still v1. Never replace its values/citations with
     # the unqualified v2 header merely because its source is now available.
     values: dict[str, int] = {}
@@ -1179,6 +1194,8 @@ def build(pack: str, profiles: dict, source: dict) -> dict:
             for name, (off, raw) in RR_ROM_ANCHORS.items()
         }
         out["native"] = native_block()
+    elif pack == "gen3_frlg":
+        out["native"] = native_block("firered")
     return out
 
 
@@ -1386,6 +1403,7 @@ def build_emerald() -> dict:
         "schema": SCHEMA,
         "generator": "tools/gen_gen3_profile.py",
         "pack": "gen3_emerald",
+        "native": native_block("emerald"),
         "source": {"file": EMERALD_SYM, "git_head": head or "unknown",
                    "sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()},
         "titles": {"emerald": {
@@ -1536,6 +1554,9 @@ def build_expansion(context):
     for key, type_name, member in (
         ("BASESTATS_GROWTH_RATE_OFFSET", "SpeciesInfo", "growthRate"), ("BATTLE_MOVE_PP_OFFSET", "MoveInfo", "pp"),
         ("BATTLE_MON_OT_ID_OFF", "BattlePokemon", "otId"), ("BATTLE_MON_PERSONALITY_OFF", "BattlePokemon", "personality"),
+        ("BATTLE_MON_HP_OFF", "BattlePokemon", "hp"),
+        ("BATTLE_MON_MOVES_OFF", "BattlePokemon", "moves"),
+        ("BATTLE_MON_PP_OFF", "BattlePokemon", "pp"),
         ("BATTLE_RESULTS_PLAYER_FAINTS_OFF", "BattleResults", "playerFaintCounter"),
         ("BATTLE_RESULTS_FOE_FAINTS_OFF", "BattleResults", "opponentFaintCounter"),
         ("BOX_DATA_OFFSET", "PokemonStorage", "boxes"), ("GMAIN_CB2_OFFSET", "Main", "callback2"),
@@ -1548,6 +1569,18 @@ def build_expansion(context):
         put(key, types[type_name]["fields"][member]["offset"], f"structs.{type_name}.fields.{member}.offset")
     put("SB1_BALL_POCKET_OFFSET", types["SaveBlock1"]["fields"]["bag"]["offset"] + types["Bag"]["fields"]["pokeBalls"]["offset"], "SaveBlock1.bag + Bag.pokeBalls")
     put("BATTLE_MON_STAT_STAGES_OFF", types["BattlePokemon"]["fields"]["statStages"]["offset"] + const["STAT_ATK"], "BattlePokemon.statStages + constants.STAT_ATK")
+    volatiles_off = types["BattlePokemon"]["fields"]["volatiles"]["offset"]
+    perish = types["Volatiles"]["bitfields"]["perishSong"]
+    timer = types["Volatiles"]["bitfields"]["perishSongTimer"]
+    if (perish["width"], perish["bits"], timer["width"], timer["bits"]) != (1, 1, 1, 2):
+        raise ValueError("expansion Perish compiler lanes changed")
+    put("BATTLE_MON_PERISH_FLAG_OFF", volatiles_off + perish["offset"],
+        "BattlePokemon.volatiles + Volatiles.perishSong compiler bitfield")
+    put("BATTLE_MON_PERISH_FLAG_MASK", int(perish["mask"], 16), "Volatiles.perishSong compiler mask")
+    put("BATTLE_MON_PERISH_TIMER_OFF", volatiles_off + timer["offset"],
+        "BattlePokemon.volatiles + Volatiles.perishSongTimer compiler bitfield")
+    put("BATTLE_MON_PERISH_TIMER_KEEP", 0xFF ^ int(timer["mask"], 16),
+        "complement of Volatiles.perishSongTimer compiler mask in its u8 lane")
     put("EXPERIENCE_TABLE_ENTRY_COUNT", const["MAX_LEVEL"] + 1, "constants.MAX_LEVEL + 1")
     flag = types["Main"]["bitfields"]["inBattle"]
     put("GMAIN_INBATTLE_OFFSET", flag["offset"], "structs.Main.bitfields.inBattle.offset")
@@ -1558,14 +1591,33 @@ def build_expansion(context):
                                    ("MON_MOVE_MASK", "PokemonSubstruct1", "move1")):
         value = types[type_name]["bitfields"][member]
         put(key, int(value["mask"], 16), f"structs.{type_name}.bitfields.{member}.mask")
-    for member in ("nickname11", "nickname12"):
-        put(member.upper() + "_FIELD", types["PokemonSubstruct0"]["bitfields"][member], "structs.PokemonSubstruct0.bitfields." + member)
+    # X2: the record-layout keys lua/gen3/reads.lua and gen3_codec.decode_*_masked consume
+    # ({word_off, word_size, shift, width} in the substruct), converted from the compiler's
+    # {offset, width (bytes), shift, bits} facts -- one representation, no hand copy.
+    def field(type_name, member):
+        f = types[type_name]["bitfields"][member]
+        return {"word_off": f["offset"], "word_size": f["width"], "shift": f["shift"], "width": f["bits"]}
+
+    for key, type_name, member in (("EXPERIENCE_MASK", "PokemonSubstruct0", "experience"),
+                                   ("PP_MASK", "PokemonSubstruct1", "pp1"),
+                                   ("MARKINGS_MASK", "BoxPokemon", "markings")):
+        put(key, int(types[type_name]["bitfields"][member]["mask"], 16), f"structs.{type_name}.bitfields.{member}.mask")
+    put("NICKNAME_EXTRA", {"chars": [field("PokemonSubstruct0", m) for m in ("nickname11", "nickname12")]},
+        "structs.PokemonSubstruct0.bitfields.nickname11/nickname12")
+    put("POKEBALL_FIELD", field("PokemonSubstruct0", "pokeball"), "structs.PokemonSubstruct0.bitfields.pokeball")
+    put("ABILITY_NUM_FIELD", field("PokemonSubstruct3", "abilityNum"), "structs.PokemonSubstruct3.bitfields.abilityNum")
+    # reads.lua reads BoxPokemon.unknown as the u16 at 0x1E: the hpLost:14 lane shinyModifier shares
+    lane, shiny = types["BoxPokemon"]["bitfields"]["hpLost"], types["BoxPokemon"]["bitfields"]["shinyModifier"]
+    if lane["offset"] != 0x1E or lane["width"] != 2 or not 0 <= shiny["offset"] - lane["offset"] < 2:
+        raise ValueError("BoxPokemon.shinyModifier is not in the u16 lane at 0x1E")
+    put("SHINY_MODIFIER_FIELD", {"shift": (shiny["offset"] - lane["offset"]) * 8 + shiny["shift"],
+                                 "width": shiny["bits"]},
+        "structs.BoxPokemon.bitfields.shinyModifier relative to hpLost's u16 lane")
     put("BASESTATS_ADDR_BY_GAME_CODE", {"BPEE": sections["rom"]["BASESTATS_ADDR"]}, "rom.BASESTATS_ADDR, exact ROM only")
     return {"schema": SCHEMA, "generator": "tools/gen_gen3_profile.py", "pack": "gen3_exp", "build": context["build"],
             "source": context["source"], "titles": {EXPANSION_TITLE: {"admitted": False, "variant": EXPANSION_TITLE,
             "rom_sha1": EXPANSION_SHA1, "rom_thumb": _thumb_keys(sections["rom"]), "_src": src, **sections,
-            "unavailable": dropped, "open": ["Runtime admission/CPU census and write safety qualification pending",
-            "Nickname extension uses two shifted fields, not a contiguous NICKNAME_EXTRA_OFFS; consumer support required"]}}}
+            "unavailable": dropped, "open": ["Runtime admission/CPU census and write safety qualification pending"]}}}
 
 
 def main() -> int:

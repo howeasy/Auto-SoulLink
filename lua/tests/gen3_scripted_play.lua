@@ -67,7 +67,9 @@ local S = Syms.for_title(TITLE)
 -- own pack/checkpoint reads). Emerald is a separate pret decomp (data/games/gen3_emerald),
 -- neither FR/LG's pokefirered profile nor RR's hand-patched one.
 local PROFILE_PACK_BY_TITLE = { firered = "gen3_frlg", leafgreen = "gen3_frlg",
-                                 radical_red = "gen3_rr", emerald = "gen3_emerald" }
+                                 radical_red = "gen3_rr", emerald = "gen3_emerald",
+                                 -- X3: one directory per onboarded expansion build
+                                 [Syms.EXP_TITLE] = "gen3_exp/28877d73" }
 local PROFILE_PACK = assert(PROFILE_PACK_BY_TITLE[TITLE],
     "gen3_scripted_play: no profile pack for title " .. tostring(TITLE))
 local profile_file = assert(io.open(WT .. "/data/games/" .. PROFILE_PACK .. "/profile.json", "rb"))
@@ -79,7 +81,7 @@ if TITLE == "radical_red" then
     -- RR/CFRU's box layout is compressed (25 boxes, no BOX_DATA_OFFSET) -- the FR/LG
     -- "uncompressed box layout" invariant below does not apply and must not be asserted here.
     assert(profile.admitted, "radical_red profile is not admitted")
-elseif TITLE == "emerald" then
+elseif Syms.emerald_engine(TITLE) then
     -- Emerald's own profile (data/games/gen3_emerald/profile.json) matches FR/LG's
     -- uncompressed box layout (BOX_DATA_OFFSET==4, BOXES_PER_STORE==14, same pret PC struct)
     -- but is not yet flagged `admitted` pending its own live gate -- this driver is authored
@@ -173,7 +175,9 @@ local function sb1_ptr(cp)
     local sb1 = memory.read_u32_le(int(ptr.address))
     -- sizeof(struct SaveBlock1): FR/LG 0x3D68, Emerald 0x3D88 (pret include/global.h; the ROM
     -- header's saveBlock1Size, gen3_codec SAVEBLOCK1_SIZE_EMERALD)
-    if sb1 < 0x02000000 or sb1 > 0x02040000 - (TITLE == "emerald" and 0x3D88 or 0x3D68)
+    -- (X3: the expansion reference build's is 15568 = 0x3CD0, facts.json SaveBlock1.size)
+    if sb1 < 0x02000000 or sb1 > 0x02040000 - (TITLE == "emerald" and 0x3D88
+                                                  or Syms.emerald_engine(TITLE) and 0x3CD0 or 0x3D68)
        or sb1 % 4 ~= 0 then return nil end
     return sb1
 end
@@ -198,7 +202,22 @@ local function whiteout_destination(cp, checkpoint)
     local raw = checkpoint or last_heal_checkpoint(cp)
     if not raw then return nil end
     local group, num, warp, x, y = raw.group, raw.num, raw.warp, raw.x, raw.y
-    if TITLE == "emerald" and warp == 255 then
+    if TITLE == Syms.EXP_TITLE and warp == 255 then
+        -- X3: the expansion reference build whites out INTO the heal location's respawn map
+        -- (OW_WHITEOUT_CUTSCENE >= GEN_4: src/overworld.c:744-756, heal_location.c:88-105), a
+        -- table generated from its src/data/heal_locations.json (harness_facts.json
+        -- whiteout_respawns, checked against the ROM's own arrays by test_gen3_fixture_exp.py).
+        local f = assert(io.open(WT .. "/data/games/gen3_exp/28877d73/harness_facts.json", "rb"))
+        local rows = JSON.decode(f:read("a")).whiteout_respawns
+        f:close()
+        for _, row in ipairs(rows) do
+            local h, r = row.heal, row.respawn
+            if h[1] == group and h[2] == num and h[3] == x and h[4] == y and r then
+                return {group = r[1], num = r[2], x = r[3], y = r[4]}
+            end
+        end
+    end
+    if Syms.emerald_engine(TITLE) and warp == 255 then
         -- E4-DUO-2: Emerald has no interior projection. pret pokeemerald c65e93f2
         -- src/overworld.c:357-366 DoWhiteOut -> SetWarpDestinationToLastHealLocation (:665-668)
         -- warps straight to gSaveBlock1Ptr->lastHealLocation, which SetLastHealLocationWarp
@@ -380,7 +399,9 @@ local SPECIAL_VAR_ITEM_ID_ADDR = S.SPECIAL_VAR_ITEM_ID_ADDR  -- gSpecialVar_Item
 -- with gSaveBlock2Ptr->encryptionKey (src/item.c:20-29 GetBagItemQuantity/SetBagItemQuantity,
 -- :41-49 ApplyNewEncryptionKeyToBagItems only XORs the quantity fields); the itemId this file
 -- reads is plaintext, like every other RAM read here.
-local ITEM_POKE_BALL = 4
+-- X3: the expansion reference build renumbered its items: ITEM_POKE_BALL is 1 there
+-- (data/games/gen3_exp/28877d73/harness_facts.json constants, compiled from its items.h enum).
+local ITEM_POKE_BALL = TITLE == Syms.EXP_TITLE and 1 or 4
 local SB1_POKEBALLS_POCKET_OFFSET = 0x0430
 
 local function bag_menu_up() return memory.read_u32_le(GMAIN_CALLBACK2_ADDR) == CB2_BAG_MENU_RUN end
@@ -1714,9 +1735,19 @@ local PC_DEPOSIT_BOX_ID = S.PC_DEPOSIT_BOX_ID -- sym:310; sDepositBoxId
 -- IN_PARTY 1, :108-115); they merely happen to share 0/1. A popup offers the option its
 -- cursor's own area implies, so map the area instead of comparing the two enums directly
 -- (C3-40, finding 5 of cx-006e6f09: a MOVE-MONS popup would have slipped through).
-local PC_POPUP_OPTION = { [0] = 0, [1] = 1 } -- CURSOR_AREA_IN_BOX -> OPTION_WITHDRAW,
-                                             -- CURSOR_AREA_IN_PARTY -> OPTION_DEPOSIT
 local PC = {}
+-- X3: that enum is private and its order follows OW_PC_MOVE_ORDER; the expansion reference build
+-- compiles WITHDRAW 2 / DEPOSIT 1 / MOVE_MONS 0 (data/games/gen3_exp/28877d73/harness_facts.json,
+-- the build's own compiler). PC.mode takes these, never a bare row number, on the Emerald engine.
+PC.OPTION = TITLE == Syms.EXP_TITLE and (function()
+    local f = assert(io.open(WT .. "/data/games/gen3_exp/28877d73/harness_facts.json", "rb"))
+    local k = JSON.decode(f:read("a")).constants
+    f:close()
+    return { withdraw = k.OPTION_WITHDRAW, deposit = k.OPTION_DEPOSIT, move_mons = k.OPTION_MOVE_MONS }
+end)() or { withdraw = 0, deposit = 1, move_mons = 2 }
+local PC_POPUP_OPTION = { [0] = PC.OPTION.withdraw, [1] = PC.OPTION.deposit }
+                                             -- CURSOR_AREA_IN_BOX -> OPTION_WITHDRAW,
+                                             -- CURSOR_AREA_IN_PARTY -> OPTION_DEPOSIT
 
 local function pc_task(fn)
     for i = 0, 15 do
@@ -1918,7 +1949,10 @@ function PC.popup(label, area, pos, row)
         return pc_fail(label, "storage_popup_missing")
     end
     local max_row = memory.read_u8(PC_MENU_MAX_CURSOR)
-    if max_row ~= 4 then return pc_fail(label, "storage_popup_wrong_row_count") end
+    if max_row ~= 4 then
+        return pc_fail(label, "storage_popup_wrong_row_count max_row=" .. max_row .. " cursor_pos="
+                       .. memory.read_u8(PC_CURSOR_POS) .. " area=" .. memory.read_u8(PC_CURSOR_AREA))
+    end
     -- The cursor is tested BEFORE each Down, so a budget of max_row presses reaches the last row
     -- (4, CANCEL) but never tests it: the popup would sit on row 4 and the leg would report
     -- storage_popup_cursor_stalled one press short (C3-41 finding 2). max_row + 1 walks 0..4.
@@ -3030,7 +3064,7 @@ LEGS[#LEGS + 1] = {
 -- ponytail: EMH holds the E2-LEGS round-2 Emerald helpers in one table -- the main chunk sits at
 -- Lua's 200-local cap. Empty unless TITLE == "emerald", like EMERALD_LEGS.
 local EMERALD_LEGS, EMH = {}, {}
-if TITLE == "emerald" then
+if Syms.emerald_engine(TITLE) then
 
 --- group/num/x/y destination check for a leg's own `check(cp)` -- returns a message (leg
 --- precondition failed) or nil (ok), the shape playlib's `leg.check` wants.
@@ -3095,12 +3129,12 @@ local EMERALD_START_SYM_NAMES = {
 local function load_emerald_start_syms()
     local want, out = {}, {}
     for _, n in ipairs(EMERALD_START_SYM_NAMES) do want[n] = true end
-    for line in io.lines(WT .. "/data/gen3/pret/pokeemerald.sym") do
+    for line in io.lines(Syms.sym_path(WT, TITLE)) do
         local addr, name = line:match("^(%x+) %a+ %x+ (%S+)$")
         if addr and want[name] then out[name] = tonumber(addr, 16) end
     end
     for _, n in ipairs(EMERALD_START_SYM_NAMES) do
-        assert(out[n], "gen3_scripted_play: symbol " .. n .. " missing from pokeemerald.sym")
+        assert(out[n], "gen3_scripted_play: symbol " .. n .. " missing from " .. Syms.sym_path(WT, TITLE))
     end
     return out
 end
@@ -3164,7 +3198,7 @@ function EMH.save_via_menu(cp, domain)
     for _ = 1, 300 do
         G.tap("A", 3, 13)
         after = G.save_counter(domain)
-        if after > before then moved = true; break end
+        if G.counter_advanced(before, after) then moved = true; break end   -- rejects a torn read
     end
     if not moved then return false, before, after, "the save counter never advanced" end
     G.phase("saved", string.format("counter=%d->%d", before, after))
@@ -3366,7 +3400,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         -- its popup, A takes STORE (row 0); the chooser opens on sDepositBoxId (box 0) and its A
         -- is the press that calls TryStorePartyMonInBox.
         PC.open(cp, L)
-        PC.mode(L, 1)
+        PC.mode(L, PC.OPTION.deposit)
         PC.popup(L, 1, 1, 0)
         PC.select(L, PC_DEPOSIT_MENU)
         PC.box(L)
@@ -3407,7 +3441,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
             return em_fail(L, "precondition: box 0 slot 0 occupied and a 1-mon party (after emerald_pc_deposit)")
         end
         PC.open(cp, L)
-        PC.mode(L, 0)             -- WITHDRAW is row 0 on a fresh menu: no press moves it
+        PC.mode(L, PC.OPTION.withdraw)             -- WITHDRAW is row 0 on a fresh menu: no press moves it
         PC.popup(L, 0, 0, 0)      -- box slot 0, WITHDRAW row 0
         PC.select(L, PC_WITHDRAW_MON)
         PC.withdraw(L)
@@ -3445,7 +3479,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         -- MOVE POKeMON (row 2): the box cursor opens on slot 0; Right to slot 1, A, A = MOVE (grab);
         -- Left to slot 0, A, A = PLACE. The carried flag must rise and fall between the two.
         PC.open(cp, L)
-        PC.mode(L, 2)   -- rows >= 2 work since master b6bd8f2b (PC.mode waits for progress)
+        PC.mode(L, PC.OPTION.move_mons)   -- rows >= 2 work since master b6bd8f2b (PC.mode waits for progress)
         em_box_cursor(L, 1)
         em_move_popup_row0(L, em_thumb(ES.Task_MoveMon))
         em_wait_carry(L, "grab_not_done", 1)
@@ -3487,7 +3521,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
         end
         local target = before.party.order[2]      -- the withdrawn Zigzagoon
         PC.open(cp, L)
-        PC.mode(L, 1)
+        PC.mode(L, PC.OPTION.deposit)
         PC.popup(L, 1, 1, 3)                      -- party slot 1, RELEASE row 3
         PC.select(L, PC_RELEASE_MON)
         PC.release(L)                             -- NO -> Up -> YES, A, then both messages
@@ -4414,7 +4448,7 @@ EMERALD_LEGS[#EMERALD_LEGS + 1] = {
     end,
 }
 
-end -- if TITLE == "emerald"
+end -- if Syms.emerald_engine(TITLE)
 
 -- ── run ──────────────────────────────────────────────────────────────────────────────────────
 
@@ -4477,7 +4511,7 @@ local function emerald_stopped_legs(stop_after)
 end
 
 local function run()
-    if TITLE == "emerald" then
+    if Syms.emerald_engine(TITLE) then
         local stop_after = os.getenv("SLINK_GEN3_PLAY_STOP_AFTER")
         local em_legs, why = EMERALD_LEGS, nil
         if stop_after then em_legs, why = emerald_stopped_legs(stop_after) end

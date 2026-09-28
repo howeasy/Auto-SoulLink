@@ -128,12 +128,13 @@ def test_hello_carries_the_trainer_badges_and_seeded_boxes_on_frlg():
     assert [(e["box"], e["slot"], e["key"]) for e in hello["pc_boxes"]] == [(0, 3, KC)]
 
 
-def test_rr_hello_falls_back_without_the_trainer_read():
+def test_rr_hello_carries_the_trainer_read():
+    """RR-DURABLE: gen3_rr carries SB2_NAME_OFFSET now (the trade journal binds to the trainer)."""
     w = World("gen3_rr", "radical_red")
     w.set_party(party(A))
     w.step()
     (hello,) = w.events("hello")
-    assert "ot_id" not in hello and "trainer_name" not in hello and hello["party"][0]["key"] == KA
+    assert hello["ot_id"] and hello["trainer_name"] and hello["party"][0]["key"] == KA
 
 
 def test_a_pre_game_save_sends_no_hello():
@@ -193,6 +194,21 @@ def test_a_gift_is_a_capture_with_gift_true():
 
 FULL_STATS = {"level": 5, "maxHP": 20, "attack": 11, "defense": 12, "speed": 13, "spAtk": 14,
               "spDef": 15, "pp1": 35, "pp2": 30, "pp3": 0, "pp4": 0}
+
+
+@pytest.mark.parametrize("pack,title", [("gen3_frlg", "firered"), ("gen3_rr", "radical_red")])
+def test_party_capture_carries_full_stats_before_a_link_can_request_retrieval(pack, title):
+    """The server may link two captures before box_mon sends its later stats_cache."""
+    w = live(pack, title)
+    w.set_balls(5)
+    w.step(30)
+    w.enter_battle([FOE])
+    w.set_party(party(A, B, C))
+    w.fire("capture_wild")
+    w.fire("mon_given")
+    w.step()
+    (cap,) = w.events("capture")
+    assert cap["key"] == KC and cap["stats"] == FULL_STATS
 
 
 def test_a_catch_with_a_full_party_is_a_boxed_capture():
@@ -659,9 +675,9 @@ def _hp_writes(w):
 
 
 def test_the_full_commit_lands_through_the_real_writes_and_safety_with_the_guard_last():
-    """C4-2e item 2: writes.lua re-checks the REAL battle_commit clause set before every byte;
-    gBattleCommunication[battler] is that set's battle_comm_0 clause AND its guard, so it must
-    be the plan's last write or the rest is refused mid-plan."""
+    """C4-2e item 2: writes.lua re-checks the REAL battle_commit clause set per write call
+    (the window is frame-bound); write_plan prevalidates its whole plan once. The final
+    gBattleCommunication guard hands control over only after the preceding updates."""
     w, base = _explode_world()
     w.command(cmd="force_explode", key=KA)
     w.step()
@@ -835,8 +851,8 @@ def test_ph_row_2_keeps_the_timer_high_nibble(title):
 
 def test_p_f4_control_comm_first_is_refused_mid_plan_by_the_real_sink():
     """F4 control: why comm must be last. gBattleCommunication[0] is both the battle_comm_0
-    clause and the commit guard, and writes.lua re-checks before every byte, so a write after
-    it is refused. (A property of writes.lua/safety.lua: this control is green on HEAD too.)"""
+    clause and the commit guard, and writes.lua re-checks per write call (the window is frame-bound), so the next
+    write call is refused. (A property of writes.lua/safety.lua: this control is green on HEAD too.)"""
     w = _p_world()
     writes = w.parts.writes
     allow = w.lua.eval("function() return true end")
@@ -1128,6 +1144,55 @@ def test_apply_trade_on_frlg_writes_nothing_and_reports_unchanged():
     w.step(3)
     assert w.writes == []
     assert [m["event"] for m in w.sent[n:] if m["event"] != "tick"] == ["trade_done", "menu_result"]
+
+
+def test_major4_a_refused_apply_trade_under_a_hidden_hello_still_reaches_the_wire():
+    """A refused apply_trade owes a NON-uncertain trade_done and, behind it, the
+    menu_result cancel. The owed gate (client.lua drv.after_receive) refuses a
+    non-uncertain trade_done while session.hello_visible is false, and hello_visible
+    only refreshes when a NEW hello is BUILT -- core/session.lua builds one only while
+    hello_sent is false, and the trade recovery block is the only thing that clears it.
+    Unarmed, both reports sit in owed.list until a reconnect; the refusal branch must
+    arm that recovery exactly as trade.lua's completed() does."""
+    w = live()
+    w.enter_battle([FOE], active=(0,))
+    w.step()
+    w.set_party([mon_record(0x99999999, 0x5555, species=7)])       # the partner's party in RAM
+    w.fire("map_load")
+    w.step()
+    w.connected = False
+    w.step()
+    w.connected = True
+    w.step()
+    assert w.events("hello")[-1]["party_hidden"] is True             # hello_visible latched false
+    w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
+    w.step(3)
+    assert w.events("menu_result") == [] and w.events("trade_done") == []
+    w.set_party(party(A, B))                                        # our own party is back
+    w.leave_battle()
+    w.overworld_safe()
+    w.step(60)
+    assert [m["token"] for m in w.events("trade_done")] == ["t"]
+    assert [m["token"] for m in w.events("menu_result")] == ["t"]
+    assert w.events("trade_done")[0].get("uncertain") is not True    # server semantics unchanged
+
+
+def test_a_held_owed_report_names_its_reason_once_and_not_once_per_frame():
+    """owed:step runs on every after_receive and a held head blocks every later report
+    (lua/owed_reports.lua:62). Without a line, a stalled trade_done is indistinguishable
+    from a running emulator -- the reason must be named, once per hold."""
+    from tests.unit.gen3_trade_journal_model import JournalModel
+
+    store = JournalModel(run=None)                    # never bound: ready() is false for good
+    w = World("gen3_frlg", "firered", "clean", journal=store, model_companion=True)
+    w.set_party(party(A))
+    w.step_to(60)
+    w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
+    w.step(120)
+    assert w.events("trade_done") == [] and w.events("menu_result") == []
+    assert [l for l in w.logs if "owed trade_done held" in l] == [
+        "[SLink-gen3] owed trade_done held: trade run not bound"
+    ]
 
 
 @pytest.mark.parametrize("name,extra,event,field,value", [

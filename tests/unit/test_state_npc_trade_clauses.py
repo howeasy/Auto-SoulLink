@@ -196,14 +196,15 @@ def test_npc_clause_has_a_named_memorial_cause(tmp_path):
     assert "NPC trade clause violation" in html
 
 
-@pytest.mark.parametrize("title", ("firered", "emerald", "firered_rr"))
-def test_hidden_npc_report_is_refused_before_identity_or_clause_retirement(tmp_path, title):
+@pytest.mark.parametrize("title,refusal", (("firered", "party_hidden"), ("emerald", "party_hidden"),
+                                          ("firered_rr", "party_hidden")))
+def test_hidden_npc_report_is_refused_before_identity_or_clause_retirement(tmp_path, title, refusal):
     srv, entry, _, ids = _setup(tmp_path, title)
     srv._dispatch("a", {"event": "hello", "rom_type": title, "ot_id": "1111",
                         "party": [], "party_hidden": True})
     before = deepcopy(entry)
     msg, replies = _exchange(srv, entry, ids["Charmander"])
-    assert replies["a"] == [{"cmd": "noop", "refused": "party_hidden"}]
+    assert replies["a"] == [{"cmd": "noop", "refused": refusal}]
     assert entry == before and entry.status == LinkStatus.ALIVE
     assert not msg.get("_key_change_status")
     assert not any(c["cmd"] in ("force_faint", "memorialize") for c in replies["b"])

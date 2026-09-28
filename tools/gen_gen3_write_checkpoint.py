@@ -44,6 +44,7 @@ import subprocess
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
 SYM_DIR = ROOT / "data" / "gen3" / "pret"
 VERSION = "gen3-overworld-v1"
 ROM_BASE = 0x08000000
@@ -62,7 +63,7 @@ ROMS = {
         "964f951a0fdaf209e4ea1344883ef0d557bb3a80"),
     ("gen3_rr", "radical_red", "companion"): (
         ROOT / "patch" / "build" / "slink_RR.gba",
-        "7a3867499d66eb3621e0e7dde43bd033fc679f01"),
+        "da579690db7d6933a0952a1f490312842793f71a"),
     ("gen3_emerald", "emerald", "clean"): (
         pathlib.Path("E:/Google Drive/SLink/Pokemon - Emerald Version (USA, Europe).gba"),
         "f3ae088181bf583e55daf962a92bb46f4f1d07b7"),
@@ -323,6 +324,28 @@ RR_CPU = {"mode": 0x1F, "thumb": 0, "pc_min": 0x00000000, "pc_max": 0x00003FFF,
           "observed_pc": 0x000001C4,
           "census": "docs/gen3/probes/census_rr_overworld_2026-09-21.txt",
           "irq_entry": RR_IRQ_ENTRY}
+
+# X3 (EXP-X23): the expansion reference build's inlined WaitForVBlank (expansion e8bd1cd7
+# src/main.c:422-437) has TWO idles, both measured live on ROM 28877d73 (BizHawk 2.11.1 HLE BIOS):
+#  * gWirelessCommType == 0 (outdoors): BIOS VBlankIntrWait -> IntrWait's halt. Census
+#    docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt (no hook): 1800/1800 at R15 0x1F8,
+#    System, ARM. With the client's frame_control exec hook
+#    (docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt): 600/600 at the IRQ vector entry
+#    R15 0x1C, mode 0x12, ARM, R14_irq 0x1F8 -- the RR G5-RR-CPU-IRQ shape, IntrWait's halt instead
+#    of Halt's (same HLE BIOS bytes as RR's receipt). Admitted as irq_entry, R14 0x1F8 only.
+#  * gWirelessCommType != 0 (inside a Pokemon Center: the Union Room tasks): a busy-wait inlined in
+#    AgbMainLoop, 0x0817AB38 ldrh r3,[r4,#0x1c] / tst r5,r3 / beq / b 0x0817AAC0 (no store; the
+#    bytes are the pack's frame_control anchor). Census docs/gen3_emerald/probes/
+#    census_exp_center_2026-09-27.txt: 1629/1800 frame ends at R15 0x0817AB3A..3E, System, Thumb;
+#    the rest (171) on the IRQ entry taken FROM that game code (R14 0x0817AB3C), refused on purpose;
+#    the same shape with the hook. Admitted as the main range, the FR/LG WaitForVBlank precedent.
+# The hookless System-mode BIOS park is not admitted: the production client always has exec hooks.
+EXP_CPU = {"mode": 0x1F, "thumb": 1, "pc_min": 0x0817AB38, "pc_max": 0x0817AB3F,
+           "observed_pc": 0x0817AB3A, "symbol": "AgbMainLoop (inlined WaitForVBlank, wireless busy-wait)",
+           "census": "docs/gen3_emerald/probes/census_exp_center_2026-09-27.txt",
+           "irq_entry": {"mode": 0x12, "thumb": 0, "pc": [0x1C], "lr_min": 0x1F8, "lr_max": 0x1F8,
+                         "evidence": "docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt",
+                         "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt"}}
 
 
 def cpu_clause(title: str, syms, is_rr: bool) -> dict:
@@ -738,10 +761,9 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
         unverified.append(f"battle.handoff: {why}")
     if handoff is not None:
         out["battle"]["handoff"] = handoff
-    if is_rr:
-        native = native_block(profile)
-        if native is not None:
-            out["native"] = native
+    native = native_block(profile)
+    if native is not None:
+        out["native"] = native
     out["sound"] = sound_block(syms, is_rr, title)
     out["sound"]["se_ids"] = se_ids(title, profile["titles"][title]["rom"]["SE_SONG_HEADERS"])
     out["gift_areas"] = gift_areas(pack, title)
@@ -775,6 +797,12 @@ def build_title(pack: str, title: str, sym_file: str, kinds: tuple[str, ...]) ->
     else:
         for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr"):
             out["pointers"][name] = {"symbol": name, "address": syms[name][0], "source": sym_file}
+    if title in ("firered","leafgreen","emerald"):
+        from tools.gen3_companions import published
+        companion=published(title,roms["clean"],ROOT)
+        if companion:
+            for anchor in out["anchors"].values():
+                anchor["expected_hex"]["companion"]=body(companion[0],ROM_BASE+anchor["rom_offset"],anchor["length"]).hex().upper()
     return out, unverified
 
 
@@ -1240,11 +1268,20 @@ def native_block(profile: dict | None) -> dict | None:
     if not profile or not isinstance(profile.get("native"), dict):
         return None
     nat = profile["native"]
+    if nat.get("ABI")==2:
+        c=nat["abi_v2"]["constants"]
+        return {"version":"gen3-native-v2","base":nat["BASE"],"sig":nat["SIG"],"abi":2,
+                "abi_off":4,"opcode_off":6,"status_off":10,"busy":1,"info":nat["INFO"],
+                "info_state_off":c["SLINK_INFO_STATE_FIELD"],
+                "source":"patch/src/trade_targets/abi.h; native heap reservation"}
     spans = []
     for key, size, what in NATIVE_ARENA:
         if nat.get(key) is None:
             continue
         spans.append({"key": key, "start": nat[key], "size": size, "what": what})
+    if nat.get("TRADE_BASE") is not None:   # RR-DURABLE: patch/src/rr_trade_relay.h shadow block
+        spans.append({"key": "TRADE_BASE", "start": nat["TRADE_BASE"] + 0x44, "size": 4,
+                      "what": "RR-DURABLE shadow session_epoch (the only host-written word of the durable block)"})
     entry = {"version": "gen3-native-v1", "base": nat.get("BASE"), "sig": nat.get("SIG"),
              "abi": nat.get("ABI"), "info": nat.get("INFO"), "spans": spans, "source": NATIVE_SOURCE}
     entry.update(NATIVE_LAYOUT)
@@ -1284,6 +1321,68 @@ def out_path(pack: str) -> pathlib.Path:
 
 def render(value: dict) -> str:
     return json.dumps(value, indent=2, sort_keys=True) + "\n"
+
+
+def expansion_handoff(context):
+    """The expansion's Perish+controller tail, from its compiler object and exact ROM."""
+    from tools.gen_gen3_profile import expansion_symbol
+
+    types, const = context["facts"]["structs"], context["facts"]["constants"]
+    def symbol(name, obj=None):
+        return expansion_symbol(context, name, obj)
+    controller = symbol("gBattlerControllerFuncs")
+    completed = symbol("PlayerBufferExecCompleted", "src/battle_controller_player.o")
+    run_command = symbol("PlayerBufferRunCommand", "src/battle_controller_player.o")
+    installer = symbol("SetControllerToPlayer", "src/battle_controller_player.o")
+    end_slots = symbol("gBattlerControllerEndFuncs")
+    exec_flags = symbol("gBattleControllerExecFlags")
+    if controller["size"] != 16 or end_slots["size"] != 16 or completed["size"] < 0x84 or installer["size"] < 0x3C:
+        raise ValueError("expansion handoff controller slot/function size changed")
+    completed_body = body(context["rom"], completed["address"], completed["size"])
+    # The initial LDR instructions resolve to pool +0x70 (the controller slots)
+    # and +0x74 (PlayerBufferRunCommand|1). The +0x80 pool word is the local
+    # exec-flags address used when the function clears the battler's busy bit.
+    if completed_body[:16] != bytes.fromhex("1b4b00061b4a10b5040e800dc2501a4b"):
+        raise ValueError("expansion PlayerBufferExecCompleted ROM prefix changed")
+    for at, word in ((0x70, controller["address"]),
+                     (0x74, run_command["address"] | 1),
+                     (0x80, exec_flags["address"])):
+        if int.from_bytes(completed_body[at:at + 4], "little") != word:
+            raise ValueError(f"expansion PlayerBufferExecCompleted pool +{at:#x} changed")
+    install_body = body(context["rom"], installer["address"], installer["size"])
+    # SetControllerToPlayer installs the completion pointer into the end-function
+    # table, then installs the run-command pointer into the live controller table.
+    # These two stores and their literal operands bind the value to the ROM.
+    if install_body[0x0A:0x18] != bytes.fromhex("074b074a8000c250074b074ac250"):
+        raise ValueError("expansion SetControllerToPlayer ROM stores changed")
+    for at, word in ((0x28, end_slots["address"]),
+                     (0x2C, completed["address"] | 1),
+                     (0x30, controller["address"]),
+                     (0x34, run_command["address"] | 1)):
+        if int.from_bytes(install_body[at:at + 4], "little") != word:
+            raise ValueError(f"expansion SetControllerToPlayer pool +{at:#x} changed")
+    battle = types["BattlePokemon"]
+    volatiles = types["Volatiles"]["bitfields"]
+    flag, timer = volatiles["perishSong"], volatiles["perishSongTimer"]
+    if flag["width"] != 1 or flag["bits"] != 1 or timer["width"] != 1 or timer["bits"] != 2:
+        raise ValueError("expansion Perish compiler lanes changed")
+    base = symbol("gBattleMons")["address"] + battle["fields"]["volatiles"]["offset"]
+    return {"symbol": "gBattlerControllerFuncs", "address": controller["address"],
+            "stride": 4, "width": 4, "value_symbol": "PlayerBufferExecCompleted",
+            "value": completed["address"] | 1,
+            "head": [
+                {"name": "perish_status", "address": base + flag["offset"],
+                 "width": 1, "set": int(flag["mask"], 16)},
+                {"name": "perish_timer", "address": base + timer["offset"],
+                 "width": 1, "keep": 0xFF ^ int(timer["mask"], 16)},
+                {"name": "no_op_action", "address": symbol("gChosenActionByBattler")["address"],
+                 "width": 1, "value": const["B_ACTION_NOTHING_FAINTED"]}],
+            "source": ("expansion@e8bd1cd7:src/battle_end_turn.c:1000-1013; "
+                       "data/battle_scripts_1.s:3486-3492; src/battle_controller_player.c:154-180; "
+                       "compiler BattlePokemon.volatiles/Volatiles.perishSong/perishSongTimer; "
+                       "ROM SetControllerToPlayer store sequence/pool +0x28..+0x34 installs "
+                       "PlayerBufferExecCompleted|1; PlayerBufferExecCompleted prefix/pool "
+                       "+0x70/+0x74/+0x80 returns to PlayerBufferRunCommand|1")}
 
 
 def build_expansion(context):
@@ -1343,15 +1442,15 @@ def build_expansion(context):
              "struct_size": types["Task"]["size"], "count": const["NUM_TASKS"],
              "func_offset": types["Task"]["fields"]["func"]["offset"],
              "is_active_offset": types["Task"]["fields"]["isActive"]["offset"],
-             # F2: name transfer only (no physical frame qualification), so the allow-list
-             "status": "OPEN",
-             # gets the same "OPEN" marker as cpu below -- a consumer keying off status
-             # (like cpu's own) refuses to treat this table as a qualified allow-list.
+             # X3: names transferred from Emerald, then qualified by the idle census (every
+             # sampled frame's active task set admitted); other states are the duo rows' evidence.
+             "status": "CENSUS",
+             "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
              "allowed_overworld_tasks": allowed, "forbidden_inventory": forbidden,
              "non_allowed_task_census": census,
              "transferred_emerald_task_names": list(allowed_names),
              "new_non_allowed_task_names": sorted(set(census) - vanilla_names),
-             "source": cite + ":src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c. Name transfer only; no physical qualification."}
+             "source": cite + ":src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c."}
     clauses = []
     for name, global_name, _, _, _, compare, expect in BATTLE_CLAUSES_FRLG:
         row = symbol(global_name)
@@ -1398,13 +1497,14 @@ def build_expansion(context):
         "version": VERSION, "title": EXPANSION_TITLE, "admitted": False, "source": context["source"],
         "anchors": anchors, "predicates": predicates, "witnesses": {"save_dialog_cb": scalar("sSaveDialogCallback")},
         "tasks": tasks,
-        "cpu": {"status": "OPEN", "reason": cite + ":src/main.c:422-437: WaitForVBlank inlined; non-wireless calls BIOS VBlankIntrWait. No parked-CPU census or BIOS range admitted. Missing mode/range intentionally refuses cpu clause."},
+        "cpu": json.loads(json.dumps(EXP_CPU)),
         "battle": {"version": "gen3-battle-v1", "clauses": clauses, "commit_guard": guard,
-                   "commit_hold": "OPEN: argument-taking controller ABI, Volatiles Perish mechanism and last-ball shortcut are not qualified for a commit handoff; the vanilla head is not copied."},
+                   "handoff": expansion_handoff(context),
+                   "commit_hold": "HOLD: only the exact battler-0 Perish+controller handoff plan is proved; other battle commits remain refused."},
         "pointers": {name: {"symbol": name, "address": symbol(name)["address"], "source": "build .sym"}
                      for name in ("gSaveBlock1Ptr", "gSaveBlock2Ptr", "gPokemonStoragePtr")},
         "sound": sound, "gift_areas": [],
-        "open": {"cpu": "source branch and machine code known; frame-end parking unqualified", "battle_handoff": "new controller ABI and Volatiles mechanism",
+        "open": {"battle_handoff": "source and ROM handoff shape bound; natural-play Perish KO pending",
                  "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"},
     }}
 

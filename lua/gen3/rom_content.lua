@@ -218,4 +218,6 @@ function RC.new(tbl, io)
     return obj
 end
 
+-- Reuse the same raw-byte digest for locally bound artifact receipts.
+RC.sha1 = sha1
 return RC

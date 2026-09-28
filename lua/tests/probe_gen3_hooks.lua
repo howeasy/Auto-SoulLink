@@ -90,12 +90,16 @@ local function main()
     assert(rows.g == "PASS", "required domains/scopes unavailable")
     local game = dofile(WT .. "/lua/games/gen3_frlge.lua")
     local variant = os.getenv("SLINK_PROBE_VARIANT") or game.detect_variant()
-    assert(variant == "vanilla" or variant == "radical_red" or variant == "emerald", "unsupported probe profile")
-    local p = assert(game.profiles[variant])
+    -- pack-driven titles: their sites and checkpoint come from the pack, not the old-client profile
+    -- (X3: the expansion reference build reads its own generated pack directory)
+    local PACK_DIR = { emerald = "gen3_emerald", emerald_expansion_28877d73 = "gen3_exp/28877d73" }
+    assert(variant == "vanilla" or variant == "radical_red" or PACK_DIR[variant], "unsupported probe profile")
+    local p = PACK_DIR[variant] == nil and assert(game.profiles[variant]) or nil
     local anchor, ret, base
-    if variant == "emerald" then
-        local f = assert(io.open(WT .. "/data/games/gen3_emerald/engine_signals.json", "rb"))
-        local sites = dofile(WT .. "/lua/json_codec.lua").decode(f:read("a")).titles.emerald.artifacts.clean.sites
+    if PACK_DIR[variant] then
+        local dir = WT .. "/data/games/" .. PACK_DIR[variant]
+        local f = assert(io.open(dir .. "/engine_signals.json", "rb"))
+        local sites = dofile(WT .. "/lua/json_codec.lua").decode(f:read("a")).titles[variant].artifacts.clean.sites
         f:close()
         -- Anchor = site.address + capture_offset, mirroring lua/gen3/signals.lua:94's own
         -- hook_address computation, not a bare site.address.
@@ -103,8 +107,8 @@ local function main()
         ret = math.floor(sites.battle_end.address + (sites.battle_end.capture_offset or 0))
         -- The watch base is write_checkpoint.json's own gMain.callback2 predicate (address +
         -- offset), not a literal "+4" beside a profile constant that happens to agree with it.
-        local cf = assert(io.open(WT .. "/data/games/gen3_emerald/write_checkpoint.json", "rb"))
-        local cp = dofile(WT .. "/lua/json_codec.lua").decode(cf:read("a")).emerald
+        local cf = assert(io.open(dir .. "/write_checkpoint.json", "rb"))
+        local cp = dofile(WT .. "/lua/json_codec.lua").decode(cf:read("a"))[variant]
         cf:close()
         local cb2 = assert(cp.predicates.callback2, "no callback2 predicate in write_checkpoint")
         base = math.floor(cb2.address + (cb2.offset or 0))

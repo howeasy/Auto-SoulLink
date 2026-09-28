@@ -630,43 +630,52 @@ def test_link_oracle_counts_the_thrown_balls(monkeypatch, tmp_path):
 
 
 # ── RR-only oracles (P5, card C5-5) ─────────────────────────────────────────────────────────
-def _native_absent_receipts(ka="KA", kb="KB"):
-    a = ("RX apply_trade\n"
-         f"[client] [SLink-gen3] apply_trade received for {ka}: queued for the native trade\n"
-         "[client] [SLink-gen3] write native 0x0203F800 +100 frame 9\n"
-         "TRADE_PHASE scene\nNATIVE_STAGED phase=scene writes=3\nWRITES 3\n")
-    b = ("RX apply_trade\n"
-         f"[client] [SLink-gen3] apply_trade refused: no trade path on this cartridge (nothing written) {kb}\n"
+def _native_absent_receipts():
+    a = ("RX apply_prepare\n"
+         "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n"
+         "PRESAVE_COUNTER before=4 after=5\n"
+         'TX apply_ready - {"event":"apply_ready","ok":true,"token":"native_absent_a"}\n'
+         "NATIVE_PREPARED phase=2 writes=3\nWRITES 3\n")
+    b = ("RX apply_prepare\n"
+         'TX apply_ready - {"event":"apply_ready","ok":false,"token":"native_absent_b"}\n'
          "PROBE_SETTLED writes=0\nWRITES 0\n")
     return {"a": a, "b": b}
 
 
-def test_native_absent_oracle_needs_a_native_stage_and_a_clean_refusal():
-    """Finding 6: the same VALID trade proves the companion's success and the clean refusal."""
+def test_native_absent_oracle_needs_a_native_presave_and_a_clean_refusal():
+    """RR-DURABLE redesign: the same valid apply_prepare. The companion answers ok only after its
+    native pre-save (a native write after the command, gSaveCounter advanced, producer READY);
+    the clean cartridge answers ok:false and writes nothing."""
+    # the companion half saves natively (its pre-save), so only the clean half is no_save;
+    # A's flash is byte-checked by the save-witness stage like every saving half
+    assert duo.SCENARIOS["native_absent_gen3"]["no_save"] == ("b",)
     run = _oracle_run("native_absent_gen3", game="gen3_rr")
     notes = []
     run._pydec_note = notes.append
     run._native_absent_keys = {"a": "KA", "b": "KB"}
     receipts = _native_absent_receipts()
     run.assert_native_absent_gen3_saved(receipts)
-    assert notes and "staged the valid trade" in notes[-1]
-    # the old probe's outcome -- both sides refuse, nobody writes -- is now a FAIL on A
-    both_refuse = dict(receipts, a=receipts["b"].replace("KB", "KA"))
-    with pytest.raises(RuntimeError, match="write native"):
+    assert notes and "native pre-save" in notes[-1]
+    both_refuse = dict(receipts, a=receipts["b"])
+    with pytest.raises(RuntimeError, match="write native|ok.:true"):
         run.assert_native_absent_gen3_saved(both_refuse)
-    unstaged = dict(receipts, a=receipts["a"].replace("NATIVE_STAGED phase=scene writes=3\n", ""))
-    with pytest.raises(RuntimeError, match="NATIVE_STAGED"):
-        run.assert_native_absent_gen3_saved(unstaged)
+    unsaved = dict(receipts, a=receipts["a"].replace("after=5", "after=4"))
+    with pytest.raises(RuntimeError, match="pre-save"):
+        run.assert_native_absent_gen3_saved(unsaved)
+    not_ready = dict(receipts, a=receipts["a"].replace("NATIVE_PREPARED phase=2", "NATIVE_PREPARED phase=1"))
+    with pytest.raises(RuntimeError, match="NATIVE_PREPARED"):
+        run.assert_native_absent_gen3_saved(not_ready)
     clean_wrote = dict(receipts, b=receipts["b"] + "[client] [SLink-gen3] write overworld 0x1 +2 frame 3\n")
     with pytest.raises(RuntimeError, match="forbidden"):
         run.assert_native_absent_gen3_saved(clean_wrote)
-    # live 156a521f: the companion's link panel writes native BEFORE the trade arrives; the
-    # trade's own write is the one after the queued line, and that is what must exist
+    clean_ok = dict(receipts, b=receipts["b"].replace('"ok":false', '"ok":true'))
+    with pytest.raises(RuntimeError, match="ok.:false"):
+        run.assert_native_absent_gen3_saved(clean_ok)
+    # the companion's link panel writes native BEFORE the command; only a write after it counts
     panel = "RX link_panel\n[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4\n"
-    run.assert_native_absent_gen3_saved(dict(receipts, a=panel + receipts["a"]))
     panel_only = dict(receipts, a=panel + receipts["a"].replace(
-        "[client] [SLink-gen3] write native 0x0203F800 +100 frame 9\n", ""))
-    with pytest.raises(RuntimeError, match="missing"):
+        "[client] [SLink-gen3] write native 0x0203F806 +2 frame 9\n", ""))
+    with pytest.raises(RuntimeError, match="write native"):
         run.assert_native_absent_gen3_saved(panel_only)
 
 
@@ -758,8 +767,10 @@ def test_the_row_resolves_titles_fixtures_and_one_line_leafgreen():
     run.gcfg = dict(row, sides=dict(row["sides"], b=("firered", "firered_party_{target}_b")))
     assert run._gen3_title("b") == "firered"
     assert run._gen3_fixture_path("b").endswith("firered_party_town_b.sav")
-    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen; E4: emerald.
-    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red", "emerald"}
+    # P5: radical_red joined (GAMES["gen3_rr"]) alongside firered/leafgreen; E4: emerald;
+    # X3: the expansion reference build (GAMES["gen3_exp"], test_e2e_duo_gen3_exp.py).
+    assert set(duo.GEN3_TITLES) == {"firered", "leafgreen", "radical_red", "emerald",
+                                    "emerald_expansion_28877d73"}
     for inst in ("a", "b"):
         assert row["sides"][inst][0] in duo.GEN3_TITLES
 
@@ -1052,7 +1063,9 @@ local MODULES = {{
   ["/repo/lua/tests/gen3_scripted_play.lua"] = {{ play = {{}}, PROFILE_PACK_BY_TITLE = {{
       firered = "gen3_frlg", leafgreen = "gen3_frlg", radical_red = "gen3_rr", emerald = "gen3_emerald" }} }},
   ["/repo/lua/gen3/reads.lua"] = {{ new = function() return {{}} end }},
-  ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end }},
+  ["/repo/lua/tests/gen3_title_syms.lua"] = {{ entries = {{}}, for_title = function() return {{}} end,
+      emerald_engine = function(t) return t == "emerald" end,
+      sym_path = function(root, t) return root .. "/data/gen3/pret/poke" .. t .. ".sym" end }},
 }}
 local function dofile(path)
     local m = MODULES[path]
@@ -1191,7 +1204,8 @@ function FAKE(scenario, player, phase, spec)
                     { slot = 1, key = "K1", hp = 5, max_hp = 17, species = 16, level = 4 },
                     { slot = 2, key = "K9", hp = 9, max_hp = 9, species = 19, level = 3 } }
     local ctx = { player = player, phase = phase, fmt = string.format, cp = {}, finished = "done",
-                  D = {}, hp0_tag = "FORCED_HP0", title = spec.emerald and "emerald" or "firered",
+                  D = { wt = WT }, hp0_tag = "FORCED_HP0", title = spec.emerald and "emerald" or "firered",
+                  emerald_engine = spec.emerald and true or false,
                   rr = spec.rr and true or false }
     -- E4c-2: an Emerald whiteout heals in C before the landing (overworld.c:357-366), so the
     -- Emerald party reads full; spec.unhealed leaves the lead short (the landing must refuse it)
@@ -1306,11 +1320,15 @@ function FAKE(scenario, player, phase, spec)
     ctx.wait_received = function(cmd)
         if cmd == "force_explode" and spec.executes ~= false then used = 153 end
         -- the companion's native stage writes; the clean side writes only what spec.writes says
-        if cmd == "apply_trade" then writes = writes + (player == "a" and 3 or (spec.writes or 0)) end
+        if cmd == "apply_prepare" then writes = writes + (player == "a" and 3 or (spec.writes or 0)) end
         return spec.received ~= false
     end
     ctx.last_sent = function(event)
         if event == "rival_team_replaced" then return spec.rival_reply or { error = "stale_battle_id" } end
+        if event == "apply_ready" then
+            if spec.ready_ok ~= nil then return { ok = spec.ready_ok } end
+            return { ok = player == "a" }
+        end
         return { area_id = "route_1", species_id = 16 }
     end
     ctx.await_turn = function() return spec.turn or "action" end
@@ -1380,8 +1398,11 @@ function FAKE(scenario, player, phase, spec)
                -- Emerald's START-menu witness (EMH.menu_ready), the same open flag as RR's
                EMH = { menu_ready = function() return rr_menu_open end } }
     -- a script is live from a talk (A tap) until A mashes it closed (mash_until)
+    ctx.press = ctx.press or function() end
     ctx.peek_u8 = function(addr)
         if addr == 0x0203ABE0 then return rr_menu_open and 1 or 0xFF end
+        if addr == 0x0203FE98 then return spec.producer_phase or 2 end    -- RR TRADE_BASE + 0x48
+        if addr >= 0x03005390 and addr < 0x03005394 then return addr == 0x03005390 and 4 or 0 end
         error("fake ctx.peek_u8: no address " .. tostring(addr))
     end
     ctx.G = { map = function() return here.group, here.num end, pos = function() return here.x, here.y end,
@@ -1575,6 +1596,7 @@ def lua():
         defs += face
     if all(defs):
         runtime.globals().HOLD_SRC = "\n".join(d.group(0) for d in defs)
+    runtime.globals().WT = str(REPO).replace(chr(92), "/")
     runtime.execute(_FAKE_CTX)
     return runtime
 
@@ -1641,7 +1663,8 @@ def _run_module(lua, scenario, player, phase, spec):
     # explode runs on the P+H model (_PH_MODEL, case "explode")
     ("rival_swap", "b", "initial", {}, ["READY_IN_BATTLE"]),
     ("rival_swap", "a", "initial", {}, []),
-    ("native_absent", "a", "initial", {}, ["TRADE_PHASE scene", "NATIVE_STAGED phase=scene writes=3"]),
+    ("native_absent", "a", "initial", {}, ["PRESAVE_COUNTER before=4 after=4",
+                                           "NATIVE_PREPARED phase=2 writes=3"]),
     ("native_absent", "b", "initial", {}, ["PROBE_SETTLED writes=0"]),
 ])
 def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spec, markers):
@@ -1662,9 +1685,10 @@ def test_scenario_modules_run_their_happy_path(lua, scenario, player, phase, spe
     ("reconnect", "a", "initial", {}, "the runner never killed A"),
     ("rival_swap", "b", "initial", {"turn": "party"}, "never reached the action menu"),
     ("rival_swap", "b", "initial", {"rival_reply": "lua:{error='window_closed'}"}, "expected error=stale_battle_id"),
-    ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_trade never arrived"),
+    ("native_absent", "b", "initial", {"received": "lua:false"}, "apply_prepare never arrived"),
     ("native_absent", "b", "initial", {"writes": 1}, "the clean cartridge wrote 1 time(s)"),
-    ("native_absent", "a", "initial", {"trade_phase": "fallback"}, "the native stage failed"),
+    ("native_absent", "a", "initial", {"ready_ok": "lua:false"}, "the companion refused the valid prepare"),
+    ("native_absent", "b", "initial", {"ready_ok": "lua:true"}, "the clean cartridge said ok"),
     # finding 2's falsifier: the mirrored deposit ACKed (stats_cache) but moved nothing
     ("whiteout", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
     ("boxsync", "b", "initial", {"noop_deposit": "lua:true"}, "was never read back boxed"),
@@ -2541,13 +2565,16 @@ def battle_model():
     consts = re.search(r"^local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = .*$", text, re.M)
     outcome = re.search(r"^local B_OUTCOME_WON = .*$", text, re.M)
     self_damage = re.search(r"^local SELF_DAMAGE_EFFECTS = \{.*?^\}$", text, re.M | re.S)
+    # X3: the vanilla gBattleMons/move-table geometry (the driver's BM table) and its power read
+    geometry = re.search(r"^local BM = \{.*?effect_off = 0 \}$", text, re.M | re.S)
+    assert geometry, "duo_gen3_main.lua must define the vanilla BM geometry"
     menus = re.findall(r"^local function (?:ctrl0|action_menu_up|move_menu_up)\(\).*$", text, re.M)
     assert consts and outcome and self_damage and len(menus) == 3
     runtime.execute("\n".join([consts.group(0), outcome.group(0), *menus,
                                _lua_defs(DRIVER, ["game_press"]),
                                "local function press(btn, gap) return game_press(btn, joypad.set, G.advance,"
                                " function() return memory.read_u16_le(GMAIN + 0x2C) end, gap, 30) end",
-                               self_damage.group(0),
+                               self_damage.group(0), geometry.group(0), _lua_defs(DRIVER, ["move_power"]),
                                _lua_defs(DRIVER, ["move_effect", "steer", "ctx.choose_action",
                                                   "ctx.status_move_slot", "any_move_slot", "ctx.use_move",
                                                   "ctx.lose_active"]),
@@ -4385,14 +4412,59 @@ def test_game_help_names_the_new_rows():
         assert row in help_text, row
 
 
-def test_memorial_problems_accept_trained_growth_only_when_trained(pair):
-    fixture, _ = pair
+def _memorial_saved(**overrides):
+    """(saved, fixture) for gen3_memorial_problems with STARTER cut from the party into the
+    memorial box: party [PIDGEY], box 13 slot 0 holding the key, nothing else moved. `overrides`
+    patch the MEMORIAL RECORD only. The party tail (level, max_hp, the six stats) is injected
+    on purpose: gen3_codec._PARTY_TAIL is party-only, so a decoded BoxPokemon can never carry
+    those fields and this pins the mask as declared rather than as one save shape happens to
+    reach it."""
+    fixture = _fixture([STARTER, PIDGEY])
+    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
+    flushed, cut = _decoded(saved), _decoded(fixture)
+    flushed[1][(13, 0)] = dict(flushed[1][(13, 0)], **overrides)
+    return flushed, cut
+
+
+# every field GEN3_TRAINED_MUTABLE names, at a value the cartridge's own record bounds accept
+_TRAINED_GROWTH = [
+    ("experience", 1261), ("level", 9), ("max_hp", 24), ("attack", 13), ("defense", 14),
+    ("speed", 12), ("sp_attack", 13), ("sp_defense", 15), ("moves", [33, 33, 0, 0]),
+    ("evs", {"hp": 4, "attack": 4, "defense": 0, "speed": 0, "sp_attack": 0, "sp_defense": 0}),
+]
+
+
+@pytest.mark.parametrize("field,value", _TRAINED_GROWTH)
+def test_memorial_trained_masks_the_growth_field_and_nothing_else(field, value):
+    """PYDEC FAIL on the RR final cut (d9a928d7): "a: the memorial ... differs from the fixture
+    record in [('experience', 228, 267)]". A fights naturally before it goes down, so its
+    memorial record may legitimately carry growth the fixture's does not. Each field the mask
+    names is hidden when the side was trained -- and is still a diff when it was not, so a
+    trained side cannot launder a change the game had no business making."""
+    assert field in duo.GEN3_TRAINED_MUTABLE
     key = _key(STARTER)
-    grown = _mon(STARTER["personality"], party=False)
-    grown["experience"] = 1261
-    saved = _saved(fixture, 3, [PIDGEY], {(13, 0): grown})
-    assert _mem("b", _decoded(saved), _decoded(fixture), key, 13, trained=True) == []
-    assert any("differs from the fixture" in p for p in _mem("b", _decoded(saved), _decoded(fixture), key, 13))
+    clean, fixture = _memorial_saved()
+    assert _mem("a", clean, fixture, key, 13) == []       # the untouched record reports nothing
+    grown, _ = _memorial_saved(**{field: value})
+    assert _mem("a", grown, fixture, key, 13, trained=True) == []
+    assert any(f"('{field}'," in p for p in _mem("a", grown, fixture, key, 13))
+
+
+@pytest.mark.parametrize("field,value", [("species", 16), ("personality", 0x11112222),
+                                         ("ot_id", 0x33445566)])
+def test_memorial_trained_never_masks_identity_or_species(field, value):
+    """`trained` is a growth mask, not a blank cheque. A changed species is a different mon filed
+    under the key and stays a diff; a changed personality or OT id makes the key lookup miss, so
+    the record is reported as not sitting in the memorial box at all. A wrong-save deposit is
+    exactly what a mask that grew to cover identity would hide."""
+    key = _key(STARTER)
+    saved, fixture = _memorial_saved(**{field: value})
+    problems = _mem("a", saved, fixture, key, 13, trained=True)
+    assert problems
+    if field == "species":
+        assert any("('species'," in p for p in problems), problems
+    else:
+        assert any("not exactly once in the memorial box" in p for p in problems), problems
 
 
 def test_last_mon_problems_positive_and_negatives(pair):
@@ -4500,6 +4572,124 @@ def test_a_throwing_watcher_is_reported_by_name_before_it_is_dropped():
     assert "WATCHER_ERROR scenario=%s watcher=%s" in text
 
 
+_LFA_SCENARIO = {"wild": "linked_faint_active_gen3", "whiteout": "linked_faint_active_whiteout_gen3",
+                 "trainer": "linked_faint_active_trainer_gen3", "lhammer": "linked_faint_active_lhammer_gen3",
+                 "explode": "explode_gen3"}
+
+# (side, trained) each linked_faint_active case hands gen3_memorial_problems, in call order.
+# A is the side whose engine faint site fires: it fights NATURALLY in every case
+# (wild/trainer/lhammer/...), so it can legitimately gain EXP before it goes down. B's KO is
+# engine-forced with no input (active_faint_chain), so its growth only moves in the trainer
+# case, where PREP_LEVEL levels it up before the hand-off. Whiteout never reaches the check on
+# B: its linked mon is B's only mon, so game_over drops the memorialize and the last mon is kept
+# (ruling 21) -- B is checked by gen3_last_mon_problems instead.
+_LFA_TRAINED_MASK = {
+    "wild": (("a", True), ("b", False)),
+    "whiteout": (("a", True),),
+    "trainer": (("a", True), ("b", True)),
+    "lhammer": (("a", True), ("b", False)),
+    "explode": (("a", True), ("b", False)),
+}
+
+
+@pytest.mark.parametrize("case", sorted(_LFA_TRAINED_MASK))
+def test_linked_faint_active_masks_growth_for_the_natural_side_only(ph, monkeypatch, tmp_path, case):
+    """PYDEC FAIL on the RR final cut (d9a928d7): "a: the memorial ... differs from the fixture
+    record in [('experience', 228, 267)]". The call site masks growth with
+    `trained=inst == "a" or case == "trainer"`, so the table below is the whole rule: A always,
+    B only for the trainer case. It is a table rather than one wild case because B is not
+    uniformly unmasked -- the trainer case levels B up first (PREP_LEVEL) and the whiteout case
+    never memorializes B at all."""
+    fixture = _fixture([STARTER, PIDGEY])
+    k = _key(STARTER)
+    memorial = _saved(fixture, 3, [PIDGEY], {(13, 0): _mon(STARTER["personality"], party=False)})
+    kept = _saved(fixture, 3, [STARTER], {(0, 0): _mon(PIDGEY["personality"], party=False, species=16)})
+    scenario = _LFA_SCENARIO[case]
+    saved = {"a": memorial, "b": kept if case == "whiteout" else memorial}
+    links = [{"a": {"key": k}, "b": {"key": k},
+              "status": "dead" if case == "whiteout" else "memorial", "cause": "battle"}]
+    run, _ = _oracle_stub(monkeypatch, tmp_path, scenario, saved, fixture, links)
+    run._link_keys = {"a": k, "b": k}
+    calls = []
+    monkeypatch.setattr(duo, "gen3_memorial_problems",
+                        lambda inst, *a, **kw: calls.append((inst, kw.get("trained"))) or [])
+    cmd = "force_explode" if case == "explode" else "force_faint"
+    (tmp_path / "slink.log").write_text(
+        f"[a] faint → {cmd} b:{k}\n" + ("" if case == "whiteout" else "fully memorialized\n"),
+        encoding="utf-8")
+    _, _, _, log = ph(case, "b")
+    receipts = {"a": (f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n"
+                      f"SAVE_WITNESS_DUMP path=p\n"),
+                "b": log.replace("K0", k).replace("K1", _key(PIDGEY))}
+    # the receipt verdict itself is test_linked_faint_active_oracle_on_p_h_receipts' job; the
+    # mask is decided in the saved-state loop, before the oracle looks at a receipt at all
+    getattr(run, duo.SCENARIOS[scenario]["oracle"])(receipts)
+    assert calls == list(_LFA_TRAINED_MASK[case])
+
+
+def test_the_explode_case_gives_b_no_turn_to_win_on(ph, monkeypatch, tmp_path):
+    """EXPLODE-B-MASK: `active_faint_chain`'s explode branch pins a bare `outcome=\d+`
+    (e2e_duo.py:1818-1819 -- the foe usually falls with the user, so the aftermath may be a win, a
+    send-out, a whiteout or a draw), which reads like a window where B's linked mon could win a
+    battle and bank EXP before its forced KO. It cannot, so `trained` stays narrow:
+      * the explode case falls through `enter` to the SAME `ctx.hunt` as wild
+        (scenario_gen3_linked_faint_active.lua:280), and hunt_encounter walks with enc=false
+        (gen3_scripted_play.lua:1182-1187) -- the first encounter IS the parked battle, never an
+        incidental fight run to a win;
+      * the chain REQUIRES the PARTY HP word at 0 in the faint site (e2e_duo.py:1812-1813) with
+        inputs=0 keys=0x0 across commit->KO (:1810-1811): the mon is fainted IN THE PARTY before
+        the battle ends, and the exp path reads that word -- "Our dead mon gets no further exp",
+        PROVEN against `src/battle_script_commands.c:3282` and the level-up refresh's
+        non-zero-HP guard (`docs/gen3/research/active_faint_in_battle_scope_2026-09-23.md:63,75,250`);
+      * the Explosion plan writes the BATTLE mon's moves/PP (lua/gen3/client.lua:731-735), never
+        the party record, so `moves` is the fixture's here too. The Explosion can hand EXP to a
+        BENCH mon sent out after the KO (the same doc's Explode costs, :163-164), and the oracle
+        only diffs the memorial record of `key`, so that is not B's linked mon.
+    Red on both edges: a receipt whose party HP word is nonzero is refused, and a B memorial record
+    with grown experience is refused -- widening `trained` to the explode case would pass it."""
+    ok, passed, msg, log = ph("explode", "b")
+    assert ok and passed is True, (msg, log)
+    assert re.search(r"^ACTIVE_KO K0 .* last_move=153 inputs=0 keys=0x0 hp_writes=0 attempted=\d+ case=explode$",
+                     log, re.M), log
+    assert re.search(r"^ACTIVE_FAINT_SITE K0 .* battle_hp=0 party_hp=0 counter=0->1$", log, re.M), log
+    required, ordered, forbidden = duo.active_faint_chain("K0", "explode")
+    assert duo.gen3_receipt_problems("b", log, required=required, ordered=ordered, forbidden=forbidden) == [], log
+    assert duo.gen3_receipt_problems("b", log.replace("party_hp=0", "party_hp=128"), required=required,
+                                     ordered=ordered, forbidden=forbidden)
+
+    fixture = _fixture([STARTER, PIDGEY])
+    k = _key(STARTER)
+    grown = _mon(STARTER["personality"], party=False)
+    grown["experience"] = 1261
+    link = [{"a": {"key": k}, "b": {"key": k}, "status": "memorial", "cause": "battle"}]
+
+    def run_for(record):
+        saved = _saved(fixture, 3, [PIDGEY], {(13, 0): record})
+        run, _ = _oracle_stub(monkeypatch, tmp_path, "explode_gen3", {"a": saved, "b": saved}, fixture, link)
+        run._link_keys = {"a": k, "b": k}
+        (tmp_path / "slink.log").write_text(f"[a] faint → force_explode b:{k}\nfully memorialized\n",
+                                           encoding="utf-8")
+        return run
+
+    _, _, _, log_b = ph("explode", "b")
+    receipts = {
+        "a": f"ENGINE_FAINT_SITE frame=1\nTX faint {k} {{}}\nTX memorialize_done {k} {{}}\n"
+             f"SAVE_WITNESS_DUMP path=p\n",
+        "b": log_b.replace("K0", k) + f"TX memorialize_done {k} {{}}\n",
+    }
+    real = duo.gen3_memorial_problems
+    calls = []
+    monkeypatch.setattr(duo, "gen3_memorial_problems",
+                        lambda inst, *a, **kw: calls.append((inst, kw.get("trained"))) or [])
+    run_for(_mon(STARTER["personality"], party=False)).assert_explode_gen3_saved(receipts)
+    assert ("a", True) in calls     # A fights naturally in every case, explode included
+    assert ("b", False) in calls    # B's mon is engine-fainted before any EXP award
+
+    monkeypatch.setattr(duo, "gen3_memorial_problems", real)
+    with pytest.raises(RuntimeError, match="differs from the fixture"):
+        run_for(grown).assert_explode_gen3_saved(receipts)
+
+
 def test_linked_faint_active_oracle_keeps_the_last_mon_on_both_sides(ph, monkeypatch, tmp_path):
     """R4 on RR's one-mon rr_battle.sav: A's natural faint and B's Perish KO both leave the lone
     linked mon in its party after game_over (ruling 21); no deposit, link DEAD, no memorial."""
@@ -4584,13 +4774,13 @@ FR_DUMP = _rom_dump("Pokemon - FireRed Version (USA).gba")
 
 RR_ARTIFACTS = {  # sha1 -> path: the clean 4.1 dump and the companion build SLink ships
     "964f951a0fdaf209e4ea1344883ef0d557bb3a80": RR_DUMP,
-    "7a3867499d66eb3621e0e7dde43bd033fc679f01": REPO / "patch" / "build" / "slink_RR.gba",
+    "da579690db7d6933a0952a1f490312842793f71a": REPO / "patch" / "build" / "slink_RR.gba",
 }
 
 
 # (the companion no longer carries a Task_HandleChooseMonInput 0x0811FB29 literal: its party chooser
 # calls RR's ChoosePartyMonByMenuType, which owns that reference)
-COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x0837992C]}
+COMPANION_EXTRA_REFS = {0x02023FFC: [0x08378F44, 0x09360318], 0x0802EA11: [0x08379D84]}
 
 
 def _pret_battle_berries():
@@ -5168,7 +5358,8 @@ def test_emerald_admission_is_production_only():
     assert re.search(r"(?m)^Entry\.ROUTED = \{ gen3_frlg = true, gen3_rr = true, gen3_emerald = true \}",
                       entry)
     assert "test_admission_codec" not in entry
-    assert "test_admission_codec" not in DRIVER.read_text(encoding="utf-8")
+    # X3: the seam is back for gen3_exp ONLY (test_e2e_duo_gen3_exp.py); it never touches Emerald
+    assert 'if game ~= "gen3_exp"' in DRIVER.read_text(encoding="utf-8")
 
 
 def test_ball_hunt_scenarios_resolve_emerald_fixture_with_enough_balls():

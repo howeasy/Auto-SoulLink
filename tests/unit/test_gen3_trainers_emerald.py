@@ -67,18 +67,37 @@ def test_json_keys_are_pret_trainer_constants():
 # ── pret-grounded spot checks ─────────────────────────────────────────────────────────────────
 
 def test_roxanne():
-    # [TRAINER_ROXANNE_1] = 265, sParty_Roxanne1 (ITEM_CUSTOM_MOVES); Rustboro Gym warps to the
-    # unmapped Rustboro City, whose nearest mapped neighbour (by id) is route_104
+    # [TRAINER_ROXANNE_1] = 265, sParty_Roxanne1 (ITEM_CUSTOM_MOVES). Rustboro City's gym warps to
+    # the city, which had no wild encounters of its own, so until owner ruling 40 named it in
+    # area_map.json (tools/gen_area_map.py E5-CITYLINK) the generator's BFS walked past the town to
+    # the nearest wild-linked neighbour and filed her under route_104. Same defect, same fix as
+    # test_wattson_is_filed_under_mauville_city_not_route_110.
     t = TRAINERS["265"]
     assert (t["const"], t["name"], t["class"], t["area"], t["key"], t["level_cap"], t["calc_label"]) == (
-        "TRAINER_ROXANNE_1", "Roxanne", "Leader", "route_104", True, 15, "Leader Roxanne")
+        "TRAINER_ROXANNE_1", "Roxanne", "Leader", "rustboro_city", True, 15, "Leader Roxanne")
     rock = ["Tackle", "Defense Curl", "Rock Throw", "Rock Tomb"]
     assert _party(265) == [("Geodude", 12, None, rock), ("Geodude", 12, None, rock),
                            ("Nosepass", 15, "Oran Berry", ["Block", "Harden", "Tackle", "Rock Tomb"])]
     assert "fight_label" not in t
     # gRematchTable REMATCH_ROXANNE: tiers 2..5 fight where tier 1 does
     assert [(TRAINERS[str(i)]["fight_label"], TRAINERS[str(i)]["area"]) for i in range(770, 774)] == [
-        (f"Rematch {n}", "route_104") for n in range(1, 5)]
+        (f"Rematch {n}", "rustboro_city") for n in range(1, 5)]
+
+
+def test_wattson_is_filed_under_mauville_city_not_route_110():
+    # [TRAINER_WATTSON] = 267 (+ 4 rematch tiers 778-781). Owner ruling 28 RC defect: Mauville City
+    # has no wild encounters of its own (unlike e.g. Petalburg/Lilycove), so it was missing from
+    # area_map.json entirely and Wattson's gym warped straight past it to the nearest wild-linked
+    # neighbour, Route 110 -- the same "nearest-area rule" mechanism test_roxanne documents for
+    # Rustboro. Owner ruling 40 then extended the same backfill to Rustboro, Fortree, Littleroot,
+    # Oldale, Fallarbor and Verdanturf (tests/unit/test_gen3_emerald_towns.py), so no Hoenn town
+    # is left unnamed.
+    for tid in (267, 778, 779, 780, 781):
+        t = TRAINERS[str(tid)]
+        assert t["name"] == "Wattson"
+        assert t["area"] == "mauville_city", (tid, t["area"])
+    area_map = json.loads(GAME["area_map"].read_text(encoding="utf-8"))
+    assert "mauville_city" in area_map.values()
 
 
 def test_wallace_is_the_champion_and_steven_is_not():

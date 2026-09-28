@@ -1,0 +1,13 @@
+# gen3_final_cut row=emerald_zip_check item=§9_item5_EMERALD cut=495685364a82d6a106c2a64cf189ce66f38f72ce
+# lane=C:/slink-wt/g3-lane
+# command: python tools/check_release_zip.py C:/slink-wt/g3-lane/dist/SLink-player-g4-49568536.zip --rev 495685364a82d6a106c2a64cf189ce66f38f72ce   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:09:59 cpu=91% emuhawk=0 python=8
+start_utc=2026-09-27T19:09:58Z tracked_clean_before=True
+check_release_zip: SLink-player-g4-49568536.zip  rev=495685364a82d6a106c2a64cf189ce66f38f72ce  members=177  mode=manifest
+  note: prefix 'SLink-player-g4-49568536/' stripped from every member
+PASS: 177 members, all blobs equal, no dev-only paths, 23/23 closure files present
+exit=0 end_utc=2026-09-27T19:10:05Z tracked_clean_after=True classification=pass

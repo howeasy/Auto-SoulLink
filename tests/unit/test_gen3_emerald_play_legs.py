@@ -782,4 +782,6 @@ def test_box_place_uses_the_shared_pc_mode_for_row_2():
     Emerald-only EMH.pc_top_row workaround is gone (test_pc_mode_reaches_a_row_two_downs_away
     covers PC.mode itself)."""
     chunk = next(c for c in _leg_chunks(_SCRIPT_SRC) if 'name = "emerald_pc_box_place"' in c)
-    assert "PC.mode(L, 2)" in chunk and "pc_top_row" not in _SCRIPT_SRC
+    # X3: the row is the title's own MOVE POKEMON option (2 on vanilla Emerald, PC.OPTION)
+    assert "PC.mode(L, PC.OPTION.move_mons)" in chunk and "pc_top_row" not in _SCRIPT_SRC
+    assert "or { withdraw = 0, deposit = 1, move_mons = 2 }" in _SCRIPT_SRC

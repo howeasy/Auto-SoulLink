@@ -16,28 +16,22 @@ def bizhawk_lua_version(monkeypatch):
 
 
 class TradeNativeWorld(World):
-    def __init__(self, *, capability=1, production=True, title="firered"):
-        def r1_layout(native):
-            # MODEL of the new producer contract f4b740f6. The producer owns
-            # abi.h and has not merged into this consumer's base yet.
-            abi = native["abi_v2"]
-            abi["structs"]["SlinkMailboxV2"]["fields"]["producer_phase"] = {"offset": 0x48, "width": 4, "count": 1}
-            abi["constants"].update(SLINK_REASON_WITHDRAW_TOO_LATE=14)
-            abi["constants"].update({f"SLINK_PHASE_{name}": i for i, name in enumerate(
-                ("IDLE", "PRE_SAVE", "READY", "SCENE", "DONE", "UNCERTAIN"))})
-        super().__init__(abi=2, pack="gen3_frlg", mutate_native=r1_layout)
+    def __init__(self, *, capability=1, production=True, title="firered",
+                 player="a", initial_seq=10, epoch=0x12345678, pack="gen3_frlg"):
+        super().__init__(abi=2, pack=pack)
         self.battle = False
         self.recovery_clear = True
         assert self.lua.eval("_VERSION") == "Lua 5.4"
         self.put(self.n["BASE"] + 0x40, capability, 4)
         self.module = self.lua.execute((native_model.ROOT / "lua/gen3/native.lua").read_text())
         self.native = self.module.new(self.lua.table_from(self.profile, recursive=True), self.lua.table(
-            io=self.native_io, writes=self.writes, reads=self.reads, title=title, player="a",
-            production=production, artifact_kind="companion", initial_seq=10,
-            timeout_frames=8, send=lambda *_: None, in_battle=lambda: self.battle,
+            io=self.native_io, writes=self.writes, reads=self.reads, title=title, player=player,
+            production=production, artifact_kind="companion", initial_seq=initial_seq,
+            timeout_frames=8, send=lambda event, fields: self.events.append((event, fields)),
+            log=self.logs.append, in_battle=lambda: self.battle,
             trade_recovery_clear=lambda: self.recovery_clear,
             trade_safe=lambda: self.safe and not self.battle))
-        self.native.set_session_epoch(self.native, 0x12345678)
+        self.native.set_session_epoch(self.native, epoch)
         self.service()
         self.old = mon_record(1, 2, species=4)
         self.incoming = mon_record(5, 6, species=7)
@@ -134,7 +128,7 @@ def test_trade_witness_size_is_validated_before_native_io():
 @pytest.mark.parametrize("capability,production,title,capable", [
     (1, True, "firered", True), (0, True, "firered", False),
     (4, True, "firered", False), (1, False, "firered", False),
-    (1, None, "firered", False), (1, True, "leafgreen", False),
+    (1, None, "firered", False), (1, True, "leafgreen", True), (1, True, "emerald", False),
 ])
 def test_trade_capability_requires_advertised_bit_and_production_identity(capability, production, title, capable):
     world = TradeNativeWorld(capability=capability, production=production, title=title)
@@ -156,6 +150,16 @@ def test_prepare_requires_consent_presave_and_matching_ready_phase():
     w.service()
     assert w.prepared_results[0][0] is None
     assert w.native.trade_visit(w.native).old_key == w.old_key
+
+
+def test_emerald_published_binding_uses_same_durable_contract():
+    w=TradeNativeWorld(title="emerald",pack="gen3_emerald",capability=87)
+    assert w.native.trade_capable(w.native) is True
+    w.prepare(ready=False)
+    assert w.read(w.n["BASE"]+6,2)==29
+    w.witness(bits=1,result=0,phase=2)
+    w.ack();w.service()
+    assert w.native.trade_visit(w.native).old_key==w.old_key
 
 
 @pytest.mark.parametrize("field,value", [("is_egg", 1), ("is_bad_egg", 1), ("species", 0),
@@ -468,3 +472,30 @@ def test_unchanged_native_ownership_stays_closed_when_journal_is_unreadable():
     assert w.journal.hidden(w.journal)
     assert not w.trade.capable(w.trade)
     assert w.native.trade_active(w.native), "native DONE is not reconciled while its journal is unreadable"
+
+
+@pytest.mark.parametrize("failure,reason", [("staging", "native staging overwritten"),
+                                           ("prepare", "native prepare lacks ready witness")])
+def test_a_dead_trade_session_logs_its_reason_once(failure, reason):
+    w = TradeNativeWorld()
+    if failure == "staging":
+        w.stage_scene()
+        w.put(w.n["BLOB_BUF"], 0xFF)
+    else:
+        w.prepare(ready=False)
+        w.ack()
+    for _ in range(5):
+        w.service()
+    notices = [line for line in w.logs if "durable trade unavailable for this session" in line]
+    assert len(notices) == 1 and reason in notices[0]
+
+
+def test_owned_trade_refuses_rebinding_and_uncertain_phase_never_advertises():
+    w = TradeNativeWorld()
+    w.prepare()
+    assert w.native.bind_trade_session(w.native, 9) is False
+    before = list(w.output)
+    w.phase(5)
+    assert not w.native.trade_capable(w.native)
+    w.service()
+    assert w.output == before

@@ -2,9 +2,9 @@
 """e2e_duo.py — TWO-INSTANCE headless E2E harness for the SLink companion patch.
 
 Runs a throwaway SLink server + two concurrent EmuHawk instances (players a/b), both
-loading savestates from the SAME save (instance B mutates its party OTIDs pre-hello so
-mon keys don't collide in the server's flat key index), then orchestrates a scenario
-via the server's debug HTTP API and waits for both instances' result files.
+booting a battery save seeded from the SAME source (instance B mutates its party OTIDs
+pre-hello so mon keys don't collide in the server's flat key index), then orchestrates a
+scenario via the server's debug HTTP API and waits for both instances' result files.
 
     python tools/e2e_duo.py --scenario faint
     python tools/e2e_duo.py --scenario all --keep-alive
@@ -49,16 +49,15 @@ else:
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EMUHAWK = "E:/Howard/Bizhawk/EmuHawk.exe"
 BIZHAWK_CONFIG = "E:/Howard/Bizhawk/config.ini"
-SAVESTATE_DIR = "E:/Howard/Bizhawk/GBA/State"
 ROM_REL = "patch/build/slink_RR.gba"
 BUILD = os.path.join(REPO, "patch", "build")
 # Where --wire-log parks a run's golden transcripts (tests/fixtures/gen3/wire/README.md).
 WIRE_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3", "wire")
 WT_FWD = REPO.replace("\\", "/")
 
-# Per-scenario knobs: extra server flags, savestate (str, or {"a":…,"b":…}), per-side timeout
-# (seconds), fillers (default True; or {"a":…,"b":…} — explode keeps B at ONE mon so the
-# Explosion self-faint whites out instead of opening the switch menu), and `games`.
+# Per-scenario knobs: extra server flags, per-side timeout (seconds), fillers (default True;
+# or {"a":…,"b":…} — explode keeps B at ONE mon so the Explosion self-faint whites out
+# instead of opening the switch menu), and `games`.
 #
 # `games` is which titles a scenario applies to. ABSENT MEANS EVERY TITLE — read it through
 # scenarios_for(), never inline.
@@ -166,8 +165,8 @@ SCENARIOS = {
     "gen2_soft_reset": {"flags": [], "timeout": 1200, "games": ("gen2_new",),
                         "no_setup": True, "frames": 216000,
                         "oracle": "assert_gen2_soft_reset_saved", "oracle_kwargs": {}},
-    "faint":   {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
-    "boxsync": {"flags": [], "savestate": "slink_overworld.State", "timeout": 420},
+    "faint":   {"flags": [], "timeout": 420},
+    "boxsync": {"flags": [], "timeout": 420},
     # The old `gen1`/`gen1_yellow` client and its scenario drivers were deleted (deletion plan
     # step 3): lua/tests/duo/scenario_gen1_*.lua and gen1_hunt.lua are gone, so every entry that
     # named `("gen1",)` went with them.
@@ -326,8 +325,8 @@ SCENARIOS = {
     # actually cross-checked against the RR binary (Task_DepositMenu/Task_WithdrawMon, a few
     # battle-flag addresses) are confirmed identical to FR's; the rest (battle action/move
     # cursors, map names/tile coordinates) are assumed, not verified.
-    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-                       "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": "town",
+    "faint_cmd_gen3": {"flags": [], "timeout": 900, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
+                       "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"}, "target": "town",
                        "frames": 2000000, "oracle": "assert_faint_cmd_gen3_saved"},
     # G5-RR-BATTERY: on gen3_rr every row that links or trades the slot-1 mon, or throws a Poke
     # Ball, boots rr_battle2{,_b}.sav (two mons, nine balls; 80913bdf) via target_by_game --
@@ -336,6 +335,10 @@ SCENARIOS = {
     # A1 and R1 (RR companion): mechanism P+H on the wild battle (active_faint_case "wild").
     # `target_by_game` (scenario_target): RR's rr_battle.sav holds ONE mon and no balls, so R1's
     # send-out needs rr_battle2 (parcel -> 10 balls, then a Route 1 catch; driver 8103ddec).
+    # X3: not on gen3_exp -- the expansion build replaced gStatuses3/gDisableStructs with struct
+    # Volatiles and the controller ABI, so its pack proves no Perish+hand-off plan and the client
+    # HOLDS an active battler's force_faint until it leaves battle (lua/gen3/client.lua
+    # active_faint_capable); P+H is re-derived at XG3 (docs/gen3_emerald/PLAN.md X3 row).
     "linked_faint_active_gen3": {"flags": [], "timeout": 1800,
                                  "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
                                  "target": "battle",
@@ -358,16 +361,16 @@ SCENARIOS = {
                                          "scenario_module": "linked_faint_active",
                                          "active_faint_case": "trainer",
                                          "oracle": "assert_linked_faint_active_trainer_gen3_saved"},
-    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-                     "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
+    "boxsync_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
+                     "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 2500000,
                      "oracle": "assert_boxsync_gen3_saved"},
     # E4c: on gen3_emerald the receipt is Emerald's own landing, not FR's Center: DoWhiteOut heals
     # in C and warps straight to gSaveBlock1Ptr->lastHealLocation, OUTDOORS (pret pokeemerald
     # src/overworld.c:357-366,665-668; heal_locations.json:82-85 Oldale Town 0.10 (6,17)).
     # Both sides boot the two-mon pc fixture (slot 1 is the linked mon; A deposits it at the Oldale
     # PC and walks out to Route 103 with its lone starter).
-    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
-                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
+    "whiteout_gen3": {"flags": [], "timeout": 2400, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
+                      "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "pc", "gen3_exp": "pc"}, "target": {"a": "battle", "b": "town"}, "frames": 3000000,
                       "oracle": "assert_whiteout_gen3_saved"},
     # G4 item 2a (4): the Center 2F negative controls (the nurse rides whiteout_gen3). A walks
     # from the Route 1 grass to the 2F; its one in-game save is the Cable Club's own
@@ -473,9 +476,9 @@ SCENARIOS = {
     # retries on the 5-ball fixture (B ran out of balls twice) before the catch fixture existed.
     # FR/LG link_gen3 hunts the SYNTH party_catch_synth saves (20 balls) for the same reason: the
     # LeafGreen battle save holds 2 balls and gen3_lgfr failed out-of-balls 3/3.
-    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
+    "link_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp"),
                   "ball_hunt": True,
-                  "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch",
+                  "target_by_game": {"gen3_rr": "battle2", "gen3_emerald": "catch", "gen3_exp": "catch",
                                      "gen3_frlg": "catch_synth", "gen3_lgfr": "catch_synth"},
                   "target": "battle", "frames": 2500000, "oracle": "assert_link_gen3_saved"},
     "deadzone_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
@@ -531,7 +534,7 @@ SCENARIOS = {
                              "no_save": ("a", "b"), "oracle": "assert_rival_swap_real_gen3_saved"},
     "native_absent_gen3": {"flags": [], "timeout": 300, "games": ("gen3_rr",),
                            "target_by_game": {"gen3_rr": "battle2"}, "target": "town", "frames": 300000,
-                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("a", "b"),
+                           "rom_kind": {"a": "companion", "b": "clean"}, "no_save": ("b",),
                            "oracle": "assert_native_absent_gen3_saved"},
     # G5 two-player evidence for the retired old-client rows, rebuilt on the new client.
     # trade / trade_decline: the companion's Pokemon-Center trade NPC; both boot rr_battle2{,_b}
@@ -539,6 +542,12 @@ SCENARIOS = {
     # infopanel: the SOULLINK START-row panel; the oracle decodes the drawn bytes with the Python
     # charmap. Both RR menu shapes: rr_town{,_b} (pre-Pokedex, 6 stock rows) and, as infopanel_dex,
     # rr_battle2{,_b} (Pokedex owned, 7 stock rows; the shape the old count==6 splice skipped).
+    "native_trade_firered": {"flags": [], "timeout": 1800, "games": ("gen3_fr_trade",),
+        "target": "town", "frames": 2500000, "gen3_native_trade": True,
+        "scenario_module": "native_trade", "oracle": "assert_native_trade_firered"},
+    "native_trade_decline_firered": {"flags": [], "timeout": 1800, "games": ("gen3_fr_trade",),
+        "target": "town", "frames": 2500000, "gen3_native_trade": True,
+        "native_decline": True, "scenario_module": "native_trade", "oracle": "assert_native_trade_firered"},
     "trade_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",), "target": "battle2",
                    "frames": 2500000, "oracle": "assert_trade_gen3_saved"},
     "trade_decline_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",), "target": "battle2",
@@ -605,6 +614,7 @@ SCENARIOS["release_gen3"] = {
     "oracle": "assert_release_gen3_saved",
 }
 SCENARIOS["ball_gate_gen3"] = {
+    "post_flip_stock": True,
     "flags": [], "timeout": 2400, "frames": 3000000,
     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"),
     "ball_hunt": True, "rng_attempts": 8,
@@ -618,8 +628,14 @@ SCENARIOS["species_family_gen3"] = {
     "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "explicit_only": True,
     "rule_kind": "family", "target": {"a": "family_synth", "b": "catch_synth"},
     "target_by_game": {"gen3_emerald": {"a": "family", "b": "catch"},
-                       "gen3_rr": {"a": "family_synth", "b": "battle2"}},
+                       "gen3_rr": {"a": "family_synth", "b": "family_galar_synth"}},
     "oracle": "assert_species_family_gen3_saved",
+}
+SCENARIOS["shiny_bonus_gen3"] = {
+    "flags": [], "timeout": 2400, "frames": 3000000, "ball_hunt": True, "rng_attempts": 8,
+    "games": ("gen3_frlg", "gen3_rr", "gen3_emerald"), "explicit_only": True,
+    "target": "catch_synth", "target_by_game": {"gen3_emerald": "catch", "gen3_rr": "battle2"},
+    "oracle": "assert_shiny_bonus_gen3_saved",
 }
 
 
@@ -628,7 +644,7 @@ SCENARIOS["species_family_gen3"] = {
 # Titles that never inherit a scenario implicitly. An entry with no `games` key means "every
 # title", which is right for savestate-less shared scenarios like faint/boxsync — but not for
 # `gen1_new`, whose driver runs only the scenarios that name it, so opt-in is the whole rule.
-OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr", "gen3_emerald")
+OPT_IN_GAMES = ("gen1_new", "gen2_new", "gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_fr_trade", "gen3_exp")
 
 
 def is_pure_pairing(game) -> bool:
@@ -725,7 +741,7 @@ RNG_OUT_OF_BALLS = "RESULT: FAIL (hunt ended out-of-balls)"
 # (retryable_gen1_rng), the per-attempt idle jitter the driver echoes (jitter_problems) and the
 # attempt budget (scenario_attempt_limit). A Gen 3 scenario opts in with `ball_hunt`: only a
 # half that throws Poke Balls can end on the out-of-balls cause.
-RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr", "gen3_emerald")
+RNG_RETRY_FAMILIES = ("gen1_new", "gen3_frlg", "gen3_rr", "gen3_emerald", "gen3_exp")
 # A partner half's own "I only failed because the other half did" line (the gen3 drivers phrase
 # it "CONSEQUENCE: <what>"). It never retries by itself: the pair still needs a CAUSE_RNG.
 CONSEQUENCE_PREFIX = "CONSEQUENCE: "
@@ -880,6 +896,10 @@ def scenario_attempt_limit(name, game):
     if scenario_family(game) == "gen2_new" and name == "gen2_ball_gate":
         return 2   # one retry, only when a side ran out of the aide's five natural Balls (GEN2_OUT_OF_BALLS)
     entry = SCENARIOS.get(name, {})
+    if entry.get("rule_kind") == "family" and scenario_family(game) == "gen3_rr":
+        return 16
+    if entry.get("rule_kind") == "gender" and scenario_family(game) == "gen3_rr":
+        return 8
     if rng_retry_family(game) and entry.get("rng_attempts"):
         return entry["rng_attempts"]
     if entry.get("rule_kind") in ("species", "family"):
@@ -1012,7 +1032,8 @@ def _new_a_hellos(problems, events_before, events_after):
             if row.get("type") == "hello" and row.get("player") == "a"]
 
 
-def reconnect_same_problems(before, after, events_before, events_after, linked_key, ot_id):
+def reconnect_same_problems(before, after, events_before, events_after, linked_key, ot_id,
+                            allow_accepted_refreshes=False):
     """Public/persisted C-2 facts; empty means a safe same-save reconnect."""
     problems = []
     a = (after.get("status", {}).get("players") or {}).get("a") or {}
@@ -1030,12 +1051,17 @@ def reconnect_same_problems(before, after, events_before, events_after, linked_k
     if _event_counts(events_before) != _event_counts(events_after):
         problems.append("a " + "/".join(RECONNECT_GAMEPLAY_EVENTS) + " count changed")
     new_hellos = _new_a_hellos(problems, events_before, events_after)
-    if len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected ("):
+    if allow_accepted_refreshes:
+        if not new_hellos or any(not row.get("text", "").startswith("Connected (")
+                                 for row in new_hellos):
+            problems.append("A did not add only accepted reconnect hellos")
+    elif len(new_hellos) != 1 or not new_hellos[0].get("text", "").startswith("Connected ("):
         problems.append("A did not add exactly one accepted reconnect hello")
     return problems
 
 
-def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, events_after):
+def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, events_after,
+                             allow_rejected_refreshes=False):
     """C-1: only the rejected hello event is allowed; the link file is byte-identical."""
     problems = []
     a = (status.get("players") or {}).get("a") or {}
@@ -1049,7 +1075,11 @@ def reconnect_wrong_problems(before_bytes, after_bytes, status, events_before, e
         problems.append("a rejected save changed a " + "/".join(RECONNECT_GAMEPLAY_EVENTS)
                         + " count")
     new_hellos = _new_a_hellos(problems, events_before, events_after)
-    if len(new_hellos) != 1 or new_hellos[0].get("text") != "REJECTED — wrong save/slot":
+    if allow_rejected_refreshes:
+        if not new_hellos or any(row.get("text") != "REJECTED — wrong save/slot"
+                                 for row in new_hellos):
+            problems.append("A did not add only WRONG SAVE rejection hellos")
+    elif len(new_hellos) != 1 or new_hellos[0].get("text") != "REJECTED — wrong save/slot":
         problems.append("A did not add exactly one WRONG SAVE rejection hello")
     return problems
 
@@ -1401,6 +1431,15 @@ def saved_money(sram):
 # tools/gen3_fixtures.py:saveram_name (BizHawk has no gamedb hash for this ROM, so it derives
 # the battery name from the launched filename, underscores->spaces -- "slink_RR.gba" is what
 # actually gets launched here, unstaged, so this is that rule applied to that exact name).
+GEN3_EXP_TITLE = "emerald_expansion_28877d73"
+
+
+def gen3_emerald_engine(title) -> bool:
+    """X3: the titles on the pokeemerald engine (vanilla Emerald + the expansion reference build
+    share the maps, the whiteout landing and the START-menu flows); data stays per title."""
+    return title in ("emerald", GEN3_EXP_TITLE)
+
+
 GEN3_TITLES = {
     "firered": {"rom": "Pokemon - FireRed Version (USA).gba",
                 "saveram": "Pokemon - FireRed Version (USA).SaveRAM"},
@@ -1410,6 +1449,11 @@ GEN3_TITLES = {
     # E4: BizHawk's gamedb knows a clean BPEE dump (tools/gen3_fixtures.py EMERALD_SAVERAM).
     "emerald": {"rom": "Pokemon - Emerald Version (USA, Europe).gba",
                 "saveram": "Pokemon - Emerald Version (USA, Europe).SaveRAM"},
+    # X3: the pokeemerald-expansion reference build -- never committed, built by
+    # tools/build_expansion.py into .cache/expansion-output/reference and staged as
+    # patch/build/gen3_pokeemerald.gba; BizHawk's gamedb does not know it, so the battery is
+    # named after the staged file (gen3_fixtures.saveram_name).
+    GEN3_EXP_TITLE: {"artifact": "pokeemerald.gba", "saveram": "gen3 pokeemerald.SaveRAM"},
 }
 # The raw, UNPATCHED Radical Red dump (patch/tools/build.py:91 DEFAULT_RR, patch/README.md:18),
 # for native_absent_gen3's clean-boot side only (`rom_kind`: "clean"). It resolves through the
@@ -1422,7 +1466,7 @@ GEN3_FIXTURES = os.path.join(REPO, "tests", "fixtures", "gen3")
 # Each title's pack directory under data/games (the same split duo_gen3_main.lua and
 # gen3_scripted_play.lua PROFILE_PACK_BY_TITLE make).
 GEN3_PACKS = {"firered": "gen3_frlg", "leafgreen": "gen3_frlg", "radical_red": "gen3_rr",
-              "emerald": "gen3_emerald"}
+              "emerald": "gen3_emerald", GEN3_EXP_TITLE: "gen3_exp/28877d73"}
 GEN3_RR_PROFILE = os.path.join(REPO, "data", "games", "gen3_rr", "profile.json")
 # Receipt lines the Gen 3 driver writes (lua/tests/duo/duo_gen3_main.lua): one per non-tick
 # event it SENDS and one per command it RECEIVES.
@@ -1454,12 +1498,15 @@ def gen3_decode(image, rr=False, title="frlg"):
     """
     codec = gen3_codec()
     body = codec.split_rtc(image)[0]
+    layout = None
+    if title == codec.TITLE_EXPANSION:          # X2: records are masked bitfields there
+        from server.adapters.gen3_expansion import EXPANSION_PARTY_LAYOUT as layout
     boxes = {}
-    for box, row in enumerate(codec.boxes_from_save(body, rr=rr, title=title)):
+    for box, row in enumerate(codec.boxes_from_save(body, rr=rr, title=title, layout=layout)):
         for slot, mon in enumerate(row):
             if mon["has_species"] and mon["species"]:
                 boxes[(box, slot)] = mon
-    return codec.party_from_save(body, rr=rr, title=title), boxes
+    return codec.party_from_save(body, rr=rr, title=title, layout=layout), boxes
 
 
 def gen3_codec_title(title) -> str:
@@ -1638,6 +1685,13 @@ def gen3_limits(title, rom=None):
 
         def species(value):
             return value in known
+    elif title == GEN3_EXP_TITLE:
+        facts = os.path.join(REPO, "data", "games", GEN3_PACKS[title], "facts.json")
+        with open(facts, encoding="utf-8") as handle:
+            num_species = json.load(handle)["constants"]["NUM_SPECIES"]
+
+        def species(value):
+            return 1 <= value < num_species
     else:
         def species(value):
             return 1 <= value < GEN3_VANILLA_NUM_SPECIES
@@ -2307,8 +2361,11 @@ def gen3_trade_problems(ka, kb, link_rows, saved, fixture, traded):
 
 
 def gen3_trade_chain(inst, ka, kb, decline):
-    """(required, ordered, forbidden) receipt regexes for one side of the NPC trade. A trade must
-    run the native scene on BOTH sides (no silent swap)."""
+    """(required, ordered, forbidden) receipt regexes for one side of the NPC trade (RR-DURABLE):
+    the server's native menus, then on YES the durable round on BOTH sides -- apply_prepare ->
+    apply_ready ok (the native pre-save), apply_trade -> trade_done with the partner's key (the
+    native scene + post-save) -> the server's commit notice. The named refusal an old-UPS client
+    gets is never a pass, and no side may report an uncertain or refused apply."""
     tx = lambda ev, body="": rf"(?m)^TX {ev} - .*{body}"          # noqa: E731
     rx = lambda cmd: rf"(?m)^RX {cmd}(?=\s|$)"                    # noqa: E731
     # TALKED is a required witness but not an ordering anchor: the patch sends trade_request in the
@@ -2322,17 +2379,20 @@ def gen3_trade_chain(inst, ka, kb, decline):
             chain.append(r"(?m)^RX msgbox text=Your partner declined")
     else:
         chain = [rx("show_menu"), tx("menu_result", f'"choice":{0 if decline else 1}')]
+    never = [r"(?m)^REFUSED_UNAVAILABLE ", r"apply_trade refused"]
     if decline:
-        return talked + chain, list(zip(chain, chain[1:], strict=False)), [rx("apply_trade"), tx("trade_done"),
-                                                     r"(?m)^TRADED "]
+        return talked + chain, list(zip(chain, chain[1:], strict=False)), never + [
+            rx("apply_prepare"), rx("apply_trade"), tx("trade_done"), r"(?m)^TRADED "]
     gets = kb if inst == "a" else ka
     gives = ka if inst == "a" else kb
-    chain += [rx("apply_trade"), tx("trade_done", f'"new_key":"{re.escape(gets)}"'),
+    done = tx("trade_done", f'"new_key":"{re.escape(gets)}"')
+    chain += [rx("apply_prepare"), tx("apply_ready", '"ok":true'), rx("apply_trade"), done,
               rf"(?m)^TRADED gave={re.escape(gives)} got={re.escape(gets)} "]
-    # each side ran the NATIVE scene (lua/gen3/client.lua trade_readback), never the silent-swap
-    # fallback the initiator used while the party chooser left its script waiting
-    native = rf"trade: native scene complete; trade_done {re.escape(gives)} -> {re.escape(gets)}"
-    return talked + chain + [native], list(zip(chain, chain[1:], strict=False)), [r"silent swap"]
+    # the server's commit notice follows BOTH trade_done reports, so it may land after this
+    # side's own TRADED read-back (live receipt, RR-DURABLE trade_gen3): ordered after trade_done only
+    notice = r"(?m)^RX msgbox text=Traded "
+    return (talked + chain + [notice], list(zip(chain, chain[1:], strict=False)) + [(done, notice)],
+            never + [tx("apply_ready", '"ok":false'), tx("trade_done", '"uncertain":true')])
 
 
 def gen3_panel_text(raw: bytes) -> str:
@@ -2408,6 +2468,8 @@ FAMILY_EVIDENCE = {
     "gen3_frlg": EvidenceContract("check_save_witness_gen3", require_oracle=True),
     "gen3_rr": EvidenceContract("check_save_witness_gen3", require_oracle=True),
     "gen3_emerald": EvidenceContract("check_save_witness_gen3", require_oracle=True),
+    "gen3_fr_trade": EvidenceContract("check_native_trade_witness", require_oracle=True),
+    "gen3_exp": EvidenceContract("check_save_witness_gen3", require_oracle=True),
 }
 
 
@@ -2676,6 +2738,18 @@ GAMES = {
     # worker's saves are firered_party_{town,battle}{,_b}.sav. B is LeafGreen (the G4 FR<->LG pairing). `oracle_required`: a
     # scenario with no saved-state oracle FAILS here, the Gen 1 rule; `save_witness` is the
     # method _run_oracle runs first.
+    "gen3_fr_trade": {
+        "main": "lua/tests/duo/duo_gen3_main.lua", "game": "gen3_fr_trade", "play": "gen3_fixtures",
+        "sides": {"a": ("firered", "firered_party_{target}"), "b": ("leafgreen", "leafgreen_party_{target}_b")},
+        "uses_savestate": False, "scenario_prefix": "gen3_", "oracle_required": True,
+        "save_witness": "check_native_trade_witness",
+    },
+    "gen3_lg_trade": {
+        "main": "lua/tests/duo/duo_gen3_main.lua", "game": "gen3_fr_trade", "play": "gen3_fixtures",
+        "sides": {"a": ("leafgreen", "leafgreen_party_{target}"), "b": ("firered", "firered_party_{target}_b")},
+        "uses_savestate": False, "scenario_prefix": "gen3_", "oracle_required": True,
+        "save_witness": "check_native_trade_witness",
+    },
     "gen3_frlg": {
         "main": "lua/tests/duo/duo_gen3_main.lua",
         "game": "gen3_frlg",
@@ -2739,6 +2813,28 @@ GAMES = {
         "scenario_prefix": "gen3_",
         "oracle_required": True,
         "save_witness": "check_save_witness_gen3",
+    },
+    # X3: the pokeemerald-expansion reference build (ROM 28877d73), E<->E on its own make-exp
+    # fixtures (tests/fixtures/gen3/exp_*.sav); same maps and hunts as gen3_emerald. Pre-XG the
+    # driver admits it through a TEST-ONLY seam (duo_gen3_main.lua test_admission_codec), logged
+    # in every receipt; production refuses it (unrouted, unadmitted).
+    "gen3_exp": {
+        "main": "lua/tests/duo/duo_gen3_main.lua",
+        "game": "gen3_exp",
+        "play": "gen3_fixtures",
+        "sides": {"a": (GEN3_EXP_TITLE, "exp_{target}"), "b": (GEN3_EXP_TITLE, "exp_{target}_b")},
+        "hunt_area": {"battle": "route_102", "pc": "route_103", "catch": "route_102"},
+        "uses_savestate": False,
+        "scenario_prefix": "gen3_",
+        "oracle_required": True,
+        "save_witness": "check_save_witness_gen3",
+        # The SERVER's half of the same TEST-ONLY seam, for the same reason and the same
+        # receipt rule (ruling 39): production refuses this rom_type by name, so the server
+        # has to be told to route it, and the only process told is this one. It is a CLI
+        # flag, not an env var, so no other lane sharing this machine's environment can
+        # inherit it; no game row but this one carries one, and the run fails unless the
+        # server's own log carries the `production:false` line it logs on startup.
+        "server_rom_routes": ["--test-only-route", GEN3_EXP_TITLE],
     },
 }
 
@@ -3157,9 +3253,9 @@ class DuoRun:
         self.is_gen1 = self.game.startswith("gen1")
         self.tcp_port = free_port()
         self.http_port = free_port()
-        if self.cfg.get("gen3_rand"):
+        if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade"):
             os.makedirs(BUILD, exist_ok=True)
-        data_parent = BUILD if self.cfg.get("gen3_rand") else None
+        data_parent = BUILD if self.cfg.get("gen3_rand") or self.cfg.get("gen3_native_trade") else None
         if self.cfg.get("gen3_rand") and os.environ.get("SLINK_STATE_DIR"):
             data_parent = Path(os.environ["SLINK_STATE_DIR"]).resolve()
             if not data_parent.is_relative_to(Path(REPO).resolve()):
@@ -3241,6 +3337,10 @@ class DuoRun:
         return self.gcfg["sides"][inst][0]
 
     def _gen3_fixture_path(self, inst) -> str:
+        if getattr(self, "cfg", {}).get("gen3_native_trade"):
+            return str(Path(REPO) / self._native_candidate["fixtures"][inst]["path"])
+        if inst in getattr(self, "_gen3_phase_fixtures", {}):
+            return self._gen3_phase_fixtures[inst]
         stem = self.gcfg["sides"][inst][1].format(target=self._target_for(inst))
         return os.path.join(GEN3_FIXTURES, stem + ".sav")
 
@@ -3263,14 +3363,23 @@ class DuoRun:
         """
         from pathlib import Path
 
+        if self.cfg.get("gen3_native_trade"):
+            from tools.gen3_trade_duo import player_manifest
+            return player_manifest(self._native_candidate, inst)["rom"]
         import gen3_fixtures
-
         if self.cfg.get("gen3_rand"):
             if not getattr(self, "_rand_current", None):
                 raise RuntimeError("randomized ROM preflight has not run")
             return self._rand_current[inst]["rom"]
         title = self._gen3_title(inst)
         row = GEN3_TITLES[title]
+        if "artifact" in row:
+            artifacts = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS")
+                             or Path(REPO) / ".cache/expansion-output/reference")
+            rom = artifacts / row["artifact"]
+            if not rom.is_file():
+                raise FileNotFoundError(f"{rom} not found (tools/build_expansion.py --host hgbox)")
+            return gen3_fixtures.stage_rom(str(rom))
         staged = row.get("staged")
         if staged and self._gen3_rom_kind(inst) == "companion":
             if not os.path.isfile(os.path.join(REPO, staged)):
@@ -3289,6 +3398,9 @@ class DuoRun:
     def _gen3_battery_path(self, inst) -> str:
         title = self._gen3_title(inst)
         row = GEN3_TITLES[title]
+        if self.cfg.get("gen3_native_trade"):
+            from tools import gen3_fixtures
+            return os.path.join(self._saveram_dir(inst), gen3_fixtures.saveram_name(self._gen3_rom(inst)))
         if self.cfg.get("gen3_rand"):
             import gen3_fixtures
 
@@ -3322,7 +3434,10 @@ class DuoRun:
 
     def _gen3_fixture_bytes(self, inst) -> bytes:
         with open(self._gen3_fixture_path(inst), "rb") as handle:
-            return handle.read()
+            body = handle.read()
+        if getattr(self, "cfg", {}).get("gen3_native_trade") and hashlib.sha256(body).hexdigest() != self._native_candidate["fixtures"][inst]["sha256"]:
+            raise RuntimeError(f"{inst}: T5 fixture changed before seeding/oracle")
+        return body
 
     @property
     def _gen3_rr(self) -> bool:
@@ -3454,12 +3569,24 @@ class DuoRun:
         return os.path.join(self.data_dir, "wire")
 
     def server_cmd(self):
-        """The server subprocess's argv. Byte-identical to the old literal without --wire-log."""
+        """Manager-equivalent run identity, stable across this run's reconnects."""
+        if any(flag == "--test-only-route" or flag.startswith("--test-only-route=")
+               for flag in self.args.server_flags):
+            raise ValueError("TEST-ONLY route is reserved for the configured game row")
+        if not getattr(self, "_server_run_id", None):
+            self._server_run_id = "duo-" + uuid.uuid4().hex
         cmd = [sys.executable, "-m", "server.server",
                "--host", "127.0.0.1",
                "--port", str(self.tcp_port),
                "--http-port", str(self.http_port),
-               "--data-dir", self.data_dir] + self.cfg["flags"] + self.args.server_flags
+               "--data-dir", self.data_dir, "--run-id",
+               ("t5-" + self._native_candidate["nonce"]) if self.cfg.get("gen3_native_trade")
+               else self._server_run_id] + self.cfg["flags"] + self.args.server_flags
+        # A game row may ask the server for a TEST-ONLY route (the expansion, ruling 39) --
+        # after --server-flags and before --wire-log, so the wire-log pair stays the tail the
+        # argv tests pin. getattr: a unit test builds a DuoRun with only the fields its own
+        # case reads, and a run with no row carries no routes at all.
+        cmd += list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
         wire = self._wire_dir()
         if wire:
             cmd += ["--wire-log", wire]
@@ -3475,24 +3602,43 @@ class DuoRun:
         `wire_rejected.jsonl` (the tap's bounded sink for lines it could not attribute to a
         real player) is server-side debug evidence, not a per-player transcript -- it is never
         promoted here.
+
+        A player this run did NOT log is left with no transcript at all: its stale golden is
+        removed and this run's data-dir source is named in the print instead. Copying what
+        exists and saying nothing about what does not is what let a FAILING run be read off a
+        PASSING run's transcript (T5, 2026-09-27: native_trade_firered_b_gen3_new.jsonl held a
+        completed trade_done while the failing run's own wire/wire_b.jsonl held none).
         """
         wire = self._wire_dir()
-        if not wire or not os.path.isdir(wire):
+        if not wire:
             return []
-        os.makedirs(WIRE_FIXTURES, exist_ok=True)
+        sources = {}
+        if os.path.isdir(wire):
+            for name in sorted(os.listdir(wire)):
+                if not (name.startswith("wire_") and name.endswith(".jsonl")):
+                    continue
+                player = name[len("wire_"):-len(".jsonl")]
+                if player != "rejected":
+                    sources[player] = os.path.join(wire, name)
+        if sources:
+            os.makedirs(WIRE_FIXTURES, exist_ok=True)
+        # All active Gen 3 rows use the new battery client; non-Gen3 rows keep their game key
+        # (getattr: a unit-test double need not carry a row key).
+        label = "gen3_new" if self.is_gen3_battery else getattr(self, "game", "")
+        # "a" and "b" are the tap's whole per-player set (server/server.py: VALID_PLAYERS), so a
+        # player with no file in this run's dir is one whose golden is now older than the run.
         landed = []
-        for name in sorted(os.listdir(wire)):
-            if not (name.startswith("wire_") and name.endswith(".jsonl")):
-                continue
-            player = name[len("wire_"):-len(".jsonl")]
-            if player == "rejected":
-                continue
-            # All active Gen 3 rows use the new battery client; non-Gen3 rows keep their game key.
-            label = "gen3_new" if self.is_gen3_battery else self.game
+        for player in sorted(set(sources) | {"a", "b"}):
             dest = os.path.join(WIRE_FIXTURES, f"{self.scenario}_{player}_{label}.jsonl")
-            shutil.copyfile(os.path.join(wire, name), dest)
-            print(f"[duo] wire log: {dest}")
-            landed.append(dest)
+            source = sources.get(player) or os.path.join(wire, f"wire_{player}.jsonl")
+            if player in sources:
+                shutil.copyfile(source, dest)
+                print(f"[duo] wire log: {dest}")
+                landed.append(dest)
+            elif os.path.exists(dest):
+                os.remove(dest)
+                print(f"[duo] no wire log for {player} this run: {source} is absent; removed the "
+                      f"stale {dest} (an earlier run's transcript)")
         return landed
 
     def start_server(self):
@@ -3511,6 +3657,48 @@ class DuoRun:
             stderr=subprocess.STDOUT)
         self.wait_for("server HTTP up", lambda: self._status() is not None, 30)
         print(f"[duo] server up: tcp={self.tcp_port} http={self.http_port} data={self.data_dir}")
+        self._require_test_only_route_receipt()
+
+    def _require_test_only_route_receipt(self, timeout: float = 15):
+        """The TEST-ONLY route this row asked for must be VISIBLE in the run's own evidence.
+
+        The server logs every route it is told to open with `production:false` (see
+        server/adapters/__init__.py set_test_only_routes), and this run copies that exact line
+        into the pydec receipt that ships with the attempt, so a receipt can always be read
+        for whether the cartridge was routed or merely admitted. It is CHECKED, not assumed: a
+        run whose server never logged the seam it was launched with did not test what it
+        claims to, and fails here instead of passing quietly. A row with no routes is silent.
+        """
+        routes = list((getattr(self, "gcfg", None) or {}).get("server_rom_routes") or ())
+        if not routes:
+            return []
+        if len(routes) != 2 or routes[0] != "--test-only-route":
+            raise RuntimeError(f"malformed configured TEST-ONLY route: {routes!r}")
+        expected = (f"TEST-ONLY route of {routes[1]} -> {self.game} enabled "
+                    "(production refuses it by name; production:false)")
+        log_path = os.path.join(self.data_dir, "server.log")
+        deadline = time.time() + timeout
+        while True:
+            try:
+                with open(log_path, encoding="utf-8", errors="replace") as handle:
+                    text = handle.read()
+            except OSError:
+                text = ""
+            line = next((row for row in text.splitlines()
+                         if row.partition("TEST-ONLY route of ")[2] ==
+                         expected[len("TEST-ONLY route of "):]), "")
+            if line or time.time() >= deadline:
+                break
+            time.sleep(0.2)
+        if not line:
+            raise RuntimeError(
+                f"{getattr(self, 'game', '?')}: the server logged no TEST-ONLY route, but this "
+                f"row launched it with {' '.join(routes)} — this run cannot be a receipt")
+        note = (f"TEST_ONLY_ROUTE game={getattr(self, 'game', '?')} "
+                f"argv={' '.join(routes)} production:false server={line}")
+        print(f"[duo] {note}")
+        self._pydec_note(note)
+        return [line]
 
     def _saveram_dir(self, inst: str) -> str:
         """A SaveRAM directory unique to this SCENARIO and this instance.
@@ -3519,13 +3707,13 @@ class DuoRun:
         Crystal on both sides) resolve to the same gamedb SaveRAM filename and would otherwise
         share one file and stamp on each other.
 
-        Per-scenario, NOT per-run — the path is reused across invocations and nothing cleans
+        Except for cold-boot and native-trade rows, the path is reused across invocations and nothing cleans
         it. That is safe only because `seed_saveram` overwrites the file before every launch,
         which is what actually prevents a crashed run's save leaking into the next one. Do not
         weaken that copy on the assumption this directory is fresh; it isn't.
         """
-        if self.cfg.get("cold_boot"):
-            # A fresh per-run path makes a cold cartridge independent of any older attempt.
+        if self.cfg.get("cold_boot") or self.cfg.get("gen3_native_trade"):
+            # Preserve earlier cold-boot/native-trade batteries, including uncertain saves.
             return os.path.join(self.data_dir, f"saveram_{inst}")
         # Per scenario, instance AND LANE: two lanes on one scenario would otherwise seed and boot
         # from one directory. Seeding still overwrites the file before every launch (that is what
@@ -3807,17 +3995,13 @@ class DuoRun:
         elif self.gcfg.get("launch_profile") == "gen2":
             from run_gb_gate import GENS
             GENS["gen2"]["config"](self._gen2_plans[inst], Path(cfg_ini))
-        elif self.battery_boot:
+        else:
             import gen1_playthrough as g1
 
             # purergb pins the config to GBC + not-SGB (PLAN A15); the fixture key names the
             # foundation, so the pure row needs nothing else to get it.
             g1.write_run_config(BIZHAWK_CONFIG, cfg_ini, saveram_dir=self._saveram_dir(inst),
                                 purergb=g1.is_purergb(self.gcfg["fixture"][inst]))
-        else:
-            from run_gate import write_gate_config
-
-            write_gate_config(BIZHAWK_CONFIG, cfg_ini)   # rewind off (duo run 61569's crash)
         self._apply_lane_window(cfg_ini)
         self._phase = getattr(self, "_phase", {})
         self._phase[inst] = phase
@@ -3835,7 +4019,8 @@ class DuoRun:
             "game": self.gcfg.get("game", ""),
             "fillers": fillers[inst] if isinstance(fillers, dict) else fillers,
             "mutate_otid": inst == "b", "result": result.replace("\\", "/"),
-            "partner_result": self._result_path("b" if inst == "a" else "a").replace("\\", "/"),
+            "partner_result": self._phase_result_path("b" if inst == "a" else "a",
+                self._phase.get("b" if inst == "a" else "a", "initial")).replace("\\", "/"),
             "go_file": self.go_files[inst].replace("\\", "/"),
             "timeout_frames": (lambda f: f[inst] if isinstance(f, dict) else f)(
                 self.cfg.get("frames", self.cfg["timeout"] * 60)),
@@ -3868,6 +4053,7 @@ class DuoRun:
             # title's pack files and pret symbols by `title`.
             duo.update({"title": self._gen3_title(inst),
                         "scenario_prefix": self.gcfg["scenario_prefix"]})
+            duo["ball_stock_phase"] = bool(self.cfg.get("post_flip_stock") and not self._gen3_rr)
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
@@ -3881,10 +4067,19 @@ class DuoRun:
                 # the live EWRAM range RR's extension writer copies to sectors 30-31
                 codec = gen3_codec()
                 duo.update({"ext_addr": codec.RR_EXT_ADDR, "ext_size": codec.RR_EXT_SIZE})
-        if self.gcfg["uses_savestate"]:
-            ss = self.cfg["savestate"]
-            duo["savestate"] = f"{SAVESTATE_DIR}/{ss[inst] if isinstance(ss, dict) else ss}"
-        elif seed and not self.cfg.get("cold_boot"):
+            if self.cfg.get("gen3_native_trade"):
+                from tools.gen3_trade_duo import ENV, player_manifest, validate_prepared
+                candidate = player_manifest(self._native_candidate, inst)
+                validate_prepared(Path(REPO), candidate)
+                if hashlib.sha1((Path(REPO) / candidate["rom"]).read_bytes()).hexdigest() != candidate["rom_sha1"]:
+                    raise RuntimeError("T5 candidate changed before emulator launch")
+                duo.update(native_candidate_manifest=candidate["path"],
+                           native_manifest_sha1=candidate["manifest_sha1"],
+                           native_battery=self._gen3_battery_path(inst).replace("\\", "/"),
+                           native_decline=self.cfg.get("native_decline", False))
+                env = dict(os.environ, **{ENV: self._native_candidate["nonce"]})
+                print(f"[duo] HARNESS_ONLY {ENV}={self._native_candidate['nonce']} side={inst} phase={phase}")
+        if seed and not self.cfg.get("cold_boot"):
             self._seed_instance_save(inst)
         elif self.cfg.get("cold_boot"):
             os.makedirs(self._saveram_dir(inst), exist_ok=True)
@@ -3918,6 +4113,8 @@ class DuoRun:
         print(f"[duo] launched {inst} phase={phase} seed={seed}")
         if self.cfg.get("gen3_rand"):
             self._pydec_note(f"RAND_PROCESS side={inst} phase={phase} pid={p.pid}")
+        if self.cfg.get("gen3_native_trade"):
+            self._pydec_note(f"T5_PROCESS side={inst} phase={phase} pid={p.pid}")
         return p
 
     def terminate_instance(self, inst):
@@ -4520,7 +4717,7 @@ class DuoRun:
 
         Freshness is identity here: a rerun (or a crashed attempt re-entered) leaves results,
         phase receipts, attempt archives, witnesses and PYDEC copies from OLDER runs in the same
-        build directory. Gen 2 attempt 1 clears those; later Gen 2 retries retain numbered archives
+        build directory. Gen 2/3 attempt 1 clears those; later retries retain numbered archives
         from this invocation, while clearing all live paths. The current PYDEC file is opened before
         launch and retained. Removals are printed so the log records what was discarded.
         """
@@ -4530,7 +4727,7 @@ class DuoRun:
             if keep and os.path.basename(path) == keep:
                 continue
             archive = re.search(r"_attempt(\d+)_(?:result\.txt|witness\.SaveRAM|exit\.SaveRAM|manifest\.json)$", os.path.basename(path))
-            if (scenario_family(getattr(self, "game", "legacy")) == "gen2_new"
+            if (scenario_family(getattr(self, "game", "legacy")) in ("gen2_new", "gen3_frlg", "gen3_emerald", "gen3_rr")
                     and archive and 0 < int(archive[1]) < getattr(self, "attempt", 1)):
                 continue  # Earlier attempts of THIS invocation remain replayable; attempt 1 clears all.
             os.remove(path)
@@ -4547,8 +4744,8 @@ class DuoRun:
     def wait_keys(self):
         """Both wrappers log MYKEY lines right after savestate+mutation."""
         def both():
-            ka = extract_keys(read_result(self.scenario, "a"))
-            kb = extract_keys(read_result(self.scenario, "b"))
+            ka = extract_keys(self._read_receipt("a"))
+            kb = extract_keys(self._read_receipt("b"))
             return (ka, kb) if ka and kb else None
         ka, kb = self.wait_for("MYKEY lines from both instances", both, 120)
         if set(ka.values()) & set(kb.values()):
@@ -4650,7 +4847,7 @@ class DuoRun:
         `REFUSED <key> (<how>)` is the line the scenario does promise, and it carries the
         full key whenever one was recovered at all.
         """
-        text = read_result(self.scenario, inst) or ""
+        text = self._read_receipt(inst)
         for line in text.splitlines():
             if "CAUGHT " in line:
                 return line.split("CAUGHT ", 1)[1].split()[0]
@@ -5232,7 +5429,7 @@ class DuoRun:
             a, b = self._caught("a"), self._caught("b")
             if a and b:
                 return a, b
-            if any(_has_exact_rng_miss(read_result(self.scenario, inst)) for inst in ("a", "b")):
+            if any(_has_exact_rng_miss(self._read_receipt(inst)) for inst in ("a", "b")):
                 raise GameRngMiss("a cartridge missed its sole ball before the pair formed")
             return None
         a_key, b_key = self.wait_for("both instances to catch a wild mon", both_caught,
@@ -6913,8 +7110,8 @@ class DuoRun:
 
     def wait_results(self):
         def both():
-            ra = read_result(self.artifact_name, "a")
-            rb = read_result(self.artifact_name, "b")
+            ra = self._read_receipt("a")
+            rb = self._read_receipt("b")
             if ra and "RESULT:" in ra and rb and "RESULT:" in rb:
                 return ra, rb
             return None
@@ -6956,8 +7153,10 @@ class DuoRun:
                 if os.path.exists(path):
                     os.remove(path)
         self.collect_wire_logs()  # the source lives under the data dir; copy before it goes
+        if self.cfg.get("gen3_native_trade"):
+            self._archive_native_receipts()
         if (passed and not self.args.keep_data and self.scenario not in GEN2_TRADE_SCENARIOS
-                and not self.cfg.get("gen3_rand")):
+                and not self.cfg.get("gen3_rand") and not self.cfg.get("gen3_native_trade")):
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
             print(f"[duo] data dir kept: {self.data_dir}")
@@ -7425,7 +7624,7 @@ class DuoRun:
     def _gen3_mark(self, inst, pattern, what, timeout=None):
         """Wait for a driver marker (a regex over the receipt, multiline)."""
         return self.wait_for(f"{inst}: {what}", lambda: re.search(
-            pattern, read_result(self.scenario, inst) or "", re.M), timeout or self.cfg["timeout"])
+            pattern, self._read_receipt(inst), re.M), timeout or self.cfg["timeout"])
 
     # Per-game-family areas for _gen3_area_control: gen3_frlg's evolve leg walks Viridian's Route 1
     # grass (a defensive superset around it); gen3_emerald's evolve_gen3 leg stands directly on
@@ -7564,6 +7763,98 @@ class DuoRun:
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
 
+    def _archive_native_receipts(self):
+        """Keep nonce-bound raw receipts when another orientation reuses top-level filenames."""
+        candidate = getattr(self, "_native_candidate", None)
+        if not candidate:
+            return
+        directory = Path(self.data_dir) / "receipts"
+        saved = {}
+        for side in "ab":
+            for phase in ("initial", "native_trade_reload"):
+                source = Path(self._phase_result_path(side, phase))
+                if not source.exists():
+                    continue
+                body = source.read_bytes()
+                bound = False
+                for line in body.decode("utf-8", errors="replace").splitlines():
+                    if not line.startswith("T5 "):
+                        continue
+                    try:
+                        row = json.loads(line[3:])
+                    except ValueError:
+                        continue  # a killed process can leave its last line incomplete
+                    if (isinstance(row, dict) and row.get("kind") == "override" and row.get("value") == candidate["nonce"]
+                            and row.get("side") == side and row.get("phase") == phase):
+                        bound = True
+                        break
+                if bound:
+                    directory.mkdir(parents=True, exist_ok=True)
+                    name = f"{side}_{phase}.txt"
+                    (directory / name).write_bytes(body)
+                    saved[name] = hashlib.sha256(body).hexdigest()
+        if saved:
+            (directory / "sha256.json").write_text(json.dumps(saved, indent=2)+"\n", encoding="utf-8")
+
+    def _prepare_native_trade(self):
+        from tools import gen3_trade_duo as t5
+        self._native_candidate = t5.prepare_pair(Path(REPO), Path(self.data_dir) / "candidate",
+                                                 {side: self._gen3_title(side) for side in "ab"})
+        self._native_initial = {}
+        self._pydec_note(f"CANDIDATE_ONLY {t5.DISCLOSURE}")
+        for side, candidate in self._native_candidate["players"].items():
+            self._pydec_note(f"T5_CANDIDATE side={side} title={candidate['title']} rom_sha1={candidate['rom_sha1']} production=false READY=0")
+            self._pydec_note(f"T5_PACK side={side} source={candidate['source_commit']} manifest_sha1={candidate['manifest_sha1']} "
+                             f"run_lua_sha1={candidate['source_sha1']['lua/gen3/run.lua']} sites_sha1={candidate['pack_sha1']['sites']}")
+            self._pydec_note(candidate["fixture_disclosure"])
+
+    def orchestrate_native_trade_firered(self):
+        self._gen3_prelude(link_slot=1)
+        for inst in "ab":
+            self._gen3_mark(inst, r"^FR_TRADE_CAPABLE$", "acknowledged T5 capability")
+        self.go(self._gen3_linked_lines())
+        for inst in "ab":
+            self._gen3_mark(inst, r"^FR_TRADE_READY_FOR_RELOAD$", "native trade/decline finished")
+        for inst in "ab":
+            self._append_reconnect_marker(inst, "RELOAD")
+        for inst in "ab":
+            self.wait_for(f"{inst} initial T5 terminal receipt", lambda i=inst: terminal_result(self._read_receipt(i)), 120)
+            self._native_initial[inst] = self._read_receipt(inst)
+            if "RESULT: PASS" not in self._native_initial[inst]:
+                raise RuntimeError(f"{inst}: T5 initial leg failed")
+            self.emu_by_inst[inst].wait(timeout=30)
+        # Preserve the saved relationship before restart, then cold boot both
+        # instances from their own flushed battery without copying a fixture.
+        self._native_document = self._reconnect_document()
+        for inst in "ab":
+            peer = "b" if inst == "a" else "a"
+            expected = self._link_keys[inst if self.cfg.get("native_decline") else peer]
+            self.launch_instance(inst, phase="native_trade_reload", seed=False, expected_key=expected)
+        for inst in "ab":
+            self.wait_for(f"{inst} T5 cold reload completed", lambda i=inst: terminal_result(self._read_receipt(i)), 180)
+            if "RESULT: PASS" not in self._read_receipt(inst):
+                raise RuntimeError(f"{inst}: T5 cold reload failed")
+        self._live_complete[self.scenario] = True
+
+    orchestrate_native_trade_decline_firered = orchestrate_native_trade_firered
+
+    def _native_trade_problems(self, results):
+        from tools import gen3_trade_duo as t5
+        self._gen3_flush_boundary()
+        if not self._live_complete.get(self.scenario):
+            return ["T5 cold reload leg was not launched"]
+        return t5.physical_problems(Path(REPO), self._native_candidate, self._native_initial, results,
+                                   self._native_document, {i: self._gen3_fixture_saved(i) for i in "ab"},
+                                   {i: self._gen3_saved(i) for i in "ab"}, decline=self.cfg.get("native_decline", False))
+
+    def check_native_trade_witness(self, results):
+        self._gen3_raise(self._native_trade_problems(results),
+                        "T5 native/flush/save/reload witness chain verified from cartridge bytes")
+
+    def assert_native_trade_firered(self, results):
+        self._gen3_raise(self._native_trade_problems(results),
+                        "T5 native NPC/selection/offer, durable outcome, server settlement and cold reload verified")
+
     def orchestrate_species_clause_gen3(self):
         from gen3_clause_rows import orchestrate_clause
         return orchestrate_clause(self, helpers=sys.modules[__name__])
@@ -7602,8 +7893,11 @@ class DuoRun:
         return orchestrate_release(self)
 
     def orchestrate_species_family_gen3(self):
+        from gen3_clause_rows import family_members
         self._gen3_prelude(link_slot=0)
-        self.go(self._gen3_linked_lines())
+        lines = self._gen3_linked_lines()
+        lines["a"].append("FAMILY_LINKS " + json.dumps(family_members(self), sort_keys=True))
+        self.go(lines)
         self._gen3_mark("a", r"^FAMILY_READY \S+$", "native family encounter and RUN")
         for inst in ("a", "b"):
             self._append_reconnect_marker(inst, "SAVE")
@@ -7612,6 +7906,14 @@ class DuoRun:
         from gen3_clause_rows import family_oracle
         return family_oracle(self, results)
 
+    def orchestrate_shiny_bonus_gen3(self):
+        from gen3_shiny_rows import orchestrate
+        return orchestrate(self)
+
+    def assert_shiny_bonus_gen3_saved(self, results):
+        from gen3_shiny_rows import saved_oracle
+        return saved_oracle(self, results)
+
     def assert_release_gen3_saved(self, results):
         from gen3_clause_rows import release_oracle
         return release_oracle(self, results)
@@ -7619,8 +7921,9 @@ class DuoRun:
     def orchestrate_trade_gen3(self):
         """The RR PC trade NPC, driven only by the two cartridges: link the slot-1 mons (server
         staging), name each side's partner key, GO. A talks to the NPC and answers the server's
-        native menus, B answers the offer; nothing is injected after GO. Both save only once the
-        server has settled (re-keyed links.json, or a declined offer on both receipts)."""
+        native menus, B answers the offer, and on YES both run the durable native trade
+        (RR-DURABLE: pre-save, scene, post-save); nothing is injected after GO. Both save only
+        once the server has settled (re-keyed links.json, or a declined offer on both receipts)."""
         self._gen3_prelude(link_slot=self.cfg.get("trade_slot", 1))
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         lines = self._gen3_linked_lines()
@@ -7663,9 +7966,8 @@ class DuoRun:
         problems = gen3_trade_problems(
             ka, kb, self._links_json(), {i: self._gen3_saved(i) for i in "ab"},
             {i: self._gen3_fixture_saved(i) for i in "ab"}, traded)
-        decline = not traded
         for inst in ("a", "b"):
-            required, ordered, forbidden = gen3_trade_chain(inst, ka, kb, decline)
+            required, ordered, forbidden = gen3_trade_chain(inst, ka, kb, not traded)
             problems += gen3_receipt_problems(inst, results[inst], required=required,
                                               ordered=ordered, forbidden=forbidden)
             if inst == "a" and len(re.findall(r"(?m)^TX trade_request ", results[inst])) != 1:
@@ -7683,13 +7985,15 @@ class DuoRun:
     def assert_trade_gen3_saved(self, results):
         ka, kb, problems = self._gen3_trade_facts(results, traded=True)
         self._gen3_raise(problems, f"trade_gen3: NPC talk -> Trade -> slot 1 -> partner YES -> "
-                                   f"native scene both sides; saved a holds {kb}, b holds {ka} "
-                                   f"(partner records intact), links.json re-keyed, each key once")
+                                   f"durable native pre-save/scene/post-save both sides; saved a holds "
+                                   f"{kb}, b holds {ka} (partner records intact), links.json re-keyed, "
+                                   f"each key once")
 
     def assert_trade_decline_gen3_saved(self, results):
         ka, kb, problems = self._gen3_trade_facts(results, traded=False)
         self._gen3_raise(problems, f"trade_decline_gen3: offer {ka} for {kb} declined with B; no "
-                                   f"apply_trade, both saves hold their fixture party, link unchanged")
+                                   f"apply_prepare/apply_trade, both saves hold their fixture party, "
+                                   f"link unchanged")
 
     def assert_infopanel_gen3_saved(self, results):
         alive = sum(1 for e in self._links_json() if e.get("status") == "alive")
@@ -8121,17 +8425,15 @@ class DuoRun:
         return sb1[at:at + codec.PARTY_MON_SIZE].hex().upper()
 
     def orchestrate_native_absent_gen3(self):
-        """PLAN P5's clean-vs-companion RR control, with a VALID operation (Codex C4-6b finding 6;
-        the trade port landed at 78908fe8): B boots rom_kind=clean, A the companion build. Each
-        side is sent a well-formed apply_trade -- its slot-1 key as old_key, the PARTNER
-        fixture's slot-1 party record as blob_hex. The companion must stage it natively (the
-        stage op ACKed, the trade FSM past "stage"); the clean cartridge must refuse it and write
-        nothing."""
+        """PLAN P5's clean-vs-companion RR control (Codex C4-6b finding 6), redesigned for the
+        durable trade (RR-DURABLE): B boots rom_kind=clean, A the companion build. Each side is
+        sent the same well-formed apply_prepare -- its slot-1 key as old_key. The companion must
+        answer ok only after its NATIVE pre-save (PREPARE posted, the native save dialog, READY);
+        the clean cartridge must answer ok:false and write nothing."""
         ka, kb = self._gen3_prelude()
         self.go()
-        for inst, own, partner in (("a", ka, "b"), ("b", kb, "a")):
-            self.queue_command(inst, {"cmd": "apply_trade", "slot": 1, "old_key": own[1],
-                                      "blob_hex": self._gen3_party_record_hex(partner, 1),
+        for inst, own in (("a", ka), ("b", kb)):
+            self.queue_command(inst, {"cmd": "apply_prepare", "slot": 1, "old_key": own[1],
                                       "token": f"native_absent_{inst}"})
         self._native_absent_keys = {"a": ka[1], "b": kb[1]}
 
@@ -8191,16 +8493,19 @@ class DuoRun:
             (s := self._status()) and (a := s["players"]["a"]).get("connected")
             and not a.get("identity_error") and self._link_keys["a"] in (a.get("party_keys") or [])),
             60)
-        old_hellos = sum(row.get("type") == "hello" and row.get("player") == "a"
-                         for row in baseline["events"])
-        self.wait_for("durable accepted reconnect hello", lambda: sum(
-            row.get("type") == "hello" and row.get("player") == "a"
-            for row in self._reconnect_events()) == old_hellos + 1, 30)
+        def accepted_reconnect_hello():
+            problems = []
+            new_hellos = _new_a_hellos(problems, baseline["events"], self._reconnect_events())
+            return (not problems and bool(new_hellos)
+                    and all(row.get("text", "").startswith("Connected (") for row in new_hellos))
+
+        self.wait_for("durable accepted reconnect hello", accepted_reconnect_hello, 30)
         same_after = {**self._reconnect_document(), "events": self._reconnect_events(),
                       "status": self._status() or {}}
         problems = reconnect_same_problems(baseline["links"], same_after, baseline["events"],
                                            same_after["events"], self._link_keys["a"],
-                                           baseline["links"]["player_identity"]["a"]["ot_id"])
+                                           baseline["links"]["player_identity"]["a"]["ot_id"],
+                                           allow_accepted_refreshes=True)
         problems += gen3_receipt_problems("a same_save", text(same_path), forbidden=(
             r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
         if problems:
@@ -8210,6 +8515,10 @@ class DuoRun:
         self._append_reconnect_marker("a", "A_DONE_SAME")
         self.wait_for("same-save A phase PASS", lambda: "RESULT: PASS" in text(same_path), 60)
         self.emu_by_inst["a"].wait(timeout=30)
+        late_problems = gen3_receipt_problems("a same_save after PASS", text(same_path), forbidden=(
+            r"(?m)^RX force_faint ", r"(?m)^RX box_mon ", r"(?m)^RX memorialize "))
+        if late_problems:
+            raise RuntimeError("C-2 same-save reconnect late command: " + "; ".join(late_problems))
         self._same_save_artifact = os.path.join(BUILD, f"e2e_{self.scenario}_a_same.SaveRAM")
         with open(self._same_save_artifact, "wb") as handle:
             handle.write(self._gen3_flushed("a"))
@@ -8229,7 +8538,8 @@ class DuoRun:
         problems = reconnect_wrong_problems(before_wrong_bytes,
                                             Path(self.data_dir, "links.json").read_bytes(),
                                             self._status() or {}, before_wrong_events,
-                                            self._reconnect_events())
+                                            self._reconnect_events(),
+                                            allow_rejected_refreshes=True)
         if problems:
             raise RuntimeError("C-1 wrong-save refusal failed: " + "; ".join(problems))
         self._pydec_note(f"C-1 wrong OT {other_ot} rejected; links.json byte-identical, no "
@@ -8539,9 +8849,15 @@ class DuoRun:
                                (kept, r"(?m)^SAVE_WITNESS_DUMP ")],
                               [gen3_tx("memorialize_done", key)])
             else:
+                # A is the side whose engine faint site fires: it fights NATURALLY in every case
+                # (wild/trainer/lhammer/...) and can legitimately gain EXP before it goes down.
+                # B's KO is engine-forced with no input (active_faint_chain), so its growth only
+                # moves when the case gives it real turns first (the "trainer" case, PREP_LEVEL).
+                # PYDEC FAIL on the RR final cut (d9a928d7): the memorial for A's key differed in
+                # experience because this mask never covered A's own natural growth.
                 problems += gen3_memorial_problems(inst, saved, fixture, key, box, rr=self._gen3_rr,
                                                    limits=self._gen3_limits(inst), battled=True,
-                                                   trained=inst == "b" and case == "trainer")
+                                                   trained=inst == "a" or case == "trainer")
                 done = gen3_tx("memorialize_done", key)
                 marks[inst] = ([done], [(done, r"(?m)^SAVE_WITNESS_DUMP ")], [])
         site = r"(?m)^ENGINE_FAINT_SITE "
@@ -8696,7 +9012,7 @@ class DuoRun:
         # queued box_mon held with zero writes while the nurse's script is live. A never ACKs
         # that box_mon (TX stats_cache would be the held write landing).
         center, landed = r"(?m)^CENTER_STATE ", r"(?m)^WRITE_IN_CENTER "
-        if self._gen3_title("a") == "emerald":
+        if gen3_emerald_engine(self._gen3_title("a")):
             # E4c replacements, each for a stated Emerald fact (pret pokeemerald c65e93f2):
             #  CENTER_STATE (Union Room set live at the Center landing) -> LANDING_STATE at A's
             #    fixture's own lastHealLocation (SaveBlock1 +0x1C WarpData, include/global.h:581-588,
@@ -8739,6 +9055,14 @@ class DuoRun:
         group, num = int.from_bytes(sb1[0x1C:0x1D], "little", signed=True), int.from_bytes(
             sb1[0x1D:0x1E], "little", signed=True)
         x, y = (int.from_bytes(sb1[at:at + 2], "little", signed=True) for at in (0x20, 0x22))
+        if self._gen3_title(inst) == GEN3_EXP_TITLE:
+            # X3: the expansion build whites out INTO the heal location's respawn map
+            # (OW_WHITEOUT_CUTSCENE >= GEN_4), harness_facts.json whiteout_respawns
+            facts = os.path.join(REPO, "data", "games", GEN3_PACKS[GEN3_EXP_TITLE], "harness_facts.json")
+            with open(facts, encoding="utf-8") as handle:
+                rows = json.load(handle)["whiteout_respawns"]
+            row = next(r for r in rows if r["heal"] == [group, num, x, y] and "respawn" in r)
+            group, num, x, y = row["respawn"]
         return rf"map={group}\.{num} at=\({x},{y}\)"
 
     def _gen3_whiteout_control(self) -> str:
@@ -8746,7 +9070,7 @@ class DuoRun:
         G5-RR-NURSE-2: RR's nurse cutscene never refuses (no message/waitmessage in her script),
         so RR holds the probe in the START menu (start_menu). E4c: Emerald lands OUTDOORS (no
         nurse), so it takes the START-menu control too, with its own menu witness."""
-        return "start_menu" if self._gen3_rr or self._gen3_title("a") == "emerald" else "nurse"
+        return "start_menu" if self._gen3_rr or gen3_emerald_engine(self._gen3_title("a")) else "nurse"
 
     def _gen3_sent_event(self, text, event, key):
         """The decoded JSON of the first `TX <event> <key> {...}` line, or None."""
@@ -8881,29 +9205,27 @@ class DuoRun:
                                    "identity-less team was refused with stale_battle_id")
 
     def assert_native_absent_gen3_saved(self, results):
-        """native_absent_gen3: the same valid apply_trade, two outcomes. A (companion): the client
-        queued it, wrote through the armed native window, and the stage op completed (NATIVE_
-        STAGED: the FSM left "stage"). B (clean): the client's refusal line, no native write, zero
-        writes. Neither side saves."""
-        ka, kb = self._native_absent_keys["a"], self._native_absent_keys["b"]
+        """native_absent_gen3 (RR-DURABLE): the same valid apply_prepare, two outcomes. A
+        (companion): a native write AFTER the command (the PREPARE post; the link panel may write
+        native before it), the native pre-save (gSaveCounter advanced), the producer READY, and
+        apply_ready ok:true. B (clean): apply_ready ok:false, no write at all. Neither side saves."""
         native_write = r"(?m)^\[client\] \[SLink-gen3\] write native "
-        queued = rf"(?m)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued"
-        staged = r"(?m)^NATIVE_STAGED phase=\S+ writes=[1-9]"
-        # the trade's own native write FOLLOWS the queued line: the companion's link panel
-        # (RX link_panel) legitimately writes native before any trade arrives (live 156a521f),
-        # so the first `write native` line proves nothing about the trade
-        trade_write = (rf"(?ms)^\[client\] \[SLink-gen3\] apply_trade received for {re.escape(ka)}: queued.*?"
-                       r"^\[client\] \[SLink-gen3\] write native .*?^NATIVE_STAGED phase=\S+ writes=[1-9]")
+        prepared = r"(?m)^NATIVE_PREPARED phase=2 writes=[1-9]"
+        after_cmd = r"(?ms)^RX apply_prepare\b.*?^\[client\] \[SLink-gen3\] write native "
+        ready_ok = r'(?m)^TX apply_ready - .*"ok":true'
         problems = gen3_receipt_problems(
-            "a", results["a"], required=[r"(?m)^RX apply_trade\b", queued, native_write, staged, trade_write])
-        refused = (rf"(?m)^\[client\] \[SLink-gen3\] apply_trade refused: no trade path on this "
-                   rf"cartridge \(nothing written\) {re.escape(kb)}")
+            "a", results["a"], required=[r"(?m)^RX apply_prepare\b", after_cmd, ready_ok, prepared],
+            forbidden=[r'(?m)^TX apply_ready - .*"ok":false'])
+        m = re.search(r"(?m)^PRESAVE_COUNTER before=(\d+) after=(\d+)$", results["a"])
+        if not m or int(m[2]) <= int(m[1]):
+            problems.append("a: the native pre-save never advanced gSaveCounter "
+                            f"({m[0] if m else 'no PRESAVE_COUNTER line'})")
         problems += gen3_receipt_problems(
-            "b", results["b"], required=[r"(?m)^RX apply_trade\b", refused, r"(?m)^WRITES 0$",
-                                         r"(?m)^PROBE_SETTLED writes=0$"],
-            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write "])
-        self._gen3_raise(problems, "native_absent: the companion staged the valid trade natively; "
-                                   "the clean cartridge refused it and wrote nothing")
+            "b", results["b"], required=[r"(?m)^RX apply_prepare\b", r'(?m)^TX apply_ready - .*"ok":false',
+                                         r"(?m)^WRITES 0$", r"(?m)^PROBE_SETTLED writes=0$"],
+            forbidden=[native_write, r"(?m)^\[client\] \[SLink-gen3\] write ", r'"ok":true'])
+        self._gen3_raise(problems, "native_absent: the companion answered the valid prepare only after "
+                                   "its native pre-save; the clean cartridge refused it and wrote nothing")
 
     def _run_oracle(self, results):
         """Revalidate the family contract and run its injected evidence stages.
@@ -8944,7 +9266,7 @@ class DuoRun:
 
     def _live_ok(self) -> bool:
         """True when every live leg this scenario needs ran to completion."""
-        if getattr(self, "cfg", {}).get("gen3_rand"):
+        if getattr(self, "cfg", {}).get("gen3_rand") or getattr(self, "cfg", {}).get("gen3_native_trade"):
             return bool(self._live_complete.get(self.scenario))
         if self.scenario not in LIVE_LEG_SCENARIOS:
             return True
@@ -8968,6 +9290,8 @@ class DuoRun:
                 self._clear_attempt_artifacts()  # startup waits must not see an older RESULT
             if self.cfg.get("gen3_rand"):
                 self._prepare_gen3_rand()
+            if self.cfg.get("gen3_native_trade"):
+                self._prepare_native_trade()
             if self.scenario == "admit_randomized_new":
                 self.prepare_admit_randomized_new()
             if self.is_gen3_battery:

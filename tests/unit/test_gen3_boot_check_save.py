@@ -74,6 +74,22 @@ def seven_per_slot() -> bytearray:
     return image
 
 
+def torn_read_image() -> bytearray:
+    """Slot CTR-1 valid; the opposite slot has ONE sector mid-program: signature already
+    committed, counter's low byte written with the upper three still erased -- PHYSICAL
+    whiteout_gen3 side B 2026-09-27 (`phase saved frame=17926 counter=4->4294967045`,
+    0xFFFFFF05 for a real counter of 5)."""
+    image = bytearray(valid(CTR - 1))
+    base = codec.NUM_SECTORS_PER_SLOT * (CTR % 2)
+    off = base * codec.SECTOR_SIZE
+    image[off + codec.OFF_SECTOR_SIGNATURE:off + codec.OFF_SECTOR_SIGNATURE + 4] = \
+        codec.SECTOR_SIGNATURE.to_bytes(4, "little")
+    torn = 0xFFFFFF00 | (CTR & 0xFF)
+    image[off + codec.OFF_SECTOR_COUNTER:off + codec.OFF_SECTOR_COUNTER + 4] = \
+        torn.to_bytes(4, "little")
+    return image
+
+
 def bad_checksum() -> bytearray:
     image = valid(CTR)
     image[(BASE + 3) * codec.SECTOR_SIZE + 0x10] ^= 0xFF
@@ -88,6 +104,7 @@ class World:
         g.flash = bytes(image)
         self.lua.execute("""
             frame, dialog, locked, swapped, a_seen, flushes = 0, 0, 0, false, false, 0
+            torn_pending, torn_at = nil, nil
             -- START menu fake (card C4-F2): sStartMenuWindowId/sStartMenuCursorPos/
             -- sNumStartMenuItems/sStartMenuOrder at their REAL addresses (independently
             -- hardcoded here, not read off the module -- this is what makes it a falsifier
@@ -194,6 +211,10 @@ class World:
                            startmenu_task, startmenu_cb, startmenu_ready_at = 1, CB_INPUT, nil
                        end
                        if initial_lock_until > 0 and frame == initial_lock_until then locked = 0 end
+                       -- a mid-write torn read (one sector's signature+counter already
+                       -- programmed, the rest of the slot still erased) fires before the real
+                       -- swap, PHYSICAL whiteout_gen3 side B 2026-09-27
+                       if torn_at and frame >= torn_at then flash, torn_at = torn_pending, nil end
                        if swap_at and frame >= swap_at then flash, swap_at = pending, nil; swapped = true end
                        if close_at and frame >= close_at then locked = 0 end
                        if a_seen then locked = 0 end
@@ -235,18 +256,21 @@ class World:
             g.startmenu_cb, g.startmenu_task = stale_cb, 0
 
     def save(self, after: bytes, swap_at=200, close_at=None, close_on_a=False,
-             dialog=0, dialog_stuck=False, initial_lock_frames=0):
+             dialog=0, dialog_stuck=False, initial_lock_frames=0, torn_image=None, torn_at=None):
         """initial_lock_frames: sLockFieldControls reads locked for this many frames from the
         very start, before any Start press -- models the settle-period lock PHYSICAL 2026-09-23
         found. 0 (default): free from the start, the common case for every test above this one
         (a Start press itself still locks it, same as the real game, until close_at/close_on_a
-        release it)."""
+        release it). torn_image/torn_at: the flash reads as `torn_image` from `torn_at` until
+        the real swap at `swap_at` -- models a polled read landing mid-flash-program."""
         g = self.lua.globals()
         g.dialog = dialog
         g.locked = 1 if initial_lock_frames else 0
         g.initial_lock_until, g.start_before_free = initial_lock_frames, 0
         g.pending, g.swap_at, g.close_at = bytes(after), swap_at, close_at
         g.close_on_a, g.swapped, g.a_seen, g.dialog_stuck = close_on_a, False, False, dialog_stuck
+        g.torn_pending = bytes(torn_image) if torn_image is not None else None
+        g.torn_at = torn_at
         return self.G.save_via_menu(self.lua.table(), DOMAIN)
 
 
@@ -276,6 +300,29 @@ def test_save_succeeds_and_flushes():
     w = World(bytes(valid(CTR - 1)))
     ok, before, after, why = w.save(valid(CTR), close_at=400)
     assert (ok, before, after, why) == (True, CTR - 1, CTR, None)
+    assert w.lua.globals().flushes == 1
+
+
+def test_counter_advanced_accepts_only_the_exact_next_value():
+    """The shared latch (gen3_emerald_boot_check.lua and gen3_scripted_play.lua's EMH.save_via_menu
+    route through this too): a torn read must never count as the save completing."""
+    G = World(bytes(valid(CTR - 1))).G
+    assert G.counter_advanced(4, 5) is True
+    assert G.counter_advanced(4, 4294967045) is False   # the physical torn value (0xFFFFFF05)
+    assert G.counter_advanced(4, 4) is False             # no change yet
+    assert G.counter_advanced(4, 6) is False             # skipped a value, not a real save seen
+
+
+def test_torn_counter_read_is_not_mistaken_for_the_save_completing():
+    """Red against the pre-fix `after > before` latch: a polled read during the write can see
+    one sector's counter word torn (low byte committed, upper bytes still erased), which is
+    numerically > before but not the real next counter. The old latch broke out of the poll
+    right there and spent the rest of the budget checking the WRONG counter's sectors, which can
+    never complete -- FAIL. The fix keeps polling past the torn value to the real swap."""
+    w = World(bytes(valid(CTR - 1)))
+    ok, before, after, why = w.save(valid(CTR), torn_image=torn_read_image(), torn_at=100,
+                                    swap_at=300, close_at=700)
+    assert (ok, before, after, why) == (True, CTR - 1, CTR, None), why
     assert w.lua.globals().flushes == 1
 
 

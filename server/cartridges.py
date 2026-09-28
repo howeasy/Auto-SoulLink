@@ -85,11 +85,6 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
             raise CartridgeError(f"player {pid}: choose a pinned cartridge; "
                                  f"{info['title'] or 'source ROM not found'}")
     family = upr_pipeline.family_of(sources)
-    if companion and family in GEN3_FAMILIES:
-        # The FR/LG companion (owner ruling 27) is being built in the Emerald lane; until it
-        # is admitted here a FireRed / LeafGreen pair is provisioned without one.
-        title = "Emerald" if family == FAMILY_EMERALD else "FireRed / LeafGreen"
-        raise CartridgeError(f"no {title} companion yet; turn Companion off")
     data = {pid: Path(path).read_bytes() for pid, path in sources.items()}
     if companion and family == FAMILY_VANILLA:
         for rom in data.values():
@@ -144,6 +139,10 @@ def _provision(run_dir, sources, *, companion, randomize, jar):
                 for pid, row in randomized["players"].items()}
         if companion and family == FAMILY_VANILLA:
             data = {pid: inject.inject(rom) for pid, rom in data.items()}
+        if companion and family in GEN3_FAMILIES:
+            from tools.gen3_companions import overlay_randomized
+            data = {pid: overlay_randomized(upr_pipeline.gen3_title(rom),Path(sources[pid]).read_bytes(),rom)
+                    for pid,rom in data.items()}
 
     players = {}
     for pid, rom in data.items():

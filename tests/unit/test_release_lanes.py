@@ -38,6 +38,9 @@ def test_zero_exit_without_executed_tests_fails(monkeypatch, stdout):
 
 
 def test_inherited_collect_only_cannot_pass_a_release_lane(monkeypatch, tmp_path):
+    # Keep the child collection root beside its fixture. On Windows, a temp
+    # fixture on another drive otherwise makes pytest scan that drive's root.
+    monkeypatch.setattr(gate,"_REPO",tmp_path)
     test_file = tmp_path / "test_required_lane.py"
     test_file.write_text(
         "import pytest\n"

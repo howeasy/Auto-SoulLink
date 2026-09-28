@@ -1,0 +1,298 @@
+-- T5 only. This module is never imported by a production bootstrap.
+-- The runner owns the nonce/environment and the private admission projection.
+-- No native witness, party byte, or save byte is written by this carrier.
+local M = {}
+M.ENV = "SLINK_DUO_FR_TRADE_CANDIDATE"
+M.DISCLOSURE = "candidate admission only; native NPC/chooser/offer evidence required"
+local cases = {native_trade_firered=true, native_trade_decline_firered=true}
+local sources = {
+    "tools/gen3_trade_duo.py", "tools/e2e_duo.py",
+    "lua/gen3/run.lua", "lua/gen3/entry.lua", "lua/gen3/client.lua", "lua/gen3/reads.lua", "lua/core/session.lua", "lua/owed_reports.lua", "lua/gen3/signals.lua",
+    "lua/gen3/native.lua", "lua/gen3/safety.lua", "lua/gen3/writes.lua", "lua/gen3/trade.lua", "lua/gen3/trade_journal.lua", "lua/gen3/rom_content.lua",
+    "lua/tests/duo/gen3_trade_candidate.lua", "lua/tests/duo/gen3_trade_driver.lua", "lua/tests/duo/duo_gen3_main.lua",
+    "lua/tests/duo/scenario_gen3_native_trade.lua",
+    "data/games/gen3_frlg/profile.json", "data/games/gen3_frlg/engine_signals.json",
+    "data/games/gen3_frlg/write_checkpoint.json", "patch/src/trade_targets/abi.h",
+    "patch/src/trade_targets/native_carrier.h", "patch/src/trade_targets/carrier_producer.h",
+    "patch/src/trade_targets/firered.h", "patch/src/trade_targets/leafgreen.h",
+    "data/gen3/pret/pokefirered.sym", "data/gen3/pret/pokeleafgreen.sym",
+}
+local function relative(path)
+    return type(path) == "string" and path:match("^patch/build/[%w_/%-.]+$") and not path:find("..",1,true)
+end
+function M.authorize(manifest, d, env, hash, read, digest)
+    assert(d.game == "gen3_fr_trade" and (d.title == "firered" or d.title == "leafgreen")
+           and cases[d.scenario], "not a T5 duo row")
+    assert(manifest.schema == "slink-frlg-native-carrier-v3", "stale T5 manifest: regenerate private packs")
+    assert(manifest.title == d.title and manifest.carrier_mode == "native"
+           and (not manifest.player or manifest.player == d.player), "wrong T5 player/title/carrier")
+    assert(manifest.production == false and manifest.ready == 0, "not a private READY0 candidate manifest")
+    assert(relative(manifest.journal_path) and manifest.journal_path:sub(-32)==manifest.nonce,
+           "stale T5 manifest: isolated journal missing")
+    assert(type(manifest.nonce) == "string" and #manifest.nonce == 32
+           and manifest.nonce:match("^%x+$") and env == manifest.nonce, "T5 runner override absent or mismatched")
+    hash = tostring(hash or ""):lower()
+    assert(hash == manifest.rom_sha1 or hash == manifest.rom_md5, "T5 cartridge differs from candidate manifest")
+    for _, name in ipairs({"profile","sites","checkpoint"}) do
+        assert(relative(manifest.pack_files[name]), "T5 private pack escaped patch/build")
+        assert(read and digest and manifest.pack_sha1 and
+               digest(read(manifest.pack_files[name])) == manifest.pack_sha1[name], "stale T5 private pack digest: " .. name)
+    end
+    local seen = 0
+    for _ in pairs(manifest.source_sha1 or {}) do seen = seen + 1 end
+    assert(seen == #sources,"stale T5 manifest: missing source digests")
+    for _, path in ipairs(sources) do
+        assert(digest(read(path)) == manifest.source_sha1[path], "stale T5 source digest: " .. path)
+    end
+    return true
+end
+function M.new(d, json, manifest, log, manifest_raw)
+    local digest = assert(dofile(d.wt .. "/lua/gen3/rom_content.lua").sha1,"raw byte digest unavailable")
+    assert(type(manifest_raw)=="string" and digest(manifest_raw)==d.native_manifest_sha1,"stale T5 manifest digest")
+    local function read(path)
+        local file = assert(io.open(d.wt .. "/" .. path,"rb"),"T5 bound file unavailable: " .. path)
+        local bytes=file:read("a");file:close();return bytes
+    end
+    M.authorize(manifest,d,os.getenv(M.ENV),gameinfo.getromhash(),read,digest)
+    local self = {manifest=manifest, ready=false, finals={}, save_entries=0, ui_jobs={}, ui_done={}, npc_edges=0}
+    local base = manifest.native.BASE
+    local prefix = "patch/build/t5_" .. manifest.nonce .. "_" .. d.player .. "_" .. (d.phase or "initial")
+    local ordinal, io_, session, parts, g = 0, nil, nil, nil, nil
+    local journal_path = d.wt .. "/" .. manifest.journal_path
+    local function emit(kind, fields)
+        fields = fields or {}
+        fields.kind, fields.side, fields.phase, fields.frame = kind,d.player,d.phase or "initial",emu.framecount()
+        log("T5 " .. json.encode(fields))
+    end
+    local function raw(address,n,domain)
+        local out = {}
+        for i=0,n-1 do out[#out+1] = string.char(memory.read_u8(address+i,domain or "System Bus")) end
+        return table.concat(out)
+    end
+    local function dump(label, data)
+        ordinal = ordinal + 1
+        local path = prefix .. "_" .. label .. "_" .. ordinal .. ".bin"
+        local f = assert(io.open(d.wt .. "/" .. path,"wb"), "T5 evidence file unavailable")
+        assert(f:write(data)); assert(f:close())
+        return path
+    end
+    local function counter() return g and g.save_counter(assert(g.flash_domain())) or -1 end
+    local function disk(path)
+        local file = io.open(path,"rb")
+        if not file then return nil end
+        local data = file:read("a");file:close();return data
+    end
+    local function journal_snapshot()
+        local until_ = os.clock()+1
+        repeat
+            local guard1 = disk(journal_path..".guard")
+            local body = disk(journal_path..".log")
+            local guard2 = disk(journal_path..".guard")
+            if guard1 and body and guard1 == guard2 then
+                local hash = 2166136261
+                for i=1,#body do hash=((hash ~ body:byte(i))*16777619)&0xFFFFFFFF end
+                if guard1 == string.format("SLINK-TRADE-JOURNAL-1\n%d:%08x\n",#body,hash) then
+                    emit("journal_intent",{path=dump("journal",body),guard=dump("guard",guard1)})
+                    return
+                end
+            end
+        until os.clock() >= until_
+        error("T5 could not capture a coherent persisted write-ahead journal")
+    end
+    function self.snapshot(kind, extra)
+        local before = memory.read_u16_le(base+0x68,"System Bus")
+        local data = raw(base,0xA0)
+        assert(memory.read_u16_le(base+0x68,"System Bus") == before, "T5 torn native snapshot")
+        local fields = extra or {}
+        fields.path, fields.counter = dump(kind,data),counter()
+        emit(kind,fields)
+    end
+    local function ui_snapshot(kind, fields)
+        local c = assert(manifest.carrier,"native carrier layout missing")
+        local bytes = raw(base,0xA0)..raw(c.state,c.size)..raw(c.callback,4)
+            ..raw(c.field_lock,1)..raw(c.script_status,1)..raw(c.party_cursor,1)
+        fields = fields or {}
+        fields.path = dump(kind,bytes)
+        emit(kind,fields)
+    end
+    local prior_control
+    function self.observe_carrier()
+        if not g then return end
+        local c = manifest.carrier
+        local control = raw(c.control,16)
+        local function word(bytes,at,n)
+            local value=0;for i=n,1,-1 do value=value*256+bytes:byte(at+i) end;return value
+        end
+        if prior_control and word(control,4,4) ~= word(prior_control,4,4) then
+            emit("npc_edge",{path=dump("npc_edge",prior_control..control
+                 ..raw(c.objects,c.stride*16)..raw(c.avatar,6))})
+            self.npc_edges=self.npc_edges+1
+        end
+        prior_control=control
+        local seq=memory.read_u16_le(base+8,"System Bus")
+        local job=self.ui_jobs[seq]
+        if not job then return end
+        if not job.entered and memory.read_u8(c.state+8,"System Bus")==1 then
+            job.entered=true;ui_snapshot("ui_enter",{op=job.op,seq=seq})
+        end
+        local status=memory.read_u16_le(base+10,"System Bus")
+        if not job.done and memory.read_u16_le(base+12,"System Bus")==seq and (status==2 or status==3) then
+            job.done=true;ui_snapshot("ui_done",{op=job.op,seq=seq})
+            if job.entered and status==2 then self.ui_done[job.op]=(self.ui_done[job.op] or 0)+1 end
+        end
+    end
+    function self.bind_entry(entry)
+        -- Only this validated harness module selects these private files. The
+        -- ordinary Entry ignores both the nonce env and the files. Their
+        -- production:true row is an explicit test projection of a false receipt.
+        entry.PACK_FILES.gen3_frlg = manifest.pack_files
+        return entry
+    end
+    function self.bind_journal(module)
+        local file_store = module.file_store
+        module.file_store = function(deps)
+            -- Real store/locking/flush implementation, isolated only by its
+            -- harness-owned installation path. Never clear a prior run's log.
+            deps.path = journal_path
+            emit("journal_location",{path=manifest.journal_path,scope="HARNESS_ONLY_RUN"})
+            return file_store(deps)
+        end
+        return module
+    end
+    function self.before_build(deps)
+        io_ = deps.io
+        local write = io_.write_u8
+        io_.write_u8 = function(address,value,...)
+            local result = write(address,value,...)
+            if address == base+7 then
+                local op = io_.read_u16(base+6)
+                if op == 29 then self.snapshot("prepare")
+                elseif op == 21 then self.snapshot("scene");journal_snapshot()
+                elseif op == 30 then self.snapshot("withdraw")
+                elseif op == 17 or op == 20 or op == 22 then
+                    local seq=io_.read_u16(base+8)
+                    self.ui_jobs[seq]={op=op};ui_snapshot("ui_post",{op=op,seq=seq})
+                end
+            end
+            return result
+        end
+        local flush = io_.saveram
+        io_.saveram = function(...)
+            emit("flash",{path=dump("flash",raw(0,0x20000,assert(g.flash_domain()))),counter=counter()})
+            local result = flush(...)
+            assert(result ~= false,"T5 host flush returned false")
+            self.snapshot("flush_native")
+            local file = assert(io.open(d.native_battery,"rb"), "T5 no battery file at host-flush return")
+            local disk = file:read("a");file:close()
+            emit("flush",{path=dump("flushed",disk),counter=counter(),status="returned"})
+            return result
+        end
+    end
+    function self.attach(the_session,the_parts)
+        session,parts = the_session,the_parts
+        if parts.native.service then
+            local service=parts.native.service
+            parts.native.service=function(...)
+                self.observe_carrier()
+                local result=table.pack(service(...))
+                self.observe_carrier()
+                return table.unpack(result,1,result.n)
+            end
+        end
+    end
+    function self.tx(message)
+        if message.event == "hello" then
+            self.advertised = message.trade_prepare == true
+            emit("hello",{trade_prepare=message.trade_prepare == true,rom_sha1=message.rom_sha1})
+        elseif message.event == "apply_ready" or message.event == "trade_done" or message.event == "menu_result"
+            or message.event == "mon_chosen" or message.event == "trade_request" then
+            emit("tx",{message=message,counter=counter()})
+        end
+    end
+    function self.command(cmd, handle)
+        emit("rx",{message=cmd})
+        if cmd.cmd == "msgbox" and type(cmd.text)=="string" and cmd.text:find("declined",1,true) then
+            self.declined = true
+        end
+        local result = handle(cmd)
+        if cmd.cmd == "trade_final" then self.finals[cmd.token] = cmd.verdict end
+        if cmd.cmd == "config" and self.advertised and parts.native:trade_capable() then
+            self.ready = true
+            emit("ready",{production=false})
+        end
+        return result
+    end
+    function self.start(ctx)
+        g = ctx.G
+        local function hook(symbol, fn)
+            local address = assert(manifest.hooks[symbol],"T5 missing engine hook "..symbol)
+            assert(event.on_bus_exec(fn,address,"T5-"..symbol),"T5 engine hook failed "..symbol)
+            emit("hook",{symbol=symbol,address=address})
+        end
+        hook("TradeMons_body",function() self.snapshot("commit") end)
+        hook("DoInGameTradeScene",function() self.snapshot("scene_enter") end)
+        hook("TradeEvolutionScene",function() self.snapshot("evolution") end)
+        local chooser_entries={}
+        hook("CB2_InitPartyMenu",function()
+            -- InitPartyMenu is a multi-frame callback. Keep its first engine
+            -- entry for each command, not an arbitrary count of initialization frames.
+            local seq=io_.read_u16(base+8)
+            if not chooser_entries[seq] then chooser_entries[seq]=true;ui_snapshot("chooser_entry") end
+        end)
+        hook("TrySavingData",function()
+            self.save_entries = self.save_entries + 1
+            self.snapshot("save_entry",{ordinal=self.save_entries})
+        end)
+        self.capture_party("boot_party",ctx)
+        emit("boot",{counter=counter(),production=false,rom_sha1=manifest.rom_sha1})
+    end
+    function self.capture_party(kind,ctx)
+        local count = memory.read_u8(ctx.reader.PARTY_COUNT_ADDR or manifest.party_count,"System Bus")
+        assert(count > 0 and count <= 6,"T5 unreadable party count")
+        emit(kind,{path=dump(kind,raw(assert(ctx.reader.party_base()),count*100)),count=count,counter=counter()})
+    end
+    function self.flush_decline() return io_.saveram() end
+    function self.carrier_complete()
+        local done = d.player=="a" and self.npc_edges==1 and self.ui_done[22]==1 and self.ui_done[20]==1
+            or d.player=="b" and self.ui_done[17]==1
+        if done then emit("native_carrier_complete",{title=d.title});return true end
+        return false
+    end
+    function self.capture_final(ctx)
+        self.snapshot("final")
+        self.capture_party("before_reload",ctx)
+        emit("ready_for_reload",{counter=counter()})
+    end
+    function self.reloaded(ctx)
+        self.capture_party("reloaded",ctx)
+        emit("reload",{counter=counter(),production=false})
+    end
+    function self.final_seen()
+        local journal = io_ and io_.trade_journal
+        for token,verdict in pairs(self.finals) do
+            if verdict=="committed" and journal and journal:ready() and not journal:hidden() and not journal:has_entries() then
+                if not self.journal_recorded then
+                    self.journal_recorded = true
+                    emit("journal",{token=token,ready=true,hidden=false,empty=true})
+                end
+                return true
+            end
+        end
+        return false
+    end
+    function self.diagnose(label)
+        local journal = io_ and io_.trade_journal
+        local ok,safe,why = pcall(function() return parts.safety:check(nil,"overworld") end)
+        emit("gate_state",{label=label,native=parts.native:mailbox(),
+            journal_ready=journal and journal:ready() or false,
+            journal_hidden=not journal or journal:hidden(),journal_path=manifest.journal_path,
+            field_ready=ok and safe==true,field_reason=tostring(ok and why or safe)})
+        self.snapshot("gate_native")
+    end
+    emit("override",{environment=M.ENV,value=manifest.nonce,production=false,ready=0,rom_sha1=manifest.rom_sha1,
+        source_commit=manifest.source_commit,manifest_sha1=d.native_manifest_sha1,
+        run_lua_sha1=manifest.source_sha1["lua/gen3/run.lua"],sites_sha1=manifest.pack_sha1.sites})
+    log("CANDIDATE_ONLY " .. M.DISCLOSURE)
+    return self
+end
+return M

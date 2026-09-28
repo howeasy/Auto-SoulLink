@@ -86,6 +86,7 @@ function Client.new(p)
     local trade_epoch, trade_connected = 0, false
     local trade_reset_epoch = 0
     local trade_report_epochs = setmetatable({}, {__mode="k"})
+    local owed_hold = nil       -- the reason the last owed report is held, logged once per hold
     local a, d = profile.ram, profile.derived
     local arr = json.array
     local area_map, locations = p.area_map or {}, p.locations or {}
@@ -169,7 +170,7 @@ function Client.new(p)
             session_nonce = nil
         end
     end
-    if native and p.artifact_kind == "companion" and native.bind_match_call_session and session_nonce then
+    if native and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and native.bind_match_call_session and session_nonce then
         -- The production nonce's first word is the persisted session counter.
         -- Short explicit harness seeds are also u32s; never invent an epoch.
         local epoch_seed = #session_nonce == 16 and session_nonce:sub(1,8)
@@ -432,7 +433,8 @@ function Client.new(p)
                 resolve_area()
                 send("capture", { key = k, area_id = area_id, species_id = m.species, level = m.level,
                                   hp = m.hp, maxHP = m.max_hp, nickname = m.nickname,
-                                  held_item_id = m.held_item, is_egg = m.is_egg == 1, gift = gift or nil })
+                                  held_item_id = m.held_item, is_egg = m.is_egg == 1,
+                                  stats = stats_of(m), gift = gift or nil })
             end
         end
         if found then return end
@@ -472,7 +474,7 @@ function Client.new(p)
                 send("capture", { key = k, area_id = "gift_daycare", species_id = m.species,
                                   level = m.level, hp = m.hp, maxHP = m.max_hp,
                                   nickname = m.nickname, held_item_id = m.held_item,
-                                  is_egg = false, gift = true })
+                                  is_egg = false, stats = stats_of(m), gift = true })
             end
         end
     end
@@ -717,7 +719,7 @@ function Client.new(p)
         if not hp then return nil end
         local plan = { { hp, 2, 0 } }
         if battler and num(a.BATTLE_MONS_ADDR) then
-            plan[2] = { a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF, 2, 0 }
+            plan[2] = { a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE + reads.BATTLE_MON_HP_OFF, 2, 0 }
         end
         return plan
     end
@@ -728,7 +730,7 @@ function Client.new(p)
     local function commit_plan(battler, with_moves)
         local plan = {}
         if with_moves then
-            local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
+            local base = a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE
             for i = 0, 3 do
                 plan[#plan + 1] = { base + BATTLE_MON_MOVES_OFF + i * 2, 2, MOVE_EXPLOSION }
                 plan[#plan + 1] = { base + BATTLE_MON_PP_OFF + i, 1, EXPLODE_PP }
@@ -766,8 +768,8 @@ function Client.new(p)
         if not (policy.handoff_entry and policy:handoff_entry(battler, "explode")) then
             return "hold", "active battler"
         end
-        local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
-        local bhp = io.read_u16(base + R.BATTLE_MON_HP_OFF)
+        local base = a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE
+        local bhp = io.read_u16(base + reads.BATTLE_MON_HP_OFF)
         local pp0 = io.read_u8(base + BATTLE_MON_PP_OFF)
         local comm = io.read_u8(a.BATTLE_COMM_ADDR + battler)
         local ex = e.explode
@@ -863,7 +865,7 @@ function Client.new(p)
 
     local function active_faint_step(e, mon, battler, b)
         if not STANDBY then return "hold", "pack has no battle.commit_guard.value" end
-        local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF)
+        local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE + reads.BATTLE_MON_HP_OFF)
         if e.perish and bhp == 0 then
             hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
             return "done"
@@ -1033,7 +1035,7 @@ function Client.new(p)
     -- reader owns bounds/pointer walking; this hook only binds table metadata and transport.
     local content_cache = {attempted=false}
     local function rom_content()
-        if p.artifact_kind ~= "rand" then return nil end
+        if p.artifact_kind ~= "rand" and p.artifact_kind ~= "rand_companion" then return nil end
         if not content_cache.attempted then
             content_cache.attempted = true
             local ok, payload, why = pcall(function()
@@ -1065,6 +1067,8 @@ function Client.new(p)
         -- a borrowed party is never published nor learned as ours (docs/protocol.md §9 item 11):
         -- hello.party stays present and empty, exactly like tick_fields' guard
         local hidden = st.frozen or (trade and trade:hide_party()) or recovery_hidden()
+        session.hello_visible = not hidden
+        if not hidden then st.trade_hello_pending = nil end
         local own = hidden and {} or party
         -- Once a baseline exists hello REPORTS and never learns: the session builds hello before
         -- this frame's signals drain, so a mon added since the last quiet frame (its acquisition
@@ -1081,7 +1085,9 @@ function Client.new(p)
         local area_id, loc = area_now()
         st.last_area = area_id .. "|" .. loc
         local gen, gen_ok = box_generation()                -- advertised only when the scan was complete
-        local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind,
+        -- Companion is a local native capability; randomized pairing stays the
+        -- existing wire kind and still carries its cartridge's ROM content.
+        local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind == "rand_companion" and "rand" or p.artifact_kind,
                     rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
                     pc_boxes_generation = gen_ok and gen or nil,
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
@@ -1525,7 +1531,7 @@ function Client.new(p)
         local active, prepared = trade:state()
         st.trade_apply = active or prepared
     end
-    if p.Trade and owed and p.artifact_kind == "companion" and (native or journal) then
+    if p.Trade and owed and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and (native or journal) then
         local trade_policy = assert(p.trade_policy, "pack trade policy required")
         trade = p.Trade.new({native=native or {trade_capable=function() return false end}, journal=journal,
             frame=io.framecount, eligible=function() return not awaiting_trade_run and eligible() end,
@@ -1581,6 +1587,16 @@ function Client.new(p)
                     seed_known(party); rebaseline(party)
                     st.trade_settle_until = io.framecount() + st.trade_limits.settle
                 end
+                -- The write-ahead interval withheld our party from the server.
+                -- Publish the now-durable (or proved unchanged) party before
+                -- releasing trade_done. Core gates this HELLO on its field
+                -- checkpoint and sends it before owed reports. Another hidden
+                -- party reason must not turn that ordering into a false proof.
+                if t.journaled and journal and journal:ready() and not journal:hidden() then
+                    st.trade_hello_pending, st.trade_hello_check = true, nil
+                    session.hello_visible = false
+                    session.hello_sent = false
+                end
             end})
     end
     C.apply_prepare = function(cmd)
@@ -1592,10 +1608,25 @@ function Client.new(p)
         if trade and trade:capable() then trade:apply(cmd); sync_trade()
         else
             log("apply_trade refused: durable native trade unavailable")
+            -- A replay during journal recovery cannot truthfully report
+            -- "unchanged"; the earlier intent may already have committed.
+            -- Its qualified uncertainty declaration owns the next report.
+            if journal and journal:hidden() then return true end
             if type(cmd.token) == "string" and cmd.token ~= "" and type(cmd.old_key) == "string" and cmd.old_key ~= "" then
                 local fields = {token=cmd.token, slot=cmd.slot, new_key=cmd.old_key, new_species=0}
                 local cancel = {token=cmd.token, choice=0, withdraw=true}
                 if owed then
+                    -- This branch owes a NON-uncertain trade_done, and the owed gate
+                    -- (drv.after_receive) refuses one while the hello is hidden.
+                    -- session.hello_visible only refreshes when a NEW hello is BUILT, and
+                    -- core/session.lua sends one only while hello_sent is false -- so without
+                    -- an armer the report (and the menu_result cancel behind it) stalls
+                    -- until a reconnect. trade.lua's completed() is the other armer; arm the
+                    -- same recovery here. The report stays NON-uncertain on purpose: this
+                    -- refusal can only justify "unchanged", which is server semantics.
+                    if not session.hello_visible then
+                        st.trade_hello_pending, st.trade_hello_check = true, nil
+                    end
                     owed.list[#owed.list+1] = {event="trade_done", fields=fields}
                     owed.list[#owed.list+1] = {event="menu_result", fields=cancel}
                 else send("trade_done", fields); send("menu_result", cancel) end
@@ -1617,14 +1648,35 @@ function Client.new(p)
         if trade then trade:tick(); sync_trade() end
         if owed then
             local refresh=false
-            owed:step(p.net.connected(), session.hello_sent == true and not awaiting_trade_run
-                       and (not journal or journal:ready()), function(event, fields)
+            owed:step(p.net.connected(), session.hello_sent == true, function(event, fields)
+                -- Uncertainty declarations deliberately precede the later
+                -- visible recovery HELLO; gating those would deadlock recovery.
+                if event == "trade_done" and not fields.uncertain
+                   and (not session.hello_visible or st.frozen
+                        or (trade and trade:hide_party()) or recovery_hidden()) then return false end
                 local sent=send(event,fields)
                 if sent and event == "trade_done" and fields.uncertain and fields.after_reset
                    and trade and trade:declaration_sent(fields.token) then
                     refresh=true
                 end
                 return sent
+            end, function(event)
+                if event ~= "trade_done" and event ~= "menu_result" then owed_hold = nil return true end
+                local why = nil
+                if awaiting_trade_run then why = "trade run not bound"
+                elseif journal and not journal:ready() then why = "trade journal not ready" end
+                if why then
+                    -- owed:step runs on EVERY after_receive, and a held head blocks every
+                    -- later report (lua/owed_reports.lua:62). Name the reason once per
+                    -- hold; a second line would only be per-frame noise.
+                    if owed_hold ~= why then
+                        owed_hold = why
+                        log(string.format("owed %s held: %s", event, why))
+                    end
+                    return false
+                end
+                owed_hold = nil
+                return true
             end)
             -- Server only consumes a hello AFTER the uncertainty declaration. This second
             -- hello is allowed only after the real reset boundary, never from unsaved RAM.
@@ -1804,6 +1856,17 @@ function Client.new(p)
                 elseif not ok or why then log("trade reload held: " .. tostring(ok and why or proof)) end
             end
         end
+        -- the hidden-HELLO recovery runs with or without a native part: a clean cartridge's
+        -- refused apply_trade owes reports behind it too (OMP cx-2e644e72 F1)
+        if st.trade_hello_pending and session.hello_sent and not session.hello_visible
+           and (not st.trade_hello_check or io.framecount()-st.trade_hello_check >= 30)
+           and not in_battle() and overworld_ok() then
+            st.trade_hello_check = io.framecount()
+            update_frozen(party_read() or {})
+            if not st.frozen and not (trade and trade:hide_party()) and not recovery_hidden() then
+                session.hello_sent = false -- one refresh when visibility returns, no hidden-HELLO spin
+            end
+        end
         if not (native and native.service) then return end
         -- C5-11c MAJOR 3: this used to clear st.battle on a live boundary, which made
         -- finish_battle skip the encounter result (RR companion then sent no no_catch where RR
@@ -1840,7 +1903,7 @@ function Client.new(p)
     session = core.Session.new({ net = transport, json = json, hud = hud, log = sink, tag = TAG,
                                  player = p.player, game = drv, identity = Id, deferred = Q })
     session.driver, session.state = drv, st
-    if native and p.artifact_kind == "companion" and native.request_match_call then
+    if native and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and native.request_match_call then
         local base_command = session.handle_command
         function session:handle_command(cmd)
             -- Same optional tag seam as gen2/client.lua: the original command

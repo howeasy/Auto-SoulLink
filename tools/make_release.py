@@ -321,6 +321,16 @@ _DATA_GAME_LUA: dict[str, list[str]] = {
         # the fixed-gift clause bypasses (Beldum/Wynaut/Castform/Mew/Deoxys) -- OMP cx-9f0eacae F1.
         "statics.json",
     ],
+    "gen3_exp/28877d73": [
+        # X3: registered in Entry.PACKS/PACK_FILES (not routed, not admitted), so
+        # Entry.admission_table opens its engine_signals.json for every GBA cartridge -- same
+        # F1 rule as gen3_emerald above. Mirrors Entry.PACK_FILES.gen3_exp.
+        "profile.json",
+        "engine_signals.json",
+        "write_checkpoint.json",
+        "area_map.json",
+        "gen3_exp_locations.lua",
+    ],
     "gen4_hgsspt": [
         "gen4_hgsspt_areas.lua",
         "gen4_hgsspt_areas_pt.lua",
@@ -354,6 +364,7 @@ _GB_COMPANION_UPS = ("SLink-RB-Red.ups", "SLink-RB-Blue.ups",
                      "SLink-PureRed.ups", "SLink-PureBlue.ups", "SLink-PureGreen.ups",
                      "SLink-Crystal.ups", "SLink-Gold.ups", "SLink-Silver.ups")
 _COMPANION_ROM_ARCNAME = "Pokemon - Radical Red (SLink companion).gba"
+_GEN3_COMPANION_FILES = ("SLink-FireRed.ups", "SLink-LeafGreen.ups", "SLink-Emerald.ups", "gen3_companions.json")
 
 # Launcher scripts (relative to lua/) whose SLINK_* lines get patched
 _LAUNCHER_SCRIPTS: set[str] = {
@@ -689,7 +700,7 @@ def build_release(
             # exists, and shipping one would advertise a capability that cannot be there.
             # pureRGB (PLAN M3): the companion source overlay over each pinned pure build,
             # one UPS per title (PureGreen included -- it is a full pure build of its own).
-            for gb_ups in _GB_COMPANION_UPS:
+            for gb_ups in _GB_COMPANION_UPS + _GEN3_COMPANION_FILES:
                 src = REPO_ROOT / "patch" / "dist" / gb_ups
                 if src.exists():
                     zf.write(src, prefix + f"companion/{gb_ups}")

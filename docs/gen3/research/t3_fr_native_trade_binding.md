@@ -75,6 +75,7 @@ The same coherent snapshot supplies progress and completion. Cumulative flags
 reach `trade.lua` in commit → scene → save → final order, including a single
 native frame containing all milestones. Host SaveRAM flush precedes journal
 `native_saved` and `trade_done`; a failed flush keeps the journal hidden.
+BizHawk `client.saveram()` returns no status, so this host gate can detect only a throw or explicit `false` (host limit).
 
 A stable, correctly bound terminal UNCHANGED is positive pre-mutation proof.
 Failure reason zero, missing COMMIT, or an ACK alone is not. The consumer has

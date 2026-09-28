@@ -48,9 +48,20 @@ def test_expansion_is_not_admitted_and_removed_fields_are_absent():
         assert all(value is not None for value in p[section].values())
     assert p["derived"]["SHEDINJA_SPECIES_ID"] == 292
     assert p["derived"]["BATTLE_MON_SIZE"] == 140
-    assert p["derived"]["NICKNAME11_FIELD"]["shift"] == 5
-    assert p["derived"]["NICKNAME12_FIELD"]["shift"] == 6
-    assert "NICKNAME_EXTRA_OFFS" not in p["derived"]
+    battle = json.loads((PACK / "facts.json").read_text())["structs"]["BattlePokemon"]["fields"]
+    assert p["derived"]["BATTLE_MON_MOVES_OFF"] == battle["moves"]["offset"] == 12
+    assert p["derived"]["BATTLE_MON_PP_OFF"] == battle["pp"]["offset"] == 37
+    perish = json.loads((PACK / "facts.json").read_text())["structs"]["Volatiles"]["bitfields"]
+    volatiles_off = battle["volatiles"]["offset"]
+    assert p["derived"]["BATTLE_MON_PERISH_FLAG_OFF"] == volatiles_off + perish["perishSong"]["offset"] == 94
+    assert p["derived"]["BATTLE_MON_PERISH_FLAG_MASK"] == int(perish["perishSong"]["mask"], 16) == 0x80
+    assert p["derived"]["BATTLE_MON_PERISH_TIMER_OFF"] == volatiles_off + perish["perishSongTimer"]["offset"] == 114
+    assert p["derived"]["BATTLE_MON_PERISH_TIMER_KEEP"] == 0xFF ^ int(perish["perishSongTimer"]["mask"], 16) == 0xF3
+    # X2: the 12-char nickname lanes in the reads.lua/gen3_codec layout shape (bit 53 and 86
+    # of the Growth substruct: nickname11 = experience u32 bits 21-28, nickname12 = +10 bits 6-13)
+    chars = p["derived"]["NICKNAME_EXTRA"]["chars"]
+    assert [c["word_off"] * 8 + c["shift"] for c in chars] == [53, 86] and {c["width"] for c in chars} == {8}
+    assert "NICKNAME_EXTRA_OFFS" not in p["derived"] and "NICKNAME11_FIELD" not in p["derived"]
 
 
 def test_every_profile_address_resolves_in_build_symbols(context):
@@ -125,12 +136,45 @@ def test_checkpoint_uses_expansion_geometry_and_keeps_unsupported_clauses_open()
     assert p["tasks"]["struct_size"] == facts["structs"]["Task"]["size"] == 40
     assert len(p["tasks"]["allowed_overworld_tasks"]) == 8
     assert not set(p["tasks"]["allowed_overworld_tasks"]) & set(p["tasks"]["non_allowed_task_census"])
-    assert p["cpu"]["status"] == "OPEN"
-    assert "mode" not in p["cpu"] and "pc_min" not in p["cpu"]
-    assert p["battle"]["commit_hold"].startswith("OPEN")
-    assert "handoff" not in p["battle"]
+    # X3: the BIOS park + IntrWait IRQ entry from the live census/IRQ receipts (test_gen3_exp_safety.py)
+    assert (p["cpu"]["mode"], p["cpu"]["thumb"], p["cpu"]["observed_pc"]) == (0x1F, 1, 0x0817AB3A)
+    assert p["cpu"]["irq_entry"]["lr_min"] == p["cpu"]["irq_entry"]["lr_max"] == 0x1F8
+    assert "cpu" not in p["open"] and p["tasks"]["status"] == "CENSUS"
+    handoff = p["battle"]["handoff"]
+    derived = read("profile.json")["titles"][TITLE]["derived"]
+    assert p["battle"]["commit_hold"].startswith("HOLD")
+    assert handoff["address"] == 0x030023EC and handoff["value"] == 0x0805A209
+    assert [row["name"] for row in handoff["head"]] == ["perish_status", "perish_timer", "no_op_action"]
+    battle_mons = read("profile.json")["titles"][TITLE]["ram"]["BATTLE_MONS_ADDR"]
+    assert handoff["head"][0] == {
+        "name": "perish_status", "address": battle_mons + derived["BATTLE_MON_PERISH_FLAG_OFF"],
+        "width": 1, "set": derived["BATTLE_MON_PERISH_FLAG_MASK"]}
+    assert handoff["head"][1] == {
+        "name": "perish_timer", "address": battle_mons + derived["BATTLE_MON_PERISH_TIMER_OFF"],
+        "width": 1, "keep": derived["BATTLE_MON_PERISH_TIMER_KEEP"]}
     assert p["battle"]["commit_guard"]["value"] == facts["constants"]["STATE_WAIT_ACTION_CONFIRMED_STANDBY"]
     assert next(c for c in p["battle"]["clauses"] if c["name"] == "battle_engine_loaded")["offset"] == 46
+
+
+def test_expansion_handoff_refuses_rom_body_or_pool_drift(context):
+    original = checkpoint.expansion_handoff(context)
+    fn = profile.expansion_symbol(context, "PlayerBufferExecCompleted", "src/battle_controller_player.o")
+    for rel in (0, 0x70, 0x74, 0x80):
+        changed = dict(context)
+        rom = bytearray(context["rom"])
+        rom[fn["address"] - checkpoint.ROM_BASE + rel] ^= 1
+        changed["rom"] = bytes(rom)
+        with pytest.raises(ValueError, match="ROM prefix changed|pool .* changed"):
+            checkpoint.expansion_handoff(changed)
+    installer = profile.expansion_symbol(context, "SetControllerToPlayer", "src/battle_controller_player.o")
+    for rel in (0x0A, 0x28, 0x2C, 0x30, 0x34):
+        changed = dict(context)
+        rom = bytearray(context["rom"])
+        rom[installer["address"] - checkpoint.ROM_BASE + rel] ^= 1
+        changed["rom"] = bytes(rom)
+        with pytest.raises(ValueError, match="ROM stores changed|pool .* changed"):
+            checkpoint.expansion_handoff(changed)
+    assert original["value"] == fn["address"] | 1
 
 
 def test_task_census_and_player_controller_are_symbol_bound(context):
@@ -190,15 +234,18 @@ def test_expansion_area_outputs_from_own_source(tmp_path):
 
 # ── F1: gen3_exp is data-only -- nothing routes a real cartridge into it ────────────────────
 def test_gen3_exp_is_unreachable_from_entry_lua_and_manager():
-    """The pack is deliberately UNADMITTED (module docstring): it must not be registered in
-    lua/gen3/entry.lua's Entry.PACKS (so no ROM hash/header can admit it) or Entry.ROUTED (so an
-    admitted cartridge could not be sent to a client build for it), and server/manager.py must
-    not offer it as a playable GAMES entry or even list it as a named UNADMITTED_GAMES key."""
+    """The pack is deliberately UNADMITTED (module docstring). X3 (the E2-ENTRY precedent) registers
+    it in lua/gen3/entry.lua's Entry.PACKS so its hash names its OWN pack (never gen3_emerald's) and
+    the launcher refuses it as unrouted (test_gen3_exp_entry.py); it must stay out of Entry.ROUTED,
+    carry no header_code (no by-name admission), keep its profile unadmitted, and server/manager.py
+    must not offer it as a playable GAMES entry or even list it as a named UNADMITTED_GAMES key."""
     lua = lupa.LuaRuntime(unpack_returned_tuples=True)
     entry_path = (ROOT / "lua/gen3/entry.lua").as_posix()
     Entry = lua.eval(f'dofile("{entry_path}")')
-    assert "gen3_exp" not in {key for key, _ in Entry.PACKS.items()}
+    assert "gen3_exp" in {key for key, _ in Entry.PACKS.items()}
+    assert Entry.PACKS.gen3_exp.header_code is None
     assert "gen3_exp" not in {key for key, _ in Entry.ROUTED.items()}
+    assert read("profile.json")["titles"][TITLE]["admitted"] is False
 
     from server.manager import GAMES, UNADMITTED_GAMES
     assert "gen3_exp" not in {key for key, _, _ in GAMES}
@@ -242,11 +289,12 @@ def test_item_row_matches_the_rom_for_potion(context):
     assert row["holdEffectParam"] == 20
 
 
-# ── F2: the overworld task allow-list is explicitly OPEN, like cpu ──────────────────────────
-def test_tasks_allow_list_carries_an_explicit_open_status():
+# ── F2 -> X3: the task allow-list names its qualification; cpu is a measured clause ──────────
+def test_tasks_allow_list_carries_its_census_and_cpu_is_measured():
     p = read("write_checkpoint.json")[TITLE]
-    assert p["tasks"]["status"] == "OPEN"
-    assert p["cpu"]["status"] == "OPEN"
+    assert p["tasks"]["status"] == "CENSUS" and (ROOT / p["tasks"]["census"]).is_file()
+    assert "status" not in p["cpu"] and (ROOT / p["cpu"]["census"]).is_file()
+    assert (ROOT / p["cpu"]["irq_entry"]["evidence"]).is_file()
 
 
 # ── F6: a ValueError from generate_emerald(check=...) is a message, not a traceback ─────────

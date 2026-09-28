@@ -66,6 +66,33 @@ def test_failed_rearm_revokes_old_window(world):
         world.execute("w:write_u16(100,0)")
 
 
+def test_state_change_during_stage_refuses_the_next_write_call_not_each_byte(world):
+    world.execute("""
+        local write = deps.io.write_u8
+        deps.io.write_u8 = function(a,v) write(a,v); safe=false end
+        w:arm('native',allow); w:write_u16(100,258)
+    """)
+    assert len(world.globals().output) == 2
+    with pytest.raises(lupa.LuaError, match="unsafe checkpoint"):
+        world.execute("w:write_u16(102,3)")
+    assert len(world.globals().output) == 2
+
+
+def test_mid_write_fault_logs_uncertain_partial_extent_before_rethrow(world):
+    world.execute("""
+        local write = deps.io.write_u8
+        deps.io.write_u8 = function(a,v) if a==102 then error('bus fault') end; write(a,v) end
+        w:arm('native',allow)
+    """)
+    with pytest.raises(lupa.LuaError, match="bus fault"):
+        world.execute("w:write_u32(100,16909060)")
+    g = world.globals()
+    assert len(g.receipts) == len(g.w.log) == 1
+    row = g.receipts[1]
+    assert row.partial and row.attempted == 3 and row.completed == 2 and row.len == 4
+    assert "bus fault" in row.error
+
+
 @pytest.mark.parametrize("reason", ["overworld", "battle_faint", "battle_commit", "native", "memorial_rename"])
 def test_reason_vocabulary(world, reason):
     world.globals().w.arm(world.globals().w, reason, world.globals().allow)
@@ -131,7 +158,7 @@ def test_write_plan_needs_an_armed_window(world):
 
 def test_r1_l9_write_plan_logs_a_receipt_for_every_entry_that_landed_before_a_sink_failure(world):
     """R1 L9 (red at cdc571f1): the sink throws on entry 3's first byte; entries 1 and 2 landed
-    and each keeps its receipt, entry 3 gets none, and the error still propagates."""
+    and each keeps its receipt; entry 3 is explicitly partial and the error propagates."""
     _arm_plan(world)
     world.execute("""
         local real = deps.io.write_u8
@@ -141,4 +168,6 @@ def test_r1_l9_write_plan_logs_a_receipt_for_every_entry_that_landed_before_a_si
         world.execute("w:write_plan(plan)")
     g = world.globals()
     assert len(g.output) == 2 and g.w.attempted == 3
-    assert [(g.receipts[i].address, g.receipts[i].len) for i in range(1, len(g.receipts) + 1)] == [(100, 1), (101, 1)]
+    assert [(g.receipts[i].address, g.receipts[i].len) for i in range(1, 3)] == [(100, 1), (101, 1)]
+    assert len(g.receipts) == 3
+    assert g.receipts[3].partial and g.receipts[3].attempted == 1 and g.receipts[3].completed == 0

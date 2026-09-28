@@ -21,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROM_BASE = 0x08000000
-RR_ROM_SHA1 = "7a3867499d66eb3621e0e7dde43bd033fc679f01"  # patch/build/slink_RR.gba pin
+RR_ROM_SHA1 = "da579690db7d6933a0952a1f490312842793f71a"  # patch/build/slink_RR.gba pin
 DEFAULT_RR_ROM = ROOT / "patch" / "build" / "slink_RR.gba"
 DEFAULT_VANILLA_ROM = ROOT / "patch" / "build" / "gen3_Pokemon_-_FireRed_Version_(USA).gba"
 

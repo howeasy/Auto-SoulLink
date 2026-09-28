@@ -953,8 +953,20 @@ def build(roms: dict[str, bytes]) -> tuple[dict, dict]:
         inventory[name] = {c["kind"]: resolve(c, name, rom) for c in CANDIDATES}
         artifact = {"rom_sha1": sha1, "rom_md5": hashlib.md5(rom).hexdigest(),
                     "sites": {k: r["site"] for k, r in inventory[name].items() if r["status"] == "PINNED"}}
+        if name == "rr_companion":
+            # RR-DURABLE: the shipped durable-trade UPS (patch/dist/SLink-RR.ups); its native
+            # trade descriptor binds only for explicit production metadata (lua/gen3/entry.lua).
+            artifact = {"production": True, **artifact}
         packs[pack]["titles"].setdefault(title, {"artifacts": {}})["artifacts"][kind] = artifact
     for pack in packs.values():
+        if pack["pack"] == "gen3_frlg":
+            from tools.gen3_companions import published, artifact as companion_artifact
+            for title, name in (("firered","fr"),("leafgreen","lg")):
+                result=published(title,roms[name],ROOT)
+                if result:
+                    rom,row=result
+                    artifacts=pack["titles"][title]["artifacts"]
+                    artifacts["companion"]=companion_artifact(artifacts["clean"],rom,row)
         pack["sha256"] = hashlib.sha256(json.dumps(pack, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return packs, inventory
 
@@ -1265,6 +1277,11 @@ def build_emerald(rom: bytes) -> tuple[dict, dict]:
     pack = {"schema": "gen3-engine-signals-v1", "pack": "gen3_emerald",
             "evidence": "SOURCE_BYTE_PIN", "live_verified": False,
             "titles": {"emerald": {"artifacts": {"clean": artifact}}}}
+    from tools.gen3_companions import published, artifact as companion_artifact
+    result=published("emerald",rom,ROOT)
+    if result:
+        patched,row=result
+        pack["titles"]["emerald"]["artifacts"]["companion"]=companion_artifact(artifact,patched,row)
     pack["sha256"] = hashlib.sha256(json.dumps(pack, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return pack, inventory
 

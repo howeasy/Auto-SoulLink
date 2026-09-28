@@ -291,6 +291,24 @@ def test_two_new_accepted_hellos_are_not_one_reconnect():
     assert any("exactly one accepted reconnect hello" in p for p in problems), problems
 
 
+def test_gen3_reconnect_accepts_capability_refreshes_only_when_all_hellos_are_accepted():
+    """The durable Gen 3 client may refresh HELLO after native capability settles."""
+    before, after, events = _reconnect_snapshots()
+    refreshed = _with_new_events(events, *[
+        {"player": "a", "type": "hello", "text": "Connected (firered_rr, 2 mons)"}
+        for _ in range(3)
+    ])
+    assert duo.reconnect_same_problems(before, after, events, refreshed,
+                                       "AAAA:1111:01", "1234",
+                                       allow_accepted_refreshes=True) == []
+    rejected = _with_new_events(refreshed,
+                                {"player": "a", "type": "hello", "text": "REJECTED — wrong OT"})
+    problems = duo.reconnect_same_problems(before, after, events, rejected,
+                                           "AAAA:1111:01", "1234",
+                                           allow_accepted_refreshes=True)
+    assert any("accepted reconnect hello" in p for p in problems), problems
+
+
 def test_a_log_at_the_entry_cap_still_finds_the_new_hello():
     """events.json is capped at 200 rows (server.py:79), so a reconnect at the cap drops the
     OLDEST row: the survivors are a prefix of the old list, not the whole of it."""
@@ -316,6 +334,24 @@ def test_wrong_save_reconnect_only_adds_a_rejected_hello():
                for p in duo.reconnect_wrong_problems(
                    b"same", b"same", status, events,
                    _with_new_events(rejected, {"player": "a", "type": "no_catch", "text": "bad"})))
+
+
+def test_gen3_wrong_save_allows_only_rejected_capability_refreshes():
+    _before, _after, events = _reconnect_snapshots()
+    status = {"players": {"a": {"identity_error": "Identity mismatch for slot A: wrong OT"},
+                          "b": {"connected": True}}}
+    rejected = _with_new_events(events, *[
+        {"player": "a", "type": "hello", "text": "REJECTED — wrong save/slot"}
+        for _ in range(3)
+    ])
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, rejected,
+                                        allow_rejected_refreshes=True) == []
+    accepted = _with_new_events(rejected,
+                                {"player": "a", "type": "hello", "text": "Connected (firered_rr, 2 mons)"})
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, accepted,
+                                        allow_rejected_refreshes=True)
+    assert duo.reconnect_wrong_problems(b"same", b"same", status, events, events,
+                                        allow_rejected_refreshes=True)
 
 
 def test_missing_second_ot_red_save_is_named_and_nonpassing(runner, tmp_path):

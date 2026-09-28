@@ -59,9 +59,9 @@ def test_title_explode_capability_agrees_with_the_manager(title):
     assert option_support("explode_mode", [title, title])["ok"] is True
 
 
-# Gen 2 (Crystal/Gold/Silver) gained its own Explode in the Gen 2 landing (master 5b6f75eb), so the
-# "stays off" control uses a title with no Explode support: HeartGold (Gen 4).
-@pytest.mark.parametrize("title", ("firered_ap", "emerald_expansion_28877d73", "heartgold"))
+# Gen 2 gained Explode on master, while ruling 39 refuses the expansion as a Manager run.
+# HeartGold remains a title with no Explode support.
+@pytest.mark.parametrize("title", ("firered_ap", "heartgold"))
 def test_explode_opt_in_does_not_enable_other_cartridges(title):
     from server.manager import option_support
 

@@ -8,10 +8,13 @@
 -- client sends trade_request, and everything after that is the SERVER's menu flow on the NATIVE
 -- menus (server/state.py _handle_trade_request .. _commit_trade): A picks "Trade" on the
 -- show_choices list and its linked mon on the choose_mon party screen; B answers show_menu's
--- YES/NO (YES for trade_gen3, B/NO for trade_decline_gen3). On YES both clients get apply_trade
--- and run the native trade scene (lua/gen3/client.lua trade FSM); A is pressed only while the
--- scene owns the screen (gMain.callback2 != CB2_Overworld), so no press can reach the NPC again.
--- Both halves then save on the runner's SAVE; the oracle decodes the flash itself (PYDEC).
+-- YES/NO (YES for trade_gen3, B/NO for trade_decline_gen3). On YES both clients run the durable
+-- native trade (RR-DURABLE, the shared FR/LG producer): apply_prepare -> the native "save the
+-- game?" pre-save -> apply_ready, then apply_trade -> the native scene -> the native post-save ->
+-- trade_done. A is pressed only while the durable producer owns the screen (producer_phase
+-- PRE_SAVE 1 or SCENE 3 at profile native.TRADE_BASE + 0x48, the T5 FR driver's gate), so no press
+-- can reach the NPC again. Both halves then save on the runner's SAVE; the oracle decodes the
+-- flash itself (PYDEC).
 --
 -- Game facts: the Center 1F geometry is tools/gba_map.py's parse of the pinned RR ROM
 --   python tools/gba_map.py patch/build/slink_RR.gba --map 5.4 --dump
@@ -173,17 +176,49 @@ local function tracer(ctx, N)
     end
 end
 
---- The native trade scene on this side: A only while the scene owns the screen, until the
---- client's trade_done. Returns the report.
+--- The durable native trade on this side: A only while the producer owns the screen (its native
+--- pre-save dialog or its scene), until the client's trade_done. Returns the report.
 local function run_scene(ctx, N)
     local trace = tracer(ctx, N)
+    local phase = function() return u32(N.TRADE_BASE + 0x48) end   -- shadow producer_phase
+    if not ctx.wait_until(function() trace("wait"); return ctx.received("apply_prepare") > 0 end, 600,
+                          "apply_prepare") then return nil, "no apply_prepare" end
+    if not press_until(ctx, function() trace("prepare"); return ctx.sent("apply_ready") > 0 end,
+                       function() return phase() == 1 end, "A", 600, "apply_ready") then
+        return nil, "no apply_ready (producer phase " .. phase() .. ")"
+    end
+    local ready = ctx.last_sent("apply_ready")
+    if not ready or ready.ok ~= true then return nil, "apply_ready refused the trade" end
     if not ctx.wait_until(function() trace("wait"); return ctx.received("apply_trade") > 0 end, 600,
                           "apply_trade") then return nil, "no apply_trade" end
     if not press_until(ctx, function() trace("scene"); return ctx.sent("trade_done") > 0 end,
-                       function() return not field_cb(N) end, "A", 900, "trade_done") then
+                       function() return phase() == 3 end, "A", 900, "trade_done") then
         return nil, "no trade_done (client trade phase " .. tostring(ctx.trade_phase()) .. ")"
     end
     return ctx.last_sent("trade_done")
+end
+
+--- Wait up to `secs` for the FIRST show_choices, or the server's named refusal, that arrives
+--- strictly AFTER `rx0` (a ctx.rx_count() snapshot taken right before the talk). Returns the rx
+--- entry, or nil on timeout. The refusal is typed (OMP cx-bfa0a588 F1): an untagged msgbox. Every
+--- server notice the walk can queue carries a `phone` tag (dead_zone, fallen, first_link), the
+--- trade refusal never does (server/state.py _handle_trade_request). PHYSICAL live trade_decline_gen3_rr_as_a (card RR-FC-FIX): the walk to the NPC
+--- crosses Route 1 grass, which can queue an unrelated msgbox first (server/state.py dz_text, "X
+--- is a dead zone!" -- a wild-encounter notice, nothing to do with trade); the first version of
+--- this fix checked ctx.received("msgbox") > 0 / ctx.rx_after(0, ...), counting from the start of
+--- the whole receipt, and reported that stale notice as the trade refusal. Scoped to `rx0` so only
+--- a real response to THIS request ever counts.
+local function wait_trade_answer(ctx, rx0, secs)
+    local function answered()
+        return ctx.rx_after(rx0, function(m)
+            return m.cmd == "show_choices" or (m.cmd == "msgbox" and m.phone == nil)
+        end)
+    end
+    if not ctx.wait_until(function() return answered() ~= nil end, secs,
+                          "show_choices or the unavailability msgbox") then
+        return nil
+    end
+    return answered()
 end
 
 local function a_side(ctx, N, linked, partner, decline)
@@ -193,9 +228,24 @@ local function a_side(ctx, N, linked, partner, decline)
         return false, "the trade NPC never spawned in the Center"
     end
     ctx.log("AT_NPC npc_oe=" .. npc_slot(N))
+    -- rx0 BEFORE talk(), not after: PHYSICAL live trade_decline_gen3_rr_as_a (card RR-FC-FIX,
+    -- second round) -- the patch sends trade_request in the SAME FRAME A talks (talk()'s own doc
+    -- comment), and this run's own receipt shows the server's msgbox landing (line "RX msgbox
+    -- text=Trade unavailable...") BEFORE talk() ever logs TALKED (gated on a LATER poll seeing
+    -- pi_count move). A snapshot taken after talk() returns can already be past the real answer,
+    -- which is exactly what turned into "TIMEOUT waiting for show_choices or the unavailability
+    -- msgbox" here.
+    local rx0 = ctx.rx_count()
     if not talk(ctx, N) then return false, "never talked to the trade NPC" end
     if not ctx.wait_sent("trade_request", nil, 60) then return false, "no trade_request after the talk" end
-    if not ctx.wait_received("show_choices", nil, 120) then return false, "no show_choices" end
+    -- The durable build trades (RR-DURABLE). The server's named refusal is only for an RR client
+    -- without the witness (the old UPS); here it is a failure, logged with its text.
+    local answer = wait_trade_answer(ctx, rx0, 120)
+    if not answer then return false, "no show_choices" end
+    if answer.cmd == "msgbox" then
+        ctx.log("REFUSED_UNAVAILABLE reason=" .. tostring(answer.text))
+        return false, "the server refused the trade: " .. tostring(answer.text)
+    end
     -- the list is up once the script owns the field; A on its first row (Trade)
     if not ctx.wait_until(function() return u8(SC2) ~= 0 end, 60, "the choices script") then
         return false, "the Trade/Say hey list never opened"
@@ -230,11 +280,18 @@ local function a_side(ctx, N, linked, partner, decline)
     if not chosen or chosen.slot ~= slot then return false, "mon_chosen said " .. tostring(chosen and chosen.slot) end
     ctx.log("CHOSE_MON slot=" .. slot .. " key=" .. linked)
     if decline then
-        local notices = ctx.received("msgbox")      -- a walk's dead-zone notice came before this
+        -- typed like the refusal (F1): the server's decline notice is untagged; a dead-zone
+        -- notice from the walk carries phone="dead_zone"
+        local rx1 = ctx.rx_count()
         local told = ctx.wait_until(function()
-            return ctx.received("msgbox") > notices and ctx.received("apply_trade") == 0
+            return ctx.rx_after(rx1, function(m)
+                return m.cmd == "msgbox" and m.phone == nil and tostring(m.text):find("^Your partner declined")
+            end)
         end, 900, "the decline notice")
         if not told then return false, "no decline notice" end
+        if ctx.received("apply_prepare") > 0 or ctx.received("apply_trade") > 0 then
+            return false, "a trade command arrived after the decline"
+        end
         return true
     end
     local report, rwhy = run_scene(ctx, N)
@@ -243,7 +300,7 @@ local function a_side(ctx, N, linked, partner, decline)
 end
 
 local function b_side(ctx, N, decline)
-    if not ctx.wait_received("show_menu", nil, 1500) then return false, "no trade offer (show_menu)" end
+    if not ctx.wait_received("show_menu", nil, 1500) then return false, "no offer (show_menu)" end
     if not ctx.wait_until(function() return u8(SC2) ~= 0 end, 120, "the YES/NO script") then
         return false, "the offer's YES/NO never opened"
     end
@@ -258,7 +315,9 @@ local function b_side(ctx, N, decline)
     ctx.log((decline and "DECLINED" or "ACCEPTED") .. " choice=" .. answer.choice)
     if decline then
         ctx.frames(600)
-        if ctx.received("apply_trade") > 0 then return false, "apply_trade after a decline" end
+        if ctx.received("apply_prepare") > 0 or ctx.received("apply_trade") > 0 then
+            return false, "a trade command arrived after a decline"
+        end
         return true
     end
     local report, why = run_scene(ctx, N)
@@ -282,8 +341,11 @@ return function(ctx)
     if ctx.player == "a" then ok, report = a_side(ctx, N, linked, partner, decline)
     else ok, report = b_side(ctx, N, decline) end
     if not ok then return false, report end
-    if decline then
-        if not ctx.find(linked) then return false, linked .. " left the party after a decline" end
+    if type(report) ~= "table" then
+        -- nothing moved: the partner declined
+        if not decline then return false, "no trade report" end
+        if not ctx.find(linked) then return false, linked .. " left the party though the trade never completed" end
+        if ctx.received("apply_trade") > 0 then return false, "apply_trade arrived though the trade never completed" end
         ctx.log("KEPT " .. linked .. " slot=" .. ctx.find(linked).slot)
     else
         if report.new_key ~= partner then
@@ -297,7 +359,9 @@ return function(ctx)
                         linked, partner, got.slot, got.species, got.level))
     end
     if not ctx.wait_go("SAVE", 1200) then return false, "the runner never released the SAVE" end
-    local sok, swhy = ctx.save(decline and "trade_decline" or "trade")
+    local traded = type(report) == "table"
+    local sok, swhy = ctx.save(traded and "trade" or "trade_decline")
     if not sok then return false, swhy end
-    return true, decline and "declined; nothing moved" or ("traded " .. linked .. " for " .. partner)
+    if traded then return true, "traded " .. linked .. " for " .. partner end
+    return true, "declined; nothing moved"
 end

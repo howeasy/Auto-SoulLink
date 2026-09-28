@@ -914,6 +914,10 @@ class SoulLinkState:
     def _handle_trade_request(self, player_id: str, msg: dict):
         """Talk-to-partner → show the native action menu (TRADE / SAY HEY). TRADE opens the party
         picker; SAY HEY just pings the partner."""
+        unavailable = self.adapter.trade_unavailable_reason()
+        if unavailable and not all(self.trade_prepare.values()):
+            self.queued_commands[player_id].append({"cmd": "msgbox", "text": unavailable})
+            return
         if self.pending_trade is not None:
             return                                # a trade is already in flight — ignore silently (no spam)
         self._trade_token += 1
@@ -3964,8 +3968,12 @@ class SoulLinkState:
                 continue
             existing = self.entry_for(pid, mon.key)       # KEY-SCOPE: per player
             if existing is not None and existing is not existing_entry and existing.status == LinkStatus.ALIVE:
-                return (f"Key collision: {mon.key} already identifies a live link in "
-                        f"{existing.area_id}", pid)
+                # Player-facing: this string reaches the HUD (gui_prompt at :2345 / :2632).
+                # Name the mon and the place; the mon key and the raw area_id are the
+                # operator's, and the caller's log line carries both.
+                who = mon.nickname or (self.adapter.species_name(mon.species) if mon.species else None) or "that Pokemon"
+                where = self.adapter.area_display_name(existing.area_id) or existing.area_id
+                return (f"Key collision: {who} is already linked in {where}", pid)
 
         if self.species_lock and a_mon.species and b_mon.species:
             # Cross-player check: A and B can't be the same species/family
@@ -4434,12 +4442,14 @@ class SoulLinkState:
         species = msg.get("species_ids") or []
         err = str(msg.get("error", "") or "")
         if err:
-            # The client couldn't perform the swap (patch_required / patch_failed /
-            # patch_timeout). Without this the player fights the canned rival team
-            # all run and never learns why.
+            # The client couldn't perform the swap. It names WHY with a code
+            # (patch_required / patch_failed / patch_timeout) -- that stays in the log line
+            # below. The HUD is player-facing only, so it says the swap did not happen and
+            # points at the console; without it the player fights the canned rival team all
+            # run and never learns anything went wrong.
             log.warning(f"[{player_id}] rival team swap FAILED: {err}")
             self.queued_commands[player_id].append({
-                "cmd": "hud_show", "text": f"Rival Swap failed: {err}",
+                "cmd": "hud_show", "text": "Rival Swap failed - see the SLink log",
                 "r": 255, "g": 80, "b": 80, "frames": 600})
             return
         if not isinstance(species, list):

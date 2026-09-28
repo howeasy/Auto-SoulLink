@@ -86,7 +86,7 @@
       "moves": 848,
       "species": 1573
     },
-    "data_sha256": "ed9428984bd3a45e8b83033ce3fbe38765aa091de38c5d632fec1d4e4227f10c",
+    "data_sha256": "0f4a0a5dcb0011028aca88a34631e6f435a740a310ba4d3bef1dfaf9c43bec2c",
     "evolution_edges": 695,
     "reserved_zero_records": {
       "abilities": [],
@@ -145,7 +145,7 @@
       }
     },
     "compile": {
-      "build_receipt_sha256": "b21156de38449ad4267b0a68568a502195a5b31795d121dbf6cbadb5b76e329c",
+      "build_receipt_sha256": "de047dfad83a004f8ee79fa5e46a674be1830676d72f92eb528e0948cdeea84f",
       "commands": [
         [
           "arm-none-eabi-cpp",
@@ -156,14 +156,14 @@
           "-DTESTING=0",
           "-DEMERALD",
           "-std=gnu17",
-          "/home/howard/slink-exp/x1-probe-20260926/work/expansion_offsets.c"
+          "/home/howard/slink-exp/xg3-faint/work/expansion_offsets.c"
         ],
         [
           "tools/preproc/preproc",
           "-i",
           "-g",
           "build/assets",
-          "/home/howard/slink-exp/x1-probe-20260926/work/expansion_offsets.c",
+          "/home/howard/slink-exp/xg3-faint/work/expansion_offsets.c",
           "charmap.txt"
         ],
         [
@@ -194,7 +194,7 @@
           "-Wno-error=unused-local-typedefs",
           "-Wno-error=deprecated-declarations",
           "-o",
-          "/home/howard/slink-exp/x1-probe-20260926/work/probe.s",
+          "/home/howard/slink-exp/xg3-faint/work/probe.s",
           "-"
         ],
         [
@@ -207,12 +207,12 @@
           "--defsym",
           "EMERALD=1",
           "-o",
-          "/home/howard/slink-exp/x1-probe-20260926/work/probe.o",
-          "/home/howard/slink-exp/x1-probe-20260926/work/probe.s"
+          "/home/howard/slink-exp/xg3-faint/work/probe.o",
+          "/home/howard/slink-exp/xg3-faint/work/probe.s"
         ]
       ],
       "executables": {
-        "/home/howard/slink-exp/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/bedf3701743a4053b72b1128e68acd65/.cache/expansion/e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7/tools/preproc/preproc": "c41243f34b4a0e491bac8b25548f39eb0305f32045085c43898dbceca418f016",
+        "/home/howard/slink-exp/xg3-source/tools/preproc/preproc": "c41243f34b4a0e491bac8b25548f39eb0305f32045085c43898dbceca418f016",
         "/usr/bin/arm-none-eabi-as": "ec839647452c629c6b26b35c8e29b56cd5be8d9bbf5221d01947451395bb7689",
         "/usr/bin/arm-none-eabi-cpp": "38db291d05ab00f837b3e99a0d89e20a628327c715a039e22c1e0c4dcab062a5",
         "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1": "1d284dd98e80e416ad199f5a2e24df5e704b43c0afd15ee3a34357dc46d8c5c0"
@@ -234,9 +234,9 @@
         "RELEASE": "0",
         "TEST": "0"
       },
-      "object_sha256": "a84e019195ce1f1ca16aa2d4d2ead2a097999121d5001361d1bf7e4610b62be1",
-      "preprocessed_sha256": "882f31bacb57ecdb6f57594713a9946707159341ebde1c72c48876f1292a9d66",
-      "probe_sha256": "46f385f1e6059726e521c529f49696cd7140b38bce13d56194ba42f53187473d",
+      "object_sha256": "81e30323668a45fcef909f19f8c4971cbd81597a1b37ccbe4eb7a681ff418f0e",
+      "preprocessed_sha256": "2f7ecbda5b8be739016313372ed87ee99a745ad453f9b83b73511355d8f2bfe9",
+      "probe_sha256": "0b999ba62a843baaf94050a76941c92fcb18fb5864cdf12ed00de26a9bb23218",
       "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
       "source_enums": {
         "CONTEXT_SHUTDOWN": {
@@ -1818,6 +1818,14 @@
     },
     "Volatiles": {
       "bitfields": {
+        "perishSong": {
+          "bits": 1,
+          "initializer_sha256": "3971d711b4bfd51cf3db00ca7e98b6d679f6fc6293059a06359257cb270cc613",
+          "mask": "0x80",
+          "offset": 10,
+          "shift": 7,
+          "width": 1
+        },
         "perishSongTimer": {
           "bits": 2,
           "initializer_sha256": "af725fdb49bf59bbc9355c3eb93ef44f3a9c4eec30dd6af4a49d0bbb759250d4",

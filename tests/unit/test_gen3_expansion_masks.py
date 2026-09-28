@@ -460,3 +460,44 @@ def test_lua_reads_is_inert_without_the_expansion_derived_keys():
             assert lua[field] == py[field], field
         assert list(lua.moves.values()) == py["moves"]
         assert list(lua.pp.values()) == py["pp"]
+
+
+# --- X2: the SHIPPED gen3_exp profile drives both decoders -------------------
+
+def _shipped_exp_derived() -> dict:
+    """data/games/gen3_exp/28877d73/profile.json's derived block: what Entry.build hands
+    lua/gen3/reads.lua on the reference build (not the test twin above)."""
+    pack = json.loads((_ROOT / "data/games/gen3_exp/28877d73/profile.json").read_text())
+    return pack["titles"]["emerald_expansion_28877d73"]["derived"]
+
+
+def test_shipped_exp_profile_carries_every_layout_key_reads_lua_consumes():
+    derived = _shipped_exp_derived()
+    assert set(EXPANSION_LAYOUT) <= set(derived)
+    # the pre-X2 facts-shaped keys no decoder reads are gone (one representation, not two)
+    assert "NICKNAME11_FIELD" not in derived and "NICKNAME12_FIELD" not in derived
+
+
+def test_lua_reads_decodes_an_expansion_record_through_the_shipped_profile():
+    raw, expected = _build_expansion_party_record()
+    runtime, reads = _lua_reads(_shipped_exp_derived())
+    lua_mon = reads.decode_party_mon(runtime.table(*raw))
+    assert lua_mon.species == expected["species"]
+    assert lua_mon.held_item == expected["held_item"]
+    assert list(lua_mon.moves.values()) == expected["moves"]
+    assert lua_mon.experience == expected["experience"]
+    assert lua_mon.nickname == expected["nickname"]
+    assert lua_mon.pokeball == expected["pokeball"]
+    assert lua_mon.ability_num == expected["ability_num"]
+    assert list(lua_mon.pp.values()) == expected["pp"]
+    assert lua_mon.markings == expected["markings"]
+    assert lua_mon.shiny_modifier == expected["shiny_modifier"]
+
+
+def test_python_masked_decode_through_the_shipped_profile_matches():
+    raw, expected = _build_expansion_party_record()
+    layout = {k: v for k, v in _shipped_exp_derived().items() if k in EXPANSION_LAYOUT}
+    decoded = codec.decode_party_mon_masked(raw, rr=False, layout=layout)
+    for field in ("species", "held_item", "moves", "experience", "nickname", "pokeball",
+                  "ability_num", "pp", "markings", "shiny_modifier"):
+        assert decoded[field] == expected[field], field

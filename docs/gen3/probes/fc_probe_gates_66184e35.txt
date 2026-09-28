@@ -1,0 +1,12 @@
+# gen3_final_cut row=probe_gates item=§11_gate cut=66184e35595578da7c8edbd00b08daf32015542d
+# lane=C:/slink-wt/g3-lane
+# command: python -m pytest tests/live/test_gen3_probe_gates.py -q -p no:randomly -rs   (cwd=C:/slink-wt/g3-lane)
+# env: SLINK_LIVE=1
+# verdict: PASS
+# inputs: rom:firered_root=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:slink_RR=bc8371bad0ec4692e5d353a65af2c3a799a9e0c1d82430891d72cb21c530544a
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T14:40:59 cpu=40% emuhawk=0 python=4
+start_utc=2026-09-27T18:40:58Z tracked_clean_before=True
+....                                                                     [100%]
+4 passed in 101.63s (0:01:41)
+exit=0 end_utc=2026-09-27T18:42:42Z tracked_clean_after=True classification=pass

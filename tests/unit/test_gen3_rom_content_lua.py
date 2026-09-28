@@ -9,6 +9,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import re
 import struct
 from collections import Counter
@@ -25,11 +26,9 @@ MODULE = ROOT / "lua/gen3/rom_content.lua"
 BASE = 0x08000000
 STRIDES = {"gTrainers": 40, "gWildMonHeaders": 20, "gEvolutionTable": 40,
            "gSpeciesInfo": 28, "gTrainerClassNames": 13}
-SCRATCH = Path(
-    "C:/Users/howar/AppData/Local/Temp/claude/"
-    "E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45/"
-    "30c21a7a-9a9b-44db-b573-10e09226bcc8/scratchpad"
-)
+# the UPR-randomized FireRed/LeafGreen "_allowed" ROMs (made by the Manager/UPR pipeline); a stable,
+# session-independent location -- this used to be one Claude session's scratchpad path
+SCRATCH = Path(os.environ.get("SLINK_GEN3_UPR_SCRATCH", "C:/slink-wt/upr_scratch"))
 
 
 def symbols(title, rom_size):

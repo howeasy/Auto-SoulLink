@@ -1,0 +1,844 @@
+{
+  "constants": {
+    "BALL_POKE": 1,
+    "GEN_4": 3,
+    "ITEM_POKE_BALL": 1,
+    "NUM_HEAL_LOCATIONS": 43,
+    "OPTION_DEPOSIT": 1,
+    "OPTION_EXIT": 4,
+    "OPTION_MOVE_ITEMS": 3,
+    "OPTION_MOVE_MONS": 0,
+    "OPTION_WITHDRAW": 2,
+    "OW_WHITEOUT_CUTSCENE": 8,
+    "POCKETS_COUNT": 5,
+    "POCKET_POKE_BALLS": 1
+  },
+  "evidence": "SOURCE/COMPILER only; harness facts, no runtime qualification",
+  "provenance": {
+    "compiler": {
+      "host": "Linux",
+      "package": "gcc-arm-none-eabi",
+      "package_version": "15:13.2.rel1-2",
+      "path": "/usr/bin/arm-none-eabi-gcc",
+      "sha256": "38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59",
+      "ssh_alias": "hgbox",
+      "status": "provisional",
+      "version": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+    },
+    "flags": {
+      "AS": "arm-none-eabi-as",
+      "ASFLAGS": "-mcpu=arm7tdmi -march=armv4t -meabi=5 --defsym MODERN=1 --defsym EMERALD=1",
+      "ASSETS_DIR_NAME": "build/assets",
+      "CC1": "/usr/lib/gcc/arm-none-eabi/13.2.1/cc1 -quiet",
+      "CFLAGS": "-mthumb -mthumb-interwork -O2 -mabi=apcs-gnu -mtune=arm7tdmi -march=armv4t -Wno-pointer-to-int-cast -std=gnu17 -Werror -Wall -Wno-strict-aliasing -Wno-attribute-alias -Woverride-init -Wnonnull -Wenum-conversion -Wno-error=unused-variable -Wno-error=unused-const-variable -Wno-error=unused-parameter -Wno-error=unused-function -Wno-error=unused-but-set-parameter -Wno-error=unused-but-set-variable -Wno-error=unused-value -Wno-error=unused-local-typedefs -Wno-error=deprecated-declarations",
+      "CPP": "arm-none-eabi-cpp",
+      "CPPFLAGS": "-iquote include -Wno-trigraphs -DMODERN=1 -DTESTING=0 -DEMERALD -std=gnu17",
+      "PREPROC": "tools/preproc/preproc"
+    },
+    "generator_sha256": "0cc13867e511a5c34892401eb84bd6d9068ede343a6934e62f241f216475206a",
+    "object_sha256": "9d83c8356fa887a2c6c99871f476eea27c46475ea823375593dce5b73af9a69a",
+    "pc_options_enum": {
+      "line": 59,
+      "sha256": "d7624ab7b184eb4d521618a5742bc54070d7d4323a34cc526df9e8df3284f8f0",
+      "source": "src/pokemon_storage_system.c",
+      "text": "enum {\n#if OW_PC_MOVE_ORDER <= GEN_3\n    OPTION_WITHDRAW,\n    OPTION_DEPOSIT,\n    OPTION_MOVE_MONS,\n#elif OW_PC_MOVE_ORDER >= GEN_4 && OW_PC_MOVE_ORDER <= GEN_6_XY\n    OPTION_DEPOSIT,\n    OPTION_WITHDRAW,\n    OPTION_MOVE_MONS,\n#elif OW_PC_MOVE_ORDER >= GEN_7\n    OPTION_MOVE_MONS,\n    OPTION_DEPOSIT,\n    OPTION_WITHDRAW,\n#endif\n    OPTION_MOVE_ITEMS,\n    OPTION_EXIT,\n    OPTIONS_COUNT,\n    OPTION_SELECT_MON\n};"
+    },
+    "preprocessed_sha256": "b06e45af172d40c1529971836a7ee2c96c2a816dd3d8f8205034cfa35f777184",
+    "probe_sha256": "c23562884c9aece7da6436ddd74ba7b8bb569b355e43d8a0507d1dde2b99023c"
+  },
+  "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+  "schema": 1,
+  "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+  "structs": {
+    "BagMenu": {
+      "bitfields": {},
+      "fields": {
+        "contextMenuNumItems": {
+          "offset": 2088,
+          "size": 1
+        }
+      },
+      "size": 3144
+    },
+    "BagPosition": {
+      "bitfields": {},
+      "fields": {
+        "cursorPosition": {
+          "count": 5,
+          "element_size": 2,
+          "offset": 8,
+          "size": 10
+        },
+        "pocket": {
+          "offset": 5,
+          "size": 1
+        },
+        "scrollPosition": {
+          "count": 5,
+          "element_size": 2,
+          "offset": 18,
+          "size": 10
+        }
+      },
+      "size": 28
+    },
+    "HealLocation": {
+      "bitfields": {},
+      "fields": {
+        "mapGroup": {
+          "offset": 0,
+          "size": 1
+        },
+        "mapNum": {
+          "offset": 1,
+          "size": 1
+        },
+        "x": {
+          "offset": 2,
+          "size": 2
+        },
+        "y": {
+          "offset": 4,
+          "size": 2
+        }
+      },
+      "size": 8
+    },
+    "SaveBlock1": {
+      "bitfields": {},
+      "fields": {
+        "bag": {
+          "offset": 1376,
+          "size": 744
+        },
+        "continueGameWarp": {
+          "offset": 12,
+          "size": 8
+        },
+        "flags": {
+          "offset": 4720,
+          "size": 300
+        },
+        "lastHealLocation": {
+          "offset": 28,
+          "size": 8
+        },
+        "location": {
+          "offset": 4,
+          "size": 8
+        },
+        "mapLayoutId": {
+          "offset": 50,
+          "size": 2
+        },
+        "money": {
+          "offset": 1168,
+          "size": 4
+        },
+        "pos": {
+          "offset": 0,
+          "size": 4
+        }
+      },
+      "size": 15568
+    },
+    "SaveBlock2": {
+      "bitfields": {},
+      "fields": {
+        "encryptionKey": {
+          "offset": 172,
+          "size": 4
+        },
+        "playerGender": {
+          "offset": 8,
+          "size": 1
+        },
+        "playerTrainerId": {
+          "count": 4,
+          "element_size": 1,
+          "offset": 10,
+          "size": 4
+        },
+        "specialSaveWarpFlags": {
+          "offset": 9,
+          "size": 1
+        }
+      },
+      "size": 3884
+    }
+  },
+  "whiteout_respawns": [
+    {
+      "heal": [
+        1,
+        1,
+        4,
+        2
+      ],
+      "id": "HEAL_LOCATION_LITTLEROOT_TOWN_BRENDANS_HOUSE_2F",
+      "respawn": [
+        1,
+        0,
+        2,
+        7
+      ],
+      "respawn_npc": "LOCALID_PLAYERS_HOUSE_1F_MOM"
+    },
+    {
+      "heal": [
+        1,
+        3,
+        4,
+        2
+      ],
+      "id": "HEAL_LOCATION_LITTLEROOT_TOWN_MAYS_HOUSE_2F",
+      "respawn": [
+        1,
+        2,
+        8,
+        7
+      ],
+      "respawn_npc": "LOCALID_PLAYERS_HOUSE_1F_MOM"
+    },
+    {
+      "heal": [
+        0,
+        0,
+        20,
+        17
+      ],
+      "id": "HEAL_LOCATION_PETALBURG_CITY",
+      "respawn": [
+        8,
+        4,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_PETALBURG_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        1,
+        19,
+        20
+      ],
+      "id": "HEAL_LOCATION_SLATEPORT_CITY",
+      "respawn": [
+        9,
+        11,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_SLATEPORT_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        2,
+        22,
+        6
+      ],
+      "id": "HEAL_LOCATION_MAUVILLE_CITY",
+      "respawn": [
+        10,
+        5,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_MAUVILLE_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        3,
+        16,
+        39
+      ],
+      "id": "HEAL_LOCATION_RUSTBORO_CITY",
+      "respawn": [
+        11,
+        5,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_RUSTBORO_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        4,
+        5,
+        7
+      ],
+      "id": "HEAL_LOCATION_FORTREE_CITY",
+      "respawn": [
+        12,
+        2,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_FORTREE_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        5,
+        24,
+        15
+      ],
+      "id": "HEAL_LOCATION_LILYCOVE_CITY",
+      "respawn": [
+        13,
+        6,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_LILYCOVE_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        6,
+        28,
+        17
+      ],
+      "id": "HEAL_LOCATION_MOSSDEEP_CITY",
+      "respawn": [
+        14,
+        3,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_MOSSDEEP_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        7,
+        43,
+        32
+      ],
+      "id": "HEAL_LOCATION_SOOTOPOLIS_CITY",
+      "respawn": [
+        15,
+        2,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_SOOTOPOLIS_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        8,
+        27,
+        49
+      ],
+      "id": "HEAL_LOCATION_EVER_GRANDE_CITY",
+      "respawn": [
+        16,
+        12,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_EVER_GRANDE_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        9,
+        5,
+        9
+      ],
+      "id": "HEAL_LOCATION_LITTLEROOT_TOWN_BRENDANS_HOUSE",
+      "respawn": [
+        1,
+        0,
+        2,
+        7
+      ],
+      "respawn_npc": "LOCALID_PLAYERS_HOUSE_1F_MOM"
+    },
+    {
+      "heal": [
+        0,
+        9,
+        14,
+        9
+      ],
+      "id": "HEAL_LOCATION_LITTLEROOT_TOWN_MAYS_HOUSE",
+      "respawn": [
+        1,
+        2,
+        8,
+        7
+      ],
+      "respawn_npc": "LOCALID_PLAYERS_HOUSE_1F_MOM"
+    },
+    {
+      "heal": [
+        0,
+        10,
+        6,
+        17
+      ],
+      "id": "HEAL_LOCATION_OLDALE_TOWN",
+      "respawn": [
+        2,
+        2,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_OLDALE_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        11,
+        2,
+        11
+      ],
+      "id": "HEAL_LOCATION_DEWFORD_TOWN",
+      "respawn": [
+        3,
+        1,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_DEWFORD_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        12,
+        9,
+        7
+      ],
+      "id": "HEAL_LOCATION_LAVARIDGE_TOWN",
+      "respawn": [
+        4,
+        5,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_LAVARIDGE_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        13,
+        14,
+        8
+      ],
+      "id": "HEAL_LOCATION_FALLARBOR_TOWN",
+      "respawn": [
+        5,
+        4,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_FALLARBOR_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        14,
+        16,
+        4
+      ],
+      "id": "HEAL_LOCATION_VERDANTURF_TOWN",
+      "respawn": [
+        6,
+        4,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_VERDANTURF_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        15,
+        8,
+        16
+      ],
+      "id": "HEAL_LOCATION_PACIFIDLOG_TOWN",
+      "respawn": [
+        7,
+        0,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_PACIFIDLOG_NURSE"
+    },
+    {
+      "heal": [
+        0,
+        8,
+        18,
+        6
+      ],
+      "id": "HEAL_LOCATION_EVER_GRANDE_CITY_POKEMON_LEAGUE",
+      "respawn": [
+        16,
+        10,
+        3,
+        4
+      ],
+      "respawn_npc": "LOCALID_LEAGUE_NURSE"
+    },
+    {
+      "heal": [
+        26,
+        9,
+        15,
+        20
+      ],
+      "id": "HEAL_LOCATION_SOUTHERN_ISLAND_EXTERIOR",
+      "respawn": [
+        26,
+        9,
+        15,
+        20
+      ],
+      "respawn_npc": "LOCALID_NONE"
+    },
+    {
+      "heal": [
+        26,
+        14,
+        3,
+        52
+      ],
+      "id": "HEAL_LOCATION_BATTLE_FRONTIER_OUTSIDE_EAST",
+      "respawn": [
+        26,
+        53,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_FRONTIER_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        0,
+        6,
+        8
+      ],
+      "id": "HEAL_LOCATION_PALLET_TOWN",
+      "respawn": [
+        38,
+        0,
+        8,
+        5
+      ],
+      "respawn_npc": "LOCALID_PLAYERS_HOUSE_1F_MOM"
+    },
+    {
+      "heal": [
+        37,
+        1,
+        26,
+        27
+      ],
+      "id": "HEAL_LOCATION_VIRIDIAN_CITY",
+      "respawn": [
+        39,
+        4,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_VIRIDIAN_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        2,
+        17,
+        26
+      ],
+      "id": "HEAL_LOCATION_PEWTER_CITY",
+      "respawn": [
+        40,
+        5,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_PEWTER_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        3,
+        22,
+        20
+      ],
+      "id": "HEAL_LOCATION_CERULEAN_CITY",
+      "respawn": [
+        41,
+        3,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_CERULEAN_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        4,
+        6,
+        6
+      ],
+      "id": "HEAL_LOCATION_LAVENDER_TOWN",
+      "respawn": [
+        42,
+        0,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_LAVENDER_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        5,
+        15,
+        7
+      ],
+      "id": "HEAL_LOCATION_VERMILION_CITY",
+      "respawn": [
+        43,
+        1,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_VERMILION_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        6,
+        48,
+        12
+      ],
+      "id": "HEAL_LOCATION_CELADON_CITY",
+      "respawn": [
+        44,
+        12,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_CELADON_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        7,
+        25,
+        32
+      ],
+      "id": "HEAL_LOCATION_FUCHSIA_CITY",
+      "respawn": [
+        45,
+        5,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_FUCHSIA_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        8,
+        14,
+        12
+      ],
+      "id": "HEAL_LOCATION_CINNABAR_ISLAND",
+      "respawn": [
+        46,
+        5,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_CINNABAR_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        9,
+        11,
+        7
+      ],
+      "id": "HEAL_LOCATION_INDIGO_PLATEAU",
+      "respawn": [
+        47,
+        0,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_LEAGUE_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        10,
+        24,
+        39
+      ],
+      "id": "HEAL_LOCATION_SAFFRON_CITY",
+      "respawn": [
+        48,
+        6,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_SAFFRON_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        22,
+        12,
+        6
+      ],
+      "id": "HEAL_LOCATION_ROUTE4",
+      "respawn": [
+        50,
+        0,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_ROUTE4_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        28,
+        13,
+        21
+      ],
+      "id": "HEAL_LOCATION_ROUTE10",
+      "respawn": [
+        55,
+        0,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_ROUTE10_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        12,
+        14,
+        6
+      ],
+      "id": "HEAL_LOCATION_ONE_ISLAND",
+      "respawn": [
+        64,
+        0,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_ONE_ISLAND_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        13,
+        21,
+        8
+      ],
+      "id": "HEAL_LOCATION_TWO_ISLAND",
+      "respawn": [
+        65,
+        2,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_TWO_ISLAND_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        14,
+        14,
+        28
+      ],
+      "id": "HEAL_LOCATION_THREE_ISLAND",
+      "respawn": [
+        66,
+        1,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_THREE_ISLAND_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        15,
+        18,
+        21
+      ],
+      "id": "HEAL_LOCATION_FOUR_ISLAND",
+      "respawn": [
+        67,
+        1,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_FOUR_ISLAND_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        16,
+        18,
+        7
+      ],
+      "id": "HEAL_LOCATION_FIVE_ISLAND",
+      "respawn": [
+        68,
+        0,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_FIVE_ISLAND_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        17,
+        12,
+        4
+      ],
+      "id": "HEAL_LOCATION_SEVEN_ISLAND",
+      "respawn": [
+        63,
+        3,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_SEVEN_ISLAND_NURSE"
+    },
+    {
+      "heal": [
+        37,
+        18,
+        11,
+        12
+      ],
+      "id": "HEAL_LOCATION_SIX_ISLAND",
+      "respawn": [
+        69,
+        0,
+        7,
+        4
+      ],
+      "respawn_npc": "LOCALID_SIX_ISLAND_NURSE"
+    }
+  ]
+}

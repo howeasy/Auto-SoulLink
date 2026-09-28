@@ -106,6 +106,11 @@ def test_committed_facts_are_bound_to_current_probe_and_generator():
     assert all(row["compiler"] == row["independent"] for row in facts["symbol_checks"].values())
     assert facts["structs"]["PokemonStorage"]["fields"]["boxes"]["offset"] == 4
     assert facts["structs"]["BattlePokemon"]["size"] == 140
+    perish = facts["structs"]["Volatiles"]["bitfields"]["perishSong"]
+    timer = facts["structs"]["Volatiles"]["bitfields"]["perishSongTimer"]
+    assert perish["bits"] == 1 and timer["bits"] == 2
+    assert not (int(perish["mask"], 16) << (8 * perish["offset"])) & (
+        int(timer["mask"], 16) << (8 * timer["offset"]))
     assert layout["tables"]["species"]["zero_records"] == [1435]
 
 

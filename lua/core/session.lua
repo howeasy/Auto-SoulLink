@@ -308,7 +308,9 @@ function Session.new(p)
         elseif c == "key_change_rejected" then
             identity:reject(cmd.old_key, game.read_party())
             log("key_change rejected: " .. tostring(cmd.reason) .. " " .. tostring(cmd.old_key))
-            hud.show("IDENTITY CHANGE REFUSED: " .. tostring(cmd.reason or "collision"), 255, 64, 64, 600)
+            -- The HUD is player-facing only (owner rule): the reason is an internal code
+            -- ("collision", "ambiguous match", ...) and belongs in the console line above.
+            hud.show("IDENTITY CHANGE REFUSED", 255, 64, 64, 600)
         elseif c == "config" then
             self.config = cmd
         elseif c == "game_over" then

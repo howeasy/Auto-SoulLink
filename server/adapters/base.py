@@ -365,6 +365,11 @@ class GameRulesAdapter(ABC):
         """
         return False
 
+    def trade_unavailable_reason(self) -> str:
+        """Named refusal for a trade_request while either player's hello lacks trade_prepare
+        (a cartridge build without the durable-trade witness); empty preserves existing behavior."""
+        return ""
+
     def refused_trade_recovery(self) -> str:
         """Named refusal when a foundation cannot interpret these optional fields."""
         return ""

@@ -270,7 +270,7 @@ def test_epoch_read_failure_aborts_without_writes_and_recovers_only_after_clear(
 def test_v2_panel_and_control_do_not_inherit_v1_memory_layout():
     w = World(abi=2)
     assert w.native.link_panel(w.native, w.lua.table(rows=w.lua.table("hello"))) == (
-        None, "v2 panel binding unavailable")
+        None, "native panel absent")
     assert w.native.config(w.native, w.lua.table(pc_trade_npc=True, battle_calc=True)) == (
         None, "v2 control binding unavailable")
     w.service()
@@ -885,10 +885,12 @@ def test_c511a_the_patch_handler_keeps_the_two_uses_apart():
     for part in ("RV_BATTLE_COMM", "RV_BATTLE_MAIN_FUNC", "RV_GMAIN_CB2", "RV_BATTLE_TYPE_LINK",
                  "RV_TRAINER_OPPONENT", "REASON_WINDOW_CLOSED", "stage_enemy_party(count)"):
         assert part in rival, part
-    trade = src[src.index("case OP_SET_ENEMY_PARTY:"):]
-    trade = trade[:trade.index("case OP_SET_PARTY_MON:")]
-    assert "RV_" not in trade, "opcode 16 must stay free of the window check"
-    assert "stage_enemy_party(count)" in trade
+    # RR-DURABLE (Codex Emerald ruling P1): on the durable build the raw trade stages 16/18
+    # are trade bypasses and are always refused by name; the trade stages through the producer.
+    raw = src[src.index("case OP_SET_ENEMY_PARTY:"):]
+    raw = raw[:raw.index("case OP_SPAWN_PEER_NPC:")]
+    assert "case OP_SET_PARTY_MON:" in raw and "ack(ST_FAIL, REASON_DURABLE_ONLY)" in raw
+    assert "stage_enemy_party" not in raw and "SLINK_BLOB_BUF" not in raw and "gPlayerParty" not in raw
 
 
 @pytest.mark.parametrize("lost_ack", [False, True])

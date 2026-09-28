@@ -79,18 +79,24 @@ document alone would have clobbered live state.
 | `0x0203FD08` | *8* | — gap |
 | `0x0203FD10` | 52 | `EvRing` |
 | `0x0203FD44` | 264 | `SlinkInfo` — §6 SOULLINK menu/info (see below) |
-| `0x0203FE4C` | *436* | — **free tail, the last contiguous run to `0x0203FFFF`** (what `test_live_ewramtail` now watches) |
+| `0x0203FE4C` | *4* | — gap (aligns the durable block) |
+| `0x0203FE50` | 80 | RR-DURABLE shadow `SlinkMailboxV2` (`RT_BASE`): +0x00..0x3F mirror of the v1 header, **+0x40 capabilities, +0x44 session_epoch (Lua), +0x48 producer_phase (native)** |
+| `0x0203FEA0` | 80 | RR-DURABLE `SlinkTradeWitnessV2` (`RT_BASE + SLINK_WITNESS_OFFSET`) |
+| `0x0203FEF0` | 112 | RR-DURABLE `SlinkTradeProducer` (phase, sequences, 100-byte incoming copy) |
+| `0x0203FF60` | 1 | RR-DURABLE `RT_PRESAVE` (our save dialog is running) |
+| `0x0203FF61` | *159* | — **free tail, the last contiguous run to `0x0203FFFF`** |
 
-**436 contiguous bytes remain**, plus 111 across seven interior gaps (largest 68 B). When the tail
+**159 contiguous bytes remain**, plus 115 across eight interior gaps (largest 68 B). When the tail
 is gone the next feature must reuse a buffer or fragment; say so here rather than letting it be
 discovered the expensive way.
 
-**The tail is runtime-proven free, not inferred.** `lua/tests/test_live_ewramtail.lua` paints all
-700 bytes of `0x0203FD44..0x0203FFFF` with a per-address pattern and watches them across seven
-savestates and 5,100 frames of mashed input (overworld, Pokécenter, a door warp, battle, the
-action/move menus), with a detector self-check each scene — it clobbers the mailbox beacon and
-requires the frame hook to restore it, so the watch cannot silently pass while blind. Zero bytes
-changed. This matters because the *static* argument for the region was wrong twice: "above CFRU's
+**The tail was runtime-proven free before allocation, not inferred.** The original
+`lua/tests/test_live_ewramtail.lua` painted all 700 bytes of `0x0203FD44..0x0203FFFF` and
+watched them across seven savestates and 5,100 frames of mashed input. It found zero changes.
+After SlinkInfo and RR-DURABLE claimed their blocks, the gate watches the remaining 159 bytes
+at `0x0203FF61..0x0203FFFF`. Its detector self-check clobbers the mailbox beacon and requires
+the frame hook to restore it, so the watch cannot silently pass while blind. This matters because
+the *static* argument for the region was wrong twice: "above CFRU's
 highest known symbol" is an incomplete list, and a ROM literal-pool scan offered as backup turned
 out to be measuring coincidental word matches inside PCM and graphics data, not literal pools.
 
@@ -403,12 +409,15 @@ against `BPRE.ld` and disassembled (capstone):
 | 13 | ARM_PEER_INTERACT | `[0]`=ghost oeId `[1]`=armed | talk-to-ghost detection (legacy; ghost auto-arms now) |
 | 14 | GHOST_SPAWN | `[0]`=gfxId `[1]`=localId | engine-driven peer ghost: hook spawns+walks it via held movements (GhostState@0x0203F850) |
 | 15 | GHOST_CLEAR | — | hook cleanly removes the ghost (RemoveEventObject) |
-| 16 | SET_ENEMY_PARTY | `[0]`=count; blobs staged in `0x0203FA00` | faithful byte-copy of count×100 party-mon bytes into `gEnemyParty` + set count (rival-team-swap) |
+| 16 | SET_ENEMY_PARTY | — | **RR-DURABLE: always refused** (`REASON_DURABLE_ONLY` 9) — a raw trade stage is a durable-trade bypass. The rival swap has its own opcode 28 |
 | 17 | SHOW_MENU | text (FR-encoded) in `0x0203F900` → `result[0]`=choice (1=YES 0=NO) | native YES/NO field menu (`yesnobox`); **async** — ack ST_BUSY, `drive_menu` publishes `gSpecialVar_Result`@`0x020370D0` when the script ends. Talk-to-partner menuing foundation. |
-| 18 | SET_PARTY_MON | `[0]`=slot `[1]`=bump; one blob staged in `0x0203FA00` | faithful 100-byte blob copy into `gPlayerParty[slot]` (trade — mirror of SET_ENEMY_PARTY) |
+| 18 | SET_PARTY_MON | — | **RR-DURABLE: always refused** (`REASON_DURABLE_ONLY` 9) — raw record replacement is never a trade path |
 | 19 | PLAY_SE | `[0..1]`=songId | `PlaySE(songId)` @`0x080722CC` — native sound effect (retires the Lua m4a SE1 RAM-poke) |
 | 20 | CHOOSE_PARTY_MON | — → `result[0]`=slot(0-5)/7=cancel | native "Choose a POKéMON" menu via `callnative ChoosePartyMonByMenuType` (FR `special` idx is reordered on RR); ASYNC, `drive_ui` publishes Var8004 |
-| 21 | TRADE_SCENE | `[0]`=slot | native in-game trade animation+evolution via `callnative DoInGameTradeScene` @`0x08054440` (RE'd); trades `gPlayerParty[slot]` ↔ `gEnemyParty[0]`; ASYNC |
+| 21 | TRADE_SCENE | ABI2 trade args (slot, role, old PID/OT, visit, token) + the incoming record in `SLINK_BLOB_BUF` | **RR-DURABLE**: owned by the shared producer (`rr_trade_relay.h`, `trade_targets/trade_producer.h`), only after a READY PREPARE. Stages `gEnemyParty[0]`, runs `callnative DoInGameTradeScene` @`0x08054440`, then the native post-save (`SaveMapView`, `SaveQuestLogData`, `TrySavingData(SAVE_NORMAL)`) before the witnessed DONE. The old raw v1 scene ack is gone |
+| 29 | TRADE_PREPARE | ABI2 trade args | **RR-DURABLE**: native "save the game?" dialog (`callnative Field_AskSaveTheGame` @`0x0806F67C`); READY only after a successful pre-save |
+| 30 | TRADE_WITHDRAW | ABI2 trade args | **RR-DURABLE**: READY → witnessed UNCHANGED; later → `withdraw_too_late` (14) |
+| 31 | TRADE_STATUS | ABI2 trade args | **RR-DURABLE**: identity-bound ACK only |
 | 22 | SHOW_CHOICES | options FR-encoded in `SLINK_MENU_BUF` (`[u8 count][str 0xFF]...`) → `result[0]`=index/0x7F=cancel | native multichoice list (custom labels); replicates `DrawVerticalMultichoiceMenu` in C (`CreateWindowFromRect 0x809D654`, `SetStandardWindowBorderStyle 0x80F7750`, `AddTextPrinterParameterized 0x8002C48`, `CopyWindowToVram 0x8003F20`, `Menu_InitCursor 0x810F7D8`, `CreateTask 0x807741C` → `Task_MultichoiceMenu_HandleInput 0x809CC98`, `GetStringWidth 0x8005ED4`, `ScheduleBgCopyTilemapToVram 0x80F67A4`); FONT_NORMAL=2, gTasks=0x3005090. ASYNC (lockall-bracketed, drive_ui kind 1) |
 | 24 | DEPOSIT_MON | `[0]`=partySlot `[1]`=boxId `[2]`=boxPos | party→PC box (CFRU `CreateCompressedMonFromBoxMon` + shift-compact party). LIVE (`test_live_boxsync`). See "PC storage / box migration reference" |
 | 25 | WITHDRAW_MON | `[0]`=boxId `[1]`=boxPos `[2]`=partySlot | PC box→party (CFRU `CompressedMonToMon`; engine recomputes level/stats/PP). LIVE (`test_live_boxsync`) |
@@ -423,6 +432,7 @@ against `BPRE.ld` and disassembled (capstone):
 | 1 | `REASON_SCRIPT_CONTEXT` | `sScriptContext2Enabled` (a script owns the field) |
 | 2 | `REASON_BAD_ARGS` | out-of-range args |
 | 3 | `REASON_NOT_ON_FIELD` | `on_field()` false |
+| 9 | `REASON_DURABLE_ONLY` | **RR-DURABLE** — raw trade opcode 16/18 on the durable build. Durable-trade refusals (identity 12, uncertain 11, withdraw_too_late 14) are the producer's ABI2 words in the SHADOW mailbox and reach Lua through the relay only for opcodes 21/29/30/31; the v1 meanings of 11/12 for the other opcodes are unchanged |
 | 8 | `REASON_WINDOW_CLOSED` | **C5-11a** — `OP_RIVAL_SWAP` consumed outside the rival-swap window. `lua/gen3/native.lua` mirrors this table (`FAIL_REASONS`) and surfaces the NAME to the job, which replies `rival_team_replaced{error="window_closed", reason="window_closed"}` (G5-RR-RIVAL review F3; was error="refresh_failed") |
 
 ### Rival-swap window constants (`OP_RIVAL_SWAP`, C5-11a)

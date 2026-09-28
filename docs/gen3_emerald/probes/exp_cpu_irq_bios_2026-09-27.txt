@@ -1,0 +1,13 @@
+# X3 (EXP-X23) where the expansion reference build's frame ends once the client's exec hook exists (the RR G5-RR-CPU-IRQ question).
+# ROM sha1 28877d733492299599f2b8fff50493109d72653c, battery tests/fixtures/gen3/exp_town.sav, BizHawk 2.11.1 mGBA HLE BIOS (no firmware), 2026-09-27.
+# lua/tests/probe_gen3_irq_park.lua; hook = engine_signals frame_control address + capture_offset (0x0817AAC0, AgbMainLoop).
+# BIOS 0x1B4..0x20F below is byte-identical to the RR receipt's disassembly (docs/gen3/probes/rr_cpu_irq_bios_2026-09-24.txt):
+#   Halt 0x1B4..0x1C0; IntrWait halt loop 0x1F0 strb r0,[ip,#0x301] (HALTCNT) .. 0x20C beq #0x1f0.
+# Reading: no hook -> System-mode park R15 0x1F8 (= the HALTCNT strb @0x1F0 + 8); hook -> IRQ vector entry R15 0x1C, mode 0x12, ARM,
+# R14_irq 0x1F8 (= 0x1F4 + 4: the IRQ taken with the instruction after IntrWait's HALTCNT write next). Expansion idles in
+# VBlankIntrWait -> IntrWait (src/main.c:422-437 at e8bd1cd7), not RR's SWI 2 Halt.
+phase start frame=1 title=emerald_expansion_28877d73 hash=28877D733492299599F2B8FFF50493109D72653C
+BIOS 0x1B4..0x20F 00b0a0e301c3a0e301b3cce51eff2fe10100a0e30110a0e30c402de901c3a0e3000050e30000a0e30120a0e30300000ab8305ce10130c3e1b8304ce10103cce50802cce5b8305ce1013013e001302310b8304c110822cce5f7ffff0a
+NOHOOK R15=000001F8 mode=1F T=0 R14=000000A4 x600
+HOOK R15=0000001C mode=12 T=0 R14=000001F8 x600
+RESULT: PASS anchor=0817AAC0 hook_hits=600 nohook_modal={R15=000001F8 mode=1F T=0 R14=000000A4} hook_modal={R15=0000001C mode=12 T=0 R14=000001F8}
