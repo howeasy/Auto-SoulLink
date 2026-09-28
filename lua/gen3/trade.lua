@@ -259,8 +259,12 @@ function T.new(d)
             function()
                 if active ~= t or t.scene_attempt ~= attempt or t.phase ~= "scene" then return false, "guard:stale" end
                 if t.epoch ~= d.epoch() then return false, "guard:epoch" end
-                if not journal:lease_open(t.token,t.journal_epoch) then return false, "guard:journal" end
                 if d.frame() > t.apply_deadline then return false, "guard:apply_expired" end
+                local open, why = journal:lease_open(t.token,t.journal_epoch)
+                if not open then
+                    if why == "trade journal lock busy" then return false, "guard:journal_busy", true end
+                    return false, "guard:journal"
+                end
                 local v, current = visit(), locate(t.old_key)
                 if not v or v.id ~= t.visit or not current then return false, "guard:lost" end
                 if current.slot ~= t.slot then return false, "guard:moved" end

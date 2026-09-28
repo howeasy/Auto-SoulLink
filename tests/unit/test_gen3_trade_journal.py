@@ -492,6 +492,21 @@ def test_busy_intent_arm_retries_without_duplicate_native_staging():
     assert journal.state.counter == 1 and len(journal.state.records) == 1
 
 
+def test_scene_guard_retains_unposted_job_only_for_busy_lease_within_deadline():
+    world, journal, _ = journaled_trade_world()
+    scene = world.start()
+    original = journal.lease_open
+    journal.lease_open = lambda *_: (False, "trade journal lock busy")
+    assert scene["valid"]() == (False, "guard:journal_busy", True)
+    assert [job["step"] for job in world.jobs] == ["enemy", "scene"]
+    assert journal.hidden(journal) is True
+    journal.lease_open = original
+    assert scene["valid"]() is True
+    world.frame += world.deps.apply_frames + 1
+    journal.lease_open = lambda *_: (False, "trade journal lock busy")
+    assert scene["valid"]() == (False, "guard:apply_expired")
+
+
 def test_saved_result_identity_is_latched_before_a_busy_journal_ack():
     world, journal, _ = journaled_trade_world()
     scene = world.start()

@@ -315,7 +315,7 @@ function J.new(d)
     function self:unbind() context = nil; self.allowed, self.qualified = {}, {} end
     function self:lease_open(value, epoch)
         local s = read(true)
-        if not s then return false end
+        if not s then return false, self.failure or (self.busy and "trade journal lock busy") end
         for _, r in ipairs(s.records) do
             if same(r.binding,context) and r.token == value and r.epoch == epoch then return r.final == "" end
         end
