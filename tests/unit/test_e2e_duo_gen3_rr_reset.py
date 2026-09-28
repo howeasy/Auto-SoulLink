@@ -98,6 +98,8 @@ def test_commit_server_link_must_match_pretrade_baseline_even_before_reload():
                                        staged + rekeyed)
     assert duo.rr_reset_link_problems("commit", keys, staged, [], staged)
     assert duo.rr_reset_link_problems("commit", keys, staged, staged + staged, staged)
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged,
+                                       staged + [{**staged[0], "area_id": "other"}])
     assert duo.rr_reset_link_problems("commit", keys, staged,
                                        [{**staged[0], "status": "dead"}], staged)
     assert duo.rr_reset_link_problems("commit", keys, staged, staged,
@@ -175,10 +177,11 @@ def test_reset_oracle_loads_the_real_gen3_codec_before_flash_checks():
 
 
 @pytest.mark.parametrize("settled", [False, True])
-def test_success_host_releases_clean_exit_only_after_server_rekey(settled):
+def test_success_host_releases_clean_exit_only_after_server_rekey(settled, tmp_path):
     run = object.__new__(duo.DuoRun)
     run.scenario = "trade_reset_success_gen3"
     run.cfg = {"reset_case": "success"}
+    run.data_dir = str(tmp_path)
     events = []
 
     def prelude(*, link_slot):
@@ -213,12 +216,14 @@ def test_success_host_releases_clean_exit_only_after_server_rekey(settled):
         run.orchestrate_trade_reset_success_gen3()
     assert events == (["GO", "NATIVE_a", "NATIVE_b", "SERVER_CHECK", "EXIT_a", "EXIT_b"]
                       if settled else ["GO", "NATIVE_a", "NATIVE_b", "SERVER_CHECK"])
+    assert json.loads((tmp_path / "rr_reset_staged_links.json").read_text()) == run._rr_reset_links_staged
 
 
-def test_commit_host_waits_for_b_despite_a_expected_partial_result(monkeypatch):
+def test_commit_host_waits_for_b_despite_a_expected_partial_result(monkeypatch, tmp_path):
     run = object.__new__(duo.DuoRun)
     run.scenario = "trade_reset_commit_gen3"
     run.cfg = {"reset_case": "commit", "timeout": 1800}
+    run.data_dir = str(tmp_path)
     run._gen3_prelude = lambda *, link_slot: setattr(run, "_link_keys", {"a": A, "b": B})
     run._gen3_linked_lines = lambda: {"a": [], "b": []}
     run._links_json = lambda: [{"a": {"key": A}, "b": {"key": B}}]
