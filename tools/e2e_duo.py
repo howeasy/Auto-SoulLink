@@ -2514,13 +2514,19 @@ def rr_reset_link_problems(case, keys, staged, initial, final):
     old = lambda row: (row.get("a") or {}).get("key") == keys["a"] and (row.get("b") or {}).get("key") == keys["b"]  # noqa: E731
     new = lambda row: (row.get("a") or {}).get("key") == keys["b"] and (row.get("b") or {}).get("key") == keys["a"]  # noqa: E731
     problems = []
-    if sum(old(row) for row in staged) != 1:
+    baseline = [row for row in staged if old(row)]
+    if (len(baseline) != 1 or not baseline[0].get("area_id")
+            or sum(row.get("area_id") == baseline[0]["area_id"] for row in staged) != 1
+            or baseline[0].get("status") != "alive"):
         problems.append("RR reset lacks exactly one staged pre-trade server link")
     if case == "commit":
-        if initial != staged:
-            problems.append("commit interruption changed persisted links before reload")
-        if final != staged:
-            problems.append("commit reload changed persisted links")
+        if len(baseline) == 1:
+            original = baseline[0]
+            for label, rows in (("interruption", initial), ("reload", final)):
+                same_area = [row for row in rows if row.get("area_id") == original.get("area_id")]
+                if (len(same_area) != 1 or same_area[0] != original
+                        or sum(old(row) for row in rows) != 1 or any(new(row) for row in rows)):
+                    problems.append(f"commit {label} changed the staged linked pair")
     elif case == "success":
         if sum(new(row) for row in final) != 1:
             problems.append("native-success reset lacks persisted server re-key")
@@ -8118,6 +8124,8 @@ class DuoRun:
         self._gen3_prelude(link_slot=1)
         keys = dict(self._link_keys)
         self._rr_reset_links_staged = self._links_json()
+        Path(self.data_dir, "rr_reset_staged_links.json").write_text(
+            json.dumps(self._rr_reset_links_staged, sort_keys=True), encoding="utf-8")
         lines = self._gen3_linked_lines()
         for inst in "ab":
             lines[inst].append(f"PARTNER {keys['b' if inst == 'a' else 'a']}")
@@ -8232,6 +8240,10 @@ class DuoRun:
         problems += rr_reset_initial_receipt_problems(initial, case, keys)
         problems += rr_reset_link_problems(case, keys, self._rr_reset_links_staged,
                                            self._rr_reset_links_before, self._links_json())
+        staged_path = Path(self.data_dir, "rr_reset_staged_links.json")
+        if (not staged_path.is_file()
+                or json.loads(staged_path.read_text(encoding="utf-8")) != self._rr_reset_links_staged):
+            problems.append("staged pre-GO server link archive missing or changed")
         problems += rr_reset_pending_problems(case, self._rr_reset_expected["a"]["token"],
                                               self._reconnect_document())
         if case == "commit":
