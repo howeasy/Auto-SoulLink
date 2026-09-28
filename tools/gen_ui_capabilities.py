@@ -29,7 +29,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from server.adapters import _ROM_TYPE_TO_GAME_ID, get_adapter  # noqa: E402
 from server.ui_capabilities import ui_capabilities  # noqa: E402
 
-# EVERY rom_type the server will accept, taken from the routing table itself rather than
+# Every known rom_type, including registered but currently unrouted builds, taken from
+# the naming table itself rather than
 # from a list kept here by hand. A curated list is one Soul Link run away from being
 # wrong: the two players are on different VERSIONS of the same game, so a fixture holding
 # "firered_rr" and not "leafgreen_rr" gives player B no capabilities at all -- which shows
