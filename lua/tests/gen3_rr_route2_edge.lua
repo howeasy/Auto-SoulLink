@@ -4,6 +4,7 @@
 -- Only the observed battle-after-first-crossing state admits recovery. "field" is the
 -- pinned callback2+in_battle predicate; callback2/tasks below are logged diagnostics, not
 -- separate gates. An off-field nonbattle state has no proven menu identity and is refused.
+-- A second battle on the one retry is terminal: this helper never loops over wild fights.
 local M = {}
 local ROUTE1, EDGE_X, EDGE_Y = 3 * 256 + 19, 12, 39
 
@@ -33,8 +34,12 @@ function M.cross(io)
     if not at_edge(after) then
         return false, "crossing left the pinned edge: " .. tostring(detail) .. " / " .. describe(after)
     end
-    if not after.battle or after.field then
-        return false, "off-field state is not the witnessed battle: "
+    if after.field then
+        return false, "field still open after failed crossing: "
+            .. tostring(detail) .. " / " .. describe(after)
+    end
+    if not after.battle then
+        return false, "off-field nonbattle state at edge: "
             .. tostring(detail) .. " / " .. describe(after)
     end
     io.log("ROUTE2_EDGE crossing battle " .. describe(after))
