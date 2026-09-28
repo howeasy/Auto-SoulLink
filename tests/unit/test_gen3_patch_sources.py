@@ -432,3 +432,59 @@ def test_first_birth_waits_for_a_slow_publisher(windows):
     assert _counter()(ROOT, open_, remove, publish_after_slow_first_start,
                       rename, fs.windows) == 2
     assert fs.text(BATON) == "2"
+
+
+def test_birth_winner_retries_a_transient_baton_publish_failure():
+    """Only the recorded birth winner may retry publishing the initial generation."""
+    fs = _FS(True)
+    open_, remove, rename = fs.api()
+    failed = []
+
+    def transient_rename(src, dst):
+        if dst == BATON and ".new." in src and not failed:
+            failed.append(True)
+            return None, "temporarily busy", EACCES
+        return rename(src, dst)
+
+    assert _counter()(ROOT, open_, remove, _no_spin, transient_rename, True) == 1
+    assert failed and fs.text(BATON) == "1"
+    assert _allocate(fs) == 2
+
+
+def test_first_birth_winner_publishes_after_the_loser_waits_past_old_bound():
+    """Two live Lua runtimes: A owns .born but pauses before .baton, then B waits >1000 spins."""
+    fs = _FS(True)
+    born, resume, finished = threading.Event(), threading.Event(), threading.Event()
+    out = {}
+    open_a, remove_a, rename_a_raw = fs.api()
+
+    def rename_a(src, dst):
+        result = rename_a_raw(src, dst)
+        if dst == BORN and result is True:
+            born.set()
+            assert resume.wait(5)
+        return result
+
+    def run_a():
+        try:
+            out["a"] = _counter()(ROOT, open_a, remove_a, _no_spin, rename_a, True)
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=run_a, daemon=True)
+    thread.start()
+    assert born.wait(5)
+    spins = []
+
+    def wait_then_release_winner():
+        spins.append(1)
+        if len(spins) == 1500:
+            resume.set()
+            assert finished.wait(5)
+
+    open_b, remove_b, rename_b = fs.api()
+    b = _counter()(ROOT, open_b, remove_b, wait_then_release_winner, rename_b, True)
+    thread.join(5)
+    assert not thread.is_alive()
+    assert (out["a"], b) == (1, 2)
+    assert fs.text(BATON) == "2"

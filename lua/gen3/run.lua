@@ -189,7 +189,19 @@ local function next_session_counter(root, open_file, remove_file, spin, rename_f
             local _, born_errno = get(born)
             if born_errno == ENOENT and won_birth() then
                 local tmp = base .. ".new." .. token
-                if not (put(tmp, "0") and rename_file(tmp, baton)) then
+                if not put(tmp, "0") then
+                    remove_file(tmp)
+                    return nil
+                end
+                -- Only this caller won the permanent birth record. A transient rename/share
+                -- failure must not strand that record forever. Keep retrying the SAME prepared
+                -- generation, without allowing any later caller to initialise the counter.
+                local published = false
+                for _ = 1, 200 do
+                    if rename_file(tmp, baton) then published = true; break end
+                    spin()
+                end
+                if not published then
                     remove_file(tmp)
                     return nil
                 end
