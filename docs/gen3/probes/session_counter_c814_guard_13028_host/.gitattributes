@@ -1,0 +1,5 @@
+* -text
+*.trace -diff
+slink_gen3_session.* -diff
+held -diff
+release -diff
