@@ -2479,6 +2479,26 @@ def rr_reset_initial_receipt_problems(receipts, case, keys):
     return problems
 
 
+def rr_reset_link_problems(case, keys, staged, initial, final):
+    """The staged pair is the independent pre-trade server baseline."""
+    old = lambda row: (row.get("a") or {}).get("key") == keys["a"] and (row.get("b") or {}).get("key") == keys["b"]  # noqa: E731
+    new = lambda row: (row.get("a") or {}).get("key") == keys["b"] and (row.get("b") or {}).get("key") == keys["a"]  # noqa: E731
+    problems = []
+    if sum(old(row) for row in staged) != 1:
+        problems.append("RR reset lacks exactly one staged pre-trade server link")
+    if case == "commit":
+        if initial != staged:
+            problems.append("commit interruption changed persisted links before reload")
+        if final != staged:
+            problems.append("commit reload changed persisted links")
+    elif case == "success":
+        if sum(new(row) for row in final) != 1:
+            problems.append("native-success reset lacks persisted server re-key")
+    else:
+        problems.append("unknown RR reset link case")
+    return problems
+
+
 def gen3_trade_chain(inst, ka, kb, decline):
     """(required, ordered, forbidden) receipt regexes for one side of the NPC trade (RR-DURABLE):
     the server's native menus, then on YES the durable round on BOTH sides -- apply_prepare ->
@@ -7974,6 +7994,7 @@ class DuoRun:
         """Cold boot the same native battery after a clean commit-window exit."""
         self._gen3_prelude(link_slot=1)
         keys = dict(self._link_keys)
+        self._rr_reset_links_staged = self._links_json()
         lines = self._gen3_linked_lines()
         for inst in "ab":
             lines[inst].append(f"PARTNER {keys['b' if inst == 'a' else 'a']}")
@@ -8049,6 +8070,8 @@ class DuoRun:
         case = self.cfg["reset_case"]
         initial = self._rr_reset_initial
         problems += rr_reset_initial_receipt_problems(initial, case, keys)
+        problems += rr_reset_link_problems(case, keys, self._rr_reset_links_staged,
+                                           self._rr_reset_links_before, self._links_json())
         archive = Path(self.data_dir, "rr_reset_initial")
         for inst in "ab":
             before = self._rr_reset_before[inst]
@@ -8102,13 +8125,6 @@ class DuoRun:
                        and item.get("uncertain") is True and item.get("after_reset") is True
                        for row in sent):
                 problems.append("a: missing production uncertain after_reset trade_done")
-            if self._links_json() != self._rr_reset_links_before:
-                problems.append("commit interruption unexpectedly changed persisted links")
-        else:
-            ka, kb = keys["a"], keys["b"]
-            if not any((row.get("a") or {}).get("key") == kb
-                       and (row.get("b") or {}).get("key") == ka for row in self._links_json()):
-                problems.append("native-success reset lacks persisted server re-key")
         self._gen3_raise(problems, f"RR {case} native battery/journal archived; cold reload and "
                                    "independent save/party/server outcome verified")
 

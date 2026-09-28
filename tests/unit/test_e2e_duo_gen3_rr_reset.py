@@ -80,3 +80,13 @@ def test_reset_cleanup_refuses_forced_emulator_termination(monkeypatch):
     monkeypatch.setattr(duo.subprocess, "run", forbidden)
     with pytest.raises(RuntimeError, match="clean exit"):
         run.cleanup(False)
+
+
+def test_commit_server_link_must_match_pretrade_baseline_even_before_reload():
+    keys = {"a": A, "b": B}
+    staged = [{"a": {"key": A}, "b": {"key": B}, "status": "alive"}]
+    rekeyed = [{"a": {"key": B}, "b": {"key": A}, "status": "alive"}]
+    assert duo.rr_reset_link_problems("commit", keys, staged, staged, staged) == []
+    assert duo.rr_reset_link_problems("commit", keys, staged, rekeyed, rekeyed)
+    assert duo.rr_reset_link_problems("commit", keys, rekeyed, rekeyed, rekeyed)
+    assert duo.rr_reset_link_problems("success", keys, staged, rekeyed, rekeyed) == []
