@@ -272,6 +272,56 @@ def test_queued_apply_trade_does_not_cross_reset_and_new_preparation(monkeypatch
     assert any("pending apply_trade discarded: preparation binding changed" in line for line in world.logs)
 
 
+def test_frame_rewind_discards_queued_apply_before_any_native_stage(monkeypatch):
+    from tests.unit.test_gen3_client import apply
+    from tests.unit.test_gen3_trade import KB
+
+    world, carrier, blob = durable_client(monkeypatch)
+    world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
+    world.step()
+    journal = carrier.journal_model.journal
+    original_ready, original_hidden = journal.ready, journal.hidden
+    journal.busy = True
+    journal.ready = lambda self: False if self.busy else original_ready(self)
+    journal.hidden = lambda self: True if self.busy else original_hidden(self)
+    apply(world, blob, token="t")
+    world.step()
+    assert not carrier.jobs
+    journal.busy = None
+    world.frame = 1  # real driver frame rewind; do not call on_reset manually
+    world.step()
+    assert not carrier.jobs, "a pre-rewind apply cannot create a native stage"
+    assert any("pending apply_trade discarded: preparation binding changed" in line for line in world.logs)
+
+
+def test_frame_rewind_clears_local_save_allowance_before_queued_final(monkeypatch):
+    world, carrier, _blob = durable_client(monkeypatch)
+    journal = carrier.journal_model.journal
+    epoch = journal.allocate(journal)
+    assert journal.arm(journal, "t", epoch) is True
+    assert journal.native_saved(journal, "t", epoch) is True
+    assert journal.hidden(journal) is False  # same-episode local save allowance
+    original_final = journal.final
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original_final(self, *args)
+
+    journal.final = busy_once
+    world.replies.append(json.dumps({"commands": [
+        {"cmd": "trade_final", "token": "t", "epoch": epoch, "verdict": "resolved"}]}))
+    world.step()
+    assert carrier.journal_model.journal.state.records[1].final == ""
+    world.frame = 1  # driver must detect this before replaying the queued final
+    world.step()
+    assert len(seen) >= 2
+    assert carrier.journal_model.journal.state.records[1].final == "resolved"
+    assert journal.hidden(journal) is True, "old local saved allowance must not survive reload"
+
+
 def test_repeated_native_save_milestones_flush_the_host_once(monkeypatch):
     world, carrier, blob = durable_client(monkeypatch)
     start_client_trade(world, carrier, blob)

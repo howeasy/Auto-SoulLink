@@ -1900,6 +1900,12 @@ function Client.new(p)
     end
     local trade_frame
     drv.pre_pump = function()
+        if trade_frame and io.framecount() < trade_frame then
+            if trade then trade:reset(); sync_trade() end
+            reload_empty_frames, reload_boot_seen = 0, false
+            session.hello_sent = false
+        end
+        trade_frame = io.framecount()
         local held_apply = pending_apply_trade
         if held_apply and p.net.connected() and not awaiting_trade_run then
             local _, current_prepared = trade:state()
@@ -1932,12 +1938,6 @@ function Client.new(p)
             end
         end
         if owed then owed:step(p.net.connected(), false, send) end
-        if trade_frame and io.framecount() < trade_frame then
-            if trade then trade:reset(); sync_trade() end
-            reload_empty_frames, reload_boot_seen = 0, false
-            session.hello_sent = false
-        end
-        trade_frame = io.framecount()
         if journal then
             local empty = reads.read_sb1 and not reads.read_sb1() and reads.read_sb2 and not reads.read_sb2()
                 and num(a.PARTY_COUNT_ADDR) and io.read_u8(a.PARTY_COUNT_ADDR) == 0
