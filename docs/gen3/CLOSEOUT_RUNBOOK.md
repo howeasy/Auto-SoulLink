@@ -38,6 +38,12 @@ Both were started on cut 02ba8ed1 at the end of the previous session.
 - RR final cut on the new companion: lane `C:/slink-wt/g3-lane3`, log `C:/slink-wt/fc-rr-02ba8ed1.log`, summary `docs/gen3/probes/fc_SUMMARY_02ba8ed1_rr.txt`.
   - Triage every FAIL. Classify each as env (lane input), harness, or product.
   - Never rerun an unchanged failed row; fix first.
+- **RR final cut RESULT at handoff (02ba8ed1, new companion da579690): 23/28.** The receipts are committed, and the summary is docs/gen3/probes/fc_SUMMARY_02ba8ed1_rr.txt. Triage, in priority order:
+  1. `rr_opcode_gates`: `test_live_ewramtail.lua did not report PASS`. **Likely REAL.** The RR durable block (rr_trade_relay.h) sits at 0x0203FE50 in the "free EWRAM tail". Check it against what test_live_ewramtail and the RR START-menu hijack use (memory note: "the proven-free EWRAM tail"). An overlap would corrupt state.
+  2. `link_gen3`: `the client sent sync_retrieve_failed`. Possibly the same overlap, since box sync retrieval fails. Recheck after 1.
+  3. `reconnect_gen3`: `timed out after 30s waiting for durable accepted reconnect hello`. RR now takes the durable reconnect path; align the harness or fix the client.
+  4. `trade_gen3`: `the server refused the trade: Trade unavailable for Radical Red`. A did not advertise trade_prepare. Most likely the first-launch session-counter race on a fresh lane (the RR worker hit it too; see rr_durable_handback.md §open 2). That is a PRODUCT risk for two windows on a fresh install: fix the first-birth race in lua/gen3/run.lua next_session_counter, not just the harness.
+  5. `type_clause_gen3`: both sides passed, but PYDEC says "type clause unobserved": the encounter did not produce a type conflict. Rerun once after 1-4, and check the RR type data against the new ROM-derived types.
 - Commit the receipts by explicit path.
 
 ## 2. Two small cards from the owner's rulings
