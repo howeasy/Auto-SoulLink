@@ -507,9 +507,6 @@ local function run_route2(existing_cp, duo_hooks)
                     battle = play.in_battle(cp), callback2 = string.format("%08X", cb2),
                     tasks = table.concat(tasks, ",")}
         end,
-        leave_menu = function()
-            play.leave_menu(cp, "route2 Route1->Pallet", {tries=6, flush=2, settle=60})
-        end,
         fight_through = function() return play.fight_through(cp, 1200) end,
         settle = function() return play.wait_scene_settled(cp, 1800) end,
         enter_warp = function() return play.enter_warp(cp, "Down", 30) end,
