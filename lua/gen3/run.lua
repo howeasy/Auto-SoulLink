@@ -241,6 +241,12 @@ local function trade_file_adapter(import_type)
     local Reader = assert(import_type("System.IO.StreamReader"))
     local Writer = assert(import_type("System.IO.StreamWriter"))
     local Thread = assert(import_type("System.Threading.Thread"))
+    -- NLua wraps CLR exceptions from File.Open in LuaScriptException. Its printed message
+    -- contains an opaque number; the inner HResult is the stable Win32 sharing/lock verdict.
+    local function lock_contention(err)
+        local ok, code = pcall(function() return err.InnerException.HResult end)
+        return ok and (code == -2147024864 or code == -2147024863) -- ERROR_SHARING/LOCK_VIOLATION
+    end
     local function finish(stream, fn)
         local ok, result = pcall(fn)
         local closed, why = pcall(function() stream:Dispose() end)
@@ -260,17 +266,18 @@ local function trade_file_adapter(import_type)
     end
     return {
         lock=function(path)
-            local last
             for _=1,10 do
                 local fresh = not File.Exists(path)
                 local ok, stream = pcall(function()
                     return File.Open(path,fresh and Mode.CreateNew or Mode.Open,Access.ReadWrite,Share.None)
                 end)
                 if ok then return stream,fresh end
-                last = stream
+                if not lock_contention(stream) then
+                    error("exclusive trade journal lock unavailable: " .. tostring(stream))
+                end
                 Thread.Sleep(5)
             end
-            error("exclusive trade journal lock unavailable: " .. tostring(last))
+            return nil,false,"busy" -- holder may finish later; no journal bytes were touched
         end,
         close=function(stream) stream:Dispose(); return true end,
         read_handle=function(stream)

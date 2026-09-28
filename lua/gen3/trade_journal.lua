@@ -3,6 +3,7 @@
 -- returning its answer. The bootstrap owns that file/flush contract; this module never
 -- replaces missing/corrupt storage with an empty journal. initial() is explicit provisioning.
 local J = {}
+local LOCK_BUSY = {} -- acquisition-only signal; never used for read/write/seal failures
 local U32 = 0xFFFFFFFF
 local MAGIC = "SLINK-TRADE-JOURNAL-1\n"
 local MAX_BYTES = 16 * 1024 * 1024
@@ -114,8 +115,11 @@ function J.file_store(d)
     local fs, path, json = assert(d.fs), assert(d.path), assert(d.json)
     local function seal(bytes) return MAGIC .. tostring(#bytes) .. ":" .. hash(bytes) .. "\n" end
     local function locked(transform)
-        local guard, fresh = fs.lock(path .. ".guard")
-        assert(guard, "trade journal lock unavailable")
+        local guard, fresh, why = fs.lock(path .. ".guard")
+        if not guard then
+            if why == "busy" then error(LOCK_BUSY) end
+            error("trade journal lock unavailable: " .. tostring(why))
+        end
         local ok, answer = pcall(function()
             local bytes = fs.read_file(path .. ".log")
             if fresh then
@@ -241,19 +245,28 @@ function J.new(d)
         end
         return nil, self.failure
     end
-    local cache_frame
+    local cache_frame, busy_frame
     local function read(fresh)
         if self.failure then return nil end
         local now = d.frame and d.frame()
+        if self.busy and now ~= nil and busy_frame == now then return nil end
         if not fresh and now ~= nil and cache_frame == now and self.state then return self.state end
         local ok, state = pcall(function() return decode(json, store.read()) end)
-        if not ok then failed(state); return nil end
+        if not ok then
+            if state == LOCK_BUSY then
+                self.busy, busy_frame, cache_frame = true, now, nil
+            else failed(state) end
+            return nil
+        end
+        self.busy, busy_frame = nil, nil
         self.state = state
         cache_frame = now
         return state
     end
     local function update(fn)
         if self.failure then return nil, self.failure end
+        local now = d.frame and d.frame()
+        if self.busy and now ~= nil and busy_frame == now then return nil, "trade journal lock busy" end
         local ok, answer = pcall(function()
             return store.update(function(bytes)
                 local s = decode(json, bytes)
@@ -270,7 +283,14 @@ function J.new(d)
                 return output, value
             end)
         end)
-        if not ok then return failed(answer) end
+        if not ok then
+            if answer == LOCK_BUSY then
+                self.busy, busy_frame, cache_frame = true, now, nil
+                return nil, "trade journal lock busy"
+            end
+            return failed(answer)
+        end
+        self.busy, busy_frame = nil, nil
         return answer
     end
     function self:bind(run_id, ot_id)
@@ -283,7 +303,8 @@ function J.new(d)
         return true
     end
     function self:ready()
-        if self.failure or not context then return false end
+        if self.busy then read(true) end
+        if self.failure or self.busy or not context then return false end
         for _, r in ipairs((self.state or {}).records or {}) do
             if r.binding.rom_sha1 == d.rom_sha1 and r.binding.player == d.player and not same(r.binding,context) then
                 return false

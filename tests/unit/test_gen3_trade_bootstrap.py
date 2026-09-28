@@ -66,7 +66,14 @@ try {
     $code="luanet.load_assembly('BizHawk.Emulation.Common'); luanet.load_assembly('BizHawk.Client.Common');`n"+$block+"`n"+@'
 local J=dofile(root..'/lua/gen3/trade_journal.lua')
 local json=dofile(root..'/lua/json_codec.lua')
-local store=J.file_store({json=json,fs=trade_file_adapter(luanet.import_type),path=path})
+local fs=trade_file_adapter(luanet.import_type)
+local held=assert(fs.lock(path..'.contention-probe'))
+local second, _, why=fs.lock(path..'.contention-probe')
+assert(second == nil and why == 'busy', 'sharing violation must be a typed transient result')
+assert(fs.close(held))
+local denied=pcall(function() fs.lock(path..'.missing/guard') end)
+assert(not denied, 'a missing parent directory must remain a permanent lock error')
+local store=J.file_store({json=json,fs=fs,path=path})
 local obj=J.new({json=json,store=store,rom_sha1=string.rep('a',40),player='a'})
 assert(not obj.failure,obj.failure)
 obj:bind('host-model','12345678')
@@ -79,6 +86,11 @@ end
 local epoch=assert(obj:allocate())
 if #old==0 then assert(obj:arm('host-token',epoch)) end
 assert(obj:hidden())
+local guard=assert(fs.lock(path..'.guard'))
+assert(obj:hidden() and obj.failure == nil, 'host contention must hide without poisoning')
+assert(obj:ready() == false, 'host contention must withhold trade capability')
+assert(fs.close(guard))
+assert(obj:ready() == true, 'the next host read must recover after guard release')
 local battery=trade_battery_path(luanet.import_type,cfg,'Test Cartridge','GBA',false)
 return json.encode({epoch=epoch,prior=#old,battery=battery,lua_version=_VERSION,epoch_type=math.type(epoch)})
 '@

@@ -36,7 +36,8 @@ class Files:
         self.fail = None
 
     def lock(self, path):
-        assert not self.held, "concurrent owner"
+        if self.held:
+            return None, False, "busy"
         self.held = True
         fresh = path not in self.files
         self.files.setdefault(path, "")
@@ -277,6 +278,82 @@ def test_disk_store_refuses_missing_torn_or_mismatched_rollback(fault):
         assert other.allocate(other) > epoch
         assert len(other.outstanding(other)) == 1
     assert not files.held
+
+
+@pytest.mark.parametrize("born_under_hold", (False, True))
+def test_shared_guard_contention_recovers_on_next_frame_without_reissuing_epoch(born_under_hold):
+    """A's temporary guard hold must not poison B for the rest of the emulator session."""
+    files = Files()
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    backend = module.file_store(lua.table(json=codec, fs=files.table(lua), path="journal"))
+    frame = [100]
+
+    def client(player):
+        obj = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40,
+                                   player=player, frame=lambda: frame[0]))
+        assert obj.bind(obj, "run-a", "12345678")
+        return obj
+
+    a = client("a")
+    assert a.allocate(a) == 1
+    b = None if born_under_hold else client("b")
+    if b is not None:
+        frame[0] += 1  # the next emulator frame must perform its own exclusive read
+    holder, fresh = files.lock("journal.guard")
+    assert holder and fresh is False
+    if b is None:
+        b = client("b")
+    assert b.hidden(b) is True  # no unverified party may be reported during contention
+    assert b.ready(b) is False  # do not advertise native trade while the guard is unavailable
+    assert b.failure is None, "a transient guard collision must not poison the session"
+    assert b.allocate(b)[0] is None  # a command cannot spend an epoch without the guard
+    assert files.close(holder)
+    frame[0] += 1
+    assert b.ready(b) is True
+    assert b.hidden(b) is False
+    assert b.allocate(b) == 2
+    assert a.allocate(a) == 3
+    assert files.held is False
+
+
+def test_writer_contention_retries_later_without_spending_an_epoch():
+    files = Files()
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    backend = module.file_store(lua.table(json=codec, fs=files.table(lua), path="journal"))
+    frame = [10]
+    a = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40, player="a",
+                             frame=lambda: frame[0]))
+    assert a.bind(a, "run-a", "12345678")
+    assert a.allocate(a) == 1
+    b = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40, player="b",
+                             frame=lambda: frame[0]))
+    assert b.bind(b, "run-a", "12345678")
+    holder, _ = files.lock("journal.guard")
+    frame[0] += 1
+    assert b.allocate(b)[0] is None
+    assert b.failure is None
+    assert files.close(holder)
+    frame[0] += 1
+    assert b.allocate(b) == 2
+    assert a.allocate(a) == 3
+
+
+def test_unavailable_guard_for_a_non_contention_reason_stays_fail_closed():
+    files = Files()
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    fs = files.table(lua)
+    fs.lock = lambda _path: (None, False, "denied")
+    backend = module.file_store(lua.table(json=codec, fs=fs, path="journal"))
+    obj = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40, player="a"))
+    assert obj.failure is not None
+    assert obj.hidden(obj) is True
+    assert files.files == {}, "an unavailable guard must never create a new journal"
 
 
 def journaled_trade_world():
