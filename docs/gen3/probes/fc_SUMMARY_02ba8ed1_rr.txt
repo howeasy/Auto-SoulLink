@@ -1,0 +1,15 @@
+# G4 final cut 02ba8ed1a4420e13097fd099524f6a04cbbfb847 -- tools/gen3_final_cut.py summary (written 2026-09-28T01:18:36Z)
+# RUN 6 / CARRIED 0 / CACHED 0 / FAIL 2
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | faint_cmd_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_faint_cmd_gen3_rr_as_a_02ba8ed1.txt |
+| 2 | linked_faint_active_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_gen3_rr_as_a_02ba8ed1.txt |
+| 3 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_whiteout_gen3_rr_as_a_02ba8ed1.txt |
+| 4 | boxsync_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_boxsync_gen3_rr_as_a_02ba8ed1.txt |
+| 5 | whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_whiteout_gen3_rr_as_a_02ba8ed1.txt |
+| 6 | link_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_link_gen3_rr_as_a_02ba8ed1.txt |
+| 7 | deadzone_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_deadzone_gen3_rr_as_a_02ba8ed1.txt |
+| 8 | reconnect_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 2 | fc_reconnect_gen3_rr_as_a_02ba8ed1.txt |
+
+OVERALL: FAIL (6/8 rows)

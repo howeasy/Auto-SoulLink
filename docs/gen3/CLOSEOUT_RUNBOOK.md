@@ -30,6 +30,11 @@ Both were started on cut 02ba8ed1 at the end of the previous session.
   - Expected: 0 failed and 0 unexplained skips, now that the runner stages the three inputs.
   - If a skip remains, it names a missing input: stage it (UNPINNED_INPUTS in `tools/gen3_final_cut.py`) and rerun the row.
   - If the T5 candidate tests fail rather than skip, the candidate builds are stale against the integration source. Rebuild them in g3-int: `python patch/tools/build.py --target firered --trade-candidate --rom "E:/Google Drive/SLink/Pokemon - FireRed Version (USA).gba"` (same for leafgreen), with `SLINK_ARMGCC` set as in `C:/slink-wt/run_t5native2.sh`.
+- **RESULT at handoff (02ba8ed1):** the FR/LG gate now reports 0 failed and 6 unexplained skips (it had 31). To clear the 6:
+  - (a) 3x `test_gen3_exp_pack.py`: "pokeemerald not cloned: <lane>/.cache/expansion-src". Create that junction in the lane (or in g3-int, and add `.cache/expansion-src` to the runner inputs) pointing at `SLINK_EXPANSION_SRC`.
+  - (b) 2x `test_gen3_rom_content_lua.py`: the UPR "_allowed" FR/LG ROMs. The test now reads `SLINK_GEN3_UPR_SCRATCH` (default `C:/slink-wt/upr_scratch`); it used to hard-code one Claude session's scratchpad. Regenerate FireRed_allowed.gba and LeafGreen_allowed.gba with the UPR pipeline (see the test's docstring / `server/upr_pipeline.py`) into that folder, and export the env var in g3-env.sh.
+  - (c) 1x `test_gen3_rom_ingest.py`: the Manager-made randomized pair `C:/slink-wt/rand_roms/r3_run` (set `SLINK_GEN3_RAND_ROMS`). Recreate it with a Manager randomize run.
+  - Then rerun the gate row.
 - RR final cut on the new companion: lane `C:/slink-wt/g3-lane3`, log `C:/slink-wt/fc-rr-02ba8ed1.log`, summary `docs/gen3/probes/fc_SUMMARY_02ba8ed1_rr.txt`.
   - Triage every FAIL. Classify each as env (lane input), harness, or product.
   - Never rerun an unchanged failed row; fix first.
