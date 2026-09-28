@@ -654,6 +654,10 @@ class SoulLinkState:
                 # silently breaks until something else forces correction.
                 self._reconcile_party_keys(player_id, party, in_battle=bool(msg.get("in_battle")))
 
+        if (event in ("hello", "tick", "safe") and "party" in msg and not msg.get("_rejected")
+                and not self.party_hidden[player_id]):
+            self._resume_prepared_trade_on_visible_snapshot()
+
         cmds = self.queued_commands[player_id][:]
         self.queued_commands[player_id].clear()
         self._arm_inflight(player_id, cmds)
@@ -1133,7 +1137,22 @@ class SoulLinkState:
             return
         pt["ready"][player_id] = True
         if all(pt["ready"].values()):
+            if self.adapter.supports_trade_recovery() and any(self.party_hidden.values()):
+                # A native pre-save can transiently withhold one party just before its
+                # apply_ready. Keep both pre-saved leases; only a NEW visible census may
+                # release this wait, and _execute_trade revalidates the whole pair then.
+                self._save()
+                return
             self._execute_trade(pt)
+
+    def _resume_prepared_trade_on_visible_snapshot(self):
+        pt = self.pending_trade
+        ready = (pt or {}).get("ready") or {}
+        if (not self.adapter.supports_trade_recovery() or not pt or pt.get("phase") != "preparing"
+                or ready.get("a") is not True or ready.get("b") is not True
+                or any(self.party_hidden.values())):
+            return
+        self._execute_trade(pt)  # retains _trade_unavailable's full pair/key/hidden validation
 
     def _trade_key_clash(self, player_id: str, gets: str, gives: str) -> bool:
         """KEY-SCOPE-2: a recipient that already indexes the key it would receive (a boxed live

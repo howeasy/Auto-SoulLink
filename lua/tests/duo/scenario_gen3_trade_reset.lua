@@ -57,6 +57,9 @@ return function(ctx)
         })
     end
     if ctx.phase ~= "initial" then return false, "unexpected RR reset phase " .. tostring(ctx.phase) end
+    -- The host writes LINKED/PARTNER only after both hellos. The unchanged trade
+    -- driver waits for GO again; the second wait sees the same persistent file.
+    if not ctx.wait_go() then return false, "no go-file" end
     local old_key = ctx.linked()
     local partner = partner_key(ctx)
     local before = counter()

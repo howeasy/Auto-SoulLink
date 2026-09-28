@@ -94,6 +94,7 @@ function Client.new(p)
     local journal = io.trade_journal
     local trade_run_id, trade_run_ot
     local pending_trade_finals = {}
+    local pending_apply_trade
     local awaiting_trade_run = journal and not journal:ready() or false
     local reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
     local owed = p.owed_reports and p.owed_reports.new() or nil
@@ -1586,6 +1587,15 @@ function Client.new(p)
                 return not awaiting_trade_run and (not journal or journal:ready())
                     and session and session.hello_sent and p.net.connected()
             end,
+            publish_visible_snapshot=function()
+                if not session or not session:eligible() then return false end
+                local fields = drv.tick_fields()
+                if type(fields) ~= "table" or fields.party_hidden == true
+                   or type(fields.party) ~= "table" or #fields.party == 0 then return false end
+                -- The same TCP stream orders this fresh census before apply_ready. A pre-save
+                -- hidden tick must not be the server's last view when it commits the pair.
+                return session:send("tick", fields) == true
+            end,
             clear=function() return not in_battle() and overworld_ok() end,
             party=party_read, key=key, capacity=d.PARTY_CAPACITY or 6, mon_size=R.PARTY_MON_SIZE,
             decode_blob=function(hex)
@@ -1641,8 +1651,21 @@ function Client.new(p)
         else send("apply_ready", {token=cmd.token, ok=false}) end
         return true
     end
+    local function hold_busy_apply(cmd)
+        if not (trade and journal and journal.busy and not awaiting_trade_run) then return false end
+        local _, prepared = trade:state()
+        if not prepared or prepared.token ~= cmd.token or prepared.old_key ~= cmd.old_key then return false end
+        if not pending_apply_trade then
+            pending_apply_trade = {cmd=cmd, run_id=trade_run_id, ot_id=trade_run_ot,
+                                   prepared=prepared, epoch=prepared.epoch,
+                                   deadline=prepared.prepare_deadline}
+            log("apply_trade held: journal lock busy")
+        end
+        return true
+    end
     C.apply_trade = function(cmd)
         if trade and trade:capable() then trade:apply(cmd); sync_trade()
+        elseif hold_busy_apply(cmd) then return true
         else
             log("apply_trade refused: durable native trade unavailable")
             -- A replay during journal recovery cannot truthfully report
@@ -1877,6 +1900,31 @@ function Client.new(p)
     end
     local trade_frame
     drv.pre_pump = function()
+        if trade_frame and io.framecount() < trade_frame then
+            if trade then trade:reset(); sync_trade() end
+            reload_empty_frames, reload_boot_seen = 0, false
+            session.hello_sent = false
+        end
+        trade_frame = io.framecount()
+        local held_apply = pending_apply_trade
+        if held_apply and p.net.connected() and not awaiting_trade_run then
+            local _, current_prepared = trade:state()
+            if held_apply.run_id ~= trade_run_id or held_apply.ot_id ~= trade_run_ot then
+                pending_apply_trade = nil
+                log("pending apply_trade discarded: server run/trainer binding changed")
+            elseif current_prepared ~= held_apply.prepared or current_prepared.epoch ~= held_apply.epoch then
+                pending_apply_trade = nil
+                log("pending apply_trade discarded: preparation binding changed")
+            elseif (held_apply.deadline and io.framecount() > held_apply.deadline)
+                   or trade:capable() then
+                pending_apply_trade = nil
+                trade:apply(held_apply.cmd) -- checks the original prepare deadline and epoch
+                sync_trade()
+            elseif not journal.busy then
+                pending_apply_trade = nil
+                C.apply_trade(held_apply.cmd) -- named non-busy refusal, with no scene write
+            end
+        end
         local pending = pending_trade_finals[1]
         if pending and p.net.connected() and not awaiting_trade_run then
             if pending.run_id ~= trade_run_id or pending.ot_id ~= trade_run_ot then
@@ -1890,12 +1938,6 @@ function Client.new(p)
             end
         end
         if owed then owed:step(p.net.connected(), false, send) end
-        if trade_frame and io.framecount() < trade_frame then
-            if trade then trade:reset(); sync_trade() end
-            reload_empty_frames, reload_boot_seen = 0, false
-            session.hello_sent = false
-        end
-        trade_frame = io.framecount()
         if journal then
             local empty = reads.read_sb1 and not reads.read_sb1() and reads.read_sb2 and not reads.read_sb2()
                 and num(a.PARTY_COUNT_ADDR) and io.read_u8(a.PARTY_COUNT_ADDR) == 0

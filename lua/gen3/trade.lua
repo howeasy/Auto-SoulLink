@@ -302,7 +302,7 @@ function T.new(d)
         if prior_report_pending(epoch, cmd.token) then return refuse(cmd, "prior report pending") end
         if prepared and prepared.token == cmd.token and prepared.epoch == epoch then
             local t = prepared
-            if t.phase == "preparing" and t.old_key == cmd.old_key then return end
+            if (t.phase == "preparing" or t.phase == "prepared_visible") and t.old_key == cmd.old_key then return end
             local v = visit()
             local ok = t.old_key == cmd.old_key and v ~= nil and v.id == t.visit
                        and locate(t.old_key) ~= nil and t.prepare_deadline ~= nil and d.frame() <= t.prepare_deadline
@@ -336,9 +336,14 @@ function T.new(d)
                    or w.id == nil or w.old_key ~= t.old_key then
                     unchanged(t); flush(); return
                 end
-                t.phase, t.prepare_pending, t.visit = "prepared", nil, w.id
+                t.visit = w.id
                 t.prepare_deadline = d.frame() + d.prepare_frames
-                emit("apply_ready", {token=t.token, ok=true}, t.epoch); flush()
+                if d.publish_visible_snapshot then
+                    t.phase = "prepared_visible" -- first send a live visible party census
+                else
+                    t.phase, t.prepare_pending = "prepared", nil
+                    emit("apply_ready", {token=t.token, ok=true}, t.epoch); flush()
+                end
             end, function()
                 local current = locate(t.old_key)
                 if prepared ~= t or t.phase ~= "preparing" or t.epoch ~= d.epoch() or not d.eligible() or not current
@@ -446,6 +451,13 @@ function T.new(d)
         end
         if prepared and prepared.epoch ~= d.epoch() then unchanged(prepared); flush() end
         if prepared and prepared.prepare_deadline and d.frame() > prepared.prepare_deadline then unchanged(prepared); flush() end
+        if prepared and prepared.phase == "prepared_visible" and d.ready_to_send() and d.clear()
+           and d.publish_visible_snapshot() == true then
+            local t = prepared
+            t.phase, t.prepare_pending = "prepared", nil
+            emit("apply_ready", {token=t.token, ok=true}, t.epoch)
+            flush()
+        end
         local t = active
         if t and (t.phase == "precommit-proof" or t.phase == "save-proof" or t.phase == "arm-proof") then
             if t.epoch ~= d.epoch() then

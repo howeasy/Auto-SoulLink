@@ -62,7 +62,7 @@ def _server(tmp_path, title=None):
     return srv
 
 
-def _applying(tmp_path, *, prepare_only=False, title=None):
+def _applying(tmp_path, *, prepare_only=False, before_confirm=False, title=None):
     srv = _server(tmp_path, title)
     entry = LinkEntry(area_id="route_1", status=LinkStatus.ALIVE,
                       a=MonInfo(key=KEYS["a"], species=1, level=12),
@@ -73,6 +73,9 @@ def _applying(tmp_path, *, prepare_only=False, title=None):
     token = srv.state.pending_trade["token"]
     srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0})
     srv._dispatch("a", {"event": "mon_chosen", "token": token, "slot": 0})
+    if before_confirm:
+        assert srv.state.pending_trade["phase"] == "confirming"
+        return srv, entry, token
     srv._dispatch("b", {"event": "menu_result", "token": token, "choice": 1})
     assert srv.state.pending_trade["phase"] == "preparing"
     if prepare_only:
@@ -401,13 +404,57 @@ def test_expansion_adapter_refuses_unsupported_recovery_extension_by_name(tmp_pa
 
 
 def test_partner_confirm_names_the_withheld_party(tmp_path):
-    srv, _entry, token = _applying(tmp_path, prepare_only=True)
+    srv, _entry, token = _applying(tmp_path, before_confirm=True)
     srv._dispatch("a", _hello("a", party_hidden=True))
-    srv._dispatch("a", {"event": "apply_ready", "token": token, "ok": True})
-    commands = srv._dispatch("b", {"event": "apply_ready", "token": token, "ok": True})
+    commands = srv._dispatch("b", {"event": "menu_result", "token": token, "choice": 1})
     assert srv.state.pending_trade is None
     assert any("party withheld" in c.get("text", "") for c in commands)
     assert not any("no longer available" in c.get("text", "") for c in commands)
+
+
+def test_preparing_waits_for_fresh_visible_snapshots_before_native_apply(tmp_path):
+    """RR producer: a transient hidden tick before ok-ready must not cancel the saved offer."""
+    srv, _entry, token = _applying(tmp_path, prepare_only=True, title="firered_rr")
+    srv._dispatch("a", {"event": "tick", "party_hidden": True, "in_battle": False})
+    srv._dispatch("a", {"event": "apply_ready", "token": token, "ok": True})
+    reply = srv._dispatch("b", {"event": "apply_ready", "token": token, "ok": True})
+    assert srv.state.pending_trade is not None
+    assert srv.state.pending_trade["phase"] == "preparing"
+    assert not any(c.get("cmd") == "apply_trade" for c in reply)
+    assert not any("party withheld" in c.get("text", "") for c in reply)
+    srv._dispatch("b", {"event": "tick", "party_hidden": True, "in_battle": False})
+    srv._dispatch("a", {"event": "tick", "party": [_mon("a")], "in_battle": False})
+    assert srv.state.pending_trade["phase"] == "preparing", "B is still hidden"
+    reply = srv._dispatch("b", {"event": "tick", "party": [_mon("b")], "in_battle": False})
+    assert srv.state.pending_trade["phase"] == "applying"
+    assert any(c.get("cmd") == "apply_trade" for c in reply)
+    assert any(c.get("cmd") == "apply_trade" for c in srv.state.queued_commands["a"])
+
+
+def test_preparing_visible_snapshot_revalidates_offered_keys_before_apply(tmp_path):
+    srv, _entry, token = _applying(tmp_path, prepare_only=True, title="firered_rr")
+    srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    for pid in ("a", "b"):
+        srv._dispatch(pid, {"event": "apply_ready", "token": token, "ok": True})
+    changed = {**_mon("a"), "key": "different:00000011", "blob_hex": "03" * 100}
+    reply = srv._dispatch("a", {"event": "tick", "party": [changed], "in_battle": False})
+    assert srv.state.pending_trade is None
+    assert not any(c.get("cmd") == "apply_trade" for c in reply)
+    assert any("no longer available" in c.get("text", "") for c in reply)
+
+
+def test_preparing_hidden_wait_expires_without_visible_snapshot_or_native_apply(tmp_path):
+    srv, _entry, token = _applying(tmp_path, prepare_only=True, title="firered_rr")
+    srv.state.TRADE_WATCHDOG_EVENTS = 2
+    srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    for pid in ("a", "b"):
+        srv._dispatch(pid, {"event": "apply_ready", "token": token, "ok": True})
+    assert srv.state.pending_trade["phase"] == "preparing"
+    for _ in range(3):
+        srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    assert srv.state.pending_trade is None
+    assert not any(c.get("cmd") == "apply_trade" for pid in "ab"
+                   for c in srv.state.queued_commands[pid])
 
 
 @pytest.mark.parametrize("traded,verdict", [(True, "committed"), (False, "rolled_back")])

@@ -1,0 +1,13 @@
+a utc_ticks=639261953336488200 cpu=0.033000 START C:/slink-wt/counter-host-runs/run-045
+a utc_ticks=639261953336538861 cpu=0.037000 GUARD C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.lock ok=true reason=nil
+a utc_ticks=639261953336542701 cpu=0.037000 RENAME_ENOENT_FIRST C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton -> C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton.1790598533-33000-1872405957
+a utc_ticks=639261953336544987 cpu=0.037000 OPEN r C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.born ok=false exists=false errno=2 msg=C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.born: No such file or directory
+a utc_ticks=639261953336555423 cpu=0.038000 OPEN w C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.born.1790598533-33000-1872405957 ok=true exists=true errno=nil msg=nil
+a utc_ticks=639261953336560406 cpu=0.039000 RENAME C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.born.1790598533-33000-1872405957 -> C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.born ok=true dst_exists=true src_exists=false content=- errno=nil msg=nil
+a utc_ticks=639261953336562891 cpu=0.039000 OPEN w C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.new.1790598533-33000-1872405957 ok=true exists=true errno=nil msg=nil
+a utc_ticks=639261953336566847 cpu=0.040000 RENAME C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.new.1790598533-33000-1872405957 -> C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton ok=true dst_exists=true src_exists=false content=- errno=nil msg=nil
+a utc_ticks=639261953336619823 cpu=0.045000 RENAME C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton -> C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton.1790598533-33000-1872405957 ok=true dst_exists=true src_exists=false content=0 errno=nil msg=nil
+a utc_ticks=639261953336623042 cpu=0.045000 OPEN r C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton.1790598533-33000-1872405957 ok=true exists=true errno=nil msg=nil
+a utc_ticks=639261953336626553 cpu=0.046000 OPEN w C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton.1790598533-33000-1872405957.next ok=true exists=true errno=nil msg=nil
+a utc_ticks=639261953336632233 cpu=0.046000 RENAME C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton.1790598533-33000-1872405957.next -> C:/slink-wt/counter-host-runs/run-045/slink_gen3_session.baton ok=true dst_exists=true src_exists=false content=- errno=nil msg=nil
+a utc_ticks=639261953336637800 cpu=0.047000 END n=1 reason=nil guard_busy=0 spins=1 missing_rename=1
