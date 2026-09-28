@@ -156,7 +156,7 @@
             "width": 1
           }
         ],
-        "source": "expansion@e8bd1cd7:src/battle_end_turn.c:1000-1013; data/battle_scripts_1.s:3486-3492; src/battle_controller_player.c:154-180; compiler BattlePokemon.volatiles/Volatiles.perishSong/perishSongTimer; ROM PlayerBufferExecCompleted prefix+pool +0x70/+0x74/+0x80",
+        "source": "expansion@e8bd1cd7:src/battle_end_turn.c:1000-1013; data/battle_scripts_1.s:3486-3492; src/battle_controller_player.c:154-180; compiler BattlePokemon.volatiles/Volatiles.perishSong/perishSongTimer; ROM SetControllerToPlayer store sequence/pool +0x28..+0x34 installs PlayerBufferExecCompleted|1; PlayerBufferExecCompleted prefix/pool +0x70/+0x74/+0x80 returns to PlayerBufferRunCommand|1",
         "stride": 4,
         "symbol": "gBattlerControllerFuncs",
         "value": 134586889,

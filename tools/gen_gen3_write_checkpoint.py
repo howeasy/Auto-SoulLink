@@ -1333,21 +1333,34 @@ def expansion_handoff(context):
     controller = symbol("gBattlerControllerFuncs")
     completed = symbol("PlayerBufferExecCompleted", "src/battle_controller_player.o")
     run_command = symbol("PlayerBufferRunCommand", "src/battle_controller_player.o")
+    installer = symbol("SetControllerToPlayer", "src/battle_controller_player.o")
+    end_slots = symbol("gBattlerControllerEndFuncs")
     exec_flags = symbol("gBattleControllerExecFlags")
-    if controller["size"] != 16 or completed["size"] < 0x84:
+    if controller["size"] != 16 or end_slots["size"] != 16 or completed["size"] < 0x84 or installer["size"] < 0x3C:
         raise ValueError("expansion handoff controller slot/function size changed")
-    offset = completed["address"] - ROM_BASE
-    body = context["rom"][offset:offset + completed["size"]]
-    # The first instructions store the caller's u8 battler index into
-    # gBattlerControllerFuncs[battler]; the following pool pins that slot and
-    # PlayerBufferRunCommand|1. A symbol-name match alone is insufficient.
-    if body[:16] != bytes.fromhex("1b4b00061b4a10b5040e800dc2501a4b"):
+    completed_body = body(context["rom"], completed["address"], completed["size"])
+    # The initial LDR instructions resolve to pool +0x70 (the controller slots)
+    # and +0x74 (PlayerBufferRunCommand|1). The +0x80 pool word is the local
+    # exec-flags address used when the function clears the battler's busy bit.
+    if completed_body[:16] != bytes.fromhex("1b4b00061b4a10b5040e800dc2501a4b"):
         raise ValueError("expansion PlayerBufferExecCompleted ROM prefix changed")
     for at, word in ((0x70, controller["address"]),
                      (0x74, run_command["address"] | 1),
                      (0x80, exec_flags["address"])):
-        if int.from_bytes(body[at:at + 4], "little") != word:
+        if int.from_bytes(completed_body[at:at + 4], "little") != word:
             raise ValueError(f"expansion PlayerBufferExecCompleted pool +{at:#x} changed")
+    install_body = body(context["rom"], installer["address"], installer["size"])
+    # SetControllerToPlayer installs the completion pointer into the end-function
+    # table, then installs the run-command pointer into the live controller table.
+    # These two stores and their literal operands bind the value to the ROM.
+    if install_body[0x0A:0x18] != bytes.fromhex("074b074a8000c250074b074ac250"):
+        raise ValueError("expansion SetControllerToPlayer ROM stores changed")
+    for at, word in ((0x28, end_slots["address"]),
+                     (0x2C, completed["address"] | 1),
+                     (0x30, controller["address"]),
+                     (0x34, run_command["address"] | 1)):
+        if int.from_bytes(install_body[at:at + 4], "little") != word:
+            raise ValueError(f"expansion SetControllerToPlayer pool +{at:#x} changed")
     battle = types["BattlePokemon"]
     volatiles = types["Volatiles"]["bitfields"]
     flag, timer = volatiles["perishSong"], volatiles["perishSongTimer"]
@@ -1367,7 +1380,9 @@ def expansion_handoff(context):
             "source": ("expansion@e8bd1cd7:src/battle_end_turn.c:1000-1013; "
                        "data/battle_scripts_1.s:3486-3492; src/battle_controller_player.c:154-180; "
                        "compiler BattlePokemon.volatiles/Volatiles.perishSong/perishSongTimer; "
-                       "ROM PlayerBufferExecCompleted prefix+pool +0x70/+0x74/+0x80")}
+                       "ROM SetControllerToPlayer store sequence/pool +0x28..+0x34 installs "
+                       "PlayerBufferExecCompleted|1; PlayerBufferExecCompleted prefix/pool "
+                       "+0x70/+0x74/+0x80 returns to PlayerBufferRunCommand|1")}
 
 
 def build_expansion(context):

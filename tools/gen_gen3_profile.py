@@ -1572,8 +1572,8 @@ def build_expansion(context):
     volatiles_off = types["BattlePokemon"]["fields"]["volatiles"]["offset"]
     perish = types["Volatiles"]["bitfields"]["perishSong"]
     timer = types["Volatiles"]["bitfields"]["perishSongTimer"]
-    if perish["width"] != 1 or timer["width"] != 1:
-        raise ValueError("expansion Perish fields must each occupy a single-byte reader lane")
+    if (perish["width"], perish["bits"], timer["width"], timer["bits"]) != (1, 1, 1, 2):
+        raise ValueError("expansion Perish compiler lanes changed")
     put("BATTLE_MON_PERISH_FLAG_OFF", volatiles_off + perish["offset"],
         "BattlePokemon.volatiles + Volatiles.perishSong compiler bitfield")
     put("BATTLE_MON_PERISH_FLAG_MASK", int(perish["mask"], 16), "Volatiles.perishSong compiler mask")

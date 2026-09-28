@@ -166,6 +166,14 @@ def test_expansion_handoff_refuses_rom_body_or_pool_drift(context):
         changed["rom"] = bytes(rom)
         with pytest.raises(ValueError, match="ROM prefix changed|pool .* changed"):
             checkpoint.expansion_handoff(changed)
+    installer = profile.expansion_symbol(context, "SetControllerToPlayer", "src/battle_controller_player.o")
+    for rel in (0x0A, 0x28, 0x2C, 0x30, 0x34):
+        changed = dict(context)
+        rom = bytearray(context["rom"])
+        rom[installer["address"] - checkpoint.ROM_BASE + rel] ^= 1
+        changed["rom"] = bytes(rom)
+        with pytest.raises(ValueError, match="ROM stores changed|pool .* changed"):
+            checkpoint.expansion_handoff(changed)
     assert original["value"] == fn["address"] | 1
 
 
