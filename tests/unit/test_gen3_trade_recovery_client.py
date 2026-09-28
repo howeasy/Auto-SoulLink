@@ -171,6 +171,157 @@ def test_native_save_flushes_host_before_a_final_can_retire_the_intent(monkeypat
         assert world.events("trade_done")[-1]["after_reset"] is True
 
 
+def test_production_client_sends_visible_tick_before_native_apply_ready(monkeypatch):
+    from tests.unit.gen3_trade_journal_model import JournalModel
+    from tests.unit.gen3_world import World
+    from tests.unit.test_gen3_trade import KB, A, B, CartridgeModel, party
+
+    class PreparingCarrier(CartridgeModel):
+        def __call__(self, runtime):
+            native = super().__call__(runtime)
+            self.pending = []
+            native.trade_authorized = lambda *_: True
+            native.prepare_trade = lambda _, cmd, done, valid: (
+                self.pending.append((cmd, done, valid)) or runtime.table())
+            return native
+
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "0000BEEF")
+    carrier = PreparingCarrier()
+    world = World("gen3_rr", "radical_red", "companion", native=carrier, journal=JournalModel())
+    world.set_party(party(A, B))
+    world.step_to(60)
+    visible = [False]
+    original = world.client.driver.tick_fields
+
+    def tick_fields():
+        fields = original()
+        if not visible[0]:
+            fields.party_hidden = True
+            fields.party = None
+        return fields
+
+    world.client.driver.tick_fields = tick_fields
+    world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
+    world.step()
+    assert carrier.pending
+    before = len(world.sent)
+    carrier.pending[0][1](None, world.lua.table(**carrier.visit, old_key=KB))
+    assert not world.events("apply_ready")
+    world.step()
+    assert not world.events("apply_ready")
+    visible[0] = True
+    world.step()
+    sent = world.sent[before:]
+    assert [m["event"] for m in sent] == ["tick", "apply_ready"]
+    assert "party_hidden" not in sent[0] and len(sent[0]["party"]) == 2
+    assert sent[1]["ok"] is True
+
+
+def test_apply_trade_waits_out_a_one_frame_journal_guard_collision(monkeypatch):
+    from tests.unit.test_gen3_client import apply
+    from tests.unit.test_gen3_trade import KB
+
+    world, carrier, blob = durable_client(monkeypatch)
+    world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
+    world.step()
+    assert world.events("apply_ready")[-1]["ok"] is True
+    journal = carrier.journal_model.journal
+    original_ready, original_hidden = journal.ready, journal.hidden
+    journal.busy = True
+    journal.ready = lambda self: False if self.busy else original_ready(self)
+    journal.hidden = lambda self: True if self.busy else original_hidden(self)
+    apply(world, blob, token="t")
+    world.step()
+    assert not carrier.jobs and not world.events("trade_done")
+    journal.busy = None
+    world.step(2)
+    assert [job["step"] for job in carrier.jobs] == ["enemy"]
+    assert not world.events("trade_done")
+
+
+def test_queued_apply_trade_does_not_cross_reset_and_new_preparation(monkeypatch):
+    from tests.unit.test_gen3_client import apply
+    from tests.unit.test_gen3_trade import KB
+
+    world, carrier, blob = durable_client(monkeypatch)
+    world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
+    world.step()
+    assert world.events("apply_ready")[-1]["ok"] is True
+    journal = carrier.journal_model.journal
+    original_ready, original_hidden = journal.ready, journal.hidden
+    journal.busy = True
+    journal.ready = lambda self: False if self.busy else original_ready(self)
+    journal.hidden = lambda self: True if self.busy else original_hidden(self)
+    apply(world, blob, token="t")
+    world.step()
+    assert not carrier.jobs
+
+    world.connected = False
+    journal.busy = None
+    world.client.driver.on_reset()
+    world.step()
+    world.connected = True
+    world.client.hello_sent = False
+    world.step(2)
+    world.command(cmd="apply_prepare", token="new", slot=1, old_key=KB)
+    world.step()
+    assert world.events("apply_ready")[-1]["token"] == "new"
+    assert world.events("apply_ready")[-1]["ok"] is True
+    world.step(2)
+    assert not carrier.jobs, "the old apply must not consume a later preparation"
+    assert any("pending apply_trade discarded: preparation binding changed" in line for line in world.logs)
+
+
+def test_frame_rewind_discards_queued_apply_before_any_native_stage(monkeypatch):
+    from tests.unit.test_gen3_client import apply
+    from tests.unit.test_gen3_trade import KB
+
+    world, carrier, blob = durable_client(monkeypatch)
+    world.command(cmd="apply_prepare", token="t", slot=1, old_key=KB)
+    world.step()
+    journal = carrier.journal_model.journal
+    original_ready, original_hidden = journal.ready, journal.hidden
+    journal.busy = True
+    journal.ready = lambda self: False if self.busy else original_ready(self)
+    journal.hidden = lambda self: True if self.busy else original_hidden(self)
+    apply(world, blob, token="t")
+    world.step()
+    assert not carrier.jobs
+    journal.busy = None
+    world.frame = 1  # real driver frame rewind; do not call on_reset manually
+    world.step()
+    assert not carrier.jobs, "a pre-rewind apply cannot create a native stage"
+    assert any("pending apply_trade discarded: preparation binding changed" in line for line in world.logs)
+
+
+def test_frame_rewind_clears_local_save_allowance_before_queued_final(monkeypatch):
+    world, carrier, _blob = durable_client(monkeypatch)
+    journal = carrier.journal_model.journal
+    epoch = journal.allocate(journal)
+    assert journal.arm(journal, "t", epoch) is True
+    assert journal.native_saved(journal, "t", epoch) is True
+    assert journal.hidden(journal) is False  # same-episode local save allowance
+    original_final = journal.final
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original_final(self, *args)
+
+    journal.final = busy_once
+    world.replies.append(json.dumps({"commands": [
+        {"cmd": "trade_final", "token": "t", "epoch": epoch, "verdict": "resolved"}]}))
+    world.step()
+    assert carrier.journal_model.journal.state.records[1].final == ""
+    world.frame = 1  # driver must detect this before replaying the queued final
+    world.step()
+    assert len(seen) >= 2
+    assert carrier.journal_model.journal.state.records[1].final == "resolved"
+    assert journal.hidden(journal) is True, "old local saved allowance must not survive reload"
+
+
 def test_repeated_native_save_milestones_flush_the_host_once(monkeypatch):
     world, carrier, blob = durable_client(monkeypatch)
     start_client_trade(world, carrier, blob)

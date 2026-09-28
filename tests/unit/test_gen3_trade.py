@@ -296,6 +296,51 @@ def test_prepare_waits_for_native_consent_and_presave_ack():
     assert world.events == [("apply_ready", {"token": "t", "ok": True})]
 
 
+def test_native_presave_ready_follows_a_fresh_visible_party_snapshot():
+    world = TradeWorld()
+    pending = []
+    visible = [False]
+    world.native.trade_authorized = lambda *_: True
+    world.native.prepare_trade = lambda _, cmd, done, valid: pending.append((cmd, done, valid)) or world.lua.table()
+
+    def publish():
+        if not visible[0]:
+            return False
+        world.events.append(("tick", {"party": [world.rows[0]["key"]]}))
+        return True
+
+    world.deps.publish_visible_snapshot = publish
+    world.trade = world.lua.execute((ROOT / "lua/gen3/trade.lua").read_text()).new(world.deps)
+    world.prepare()
+    pending[0][1](None, world.lua.table(**world.visit, old_key=world.rows[0]["key"]))
+    assert not [fields for event, fields in world.events if event == "apply_ready"]
+    world.tick()
+    assert not [fields for event, fields in world.events if event == "apply_ready"]
+    visible[0] = True
+    world.tick()
+    assert [event for event, _ in world.events] == ["tick", "apply_ready"]
+    assert world.events[-1] == ("apply_ready", {"token": "t", "ok": True})
+
+
+def test_native_presave_visible_barrier_expires_without_late_ready():
+    world = TradeWorld()
+    pending = []
+    visible = [False]
+    world.native.trade_authorized = lambda *_: True
+    world.native.prepare_trade = lambda _, cmd, done, valid: pending.append((cmd, done, valid)) or world.lua.table()
+    world.deps.publish_visible_snapshot = lambda: visible[0]
+    world.trade = world.lua.execute((ROOT / "lua/gen3/trade.lua").read_text()).new(world.deps)
+    world.prepare()
+    pending[0][1](None, world.lua.table(**world.visit, old_key=world.rows[0]["key"]))
+    world.frame += 601
+    world.tick()
+    visible[0] = True
+    world.tick()
+    assert [fields for event, fields in world.events if event == "apply_ready"] == [
+        {"token": "t", "ok": False}]
+    assert not world.jobs
+
+
 def test_reorder_at_scene_dispatch_relocates_identity_without_touching_bystander():
     world = TradeWorld()
     world.prepare()
