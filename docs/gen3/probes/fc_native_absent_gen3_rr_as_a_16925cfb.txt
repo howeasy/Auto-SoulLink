@@ -1,0 +1,50 @@
+# gen3_final_cut row=native_absent_gen3_rr_as_a item=§14_P5_RR_duo cut=16925cfb55665e88877947f289e2850da81c0821
+# lane=C:/slink-wt/g3-lane3
+# command: python tools/e2e_duo.py --game gen3_rr --scenario native_absent_gen3   (cwd=C:/slink-wt/g3-lane3)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T22:40:09 cpu=85% emuhawk=5 python=15
+start_utc=2026-09-28T02:40:08Z tracked_clean_before=True
+
+========== scenario: native_absent_gen3 ==========
+[duo] native_absent_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=679d112cdfe699c2793d82c7e7999ac9dfca9e222ad5a85d4f8f1e457cd0283f:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=16925cfb55665e88877947f289e2850da81c0821
+[duo] server up: tcp=55626 http=55628 data=C:\Users\howar\AppData\Local\Temp\slink_duo_native_absent_gen3_0pi7nqzr
+[duo] timing server 1.2s
+[duo] cleared 7 stale artifact(s) for native_absent_gen3: e2e_native_absent_gen3_a_1_witness.bin, e2e_native_absent_gen3_a_1_witness_ext.bin, e2e_native_absent_gen3_a_attempt1_result.txt, e2e_native_absent_gen3_a_result.txt, e2e_native_absent_gen3_b_attempt1_result.txt, e2e_native_absent_gen3_b_result.txt, e2e_native_absent_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'apply_prepare', 'slot': 1, 'old_key': 'F56D8C1D:2BDDC8BF', 'token': 'native_absent_a'}
+[duo] queued for b: {'cmd': 'apply_prepare', 'slot': 1, 'old_key': 'F56D8C1D:D4223740', 'token': 'native_absent_b'}
+[duo] timing orchestrate 5.9s
+[duo] timing results 4.2s
+[duo] RESULT_LINE a: RESULT: PASS (companion: valid apply_prepare answered after the native pre-save)
+[duo] RESULT_LINE b: RESULT: PASS (clean: valid apply_prepare refused, nothing written)
+[duo] SAVE_WITNESS_SHA256 inst=a site=8aa12eec4b2b64ee3a623d23207ac3e942be15d52e1c18aa6f979614915afc2b file=8aa12eec4b2b64ee3a623d23207ac3e942be15d52e1c18aa6f979614915afc2b match=true saves=1 counter=4->5 rtc=normalized extension_30_31=LIVE_RAM_MATCH
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] native_absent: the companion answered the valid prepare only after its native pre-save; the clean cartridge refused it and wrote nothing
+[duo] MARKER a: RX apply_prepare
+[duo] MARKER a: RX apply_prepare RX resolved_areas RX config RX dead_keys [client] [SLink-gen3] unhandled command dead_keys [client] [SLink-gen3] write native 0x0203F810 +32 frame 622
+[duo] MARKER a: TX apply_ready - {"event":"apply_ready","ok":true,"player":"a","seq":39,"token":"native_absent_a"}
+[duo] MARKER a: NATIVE_PREPARED phase=2 writes=8
+[duo] MARKER b: RX apply_prepare
+[duo] MARKER b: TX apply_ready - {"event":"apply_ready","ok":false,"player":"b","seq":5,"token":"native_absent_b"}
+[duo] MARKER b: WRITES 0
+[duo] MARKER b: PROBE_SETTLED writes=0
+[duo] timing oracle 0.2s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] native_absent_gen3: a=PASS b=PASS
+
+========== summary ==========
+  native_absent_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-28T02:40:22Z tracked_clean_after=True classification=pass
