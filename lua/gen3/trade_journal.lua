@@ -3,6 +3,7 @@
 -- returning its answer. The bootstrap owns that file/flush contract; this module never
 -- replaces missing/corrupt storage with an empty journal. initial() is explicit provisioning.
 local J = {}
+local LOCK_BUSY = {} -- acquisition-only signal; never used for read/write/seal failures
 local U32 = 0xFFFFFFFF
 local MAGIC = "SLINK-TRADE-JOURNAL-1\n"
 local MAX_BYTES = 16 * 1024 * 1024
@@ -114,8 +115,11 @@ function J.file_store(d)
     local fs, path, json = assert(d.fs), assert(d.path), assert(d.json)
     local function seal(bytes) return MAGIC .. tostring(#bytes) .. ":" .. hash(bytes) .. "\n" end
     local function locked(transform)
-        local guard, fresh = fs.lock(path .. ".guard")
-        assert(guard, "trade journal lock unavailable")
+        local guard, fresh, why = fs.lock(path .. ".guard")
+        if not guard then
+            if why == "busy" then error(LOCK_BUSY) end
+            error("trade journal lock unavailable: " .. tostring(why))
+        end
         local ok, answer = pcall(function()
             local bytes = fs.read_file(path .. ".log")
             if fresh then
@@ -241,19 +245,28 @@ function J.new(d)
         end
         return nil, self.failure
     end
-    local cache_frame
+    local cache_frame, busy_frame
     local function read(fresh)
         if self.failure then return nil end
         local now = d.frame and d.frame()
+        if self.busy and now ~= nil and busy_frame == now then return nil end
         if not fresh and now ~= nil and cache_frame == now and self.state then return self.state end
         local ok, state = pcall(function() return decode(json, store.read()) end)
-        if not ok then failed(state); return nil end
+        if not ok then
+            if state == LOCK_BUSY then
+                self.busy, busy_frame, cache_frame = true, now, nil
+            else failed(state) end
+            return nil
+        end
+        self.busy, busy_frame = nil, nil
         self.state = state
         cache_frame = now
         return state
     end
     local function update(fn)
         if self.failure then return nil, self.failure end
+        local now = d.frame and d.frame()
+        if self.busy and now ~= nil and busy_frame == now then return nil, "trade journal lock busy" end
         local ok, answer = pcall(function()
             return store.update(function(bytes)
                 local s = decode(json, bytes)
@@ -270,7 +283,14 @@ function J.new(d)
                 return output, value
             end)
         end)
-        if not ok then return failed(answer) end
+        if not ok then
+            if answer == LOCK_BUSY then
+                self.busy, busy_frame, cache_frame = true, now, nil
+                return nil, "trade journal lock busy"
+            end
+            return failed(answer)
+        end
+        self.busy, busy_frame = nil, nil
         return answer
     end
     function self:bind(run_id, ot_id)
@@ -283,7 +303,8 @@ function J.new(d)
         return true
     end
     function self:ready()
-        if self.failure or not context then return false end
+        if self.busy then read(true) end
+        if self.failure or self.busy or not context then return false end
         for _, r in ipairs((self.state or {}).records or {}) do
             if r.binding.rom_sha1 == d.rom_sha1 and r.binding.player == d.player and not same(r.binding,context) then
                 return false
@@ -294,14 +315,16 @@ function J.new(d)
     function self:unbind() context = nil; self.allowed, self.qualified = {}, {} end
     function self:lease_open(value, epoch)
         local s = read(true)
-        if not s then return false end
+        if not s then return false, self.failure or (self.busy and "trade journal lock busy") end
         for _, r in ipairs(s.records) do
             if same(r.binding,context) and r.token == value and r.epoch == epoch then return r.final == "" end
         end
         return false
     end
     function self:allocate()
-        if not self:ready() then return nil, self.failure or "run identity not bound" end
+        if not self:ready() then
+            return nil, self.failure or (self.busy and "trade journal lock busy") or "run identity not bound"
+        end
         return update(function(s)
             local next_value, why = J.next_epoch(s.counter)
             assert(next_value,why)
@@ -311,8 +334,9 @@ function J.new(d)
     end
     function self:arm(value, epoch)
         if not text(value,256) then return nil, "token must be nonempty printable ASCII (max 256 bytes)" end
-        if not self:ready() or not integer(epoch,1,U32) then
-            return nil, self.failure or "invalid write-ahead lease"
+        if not integer(epoch,1,U32) then return nil, "invalid write-ahead lease" end
+        if not self:ready() then
+            return nil, self.failure or (self.busy and "trade journal lock busy") or "invalid write-ahead lease"
         end
         epoch = math.tointeger(epoch)
         return update(function(s)
@@ -378,11 +402,20 @@ function J.new(d)
     end
     local function allow(value, epoch)
         local s = read()
-        if not s then return nil, self.failure end
+        if not s then return nil, self.failure or (self.busy and "trade journal lock busy") end
         for _, r in ipairs(s.records) do
             if same(r.binding,context) and r.token == value and r.epoch == epoch then
-                self.allowed[record_id(r)] = true
-                if r.final ~= "" then return self:final(value,epoch,r.final) end
+                local id = record_id(r)
+                if r.final ~= "" then
+                    -- The terminal write may contend after this read. Do not expose the party
+                    -- until that retirement is durably committed under its own guard hold.
+                    local was_allowed = self.allowed[id]
+                    self.allowed[id] = true
+                    local ok, why = self:final(value,epoch,r.final)
+                    if ok ~= true then self.allowed[id] = was_allowed; return ok, why end
+                    return true
+                end
+                self.allowed[id] = true
                 return true
             end
         end

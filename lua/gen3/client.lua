@@ -93,6 +93,7 @@ function Client.new(p)
     local trade
     local journal = io.trade_journal
     local trade_run_id, trade_run_ot
+    local pending_trade_finals = {}
     local awaiting_trade_run = journal and not journal:ready() or false
     local reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
     local owed = p.owed_reports and p.owed_reports.new() or nil
@@ -1673,9 +1674,16 @@ function Client.new(p)
         return true
     end
     C.trade_final = function(cmd)
-        if journal and (awaiting_trade_run or not journal:ready()) then return true end
-        if trade then trade:server_final(cmd)
-        elseif journal then journal:final(cmd.token,cmd.epoch,cmd.verdict) end
+        if journal and (awaiting_trade_run or (not journal:ready() and not journal.busy)) then return true end
+        local ok, why
+        if trade then ok, why = trade:server_final(cmd)
+        elseif journal then ok, why = journal:final(cmd.token,cmd.epoch,cmd.verdict) end
+        if why == "trade journal lock busy" then
+            pending_trade_finals[#pending_trade_finals+1] = {
+                token=cmd.token, epoch=cmd.epoch, verdict=cmd.verdict,
+                run_id=trade_run_id, ot_id=trade_run_ot,
+            }
+        end
         return true
     end
     drv.after_receive = function()
@@ -1867,6 +1875,18 @@ function Client.new(p)
     end
     local trade_frame
     drv.pre_pump = function()
+        local pending = pending_trade_finals[1]
+        if pending and p.net.connected() and not awaiting_trade_run then
+            if pending.run_id ~= trade_run_id or pending.ot_id ~= trade_run_ot then
+                table.remove(pending_trade_finals,1) -- a different run cannot inherit this final
+                log("pending trade_final discarded: server run/trainer binding changed")
+            elseif journal and (journal:ready() or journal.busy) then
+                local _, why
+                if trade then _, why = trade:server_final(pending)
+                else _, why = journal:final(pending.token,pending.epoch,pending.verdict) end
+                if why ~= "trade journal lock busy" then table.remove(pending_trade_finals,1) end
+            end
+        end
         if owed then owed:step(p.net.connected(), false, send) end
         if trade_frame and io.framecount() < trade_frame then
             if trade then trade:reset(); sync_trade() end

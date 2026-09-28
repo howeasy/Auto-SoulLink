@@ -553,6 +553,19 @@ SCENARIOS = {
     "trade_decline_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",), "target": "battle2",
                            "frames": 2500000, "scenario_module": "trade",
                            "oracle": "assert_trade_decline_gen3_saved"},
+    # RR physical durability: native pre-save/commit interruption and native-success
+    # cold reload. The FINAL phase has no save; the initial phase's native save(s) are
+    # checked separately against immutable battery/journal copies by the reset oracle.
+    "trade_reset_commit_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
+                                 "target": "battle2", "frames": 2500000, "explicit_only": True,
+                                 "rr_reset_trade": True, "reset_case": "commit",
+                                 "scenario_module": "trade_reset", "no_save": ("a", "b"),
+                                 "oracle": "assert_rr_trade_reset_saved"},
+    "trade_reset_success_gen3": {"flags": [], "timeout": 1800, "games": ("gen3_rr",),
+                                  "target": "battle2", "frames": 2500000, "explicit_only": True,
+                                  "rr_reset_trade": True, "reset_case": "success",
+                                  "scenario_module": "trade_reset", "no_save": ("a", "b"),
+                                  "oracle": "assert_rr_trade_reset_saved"},
     "infopanel_gen3": {"flags": [], "timeout": 600, "games": ("gen3_rr",), "target": "town",
                        "frames": 900000, "no_save": ("a", "b"),
                        "oracle": "assert_infopanel_gen3_saved"},
@@ -1004,7 +1017,7 @@ def jitter_problems(text, expected_requested):
 # and the post-result oracle refuses to describe a save that leg never produced.
 GEN2_CLAUSE_SCENARIOS = ("gen2_type_clause", "gen2_gender_clause", "gen2_species_clause")
 LIVE_LEG_SCENARIOS = ("reconnect_new", "admit_randomized_new", "gen2_reconnect", "gen2_soft_reset",
-                      "reconnect_gen3")
+                      "reconnect_gen3", "trade_reset_commit_gen3", "trade_reset_success_gen3")
 
 RECONNECT_GAMEPLAY_EVENTS = ("capture", "linked", "no_catch", "dead_zone")
 
@@ -2380,6 +2393,124 @@ def gen3_trade_problems(ka, kb, link_rows, saved, fixture, traded):
     return problems
 
 
+def rr_reset_initial_receipt_problems(receipts, case, keys):
+    """Check named partial/native-success exits before the later cold-reload oracle."""
+    problems = []
+    if case not in ("commit", "success"):
+        return ["unknown RR reset case"]
+    if set(receipts) != {"a", "b"} or set(keys) != {"a", "b"}:
+        return ["RR reset receipts/keys require both players"]
+
+    def marker(inst, label):
+        rows = re.findall(rf"^{re.escape(label)} (\{{.*\}})$", receipts[inst], re.M)
+        if len(rows) != 1:
+            problems.append(f"{inst}: expected exactly one {label}, got {len(rows)}")
+            return None
+        try:
+            row = json.loads(rows[0])
+        except ValueError:
+            problems.append(f"{inst}: malformed {label} JSON")
+            return None
+        if not isinstance(row, dict):
+            problems.append(f"{inst}: {label} is not an object")
+            return None
+        return row
+
+    tokens = []
+    for inst in ("a", "b"):
+        body = receipts[inst]
+        interrupted = case == "commit" and inst == "a"
+        expected_dumps = 1 if interrupted else 2
+        ordinals = [int(row[2]) for row in SAVE_WITNESS_DUMP_RE.findall(body)]
+        if ordinals != list(range(1, expected_dumps + 1)):
+            problems.append(f"{inst}: native save ordinals {ordinals}, expected 1..{expected_dumps}")
+        if re.search(r"^SAVE_WITNESS\s", body, re.M):
+            problems.append(f"{inst}: runner manual SAVE occurred")
+        start = body.find("RX apply_prepare")
+        ready = re.search(r'^TX apply_ready - .*"ok":true', body, re.M)
+        apply = body.find("RX apply_trade")
+        if start < 0 or not ready or apply < 0 or not start < ready.start() < apply:
+            problems.append(f"{inst}: native prepare/ready/apply order missing")
+        if ready and body.find("SAVE_WITNESS_DUMP ") > ready.start():
+            problems.append(f"{inst}: pre-save witness landed after apply_ready")
+        if interrupted:
+            observed = marker(inst, "RESET_COMMIT_ENTERED")
+            exit_row = marker(inst, "RESET_PARTIAL_COMMIT_EXIT")
+            if observed and exit_row and observed != exit_row:
+                problems.append(f"{inst}: partial exit did not bind the commit witness")
+            if observed:
+                if (observed.get("bits") != 3 or observed.get("side") != inst
+                        or observed.get("old_key") != keys[inst]
+                        or observed.get("counter_after") != observed.get("counter_before", -10) + 1
+                        or not all(isinstance(observed.get(k), int) and observed[k] > 0
+                                   for k in ("epoch", "visit", "revision", "pre_seq", "scene_seq"))
+                        or observed["revision"] % 2
+                        or not str(observed.get("witness_path", "")).endswith("_native_witness.bin")):
+                    problems.append(f"{inst}: commit window marker is unbound or post-saved")
+                tokens.append(observed.get("token"))
+            if "TX trade_done " in body or re.search(r"^TRADED\b", body, re.M):
+                problems.append(f"{inst}: interrupted side claimed trade completion")
+            if "RESULT: FAIL (EXPECTED_RESET_PARTIAL_COMMIT)" not in body:
+                problems.append(f"{inst}: no named clean interruption result")
+        else:
+            saved = marker(inst, "RESET_NATIVE_SUCCESS_NO_MANUAL_SAVE")
+            exit_row = marker(inst, "RESET_NATIVE_SUCCESS_EXIT")
+            if saved and exit_row and saved != exit_row:
+                problems.append(f"{inst}: native success exit changed its witness")
+            if saved:
+                partner = keys["b" if inst == "a" else "a"]
+                if (saved.get("bits") != 31 or saved.get("side") != inst
+                        or saved.get("old_key") != keys[inst] or saved.get("new_key") != partner
+                        or saved.get("counter_after") != saved.get("counter_before", -10) + 2
+                        or not str(saved.get("witness_path", "")).endswith("_native_witness.bin")):
+                    problems.append(f"{inst}: native success lacks received/post-save witness")
+                tokens.append(saved.get("token"))
+            if (re.search(r'^TX trade_done - .*"uncertain":true', body, re.M)
+                    or not re.search(r'^TX trade_done - .*"new_key":', body, re.M)):
+                problems.append(f"{inst}: no concrete native trade_done")
+            partner = keys["b" if inst == "a" else "a"]
+            if not re.search(rf"^TRADED gave={re.escape(keys[inst])} got={re.escape(partner)}\b",
+                             body, re.M):
+                problems.append(f"{inst}: received mon was not read back before exit")
+            if "RESULT: FAIL (EXPECTED_NATIVE_SUCCESS_NO_MANUAL_SAVE)" not in body:
+                problems.append(f"{inst}: no named native-success clean exit")
+    if len(tokens) == 2 and (not tokens[0] or tokens[0] != tokens[1]):
+        problems.append("RR reset sides disagree on server trade token")
+    return problems
+
+
+def rr_reset_link_problems(case, keys, staged, initial, final):
+    """The staged pair is the independent pre-trade server baseline."""
+    old = lambda row: (row.get("a") or {}).get("key") == keys["a"] and (row.get("b") or {}).get("key") == keys["b"]  # noqa: E731
+    new = lambda row: (row.get("a") or {}).get("key") == keys["b"] and (row.get("b") or {}).get("key") == keys["a"]  # noqa: E731
+    problems = []
+    if sum(old(row) for row in staged) != 1:
+        problems.append("RR reset lacks exactly one staged pre-trade server link")
+    if case == "commit":
+        if initial != staged:
+            problems.append("commit interruption changed persisted links before reload")
+        if final != staged:
+            problems.append("commit reload changed persisted links")
+    elif case == "success":
+        if sum(new(row) for row in final) != 1:
+            problems.append("native-success reset lacks persisted server re-key")
+    else:
+        problems.append("unknown RR reset link case")
+    return problems
+
+
+def rr_reset_pending_problems(case, token, document):
+    """Require the server to persist receipt of the uncertain after-reset report."""
+    pending = (document or {}).get("pending_trade") or {}
+    if case == "success":
+        return ["native-success reset left a pending server trade"] if pending else []
+    if (pending.get("token") != token or pending.get("phase") != "uncertain"
+            or (pending.get("hello_only") or {}).get("a") is not True
+            or (pending.get("verdict") or {}).get("a") != "await"):
+        return ["server did not persist A's token-bound hello-only uncertainty"]
+    return []
+
+
 def gen3_trade_chain(inst, ka, kb, decline):
     """(required, ordered, forbidden) receipt regexes for one side of the NPC trade (RR-DURABLE):
     the server's native menus, then on YES the durable round on BOTH sides -- apply_prepare ->
@@ -3732,7 +3863,7 @@ class DuoRun:
         which is what actually prevents a crashed run's save leaking into the next one. Do not
         weaken that copy on the assumption this directory is fresh; it isn't.
         """
-        if self.cfg.get("cold_boot") or self.cfg.get("gen3_native_trade"):
+        if self.cfg.get("cold_boot") or self.cfg.get("gen3_native_trade") or self.cfg.get("rr_reset_trade"):
             # Preserve earlier cold-boot/native-trade batteries, including uncertain saves.
             return os.path.join(self.data_dir, f"saveram_{inst}")
         # Per scenario, instance AND LANE: two lanes on one scenario would otherwise seed and boot
@@ -4077,6 +4208,11 @@ class DuoRun:
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
                     duo[field] = self.cfg[field]
+            if self.cfg.get("rr_reset_trade"):
+                expected = getattr(self, "_rr_reset_expected", {}).get(inst, {})
+                duo.update(reset_case=self.cfg["reset_case"],
+                           expected_token=expected.get("token", ""),
+                           expected_counter=expected.get("counter"))
             if self.cfg.get("rule_kind"):
                 from gen3_clause_rows import own_facts
                 duo.update(rule_kind=self.cfg["rule_kind"], clause_facts=own_facts(self, inst))
@@ -7158,6 +7294,13 @@ class DuoRun:
         return os.path.join(BUILD, f"e2e_{self.artifact_name}_{inst}_result.txt")
 
     def cleanup(self, passed):
+        if self.cfg.get("rr_reset_trade"):
+            live = [p.pid for p in self.emus if p.poll() is None]
+            if live:
+                # A native reset proof permits only a cartridge's own clean client.exit.
+                # Preserve the live PIDs, server and data dir for inspection; no taskkill.
+                raise RuntimeError(f"RR reset clean exit missing for EmuHawk PID(s) {live}; "
+                                   "refusing taskkill")
         for p in self.emus:
             if p.poll() is None:
                 subprocess.run(["taskkill", "/PID", str(p.pid), "/T", "/F"],
@@ -7176,7 +7319,8 @@ class DuoRun:
         if self.cfg.get("gen3_native_trade"):
             self._archive_native_receipts()
         if (passed and not self.args.keep_data and self.scenario not in GEN2_TRADE_SCENARIOS
-                and not self.cfg.get("gen3_rand") and not self.cfg.get("gen3_native_trade")):
+                and not self.cfg.get("gen3_rand") and not self.cfg.get("gen3_native_trade")
+                and not self.cfg.get("rr_reset_trade")):
             shutil.rmtree(self.data_dir, ignore_errors=True)
         else:
             print(f"[duo] data dir kept: {self.data_dir}")
@@ -7857,6 +8001,151 @@ class DuoRun:
         self._live_complete[self.scenario] = True
 
     orchestrate_native_trade_decline_firered = orchestrate_native_trade_firered
+
+    def orchestrate_trade_reset_commit_gen3(self):
+        """Cold boot the same native battery after a clean commit-window exit."""
+        self._gen3_prelude(link_slot=1)
+        keys = dict(self._link_keys)
+        self._rr_reset_links_staged = self._links_json()
+        lines = self._gen3_linked_lines()
+        for inst in "ab":
+            lines[inst].append(f"PARTNER {keys['b' if inst == 'a' else 'a']}")
+        self.go(lines)
+        initial = {}
+        for inst in "ab":
+            initial[inst] = wait_for(
+                f"{inst} named RR reset partial exit",
+                lambda i=inst: self._read_receipt(i) if terminal_result(self._read_receipt(i)) else None,
+                self.cfg["timeout"])
+        problems = rr_reset_initial_receipt_problems(initial, self.cfg["reset_case"], keys)
+        self._gen3_raise(problems, "RR reset initial native phase markers checked")
+        # client.exit is the only flush boundary. Never relaunch on an unexited emulator;
+        # cleanup also refuses to taskkill an RR reset cartridge.
+        for inst in "ab":
+            code = self.emu_by_inst[inst].wait(timeout=30)
+            if code != 0:
+                raise RuntimeError(f"{inst}: RR reset clean exit failed ({code})")
+        self._rr_reset_initial = initial
+        self._rr_reset_before = {inst: self._gen3_flushed(inst) for inst in "ab"}
+        self._rr_reset_links_before = self._links_json()
+        archive = Path(self.data_dir, "rr_reset_initial")
+        archive.mkdir(exist_ok=True)
+        for inst in "ab":
+            (archive / f"{inst}_receipt.txt").write_text(initial[inst], encoding="utf-8")
+            (archive / f"{inst}_battery.bin").write_bytes(self._rr_reset_before[inst])
+            witness = Path(self._witness_path(inst))
+            for source in (witness, witness.with_name(witness.stem + "_ext.bin")):
+                if not source.is_file():
+                    raise RuntimeError(f"{inst}: native save artifact missing at clean exit: {source}")
+                shutil.copy2(source, archive / f"{inst}_{source.name}")
+        (archive / "links.json").write_bytes(self._links_bytes() or b"")
+        for suffix in ("log", "guard"):
+            source = Path(REPO, f"slink_gen3_trade.{suffix}")
+            if not source.is_file():
+                raise RuntimeError(f"RR reset missing durable trade journal {source}")
+            shutil.copy2(source, archive / source.name)
+        self._pydec_note(f"RR_RESET_INITIAL_ARCHIVE {rel_to_repo(archive)} "
+                         + " ".join(f"{i}_sha256={hashlib.sha256(self._rr_reset_before[i]).hexdigest()}"
+                                    for i in "ab"))
+        for inst in "ab":
+            row = re.search(r"^RESET_(?:COMMIT_ENTERED|NATIVE_SUCCESS_NO_MANUAL_SAVE) (\{.*\})$",
+                            initial[inst], re.M)
+            if not row:
+                raise RuntimeError(f"{inst}: missing initial native witness")
+            marker = json.loads(row[1])
+            native = Path(marker["witness_path"])
+            if not native.is_file() or native.stat().st_size != 0x50:
+                raise RuntimeError(f"{inst}: native trade witness missing/short: {native}")
+            shutil.copy2(native, archive / f"{inst}_native_witness.bin")
+            expected = keys[inst] if self.cfg["reset_case"] == "commit" and inst == "a" else keys["b" if inst == "a" else "a"]
+            self._rr_reset_expected = getattr(self, "_rr_reset_expected", {})
+            self._rr_reset_expected[inst] = {"token": marker["token"], "counter": marker["counter_after"]}
+            self.launch_instance(inst, phase="rr_reset_reload", seed=False, expected_key=expected)
+        for inst in "ab":
+            self.wait_for(f"{inst} RR native battery reload", lambda i=inst:
+                          terminal_result(self._read_receipt(i)), 240)
+            if "RESULT: PASS" not in self._read_receipt(inst):
+                raise RuntimeError(f"{inst}: RR cold reload failed")
+        if self.cfg["reset_case"] == "commit":
+            token = self._rr_reset_expected["a"]["token"]
+            wait_for("persisted RR after-reset uncertainty",
+                     lambda: not rr_reset_pending_problems("commit", token,
+                                                           self._reconnect_document()), 30)
+        self._live_complete[self.scenario] = True
+
+    orchestrate_trade_reset_success_gen3 = orchestrate_trade_reset_commit_gen3
+
+    def assert_rr_trade_reset_saved(self, results):
+        """Independent native flash, reload and server outcome at the clean exit boundary."""
+        from tools import gen3_codec as codec
+
+        self._gen3_flush_boundary()
+        problems = []
+        if not self._live_complete.get(self.scenario):
+            problems.append("RR reset cold reload did not complete")
+        keys = self._link_keys
+        case = self.cfg["reset_case"]
+        initial = self._rr_reset_initial
+        problems += rr_reset_initial_receipt_problems(initial, case, keys)
+        problems += rr_reset_link_problems(case, keys, self._rr_reset_links_staged,
+                                           self._rr_reset_links_before, self._links_json())
+        problems += rr_reset_pending_problems(case, self._rr_reset_expected["a"]["token"],
+                                              self._reconnect_document())
+        archive = Path(self.data_dir, "rr_reset_initial")
+        for inst in "ab":
+            before = self._rr_reset_before[inst]
+            flushed = self._gen3_flushed(inst)
+            if codec.split_rtc(before)[0] != codec.split_rtc(flushed)[0]:
+                problems.append(f"{inst}: cold reload changed the native flash body")
+            if (archive / f"{inst}_battery.bin").read_bytes() != before:
+                problems.append(f"{inst}: immutable initial battery archive changed")
+            if (archive / f"{inst}_receipt.txt").read_text(encoding="utf-8") != initial[inst]:
+                problems.append(f"{inst}: immutable initial receipt archive changed")
+            saves = 1 if case == "commit" and inst == "a" else 2
+            path = self._witness_path(inst)
+            if not os.path.isfile(path):
+                problems.append(f"{inst}: initial native save witness missing: {path}")
+                continue
+            try:
+                ext, _ = self._gen3_final_ext(inst, initial[inst], saves, self._started)
+                facts = check_gen3_witness(Path(path).read_bytes(), before,
+                                           self._gen3_fixture_bytes(inst), saves=saves,
+                                           rr=True, ext_ram=ext, title="frlg")
+                if facts["extension"] != "LIVE_RAM_MATCH":
+                    problems.append(f"{inst}: RR extension save not tied to live RAM")
+                self._pydec_note(f"RR_RESET_NATIVE_SAVE side={inst} site={facts['site']} "
+                                 f"battery={facts['file']} counter={facts['counter'][0]}->"
+                                 f"{facts['counter'][1]} saves={saves} extension={facts['extension']}")
+            except (OSError, RuntimeError, ValueError) as exc:
+                problems.append(f"{inst}: native save witness invalid: {exc}")
+            partner = keys["b" if inst == "a" else "a"]
+            expected = keys[inst] if case == "commit" and inst == "a" else partner
+            try:
+                party, _ = gen3_decode(flushed, rr=True, title="frlg")
+                if sum(gen3_key(mon) == expected for mon in party) != 1:
+                    problems.append(f"{inst}: reloaded native party lacks {expected} exactly once")
+            except (ValueError, RuntimeError) as exc:
+                problems.append(f"{inst}: native party decode failed: {exc}")
+            if "SAVE_WITNESS_DUMP " in results[inst]:
+                problems.append(f"{inst}: a game SAVE occurred after cold reload")
+            if not re.search(rf'^RESET_RELOADED .*"key":"{re.escape(expected)}"',
+                             results[inst], re.M):
+                # Marker field order is not a protocol; the Lua side already checks
+                # party/key/counter. Require the marker and inspect its JSON here.
+                rows = re.findall(r"^RESET_RELOADED (\{.*\})$", results[inst], re.M)
+                if len(rows) != 1 or json.loads(rows[0]).get("key") != expected:
+                    problems.append(f"{inst}: cold-reload key witness missing or wrong")
+        if case == "commit":
+            token = self._rr_reset_expected["a"]["token"]
+            if not re.search(r"^RESET_AFTER_RESET (\{.*\})$", results["a"], re.M):
+                problems.append("a: production after_reset marker absent")
+            sent = re.findall(r'^TX trade_done - (\{.*\})$', results["a"], re.M)
+            if not any((item := json.loads(row)).get("token") == token
+                       and item.get("uncertain") is True and item.get("after_reset") is True
+                       for row in sent):
+                problems.append("a: missing production uncertain after_reset trade_done")
+        self._gen3_raise(problems, f"RR {case} native battery/journal archived; cold reload and "
+                                   "independent save/party/server outcome verified")
 
     def _native_trade_problems(self, results):
         from tools import gen3_trade_duo as t5

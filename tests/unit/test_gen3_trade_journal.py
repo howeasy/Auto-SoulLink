@@ -36,7 +36,8 @@ class Files:
         self.fail = None
 
     def lock(self, path):
-        assert not self.held, "concurrent owner"
+        if self.held:
+            return None, False, "busy"
         self.held = True
         fresh = path not in self.files
         self.files.setdefault(path, "")
@@ -154,6 +155,29 @@ def test_server_final_is_bookkeeping_and_never_clears_a_reload_barrier():
     assert obj.hidden(obj) is True and len(obj.outstanding(obj)) == 1
     _, _, restarted = journal(store)
     assert restarted.hidden(restarted) is True
+
+
+def test_busy_final_retirement_cannot_mark_native_save_allowed_early():
+    store = Store()
+    _, _, obj = journal(store, fresh=True)
+    epoch = arm(obj)
+    assert obj.final(obj, "t", epoch, "resolved") is True
+    original = obj.final
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    obj.final = busy_once
+    assert obj.native_saved(obj, "t", epoch)[0] is None
+    assert obj.hidden(obj) is True
+    assert len(obj.state.records) == 1
+    assert obj.native_saved(obj, "t", epoch) is True
+    assert obj.hidden(obj) is False
+    assert len(obj.state.records) == 0
 
 
 def test_independent_writers_allocate_unique_monotonic_epochs():
@@ -277,6 +301,294 @@ def test_disk_store_refuses_missing_torn_or_mismatched_rollback(fault):
         assert other.allocate(other) > epoch
         assert len(other.outstanding(other)) == 1
     assert not files.held
+
+
+@pytest.mark.parametrize("born_under_hold", (False, True))
+def test_shared_guard_contention_recovers_on_next_frame_without_reissuing_epoch(born_under_hold):
+    """A's temporary guard hold must not poison B for the rest of the emulator session."""
+    files = Files()
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    backend = module.file_store(lua.table(json=codec, fs=files.table(lua), path="journal"))
+    frame = [100]
+
+    def client(player):
+        obj = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40,
+                                   player=player, frame=lambda: frame[0]))
+        assert obj.bind(obj, "run-a", "12345678")
+        return obj
+
+    a = client("a")
+    assert a.allocate(a) == 1
+    b = None if born_under_hold else client("b")
+    if b is not None:
+        frame[0] += 1  # the next emulator frame must perform its own exclusive read
+    holder, fresh = files.lock("journal.guard")
+    assert holder and fresh is False
+    if b is None:
+        b = client("b")
+    assert b.hidden(b) is True  # no unverified party may be reported during contention
+    assert b.ready(b) is False  # do not advertise native trade while the guard is unavailable
+    assert b.failure is None, "a transient guard collision must not poison the session"
+    assert b.allocate(b) == (None, "trade journal lock busy")
+    assert files.close(holder)
+    frame[0] += 1
+    assert b.ready(b) is True
+    assert b.hidden(b) is False
+    assert b.allocate(b) == 2
+    assert a.allocate(a) == 3
+    assert files.held is False
+
+
+def test_writer_contention_retries_later_without_spending_an_epoch():
+    files = Files()
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    backend = module.file_store(lua.table(json=codec, fs=files.table(lua), path="journal"))
+    frame = [10]
+    a = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40, player="a",
+                             frame=lambda: frame[0]))
+    assert a.bind(a, "run-a", "12345678")
+    assert a.allocate(a) == 1
+    b = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40, player="b",
+                             frame=lambda: frame[0]))
+    assert b.bind(b, "run-a", "12345678")
+    holder, _ = files.lock("journal.guard")
+    frame[0] += 1
+    assert b.allocate(b) == (None, "trade journal lock busy")
+    assert b.failure is None
+    assert files.close(holder)
+    frame[0] += 1
+    assert b.allocate(b) == 2
+    assert a.allocate(a) == 3
+
+
+def test_real_store_arm_reports_same_frame_busy_then_commits_one_intent_after_release():
+    files = Files()
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    backend = module.file_store(lua.table(json=codec, fs=files.table(lua), path="journal"))
+    frame = [100]
+    a = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40, player="a",
+                             frame=lambda: frame[0]))
+    assert a.bind(a, "run-a", "12345678")
+    assert a.allocate(a) == 1
+    b = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40, player="b",
+                             frame=lambda: frame[0]))
+    assert b.bind(b, "run-a", "12345678")
+    epoch = b.allocate(b)
+    assert epoch == 2
+    holder, _ = files.lock("journal.guard")
+    frame[0] += 1
+    assert b.hidden(b) is True
+    assert b.arm(b, "token", epoch) == (None, "trade journal lock busy")
+    assert files.close(holder)
+    frame[0] += 1
+    assert b.arm(b, "token", epoch) is True
+    assert b.arm(b, "token", epoch) is True  # replay cannot append a second intent
+    assert b.state.counter == 2 and len(b.state.records) == 1
+
+
+def test_busy_precommit_proof_does_not_publish_unchanged_until_retried():
+    world, journal, _ = journaled_trade_world()
+    world.deps.precommit_refusal_reasons = world.lua.table_from({"model_pre_commit_refused": True})
+    world.trade = world.lua.execute((ROOT / "lua/gen3/trade.lua").read_text()).new(world.deps)
+    scene = world.start()
+    original = journal.precommit_unchanged
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.precommit_unchanged = busy_once
+    scene["done"]("native refused", 7, "model_pre_commit_refused")
+    assert not [fields for event, fields in world.events if event == "trade_done"]
+    assert journal.hidden(journal) is True
+    world.tick()
+    assert len(seen) >= 2
+    assert len([fields for event, fields in world.events if event == "trade_done"]) == 1
+    assert journal.hidden(journal) is False
+
+
+def test_permanent_precommit_journal_failure_never_claims_certain_unchanged():
+    world, journal, _ = journaled_trade_world()
+    world.deps.precommit_refusal_reasons = world.lua.table_from({"model_pre_commit_refused": True})
+    world.trade = world.lua.execute((ROOT / "lua/gen3/trade.lua").read_text()).new(world.deps)
+    scene = world.start()
+    journal.precommit_unchanged = lambda *_: (None, "trade journal: durable write failed")
+    scene["done"]("native refused", 7, "model_pre_commit_refused")
+    world.tick()
+    reports = [fields for event, fields in world.events if event == "trade_done"]
+    assert len(reports) == 1 and reports[0].get("uncertain") is True
+    assert journal.hidden(journal) is True
+
+
+def test_saved_result_waiting_on_guard_cannot_commit_in_a_new_session_epoch():
+    world, journal, _ = journaled_trade_world()
+    scene = world.start()
+    original = journal.native_saved
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.native_saved = busy_once
+    world.progress(scene, commit_entered=True, scene_done=True, save_success=True,
+                   final_result="committed")
+    world.received()
+    scene["done"](None, 0, None)
+    assert not [fields for event, fields in world.events if event == "trade_done"]
+    world.epoch += 1
+    world.tick()
+    reports = [fields for event, fields in world.events if event == "trade_done"]
+    assert len(reports) == 1 and reports[0].get("uncertain") is True
+    assert journal.hidden(journal) is True
+
+
+@pytest.mark.parametrize("busy_at_capability", (False, True))
+def test_busy_prepare_allocation_waits_without_refusal_or_duplicate_epoch(busy_at_capability):
+    world, journal, store = journaled_trade_world()
+    original = journal.allocate
+    seen = []
+
+    def busy_once(self):
+        seen.append(True)
+        if len(seen) == 1 and not busy_at_capability:
+            return None, "trade journal lock busy"
+        return original(self)
+
+    journal.allocate = busy_once
+    if busy_at_capability:
+        original_ready = journal.ready
+        journal.busy = True
+        journal.ready = lambda self: False if self.busy else original_ready(self)
+    world.prepare()
+    assert not [fields for event, fields in world.events if event == "apply_ready"]
+    journal.busy = None
+    world.tick()
+    assert len(seen) >= (1 if busy_at_capability else 2)
+    assert [fields for event, fields in world.events if event == "apply_ready"] == [
+        {"token": "t", "ok": True}]
+    assert journal.state.counter == 1 and store.writes == 1
+
+
+def test_busy_prepare_keeps_its_original_deadline_and_never_spends_an_epoch_after_expiry():
+    world, journal, store = journaled_trade_world()
+    journal.allocate = lambda *_: (None, "trade journal lock busy")
+    world.prepare()
+    assert not [fields for event, fields in world.events if event == "apply_ready"]
+    world.frame += world.deps.prepare_frames + 1
+    world.tick()
+    assert [fields for event, fields in world.events if event == "apply_ready"] == [
+        {"token": "t", "ok": False}]
+    assert any("trade journal lock busy" in line for line in world.logs)
+    assert journal.state.counter == 0 and store.writes == 0 and world.jobs == []
+
+
+def test_busy_intent_arm_retries_without_duplicate_native_staging():
+    world, journal, _ = journaled_trade_world()
+    world.prepare()
+    world.command("apply", token="t", old_key=world.rows[0]["key"], slot=0, blob_hex="05" * 100)
+    world.tick()
+    stage = world.jobs[-1]
+    world.dispatch(stage)
+    original = journal.arm
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.arm = busy_once
+    stage["done"](None, 0, None)
+    assert [job["step"] for job in world.jobs] == ["enemy"]
+    assert not [fields for event, fields in world.events if event == "trade_done"]
+    world.tick()
+    assert len(seen) >= 2
+    assert [job["step"] for job in world.jobs] == ["enemy", "scene"]
+    assert journal.state.counter == 1 and len(journal.state.records) == 1
+
+
+def test_scene_guard_retains_unposted_job_only_for_busy_lease_within_deadline():
+    world, journal, _ = journaled_trade_world()
+    scene = world.start()
+    original = journal.lease_open
+    journal.lease_open = lambda *_: (False, "trade journal lock busy")
+    assert scene["valid"]() == (False, "guard:journal_busy", True)
+    assert [job["step"] for job in world.jobs] == ["enemy", "scene"]
+    assert journal.hidden(journal) is True
+    journal.lease_open = original
+    assert scene["valid"]() is True
+    world.frame += world.deps.apply_frames + 1
+    journal.lease_open = lambda *_: (False, "trade journal lock busy")
+    assert scene["valid"]() == (False, "guard:apply_expired")
+
+
+def test_busy_arm_epoch_change_retire_is_certain_only_before_scene_publication():
+    world, journal, _ = journaled_trade_world()
+    world.prepare()
+    world.command("apply", token="t", old_key=world.rows[0]["key"], slot=0, blob_hex="05" * 100)
+    world.tick()
+    stage = world.jobs[-1]
+    world.dispatch(stage)
+    journal.arm = lambda *_: (None, "trade journal lock busy")
+    stage["done"](None, 0, None)
+    assert [job["step"] for job in world.jobs] == ["enemy"]
+    world.epoch += 1
+    world.tick()
+    reports = [fields for event, fields in world.events if event == "trade_done"]
+    assert reports == [{"token": "t", "slot": 0, "new_key": world.rows[0]["key"], "new_species": 0}]
+    assert len(journal.state.records) == 0
+
+
+def test_saved_result_identity_is_latched_before_a_busy_journal_ack():
+    world, journal, _ = journaled_trade_world()
+    scene = world.start()
+    original = journal.native_saved
+    seen = []
+
+    def busy_once(self, *args):
+        seen.append(args)
+        if len(seen) == 1:
+            return None, "trade journal lock busy"
+        return original(self, *args)
+
+    journal.native_saved = busy_once
+    world.progress(scene, commit_entered=True, scene_done=True, save_success=True,
+                   final_result="committed")
+    world.received()
+    scene["done"](None, 0, None)
+    assert not [fields for event, fields in world.events if event == "trade_done"]
+    world.rows[0] = {"key": "later:unrelated", "slot": 0, "species": 1, "hp": 20}
+    world.tick()
+    reports = [fields for event, fields in world.events if event == "trade_done"]
+    assert reports == [{"token": "t", "slot": 0, "new_key": "00000005:00000006", "new_species": 65}]
+    assert journal.hidden(journal) is False
+
+
+def test_unavailable_guard_for_a_non_contention_reason_stays_fail_closed():
+    files = Files()
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    module = lua.execute((ROOT / "lua/gen3/trade_journal.lua").read_text())
+    codec = lua.execute((ROOT / "lua/json_codec.lua").read_text())
+    fs = files.table(lua)
+    fs.lock = lambda _path: (None, False, "denied")
+    backend = module.file_store(lua.table(json=codec, fs=fs, path="journal"))
+    obj = module.new(lua.table(json=codec, store=backend, rom_sha1="a" * 40, player="a"))
+    assert obj.failure is not None
+    assert obj.hidden(obj) is True
+    assert files.files == {}, "an unavailable guard must never create a new journal"
 
 
 def journaled_trade_world():
