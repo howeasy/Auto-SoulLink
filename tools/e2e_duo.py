@@ -40,9 +40,11 @@ import uuid
 from pathlib import Path
 
 if __package__:
+    from . import gen3_expansion_faint_oracle as exp_faint_oracle
     from .duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
     from .gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
 else:
+    import gen3_expansion_faint_oracle as exp_faint_oracle
     from duo_oracle_pipeline import EvidenceContract, run_pipeline, validate_pipeline
     from gen2_trade_lane import SCENARIOS as GEN2_TRADE_SCENARIOS
 
@@ -1932,7 +1934,8 @@ def gen3_last_mon_problems(label, saved, fixture, key, deposited, memorial_box, 
 
 
 def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, limits=None,
-                           battled=False, trained=False, captured=None):
+                           battled=False, trained=False, captured=None,
+                           expansion_hplost_zero=False):
     """`key` left the party for exactly one slot of the memorial box; nothing else moved. The
     memorial record must be valid for the cartridge and, when the fixture carried the mon, keep
     every invariant field of the record it was cut from (friendship only if it `battled`, the
@@ -1954,6 +1957,14 @@ def gen3_memorial_problems(label, saved, fixture, key, memorial_box, rr=False, l
         mutable = (GEN3_RECORD_MUTABLE | (GEN3_ACTIVITY_MUTABLE if battled else set())
                    | (GEN3_TRAINED_MUTABLE if trained else set()))
         now = boxes[where[0]]
+        if was and expansion_hplost_zero:
+            # Expansion BoxPokemon embeds hpLost in `unknown`'s low 14 bits. The engine's
+            # MON_DATA_HP write on the proved B Perish KO makes it maxHP-0; keep both high
+            # bits (including shinyModifier) invariant. This is narrower than ignoring unknown.
+            hp_problems = exp_faint_oracle.memorial_hp_lost_problems(was, now)
+            problems += [f"{label}: {problem}" for problem in hp_problems]
+            if not hp_problems:
+                mutable = mutable | {"unknown"}
         changed = gen3_consumed_ok(gen3_record_diff(was, now, rr, mutable), battled) if was else []
         if was is None:
             # a key the fixture never carried (a catch): compare against its own capture event,
@@ -8864,14 +8875,24 @@ class DuoRun:
                 # experience because this mask never covered A's own natural growth.
                 problems += gen3_memorial_problems(inst, saved, fixture, key, box, rr=self._gen3_rr,
                                                    limits=self._gen3_limits(inst), battled=True,
-                                                   trained=inst == "a" or case == "trainer")
+                                                   trained=inst == "a" or case == "trainer",
+                                                   expansion_hplost_zero=self.game == "gen3_exp" and inst == "b")
                 done = gen3_tx("memorialize_done", key)
                 marks[inst] = ([done], [(done, r"(?m)^SAVE_WITNESS_DUMP ")], [])
-        site = r"(?m)^ENGINE_FAINT_SITE "
         req_a, ord_a, forb_a = marks["a"]
-        problems += gen3_receipt_problems(
-            "a", results["a"], required=[site, gen3_tx("faint", ka), *req_a],
-            ordered=[(site, gen3_tx("faint", ka)), *ord_a], forbidden=[r"(?m)^RX force_", *forb_a])
+        if self.game == "gen3_exp":
+            # The expansion's natural A faint has a raw frame-end party HP0 witness but does
+            # not hit the pinned Cmd_tryfaintmon completion site. B's P+H path below still
+            # requires that engine site, counter increment and independent save readback.
+            problems += exp_faint_oracle.natural_faint_receipt_problems(results["a"], ka)
+            problems += gen3_receipt_problems("a", results["a"],
+                                             required=[gen3_tx("faint", ka), *req_a],
+                                             ordered=ord_a, forbidden=[r"(?m)^RX force_", *forb_a])
+        else:
+            site = r"(?m)^ENGINE_FAINT_SITE "
+            problems += gen3_receipt_problems(
+                "a", results["a"], required=[site, gen3_tx("faint", ka), *req_a],
+                ordered=[(site, gen3_tx("faint", ka)), *ord_a], forbidden=[r"(?m)^RX force_", *forb_a])
         required, ordered, forbidden = active_faint_chain(kb, case)
         req_b, ord_b, forb_b = marks["b"]
         problems += gen3_receipt_problems("b", results["b"], required=required + req_b,
