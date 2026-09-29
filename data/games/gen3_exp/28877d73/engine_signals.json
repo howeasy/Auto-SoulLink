@@ -48,8 +48,9 @@
       "status": "PINNED_SOURCE_ONLY"
     },
     "pc_deposit": {
-      "reason": "TryStorePartyMonInBox is absent from .sym (src/pokemon_storage_system.c:6491); compiler-inlined caller-site proof remains OPEN.",
-      "status": "OPEN"
+      "capture_contract": "State 1, chosen box<14 and free slot<30: inlined TryStorePartyMonInBox joins here after SetPlacedMonData and party-icon destruction or moving-flag clear. R7 chosen box, R4 first free slot, R5=&sStorage; successful deposit only. Distinguish moved-mon origin using sIsMonBeingMoved before the call, and do not duplicate pc_box_place.",
+      "source": "src/pokemon_storage_system.c:2843-2880,6492-6517",
+      "status": "PINNED_SOURCE_ONLY"
     },
     "pc_move": {
       "capture_contract": "Common epilogue: R0 allocation result, R8 source mon, R7 box/R5 slot only on success. Acquisition-to-storage, not every PC menu operation.",
@@ -57,12 +58,14 @@
       "status": "PINNED_SOURCE_ONLY"
     },
     "pc_release": {
-      "reason": "ReleaseMon is absent from .sym; post-PurgeMonOrBoxMon caller-site proof remains OPEN.",
-      "status": "OPEN"
+      "capture_contract": "State 3 common continuation after inlined party ZeroMonData or box ZeroBoxMonAt and optional AddBagItem; R5=&sStorage. Emit only with a matching pc_release_begin snapshot, because the moved-mon flag-clear path also joins here. Resolve identity from that snapshot, never from cleared storage.",
+      "source": "src/pokemon_storage_system.c:2954-2958,6552-6582",
+      "status": "PINNED_SOURCE_ONLY"
     },
     "pc_release_begin": {
-      "reason": "ReleaseMon is absent from .sym; pre-removal identity capture at a caller remains OPEN (src/pokemon_storage_system.c ReleaseMon).",
-      "status": "OPEN"
+      "capture_contract": "State 3 after DestroyReleaseMonIcon and the moved-mon bypass: R5=&sStorage; snapshot sCursorArea/sCursorPosition and pre-removal mon identity now. Party area selects boxId=TOTAL_BOXES_COUNT; box area selects StorageGetCurrentBox. Pair with pc_release; no snapshot is emitted for moved-mon flag clear.",
+      "source": "src/pokemon_storage_system.c:2908-2958,6552-6582",
+      "status": "PINNED_SOURCE_ONLY"
     },
     "pc_withdraw": {
       "capture_contract": "Party branch after SetMonFormPSS: R5==14, R6 slot, R4 party mon. Correlate moving-mon origin; placement can also be a party rearrangement.",
@@ -108,7 +111,7 @@
   "live_verified": false,
   "pack": "gen3_exp",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "f7db717c0364829855ff3b9cc8762672e4b57ceb4bc0dfe9ee7a59697e00bc72",
+  "sha256": "bd0bba7e9f719de60bbfb9e00f83aa57b40a0f5ec8e6115a3efde0ef23ab8a9d",
   "source": {
     "facts_sha256": "9f3691e0d7439f1947428101c2e0d0b50d08725d72711a30155766268becc4bf",
     "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
@@ -395,6 +398,38 @@
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:6464-6468",
               "symbol": "SetPlacedMonData"
             },
+            "pc_deposit": {
+              "address": 136127454,
+              "capture_contract": "State 1, chosen box<14 and free slot<30: inlined TryStorePartyMonInBox joins here after SetPlacedMonData and party-icon destruction or moving-flag clear. R7 chosen box, R4 first free slot, R5=&sStorage; successful deposit only. Distinguish moved-mon origin using sIsMonBeingMoved before the call, and do not duplicate pc_box_place.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5D6464F464646874DC0B52A681378",
+                "rom_offset": 1909364
+              },
+              "expected_hex": "00236B7143461B681B78BB4253D02A68",
+              "function": {
+                "address": 136127092,
+                "anchor_offset": 362,
+                "capture_offset": 366,
+                "line": 12752,
+                "size": 636,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "Task_DepositMenu",
+                "symbol_source": "build:pokemon.sym:12752",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R4",
+                "R5",
+                "R7",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1909726,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:2843-2880,6492-6517",
+              "symbol": "Task_DepositMenu"
+            },
             "pc_move": {
               "address": 136043888,
               "capture_contract": "Common epilogue: R0 allocation result, R8 source mon, R7 box/R5 slot only on success. Acquisition-to-storage, not every PC menu operation.",
@@ -427,6 +462,66 @@
               "rom_offset": 1826160,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon.c:2963",
               "symbol": "CopyMonToPC"
+            },
+            "pc_release": {
+              "address": 136128104,
+              "capture_contract": "State 3 common continuation after inlined party ZeroMonData or box ZeroBoxMonAt and optional AddBagItem; R5=&sStorage. Emit only with a matching pc_release_begin snapshot, because the moved-mon flag-clear path also joins here. Resolve identity from that snapshot, never from cleared storage.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5D6464F464646BA4D2A681378C0B5",
+                "rom_offset": 1910000
+              },
+              "expected_hex": "91F7C2FAF9F7EEFAF9F70EFC0A204AE7",
+              "function": {
+                "address": 136127728,
+                "anchor_offset": 376,
+                "capture_offset": 380,
+                "line": 12753,
+                "size": 1532,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "Task_ReleaseMon",
+                "symbol_source": "build:pokemon.sym:12753",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1910376,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:2954-2958,6552-6582",
+              "symbol": "Task_ReleaseMon"
+            },
+            "pc_release_begin": {
+              "address": 136127974,
+              "capture_contract": "State 3 after DestroyReleaseMonIcon and the moved-mon bypass: R5=&sStorage; snapshot sCursorArea/sCursorPosition and pre-removal mon identity now. Party area selects boxId=TOTAL_BOXES_COUNT; box area selects StorageGetCurrentBox. Pair with pc_release; no snapshot is emitted for moved-mon flag clear.",
+              "capture_offset": 4,
+              "context": {
+                "expected_hex": "F0B5D6464F464646BA4D2A681378C0B5",
+                "rom_offset": 1910000
+              },
+              "expected_hex": "00D0E9E0042118226956AA56012900D1",
+              "function": {
+                "address": 136127728,
+                "anchor_offset": 246,
+                "capture_offset": 250,
+                "line": 12753,
+                "size": 1532,
+                "size_evidence": "verified_build_symbol",
+                "symbol": "Task_ReleaseMon",
+                "symbol_source": "build:pokemon.sym:12753",
+                "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+              },
+              "mode": "thumb",
+              "point": [
+                "R5",
+                "R15",
+                "CPSR"
+              ],
+              "rom_offset": 1910246,
+              "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:2908-2958,6552-6582",
+              "symbol": "Task_ReleaseMon"
             },
             "pc_withdraw": {
               "address": 136104058,

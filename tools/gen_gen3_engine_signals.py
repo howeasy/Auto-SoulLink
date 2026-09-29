@@ -1384,12 +1384,14 @@ EXPANSION_BINDINGS = {
         "Party branch after SetMonFormPSS: R5==14, R6 slot, R4 party mon. Correlate moving-mon origin; placement can also be a party rearrangement."),
     "pc_box_place": ("SetPlacedMonData", 0x5A, "src/pokemon_storage_system.c:6464-6468", ["R5", "R6", "R15", "CPSR"],
         "Box branch after SetMonFormPSS: R5==5*box ID, R6 slot. Require box<14/slot<30 and correlate origin; do not duplicate deposit."),
+    "pc_deposit": ("Task_DepositMenu", 0x16E, "src/pokemon_storage_system.c:2843-2880,6492-6517", ["R4", "R5", "R7", "R15", "CPSR"],
+        "State 1, chosen box<14 and free slot<30: inlined TryStorePartyMonInBox joins here after SetPlacedMonData and party-icon destruction or moving-flag clear. R7 chosen box, R4 first free slot, R5=&sStorage; successful deposit only. Distinguish moved-mon origin using sIsMonBeingMoved before the call, and do not duplicate pc_box_place."),
+    "pc_release_begin": ("Task_ReleaseMon", 0xFA, "src/pokemon_storage_system.c:2908-2958,6552-6582", ["R5", "R15", "CPSR"],
+        "State 3 after DestroyReleaseMonIcon and the moved-mon bypass: R5=&sStorage; snapshot sCursorArea/sCursorPosition and pre-removal mon identity now. Party area selects boxId=TOTAL_BOXES_COUNT; box area selects StorageGetCurrentBox. Pair with pc_release; no snapshot is emitted for moved-mon flag clear."),
+    "pc_release": ("Task_ReleaseMon", 0x17C, "src/pokemon_storage_system.c:2954-2958,6552-6582", ["R5", "R15", "CPSR"],
+        "State 3 common continuation after inlined party ZeroMonData or box ZeroBoxMonAt and optional AddBagItem; R5=&sStorage. Emit only with a matching pc_release_begin snapshot, because the moved-mon flag-clear path also joins here. Resolve identity from that snapshot, never from cleared storage."),
 }
-EXPANSION_OPEN = {
-    "pc_deposit": "TryStorePartyMonInBox is absent from .sym (src/pokemon_storage_system.c:6491); compiler-inlined caller-site proof remains OPEN.",
-    "pc_release_begin": "ReleaseMon is absent from .sym; pre-removal identity capture at a caller remains OPEN (src/pokemon_storage_system.c ReleaseMon).",
-    "pc_release": "ReleaseMon is absent from .sym; post-PurgeMonOrBoxMon caller-site proof remains OPEN.",
-}
+EXPANSION_OPEN = {}
 
 
 def build_expansion(context):

@@ -91,9 +91,8 @@ def test_every_engine_and_checkpoint_pin_matches_rom(context):
     pack = read("engine_signals.json")
     assert pack["live_verified"] is False
     sites = pack["titles"][TITLE]["artifacts"]["clean"]["sites"]
-    assert len(sites) == 18
-    assert {kind for kind, row in pack["inventory"].items() if row["status"] == "OPEN"} == {
-        "pc_deposit", "pc_release_begin", "pc_release"}
+    assert len(sites) == 21
+    assert {kind for kind, row in pack["inventory"].items() if row["status"] == "OPEN"} == set()
     for kind, row in sites.items():
         data = bytes.fromhex(row["expected_hex"])
         offset = row["rom_offset"]
@@ -109,6 +108,35 @@ def test_every_engine_and_checkpoint_pin_matches_rom(context):
     for row in read("write_checkpoint.json")[TITLE]["anchors"].values():
         data = bytes.fromhex(row["expected_hex"]["clean"])
         assert context["rom"][row["rom_offset"]:row["rom_offset"] + len(data)] == data
+
+
+def test_inlined_pc_sites_have_proven_caller_contracts(context):
+    pack = signals.build_expansion(context)
+    sites = pack["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    expected = {
+        "pc_deposit": ("Task_DepositMenu", 0x16E, {"R4", "R5", "R7", "R15", "CPSR"}),
+        "pc_release_begin": ("Task_ReleaseMon", 0xFA, {"R5", "R15", "CPSR"}),
+        "pc_release": ("Task_ReleaseMon", 0x17C, {"R5", "R15", "CPSR"}),
+    }
+    for kind, (symbol, capture, registers) in expected.items():
+        row = sites[kind]
+        fn = profile.expansion_symbol(context, symbol)
+        assert pack["inventory"][kind]["status"] == "PINNED_SOURCE_ONLY"
+        assert row["symbol"] == symbol
+        assert row["address"] + row["capture_offset"] == fn["address"] + capture
+        assert set(row["point"]) == registers
+        anchor = bytes.fromhex(row["expected_hex"])
+        assert pins.find_offsets(context["rom"], anchor) == [row["rom_offset"]]
+        assert row["capture_offset"] in pins.instruction_offsets(anchor, "thumb")
+        body = bytes.fromhex(row["context"]["expected_hex"])
+        assert context["rom"][fn["address"] - pins.ROM_BASE:fn["address"] - pins.ROM_BASE + 16] == body
+
+    changed = dict(context)
+    bad = bytearray(context["rom"])
+    bad[profile.expansion_symbol(context, "Task_ReleaseMon")["address"] - pins.ROM_BASE] ^= 1
+    changed["rom"] = bytes(bad)
+    with pytest.raises(ValueError, match="identity mismatch"):
+        signals.build_expansion(changed)
 
 
 def test_wrong_rom_cannot_generate_pins(context):
