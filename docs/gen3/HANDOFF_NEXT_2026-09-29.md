@@ -63,19 +63,18 @@ None touches trade, durable, reconnect, counter or journal work. These are all v
 
 Unrouted and refused server-side. XG3 is open and shinyModifier ships as a known limit (ruling 38, carried in X4). Details are in `CLOSEOUT_RUNBOOK.md` section 2b and `docs/gen3_resume.md` checkpoint 24. It must never delay the core cut or change production routing.
 
-## 6. Cleanup status (owner-run script, 2026-09-29)
+## 6. Cleanup status (DONE 2026-09-29, owner ran the script)
 
-The owner ran `cleanup.py --go` on the worktrees. It was still mid-run at the time of writing (115 -> 73 worktrees; branches not yet deleted).
-- **Check the result:** `C:/slink-wt-archive/cleanup_run.json` (the per-worktree and per-branch outcome), `git worktree list | wc -l`, `git branch | wc -l`.
-- **Kept on purpose:** `g3-int`, `rv-land`, `g3-lane`, `g3-lane-master`, plus other lanes' trees (Gen 2 `codex/gen2-foundation`, Gen 4, the emerald-support-planning tree, this session's tree, the main checkout).
-- **Recoverable:** unreachable tips are tagged `archive/gen3-wt/*` and `archive/gen3-br/*`. Dirty trees' diffs are in `C:/slink-wt-archive/patches/`.
-- **Left for a follow-up sweep:**
+- **Result:** 97 of 97 worktrees and 116 of 116 branches removed, no errors (`C:/slink-wt-archive/cleanup_run.json`). Worktrees 115 -> 18, local branches 130 -> 14, C: free space 45 GB -> 85 GB.
+- **Kept, Gen 3:** `g3-int`, `rv-land`, `g3-lane`, `g3-lane-master` (hold until the owner closes the RC). Tips unchanged: integration `742d5934`, landing-prep `38c68769`, master `abc6bf28`.
+- **Kept, other lanes (never touch):** Gen 2 (`codex/gen2-foundation`, `omp/gen2-*` branches, `Temp/g2omp`), Gen 4, emerald-support-planning, `claude/ui-board-ambiguous`, this planning session's tree, the main checkout.
+- **Recoverable:** 29 tips not reachable from a kept ref were tagged `archive/gen3-wt/*` and `archive/gen3-br/*` (108 `archive/*` tags in total). The 5 dirty trees' diffs are in `C:/slink-wt-archive/patches/`: `core-hud-red`, `g3-rival-rezero` (touches `lua/core/session.lua`, `lua/gen3/client.lua`), `g3-t5-fr-duo`, `g3-uiq`, `o-rrrand`. If something looks missing, look there first.
+- **Still open (follow-up sweep):**
   - about 217 loose logs and scripts in the root of `C:/slink-wt`. Commit anything that is a needed receipt, delete the rest;
   - the `g3-lane*-state` directories;
-  - the Temp worktrees `fs1`-`fs4`, `g2unprov`, `g2unprov2` and `uiamb` (look like Gen 2's, so ask Gen 2 first);
+  - Temp worktrees `fs1`-`fs4`, `g2unprov`, `g2unprov2`, `uiamb` (look like Gen 2's, so ask Gen 2 before removing);
   - the 3 untracked `docs/gen3/probes/checkpoint_{fr,lg,emerald}_clean_5a67e3f6.txt` in `g3-int`: inspect them and commit by path if they are real receipts;
-  - the `g3-lane`/`g3-lane-master` worktrees, once the owner closes the RC.
-- Then update `RC_MASTER_GUIDE.md` and `WORKTREE_REGISTER.md`. The register was not updated during this cleanup.
+  - `g3-lane` and `g3-lane-master` once the owner closes the RC.
 
 ## 7. Owner actions still open
 
