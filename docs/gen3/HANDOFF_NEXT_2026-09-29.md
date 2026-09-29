@@ -76,6 +76,22 @@ Unrouted and refused server-side. XG3 is open and shinyModifier ships as a known
   - the 3 untracked `docs/gen3/probes/checkpoint_{fr,lg,emerald}_clean_5a67e3f6.txt` in `g3-int`: inspect them and commit by path if they are real receipts;
   - `g3-lane` and `g3-lane-master` once the owner closes the RC.
 
+## 6b. Gate inputs repaired after the cleanup (2026-09-29, owner approved the downloads)
+
+The worktree cleanup deleted two gitignored inputs that lived only inside removed trees (`g3-xc4`, `em-t3`). Both are re-provisioned in STABLE places, outside any worktree, so a future cleanup cannot take them again:
+
+| Input | Now at | Notes |
+|---|---|---|
+| Pinned expansion source (`rh-hideout/pokeemerald-expansion` @ `e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7`) | `C:/slink-cache/expansion/e8bd1cd7...` | shallow fetch of the pin. `trainerproc` built and `src/data/trainers.h` GENERATED with the source's own rule (`cpp -iquote include -iquote . -Wno-trigraphs -DMODERN=1 -DTESTING=0 -DEMERALD -std=gnu17 -traditional-cpp - < src/data/trainers.party | trainerproc -o src/data/trainers.h -i src/data/trainers.party -`, w64devkit on PATH). The trainer-set tests need that generated file. |
+| `.cache/expansion-src` junctions | `g3-int`, `rv-land`, `g3-lane` -> the source above | recreate with `cmd /c mklink /J` from Python (no spaces in the target) |
+| JDK 17 (Temurin 17.0.20.1+1, sha256-verified by `_build_tools_bootstrap.ensure_jdk`) | `E:/Google Drive/SLink/.cache/build-tools/jdk-17/jdk-17.0.20.1+1/bin` | run `ensure_jdk` from the MAIN checkout so it lands in the shared cache |
+| pret clones for `g3-int` | `.cache/pret/{pokeemerald,pokefirered,pokecrystal}` = junctions to `E:/Google Drive/SLink/.cache/pret/*`; `pokered`/`pokeyellow` are real copies | the Emerald explode-bind and write-checkpoint tests need the full pokeemerald history at c65e93f2 |
+
+`C:/slink-wt/g3-env.sh` (outside the repo) now points `SLINK_EXPANSION_SRC` and `SLINK_JDK_BIN` at these. Verified: expansion, trainer-set, explode-bind, write-checkpoint and randomizer/JDK unit files pass with no skips (190 + 363). Full-suite result: see the guide's `cleanup_ledger`.
+
+**Lesson (also in memory):** before removing a worktree, check what KEPT trees and env scripts point INTO it (junction targets, `g3-env.sh` paths). Never park a shared input inside a worktree; put it under `C:/slink-cache/` or the main checkout's `.cache/`.
+
+
 ## 7. Owner actions still open
 
 - Kill the 3 orphaned `server.server` processes (the auto-mode classifier blocked the agent):
