@@ -105,6 +105,10 @@ window.SLinkCalc = (function () {
   function _calcMove(gen, atk, def, moveName, field) {
     try {
       var move = new window.calc.Move(gen, moveName, { ability: atk.ability, item: atk.item, species: atk.name });
+      // Unknown names can construct a Move with no type instead of throwing. Never
+      // present that failed lookup as an immunity or silently lose an occupied slot.
+      if (!move.type) return { label: 'Unavailable' };
+      if (move.category === 'Status') return { label: 'Status' };
       var dmg = window.calc.calculate(gen, atk, def, move, field).damage;
       var lo, hi;
       if (typeof dmg === 'number') { lo = hi = dmg; }
@@ -112,7 +116,7 @@ window.SLinkCalc = (function () {
         lo = _sum(dmg.map(function (h) { return h[0]; }));
         hi = _sum(dmg.map(function (h) { return h[h.length - 1]; }));
       } else { lo = dmg[0]; hi = dmg[dmg.length - 1]; }
-      if (!hi) return null;  // status moves and immunities
+      if (!Number.isFinite(lo) || !Number.isFinite(hi)) return { label: 'Unavailable' };
       var max = def.maxHP() || 1, cur = def.curHP() || max;
       return {
         lo: Math.round(lo / max * 1000) / 10,
@@ -120,7 +124,7 @@ window.SLinkCalc = (function () {
         ohko: lo >= cur,
         twoHko: lo * 2 >= cur && lo < cur,
       };
-    } catch (e) { return null; }
+    } catch (e) { return { label: 'Unavailable' }; }
   }
 
   // Update in place: hiding first and rebuilding every poll made the box flash on each HP
@@ -186,10 +190,9 @@ window.SLinkCalc = (function () {
       var rows = '';
       moves.forEach(function (m) {
         var r = _calcMove(gen, attacker, defender, m, field);
-        if (!r) return;
         var cls = r.ohko ? 'ohko' : (r.twoHko ? 'twohko' : '');
         rows += '<tr><td>' + _esc(m) + '</td>'
-          + '<td class="' + cls + '">' + r.lo + '–' + r.hi + '%</td>'
+          + '<td class="' + cls + '">' + (r.label || r.lo + '–' + r.hi + '%') + '</td>'
           + '<td class="' + cls + '">' + (r.ohko ? 'OHKO' : (r.twoHko ? '2HKO' : '')) + '</td></tr>';
       });
       if (!rows) return;

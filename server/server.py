@@ -4996,8 +4996,20 @@ class SLinkServer:
 
     def _journal_trade(self, rec: dict) -> None:
         """events.json: one trade_<outcome> entry per native-trade outcome; key = the trade token."""
+        names = []
+        for pid, partner in (("a", "b"), ("b", "a")):
+            # Commit is published after the link swap and trade evolution, before the
+            # next party tick. Resolve the received identity from the updated link;
+            # the display caches can still describe its pre-trade species/holder.
+            key = ((rec.get(f"{pid}_new") or rec[f"{partner}_key"])
+                   if rec["outcome"] == "committed" else rec[f"{pid}_key"])
+            entry = self.state.entry_for(pid, key)
+            mon = entry and getattr(entry, pid)
+            name = ((mon.nickname or self.adapter_for(pid).species_name(mon.species))
+                    if mon and mon.key == key else "")
+            names.append(name or self._mon_display_name(pid, key))
         self._log_event("", f"trade_{rec['outcome']}",
-                        f"{rec['a_key']} <-> {rec['b_key']}: {rec['verdict']} {rec['problem']}".strip(),
+                        f"{names[0]} <-> {names[1]}: {rec['verdict']} {rec['problem']}".strip(),
                         key=rec["token"])
 
     def _presentation_key_in_use(self, key: str, player_id: str | None = None,

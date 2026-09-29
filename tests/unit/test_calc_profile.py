@@ -44,7 +44,8 @@ def test_purergb_adapter_calc_profile_is_its_own_dex():
     # Gen1PureRGBAdapter subclasses Gen1Adapter; it must not inherit the vanilla dex/sets.
     from server.adapters.gen1_purergb import Gen1PureRGBAdapter
     assert Gen1PureRGBAdapter().calc_profile() == {
-        "gen": 1, "dex": "purergb", "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
+        "gen": 1, "dex": "purergb", "name": "pureRGB",
+        "sets": {"file": "PureRGB.js", "var": "CUSTOMSETDEX_PURERGB"}}
 
 
 def test_base_default_calc_profile_is_none():

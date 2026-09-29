@@ -4,9 +4,9 @@
 ; D returns 0=completed, 1=refused before mutation, 2=uncertain append failure.
 ; A mirrors D on direct return; Bankswitch preserves D/flags but replaces A and BC.
 ;
-; Home-bank routines are plain `call`s; the four routines that live in other banks
+; Home-bank routines are plain `call`s; routines that live in other banks
 ; (InternalClockTradeAnim, TryEvolvingMon, InGameTrade_RestoreScreen, RedrawMapView,
-; SaveGameData) go through `farcall`, with the bank resolved by the linker
+; InitMapSprites, SaveGameData) go through `farcall`, with the bank resolved by the linker
 ; (TryEvolvingMon is bank $2C in pureRGB, not vanilla's $0E: the linker, not a constant).
 
 ; 191 entries: internal ids $00-$BE (pureRGB has 190 real records; index 0 is never a species).
@@ -107,6 +107,10 @@ SlinkTradeApply::
 	push af
 	ldh a, [hWY]
 	push af
+	; The first screen restore loads player graphics with tile animations disabled,
+	; which changes surfing/lava-suit players to walking. Retain the native mode.
+	ld a, [wWalkBikeSurfState]
+	push af
 	xor a
 	ldh [hTileAnimations], a
 	call SaveScreenTilesToBuffer2
@@ -195,6 +199,8 @@ SlinkTradeApply::
 	ld d, 2
 .restore
 	pop af
+	ld [wWalkBikeSurfState], a
+	pop af
 	ldh [hWY], a
 	pop af
 	ldh [hTileAnimations], a
@@ -213,6 +219,21 @@ SlinkTradeApply::
 	ld a, d
 	and a
 	ret nz
+	; InGameTrade_RestoreScreen reloads sprites THEN the font, which aliases the
+	; upper (walking) sprite tiles. Native NPC trades fix that in
+	; CloseTextDisplayPart2; our foreground return bypasses that text tail.
+	; Reuse its native sprite loads after hTileAnimations/movement are restored.
+	; FONT_LOADED forces upper-frame reload even for an unchanged outdoor sprite
+	; set, using the native LCD-on copy path. Preserve every other font flag.
+	ld a, [wFontLoaded]
+	push af
+	or 1 << BIT_FONT_LOADED
+	ld [wFontLoaded], a
+	farcall InitMapSprites
+	pop af
+	ld [wFontLoaded], a
+	call LoadPlayerSpriteGraphics
+	call UpdateSprites
 	; Vanilla saves only party+dex after a Cable Club trade (engine/link/cable_club.asm,
 	; "this allows reset into Pokecenter") because its entry save left nothing else to
 	; change. This player roamed since consenting, so save everything, after the

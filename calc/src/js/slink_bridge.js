@@ -150,6 +150,14 @@
     if (modeSel) modeSel.style.display = _isRR() ? '' : 'none';
   }
 
+  function _updateCalcTitle(calcInfo) {
+    var name = calcInfo && (calcInfo.name || (_isRR() ? 'Radical Red' : 'Generation ' + calcInfo.gen));
+    var title = 'Pokémon' + (name ? ' ' + name : '') + ' Damage Calculator';
+    var heading = document.querySelector('.title-text');
+    if (heading) heading.textContent = title;
+    document.title = title;
+  }
+
   // Called at the top of every successful /api/calc/mons fetch, before the
   // species-name normalization / enemy enrichment that depend on the right
   // gen's pokedex being loaded.
@@ -158,10 +166,13 @@
       console.warn('[SLink bridge] Payload has no "calc" info — staying on Gen 9.');
       _dex = null;
       _updateModeToggleVisibility();
+      _updateCalcTitle(null);
       return;
     }
+    var previousDex = _dex;
     _dex = calcInfo.dex || null;
     _updateModeToggleVisibility();
+    _updateCalcTitle(calcInfo);
     // pureRGB's engine export must be selected BEFORE the gen-1 radio switch below loads
     // its pokedex; vanilla gen-1 needs the vanilla export back if a prior payload left
     // 'purergb' selected. Guarded: a no-op until that worker wires calc.useDex onto the
@@ -171,7 +182,9 @@
       else if (calcInfo.gen === 1) calc.useDex('vanilla');
     }
     var wantGen = calcInfo.gen;
-    if (!wantGen || window.gen === wantGen) return;
+    // A same-generation dex change replaces the engine's tables, but the UI caches
+    // pokedex/moves/typeChart in the gen change handler. Re-run it for that change too.
+    if (!wantGen || (window.gen === wantGen && previousDex === _dex)) return;
     var $radio = window.$ && window.$('#gen' + wantGen);
     if (!$radio || !$radio.length) {
       console.warn('[SLink bridge] No #gen' + wantGen + ' radio in this template — staying on gen ' + window.gen + '.');
