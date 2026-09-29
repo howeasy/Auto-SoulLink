@@ -2,6 +2,8 @@
 
 Written 2026-09-27 by the combined Gen 3 coordinator (claude 30c21a7a) at the owner's request: "Get us ready for one more session to close this all out." The next coordinator is Codex, per the owner's handoff. Follow this top to bottom. Every step names its exit evidence.
 
+> **Start at [HANDOFF_NEXT_2026-09-29.md](HANDOFF_NEXT_2026-09-29.md).** It is the current what-is-left list (RR rows, Gen 2 ping, landing, cleanup). The sections below are the evidence trail.
+
 ## Latest closeout handoff — 2026-09-28
 
 Read [CLOSEOUT_2026-09-28.md](CLOSEOUT_2026-09-28.md) first. Non-expansion development fixes and their targeted physical proofs are complete; exact frozen qualification remains pending. Refresh landing prep first, freeze one candidate, then run all title cuts, standalone units, full Gen 3 and Gen 1 gates, the additional RR contention/success-reload/commit-interruption rows, and independent final reviews against that candidate. Keep distinct private ROOTs for the two reset rows: the interrupted row deliberately retains a pending journal. No master landing or approval. The detailed sections below preserve earlier planning/history and are superseded by the handoff.
