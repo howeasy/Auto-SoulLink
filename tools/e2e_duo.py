@@ -9284,9 +9284,10 @@ class DuoRun:
 
     def assert_linked_faint_active_gen3_saved(self, results):
         """W-2 on FRLG/RR, the in-battle path under mechanism P+H. A: the engine's faint site
-        fired, THEN the client sent faint for the linked key. Server: DEAD by battle, force_faint
-        to B, then MEMORIAL. B: active_faint_chain (the commit, the hand-off, the KO with no
-        input, the faint site, the case's aftermath) and no `faint` echo. Both memorials saved."""
+        fired, THEN the client sent faint for the linked key. Server: DEAD by battle (or by A's
+        whiteout if the server refused a hidden-party faint), force_faint to B, then MEMORIAL.
+        B: active_faint_chain (the commit, the hand-off, the KO with no input, the faint site,
+        the case's aftermath) and no `faint` echo. Both memorials saved."""
         self._gen3_flush_boundary()
         ka, kb = self._link_keys["a"], self._link_keys["b"]
         case = self.cfg.get("active_faint_case", "wild")
@@ -9297,13 +9298,33 @@ class DuoRun:
         # stays DEAD unless both halves were memorialized.
         lone = {inst: re.search(rf"(?m)^LAST_MON_KEPT {re.escape(key)}$", results[inst] or "") is not None
                 for inst, key in (("a", ka), ("b", kb))}
-        self._gen3_one_link("dead" if any(lone.values()) else "memorial", cause="battle")
         with open(os.path.join(self.data_dir, "slink.log"), encoding="utf-8") as handle:
             log_text = handle.read()
+        link = self._gen3_one_link("dead" if any(lone.values()) else "memorial")
+        cause = link.get("cause")
+        # The RR one-mon whiteout cut sent A's engine faint while its party snapshot was hidden.
+        # The server refused that faint, then A's actual whiteout retired the still-live pair.
+        # Accept this ordering only for the whiteout scenario; all other paths still require a
+        # battle retirement. The persisted cause alone is insufficient evidence of that ordering.
+        whiteout_retirement = case == "whiteout" and cause == "whiteout"
+        if whiteout_retirement:
+            refusal = log_text.find("[a] faint refused: party hidden; waiting for a trustworthy snapshot")
+            whiteout = log_text.find("[a] whiteout\n", refusal + 1)
+            propagated = log_text.find("[a] whiteout — force-fainting 1 partner mon(s)", whiteout + 1)
+            if (link.get("initiating_player") != "a" or refusal < 0 or whiteout <= refusal
+                    or propagated <= whiteout):
+                raise RuntimeError("whiteout retirement lacks A's refused faint followed by "
+                                   "A's whiteout force-fainting the linked partner")
+        elif cause != "battle":
+            raise RuntimeError(f"link {sorted((ka, kb))} is {link.get('status')}/{cause}, "
+                               f"expected {link.get('status')}/battle")
         dead = log_text.find(f"[a] faint → {cmd} b:{kb}")
         memorial = log_text.find("fully memorialized")
         problems = []
-        if dead < 0 or (not any(lone.values()) and memorial <= dead):
+        if whiteout_retirement:
+            if dead >= 0:
+                problems.append("server logged battle faint propagation before whiteout retirement")
+        elif dead < 0 or (not any(lone.values()) and memorial <= dead):
             problems.append(f"server log lacks DEAD propagation ({cmd} b) before MEMORIAL")
         box = self._gen3_memorial_box()
         marks = {}   # inst -> (required, ordered, forbidden) for its memorial ending
@@ -9350,9 +9371,12 @@ class DuoRun:
                                              ordered=ord_a, forbidden=[r"(?m)^RX force_", *forb_a])
         else:
             site = r"(?m)^ENGINE_FAINT_SITE "
+            whiteout_tx = [gen3_tx("whiteout", "-")] if whiteout_retirement else []
             problems += gen3_receipt_problems(
-                "a", results["a"], required=[site, gen3_tx("faint", ka), *req_a],
-                ordered=[(site, gen3_tx("faint", ka)), *ord_a], forbidden=[r"(?m)^RX force_", *forb_a])
+                "a", results["a"], required=[site, gen3_tx("faint", ka), *whiteout_tx, *req_a],
+                ordered=[(site, gen3_tx("faint", ka)),
+                         *([(gen3_tx("faint", ka), whiteout_tx[0])] if whiteout_tx else []),
+                         *ord_a], forbidden=[r"(?m)^RX force_", *forb_a])
         required, ordered, forbidden = active_faint_chain(kb, case)
         req_b, ord_b, forb_b = marks["b"]
         problems += gen3_receipt_problems("b", results["b"], required=required + req_b,
