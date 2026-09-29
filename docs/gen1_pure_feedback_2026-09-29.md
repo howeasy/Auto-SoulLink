@@ -51,8 +51,8 @@ UPR patch `0011-slink-pure-overlay-trade-sprite-restore.patch` updates exactly t
 
 ## Independent review and delivery
 
-Pending: isolated reviewer on the committed frozen candidate, with a committed review receipt. Author workers are not reviewers. Any findings require reproduction before correction and scoped revalidation.
+Independent isolated reviewer approved source/model candidate `9ece893c4b2bcd04d975533fa7362e0037b68bfa` with no material blocker. Review receipt: `docs/gen1_pure_feedback_review_2026-09-29.md`. Reviewer independently ran 116 checks (52 feedback + 64 artifact/INI/JAR), all passed with 0 skips, and read-only verified actual JAR resource/pin and provenance. Author workers did not review their own changes. Runtime-source digest remained unchanged after review.
 
 PHYSICAL remains unverified for these changes: no emulator or actual OBS run was used. Existing owner run is PureRed `rand_overlay`; changing server/CSS/bridge alone cannot repair graphics code already inside that randomized cartridge. Fresh provisioned cartridges use the rebuilt overlay. An existing-run ROM upgrade must preserve the randomization and saves and regenerate matching admission/contract hashes; do not silently replace or restart the owner's played run.
 
-Next action: independent review; owner authority for local master integration; then web/OBS refresh and normal-input post-trade movement retest against updated Pure cartridges. No release readiness inference. The same font restore ordering exists in pokered; vanilla follow-up is prospective and outside this owner Pure feedback scope.
+Next action: owner authority for local master integration; deploy the matching pinned fork resource; then web/OBS refresh and normal-input post-trade movement retest against updated Pure cartridges. No release readiness inference. The same font restore ordering exists in pokered; vanilla follow-up is prospective and outside this owner Pure feedback scope.
