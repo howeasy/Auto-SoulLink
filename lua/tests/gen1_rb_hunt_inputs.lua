@@ -74,6 +74,8 @@ end
 -- opts.switch_slot 0-based linked party slot; opts.move_slot 1-based move to play
 -- opts.start_active: switch-hold lead was selected in the overworld, so the first
 -- battle menu is already the hold point; do NOT spend a switch turn.
+-- opts.stop_on_first_uncaught_battle: a linked-faint prerequisite cannot use a later Route 1
+-- catch after the first battle already reported no_catch and dead-zoned that area.
 -- opts.fainted() read-only engine-faint receipt predicate for sacrifice mode.
 function M.new(expected, opts)
     assert(expected and (expected.player == "a" or expected.player == "b"), "R/B route identity required")
@@ -265,6 +267,8 @@ function M.new(expected, opts)
             elseif point.party_count > self.party_before then self.terminal = "caught"
             elseif mode == "run" then self.terminal = "escaped"
             elseif balls() == 0 then self.terminal = "out-of-balls"
+            elseif mode == "catch" and opts.stop_on_first_uncaught_battle and self.encounters == 1
+                   and o == "battle_over" then self.terminal = "first-catch-battle-lost"
             elseif self.encounters >= M.MAX_ENCOUNTERS then self.terminal = "hunt-exhausted" end
             log(string.format("[hunt] after battle: outcome=%s result=%s party=%d balls=%d -> %s",
                               o, tostring(point.battle_result), point.party_count, balls(), self.terminal or "hunt again"))

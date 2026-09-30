@@ -703,6 +703,8 @@ def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expe
 @pytest.mark.parametrize(("line", "classification"), [
     ("RESULT: FAIL (hunt ended out-of-balls)", "CAUSE_RNG"),
     ("RESULT: FAIL (link_new prerequisite failed: hunt ended out-of-balls)", "CAUSE_RNG"),
+    ("RESULT: FAIL (hunt ended first-catch-battle-lost)", "CAUSE_RNG"),
+    ("RESULT: FAIL (link_new prerequisite failed: hunt ended first-catch-battle-lost)", "CAUSE_RNG"),
     ("RESULT: FAIL (linked capture was not returned)", "CONSEQUENCE"),
     ("RESULT: FAIL (linked capture was not returned to party)", "CONSEQUENCE"),
     ("RESULT: FAIL (force_faint never arrived)", "FINAL"),
@@ -722,6 +724,22 @@ def test_rng_retry_predicate_accepts_only_the_game_ball_miss(a, b, attempt, expe
 ])
 def test_gen1_result_reason_table_is_exact(line, classification):
     assert duo.classify_gen1_result(line) == classification
+
+
+@pytest.mark.parametrize(("other", "retry"), [
+    ("RESULT: PASS (caught)\n", True),
+    ("RESULT: FAIL (linked capture was not returned)\n", True),
+    (None, True),
+    ("RESULT: FAIL (force_faint never arrived)\n", False),
+])
+def test_first_catch_loss_uses_only_the_existing_fresh_attempt_budget(other, retry):
+    cause = "RESULT: FAIL (link_new prerequisite failed: hunt ended first-catch-battle-lost)\n"
+    receipts = {"a": other, "b": cause}
+    name = "linked_faint_bench_battle_new"
+    assert duo.scenario_attempt_limit(name, "gen1_pure") == 3
+    assert duo.retryable_gen1_rng("gen1_pure", receipts, 1, 3, scenario=name) is retry
+    assert duo.retryable_gen1_rng("gen1_pure", receipts, 2, 3, scenario=name) is retry
+    assert not duo.retryable_gen1_rng("gen1_pure", receipts, 3, 3, scenario=name)
 
 
 def test_the_poison_rng_phrases_are_the_bodies_own_return_strings():
@@ -1098,6 +1116,38 @@ def test_hunt_switch_and_three_encounter_sacrifice_bound(mode, faint_after, expe
     assert phase == expected
     assert route.encounters == encounters
     assert switches == ([] if start_active else [1] * encounters)
+
+
+@pytest.mark.parametrize(("opt_in", "party_after", "balls_after", "expected"), [
+    (True, 1, 1, "first-catch-battle-lost"),
+    (False, 1, 1, "pace-grass"),
+    (True, 2, 1, "caught"),
+    (True, 1, 0, "out-of-balls"),
+])
+def test_first_uncaught_route1_battle_is_terminal_only_when_opted_in(opt_in, party_after, balls_after, expected):
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    module = lua.eval(f'dofile("{(REPO / "lua/tests/gen1_rb_hunt_inputs.lua").as_posix()}")')
+    balls = {"count": 1}
+    def rd(address):
+        return {1: 1, 2: 4, 3: balls["count"], 4: 0, 5: 14, 6: 0, 7: 14}.get(address, 0)
+    driver = lua.table(wait_menu=lambda _budget: lua.table(ok=True, frames=1),
+                       choose=lambda _name: lua.table(ok=True),
+                       commit_move=lambda _slot: lua.table(ok=False, why="battle_over"))
+    route = module.new(lua.table(player="b"), lua.table(driver=driver, step=lambda _buttons: None,
+        rd=rd, symbols=lua.table(wNumBagItems=1, wBagItems=2, wEnemyMonHP=4, wEnemyMonMaxHP=6),
+        mode="catch", stop_on_first_uncaught_battle=opt_in))
+    battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=19,
+                       party_count=1, font_loaded=False, joy_ignore=0)
+    overworld = lua.table(map=12, x=10, y=35, battle=0, battle_result=0, party_hp=19,
+                          party_count=party_after, font_loaded=False, joy_ignore=0)
+    _, phase = route.step(None, None, battle, 1)
+    assert phase == "wild-battle_over"
+    balls["count"] = balls_after
+    _, phase = route.step(None, None, overworld, 2)
+    assert phase == expected and route.encounters == 1
+    if expected == "first-catch-battle-lost":
+        _, again = route.step(None, None, battle, 3)
+        assert again == expected and route.encounters == 1  # no second grass encounter can qualify
 
 
 # ── A0-H2: the post-result oracle registry, artifact provenance and the bag baseline ─────

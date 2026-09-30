@@ -767,15 +767,17 @@ CONSEQUENCE_PREFIX = "CONSEQUENCE: "
 def rng_retry_family(game) -> bool:
     return scenario_family(game) in RNG_RETRY_FAMILIES
 # Classification table for RESULT reasons in duo_gen1_main.lua:286-758:
-#   CAUSE_RNG   bare/nested `hunt ended out-of-balls` (the game's only missed ball)
+#   CAUSE_RNG   bare/nested `hunt ended out-of-balls` or opt-in first catch battle loss
 #   CONSEQUENCE exact linked-capture-not-returned phrases when the other side has CAUSE_RNG
 #   FINAL       every other return-false template: no-go/boot/save, other hunt phase,
 #               trade menu/prompt/apply, faint window/force_faint/battle/text/Box 12,
 #               and admission hello/party/map errors. A nested link prerequisite with
-#               any cause OTHER than out-of-balls is FINAL, too.
+#               other causes than the named RNG prerequisites stay FINAL.
 GEN1_RNG_REASON_CLASS = {
     "hunt ended out-of-balls": "CAUSE_RNG",  # link_new/deadzone_new direct
     "link_new prerequisite failed: hunt ended out-of-balls": "CAUSE_RNG",  # nested trade/faint
+    "hunt ended first-catch-battle-lost": "CAUSE_RNG",  # opt-in Route 1 prerequisite
+    "link_new prerequisite failed: hunt ended first-catch-battle-lost": "CAUSE_RNG",
     # The Route 1 hunter can also lose its wild battle outright (a Rattata crit chain on the L5
     # starter): the walk-back whiteout is the game's RNG, same shape as poison's starter KO,
     # so a whole-run retry is the right response (seen in the duo-pairs lane, linked_faint_bench).

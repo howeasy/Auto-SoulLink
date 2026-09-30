@@ -411,7 +411,8 @@ local function hunt(mode, options)
     local route = Hunt.new({ player = D.player, facts = FACTS }, { driver = driver, step = yield_buttons, rd = rd, symbols = symbols,
                                                    mode = mode, log = log, switch_slot = options.switch_slot,
                                                    move_slot = options.move_slot, fainted = options.fainted,
-                                                   start_active = options.start_active })
+                                                   start_active = options.start_active,
+                                                   stop_on_first_uncaught_battle = options.stop_on_first_uncaught_battle })
     local last_phase, n = nil, 0
     local terminal = { caught = true, escaped = true, ["out-of-balls"] = true, ["hunt-exhausted"] = true,
                        ["linked-fainted"] = true, ["linked-active-menu"] = true,
@@ -606,7 +607,9 @@ end
 -- D-1: both catch on Route 1; the server pairs the two captures by area on its own.
 function scenarios.link_new()
     if not wait_go() then return false, "no go-file" end
-    local phase = hunt("catch")
+    local bench_prerequisite = D.scenario == "linked_faint_bench_battle_new"
+                               or D.scenario == "explode_bench_battle_new"
+    local phase = hunt("catch", {stop_on_first_uncaught_battle = bench_prerequisite})
     if phase ~= "caught" then return false, "hunt ended " .. phase end
     local key = new_key()
     if not key then return false, "party grew but no new key" end
