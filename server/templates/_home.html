@@ -1,0 +1,65 @@
+{# Manager landing: presentation only; run order, status and counts come from _home_runs. #}
+{% set live = home_runs | selectattr('status', 'equalto', 'running') | first %}
+<div class="mk-page mk-home">
+  <section class="mk-home-hero" aria-labelledby="home-title">
+    <div class="mk-home-intro">
+      <p class="mk-home-eyebrow">Auto-SoulLink · Pokémon for two players</p>
+      <h1 class="mk-home-title" id="home-title">Pokémon Soul Link,<br>automated.</h1>
+      <p class="mk-home-lede">Play your own game while SLink keeps both runs connected. Catches link by area, teams stay together, and a faint on one side takes its partner down too.</p>
+      <div class="mk-home-actions">
+        {% if live %}
+          <a class="mk-btn primary big" href="/runs/{{ live.run_id }}">Open {{ live.name }}</a>
+          <a class="mk-btn big" href="/new">New run</a>
+        {% else %}
+          <a class="mk-btn primary big" href="/new">New run</a>
+          <a class="mk-btn big" href="#getting-started">How to start</a>
+        {% endif %}
+      </div>
+      <p class="mk-home-note">Two players · Two games in BizHawk · One linked run</p>
+    </div>
+    <div class="mk-home-link" aria-hidden="true">
+      <div class="mk-home-player"><span>Player A</span><img class="mk-home-ball" src="/static/pokeball.svg" width="120" height="120" alt=""></div>
+      <div class="mk-home-bond"><span class="mk-home-bond-line"></span><span>Linked<br>by area</span><span class="mk-home-bond-line"></span></div>
+      <div class="mk-home-player"><span>Player B</span><img class="mk-home-ball" src="/static/pokeball.svg" width="120" height="120" alt=""></div>
+    </div>
+  </section>
+
+  <section class="mk-home-rules" aria-label="The Soul Link rules">
+    <div><span class="mk-home-number">01</span><h2>Catch and link</h2><p>Your first catches in the same area become a pair. Miss the encounter and the area closes for both players.</p></div>
+    <div><span class="mk-home-number">02</span><h2>Build your teams together</h2><p>A linked pair belongs in both parties or both PCs. SLink keeps the pair together when you change your team.</p></div>
+    <div><span class="mk-home-number">03</span><h2>Share the loss</h2><p>When a Pokémon faints, its partner falls too. The memorial keeps a record of each lost pair.</p></div>
+  </section>
+
+  {% if home_runs %}
+    <section class="mk-zone" aria-labelledby="home-runs-title">
+      <h2 class="mk-h2" id="home-runs-title"><span>Your runs</span><i></i><em>running and saved runs</em></h2>
+      <ul class="mk-home-runs">
+        {% for r in home_runs %}
+          <li><a class="mk-home-run" href="/runs/{{ r.run_id }}">
+            <span class="mk-dot {{ r.status }}" aria-hidden="true"></span>
+            <span class="mk-home-runname">{{ r.name }}</span>
+            <span class="mk-sub">{{ r.game_label or 'Game detected when players connect' }}</span>
+            <span class="mk-home-runstate"><span class="mk-home-status">{{ r.status | capitalize }}</span>{% if r.counts %}<span><b class="alive num">{{ r.counts.alive }}</b> alive, <b class="fallen num">{{ r.counts.fallen }}</b> fallen</span>{% endif %}</span>
+          </a></li>
+        {% endfor %}
+      </ul>
+    </section>
+  {% endif %}
+
+  <section class="mk-home-setup" id="getting-started" aria-labelledby="home-setup-title">
+    <div class="mk-home-section-intro">
+      <h2 id="home-setup-title">Getting started</h2>
+      <p>Choose your games and rules, connect both players, then play. The run board tracks your pairs as you go.</p>
+    </div>
+    <ol class="mk-home-steps">
+      <li><b>Create a run.</b><span>Pick a game family and the rules you want to play with. Both players use games from the same family.</span></li>
+      <li><b>Connect both games.</b><span>Download each player's setup from the run page. In BizHawk, load your game and save, then load the launcher in the Lua console.</span></li>
+      <li><b>Start playing.</b><span>Catch your first Pokémon in the same area. Check the board for linked pairs, your teams, and the run's recent events.</span></li>
+    </ol>
+  </section>
+
+  <footer class="mk-home-more">
+    <a href="/broadcast"><b>Put your run on stream <span aria-hidden="true">→</span></b><span>Party cards, linked pairs, and the memorial as OBS overlays.</span></a>
+    <a href="/tools"><b>Prepare your games <span aria-hidden="true">→</span></b><span>Companion patches and game preparation tools.</span></a>
+  </footer>
+</div>

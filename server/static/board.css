@@ -124,7 +124,7 @@ body.mgr .launcher { min-height: 0; max-height: calc(100vh - 57px); }
   background: color-mix(in srgb, var(--c-card) 60%, var(--c-bg)); border-right: 1px solid var(--c-edge);
 }
 .mk-rail-brand { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-2) var(--space-2); color: var(--c-txt); text-decoration: none; }
-.mk-rail-brand svg { width: calc(var(--scale-step) * 1.1); height: calc(var(--scale-step) * 1.1); flex: none; }
+.mk-rail-brand :is(svg, .mk-brand-ball) { width: calc(var(--scale-step) * 1.1); height: calc(var(--scale-step) * 1.1); flex: none; }
 .mk-rail-brandtext { display: flex; flex-direction: column; line-height: 1.05; min-width: 0; }
 .mk-rail-brandtext b { color: var(--c-brand); font-size: var(--fs-md); letter-spacing: .04em; }
 .mk-rail-brandtext span { color: var(--c-dim); font-size: var(--fs-xs); }
@@ -696,35 +696,4 @@ kbd { padding: 1px 5px; border: 1px solid var(--c-edge); border-bottom-width: 2p
 @media (prefers-reduced-motion: reduce) {
   .mk-btn, .mk-gchip, .mk-tab, .mk-rail-item, .mk-opt, .mk-hp-fill { transition-duration: 0s; }
   .mk-btn:active, .mk-gchip:active, .mk-tab:active { scale: 1; }
-}
-
-/* ── Home (/) ───────────────────────────────────────────────────────────
- * The one bold thing is the pair of marks: two players' balls joined by the board's
- * own bond glyph. Everything else is the Manager's usual type and components. */
-.mk-home { max-width: 60rem; display: flex; flex-direction: column; gap: var(--space-6); }
-.mk-home-hero { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-3); padding-top: var(--space-5); }
-.mk-home-link { display: flex; align-items: center; gap: var(--space-3); color: var(--c-txt); }
-.mk-home-ball { width: clamp(40px, 9vw, 112px); height: auto; flex: none; }
-.mk-home-bond { font-family: var(--font-mono); font-size: clamp(1.5rem, 3vw, 2.25rem); letter-spacing: .1em; color: var(--c-alive); }
-.mk-home-title { margin: var(--space-2) 0 0; font-family: var(--font-heading); font-size: clamp(2.25rem, 5vw, 3.5rem); line-height: 1; color: var(--c-brand); }
-.mk-home-lede { margin: 0; max-width: 34rem; font-size: var(--fs-lg); line-height: 1.5; color: var(--c-txt); }
-.mk-home-actions { display: flex; flex-wrap: wrap; gap: var(--space-3); margin-top: var(--space-2); }
-.mk-home-actions .mk-btn { padding: var(--space-3) var(--space-4); font-size: var(--fs-base); }
-.mk-home-runs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-2); }
-.mk-home-run { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "dot name state" ". game state";
-  column-gap: var(--space-3); align-items: center; padding: var(--space-3) var(--space-4); border: 1px solid var(--c-edge);
-  border-radius: var(--mk-radius); background: var(--c-card); color: var(--c-txt); text-decoration: none; }
-.mk-home-run:hover, .mk-home-run:focus-visible { border-color: var(--c-brand); }
-.mk-home-run .mk-dot { grid-area: dot; }
-.mk-home-runname { grid-area: name; font-size: var(--fs-base); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mk-home-run .mk-sub { grid-area: game; }
-.mk-home-runstate { grid-area: state; font-size: var(--fs-md); color: var(--c-dim); text-align: right; }
-.mk-home-runstate .alive { color: var(--c-alive); }
-.mk-home-runstate .fallen { color: var(--c-dead); }
-.mk-home-steps { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: var(--space-3); max-width: 40rem; line-height: 1.5; }
-.mk-home-steps b { color: var(--c-brand); font-weight: 600; }
-.mk-home-more a { color: var(--c-link, var(--c-brand)); }
-@media (max-width: 640px) {
-  .mk-home-run { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "dot name" ". game" ". state"; }
-  .mk-home-runstate { text-align: left; }
 }

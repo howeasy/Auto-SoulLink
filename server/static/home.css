@@ -1,0 +1,89 @@
+/* Manager landing. Reuses the shell, buttons and theme tokens from board.css.
+ * All selectors stay under the home classes; the run board keeps its own type scale. */
+.mk-home {
+  max-width: 78rem;
+  margin-inline: auto;
+  padding: clamp(24px, 4vw, 64px);
+  display: flex;
+  flex-direction: column;
+  gap: clamp(32px, 4vw, 56px);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+.mk-home h1, .mk-home h2, .mk-home p { margin: 0; }
+.mk-home h1, .mk-home h2 { text-wrap: balance; }
+.mk-home p, .mk-home li { text-wrap: pretty; }
+.mk-home-hero { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 32px; align-items: center; }
+.mk-home-intro { min-width: 0; }
+.mk-home .mk-home-eyebrow { margin-bottom: 20px; font-size: .75rem; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--c-dim); }
+.mk-home .mk-home-title { font-family: var(--font-body); font-size: clamp(2rem, 3.8vw, 3.6rem); font-weight: 650; line-height: 1.12; letter-spacing: -.04em; color: var(--c-txt); }
+.mk-home .mk-home-lede { margin-top: 24px; max-width: 35rem; font-size: 1rem; color: var(--c-dim); }
+.mk-home-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 28px; }
+.mk-home-actions .mk-btn { min-height: 44px; max-width: 100%; padding: 10px 18px; font-family: inherit; font-size: .9375rem; line-height: 1.4; overflow-wrap: anywhere; text-align: center; text-decoration: none; }
+.mk-home .mk-home-note { margin-top: 16px; font-size: .75rem; color: var(--c-dim); }
+.mk-home-link { display: flex; align-items: center; justify-content: center; padding: 32px 8px; }
+.mk-home-player { display: flex; flex-direction: column; align-items: center; gap: 20px; flex: none; }
+.mk-home-player > span { font-size: .75rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--c-dim); }
+.mk-home-ball { width: clamp(72px, 8vw, 120px); height: auto; display: block; }
+.mk-home-bond { display: flex; align-items: center; flex: 1; max-width: 160px; min-width: 68px; gap: 8px; padding-top: 40px; color: var(--c-dim); }
+.mk-home-bond > span:not(.mk-home-bond-line) { flex: none; font-size: .6875rem; line-height: 1.5; text-align: center; }
+.mk-home-bond-line { flex: 1; height: 1px; background: var(--c-dim); opacity: .55; }
+.mk-home-rules { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border-block: 1px solid var(--c-edge); }
+.mk-home-rules > div { padding: 28px 24px; }
+.mk-home-rules > div:first-child { padding-left: 0; }
+.mk-home-rules > div:last-child { padding-right: 0; }
+.mk-home-rules > div + div { border-left: 1px solid var(--c-edge); }
+.mk-home-number { display: block; margin-bottom: 14px; font-family: var(--font-mono); font-size: .75rem; font-variant-numeric: tabular-nums; color: var(--c-brand); }
+.mk-home-rules h2, .mk-home-section-intro h2 { font-size: 1.0625rem; font-weight: 600; color: var(--c-txt); line-height: 1.4; }
+.mk-home-rules p { margin-top: 10px; font-size: .875rem; color: var(--c-dim); }
+.mk-home .mk-h2 { font-family: inherit; font-size: 1.0625rem; }
+.mk-home .mk-h2 em { font-family: inherit; font-size: .75rem; letter-spacing: 0; }
+.mk-home-runs { list-style: none; margin: 16px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.mk-home-run { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "dot name state" ". game state"; column-gap: 12px; align-items: center; padding: 16px 20px; border: 1px solid var(--c-edge); border-radius: var(--mk-radius); background: var(--c-card); color: var(--c-txt); text-decoration: none; transition: border-color .12s ease-out, background-color .12s ease-out; }
+.mk-home-run:hover { border-color: var(--c-brand); background: color-mix(in srgb, var(--c-brand) 5%, var(--c-card)); }
+.mk-home-run:focus-visible, .mk-home-more a:focus-visible { outline: 2px solid var(--c-brand); outline-offset: 3px; }
+.mk-home-run .mk-dot { grid-area: dot; }
+.mk-home-runname { grid-area: name; font-size: .9375rem; font-weight: 600; overflow-wrap: anywhere; }
+.mk-home-run .mk-sub { grid-area: game; font-family: inherit; font-size: .8125rem; }
+.mk-home-runstate { grid-area: state; display: flex; flex-direction: column; align-items: flex-end; font-size: .8125rem; color: var(--c-dim); font-variant-numeric: tabular-nums; }
+.mk-home-status { font-size: .75rem; }
+.mk-home-runstate .alive { color: var(--c-alive); }
+.mk-home-runstate .fallen { color: var(--c-dead); }
+.mk-home-setup { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: 48px; scroll-margin-top: 80px; }
+.mk-home-section-intro p { margin-top: 12px; max-width: 26rem; font-size: .875rem; color: var(--c-dim); }
+.mk-home-steps { margin: 0; padding-left: 1.5em; display: flex; flex-direction: column; gap: 20px; font-size: .875rem; }
+.mk-home-steps li { padding-left: 8px; }
+.mk-home-steps li::marker { font-family: var(--font-mono); color: var(--c-dim); }
+.mk-home-steps b { display: block; margin-bottom: 4px; font-weight: 600; color: var(--c-txt); }
+.mk-home-steps span { color: var(--c-dim); }
+.mk-home-more { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px; padding-top: 24px; border-top: 1px solid var(--c-edge); }
+.mk-home-more a { display: flex; flex-direction: column; gap: 4px; padding-block: 4px; min-height: 44px; color: var(--c-txt); text-decoration: none; font-size: .875rem; }
+.mk-home-more b { font-weight: 600; }
+.mk-home-more b span { color: var(--c-brand); }
+.mk-home-more a > span { font-size: .8125rem; color: var(--c-dim); }
+.mk-home-more a:hover b { color: var(--c-brand); }
+@media (max-width: 1100px) {
+  .mk-home-hero { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); gap: 16px; }
+  .mk-home-ball { width: 80px; }
+  .mk-home-bond { gap: 4px; }
+}
+@media (max-width: 640px) {
+  .mk-home { padding: 28px 20px; gap: 32px; }
+  .mk-home-hero { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+  .mk-home-link { justify-content: flex-start; max-width: 320px; padding: 8px 0; }
+  .mk-home-player { gap: 12px; }
+  .mk-home-bond { padding-top: 32px; }
+  .mk-home-rules, .mk-home-setup, .mk-home-more { grid-template-columns: minmax(0, 1fr); }
+  .mk-home-rules > div, .mk-home-rules > div:first-child, .mk-home-rules > div:last-child { padding: 20px 0; }
+  .mk-home-rules > div + div { border-left: 0; border-top: 1px solid var(--c-edge); }
+  .mk-home-number { margin-bottom: 8px; }
+  .mk-home-setup { gap: 24px; }
+  .mk-home .mk-h2 em { display: none; }
+  .mk-home-run { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "dot name" ". game" ". state"; padding: 12px; }
+  .mk-home-runstate { align-items: flex-start; flex-direction: row; flex-wrap: wrap; gap: 12px; margin-top: 8px; }
+  .mk-home-more { gap: 20px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mk-home-run { transition: none; }
+}
