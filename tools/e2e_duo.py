@@ -3538,7 +3538,7 @@ class DuoRun:
         T5's native candidate owns its manifest-pinned path. The lock probe intentionally reads
         and locks the install-root path, so neither row uses this ordinary duo override.
         """
-        if self.cfg.get("gen3_native_trade") or self.scenario == "trade_lock_probe_gen3":
+        if self.cfg.get("gen3_native_trade") or self.cfg.get("journal_lock_probe"):
             return None
         return Path(self.data_dir, "slink_gen3_trade")
 

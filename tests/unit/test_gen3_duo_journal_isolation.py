@@ -115,10 +115,74 @@ def test_real_guarded_journal_keeps_attempt_one_intent_out_of_attempt_two(tmp_pa
 
 
 @pytest.mark.parametrize("scenario,cfg", [
-    ("trade_lock_probe_gen3", {}),
+    ("trade_lock_probe_gen3", {"journal_lock_probe": True}),
     ("native_trade_gen3", {"gen3_native_trade": True}),
 ])
 def test_existing_journal_owners_keep_their_paths(scenario, cfg, tmp_path):
     run = duo.DuoRun.__new__(duo.DuoRun)
     run.scenario, run.cfg, run.data_dir = scenario, cfg, str(tmp_path)
     assert run._gen3_duo_journal_path() is None
+
+
+def test_journal_probe_flag_survives_scenario_rename(tmp_path):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.scenario, run.cfg, run.data_dir = "renamed_probe", {"journal_lock_probe": True}, str(tmp_path)
+    assert run._gen3_duo_journal_path() is None
+
+
+def test_new_private_server_data_identity_gets_its_own_journal(tmp_path):
+    run = duo.DuoRun.__new__(duo.DuoRun)
+    run.scenario, run.cfg, run.data_dir = "admit_randomized_frlg", {"gen3_rand": True}, str(tmp_path / "controls")
+    controls = run._gen3_duo_journal_path()
+    run.data_dir = str(tmp_path / "controls" / "randomized_pair")
+    randomized = run._gen3_duo_journal_path()
+    assert controls != randomized
+    assert controls.parent.name == "controls" and randomized.parent.name == "randomized_pair"
+
+
+def test_actual_dofile_interception_reaches_run_lua_journal_load(tmp_path):
+    lupa = pytest.importorskip("lupa")
+    source = (ROOT / "lua/tests/duo/duo_gen3_main.lua").read_text(encoding="utf-8")
+    run_source = (ROOT / "lua/gen3/run.lua").read_text(encoding="utf-8")
+    assert 'dofile(ROOT .. "/lua/gen3/trade_journal.lua")' in run_source
+    assert 'path=ROOT .. "/slink_gen3_trade"' in run_source
+    helper = re.search(r"(?ms)^local function isolated_journal_module\([^\n]+\).*?^end$", source)
+    interception = re.search(
+        r"(?ms)^do\n    dofile = function\(path\).*?^if not okrun then finish\(false, .*?\n", source)
+    assert helper and interception, "execute the wrapper installed around the run.lua dofile"
+    private = (tmp_path / "attempt" / "slink_gen3_trade").as_posix()
+
+    def selected_path(interceptor):
+        lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+        prelude = '''
+local ROOT = "fixture-root"
+local D = {journal_path = PRIVATE_PATH}
+local title = "radical_red"
+local native_candidate = nil
+local battle_parts = nil
+local log = function(_) end
+local test_admission_codec = function(_, _, value) return value end
+local finish = function(_, message) error(message) end
+local seen = {}
+local dofile
+local original_dofile = function(path)
+    if path == ROOT .. "/lua/gen3/trade_journal.lua" then
+        return {file_store = function(deps) seen[#seen + 1] = deps.path; return {} end}
+    end
+    if path == ROOT .. "/lua/gen3/run.lua" then
+        local module = dofile(ROOT .. "/lua/gen3/trade_journal.lua")
+        module.file_store({path = ROOT .. "/slink_gen3_trade"})
+        return true
+    end
+    error("unexpected dofile " .. path)
+end
+dofile = original_dofile
+'''.replace("PRIVATE_PATH", json.dumps(private))
+        return lua.execute(prelude + helper.group() + "\n" + interceptor + "\nreturn seen[1]")
+
+    assert selected_path(interception.group()) == private
+    misplaced = interception.group().replace(
+        'if path == ROOT .. "/lua/gen3/trade_journal.lua" then',
+        'if path == ROOT .. "/lua/gen3/wrong_journal.lua" then', 1)
+    assert misplaced != interception.group()
+    assert selected_path(misplaced) == "fixture-root/slink_gen3_trade"  # would fail the private-path assertion
