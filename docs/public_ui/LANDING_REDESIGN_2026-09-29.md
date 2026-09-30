@@ -68,15 +68,71 @@ phone 390px, narrow phone 320px with reduced motion, and light theme 1440px. No
 horizontal overflow, missing images, failed HTTP resources or page errors. The three
 brand images load; the New run link opens the actual form, setup anchor works,
 and the keyboard skip link focuses `main-content`. Screenshots visually inspected.
-Additional theme and populated-run presentation checks are recorded after final review.
+The final pass also confirmed the actual `funtastic-grape` theme at 1024px and
+presentation-only fixtures with running, unavailable-board and stopped rows at
+1440px and 320px. A long unbroken run name and its primary CTA wrap without overflow.
+Fixtures were rendered directly into a test page; no Manager registry or game state
+was populated. Current statuses remain visible when counts exist or are unavailable.
+All 33 README link/image references were checked for local-path existence; no missing
+local targets. Both SVG export files are byte-identical. External URLs were not fetched.
 
 PHYSICAL: Not run or claimed. These are presentation checks, not release qualification.
 
 ## Independent review and next action
 
-Required on the frozen author commit by isolated non-authors, covering Standards and
-the owner's Spec separately. Review results and final frozen cut will be appended
-here before delivery. No master merge or push without owner authority.
+Frozen author commit: `dee76923a8553a0468411674b72ecc4d9a5a9280`.
+Two isolated non-authors reviewed the same nine-file diff against the source cut.
+Both sent explicit read-only grant ACKs and reported a clean worktree and correct HEAD.
+
+### Standards
+
+`/root/landing_standards`: **APPROVE**, no actionable documented-standard breach or
+Fowler-smell finding. Shared Jinja/CSS placement, conditional home stylesheet loading,
+theme tokens, asset reuse, visible focus and reduced-motion rules follow the established
+contracts. README family choices and ZIP/launcher setup match current source.
+Reviewer performed source reads only and did not independently exercise the browser.
+
+### Spec
+
+`/root/landing_spec`: **APPROVE**, no concrete missing requirement, incorrect setup
+instruction, unsupported hardware/qualification claim or extra feature implementation.
+The reviewer checked restrained gameplay copy, literal black SVG outlines, current
+Manager game choices and ZIP setup, retained documentation targets, and supplied
+desktop/mobile screenshots. No tests or integration performed by reviewer.
+
+Zero findings on each axis. Reviewer boundaries remain distinct from author checks.
+
+Next action: present preview and revised README; obtain owner authority before applying
+this reviewed cut to local master. GitHub publication remains unperformed.
 
 Suggestions to present to owner: a short player setup guide, refreshed gameplay
 screenshots, and a first-run readiness checklist on the run page.
+
+## Interface polish coverage
+
+Full scope: home composition, shared Poké Ball brand asset and its rail placement;
+Jinja2 and established plain CSS. No gameplay or game-adapter scope.
+
+| Category | Inspected evidence | Result |
+|---|---|---|
+| Typography | Heading/body font token, balanced headings, wrapping, long names | Clear |
+| Surfaces | Structural dividers, run rows, focus rings, phone hit targets | Clear |
+| Animations | Brief border/background hover transitions, shared button press, reduced motion | No entrance animation added; reduced-motion layout verified |
+| Icons | Shared brand image, explicit black outlines, decorative empty alt | Clear |
+| Performance | Home-only stylesheet, existing shell, explicit transition properties | Clear |
+
+| Location | Before | After | Why |
+|---|---|---|---|
+| `manager.html`, `_home.html` | Single stacked introduction | Hero, core rules, actual runs, setup and utility links | Clear hierarchy and direct primary path |
+| `home.css` | Pixel heading and brief home styles in board CSS | Scoped system-font content, responsive grids and readable spacing | Legible prose; preserves established styling system |
+| `pokeball.svg`, `_rail.html`, docs logo | Repeated theme-colored SVG outlines | One shared UI asset with literal black outlines and a docs export | Consistent requested brand treatment |
+| `_home.html`, `home.css` | Counts could replace visible process status | Status remains beside pair counts | Avoids confusing a running process with gameplay progress |
+| `home.css` | Single-column desktop setup and fixed run-name truncation | Two-column setup; narrow-screen stack and long-name wrapping | Preserves content at narrow sizes |
+| `home.css` | Inherited link underlines on primary controls | Explicit button link decoration | Clear button affordance |
+
+Considered but rejected: an animated gameplay demo (owner requested restrained tone
+and direct setup); new per-game palettes (existing theme tokens already cover the
+page); global font changes (the requested landing content is the bounded scope).
+
+Verdict: **APPROVE** within SOURCE/MODEL presentation scope. Not verified: full
+screen-reader narration, all remaining palettes, physical gameplay or release readiness.
