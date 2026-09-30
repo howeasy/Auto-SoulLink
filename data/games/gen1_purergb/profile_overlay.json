@@ -5,17 +5,17 @@
   "pureblue_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "c4f96d86a634f2d284d8ab1ae8c690acbe21ae76d3e4034f6ed1e54c8f8cbbec"
+   "sha256": "d85b256fe0133bbee8c21c33dff9694483e2f40fe666c12297095dda9c1d35b0"
   },
   "puregreen_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "74be3701dcfa6dff8f735c2134ebd5faa6226b1781cd8ee51c22f1e4932a14bb"
+   "sha256": "e03094c6c71dead76686bb7db5cac8d54c6f6ea259ca2b8b35af6441f4297fc9"
   },
   "purered_slink.sym": {
    "commit": "7e7a46535ca332ad24ecb02e326ea2f75e79ebb9",
    "repo": "purergb",
-   "sha256": "26b262c9f38158a42607a4490f8ff4701ceda8aad4f0651ed745eb0e7e94c709"
+   "sha256": "d049d08e9e25d166fe36651f54457204b694ca1a3a4568af3fa39e516dd204d9"
   }
  },
  "titles": {
@@ -601,7 +601,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "134aed7fc5f86e3aa9833cffd2b4fdf22b650916",
+   "rom_sha1": "237cf7cf80376b6ab0e18969266a38fe4e0e5f6d",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -630,7 +630,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21174EC738",
+      "expected_hex": "545D063F21384EC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -654,7 +654,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "217F45063FC7C9",
+      "expected_hex": "21A045063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -670,7 +670,7 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "217F45063FC7C9",
+    "dispatch_hex": "21A045063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
@@ -1262,7 +1262,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "df651ddccf82d73c212b6f5400d240a2f9994ad0",
+   "rom_sha1": "df71763fd52eff57bc2c4492add85d4bd0d82070",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1291,7 +1291,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21174EC738",
+      "expected_hex": "545D063F21384EC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -1315,7 +1315,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "217F45063FC7C9",
+      "expected_hex": "21A045063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -1331,7 +1331,7 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "217F45063FC7C9",
+    "dispatch_hex": "21A045063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
@@ -1923,7 +1923,7 @@
      "flat": 49152
     }
    },
-   "rom_sha1": "c7ee0bd985a59fab7bd8f02b4574886d5af323bd",
+   "rom_sha1": "43642f1248197ecbc8247ad6038b56c72264cbbc",
    "sram_bank": {
     "sBank2AllBoxesChecksum": 2,
     "sBank2IndividualBoxChecksums": 2,
@@ -1952,7 +1952,7 @@
      "apex_guard": {
       "addr": 23363,
       "bank": 3,
-      "expected_hex": "545D063F21174EC738",
+      "expected_hex": "545D063F21384EC738",
       "flat": 56131
      },
      "delay_frame_tail": {
@@ -1976,7 +1976,7 @@
      "receptionist": {
       "addr": 12903,
       "bank": 0,
-      "expected_hex": "217F45063FC7C9",
+      "expected_hex": "21A045063FC7C9",
       "flat": 12903
      },
      "start_menu_row": {
@@ -1992,7 +1992,7 @@
       "flat": 7784
      }
     },
-    "dispatch_hex": "217F45063FC7C9",
+    "dispatch_hex": "21A045063FC7C9",
     "mailbox": 57066,
     "receptionist_hook": 12903,
     "service": {
