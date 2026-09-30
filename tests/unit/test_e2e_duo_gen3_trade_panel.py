@@ -78,6 +78,17 @@ def test_the_rr_refusal_never_passes_a_trade_row(monkeypatch, tmp_path, scenario
         getattr(run, duo.SCENARIOS[scenario]["oracle"])(_refusal_receipts())
 
 
+def test_explicit_rr_refusal_is_rejected_even_with_valid_preimages(monkeypatch, tmp_path):
+    run = _oracle_stub(monkeypatch, tmp_path, "trade_decline_gen3",
+                       [{"a": {"key": KA}, "b": {"key": KB}, "status": "alive"}])
+    receipts = {"a": _receipt_a(True) + f"\nKEPT {KA} slot=1",
+                "b": _receipt_b(True) + f"\nKEPT {KB} slot=1"}
+    run.assert_trade_decline_gen3_saved(receipts)
+    refused = dict(receipts, a=receipts["a"] + f"\nREFUSED_UNAVAILABLE reason={REFUSAL}")
+    with pytest.raises(RuntimeError, match="REFUSED_UNAVAILABLE"):
+        run.assert_trade_decline_gen3_saved(refused)
+
+
 @pytest.mark.parametrize("scenario", ["trade_gen3", "trade_decline_gen3"])
 def test_the_two_rows_are_distinct_again(monkeypatch, tmp_path, scenario):
     """F2: a decline receipt set passes only trade_decline_gen3 (both saves at their fixture
