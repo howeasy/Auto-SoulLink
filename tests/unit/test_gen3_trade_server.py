@@ -432,6 +432,28 @@ def test_recovery_confirm_waits_for_fresh_visible_party_before_native_prepare(tm
     assert not any(c.get("cmd") == "apply_prepare" for c in srv.state.queued_commands["b"])
 
 
+@pytest.mark.parametrize("phase", ["preparing", "applying"])
+def test_deferred_confirm_duplicate_yes_after_delivery_cannot_renew_watchdog(tmp_path, phase):
+    srv, _entry, token = _applying(tmp_path, before_confirm=True, title="firered_rr")
+    srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    srv._dispatch("b", {"event": "menu_result", "token": token, "choice": 1})
+    srv._dispatch("a", {"event": "tick", "party": [_mon("a")], "in_battle": False})
+    assert srv.state.pending_trade["phase"] == "preparing"
+    delivered = srv._dispatch("b", {"event": "tick", "party": [_mon("b")], "in_battle": False})
+    assert [c["cmd"] for c in delivered if c.get("cmd") == "apply_prepare"] == ["apply_prepare"]
+    if phase == "applying":
+        srv._dispatch("a", {"event": "apply_ready", "token": token, "ok": True})
+        delivered = srv._dispatch("b", {"event": "apply_ready", "token": token, "ok": True})
+        assert [c["cmd"] for c in delivered if c.get("cmd") == "apply_trade"] == ["apply_trade"]
+    assert srv.state.pending_trade["phase"] == phase
+    srv.state.pending_trade["age"] = 10
+    duplicate = srv._dispatch("b", {"event": "menu_result", "token": token, "choice": 1})
+    assert srv.state.pending_trade["age"] >= 10
+    assert not any(c.get("cmd") in ("apply_prepare", "apply_trade") for c in duplicate)
+    assert not any(c.get("cmd") in ("apply_prepare", "apply_trade")
+                   for c in srv.state.queued_commands["b"])
+
+
 @pytest.mark.parametrize("change", ["key", "slot"])
 def test_rr_deferred_confirm_refuses_changed_offered_mon(tmp_path, change):
     srv, _entry, token = _applying(tmp_path, before_confirm=True, title="firered_rr")

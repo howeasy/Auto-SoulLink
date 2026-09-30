@@ -1056,7 +1056,7 @@ class SoulLinkState:
             choice = int(msg.get("choice", 0))
         except (TypeError, ValueError):
             choice = 0
-        if (pt.get("phase") == "confirming" and pt.get("confirm_deferred")
+        if (pt.get("phase") in ("confirming", "preparing", "applying") and pt.get("confirm_deferred")
                 and player_id == _partner(pt["initiator"])
                 and choice == 1):
             return  # replayed YES cannot renew the watchdog or duplicate native preparation
