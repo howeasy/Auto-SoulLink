@@ -1393,6 +1393,92 @@ EXPANSION_BINDINGS = {
 }
 EXPANSION_OPEN = {}
 
+# Per-build PC cursor/state facts, bound to the .sym by expansion_symbol (which refuses a
+# name that is not unique) and cross-checked against the ROM. `from_sStorage` is the byte offset
+# from &sStorage; the address itself is never written as a literal here, it comes from the .sym.
+#
+# Additive registry metadata: the consumers (upr_pipeline.py:348-362, e2e_duo.py:3106) read only
+# address/expected_hex/rom_offset/capture_offset/point/mode/function/symbol, so these keys are
+# carried and ignored. No runtime consumer is added by this change and none is implied.
+EXPANSION_CURSOR_SYMBOLS = {
+    "sStorage": 0,
+    "sCursorArea": 4,
+    "sIsMonBeingMoved": 5,
+    "sCursorPosition": 24,
+}
+
+# Snapshot provenance, per site. `contract` is the one-shot pairing obligation; it is a contract
+# only, there is no consumer here and none should be added without a run card.
+EXPANSION_SNAPSHOT_PROVENANCE = {
+    "pc_release_begin": {
+        "emits": "pc_release_begin",
+        "one_shot": True,
+        "cleared_by": ["pc_release", "release_cancel", "task_change", "storage_reset"],
+        "reads": ["sCursorArea", "sCursorPosition", "sIsMonBeingMoved"],
+        "contract": ("Consumed once by the next pc_release from the SAME Task_ReleaseMon invocation. "
+                     "A moved-mon flag clear emits no begin and must not reuse an older latch."),
+    },
+    "pc_release": {
+        "emits": "pc_release",
+        "one_shot": False,
+        "consumes": "pc_release_begin",
+        "cleared_by": ["pc_release", "release_cancel", "task_change", "storage_reset"],
+        "contract": ("Emit only when a matching pc_release_begin latch exists; resolve identity from "
+                     "the snapshot, never from cleared storage."),
+    },
+    "pc_deposit": {
+        "emits": "pc_deposit",
+        "one_shot": False,
+        "cleared_by": ["task_change", "storage_reset"],
+        "reads": ["sIsMonBeingMoved"],
+        "contract": ("Read sIsMonBeingMoved BEFORE the storage call to tell a moved-mon release-clear "
+                     "apart from an acquisition deposit. R4 slot and R7 box are compiled def-use; "
+                     "runtime liveness is not demonstrated by this pin."),
+    },
+}
+
+
+def expansion_cursor_symbols(context):
+    """Bind the PC cursor/state globals to the .sym, and prove the ROM agrees."""
+    from tools.gen_gen3_profile import expansion_symbol
+    out = {}
+    base = None
+    for name, offset in EXPANSION_CURSOR_SYMBOLS.items():
+        hit = expansion_symbol(context, name)
+        if base is None:
+            base = hit["address"]
+        want = base + offset
+        if hit["address"] != want:
+            raise ValueError(f"{name} is 0x{hit['address']:08X}, expected &sStorage+{offset} = 0x{want:08X}")
+        out[name] = {"address": hit["address"], "size": hit["size"], "from_sStorage": offset,
+                     "symbol_source": f"build:pokemon.sym:{hit['line']}",
+                     "symbols_sha256": context["source"]["symbols_sha256"],
+                     "size_evidence": "verified_build_symbol"}
+    return out
+
+
+def expansion_pool_register(context, symbol, offset=8, register=5):
+    """Prove `ldr r<register>,[pc,#imm]` at `symbol+offset` resolves to &sStorage.
+
+    Static register reasoning over verified ROM bytes. It does NOT demonstrate that the value is
+    live at the capture point; that is a PHYSICAL question this card leaves open.
+    """
+    from tools.gen_gen3_profile import expansion_symbol
+    from tools.pin_gen3_site import ROM_BASE
+    fn = expansion_symbol(context, symbol)
+    base = fn["address"] - ROM_BASE
+    ins = int.from_bytes(context["rom"][base + offset:base + offset + 2], "little")
+    if ins & 0xF800 != 0x4800 or (ins >> 8) & 7 != register:
+        raise ValueError(f"{symbol}+{offset:#x} is not ldr r{register},[pc,#imm] (0x{ins:04X})")
+    pool = ((offset + 4) & ~3) + (ins & 0xFF) * 4
+    word = int.from_bytes(context["rom"][base + pool:base + pool + 4], "little")
+    storage = expansion_symbol(context, "sStorage")["address"]
+    if word != storage:
+        raise ValueError(f"{symbol}+{offset:#x} pool resolves 0x{word:08X}, not &sStorage 0x{storage:08X}")
+    return {"symbol": symbol, "function_offset": offset, "register": f"R{register}",
+            "pool_function_offset": pool, "pool_value": word,
+            "evidence": "COMPILED_DEF_USE", "runtime_liveness": "OPEN_PHYSICAL"}
+
 
 def build_expansion(context):
     from tools.gen_gen3_profile import EXPANSION_TITLE
@@ -1405,10 +1491,25 @@ def build_expansion(context):
         sites[kind] = site
         inventory[kind] = {"status": "PINNED_SOURCE_ONLY", "source": source, "capture_contract": contract}
     inventory.update({k: {"status": "OPEN", "reason": v} for k, v in EXPANSION_OPEN.items()})
+    cursors = expansion_cursor_symbols(context)
+    for kind, provenance in EXPANSION_SNAPSHOT_PROVENANCE.items():
+        if kind not in sites:
+            raise ValueError(f"snapshot provenance names unknown site: {kind}")
+        for name in provenance.get("reads", ()):
+            if name not in cursors:
+                raise ValueError(f"{kind} provenance names unbound cursor symbol: {name}")
+        if "consumes" in provenance and provenance["consumes"] not in sites:
+            raise ValueError(f"{kind} provenance consumes unknown site: {provenance['consumes']}")
+        sites[kind]["snapshot"] = provenance
+    for kind in sites:
+        sites[kind].setdefault("snapshot", None)
+    register_proof = {symbol: expansion_pool_register(context, symbol)
+                      for symbol in ("Task_DepositMenu", "Task_ReleaseMon")}
     result = {"schema": "gen3-engine-signals-v1", "pack": "gen3_exp", "build": context["build"],
               "evidence": "SOURCE_BYTE_PIN", "live_verified": False, "source": context["source"],
               "inventory": inventory, "titles": {EXPANSION_TITLE: {"artifacts": {"clean": {
-                  "rom_sha1": context["source"]["rom_sha1"], "rom_md5": hashlib.md5(context["rom"]).hexdigest(), "sites": sites}}}}}
+                  "rom_sha1": context["source"]["rom_sha1"], "rom_md5": hashlib.md5(context["rom"]).hexdigest(),
+                  "cursor_symbols": cursors, "register_pool_proof": register_proof, "sites": sites}}}}}
     result["sha256"] = hashlib.sha256(json.dumps(result, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     return result
 

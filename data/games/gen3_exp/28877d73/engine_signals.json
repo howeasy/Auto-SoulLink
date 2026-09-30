@@ -111,7 +111,7 @@
   "live_verified": false,
   "pack": "gen3_exp",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "bd0bba7e9f719de60bbfb9e00f83aa57b40a0f5ec8e6115a3efde0ef23ab8a9d",
+  "sha256": "d21b118471931a57a39bcc2fee6a950ccdf8cfb4485fc39dad27d3354d63534e",
   "source": {
     "facts_sha256": "9f3691e0d7439f1947428101c2e0d0b50d08725d72711a30155766268becc4bf",
     "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
@@ -122,6 +122,60 @@
     "emerald_expansion_28877d73": {
       "artifacts": {
         "clean": {
+          "cursor_symbols": {
+            "sCursorArea": {
+              "address": 33760464,
+              "from_sStorage": 4,
+              "size": 1,
+              "size_evidence": "verified_build_symbol",
+              "symbol_source": "build:pokemon.sym:482",
+              "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+            },
+            "sCursorPosition": {
+              "address": 33760484,
+              "from_sStorage": 24,
+              "size": 1,
+              "size_evidence": "verified_build_symbol",
+              "symbol_source": "build:pokemon.sym:490",
+              "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+            },
+            "sIsMonBeingMoved": {
+              "address": 33760465,
+              "from_sStorage": 5,
+              "size": 1,
+              "size_evidence": "verified_build_symbol",
+              "symbol_source": "build:pokemon.sym:483",
+              "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+            },
+            "sStorage": {
+              "address": 33760460,
+              "from_sStorage": 0,
+              "size": 4,
+              "size_evidence": "verified_build_symbol",
+              "symbol_source": "build:pokemon.sym:481",
+              "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+            }
+          },
+          "register_pool_proof": {
+            "Task_DepositMenu": {
+              "evidence": "COMPILED_DEF_USE",
+              "function_offset": 8,
+              "pool_function_offset": 552,
+              "pool_value": 33760460,
+              "register": "R5",
+              "runtime_liveness": "OPEN_PHYSICAL",
+              "symbol": "Task_DepositMenu"
+            },
+            "Task_ReleaseMon": {
+              "evidence": "COMPILED_DEF_USE",
+              "function_offset": 8,
+              "pool_function_offset": 756,
+              "pool_value": 33760460,
+              "register": "R5",
+              "runtime_liveness": "OPEN_PHYSICAL",
+              "symbol": "Task_ReleaseMon"
+            }
+          },
           "rom_md5": "83bde8deeaa27453b12545b9cfffe3a6",
           "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
           "sites": {
@@ -151,6 +205,7 @@
                 "CPSR"
               ],
               "rom_offset": 546696,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:472-504",
               "symbol": "CB2_InitBattle"
             },
@@ -181,6 +236,7 @@
                 "CPSR"
               ],
               "rom_offset": 535698,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:5422-5457",
               "symbol": "ReturnFromBattleToOverworld"
             },
@@ -213,6 +269,7 @@
                 "CPSR"
               ],
               "rom_offset": 1826318,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_script_commands.c:8371; src/pokemon.c:2941-2961",
               "symbol": "GiveCapturedMonToPlayer"
             },
@@ -243,6 +300,7 @@
                 "CPSR"
               ],
               "rom_offset": 1252458,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/evolution_scene.c:786-792",
               "symbol": "Task_EvolutionScene"
             },
@@ -273,6 +331,7 @@
                 "CPSR"
               ],
               "rom_offset": 678874,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_script_commands.c:1906; src/battle_util.c:11125-11153",
               "symbol": "Cmd_tryfaintmon"
             },
@@ -302,6 +361,7 @@
                 "CPSR"
               ],
               "rom_offset": 1551036,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/main.c:134-172",
               "symbol": "AgbMainLoop"
             },
@@ -332,6 +392,7 @@
                 "CPSR"
               ],
               "rom_offset": 1658046,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/overworld.c:1992-1998",
               "symbol": "CB2_LoadMap2"
             },
@@ -364,6 +425,7 @@
                 "CPSR"
               ],
               "rom_offset": 1826318,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon.c:2941-2961; src/script_pokemon_util.c:76",
               "symbol": "GiveCapturedMonToPlayer"
             },
@@ -395,6 +457,7 @@
                 "CPSR"
               ],
               "rom_offset": 1886266,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:6464-6468",
               "symbol": "SetPlacedMonData"
             },
@@ -427,6 +490,18 @@
                 "CPSR"
               ],
               "rom_offset": 1909726,
+              "snapshot": {
+                "cleared_by": [
+                  "task_change",
+                  "storage_reset"
+                ],
+                "contract": "Read sIsMonBeingMoved BEFORE the storage call to tell a moved-mon release-clear apart from an acquisition deposit. R4 slot and R7 box are compiled def-use; runtime liveness is not demonstrated by this pin.",
+                "emits": "pc_deposit",
+                "one_shot": false,
+                "reads": [
+                  "sIsMonBeingMoved"
+                ]
+              },
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:2843-2880,6492-6517",
               "symbol": "Task_DepositMenu"
             },
@@ -460,6 +535,7 @@
                 "CPSR"
               ],
               "rom_offset": 1826160,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon.c:2963",
               "symbol": "CopyMonToPC"
             },
@@ -490,6 +566,18 @@
                 "CPSR"
               ],
               "rom_offset": 1910376,
+              "snapshot": {
+                "cleared_by": [
+                  "pc_release",
+                  "release_cancel",
+                  "task_change",
+                  "storage_reset"
+                ],
+                "consumes": "pc_release_begin",
+                "contract": "Emit only when a matching pc_release_begin latch exists; resolve identity from the snapshot, never from cleared storage.",
+                "emits": "pc_release",
+                "one_shot": false
+              },
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:2954-2958,6552-6582",
               "symbol": "Task_ReleaseMon"
             },
@@ -520,6 +608,22 @@
                 "CPSR"
               ],
               "rom_offset": 1910246,
+              "snapshot": {
+                "cleared_by": [
+                  "pc_release",
+                  "release_cancel",
+                  "task_change",
+                  "storage_reset"
+                ],
+                "contract": "Consumed once by the next pc_release from the SAME Task_ReleaseMon invocation. A moved-mon flag clear emits no begin and must not reuse an older latch.",
+                "emits": "pc_release_begin",
+                "one_shot": true,
+                "reads": [
+                  "sCursorArea",
+                  "sCursorPosition",
+                  "sIsMonBeingMoved"
+                ]
+              },
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:2908-2958,6552-6582",
               "symbol": "Task_ReleaseMon"
             },
@@ -552,6 +656,7 @@
                 "CPSR"
               ],
               "rom_offset": 1886330,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/pokemon_storage_system.c:6450-6463",
               "symbol": "SetPlacedMonData"
             },
@@ -583,6 +688,7 @@
                 "CPSR"
               ],
               "rom_offset": 1324518,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/field_poison.c:135-149",
               "symbol": "DoPoisonFieldEffect"
             },
@@ -614,6 +720,7 @@
                 "CPSR"
               ],
               "rom_offset": 1324492,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/field_poison.c:125-149",
               "symbol": "DoPoisonFieldEffect"
             },
@@ -645,6 +752,7 @@
                 "CPSR"
               ],
               "rom_offset": 2054110,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/save.c:773-792",
               "symbol": "TrySavingData"
             },
@@ -676,6 +784,7 @@
                 "CPSR"
               ],
               "rom_offset": 2187784,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/trade.c:3083",
               "symbol": "TradeMons"
             },
@@ -705,6 +814,7 @@
                 "CPSR"
               ],
               "rom_offset": 2188006,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/trade.c:3083-3205",
               "symbol": "TradeMons"
             },
@@ -735,6 +845,7 @@
                 "CPSR"
               ],
               "rom_offset": 1255346,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/evolution_scene.c:1214-1220",
               "symbol": "Task_TradeEvolutionScene"
             },
@@ -765,6 +876,7 @@
                 "CPSR"
               ],
               "rom_offset": 1662724,
+              "snapshot": null,
               "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/overworld.c:1956-1981",
               "symbol": "CB2_WhiteOut"
             }

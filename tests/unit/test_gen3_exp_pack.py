@@ -139,6 +139,119 @@ def test_inlined_pc_sites_have_proven_caller_contracts(context):
         signals.build_expansion(changed)
 
 
+def test_pc_cursor_globals_are_sym_bound_with_consistent_offsets(context):
+    """STATIC only: each cursor global is uniquely named in the .sym and sits at &sStorage+off.
+
+    Proves symbol identity and address layout. It says nothing about runtime liveness -- a value
+    that exists and is correctly placed can still be stale or dead at any capture point. That is
+    the PHYSICAL run's job and is not claimed here.
+    """
+    pack = signals.build_expansion(context)
+    cursors = pack["titles"][TITLE]["artifacts"]["clean"]["cursor_symbols"]
+    assert set(cursors) == {"sStorage", "sCursorArea", "sIsMonBeingMoved", "sCursorPosition"}
+    storage = cursors["sStorage"]["address"]
+    for name, row in cursors.items():
+        hit = profile.expansion_symbol(context, name)
+        assert row["address"] == hit["address"], name
+        assert row["size"] == hit["size"], name
+        assert row["address"] == storage + row["from_sStorage"], name
+        assert row["from_sStorage"] == signals.EXPANSION_CURSOR_SYMBOLS[name], name
+        assert row["size_evidence"] == "verified_build_symbol", name
+    # Offsets are the ROM's, not the brief's: sCursorPosition is 0x18 (24), not 18.
+    assert cursors["sCursorPosition"]["from_sStorage"] == 0x18
+    assert cursors["sCursorPosition"]["address"] - storage == 0x18
+
+
+def test_cursor_offsets_are_refused_when_a_sym_row_disagrees(context):
+    """A wrong value in the symbol table must stop generation, not be emitted as a fact."""
+    bad = dict(context)
+    rows = dict(context["symbols"])
+    rows["sCursorArea"] = [dict(context["symbols"]["sCursorArea"][0], address=0x020324FF)]
+    bad["symbols"] = rows
+    with pytest.raises(ValueError, match="sCursorArea is 0x020324FF, expected &sStorage"):
+        signals.build_expansion(bad)
+
+    dup = dict(context)
+    rows = dict(context["symbols"])
+    rows["sStorage"] = context["symbols"]["sStorage"] * 2
+    dup["symbols"] = rows
+    with pytest.raises(ValueError, match="occurrences of sStorage"):
+        signals.build_expansion(dup)
+
+
+def test_r5_pool_resolves_to_sstorage_by_decoding_not_by_literal(context):
+    """STATIC compiled def-use: the LDR at each PC task's entry pools &sStorage into R5.
+
+    Reads the literal out of the verified ROM. It proves the compile-time value only; whether R5
+    is still live at the capture offset is runtime_liveness=OPEN_PHYSICAL and is not claimed.
+    """
+    proof = signals.build_expansion(context)["titles"][TITLE]["artifacts"]["clean"]["register_pool_proof"]
+    storage = profile.expansion_symbol(context, "sStorage")["address"]
+    for symbol in ("Task_DepositMenu", "Task_ReleaseMon"):
+        row = proof[symbol]
+        assert row["register"] == "R5", symbol
+        assert row["function_offset"] == 8, symbol
+        assert row["pool_value"] == storage, symbol
+        assert row["evidence"] == "COMPILED_DEF_USE", symbol
+        assert row["runtime_liveness"] == "OPEN_PHYSICAL", symbol
+        # Independent re-decode, so the test does not just echo the generator's own arithmetic.
+        fn = profile.expansion_symbol(context, symbol)
+        base = fn["address"] - pins.ROM_BASE
+        ins = int.from_bytes(context["rom"][base + 8:base + 10], "little")
+        assert ins & 0xF800 == 0x4800 and (ins >> 8) & 7 == 5, symbol
+        pool = ((8 + 4) & ~3) + (ins & 0xFF) * 4
+        assert pool == row["pool_function_offset"], symbol
+        assert int.from_bytes(context["rom"][base + pool:base + pool + 4], "little") == storage, symbol
+
+    # Negative control, and an honest limit: mutating the ROM is refused by the SHA-1 identity
+    # gate BEFORE any pool word is decoded, so a "drifted pool is rejected" negative is
+    # unreachable by construction. Recorded rather than worked around -- the pool proof is a
+    # positive fact about the verified ROM, not a mutation-robustness claim.
+    bad = dict(context)
+    rom = bytearray(context["rom"])
+    fn = profile.expansion_symbol(context, "Task_ReleaseMon")
+    base = fn["address"] - pins.ROM_BASE
+    ins = int.from_bytes(context["rom"][base + 8:base + 10], "little")
+    pool = ((8 + 4) & ~3) + (ins & 0xFF) * 4
+    rom[base + pool:base + pool + 4] = (0x02030000).to_bytes(4, "little")
+    bad["rom"] = bytes(rom)
+    with pytest.raises(ValueError, match="identity mismatch"):
+        signals.build_expansion(bad)
+
+
+
+
+def test_release_snapshot_latch_is_a_contract_with_no_consumer(context):
+    """The one-shot pairing is metadata only. Nothing in the tree consumes `snapshot` yet."""
+    sites = signals.build_expansion(context)["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    begin, release = sites["pc_release_begin"]["snapshot"], sites["pc_release"]["snapshot"]
+    assert begin["one_shot"] is True
+    assert begin["emits"] == "pc_release_begin"
+    assert release["consumes"] == "pc_release_begin"
+    assert set(begin["cleared_by"]) == {"pc_release", "release_cancel", "task_change", "storage_reset"}
+    assert "moved-mon" in begin["contract"] and "SAME Task_ReleaseMon" in begin["contract"]
+    # Every cursor a site claims to read must be one the generator actually bound.
+    for kind, row in sites.items():
+        if row.get("snapshot"):
+            for name in row["snapshot"].get("reads", ()):
+                assert name in signals.EXPANSION_CURSOR_SYMBOLS, (kind, name)
+    # Additive only: the pre-existing site keys a consumer reads are untouched.
+    for kind, row in sites.items():
+        for key in ("address", "expected_hex", "rom_offset", "capture_offset", "point", "mode", "symbol"):
+            assert key in row, (kind, key)
+    # The emerald pack is a different generator path and is not touched by this card; the
+    # additive claim is checked by key-set parity above, not by reaching into another pack.
+
+
+def test_generated_pack_is_current_and_reproducible(context):
+    on_disk = read("engine_signals.json")
+    assert json.loads(json.dumps(signals.build_expansion(context))) == on_disk
+    body = {k: v for k, v in on_disk.items() if k != "sha256"}
+    assert on_disk["sha256"] == hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    assert on_disk["live_verified"] is False
+
+
 def test_wrong_rom_cannot_generate_pins(context):
     bad = dict(context)
     data = bytearray(context["rom"])
