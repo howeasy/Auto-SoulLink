@@ -1439,14 +1439,16 @@ EXPANSION_SNAPSHOT_PROVENANCE = {
 
 
 def expansion_cursor_symbols(context):
-    """Bind the PC cursor/state globals to the .sym, and prove the ROM agrees."""
+    """Bind the PC cursor/state globals to the .sym, and prove the ROM agrees.
+
+    The base is taken from sStorage EXPLICITLY, not from whichever name the table yields first:
+    a table reorder or a rename of the first key must not silently redefine every other offset.
+    """
     from tools.gen_gen3_profile import expansion_symbol
     out = {}
-    base = None
+    base = expansion_symbol(context, "sStorage")["address"]
     for name, offset in EXPANSION_CURSOR_SYMBOLS.items():
         hit = expansion_symbol(context, name)
-        if base is None:
-            base = hit["address"]
         want = base + offset
         if hit["address"] != want:
             raise ValueError(f"{name} is 0x{hit['address']:08X}, expected &sStorage+{offset} = 0x{want:08X}")
@@ -1481,6 +1483,8 @@ def expansion_pool_register(context, symbol, offset=8, register=5):
 
 
 def build_expansion(context):
+    import copy
+
     from tools.gen_gen3_profile import EXPANSION_TITLE
     from tools.pin_gen3_site import pin_expansion_site
 
@@ -1500,7 +1504,11 @@ def build_expansion(context):
                 raise ValueError(f"{kind} provenance names unbound cursor symbol: {name}")
         if "consumes" in provenance and provenance["consumes"] not in sites:
             raise ValueError(f"{kind} provenance consumes unknown site: {provenance['consumes']}")
-        sites[kind]["snapshot"] = provenance
+        if provenance.get("emits") != kind:
+            raise ValueError(f"{kind} provenance declares emits={provenance.get('emits')!r}")
+        # A returned pack is caller-owned. Handing out the module constant by reference would let
+        # one build's mutation leak into the next build, so each pack gets its own copy.
+        sites[kind]["snapshot"] = copy.deepcopy(provenance)
     for kind in sites:
         sites[kind].setdefault("snapshot", None)
     register_proof = {symbol: expansion_pool_register(context, symbol)

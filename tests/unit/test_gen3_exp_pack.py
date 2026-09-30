@@ -1,5 +1,6 @@
 """Unadmitted expansion pack: exact build facts, bytes, and additive generation."""
 
+import copy
 import hashlib
 import json
 import os
@@ -194,7 +195,9 @@ def test_r5_pool_resolves_to_sstorage_by_decoding_not_by_literal(context):
         assert row["pool_value"] == storage, symbol
         assert row["evidence"] == "COMPILED_DEF_USE", symbol
         assert row["runtime_liveness"] == "OPEN_PHYSICAL", symbol
-        # Independent re-decode, so the test does not just echo the generator's own arithmetic.
+        # Double entry: the test re-decodes from the same verified bytes, so a decode bug on
+        # either side shows as a mismatch. It is NOT an independent re-derivation - both
+        # sides use the same Thumb LDR-literal rule, so this proves placement, not the rule.
         fn = profile.expansion_symbol(context, symbol)
         base = fn["address"] - pins.ROM_BASE
         ins = int.from_bytes(context["rom"][base + 8:base + 10], "little")
@@ -241,6 +244,55 @@ def test_release_snapshot_latch_is_a_contract_with_no_consumer(context):
             assert key in row, (kind, key)
     # The emerald pack is a different generator path and is not touched by this card; the
     # additive claim is checked by key-set parity above, not by reaching into another pack.
+
+
+def test_snapshot_metadata_is_not_aliased_across_builds(context, monkeypatch):
+    """A returned pack is caller-owned: mutating it must not poison the next build."""
+    first = signals.build_expansion(context)
+    sites = first["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    sites["pc_release_begin"]["snapshot"]["one_shot"] = "MUTATED"
+    sites["pc_release_begin"]["snapshot"]["cleared_by"].append("injected")
+    sites["pc_release_begin"]["snapshot"]["contract"] = "MUTATED"
+
+    second = signals.build_expansion(context)
+    again = second["titles"][TITLE]["artifacts"]["clean"]["sites"]["pc_release_begin"]["snapshot"]
+    assert again["one_shot"] is True
+    assert again["contract"] != "MUTATED"
+    assert "injected" not in again["cleared_by"]
+    # And the module constant itself is untouched, so a third build is still clean.
+    assert signals.EXPANSION_SNAPSHOT_PROVENANCE["pc_release_begin"]["one_shot"] is True
+    assert "injected" not in signals.EXPANSION_SNAPSHOT_PROVENANCE["pc_release_begin"]["cleared_by"]
+    third = signals.build_expansion(context)["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    assert third["pc_release_begin"]["snapshot"] == again
+
+
+def test_provenance_emits_must_name_its_own_site(context, monkeypatch):
+    """A mislabelled provenance block is a fact error, not a cosmetic one: refuse it."""
+    pristine = copy.deepcopy(signals.EXPANSION_SNAPSHOT_PROVENANCE)
+    broken = copy.deepcopy(pristine)
+    broken["pc_release"]["emits"] = "pc_deposit"
+    monkeypatch.setattr(signals, "EXPANSION_SNAPSHOT_PROVENANCE", broken)
+    with pytest.raises(ValueError, match=r"pc_release provenance declares emits='pc_deposit'"):
+        signals.build_expansion(context)
+
+    missing = copy.deepcopy(pristine)
+    del missing["pc_deposit"]["emits"]
+    monkeypatch.setattr(signals, "EXPANSION_SNAPSHOT_PROVENANCE", missing)
+    with pytest.raises(ValueError, match=r"pc_deposit provenance declares emits=None"):
+        signals.build_expansion(context)
+
+
+def test_cursor_base_is_sstorage_not_the_first_table_key(context, monkeypatch):
+    """The offset base is &sStorage explicitly; table order must not define it."""
+    reordered = dict(reversed(list(signals.EXPANSION_CURSOR_SYMBOLS.items())))
+    monkeypatch.setattr(signals, "EXPANSION_CURSOR_SYMBOLS", reordered)
+    sites = signals.build_expansion(context)
+    cursors = sites["titles"][TITLE]["artifacts"]["clean"]["cursor_symbols"]
+    assert set(cursors) == set(signals.EXPANSION_CURSOR_SYMBOLS)
+    storage = profile.expansion_symbol(context, "sStorage")["address"]
+    for name, row in cursors.items():
+        assert row["address"] == storage + row["from_sStorage"], name
+    assert cursors["sCursorPosition"]["address"] - storage == 0x18
 
 
 def test_generated_pack_is_current_and_reproducible(context):
