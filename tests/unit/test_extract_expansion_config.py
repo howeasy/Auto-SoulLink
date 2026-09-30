@@ -6,10 +6,13 @@ pytest dependency (mirrors tools/build_expansion.py: never invoked from tests).
 """
 
 import copy
+import hashlib
 import json
+import os
 import re
 import subprocess
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -17,10 +20,17 @@ from tools import build_expansion as be, extract_expansion_config as c
 
 CONFIG = json.loads(c.OUTPUT.read_text(encoding="utf-8"))
 
-# Fixed, read-only local checkout named by the XC0 card (a different worktree than
-# this one); the neighbouring expansion tests instead use `ex.ROOT/".cache/expansion-src"`
-# -- this repo has no such local clone, so the falsifier below is gated on this path.
-LOCAL_CHECKOUT = c.ROOT.parent / "em-x1/.cache/expansion-src"
+
+def test_provided_pinned_source_is_not_silently_skipped(monkeypatch):
+    source = Path(os.environ.get("SLINK_EXPANSION_SRC", str(c.ROOT / ".cache/expansion-src")))
+    if not source.is_dir():
+        pytest.skip("local pinned expansion source absent")
+    monkeypatch.setenv("SLINK_EXPANSION_SRC", str(source))
+    try:
+        selected = local_checkout()
+    except pytest.skip.Exception:
+        pytest.fail("provided pinned source was skipped by stale locator")
+    assert selected == source
 
 
 def test_committed_config_header_hashes_match_lock_and_facts_provenance():
@@ -36,13 +46,50 @@ def test_committed_config_header_hashes_match_lock_and_facts_provenance():
 
 
 def local_checkout():
-    if not LOCAL_CHECKOUT.exists():
-        pytest.skip(f"expansion source not cloned: {LOCAL_CHECKOUT}")
-    commit = subprocess.check_output(["git", "-C", str(LOCAL_CHECKOUT), "rev-parse", "HEAD"], text=True).strip()
+    # The caller may supply a pinned checkout; otherwise use the repo's common cache location.
+    # A provided but wrong checkout must fail here, never fall back to another source.
+    source = Path(os.environ["SLINK_EXPANSION_SRC"]) if os.environ.get("SLINK_EXPANSION_SRC") else \
+        c.ROOT / ".cache/expansion-src"
+    if not source.is_dir():
+        pytest.skip(f"expansion source not cloned: {source}")
+    commit = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
     assert commit == c.PIN
-    dirty = subprocess.check_output(["git", "-C", str(LOCAL_CHECKOUT), "status", "--porcelain", "--untracked-files=no"], text=True)
+    dirty = subprocess.check_output(["git", "-C", str(source), "status", "--porcelain", "--untracked-files=no"], text=True)
     assert not dirty
-    return LOCAL_CHECKOUT
+    for header, expected in be.load_lock()["config_headers"].items():
+        actual = hashlib.sha256((source / header).read_bytes()).hexdigest()
+        assert actual == expected, f"pinned expansion header hash differs: {header}"
+    return source
+
+
+def test_present_wrong_header_fails_without_skip(tmp_path, monkeypatch):
+    source = Path(os.environ.get("SLINK_EXPANSION_SRC", str(c.ROOT / ".cache/expansion-src")))
+    if not source.is_dir():
+        pytest.skip("local pinned expansion source absent")
+    for header in be.load_lock()["config_headers"]:
+        target = tmp_path / header
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes((source / header).read_bytes())
+    battle = tmp_path / "include/config/battle.h"
+    battle.write_bytes(battle.read_bytes() + b"\n/* wrong header */\n")
+    monkeypatch.setenv("SLINK_EXPANSION_SRC", str(tmp_path))
+    monkeypatch.setattr(subprocess, "check_output", lambda args, text=True: c.PIN + "\n"
+                        if "rev-parse" in args else "")
+    with pytest.raises(AssertionError, match="header hash differs"):
+        local_checkout()
+
+
+def test_absent_source_skips_but_present_wrong_pin_fails(tmp_path, monkeypatch):
+    missing = tmp_path / "absent"
+    monkeypatch.setenv("SLINK_EXPANSION_SRC", str(missing))
+    with pytest.raises(pytest.skip.Exception):
+        local_checkout()
+    present = tmp_path / "present"
+    present.mkdir()
+    monkeypatch.setenv("SLINK_EXPANSION_SRC", str(present))
+    monkeypatch.setattr(subprocess, "check_output", lambda args, text=True: "0" * 40 + "\n")
+    with pytest.raises(AssertionError):
+        local_checkout()
 
 
 def hand_read(source, header, name):

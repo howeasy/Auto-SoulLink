@@ -1,0 +1,7 @@
+# Core unit input locator repair (2026-09-30)
+
+At core checkout `0beca30d`, `tests/unit/test_extract_expansion_config.py` still looked only at `em-x1/.cache/expansion-src`, a retired worktree. Four required global-unit falsifiers skipped despite the pinned source being available at the repo's `.cache/expansion-src` junction. This is a test input locator repair, not expansion feature or runtime work.
+
+The test now honors `SLINK_EXPANSION_SRC` when set and otherwise uses this checkout's `.cache/expansion-src`. A supplied path is authoritative: if it is absent, only then does the test skip; if present with a wrong Git HEAD, tracked edits, missing header, or header bytes differing from the pinned source lock, it fails. The committed config/facts provenance tests and independent macro hand-read remain in place. No absolute local cache path is committed to the test.
+
+RED: with `SLINK_EXPANSION_SRC` set to the available pinned checkout, the new supplied-source test failed because the old locator skipped `C:/slink-wt/em-x1/.cache/expansion-src`. GREEN: `python -m pytest tests/unit/test_extract_expansion_config.py -q` returned **26 passed, zero skipped** after the locator change. The focused controls also check absent-source skip, present wrong-pin failure, and present wrong-header-hash failure. This does not replace the required post-JAR/post-citation full frozen unit suite or any PHYSICAL gate.
