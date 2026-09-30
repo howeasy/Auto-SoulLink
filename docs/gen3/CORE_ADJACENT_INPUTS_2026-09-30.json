@@ -40,5 +40,6 @@
     }
   ],
   "compiler_binding": "SLINK_ARMGCC is existing bin directory, not exe path; no installation",
-  "affected_verification": "258 passed/1 skipped before correcting RR patch/build binding; then test_patcher_routes.py 26 passed/0 skipped; Gen1 patch verify-only exit0. Existing main RR clean file already matched, so retained."
+  "affected_verification": "258 passed/1 skipped before correcting RR patch/build binding; then test_patcher_routes.py 26 passed/0 skipped; Gen1 patch verify-only exit0. Existing main RR clean file already matched, so retained.",
+  "gen2_containment": "Core and main .cache/gen2-build/pokegold are ordinary verified copies of the preserved stable context; root-bound trade manifests reject out-of-root junctions, and the guard was not changed."
 }
