@@ -6,6 +6,7 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from pathlib import Path
@@ -1148,6 +1149,62 @@ def test_first_uncaught_route1_battle_is_terminal_only_when_opted_in(opt_in, par
     if expected == "first-catch-battle-lost":
         _, again = route.step(None, None, battle, 3)
         assert again == expected and route.encounters == 1  # no second grass encounter can qualify
+
+
+def test_actual_link_prerequisite_wording_is_the_retryable_hunt_terminal():
+    """Compose the real Lua carrier around a phase returned by the real Route 1 hunter."""
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    hunt_source = REPO / "lua/tests/gen1_rb_hunt_inputs.lua"
+    duo_source = (REPO / "lua/tests/duo/duo_gen1_main.lua").read_text(encoding="utf-8")
+    hunter = lua.eval(f'dofile("{hunt_source.as_posix()}")')
+    driver = lua.table(wait_menu=lambda _budget: lua.table(ok=True, frames=1),
+                       choose=lambda _name: lua.table(ok=True),
+                       commit_move=lambda _slot: lua.table(ok=False, why="battle_over"))
+    route = hunter.new(lua.table(player="b"), lua.table(driver=driver, step=lambda _buttons: None,
+        rd=lambda address: {1: 1, 2: 4, 3: 1, 4: 0, 5: 14, 6: 0, 7: 14}.get(address, 0),
+        symbols=lua.table(wNumBagItems=1, wBagItems=2, wEnemyMonHP=4, wEnemyMonMaxHP=6),
+        mode="catch", stop_on_first_uncaught_battle=True))
+    battle = lua.table(map=12, x=10, y=35, battle=1, battle_type=0, party_hp=19,
+                       party_count=1, font_loaded=False, joy_ignore=0)
+    overworld = lua.table(map=12, x=10, y=35, battle=0, battle_result=0, party_hp=19,
+                          party_count=1, font_loaded=False, joy_ignore=0)
+    route.step(None, None, battle, 1)
+    _, phase = route.step(None, None, overworld, 2)
+    assert phase == "first-catch-battle-lost"
+
+    wrap_source = re.search(r"(?ms)^local function link_prerequisite_failure\(why\).*?^end$", duo_source)
+    scenario_source = re.search(r"(?ms)^function scenarios.link_new\(\).*?^end$", duo_source)
+    assert wrap_source and scenario_source
+    lua.globals().LOST_PHASE = phase
+    prelude = '''
+local scenarios, D = {}, {scenario="linked_faint_bench_battle_new"}
+local function wait_go() return true end
+local function hunt(mode, options)
+    assert(mode == "catch" and options.stop_on_first_uncaught_battle == true)
+    return LOST_PHASE
+end
+'''
+    def compose(wrapper):
+        return lua.execute(prelude + wrapper + "\n" + scenario_source.group() +
+                           "\nreturn {scenarios.link_new, link_prerequisite_failure}")
+    funcs = compose(wrap_source.group())
+    passed, bare = funcs[1]()
+    assert passed is False and bare == "hunt ended first-catch-battle-lost"
+    nested = funcs[2](bare)
+    assert nested == "link_new prerequisite failed: " + bare
+    for reason in (bare, nested):
+        assert duo.classify_gen1_result("RESULT: FAIL (" + reason + ")") == "CAUSE_RNG"
+    pair = {"a": "RESULT: FAIL (linked capture was not returned)\n",
+            "b": "RESULT: FAIL (" + nested + ")\n"}
+    assert duo.retryable_gen1_rng("gen1_pure", pair, 1, 3, scenario="linked_faint_bench_battle_new")
+    assert not duo.retryable_gen1_rng("gen1_pure", pair, 3, 3, scenario="linked_faint_bench_battle_new")
+
+    changed = wrap_source.group().replace("link_new prerequisite failed: ", "link_new prerequisite changed: ")
+    assert changed != wrap_source.group()
+    altered = compose(changed)[2](bare)
+    assert duo.classify_gen1_result("RESULT: FAIL (" + altered + ")") == "FINAL"
+    assert not duo.retryable_gen1_rng("gen1_pure", {**pair, "b": "RESULT: FAIL (" + altered + ")\n"},
+                                      1, 3, scenario="linked_faint_bench_battle_new")
 
 
 # ── A0-H2: the post-result oracle registry, artifact provenance and the bag baseline ─────
