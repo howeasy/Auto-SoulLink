@@ -263,8 +263,86 @@ def test_preserved_cache_cannot_authorize_a_second_trade_while_hidden(tmp_path):
     srv._dispatch("b", {"event": "trade_request"})
     token2 = srv.state.pending_trade["token"]
     commands = srv._dispatch("b", {"event": "menu_result", "token": token2, "choice": 0})
-    assert any("party withheld" in c.get("text", "") for c in commands)
+    assert srv.state.pending_trade["token"] == token2
+    assert srv.state.pending_trade["phase"] == "menu"
     assert not any(c["cmd"] == "choose_mon" for c in commands)
+    srv._dispatch("b", {"event": "tick", "party": [_mon("b")]})
+    assert srv.state.pending_trade["phase"] == "menu", "recovery pending is not a fresh eligible census"
+
+
+def test_recovery_menu_trade_choice_waits_for_fresh_visible_party(tmp_path):
+    srv = _server(tmp_path, "firered_rr")
+    entry = LinkEntry(area_id="route_1", status=LinkStatus.ALIVE,
+                      a=MonInfo(key=KEYS["a"], species=1, level=12),
+                      b=MonInfo(key=KEYS["b"], species=4, level=12))
+    srv.state.links.append(entry)
+    srv.state._index_entry(entry)
+    srv._dispatch("a", {"event": "trade_request"})
+    token = srv.state.pending_trade["token"]
+    srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    reply = srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0})
+    assert srv.state.pending_trade and srv.state.pending_trade["token"] == token
+    assert not any(c.get("cmd") in ("choose_mon", "apply_prepare", "apply_trade") for c in reply)
+    srv.state.pending_trade["age"] = 10
+    duplicate = srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0})
+    assert srv.state.pending_trade["age"] >= 10
+    assert not any(c.get("cmd") == "choose_mon" for c in duplicate)
+    visible = srv._dispatch("a", {"event": "tick", "party": [_mon("a")], "in_battle": False})
+    assert srv.state.pending_trade["phase"] == "choosing"
+    assert [c["cmd"] for c in visible if c.get("cmd") == "choose_mon"] == ["choose_mon"]
+    srv.state.pending_trade["age"] = 10
+    replay = srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0})
+    assert srv.state.pending_trade["age"] >= 10
+    assert not any(c.get("cmd") == "choose_mon" for c in replay)
+
+
+@pytest.mark.parametrize("failure", ["key", "capability"])
+def test_recovery_menu_wait_refuses_stale_party_or_prepare_capability(tmp_path, failure):
+    srv = _server(tmp_path, "firered_rr")
+    entry = LinkEntry(area_id="route_1", status=LinkStatus.ALIVE,
+                      a=MonInfo(key=KEYS["a"], species=1, level=12),
+                      b=MonInfo(key=KEYS["b"], species=4, level=12))
+    srv.state.links.append(entry)
+    srv.state._index_entry(entry)
+    srv._dispatch("a", {"event": "trade_request"})
+    token = srv.state.pending_trade["token"]
+    srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0})
+    if failure == "capability":
+        srv.state.trade_prepare["b"] = False
+    mon = {**_mon("a"), "key": "different:00000011"} if failure == "key" else _mon("a")
+    reply = srv._dispatch("a", {"event": "tick", "party": [mon], "in_battle": False})
+    assert srv.state.pending_trade is None
+    assert not any(c.get("cmd") in ("choose_mon", "apply_prepare", "apply_trade") for c in reply)
+
+
+@pytest.mark.parametrize("ending", ["withdraw", "say_hey", "watchdog"])
+def test_recovery_menu_wait_has_bounded_exit(tmp_path, ending):
+    srv = _server(tmp_path, "firered_rr")
+    srv._dispatch("a", {"event": "trade_request"})
+    token = srv.state.pending_trade["token"]
+    srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0})
+    if ending == "watchdog":
+        srv.state.TRADE_WATCHDOG_EVENTS = 2
+        for _ in range(3):
+            srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    else:
+        srv._dispatch("a", {"event": "menu_result", "token": token,
+                            "choice": 1 if ending == "say_hey" else 0,
+                            "withdraw": ending == "withdraw"})
+    assert srv.state.pending_trade is None
+
+
+def test_hidden_initial_trade_without_both_prepare_capabilities_still_refuses(tmp_path):
+    srv = _server(tmp_path, "firered_rr")
+    srv._dispatch("a", {"event": "trade_request"})
+    token = srv.state.pending_trade["token"]
+    srv.state.trade_prepare["b"] = False
+    srv._dispatch("a", {"event": "tick", "party_hidden": True})
+    reply = srv._dispatch("a", {"event": "menu_result", "token": token, "choice": 0})
+    assert srv.state.pending_trade is None
+    assert any("party withheld" in c.get("text", "") for c in reply)
 
 
 def test_recovery_does_not_deliver_an_apply_that_was_still_queued(tmp_path):

@@ -1056,6 +1056,9 @@ class SoulLinkState:
             choice = int(msg.get("choice", 0))
         except (TypeError, ValueError):
             choice = 0
+        if (pt.get("phase") in ("menu", "choosing", "confirming", "preparing", "applying") and pt.get("menu_deferred")
+                and player_id == pt["initiator"] and choice == 0 and msg.get("withdraw") is not True):
+            return  # a replayed Trade choice cannot renew the hidden wait or issue two pickers
         if (pt.get("phase") in ("confirming", "preparing", "applying") and pt.get("confirm_deferred")
                 and player_id == _partner(pt["initiator"])
                 and choice == 1):
@@ -1065,7 +1068,16 @@ class SoulLinkState:
         if phase == "menu":                                # initiator's action menu (multichoice index)
             if player_id != pt["initiator"]:
                 return
+            if msg.get("withdraw") is True:
+                self.pending_trade = None
+                self.queued_commands[player_id].append({"cmd": "msgbox", "text": "Trade canceled.", "fb": "prompt"})
+                return
             if choice == 0:                                # TRADE → open the party picker (if eligible)
+                if (self.adapter.supports_trade_recovery() and all(self.trade_prepare.values())
+                        and (any(self.party_hidden.values()) or any(self.trade_recovery_pending.values()))):
+                    pt["menu_deferred"] = True
+                    self._save()
+                    return
                 if not self._eligible_trade_pairs(player_id):
                     self.pending_trade = None
                     self.queued_commands[player_id].append({
@@ -1158,6 +1170,17 @@ class SoulLinkState:
 
     def _resume_prepared_trade_on_visible_snapshot(self):
         pt = self.pending_trade
+        if (self.adapter.supports_trade_recovery() and pt and pt.get("phase") == "menu"
+                and pt.get("menu_deferred") and not any(self.party_hidden.values())
+                and not any(self.trade_recovery_pending.values())):
+            initiator = pt["initiator"]
+            if not all(self.trade_prepare.values()) or not self._eligible_trade_pairs(initiator):
+                self._cancel_trade("Trade canceled - a POKeMON is\nno longer available.")
+            else:
+                pt["phase"], pt["age"] = "choosing", 0
+                self.queued_commands[initiator].append({"cmd": "choose_mon", "token": pt["token"]})
+                self._save()
+            return
         if (self.adapter.supports_trade_recovery() and pt and pt.get("phase") == "confirming"
                 and pt.get("confirm_deferred") and not any(self.party_hidden.values())
                 and not any(self.trade_recovery_pending.values())):
