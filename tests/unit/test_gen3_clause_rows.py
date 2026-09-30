@@ -570,11 +570,13 @@ def test_species_match_releases_a_catch_before_b_pending_and_save():
 
 def test_species_preflight_oracle_requires_native_order_and_matching_rom_families():
     rules = importlib.import_module("gen3_clause_rows")
-    facts = {i: {"16": {"family": 16}, "19": {"family": 19}} for i in "ab"}
+    facts = {i: {"16": {"family": 16}, "17": {"family": 16},
+                 "19": {"family": 19}} for i in "ab"}
     tag = lambda name, row: name + " " + json.dumps(row) + "\n"
     receipts = {
         "a": tag("A_PRE_ENCOUNTER", {"species": 16, "family": 16}) +
-             "PREFLIGHT_MATCH\nTX capture A:16 {}\n" + tag("PENDING_CAPTURE", {"species_id": 16}),
+             "PREFLIGHT_MATCH\n" + tag("CLAUSE_ENCOUNTER", {"n": 1, "species": 16}) +
+             "TX capture A:16 {}\n" + tag("PENDING_CAPTURE", {"species_id": 16}),
         "b": tag("B_PRE_ENCOUNTER", {"species": 16, "family": 16}) +
              tag("A_PENDING", {"species_id": 16}) + tag("CLAUSE_ENCOUNTER", {"n": 1, "species": 16}) +
              "TX no_catch - {}\n" + tag("CLAUSE_REROLL", {"n": 1, "species": 16}),
@@ -584,6 +586,28 @@ def test_species_preflight_oracle_requires_native_order_and_matching_rom_familie
     assert rules.species_preflight_problems(wrong, facts)
     missing = dict(receipts, b=receipts["b"].replace("TX no_catch - {}\n", ""))
     assert rules.species_preflight_problems(missing, facts)
+    same_family_other_foe = dict(receipts, b=receipts["b"].replace(
+        '"n": 1, "species": 16', '"n": 1, "species": 17', 1))
+    assert any("B preflight species" in p for p in rules.species_preflight_problems(same_family_other_foe, facts))
+    same_family_other_a_catch = dict(receipts, a=receipts["a"].replace(
+        '"species_id": 16', '"species_id": 17', 1))
+    assert any("A preflight species" in p for p in rules.species_preflight_problems(same_family_other_a_catch, facts))
+    same_family_other_a_foe = dict(receipts, a=receipts["a"].replace(
+        '"n": 1, "species": 16', '"n": 1, "species": 17', 1))
+    assert any("A preflight species" in p for p in rules.species_preflight_problems(same_family_other_a_foe, facts))
+
+
+def test_unknown_preflight_rom_fact_is_hard_not_rng_retry():
+    from types import SimpleNamespace
+    rules = importlib.import_module("gen3_clause_rows")
+    run = SimpleNamespace(cfg={"rule_kind": "species"}, _hunt_area="route_1",
+        _gen3_prelude=lambda: None, go=lambda: None,
+        _gen3_mark=lambda *args: re.match(r"(.*)", json.dumps({"species": 999999, "family": 1})),
+        _read_receipt=lambda side: "", _gen3_title=lambda side: "firered",
+        _clause_facts={i: {"16": {"family": 16}} for i in "ab"})
+    with pytest.raises(RuntimeError, match="booted-ROM facts") as caught:
+        rules._orchestrate_clause(run)
+    assert not isinstance(caught.value, rules.ClauseUnobserved)
 
 
 def test_script_entrypoint_uses_its_own_rng_exception_classes():

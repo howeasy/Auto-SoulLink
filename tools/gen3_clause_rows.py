@@ -109,11 +109,19 @@ def species_preflight_problems(results, facts):
             problems.append(f"{side}: preflight family disagrees with booted ROM")
     if pa.get("family") != pb.get("family"):
         problems.append("species preflight was released on different families")
+    a_encounter = one(a, "CLAUSE_ENCOUNTER")
+    b_encounters = rows(b, "CLAUSE_ENCOUNTER")
+    a_pending = one(a, "PENDING_CAPTURE")
+    if (pa.get("species") != a_encounter.get("species")
+            or pa.get("species") != a_pending.get("species_id")):
+        problems.append("A preflight species differs from its first encounter or actual pending capture")
+    if not b_encounters or pb.get("species") != b_encounters[0].get("species"):
+        problems.append("B preflight species differs from its held first encounter")
     if not (0 <= b.find("B_PRE_ENCOUNTER ") < b.find("A_PENDING ") < b.find("CLAUSE_ENCOUNTER ")
             < b.find("TX no_catch ") < b.find("CLAUSE_REROLL ")):
         problems.append("B's native preflight/pending/RUN/reroll phase order is incomplete")
     if not (0 <= a.find("A_PRE_ENCOUNTER ") < a.find("PREFLIGHT_MATCH\n")
-            < a.find("TX capture ") < a.find("PENDING_CAPTURE ")):
+            < a.find("CLAUSE_ENCOUNTER ") < a.find("TX capture ") < a.find("PENDING_CAPTURE ")):
         problems.append("A caught before its native preflight match release")
     return problems
 
