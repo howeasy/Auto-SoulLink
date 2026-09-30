@@ -1052,11 +1052,15 @@ class SoulLinkState:
         pt = self.pending_trade
         if not pt or str(msg.get("token", "")) != pt["token"]:
             return
-        pt["age"] = 0                                  # progress — reset the abandonment watchdog
         try:
             choice = int(msg.get("choice", 0))
         except (TypeError, ValueError):
             choice = 0
+        if (pt.get("phase") == "confirming" and pt.get("confirm_deferred")
+                and player_id == _partner(pt["initiator"])
+                and choice == 1):
+            return  # replayed YES cannot renew the watchdog or duplicate native preparation
+        pt["age"] = 0                                  # progress — reset the abandonment watchdog
         phase = pt.get("phase")
         if phase == "menu":                                # initiator's action menu (multichoice index)
             if player_id != pt["initiator"]:
@@ -1096,6 +1100,13 @@ class SoulLinkState:
             if player_id != _partner(pt["initiator"]):
                 return
             if choice == 1:
+                if (self.adapter.supports_trade_recovery() and all(self.trade_prepare.values())
+                        and (any(self.party_hidden.values()) or any(self.trade_recovery_pending.values()))):
+                    # Preserve this exact token/offer while the withheld party obtains a fresh
+                    # visible census. A hidden snapshot cannot authorize native prepare yet.
+                    pt["confirm_deferred"] = True
+                    self._save()
+                    return
                 if all(self.trade_prepare.values()):
                     self._prepare_trade(pt)
                 else:
@@ -1147,6 +1158,20 @@ class SoulLinkState:
 
     def _resume_prepared_trade_on_visible_snapshot(self):
         pt = self.pending_trade
+        if (self.adapter.supports_trade_recovery() and pt and pt.get("phase") == "confirming"
+                and pt.get("confirm_deferred") and not any(self.party_hidden.values())
+                and not any(self.trade_recovery_pending.values())):
+            # Revalidate the original pair, keys and slots against the newly visible party
+            # before either native client receives a prepare/apply command.
+            if any(not any(blob.get("key") == pt[f"{pid}_key"]
+                           and blob.get("slot") == pt[f"{pid}_slot"]
+                           for blob in self.partner_blobs[pid]) for pid in ("a", "b")):
+                self._cancel_trade("Trade canceled - a POKeMON is\nno longer available.")
+            elif not all(self.trade_prepare.values()):
+                self._cancel_trade("Trade did not go through.")
+            else:
+                self._prepare_trade(pt)
+            return
         ready = (pt or {}).get("ready") or {}
         if (not self.adapter.supports_trade_recovery() or not pt or pt.get("phase") != "preparing"
                 or ready.get("a") is not True or ready.get("b") is not True
