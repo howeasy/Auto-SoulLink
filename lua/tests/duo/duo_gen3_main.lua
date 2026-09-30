@@ -101,7 +101,16 @@ end
 log(fmt("duo instance %s scenario=%s phase=%s title=%s attempt=%d", D.player, D.scenario, phase,
         D.title, D.attempt or 1))
 pcall(memory.usememorydomain, "System Bus")
-pcall(function() client.speedmode(D.speed or 1600) end)
+-- Route runs ask for 300% (the orchestration contract reserves 100 for explicit qualification).
+-- e2e_duo.py's Gen 3 stub sends no `speed`, so this default IS every FR/LG/EM/RR route run; an
+-- explicit D.speed from a caller still wins. speedmode is a front-end capability rather than core
+-- state, so a failure is logged, not fatal -- the same discipline as the invisibleemulation pcall
+-- below. One line, both facts: what we asked for, and whether the speedmode CALL returned without
+-- error. A clean pcall is NOT a readback: it does not show the front end accepted the throttle or
+-- is running at that rate. The token is call=, not applied=, on purpose.
+local speed_requested = D.speed or 300
+local speed_ok, speed_err = pcall(function() client.speedmode(speed_requested) end)
+log(fmt("speedmode requested=%d call=%s", speed_requested, speed_ok and "ok" or tostring(speed_err)))
 -- Rendering off (W23 EMU-SPEED): oracles read RAM, and client.screenshot still captures the core's
 -- frame under invisibleemulation (checked on 2.11.1/mGBA). SLINK_EMU_VISIBLE=1 keeps the window live.
 pcall(function() client.invisibleemulation(not D.visible and os.getenv("SLINK_EMU_VISIBLE") ~= "1") end)
