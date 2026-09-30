@@ -123,11 +123,18 @@ window.SLinkCalc = (function () {
     } catch (e) { return null; }
   }
 
+  // Update in place: hiding first and rebuilding every poll made the box flash on each HP
+  // tick. The DOM is only rewritten when the rendered numbers actually change.
   function _renderPreview(pid) {
     var div = document.getElementById('calc-preview-' + pid);
     if (!div) return;
-    div.style.display = 'none';
-    if (!div.getAttribute('data-in-battle') || _state !== 'ready') return;
+    var html = (div.getAttribute('data-in-battle') && _state === 'ready') ? _previewHtml(div) : '';
+    if (!html) { div.style.display = 'none'; return; }
+    if (div._calcHtml !== html) { div.innerHTML = html; div._calcHtml = html; }
+    div.style.display = '';
+  }
+
+  function _previewHtml(div) {
     try {
       var c = JSON.parse(div.getAttribute('data-calc') || '{}');
       var moves = (c.player_moves || []).filter(Boolean);
@@ -187,13 +194,12 @@ window.SLinkCalc = (function () {
       });
       if (!rows) return;
       var badge = difficulty === 'hardcore' ? ' <span style="color:#f80;font-size:0.78em">HC</span>' : '';
-      div.innerHTML = '<h5>⚔ vs ' + _esc(c.enemy_species) + badge + '</h5>'
+      return '<h5>⚔ vs ' + _esc(c.enemy_species) + badge + '</h5>'
         + '<table class="calc-preview-table"><thead><tr><th>Move</th><th>Dmg %</th><th></th></tr></thead>'
         + '<tbody>' + rows + '</tbody></table>'
         + '<a class="calc-open-btn" href="/calc/' + difficulty + '.html" target="_blank">'
-        + '⚔️ Open in RR Calc</a>';
-      div.style.display = '';
-    } catch (e) { /* a matchup the engine cannot model stays hidden */ }
+        + '⚔️ Open in Calc</a>';
+    } catch (e) { return ''; /* a matchup the engine cannot model stays hidden */ }
   }
 
   function _renderAll() { _renderPreview('a'); _renderPreview('b'); }

@@ -82,9 +82,11 @@ class TestGen2GSCAdapter:
         assert not gsc_adapter.supports_abilities()
         assert not gsc_adapter.supports_info_panel()
         assert not gsc_adapter.native_trade_ui()
-        assert not gsc_adapter.supports_explode_mode()
+        assert gsc_adapter.supports_explode_mode()          # W-3, owner 2026-09-26 (Gen 1 parity)
         assert gsc_adapter.info_panel_width() == 0
-        assert gsc_adapter.rival_trainer_ids() == set()
+        # W-4: class * 256 + instance for RIVAL1 (9) x 15 and RIVAL2 ($2A) x 6 (trainer_constants.asm)
+        assert gsc_adapter.rival_trainer_ids() == ({9 * 256 + i for i in range(1, 16)}
+                                                   | {0x2A * 256 + i for i in range(1, 7)})
         gsc_adapter.set_artifact_kind("clean")
         with pytest.raises(ValueError):
             gsc_adapter.set_artifact_kind("named")
@@ -155,7 +157,11 @@ class TestGen2GSCAdapter:
         # named_trainer=true for his Spearow gift) -- but a gift-giver carries
         # no (class, instance) trainer id, so gsc still answers ("", "").
         assert gsc_adapter.trainer_info(0) == ("", "")
-        assert gsc_adapter.trainer_info(999) == ("", "")
+        assert gsc_adapter.trainer_info(999) == ("", "")     # Bugsy (3) has no instance 231
+        # the packed id: class * 256 + instance (lua/gen2/client.lua trainer_id_of)
+        assert gsc_adapter.trainer_info(1 * 256 + 1) == ("Falkner", "Leader")
+        assert gsc_adapter.trainer_info(9 * 256 + 1) == ("", "Rival")   # the player names him: "?" in the pack
+        assert gsc_adapter.trainer_info(1) == ("", "")         # class 0 is no trainer
 
     # data/items/mail_items.asm:1-12 (MailItems, identical in both pins; read by
     # ItemIsMail, C engine/pokemon/mail_2.asm:941-945, G :922-926). Ids from

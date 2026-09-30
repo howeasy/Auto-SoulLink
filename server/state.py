@@ -2881,8 +2881,13 @@ class SoulLinkState:
                 return True
 
         # Check 3: partner is currently in a wild battle on the same area with the same evo family.
-        # Covers the concurrent-battle case where neither player has captured yet.
-        if partner_battle_species:
+        # Covers the concurrent-battle case where neither player has captured yet -- and that is a
+        # precondition, not just a description. Once the partner holds a pending capture HERE their
+        # slot for this area is filled (a second capture in one area is retired on arrival), so what
+        # they happen to be battling now can never link against this encounter. Checking it anyway
+        # costs this player a legal encounter for a collision that cannot happen. The mirror of the
+        # `pending_captures[area_id][player_id]` early return above.
+        if partner_battle_species and not partner_cap:
             partner_base = self.adapter.evo_family(partner_battle_species)
             if enc_base == partner_base:
                 partner_name = self.adapter.species_name(partner_battle_species)

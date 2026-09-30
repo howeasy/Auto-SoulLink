@@ -183,3 +183,30 @@ def test_preview_defender_uses_the_live_foe_and_an_rr_set_still_wins():
     rr = {**_BASE, **live, "gen": 9, "dex": "rr", "is_trainer": True, "trainer_key": "Leader Brock"}
     d = _run_preview(rr)["defender"]
     assert (d["item"], d["ability"]) == ("Set Item", "Sturdy")
+
+
+def test_a_repeat_render_neither_hides_nor_rewrites_the_box():
+    """The battle flash: every 2 s poll re-rendered the preview by hiding it and rebuilding its
+    HTML. An unchanged matchup must leave the box visible and its DOM untouched."""
+    harness = _PREVIEW_HARNESS.replace(
+        "setTimeout(() => console.log(JSON.stringify(log)), 200);",
+        """setTimeout(() => {
+  const writes = { display: [], html: 0 };
+  let d = div.style.display, h = div.innerHTML;
+  Object.defineProperty(div.style, 'display', { get: () => d, set: v => { writes.display.push(v); d = v; } });
+  Object.defineProperty(div, 'innerHTML', { get: () => h, set: v => { writes.html++; h = v; } });
+  window._slinkCalcRender(); window._slinkCalcRender();
+  console.log(JSON.stringify(writes));
+}, 200);""")
+    import shutil
+    import subprocess
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node is not installed")
+    res = subprocess.run([node, "-e", harness, os.path.join(_REPO, "server", "static", "calc-preview.js"),
+                          json.dumps({**_BASE, "gen": 3, "dex": "vanilla"})],
+                         capture_output=True, text=True, timeout=30)
+    assert res.returncode == 0, res.stderr
+    writes = json.loads(res.stdout)
+    assert "none" not in writes["display"], writes
+    assert writes["html"] == 0, writes

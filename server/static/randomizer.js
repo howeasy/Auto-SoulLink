@@ -263,7 +263,7 @@ function randomizerFields(form) {
     },
     // A cartridge this run can take: clean, and of its family when it names one.
     usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
-    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : ''; },
+    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : ''; },
     // The option's words: the cartridge, and why it is greyed when it is.
     romNote(r) {
       if (this.usable(r)) return r.title;
@@ -285,6 +285,7 @@ function randomizerFields(form) {
         add('Red · Blue · Yellow', function (r) { return r.clean && r.family === 'gen1_rby'; });
         add('FireRed · LeafGreen', function (r) { return r.clean && r.family === 'gen3_frlg'; });
         add('Emerald', function (r) { return r.clean && r.family === 'gen3_emerald'; });
+        add('Gold · Silver · Crystal', function (r) { return r.clean && r.family === 'gen2_gsc'; });
       }
       add('not usable', function (r) { return !r.clean; });
       return groups;
@@ -357,6 +358,7 @@ function randomizerFields(form) {
       if (!a || !b) return 'Pick a cartridge for both players.';
       var ra = this.pick('a'), rb = this.pick('b');
       if ((ra && !this.usable(ra)) || (rb && !this.usable(rb))) return 'That cartridge cannot be used here.';
+      if (this.rdraft.randomize && this.family === 'gen2_gsc') return 'Gen 2 has no randomizer support; turn Randomize off.';
       if (this.rdraft.randomize && this.pre && !this.pre.jar_found) return 'Randomizing needs PokeRandoZX.jar.';
       if (this.rdraft.randomize && this.pre && this.pre.jar_found && this.pre.jar_trusted === false) {
         return this.pre.jar_error || 'This PokeRandoZX.jar is not a known build; SLink will not run it.';

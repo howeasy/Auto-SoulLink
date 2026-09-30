@@ -148,7 +148,7 @@ class Gen2GSCAdapter(GameAdapter):
             data = _json(directory / f"{name}.json")
             _require(data.get("schema") == schema, f"{name}: unsupported pack schema")
             _require(data.get("source") == self.source, f"{name}: source provenance mismatch")
-            if name not in {"gifts", "static_encounters"}:
+            if name not in {"gifts", "static_encounters", "trainers"}:
                 _require(data.get("title") == title, f"{name}: title mismatch")
             return data
 
@@ -237,6 +237,19 @@ class Gen2GSCAdapter(GameAdapter):
             _require(self._encounters["map_areas"].get(key) == row["area_id"], "encounter/map area mismatch")
             self._area_names[row["area_id"]] = _display(row["name"])
         self._tables = self._presentation_tables()
+        # Trainer identity on the wire is class * 256 + instance (lua/gen2/client.lua trainer_id_of:
+        # wOtherTrainerClass/wOtherTrainerID, C ram/wram.asm:2728,2736 / G:2194,2204). The rival is
+        # every instance of RIVAL1 (class 9) and RIVAL2 (class $2A): C constants/trainer_constants.asm:55,454,
+        # G:51,424 -- the same 21 ids in all three titles, so a cross-title run adapter agrees.
+        trainers = load("trainers", "gen2-trainers-v1")
+        self._trainer_classes = {int(k): v for k, v in trainers["classes"].items()}
+        self._trainer_names = {(int(cls), int(inst)): row.get("name", "")
+                               for cls, rows in trainers["parties"].items() for inst, row in rows.items()}
+        _require(all(_integer(cls, 1, 255) and _integer(inst, 1, 255) for cls, inst in self._trainer_names),
+                 "trainer (class, instance) outside a byte")
+        rivals = {int(cls) for cls, const in trainers["class_constants"].items() if const in ("RIVAL1", "RIVAL2")}
+        _require(len(rivals) == 2, "RIVAL1/RIVAL2 trainer classes missing")
+        self._rival_ids = frozenset(cls * 256 + inst for cls, inst in self._trainer_names if cls in rivals)
         self._artifact_kind = "clean"
         if artifact_kind is not None:
             self.set_artifact_kind(artifact_kind)
@@ -606,13 +619,14 @@ class Gen2GSCAdapter(GameAdapter):
         return self._artifact_kind == "overlay"
 
     def supports_explode_mode(self):
-        return False
+        # W-3 (owner 2026-09-26, Gen 1 parity): lua/gen2/writes.lua explode_active_battler at the battle hold.
+        return True
 
     def info_panel_width(self):
         return 0
 
     def rival_trainer_ids(self):
-        return set()
+        return set(self._rival_ids)
 
     @property
     def mons_per_box(self):
@@ -643,9 +657,12 @@ class Gen2GSCAdapter(GameAdapter):
         return ""
 
     def trainer_info(self, trainer_id):
-        # Base's single id cannot identify the Gen 2 (class, instance) pair.
-        # No guessed packing convention or rival-team injection is activated.
-        return "", ""
+        # trainer_id = class * 256 + instance (see __init__); only a pair the pack's parties know answers.
+        # The rival's instances carry "?" (the player names him), so he shows by class alone.
+        if not _integer(trainer_id, 1, 0xFFFF) or (key := divmod(trainer_id, 256)) not in self._trainer_names:
+            return "", ""
+        name = self._trainer_names[key]
+        return ("" if name == "?" else name), self._trainer_classes.get(key[0], "")
 
     def gender_symbol(self, gender):
         return {"male": "♂", "female": "♀"}.get(gender, "")

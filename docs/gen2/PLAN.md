@@ -204,7 +204,7 @@ Signed cell grammar (tools/verify_gen2_release.py g4_signature_errors): `owner Y
 | G2 | — | — | — | — |
 | G3a | — | — | — | — |
 | G3 | — | — | — | — |
-| G4 | — | — | — | — |
+| G4 | owner 2026-09-26: "Sign G4 now (Recommended)" | b4741403 | overlays Crystal b405446e / Gold 69067c4b / Silver 583d8df4 (UPS 88ca93d1 / a40ba8e2 / c9ffe317); signed in chat after the owner found the Manager could not provision the patched cart; promotion (`--promote-overlays`) follows the re-sweep at the post-wiring digest | — |
 | G5 | — | — | — | — |
 | G6 | — | — | — | — |
 
@@ -263,8 +263,7 @@ rules receipts (CR1 finding 4); the §6.1 ledger records which receipts were re-
 
 Archipelago Crystal beyond profile documentation (post-RC, O-8); peer ghost (post-RC, O-13); Time Capsule trades and mail (recorded limits, O-14; held items are carried); `playthrough`/`deadzone`/`dupes` on Gen 2
 (closed); non-US ROMs and VC builds; Battle Tower; Mobile Adapter; UPR
-randomizer for Gen 2 (fog; owner question at P6); Explode Mode and Rival Team Swap on Gen 2 (RR opt-ins
-today: CLAUDE.md "RR-only opt-ins"; whether Gen 2 gets them is an owner question, default no).
+randomizer for Gen 2 (fog; owner question at P6); ~~Explode Mode and Rival Team Swap on Gen 2~~ -- REOPENED, owner 2026-09-26: "Yes, both" (Gen 1 parity; the earlier "default no" was an unasked agent default).
 
 ## 11. Risks
 

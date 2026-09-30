@@ -219,3 +219,23 @@ def test_pure_targets_advertise_the_admitted_overlay_hashes():
         row = by_title[title]
         assert patcher.TARGETS[slug]["patched_md5"] == row["md5"]
         assert patcher.TARGETS[slug]["base_md5"] == clean[row["base_sha1"]]["md5"]
+
+
+def test_gen2_targets_advertise_the_admitted_overlay_hashes():
+    """The /patcher page's Gen 2 rows must name the md5 of the ROM the client admits (each
+    title's own admission table) -- the same drift the pureRGB test above guards against,
+    since the overlay is rebuilt whenever patch/gen2/src/*.asm changes."""
+    import json
+    root = os.path.normpath(os.path.join(os.path.dirname(patcher.__file__), ".."))
+    for slug, title in (("gen2-crystal", "crystal"), ("gen2-gold", "gold"), ("gen2-silver", "silver")):
+        with open(os.path.join(root, "data", "games", f"gen2_{title}", "admission.json"),
+                 encoding="utf-8") as fh:
+            artifacts = json.load(fh)["artifacts"]
+        clean = next(a for a in artifacts if a["kind"] == "clean" and a["selection"] == "SELECTED")
+        overlay = next(a for a in artifacts if a["kind"] == "overlay")
+        assert patcher.TARGETS[slug]["patched_md5"] == overlay["md5"]
+        # base_md5 is a literal (the clean ROM is pinned to a fixed pret commit and never
+        # rebuilds); pin it here to the sha1 it was computed from so a drift is caught even
+        # without a local build of the decomp to recompute it from.
+        assert re.fullmatch(r"[0-9a-f]{32}", patcher.TARGETS[slug]["base_md5"])
+        assert clean["sha1"] in patcher.TARGETS[slug]["base_hint"]

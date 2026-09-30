@@ -82,6 +82,17 @@ def _pure(title="red"):
     return str(path)
 
 
+def _gen2():
+    """{'a': clean pokegold, 'b': clean pokesilver} -- the pret decomp builds under
+    .cache/gen2-build/ (tools/gen2_source_data.py's home), skipped when not built."""
+    gold = REPO / ".cache" / "gen2-build" / "pokegold" / "pokegold.gbc"
+    silver = REPO / ".cache" / "gen2-build" / "pokegold" / "pokesilver.gbc"
+    for path in (gold, silver):
+        if not path.is_file():
+            pytest.skip(f"pinned Gen 2 build absent: {path}")
+    return {"a": str(gold), "b": str(silver)}
+
+
 @pytest.mark.parametrize("companion", [False, True])
 @pytest.mark.parametrize("randomize", [False, True])
 def test_vanilla_modes(tmp_path, monkeypatch, companion, randomize):
@@ -219,6 +230,38 @@ def test_refuses_mixed_families_before_spending(tmp_path, monkeypatch):
         provision(str(tmp_path / "run"), sources, companion=True,
                   randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
     assert not (tmp_path / "run").exists()
+
+
+def test_gen2_companion_applies_the_admitted_overlay(tmp_path):
+    """companion=True on a clean Gold/Silver pair must apply each title's own SLink-<Title>.ups
+    and produce exactly the sha1 admitted in data/games/gen2_<title>/admission.json's overlay
+    row -- the same proof test_pure_modes_and_overlay_before_randomizer runs for pureRGB."""
+    from server import cartridges
+
+    sources = _gen2()
+    result = cartridges.provision(str(tmp_path), sources, companion=True, randomize=None)
+    assert result["family"] == cartridges.upr_pipeline.FAMILY_GEN2
+    admission = {}
+    for title, dirname in (("a", "gold"), ("b", "silver")):
+        with open(REPO / "data" / "games" / f"gen2_{dirname}" / "admission.json", encoding="utf-8") as fh:
+            admission[title] = next(a for a in json.load(fh)["artifacts"] if a["kind"] == "overlay")
+    for pid in ("a", "b"):
+        player = result["players"][pid]
+        assert player["kind"] == "companion"
+        assert player["rom_sha1"] == admission[pid]["sha1"]
+        assert Path(player["output"]).suffix == ".gbc"
+
+
+def test_gen2_randomize_is_refused(tmp_path, monkeypatch):
+    """Gen 2 has no randomizer support: the request must be refused before any jar runs,
+    not silently ignored or (worse) run against a Gen 1 jar section that doesn't exist."""
+    from server import cartridges, upr_pipeline
+
+    sources = _gen2()
+    monkeypatch.setattr(upr_pipeline, "prepare_pair", lambda *a: pytest.fail("spent on Gen 2 randomize"))
+    with pytest.raises(cartridges.CartridgeError, match="Gen 2 has no randomizer support"):
+        cartridges.provision(str(tmp_path), sources, companion=False,
+                             randomize={"settings_path": "s.rnqs"}, jar="fake.jar")
 
 
 def test_yellow_companion_refuses_before_spending(tmp_path, monkeypatch):

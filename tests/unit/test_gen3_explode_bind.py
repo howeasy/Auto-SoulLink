@@ -59,10 +59,9 @@ def test_title_explode_capability_agrees_with_the_manager(title):
     assert option_support("explode_mode", [title, title])["ok"] is True
 
 
-# The expansion was the third negative control here. Ruling 39 refuses that cartridge by
-# name, so it can never become a Manager run and this gate is never asked about it -- see
-# tests/unit/test_gen3_expansion_refusal.py.
-@pytest.mark.parametrize("title", ("firered_ap", "crystal"))
+# Gen 2 gained Explode on master, while ruling 39 refuses the expansion as a Manager run.
+# HeartGold remains a title with no Explode support.
+@pytest.mark.parametrize("title", ("firered_ap", "heartgold"))
 def test_explode_opt_in_does_not_enable_other_cartridges(title):
     from server.manager import option_support
 

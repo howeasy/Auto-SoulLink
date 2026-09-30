@@ -657,3 +657,25 @@ Cross-lane contacts (cross-session, by name):
 - RE-SWEEP #3 (owner 2026-09-26 "Do whatever resweep you need"): 1d2b00f0 DIGEST-DOCS fix (DOC_SUFFIXES dropped under packs + guard test) + Crystal pack README; merged master b18c357d (READMEs only) -> 1d9dbf86, NEW DIGEST 9f8e2cb3. Crystal build outputs rebuilding via tools/build_gen2_syms.py --check (they had been cleaned: only rgbdscheck.o left in the clone, i.e. a clean + interrupted build by some tool). Then: sweep 98 at 1d9dbf86 -> triage -> pin -> land.
 - Gen 3 queued a server/** batch on the owner's order (RR companion fixes: patcher TARGETS["rr"] md5s; state.py/manager.py Overworld Presence forced off). It stales the Gen 2 digest again. Decision: finish the current sweep (validates digest fix + rebuilt Crystal ROMs; master gets current evidence), Gen 3 lands its whole shared batch in ONE landing afterwards, then Gen 2 re-sweeps once.
 - Cache-wipe cause: not Gen1-Collab2 (they only copied FROM this worktree .cache, deleted nothing, root has no .cache/gen2-build; they ran git worktree prune for the orphaned ui-sprite-size admin dir only). Leading theory: Google Drive sync removing large binaries under dot-dirs. If it recurs: move .cache/gen2-build + build-tools off Drive (short non-Drive path, like the sweep lanes) and junction them.
+- 15:xx RE-SWEEP #3 DONE: 98/98 at digest 9f8e2cb3 (sweep 95 + whiteout rerun + ball_gate @5fb8f08a + poison @93fd93ef), fixes cfdd675f/5fb8f08a/93fd93ef (GS-FIX) + day_clock disclosure shape fix; landed on master 9b820593. BUT master already had 88bf2c70 (server/*.py, calc preview only; NOT the calc lane per its coordinator, author session unknown) -> master digest 5a798845, receipts stale by digest on master. PLAN: one re-sweep after Gen 3 lands its server batch (+ Emerald if close); all other lanes asked to ping before server/lua changes. Leftover: stash entry "gsfix-nopassive-wip-1790448244" (content == committed; guard hook blocks drop; owner may drop).
+- OWNER 2026-09-26: "Skip testing" -> re-sweep #4 (4b3ef391, digest c0ebc7a6) STOPPED mid-run, nothing pinned from it. State: last full Gen 2 evidence = 98/98 at digest 9f8e2cb3 (on master 9b820593); master is now at digest c0ebc7a6 (88bf2c70 calc preview + Gen 3 7c14386a server batch), so release-evidence reads those receipts STALE by digest. Next sweep only if the owner asks.
+
+## 2026-09-26: Manager wiring, G4 signed, Explode + Rival Swap
+
+- The owner made a Gen 2 game in the Manager and got a plain cartridge. The Manager never knew Gen 2, so there was no companion patch, no Native Sounds, and no explode or rival swap.
+- Owner rulings:
+  - **G4 signed** (PLAN §6.1, `17d98668`).
+  - **Explode Mode and Rival Swap reopened for Gen 2:** "Yes, both".
+- `0300ba23`: Manager wiring. The scanner recognises Gen 2 dumps, the patcher has TARGETS for SLink-{Crystal,Gold,Silver}.ups, `gen2_gsc` option rows exist, and Gen 2 randomize is refused.
+- `dfb169a3`: W-3 explode at the battle hold and W-4 rival swap at a battle frame end. Trainer id = class*256+instance.
+- Owner said "Dont run the test now". Every new test is written but NOT RUN.
+- **Still owed, when the owner schedules it:**
+  1. The unit suite.
+  2. Live gates W-3 (Crystal + Gold) and W-4 (Cherrygrove RIVAL1, needs a trainer fixture), plus Gen 2 duo equivalents of `explode_new` / `rival_swap_new`.
+  3. The full re-sweep at the new digest.
+  4. `tools/gen_gen2_admission.py ... --promote-overlays`: it refuses until release-evidence is green. The owner cannot play the patched cartridge until this step.
+  5. Regenerate `tests/fixtures/ui/capabilities.json` (`explode_mode` is now True).
+- **Rival-swap risks** (from the implementer):
+  - The rival window is detected by polling, because the `trainer_ready` site is not in a shipped U1 receipt.
+  - `RIVAL_FRAMES=240` is not measured on Gen 2.
+  - A frame end inside LoadEnemyMon is a residual race.
