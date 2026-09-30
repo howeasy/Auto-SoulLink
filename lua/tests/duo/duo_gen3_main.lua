@@ -505,11 +505,34 @@ local function test_admission_codec(game, title, json, logf)
         return doc
     end }, { __index = json })
 end
+
+-- The production run.lua still requests ROOT/slink_gen3_trade. Ordinary duo attempts redirect
+-- only that file_store argument to their private data directory. The native candidate's own
+-- manifest path and the install-root lock probe keep their existing composition and guard.
+local function isolated_journal_module(module, private_path, native_candidate, logf)
+    if native_candidate then
+        native_candidate.bind_journal(module)
+        logf("DUO_JOURNAL scope=native-candidate path=manifest guard=unchanged")
+        return module
+    end
+    if not private_path then
+        logf("DUO_JOURNAL scope=install-root-probe path=production-default guard=unchanged")
+        return module
+    end
+    assert(type(private_path) == "string" and private_path ~= "", "private duo journal path missing")
+    local file_store = module.file_store
+    module.file_store = function(deps)
+        deps.path = private_path
+        logf("DUO_JOURNAL scope=attempt-private path=" .. private_path .. " guard=unchanged")
+        return file_store(deps)
+    end
+    return module
+end
 do
     dofile = function(path)
         local value = original_dofile(path)
-        if native_candidate and path == ROOT .. "/lua/gen3/trade_journal.lua" then
-            native_candidate.bind_journal(value)
+        if path == ROOT .. "/lua/gen3/trade_journal.lua" then
+            value = isolated_journal_module(value, D.journal_path, native_candidate, log)
         end
         if tostring(path):gsub("\\", "/"):match("/lua/json_codec%.lua$") then
             value = test_admission_codec(D.game, title, value, log)

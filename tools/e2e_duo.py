@@ -3532,6 +3532,16 @@ class DuoRun:
                               + scenario_attempt_limit(scenario, self.game) * self.cfg["timeout"]
                               + 300)
 
+    def _gen3_duo_journal_path(self):
+        """One durable journal per attempt, shared by A/B and all their relaunch phases.
+
+        T5's native candidate owns its manifest-pinned path. The lock probe intentionally reads
+        and locks the install-root path, so neither row uses this ordinary duo override.
+        """
+        if self.cfg.get("gen3_native_trade") or self.scenario == "trade_lock_probe_gen3":
+            return None
+        return Path(self.data_dir, "slink_gen3_trade")
+
     # ── lane identity ────────────────────────────────────────────────────────
     def stub_path(self, inst: str) -> str:
         """The generated Lua stub for this lane and instance (one place that names it)."""
@@ -4292,6 +4302,15 @@ class DuoRun:
             # title's pack files and pret symbols by `title`.
             duo.update({"title": self._gen3_title(inst),
                         "scenario_prefix": self.gcfg["scenario_prefix"]})
+            journal_path = self._gen3_duo_journal_path()
+            if journal_path is not None:
+                duo["journal_path"] = journal_path.as_posix()
+                print(f"[duo] JOURNAL attempt={self.attempt} inst={inst} phase={phase} "
+                      f"scope=private data={self.data_dir} path={journal_path}")
+            else:
+                scope = "native-candidate" if self.cfg.get("gen3_native_trade") else "install-root-probe"
+                print(f"[duo] JOURNAL attempt={self.attempt} inst={inst} phase={phase} "
+                      f"scope={scope} install_root={REPO}")
             duo["ball_stock_phase"] = bool(self.cfg.get("post_flip_stock") and not self._gen3_rr)
             for field in ("scenario_module", "battle_window_case", "active_faint_case"):
                 if field in self.cfg:
@@ -8185,8 +8204,11 @@ class DuoRun:
                     raise RuntimeError(f"{inst}: native save artifact missing at clean exit: {source}")
                 shutil.copy2(source, archive / f"{inst}_{source.name}")
         (archive / "links.json").write_bytes(self._links_bytes() or b"")
+        journal_base = self._gen3_duo_journal_path()
+        if journal_base is None:
+            raise RuntimeError("RR reset has no private durable journal path")
         for suffix in ("log", "guard"):
-            source = Path(REPO, f"slink_gen3_trade.{suffix}")
+            source = Path(str(journal_base) + f".{suffix}")
             if not source.is_file():
                 raise RuntimeError(f"RR reset missing durable trade journal {source}")
             shutil.copy2(source, archive / source.name)
