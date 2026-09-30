@@ -1,6 +1,7 @@
 """trade_gen3 / trade_decline_gen3 / infopanel_gen3 oracles: a known-positive and a known-negative
 control for every assertion (each negative flips exactly one fact the positive holds)."""
 import copy
+import hashlib
 import json
 import os
 import re
@@ -30,6 +31,8 @@ def _raw(name):
 FA, FB = _fixture("rr_battle2.sav"), _fixture("rr_battle2_b.sav")
 RAW_A, RAW_B = _raw("rr_battle2.sav"), _raw("rr_battle2_b.sav")
 KA, KB = duo.gen3_key(FA[0][1]), duo.gen3_key(FB[0][1])
+MODEL_ROM_SHA1 = {"a": hashlib.sha1(RAW_A).hexdigest(),
+                  "b": hashlib.sha1(RAW_B).hexdigest()}
 
 
 def _oracle_stub(monkeypatch, tmp_path, scenario, links):
@@ -43,6 +46,7 @@ def _oracle_stub(monkeypatch, tmp_path, scenario, links):
     (tmp_path / "links.json").write_text(json.dumps({"links": links}), encoding="utf-8")
     monkeypatch.setattr(run, "_gen3_flushed", lambda inst: RAW_A if inst == "a" else RAW_B)
     monkeypatch.setattr(run, "_gen3_fixture_bytes", lambda inst: RAW_A if inst == "a" else RAW_B)
+    monkeypatch.setattr(run, "_gen3_rom", lambda inst: f"tests/fixtures/gen3/rr_battle2{'_b' if inst == 'b' else ''}.sav")
     run._link_keys = {"a": KA, "b": KB}
     return run
 
@@ -98,8 +102,8 @@ def _row(a, b, status="alive"):
     return [{"a": {"key": a}, "b": {"key": b}, "status": status}]
 
 
-def _trade(saved, rows, traded=True):
-    return duo.gen3_trade_problems(KA, KB, rows, saved, {"a": FA, "b": FB}, traded)
+def _trade(saved, rows, traded=True, preimages=None):
+    return duo.gen3_trade_problems(KA, KB, rows, saved, {"a": FA, "b": FB}, traded, preimages)
 
 
 SCENARIO_TRADE_LUA = os.path.join(REPO, "lua", "tests", "duo", "scenario_gen3_trade.lua")
@@ -204,15 +208,94 @@ def test_trade_negative_received_record_changed():
     assert any("differs from b's record" in p for p in _trade(saved, _row(KB, KA)))
 
 
+def test_trade_oracle_accepts_naturally_learned_donor_move_before_transfer():
+    donor = copy.deepcopy(FA[0][1])
+    donor["level"], donor["experience"] = 5, 153
+    donor["moves"] = [33, 230, 71, 0]
+    saved = _traded()
+    saved["b"][0][1] = copy.deepcopy(donor)  # native transfer preserved A's live record
+    assert _trade(saved, _row(KB, KA), preimages={"a": [donor], "b": [FB[0][1]]}) == []
+    saved["b"][0][1]["moves"] = [33, 230, 45, 0]
+    assert any("moves" in p for p in _trade(saved, _row(KB, KA),
+                                           preimages={"a": [donor], "b": [FB[0][1]]}))
+
+
 def test_decline_positive_and_negative():
     assert _trade({"a": FA, "b": FB}, _row(KA, KB), traded=False) == []
     assert _trade(_traded(), _row(KA, KB), traded=False)
+    saved = {"a": copy.deepcopy(FA), "b": copy.deepcopy(FB)}
+    saved["a"][0][1]["moves"] = [33, 230, 71, 0]
+    assert any("declined trade changed" in p for p in _trade(
+        saved, _row(KA, KB), traded=False,
+        preimages={"a": [FA[0][1]], "b": [FB[0][1]]}))
+
+
+def _preimage(side):
+    mon = (FA if side == "a" else FB)[0][1]
+    raw = codec.encode_party_mon(mon, rr=True)
+    row = {"token": "t1", "player": side, "key": KA if side == "a" else KB,
+           "slot": 1, "frame": 100, "counter": 4,
+           "rom_sha1": MODEL_ROM_SHA1[side],
+           "raw_hex": raw.hex().upper()}
+    return "TRADE_PREIMAGE " + json.dumps(row, separators=(",", ":"))
+
+
+def test_trade_preimage_binding_rejects_missing_wrong_and_late_receipts():
+    good = {"a": _receipt_a(), "b": _receipt_b()}
+    def problems(rows):
+        return duo.gen3_trade_preimages(rows, {"a": KA, "b": KB},
+                                        {"a": FA, "b": FB}, MODEL_ROM_SHA1)[1]
+    assert problems(good) == []
+    missing = dict(good, a=good["a"].replace(_preimage("a") + "\n", ""))
+    assert problems(missing)
+    wrong = dict(good, b=good["b"].replace(KB, KA))
+    assert problems(wrong)
+    late = dict(good, a=good["a"].replace(_preimage("a") + "\n", "") + "\n" + _preimage("a"))
+    assert problems(late)
+    # A replayed send after a late marker must not hide the first native menu send.
+    b_after_first_send = good["b"].replace(_preimage("b") + "\n", "")
+    first_send = 'TX menu_result - {"choice":1,"event":"menu_result","token":"t1"}'
+    b_after_first_send = b_after_first_send.replace(first_send, first_send + "\n" + _preimage("b")
+                                                   + "\n" + first_send)
+    assert problems(dict(good, b=b_after_first_send))
+
+
+def test_lua_trade_preimage_captures_raw_keyed_party_before_native_input():
+    lupa = pytest.importorskip("lupa")
+    from tests.unit.gen3_world import lua_to_py
+
+    source = open(SCENARIO_TRADE_LUA, encoding="utf-8").read()
+    body = re.search(r"(?ms)^local function trade_preimage\(.*?^end$", source).group(0)
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    raw = codec.encode_party_mon(FA[0][1], rr=True)
+    base, count_at = 0x02010000, 0x02000080  # fake bus addresses, not product pins
+    lua.globals().memory = lua.table(read_u8=lambda addr, domain=None:
+                                     2 if addr == count_at else raw[addr - base - 100]
+                                     if base + 100 <= addr < base + 200 else 0)
+    lua.globals().gameinfo = lua.table(getromhash=lambda: MODEL_ROM_SHA1["a"])
+    lua.globals().emu = lua.table(framecount=lambda: 123)
+    capture = lua.execute('local function u8(a) return memory.read_u8(a, "System Bus") end\n'
+                          + body + "\nreturn trade_preimage")
+    rows = []
+    ctx = lua.table(player="a", find=lambda key: lua.table(slot=1) if key == KA else None,
+                    party_base=lambda: base,
+                    G=lua.table(flash_domain=lambda: "CART", save_counter=lambda domain: 4),
+                    jlog=lambda tag, row: rows.append((tag, lua_to_py(row))))
+    assert capture(ctx, lua.table(PARTY_COUNT_ADDR=count_at), KA, 1, "t1") is True
+    tag, row = rows[0]
+    assert tag == "TRADE_PREIMAGE" and row["token"] == "t1" and row["slot"] == 1
+    assert bytes.fromhex(row["raw_hex"]) == raw
+    assert duo.gen3_key(codec.decode_party_mon(bytes.fromhex(row["raw_hex"]), rr=True)) == KA
+    moved = lua.table(player="a", find=lambda key: lua.table(slot=0), party_base=lambda: base,
+                      G=ctx.G, jlog=ctx.jlog)
+    assert capture(moved, lua.table(PARTY_COUNT_ADDR=count_at), KA, 1, "t1")[0] is False
 
 
 def _receipt_a(decline=False):
     lines = ["TALKED npc=(3,3) player=(3,4) facing=Up pi_count=0->1",
              'TX trade_request - {"event":"trade_request"}', "RX show_choices",
              'TX menu_result - {"choice":0,"event":"menu_result","token":"t1"}', "RX choose_mon",
+             _preimage("a"),
              'TX mon_chosen - {"event":"mon_chosen","slot":1,"token":"t1"}']
     if decline:
         return "\n".join(lines + ["RX msgbox text=Your partner declined the trade."])
@@ -224,7 +307,8 @@ def _receipt_a(decline=False):
 
 
 def _receipt_b(decline=False):
-    lines = ["RX show_menu", f'TX menu_result - {{"choice":{0 if decline else 1},"event":"menu_result"}}']
+    lines = ["RX show_menu", _preimage("b"),
+             f'TX menu_result - {{"choice":{0 if decline else 1},"event":"menu_result","token":"t1"}}']
     if decline:
         return "\n".join(lines + ["RX msgbox text=Trade declined.", "DECLINED choice=0"])
     return "\n".join(lines + ["RX apply_prepare", 'TX apply_ready - {"event":"apply_ready","ok":true,"token":"t1"}',

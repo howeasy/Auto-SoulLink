@@ -2352,7 +2352,7 @@ def gen3_returned(key):
 GEN3_TRADE_INVARIANT = ("personality", "ot_id", "ot_name", "species", "ivs", "nickname", "moves")
 
 
-def gen3_trade_problems(ka, kb, link_rows, saved, fixture, traded):
+def gen3_trade_problems(ka, kb, link_rows, saved, fixture, traded, preimages=None):
     """trade_gen3 / trade_decline_gen3's saved state, from the flash images alone (PYDEC) and the
     server's persisted links.json: `saved`/`fixture` map "a"/"b" -> (party, boxes) as gen3_decode
     returns them. traded: each side's party is its fixture's with its linked key replaced, in
@@ -2386,17 +2386,80 @@ def gen3_trade_problems(ka, kb, link_rows, saved, fixture, traded):
             counts[key] += [f"{inst}:box{b}" for b, m in boxes.items() if gen3_key(m) == key]
         if traded and gets in keys:
             got = party[keys.index(gets)]
-            src = next((m for m in fixture[peer][0] if gen3_key(m) == gets), None)
+            source_party = preimages[peer] if preimages is not None else fixture[peer][0]
+            src = next((m for m in source_party if gen3_key(m) == gets), None)
             if src is None:
                 problems.append(f"{inst}: {gets} is not in {peer}'s fixture party")
             else:
                 diff = [f for f in GEN3_TRADE_INVARIANT if got.get(f) != src.get(f)]
                 if diff:
                     problems.append(f"{inst}: received {gets} differs from {peer}'s record in {diff}")
+        if not traded and preimages is not None and gives in keys:
+            own = party[keys.index(gives)]
+            source = next((m for m in preimages[inst] if gen3_key(m) == gives), None)
+            diff = [f for f in GEN3_TRADE_INVARIANT if source is None or own.get(f) != source.get(f)]
+            if diff:
+                problems.append(f"{inst}: declined trade changed its captured donor in {diff}")
     for key, where in counts.items():
         if len(where) != 1:
             problems.append(f"{key} exists {len(where)}x across both saves: {where}")
     return problems
+
+
+def gen3_trade_preimages(results, keys, fixture, rom_sha1):
+    """Decode each donor's one raw RR party record captured before native preparation."""
+    from server.adapters import gen3_codec as codec
+
+    records, problems, tokens = {}, [], []
+    for side in "ab":
+        text = results[side]
+        rows = re.findall(r"(?m)^TRADE_PREIMAGE (\{.*\})$", text)
+        try:
+            if len(rows) != 1:
+                raise ValueError(f"expected one preimage, got {len(rows)}")
+            row = json.loads(rows[0])
+            if row.get("player") != side or row.get("key") != keys[side]:
+                raise ValueError("player/key differs")
+            slot = row.get("slot")
+            if type(slot) is not int or not 0 <= slot < len(fixture[side][0]):
+                raise ValueError("slot outside fixture party")
+            if gen3_key(fixture[side][0][slot]) != keys[side]:
+                raise ValueError("slot no longer names offered fixture key")
+            if type(row.get("frame")) is not int or row["frame"] < 0:
+                raise ValueError("frame missing")
+            if type(row.get("counter")) is not int or row["counter"] < 0:
+                raise ValueError("native flash counter missing")
+            if row.get("rom_sha1") != rom_sha1[side]:
+                raise ValueError("ROM hash differs")
+            token = row.get("token")
+            if not isinstance(token, str) or not token:
+                raise ValueError("offer token missing")
+            tokens.append(token)
+            raw_hex = row.get("raw_hex")
+            if not isinstance(raw_hex, str) or len(raw_hex) != 200 or not re.fullmatch(r"[0-9A-F]{200}", raw_hex):
+                raise ValueError("raw party record is not 100 bytes of hex")
+            mon = codec.decode_party_mon(bytes.fromhex(raw_hex), rr=True)
+            # CFRU does not maintain a verifiable BoxPokemon checksum: the field is zero and
+            # the codec reports checksum_ok=None. Refuse a changed format rather than bless it.
+            if mon["checksum"] != 0 or mon["checksum_ok"] is not None or mon["has_species"] != 1:
+                raise ValueError("RR raw record format/checksum differs")
+            if gen3_key(mon) != keys[side]:
+                raise ValueError("decoded raw key differs")
+            marker = "TX mon_chosen " if side == "a" else "TX menu_result "
+            first_send = text.find(marker)
+            prepare = text.find("RX apply_prepare")
+            if (first_send < 0 or text.find("TRADE_PREIMAGE ") >= first_send
+                    or (prepare >= 0 and prepare < first_send)):
+                raise ValueError("preimage was not before native transaction")
+            wire = re.search(r"(?m)^" + marker + r"- (\{.*\})$", text[first_send:])
+            if not wire or json.loads(wire.group(1)).get("token") != token:
+                raise ValueError("preimage token differs from native menu send")
+            records[side] = [mon]
+        except (ValueError, KeyError, TypeError) as exc:
+            problems.append(f"{side}: trade preimage invalid: {exc}")
+    if len(tokens) == 2 and tokens[0] != tokens[1]:
+        problems.append("A/B trade preimage tokens differ")
+    return records, problems
 
 
 def rr_reset_initial_receipt_problems(receipts, case, keys):
@@ -8457,9 +8520,13 @@ class DuoRun:
     def _gen3_trade_facts(self, results, traded):
         self._gen3_flush_boundary()
         ka, kb = self._link_keys["a"], self._link_keys["b"]
+        fixture = {i: self._gen3_fixture_saved(i) for i in "ab"}
+        rom_sha1 = {i: hashlib.sha1(Path(REPO, self._gen3_rom(i)).read_bytes()).hexdigest() for i in "ab"}
+        preimages, pre_problems = gen3_trade_preimages(results, {"a": ka, "b": kb}, fixture, rom_sha1)
         problems = gen3_trade_problems(
             ka, kb, self._links_json(), {i: self._gen3_saved(i) for i in "ab"},
-            {i: self._gen3_fixture_saved(i) for i in "ab"}, traded)
+            fixture, traded, preimages=preimages if not pre_problems else None)
+        problems += pre_problems
         for inst in ("a", "b"):
             required, ordered, forbidden = gen3_trade_chain(inst, ka, kb, not traded)
             problems += gen3_receipt_problems(inst, results[inst], required=required,

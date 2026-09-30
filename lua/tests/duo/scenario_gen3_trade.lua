@@ -43,6 +43,32 @@ local function native_block(ctx)
     return N
 end
 
+-- The donor record at the last input boundary before either native prepare. RR's 100-byte
+-- party record is unencrypted; the keyed raw bytes, not the old fixture, are the transfer oracle.
+local function trade_preimage(ctx, N, key, slot, token)
+    local mon = ctx.find(key)
+    local base = ctx.party_base()
+    local domain = ctx.G.flash_domain()
+    if not mon or mon.slot ~= slot or not base or not domain or type(token) ~= "string" or token == "" then
+        return false, "trade preimage has no bound live party/slot/token"
+    end
+    if slot < 0 or slot >= u8(N.PARTY_COUNT_ADDR) then return false, "trade preimage slot outside party" end
+    local bytes = {}
+    for i = 0, 99 do bytes[#bytes + 1] = u8(base + slot * 100 + i) end
+    local raw = string.char(table.unpack(bytes))
+    local pid, ot = string.unpack("<I4I4", raw)
+    if string.format("%08X:%08X", pid, ot) ~= key then return false, "trade preimage raw key differs" end
+    local hash = gameinfo.getromhash()
+    local counter = ctx.G.save_counter(domain)
+    if type(hash) ~= "string" or #hash ~= 40 or type(counter) ~= "number" or counter < 0 then
+        return false, "trade preimage ROM/counter missing"
+    end
+    ctx.jlog("TRADE_PREIMAGE", {token=token, player=ctx.player, key=key, slot=slot,
+             frame=emu.framecount(), counter=counter, rom_sha1=hash:lower(),
+             raw_hex=(raw:gsub(".", function(c) return string.format("%02X", string.byte(c)) end))})
+    return true
+end
+
 local function oe(N, i) return N.OBJECT_EVENTS_BASE + i * OE_STRIDE end
 local function player_slot(N) local id = u8(N.GPLAYER_AVATAR + 5); return id < 16 and id or 0 end
 local function npc_slot(N)
@@ -274,6 +300,8 @@ local function a_side(ctx, N, linked, partner, decline)
     end
     ctx.log(ctx.fmt("PARTY_CURSOR %s party_count=%d", table.concat(seen, ","), u8(N.PARTY_COUNT_ADDR)))
     if cursor() ~= slot then return false, "the party cursor never reached slot " .. slot end
+    local pre_ok, pre_why = trade_preimage(ctx, N, linked, slot, choice.token)
+    if not pre_ok then return false, pre_why end
     press_until(ctx, function() return ctx.sent("mon_chosen") > 0 end,
                 function() return not field_cb(N) end, "A", 120, "mon_chosen")
     local chosen = ctx.last_sent("mon_chosen")
@@ -299,11 +327,16 @@ local function a_side(ctx, N, linked, partner, decline)
     return true, report
 end
 
-local function b_side(ctx, N, decline)
+local function b_side(ctx, N, linked, decline)
     if not ctx.wait_received("show_menu", nil, 1500) then return false, "no offer (show_menu)" end
+    local offer = ctx.rx_after(0, function(m) return m.cmd == "show_menu" end)
+    local mine = ctx.find(linked)
+    if not offer or not mine then return false, "trade offer/preimage missing" end
     if not ctx.wait_until(function() return u8(SC2) ~= 0 end, 120, "the YES/NO script") then
         return false, "the offer's YES/NO never opened"
     end
+    local pre_ok, pre_why = trade_preimage(ctx, N, linked, mine.slot, offer.token)
+    if not pre_ok then return false, pre_why end
     local button = decline and "B" or "A"
     press_until(ctx, function() return ctx.sent("menu_result") > 0 end,
                 function() return u8(SC2) ~= 0 end, button, 120, "menu_result")
@@ -339,7 +372,7 @@ return function(ctx)
     if not mon or not partner then return false, "go-file needs LINKED (in the party) and PARTNER" end
     local ok, report
     if ctx.player == "a" then ok, report = a_side(ctx, N, linked, partner, decline)
-    else ok, report = b_side(ctx, N, decline) end
+    else ok, report = b_side(ctx, N, linked, decline) end
     if not ok then return false, report end
     if type(report) ~= "table" then
         -- nothing moved: the partner declined
