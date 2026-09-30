@@ -1,0 +1,11 @@
+# gen3_final_cut row=profile_generated_check item=§13.1_source cut=067768b920d1e797e6f8fc39d2bd6a872126ee23
+# lane=C:/slink-wt/g3-core
+# command: python tools/gen_gen3_profile.py --check   (cwd=C:/slink-wt/g3-core)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-30T02:37:25 cpu=16% emuhawk=0 python=3
+start_utc=2026-09-30T06:37:23Z tracked_clean_before=True
+data/games/gen3_{frlg,rr,emerald}/profile.json are current
+exit=0 end_utc=2026-09-30T06:37:26Z tracked_clean_after=True classification=pass

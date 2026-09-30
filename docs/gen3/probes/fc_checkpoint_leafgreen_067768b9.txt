@@ -1,0 +1,15 @@
+# gen3_final_cut row=checkpoint_leafgreen item=§6_item3 cut=067768b920d1e797e6f8fc39d2bd6a872126ee23
+# lane=C:/slink-wt/g3-core
+# command: python tools/gen3_probe_receipt.py --title leafgreen --lane C:/slink-wt/g3-core --out checkpoint_lg_clean_067768b9.txt   (cwd=E:\Google Drive\SLink)
+# env: (none)
+# verdict: PASS
+# inputs: rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc state:gen3_probe_states/slink_oldman.State=9ef773aca025e0ee1da29a2cba84c47201171adaef28c33c3e6bd973cee23cb3 state:gen3_probe_states/slink_pokedude.State=f1d309c9d196e0f21ef3b3cc82d3c5fe26a73b639f60f96c569cab3d6cf155a5 state:gen3_probe_states_c4p2/slink_door.State=23b6568595ffc157a6bb4dda5f18a5872fa947c748ef9e067310308df94010c4 state:gen3_probe_states_c4p2/slink_overworld.State=d102bf33b849f062271007c530d62916f6803ad050985684b664a6beb8c62398 state:gen3_probe_states_c4p2/slink_postbattle.State=7931cd6c6f554bb28cf0d1d2d2fc8679162e9e682dbd7a74a059370660abe109 state:gen3_probe_states_c4p2/slink_prebattle.State=7313374021a5b6174c708d925a3c125a26efaead3b80a2c139181518c3e47548 state:gen3_probe_states_c4p2/slink_prefaint.State=b52afaa091817d21921a09d7ba25c5ebd422a41a217e8cabc43f439230c02cf9 state:gen3_probe_states_c4p2/slink_preintro.State=6b3657701a9bb9d21ca0b86a66f5b7bde359d5d4a7df986c71ae73470640bafe state:gen3_probe_states_c4p2/slink_pretrainer.State=24d3102059b25170b98c7ff7671de9c7c6c96db81d2ee241281afe3cd4687229 state:gen3_probe_states_c4p2/slink_script.State=8321a1fd10bafeb9772031686208e9e4e93c456051f147bdee50edce6772be2c
+--- attempt 1 of 1 ---
+LOAD 2026-09-30T02:14:03 cpu=36% emuhawk=0 python=3
+start_utc=2026-09-30T06:14:01Z tracked_clean_before=True
+C:/slink-wt/g3-core/patch/build/bw_hashes_leafgreen.json
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_probe_gen3_checkpoint.ini --lua=lua/tests/probe_gen3_checkpoint.lua patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] probe_gen3_checkpoint: RESULT: PASS all checkpoint controls  (219s)
+--- patch\build\probe_gen3_checkpoint_result.txt ---
+E:\Google Drive\SLink\docs\gen3\probes\checkpoint_lg_clean_067768b9.txt
+exit=0 end_utc=2026-09-30T06:17:43Z tracked_clean_after=True classification=pass
