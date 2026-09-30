@@ -1,0 +1,113 @@
+{
+  "game_id": "gen1_purergb",
+  "rules": {
+    "species_lock": false,
+    "gender_lock": false,
+    "type_lock": false,
+    "explode_mode": false,
+    "rival_team_swap": false,
+    "overworld_presence": false,
+    "native_messages": false,
+    "native_sounds": false,
+    "battle_calc": true,
+    "pc_trade_npc": true
+  },
+  "links": [
+    {
+      "area_id": "route_1",
+      "a": null,
+      "b": null,
+      "status": "dead",
+      "encounter_a": null,
+      "encounter_b": {
+        "key": "",
+        "level": 2,
+        "species": 36,
+        "nickname": "",
+        "is_shiny": false
+      },
+      "killed_at": "2026-09-30T04:05:25.673111+00:00",
+      "cause": "dead_zone",
+      "killer": null,
+      "initiating_player": "b"
+    }
+  ],
+  "area_states": {
+    "route_1": "dead_zone"
+  },
+  "pending_captures": {},
+  "mon_stats": {
+    "a": {
+      "7693:C131:99": {
+        "level": 5,
+        "maxHP": 20
+      },
+      "88F5:C131:24": {
+        "level": 3,
+        "maxHP": 15
+      }
+    },
+    "b": {
+      "C3D4:FA81:B0": {
+        "level": 5,
+        "maxHP": 19
+      },
+      "1901:FA81:A5": {
+        "level": 3,
+        "maxHP": 15
+      }
+    }
+  },
+  "pokeballs_obtained": {
+    "a": true,
+    "b": true
+  },
+  "rom_type": "PureRed",
+  "artifact_kind": "clean",
+  "trainer_names": {
+    "a": "RED",
+    "b": "GREEN"
+  },
+  "player_identity": {
+    "a": {
+      "ot_id": "49457",
+      "trainer_name": "RED"
+    },
+    "b": {
+      "ot_id": "64129",
+      "trainer_name": "GREEN"
+    }
+  },
+  "pending_memorials": {
+    "a": [],
+    "b": []
+  },
+  "retry_areas": {
+    "a": [],
+    "b": []
+  },
+  "bonus_keys": {
+    "a": [],
+    "b": []
+  },
+  "pending_bonus": {
+    "a": [],
+    "b": []
+  },
+  "ambiguous_keys": {
+    "a": {},
+    "b": {}
+  },
+  "key_migration_ledger": {
+    "a": [],
+    "b": []
+  },
+  "run_over": false,
+  "attempts_count": 0,
+  "pending_trade": null,
+  "trade_token": 0,
+  "rebuild_pending": {
+    "a": null,
+    "b": null
+  }
+}
