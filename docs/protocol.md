@@ -253,7 +253,7 @@ Built by `party_wire`/`party_entry` (`lua/gen3/client.lua:297-316`, fields at `:
 | `key` | key | **MUST** | `party_keys` (`m["key"]` — a missing key raises `KeyError` in `_handle_hello` and kills the connection coroutine), `_reconcile_party_keys`, blobs, `party_details` (skipped if falsy) | `state.py:1859`, `state.py:3419`, `server.py:3239` |
 | `maxHP` | int | MUST | hello: only `maxHP > 0` entries count as party members; HP bars | `state.py:2003`, `server.py:3338-3354` |
 | `hp` | int | MUST | hello offline-faint detection (`hp == 0`), alive set for re-quarantine; HP bars | `state.py:2016`, `state.py:2041-2052` |
-| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:4312`, `server.py:5235` |
+| `level` | int | MUST | `partner_blobs.level`, display back-fill, `_resolve_level`, killfeed level | `state.py:4312`, `server.py:5250` |
 | `slot` | int 0-5 | SHOULD | `partner_blobs.slot` (trade `apply_trade.slot`), party ordering (`999` fallback) | `state.py:4310`, `server.py:5194` |
 | `species_id` | int (game-internal) | SHOULD | display back-fill into MonInfo, blobs, sprites, names, types | `state.py:2117`, `server.py:2772-2775` |
 | `nickname` | str | SHOULD | MonInfo back-fill, HUD labels, dashboard | `state.py:2111-2128` |
@@ -312,11 +312,11 @@ Built by `rescan_boxes` (`lua/gen3/client.lua:335-351`, entry at `:338-343`): th
 
 | Field | Type | Consumer | Cite |
 |---|---|---|---|
-| `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:5166`, `4652`, `4701` |
+| `box` | int, 0-based box index | memorial contamination (`box == adapter.memorial_box_index`), display `box+1` | `server.py:5178`, `4652`, `4701` |
 | `slot` | int, 0-based | display `slot+1`, logs | `server.py:4542`, `4702` |
 | `key` | key | `_cache_mon_info`, dead-in-regular-box re-memorialize, level fallbacks | `server.py:1937-1983`, `8066-8079` |
 | `species_id`, `nickname` | int, str | display | `server.py:2784-2793` (`_enrich_box`, wire-through to the template) |
-| `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:5222-5241` |
+| `level` | int | optional; falls back through `mon_stats` → link entry → `party_details` → `_mon_cache` | `server.py:5250-5269` |
 | `held_item_id`, `ability_id`, `moves` | | box table | `server.py:4790-4791`, `3430-3439` |
 
 There is **no** "active box index" on the wire.
@@ -330,7 +330,7 @@ There is **no** "active box index" on the wire.
 | `_build_link_panel` `server.py:1816-1924` | links, `party_details` (`species_id, nickname, level, hp, maxHP, status_cond`), `_mon_cache`, `area_states`, `SoulLinkState.player_badges` (count) or `SLinkServer.player_badges` (bitmask) | `area_display_name`, `species_name`, `status_token`, `info_panel_width`, `supports_info_panel` |
 | `_build_party_overlay_context` `server.py:3233-3281` | `party_keys` order, `party_details` `hp,maxHP,species_id,species_name,nickname,level,sprite_html,status_cond,stat_stages,active` | — |
 | `_build_badges_overlay_context` `server.py:3664-3684` | `badges` bits 0-7, `kanto_badges` bits 0-7 for slugs 8+ | `gym_badge_slugs` |
-| `_check_memorial_box_contamination` `server.py:5124-5223` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
+| `_check_memorial_box_contamination` `server.py:5139-5238` | `pc_boxes[].box/key/nickname/species_id/slot` | `memorial_box_index`, `species_name` |
 | `_memorial_box_indices` `server.py:5023-5042` | dead count | `memorial_box_index`, `mons_per_box` |
 
 `status_pill` (`server/templates/_macros.html:43-53`) decodes `status_cond` with the Gen 3 bit layout directly (SLP bits 0-2, TOX 0x80, PSN 0x08, BRN 0x10, FRZ 0x20, PAR 0x40). A client for a generation with a different layout MUST translate to this layout on the wire (see §8).
