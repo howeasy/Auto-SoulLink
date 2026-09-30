@@ -1,0 +1,1264 @@
+{
+  "area_map_source_sha256": "c145e47e84215efa76791883f7e4f8ea1d9bd3b67aa70ee7faab7162129c9c81",
+  "build": "28877d73",
+  "counts": {
+    "active_egg": 1,
+    "active_gift": 8,
+    "active_static": 14,
+    "excluded_egg": 3,
+    "excluded_gift": 25,
+    "excluded_static": 10
+  },
+  "coverage": {
+    "limits": [
+      "Kecleon shared script caller maps need expansion",
+      "Mystery-gift payload is external to ordinary map scripts",
+      "Runtime species expressions are retained unresolved",
+      "Other non-script acquisition paths need a separate audit"
+    ],
+    "native_concrete_callers": [
+      "src/battle_setup.c",
+      "src/debug.c"
+    ],
+    "script_forms": [
+      "givemon",
+      "giveegg",
+      "createmon",
+      "setwildbattle"
+    ]
+  },
+  "declarations": [
+    {
+      "arguments": [
+        "SPECIES_REGISTEEL",
+        "40"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_120",
+      "kind": "static",
+      "line": 64,
+      "map_group_num": "24:68",
+      "map_id": "MAP_ANCIENT_TOMB",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/AncientTomb/scripts.inc",
+      "species": "SPECIES_REGISTEEL",
+      "species_id": 379,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_ELECTRODE",
+        "30"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "lilycove_city",
+      "kind": "static",
+      "line": 32,
+      "map_group_num": "24:24",
+      "map_id": "MAP_AQUA_HIDEOUT_B1F",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/AquaHideout_B1F/scripts.inc",
+      "species": "SPECIES_ELECTRODE",
+      "species_id": 101,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_ELECTRODE",
+        "30"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "lilycove_city",
+      "kind": "static",
+      "line": 56,
+      "map_group_num": "24:24",
+      "map_id": "MAP_AQUA_HIDEOUT_B1F",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/AquaHideout_B1F/scripts.inc",
+      "species": "SPECIES_ELECTRODE",
+      "species_id": 101,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_SUDOWOODO",
+        "40"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "artisan_cave",
+      "kind": "static",
+      "line": 129,
+      "map_group_num": "26:14",
+      "map_id": "MAP_BATTLE_FRONTIER_OUTSIDE_EAST",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/BattleFrontier_OutsideEast/scripts.inc",
+      "species": "SPECIES_SUDOWOODO",
+      "species_id": 185,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_EEVEE",
+        "25"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 12,
+      "map_group_num": "44:11",
+      "map_id": "MAP_CELADON_CITY_CONDOMINIUMS_ROOF_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_Condominiums_RoofRoom_Frlg/scripts.inc",
+      "species": "SPECIES_EEVEE",
+      "species_id": 133,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "9"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 123,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "7"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 126,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "8"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 134,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "12"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 137,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "18"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 145,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "24"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 148,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "25"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 155,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "26"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 161,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "18"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 164,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "18"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 171,
+      "map_group_num": "44:15",
+      "map_id": "MAP_CELADON_CITY_GAME_CORNER_PRIZE_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CeladonCity_GameCorner_PrizeRoom_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_MEWTWO",
+        "70"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 35,
+      "map_group_num": "35:74",
+      "map_id": "MAP_CERULEAN_CAVE_B1F",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/CeruleanCave_B1F_Frlg/scripts.inc",
+      "species": "SPECIES_MEWTWO",
+      "species_id": 150,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_OMANYTE",
+        "5"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 201,
+      "map_group_num": "46:4",
+      "map_id": "MAP_CINNABAR_ISLAND_POKEMON_LAB_EXPERIMENT_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CinnabarIsland_PokemonLab_ExperimentRoom_Frlg/scripts.inc",
+      "species": "SPECIES_OMANYTE",
+      "species_id": 138,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_KABUTO",
+        "5"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 212,
+      "map_group_num": "46:4",
+      "map_id": "MAP_CINNABAR_ISLAND_POKEMON_LAB_EXPERIMENT_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CinnabarIsland_PokemonLab_ExperimentRoom_Frlg/scripts.inc",
+      "species": "SPECIES_KABUTO",
+      "species_id": 140,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_AERODACTYL",
+        "5"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 223,
+      "map_group_num": "46:4",
+      "map_id": "MAP_CINNABAR_ISLAND_POKEMON_LAB_EXPERIMENT_ROOM",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/CinnabarIsland_PokemonLab_ExperimentRoom_Frlg/scripts.inc",
+      "species": "SPECIES_AERODACTYL",
+      "species_id": 142,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_REGIROCK",
+        "40"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_111",
+      "kind": "static",
+      "line": 64,
+      "map_group_num": "24:6",
+      "map_id": "MAP_DESERT_RUINS",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/DesertRuins/scripts.inc",
+      "species": "SPECIES_REGIROCK",
+      "species_id": 377,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_TOGEPI"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "egg",
+      "line": 31,
+      "map_group_num": "37:51",
+      "map_id": "MAP_FIVE_ISLAND_WATER_LABYRINTH",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "giveegg",
+      "source": "data/maps/FiveIsland_WaterLabyrinth_Frlg/scripts.inc",
+      "species": "SPECIES_TOGEPI",
+      "species_id": 175,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_REGICE",
+        "40"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_105",
+      "kind": "static",
+      "line": 97,
+      "map_group_num": "24:67",
+      "map_id": "MAP_ISLAND_CAVE",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/IslandCave/scripts.inc",
+      "species": "SPECIES_REGICE",
+      "species_id": 378,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_WYNAUT"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_112",
+      "kind": "egg",
+      "line": 245,
+      "map_group_num": "0:12",
+      "map_id": "MAP_LAVARIDGE_TOWN",
+      "note": "",
+      "opcode": "giveegg",
+      "source": "data/maps/LavaridgeTown/scripts.inc",
+      "species": "SPECIES_WYNAUT",
+      "species_id": 360,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_CYNDAQUIL",
+        "5"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_101",
+      "kind": "gift",
+      "line": 336,
+      "map_group_num": "1:4",
+      "map_id": "MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB",
+      "note": "",
+      "opcode": "givemon",
+      "source": "data/maps/LittlerootTown_ProfessorBirchsLab/scripts.inc",
+      "species": "SPECIES_CYNDAQUIL",
+      "species_id": 155,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_TOTODILE",
+        "5"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_101",
+      "kind": "gift",
+      "line": 377,
+      "map_group_num": "1:4",
+      "map_id": "MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB",
+      "note": "",
+      "opcode": "givemon",
+      "source": "data/maps/LittlerootTown_ProfessorBirchsLab/scripts.inc",
+      "species": "SPECIES_TOTODILE",
+      "species_id": 158,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_CHIKORITA",
+        "5"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_101",
+      "kind": "gift",
+      "line": 418,
+      "map_group_num": "1:4",
+      "map_id": "MAP_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB",
+      "note": "",
+      "opcode": "givemon",
+      "source": "data/maps/LittlerootTown_ProfessorBirchsLab/scripts.inc",
+      "species": "SPECIES_CHIKORITA",
+      "species_id": 152,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_KYOGRE",
+        "70"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": null,
+      "kind": "static",
+      "line": 36,
+      "map_group_num": "24:103",
+      "map_id": "MAP_MARINE_CAVE_END",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/MarineCave_End/scripts.inc",
+      "species": "SPECIES_KYOGRE",
+      "species_id": 382,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": "map has no mapped area in area_map/BFS graph"
+    },
+    {
+      "arguments": [
+        "SPECIES_BELDUM",
+        "5"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "mossdeep_city",
+      "kind": "gift",
+      "line": 86,
+      "map_group_num": "14:7",
+      "map_id": "MAP_MOSSDEEP_CITY_STEVENS_HOUSE",
+      "note": "",
+      "opcode": "givemon",
+      "source": "data/maps/MossdeepCity_StevensHouse/scripts.inc",
+      "species": "SPECIES_BELDUM",
+      "species_id": 374,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_MOLTRES",
+        "50"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 27,
+      "map_group_num": "35:101",
+      "map_id": "MAP_MT_EMBER_SUMMIT",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/MtEmber_Summit_Frlg/scripts.inc",
+      "species": "SPECIES_MOLTRES",
+      "species_id": 146,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_VOLTORB",
+        "25"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "new_mauville",
+      "kind": "static",
+      "line": 179,
+      "map_group_num": "24:53",
+      "map_id": "MAP_NEW_MAUVILLE_INSIDE",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/NewMauville_Inside/scripts.inc",
+      "species": "SPECIES_VOLTORB",
+      "species_id": 100,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_VOLTORB",
+        "25"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "new_mauville",
+      "kind": "static",
+      "line": 203,
+      "map_group_num": "24:53",
+      "map_id": "MAP_NEW_MAUVILLE_INSIDE",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/NewMauville_Inside/scripts.inc",
+      "species": "SPECIES_VOLTORB",
+      "species_id": 100,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_VOLTORB",
+        "25"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "new_mauville",
+      "kind": "static",
+      "line": 227,
+      "map_group_num": "24:53",
+      "map_id": "MAP_NEW_MAUVILLE_INSIDE",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/NewMauville_Inside/scripts.inc",
+      "species": "SPECIES_VOLTORB",
+      "species_id": 100,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "PLAYER_STARTER_SPECIES",
+        "5"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 1120,
+      "map_group_num": "38:3",
+      "map_id": "MAP_PALLET_TOWN_PROFESSOR_OAKS_LAB",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/PalletTown_ProfessorOaksLab_Frlg/scripts.inc",
+      "species": "PLAYER_STARTER_SPECIES",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_MAROWAK",
+        "30"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 8,
+      "map_group_num": "35:93",
+      "map_id": "MAP_POKEMON_TOWER_6F",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/PokemonTower_6F_Frlg/scripts.inc",
+      "species": "SPECIES_MAROWAK",
+      "species_id": 105,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_ZAPDOS",
+        "50"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 38,
+      "map_group_num": "35:95",
+      "map_id": "MAP_POWER_PLANT",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/PowerPlant_Frlg/scripts.inc",
+      "species": "SPECIES_ZAPDOS",
+      "species_id": 145,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_ELECTRODE",
+        "34"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 71,
+      "map_group_num": "35:95",
+      "map_id": "MAP_POWER_PLANT",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/PowerPlant_Frlg/scripts.inc",
+      "species": "SPECIES_ELECTRODE",
+      "species_id": 101,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_ELECTRODE",
+        "34"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 95,
+      "map_group_num": "35:95",
+      "map_id": "MAP_POWER_PLANT",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/PowerPlant_Frlg/scripts.inc",
+      "species": "SPECIES_ELECTRODE",
+      "species_id": 101,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_CASTFORM_NORMAL",
+        "25",
+        "ITEM_MYSTIC_WATER"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_119",
+      "kind": "gift",
+      "line": 85,
+      "map_group_num": "32:1",
+      "map_id": "MAP_ROUTE119_WEATHER_INSTITUTE_2F",
+      "note": "",
+      "opcode": "givemon",
+      "source": "data/maps/Route119_WeatherInstitute_2F/scripts.inc",
+      "species": "SPECIES_CASTFORM_NORMAL",
+      "species_id": 351,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_KECLEON",
+        "30"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_120",
+      "kind": "static",
+      "line": 193,
+      "map_group_num": "0:35",
+      "map_id": "MAP_ROUTE120",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/Route120/scripts.inc",
+      "species": "SPECIES_KECLEON",
+      "species_id": 352,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_SNORLAX",
+        "30"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 20,
+      "map_group_num": "37:30",
+      "map_id": "MAP_ROUTE12",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/Route12_Frlg/scripts.inc",
+      "species": "SPECIES_SNORLAX",
+      "species_id": 143,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_SNORLAX",
+        "30"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 38,
+      "map_group_num": "37:34",
+      "map_id": "MAP_ROUTE16",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/Route16_Frlg/scripts.inc",
+      "species": "SPECIES_SNORLAX",
+      "species_id": 143,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_MAGIKARP",
+        "5"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 49,
+      "map_group_num": "50:0",
+      "map_id": "MAP_ROUTE4_POKEMON_CENTER_1F",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/Route4_PokemonCenter_1F_Frlg/scripts.inc",
+      "species": "SPECIES_MAGIKARP",
+      "species_id": 129,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_LILEEP",
+        "20"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_104",
+      "kind": "gift",
+      "line": 146,
+      "map_group_num": "11:1",
+      "map_id": "MAP_RUSTBORO_CITY_DEVON_CORP_2F",
+      "note": "",
+      "opcode": "givemon",
+      "source": "data/maps/RustboroCity_DevonCorp_2F/scripts.inc",
+      "species": "SPECIES_LILEEP",
+      "species_id": 345,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_ANORITH",
+        "20"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "route_104",
+      "kind": "gift",
+      "line": 191,
+      "map_group_num": "11:1",
+      "map_id": "MAP_RUSTBORO_CITY_DEVON_CORP_2F",
+      "note": "",
+      "opcode": "givemon",
+      "source": "data/maps/RustboroCity_DevonCorp_2F/scripts.inc",
+      "species": "SPECIES_ANORITH",
+      "species_id": 347,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "VAR_TEMP_1",
+        "25"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 59,
+      "map_group_num": "48:2",
+      "map_id": "MAP_SAFFRON_CITY_DOJO",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/SaffronCity_Dojo_Frlg/scripts.inc",
+      "species": "VAR_TEMP_1",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_ARTICUNO",
+        "50"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 157,
+      "map_group_num": "35:87",
+      "map_id": "MAP_SEAFOAM_ISLANDS_B4F",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/SeafoamIslands_B4F_Frlg/scripts.inc",
+      "species": "SPECIES_ARTICUNO",
+      "species_id": 144,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_LAPRAS",
+        "25"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 121,
+      "map_group_num": "35:53",
+      "map_id": "MAP_SILPH_CO_7F",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "givemon",
+      "source": "data/maps/SilphCo_7F_Frlg/scripts.inc",
+      "species": "SPECIES_LAPRAS",
+      "species_id": 131,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_RAYQUAZA",
+        "70"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": "sky_pillar",
+      "kind": "static",
+      "line": 49,
+      "map_group_num": "24:85",
+      "map_id": "MAP_SKY_PILLAR_TOP",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/SkyPillar_Top/scripts.inc",
+      "species": "SPECIES_RAYQUAZA",
+      "species_id": 384,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_GROUDON",
+        "70"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": null,
+      "kind": "static",
+      "line": 36,
+      "map_group_num": "24:105",
+      "map_id": "MAP_TERRA_CAVE_END",
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/maps/TerraCave_End/scripts.inc",
+      "species": "SPECIES_GROUDON",
+      "species_id": 383,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": "map has no mapped area in area_map/BFS graph"
+    },
+    {
+      "arguments": [
+        "SPECIES_HYPNO",
+        "30"
+      ],
+      "condition": "IS_FRLG",
+      "gift_area": null,
+      "kind": "static",
+      "line": 23,
+      "map_group_num": "35:109",
+      "map_id": "MAP_THREE_ISLAND_BERRY_FOREST",
+      "note": "event_scripts.s IS_FRLG branch is false for EMERALD",
+      "opcode": "setwildbattle",
+      "source": "data/maps/ThreeIsland_BerryForest_Frlg/scripts.inc",
+      "species": "SPECIES_HYPNO",
+      "species_id": 97,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_TREECKO",
+        "20",
+        "ITEM_NONE"
+      ],
+      "condition": "DEBUG_OVERWORLD_MENU / DEBUG=0",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 20,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "DEBUG=0; debug interface is disabled in this reference build",
+      "opcode": "givemon",
+      "source": "data/scripts/debug.inc",
+      "species": "SPECIES_TREECKO",
+      "species_id": 252,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_TORCHIC",
+        "20",
+        "ITEM_NONE"
+      ],
+      "condition": "DEBUG_OVERWORLD_MENU / DEBUG=0",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 21,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "DEBUG=0; debug interface is disabled in this reference build",
+      "opcode": "givemon",
+      "source": "data/scripts/debug.inc",
+      "species": "SPECIES_TORCHIC",
+      "species_id": 255,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_MUDKIP",
+        "20",
+        "ITEM_NONE"
+      ],
+      "condition": "DEBUG_OVERWORLD_MENU / DEBUG=0",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 22,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "DEBUG=0; debug interface is disabled in this reference build",
+      "opcode": "givemon",
+      "source": "data/scripts/debug.inc",
+      "species": "SPECIES_MUDKIP",
+      "species_id": 258,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_BULBASAUR",
+        "20",
+        "ITEM_NONE"
+      ],
+      "condition": "DEBUG_OVERWORLD_MENU / DEBUG=0",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 78,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "DEBUG=0; debug interface is disabled in this reference build",
+      "opcode": "givemon",
+      "source": "data/scripts/debug.inc",
+      "species": "SPECIES_BULBASAUR",
+      "species_id": 1,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_CHARMANDER",
+        "20",
+        "ITEM_NONE"
+      ],
+      "condition": "DEBUG_OVERWORLD_MENU / DEBUG=0",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 79,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "DEBUG=0; debug interface is disabled in this reference build",
+      "opcode": "givemon",
+      "source": "data/scripts/debug.inc",
+      "species": "SPECIES_CHARMANDER",
+      "species_id": 4,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_SQUIRTLE",
+        "20",
+        "ITEM_NONE"
+      ],
+      "condition": "DEBUG_OVERWORLD_MENU / DEBUG=0",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 80,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "DEBUG=0; debug interface is disabled in this reference build",
+      "opcode": "givemon",
+      "source": "data/scripts/debug.inc",
+      "species": "SPECIES_SQUIRTLE",
+      "species_id": 7,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_PICHU"
+      ],
+      "condition": "mystery_gift_payload",
+      "gift_area": null,
+      "kind": "egg",
+      "line": 31,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "external mystery-gift payload, not an ordinary map script",
+      "opcode": "giveegg",
+      "source": "data/scripts/gift_pichu.inc",
+      "species": "SPECIES_PICHU",
+      "species_id": 172,
+      "species_resolution": "constant",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "SPECIES_KECLEON",
+        "30"
+      ],
+      "condition": "IS_EMERALD",
+      "gift_area": null,
+      "kind": "static",
+      "line": 74,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "",
+      "opcode": "setwildbattle",
+      "source": "data/scripts/kecleon.inc",
+      "species": "SPECIES_KECLEON",
+      "species_id": 352,
+      "species_resolution": "constant",
+      "status": "active",
+      "unresolved_area": "shared or native grant has runtime location"
+    },
+    {
+      "arguments": [
+        "starterMon",
+        "5",
+        "ITEM_NONE"
+      ],
+      "condition": "EMERALD starter callback",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 1009,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "starter species chosen at runtime; callback precedes first battle",
+      "opcode": "ScriptGiveMon",
+      "source": "src/battle_setup.c",
+      "species": "starterMon",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "active",
+      "unresolved_area": "shared or native grant has runtime location"
+    },
+    {
+      "arguments": [
+        "DebugSelection_GetData(taskId",
+        "0)",
+        "DebugSelection_GetData(taskId",
+        "1)",
+        "ITEM_NONE"
+      ],
+      "condition": "DEBUG_OVERWORLD_MENU / DEBUG=0",
+      "gift_area": null,
+      "kind": "gift",
+      "line": 3198,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "debug interface disabled in reference build",
+      "opcode": "ScriptGiveMon",
+      "source": "src/debug.c",
+      "species": "DebugSelection_GetData(taskId",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    },
+    {
+      "arguments": [
+        "DebugSelection_GetData(taskId",
+        "0)"
+      ],
+      "condition": "DEBUG_OVERWORLD_MENU / DEBUG=0",
+      "gift_area": null,
+      "kind": "egg",
+      "line": 3488,
+      "map_group_num": null,
+      "map_id": null,
+      "note": "debug interface disabled in reference build",
+      "opcode": "ScriptGiveEgg",
+      "source": "src/debug.c",
+      "species": "DebugSelection_GetData(taskId",
+      "species_id": null,
+      "species_resolution": "runtime expression",
+      "status": "excluded",
+      "unresolved_area": null
+    }
+  ],
+  "evidence": "SOURCE_ONLY",
+  "live_verified": false,
+  "schema": "gen3-expansion-gifts-source-v1",
+  "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
+}
