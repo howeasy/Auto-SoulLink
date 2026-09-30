@@ -13,6 +13,8 @@
   "header_count": 124,
   "header_order_sha256": "9cb704488d96e35cda8d9d6c3f04f6c45b3659ee097060562bc7e4fa6b15c754",
   "header_stride": 84,
+  "hidden_pointer_count": 0,
+  "hidden_pointer_sha256": "882993b55cc0c527f0a6059b69b3faf4ef3ccb9cecd3d8847ca0e49a1444debe",
   "limits": [
     "Static compiled ROM/source readback, not live encounter behavior",
     "Area projection selects first header per map; later Altering Cave sets remain unprojected",

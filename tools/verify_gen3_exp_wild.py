@@ -54,7 +54,7 @@ def readback(rom: bytes, context: dict, src: Path) -> dict:
     header = profile.expansion_symbol(context, "gWildMonHeaders")
     # include/wild_encounter.h: u8,u8,2 pad, WildEncounterTypes[4]; each type has five ptrs.
     # include/constants/rtc.h: TIME_MORNING/DAY/EVENING/NIGHT, COUNT=4.
-    stride = 4 + 4 * 5 * 4
+    stride = 4 + 4 * 5 * 4  # this pinned source's four TimeOfDay values and five info pointers
     if header["size"] != (len(entries) + 1) * stride:
         raise ValueError("gWildMonHeaders size differs from source/count/struct geometry")
 
@@ -76,12 +76,20 @@ def readback(rom: bytes, context: dict, src: Path) -> dict:
 
     decoded = []
     counts = Counter()
+    hidden_pointers = bytearray()
     for i, entry in enumerate(entries):
         base = header["address"] + i * stride
         raw = rom[at(base, stride):at(base, stride) + stride]
         expected_pos = positions.get(entry["map"])
         if expected_pos is None or tuple(raw[:2]) != expected_pos or raw[2:4] != b"\0\0":
             raise ValueError(f"wild header {i} map/padding differs: {entry['base_label']}")
+        # The source JSON has no hidden_mons field, so the pinned header generator emits four
+        # named infos and C zero-initializes WildEncounterTypes.hiddenMonsInfo. The fifth
+        # pointer is at +20; checking only raw[24:] would silently accept a hidden table.
+        hidden = u32(base + 20)
+        hidden_pointers.extend(raw[20:24])
+        if hidden:
+            raise ValueError(f"wild header {i} unexpected hidden fifth pointer: {hidden:#x}")
         if any(raw[24:]):
             raise ValueError(f"wild header {i} inactive time pointers are nonzero")
         block = {}
@@ -120,7 +128,10 @@ def readback(rom: bytes, context: dict, src: Path) -> dict:
     if terminator != b"\xff\xff" + bytes(stride - 2):
         raise ValueError("wild header terminator differs")
     return {"headers": decoded, "habitat_counts": dict(sorted(counts.items())),
-            "terminator_count": 1, "stride": stride}
+            "terminator_count": 1, "stride": stride,
+            "hidden_pointer_count": sum(hidden_pointers[i:i + 4] != b"\0\0\0\0"
+                                        for i in range(0, len(hidden_pointers), 4)),
+            "hidden_pointer_sha256": hashlib.sha256(hidden_pointers).hexdigest()}
 
 
 def project_set_zero(headers: list[dict]) -> dict:
@@ -178,6 +189,8 @@ def build() -> dict:
             "source_commit": context["source"]["source_commit"],
             "header_count": len(headers), "terminator_count": decoded["terminator_count"],
             "header_stride": decoded["stride"], "habitat_counts": decoded["habitat_counts"],
+            "hidden_pointer_count": decoded["hidden_pointer_count"],
+            "hidden_pointer_sha256": decoded["hidden_pointer_sha256"],
             "altering_cave_header_count": len(cave),
             "source_projection_set": 0, "source_projection_match": True,
             "header_order_sha256": digest([[r["label"], r["map"]] for r in headers]),
