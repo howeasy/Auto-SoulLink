@@ -6,6 +6,18 @@ import pytest
 from tests.unit.test_gen3_trade import durable_client, start_client_trade, swap_in_partner
 
 
+def pending_settle_flags(world):
+    """Inspect the real Lua reducer closure, without replacing its production behavior."""
+    state = world.lua.eval('''function(fn)
+        for i = 1, 20 do
+            local name, value = debug.getupvalue(fn, i)
+            if name == "st" then return value end
+        end
+    end''')(world.client.driver.frame_hooks[2])
+    assert state is not None
+    return state.flags
+
+
 def uncertain_client(monkeypatch):
     world, carrier, blob = durable_client(monkeypatch)
     start_client_trade(world, carrier, blob)
@@ -648,6 +660,7 @@ def test_empty_journal_one_frame_busy_replays_capture_once_after_visibility_retu
     world.fire("save")
     world.step(2)
     assert world.events("capture") == []
+    assert pending_settle_flags(world).acquire is True
     assert world.saveram_calls == flushed + 1
     journal.busy = None
     world.step(3)
@@ -657,3 +670,56 @@ def test_empty_journal_one_frame_busy_replays_capture_once_after_visibility_retu
     world.step(35)
     assert len(world.events("capture")) == 1
     assert world.saveram_calls == flushed + 1
+    world.fire("save")
+    world.step()
+    assert world.saveram_calls == flushed + 2  # a distinct engine save still flushes
+
+
+@pytest.mark.parametrize("signal", ("mon_given", "pc_move"))
+def test_posted_native_trade_signal_cannot_become_a_late_capture(monkeypatch, signal):
+    world, carrier, blob = durable_client(monkeypatch)
+    start_client_trade(world, carrier, blob)
+    swap_in_partner(world)  # patch's received mon, not a player acquisition
+    scene = carrier.jobs[-1]
+    scene["progress"](carrier.lua.table(commit_entered=True, scene_done=True))
+    world.step()
+    journal = carrier.journal_model.journal
+    assert journal.hidden(journal) is True
+    world.fire(signal)
+    world.step(200)  # beyond any ordinary trade settle window, still journal-hidden
+    assert world.events("capture") == []
+    assert pending_settle_flags(world).acquire is None
+    assert pending_settle_flags(world).pc is None
+    carrier.ack(commit_entered=True, scene_done=True, save_success=True, final_result="committed")
+    world.step(40)
+    assert journal.hidden(journal) is False
+    assert world.events("capture") == []
+
+
+@pytest.mark.parametrize("signal", ("mon_given", "pc_move"))
+def test_cold_trade_recovery_does_not_replay_trade_owned_acquisition(tmp_path, monkeypatch, signal):
+    from tests.unit.gen3_world import SB1_ADDR, SB2_ADDR
+
+    world, model, server, _entry, token, _epoch, pump = recovering_pair(tmp_path, monkeypatch)
+    assert model.journal.hidden(model.journal) is True
+    world.fire(signal)
+    pump(200)  # the received party stays hidden well beyond an ordinary settle window
+    assert world.events("capture") == []
+    assert pending_settle_flags(world).acquire is None
+    assert pending_settle_flags(world).pc is None
+    party, sb1, sb2 = install_battery_readback(world, model, tmp_path / "battery.SaveRAM")
+    server._dispatch("b", {"event": "trade_done", "token": token,
+                           "new_key": "00000001:00000011", "new_species": 1})
+    world.frame = 1
+    world.poke_int(world.ram["SB1_PTR_ADDR"], 0, 4)
+    world.poke_int(world.ram["SB2_PTR_ADDR"], 0, 4)
+    world.poke_int(world.ram["PARTY_COUNT_ADDR"], 0, 1)
+    pump(2)
+    world.poke_int(world.ram["SB1_PTR_ADDR"], sb1, 4)
+    world.poke_int(world.ram["SB2_PTR_ADDR"], sb2, 4)
+    world.poke_int(world.ram["PARTY_COUNT_ADDR"], 1, 1)
+    world.poke(world.ram["PARTY_BASE"], party)
+    world.poke_int(0x03005390, 7, 4)
+    pump(65)
+    assert model.journal.hidden(model.journal) is False
+    assert world.events("capture") == []

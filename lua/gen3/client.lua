@@ -628,10 +628,16 @@ function Client.new(p)
         if f.save and io.saveram then pcall(io.saveram) end
         f.save = nil -- a host flush is one-shot even while a journal read is temporarily hidden
         if recovery_hidden() then
-            -- A guard collision can withhold one frame even with an empty journal. Keep the
-            -- engine's acquisition/PC evidence for a later readable party; observe_known must
-            -- not silently seed that new key as a baseline in the meantime. A trade completion
-            -- remains owned by the journal recovery path, not this ordinary settle.
+            -- Retain observer evidence only for a temporary guard collision outside a posted
+            -- native trade. A genuinely unsettled/failed journal or a posted trade owns the
+            -- party change; replaying its signal after the settle window could report the
+            -- received mon as a catch. A transient empty-journal read instead needs this flag
+            -- until visibility returns, so observe_known cannot silently seed its new key.
+            local posted = st.trade_apply and (st.trade_apply.posted or st.trade_apply.possibly_posted)
+            if not (journal and journal.busy and not journal.failure
+                    and not awaiting_trade_run and not posted) then
+                st.flags = {}
+            end
             st.trade, f.trade = nil, nil
             return
         end
