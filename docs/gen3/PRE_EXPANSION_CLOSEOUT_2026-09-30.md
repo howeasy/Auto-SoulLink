@@ -25,4 +25,6 @@ Source changes reuse the existing hunter, duo transport, classifier and clause o
 
 Verified reusable inputs live in the main checkout and `C:/slink-cache/gen3-inputs/`; two genuinely independent current Linux builds and pinned Gold/Silver inputs are retained. Ignored core evidence, environment bindings and per-file hashes are recorded in [preservation manifest](CORE_WRAP_PRESERVATION_2026-09-30.json) before removing the merged task checkout and branch.
 
+Local main integration and all 72 final-cut receipts are committed at `01e2978c`. The merged `codex/gen3-core-finish` branch and its Git worktree registration were removed. External cache links were unlinked and the temporary environment file was removed after verified preservation. Ordinary filesystem deletion left Windows access-denied remnants under `C:/slink-wt/g3-core`; the preservation manifest records exact paths and operations. This directory residue is not a parked Git worktree or unmerged source change.
+
 The task does not own main's untracked `lua/memory_gba.lua` or `server/adapters/gen2_crystal.py`; both remain untouched. Earlier ACL-denied residue (`C:/slink-wt/g3-lane` and four old Git worktree metadata directories) remains a separately recorded cleanup blocker. No ACL or trust bypass is authorized or used. No push, tag or release publication is performed.

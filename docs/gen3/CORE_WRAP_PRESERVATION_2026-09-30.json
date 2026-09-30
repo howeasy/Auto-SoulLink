@@ -19,6 +19,35 @@
   "file_count": 1765,
   "member_bytes": 721922127,
   "full_manifest": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\core-ignored-manifest.json",
-  "full_manifest_sha256": "72fc10389c108a9347aec051a1b73f33f7ae2e10055b9b5c0458889e27ae9174",
-  "cleanup_status": "Preserved and verified before authorized main integration and task checkout retirement."
+  "full_manifest_sha256": "87158b9846fb7b99472e3e10dd7638dda61d15dabf096b37a0364c5ea9362a5b",
+  "cleanup_status": "Git checkout registration and merged branch removed. Ordinary filesystem cleanup completed except Windows access-denied remnants. No ACL changes or bypass.",
+  "cleanup_completed_at_utc": "2026-09-30T06:54:59.835069+00:00",
+  "main_integration_commit": "01e2978c873f2e431fb70f9970087b1d7527abd7",
+  "git_worktree_registration_removed": true,
+  "merged_branch_removed": true,
+  "external_cache_links_removed": true,
+  "temporary_environment_removed": true,
+  "remaining_directory": "C:\\slink-wt\\g3-core",
+  "cleanup_error_count": 4026,
+  "cleanup_operations": {
+    "rmdir": 3994,
+    "unlink": 32
+  },
+  "cleanup_error_examples": [
+    {
+      "path": "C:\\slink-wt\\g3-core\\.cache\\pret\\pokecrystal\\.git\\logs\\refs\\remotes\\origin",
+      "operation": "rmdir",
+      "error": "[WinError 5] Access is denied: 'C:\\\\slink-wt\\\\g3-core\\\\.cache\\\\pret\\\\pokecrystal\\\\.git\\\\logs\\\\refs\\\\remotes\\\\origin'"
+    },
+    {
+      "path": "C:\\slink-wt\\g3-core\\.cache\\pret\\pokecrystal\\.git\\logs\\refs\\heads",
+      "operation": "rmdir",
+      "error": "[WinError 5] Access is denied: 'C:\\\\slink-wt\\\\g3-core\\\\.cache\\\\pret\\\\pokecrystal\\\\.git\\\\logs\\\\refs\\\\heads'"
+    },
+    {
+      "path": "C:\\slink-wt\\g3-core\\.cache\\pret\\pokecrystal\\.git\\logs\\refs\\remotes",
+      "operation": "rmdir",
+      "error": "[WinError 5] Access is denied: 'C:\\\\slink-wt\\\\g3-core\\\\.cache\\\\pret\\\\pokecrystal\\\\.git\\\\logs\\\\refs\\\\remotes'"
+    }
+  ]
 }
