@@ -18,7 +18,7 @@ BATTLE = f"[a] faint → force_faint b:{KB}"
 
 
 def _replay(tmp_path, monkeypatch, *, case="whiteout", cause="whiteout", status="dead",
-            server_lines=(REFUSED, "[a] whiteout", WHITEOUT)):
+            server_lines=(REFUSED, "[a] whiteout", WHITEOUT), mock_downstream=True):
     (tmp_path / "links.json").write_text(json.dumps({"links": [{
         "a": {"key": KA}, "b": {"key": KB}, "status": status, "cause": cause,
         "initiating_player": "a",
@@ -33,30 +33,22 @@ def _replay(tmp_path, monkeypatch, *, case="whiteout", cause="whiteout", status=
     run._gen3_saved = run._gen3_fixture_saved = lambda inst: ([], {})
     run._gen3_limits = lambda inst: {}
     run._pydec_note = lambda fact: None
-    # Save and receipt validators have their own tests. Keep their calls observable here while
-    # replaying the actual persisted-link and server-log checks in this oracle.
+    # Positive controls use independently tested save/receipt validators as spies. The captured
+    # refusal runs through the actual oracle and fails before either downstream validator.
     calls = []
-    monkeypatch.setattr(duo, "gen3_last_mon_problems", lambda *a, **kw: calls.append("last") or [])
-    monkeypatch.setattr(duo, "gen3_memorial_problems", lambda *a, **kw: calls.append("memorial") or [])
-    monkeypatch.setattr(duo, "gen3_receipt_problems", lambda *a, **kw: calls.append("receipt") or [])
+    if mock_downstream:
+        monkeypatch.setattr(duo, "gen3_last_mon_problems", lambda *a, **kw: calls.append("last") or [])
+        monkeypatch.setattr(duo, "gen3_memorial_problems", lambda *a, **kw: calls.append("memorial") or [])
+        monkeypatch.setattr(duo, "gen3_receipt_problems", lambda *a, **kw: calls.append("receipt") or [])
     results = {"a": f"LAST_MON_KEPT {KA}\n", "b": f"LAST_MON_KEPT {KB}\n"}
     return run, results, calls
 
 
-def test_rr_observed_whiteout_retires_link_and_runs_durable_checks(tmp_path, monkeypatch):
-    run, results, calls = _replay(tmp_path, monkeypatch)
-    receipt_checks = []
-    def receipt_check(side, text, **checks):
-        calls.append("receipt")
-        receipt_checks.append((side, checks))
-        return []
-    monkeypatch.setattr(duo, "gen3_receipt_problems", receipt_check)
-    run.assert_linked_faint_active_whiteout_gen3_saved(results)
-    assert calls == ["last", "last", "receipt", "receipt"]
-    a_checks = receipt_checks[0][1]
-    assert receipt_checks[0][0] == "a"
-    assert duo.gen3_tx("whiteout", "-") in a_checks["required"]
-    assert (duo.gen3_tx("faint", KA), duo.gen3_tx("whiteout", "-")) in a_checks["ordered"]
+def test_rr_observed_refused_faint_does_not_qualify_whiteout(tmp_path, monkeypatch):
+    run, results, calls = _replay(tmp_path, monkeypatch, mock_downstream=False)
+    with pytest.raises(RuntimeError, match="faint refused.*party hidden.*whiteout"):
+        run.assert_linked_faint_active_whiteout_gen3_saved(results)
+    assert calls == []  # the persisted link/log contradict W-4 before saved-state validation
 
 
 @pytest.mark.parametrize("case,cause,status,server_lines", [
