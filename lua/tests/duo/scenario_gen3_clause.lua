@@ -12,6 +12,28 @@ end
 return function(ctx)
     if not ctx.wait_go() then return false, "no go-file" end
     local kind, pending = ctx.D.rule_kind
+    local pre_species
+    if kind == "species" then
+        if ctx.player == "a" then
+            local b = ctx.wait_until(function() return ctx.go_value("B_PRE") or (ctx.partner_done() and "gone") end,
+                                     1800, "B native preflight")
+            if type(b) ~= "table" then return false, "B native preflight missing" end
+        end
+        -- Only ordinary hunting opens a battle. Keep it at the action menu while the runner
+        -- compares both independently decoded ROM families; neither side RUNs on a mismatch.
+        if not ctx.hunt("clause preflight") then return false, "hunt ended no wild encounter" end
+        if not ctx.wild_ready("clause preflight") then return false, "wild battle never reached its action menu" end
+        local why
+        pre_species, why = ctx.enemy_species()
+        local info = pre_species and fact(ctx, pre_species)
+        if not info then return false, "unproven wild species: " .. tostring(why or pre_species) end
+        ctx.jlog(ctx.player == "b" and "B_PRE_ENCOUNTER" or "A_PRE_ENCOUNTER",
+                 {species=pre_species, family=info.family})
+        if ctx.player == "a" and not ctx.wait_go("PREFLIGHT_MATCH") then
+            return false, "species preflight match not released"
+        end
+        if ctx.player == "a" then ctx.log("PREFLIGHT_MATCH") end
+    end
     if ctx.player == "b" then
         pending = ctx.wait_until(function() return ctx.go_value("A_PENDING") or (ctx.partner_done() and "gone") end, 1800, "A_PENDING")
         if type(pending) ~= "table" then return false, "runner never released B (A_PENDING)" end
@@ -20,9 +42,12 @@ return function(ctx)
     local key, why, rerolls = nil, nil, 0
     for n = 1, (kind == "species" and ctx.player == "b" and 8 or 1) do
         local cursor = ctx.rx_count()
-        if not ctx.hunt("clause") then return false, "hunt ended no wild encounter" end
-        if not ctx.wild_ready("clause") then return false, "wild battle never reached its action menu" end
-        local species, error = ctx.enemy_species()
+        if not (n == 1 and pre_species) then
+            if not ctx.hunt("clause") then return false, "hunt ended no wild encounter" end
+            if not ctx.wild_ready("clause") then return false, "wild battle never reached its action menu" end
+        end
+        local species, error = pre_species, nil
+        if n ~= 1 or not species then species, error = ctx.enemy_species() end
         local f = species and fact(ctx, species)
         if not f then return false, "unproven wild species: " .. tostring(error or species) end
         local other = pending and fact(ctx, pending.species_id)

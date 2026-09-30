@@ -2,6 +2,7 @@
 import importlib
 import json
 import os
+import re
 import struct
 import sys
 from pathlib import Path
@@ -296,10 +297,10 @@ def test_species_carrier_runs_from_the_encounter_it_observed():
       c.wait_until=function(p) return p() end
       c.rx_count=function() return #c.messages end
       c.rx_after=function(at,p) for i=at+1,#c.messages do if p(c.messages[i]) then return c.messages[i] end end end
-      c.hunt=function() c.n=c.n+1; if c.n==1 then c.messages[#c.messages+1]={cmd='gui_prompt',text='Dupes clause: Pidgey -- reroll!'} end;return true end
+      c.hunt=function() c.n=c.n+1;return true end
       c.wild_ready=function() return true end
       c.enemy_species=function() return c.n==1 and 16 or 19 end
-      c.run_away=function() c.runs=c.runs+1;return true end
+      c.run_away=function() c.runs=c.runs+1;c.messages[#c.messages+1]={cmd='gui_prompt',text='Dupes clause: Pidgey -- reroll!'};return true end
       c.catch=function(label,ready) assert(ready==true,'second hunt would discard the observed foe');c.catches=c.catches+1;c.messages[#c.messages+1]={cmd='msgbox',text='A and B linked!'};return 'B' end
       c.last_sent=function() return {key='B',species_id=19,area_id='route_1'} end
       c.received=function() return 0 end
@@ -311,7 +312,32 @@ def test_species_carrier_runs_from_the_encounter_it_observed():
     ''')
     assert scenario(ctx) is True
     assert (ctx["n"], ctx["runs"], ctx["catches"]) == (2, 1, 1)
+    assert ctx["lines"][1]["tag"] == "B_PRE_ENCOUNTER"
     assert [ctx["lines"][i]["tag"] for i in range(1, len(ctx["lines"]) + 1)].count("CLAUSE_REROLL") == 1
+
+
+def test_species_a_holds_first_battle_until_runner_matches_family():
+    from lupa import LuaRuntime
+    lua = LuaRuntime(unpack_returned_tuples=True)
+    scenario = lua.execute("return dofile('lua/tests/duo/scenario_gen3_clause.lua')")
+    ctx = lua.execute('''
+      local c={player='a',D={rule_kind='species',clause_facts={['16']={family=16}}},hunts=0,catches=0,runs=0}
+      c.wait_go=function(marker) return marker~='PREFLIGHT_MATCH' end
+      c.go_value=function() return {species=16,family=16} end
+      c.partner_done=function() return false end
+      c.wait_until=function(p) return p() end
+      c.hunt=function() c.hunts=c.hunts+1;return true end
+      c.wild_ready=function() return true end
+      c.enemy_species=function() return 16 end
+      c.jlog=function() end
+      c.log=function() end
+      c.catch=function() c.catches=c.catches+1;return 'A' end
+      c.run_away=function() c.runs=c.runs+1;return true end
+      return c
+    ''')
+    ok, why = scenario(ctx)
+    assert ok is False and why == "species preflight match not released"
+    assert (ctx["hunts"], ctx["runs"], ctx["catches"]) == (1, 0, 0)
 
 
 def test_rule_rng_failures_keep_final_failures_final():
@@ -475,6 +501,89 @@ def test_exhausted_unobserved_clause_never_becomes_a_pass(monkeypatch):
     result = duo.run_scenario_with_rng_retry("species_clause_gen3", SimpleNamespace(game="gen3_frlg", idle_jitter=0))
     assert result[:2] == (False, 8)
     assert calls == list(range(1, 9))
+
+
+def test_species_preflight_orders_b_then_a_and_aborts_mismatch_before_capture():
+    from types import SimpleNamespace
+    rules = importlib.import_module("gen3_clause_rows")
+    order = []
+    def mark(side, pattern, what, timeout=None):
+        order.append(("mark", side, what))
+        if "B preflight" in what:
+            return re.match(r"(.*)", json.dumps({"species": 16, "family": 16}))
+        if "A preflight" in what:
+            return re.match(r"(.*)", json.dumps({"species": 19, "family": 19}))
+        raise AssertionError("capture was released on a mismatch")
+    run = SimpleNamespace(cfg={"rule_kind": "species"}, _hunt_area="route_1",
+        _gen3_prelude=lambda: order.append(("prelude",)), go=lambda: order.append(("go",)),
+        _gen3_mark=mark, _append_reconnect_marker=lambda side, line: order.append(("release", side, line)),
+        _read_receipt=lambda side: "", _gen3_title=lambda side: "firered",
+        _clause_facts={"a": {"16": {"family": 16}, "19": {"family": 19}},
+                       "b": {"16": {"family": 16}, "19": {"family": 19}}})
+    with pytest.raises(rules.ClauseUnobserved, match="preflight"):
+        rules._orchestrate_clause(run)
+    assert order[:3] == [("prelude",), ("go",), ("mark", "b", "B preflight")]
+    assert any(item[:2] == ("release", "a") for item in order)
+    assert not any(item[0] == "release" and item[1] == "b" for item in order)
+
+
+def test_held_b_battle_a_real_capture_then_b_no_catch_gets_server_reroll(tmp_path, monkeypatch):
+    from server.state import AreaStatus, SoulLinkState
+
+    monkeypatch.setattr("server.state.LINKS_PATH", str(tmp_path / "links.json"))
+    state = SoulLinkState(species_lock=True)
+    state.pokeballs_obtained = {"a": True, "b": True}
+    assert state.check_dupe_on_encounter("b", "route_1", 16) is False
+    # A's concurrent-battle prompt is informational; it does not block the native catch.
+    assert state.check_dupe_on_encounter("a", "route_1", 16, partner_battle_species=16)
+    state.handle_event("a", {"event": "capture", "key": "A:16", "area_id": "route_1",
+                             "level": 3, "species_id": 16})
+    assert state.pending_captures["route_1"]["a"].key == "A:16"
+    cmds = state.handle_event("b", {"event": "no_catch", "area_id": "route_1", "species_id": 16})
+    assert state.area_states["route_1"] != AreaStatus.DEAD_ZONE
+    assert any(c.get("cmd") == "gui_prompt" and "reroll!" in c.get("text", "") for c in cmds)
+
+
+def test_species_match_releases_a_catch_before_b_pending_and_save():
+    from types import SimpleNamespace
+    rules = importlib.import_module("gen3_clause_rows")
+    order = []
+    cap = {"key": "A:16", "species_id": 16, "area_id": "route_1"}
+    def mark(side, pattern, what, timeout=None):
+        order.append(("mark", side, what))
+        payload = ({"species": 16, "family": 16} if "preflight" in what else cap)
+        return re.match(r"(.*)", json.dumps(payload))
+    run = SimpleNamespace(cfg={"rule_kind": "species"}, _hunt_area="route_1",
+        _gen3_prelude=lambda: None, go=lambda: order.append(("go",)), _gen3_mark=mark,
+        _append_reconnect_marker=lambda side, line: order.append(("release", side, line)),
+        _read_receipt=lambda side: "", _gen3_title=lambda side: "firered",
+        _clause_facts={i: {"16": {"family": 16}} for i in "ab"},
+        _status=lambda: {"pending_captures": {"route_1": {"a": {"key": "A:16", "species": 16}}}},
+        wait_for=lambda name, pred, timeout: pred())
+    rules._orchestrate_clause(run)
+    releases = [(i, item[1], item[2]) for i, item in enumerate(order) if item[0] == "release"]
+    match = next(i for i, side, line in releases if side == "a" and line == "PREFLIGHT_MATCH")
+    pending = next(i for i, side, line in releases if side == "b" and line.startswith("A_PENDING "))
+    assert match < pending
+    assert order[-2:] == [("release", "a", "SAVE"), ("release", "b", "SAVE")]
+
+
+def test_species_preflight_oracle_requires_native_order_and_matching_rom_families():
+    rules = importlib.import_module("gen3_clause_rows")
+    facts = {i: {"16": {"family": 16}, "19": {"family": 19}} for i in "ab"}
+    tag = lambda name, row: name + " " + json.dumps(row) + "\n"
+    receipts = {
+        "a": tag("A_PRE_ENCOUNTER", {"species": 16, "family": 16}) +
+             "PREFLIGHT_MATCH\nTX capture A:16 {}\n" + tag("PENDING_CAPTURE", {"species_id": 16}),
+        "b": tag("B_PRE_ENCOUNTER", {"species": 16, "family": 16}) +
+             tag("A_PENDING", {"species_id": 16}) + tag("CLAUSE_ENCOUNTER", {"n": 1, "species": 16}) +
+             "TX no_catch - {}\n" + tag("CLAUSE_REROLL", {"n": 1, "species": 16}),
+    }
+    assert rules.species_preflight_problems(receipts, facts) == []
+    wrong = dict(receipts, b=receipts["b"].replace('"family": 16', '"family": 19', 1))
+    assert rules.species_preflight_problems(wrong, facts)
+    missing = dict(receipts, b=receipts["b"].replace("TX no_catch - {}\n", ""))
+    assert rules.species_preflight_problems(missing, facts)
 
 
 def test_script_entrypoint_uses_its_own_rng_exception_classes():

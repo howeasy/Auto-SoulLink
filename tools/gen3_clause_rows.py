@@ -98,6 +98,26 @@ def one(text, tag):
     return found[0]
 
 
+def species_preflight_problems(results, facts):
+    """Bind the held native battles to the later pending capture and actual reroll wire event."""
+    a, b = results["a"], results["b"]
+    pa, pb = one(a, "A_PRE_ENCOUNTER"), one(b, "B_PRE_ENCOUNTER")
+    problems = []
+    for side, pre in (("a", pa), ("b", pb)):
+        species = pre.get("species")
+        if str(species) not in facts[side] or pre.get("family") != facts[side][str(species)]["family"]:
+            problems.append(f"{side}: preflight family disagrees with booted ROM")
+    if pa.get("family") != pb.get("family"):
+        problems.append("species preflight was released on different families")
+    if not (0 <= b.find("B_PRE_ENCOUNTER ") < b.find("A_PENDING ") < b.find("CLAUSE_ENCOUNTER ")
+            < b.find("TX no_catch ") < b.find("CLAUSE_REROLL ")):
+        problems.append("B's native preflight/pending/RUN/reroll phase order is incomplete")
+    if not (0 <= a.find("A_PRE_ENCOUNTER ") < a.find("PREFLIGHT_MATCH\n")
+            < a.find("TX capture ") < a.find("PENDING_CAPTURE ")):
+        problems.append("A caught before its native preflight match release")
+    return problems
+
+
 def release_membership(saved, fixture, released, key_of):
     party, boxes = saved
     fp, fb = fixture
@@ -135,6 +155,27 @@ def _orchestrate_clause(run):
     # Gen 1's ordered pending-capture carrier. This also makes the later
     # capturer's gender/type rejection deterministic given the actual two mons.
     run.go()
+    if run.cfg["rule_kind"] == "species":
+        # Hold B's first real wild battle at its action menu. A then opens one battle of its
+        # own. A mismatch aborts both still in battle: RUN would send no_catch and dead-zone
+        # the area. Only a ROM-proven family match releases A's ordinary catch inputs.
+        pre = {}
+        for side, what in (("b", "B preflight"), ("a", "A preflight")):
+            if side == "a":
+                run._append_reconnect_marker("a", "B_PRE " + json.dumps(pre["b"], separators=(",", ":")))
+            marker = run._gen3_mark(side, rf"^{side.upper()}_PRE_ENCOUNTER (\{{.*\}})$", what)
+            row = json.loads(marker.group(1))
+            species = row.get("species")
+            facts = own_facts(run, side)
+            if (str(species) not in facts or row.get("family") != facts[str(species)]["family"]
+                    or not any(e["species_id"] == species for e in wild_facts(run._gen3_title(side), run._hunt_area))):
+                raise RuntimeError(f"{side}: native preflight species/family lacks booted-ROM facts")
+            pre[side] = row
+        if any(re.search(r"(?m)^TX (?:capture|no_catch) ", run._read_receipt(side) or "") for side in "ab"):
+            raise RuntimeError("preflight left a battle before the family decision")
+        if pre["a"]["family"] != pre["b"]["family"]:
+            raise ClauseUnobserved("species preflight families differ; both battles held")
+        run._append_reconnect_marker("a", "PREFLIGHT_MATCH")
     pending = run._gen3_mark("a", r"^PENDING_CAPTURE (\{.*\})$", "A's native capture")
     cap = json.loads(pending.group(1))
     if cap.get("area_id") != run._hunt_area:
@@ -270,6 +311,7 @@ def clause_oracle(run, results):
     rx = {i: rows(t, "RULE_RX") for i, t in results.items()}
     rejected = [i for i in ("a", "b") if any(r.get("cmd") == "force_faint" and r.get("key") == keys[i] for r in rx[i])]
     if kind == "species":
+        problems += species_preflight_problems(results, facts)
         if rejected:
             raise RuntimeError("species reroll produced a rejection")
         if facts["a"][str(caps["a"]["species_id"])]["family"] == facts["b"][str(caps["b"]["species_id"])]["family"]:
