@@ -57,7 +57,7 @@ The names differ from HGSS but the roles match. The generator maps them by role 
   `ARM9 System Bus` reports size **0**, but reads at 0x02xxxxxx work.
 - **Registers:** `ARM9 r0..r15` and `ARM7 r0..r15`. There is **no CPSR**. `getregister` is **signed**, so mask with `& 0xFFFFFFFF`.
 - **`event.on_bus_exec(fn, addr, name, scope)`:**
-  - The callback gets `(addr, val, flags)`. `val` is the 32-bit word at the site, equal to the ROM/overlay bytes, so it **is the fire-time byte check at no cost**. `flags` is always 0x4000.
+  - The callback gets `(addr, val, flags)`. `val` is the **four-byte little-endian word** at the site. Normalize unsigned and compare to a separate four-byte `fire_hex`; it does not check a longer `register_hex` or trampoline target. Full registration pins still require their declared-image byte read. Observed `flags` was 0x4000.
   - Scope: none or `"ARM9 System Bus"` works. `"Main RAM"`, `"System Bus"` and Main-RAM offsets return an **all-zero GUID and never fire** (no error), so a zero GUID must count as a failed registration.
   - A Thumb `addr+1` never fires. Use the even address.
 - The callback runs **before** the instruction. `ARM9 r15` reads site+4 (Thumb) or site+8 (ARM); that offset is the only Thumb signal.
@@ -75,6 +75,7 @@ The names differ from HGSS but the roles match. The generator maps them by role 
 ### Overlay residency (rows b/c)
 
 - **Load hook vs table:** 15 `HandleLoadOverlay` entry hits == 15 newly-active ids in `sOverlayRegions`, with r0 = id and r1 = load type. The table shows each load one frame later.
+- **Quantities are distinct:** `hg_p3/out.txt` reports 15 hits /15 newly-active IDs /22 total transitions; `hge_p3/out.txt` reports16/19/27. A transition can include removal as well as load. G1 must explain each load/unload/internal hge load, not equate hook count with all transitions or allow an unexplained numeric deficit.
 - **Boot sequence:** 0, 38, 60, 60, 74 (main menu), 36, 124, then field overlays 1, 2, 3, 27.
 - **START menu** loads no overlay; only `taskman` changes (0 → heap pointer).
 - **The party screen unloads every field overlay** and runs from static ARM9 with MAIN empty; overlays 1/2/3/27 reload on exit.
@@ -139,12 +140,20 @@ Unthrottled idle overworld, 600 frames per case:
 
 **The cost is per registered hook, not per hit.** The first hook adds about 5 ms/frame and each further one about 2 ms. Unregistering restores full speed. **On this machine more than 4 simultaneous hooks cannot hold 60 fps.**
 
+This is a 600-frame single-instance idle sample using CPU-time measurement, not sustained duplex battle/save qualification. Four hooks (~64fps) leave little headroom for both clients, scans, transport and saves. D6's cap stays an upper resource bound; G4 requires actual two-client frame delivery and event-completeness receipts. Development routes request300%;100% is reserved for explicit qualification, and receipts record requested/achieved rates. No Gen4 near-3× release claim follows from these measurements.
+
 ### hg-engine (information only)
 
 - MAIN = 129, 1, 131, 2, 3, 27; ov129 is resident from frame 9 (base reads "hg-engin").
 - SaveData resolves exactly as in vanilla.
 - `Party_AddMon`, `Task_Blackout`, `Encounter_GetResult`, `Main_RunOverlayManager` and `OS_WaitIrq` are byte-identical to vanilla on the bus.
 - **`HandleLoadOverlay` is patched** (`ldr r2,[pc]; bx r2`). Its entry hook still fires for vanilla-path loads but **misses hge's own loads of 129/131**. Only the table sees every load.
+
+## Phase and battle evidence still required (rev5)
+
+The research logs establish menu/overworld platform behavior, not the active-faint mechanism: they did not reach ov12/ov130. C1-8 must establish hge/HG battle pointers, legal write seam, representation, game effect, latency and copy-back/healing independently.
+
+The one-frame load observation does not prove first-event coverage or unload timing. Each phase needs a producer/activation proof and a first/last-event control. Static party/PC functions need caller/application predicates. The NDS composite drains queued events before dropping a closed phase; construction/cleanup failure remains visible with retained handles and owner reservations. An inactive-overlay collision is dropped before pin checking; an active-owner pin mismatch latches a fault. No false-pass repair may weaken that distinction.
 
 ### RTC (row k)
 

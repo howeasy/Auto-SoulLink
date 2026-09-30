@@ -23,7 +23,7 @@ OMP card G4-R8 `cx-5e4819dc`. The coordinator re-checked `src/savedata.c:101-111
 
 ## Consequences for the design
 
-- The D3 claim holds **with a richer profile schema**:
+- The D3 SOURCE schema-feasibility claim is supported **with a richer profile schema**; runtime module binding remains OPEN:
   - a table-of-offsets save accessor (not HGSS field names)
   - explicit box base/stride/current-box offsets
   - a nullable per-box modified flag plus an optional whole-save dirty flag
@@ -31,3 +31,9 @@ OMP card G4-R8 `cx-5e4819dc`. The coordinator re-checked `src/savedata.c:101-111
   - idle clauses as data
 - `lua/gen4/storage.lua` must write the pack's "dirty" clause: the per-box bit for HGSS, `fullSaveRequired` for Pt.
 - Remaining Pt unknowns (for its own bring-up, not this release): the offsets of `processManager` parent/child and `fullSaveRequired`, from the xMAP and live.
+
+## Evidence limits and emulator-free falsifiers (rev5)
+
+Generating the Platinum profile exercises the generator, not every runtime module. The missing real save leaves its codec cell OPEN under D3; this is not a signed completion waiver. Platinum remains non-shipping and cannot contribute HGSS/hge PHYSICAL release evidence.
+
+A Platinum-shaped model can independently reject HGSS assumptions using distinct save-array IDs/table geometry, pointer chains, PC base/stride, process-manager idle clauses and a whole-save dirty flag. Reject any required clause the schema cannot express or any required title-specific module code change. Use explicitly synthetic model offsets where the real offset is unknown and label them MODEL; never publish them as source profile facts. The actual missing offsets and Pt event bindings remain named OPEN cells until established. No Platinum emulator work is added.

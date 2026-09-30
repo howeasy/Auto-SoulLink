@@ -52,7 +52,18 @@
       "give_species_name": "SPECIES_ONIX",
       "ask_species_name": "SPECIES_BELLSPROUT"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0864_T22R0601.s",
+        "line": 40
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165"
+    ]
   },
   {
     "index": 1,
@@ -107,7 +118,18 @@
       "give_species_name": "SPECIES_MACHOP",
       "ask_species_name": "SPECIES_DROWZEE"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0903_T25R1005.s",
+        "line": 102
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165"
+    ]
   },
   {
     "index": 2,
@@ -162,7 +184,18 @@
       "give_species_name": "SPECIES_VOLTORB",
       "ask_species_name": "SPECIES_KRABBY"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0916_T26R0301.s",
+        "line": 35
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165"
+    ]
   },
   {
     "index": 3,
@@ -217,7 +250,18 @@
       "give_species_name": "SPECIES_DODRIO",
       "ask_species_name": "SPECIES_DRAGONAIR"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0947_T30R0301.s",
+        "line": 36
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165"
+    ]
   },
   {
     "index": 4,
@@ -272,7 +316,14 @@
       "give_species_name": "SPECIES_RAPIDASH",
       "ask_species_name": "SPECIES_GLOOM"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "dormant_narc_record_in_pinned_authored_scan",
+    "authored_load_sites": [],
+    "identity_rule": "no_authored_execution_proven; no_key_change",
+    "source_evidence": [
+      "include/constants/npc_trade.h:9",
+      "bounded scr_seq LoadNPCTrade and source initializer scan"
+    ]
   },
   {
     "index": 5,
@@ -327,7 +378,20 @@
       "give_species_name": "SPECIES_STEELIX",
       "ask_species_name": "SPECIES_STEELIX"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0913_T26GYM0101.s",
+        "line": 228
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165",
+      "scr_seq_0913_T26GYM0101.s:228-230"
+    ],
+    "same_species_exchange": true
   },
   {
     "index": 6,
@@ -382,7 +446,19 @@
       "give_species_name": "SPECIES_SHUCKLE",
       "ask_species_name": "SPECIES_SHUCKLE"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_loan_grant",
+    "authored_loan_sites": [
+      {
+        "file": "scr_seq_0880_T24R0201.s",
+        "line": 47
+      }
+    ],
+    "identity_rule": "gift_or_loan_capture; no_outgoing_slot_replacement; no_key_change",
+    "source_evidence": [
+      "src/scrcmd_c.c:3487-3494",
+      "src/npc_trade.c:56-70"
+    ]
   },
   {
     "index": 7,
@@ -437,7 +513,19 @@
       "give_species_name": "SPECIES_SPEAROW",
       "ask_species_name": "SPECIES_SPEAROW"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_loan_grant",
+    "authored_loan_sites": [
+      {
+        "file": "scr_seq_0241_R35R0101.s",
+        "line": 61
+      }
+    ],
+    "identity_rule": "gift_or_loan_capture; no_outgoing_slot_replacement; no_key_change",
+    "source_evidence": [
+      "src/scrcmd_c.c:3487-3494",
+      "src/npc_trade.c:56-70"
+    ]
   },
   {
     "index": 8,
@@ -492,7 +580,22 @@
       "give_species_name": "SPECIES_MAGNETON",
       "ask_species_name": "SPECIES_DUGTRIO"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0195_R10R0201.s",
+        "line": 64
+      },
+      {
+        "file": "scr_seq_0196_R10R0202.s",
+        "line": 207
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165"
+    ]
   },
   {
     "index": 9,
@@ -547,7 +650,18 @@
       "give_species_name": "SPECIES_XATU",
       "ask_species_name": "SPECIES_HAUNTER"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0753_T03PC0101.s",
+        "line": 41
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165"
+    ]
   },
   {
     "index": 10,
@@ -602,7 +716,20 @@
       "give_species_name": "SPECIES_PIKACHU",
       "ask_species_name": "SPECIES_PIKACHU"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0834_T11R0601.s",
+        "line": 153
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165",
+      "scr_seq_0834_T11R0601.s:153-160"
+    ],
+    "same_species_exchange": true
   },
   {
     "index": 11,
@@ -657,7 +784,18 @@
       "give_species_name": "SPECIES_RHYHORN",
       "ask_species_name": "SPECIES_BONSLY"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0005_D01R0101.s",
+        "line": 224
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165"
+    ]
   },
   {
     "index": 12,
@@ -712,6 +850,17 @@
       "give_species_name": "SPECIES_BELDUM",
       "ask_species_name": "SPECIES_FORRETRESS"
     },
-    "hg_ss_identical": true
+    "hg_ss_identical": true,
+    "source_class": "authored_exchange",
+    "authored_load_sites": [
+      {
+        "file": "scr_seq_0837_T11R0701.s",
+        "line": 306
+      }
+    ],
+    "identity_rule": "key_change_candidate_only_after_executed_slot_replacement_and_old_new_PID_OTID_observed",
+    "source_evidence": [
+      "src/npc_trade.c:153-165"
+    ]
   }
 ]

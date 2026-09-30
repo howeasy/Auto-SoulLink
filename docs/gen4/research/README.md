@@ -1,14 +1,15 @@
-# Gen 4 research record (2026-09-26)
+# Gen 4 research record (2026-09-26; corrected 2026-09-29)
 
 These notes come from the Gen 4 planning session (coordinator: Claude, worktree `gen4-support-framework-dfd5e2`).
 The plan built on them is [`../PLAN.md`](../PLAN.md).
 
-Every table row carries its evidence class:
+The record distinguishes these evidence classes:
 - **SOURCE**: a file:line in a pinned pret or hg-engine checkout, or an xMAP.
 - **FILE**: measured offline on a real ROM or battery save.
 - **REPORTED**: taken from an independent reviewer's reply and not re-checked by the coordinator.
+- **PHYSICAL research**: host/game observation from the pinned research probe; it is not a signed G1/G4 receipt. Offline FILE measurements and SOURCE/model reasoning cannot replace it.
 
-The coordinator re-checked the load-bearing citations in each card. The spot checks are listed per file.
+The original coordinator's spot checks are listed per file. The [2026-09-29 adversarial review](../reviews/ADVERSARIAL_REVIEW_2026-09-29.md) identified corrections despite those checks; accepted counts or reviewer agreement are not proof of unreviewed claims.
 
 ## How the research was done
 
@@ -48,6 +49,16 @@ The coordinator re-checked the load-bearing citations in each card. The spot che
 | pokeheartgold source clone used for citations | `E:/Howard/hgss_archipelago-master/.tooling/pokeheartgold` @ `ad7a3afa` (older than the xmap build; line numbers refer to this clone) |
 
 Local copies of the two HGSS xMAPs are in `.cache/gen4/xmap/` (gitignored).
+
+The exact battery files behind offline claims are now identified in [offline_measurements.md](offline_measurements.md): the HG owner save SHA256 `e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6` and separately measured AP-named hge save SHA256 `67759699ee32ba3f5ec920efab5dad45e71306f8c93ba2dda1f233bc5062aea0`. On 2026-09-29 the coordinator independently hashed `C:/slink/g4/probe/saves/hg_orig.SaveRAM` and `hge_orig.SaveRAM`; their current SHA256 values match those respective files. Record each path/hash explicitly; this current byte equality does not establish historical input identity or future fixture qualification. C0 pins must record full input hashes and source/build/tool provenance per receipt.
+
+## Rev5 corrections and evidence limits
+
+- Vanilla's13 NPC records represent ten authored exchange identities, two loan grants and one dormant record. The61 script hits are a bounded inventory requiring C-producer/runtime-branch joins.
+- Corrected hge survival data resolves the declared ov12/ov130 images and preserves the historical ARM9-padding error. `ov12_0223843C` has a matching16-byte prefix, not a proved unchanged function; the hge faint replacement has FILE bytes and an exported address, not a live faint receipt.
+- Empty hge save geometry does not uniquely establish `party_off`: both0x90/0xCAB4 passed the empty-header scan. Populated-mon decode and dirty-bit mutation/persistence remain OPEN.
+- Active faint requires two HP copies, representation/key/epoch checks, a measured legal seam and an independent game-effect oracle. Command11, latency, normal animation and hge semantics remain unqualified. NPC-follower win healing and native whiteout healing have separate witnesses.
+- Phase drain/cleanup, command eligibility, exact required artifact cells and Platinum-shaped model binding are explicit rev5 contracts. G0 is unsigned; a missing required SS/hge input cannot be a release PASS. D3 stays emulator-free and its absent save decode remains OPEN.
 
 ## Files
 

@@ -55,4 +55,10 @@
 - 0x02111880 is inside `main.o _02111868` (.bss, 0x1C bytes) at +0x18. It is a different global that happens to hold `SaveData*` after the save loads; the owner's AP probes saw it become non-zero at about frame 134.
 - The real `sSaveDataPtr` is 0x021D2228, and hg-engine's `rom.ld:552` lists the same value.
 
-G1 row h must resolve SaveData through 0x021D2228, confirmed by the save page signature. The archived chain is the negative control.
+G1 row h must resolve SaveData through 0x021D2228, confirmed by the page signature and loaded-save identity. The archived chain aliases the real pointer after about frame197 ([platform.md](platform.md)); reject it by symbol provenance, not by steady-state value inequality. Use its early-boot invalid interval or an independently invalid pointer/signature for the red-capable control.
+
+## Declared-image resolution and pin extent (rev5)
+
+Site lookup is keyed by the declared ARM9/overlay identity and address, with the full extent inside that image. A single address may lie inside expanded hge ARM9 and ov12, or several overlays. The old `.cache/gen4/offline/common.py:45-58` chose ARM9 first and produced zero-byte false corroboration for two hge ov12 sites. The corrected [survival data](data/hge_site_survival.json) preserves that historical read and records declared-image FILE measurements; it is not live callback proof.
+
+Generated descriptors have a complete `register_hex` byte pin and a separate four-byte little-endian `fire_hex` word. The callback word proves only those four bytes. Static/full resident registration verifies the remaining bytes, including trampoline targets. At fire time, reject inactive owning overlays first; an active-owner byte mismatch is a fault, not a silent collision drop.

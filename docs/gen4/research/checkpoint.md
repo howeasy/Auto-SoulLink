@@ -7,7 +7,7 @@ The coordinator re-checked `battle_setup.c:425-434`, `task.c:70-72`, `main.c:120
 ## 1. A battle works on copies, and the field copies them back (SOURCE, verified)
 
 - `BattleSetup` allocates its own `Party` per battler (`src/battle/battle_setup.c:57`). It copies the save party in with `BattleSetup_SetParty` → `Party_Copy` (`:174-177`, via `BattleSetup_InitFromFieldSystem` `:257-260`).
-- At battle end the engine copies its party into `BattleSetup` (`asm/overlay_12_022378C0.s:892-895`). The field then **unconditionally** runs `sub_0205239C` (0x0205239C, `src/encounter.c:112` → `src/battle/battle_setup.c:425-434`). That function copies **profile, party and bag** back into the save:
+- At battle end the engine copies its party into `BattleSetup` (`asm/overlay_12_022378C0.s:892-895`). The ordinary encounter path runs `sub_0205239C` through `src/encounter.c:110-113` (except `BATTLE_TYPE_DEBUG`), which copies **profile, party and bag** back into the save (`src/battle/battle_setup.c:425-434`):
 
   ```
   PlayerProfile_Copy(setup->profile[BATTLER_PLAYER], profile);
@@ -18,13 +18,13 @@ The coordinator re-checked `battle_setup.c:425-434`, `task.c:70-72`, `main.c:120
 - **Consequence:** a write to the save party, profile or bag between battle setup and the copy-back is lost. The checkpoint must refuse from battle setup until the encounter task finishes, not merely while ov12 is resident.
 - Link and Frontier battles copy back only the Pokédex (`battle_setup.c:449-460`; `encounter.c:212-213, 272-273`). Safari, Bug Contest and Catching Show go through the same field copy-back (`encounter.c:545-560, 599, 716-717`).
 - Evolution at battle end mutates the **setup copy** before the copy-back (`src/battle/battle_022378C0.c:147-148`). Level-up/stone evolution from the menu mutates the save party directly (`src/start_menu.c:1472-1474`).
-- On a `BATTLE_TYPE_11` loss, or when a follower exists, the field also runs `HealParty(save party)` (`src/encounter.c:139-146`).
+- In `Task_StartEncounter`, a `BATTLE_TYPE_11` loss heals the save party (`src/encounter.c:145-148`); an NPC-follower flag also heals after a win (`:154-156`). The wild-loss task copies back and jumps to `Task_Blackout` (`:369-375`), whose first state heals (`src/blackout.c:189-205`). The follower flag is tied to a follower trainer number (`src/scrcmd_battle.c:109-110`), not established by an ordinary walking Pokémon. A linked-faint witness must separate pre-heal battle/save-copy state from post-heal native save/reload and Soul Link death state.
 
 ## 2. Battle outcome (SOURCE, verified)
 
 - The engine keeps its outcome byte at `BattleSystem+0x2420` (`include/battle/battle.h:604-605`).
 - `ov12_0223843C` (0x0223843C, called in `BSTATE_END_INIT`, `src/battle/battle_022378C0.c:104`) stores `battleOutcomeFlag & 0x3F` into `BattleSetup+0x14` (`winFlag`) at `asm/overlay_12_022378C0.s:962-968`.
-- `Encounter_GetResult` (0x020506F4) then copies the result to `VAR_BATTLE_RESULT`. It is a clean, static-ARM9 read point for the outcome.
+- `Encounter_GetResult` (0x020506F4, `src/encounter.c:102-107`) copies setup's result to `VAR_BATTLE_RESULT` in the generic encounter task. The wild-loss task instead reads `setup->winFlag` directly (`:369-375`) and does **not** update that variable on this path. A variable-only poll may miss that loss or reuse an older result. Retain encounter identity and the setup outcome through copy-back/blackout, clear the latch exactly once, and never keep the battle application's pointer as a writable handle after teardown. This lifetime contract still needs a PHYSICAL consecutive-battle receipt.
 
 ## 3. "Overworld idle" (SOURCE; addresses from the xMAP)
 
@@ -45,7 +45,7 @@ The coordinator re-checked `battle_setup.c:425-434`, `task.c:70-72`, `main.c:120
 - `PCStorage+0x12004` holds `boxModifiedFlag`. The game sets `|= 1<<box` in every mutator (`src/pokemon_storage_system.c:336-342`, called from `:59, :79, :93, :106, :115`).
 - The incremental save flashes only boxes with a set bit (`src/save.c:1220-1231, 1326-1328, 1354-1361`). The bits are cleared after a successful save (`:682-687`).
 - **A Soul Link box write must OR `1<<box` into +0x12004.** Save CRCs and footers are regenerated at save time, so no other bookkeeping is needed.
-- The PK4 record itself stays encrypted: re-encrypt and recompute its checksum ([pk4_and_save.md](pk4_and_save.md)).
+- Keep each PK4 record's representation consistent: box-data edits require re-encryption and box checksum regeneration, while party-tail-only HP edits use the PID stream when encrypted and do not change the box checksum ([pk4_and_save.md](pk4_and_save.md)). Inspect `partyDecrypted`/`boxDecrypted` before writing.
 
 ## 5. Candidate checkpoint predicate (all clauses verified or marked)
 
@@ -59,7 +59,7 @@ Write only when **all** of these hold:
 
 Then write through `SaveArray_Get(fs->saveData, …)` and, for box edits, OR the box bit into +0x12004.
 
-**Linked-faint consequence:** the partner's faint lands at this checkpoint. That means after battle end for an active battler (see the linked-faint timing default in [../PLAN.md](../PLAN.md)).
+**Linked-faint consequence:** this checkpoint is for benched/deferred writes after battle settlement. D7 requires the active battler's effect **in battle**, and D12 does not accept a checkpoint fallback. A command whose active opportunity ended without a proved game-observed faint remains unresolved; do not label a later checkpoint zero-HP write as D7 success.
 
 ## Open
 

@@ -92,11 +92,30 @@
   {
     "symbol": "BtlCmd_TryFaintMon",
     "address": "0x0223E22C",
-    "hge_binary": "arm9",
-    "hge_bytes": "00000000000000000000000000000000",
+    "hge_binary": "ov12",
+    "hge_bytes": "004b1847d1ed3c02012107f067f9281c",
     "measured_verdict": "CHANGED",
     "prior_verdict": "REPLACED",
-    "verdict_matches_prior": true
+    "verdict_matches_prior": true,
+    "historical_wrong_image": {
+      "binary": "arm9",
+      "bytes": "00000000000000000000000000000000",
+      "cause": "ARM9-first resolver selected overlapping expanded ARM9 padding instead of declared ov12"
+    },
+    "declared_binary": "ov12",
+    "file_measurement_provenance": {
+      "rom_sha1": "cb2dc435196d09c8c9209bf037240ed834f4cea1",
+      "method": "ndspy loadArm9Overlays()[12], declared ov12 RAM address, 16 bytes",
+      "physical_site": "UNVERIFIED"
+    },
+    "replacement_site": {
+      "source_export": ".cache/gen4/hge/offsets.ini:91",
+      "address": "0x023CEDD0",
+      "declared_binary": "ov130",
+      "file_bytes": "f8b50c002a4b01210600200000f068fa",
+      "rom_sha1": "cb2dc435196d09c8c9209bf037240ed834f4cea1",
+      "physical_site": "UNVERIFIED"
+    }
   },
   {
     "symbol": "sub_0205239C",
@@ -110,11 +129,23 @@
   {
     "symbol": "ov12_0223843C",
     "address": "0x0223843C",
-    "hge_binary": "arm9",
-    "hge_bytes": "00000000000000000000000000000000",
-    "measured_verdict": "CHANGED",
+    "hge_binary": "ov12",
+    "hge_bytes": "f8b5051ccef526ff041c281ccef52cff",
+    "measured_verdict": "KEPT_16_BYTE_PREFIX",
     "prior_verdict": null,
-    "verdict_matches_prior": null
+    "verdict_matches_prior": null,
+    "historical_wrong_image": {
+      "binary": "arm9",
+      "bytes": "00000000000000000000000000000000",
+      "cause": "ARM9-first resolver selected overlapping expanded ARM9 padding instead of declared ov12"
+    },
+    "declared_binary": "ov12",
+    "file_measurement_provenance": {
+      "rom_sha1": "cb2dc435196d09c8c9209bf037240ed834f4cea1",
+      "method": "ndspy loadArm9Overlays()[12], declared ov12 RAM address, 16 bytes",
+      "physical_site": "UNVERIFIED",
+      "comparison": "same 16-byte prefix as vanilla HG/SS site_bytes_hg_ss.json; full function and live semantics UNVERIFIED"
+    }
   },
   {
     "symbol": "OS_WaitIrq",

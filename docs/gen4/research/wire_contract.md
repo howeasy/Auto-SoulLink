@@ -50,7 +50,9 @@ Citations are to the files below:
 
 **Not wire events:** `mon_given`, `battle_begin`, `battle_end`, `evolution`, `save`, `pc_move` are internal signal kinds. The legacy Gen 4 `hatch` event is unknown to the server; hatches go out as `capture{is_egg…}`.
 
-**Leave out for a first duo:** trades, rival swap, `key_change` (later for in-game trades with `reason:"npc_trade"`), `status`, `ghost_pos`, `release`, `pc_boxes_generation`, `battle_identity`, `trade_prepare`, `panel`, `sfx`.
+**D11 correction (2026-09-29):** executed NPC exchanges send `key_change{old_key,new_key,reason:"npc_trade"}` with replacement evidence and shared identity alias handling. Vanilla has ten authored exchange identities, two loan grants and a dormant record; equal species does not mean equal identity. Loans use acquisition policy, without a fabricated old key or a new `npc_loan` wire event/reason. Hge reachability is derived per build.
+
+**Leave out for a first duo:** native link trades, rival swap, `status`, `ghost_pos`, `release`, `pc_boxes_generation`, server wire `battle_identity`, `trade_prepare`, `panel`, `sfx`. Local encounter IDs in diagnostic receipts are not a new server event.
 
 ## Commands (server → client)
 
@@ -61,6 +63,14 @@ Citations are to the files below:
 - **Prompt commands** (`show_choices` etc.) get cancel sentinels.
 - **Never sent to a Gen 4 run** on the current adapter: `force_explode`, `replace_rival_team`, `link_panel`, `apply_trade`/`apply_prepare` (`party_blob_size()` is 0), `trade_mask`.
 - **Keying.** Commands are keyed by mon `key`, prompts by `token`. There are no command ids. `force_faint` must be idempotent (the lost-faint repair re-sends it).
+
+### Held active-faint commands and diagnostic receipts
+
+The shared session consumes `battle_write` dispositions, not a returned arbitrary receipt. Gen 4 uses the existing `session:eligible()` and explicit save/encounter epochs at every write arm; connection, hello, reset and key ambiguity cannot be left to the current held-queue flush. Test hold→disconnect→legal seam, wrong-save reconnect, reset and duplicate-command sequences with no unintended bytes.
+
+The proposed client/harness diagnostic line is `GEN4_BATTLE_FAINT <JSON>`, with the exact fields and independent game-effect oracle specified in [PLAN.md §4.3](../PLAN.md). It is emitted through the existing diagnostic sink and consumed by the harness; no server wire schema is expanded. Missing/malformed/stale/partial receipt is FAIL. Receipt and saved HP alone do not prove the game's in-battle effect. Disabling the battle operation while preserving deferred writes and the receipt producer must make G4 red.
+
+Capture setup/application state through encounter end; overlay residency alone can lag and route an active command to the deferred queue. If the battle ends before the required effect, report an unfulfilled/interrupted D7 command and retain truthful disposition/persistence evidence. Do not qualify it as D7 through the checkpoint path or silently relax D12. Observe native copy-back and healing separately from any later persistence correction.
 
 ## Mon key and snapshot shape
 

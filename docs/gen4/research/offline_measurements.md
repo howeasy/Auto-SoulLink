@@ -8,7 +8,7 @@ All 21 candidate symbols are **byte-identical in HG and SS, at identical address
 
 ## hg-engine site survival
 
-Bytes at the vanilla addresses in the pinned hge build (`cb2dc435…`). Data: [data/hge_site_survival.json](data/hge_site_survival.json).
+Bytes at vanilla addresses in the pinned hge build (`test.nds` SHA1 `cb2dc435196d09c8c9209bf037240ed834f4cea1`). Data: [data/hge_site_survival.json](data/hge_site_survival.json). The original resolver (`.cache/gen4/offline/common.py:43-58`) searched expanded ARM9 before overlays. Its ARM9-zero readings for the two ov12 addresses were therefore **wrong-image measurements**, not evidence of replacement. A read-only ndspy remeasurement selected declared ov12 directly: `BtlCmd_TryFaintMon` 0x0223E22C → `004b1847d1ed3c02012107f067f9281c` (changed); `ov12_0223843C` 0x0223843C → `f8b5051ccef526ff041c281ccef52cff` (same 16-byte prefix as vanilla). The hge export `.cache/gen4/hge/offsets.ini:91` puts the replacement `BtlCmd_TryFaintMon` at 0x023CEDD0; declared ov130 there reads `f8b50c002a4b01210600200000f068fa`. These are FILE bytes for the pinned image, not live execution/residency proof. The JSON retains the earlier zero readings as historical wrong-image metadata.
 
 **KEPT:**
 
@@ -25,13 +25,13 @@ Bytes at the vanilla addresses in the pinned hge build (`cb2dc435…`). Data: [d
 |---|---|
 | `HandleLoadOverlay` | |
 | `UnloadOverlayByID` | |
-| `BtlCmd_TryFaintMon` | |
+| `BtlCmd_TryFaintMon` | source replacement at 0x023CEDD0 (ov130); the vanilla ov12 address contains a branch trampoline, not ARM9 zeros |
 | `PCStorage_PlaceMonInBox…` | |
 | `Save_WriteManFinish` | |
 | `ScrCmd_GiveEgg` | |
 | `GiveMon` (the script helper) | 0x020541DC |
 
-These match the source-level verdicts in [hg_engine.md](hg_engine.md) §4. The earlier "`ScrCmd_GiveMon` 0x020541DC replaced" wording mixed up two symbols: 0x020541DC is `GiveMon` (`script_pokemon_util.o`), which hge replaces; the script command `ScrCmd_GiveMon` itself is kept.
+The non-overlay rows match the source-level verdicts in [hg_engine.md](hg_engine.md) §4. The ov12/ov130 row needs separate source, image and PHYSICAL site evidence; address overlap cannot choose the owning image. The earlier "`ScrCmd_GiveMon` 0x020541DC replaced" wording mixed up two symbols: 0x020541DC is `GiveMon` (`script_pokemon_util.o`), which hge replaces; the script command `ScrCmd_GiveMon` itself is kept.
 
 **hge geometry:**
 - arm9 is **0x2477C8** bytes (vanilla 0x111760), ending at 0x022477C8. This confirms the `hooks:632-636` misfile: the overlay-2 hooks landed in a bloated arm9, and overlay 2 at 0x1B0C..0x1C40 is unchanged from vanilla.
@@ -40,7 +40,7 @@ These match the source-level verdicts in [hg_engine.md](hg_engine.md) §4. The e
 
 ## Acquisition manifest
 
-A grep over all 1501 `scr_seq/*.s` files found 61 sites:
+A bounded grep over all 1501 `scr_seq/*.s` files found 61 sites for the selected command set:
 
 | Command | Sites |
 |---|---|
@@ -54,11 +54,11 @@ A grep over all 1501 `scr_seq/*.s` files found 61 sites:
 | `LoadNPCTrade` | 11 |
 | `ChooseStarter` | 1 |
 
-Species are resolved via `species.h` and maps via the scr_seq filename token. Variable-driven species (Kanto starter, Game Corner) are recorded with their script context. Data: [data/acquisition_manifest.json](data/acquisition_manifest.json).
+Species are resolved via `species.h` and maps via the scr_seq filename token. Variable-driven species (Kanto starter, Game Corner) are recorded with their script context, but their runtime outcomes remain open. The 61 script hits must be joined to C producers, NARC records, and runtime branches before claiming exhaustive acquisition coverage. Data: [data/acquisition_manifest.json](data/acquisition_manifest.json).
 
 ## NPC trades
 
-13 × 0x54-byte records from NARC `a/1/1/2`, **byte-identical in HG and SS**, all decoding to known trades (e.g. Onix↔Bellsprout, Machop↔Drowzee … Beldum↔Forretress). The four records with give == ask species (Steelix, Shuckle, Spearow, Pikachu) are the loan / special mons. Data: [data/npc_trades.json](data/npc_trades.json).
+13 × 0x54-byte records from NARC `a/1/1/2`, **byte-identical in HG and SS**. The authored scripts contain 11 `LoadNPCTrade` sites using ten IDs (0,1,2,3,5,8,9,10,11,12); ID 8 has two sites. IDs 6/7 are Shuckle/Spearow loan grants through `GiveLoanMon`, and Rapidash ID 4 is a dormant record in the pinned authored-source scan. Steelix ID 5 and Pikachu ID 10 are same-species **executed exchanges**, not loans. Data: [data/npc_trades.json](data/npc_trades.json). This classification does not establish hge's authored paths.
 
 ## Player profile on the real HG save
 
@@ -94,7 +94,8 @@ Consistency check: 0x60 + sizeof(PLAYERDATA) 0x2C + 4 (chunk CRC) = 0x90, which 
 ## hg-engine save
 
 - Both footer CRCs verify.
-- Party at general+**0x90** (same as vanilla), count 0.
+- The empty-party scan found **two** candidates at general+`0x90` and general+`0xCAB4`, both count 0 and first PID 0 (`.cache/gen4/offline/task7_hge_save.json`). FILE evidence cannot select the party offset. Source projection favors `0x90`, but it remains unconfirmed by this save.
 - PC: 30 boxes, all empty; the box names decode to "Box 1".."Box 30".
+- The untouched PC's apparent modified-flag value is zero; this does not prove the flag's offset or mutation/persistence semantics.
 
-This save is bare, so a populated hge fixture must be made at G5.
+The measured battery file is `E:/Howard/Bizhawk/NDS/SaveRAM/patched hge ap.SaveRAM`, SHA256 `67759699ee32ba3f5ec920efab5dad45e71306f8c93ba2dda1f233bc5062aea0`. It is a bare, separately measured AP-named save; do not substitute it for a probe save or a future hge↔hge fixture. The real HG profile observation above used `E:/Howard/Bizhawk/NDS/SaveRAM/Pokemon - HeartGold Version (USA).SaveRAM`, SHA256 `e18a15c7e3a9959a687d9e069dda0617bcd735363a59ddf5378df88e3371b5e6`. A populated hge mon and the box dirty-flag behavior remain open, and the owner-played hge duo fixtures have not been staged.

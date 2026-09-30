@@ -26,19 +26,21 @@ HG/SS script differences are **runtime** branches (`GetGameVersion`, cmd 494 →
 
 ## Acquisition manifest
 
-The generator should grep this fixed command set over `files/fielddata/script/scr_seq`:
+The 61-hit manifest is a bounded scan of this fixed command set over `files/fielddata/script/scr_seq`, not an exhaustive acquisition inventory:
 
 ```
 ^\s*(GiveMon|GiveEgg|GiveTogepiEgg|GiveSpikyEarPichu|GiveLoanMon|CreateRoamer|WildBattle|LoadNPCTrade|ChooseStarter)\b
 ```
 
-Add the C `Party_AddMon` sites:
+Join those script hits to C producers and runtime branches before asserting acquisition coverage. The known C `Party_AddMon` sites are:
 - `src/choose_starter.c:81` (Elm starter)
 - `src/get_egg.c:640` (daycare / hatch)
 - `src/npc_trade.c:70`
 - `src/scrcmd_mystery_gift.c:305`
 - `src/battle/battle_command.c:7003` (capture)
 - `src/field/scrcmd_pokemon_misc.c:1071, :1139`
+
+The generator must keep unresolved variable-driven species/level and HG/SS version branches explicit. It must also classify each path by actual operation (capture, gift, loan, daycare, contest result, or exchange), then compare the joined producer set to the supported policy rows. A script count by itself cannot close a signal or data-coverage cell; hge needs a separate authored-script inventory.
 
 | Kind | Examples (site) |
 |---|---|
@@ -49,7 +51,7 @@ Add the C `Party_AddMon` sites:
 | Loans | Shuckle `GiveLoanMon 6,20,75` (Cianwood); Kenya's Spearow `GiveLoanMon 7,20,101` (Route 35) |
 | Statics (`WildBattle` cmd 589, 21 sites) | Mewtwo, Articuno, Zapdos, Moltres, Suicune ×2, Lapras, Electrode ×3, Snorlax ×2, Sudowoodo ×2, Red Gyarados (shiny, L30), Groudon/Kyogre/Rayquaza, Lugia/Ho-Oh (Lugia L70 in HG, L45 in SS, `scr_seq_0104_D40R0107.s:70-80`) |
 | Roamers | Raikou, Entei, Latias, Latios only (`include/constants/roamer.h:4-8`); save array 21 `RoamerSaveData` (`include/roamer.h:19-40`); created by `CreateRoamer` (cmd 361); triggered by step-count checks (`src/field/encounter_check.c:255-263, 429-436, 1205-1213`, `BATTLE_TYPE_ROAMER`). Lugia/Ho-Oh are **not** roamers. |
-| NPC trades | 13 (Onix, Machop, Voltorb, Dodrio, Rapidash, Steelix, Shuckle, Spearow, Magneton, Xatu, Pikachu, Rhyhorn, Beldum), `include/constants/npc_trade.h:4-19`. Species come from the NARC. |
+| NPC records and exchanges | NARC `a/1/1/2` has **13 records**, but the pinned vanilla scripts have **11 `LoadNPCTrade` sites using ten distinct exchange IDs**: 0, 1, 2, 3, 5, 8, 9, 10, 11, 12 (ID 8 occurs twice). IDs 6/7 are `GiveLoanMon` grants; ID 4 (Rapidash) has no authored `LoadNPCTrade 4` or direct initializer in the scanned source. Steelix 5 and Pikachu 10 are real same-species exchanges. [data/npc_trades.json](data/npc_trades.json) preserves all raw records and classifies their source reachability. |
 | Pokéwalker | **no mon-giving code** (`src/pokewalker.c`) |
 | Mystery Gift | `src/scrcmd_mystery_gift.c` (incl. Manaphy egg); external distribution, not observable |
 
@@ -73,7 +75,12 @@ Add the C `Party_AddMon` sites:
 
   The legacy table's "0x1F4 = Sport Ball" is wrong: 0x1F4 = 500 = Park Ball.
 
+## NPC exchange identity (SOURCE)
+
+`GiveLoanMon 6/7` calls `NPCTrade_MakeAndGiveLoanMon` (`src/scrcmd_c.c:3487-3494`), which adds a party mon without replacing an outgoing slot (`src/npc_trade.c:56-70`). It is a gift/loan acquisition, not `key_change`. A real trade runs `NPCTradeExec` and replaces the selected party slot (`src/npc_trade.c:153-165`); the Steelix and Pikachu scripts do this even though received and requested species match (`scr_seq_0913_T26GYM0101.s:228-230`, `scr_seq_0834_T11R0601.s:153-160`). Emit `key_change{reason:"npc_trade"}` only after observing the outgoing and incoming PID:OTID identities at an executed replacement. A NARC record alone, or species equality/inequality, is not evidence of that event. The ten-ID reachability claim is bounded to the authored vanilla script/source scan, not all possible runtime or hge paths.
+
 ## Open
 
 - Raw numeric species literals at the Game Corner, Silph and fossil sites: resolve them against `include/constants/species.h` in the generator.
-- NPC trade NARC contents.
+- Runtime outcomes of variable-driven gift/static scripts and complete C/script producer join; the manifest records candidates, not exhaustive event coverage.
+- hge's authored exchange and acquisition inventory, which may differ from vanilla.

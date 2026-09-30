@@ -23,7 +23,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 11,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0011_D03R0103.s",
@@ -338,7 +340,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 8,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0196_R10R0202.s",
@@ -351,7 +355,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 8,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0197_R11.s",
@@ -403,7 +409,9 @@
       "species_arg": "101",
       "species_resolved": 101,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 7,
+      "producer_class": "loan_grant_no_outgoing_replacement"
     },
     {
       "file": "scr_seq_0243_R36.s",
@@ -486,7 +494,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 9,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0755_T03R0101.s",
@@ -619,7 +629,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 10,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0837_T11R0701.s",
@@ -654,7 +666,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 12,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0843_T20R0101.s",
@@ -732,7 +746,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 0,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0878_T24PC0101.s",
@@ -758,7 +774,9 @@
       "species_arg": "75",
       "species_resolved": 75,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 6,
+      "producer_class": "loan_grant_no_outgoing_replacement"
     },
     {
       "file": "scr_seq_0892_T25R0401.s",
@@ -784,7 +802,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 1,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0906_T25R1101.s",
@@ -839,7 +859,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 5,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0916_T26R0301.s",
@@ -852,7 +874,9 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 2,
+      "producer_class": "executed_exchange_candidate"
     },
     {
       "file": "scr_seq_0938_T29.s",
@@ -878,7 +902,57 @@
       "species_arg": null,
       "species_resolved": null,
       "level": null,
-      "var_context": null
+      "var_context": null,
+      "npc_record_id": 3,
+      "producer_class": "executed_exchange_candidate"
     }
-  ]
+  ],
+  "inventory_scope": {
+    "evidence": "SOURCE bounded command scan in 1501 vanilla HGSS scr_seq/*.s files at pokeheartgold ad7a3afa",
+    "status": "candidate script sites, not exhaustive acquisition producer or runtime-outcome coverage",
+    "required_join": [
+      "C Party_AddMon and other direct producers",
+      "NPC trade NARC records and replacement semantics",
+      "HG/SS version branches and unresolved variable species/levels",
+      "catch, gift, loan, daycare and Bug Contest policy"
+    ],
+    "known_c_producers": [
+      "src/choose_starter.c:81",
+      "src/get_egg.c:640",
+      "src/npc_trade.c:70",
+      "src/scrcmd_mystery_gift.c:305",
+      "src/battle/battle_command.c:7003",
+      "src/field/scrcmd_pokemon_misc.c:1071",
+      "src/field/scrcmd_pokemon_misc.c:1139"
+    ],
+    "hge_authored_inventory": "UNVERIFIED; do not reuse vanilla counts without separate scan"
+  },
+  "npc_trade_reconciliation": {
+    "narc_record_count": 13,
+    "load_site_count": 11,
+    "distinct_authored_exchange_ids": [
+      0,
+      1,
+      2,
+      3,
+      5,
+      8,
+      9,
+      10,
+      11,
+      12
+    ],
+    "loan_grant_ids": [
+      6,
+      7
+    ],
+    "dormant_record_ids_in_pinned_authored_scan": [
+      4
+    ],
+    "same_species_exchanges": [
+      5,
+      10
+    ],
+    "rule": "key_change requires executed slot replacement and observed old/new PID:OTID; record presence and species equality are insufficient"
+  }
 }

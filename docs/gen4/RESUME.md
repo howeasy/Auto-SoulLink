@@ -1,33 +1,28 @@
 # Gen 4 resume note
 
-## Checkpoint 2 (2026-09-26): research complete, plan rev 4, awaiting G0
+## Checkpoint3 (2026-09-29): plan rev5 amended; G0 unsigned
 
-- **Worktree:** `.claude/worktrees/gen4-support-framework-dfd5e2`
-- **Branch:** `claude/gen4-support-framework-dfd5e2`, based on master `1d02702f`, not pushed.
-- **Coordinator:** Claude (Opus 5.5).
-- **Plan:** [PLAN.md](PLAN.md) **rev 4**. Owner decisions **D1-D15**, all taken 2026-09-26. Two adversarial reviews are folded in: OMP `cx-b646f457` on rev 2, OMP `cx-03ea7236` on rev 3.
-- **Research:** [research/](research/README.md) holds SOURCE, FILE and live PHYSICAL research (the research probe, not gate evidence), plus data JSON.
-- **Nothing is running.** No emulator lane is held and no production code has been written.
+- **Worktree/branch:** `.claude/worktrees/gen4-support-framework-dfd5e2` / `claude/gen4-support-framework-dfd5e2`; integration target master, no landing/push authority.
+- **Guide ownership:** Claude holds the sole RC guide. The owner paused guide/register edits by the Codex amendment session; that pause remains in force. This note is a task entry, not a second grant ledger.
+- **Plan:** [PLAN.md](PLAN.md) rev5, incorporating the [full adversarial review](reviews/ADVERSARIAL_REVIEW_2026-09-29.md) and the owner's request to make its accepted amendments. D1–D15 stand; D11's factual inventory is corrected to ten exchanges/two loans/one dormant record.
+- **Requirements:** [rev5 skeleton](../gen4_requirements.md) created; all unrun gate cells and signatures OPEN. C0-2 generated lock/tool/config pins and exact check bindings are still required before G0.
+- **Source:** production remains the reviewed7da76fbf cut; c4dd4df0 added the review receipt. Current amendments are documentation/research-data only, with no production code or emulator run.
 
 ### Next action
 
-Get the owner's **G0 signature** (an explicit yes). Then dispatch wave 1 (PLAN.md §7):
+Finish C0-1's exact runner/manifest mappings and C0-2 pins under explicit coordinator grants, then obtain full G0 signature. Do not dispatch a production wave on the basis of documentation approval alone.
 
-| Card | Model |
-|---|---|
-| C1-2 pack generator | Sonnet |
-| C1-3 codec | Sonnet |
-| C1-7 in-battle faint research | Opus |
+After G0, prepare C1-2 pack generation, C1-3 independent codec and C0-3 pinned hge build/export inputs in parallel, then fixture infra. C1-7 source notes are completed/revised inputs, not a new broad research wave. C1-1 owns platform/phase rows a–n; C1-8 owns row o and the critical active-faint mechanism. No physical lane starts without addresses/build/config/populated-input prerequisites and an exact lease.
 
-C1-7 → C1-8 → probe row o is RC-blocking under D12.
+C1-8 must prove both HP copies, identity/epoch/flags, legal seam or complete polling, accepted latency, independent game effect and native copy-back/healing/cold reload on HG and hge. Command11 is not proven safe. D7 immediate/D12 nofallback remain unchanged; a missing in-battle effect cannot pass through deferred writes or a self-reported receipt.
 
-### Owner inputs outstanding
+### Inputs and unresolved cells
 
-- **SoulSilver** first save (D4)
-- **Platinum** first save (D3)
-- **Two hg-engine** first saves with a populated party and distinct trainer IDs (D15)
-- **G0 signature**
-- Later: push/merge authority at landing
+- D4: owner-played SoulSilver starter save; missing cells block SS required signatures/release.
+- D15: two populated hge starter saves with distinct trainer IDs; current empty-save scan is ambiguous. Missing populated mon blocks hge G2; missing duo input blocks its G4.
+- D3: real Platinum save decode OPEN, emulator-free/non-shipping. Pt-shaped model schema checks can proceed without falsely publishing unknown runtime offsets.
+- G0: source lock, exact required inventory/oracles, owner signature.
+- Later: measured/accepted active-faint latency, complete artifact gate signatures, independent frozen integration review and owner landing/shipping authority.
 
 ### Local inputs (gitignored or outside the repo)
 
@@ -47,10 +42,6 @@ C1-7 → C1-8 → probe row o is RC-blocking under D12.
 
 ## History
 
-- **Checkpoint 1 (2026-09-26):** planning complete; plan rev 2, D1-D5.
-- **Research wave (2026-09-26):**
-  - OMP R1-R9
-  - Explore: legacy audit, framework seams, Gen 3 process, AP prior art, wire contract
-  - Sonnet offline measurements
-  - Opus live melonDS probe
-  - Plan revs 3-4 with D6-D15
+- 2026-09-26: original planning/research, revs2–4, D1–D15; existing probe is research evidence only.
+- 2026-09-29: three Sol and three live OMP reviews reconciled at7da76fbf; receipt c4dd4df0. Three headless OMP attempts failed without review evidence.
+- 2026-09-29: owner requested amendments; rev5 integrates required contract/gate/research corrections, creates the OPEN requirement skeleton and preserves the nofallback/limited-Pt/Manager boundaries.
