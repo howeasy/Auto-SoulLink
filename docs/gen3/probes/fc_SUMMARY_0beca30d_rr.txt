@@ -1,4 +1,6 @@
 # G4 final cut 0beca30d5ccbc0807ae9e06f55adbc3324446cd3 -- tools/gen3_final_cut.py summary (written 2026-09-30T02:11:42Z)
+# Scope: TARGETED one-row replay only; the full 28-row RR qualification was not run at this cut.
+# The attempts column counts outer final-cut runner invocations; this invocation consumed 6 of 8 fresh species carrier attempts, as recorded in the row receipt.
 # RUN 1 / CARRIED 0 / CACHED 0 / FAIL 0
 
 | # | row | runbook | verdict | attempts | receipt |
