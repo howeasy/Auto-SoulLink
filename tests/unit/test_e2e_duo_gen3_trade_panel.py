@@ -31,8 +31,9 @@ def _raw(name):
 FA, FB = _fixture("rr_battle2.sav"), _fixture("rr_battle2_b.sav")
 RAW_A, RAW_B = _raw("rr_battle2.sav"), _raw("rr_battle2_b.sav")
 KA, KB = duo.gen3_key(FA[0][1]), duo.gen3_key(FB[0][1])
-MODEL_ROM_SHA1 = {"a": hashlib.sha1(RAW_A).hexdigest(),
-                  "b": hashlib.sha1(RAW_B).hexdigest()}
+MODEL_ROM_BYTES = b"gen3 trade panel MODEL cartridge identity v1"
+MODEL_ROM_SHA1 = {"a": hashlib.sha1(MODEL_ROM_BYTES).hexdigest(),
+                  "b": hashlib.sha1(MODEL_ROM_BYTES).hexdigest()}
 
 
 def _oracle_stub(monkeypatch, tmp_path, scenario, links):
@@ -46,7 +47,9 @@ def _oracle_stub(monkeypatch, tmp_path, scenario, links):
     (tmp_path / "links.json").write_text(json.dumps({"links": links}), encoding="utf-8")
     monkeypatch.setattr(run, "_gen3_flushed", lambda inst: RAW_A if inst == "a" else RAW_B)
     monkeypatch.setattr(run, "_gen3_fixture_bytes", lambda inst: RAW_A if inst == "a" else RAW_B)
-    monkeypatch.setattr(run, "_gen3_rom", lambda inst: f"tests/fixtures/gen3/rr_battle2{'_b' if inst == 'b' else ''}.sav")
+    model_rom = tmp_path / "model_cartridge.bin"
+    model_rom.write_bytes(MODEL_ROM_BYTES)
+    monkeypatch.setattr(run, "_gen3_rom", lambda inst: str(model_rom))
     run._link_keys = {"a": KA, "b": KB}
     return run
 
@@ -71,7 +74,7 @@ def test_the_rr_refusal_never_passes_a_trade_row(monkeypatch, tmp_path, scenario
     old-UPS client gets is a FAIL on both rows, even with nothing moved on either cartridge."""
     run = _oracle_stub(monkeypatch, tmp_path, scenario,
                        [{"a": {"key": KA}, "b": {"key": KB}, "status": "alive"}])
-    with pytest.raises(RuntimeError, match="REFUSED_UNAVAILABLE|show_choices"):
+    with pytest.raises(RuntimeError, match="trade preimage invalid: expected one preimage, got 0"):
         getattr(run, duo.SCENARIOS[scenario]["oracle"])(_refusal_receipts())
 
 
@@ -260,6 +263,22 @@ def test_trade_preimage_binding_rejects_missing_wrong_and_late_receipts():
     assert problems(dict(good, b=b_after_first_send))
 
 
+@pytest.mark.parametrize("field,value", [
+    ("rom_sha1", "0" * 40), ("slot", 0), ("slot", 6),
+    ("counter", -1), ("frame", -1), ("raw_hex", "00" * 99),
+])
+def test_trade_preimage_one_field_falsifiers(field, value):
+    good = {"a": _receipt_a(), "b": _receipt_b()}
+    marker = _preimage("a")
+    row = json.loads(marker.removeprefix("TRADE_PREIMAGE "))
+    row[field] = value
+    bad_marker = "TRADE_PREIMAGE " + json.dumps(row, separators=(",", ":"))
+    changed = dict(good, a=good["a"].replace(marker, bad_marker))
+    _records, problems = duo.gen3_trade_preimages(
+        changed, {"a": KA, "b": KB}, {"a": FA, "b": FB}, MODEL_ROM_SHA1)
+    assert any(p.startswith("a: trade preimage invalid:") for p in problems)
+
+
 def test_lua_trade_preimage_captures_raw_keyed_party_before_native_input():
     lupa = pytest.importorskip("lupa")
     from tests.unit.gen3_world import lua_to_py
@@ -289,6 +308,10 @@ def test_lua_trade_preimage_captures_raw_keyed_party_before_native_input():
     moved = lua.table(player="a", find=lambda key: lua.table(slot=0), party_base=lambda: base,
                       G=ctx.G, jlog=ctx.jlog)
     assert capture(moved, lua.table(PARTY_COUNT_ADDR=count_at), KA, 1, "t1")[0] is False
+    fractional = lua.table(player="a", find=ctx.find, party_base=ctx.party_base,
+                           G=lua.table(flash_domain=lambda: "CART", save_counter=lambda domain: 4.5),
+                           jlog=ctx.jlog)
+    assert capture(fractional, lua.table(PARTY_COUNT_ADDR=count_at), KA, 1, "t1")[0] is False
 
 
 def _receipt_a(decline=False):

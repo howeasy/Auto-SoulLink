@@ -60,7 +60,8 @@ local function trade_preimage(ctx, N, key, slot, token)
     if string.format("%08X:%08X", pid, ot) ~= key then return false, "trade preimage raw key differs" end
     local hash = gameinfo.getromhash()
     local counter = ctx.G.save_counter(domain)
-    if type(hash) ~= "string" or #hash ~= 40 or type(counter) ~= "number" or counter < 0 then
+    if type(hash) ~= "string" or #hash ~= 40 or type(counter) ~= "number"
+       or counter < 0 or counter >= 0xFFFFFFFF or counter % 1 ~= 0 then
         return false, "trade preimage ROM/counter missing"
     end
     ctx.jlog("TRADE_PREIMAGE", {token=token, player=ctx.player, key=key, slot=slot,

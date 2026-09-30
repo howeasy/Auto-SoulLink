@@ -8523,10 +8523,11 @@ class DuoRun:
         fixture = {i: self._gen3_fixture_saved(i) for i in "ab"}
         rom_sha1 = {i: hashlib.sha1(Path(REPO, self._gen3_rom(i)).read_bytes()).hexdigest() for i in "ab"}
         preimages, pre_problems = gen3_trade_preimages(results, {"a": ka, "b": kb}, fixture, rom_sha1)
+        if pre_problems:
+            return ka, kb, pre_problems  # missing/bad evidence cannot fall back to an old fixture
         problems = gen3_trade_problems(
             ka, kb, self._links_json(), {i: self._gen3_saved(i) for i in "ab"},
-            fixture, traded, preimages=preimages if not pre_problems else None)
-        problems += pre_problems
+            fixture, traded, preimages=preimages)
         for inst in ("a", "b"):
             required, ordered, forbidden = gen3_trade_chain(inst, ka, kb, not traded)
             problems += gen3_receipt_problems(inst, results[inst], required=required,
