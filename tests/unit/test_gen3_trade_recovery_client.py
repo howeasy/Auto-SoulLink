@@ -619,3 +619,41 @@ def test_unrecovered_party_does_not_generate_faint_or_capture_evidence(monkeypat
     world.step(40)
     assert not [m for m in world.sent[start:] if m["event"] in ("faint", "capture", "whiteout", "party_to_box", "box_to_party")]
     assert world.client.driver.checkpoint_ok()[0] is False
+
+
+@pytest.mark.parametrize("signal", ("capture_wild", "mon_given", "pc_move"))
+def test_empty_journal_one_frame_busy_replays_capture_once_after_visibility_returns(signal):
+    """A real capture signal cannot be lost behind a transient empty-journal guard hold."""
+    from tests.unit.gen3_trade_journal_model import JournalModel
+    from tests.unit.gen3_world import World, mon_record
+
+    model = JournalModel(player="a")
+    world = World("gen3_rr", "radical_red", "companion", journal=model)
+    lead = mon_record(1, 0xABCD, species=277)
+    reserve = mon_record(2, 0xABCD, species=19)
+    catch = mon_record(3, 0xABCD, species=52)
+    world.set_party([lead, reserve])
+    world.step_to(60)  # visible hello/known-party baseline
+    assert model.journal.hidden(model.journal) is False
+    assert len(model.journal.state.records) == 0
+
+    journal = model.journal
+    original_ready, original_hidden = journal.ready, journal.hidden
+    journal.busy = True
+    journal.ready = lambda self: False if self.busy else original_ready(self)
+    journal.hidden = lambda self: True if self.busy else original_hidden(self)
+    world.set_party([lead, reserve, catch])
+    world.fire(signal)
+    flushed = world.saveram_calls
+    world.fire("save")
+    world.step(2)
+    assert world.events("capture") == []
+    assert world.saveram_calls == flushed + 1
+    journal.busy = None
+    world.step(3)
+    captures = world.events("capture")
+    assert len(captures) == 1
+    assert captures[0]["key"] == "00000003:0000ABCD" and captures[0]["species_id"] == 52
+    world.step(35)
+    assert len(world.events("capture")) == 1
+    assert world.saveram_calls == flushed + 1

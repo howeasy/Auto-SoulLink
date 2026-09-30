@@ -625,9 +625,17 @@ function Client.new(p)
     local function settle()
         local f = st.flags
         if not next(f) then return end
-        st.flags = {}
         if f.save and io.saveram then pcall(io.saveram) end
-        if recovery_hidden() then st.trade = nil; return end
+        f.save = nil -- a host flush is one-shot even while a journal read is temporarily hidden
+        if recovery_hidden() then
+            -- A guard collision can withhold one frame even with an empty journal. Keep the
+            -- engine's acquisition/PC evidence for a later readable party; observe_known must
+            -- not silently seed that new key as a baseline in the meantime. A trade completion
+            -- remains owned by the journal recovery path, not this ordinary settle.
+            st.trade, f.trade = nil, nil
+            return
+        end
+        st.flags = {}
         local party = party_read(f.pc)                          -- a PC settle reads occupancy
         if not party then
             f.save = nil
