@@ -1,0 +1,8 @@
+# G4 final cut 0beca30d5ccbc0807ae9e06f55adbc3324446cd3 -- tools/gen3_final_cut.py summary (written 2026-09-30T02:11:42Z)
+# RUN 1 / CARRIED 0 / CACHED 0 / FAIL 0
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | species_clause_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_species_clause_gen3_rr_as_a_0beca30d.txt |
+
+OVERALL: PASS (1/1 rows)
