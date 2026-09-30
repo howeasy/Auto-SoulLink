@@ -18,7 +18,7 @@ new game support, emulator run, master merge or push is part of this grant.
 
 Source cut: `883660a7cc6cefc0a9716fe09d4c2f5f9259395f`.
 Task worktree: `C:/slink-wt/ui-landing`, branch `codex/ui-landing`.
-Integration target: `master`, owner authority pending.
+Integration target: `master`; owner authority granted 2026-09-30 after preview approval.
 Exact grants and ACK are in the sole hook guide checkpoint under `ui-landing-readme`.
 
 ## Implementation and reuse decision
@@ -102,8 +102,8 @@ desktop/mobile screenshots. No tests or integration performed by reviewer.
 
 Zero findings on each axis. Reviewer boundaries remain distinct from author checks.
 
-Next action: present preview and revised README; obtain owner authority before applying
-this reviewed cut to local master. GitHub publication remains unperformed.
+The original delivery hold required preview approval and owner authority; both were
+provided on 2026-09-30. GitHub publication remains outside this integration request.
 
 Suggestions to present to owner: a short player setup guide, refreshed gameplay
 screenshots, and a first-run readiness checklist on the run page.
@@ -164,3 +164,17 @@ reported **95 passed, 1 skipped** in 7.32 seconds. The skip remains the absent
 `patch/build/gen1_red.gb`, not a present-but-wrong input. Merge conflict markers are
 removed and the scoped diff check is clean. Frozen reconciliation independent
 review precedes final master delivery; no PHYSICAL run is added.
+
+Frozen reconciled cut `60f2c3152a5189aa8f70e1a7889a57663afe4081` received renewed
+**APPROVE** from both `/root/landing_standards` and `/root/landing_spec` after exact
+read-only grant ACKs. Reviewers confirmed Emerald availability, capability-based
+preparation/randomizer instructions, the three unchanged `form.randomizer_games`
+conditions, preserved approved visual content, and accurate BizHawk wording.
+Their reconciliation checks were SOURCE-only; they did not rerun the MODEL suite.
+The 33 README link/image references still have no missing local targets, and the
+SVG exports remain byte-identical. This final receipt-only commit changes no UI behavior.
+
+Delivery procedure: fast-forward the local `master` to this reviewed reconciliation
+plus receipt, compare all nine delivered paths to the task tree, verify foreign-file
+hashes and tracked-tree state, then remove the owned task worktree and its branch
+in the same integration step. No force cleanup, foreign staging, push or release claim.
