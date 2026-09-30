@@ -4,12 +4,36 @@ Build the RR internal species ID → National Pokédex mapping.
 
 This maps every RR species define name to its National Dex number,
 accounting for RR's custom numbering (Gen 9 in gaps, Sevii forms, etc.).
+
+species.h used to be fetched live from funnotbun/funnotbun.github.io, which
+no longer exists on GitHub (confirmed 404, 2026-09-26). This now reads a
+byte-for-byte pinned Wayback Machine capture declared in
+data/gen3_rr_sources.lock.json (funnotbun_species_h). See
+docs/gen3_requirements.md row F-7 and tools/fetch_rr_sources.py.
+
+The generated mapping is hand-pasted into server/pokemon_data.py's
+CFRU_TO_NATIONAL dict (not written to a data/games/gen3_frlge/*.json file
+like the other RR generators) -- --check below reads that dict back out of
+pokemon_data.py with a regex rather than diffing a JSON file.
+
+Usage:
+    python tools/gen_rr_natdex.py            # write data/rr_cfru_to_national.txt
+    python tools/gen_rr_natdex.py --check     # regenerate in memory and diff
+                                                # against CFRU_TO_NATIONAL in
+                                                # server/pokemon_data.py
 """
 
+import argparse
+import ast
 import re
-import urllib.request
+import sys
+from pathlib import Path
 
-SPECIES_H_URL = "https://raw.githubusercontent.com/funnotbun/funnotbun.github.io/main/data/species/species.h"
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from fetch_rr_sources import cached_source, diff_snippet  # noqa: E402
+
+_REPO_ROOT = Path(__file__).resolve().parent.parent
+POKEMON_DATA_PATH = _REPO_ROOT / "server" / "pokemon_data.py"
 
 # Map from species define basename (no form suffix) to national dex number.
 # This is the authoritative NatDex mapping for all 1025 base species.
@@ -403,10 +427,7 @@ FORM_BASE_MAP = {
 }
 
 
-def main():
-    print(f"Fetching {SPECIES_H_URL} ...")
-    data = urllib.request.urlopen(SPECIES_H_URL).read().decode()
-
+def _build_rr_to_nat(data: str) -> tuple[dict[int, int], list[tuple[int, str]]]:
     rr_defines = {}
     for m in re.finditer(r"#define\s+SPECIES_(\w+)\s+0x([0-9A-Fa-f]+)", data):
         name = m.group(1)
@@ -416,9 +437,6 @@ def main():
         if num not in rr_defines:
             rr_defines[num] = name
 
-    print(f"Parsed {len(rr_defines)} species entries")
-
-    # Build all lookup dicts
     all_natdex = {}
     all_natdex.update(GEN3_NATDEX)
     all_natdex.update(GEN4_NATDEX)
@@ -429,13 +447,11 @@ def main():
     all_natdex.update(GEN9_NATDEX)
     all_natdex.update(FORM_BASE_MAP)
 
-    # Map RR internal ID → NatDex
     rr_to_nat = {}
     unmapped = []
     for rr_id, define_name in sorted(rr_defines.items()):
         if rr_id <= 251:
-            # Gen 1-2: identity
-            continue
+            continue  # Gen 1-2: identity
         if define_name in all_natdex:
             nat = all_natdex[define_name]
             if nat != rr_id:
@@ -446,8 +462,60 @@ def main():
                 rr_to_nat[rr_id] = nat
         else:
             unmapped.append((rr_id, define_name))
+    return rr_to_nat, unmapped
 
+
+def _committed_cfru_to_national() -> dict[int, int]:
+    """Parse the CFRU_TO_NATIONAL dict literal out of pokemon_data.py.
+
+    Uses ast rather than a regex over "\\n}" -- a lazy regex like that stops
+    at the first line that's just a closing brace, which is fragile against
+    anything added to the file later (a nested literal, a trailing comment).
+    ast.literal_eval on the assignment's own AST node can't run past the
+    dict's real end.
+    """
+    text = POKEMON_DATA_PATH.read_text(encoding="utf-8")
+    tree = ast.parse(text, filename=str(POKEMON_DATA_PATH))
+    for node in ast.walk(tree):
+        if (isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name)
+                and node.target.id == "CFRU_TO_NATIONAL"):
+            return ast.literal_eval(node.value)
+    raise ValueError(f"CFRU_TO_NATIONAL not found in {POKEMON_DATA_PATH}")
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--check", action="store_true",
+                        help="Regenerate in memory and diff against "
+                             f"CFRU_TO_NATIONAL in {POKEMON_DATA_PATH}; "
+                             "exit 1 on drift.")
+    args = parser.parse_args()
+
+    data = cached_source("funnotbun_species_h").decode("utf-8")
+    rr_to_nat, unmapped = _build_rr_to_nat(data)
     print(f"Mapped: {len(rr_to_nat)}, Unmapped: {len(unmapped)}")
+
+    if args.check:
+        committed = _committed_cfru_to_national()
+        if rr_to_nat == committed:
+            print(f"OK: regenerated mapping matches CFRU_TO_NATIONAL in "
+                  f"{POKEMON_DATA_PATH} ({len(rr_to_nat)} entries).")
+            return 0
+        only_regen = {k: v for k, v in rr_to_nat.items() if committed.get(k) != v}
+        only_committed = {k: v for k, v in committed.items() if rr_to_nat.get(k) != v}
+        print(f"DRIFT: {len(only_regen)} entries differ from "
+              f"{POKEMON_DATA_PATH}'s CFRU_TO_NATIONAL "
+              f"({len(rr_to_nat)} regenerated vs {len(committed)} committed).",
+              file=sys.stderr)
+        print(f"  regen-side sample: {list(only_regen.items())[:10]}", file=sys.stderr)
+        print(f"  committed-side sample: {list(only_committed.items())[:10]}", file=sys.stderr)
+
+        def _fmt(d: dict[int, int]) -> str:
+            return "".join(f"{k}:{v}\n" for k, v in sorted(d.items()))
+
+        print(diff_snippet(_fmt(committed), _fmt(rr_to_nat)), file=sys.stderr)
+        return 1
+
     if unmapped:
         print("Unmapped species (will use RR ID as-is for sprites):")
         for rr_id, name in unmapped[:30]:
@@ -479,7 +547,8 @@ def main():
         actual = rr_to_nat.get(rr_id, rr_id)
         ok = "✓" if actual == expected_nat else "✗"
         print(f"  {ok} RR {rr_id} → NatDex {actual} (expected {expected_nat})")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

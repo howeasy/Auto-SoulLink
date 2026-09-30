@@ -25,6 +25,7 @@ from tests.unit.protocol_schema import ARTIFACT_KINDS
 RR = {"rom_type": "firered_rr", "artifact_kind": "companion"}
 RR_CLEAN = {"rom_type": "firered_rr", "artifact_kind": "clean"}
 FR = {"rom_type": "firered", "artifact_kind": "clean"}
+EM = {"rom_type": "emerald", "artifact_kind": "clean"}
 
 
 async def _session(srv):
@@ -77,6 +78,7 @@ def test_the_two_gen3_foundations_are_distinct_but_share_one_adapter():
     assert foundation_for_rom_type("firered") == "gen3_frlg"
     assert foundation_for_rom_type("leafgreen") == "gen3_frlg"
     assert foundation_for_rom_type("firered_rr") == "gen3_rr"
+    assert foundation_for_rom_type("emerald") == "gen3_emerald"
     assert (adapter_class_for_rom_type("firered")
             is adapter_class_for_rom_type("firered_rr")), "same class, different foundations"
 
@@ -163,6 +165,37 @@ async def test_a_clean_rr_pairs_with_a_companion_rr_and_firered_with_leafgreen(t
     finally:
         await close()
 
+
+
+# ── Emerald is a third Gen 3 foundation (docs/gen3_emerald/PLAN.md §2 decision 5, EC-1) ───
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("first,second", [(FR, EM), (EM, FR), (RR, EM), (EM, RR)],
+                         ids=["fr-then-e", "e-then-fr", "rr-then-e", "e-then-rr"])
+async def test_emerald_never_pairs_with_firered_or_rr(tmp_path, first, second):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        assert not _refused(await send(_hello("a", first)))
+        before = _snapshot(srv)
+        reply = await send(_hello("b", second))
+        assert _refused(reply), (first, second)
+        assert foundation_for_rom_type(first["rom_type"]) in srv.state.identity_error["b"]
+        assert _snapshot(srv) == before, "a refused hello changed the run (links.json included)"
+    finally:
+        await close()
+
+
+@pytest.mark.asyncio
+async def test_emerald_pairs_with_emerald(tmp_path):
+    srv = SLinkServer(data_dir=str(tmp_path))
+    send, close = await _session(srv)
+    try:
+        assert not _refused(await send(_hello("a", EM)))
+        assert not _refused(await send(_hello("b", EM)))
+        assert not srv.state.identity_error.get("b") and srv.state.rom_type == "emerald"
+    finally:
+        await close()
 
 def test_a_restart_re_derives_the_lock_from_the_persisted_rom_type(tmp_path):
     srv = SLinkServer(data_dir=str(tmp_path))

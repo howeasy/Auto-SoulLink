@@ -1,0 +1,12 @@
+attempt 1 of 1
+IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=3383c8d28a5895ca5f296c7b0d73ab836e4cdd6a
+RR reset initial native phase markers checked
+RR_RESET_INITIAL_ARCHIVE ..\..\Users\howar\AppData\Local\Temp\slink_duo_trade_reset_success_gen3_7t_jz54n\rr_reset_initial a_sha256=20280d9d1aaa83d1a527fa93601b54fc0454a2a18e38574e3052b4de596f98e0 b_sha256=ad6c8dec7b75bdd306f613a0b70e369644979c5d5f25878bb931ea2d5993fa86
+RESULT_LINE a: RESULT: PASS (cold-reloaded expected native save without runner SAVE)
+RESULT_LINE b: RESULT: PASS (cold-reloaded expected native save without runner SAVE)
+SAVE_WITNESS_SHA256 inst=a site=- file=- match=- saves=0 skipped (no_save)
+SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+RR_RESET_NATIVE_SAVE side=a site=32450be9677bc75376e40e7a298b8c4c6cdb87dddd700561797ab538eeab8476 battery=32450be9677bc75376e40e7a298b8c4c6cdb87dddd700561797ab538eeab8476 counter=4->6 saves=2 extension=LIVE_RAM_MATCH
+RR_RESET_NATIVE_SAVE side=b site=c00a16e293719e4c917d00bb9295b0c3693460c3a5b8fc42d7bbde88df870f18 battery=c00a16e293719e4c917d00bb9295b0c3693460c3a5b8fc42d7bbde88df870f18 counter=4->6 saves=2 extension=LIVE_RAM_MATCH
+RR success native battery/journal archived; cold reload and independent save/party/server outcome verified
+PYDEC: PASS asserted scenario facts

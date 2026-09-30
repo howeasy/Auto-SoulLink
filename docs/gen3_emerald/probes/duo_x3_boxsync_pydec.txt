@@ -1,0 +1,18 @@
+attempt 1 of 1
+IDENTITY a=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=28798fb866a1de7a8714ff018fc23ab156310f314ed8d2ae462c23370f762c6a b=emerald_expansion_28877d73:rom=08c655bb0b41de67bf92502edab57c3a76b61f5e94d49126bc55fb5cb03bfc39:fixture=9d4b278a1f0b4bf751114352e43217f4670288ec4360350a1e47a6534ea5c085 write_checkpoint.json=a2614dcbbf7a291e0b39c89b0d58920433741d422056e58d710b058c79088e0b profile.json=0fc90a0e8e26560d82e6699397c66c2033115fb59aa4d4e7997ab08edab51c9f source=272d0a0b6400b4672f59edf13ab65b3f25afb15c
+RESULT_LINE a: RESULT: PASS (round trip of 504F4F4D:20250925)
+RESULT_LINE b: RESULT: PASS (round trip of 504F4F4D:DFDAF6DA)
+SAVE_WITNESS_SHA256 inst=a site=26939ce45f919a4e2a92fd10939587fd5f8e886d5bcc179bc1f04a7f5dae7975 file=26939ce45f919a4e2a92fd10939587fd5f8e886d5bcc179bc1f04a7f5dae7975 match=true saves=1 counter=2->3 rtc=normalized
+SAVE_WITNESS_SHA256 inst=b site=0d17b8174c75f160a689e7669f5c0857643d70fa4c6eeb2a78bb613697bc6954 file=0d17b8174c75f160a689e7669f5c0857643d70fa4c6eeb2a78bb613697bc6954 match=true saves=1 counter=3->4 rtc=normalized
+boxsync: 504F4F4D:20250925 / 504F4F4D:DFDAF6DA deposited and withdrawn, saved once in party with the fixture record
+MARKER a: TX party_to_box 504F4F4D:20250925 {"event":"party_to_box","key":"504F4F4D:20250925","player":"a","seq":38,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+MARKER a: BOXED_OBSERVED 504F4F4D:20250925 box=0:2
+MARKER a: TX box_to_party 504F4F4D:20250925 {"area_id":"","event":"box_to_party","key":"504F4F4D:20250925","player":"a","seq":73}
+MARKER a: RETURNED_OBSERVED 504F4F4D:20250925 slot=1
+MARKER b: RX box_mon key=504F4F4D:DFDAF6DA
+MARKER b: TX stats_cache 504F4F4D:DFDAF6DA {"event":"stats_cache","key":"504F4F4D:DFDAF6DA","player":"b","seq":54,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+MARKER b: BOXED_OBSERVED 504F4F4D:DFDAF6DA box=0:2
+MARKER b: RX party_mon key=504F4F4D:DFDAF6DA
+MARKER b: TX sync_retrieve_done 504F4F4D:DFDAF6DA {"event":"sync_retrieve_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":111}
+MARKER b: RETURNED_OBSERVED 504F4F4D:DFDAF6DA slot=1
+PYDEC: PASS asserted scenario facts

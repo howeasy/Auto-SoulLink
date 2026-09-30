@@ -1,0 +1,20 @@
+# gen3_fixtures boot-check fixture=rr_battle2 item=F-6 cut=35e2521b
+# lane=E:/Google Drive/SLink/.claude/worktrees/gen3-migration-planning-5d8e45 (branch claude/gen3-migration-planning-5d8e45)
+# command: python tools/gen3_fixtures.py boot-check --rom patch/build/slink_RR.gba --fixture tests/fixtures/gen3/rr_battle2.sav --rr --timeout 600
+# verdict: PASS
+# inputs: rom:radical_red_companion:md5=c372c428c8f41cbbde5c71d6408233dd
+--- attempt 1 of 1 ---
+seeded E:\Google Drive\SLink\.claude\worktrees\gen3-migration-planning-5d8e45\patch\build\gen3_fixture_runs\bootcheck_rr_battle2\gen3 slink RR.SaveRAM from tests\fixtures\gen3\rr_battle2.sav (counter=4)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_boot_check.ini --lua=lua/tests/gen3_boot_check.lua patch/build/gen3_slink_RR.gba
+[gate] gen3_boot_check: RESULT: PASS counter 4 -> 5  (5s)
+phase start frame=1 title=radical_red
+phase domain frame=1 SRAM
+phase seeded frame=1 counter=4
+phase field frame=545 map=(3,19)
+phase save-menu frame=545 counter=4
+phase save-dialog frame=692 row=4
+phase saved frame=755 counter=4->5
+phase slot-complete frame=1601 sectors=14/14
+phase flushed frame=1758
+RESULT: PASS counter 4 -> 5
+BOOT-CHECK PASS tests\fixtures\gen3\rr_battle2.sav counter=4->5 party=[{'key': 'EBEF11DA:2BDDC8BF', 'species': 277, 'level': 6}, {'key': 'F56D8C1D:2BDDC8BF', 'species': 1324, 'level': 4}]

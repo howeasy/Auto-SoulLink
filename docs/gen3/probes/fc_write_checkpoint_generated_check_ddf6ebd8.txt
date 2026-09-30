@@ -1,0 +1,13 @@
+# gen3_final_cut row=write_checkpoint_generated_check item=§13.1_source cut=ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d
+# lane=C:/slink-wt/g3-lane2
+# command: python tools/gen_gen3_write_checkpoint.py --check   (cwd=C:/slink-wt/g3-lane2)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T23:15:16 cpu=69% emuhawk=3 python=16
+start_utc=2026-09-28T03:15:15Z tracked_clean_before=True
+data\games\gen3_frlg\write_checkpoint.json is current
+data\games\gen3_rr\write_checkpoint.json is current
+data\games\gen3_emerald\write_checkpoint.json is current
+exit=0 end_utc=2026-09-28T03:15:20Z tracked_clean_after=True classification=pass

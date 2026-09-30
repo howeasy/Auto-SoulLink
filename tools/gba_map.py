@@ -234,9 +234,21 @@ class Map:
 
 
 class Rom:
-    def __init__(self, data: bytes, groups_addr: int):
+    # struct Tileset.metatileAttributes: FR/LG/RR (pret pokefirered include/global.fieldmap.h)
+    # declare it `const u32 *` at offset 0x14; Emerald (pret pokeemerald include/global.fieldmap.h)
+    # declares it `const u16 *` at offset 0x10 -- a real format difference, not a renumbering
+    # (verified: reading Route102's known tall-grass patch as u32@0x14 returns behaviour bytes
+    # that are never MB_TALL_GRASS(0x02) anywhere on the map; as u16@0x10 the same patch reads
+    # 0x02 exactly where the wild-encounter grass sits). `game="fr"` (default) preserves this
+    # tool's original FR/LG/RR-only behaviour byte for byte.
+    _ATTR_LAYOUT = {"fr": (0x14, 4), "emerald": (0x10, 2)}
+
+    def __init__(self, data: bytes, groups_addr: int, game: str = "fr"):
         self.data = data
         self.groups_addr = groups_addr
+        if game not in self._ATTR_LAYOUT:
+            raise ValueError(f"unknown game {game!r} (want {sorted(self._ATTR_LAYOUT)})")
+        self.game = game
 
     def _u8(self, addr: int) -> int:
         off = _addr_to_offset(addr)
@@ -286,8 +298,10 @@ class Rom:
         primary_tileset_ptr = self._ptr(layout_ptr + 0x10)
         secondary_tileset_ptr = self._ptr(layout_ptr + 0x14)
 
-        primary_attrs_ptr = self._ptr(primary_tileset_ptr + 0x14)
-        secondary_attrs_ptr = self._ptr(secondary_tileset_ptr + 0x14)
+        attrs_off, attrs_width = self._ATTR_LAYOUT[self.game]
+        attrs_read = self._u16 if attrs_width == 2 else self._u32
+        primary_attrs_ptr = self._ptr(primary_tileset_ptr + attrs_off)
+        secondary_attrs_ptr = self._ptr(secondary_tileset_ptr + attrs_off)
 
         collision = [[0] * width for _ in range(height)]
         behaviour = [[0] * width for _ in range(height)]
@@ -303,7 +317,7 @@ class Rom:
                 else:
                     attrs_ptr = secondary_attrs_ptr
                     local_id = metatile_id - NUM_METATILES_IN_PRIMARY
-                attr = self._u32(attrs_ptr + local_id * 4)
+                attr = attrs_read(attrs_ptr + local_id * attrs_width)
                 behaviour[y][x] = attr & 0xFF
 
         result = Map(width=width, height=height, collision=collision, behaviour=behaviour)
@@ -400,13 +414,13 @@ def resolve_groups_addr(sym_path) -> int:
     return int(match.group(1), 16)
 
 
-def load(rom_path, groups_addr: int = None, sym_path=None) -> Rom:
+def load(rom_path, groups_addr: int = None, sym_path=None, game: str = "fr") -> Rom:
     data = Path(rom_path).read_bytes()
     if sym_path is not None:
         groups_addr = resolve_groups_addr(sym_path)
     elif groups_addr is None:
         groups_addr = DEFAULT_GROUPS_ADDR
-    return Rom(data, groups_addr)
+    return Rom(data, groups_addr, game=game)
 
 
 def _parse_group_num(text: str):
@@ -424,6 +438,8 @@ def main(argv=None) -> int:
     parser.add_argument("rom")
     parser.add_argument("--groups-addr", type=lambda s: int(s, 0), default=None)
     parser.add_argument("--sym")
+    parser.add_argument("--game", choices=sorted(Rom._ATTR_LAYOUT), default="fr",
+                         help="metatile-attribute format: fr (u32@0x14, default) or emerald (u16@0x10)")
     parser.add_argument("--map", required=True, help="group.num, e.g. 5.4")
     parser.add_argument("--find-behaviour", type=lambda s: int(s, 0))
     parser.add_argument("--bfs", nargs=2, metavar=("SRC", "DST"))
@@ -431,7 +447,7 @@ def main(argv=None) -> int:
     parser.add_argument("--connections", action="store_true")
     args = parser.parse_args(argv)
 
-    rom = load(args.rom, groups_addr=args.groups_addr, sym_path=args.sym)
+    rom = load(args.rom, groups_addr=args.groups_addr, sym_path=args.sym, game=args.game)
     group, num = _parse_group_num(args.map)
     m = rom.map(group, num)
 

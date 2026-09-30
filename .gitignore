@@ -32,6 +32,11 @@ data/obs_config.json
 # intermediate .o files). data/pret_syms.json IS committed (50KB artifact
 # so contributors without RGBDS can still run pytest).
 /.cache/
+/.lane/
+
+# F-7: cache of the pinned Radical Red generator sources (tools/fetch_rr_sources.py);
+# hash-verified and repopulated on demand, not checked in.
+data/.rr_src_cache/
 
 # Lua console tee (per-run debug log written by lua/slink.lua, truncated
 # each boot — not useful in version control)
@@ -43,3 +48,7 @@ slink_lua.log
 # C5-11b: the Gen 3 client's per-install session counter (lua/gen3/run.lua writes it at
 # the install root, which is the repo root during dev runs).
 slink_gen3_session.*
+
+# Gen 3 durable trade journal (lua/gen3/run.lua), written beside the install root at runtime
+slink_gen3_trade.log
+slink_gen3_trade.guard

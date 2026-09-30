@@ -1,0 +1,15 @@
+# gen3_final_cut row=checkpoint_firered item=§6_item3 cut=ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d
+# lane=C:/slink-wt/close-final-frlg2
+# command: python tools/gen3_probe_receipt.py --title firered --lane C:/slink-wt/close-final-frlg2 --out checkpoint_fr_clean_ddf6ebd8.txt   (cwd=C:\slink-wt\close-final)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac state:gen3_probe_states/slink_oldman.State=a53ee02d2f73b3bc993e6ff304afa4bee504d8bdb7c9f01dcfca7e686152f275 state:gen3_probe_states/slink_pokedude.State=5b24fc5c095bf6d8b6b0213e6198c1fe905ab32ae7e9df1a2483c20a70096bad state:gen3_probe_states_c4p2/slink_door.State=485cfe0fb93f67f473988d91e77540b947ef4c3931e7d2724cc1a0293295e15e state:gen3_probe_states_c4p2/slink_overworld.State=0e1ca7a84d505507f1705bce6f0f37f6c9ef082ab3c1364fbf4940c7f5538581 state:gen3_probe_states_c4p2/slink_postbattle.State=c00fd1c5755f06fcb2dfa9c1b6c898f8fc4a32310cf6f3bf0a70ca22948f562c state:gen3_probe_states_c4p2/slink_prebattle.State=8ad13ca4728f45a6a7dd8e5c9fb399a347978221830b8b4a67a68b87157e2fef state:gen3_probe_states_c4p2/slink_prefaint.State=d12840e56de251def71a530f8e6e5a27fe7b00912364cb09d8a4b4945206a01c state:gen3_probe_states_c4p2/slink_preintro.State=b559b73cd60b801fb5314231d6500bbd1549d22ae0252f68b0eba5ad261b6af1 state:gen3_probe_states_c4p2/slink_pretrainer.State=3e695fa48acbec00da31f25b3adcf6cb158111d9ca46e7b7553baf0661ea2f47 state:gen3_probe_states_c4p2/slink_script.State=1b15b25814e78aa10bf8de4036ed102bfc99523f5c053dbdd97a10ca7314e6a4
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T23:26:22 cpu=83% emuhawk=4 python=15
+start_utc=2026-09-28T03:26:20Z tracked_clean_before=True
+C:/slink-wt/close-final-frlg2/patch/build/bw_hashes_firered.json
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_probe_gen3_checkpoint.ini --lua=lua/tests/probe_gen3_checkpoint.lua patch/build/gen3_Pokemon_-_FireRed_Version_(USA).gba
+[gate] probe_gen3_checkpoint: RESULT: PASS all checkpoint controls  (223s)
+--- patch\build\probe_gen3_checkpoint_result.txt ---
+C:\slink-wt\close-final\docs\gen3\probes\checkpoint_fr_clean_ddf6ebd8.txt
+exit=0 end_utc=2026-09-28T03:30:06Z tracked_clean_after=True classification=pass

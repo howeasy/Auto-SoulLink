@@ -1,0 +1,35 @@
+# G4 final cut 02ba8ed1a4420e13097fd099524f6a04cbbfb847 -- tools/gen3_final_cut.py summary (written 2026-09-28T01:27:54Z)
+# RUN 23 / CARRIED 0 / CACHED 0 / FAIL 5
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | faint_cmd_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_faint_cmd_gen3_rr_as_a_02ba8ed1.txt |
+| 2 | linked_faint_active_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_gen3_rr_as_a_02ba8ed1.txt |
+| 3 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_whiteout_gen3_rr_as_a_02ba8ed1.txt |
+| 4 | boxsync_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_boxsync_gen3_rr_as_a_02ba8ed1.txt |
+| 5 | whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_whiteout_gen3_rr_as_a_02ba8ed1.txt |
+| 6 | link_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_link_gen3_rr_as_a_02ba8ed1.txt |
+| 7 | deadzone_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_deadzone_gen3_rr_as_a_02ba8ed1.txt |
+| 8 | reconnect_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 2 | fc_reconnect_gen3_rr_as_a_02ba8ed1.txt |
+| 9 | explode_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_explode_gen3_rr_as_a_02ba8ed1.txt |
+| 10 | rival_swap_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_gen3_rr_as_a_02ba8ed1.txt |
+| 11 | rival_swap_real_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_rival_swap_real_gen3_rr_as_a_02ba8ed1.txt |
+| 12 | native_absent_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_native_absent_gen3_rr_as_a_02ba8ed1.txt |
+| 13 | trade_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_trade_gen3_rr_as_a_02ba8ed1.txt |
+| 14 | trade_decline_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_trade_decline_gen3_rr_as_a_02ba8ed1.txt |
+| 15 | infopanel_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_infopanel_gen3_rr_as_a_02ba8ed1.txt |
+| 16 | infopanel_dex_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_infopanel_dex_gen3_rr_as_a_02ba8ed1.txt |
+| 17 | linked_faint_active_clean_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_clean_gen3_rr_as_a_02ba8ed1.txt |
+| 18 | faint_cmd_clean_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_faint_cmd_clean_gen3_rr_as_a_02ba8ed1.txt |
+| 19 | linked_faint_active_lhammer_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_lhammer_gen3_rr_as_a_02ba8ed1.txt |
+| 20 | species_clause_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_species_clause_gen3_rr_as_a_02ba8ed1.txt |
+| 21 | gender_clause_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_gender_clause_gen3_rr_as_a_02ba8ed1.txt |
+| 22 | type_clause_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_type_clause_gen3_rr_as_a_02ba8ed1.txt |
+| 23 | release_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_release_gen3_rr_as_a_02ba8ed1.txt |
+| 24 | ball_gate_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_ball_gate_gen3_rr_as_a_02ba8ed1.txt |
+| 25 | rr_opcode_gates | G5-GATES-LIVE | FAIL exit=1 | 1 | fc_rr_opcode_gates_02ba8ed1.txt |
+| 26 | rr_zip_build | §9 item5 RR | PASS | 1 | fc_rr_zip_build_02ba8ed1.txt |
+| 27 | rr_zip_check | §9 item5 RR | PASS | 1 | fc_rr_zip_check_02ba8ed1.txt |
+| 28 | zip_boot_radicalred | §9 item5 RR | PASS | 1 | fc_zip_boot_radicalred_02ba8ed1.txt |
+
+OVERALL: FAIL (23/28 rows)

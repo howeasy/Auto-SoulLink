@@ -21,3 +21,9 @@ capstone==5.0.7
 # tests/unit/test_manager_launcher.py importorskips it. Undeclared until now, so a fresh
 # clone silently skipped those tests and had no Lua syntax gate.
 lupa==2.8
+
+# openpyxl — reads the Radical Red priority-trainers Google Sheet xlsx export
+# (tools/gen_rr_priority_trainers.py, tools/fetch_rr_sources.py's xlsx content
+# hash). Undeclared until now; tests/unit/test_gen3_rr_generators.py importorskips
+# it so a fresh env without it gets a named skip, not a failure.
+openpyxl

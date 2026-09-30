@@ -79,6 +79,10 @@ def _display_case(name: str) -> str:
 class Gen1PureRGBAdapter(Gen1Adapter):
     """One per-player view of a pureRGB cartridge (PureRed/PureBlue/PureGreen)."""
 
+    @classmethod
+    def supports_randomized(cls, rom_type: str) -> bool:
+        return isinstance(rom_type, str) and rom_type in _ROM_VARIANT
+
     def __init__(self, **kwargs):
         rom_type = kwargs.get("rom_type") or "PureRed"
         if rom_type not in _ROM_VARIANT:

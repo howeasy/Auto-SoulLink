@@ -1,0 +1,220 @@
+{
+  "card": "E-MGR",
+  "evidence": [
+    "SOURCE",
+    "MODEL"
+  ],
+  "source_commit": "aabba561ff9dd5f8807f56b8a4f04a8b756bac2e",
+  "base_commit": "07c529bd7daf80b146e136fcde380baa23a2e17e",
+  "merged_integration": "95ce7c81e9fc9a59dd5dd24451d1b27c7925d3cc",
+  "clean_rom_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
+  "pret_emerald_commit": "c65e93f20a5275ab03b07d6f6411096a82a60ffd",
+  "jar_sha256": "28292b595a411e78beef851e0cd5017a5d4ff592eca9a1db3f8939b0f7ab6e56",
+  "model": {
+    "path": "data/games/gen3_emerald/upr_write_domains.json",
+    "sha256": "b0ecebcefedd103eebebae5893b13ec0431c8be22fb4eca81b16a6fe1f1f238b",
+    "symbol_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc",
+    "domains": 43,
+    "forbidden_domains": [
+      "base_stats",
+      "types",
+      "abilities",
+      "exp_curves",
+      "evolutions",
+      "movesets",
+      "egg_moves",
+      "move_data",
+      "type_chart",
+      "frontier",
+      "pyramid",
+      "trainer_hill",
+      "contests",
+      "secret_bases"
+    ]
+  },
+  "full_unit": {
+    "tests": 15941,
+    "passed": 11680,
+    "skipped": 4261,
+    "failures": 0,
+    "errors": 0,
+    "wall_seconds": 591.32,
+    "junit_path": "C:/slink-wt/em-t3/.cache/e-mgr-full-final.xml",
+    "junit_sha256": "e674f89410fb06cd0dc0ed7430ae9944ac7a35f62e21ef3f05b02447c38f7869",
+    "stdout_path": "C:/slink-wt/em-t3/.cache/e-mgr-full-final.log",
+    "stdout_sha256": "41fdb49272e27b3d58263dc0fe0dcaa9915642b6790f3282c88ae4349ae6df5f",
+    "modules": {
+      "test_upr_emerald_write_domain": {
+        "passed": 78,
+        "skipped": 0
+      },
+      "test_upr_pipeline_emerald": {
+        "passed": 9,
+        "skipped": 0
+      },
+      "test_upr_gen3_write_domain": {
+        "passed": 128,
+        "skipped": 1
+      },
+      "test_randomizer_js": {
+        "passed": 4,
+        "skipped": 0
+      },
+      "test_e2e_duo_emerald_rand": {
+        "passed": 15,
+        "skipped": 0
+      }
+    }
+  },
+  "external_outputs": {
+    "allowed": {
+      "path": "C:/slink-wt/rand_roms/Emerald_allowed.gba",
+      "rom_sha1": "e0da2e1a530e029c0b8fc378476a5b73b4f724ec",
+      "rom_sha256": "566b4066c3d1c70de9a22347d8c7d20dbf5f09abf7cd03c92e50e89e8655e959",
+      "log_sha256": "e1bd7638fd2fd0f40ea6f67ba8e391ff8634a09b8ebcc832892423ee424a6d00",
+      "settings_string": "322AAgEBQL7AP4AAQEEAAIeJAoEFAAAFABABAABGAAAAAAAAAAAMgQyAQAICTIAAAAyBwIAC0VtZXJhbGQgKFUpIzig++PDOIo=",
+      "audit": {
+        "changed": 13038,
+        "stray": [],
+        "named": {},
+        "enabled": [
+          "baseline",
+          "obedience_evo_code",
+          "starters",
+          "statics",
+          "trainer_parties",
+          "wild",
+          "wild_held_items"
+        ],
+        "stray_count": 0
+      }
+    },
+    "widest": {
+      "path": "C:/slink-wt/rand_roms/Emerald_widest.gba",
+      "rom_sha1": "ea446225bb98c75b60f05a8a0749cfddf45b64e2",
+      "rom_sha256": "93d334867d8cdaa995f8b54abc93d2e6b6b10bdbdb2ca8bb5c903d3d4279045f",
+      "log_sha256": "2e6452e008c37df75c22b55cf9d3779011137659c4a164a916071aa640410203",
+      "settings_string": "322AAICBgL7AP4AAQEBAAIeJAoEFAAAFABABAACGAAAAAAAAAAAMgQyAQAICTIAAAAyBwIAC0VtZXJhbGQgKFUpOMJ+FuPDOIo=",
+      "audit": {
+        "changed": 23622,
+        "stray": [
+          3277800,
+          3277801,
+          3277802,
+          3277803,
+          3277804,
+          3277805,
+          3277806,
+          3277807,
+          3277822,
+          3277828,
+          3277829,
+          3277830,
+          3277831,
+          3277832,
+          3277833,
+          3277834
+        ],
+        "named": {
+          "base_stats": 2289,
+          "types": 724,
+          "abilities": 505,
+          "movesets": 5248,
+          "evolutions": 250,
+          "egg_moves": 1462
+        },
+        "enabled": [
+          "baseline",
+          "obedience_evo_code",
+          "starters",
+          "statics",
+          "trainer_parties",
+          "wild",
+          "wild_held_items"
+        ],
+        "stray_count": 10478
+      }
+    }
+  },
+  "manager_pair": {
+    "directory": "C:/slink-wt/em-t3/.cache/e-mgr-full-final-tmp/manager_emerald_pair0",
+    "contract_sha256": "ec545694522ef2b899fc22aef084b8f4e46d8e83cfbc661b6a220b6dae91e475",
+    "settings_sha256": "339a3bd0a3405ecd25c10ba3c4afcbb8e762a528e5fa1a6328fbcbdec6144e6f",
+    "players": {
+      "a": {
+        "fingerprint": "b87d6f7646efb733aca3e2ae11359d0c62cc35d81324cf2e14ea4acb8fdd439f",
+        "rom_sha1": "f1f1c9f6cc191081e9d0a8a9d95eb7b6f5c88112",
+        "seed": "249204072617971",
+        "path": "C:/slink-wt/em-t3/.cache/e-mgr-full-final-tmp/manager_emerald_pair0/roms/a_randomized.gba",
+        "rom_sha256": "14da303d45ae3530cdf3fe0b3ad88cbab9eb4819a709871259c6c822f2b2d9d8",
+        "log_sha256": "6d35b6fc6b4bf2c305eba58095641e3576ea01df09b3429260837b38f8caf555",
+        "settings_string": "322AAgEBQL7AP4AAQEEAAIeJAoEFAAAFABABAABGAAAAAAAAAAIMgQyAQAICTIAAAAyBAIAC0VtZXJhbGQgKFUpP+oiauPDOIo=",
+        "audit": {
+          "changed": 12765,
+          "stray": [],
+          "named": {},
+          "enabled": [
+            "baseline",
+            "fastest_text",
+            "obedience_evo_code",
+            "starters",
+            "statics",
+            "trainer_parties",
+            "wild",
+            "wild_held_items"
+          ],
+          "stray_count": 0
+        },
+        "final_path": "C:/slink-wt/em-t3/.cache/e-mgr-full-final-tmp/manager_emerald_pair0/roms/a.gba"
+      },
+      "b": {
+        "fingerprint": "8b1738f97c529283c11c929af0afe5201ffb01005365a33cbef47be8984324a2",
+        "rom_sha1": "a46c073b4a54cc2b258eeff8e219310e415d8212",
+        "seed": "261944579878916",
+        "path": "C:/slink-wt/em-t3/.cache/e-mgr-full-final-tmp/manager_emerald_pair0/roms/b_randomized.gba",
+        "rom_sha256": "ab81dece89f2052efc5411be3215797742c1453ad5fd52b2a96f9afab23799aa",
+        "log_sha256": "8efb03e32910b0a096b07bfb2e70f016867c0dcd795ce36e993b4d07d2dd8703",
+        "settings_string": "322AAgEBQL7AP4AAQEEAAIeJAoEFAAAFABABAABGAAAAAAAAAAIMgQyAQAICTIAAAAyBAIAC0VtZXJhbGQgKFUpP+oiauPDOIo=",
+        "audit": {
+          "changed": 12728,
+          "stray": [],
+          "named": {},
+          "enabled": [
+            "baseline",
+            "fastest_text",
+            "obedience_evo_code",
+            "starters",
+            "statics",
+            "trainer_parties",
+            "wild",
+            "wild_held_items"
+          ],
+          "stray_count": 0
+        },
+        "final_path": "C:/slink-wt/em-t3/.cache/e-mgr-full-final-tmp/manager_emerald_pair0/roms/b.gba"
+      }
+    },
+    "persisted_state": {
+      "rom_type": "emerald",
+      "artifact_kind": "rand",
+      "player_identity": {
+        "a": {
+          "ot_id": "7A0A",
+          "trainer_name": "A"
+        },
+        "b": {
+          "ot_id": "7B0B",
+          "trainer_name": "B"
+        }
+      }
+    },
+    "admission": "Both actual Lua-collected reports admitted by SLinkServer: cartridge matches the contract",
+    "test": "tests/unit/test_upr_pipeline_emerald.py::test_manager_produced_emerald_pair_is_admitted_by_the_server"
+  },
+  "limits": [
+    "No physical Manager-produced Emerald run",
+    "Range audit does not validate every value or repointed target",
+    "Companion and native v2 qualification remain held",
+    "Skipped unit prerequisites are not qualified by this pass"
+  ]
+}

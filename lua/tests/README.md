@@ -38,7 +38,7 @@ BizHawk Lua test scripts. Three families:
   Red as A / Blue as B) or `gen2_new` (Crystal/Gold/Silver pairings).
 
   ```bash
-  SLINK_E2E=1 pytest tests/e2e/test_duo.py -q               # Gen 3
+  SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py -q          # Gen 3
   SLINK_E2E=1 pytest tests/e2e/test_duo_gen1_new.py -q      # Gen 1 (rewritten client, 18 scenarios)
   SLINK_E2E=1 pytest tests/e2e/test_duo_gen2_new.py -q      # Gen 2
   python tools/e2e_duo.py --game gen2_new --scenario link    # one scenario, directly
@@ -93,10 +93,11 @@ fresh probe per the patterns below if new discovery is needed.
 | `test_live_message.lua`, `test_live_msgboxdismiss.lua` | OP_SHOW_MESSAGE (8) field box + dismissal |
 | `test_live_menu.lua`, `test_live_choices.lua` | OP_SHOW_MENU (17) / OP_SHOW_CHOICES (22) |
 | `test_live_choosepartymon.lua` | OP_CHOOSE_PARTY_MON (20) |
-| `test_live_tradescene.lua` | OP_TRADE_SCENE (21) native trade animation |
-| `test_live_setpartymon.lua` | OP_SET_PARTY_MON (19) silent trade fallback |
+| `test_live_tradescene.lua` | RR-DURABLE: OP_TRADE_PREPARE (29) + OP_TRADE_SCENE (21), native pre-save/scene/post-save, witnessed COMMITTED; bare 21 refused |
+| `test_live_setpartymon.lua` | OP_SET_PARTY_MON (18) refused on the durable build (reason 9) |
 | `test_live_createmon.lua`, `test_live_givemon.lua` | OP_CREATE_MON (4) / OP_GIVE_MON |
-| `test_live_enemyparty.lua`, `test_live_enemyparty_route.lua` | OP_SET_ENEMY_PARTY (16) rival swap |
+| `test_live_enemyparty.lua` | OP_CREATE_MON into the enemy party |
+| `test_live_enemyparty_route.lua` | OP_SET_ENEMY_PARTY (16) refused on the durable build (reason 9) |
 | `test_live_forcemove.lua`, `test_live_explode_route.lua` | OP_FORCE_MOVE_SLOT (5) / explode plumbing (native path currently disabled — ROADMAP §2) |
 | `test_live_playse.lua` | OP_PLAY_SE (native sound) |
 | `test_live_spawnnpc.lua`, `test_live_pcnpc.lua` | OP_SPAWN/DESPAWN_PEER_NPC + the Pokémon-Center trade NPC driver |

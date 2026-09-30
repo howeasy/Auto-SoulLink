@@ -1,0 +1,45 @@
+# gen3_final_cut row=deadzone_gen3_fr_as_a item=§2-3_item1-2 cut=ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d
+# lane=C:/slink-wt/close-final-frlg2
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario deadzone_gen3   (cwd=C:/slink-wt/close-final-frlg2)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T23:18:11 cpu=94% emuhawk=5 python=18
+start_utc=2026-09-28T03:18:10Z tracked_clean_before=True
+
+========== scenario: deadzone_gen3 ==========
+[duo] deadzone_gen3: attempt 1 of 3
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=95f047f0bd9c54014d81720858869f7c46a484362d5751df27fe6cc54287024e b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=3922d561ff671b86f3f82e84be6068a2ce1f6a4a60df942831dadd9ebe6a01ae write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=86f0a0dc0f53671792daf2cf4a760dcb412c22c85fdfa962168fd289d66c5c64 source=ddf6ebd83d22b820f745fb87a5df2d1ea7c0005d
+[duo] server up: tcp=56440 http=56441 data=C:\Users\howar\AppData\Local\Temp\slink_duo_deadzone_gen3_plsjhlh8
+[duo] timing server 1.2s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] go-file written for a
+[duo] DEAD ZONE FROM REAL PLAY (new client): route_1
+[duo] go-file written for b
+[duo] B caught 137E4616:1C600D89 in the dead zone; force-fainted, memorialized
+[duo] links.json: 1 dead_zone entry for route_1; B's 137E4616:1C600D89 retired
+[duo] timing orchestrate 23.4s
+[duo] timing results 3.8s
+[duo] RESULT_LINE a: RESULT: PASS (ran; route locked)
+[duo] RESULT_LINE b: RESULT: PASS (dead-zone capture 137E4616:1C600D89 retired)
+[duo] SAVE_WITNESS_SHA256 inst=a site=354e0a70bbde6f6ff83f47c2130db3e0a5a0f25cf7cbed0e4b4cf75d83dcd09d file=354e0a70bbde6f6ff83f47c2130db3e0a5a0f25cf7cbed0e4b4cf75d83dcd09d match=true saves=1 counter=7->8 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=095f6eb0680629699ec3337f86d8fc0726d47293fd63bff166f6273a96966702 file=095f6eb0680629699ec3337f86d8fc0726d47293fd63bff166f6273a96966702 match=true saves=1 counter=4->5 rtc=normalized
+[duo] deadzone: route_1 locked by A's no_catch (species 19); B's 137E4616:1C600D89 saved only in the memorial box
+[duo] MARKER b: FAINTED 137E4616:1C600D89 frame=3868 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=137E4616:1C600D89
+[duo] MARKER b: TX memorialize_done 137E4616:1C600D89 {"box":13,"event":"memorialize_done","key":"137E4616:1C600D89","player":"b","seq":117}
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] deadzone_gen3: a=PASS b=PASS
+
+========== summary ==========
+  deadzone_gen3: PASS (attempt 1 of 3)
+exit=0 end_utc=2026-09-28T03:18:41Z tracked_clean_after=True classification=pass

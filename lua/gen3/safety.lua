@@ -118,7 +118,10 @@ function S.new(pack, deps, kind)
             -- G5-CPU-HARDEN: RR-only by construction (the shape is pinned to RR's HLE-BIOS halt), so a
             -- pack not titled radical_red that carries irq_entry is refused, never honoured; R14_irq
             -- of an ARM-state IRQ is a word address, so an unaligned one is not that halt's return.
-            local irq = pack.title == "radical_red" and cpu.irq_entry or nil
+            -- X3: the expansion reference build is the one other title (IntrWait's halt, R14 0x1F8,
+            -- docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt); still exact titles only.
+            local irq = (pack.title == "radical_red" or pack.title == "emerald_expansion_28877d73")
+                and cpu.irq_entry or nil
             if not parked and irq and cpsr % 32 == irq.mode and math.floor(cpsr / 32) % 2 == irq.thumb then
                 local lr, at_vector = uint(regs.R14, 4294967295), false
                 for _, v in ipairs(irq.pc) do at_vector = at_vector or pc == v end
@@ -432,18 +435,25 @@ function S.new(pack, deps, kind)
         local ok, result = pcall(preamble, "native")
         if not ok then self.last_clauses = {"pack"}; return false, tostring(result) end
         local n = assert(pack.native, "missing native block")
-        assert(n.version == "gen3-native-v1", "unsupported native block")
+        assert(n.version == "gen3-native-v1" or n.version == "gen3-native-v2", "unsupported native block")
         local entries = {
             {key = "native_present", fn = function()
                 assert(kind == "companion", "native bytes belong to the companion artifact")
                 assert(read(n.base, 4) == n.sig, "companion signature absent")
                 assert(read(n.base + n.abi_off, 2) == n.abi, "companion ABI differs")
+                if n.version == "gen3-native-v2" then assert(n.abi == 2, "v2 native block requires ABI2") end
             end},
             {key = "native_idle", fn = function()
                 assert(read(n.base + n.opcode_off, 2) == 0, "mailbox opcode pending")
                 assert(read(n.base + n.status_off, 2) ~= n.busy, "mailbox status busy")
-                assert(read(n.info + n.info_drawn_off, 1) == read(n.info + n.info_ack_off, 1),
-                    "panel handshake differs")
+                if n.version == "gen3-native-v2" then
+                    -- INFO v2 owns its private display until state returns to
+                    -- CLOSED. V1's byte drawn/ack comparison is not its ABI.
+                    assert(read(n.info + n.info_state_off, 1) == 0, "native v2 panel still owns the UI")
+                else
+                    assert(read(n.info + n.info_drawn_off, 1) == read(n.info + n.info_ack_off, 1),
+                        "panel handshake differs")
+                end
             end},
         }
         return run_clauses(entries)

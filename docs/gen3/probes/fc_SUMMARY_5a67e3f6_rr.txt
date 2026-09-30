@@ -1,0 +1,18 @@
+# G4 final cut 5a67e3f62144ffe604c9e34e4ac668fbe81c0150 -- tools/gen3_final_cut.py summary (written 2026-09-28T19:30:41Z)
+# RUN 7 / CARRIED 0 / CACHED 0 / FAIL 4
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | linked_faint_active_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_gen3_rr_as_a_5a67e3f6.txt |
+| 2 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_linked_faint_active_whiteout_gen3_rr_as_a_5a67e3f6.txt |
+| 3 | boxsync_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_boxsync_gen3_rr_as_a_5a67e3f6.txt |
+| 4 | whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_whiteout_gen3_rr_as_a_5a67e3f6.txt |
+| 5 | link_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_link_gen3_rr_as_a_5a67e3f6.txt |
+| 6 | explode_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_explode_gen3_rr_as_a_5a67e3f6.txt |
+| 7 | trade_decline_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_trade_decline_gen3_rr_as_a_5a67e3f6.txt |
+| 8 | species_clause_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_species_clause_gen3_rr_as_a_5a67e3f6.txt |
+| 9 | gender_clause_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_gender_clause_gen3_rr_as_a_5a67e3f6.txt |
+| 10 | release_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_release_gen3_rr_as_a_5a67e3f6.txt |
+| 11 | ball_gate_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_ball_gate_gen3_rr_as_a_5a67e3f6.txt |
+
+OVERALL: FAIL (7/11 rows)

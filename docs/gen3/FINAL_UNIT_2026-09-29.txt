@@ -1,0 +1,7 @@
+Frozen runtime 6556df8d full-unit run: 8 failed, 14123 passed, 3407 skipped, 2 warnings, 2 errors; EXIT 1.
+Failures were current-JAR write-domain identity mismatches and protocol citation drift after parent merges.
+Regenerated FRLG/E models from trusted/fork-capable db24703b: only jar_sha256 changes; all spans/forbidden domains identical.
+Complete affected-file rerun: 267 passed, zero failed/skipped; EXIT 0.
+Final protocol citation rerun: 9 passed; EXIT 0.
+No final full-suite rerun after these exact integration fixes; no release qualification or skip waiver.
+Route evidence remains strict whiteout/boxsync/release PASS, species reroll unobserved FAIL; expansion SOURCE-only changes reviewed.

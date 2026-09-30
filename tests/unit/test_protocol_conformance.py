@@ -1102,18 +1102,18 @@ def test_world_force_faint_on_a_benched_mon_lands_immediately_with_no_faint_repo
 
 @world_item("34")
 def test_world_force_explode_is_handled_at_least_as_force_faint_on_vanilla_frlg():
-    """FRLG has no menu-skip capability: the pack ships no CHOSEN_MOVE_ADDR, so explode_capable
-    == false (lua/gen3/client.lua:547-548). Its CHOSEN_ACTION_ADDR/BATTLE_COMM_ADDR serve only
-    force_faint's Perish commit (C4-ACTIVE-FAINT-P, client.lua:777). force_explode keeps the
-    active-battler hold ("active battler", client.lua:783, zero bytes) and lands as a bench
-    battle_faint once the mon is switched out."""
+    """FRLG now commits the same engine Explosion contract; HP remains the engine's to change.
+    A later switch-out still lands the established linked bench-faint rule."""
     w = _live()
     w.battle_ok = True
     w.enter_battle([_FOE], active=(0,))
     w.command(cmd="force_explode", key=_KA)
     w.step(3)
-    assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
+    assert w.writes and w.client.battle_pending_count(w.client) == 1
+    assert w._read(0x03004FE0, 4) == 0x0802E33D and w._read(0x02023DC4, 2) == 153
+    assert w._read(w.ram["BATTLE_MONS_ADDR"] + 0x24, 1) == 5 and w.party_hp(0) == 20
     w.set_active([1])
+    w.battle_ok = True  # the engine has returned from the hand-off to a new parked menu
     w.step()
     assert w.party_hp(0) == 0
     # RR (owner ruling 19, G5-EXPLODE-HANDOFF): force_faint on the active battler is mechanism
@@ -1234,3 +1234,32 @@ def test_world_a_repeated_key_change_ack_is_idempotent_and_does_not_crash():
     w.command(cmd="key_change_ack", old_key=kc["old_key"], new_key=kc["new_key"], migrated=False)
     w.step(5)                                       # no crash, nothing re-sent
     assert len(w.events("key_change")) == 1
+
+
+# ── Emerald rows of the per-artifact World items (docs/gen3_emerald/PLAN.md E3, EG3 exit) ──────
+# Since EG4 (ruling 24), the production Entry admits Emerald directly, so these rows run the
+# REAL production client over a tmp copy of lua/ + the Emerald pack (test_gen3_emerald_client.py's
+# pattern) -- a tmp copy only so PACK_DIRS/ENTRY can be redirected without touching the shipped
+# tree. They replay the per-artifact bodies above with ARTIFACTS narrowed to the Emerald
+# cartridge.
+
+@pytest.fixture
+def _emerald_admitted(tmp_path, monkeypatch):
+    import shutil
+
+    from tests.unit import gen3_world as gw
+    shutil.copytree(gw.REPO / "lua", tmp_path / "lua")
+    pack_dir = tmp_path / "data" / "games" / "gen3_emerald"
+    shutil.copytree(gw.REPO / "data" / "games" / "gen3_emerald", pack_dir)
+    monkeypatch.setattr(gw, "REPO", tmp_path)
+    monkeypatch.setattr(gw, "ENTRY", (tmp_path / "lua" / "gen3" / "entry.lua").as_posix())
+    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", pack_dir)
+    monkeypatch.setitem(globals(), "ARTIFACTS", [("gen3_emerald", "emerald", "clean")])
+
+
+@pytest.mark.parametrize("body", [test_world_hello_carries_the_required_fields_on_every_artifact,
+                                  test_world_ot_id_is_present_or_derivable_from_the_party_key,
+                                  test_world_tick_is_periodic_every_30_frames_with_required_fields],
+                         ids=["8-9_hello", "10_ot_id", "14_tick"])
+def test_world_rows_on_emerald(_emerald_admitted, body):
+    body()

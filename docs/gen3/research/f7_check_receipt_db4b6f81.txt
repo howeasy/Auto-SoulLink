@@ -1,0 +1,95 @@
+F-7b check receipt -- 2026-09-27T00:56:21Z
+HEAD: db4b6f81 (working tree has the F-7b OMP review fixes, uncommitted at capture time)
+Cache populated via: python tools/fetch_rr_sources.py
+
+=== python tools/gen_rr_species.py --check ===
+OK: regenerated output matches C:\slink-wt\g3-f7\data\games\gen3_frlge\rr_species.json byte-for-byte (1329 species).
+
+=== python tools/gen_rr_types.py --check ===
+  Parsed types for 1328 species
+OK: regenerated output matches C:\slink-wt\g3-f7\data\games\gen3_frlge\rr_types.json byte-for-byte (1328 species).
+
+=== python tools/gen_rr_natdex.py --check ===
+Mapped: 1077, Unmapped: 0
+OK: regenerated mapping matches CFRU_TO_NATIONAL in C:\slink-wt\g3-f7\server\pokemon_data.py (1077 entries).
+
+=== python tools/gen_rr_encounters.py --check ===
+Loaded 142,814 bytes — parsing encounters…
+Parsed 2103 encounter entries across 53 areas.
+OK: regenerated output matches C:\slink-wt\g3-f7\data\games\gen3_frlge\rr_encounters.json byte-for-byte (2103 entries across 53 areas).
+
+=== python tools/gen_rr_sprites.py --check ===
+  1330 sprites in data.js
+OK: 1322 regenerated sprites match the committed PNGs under C:\slink-wt\g3-f7\server\static\sprites\rr byte-for-byte.
+
+=== python tools/gen_rr_priority_trainers.py --check ===
+DRIFT: regenerated roster (694452 bytes) != C:\slink-wt\g3-f7\data\games\gen3_frlge\rr_priority_trainers.json (694511 bytes) -- the pinned spreadsheet snapshot no longer reproduces the committed roster (see the lock file's rr_priority_trainers_sheet_xlsx note: this is a community-edited Google Sheet with no immutable revision).
+--- committed
++++ regenerated
+@@ -138,11 +138,9 @@
+       147
+     ],
+     "celadon_city": [
+-      65,
+       417
+     ],
+     "celadon_city_game_corner": [
+-      350,
+       382
+     ],
+     "celadon_hotel": [
+@@ -158,8 +156,6 @@
+       475
+     ],
+     "cerulean_city": [
+-      32,
+-      48,
+       332,
+       333,
+       334,
+@@ -257,7 +253,6 @@
+       66
+     ],
+     "pewter_city": [
+-      56,
+       414
+     ],
+     "pewter_museum": [
+@@ -277,6 +272,7 @@
+     ],
+     "rocket_hideout": [
+       69,
++      350,
+       385,
+       538
+     ],
+@@ -378,8 +374,7 @@
+
+  calc/normal.js : 403 trainers parsed (canonical sets — primary party source; skipped 24 >6-mon supersets)
+  Kanto Leaders         8 trainers parsed
+  Kanto Rematch         4 trainers parsed
+  Johto Leaders        10 trainers parsed
+  Indigo League        11 trainers parsed
+  Rivals               17 trainers parsed
+  Team Rocket          14 trainers parsed
+  Mini Bosses          42 trainers parsed
+  Optional Bosses      10 trainers parsed
+  Postgame             51 trainers parsed
+Total trainers : sheet=167 + calc-extra=402 = 569
+Main milestones: 18 entries (first: ('Brock', 15), last: ('Post Game', 100))
+Trainer Order: 96 (trainer, area) pairs, 94 level caps across 83 trainer names (93 (name, area) keys)
+rr_trainers.json: 447 unique trainer names
+  trainers_by_area : 52 areas
+  unmatched        : 22
+  first 10 unmatched:
+    - Ghost Ghost (Mini Bosses!R265)
+    - Creator Soupercell (Mini Bosses!R1001)
+    - Crush Kin Mik & Kia (Postgame!R460)
+    - Goon 1 Goon 1 (Postgame!R841)
+    - Goon 2 Goon 2 (Postgame!R865)
+    - Goon 3 Goon 3 (Postgame!R888)
+    - Gang Boss Gang Boss (Postgame!R912)
+    - Twins Joy & Meg (Postgame!R937)
+    - Spirit Spirit (Postgame!R1174)
+    - *Twins Joy & Meg (calc:*Twins Joy & Meg)
+

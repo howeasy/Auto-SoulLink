@@ -128,12 +128,13 @@ def test_hello_carries_the_trainer_badges_and_seeded_boxes_on_frlg():
     assert [(e["box"], e["slot"], e["key"]) for e in hello["pc_boxes"]] == [(0, 3, KC)]
 
 
-def test_rr_hello_falls_back_without_the_trainer_read():
+def test_rr_hello_carries_the_trainer_read():
+    """RR-DURABLE: gen3_rr carries SB2_NAME_OFFSET now (the trade journal binds to the trainer)."""
     w = World("gen3_rr", "radical_red")
     w.set_party(party(A))
     w.step()
     (hello,) = w.events("hello")
-    assert "ot_id" not in hello and "trainer_name" not in hello and hello["party"][0]["key"] == KA
+    assert hello["ot_id"] and hello["trainer_name"] and hello["party"][0]["key"] == KA
 
 
 def test_a_pre_game_save_sends_no_hello():
@@ -195,6 +196,21 @@ FULL_STATS = {"level": 5, "maxHP": 20, "attack": 11, "defense": 12, "speed": 13,
               "spDef": 15, "pp1": 35, "pp2": 30, "pp3": 0, "pp4": 0}
 
 
+@pytest.mark.parametrize("pack,title", [("gen3_frlg", "firered"), ("gen3_rr", "radical_red")])
+def test_party_capture_carries_full_stats_before_a_link_can_request_retrieval(pack, title):
+    """The server may link two captures before box_mon sends its later stats_cache."""
+    w = live(pack, title)
+    w.set_balls(5)
+    w.step(30)
+    w.enter_battle([FOE])
+    w.set_party(party(A, B, C))
+    w.fire("capture_wild")
+    w.fire("mon_given")
+    w.step()
+    (cap,) = w.events("capture")
+    assert cap["key"] == KC and cap["stats"] == FULL_STATS
+
+
 def test_a_catch_with_a_full_party_is_a_boxed_capture():
     w = live(pids=(A, B))
     w.enter_battle([mon_record(C, OT, species=19)])            # the wild mon, as caught
@@ -230,6 +246,21 @@ def test_a_failed_wild_encounter_sends_one_no_catch():
     assert nc == {**nc, "area_id": "route_1", "species_id": 19, "level": 3}
     w.step(31)
     assert len(w.events("safe")) == 1
+
+
+def test_frlg_a_failed_wild_battle_in_a_gift_area_sends_no_no_catch():
+    """OMP cx-daf0f544 #4: oaks_lab (FR 4:3) is in the pack's gift_areas.ids, so the same failed
+    battle that dead-zones route_1 above never dead-zones it."""
+    w = live()
+    assert "oaks_lab" in w.wc["gift_areas"]["ids"]
+    w.set_location(4, 3)
+    w.set_balls(3)
+    w.step(30)
+    w.enter_battle([FOE])
+    w.step(30)
+    w.leave_battle(outcome=4)
+    w.step()
+    assert w.events("no_catch") == []
 
 
 def test_a_trainer_battle_sends_trainer_battle_start_once_and_no_no_catch():
@@ -324,6 +355,177 @@ def test_open_kind_trade_done_reports_a_key_change_with_the_npc_trade_reason():
     assert kc["old_key"] == KB and kc["new_key"] == key_of(C, 0x9999) and kc["reason"] == "npc_trade"
 
 
+@pytest.mark.parametrize("same_frame", [True, False], ids=["captured-emerald-timing", "separate-frame-control"])
+@pytest.mark.parametrize("startup", ["immediate", "quiet_party", "trainer_first"])
+def test_emerald_npc_trade_reports_key_change_when_both_hooks_fire_in_one_frame(monkeypatch, same_frame, startup):
+    from tests.unit import gen3_world as gw
+
+    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
+    w = World("gen3_emerald", "emerald", "clean")
+    bystander = mon_record(0x4D55444B, 0x20250925, species=283)
+    outgoing = mon_record(0x52414C5C, 0x20250925, species=392)
+    received = mon_record(0x84, 0x9746, species=298)
+    if startup == "trainer_first":
+        w.set_party([])
+        w.break_checkpoint()
+        w.step(3)
+    w.set_party([bystander, outgoing])
+    if startup != "immediate":
+        # Quiet, readable startup precedes the first eligible hello on Emerald.
+        # This must seed both known keys and the eventual trade/PC baseline.
+        w.break_checkpoint()
+        w.step(3)
+        assert w.events("hello") == []
+        w.overworld_safe()
+    w.step_to(60)
+    w.regs["R0"], w.regs["R1"] = 1, 0
+    w.fire("trade_begin")
+    if not same_frame:
+        w.step()
+    w.set_party([bystander, received])
+    w.fire("trade_done")
+    w.step(240)
+    changes = w.events("key_change")
+    assert len(changes) == 1
+    assert (changes[0]["old_key"], changes[0]["new_key"], changes[0]["new_species"], changes[0]["reason"]) == (
+        "52414C5C:20250925", "00000084:00009746", 298, "npc_trade")
+    assert w.events("capture") == [] and w.writes == []
+
+
+def test_npc_trade_without_a_readable_entry_preimage_does_not_guess_from_cached_party():
+    w = live(pids=(A, B))
+    w.poke_int(w.ram["PARTY_COUNT_ADDR"], 7, 1)  # invalid at entry, readable again at completion
+    w.fire("trade_begin")
+    w.set_party([mon_record(A, OT), mon_record(C, 0x9999, species=122)])
+    w.fire("trade_done")
+    w.step(3)
+    assert w.events("key_change") == []
+    assert any("NPC trade preimage unavailable" in line for line in w.logs)
+
+
+def test_save_cleared_reset_discards_queued_npc_trade_preimage():
+    w = live(pids=(A, B))
+    w.fire("trade_begin")
+    w.set_party([])
+    w.set_trainer(0)
+    w.client.validate(w.client)  # production save-cleared path, before signal drain
+    w.set_trainer(OT)
+    w.set_party([mon_record(A, OT), mon_record(C, 0x9999, species=122)])
+    w.fire("trade_done")
+    w.step(3)
+    assert w.events("key_change") == []
+    w.fire("trade_begin")
+    w.set_party([mon_record(A, OT), mon_record(0x44444444, 0x8888, species=25)])
+    w.fire("trade_done")
+    w.step()
+    assert [(m["old_key"], m["new_key"]) for m in w.events("key_change")] == [
+        (key_of(C, 0x9999), "44444444:00008888")]
+
+
+@pytest.mark.parametrize("size,slot", [(size, slot) for size in range(1, 7) for slot in range(size)])
+def test_emerald_npc_trade_maps_each_slot_and_party_size(monkeypatch, size, slot):
+    from tests.unit import gen3_world as gw
+
+    monkeypatch.setitem(gw.PACK_DIRS, "gen3_emerald", REPO / "data/games/gen3_emerald")
+    w = World("gen3_emerald", "emerald", "clean")
+    mons = [mon_record(A + i, OT, species=283) for i in range(size)]
+    w.set_party(mons)
+    w.step_to(60)
+    w.regs["R0"], w.regs["R1"] = slot, 0
+    w.fire("trade_begin")
+    mons[slot] = mon_record(C, 0x9999, species=298)
+    w.set_party(mons)
+    w.fire("trade_done")
+    w.step()
+    assert [(m["old_key"], m["new_key"], m["reason"]) for m in w.events("key_change")] == [
+        (key_of(A + slot, OT), key_of(C, 0x9999), "npc_trade")]
+
+
+def test_cancelled_npc_trade_is_replaced_by_the_second_preimage():
+    w = live(pids=(A, B))
+    w.fire("trade_begin")
+    w.step()  # no completion for this observation
+    w.set_party([mon_record(A, OT), mon_record(0x44444444, OT)])
+    w.fire("trade_begin")
+    w.set_party([mon_record(A, OT), mon_record(C, 0x9999, species=122)])
+    w.fire("trade_done")
+    w.step()
+    assert [(m["old_key"], m["new_key"]) for m in w.events("key_change")] == [
+        ("44444444:0000ABCD", key_of(C, 0x9999))]
+
+
+def test_npc_trade_preimage_survives_a_map_signal_between_swap_and_done():
+    w = live(pids=(A, B))
+    w.fire("trade_begin")
+    w.step()
+    w.set_party([mon_record(A, OT), mon_record(C, 0x9999, species=122)])
+    w.fire("map_load")
+    w.step()
+    w.fire("trade_done")
+    w.step()
+    assert [(m["old_key"], m["new_key"]) for m in w.events("key_change")] == [(KB, key_of(C, 0x9999))]
+
+
+def test_shared_client_forwards_existing_server_phone_content_without_consuming_the_command(monkeypatch):
+    from tests.unit.test_state import make_state_with_link
+
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "00000007ABCDEF01")
+    calls, epochs = [], []
+
+    def binder(lua):
+        # MODEL command seam on the admitted companion harness. Native Emerald
+        # capability/ABI/record gates are independently exercised in test_gen3_native.
+        return lua.table(service=lambda *_: True, idle=lambda *_: True,
+                         trade_capable=lambda *_: False,
+                         bind_match_call_session=lambda _, epoch: epochs.append(epoch),
+                         request_match_call=lambda _, tag, data: calls.append((tag, lua_to_py(data))))
+
+    w = World("gen3_rr", "radical_red", "companion", native=binder)
+    w.set_party(party(A, B))
+    w.step_to(60)
+    state = make_state_with_link("PARTNER:1", KA)
+    state.trainer_names = {"a": "BOB", "b": "RED"}
+    state.links[0].a.species, state.links[0].a.nickname = 392, "RALTS"
+    state.links[0].b.species, state.links[0].b.nickname = 298, "DOTS"
+    state.handle_event("a", {"event": "faint", "key": "PARTNER:1"})
+    command = next(c for c in state.queued_commands["b"] if c.get("phone") == "fallen")
+    w.command(**command)
+    w.step(3)
+    assert epochs == [7]
+    assert calls == [("fallen", {"trainer_name": "BOB",
+                                 "caller_mon": {"species_id": 392, "nickname": "RALTS"},
+                                 "receiver_mon": {"species_id": 298, "nickname": "DOTS"}})]
+    assert w.party_hp(0) == 0  # the original force_faint still runs
+
+
+def test_clean_client_does_not_forward_phone_tags_to_an_injected_binder():
+    calls = []
+    w = World(native=lambda lua: lua.table(request_match_call=lambda *args: calls.append(args)))
+    w.set_party(party(A, B))
+    w.step_to(60)
+    w.command(cmd="msgbox", text="same message", phone="first_link")
+    w.step()
+    assert calls == []
+
+
+def test_phone_forwarding_error_never_drops_the_original_force_faint(monkeypatch):
+    monkeypatch.setenv("SLINK_GEN3_BATTLE_NONCE", "00000007ABCDEF01")
+
+    def binder(lua):
+        def failed(*_):
+            raise RuntimeError("synthetic phone path failure")
+        return lua.table(service=lambda *_: True, idle=lambda *_: True,
+                         trade_capable=lambda *_: False, request_match_call=failed)
+
+    w = World("gen3_rr", "radical_red", "companion", native=binder)
+    w.set_party(party(A, B))
+    w.step_to(60)
+    w.command(cmd="force_faint", key=KA, phone="fallen")
+    w.step(3)
+    assert w.party_hp(0) == 0
+    assert any("match_call request failed" in line for line in w.logs)
+
+
 # ── in-battle writes (owner ruling 2026-09-23) ────────────────────────────────────────────
 
 def test_a_bench_faint_lands_immediately_and_its_faint_is_not_reported():
@@ -375,13 +577,14 @@ def test_a_held_battler_at_battle_end_lands_at_the_overworld_checkpoint():
     assert w.party_hp(0) == 0 and write_reasons(w) == ["overworld"]
 
 
-def test_frlg_force_explode_on_the_active_battler_is_a_held_faint():
+def test_frlg_force_explode_commits_but_keeps_hp_for_the_engine():
     w = live()
     w.battle_ok = True
     w.enter_battle([FOE], active=(0,))
     w.command(cmd="force_explode", key=KA)
     w.step(3)
-    assert w.writes == [] and w.client.battle_pending_count(w.client) == 1
+    assert w.writes and w.client.battle_pending_count(w.client) == 1
+    assert w.party_hp(0) == 20 and w._read(w.ram["CHOSEN_MOVE_ADDR"], 2) == 153
 
 
 def _lift_rr_commit_hold(w):
@@ -472,9 +675,9 @@ def _hp_writes(w):
 
 
 def test_the_full_commit_lands_through_the_real_writes_and_safety_with_the_guard_last():
-    """C4-2e item 2: writes.lua re-checks the REAL battle_commit clause set before every byte;
-    gBattleCommunication[battler] is that set's battle_comm_0 clause AND its guard, so it must
-    be the plan's last write or the rest is refused mid-plan."""
+    """C4-2e item 2: writes.lua re-checks the REAL battle_commit clause set per write call
+    (the window is frame-bound); write_plan prevalidates its whole plan once. The final
+    gBattleCommunication guard hands control over only after the preceding updates."""
     w, base = _explode_world()
     w.command(cmd="force_explode", key=KA)
     w.step()
@@ -599,22 +802,21 @@ def test_p_frlg_active_force_faint_commits_the_perish_plan_in_order_with_the_han
 
 
 @pytest.mark.parametrize("title", ["firered", "leafgreen"])
-def test_p_never_touches_explode_mode_force_explode_on_frlg_is_the_parents_hold(title):
-    """Owner 2026-09-23: Explode Mode is untouched. On FR/LG (explode not capable: no
-    CHOSEN_MOVE_ADDR) force_explode on the active battler is exactly the parent's behaviour:
-    held as "active battler", zero bytes, no Perish/no-op/commit byte, every frame of the turn;
-    it lands only on switch-out as battle_faint. The same world with force_faint commits P."""
-    assert "CHOSEN_MOVE_ADDR" not in World(title=title).ram      # explode_capable stays false
+def test_frlg_explosion_is_separate_from_perish_and_retains_the_bench_rule(title):
+    """Explosion coerces move 153, not Perish; a switch-out still lands the linked bench faint."""
     w = _p_world(title)
     w.command(cmd="force_explode", key=KA)
     w.step(30)
-    assert w.writes == [] and write_reasons(w) == []
+    assert set(write_reasons(w)) == {"battle_commit"}
     (held,) = lua_to_py_list(w.client.battle_pending)
-    assert str(held.cmd) == "force_explode" and str(held.why) == "active battler"
-    assert w._read(P_STATUS3, 4) & STATUS3_PERISH_SONG == 0 and w._read(P_COMM, 1) == 1
+    assert str(held.cmd) == "force_explode" and str(held.why) == "explosion committed"
+    assert w._read(P_STATUS3, 4) & STATUS3_PERISH_SONG == 0 and w._read(P_COMM, 1) == 3
+    assert w._read(w.ram["CHOSEN_ACTION_ADDR"], 1) == 0
+    assert w._read(w.ram["CHOSEN_MOVE_ADDR"], 2) == 153
     w.set_active([1])                                            # the parent's landing: switch-out
+    _next_parked_menu(w)                                         # engine has completed the prior hand-off
     w.step()
-    assert w.party_hp(0) == 0 and write_reasons(w) == ["battle_faint"]
+    assert w.party_hp(0) == 0 and write_reasons(w)[-1] == "battle_faint"
     assert w.client.battle_pending_count(w.client) == 0
     # control: the linked-faint path on the same title still uses P
     w = _p_world(title)
@@ -649,8 +851,8 @@ def test_ph_row_2_keeps_the_timer_high_nibble(title):
 
 def test_p_f4_control_comm_first_is_refused_mid_plan_by_the_real_sink():
     """F4 control: why comm must be last. gBattleCommunication[0] is both the battle_comm_0
-    clause and the commit guard, and writes.lua re-checks before every byte, so a write after
-    it is refused. (A property of writes.lua/safety.lua: this control is green on HEAD too.)"""
+    clause and the commit guard, and writes.lua re-checks per write call (the window is frame-bound), so the next
+    write call is refused. (A property of writes.lua/safety.lua: this control is green on HEAD too.)"""
     w = _p_world()
     writes = w.parts.writes
     allow = w.lua.eval("function() return true end")
@@ -935,12 +1137,62 @@ def test_p_draw_edge_today_an_end_of_turn_foe_ko_plus_our_last_mons_perish_ko_is
 
 # ── command seams ───────────────────────────────────────────────────────────────────────
 
-def test_apply_trade_on_frlg_writes_nothing_and_replies_nothing():
+def test_apply_trade_on_frlg_writes_nothing_and_reports_unchanged():
     w = live()
     n = len(w.sent)
     w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
     w.step(3)
-    assert w.writes == [] and [m["event"] for m in w.sent[n:] if m["event"] != "tick"] == []
+    assert w.writes == []
+    assert [m["event"] for m in w.sent[n:] if m["event"] != "tick"] == ["trade_done", "menu_result"]
+
+
+def test_major4_a_refused_apply_trade_under_a_hidden_hello_still_reaches_the_wire():
+    """A refused apply_trade owes a NON-uncertain trade_done and, behind it, the
+    menu_result cancel. The owed gate (client.lua drv.after_receive) refuses a
+    non-uncertain trade_done while session.hello_visible is false, and hello_visible
+    only refreshes when a NEW hello is BUILT -- core/session.lua builds one only while
+    hello_sent is false, and the trade recovery block is the only thing that clears it.
+    Unarmed, both reports sit in owed.list until a reconnect; the refusal branch must
+    arm that recovery exactly as trade.lua's completed() does."""
+    w = live()
+    w.enter_battle([FOE], active=(0,))
+    w.step()
+    w.set_party([mon_record(0x99999999, 0x5555, species=7)])       # the partner's party in RAM
+    w.fire("map_load")
+    w.step()
+    w.connected = False
+    w.step()
+    w.connected = True
+    w.step()
+    assert w.events("hello")[-1]["party_hidden"] is True             # hello_visible latched false
+    w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
+    w.step(3)
+    assert w.events("menu_result") == [] and w.events("trade_done") == []
+    w.set_party(party(A, B))                                        # our own party is back
+    w.leave_battle()
+    w.overworld_safe()
+    w.step(60)
+    assert [m["token"] for m in w.events("trade_done")] == ["t"]
+    assert [m["token"] for m in w.events("menu_result")] == ["t"]
+    assert w.events("trade_done")[0].get("uncertain") is not True    # server semantics unchanged
+
+
+def test_a_held_owed_report_names_its_reason_once_and_not_once_per_frame():
+    """owed:step runs on every after_receive and a held head blocks every later report
+    (lua/owed_reports.lua:62). Without a line, a stalled trade_done is indistinguishable
+    from a running emulator -- the reason must be named, once per hold."""
+    from tests.unit.gen3_trade_journal_model import JournalModel
+
+    store = JournalModel(run=None)                    # never bound: ready() is false for good
+    w = World("gen3_frlg", "firered", "clean", journal=store, model_companion=True)
+    w.set_party(party(A))
+    w.step_to(60)
+    w.command(cmd="apply_trade", slot=0, blob_hex="00" * 100, old_key=KA, token="t")
+    w.step(120)
+    assert w.events("trade_done") == [] and w.events("menu_result") == []
+    assert [l for l in w.logs if "owed trade_done held" in l] == [
+        "[SLink-gen3] owed trade_done held: trade run not bound"
+    ]
 
 
 @pytest.mark.parametrize("name,extra,event,field,value", [
@@ -1124,10 +1376,15 @@ def test_blocker_a_paused_session_stages_no_rival_swap():
     w.command(cmd="replace_rival_team", trainer_id=5, n=1, blobs_hex=viable_blobs(w),
               session=session, battle_id=bid)
     w.step(5)
-    assert w.writes == [] and w.events("rival_team_replaced") == []
+    assert w.writes == []
+    (reply,) = w.events("rival_team_replaced")
+    assert (reply["trainer_id"], reply["species_ids"], reply["error"]) == (
+        5, [], "writes_paused"
+    )
     w.client.writes_enabled, w.client.gate_revoked = True, False
     w.step(3)
     assert native_writes(w) == [], "nothing was queued while paused, so nothing stale posts later"
+    assert len(w.events("rival_team_replaced")) == 1
 
 
 def test_minor1_a_native_owned_prompt_is_answered_exactly_once():
@@ -1331,6 +1588,9 @@ def test_major2_a_mid_battle_reconnect_with_a_borrowed_party_hellos_an_empty_par
     w.connected = True
     w.step()
     assert w.events("hello")[-1]["party"] == []
+    assert w.events("hello")[-1]["party_hidden"] is True
+    assert "pc_boxes" not in w.events("hello")[-1]
+    assert "trade_outstanding" not in w.events("hello")[-1]  # borrowed-only, not a journal declaration
 
 
 def test_major3_a_force_faint_during_a_borrowed_party_is_held_and_lands_after_restore():
@@ -1427,7 +1687,8 @@ def test_sound_is_refused_while_the_session_is_ineligible():
     assert w.writes == [] and "sound" not in w.battle_checks
 
 
-# ── C5-6a: the RR PC trade (apply_trade) over the REAL native.lua ─────────────────────────
+# RR v1 transport fixtures remain for panel/sound/rival checks.
+# Durable trade behavior and replacements for retired raw-copy success tests live in test_gen3_trade.py.
 
 PARTNER = mon_record(0x55555555, 0x00009999, species=25, nickname="PIKA")
 KP = key_of(0x55555555, 0x00009999)
@@ -1798,188 +2059,26 @@ def test_a_pre_announcement_whose_battle_never_begins_holds_nothing_after_a_batt
     assert reply["error"] in ("stale_battle_id", "not_in_battle") and mb_op(w) == 0, reply
 
 
-def test_trade_happy_path_stages_runs_the_scene_and_reports_the_received_mon():
-    w, blob = trade_world()
-    apply(w, blob)
-    w.step(2)
-    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
-    staged = bytes(w._read(NATIVE["BLOB_BUF"] + i, 1) for i in range(100))
-    assert staged.hex().upper() == blob                        # the partner mon, byte for byte
-    mb_ack(w)
-    w.step()
-    assert mb_op(w) == NATIVE["OP_TRADE_SCENE"]
-    w.fire("trade_begin")                                        # TradeMons fires inside the scene
-    swap_in_partner(w)
-    w.fire("trade_done")
-    mb_ack(w)
-    w.step()
-    (done,) = w.events("trade_done")
-    assert done == {**done, "token": "tr1", "slot": 1, "new_key": KP, "new_species": 25}
-    w.fire("mon_given")
-    w.step(40)
-    # protocol §6.5: no key_change, no capture of the received mon, no party_to_box of the old one
-    assert w.events("key_change") == [] and w.events("capture") == [] and w.events("party_to_box") == []
-    trade_writes_are_native_only(w)
 
 
-def test_trade_relocates_the_offered_mon_by_key_when_the_party_was_reordered():
-    w, blob = trade_world()
-    w.set_party([mon_record(B, OT, species=5, nickname="MON1"), mon_record(A, OT, species=4, nickname="MON0")])
-    w.step()
-    apply(w, blob, slot=1)                                      # the snapshot said slot 1; B is in 0 now
-    w.step(2)
-    mb_ack(w)
-    w.step()
-    assert w._read(NATIVE["BASE"] + 16, 1) == 0                 # OP_TRADE_SCENE args: slot 0
-    w.set_party([PARTNER, mon_record(A, OT, species=4, nickname="MON0")])
-    mb_ack(w)
-    w.step()
-    assert w.events("trade_done")[0]["slot"] == 0 and w.events("trade_done")[0]["new_key"] == KP
 
 
-def test_trade_scene_refused_before_the_swap_falls_back_to_the_silent_swap():
-    w, blob = trade_world()
-    apply(w, blob)
-    w.step(2)
-    mb_ack(w)
-    w.step()
-    mb_ack(w, status=FAIL_)                                     # the scene failed; slot untouched
-    w.step()
-    assert mb_op(w) == NATIVE["OP_SET_PARTY_MON"]
-    swap_in_partner(w)
-    mb_ack(w)
-    w.step()
-    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
-    trade_writes_are_native_only(w)
 
 
-def test_trade_scene_failure_after_the_swap_reconciles_without_an_overwrite():
-    w, blob = trade_world()
-    apply(w, blob)
-    w.step(2)
-    mb_ack(w)
-    w.step()
-    swap_in_partner(w)                                           # the scene DID swap, then failed
-    mb_ack(w, status=FAIL_)
-    n = len(w.writes)
-    w.step(3)
-    assert mb_op(w) == 0 and len(w.writes) == n                  # no silent swap on top
-    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
 
 
-def test_trade_lost_scene_ack_waits_the_backstop_then_reconciles_from_the_slot():
-    w, blob = trade_world()
-    w.client.state.trade_limits.backstop = 120
-    apply(w, blob)
-    w.step(2)
-    mb_ack(w)
-    w.step()
-    w.poke_int(NATIVE["BASE"] + MB["seq"], 0xBEEF, 2)           # the ACK channel is lost
-    w.step()
-    assert w.events("trade_done") == []                          # never an early claim
-    swap_in_partner(w)                                           # the scene finished natively
-    w.step(120)
-    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
-    assert mb_op(w) == NATIVE["OP_TRADE_SCENE"]                  # nothing posted after the loss
 
 
-def test_trade_stage_timeout_sends_no_trade_done_and_is_left_unresolved():
-    """C5-6b: the real native.lua timeout (1800 frames) poisons the mailbox, so the silent swap
-    cannot post either. The trade failed: NO trade_done, nothing fabricated, nothing purged; the
-    FSM is unresolved (the server watchdog settles it) and says so."""
-    w, blob = trade_world()
-    w.break_checkpoint()                                         # queue a box move behind it first
-    w.command(cmd="box_mon", key=KB)
-    apply(w, blob)
-    w.step()
-    w.overworld_safe()
-    w.step(2)
-    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
-    w.step(1801)
-    assert w.events("trade_done") == []
-    assert w.client.state.trade_apply is None and w.client.state.trade_unresolved["tr1"].phase == "unresolved"
-    assert any(h[0] == "show" and "TRADE UNRESOLVED" in h[1] for h in w.hud)
-    assert not any("trade: purged" in line for line in w.logs)    # the queued move was not purged
 
 
-def test_trade_failed_silent_swap_sends_no_trade_done():
-    w, blob = trade_world()
-    apply(w, blob)
-    w.step(2)
-    mb_ack(w)
-    w.step()
-    mb_ack(w, status=FAIL_)                                     # the scene failed, slot untouched
-    w.step()
-    assert mb_op(w) == NATIVE["OP_SET_PARTY_MON"]
-    mb_ack(w, status=FAIL_)                                     # and the silent swap failed too
-    w.step(3)
-    assert w.events("trade_done") == []
-    assert w.client.state.trade_unresolved["tr1"] is not None
-    assert any("silent swap failed" in line for line in w.logs)
 
 
-def test_trade_unreadable_party_at_scene_completion_reports_nothing_then_the_truth():
-    w, blob = trade_world()
-    apply(w, blob)
-    w.command(cmd="box_mon", key=KB)                            # held while the trade is owned
-    w.step(2)
-    mb_ack(w)
-    w.step()
-    swap_in_partner(w)
-    w.poke_int(w.ram["PARTY_COUNT_ADDR"], 7, 1)                 # the party cannot be read back
-    mb_ack(w)
-    w.step(3)
-    assert w.events("trade_done") == []
-    assert w.client.deferred.size(w.client.deferred) == 1      # nothing purged
-    assert w.client.state.trade_apply.phase == "readback"
-    w.poke_int(w.ram["PARTY_COUNT_ADDR"], 2, 1)                 # readable again
-    w.step()
-    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
-    assert w.client.deferred.size(w.client.deferred) == 0      # purged only now, on the fact
 
 
-def test_codex_blocker1_a_reorder_after_the_stage_retargets_the_scene():
-    """Codex REV4 repro: offer B at slot 1 -> op16 staged -> reorder to B slot 0 / A slot 1 ->
-    stage ACK. The scene must post for B's slot 0; bystander A is never traded."""
-    w, blob = trade_world()
-    apply(w, blob, slot=1)
-    w.step(2)
-    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]
-    w.set_party([mon_record(B, OT, species=5, nickname="MON1"), mon_record(A, OT, species=4, nickname="MON0")])
-    mb_ack(w)
-    w.step(2)
-    assert mb_op(w) == NATIVE["OP_TRADE_SCENE"]
-    assert w._read(NATIVE["BASE"] + 16, 1) == 0                 # args: B's slot now
-    w.set_party([PARTNER, mon_record(A, OT, species=4, nickname="MON0")])
-    mb_ack(w)
-    w.step()
-    (done,) = w.events("trade_done")
-    assert (done["slot"], done["new_key"]) == (0, KP)
 
 
-def test_a_reorder_before_the_silent_swap_dispatch_retargets_the_fallback():
-    w, blob = trade_world()
-    apply(w, blob, slot=1)
-    w.step(2)
-    mb_ack(w)
-    w.step()
-    w.set_party([mon_record(B, OT, species=5, nickname="MON1"), mon_record(A, OT, species=4, nickname="MON0")])
-    mb_ack(w, status=FAIL_)                                     # scene failed; B moved meanwhile
-    w.step(2)
-    assert mb_op(w) == NATIVE["OP_SET_PARTY_MON"]
-    assert w._read(NATIVE["BASE"] + 16, 1) == 0                 # the silent swap targets B's slot 0
 
 
-def test_the_offered_mon_leaving_before_the_scene_posts_nothing_for_the_slot():
-    w, blob = trade_world()
-    apply(w, blob, slot=1)
-    w.step(2)
-    w.set_party([mon_record(A, OT, species=4, nickname="MON0")])  # B was boxed meanwhile
-    mb_ack(w)
-    w.step(2)
-    assert mb_op(w) == 0                                         # no scene was posted
-    (done,) = w.events("trade_done")
-    assert (done["new_key"], done["new_species"]) == (KB, 0)     # the authorized "nothing changed"
 
 
 def _paused_gift(w):
@@ -1991,61 +2090,8 @@ def _paused_gift(w):
     w.step()
 
 
-def test_codex_c56c_1_a_queued_but_unposted_trade_does_not_freeze_a_paused_gift():
-    """Codex REV6 repro: apply; step (the stage is only QUEUED: opcode 0, no bytes); the session
-    pauses, the party gains C, mon_given fires, step. capture(KC) must be reported -- and stays
-    the only capture after the trade later completes with [A, PARTNER, C]."""
-    w, blob = trade_world()
-    apply(w, blob)
-    w.step()
-    assert mb_op(w) == 0 and w.writes == []
-    _paused_gift(w)
-    assert [c["key"] for c in w.events("capture")] == [KC]
-    assert w.client.state.trade_apply.posted is not True
-    w.client.writes_enabled, w.client.gate_revoked = True, False
-    w.step()
-    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"] and w.client.state.trade_apply.posted is True
-    mb_ack(w)
-    w.step()
-    w.set_party([mon_record(A, OT, species=4, nickname="MON0"), PARTNER,
-                 mon_record(C, OT, species=6, nickname="MON2")])
-    mb_ack(w)
-    w.step(3)
-    assert [d["new_key"] for d in w.events("trade_done")] == [KP]
-    assert [c["key"] for c in w.events("capture")] == [KC]
 
 
-def test_codex_c57_a_foreign_sink_write_in_the_same_call_does_not_latch_the_trade():
-    """REV7's counterexample at the client seam. In one pre_pump call a panel/NPC callback moves
-    the sink's byte count while our trade job is held at its arm and its guard has already run --
-    exactly the two inputs the old byte-count latch read. The latch must stay unset, because it
-    reads the posting job's own dispatch receipt (native.lua sets `job.posted` when it publishes
-    that job's opcode, and nothing else does)."""
-    w, blob = trade_world()
-    w.command(cmd="config", overworld_presence=False, pc_trade_npc=True)
-    w.step(3)
-    apply(w, blob)
-    w.step()                                                    # the stage is queued, nothing posted
-    assert w.client.state.trade_apply.posted is not True
-    writes = w.parts.writes
-    before = writes.attempted
-    sends = w.client.send
-    def with_a_foreign_byte(*args):
-        writes.attempted = writes.attempted + 1                 # a foreign writer's byte, this call
-        return sends(*args)
-    w.client.send = with_a_foreign_byte
-    counter = NATIVE["PI_COUNT"]
-    w.poke_int(counter, w._read(counter, 1) + 1, 1)             # the NPC branch sends in this call
-    w.client.writes_enabled, w.client.gate_revoked = False, True   # held: the arm refuses
-    w.step()
-    assert writes.attempted > before, "the counter moved with no trade byte in it"
-    posts = w.client.state.trade_apply.posts
-    assert posts is not None and posts[1]["posted"] is None     # our job was attempted, not published
-    assert w.client.state.trade_apply.posted is not True
-    w.client.writes_enabled, w.client.gate_revoked = True, False
-    w.step()
-    assert mb_op(w) == NATIVE["OP_SET_ENEMY_PARTY"]             # the held job then posts...
-    assert w.client.state.trade_apply.posted is True            # ...and the receipt latches it
 
 
 def test_codex_c56c_1_control_the_same_paused_gift_without_a_trade_is_captured():
@@ -2058,56 +2104,10 @@ PARTNER2 = mon_record(0x66666666, 0x00008888, species=26, nickname="RAI")
 KP2 = key_of(0x66666666, 0x00008888)
 
 
-def _unresolve_by_a_stage_seq_overwrite(w, blob, token, old_key=KB, slot=1):
-    apply(w, blob, old_key=old_key, slot=slot, token=token)
-    w.step(2)
-    w.poke_int(NATIVE["BASE"] + MB["seq"], 0xBEEF, 2)           # the stage ACK channel is lost
-    w.step(3)
-    assert w.client.state.trade_unresolved[token] is not None
 
 
-def test_codex_c56c_2_a_second_unresolved_trade_never_hides_the_first_ones_late_fact():
-    """Codex REV6 repro: tr1 goes unresolved (a lost ACK poisons the mailbox), tr2 fails its
-    fallback on the poisoned mailbox and is unresolved too; then tr1's real partner mon appears.
-    tr1's trade_done must come. Option chosen: per-transaction records, each watched."""
-    w, blob = trade_world()
-    _unresolve_by_a_stage_seq_overwrite(w, blob, "tr1")
-    blob2 = w.encode(PARTNER2).hex().upper()
-    # the poisoned mailbox fails the checkpoint's native_idle clause, so tr2 waits out the
-    # field-clear limit and then tries its silent swap on the poisoned mailbox
-    w.client.state.trade_limits.field_wait = 5
-    apply(w, blob2, old_key=KA, slot=0, token="tr2")
-    w.step(8)
-    assert w.client.state.trade_unresolved["tr2"] is not None
-    assert w.events("trade_done") == []
-    swap_in_partner(w)                                           # tr1's partner lands after all
-    w.step()
-    assert [(d["token"], d["new_key"]) for d in w.events("trade_done")] == [("tr1", KP)]
-    assert w.client.state.trade_unresolved["tr1"] is None
-    assert w.client.state.trade_unresolved["tr2"] is not None    # still watched, not overwritten
 
 
-def test_codex_c56c_2_control_a_lone_unresolved_trade_reports_its_late_fact():
-    w, blob = trade_world()
-    _unresolve_by_a_stage_seq_overwrite(w, blob, "tr1")
-    assert w.events("trade_done") == []
-    swap_in_partner(w)
-    w.step()
-    assert [(d["token"], d["new_key"]) for d in w.events("trade_done")] == [("tr1", KP)]
-
-
-def test_codex_major_a_battle_faint_while_an_apply_waits_is_still_reported():
-    """Codex REV4: apply during a battle (the apply waits, nothing posted) and a real player
-    faint: the faint is reduced normally -- only the owned swap lifecycle freezes diffing."""
-    w, blob = trade_world()
-    w.enter_battle([FOE])
-    apply(w, blob)
-    w.step()
-    assert w.client.state.trade_apply.phase == "wait"
-    w.set_party([mon_record(A, OT, species=4, nickname="MON0", hp=0), mon_record(B, OT, species=5, nickname="MON1")])
-    w.fire("faint")
-    w.step()
-    assert [f["key"] for f in w.events("faint")] == [KA]
 
 
 def test_trade_partner_declining_the_confirm_writes_no_party_byte_and_completes_nothing():
@@ -2122,64 +2122,20 @@ def test_trade_partner_declining_the_confirm_writes_no_party_byte_and_completes_
     trade_writes_are_native_only(w)
 
 
-def test_trade_on_rr_clean_has_no_trade_path_writes_nothing_and_completes_nothing():
+def test_trade_on_rr_clean_has_no_trade_path_and_reports_unchanged():
     w = live("gen3_rr", "radical_red", "clean")
     assert w.parts.native is None
     apply(w, w.encode(PARTNER).hex().upper())
     w.step(5)
-    assert w.writes == [] and w.events("trade_done") == []
+    assert w.writes == [] and w.events("trade_done")[-1]["new_key"] == KB
 
 
-def test_trade_with_the_companion_beacon_absent_aborts_with_no_write_and_no_completion():
-    w, blob = trade_world(present=False)
-    apply(w, blob)
-    w.step(5)
-    assert w.writes == [] and w.events("trade_done") == []
-    assert w.client.state.trade_apply is None and any("trade ABORTED" in line for line in w.logs)
 
 
-def test_trade_nothing_changed_when_the_offered_mon_left_the_party():
-    w, blob = trade_world()
-    apply(w, blob, old_key=KC, slot=1)                          # KC was never in the party
-    w.step(2)
-    (done,) = w.events("trade_done")
-    assert (done["new_key"], done["new_species"], done["slot"]) == (KC, 0, 1)
-    assert w.writes == []                                        # the bystander in slot 1 untouched
 
 
-def test_trade_holds_the_checkpoint_queue_then_purges_box_moves_for_the_traded_keys():
-    w, blob = trade_world()
-    w.break_checkpoint()                                         # the apply waits for a clear field
-    apply(w, blob)
-    w.command(cmd="box_mon", key=KB)
-    w.step(3)
-    assert w.client.deferred.size(w.client.deferred) == 1
-    w.overworld_safe()
-    w.step(2)
-    mb_ack(w)
-    w.step()
-    swap_in_partner(w)
-    mb_ack(w)
-    w.step(3)
-    assert w.events("trade_done")[0]["new_key"] == KP
-    assert w.client.deferred.size(w.client.deferred) == 0 and w.events("box_mon_failed") == []
 
 
-def test_trade_request_is_never_sent_while_an_apply_is_in_flight():
-    w, blob = trade_world()
-    w.command(cmd="config", overworld_presence=False, pc_trade_npc=True)
-    w.step(3)
-    counter = NATIVE["PI_COUNT"]
-    w.poke_int(counter, w._read(counter, 1) + 1, 1)             # positive control: an NPC talk
-    w.step()
-    assert len(w.events("trade_request")) == 1
-    w.break_checkpoint()
-    apply(w, blob)
-    w.step()
-    w.poke_int(counter, w._read(counter, 1) + 1, 1)
-    w.step()
-    assert len(w.events("trade_request")) == 1                   # the second one was dropped
-    assert any("trade_request dropped" in line for line in w.logs)
 
 
 # ── card C5-10: the battle request identity ──────────────────────────────────────────────────
@@ -2725,13 +2681,6 @@ def test_c511d_a_plan_stopped_mid_way_is_logged_as_partial():
     assert any("PARTIAL battle_faint write: 2 byte(s) attempted, partial mutation possible" in line for line in w.logs), w.logs[-3:]
 
 
-def test_a_second_apply_while_one_is_in_flight_is_ignored():
-    w, blob = trade_world()
-    w.break_checkpoint()
-    apply(w, blob, token="t1")
-    apply(w, blob, token="t2")
-    w.step()
-    assert w.client.state.trade_apply.token == "t1"
 
 
 # ── static contract ───────────────────────────────────────────────────────────────────────
@@ -2773,3 +2722,63 @@ def test_a_pc_withdraw_is_box_to_party_while_the_party_count_is_stale():
     w.fire("map_load")
     w.step()
     assert [e["key"] for e in w.events("box_to_party")] == [KB]   # no duplicate
+
+
+@pytest.mark.parametrize("pack,title", [("gen3_frlg", "firered"), ("gen3_frlg", "leafgreen"),
+                                        ("gen3_rr", "radical_red")])
+def test_e3_frlg_rr_packs_carry_todays_client_values_explicitly(pack, title):
+    """E3-CLIENT (a): the facts the client used to hard-code are explicit pack fields holding
+    today's values -- committed state 3, identity wire->title SE ids, the server's gift areas."""
+    from server.adapters.gen3_frlge import _GIFT_AREAS
+    wc = json.loads((REPO / "data" / "games" / pack / "write_checkpoint.json")
+                    .read_text(encoding="utf-8"))[title]
+    headers = json.loads((REPO / "data" / "games" / pack / "profile.json")
+                         .read_text(encoding="utf-8"))["titles"][title]["rom"]["SE_SONG_HEADERS"]
+    assert wc["battle"]["commit_guard"]["value"] == 3
+    assert wc["sound"]["se_ids"] == {k: int(k) for k in headers}
+    assert set(wc["gift_areas"]["ids"]) == set(_GIFT_AREAS)
+
+
+def test_every_write_checkpoint_title_carries_se_ids_and_gift_areas_ids():
+    """OMP cx-daf0f544 #7: the client fails closed without either field, so every generated
+    title (admitted or not) must ship both, as a JSON object and a list of non-empty strings."""
+    import sys
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_gen3_write_checkpoint as G
+    seen = []
+    for pack, titles in G.ALL_PACKS.items():
+        wc = json.loads((REPO / "data" / "games" / pack / "write_checkpoint.json")
+                        .read_text(encoding="utf-8"))
+        assert set(wc) == set(titles), pack
+        for title, t in wc.items():
+            assert isinstance(t["sound"]["se_ids"], dict) and t["sound"]["se_ids"], title
+            ids = t["gift_areas"]["ids"]
+            assert isinstance(ids, list) and all(isinstance(i, str) and i for i in ids), title
+            seen.append(title)
+    assert sorted(seen) == ["emerald", "firered", "leafgreen", "radical_red"]
+
+
+def test_gift_areas_has_no_default_for_an_unknown_pack():
+    """OMP cx-daf0f544 #6: only the allowlisted packs get the Kanto list; any other is fatal."""
+    import sys
+    sys.path.insert(0, str(REPO / "tools"))
+    import gen_gen3_write_checkpoint as G
+    assert G.gift_areas("gen3_rr", "radical_red")["ids"] == G.GIFT_AREAS_FRLG
+    with pytest.raises(SystemExit, match="no gift_areas rule"):
+        G.gift_areas("gen3_sapphire", "sapphire")
+
+
+def test_every_pack_maps_every_sound_id_the_server_and_session_send():
+    """OMP cx-6ecf4fc8 #8: the wire ids are a protocol constant (docs/protocol.md 8.2); a cue a
+    title's se_ids lacks is refused on that title only. The server sends 22/25/26/95
+    (server/state.py play_sound), lua/core/session.lua sends 26."""
+    import re
+    wire = {int(n) for n in re.findall(r'"play_sound",\s*"sound":\s*(\d+)', (REPO / "server/state.py").read_text(encoding="utf-8"))}
+    wire |= {int(n) for n in re.findall(r"play_sound\((\d+)", (REPO / "lua/core/session.lua").read_text(encoding="utf-8"))}
+    assert wire >= {22, 25, 26, 95}, wire
+    for pack in ("gen3_frlg", "gen3_rr", "gen3_emerald"):
+        wc = json.loads((REPO / "data/games" / pack / "write_checkpoint.json").read_text(encoding="utf-8"))
+        for title, block in wc.items():
+            if isinstance(block, dict) and "sound" in block:
+                mapped = {int(k) for k in block["sound"]["se_ids"]}
+                assert wire <= mapped, (pack, title, sorted(wire - mapped))

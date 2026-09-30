@@ -1,0 +1,18 @@
+{
+  "evidence": "FR/LG payload bytes retained from native candidate receipts through production commit 3cb4bd72; private whole-ROM live receipts documented in fr_native_trade_abi.md",
+  "source_region_byte": 255,
+  "titles": {
+    "firered": {
+      "offset": 15403808,
+      "size": 8625,
+      "payload_sha256": "bce6a8eaba3ea0bd6aadd147643eac8deb0b3d610a79e80b6e3bf1e6d70f0dd1",
+      "rom_sha256": "421f72aa88f3eda47bbf316cde7a1aac8369aaabae3188987123f1bb7a990007"
+    },
+    "leafgreen": {
+      "offset": 15404564,
+      "size": 8625,
+      "payload_sha256": "f078482f26a8637977b23f013438ff8467e00b38b3ad67f6f5d82104e06670a7",
+      "rom_sha256": "a0e5fe73b888f86abf8d9722703334a3afd1ee5f68d56ed7f8e6ef08eec48db0"
+    }
+  }
+}

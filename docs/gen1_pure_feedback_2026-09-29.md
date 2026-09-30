@@ -2,7 +2,7 @@
 
 Owner reports: post-trade player sprite corruption until area change; trade event log shows keys; full calculator still presents Radical Red; OBS sprites tiny; embedded battle calculator displays only Move 1.
 
-Task checkout `C:/slink-wt/gen1-pure-feedback`, branch `codex/gen1-pure-feedback`, base `abc6bf28cf0e16d1c2c276f768e4d58f35dfec11`. Integration target local `master` requires owner authority. No master merge, push, emulator run or release claim occurred. All author workers acknowledged exact disjoint files; coordinator alone records guide/register.
+Task checkout `C:/slink-wt/gen1-pure-feedback`, branch `codex/gen1-pure-feedback`, base `abc6bf28cf0e16d1c2c276f768e4d58f35dfec11`. Owner subsequently authorized local master integration and matching JAR installation; delivery is recorded below. No push, emulator run or release claim occurred. All author workers acknowledged exact disjoint files; coordinator alone records guide/register.
 
 ## Changes and reuse
 
@@ -55,4 +55,12 @@ Independent isolated reviewer approved source/model candidate `9ece893c4b2bcd04d
 
 PHYSICAL remains unverified for these changes: no emulator or actual OBS run was used. Existing owner run is PureRed `rand_overlay`; changing server/CSS/bridge alone cannot repair graphics code already inside that randomized cartridge. Fresh provisioned cartridges use the rebuilt overlay. An existing-run ROM upgrade must preserve the randomization and saves and regenerate matching admission/contract hashes; do not silently replace or restart the owner's played run.
 
-Next action: owner authority for local master integration; deploy the matching pinned fork resource; then web/OBS refresh and normal-input post-trade movement retest against updated Pure cartridges. No release readiness inference. The same font restore ordering exists in pokered; vanilla follow-up is prospective and outside this owner Pure feedback scope.
+Next action: reload SLink processes and web/OBS views as appropriate; provision updated Pure cartridges or prepare a compatible upgrade of the existing randomized run, then perform a normal-input post-trade movement retest. No release readiness inference. The same font restore ordering exists in pokered; vanilla follow-up is prospective and outside this owner Pure feedback scope.
+
+## Owner-authorized local delivery
+
+2026-09-29T23:56:19Z: owner selected Merge fixes and install JAR. Local master fast-forwarded to reviewed documentation cut `883660a7` (runtime candidate `9ece893c`). Installed `.cache/slink-upr/PokeRandoZX.jar` has SHA-256 `db24703b4da3cea08386c6368ec1acbf37c8fc5e34935348881348581056d0f6`, is allowlisted, and is recognized as a fork by the destination pipeline. Original JAR preserved as `.cache/slink-upr/PokeRandoZX-pre0011-2026-09-29.jar` (SHA-256 `28292b595a411e78beef851e0cd5017a5d4ff592eca9a1db3f8939b0f7ab6e56`). Destination overlay ROMs/symbols/maps/native source were refreshed and all three overlay SHA-1s verified through the destination foundation resolver. Screenshots and CLI smoke evidence preserved under the main checkout cache.
+
+The owned task Git worktree registration and `codex/gen1-pure-feedback` branch are removed. Filesystem residue remains at `C:/slink-wt/gen1-pure-feedback`: Git removal returned Windows permission denied; explicitly verified native recursive cleanup was rejected by automatic approval review as blocked by policy. The duplicate `.cache/slink-upr/PokeRandoZX-pure-feedback-install.tmp` also remains after native single-file cleanup was rejected by the same policy. No alternative deletion mechanism was attempted. The remaining folder is not a registered or active worktree.
+
+No played ROM, save, live process or OBS session was changed. Existing processes need normal restart/refresh to load applicable server/UI changes. The existing played randomized cartridge needs a compatible code/contract upgrade for the native sprite fix; this remains a separate delivery action. No physical or release claim.

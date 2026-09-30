@@ -1,0 +1,387 @@
+{
+  "source_commit": "c65e93f20a5275ab03b07d6f6411096a82a60ffd",
+  "symbols_sha256": "a0a134789ca3dda4ae677a91a10fbe5f0d72008b83382ed56a5713d4131807cc",
+  "rom_sha1": "f3ae088181bf583e55daf962a92bb46f4f1d07b7",
+  "bindings": {
+    "HEAP_BASE": {
+      "symbol": "EWRAM_START",
+      "symbol_address": 33554432,
+      "offset": 0
+    },
+    "HEAP_INIT": {
+      "symbol": "InitHeap",
+      "symbol_address": 134220572,
+      "offset": 0
+    },
+    "HEAP_START_PTR": {
+      "symbol": "sHeapStart",
+      "symbol_address": 50331652,
+      "offset": 0
+    },
+    "HEAP_SIZE_PTR": {
+      "symbol": "sHeapSize",
+      "symbol_address": 50331656,
+      "offset": 0
+    },
+    "PUT_FIRST_HEADER": {
+      "symbol": "PutFirstMemBlockHeader",
+      "symbol_address": 134220196,
+      "offset": 0
+    },
+    "ALLOC_INTERNAL": {
+      "symbol": "AllocInternal",
+      "symbol_address": 134220216,
+      "offset": 0
+    },
+    "FREE_INTERNAL": {
+      "symbol": "FreeInternal",
+      "symbol_address": 134220320,
+      "offset": 0
+    },
+    "FRAME_ENTRY": {
+      "symbol": "CallCallbacks",
+      "symbol_address": 134219036,
+      "offset": 0
+    },
+    "GMAIN": {
+      "symbol": "gMain",
+      "symbol_address": 50340544,
+      "offset": 0
+    },
+    "FIELD_CALLBACK": {
+      "symbol": "CB2_Overworld",
+      "symbol_address": 134766172,
+      "offset": 1
+    },
+    "FIELD_LOCK": {
+      "symbol": "sLockFieldControls",
+      "symbol_address": 50335532,
+      "offset": 0
+    },
+    "SCRIPT_SETUP": {
+      "symbol": "ScriptContext_SetupScript",
+      "symbol_address": 134844152,
+      "offset": 0
+    },
+    "TRADE_SCENE": {
+      "symbol": "DoInGameTradeScene",
+      "symbol_address": 134738148,
+      "offset": 0
+    },
+    "ENEMY_PARTY": {
+      "symbol": "gEnemyParty",
+      "symbol_address": 33703748,
+      "offset": 0
+    },
+    "ENEMY_COUNT": {
+      "symbol": "gEnemyPartyCount",
+      "symbol_address": 33703146,
+      "offset": 0
+    },
+    "TRADE_SLOT_VAR": {
+      "symbol": "gSpecialVar_0x8005",
+      "symbol_address": 33781218,
+      "offset": 0
+    },
+    "TRADE_TABLE_VAR": {
+      "symbol": "gSpecialVar_0x8004",
+      "symbol_address": 33781216,
+      "offset": 0
+    },
+    "STR_VAR1": {
+      "symbol": "gStringVar1",
+      "symbol_address": 33692868,
+      "offset": 0
+    },
+    "STR_VAR3": {
+      "symbol": "gStringVar3",
+      "symbol_address": 33693380,
+      "offset": 0
+    },
+    "PLAYER_PARTY": {
+      "symbol": "gPlayerParty",
+      "symbol_address": 33703148,
+      "offset": 0
+    },
+    "PLAYER_COUNT": {
+      "symbol": "gPlayerPartyCount",
+      "symbol_address": 33703145,
+      "offset": 0
+    },
+    "SCRIPT_STATUS": {
+      "symbol": "sGlobalScriptContextStatus",
+      "symbol_address": 50335288,
+      "offset": 0
+    },
+    "AVATAR_TRANSITION": {
+      "symbol": "gPlayerAvatar",
+      "symbol_address": 33781136,
+      "offset": 3
+    },
+    "PALETTE_ACTIVE": {
+      "symbol": "gPaletteFade",
+      "symbol_address": 33783764,
+      "offset": 7
+    },
+    "REMOTE_LINK_PLAYERS": {
+      "symbol": "gReceivedRemoteLinkPlayers",
+      "symbol_address": 50344228,
+      "offset": 0
+    },
+    "LINK_TRANSFERRING": {
+      "symbol": "gLinkTransferringData",
+      "symbol_address": 50340532,
+      "offset": 0
+    },
+    "SPECIAL_RESULT": {
+      "symbol": "gSpecialVar_Result",
+      "symbol_address": 33781232,
+      "offset": 0
+    },
+    "ASK_SAVE": {
+      "symbol": "SaveGame",
+      "symbol_address": 134872960,
+      "offset": 0
+    },
+    "SAVE_MAP": {
+      "symbol": "SaveMapView",
+      "symbol_address": 134775748,
+      "offset": 0
+    },
+    "SAVE_NORMAL": {
+      "symbol": "TrySavingData",
+      "symbol_address": 135607096,
+      "offset": 0
+    },
+    "SAVE_DIALOG_PTR": {
+      "symbol": "sSaveDialogCallback",
+      "symbol_address": 33781276,
+      "offset": 0
+    },
+    "SAVE_PRINTING_CB": {
+      "symbol": "SaveSavingMessageCallback",
+      "symbol_address": 134873652,
+      "offset": 1
+    },
+    "SAVE_WRITING_CB": {
+      "symbol": "SaveDoSaveCallback",
+      "symbol_address": 134873676,
+      "offset": 1
+    },
+    "GET_MON_DATA": {
+      "symbol": "GetMonData2",
+      "symbol_address": 134653208,
+      "offset": 0
+    },
+    "ITEM_IS_MAIL": {
+      "symbol": "ItemIsMail",
+      "symbol_address": 135088060,
+      "offset": 0
+    },
+    "TRADE_MON": {
+      "symbol": "TradeMons",
+      "symbol_address": 134722768,
+      "offset": 0
+    },
+    "EVO_GETTER": {
+      "symbol": "GetEvolutionTargetSpecies",
+      "symbol_address": 134664344,
+      "offset": 0
+    },
+    "PANEL_NORMAL_MENU": {
+      "symbol": "BuildNormalStartMenu",
+      "symbol_address": 134870220,
+      "offset": 0
+    },
+    "PANEL_APPEND": {
+      "symbol": "AddStartMenuAction",
+      "symbol_address": 134870192,
+      "offset": 0
+    },
+    "PANEL_FLAG_GET": {
+      "symbol": "FlagGet",
+      "symbol_address": 134862736,
+      "offset": 0
+    },
+    "PANEL_EXIT": {
+      "symbol": "StartMenuExitCallback",
+      "symbol_address": 134872420,
+      "offset": 0
+    },
+    "PANEL_FADE": {
+      "symbol": "FadeScreen",
+      "symbol_address": 134921424,
+      "offset": 0
+    },
+    "PANEL_ACTION_TABLE": {
+      "symbol": "sStartMenuItems",
+      "symbol_address": 139527488,
+      "offset": 0
+    },
+    "PANEL_ADD_WINDOW": {
+      "symbol": "AddWindow",
+      "symbol_address": 134230912,
+      "offset": 0
+    },
+    "PANEL_PUT_TILEMAP": {
+      "symbol": "PutWindowTilemap",
+      "symbol_address": 134231948,
+      "offset": 0
+    },
+    "PANEL_BORDER": {
+      "symbol": "SetStandardWindowBorderStyle",
+      "symbol_address": 135886932,
+      "offset": 0
+    },
+    "PANEL_PRINT": {
+      "symbol": "AddTextPrinterParameterized4",
+      "symbol_address": 135896812,
+      "offset": 0
+    },
+    "PANEL_WIDTH": {
+      "symbol": "GetStringWidth",
+      "symbol_address": 134242008,
+      "offset": 0
+    },
+    "PANEL_RECT": {
+      "symbol": "FillWindowPixelRect",
+      "symbol_address": 134232932,
+      "offset": 0
+    },
+    "PANEL_COPY": {
+      "symbol": "CopyWindowToVram",
+      "symbol_address": 134231640,
+      "offset": 0
+    },
+    "PANEL_CURSOR": {
+      "symbol": "InitMenuNormal",
+      "symbol_address": 135889836,
+      "offset": 0
+    },
+    "PANEL_CREATE_TASK": {
+      "symbol": "CreateTask",
+      "symbol_address": 134909872,
+      "offset": 0
+    },
+    "PANEL_INPUT_TASK": {
+      "symbol": "Task_HandleMultichoiceInput",
+      "symbol_address": 135143512,
+      "offset": 0
+    },
+    "PANEL_TASKS": {
+      "symbol": "gTasks",
+      "symbol_address": 50355712,
+      "offset": 0
+    },
+    "PANEL_DELAY": {
+      "symbol": "sProcessInputDelay",
+      "symbol_address": 33791888,
+      "offset": 0
+    },
+    "PANEL_BG_COPY": {
+      "symbol": "ScheduleBgCopyTilemapToVram",
+      "symbol_address": 135895484,
+      "offset": 0
+    },
+    "PANEL_SCRIPT_ENABLE": {
+      "symbol": "ScriptContext_Enable",
+      "symbol_address": 134844220,
+      "offset": 0
+    },
+    "CARRIER_OBJECTS": {
+      "symbol": "gObjectEvents",
+      "symbol_address": 33780560,
+      "offset": 0
+    },
+    "CARRIER_AVATAR": {
+      "symbol": "gPlayerAvatar",
+      "symbol_address": 33781136,
+      "offset": 0
+    },
+    "CARRIER_SPAWN": {
+      "symbol": "SpawnSpecialObjectEventParameterized",
+      "symbol_address": 134798404,
+      "offset": 0
+    },
+    "CARRIER_REMOVE": {
+      "symbol": "RemoveObjectEvent",
+      "symbol_address": 134797488,
+      "offset": 0
+    },
+    "CARRIER_CHOOSE": {
+      "symbol": "ChoosePartyMon",
+      "symbol_address": 136025264,
+      "offset": 0
+    },
+    "SOUND_SE": {
+      "symbol": "PlaySE",
+      "symbol_address": 134887332,
+      "offset": 0
+    },
+    "SOUND_FANFARE": {
+      "symbol": "PlayFanfare",
+      "symbol_address": 134885604,
+      "offset": 0
+    },
+    "RIVAL_START": {
+      "symbol": "CB2_HandleStartBattle",
+      "symbol_address": 134442924,
+      "offset": 0
+    },
+    "RIVAL_DUMMY": {
+      "symbol": "BeginBattleIntroDummy",
+      "symbol_address": 134454984,
+      "offset": 0
+    },
+    "RIVAL_COMM": {
+      "symbol": "gBattleCommunication",
+      "symbol_address": 33702706,
+      "offset": 0
+    },
+    "RIVAL_MAIN_FUNC": {
+      "symbol": "gBattleMainFunc",
+      "symbol_address": 50355460,
+      "offset": 0
+    },
+    "RIVAL_FLAGS": {
+      "symbol": "gBattleTypeFlags",
+      "symbol_address": 33697772,
+      "offset": 0
+    },
+    "RIVAL_TRAINER": {
+      "symbol": "gTrainerBattleOpponent_A",
+      "symbol_address": 33786826,
+      "offset": 0
+    },
+    "CALL_SHOW": {
+      "symbol": "ShowPokenavFieldMessage",
+      "symbol_address": 134840888,
+      "offset": 0
+    },
+    "CALL_MODE": {
+      "symbol": "GetFieldMessageBoxMode",
+      "symbol_address": 134841136,
+      "offset": 0
+    },
+    "CALL_TASK": {
+      "symbol": "ExecuteMatchCall",
+      "symbol_address": 135880928,
+      "offset": 0
+    },
+    "CALL_ACTIVE": {
+      "symbol": "IsMatchCallTaskActive",
+      "symbol_address": 135880852,
+      "offset": 0
+    },
+    "CALL_SPECIES_NAMES": {
+      "symbol": "gSpeciesNames",
+      "symbol_address": 137463240,
+      "offset": 0
+    },
+    "CALL_SCRIPT_CONTEXT": {
+      "symbol": "sGlobalScriptContext",
+      "symbol_address": 50335296,
+      "offset": 0
+    }
+  }
+}

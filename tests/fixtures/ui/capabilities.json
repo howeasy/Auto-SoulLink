@@ -391,8 +391,37 @@
       "Mind Badge",
       "Rain Badge"
     ],
-    "explode_mode": false,
+    "explode_mode": true,
     "game_id": "gen3_frlge",
+    "info_panel": true,
+    "info_panel_width": 0,
+    "memorial_box_index": 13,
+    "mons_per_box": 30,
+    "party_blob_size": 100,
+    "stat_stage_labels": [
+      "ATK",
+      "DEF",
+      "SPD",
+      "SATK",
+      "SDEF",
+      "ACC",
+      "EVA"
+    ]
+  },
+  "emerald_expansion_28877d73": {
+    "abilities": true,
+    "badges": [
+      "Stone Badge",
+      "Knuckle Badge",
+      "Dynamo Badge",
+      "Heat Badge",
+      "Balance Badge",
+      "Feather Badge",
+      "Mind Badge",
+      "Rain Badge"
+    ],
+    "explode_mode": false,
+    "game_id": "gen3_exp",
     "info_panel": false,
     "info_panel_width": 0,
     "memorial_box_index": 13,
@@ -420,9 +449,9 @@
       "Volcano Badge",
       "Earth Badge"
     ],
-    "explode_mode": false,
+    "explode_mode": true,
     "game_id": "gen3_frlge",
-    "info_panel": false,
+    "info_panel": true,
     "info_panel_width": 0,
     "memorial_box_index": 13,
     "mons_per_box": 30,
@@ -618,9 +647,9 @@
       "Volcano Badge",
       "Earth Badge"
     ],
-    "explode_mode": false,
+    "explode_mode": true,
     "game_id": "gen3_frlge",
-    "info_panel": false,
+    "info_panel": true,
     "info_panel_width": 0,
     "memorial_box_index": 13,
     "mons_per_box": 30,

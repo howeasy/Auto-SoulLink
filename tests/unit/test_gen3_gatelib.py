@@ -115,7 +115,6 @@ FAKE.patch = function()
     local args, seq = P.BASE + 16, FAKE.r16(P.BASE + 8)
     FAKE.consumed_at = emu.framecount()
     FAKE.w(P.BASE + 6, 0, 2)                          -- opcode consumed
-    local function copy(dst, n) for i = 0, n - 1 do FAKE.mem[dst + i] = FAKE.mem[P.BLOB_BUF + i] end end
     if FAKE.fms and op == P.OP_FORCE_MOVE_SLOT then
         local b, pos = FAKE.mem[args] or 0, FAKE.mem[args + 2] or 0
         FAKE.w(P.BASE + 10, 1, 2)                     -- ST_BUSY: armed until the controller fires
@@ -129,17 +128,9 @@ FAKE.patch = function()
         end)
         return
     end
-    if FAKE.status == 2 and op == P.OP_SET_PARTY_MON then
-        local slot = FAKE.mem[args] or 0
-        copy(ram.PARTY_BASE + slot * 100, 100)
-        if (FAKE.mem[args + 1] or 0) == 1 and (FAKE.mem[ram.PARTY_COUNT_ADDR] or 0) < slot + 1 then
-            FAKE.mem[ram.PARTY_COUNT_ADDR] = slot + 1
-        end
-    elseif FAKE.status == 2 and op == P.OP_SET_ENEMY_PARTY then
-        local n = FAKE.mem[args] or 0
-        copy(ram.ENEMY_BASE, n * 100)
-        FAKE.mem[ram.ENEMY_COUNT_ADDR] = n
-        FAKE.w(ram.ENEMY_BASE + n * 100 + 0x58, 0, 2)
+    if FAKE.status == 2 and (op == P.OP_SET_PARTY_MON or op == P.OP_SET_ENEMY_PARTY) then
+        finish(seq, 3, 9)       -- RR-DURABLE: the working patch refuses the raw trade bypasses
+        return
     elseif FAKE.status == 2 and op == P.OP_FORCE_FAINT then
         FAKE.w(0x02023BE4 + (FAKE.mem[args] or 0) * 0x58 + 0x28, 0, 2)
     elseif FAKE.status == 2 and op == P.OP_FORCE_MOVE then

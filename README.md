@@ -71,8 +71,8 @@ Open **http://localhost:8090/** on the machine running the Manager.
 <img src="docs/images/manager-new.png" width="900" alt="Creating a run: choose a name, game family, and optional rules">
 
 1. **Create a run.** Give it a name, choose your game family, and select the rules you
-   want to use. For Red/Blue/Yellow and pureRGB, you can also prepare each player's
-   game and choose randomizer settings here.
+   want to use. Game preparation and randomizer settings appear where the selected
+   game family supports them.
 2. **Download each player's setup.** Open **Launchers** on the run page and download
    the Player A and Player B setup ZIPs. Each includes the SLink runtime and that
    player's launcher. Download the prepared game files too if your run made them.
@@ -99,11 +99,12 @@ features matter, so use the game's setup options when preparing a run.
 | **PureRed, PureBlue, PureGreen** ([pureRGB](https://github.com/Vortyne/pureRGB)) | Two compatible pureRGB games; separate from vanilla Red/Blue/Yellow |
 | **Gold, Silver, Crystal** | Two games from this family |
 | **FireRed, LeafGreen** | Two games from this family |
+| **Emerald** | Emerald on both sides |
 | **Radical Red 4.1** | Radical Red on both sides |
 | **Archipelago Red/Blue** | Compatible Archipelago builds |
 
-Emerald and Archipelago FireRed/LeafGreen are disabled in this checkout's new-run
-form. Gen 4 and Gen 5 work is experimental and isn't offered there yet.
+Archipelago FireRed/LeafGreen is disabled in this checkout's new-run form.
+Gen 4 and Gen 5 work is experimental and isn't offered there yet.
 
 Testing is performed with ROMs in **BizHawk emulation**. SLink is in active development;
 the list above describes available choices, not a completed playthrough of every game.
@@ -112,7 +113,7 @@ See the [runtime checks](docs/gen1_gen2_runtime_checks.md) and
 
 ## Prepare your games
 
-For Red/Blue/Yellow and pureRGB runs, the Manager can build a randomized pair with
+For game families that support randomization, the Manager can build a pair with
 **the same settings and different seeds**. Choose encounters, trainers, items, and
 difficulty settings in the form. The available settings keep both games compatible
 with the Soul Link rules.

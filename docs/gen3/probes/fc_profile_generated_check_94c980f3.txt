@@ -1,0 +1,11 @@
+# gen3_final_cut row=profile_generated_check item=§13.1_source cut=94c980f352113f3b5772dc4e2c9bba7acb5308df
+# lane=C:/slink-wt/emerald-fc
+# command: python tools/gen_gen3_profile.py --check   (cwd=C:/slink-wt/emerald-fc)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-26T15:31:33 cpu=69% emuhawk=7 python=12
+start_utc=2026-09-26T19:31:31Z tracked_clean_before=True
+data/games/gen3_{frlg,rr,emerald}/profile.json are current
+exit=0 end_utc=2026-09-26T19:31:34Z tracked_clean_after=True classification=pass

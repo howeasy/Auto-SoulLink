@@ -1,0 +1,107 @@
+-- harness_rows.sym -- hash-bound slice of pokeemerald.sym (card X3-FIX).
+-- Contains only the rows tools/gen_gen3_title_syms_exp.py consumes, so the tests can run in CI
+-- without the 4.6 MB full artifact. full sha256 ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e size 4812449
+-- (data/games/gen3_exp/28877d73/facts.json provenance.artifacts["pokeemerald.sym"]).
+-- Each "-- line N" comment records that row's line number in the FULL .sym, so addresses/
+-- citations generated from this slice are byte-identical to those generated from the full file
+-- (see test_slice_rows_match_full_sym_when_present in tests/unit/test_gen3_title_syms_exp.py).
+-- DO NOT EDIT BY HAND: regenerate by re-extracting these exact rows, with their original line
+-- numbers, from a pin-verified pokeemerald.sym for this build (28877d73).
+-- line 58
+020000d8 g 00000001 gBattleOutcome
+-- line 83
+02000248 g 00000004 gActionSelectionCursor
+-- line 84
+0200024c g 00000004 gMoveSelectionCursor
+-- line 100
+020002a8 g 00000002 gLastUsedItem
+-- line 256
+0200156e g 00000002 gSpecialVar_Result
+-- line 287
+02006624 g 00000240 gObjectEvents
+-- line 334
+02006bb8 g 0000001c gBagPosition
+-- line 335
+02006bd4 g 00000004 gBagMenu
+-- line 336
+02006bd8 g 00000002 gSpecialVar_ItemId
+-- line 379
+020310c8 l 0000000c sMenu
+-- line 402
+02031194 l 00000004 sMenu
+-- line 441
+02031ab4 g 00000014 gPartyMenu
+-- line 473
+02031b54 g 00000004 gPartiesCount
+-- line 478
+02031b64 g 00000960 gParties
+-- line 481
+020324cc l 00000004 sStorage
+-- line 482
+020324d0 l 00000001 sCursorArea
+-- line 490
+020324e4 l 00000001 sCursorPosition
+-- line 501
+02032556 l 00000001 sDepositBoxId
+-- line 690
+020372c0 l 00000004 sMenu
+-- line 902
+030016c5 l 00000001 sGlobalScriptContextStatus
+-- line 951
+030023ec g 00000010 gBattlerControllerFuncs
+-- line 959
+0300241c g 00000058 gBattleResults
+-- line 1029
+030051c0 g 00000004 gSaveBlock2Ptr
+-- line 1052
+030066c0 g 0000043c gMain
+-- line 1083
+03006c20 g 00000280 gTasks
+-- line 3137
+08057d38 l 000001a4 HandleInputChooseAction
+-- line 3192
+08059db0 l 00000068 PlayerBufferRunCommand
+-- line 3206
+0805a208 g 0000008c PlayerBufferExecCompleted
+-- line 3243
+0805bee0 g 0000073c HandleInputChooseMove
+-- line 3248
+0805ccd4 l 000003e4 HandleInputChooseAction
+-- line 3319
+0805f604 l 000000d8 HandleInputChooseAction
+-- line 3933
+08083d10 g 00000070 BattleMainCB2
+-- line 9602
+081650d0 g 0000001a CB2_BagMenuRun
+-- line 9645
+08167124 l 00000058 Task_ItemContext_SingleRow
+-- line 9672
+0816812c l 00000304 Task_BagMenu_HandleInput
+-- line 11149
+0818fc18 l 00000016 CB2_NamingScreen
+-- line 11431
+08198ee0 l 0000001a CB2_UpdatePartyMenu
+-- line 11595
+0819f45c l 00000074 Task_ReturnToChooseMonAfterText
+-- line 11615
+081a0464 l 000000d0 Task_HandleSelectionMenuInput
+-- line 11617
+081a06d0 g 000008ec Task_HandleChooseMonInput
+-- line 12720
+081ce6ec l 000003fc Task_PCMainMenu
+-- line 12725
+081ceef4 l 0000013c Task_WithdrawMon
+-- line 12730
+081cfd64 l 00000238 Task_OnBPressed
+-- line 12742
+081d1424 l 00000468 Task_OnSelectedMon
+-- line 12743
+081d188c l 000005cc Task_PokeStorageMain
+-- line 12752
+081d2274 l 0000027c Task_DepositMenu
+-- line 12753
+081d24f0 l 000005fc Task_ReleaseMon
+-- line 14011
+081fbcec l 00000064 Task_HandleYesNoInput
+-- line 14018
+081fbf7c l 000000a4 Task_HandleMultichoiceInput

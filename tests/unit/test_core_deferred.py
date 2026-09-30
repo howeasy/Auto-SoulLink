@@ -140,6 +140,24 @@ def test_one_command_per_frame():
     assert q.calls("faint_slot") == [("faint_slot", 0), ("faint_slot", 1)] and q.size() == 0
 
 
+@pytest.mark.parametrize("nickname,expected", [
+    (None, "!! Your Pokemon KO'd"),
+    ("", "!! Your Pokemon KO'd"),
+    ("   ", "!! Your Pokemon KO'd"),
+    ("SPARKY", "!! SPARKY KO'd"),
+])
+def test_deferred_faint_banner_never_exposes_a_key(nickname, expected):
+    q = Queue()
+    cmd = {"cmd": "force_faint", "key": A}
+    if nickname is not None:
+        cmd["nickname"] = nickname
+    q.push(**cmd)
+    q.run()
+    assert q.calls("faint_slot") == [("faint_slot", 0)]
+    assert q.hud == [expected]
+    assert A not in q.hud[0] and A[:8] not in q.hud[0]
+
+
 def test_a_closed_gate_runs_nothing_keeps_the_queue_and_reports_the_hold():
     q = Queue()
     q.gate = (False, "not at the overworld checkpoint")
@@ -222,8 +240,8 @@ def test_an_error_after_the_reply_sends_nothing_more():
 
 
 def test_r1_a_sink_that_throws_on_byte_two_is_uncertain_through_the_real_writes_lua():
-    """The real lua/gen3/writes.lua: byte 1 lands, the sink throws on byte 2 before any log
-    receipt exists. Its attempt counter moved, so the reply is 'uncertain', never a retry."""
+    """The real sink logs a partial receipt when byte 2 throws after byte 1 landed.
+    Its attempt counter moved, so the reply remains 'uncertain', never a retry."""
     q = Queue()
     L = q.lua
     ram, calls = {}, []
@@ -243,7 +261,8 @@ def test_r1_a_sink_that_throws_on_byte_two_is_uncertain_through_the_real_writes_
     q.q.exec.write_count = L.eval("function(w) return function() return w.attempted end end")(writes)
     q.push(cmd="box_mon", key=A)
     q.drain(5)
-    assert ram == {4096: 1} and len(writes.log) == 0            # RAM changed, no receipt
+    assert ram == {4096: 1} and len(writes.log) == 1
+    assert writes.log[1].partial and writes.log[1].completed == 1 and writes.log[1].attempted == 2
     assert writes.attempted == 2 and len(calls) == 2              # never retried
     (fail,) = q.sends("box_mon_failed")
     assert fail["reason"].startswith("uncertain: partial write")

@@ -1,0 +1,93 @@
+{
+  "schema_version": 1,
+  "build": "reference",
+  "source": {
+    "url": "https://github.com/rh-hideout/pokeemerald-expansion.git",
+    "tag": "expansion/1.17.0",
+    "commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
+  },
+  "compiler": {
+    "path": "/usr/bin/arm-none-eabi-gcc",
+    "version": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+    "sha256": "38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59",
+    "status": "provisional",
+    "host": "Linux",
+    "ssh_alias": "hgbox",
+    "package": "gcc-arm-none-eabi",
+    "package_version": "15:13.2.rel1-2"
+  },
+  "config_headers": {
+    "include/config/ai.h": "e02715eb465d29944cfdf8a65ab270fcea9ffed84a9963a27bcc017dbbbdcea2",
+    "include/config/battle.h": "56d3eb68994173519b3910781e29de112d8dc6cf040928b9151917cc1026f94c",
+    "include/config/caps.h": "9736cf6ac82da0743b40cab86750a0f496430bb82829724cf013a39f151f6d48",
+    "include/config/contest.h": "23097e4537a9046f9084181dc00eb8f5e1ac998fd79a07466b81a509de94ab6e",
+    "include/config/debug.h": "866e0841ddf91176dc8f2144a039de70997908168acef539c556590d9c837d47",
+    "include/config/dexnav.h": "606e82fc4efa155d0d8b90b704497a062ffecf18e404f0a334956d5ad0c6e543",
+    "include/config/fishing.h": "a19ef43b62d92da6c0ec674fd798c93bfa100fc339b755aa675f5c7d56919c7a",
+    "include/config/follower_npc.h": "7473fad59ffe7db1a530dbfab3924cb97144dc3e7d1735af82918c03ecef6958",
+    "include/config/general.h": "270073678c6849e9d16816bc6dcaecdd1124988353a1e7d0dc2552e13e187fd5",
+    "include/config/item.h": "ce169ff6908456b6d337dc207328b5a3bfb41a3e7b46e79cbffd70fdcf6c747f",
+    "include/config/map_preview_screen.h": "bd0b33b507fac833f364fa61f796ca5a2047f672feba76c798d9e63e170c0560",
+    "include/config/name_box.h": "e5fb790a23cd2b5c01e4c5139c44f2cff6dc34dd7f8161cff2bf5f1ca2a61ba6",
+    "include/config/overworld.h": "85d30914688cbc1c24226568977333fc3656befc558f3840d8b1c2c3671cb2fd",
+    "include/config/pokedex_plus_hgss.h": "9b2663061b2c199e25a40fc51d8727ba01d972ab76b49aadc2f6ebcf7862d747",
+    "include/config/pokemon.h": "e476277d082276ac078452c44482cf9b3b6fb076159fe4745f0774bc276b85ba",
+    "include/config/pokerus.h": "6e0e78b779b45ecce4aa3f1ce840e4cef41d10c30926417c67a1b26b4ca4a4da",
+    "include/config/quickstart.h": "2f36941f8dc75b7a60540a0b12bc24ab09d6082314a1c97ee023d09a7fabf5d3",
+    "include/config/save.h": "cdad2f5dcd783f59b6b53e0ab9649659e683ef61cb07efe79727dd9fdac9dd45",
+    "include/config/species_enabled.h": "86a829d83a344bf23440a586706bf3c91ccef9a02c145afa0d1844c8824374eb",
+    "include/config/summary_screen.h": "ddaef0f2a089d9e09b053d7df3d123c524bdd862c866a9c3eb0cf38a7e4f6849",
+    "include/config/test.h": "63cbf70c00fee57daf812c5b18809030f6205afe4263d9c7ace7e258abc67fd1",
+    "include/config/text.h": "2c4f70e37f708c2d718a88331d3423e5c510805c0093213264a4788e88f91ee6",
+    "include/config/wild_encounter.h": "026ea3f8608fc61c847df71d4042cd841a5523929a9eb3bc3e0c894fd7f6eaab"
+  },
+  "make_variables": {
+    "BUILD": "emerald",
+    "DEBUG": "0",
+    "RELEASE": "0",
+    "LTO": "0",
+    "TEST": "0"
+  },
+  "make_targets": [
+    "all",
+    "syms"
+  ],
+  "host_toolchain": {
+    "distro": "NAME=\"Linux Mint\"\nVERSION=\"22.3 (Zena)\"\nID=linuxmint\nID_LIKE=\"ubuntu debian\"\nPRETTY_NAME=\"Linux Mint 22.3\"\nVERSION_ID=\"22.3\"\nHOME_URL=\"https://www.linuxmint.com/\"\nSUPPORT_URL=\"https://forums.linuxmint.com/\"\nBUG_REPORT_URL=\"http://linuxmint-troubleshooting-guide.readthedocs.io/en/latest/\"\nPRIVACY_POLICY_URL=\"https://www.linuxmint.com/\"\nVERSION_CODENAME=zena\nUBUNTU_CODENAME=noble\n",
+    "packages": {
+      "build-essential": "12.10ubuntu1",
+      "binutils-arm-none-eabi": "2.42-1ubuntu1+23",
+      "gcc-arm-none-eabi": "15:13.2.rel1-2",
+      "libnewlib-arm-none-eabi": "4.4.0.20231231-2",
+      "git": "1:2.43.0-1ubuntu7.3",
+      "libpng-dev": "1.6.43-5ubuntu0.6",
+      "python3": "3.12.3-0ubuntu2.1",
+      "pkg-config": "1.8.1-2build1",
+      "make": "4.3-4.1build2",
+      "gcc": "4:13.2.0-7ubuntu1"
+    },
+    "tools": {
+      "arm-none-eabi-gcc": {
+        "path": "/usr/bin/arm-none-eabi-gcc",
+        "version": "arm-none-eabi-gcc (15:13.2.rel1-2) 13.2.1 20231009\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+        "sha256": "38fc178604a84beb10f9adb8ea243bd5e0475a9e6e31c9270f53e2fcaa79ec59"
+      },
+      "gcc": {
+        "path": "/usr/bin/gcc",
+        "version": "gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.",
+        "sha256": "1b99826121ae6682a634e5efe09bd3e3df58ce58e0b28f849114ab5b89139c26"
+      },
+      "make": {
+        "path": "/usr/bin/make",
+        "version": "GNU Make 4.3\nBuilt for x86_64-pc-linux-gnu\nCopyright (C) 1988-2020 Free Software Foundation, Inc.\nLicense GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>\nThis is free software: you are free to change and redistribute it.\nThere is NO WARRANTY, to the extent permitted by law.",
+        "sha256": "d78b8f1d099fbcfb6f2f49ab87223b9b68fb3956642f92d6ec6de812e8afa965"
+      }
+    }
+  },
+  "host_patches": [],
+  "expected_rom": {
+    "sha1": "28877d733492299599f2b8fff50493109d72653c",
+    "md5": "83bde8deeaa27453b12545b9cfffe3a6",
+    "size": 33554432
+  }
+}

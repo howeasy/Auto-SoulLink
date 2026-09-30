@@ -91,7 +91,7 @@
           "expect": 1,
           "name": "battle_exec_flags_input",
           "offset": 0,
-          "source": "profile.ram.BATTLE_CONTROLLER_EXEC_FLAGS_ADDR; rom:patch/build/slink_RR.gba sha1=7a3867499d66eb3621e0e7dde43bd033fc679f01 controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; OR/STR@0x17266..0x1726A,0x17284..0x1728A; controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204",
+          "source": "profile.ram.BATTLE_CONTROLLER_EXEC_FLAGS_ADDR; rom:patch/build/slink_RR.gba sha1=da579690db7d6933a0952a1f490312842793f71a controller_exec_marker:LDR@0x1725A/0x1727C pools@0x17274/0x17290; OR/STR@0x17266..0x1726A,0x17284..0x1728A; controller_exec_reader:LDR@0x141DC pool@0x14234,word-test@0x141FC..0x14204",
           "symbol": "BATTLE_CONTROLLER_EXEC_FLAGS_ADDR",
           "width": 4
         },
@@ -284,6 +284,19 @@
       "pc_min": 0,
       "thumb": 0
     },
+    "gift_areas": {
+      "ids": [
+        "celadon_condominiums",
+        "cinnabar_lab",
+        "gift",
+        "intro",
+        "oaks_lab",
+        "route_4_pokecenter",
+        "saffron_dojo",
+        "silph_co_7f"
+      ],
+      "source": "server/adapters/gen3_frlge.py _GIFT_AREAS"
+    },
     "native": {
       "abi": 1,
       "abi_off": 4,
@@ -361,6 +374,12 @@
           "size": 264,
           "start": 33815876,
           "what": "SlinkInfo"
+        },
+        {
+          "key": "TRADE_BASE",
+          "size": 4,
+          "start": 33816212,
+          "what": "RR-DURABLE shadow session_epoch (the only host-written word of the durable block)"
         }
       ],
       "status_off": 10,
@@ -547,6 +566,18 @@
       "iwram_min": 50331648,
       "player_head_off": 36,
       "player_next_off": 60,
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "193": 193,
+        "2": 2,
+        "22": 22,
+        "25": 25,
+        "26": 26,
+        "268": 268,
+        "79": 79,
+        "95": 95
+      },
       "source": "old client archive/gen3-old-client:lua/memory_gba.lua:1945-1996 (SOUND_INFO_PTR + the linked-list walk)",
       "track0_off": 0,
       "tracks_off": 44,

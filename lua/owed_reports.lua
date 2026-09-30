@@ -48,7 +48,7 @@ function OwedReports.new()
     -- Per frame, and after each new report. Called every frame the socket is down, so a reply line
     -- still queued from the dead connection (drained the same frame) never counts on the next one:
     -- the connector waits RECONNECT_FRAMES before reconnecting.
-    function self:step(connected, ready, send)
+    function self:step(connected, ready, send, report_ready)
         if not connected then
             self.lines, self.replies, self.paused = 0, 0, false
             for _, e in ipairs(self.list) do e.line = nil end
@@ -57,6 +57,9 @@ function OwedReports.new()
         if not ready or self.paused then return end
         for _, e in ipairs(self.list) do
             if not e.line then
+                -- Some reports require a bound recovery journal; a release does
+                -- not. A held head still blocks every later report: never reorder.
+                if report_ready and not report_ready(e.event, e.fields) then return end
                 if not send(e.event, e.fields) then return end -- keep the order: the rest waits
                 e.line = self.lines
             end

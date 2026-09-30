@@ -98,7 +98,7 @@ def compress_box_mon(raw80: bytes) -> bytes:
 
 class World:
     def __init__(self, pack="gen3_frlg", title="firered", kind="clean", player="a",
-                 connected=True, native=None, boxes=None):
+                 connected=True, native=None, boxes=None, journal=None, model_companion=False):
         self.pack, self.title, self.kind, self.player = pack, title, kind, player
         self.artifact_kind = "clean" if kind == "named" else kind
         titles = pack_json(pack, "engine_signals.json")["titles"]
@@ -150,6 +150,8 @@ class World:
             register=lambda name: self.regs.get(str(name), 0),
             write_u8=self._write_u8, saveram=self._saveram,
         )
+        if journal is not None:
+            self.io.trade_journal = journal(L)
         self.ev = L.table(on_bus_exec=self._on_bus_exec, unregister=lambda i: None)
         net = L.table(init=lambda h, p: None, connected=lambda: self.connected, pump=lambda: None,
                       send=self._send, receive=lambda: self.replies.pop(0) if self.replies else None)
@@ -170,7 +172,23 @@ class World:
         if boxes is not None:           # boxes(lua_runtime) -> the mover's Lua table
             mover = boxes(L)
             deps["boxes_new"] = lambda *_a: mover
+        if model_companion:
+            # Explicit MODEL-only client binding over vanilla read/anchor geometry.
+            # No production admission/profile/READY flag is changed.
+            L.execute('''
+                model_real_dofile = dofile
+                function dofile(path)
+                    local module = model_real_dofile(path)
+                    if path:match("lua/gen3/client.lua$") then
+                        local make = module.new
+                        module.new = function(p) p.artifact_kind="companion"; return make(p) end
+                    end
+                    return module
+                end
+            ''')
         self.client, self.parts = self.Entry.build(L.table(**deps))
+        if model_companion:
+            L.execute('dofile = model_real_dofile; model_real_dofile = nil')
         policy = self.parts.policy
         real_check = policy.check
 

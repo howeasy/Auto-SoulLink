@@ -136,3 +136,31 @@ page); global font changes (the requested landing content is the bounded scope).
 
 Verdict: **APPROVE** within SOURCE/MODEL presentation scope. Not verified: full
 screen-reader narration, all remaining palettes, physical gameplay or release readiness.
+
+
+## Owner-approved integration, 2026-09-30
+
+Owner: "Looks good. Commit to main". The repository's primary branch is `master`.
+Authority now includes local master integration and the required owned task-worktree
+retirement. It does not include GitHub push or a release claim.
+
+Current integration base: `623e95252e63e2d0d34d4c9ae5420799587f9ab3`.
+Since the original UI cut, main gained Emerald support and broader cartridge-form
+support. Reconciled that main cut in the existing UI task worktree. README conflict
+resolution preserves the approved player-focused rewrite, adds Emerald to the
+available games, removes its old disabled label, and describes preparation/randomizer
+options by game capability. No hardware verification wording is restored.
+The Manager's current `form.randomizer_games` conditions and `gen1()` implementation
+remain identical to main; the landing changes do not replace them.
+
+Foreign root untracked files `lua/memory_gba.lua` and
+`server/adapters/gen2_crystal.py` are excluded from staging and cleanup. Their SHA256
+pins before integration are, respectively:
+`8518B82CF0FD10141C8029D05781E2394E7D5DFE42A27883CCF8E6B7EBE85B55` and
+`0590A8B52E2E5E0938CA2D7E0206BACE50B7AE826DE0995EBA2933A27AC65D06`.
+
+Reconciled SOURCE/MODEL checks: the same eight focused Manager/board/theme modules
+reported **95 passed, 1 skipped** in 7.32 seconds. The skip remains the absent
+`patch/build/gen1_red.gb`, not a present-but-wrong input. Merge conflict markers are
+removed and the scoped diff check is clean. Frozen reconciliation independent
+review precedes final master delivery; no PHYSICAL run is added.

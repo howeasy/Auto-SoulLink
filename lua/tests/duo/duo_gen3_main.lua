@@ -7,7 +7,7 @@
 -- driver only tees three seams before run.lua binds them:
 --   * event.on_bus_exec: the `save` site's hook also dumps the whole SRAM (flash) domain,
 --     INSIDE the callback, once the signal validated and the capture contract holds (R0 == 1,
---     R5 == SAVE_NORMAL); the `faint` site's hook logs ENGINE_FAINT_SITE when it validates;
+--     the site's save-type register == SAVE_NORMAL); the `faint` site's hook logs ENGINE_FAINT_SITE when it validates;
 --   * connector.send: every non-tick event as "TX <event> <key|-> <json>";
 --   * the session's handle_command: every command as "RX <cmd> key=<key> ...".
 -- The battery boots through CONTINUE (lua/tests/gen3_boot_check.lua), then the scenario runs
@@ -26,8 +26,12 @@ assert(D and D.wt and D.player and D.scenario and D.result, "SLINK_DUO not confi
 -- P5 (card C5-5): "gen3_rr" is the battery-boot RR row (tools/e2e_duo.py GAMES), sharing
 -- this driver with "gen3_frlg" -- everything below that reads a per-title pack/checkpoint path
 -- or symbol table branches on D.title ("radical_red" vs firered/leafgreen), not on D.game.
-assert(D.game == "gen3_frlg" or D.game == "gen3_rr",
-       "duo_gen3_main only serves game gen3_frlg/gen3_rr, got " .. tostring(D.game))
+-- E4: "gen3_emerald" is the battery-boot Emerald row (E<->E); its pack, .sym and START/save
+-- flows are selected by D.title == "emerald" below.
+-- X3: "gen3_exp" is the pokeemerald-expansion reference build (E<->E shape); every Emerald-ENGINE
+-- branch below takes it too (EMERALD_ENGINE), while its pack, .sym and data are its own.
+assert(D.game == "gen3_frlg" or D.game == "gen3_rr" or D.game == "gen3_emerald" or D.game == "gen3_exp" or D.game == "gen3_fr_trade",
+       "duo_gen3_main only serves game gen3_frlg/gen3_rr/gen3_emerald/gen3_exp/gen3_fr_trade, got " .. tostring(D.game))
 assert(D.title, "SLINK_DUO.title missing (the GAMES row's sides)")
 
 local ROOT = D.wt
@@ -97,7 +101,16 @@ end
 log(fmt("duo instance %s scenario=%s phase=%s title=%s attempt=%d", D.player, D.scenario, phase,
         D.title, D.attempt or 1))
 pcall(memory.usememorydomain, "System Bus")
-pcall(function() client.speedmode(D.speed or 1600) end)
+-- Route runs ask for 300% (the orchestration contract reserves 100 for explicit qualification).
+-- e2e_duo.py's Gen 3 stub sends no `speed`, so this default IS every FR/LG/EM/RR route run; an
+-- explicit D.speed from a caller still wins. speedmode is a front-end capability rather than core
+-- state, so a failure is logged, not fatal -- the same discipline as the invisibleemulation pcall
+-- below. One line, both facts: what we asked for, and whether the speedmode CALL returned without
+-- error. A clean pcall is NOT a readback: it does not show the front end accepted the throttle or
+-- is running at that rate. The token is call=, not applied=, on purpose.
+local speed_requested = D.speed or 300
+local speed_ok, speed_err = pcall(function() client.speedmode(speed_requested) end)
+log(fmt("speedmode requested=%d call=%s", speed_requested, speed_ok and "ok" or tostring(speed_err)))
 -- Rendering off (W23 EMU-SPEED): oracles read RAM, and client.screenshot still captures the core's
 -- frame under invisibleemulation (checked on 2.11.1/mGBA). SLINK_EMU_VISIBLE=1 keeps the window live.
 pcall(function() client.invisibleemulation(not D.visible and os.getenv("SLINK_EMU_VISIBLE") ~= "1") end)
@@ -125,6 +138,15 @@ local function guard(label, fn)
 end
 
 local JSON = load_or_die("/lua/json_codec.lua", "json_codec.lua")
+local native_candidate
+if D.native_candidate_manifest then
+    native_candidate = guard("HARNESS_ONLY FireRed candidate",function()
+        local f = assert(io.open(ROOT .. "/" .. D.native_candidate_manifest,"rb"))
+        local raw = f:read("a"); f:close()
+        local manifest = JSON.decode(raw)
+        return load_or_die("/lua/tests/duo/gen3_trade_candidate.lua","candidate carrier").new(D,JSON,manifest,log,raw)
+    end)
+end
 local G = load_or_die("/lua/tests/gen3_boot_check.lua", "gen3_boot_check.lua")
 SLINK_GEN3_TITLE = D.title   -- the scripted helpers read their per-title addresses from this (C4-LG)
 local SP = load_or_die("/lua/tests/gen3_scripted_play.lua", "gen3_scripted_play.lua")   -- helpers only; never run()
@@ -137,17 +159,22 @@ local function read_json(rel)
     return assert(JSON.decode(raw), "malformed " .. rel)
 end
 local title = D.title
+local TITLES = load_or_die("/lua/tests/gen3_title_syms.lua", "gen3_title_syms.lua")
+local EMERALD_ENGINE = TITLES.emerald_engine(title)
 -- P5: radical_red's pack lives under data/games/gen3_rr, not gen3_frlg's (different checkpoint
 -- predicate and RAM/derived offsets -- RR's 25-box layout in particular, gen3_codec commit
 -- 62887460). Every OTHER read in this file goes through `cp`/`profile`, so this one branch is
 -- the whole of the pack selection.
-local pack = title == "radical_red" and "gen3_rr" or "gen3_frlg"
+-- E4: the one title -> pack table, shared with the scripted helpers (emerald -> gen3_emerald).
+local pack = assert(SP.PROFILE_PACK_BY_TITLE[title], "no profile pack for title " .. tostring(title))
 local cp_rel = "data/games/" .. pack .. "/write_checkpoint.json"
+if native_candidate then cp_rel = native_candidate.manifest.pack_files.checkpoint end
 local cp = guard("checkpoint for title '" .. title .. "' in " .. cp_rel, function()
     local doc = read_json(cp_rel)
     return assert(doc[title], cp_rel .. " has no entry for title '" .. title .. "'")
 end)
 local profile_rel = "data/games/" .. pack .. "/profile.json"
+if native_candidate then profile_rel = native_candidate.manifest.pack_files.profile end
 local profile = guard("profile for title '" .. title .. "' in " .. profile_rel, function()
     local doc = read_json(profile_rel)
     return assert(doc.titles and doc.titles[title], profile_rel .. " has no titles." .. title)
@@ -176,7 +203,7 @@ local SYMS = { "gBattlerControllerFuncs", "HandleInputChooseAction", "HandleInpu
                "gActionSelectionCursor", "gMoveSelectionCursor", "gBattleMons", "gBattlerPartyIndexes",
                "gBattleOutcome", "gMain", "gTasks", "gPartyMenu", "CB2_UpdatePartyMenu",
                "Task_HandleChooseMonInput", "Task_HandleSelectionMenuInput",
-               "Task_ReturnToChooseMonAfterText", "Task_DepositMenu", "Task_WithdrawMon",
+               "Task_ReturnToChooseMonAfterText", "Task_DepositMenu", "Task_WithdrawMon", "Task_ReleaseMon",
                "CB2_BagMenuRun", "Task_BagMenu_HandleInput", "Task_AnimateWin0v", "gPaletteFade",
                "Task_LinkupAwaitConnection", "sGlobalScriptContext",
                "CableClub_EventScript_WelcomeToCableClub", "CableClub_EventScript_UnusedWelcomeToCableClub",
@@ -244,7 +271,7 @@ if title == "radical_red" then
 else
     local want = {}
     for _, n in ipairs(SYMS) do want[n] = true end
-    local path = ROOT .. "/data/gen3/pret/poke" .. title .. ".sym"
+    local path = TITLES.sym_path(ROOT, title)
     guard("pret symbols in " .. path, function()
         local fh = assert(io.open(path, "r"), "cannot read " .. path)
         for line in fh:lines() do
@@ -266,9 +293,49 @@ else
         end
         local missing = {}
         for _, n in ipairs(SYMS) do if not S[n] then missing[#missing + 1] = n end end
+        if EMERALD_ENGINE and #missing > 0 then
+            -- E4: FR/LG-only START-menu/save-dialog/bag names (pokeemerald rebuilt those menus,
+            -- src/start_menu.c, src/item_menu.c) are ABSENT, not guessed: reading one raises by
+            -- name at the point of use (fail closed), the rr_symbols rule. Emerald's own START/
+            -- save flow is gen3_scripted_play.lua EMH.save_via_menu (pokeemerald.sym names).
+            log("SYMS_ABSENT " .. title .. " " .. table.concat(missing, ","))
+            setmetatable(S, { __index = function(_, k)
+                error("symbol " .. tostring(k) .. " is absent from " .. path .. " (FR/LG-only name)", 2)
+            end })
+            missing = {}
+        end
         assert(#missing == 0,
                "pret symbol(s) missing from " .. path .. ": " .. table.concat(missing, ", "))
     end)
+end
+
+--- gBattleMons/move-table geometry. Vanilla: pret struct BattlePokemon (0x58 bytes: moves +0x0C,
+--- pp +0x24, hp +0x28) and struct BattleMove (effect byte 0, power byte 1) -- CFRU keeps both.
+--- X3: the expansion reference build redesigned both; its geometry is the build's own compiler
+--- facts (facts.json BattlePokemon 140 bytes, MoveInfo.power a 9-bit field). Its effect enum is
+--- not CFRU's, so no effect id is trusted there (move_effect -> nil: any_move_slot skips it).
+local BM = { size = 0x58, moves = 0x0C, pp = 0x24, hp = 0x28,
+             power = { off = 1, width = 1, shift = 0, mask = 0xFF }, effect_off = 0 }
+if title == TITLES.EXP_TITLE then
+    BM = guard("expansion battle geometry (facts.json)", function()
+        local st = read_json("data/games/gen3_exp/28877d73/facts.json").structs
+        local b, pw = st.BattlePokemon, st.MoveInfo.bitfields.power
+        local flag = st.Volatiles.bitfields.perishSong
+        assert(flag.width == 1 and flag.bits == 1, "expansion Perish flag compiler lane changed")
+        return { size = b.size, moves = b.fields.moves.offset, pp = b.fields.pp.offset,
+                 hp = b.fields.hp.offset,
+                 perish_off = b.fields.volatiles.offset + flag.offset,
+                 perish_mask = assert(tonumber(flag.mask)),
+                 party = { size = st.Pokemon.size, hp = st.Pokemon.fields.hp.offset,
+                           max_hp = st.Pokemon.fields.maxHP.offset },
+                 power = { off = pw.offset, width = pw.width, shift = pw.shift, mask = (1 << pw.bits) - 1 } }
+    end)
+end
+--- `move`'s base power from the pack's move table (rom.BATTLE_MOVES_ADDR, derived.BATTLE_MOVE_ENTRY_SIZE).
+local function move_power(move)
+    local at = profile.rom.BATTLE_MOVES_ADDR + move * profile.derived.BATTLE_MOVE_ENTRY_SIZE + BM.power.off
+    local raw = BM.power.width == 1 and memory.read_u8(at) or memory.read_u16_le(at)
+    return (raw >> BM.power.shift) & BM.power.mask
 end
 
 -- ── seams teed before run.lua binds them ─────────────────────────────────────────────────
@@ -337,10 +404,23 @@ local faint_sites = {}
 local function faint_site_now()
     local slot = memory.read_u16_le(S.gBattlerPartyIndexes, "System Bus")
     local base = reader.party_base()
-    return { frame = emu.framecount(), active = memory.read_u8(S.gActiveBattler, "System Bus"),
-             battler0_slot = slot, battle_hp = memory.read_u16_le(S.gBattleMons + 0x28, "System Bus"),
+    local active = title == TITLES.EXP_TITLE and (emu.getregister("R4") & 0xFF)
+                   or memory.read_u8(S.gActiveBattler, "System Bus")
+    return { frame = emu.framecount(), active = active,
+             battler0_slot = slot, battle_hp = memory.read_u16_le(S.gBattleMons + BM.hp, "System Bus"),
              party_hp = base and memory.read_u16_le(base + slot * 100 + 0x56, "System Bus") or -1,
              counter = memory.read_u8(S.gBattleResults, "System Bus") }
+end
+--- The save site's capture contract (engine_signals.json capture_contract): R0 == SAVE_STATUS_OK and
+--- the save type == SAVE_NORMAL (0). The type register is the site's own: R5 on the vanilla packs,
+--- R4 on the expansion reference build (its save site's point lists R4, not R5). Self-contained so a
+--- unit test runs this exact body.
+local function save_contract_holds(point)
+    if type(point) ~= "table" then return false, "no-point" end
+    local stype = point.R5
+    if stype == nil then stype = point.R4 end
+    if point.R0 == 1 and stype == 0 then return true end
+    return false, string.format("r0-%s-type-%s", tostring(point.R0), tostring(stype))
 end
 local raw_on_bus_exec = event.on_bus_exec
 event.on_bus_exec = function(fn, addr, name, ...)
@@ -351,9 +431,9 @@ event.on_bus_exec = function(fn, addr, name, ...)
             fire(...)
             local sig, why = validated(before, "save")
             -- the site's capture contract (engine_signals.json): a full save returned OK
-            if sig and not (sig.point and sig.point.R0 == 1 and sig.point.R5 == 0) then
-                sig, why = nil, fmt("r0-%s-r5-%s", tostring(sig.point and sig.point.R0),
-                                    tostring(sig.point and sig.point.R5))
+            if sig then
+                local held, broken = save_contract_holds(sig.point)
+                if not held then sig, why = nil, broken end
             end
             if not sig then log("SAVE_WITNESS_DUMP_SKIPPED why=" .. why) return end
             local ok, err = pcall(dump_witness)
@@ -363,7 +443,14 @@ event.on_bus_exec = function(fn, addr, name, ...)
         fn = function(...)
             local before = pending_count()
             fire(...)
-            if validated(before, "faint") then
+            local signal, why = validated(before, "faint")
+            if title == TITLES.EXP_TITLE then
+                log(fmt("XG3_FAINT_HOOK frame=%d r4=%d counter=%d pending=%d->%d result=%s",
+                        emu.framecount(), emu.getregister("R4") & 0xFF,
+                        memory.read_u8(S.gBattleResults, "System Bus"), before, pending_count(),
+                        signal and "accepted" or tostring(why)))
+            end
+            if signal then
                 -- read INSIDE the callback: at Cmd_tryfaintmon +0x11C the counter store is done and
                 -- datahpupdate's party write has completed (scripts wait on the exec flags)
                 local f = faint_site_now()
@@ -381,6 +468,7 @@ local raw_send = C.send
 C.send = function(line)
     local ok, msg = pcall(JSON.decode, line)
     local name = ok and type(msg) == "table" and type(msg.event) == "string" and msg.event or "?"
+    if native_candidate and ok and type(msg)=="table" then native_candidate.tx(msg) end
     seen_tx[name] = (seen_tx[name] or 0) + 1
     if name ~= "tick" then
         local key = ok and type(msg) == "table" and type(msg.key) == "string" and msg.key or "-"
@@ -398,13 +486,67 @@ SLINK_GEN3_CLIENT = nil
 local battle_parts
 local original_dofile = dofile
 local wants_routes = D.battle_window_case or D.active_faint_case == "trainer"
+--- TEST-ONLY admission of gen3_exp/<title> (X3; the E4 pre-EG4 precedent, be492ee4): the
+--- profile's admitted=false and Entry.ROUTED's missing gen3_exp both stay in production until
+--- the owner's XG gates. On the gen3_exp duo row ONLY, json_codec's decode is wrapped so the
+--- decoded profile's titles[<title>].admitted reads true, and Entry.ROUTED gains gen3_exp; any
+--- other game gets both back untouched. Self-contained (no upvalues) so a unit test runs this
+--- exact body; every receipt logs the line.
+local function test_admission_codec(game, title, json, logf)
+    if game ~= "gen3_exp" or type(json) ~= "table" then return json end
+    local decode = json.decode
+    return setmetatable({ decode = function(...)
+        local doc = decode(...)
+        local row = type(doc) == "table" and type(doc.titles) == "table" and doc.titles[title]
+        if type(row) == "table" and row.admitted == false then
+            row.admitted = true
+            logf("TEST-ONLY admission of gen3_exp/" .. title .. " (pre-XG; production refuses)")
+        end
+        return doc
+    end }, { __index = json })
+end
+
+-- The production run.lua still requests ROOT/slink_gen3_trade. Ordinary duo attempts redirect
+-- only that file_store argument to their private data directory. The native candidate's own
+-- manifest path and the install-root lock probe keep their existing composition and guard.
+local function isolated_journal_module(module, private_path, native_candidate, logf)
+    if native_candidate then
+        native_candidate.bind_journal(module)
+        logf("DUO_JOURNAL scope=native-candidate path=manifest guard=unchanged")
+        return module
+    end
+    if not private_path then
+        logf("DUO_JOURNAL scope=install-root-probe path=production-default guard=unchanged")
+        return module
+    end
+    assert(type(private_path) == "string" and private_path ~= "", "private duo journal path missing")
+    local file_store = module.file_store
+    module.file_store = function(deps)
+        deps.path = private_path
+        logf("DUO_JOURNAL scope=attempt-private path=" .. private_path .. " guard=unchanged")
+        return file_store(deps)
+    end
+    return module
+end
 do
     dofile = function(path)
         local value = original_dofile(path)
+        if path == ROOT .. "/lua/gen3/trade_journal.lua" then
+            value = isolated_journal_module(value, D.journal_path, native_candidate, log)
+        end
+        if tostring(path):gsub("\\", "/"):match("/lua/json_codec%.lua$") then
+            value = test_admission_codec(D.game, title, value, log)
+        end
+        if path == ROOT .. "/lua/gen3/entry.lua" and D.game == "gen3_exp" then
+            value.ROUTED.gen3_exp = true
+            log("TEST-ONLY route of gen3_exp (pre-XG; production Entry.ROUTED lacks it)")
+        end
         if path == ROOT .. "/lua/gen3/entry.lua" then
+            if native_candidate then native_candidate.bind_entry(value) end
             local build = value.build
-            value.build = function(...)
-                local client, parts = build(...)
+            value.build = function(deps,...)
+                if native_candidate then native_candidate.before_build(deps) end
+                local client, parts = build(deps,...)
                 battle_parts = parts
                 return client, parts
             end
@@ -417,6 +559,36 @@ dofile = original_dofile
 if not okrun then finish(false, "lua/gen3/run.lua raised: " .. tostring(errrun)) end
 local session = SLINK_GEN3_CLIENT
 if not session then finish(false, "run.lua built no client: " .. tostring(refused or "no reason logged")) end
+if native_candidate then native_candidate.attach(session,battle_parts) end
+if D.game == "gen3_exp" and D.scenario == "linked_faint_active_gen3" and battle_parts.boxes then
+    local boxes, original = battle_parts.boxes, battle_parts.boxes.memorialize
+    boxes.memorialize = function(self, key, hint)
+        -- Snapshot raw party bytes at the actual memorial transaction, before its first write.
+        -- boxes.memorialize does not advance a frame; only a successful new write logs a marker.
+        local source, base = nil, reader.party_base()
+        local count = memory.read_u8(profile.ram.PARTY_COUNT_ADDR, "System Bus")
+        if base and count <= 6 then
+            for slot = 0, count - 1 do
+                local at = base + slot * BM.party.size
+                local found = fmt("%08X:%08X", memory.read_u32_le(at, "System Bus"),
+                                  memory.read_u32_le(at + 4, "System Bus"))
+                if found == key then
+                    source = {slot = slot, hp = memory.read_u16_le(at + BM.party.hp, "System Bus"),
+                              max_hp = memory.read_u16_le(at + BM.party.max_hp, "System Bus")}
+                    break
+                end
+            end
+        end
+        local before = battle_parts.writes.attempted
+        local ok, why = original(self, key, hint)
+        local written = battle_parts.writes.attempted - before
+        if ok and source and written > 0 then
+            log(fmt("XG3_MEMORIAL_SOURCE %s frame=%d slot=%d hp=%d max_hp=%d attempted=%d", key,
+                    emu.framecount(), source.slot, source.hp, source.max_hp, written))
+        end
+        return ok, why
+    end
+end
 local raw_handle = session.handle_command
 session.handle_command = function(self, cmd)
     local c = type(cmd) == "table" and type(cmd.cmd) == "string" and cmd.cmd or "?"
@@ -424,13 +596,15 @@ session.handle_command = function(self, cmd)
     local text = type(cmd) == "table" and type(cmd.text) == "string" and cmd.text or nil
     seen_rx[c] = (seen_rx[c] or 0) + 1
     if c ~= "noop" then
-        rx[#rx + 1] = { cmd = c, key = key }
+        rx[#rx + 1] = { cmd = c, key = key, msg = cmd }
         log("RX " .. c .. (key and (" key=" .. key) or "") .. (text and (" text=" .. text) or ""))
+        if D.rule_kind then log("RULE_RX " .. JSON.encode(cmd)) end
     end
     if c == "hud_show" and text and text:find("WRONG SAVE", 1, true) then
         wrong_save_hud = true
         log("WRONG_SAVE_HUD " .. text)
     end
+    if native_candidate then return native_candidate.command(cmd,function(command) return raw_handle(self,command) end) end
     return raw_handle(self, cmd)
 end
 log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, D.player,
@@ -439,7 +613,24 @@ log(fmt("client built by lua/gen3/run.lua: title=%s player=%s -> %s:%s", title, 
 -- ── context ──────────────────────────────────────────────────────────────────────────────
 local ctx = { D = D, player = D.player, phase = phase, log = log, fmt = fmt, G = G, SP = SP,
               play = play, cp = cp, reader = reader, sym = S, title = title, session = session,
-              finished = FINISHED, emulator = emu }
+              emerald_engine = EMERALD_ENGINE,
+              finished = FINISHED, emulator = emu, enemy_base = profile.ram.ENEMY_BASE }
+ctx.native_candidate = native_candidate
+
+function ctx.jlog(tag, value) log(tag .. " " .. JSON.encode(value)) end
+function ctx.fail(why) finish(false, why) end
+function ctx.rx_after(index, pred)
+    for i = (index or 0) + 1, #rx do if pred(rx[i].msg) then return rx[i].msg, i end end
+end
+function ctx.rx_count() return #rx end
+function ctx.enemy_species()
+    local mons, why = reader.read_enemy_party()
+    if not mons or not mons[1] then return nil, why or "no wild enemy" end
+    return mons[1].species
+end
+function ctx.wild_ready(label)
+    return SP.verify_fight_cursor(cp, label) == "fight"
+end
 
 function ctx.frames(n) for _ = 1, n do emu.frameadvance() end end
 --- pred() each frame until truthy (its value) or `secs` of wall clock pass (nil, logged).
@@ -468,6 +659,11 @@ end
 function ctx.go_has(marker)
     for _, l in ipairs(go_lines() or {}) do if l == marker then return true end end
     return false
+end
+function ctx.go_value(prefix)
+    for _, line in ipairs(go_lines() or {}) do
+        if line:sub(1, #prefix + 1) == prefix .. " " then return JSON.decode(line:sub(#prefix + 2)) end
+    end
 end
 -- --idle-jitter, the Gen 1 standard's retry lever: BizHawk is deterministic, and FRLG's VBlank
 -- advances the RNG once per frame (pret src/main.c:412 Random() in VBlankIntr), so idle frames
@@ -512,7 +708,8 @@ function ctx.party()
     for _, m in ipairs(mons) do
         out[#out + 1] = { slot = m.slot, key = reader.key(m), hp = m.hp, max_hp = m.max_hp,
                           species = m.species, level = m.level, experience = m.experience, status = m.status,
-                          moves = m.moves, pp = m.pp }
+                          moves = m.moves, pp = m.pp, is_egg = m.is_egg,
+                          is_egg_flag = m.is_egg_flag, friendship = m.friendship }
     end
     return out
 end
@@ -760,6 +957,8 @@ function ctx.battle_outcome() return memory.read_u8(S.gBattleOutcome) end
 
 -- ── P+H engine oracles (scenario_gen3_linked_faint_active.lua) ─────────────────────────────
 ctx.rr = title == "radical_red"
+ctx.perish_mask = BM.perish_mask or 0x20
+ctx.perish_label = BM.perish_off and "BattlePokemon.volatiles.perishSong" or "gStatuses3[0]"
 function ctx.inputs() return presses end
 function ctx.press(buttons) joypad.set(buttons) end
 function ctx.faint_sites() return faint_sites end
@@ -775,7 +974,7 @@ ctx.handoff = { slot_addr = S.gBattlerControllerFuncs, from = S.PlayerBufferExec
 --- hp +0x28), as a set: no SLink write may touch either.
 function ctx.hp_addrs(slot)
     local base = reader.party_base() or profile.ram.PARTY_BASE
-    return { [base + slot * 100 + 0x56] = true, [S.gBattleMons + 0x28] = true }
+    return { [base + slot * 100 + 0x56] = true, [S.gBattleMons + BM.hp] = true }
 end
 --- One frame's engine reads for the carrier. gMain.heldKeysRaw +0x28 (pret include/main.h);
 --- gBattleResults playerFaintCounter +0 / lastUsedMovePlayer +0x22 (include/battle.h); battler 0's
@@ -788,8 +987,9 @@ function ctx.engine_sample(slot)
     return { frame = emu.framecount(), in_battle = play.in_battle(cp) and true or false,
              ctrl0 = u32(S.gBattlerControllerFuncs), exec = u32(S.gBattleControllerExecFlags),
              keys = u16(S.gMain + 0x28), battler0_slot = u16(S.gBattlerPartyIndexes),
-             battle_hp = u16(bm + 0x28), pp = { u8(bm + 0x24), u8(bm + 0x25), u8(bm + 0x26), u8(bm + 0x27) },
-             status3 = u32(S.gStatuses3), counter = u8(S.gBattleResults), last_move = u16(S.gBattleResults + 0x22),
+             battle_hp = u16(bm + BM.hp), pp = { u8(bm + BM.pp), u8(bm + BM.pp + 1), u8(bm + BM.pp + 2), u8(bm + BM.pp + 3) },
+             status3 = BM.perish_off and u8(bm + BM.perish_off) or u32(S.gStatuses3),
+             counter = u8(S.gBattleResults), last_move = u16(S.gBattleResults + 0x22),
              outcome = u8(S.gBattleOutcome), party_hp = base and u16(base + slot * 100 + 0x56) or -1 }
 end
 --- The client's own trade FSM phase (lua/gen3/client.lua st.trade_apply.phase), nil when idle.
@@ -800,6 +1000,7 @@ end
 
 -- ── battle input (pret battle_controller_player.c / party_menu.c, symbols above) ─────────
 local B_OUTCOME_CAUGHT = 7        -- pret include/constants/battle.h
+local B_OUTCOME_LOST = 2          -- pret include/constants/battle.h
 local B_OUTCOME_WON = 1           -- pret include/constants/battle.h
 local ACTION_FIGHT, ACTION_BAG, ACTION_SWITCH, ACTION_RUN = 0, 1, 2, 3
 local function ctrl0() return memory.read_u32_le(S.gBattlerControllerFuncs) end
@@ -1174,9 +1375,9 @@ function ctx.status_move_slot()
     local base = S.gBattleMons                            -- battler 0
     local table_at, size = profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE
     for slot = 0, 3 do
-        local move = memory.read_u16_le(base + 0x0C + slot * 2)
-        local pp = memory.read_u8(base + 0x24 + slot)
-        if move ~= 0 and pp > 0 and memory.read_u8(table_at + move * size + 1) == 0 then return slot end
+        local move = memory.read_u16_le(base + BM.moves + slot * 2)
+        local pp = memory.read_u8(base + BM.pp + slot)
+        if move ~= 0 and pp > 0 and move_power(move) == 0 then return slot end
     end
 end
 
@@ -1197,8 +1398,8 @@ local SELF_DAMAGE_EFFECTS = {
 --- or nil if the table isn't known -- never pret FR's gBattleMoves on RR (G5-RR-MOVEPICK).
 local function move_effect(move)
     local table_at, size = profile.rom.BATTLE_MOVES_ADDR, profile.derived.BATTLE_MOVE_ENTRY_SIZE
-    if not (table_at and size and move and move ~= 0) then return nil end
-    return memory.read_u8(table_at + move * size)
+    if not (table_at and size and move and move ~= 0 and BM.effect_off) then return nil end
+    return memory.read_u8(table_at + move * size + BM.effect_off)
 end
 
 --- The first move of battler 0 with PP left AND a known, non-self-damaging effect: lose_active's
@@ -1213,8 +1414,8 @@ end
 local function any_move_slot()
     local base = S.gBattleMons                            -- battler 0
     for slot = 0, 3 do
-        local move = memory.read_u16_le(base + 0x0C + slot * 2)
-        local pp = memory.read_u8(base + 0x24 + slot)
+        local move = memory.read_u16_le(base + BM.moves + slot * 2)
+        local pp = memory.read_u8(base + BM.pp + slot)
         if move ~= 0 and pp > 0 then
             local effect = move_effect(move)
             if effect and not SELF_DAMAGE_EFFECTS[effect] then return slot, effect end
@@ -1286,24 +1487,65 @@ function ctx.run_away(label)
         local ok, why = ctx.choose_action(ACTION_RUN)
         if not ok then return false, why end
         local r = ctx.await_turn(120, "B")
-        if r == "over" then play.wait_scene_settled(cp, 1800) return true end
+        if r == "over" then
+            local settled, settle_why = play.wait_scene_settled(cp, 1800)
+            if not settled then return false, "escape scene did not settle: " .. tostring(settle_why) end
+            return true
+        end
         if r ~= "action" then return false, "no decision point after RUN (" .. tostring(r) .. ")" end
     end
     return false, label .. ": could not escape in 10 turns"
 end
 
 --- Grass hunt from the pinned Route 1 square (gen3_scripted_play hunt_encounter).
-function ctx.hunt(label) return SP.hunt_encounter(cp, label, 40) end
+--- E4: Emerald hunts Route 102's pinned grass loop (gen3_scripted_play.lua EMH, proven at E2).
+function ctx.hunt(label)
+    if EMERALD_ENGINE then return SP.EMH.hunt(cp, label, 40) end
+    return SP.hunt_encounter(cp, label, 40)
+end
 
 local boot_keys = {}
 --- Hunt, throw Poke Balls until the catch lands; returns the new party key or nil, why.
-function ctx.catch(label)
-    if not ctx.hunt(label) then return nil, "no wild encounter" end
+function ctx.catch(label, already_hunted)
+    if not already_hunted and not ctx.hunt(label) then return nil, "no wild encounter" end
+    -- R4-DRIVER: the 20-ball SYNTH fixtures must stay on this instrumented path after eight
+    -- misses. The former fall-through let the scene settler throw an unlogged ninth ball.
+    local throw_budget = 20
     local throws = 0
-    while throws < 8 do
+    local saw_faint, switched = false, false
+    local function faint_prompt()
+        if not play.in_battle(cp) then return false end
+        local active = ctx.battler_slot()
+        for _, m in ipairs(ctx.party() or {}) do
+            if m.slot == active and m.hp == 0 then
+                saw_faint = true
+                -- A accepts "Use next Pokemon?"; B declines it and flees
+                -- (outcome 4), before the forced party screen can be observed.
+                return true, "A"
+            end
+        end
+        return false
+    end
+    local function recover_party()
+        saw_faint = true
+        local reserve
+        for _, m in ipairs(ctx.party() or {}) do if m.slot == 1 and m.hp > 0 then reserve = m end end
+        if switched or not reserve then return false, "lead fainted while catching" end
+        local ok, why = ctx.send_out(1)
+        if not ok then return false, "forced catch switch failed: " .. tostring(why) end
+        switched = true
+        return true
+    end
+    while throws < throw_budget do
         local turn = SP.verify_fight_cursor(cp, "incidental_battle")
         if turn == nil then break end
-        if turn == "party" then return nil, "a forced party menu came up while catching" end
+        if turn == "party" then
+            local ok, why = recover_party()
+            if not ok then return nil, why end
+            turn = SP.verify_fight_cursor(cp, "incidental_battle")
+            if turn == nil then break end
+            if turn == "party" then return nil, "forced catch switch did not leave the party menu" end
+        end
         -- Only an exhaustion OBSERVED after real throws is the ball RNG (and earns the retry); an
         -- unreadable count or a fixture that starts empty is a harness defect (Codex review of
         -- ad9669b1: read_balls() nil before any throw read as "out-of-balls", retryable).
@@ -1319,23 +1561,52 @@ function ctx.catch(label)
         end
         local ok, why = ctx.choose_action(ACTION_BAG)
         if not ok then return nil, why end
-        -- Live link_gen3 FR, throw 2: the bag REMEMBERS the POKEBALLS pocket (gBagMenuState is
-        -- EWRAM, OPEN_BAG_LAST), so the helper's pocket steer -- whose Right + 40-frame idle hid
-        -- the open fade on throw 1 -- was skipped, its selecting A landed during the fade and was
-        -- dropped, and gSpecialVar_ItemId kept GoToBagMenu's ITEM_NONE (item_menu.c:340).
-        if not ctx.wait_until(ctx.bag_input_ready, 20, "the battle bag to take input") then
-            return nil, "the battle bag never took input"
+        if EMERALD_ENGINE then
+            -- E4: Emerald's heap gBagMenu/gBagPosition bag (EMH.throw_ball waits for input itself)
+            if not SP.EMH.throw_ball(cp, label) then return nil, "the Emerald ball throw failed" end
+        else
+            -- Live link_gen3 FR, throw 2: the bag REMEMBERS the POKEBALLS pocket (gBagMenuState is
+            -- EWRAM, OPEN_BAG_LAST), so the helper's pocket steer -- whose Right + 40-frame idle hid
+            -- the open fade on throw 1 -- was skipped, its selecting A landed during the fade and was
+            -- dropped, and gSpecialVar_ItemId kept GoToBagMenu's ITEM_NONE (item_menu.c:340).
+            if not ctx.wait_until(ctx.bag_input_ready, 20, "the battle bag to take input") then
+                return nil, "the battle bag never took input"
+            end
+            SP.throw_pokeball_from_bag(cp, label)
         end
-        SP.throw_pokeball_from_bag(cp, label)
         throws = throws + 1
         log("THREW " .. throws)
-        local r = ctx.await_turn(180, "B")
+        local r = ctx.await_turn(180, "B", faint_prompt)
         if r == "over" then break end
-        if r ~= "action" then return nil, "no decision point after the throw (" .. tostring(r) .. ")" end
+        if r == "party" then
+            local recovered, why = recover_party()
+            if not recovered then return nil, why end
+        elseif r ~= "action" then return nil, "no decision point after the throw (" .. tostring(r) .. ")" end
     end
-    play.wait_scene_settled(cp, 1800)
+    if play.in_battle(cp) ~= false then
+        -- A budget-exhausting throw can be the fixture's LAST ball: report the RNG-classified
+        -- "out-of-balls" (tools/e2e_duo.py classify_gen1_result retryable), not the generic
+        -- budget message, which e2e_duo.py treats as FINAL (R4-DRIVER-2 review, OMP cx-d84db30c).
+        if throws >= throw_budget then
+            if ctx.balls() == 0 then return nil, "out-of-balls" end
+            return nil, "capture throw budget exhausted (20)"
+        end
+        return nil, "capture ended without an inactive battle witness"
+    end
+    local settled, settle_why = play.wait_scene_settled(cp, 1800)
+    if not settled then return nil, "capture scene did not settle: " .. tostring(settle_why) end
     local outcome = memory.read_u8(S.gBattleOutcome)
-    if outcome ~= B_OUTCOME_CAUGHT then return nil, "the battle ended with outcome " .. outcome end
+    -- B_OUTCOME_LOST (2, pret include/constants/battle.h): the wild foe knocked the lead out
+    -- mid-catch and the player whited out -- the game's RNG, reported with the Gen 1 standard's
+    -- retryable "whiteout" phrase (tools/e2e_duo.py GEN1_RNG_REASON_CLASS "hunt ended whiteout").
+    if outcome == B_OUTCOME_LOST then return nil, "whiteout" end
+    if outcome ~= B_OUTCOME_CAUGHT then
+        local diagnostic = fmt("the battle ended with outcome %d (ctrl0=0x%08X action_cursor=%d)",
+                               outcome, ctrl0(), memory.read_u8(S.gActionSelectionCursor))
+        log(diagnostic)
+        if saw_faint then return nil, "lead fainted while catching" end
+        return nil, diagnostic
+    end
     -- The client's own capture event names the key: by the time the field settles the server may
     -- already have quarantined (box_mon) or retired (dead zone) the record out of the party.
     local cap = ctx.last_sent("capture")
@@ -1358,7 +1629,7 @@ function ctx.lose_active(key, label)
     -- RR R4 at 97672e6d spent all 30 of Leer's PP on one foe and failed "no no-damage move with
     -- PP". After STALL_TURNS turns with no HP lost, RUN and hunt a fresh foe (G5-RR-MOVEPICK).
     local STALL_TURNS = 6
-    local function lead_hp() return memory.read_u16_le(S.gBattleMons + 0x28) end
+    local function lead_hp() return memory.read_u16_le(S.gBattleMons + BM.hp) end
     local last_hp, stalled, hunts, used_status, fallback_effect = nil, 0, 1, false, nil
     -- Attribution guard (G5-RR-CLEAN-2): any_move_slot already excludes self-damaging/unknown-
     -- effect moves, so this should never fire on real data -- it exists so a faint that DOES
@@ -1411,7 +1682,7 @@ function ctx.lose_active(key, label)
             last_hp = hp
             if stalled >= STALL_TURNS and hunts < 6 then
                 log(fmt("LOSE_REHUNT %s turn=%d hp=%d foe_hp=%d", key, turn_no, hp,
-                        memory.read_u16_le(S.gBattleMons + 0x58 + 0x28)))
+                        memory.read_u16_le(S.gBattleMons + BM.size + BM.hp)))
                 local ran, rwhy = ctx.run_away(label .. " rehunt")
                 if not ran then return false, label .. ": re-hunt escape: " .. tostring(rwhy) end
                 if not ctx.hunt(label .. " rehunt") then return false, label .. ": re-hunt found no encounter" end
@@ -1447,9 +1718,20 @@ local function reversed(name, as)
     SP.PATHS[as] = { map = p.map, from = { p.to[1], p.to[2] }, to = { p.from[1], p.from[2] }, dirs = dirs }
 end
 reversed("pokecenter_entrance_to_pc", "pc_to_pokecenter_entrance")   -- the same tiles, walked back
+if EMERALD_ENGINE then reversed("em_oldale_center_to_pc", "em_pc_to_center_door") end
 
 --- Route 1 grass origin -> facing the Viridian Pokemon Center PC (the viridian_pc leg's walk).
 function ctx.walk_to_pc(label)
+    if EMERALD_ENGINE then
+        -- E4: from the pc fixture's own Oldale tile (6,17) into the Center (emerald_enter_pc's
+        -- door, (6,16) -> 2.2 (7,8)), then gen3_scripted_play.lua's em_oldale_center_to_pc path
+        local ok, why = play.enter_warp(cp, "Up", 20)
+        if not ok then error(label .. ": the Oldale Center door never fired a warp: " .. tostring(why)) end
+        SP.verify_destination(cp, label, { group = 2, num = 2, x = 7, y = 8 })
+        play.follow(cp, "em_oldale_center_to_pc", label)
+        G.tap("Up", 2, 13)
+        return
+    end
     SP.return_to_grass_origin(cp, label)
     play.follow(cp, "route1_grass_to_north_edge", label)
     SP.warp_to(cp, "Up", 30, SP.DEST.viridian_south, label .. " Route1->Viridian")
@@ -1461,6 +1743,14 @@ end
 
 --- The PC -> the Route 1 grass origin (Center door, Viridian, Route 1 north to south).
 function ctx.walk_pc_to_grass(label)
+    if EMERALD_ENGINE then
+        -- E4c: the PC -> the Center door landing (7,8) -> out through Oldale's door; the exit
+        -- lands on (6,17), the pinned `from` of the Route 103 walk ctx.hunt takes next
+        play.follow(cp, "em_pc_to_center_door", label)
+        local ok, why = play.enter_warp(cp, "Down", 20)
+        if not ok then error(label .. ": the Oldale Center exit never fired a warp: " .. tostring(why)) end
+        return
+    end
     play.follow(cp, "pc_to_pokecenter_entrance", label)
     SP.warp_to(cp, "Down", 30, SP.DEST.center_exit, label .. " Center exit")
     -- G5-RR-WHITEOUT: this is the whiteout_gen3 stall site on RR -- an RR-only object near the
@@ -1477,13 +1767,21 @@ end
 function ctx.pc_deposit(label)
     local before = ctx.party() or {}
     local PC = SP.PC
-    PC.open(cp, label); PC.mode(label, 1); PC.popup(label, 1, 1, 0)
+    PC.open(cp, label); PC.mode(label, PC.OPTION.deposit); PC.popup(label, 1, 1, 0)
     PC.select(label, S.Task_DepositMenu | 1); PC.box(label); PC.leave(cp, label)
     local after = ctx.party() or {}
     if #after ~= #before - 1 then return nil, fmt("party %d -> %d after the deposit", #before, #after) end
     local left = {}
     for _, m in ipairs(after) do left[m.key] = true end
-    for _, m in ipairs(before) do if not left[m.key] then return m.key end end
+    for _, m in ipairs(before) do
+        if not left[m.key] then
+            -- E4: where it landed (the Emerald pc fixture's box 0 already holds two mons), so the
+            -- withdraw takes that slot back; FR/LG/RR's empty box 0 gives slot 0 as before
+            local at = ctx.locate(m.key)
+            ctx.deposited_slot = at and at.box and tonumber(at.box:match("^0:(%d+)$")) or 0
+            return m.key
+        end
+    end
     return nil, "no key left the party"
 end
 
@@ -1492,13 +1790,37 @@ function ctx.pc_withdraw(label)
     local before = ctx.party() or {}
     local PC = SP.PC
     G.tap("Up", 2, 13)
-    PC.open(cp, label); PC.mode(label, 0); PC.popup(label, 0, 0, 0)
+    local slot = ctx.deposited_slot or 0
+    PC.open(cp, label); PC.mode(label, PC.OPTION.withdraw)
+    if slot > 0 then SP.EMH.box_cursor(label, slot) end
+    PC.popup(label, 0, slot, 0)
     PC.select(label, S.Task_WithdrawMon | 1); PC.withdraw(label); PC.leave(cp, label)
     local after = ctx.party() or {}
     local had = {}
     for _, m in ipairs(before) do had[m.key] = true end
     for _, m in ipairs(after) do if not had[m.key] then return m.key end end
     return nil, fmt("party %d -> %d and no new key after the withdraw", #before, #after)
+end
+function ctx.game_flag(id)
+    local sb1 = reader.read_sb1()
+    if not sb1 then return nil end
+    return (memory.read_u8(sb1 + profile.derived.SB1_FLAGS_OFFSET + id // 8) & (1 << (id % 8))) ~= 0
+end
+
+--- RELEASE the just-deposited box-0 record, through the normal confirmation.
+function ctx.pc_release(label, key)
+    local at = ctx.locate(key)
+    local slot = ctx.deposited_slot or 0
+    if not at or at.party ~= false or at.box ~= "0:" .. slot then return false, "release key not in its deposited slot" end
+    local PC = SP.PC
+    G.tap("Up", 2, 13)
+    PC.open(cp, label); PC.mode(label, PC.OPTION.withdraw)
+    if slot > 0 then SP.EMH.box_cursor(label, slot) end
+    PC.popup(label, 0, slot, 3)
+    PC.select(label, S.Task_ReleaseMon | 1); PC.release(label); PC.leave(cp, label)
+    at = ctx.locate(key)
+    if not at or at.party ~= false or at.box ~= false then return false, "released key not proven absent" end
+    return true
 end
 
 --- In-game SAVE (row search + flash-counter proof, gen3_boot_check save_via_menu), then settle
@@ -1509,7 +1831,8 @@ function ctx.save(tag)
     end
     local dom = G.flash_domain()
     if not dom then return false, "no flash memory domain" end
-    local ok, before, after, why = G.save_via_menu(cp, dom)
+    -- E4: Emerald's gMenuCallback START menu (gen3_scripted_play.lua EMH, proven at E2)
+    local ok, before, after, why = (EMERALD_ENGINE and SP.EMH.save_via_menu or G.save_via_menu)(cp, dom)
     if not ok then return false, "SAVE failed: " .. tostring(why) end
     log(fmt("SAVE_WITNESS %s counter=%d->%d", tag, before, after))
     ctx.frames(30)
@@ -1519,8 +1842,10 @@ end
 -- ── boot: battery -> CONTINUE -> field, then the production hello ───────────────────────
 -- Guarded too (card C4-GUARD): a raise inside the boot is the same silent hang as a load-time
 -- one -- the driver never reaches MYKEY, so a bare raise here writes no RESULT either.
-local reached_field = guard("boot to field from the battery save",
-                            function() return G.boot_to_field(cp, 9000) end)
+local reached_field = guard("boot to field from the battery save", function()
+    -- E4: Emerald boots A-only (EMH.boot_to_field, the gen3_emerald_boot_check.lua rule)
+    return (EMERALD_ENGINE and SP.EMH.boot_to_field or G.boot_to_field)(cp, 9000)
+end)
 if not reached_field then
     G.shot(D.scenario .. "_" .. D.player .. "_bootfail")
     finish(false, "never reached the field from the battery save")
@@ -1560,7 +1885,7 @@ if wants_routes then
         u32=function(a) return memory.read_u32_le(a,"System Bus") end,
     },S,log)
 end
-if D.active_faint_case == "whiteout" then
+if D.active_faint_case == "whiteout" or D.scenario == "ball_gate_gen3" then
     --- fn() with every incidental battle FLED instead of fought (T2's proven escape policy,
     --- gen3_routes.lua with_incidental_escape); the lone-lead walks of linked_faint_active's
     --- whiteout case (W3, live FR-as-A at b0483efe: the walk back fought a Route 1 encounter,

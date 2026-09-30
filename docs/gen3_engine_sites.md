@@ -23,7 +23,7 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | fr | 41cb23d8dccc8ebd7c649cd8fbb58eeace6e2fdc |
 | lg | 574fa542ffebb14be69902d1d36f1ec0a4afd71e |
 | rr | 964f951a0fdaf209e4ea1344883ef0d557bb3a80 |
-| rr_companion | 7a3867499d66eb3621e0e7dde43bd033fc679f01 |
+| rr_companion | da579690db7d6933a0952a1f490312842793f71a |
 
 ## PINNED / UNVERIFIED matrix
 
@@ -44,6 +44,7 @@ Schema: titles[title].artifacts[clean|companion].sites[kind]. Each record has ad
 | poison_faint | PINNED | PINNED | UNVERIFIED | UNVERIFIED |
 | borrowed_party | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
 | nature_change | UNVERIFIED | UNVERIFIED | UNVERIFIED | UNVERIFIED |
+| hatch | PINNED | PINNED | PINNED | PINNED |
 | pc_deposit | PINNED | PINNED | PINNED | PINNED |
 | pc_withdraw | PINNED | PINNED | PINNED | PINNED |
 | pc_box_place | PINNED | PINNED | PINNED | PINNED |
@@ -364,7 +365,7 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 | fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-specific mutation and restore pairing not pinned; bytes, if shown, are diagnostic only |
 | lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-specific mutation and restore pairing not pinned; bytes, if shown, are diagnostic only |
 | rr | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 1 matches, aligned=none; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 2 matches, aligned=0x8379724; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | backup literal 02025564: 2 matches, aligned=0x8379b7c; clean ROM has no aligned direct literal. Companion-only literal is patch data; MoveSaveBlocks_ResetHeap copies are relocation, not proof of a borrowed-party swap/restore. Indirect/synthesized addressing remains possible; no unique begin/restore pair established.; bytes, if shown, are diagnostic only |
 
 ### nature_change — RR nature-changer special
 
@@ -375,7 +376,37 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 | fr | UNVERIFIED | not resolved; no capture offset authorized | not established | no pinned RR special entry/store/caller context; bytes, if shown, are diagnostic only |
 | lg | UNVERIFIED | not resolved; no capture offset authorized | not established | no pinned RR special entry/store/caller context; bytes, if shown, are diagnostic only |
 | rr | UNVERIFIED | not resolved; no capture offset authorized | not established | party-base 02024284 has 906 literal matches; no unique nature-special PID write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search did not provide an RR special address; a generic PID store is not sufficient attribution.; bytes, if shown, are diagnostic only |
-| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | party-base 02024284 has 911 literal matches; no unique nature-special PID write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search did not provide an RR special address; a generic PID store is not sufficient attribution.; bytes, if shown, are diagnostic only |
+| rr_companion | UNVERIFIED | not resolved; no capture offset authorized | not established | party-base 02024284 has 913 literal matches; no unique nature-special PID write/dispatch identified. CFRU scripting/util/item/party_menu/build_pokemon name search did not provide an RR special address; a generic PID store is not sufficient attribution.; bytes, if shown, are diagnostic only |
+
+### hatch — AddHatchedMonToParty
+
+[pret src/daycare.c#L1639-L1678](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/daycare.c#L1639-L1678). AddHatchedMonToParty +0xAA, after MonRestorePP and CalculateMonStats, before stack unwind. R5 is the completed party mon. Snapshot only that aligned party record; require non-egg, non-Bad-Egg and valid checksum. O-15: one gift_daycare acquisition at hatch; GiveEgg is not acquisition. Normal caller CB2_EggHatch_0; ScriptHatchMon also calls this completed mutation routine.
+
+| ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
+|---|---|---|---|---|
+| fr | PINNED | 08046DFE / +C / 46DFE | 281CFDF76AFA281CF7F739FB05B030BC | SOURCE only; capture contract above |
+| lg | PINNED | 08046DFE / +C / 46DFE | 281CFDF76AFA281CF7F739FB05B030BC | SOURCE only; capture contract above |
+| rr | PINNED | 08046DFE / +C / 46DFE | 281CFDF76AFA281CF7F739FB05B030BC | SOURCE only; capture contract above |
+| rr_companion | PINNED | 08046DFE / +C / 46DFE | 281CFDF76AFA281CF7F739FB05B030BC | SOURCE only; capture contract above |
+
+Function bounds and independently pinned entry anchors (vanilla):
+
+| ROM | Symbol source | Function address / size | Function-relative capture | Entry bytes |
+|---|---|---|---|---|
+| fr | data/gen3/pret/pokefirered.sym:2583 AddHatchedMonToParty | 08046D60 / C0 | +AA | 30B585B00006000E03AC462121706421 |
+| lg | data/gen3/pret/pokeleafgreen.sym:2583 AddHatchedMonToParty | 08046D60 / C0 | +AA | 30B585B00006000E03AC462121706421 |
+
+Unless an RR-specific binding is described below, RR entry checks use the FR entry bytes at the uniquely matched anchor minus the reviewed function-relative anchor offset; a mismatch is refused, never repinned. JSON reference_size is a vanilla bound, not a proved RR extent. frame_control retains its measured/patched artifact binding.
+
+RR-specific capture contract:
+
+[CFRU source map](https://github.com/Skeli789/Complete-Fire-Red-Upgrade/blob/b637a27898b14e25dd24d0f69a3e302f0069deb8/src/daycare.c#L1639-L1678). RR ROM 08046D60 body; capture 08046E0A after its CalculateMonStats call. R5 is the completed hatchling. RR CB2_EggHatch_0 calls this body at 080471D4; the body, entry, tail and caller were read independently in both RR artifacts. Require an aligned party record, non-egg/non-Bad-Egg; publish once in gift_daycare.
+Binary body, not upstream C, is authoritative. RR body ends at 08046E20: return at +0xB0, three data words +0xB4..BF; next ScriptHatchMon entry pinned.
+
+| Artifact | Entry/trampoline | Body entry bytes | Estimated extent | Boundary bytes |
+|---|---|---|---|---|
+| rr | 08046D60 in-place | 30B585B00006000E03AC462121706421 | C0 (estimate) | 00B503480078FFF7 |
+| rr_companion | 08046D60 in-place | 30B585B00006000E03AC462121706421 | C0 (estimate) | 00B503480078FFF7 |
 
 ### pc_deposit — TryStorePartyMonInBox
 

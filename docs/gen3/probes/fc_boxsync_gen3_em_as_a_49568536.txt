@@ -1,0 +1,52 @@
+# gen3_final_cut row=boxsync_gen3_em_as_a item=§13.3_duo cut=495685364a82d6a106c2a64cf189ce66f38f72ce
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_emerald --scenario boxsync_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T15:04:05 cpu=65% emuhawk=0 python=8
+start_utc=2026-09-27T19:04:03Z tracked_clean_before=True
+
+========== scenario: boxsync_gen3 ==========
+[duo] boxsync_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=859891e75bd73ddb4dcf16cdf56b4db84dca83dc2c1eb0e2fea08696bc14f6dc profile.json=6776be4e8fe6878b8151de7263414eb84722d75a565b55d31821835091009f53 source=495685364a82d6a106c2a64cf189ce66f38f72ce
+[duo] server up: tcp=51933 http=51934 data=C:\Users\howar\AppData\Local\Temp\slink_duo_boxsync_gen3_dezwv70t
+[duo] timing server 1.1s
+[duo] cleared 7 stale artifact(s) for boxsync_gen3: e2e_boxsync_gen3_a_1_witness.bin, e2e_boxsync_gen3_a_attempt1_result.txt, e2e_boxsync_gen3_a_result.txt, e2e_boxsync_gen3_b_1_witness.bin, e2e_boxsync_gen3_b_attempt1_result.txt, e2e_boxsync_gen3_b_result.txt, e2e_boxsync_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 504F4F4D:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 17.8s
+[duo] timing results 5.7s
+[duo] RESULT_LINE a: RESULT: PASS (round trip of 504F4F4D:20250925)
+[duo] RESULT_LINE b: RESULT: PASS (round trip of 504F4F4D:DFDAF6DA)
+[duo] SAVE_WITNESS_SHA256 inst=a site=e0984c33603b704e6a99bf6d085af3b1f9aed1b721cd01641ae0f3011fe462c7 file=e0984c33603b704e6a99bf6d085af3b1f9aed1b721cd01641ae0f3011fe462c7 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=24d5155c929af30edc48a7721da236f1a416a2ed0bc295230b0f4190d2b3ec02 file=24d5155c929af30edc48a7721da236f1a416a2ed0bc295230b0f4190d2b3ec02 match=true saves=1 counter=2->3 rtc=normalized
+[duo] boxsync: 504F4F4D:20250925 / 504F4F4D:DFDAF6DA deposited and withdrawn, saved once in party with the fixture record
+[duo] MARKER a: TX party_to_box 504F4F4D:20250925 {"event":"party_to_box","key":"504F4F4D:20250925","player":"a","seq":38,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+[duo] MARKER a: BOXED_OBSERVED 504F4F4D:20250925 box=0:2
+[duo] MARKER a: TX box_to_party 504F4F4D:20250925 {"area_id":"","event":"box_to_party","key":"504F4F4D:20250925","player":"a","seq":72}
+[duo] MARKER a: RETURNED_OBSERVED 504F4F4D:20250925 slot=1
+[duo] MARKER b: RX box_mon key=504F4F4D:DFDAF6DA
+[duo] MARKER b: TX stats_cache 504F4F4D:DFDAF6DA {"event":"stats_cache","key":"504F4F4D:DFDAF6DA","player":"b","seq":38,"stats":{"attack":8,"defense":7,"level":3,"maxHP":15,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":7,"spDef":7,"speed":7}}
+[duo] MARKER b: BOXED_OBSERVED 504F4F4D:DFDAF6DA box=0:2
+[duo] MARKER b: RX party_mon key=504F4F4D:DFDAF6DA
+[duo] MARKER b: TX sync_retrieve_done 504F4F4D:DFDAF6DA {"event":"sync_retrieve_done","key":"504F4F4D:DFDAF6DA","player":"b","seq":73}
+[duo] MARKER b: RETURNED_OBSERVED 504F4F4D:DFDAF6DA slot=1
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] boxsync_gen3: a=PASS b=PASS
+
+========== summary ==========
+  boxsync_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-27T19:04:31Z tracked_clean_after=True classification=pass

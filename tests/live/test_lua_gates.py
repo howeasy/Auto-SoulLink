@@ -65,7 +65,7 @@ PORTED = (
     "test_live_choosepartymon.lua",    # native:choose_mon
     "test_live_createmon.lua",         # raw OP_CREATE_MON
     "test_live_enemyparty.lua",        # raw OP_CREATE_MON (enemy party)
-    "test_live_enemyparty_route.lua",  # native:transfer("enemy")  (savestate-free, standalone)
+    "test_live_enemyparty_route.lua",  # native:transfer("enemy") -> 16 refused (RR-DURABLE)
     "test_live_events.lua",            # gatelib EvRing drain (faint/outcome producers)
     "test_live_ewramtail.lua",         # read-only watch + paint instrumentation
     "test_live_explode_route.lua",     # raw OP_FORCE_MOVE_SLOT (C5-FMS-FIX semantics)
@@ -77,11 +77,11 @@ PORTED = (
     "test_live_partyevents.lua",       # gatelib EvRing drain (party producers)
     "test_live_pcnpc.lua",             # native:config{pc_trade_npc} + service() trade_request
     "test_live_playse.lua",            # native:play_sound
-    "test_live_setpartymon.lua",       # native:transfer("party")
+    "test_live_setpartymon.lua",       # native:transfer("party") -> 18 refused (RR-DURABLE)
     "test_live_soullinkmenu.lua",      # native:link_panel staging + the START-menu hook
     "test_live_startmenu.lua",         # read-only START-menu recon
     "test_live_startmenu_shapes.lua",  # SOULLINK row: with-Pokedex / Safari / tools-page shapes
-    "test_live_tradescene.lua",        # native:transfer("enemy") then transfer("scene")
+    "test_live_tradescene.lua",        # raw durable PREPARE 29 + SCENE 21 (RR-DURABLE)
     "test_mailbox_absent.lua",         # negative control: native absent on the clean ROM
     "test_mailbox_battle.lua",         # raw OP_FORCE_FAINT / OP_FORCE_MOVE / unknown opcode
     "test_mailbox_ping.lua",           # raw OP_PING + beacon stability

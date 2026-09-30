@@ -1,0 +1,201 @@
+# reads == PYDEC, vanilla Emerald (BPEE), live bytes, 2026-09-25 (card E2-CKPT)
+# ROM sha1 f3ae088181bf583e55daf962a92bb46f4f1d07b7; EmuHawk 2.11.1; worktree gen3-emerald (HEAD e425dcd2 at run time) + uncommitted E2-CKPT edits
+# state: slink_overworld.State (sha256 d511fc8e...; tools/mkstates_gen3.py --title emerald --kind town from tests/fixtures/gen3/emerald_town.sav):
+#   Oldale 0.10 (6,17), party = 1 Mudkip Lv5 (SYNTH OT EMER#20250925), box 0 empty, 5 Poke Balls, 0 badges; CONTINUE re-rolled encryptionKey (low16 0xFCED)
+# Why a scratch driver (C:/slink-wt/emerald-e2/gen3_reads_dump_emerald.lua + run_reads_pydec.py, sources below):
+#   lua/tests/probe_gen3_reads_dump.lua has no Emerald pack (TITLE_TO_PACK firered/leafgreen/radical_red, Entry admission not routed for Emerald)
+#   and tools/gen3_reads_pydec.py main() diffs party/box only and has no emerald TITLE_PROFILES row -- both outside the E2-CKPT lease.
+#   The driver builds lua/gen3/reads.lua exactly as the checkpoint probe builds its bag reader: reads.new(profile.titles.emerald, io, pack pointers),
+#   writes DUMP/LUA lines in the FR dumper format for party + box0, and XDUMP/LUAX lines for trainer/location/badges/balls. The comparison imports
+#   tools/gen3_reads_pydec.py (parse_dump, diff_dump, apply_mutation, decode_trainer, decode_location, decode_badges_for_profile,
+#   decode_ball_pocket) with the Emerald profile's own derived offsets.
+#
+# RUN A (receipt): reads.lua @ 04960989 (git show 04960989:lua/gen3/reads.lua, sha256 0837bd9e...) -- RESULT: PASS
+[gate] gen3_reads_dump_emerald: RESULT: PASS party=1 dumped  (3s)
+RESULT: PASS party=1 dumped
+## party/box: 0 difference(s) over 31 LUA mon lines (1 party + 30 box0), 155 fields
+## planted-offender control: flipped byte 0 of the first party record -> 2 difference(s)
+OK   trainer.ot_id lua=539298085 py=539298085
+OK   trainer.name lua=EMER py=EMER
+OK   location.map_group lua=0 py=0
+OK   location.map_num lua=10 py=10
+OK   badges.value lua=0 py=0
+OK   balls.ball_count lua=5 py=5
+OK   balls.has_pokeballs lua=true py=True
+# encryptionKey low16=0xFCED (raw ball qty words XOR it)
+RESULT: PASS
+#
+# RUN B: reads.lua as committed at e425dcd2 (E2-ENTRY-2's F10 refusal) -- RESULT: FAIL, badges only
+[gate] gen3_reads_dump_emerald: RESULT: PASS party=1 dumped  (3s)
+RESULT: PASS party=1 dumped
+## party/box: 0 difference(s) over 31 LUA mon lines (1 party + 30 box0), 155 fields
+## planted-offender control: flipped byte 0 of the first party record -> 2 difference(s)
+OK   trainer.ot_id lua=539298085 py=539298085
+OK   trainer.name lua=EMER py=EMER
+OK   location.map_group lua=0 py=0
+OK   location.map_num lua=10 py=10
+DIFF badges.value lua=ERROR profile derived sets both BADGE_FIRST_FLAG and SB1_BADGE_BYTE_OFFSET py=0
+OK   balls.ball_count lua=5 py=5
+OK   balls.has_pokeballs lua=true py=True
+# encryptionKey low16=0xFCED (raw ball qty words XOR it)
+RESULT: FAIL
+# FINDING: e425dcd2 lua/gen3/reads.lua read_badges refuses the REAL Emerald profile: `d.SB1_BADGE_BYTE_OFFSET ~= nil` is true because
+#   lua/json_codec.lua decodes JSON null to the M.null sentinel table (json_codec.lua:4,174), and data/games/gen3_emerald/profile.json carries
+#   "SB1_BADGE_BYTE_OFFSET": null. The Python twin (decode_badges_for_profile) sees None and decodes. Unit fakes that pass nil hide it.
+#
+# raw dump of RUN A (C:/slink-wt/emerald-e2/reads_dump_emerald_04960989.txt), box0 slots 1..29 elided (all zero, identical to slot 0):
+DUMP name=party addr=0x20244EC len=100 frame=762 hex=4b44554d25092520c7cfbec5c3caffffffff0202bfc7bfccffffff007efe00004f4d5d6d6e4d706d4d65706d6e5df54c81f087f36e4d706d6e4d706d6e4d706d6e4d706d754c706de94d706d6e0b706d0000000005ff140014000c000a0009000a000a00
+LUA name=party slot=0 key=4D55444B:20250925 species=283 level=5 hp=20 nickname=MUDKIP
+DUMP name=box0 addr=0x2029830 len=2400 frame=762 hex=000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+LUA name=box0 slot=0 key=00000000:00000000 species=0 level= hp= nickname=          
+XDUMP name=sb2 addr=0x2024A78 hex=bfc7bfccffffffff0000250925200000000f12000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000edfc6f6e
+XDUMP name=sb1 addr=0x2025A24 hex=06001100000aff00
+XDUMP name=flags addr=0x2026C94 hex=000000000000000000004100000010001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080ce5cbcbf31e94e3fe4efccdb81fd6d73ebfd7cfd739be7e5092f47145b00822188817d00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000100010000000200000000000000000000000000
+XDUMP name=balls addr=0x2026074 hex=0400e8fc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc0000edfc
+LUAX trainer ot_id=539298085 name=EMER
+LUAX location map_group=0 map_num=10
+LUAX badges value=0
+LUAX balls ball_count=5 has_pokeballs=true
+#
+# ---- driver: gen3_reads_dump_emerald.lua ----
+-- E2-CKPT scratch driver: reads == PYDEC on BPEE. Loads SLINK_STATE, builds lua/gen3/reads.lua on
+-- the Emerald profile + pack pointers (the checkpoint probe's own construction), and writes
+-- raw bytes (DUMP) and reads.lua's decodes (LUA / LUAX) to SLINK_READS_DUMP. Read-only.
+local WT = SLINK_ROOT or os.getenv("SLINK_ROOT")
+local G = dofile(WT .. "/lua/tests/gen3_boot_check.lua")
+local JSON = dofile(WT .. "/lua/json_codec.lua")
+G.open("gen3_reads_dump_emerald")
+local cp = G.checkpoint()
+memory.usememorydomain("System Bus")
+local ok = savestate.load(os.getenv("SLINK_STATE"))
+if ok ~= true then G.finish(false, "savestate.load refused") end
+G.idle(30)
+local f = assert(io.open(WT .. "/data/games/gen3_emerald/profile.json", "rb"))
+local profile = JSON.decode(f:read("a")).titles.emerald
+f:close()
+local function bytes(a, n)
+    local out = {}
+    for i = 1, n do out[i] = memory.read_u8(a + i - 1) end
+    return out
+end
+local io_ro = {
+    read_u8 = function(a) return memory.read_u8(a) end,
+    read_u16 = function(a) return memory.read_u16_le(a) end,
+    read_u32 = function(a) return memory.read_u32_le(a) end,
+    read_bytes = bytes,
+}
+local reads = dofile(os.getenv("SLINK_READS_LUA") or (WT .. "/lua/gen3/reads.lua")).new(profile, io_ro, cp.pointers)
+local d = profile.derived
+local out = assert(io.open(os.getenv("SLINK_READS_DUMP"), "w"))
+local function hex(b)
+    local t = {}
+    for i = 1, #b do t[i] = string.format("%02x", b[i]) end
+    return table.concat(t)
+end
+local function dump(name, a, b)
+    out:write(string.format("DUMP name=%s addr=0x%X len=%d frame=%d hex=%s\n", name, a, #b, emu.framecount(), hex(b)))
+end
+local function mon_line(name, mon)
+    out:write(string.format("LUA name=%s slot=%d key=%s species=%s level=%s hp=%s nickname=%s\n",
+        name, mon.slot, reads.key(mon), tostring(mon.species), tostring(mon.level or ""),
+        tostring(mon.hp or ""), mon.nickname))
+end
+local count = memory.read_u8(profile.ram.PARTY_COUNT_ADDR)
+local pb = assert(reads.party_base())
+dump("party", pb, bytes(pb, count * 100))
+for _, m in ipairs(assert(reads.read_party())) do mon_line("party", m) end
+local st = assert(reads.read_storage())
+dump("box0", st + d.BOX_DATA_OFFSET, bytes(st + d.BOX_DATA_OFFSET, 30 * 80))
+for _, m in ipairs(assert(reads.read_box(0))) do mon_line("box0", m) end
+-- extras: separate prefix so the party/box parser never sees them
+local sb1, sb2 = assert(reads.read_sb1()), assert(reads.read_sb2())
+out:write(string.format("XDUMP name=sb2 addr=0x%X hex=%s\n", sb2, hex(bytes(sb2, 0xB0))))
+out:write(string.format("XDUMP name=sb1 addr=0x%X hex=%s\n", sb1, hex(bytes(sb1, 8))))
+out:write(string.format("XDUMP name=flags addr=0x%X hex=%s\n", sb1 + d.SB1_FLAGS_OFFSET,
+    hex(bytes(sb1 + d.SB1_FLAGS_OFFSET, 0x120))))
+out:write(string.format("XDUMP name=balls addr=0x%X hex=%s\n", sb1 + d.SB1_BALL_POCKET_OFFSET,
+    hex(bytes(sb1 + d.SB1_BALL_POCKET_OFFSET, 4 * d.SB1_BALL_POCKET_COUNT))))
+local function x(name, fn)
+    local ok, a, b = pcall(fn)
+    if not ok or a == nil then out:write("LUAX " .. name .. " error=" .. tostring(ok and b or a) .. "\n")
+    else out:write("LUAX " .. name .. " " .. a .. "\n") end
+    out:flush()
+end
+x("trainer", function() local t, w = reads.read_trainer(); if not t then return nil, w end
+    return string.format("ot_id=%d name=%s", t.ot_id, t.name) end)
+x("location", function() local l, w = reads.read_location(); if not l then return nil, w end
+    return string.format("map_group=%d map_num=%d", l.map_group, l.map_num) end)
+x("badges", function() local v, w = reads.read_badges(); if v == nil then return nil, w end
+    return string.format("value=%d", v) end)
+x("balls", function() local b, w = reads.read_balls(); if not b then return nil, w end
+    return string.format("ball_count=%d has_pokeballs=%s", b.ball_count, tostring(b.has_pokeballs)) end)
+out:close()
+G.finish(true, "party=" .. count .. " dumped")
+
+# ---- comparison: run_reads_pydec.py ----
+"""E2-CKPT scratch: reads == PYDEC on BPEE. Runs gen3_reads_dump_emerald.lua on a savestate, then
+diffs reads.lua's decodes against tools/gen3_reads_pydec.py's independent decoders (gen3_codec)."""
+import json
+import os
+import subprocess
+import sys
+
+WT = 'E:/Google Drive/SLink/.claude/worktrees/gen3-emerald'
+os.chdir(WT)
+os.environ.setdefault('SLINK_GEN3_FIXTURE_RUNS', 'C:/slink-wt/emerald-e2')
+sys.path.insert(0, WT + '/tools')
+import gen3_fixtures as fx  # noqa: E402
+import gen3_reads_pydec as pd  # noqa: E402
+
+state = sys.argv[1]
+dump = 'C:/slink-wt/emerald-e2/reads_dump_emerald.txt'
+if '--no-run' not in sys.argv:
+    rom = fx.resolve_rom('emerald', None)
+    seed = fx.codec.split_rtc(open(WT + '/tests/fixtures/gen3/emerald_town.sav', 'rb').read())[0]
+    rom_rel, run_dir, _ = fx._prepare_run('reads_pydec_emerald', rom, seed=seed,
+                                          saveram_name_override=fx.EMERALD_SAVERAM)
+    ok, text = fx._launch('C:/slink-wt/emerald-e2/gen3_reads_dump_emerald.lua', rom_rel, run_dir, rr=False,
+                          timeout=300, title='emerald',
+                          extra_env={'SLINK_GEN3_CHECKPOINT': WT + '/data/games/gen3_emerald/write_checkpoint.json',
+                                     'SLINK_STATE': state, 'SLINK_READS_DUMP': dump,
+                                     **({'SLINK_READS_LUA': sys.argv[2]} if len(sys.argv) > 2 and sys.argv[2].endswith('.lua') else {})})
+    print(text.rstrip())
+    if not ok:
+        sys.exit(1)
+
+derived = json.load(open(WT + '/data/games/gen3_emerald/profile.json'))['titles']['emerald']['derived']
+dumps, lua_lines = pd.parse_dump(__import__('pathlib').Path(dump))
+diffs = pd.diff_dump(dumps, lua_lines, False)
+print(f"## party/box: {len(diffs)} difference(s) over {sum(len(v) for v in lua_lines.values())} LUA mon line(s)")
+for row in diffs:
+    print("DIFF", row)
+mut = pd.apply_mutation(dumps)
+mdiffs = pd.diff_dump(dumps, lua_lines, False)
+print(f"## planted-offender control: flipped byte 0 of the first {mut} record -> {len(mdiffs)} difference(s)")
+
+x, lx = {}, {}
+for ln in open(dump, encoding='utf-8'):
+    p = ln.split()
+    if p[0] == 'XDUMP':
+        x[p[1][5:]] = bytes.fromhex(p[3][4:])
+    elif p[0] == 'LUAX':
+        lx[p[1]] = {'error': ln.split('error=', 1)[1].strip()} if 'error=' in ln else dict(kv.split('=', 1) for kv in p[2:])
+sb2, sb1, flags, balls = x['sb2'], x['sb1'], x['flags'], x['balls']
+py = {
+    'trainer': pd.decode_trainer(sb2, derived['SB2_OT_ID_OFFSET'], derived['SB2_NAME_OFFSET']),
+    'location': pd.decode_location(sb1, derived['SB1_LOCATION_MAP_GROUP_OFFSET'], derived['SB1_LOCATION_MAP_NUM_OFFSET']),
+    'badges': {'value': pd.decode_badges_for_profile(flags, derived)[0]},
+    'balls': pd.decode_ball_pocket(balls, derived['SB1_BALL_POCKET_COUNT'],
+                                   int.from_bytes(sb2[derived['SB2_ENC_KEY_OFFSET']:derived['SB2_ENC_KEY_OFFSET'] + 4], 'little')),
+}
+bad = 0
+for k, fields in py.items():
+    for f, v in fields.items():
+        lua_v = lx[k].get(f, 'ERROR ' + lx[k].get('error', '?'))
+        same = str(v).lower() == lua_v.lower() if isinstance(v, bool) else str(v) == lua_v
+        bad += not same
+        print(f"{'OK  ' if same else 'DIFF'} {k}.{f} lua={lua_v} py={v}")
+enc = int.from_bytes(sb2[0xAC:0xB0], 'little')
+print(f"# encryptionKey low16=0x{enc & 0xFFFF:04X} (raw ball qty words XOR it)")
+print("RESULT:", "PASS" if not diffs and mdiffs and not bad else "FAIL")
+sys.exit(0 if not diffs and mdiffs and not bad else 1)

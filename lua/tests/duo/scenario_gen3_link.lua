@@ -27,7 +27,11 @@ return function(ctx)
     -- This side's own command failures are FINAL, whatever the partner did (Codex review of
     -- 43b9ccb4: sync_retrieve_failed with the partner still running read as a CONSEQUENCE).
     for _, failed in ipairs({ "box_mon_failed", "sync_retrieve_failed" }) do
-        if ctx.sent(failed, key) > 0 then return false, "the client sent " .. failed .. " for " .. key end
+        if ctx.sent(failed, key) > 0 then
+            local event = ctx.last_sent(failed) or {}
+            return false, "the client sent " .. failed .. " for " .. key
+                .. " (reason: " .. tostring(event.reason or "unspecified") .. ")"
+        end
     end
     if quarantined() then
         if ctx.sent("sync_retrieve_done", key) == 0 then

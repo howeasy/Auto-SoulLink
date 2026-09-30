@@ -86,7 +86,11 @@ function randomizerFields(form) {
       trainers_similar_strength: { on: 'trainers', when: 'distributed',
                                    why: 'not available with evenly distributed trainer teams' },
     },
+    // A row another family owns (option_form `families`: the FR/LG-only held items, tutors,
+    // trades, shops, pickup and tweaks; the Gen 1-only tweaks) is greyed like a pure one.
     optWhy(o) {
+      if (this.family && o.families && o.families.indexOf(this.family) < 0) return 'not available for ' + this.familyLabel(this.family);
+      if (!this.family && o.families && o.families.indexOf('gen1_rby') < 0) return 'Gen 3 only';
       if (this.family === 'gen1_purergb' && o.pure === false) return this.PURE_WHY;
       var d = this.DEPENDS[o.key];
       if (d && !d.off && this.rdraft.spec[d.on] === d.when) return d.why;
@@ -110,7 +114,11 @@ function randomizerFields(form) {
     // The preflight in words: the tags and the status region say the same thing.
     jarWords() {
       var p = this.pre;
-      return !p ? '' : p.jar_found ? (p.jar_fork ? 'SLink fork jar (vanilla + pureRGB)' : 'stock jar (vanilla only)') : 'jar not found';
+      if (!p) return '';
+      if (!p.jar_found) return 'jar not found';
+      if (p.jar_fork) return 'SLink fork jar (vanilla + pureRGB + FireRed / LeafGreen + Emerald)';
+      return this.family === 'gen3_frlg' || this.family === 'gen3_emerald'
+        ? 'stock jar (not accepted for ' + this.familyLabel(this.family) + ')' : 'stock jar (vanilla only)';
     },
     javaWords() { return !this.pre ? '' : this.pre.java_found ? 'java on PATH' : 'java not on PATH'; },
     setChoice(o, c) { this.rdraft.spec[o.key] = c.value; this.settleSpecForFamily(); },
@@ -197,7 +205,7 @@ function randomizerFields(form) {
     async exportSettings() {
       var name = this.presetName.trim() || 'slink';
       var res = await fetch('/api/randomizer/settings/export', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                                                 body: JSON.stringify({ spec: this.rdraft.spec, name: name }) });
+                                                                 body: JSON.stringify({ spec: this.rdraft.spec, name: name, family: this.family }) });
       if (!res.ok) { var j = await res.json(); this.presetNote = j.error || 'Export failed'; return; }
       var a = document.createElement('a');
       a.href = URL.createObjectURL(await res.blob()); a.download = name.replace(/[^\w-]+/g, '_') + '.rnqs';
@@ -255,7 +263,7 @@ function randomizerFields(form) {
     },
     // A cartridge this run can take: clean, and of its family when it names one.
     usable(r) { return !!r.clean && (!this.family || r.family === this.family); },
-    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : ''; },
+    familyLabel(f) { return f === 'gen1_purergb' ? 'pureRGB' : f === 'gen1_rby' ? 'vanilla' : f === 'gen2_gsc' ? 'Gen 2' : f === 'gen3_frlg' ? 'FireRed / LeafGreen' : f === 'gen3_emerald' ? 'Emerald' : ''; },
     // The option's words: the cartridge, and why it is greyed when it is.
     romNote(r) {
       if (this.usable(r)) return r.title;
@@ -275,6 +283,8 @@ function randomizerFields(form) {
       } else {
         add('pureRGB', function (r) { return r.clean && r.family === 'gen1_purergb'; });
         add('Red · Blue · Yellow', function (r) { return r.clean && r.family === 'gen1_rby'; });
+        add('FireRed · LeafGreen', function (r) { return r.clean && r.family === 'gen3_frlg'; });
+        add('Emerald', function (r) { return r.clean && r.family === 'gen3_emerald'; });
         add('Gold · Silver · Crystal', function (r) { return r.clean && r.family === 'gen2_gsc'; });
       }
       add('not usable', function (r) { return !r.clean; });
@@ -333,6 +343,7 @@ function randomizerFields(form) {
       for (var i = 0; i < 2; i++) {
         var r = this.pick('ab'[i]);
         if (r && r.variant && titles.indexOf(r.variant) < 0) {
+          if (r.family === 'gen3_emerald') return { ok: false, why: 'No Emerald companion build is available yet. Use the standard cartridge.' };
           return { ok: false, why: 'No companion build for ' + r.variant + ': it has no free WRAM for the mailbox. It plays fine with the Lua HUD, without native sounds.' };
         }
       }
@@ -356,6 +367,10 @@ function randomizerFields(form) {
       // pinned is pinned whatever the jar; the FORK is the randomizer's requirement for pure
       if (this.rdraft.randomize && this.family === 'gen1_purergb' && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
         return 'Randomizing pureRGB needs the current SLink fork jar (tools/build_upr_fork.py); this jar is the stock 4.6.1 or an older fork.';
+      }
+      if (this.rdraft.randomize && (this.family === 'gen3_frlg' || this.family === 'gen3_emerald')
+          && this.pre && this.pre.jar_found && !this.pre.jar_fork) {
+        return 'Randomizing ' + this.familyLabel(this.family) + ' needs the current SLink fork jar.';
       }
       if (this.rdraft.randomize && this.rdraft.companion && this.companionOk().ok && this.family === 'gen1_purergb'
           && this.pre && this.pre.jar_entries) {

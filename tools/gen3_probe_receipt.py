@@ -52,6 +52,18 @@ BW_ROWS = ["bw_n1_action_draw", "bw_n4_bag", "bw_n5_party", "bw_n6_summary", "bw
            "bw_n9_run", "bw_u1_oldman", "bw_u2_pokedude", "bw_n8_item"]
 DEFAULT_ROWS = BASE_ROWS + BW_ROWS
 
+# card E4b-CKPT: the checkpoint pack a title's probe run reads. Only Emerald diverges (its own
+# pack, data/games/gen3_emerald/write_checkpoint.json); firered/leafgreen (and anything not named
+# here) keep the shared FR/LG pack, unchanged.
+CHECKPOINT_PACK = {"emerald": "gen3_emerald"}
+_DEFAULT_CHECKPOINT_PACK = "gen3_frlg"
+
+# Emerald has no oldman/pokedude tutorial states (tools/mkstates_gen3_tutorials.py and
+# tools/gen3_bw_hashes.py both accept only --title firered/leafgreen -- their own argparse
+# `choices`), so its bw_* rows are refused by name rather than silently pointed at states that
+# were never built. Titles not in this set are unaffected.
+NO_BW_TITLES = {"emerald"}
+
 
 def staged_rom_rel(title):
     """The staged, space-free ROM path a lane's run_gate invocation uses -- the same naming
@@ -67,8 +79,9 @@ def staged_rom_rel(title):
 
 
 def build_env(title, lane, rows, kind):
+    pack = CHECKPOINT_PACK.get(title, _DEFAULT_CHECKPOINT_PACK)
     env = {
-        "SLINK_GEN3_CHECKPOINT": f"{lane}/data/games/gen3_frlg/write_checkpoint.json",
+        "SLINK_GEN3_CHECKPOINT": f"{lane}/data/games/{pack}/write_checkpoint.json",
         "SLINK_GEN3_TITLE": title,
         "SLINK_GEN3_KIND": kind,
         "SLINK_STATE_DIR": f"{lane}/patch/build/gen3_probe_states_c4p2/{title}",
@@ -289,8 +302,10 @@ def main():
                      choices=sorted(gen3_fixtures.PARTY_TITLES) + ["radical_red"])
     ap.add_argument("--lane", required=True)
     ap.add_argument("--kind", default="clean")
-    ap.add_argument("--rows", default=",".join(DEFAULT_ROWS),
-                     help="comma list (default: the full §6 row list, base + bw)")
+    ap.add_argument("--rows", default=None,
+                     help="comma list (default: the full §6 row list, base + bw -- except "
+                          "--title emerald, which defaults to no restriction at all: its pack's "
+                          "own artifacts table decides, since it has no bw_* states)")
     ap.add_argument("--out", default=None,
                      help="filename under docs/gen3/probes/ (default: computed; sanitised to "
                           "a bare basename either way)")
@@ -303,7 +318,24 @@ def main():
               file=sys.stderr)
         return 1
 
-    rows = [r.strip() for r in args.rows.split(",") if r.strip()]
+    if args.rows is not None:
+        rows = [r.strip() for r in args.rows.split(",") if r.strip()]
+    elif args.title in NO_BW_TITLES:
+        # no restriction at all (not BASE_ROWS): the lua probe's P.planned() treats a nil/empty
+        # SLINK_CHECKPOINT_ROWS as "run everything the pack's own artifacts table admits", which
+        # is exactly what the E2 scratch driver relied on (it never set the env var either) --
+        # naming BASE_ROWS explicitly here would risk an assertion in the lua probe for any row
+        # the pack does not (yet) admit for this title/kind.
+        rows = []
+    else:
+        rows = list(DEFAULT_ROWS)
+
+    bw_named = [r for r in rows if r.startswith("bw_")]
+    if bw_named and args.title in NO_BW_TITLES:
+        print(f"--rows names bw_* row(s) not available for {args.title} (no oldman/pokedude "
+              f"tutorial states -- tools/mkstates_gen3_tutorials.py and tools/gen3_bw_hashes.py "
+              f"only support --title firered/leafgreen): {', '.join(bw_named)}", file=sys.stderr)
+        return 1
     has_bw = any(r.startswith("bw_") for r in rows)
 
     if args.dry_run:

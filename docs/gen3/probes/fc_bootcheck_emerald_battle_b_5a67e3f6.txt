@@ -1,0 +1,24 @@
+# gen3_final_cut row=bootcheck_emerald_battle_b item=§13.4_item4 cut=5a67e3f62144ffe604c9e34e4ac668fbe81c0150
+# lane=C:/slink-wt/g3-lane2
+# command: python tools/gen3_fixtures.py boot-check --rom 'Pokemon - Emerald Version (USA, Europe).gba' --fixture tests/fixtures/gen3/emerald_battle_b.sav --title emerald --saveram-name 'Pokemon - Emerald Version (USA, Europe).SaveRAM'   (cwd=C:/slink-wt/g3-lane2)
+# env: (none)
+# verdict: PASS
+# inputs: rom:emerald=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af
+--- attempt 1 of 1 ---
+LOAD 2026-09-28T13:39:22 cpu=77% emuhawk=4 python=13
+start_utc=2026-09-28T17:39:20Z tracked_clean_before=True
+seeded C:\slink-wt\g3-lane2\patch\build\gen3_fixture_runs\bootcheck_emerald_battle_b\Pokemon - Emerald Version (USA, Europe).SaveRAM from tests\fixtures\gen3\emerald_battle_b.sav (counter=2)
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_gen3_emerald_boot_check.ini --lua=lua/tests/gen3_emerald_boot_check.lua patch/build/gen3_Pokemon_-_Emerald_Version_(USA,_Europe).gba
+[gate] gen3_emerald_boot_check: RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)  (5s)
+phase start frame=1 title=emerald
+phase seeded frame=1 domain=SRAM counter=2
+phase overworld-cb2 frame=499 map=0.17 pos=(21,16)
+phase field frame=582 map=0.17 pos=(21,16) saveFileStatus=1
+phase save-menu frame=582 counter=2
+phase save-dialog frame=642 row=3/6
+phase saved frame=1169 counter=2->3
+phase flushed frame=1605 map=0.17 pos=(21,16)
+RESULT: PASS counter 2 -> 3 map=0.17 pos=(21,16)
+emerald_fixture_problems(battle): 0 problem(s)
+BOOT-CHECK PASS tests\fixtures\gen3\emerald_battle_b.sav counter=2->3 party=[{'key': '4D55444B:DFDAF6DA', 'species': 283, 'level': 5}]
+exit=0 end_utc=2026-09-28T17:39:28Z tracked_clean_after=True classification=pass

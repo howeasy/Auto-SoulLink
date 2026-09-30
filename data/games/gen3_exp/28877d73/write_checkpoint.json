@@ -1,0 +1,3764 @@
+{
+  "emerald_expansion_28877d73": {
+    "admitted": false,
+    "anchors": {
+      "cb1_overworld": {
+        "address": 135868576,
+        "expected_hex": {
+          "clean": "30B5284A284B516881B0994203D001B030BC01BC0047D48D958DAFF7C1FA6846A2F7F4FC2A0021006846A2F7F7FC6846A3F762FD67F0A6FE002822D0C0F7F8FD0028E4D0194B1B78DB07E0D58AF772F80028DCD0C0F704FE0500C0F701FEC300134C1B189B00E318187E0007000F96F7A5FEEB005B199B000100181999F70CFEC5E76846A3F738F8012806D06B462A0021009878AEF744FCD0E767F063FEEAF7BFFECBE7C0660003FD5B1908F465000224660002"
+        },
+        "length": 180,
+        "rom_offset": 1650848,
+        "symbol": "CB1_Overworld"
+      },
+      "cb2_overworld": {
+        "address": 135879676,
+        "expected_hex": {
+          "clean": "084BDB7B00B57F2B03D8FFF7A5FF01BC00470020E4F7DCFEFFF79EFF0248E4F7D7FEF4E794120302FD291908"
+        },
+        "length": 44,
+        "rom_offset": 1661948,
+        "symbol": "CB2_Overworld"
+      },
+      "frame_control": {
+        "address": 135768736,
+        "expected_hex": {
+          "clean": "F0B557464E464546DE464B4B9A464B4B99464B4BE0B5984601254A4C4A4E4B4F434619883B004B401800228D904302006085E0852086B94202D0A18D99425FD0B188618651462385A3850968C97C022947D0E18E114200D0A5864022B25C002A02D1DB431B0760D01BF0FEFC4123012816D1F054F7F7CEFC002827D041230022F2542BF09BFF8EF0BFF9A38BAB43A3834B461B78002B30D0A38B1D42FCD0BFE70022F254F7F7B6FC002833D01BF0AAFC83460128E5D10023E3858FF005FD41235A46F254F7F7A6FC0028D7D12368002B01D000F0FDF86368002BCFD000F0F8F8CCE7910502D501210A43E2859A0502D501221A43A285E28DABE785F6B5FB8FE7618E01390904090C61869BD171882386618697E72368002B01D000F0D9F86368002BC3D000F0D4F8C0E7F3F727F8F2F7C3FAFFF72FFF97E7C0510003AB25000330010004C066000378660003FF030000"
+        },
+        "length": 336,
+        "rom_offset": 1551008,
+        "symbol": "AgbMainLoop"
+      },
+      "run_tasks": {
+        "address": 136375960,
+        "expected_hex": {
+          "clean": "002030B50D4B05E001300006000E2833102810D01A78012AF6D15A78FE2AF3D1074D84002418E4002B592C1900F08AF8A079FF28F5D130BC01BC0047246C0003206C0003"
+        },
+        "length": 68,
+        "rom_offset": 2158232,
+        "symbol": "RunTasks"
+      },
+      "try_saving_data": {
+        "address": 136271820,
+        "expected_hex": {
+          "clean": "0D4B1B68000610B5040E012B06D0FF22FF200A4B1A8110BC02BC08472000FFF743FF074BDB6F002B02D101220120F0E7200000F055FEEAE7BC510003FC6B00037C6B0003"
+        },
+        "length": 68,
+        "rom_offset": 2054092,
+        "symbol": "TrySavingData"
+      }
+    },
+    "battle": {
+      "clauses": [
+        {
+          "address": 50340876,
+          "compare": "eq_symbol",
+          "expect": 134770037,
+          "expect_symbol": "HandleTurnActionSelectionState",
+          "name": "battle_main_func",
+          "offset": 0,
+          "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:3785-3875; src/battle_controller_player.c:154-180,234-330; include/battle_controllers.h:94-110; build .sym and compiler facts",
+          "symbol": "gBattleMainFunc",
+          "width": 4
+        },
+        {
+          "address": 33554740,
+          "compare": "eq",
+          "expect": 2,
+          "name": "battle_comm_0",
+          "offset": 0,
+          "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:3785-3875; src/battle_controller_player.c:154-180,234-330; include/battle_controllers.h:94-110; build .sym and compiler facts",
+          "symbol": "gBattleCommunication",
+          "width": 1
+        },
+        {
+          "address": 33555088,
+          "compare": "eq",
+          "expect": 1,
+          "name": "battle_exec_flags_input",
+          "offset": 0,
+          "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:3785-3875; src/battle_controller_player.c:154-180,234-330; include/battle_controllers.h:94-110; build .sym and compiler facts",
+          "symbol": "gBattleControllerExecFlags",
+          "width": 4
+        },
+        {
+          "address": 50340844,
+          "compare": "eq_symbol",
+          "expect": 134597845,
+          "expect_symbol": "HandleInputChooseAction",
+          "name": "battle_input_controller",
+          "offset": 0,
+          "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:3785-3875; src/battle_controller_player.c:154-180,234-330; include/battle_controllers.h:94-110; build .sym and compiler facts",
+          "symbol": "gBattlerControllerFuncs",
+          "width": 4
+        },
+        {
+          "address": 33554636,
+          "compare": "eq",
+          "expect": 0,
+          "mask": 2,
+          "name": "battle_not_link",
+          "offset": 0,
+          "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:3785-3875; src/battle_controller_player.c:154-180,234-330; include/battle_controllers.h:94-110; build .sym and compiler facts",
+          "symbol": "gBattleTypeFlags",
+          "width": 4
+        },
+        {
+          "address": 33555696,
+          "compare": "nonzero",
+          "name": "battle_engine_loaded",
+          "offset": 46,
+          "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:3785-3875; src/battle_controller_player.c:154-180,234-330; include/battle_controllers.h:94-110; build .sym and compiler facts",
+          "symbol": "gBattleMons",
+          "width": 2
+        },
+        {
+          "address": 33554648,
+          "compare": "eq",
+          "expect": 0,
+          "name": "battle_outcome_open",
+          "offset": 0,
+          "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/battle_main.c:3785-3875; src/battle_controller_player.c:154-180,234-330; include/battle_controllers.h:94-110; build .sym and compiler facts",
+          "symbol": "gBattleOutcome",
+          "width": 1
+        }
+      ],
+      "commit_guard": {
+        "address": 33554740,
+        "compare": "lt",
+        "indexed_by": "battler",
+        "offset": 0,
+        "source": "compiler private source enum from battle_main.c",
+        "symbol": "gBattleCommunication",
+        "value": 4,
+        "width": 1
+      },
+      "commit_hold": "HOLD: only the exact battler-0 Perish+controller handoff plan is proved; other battle commits remain refused.",
+      "handoff": {
+        "address": 50340844,
+        "head": [
+          {
+            "address": 33555790,
+            "name": "perish_status",
+            "set": 128,
+            "width": 1
+          },
+          {
+            "address": 33555810,
+            "keep": 243,
+            "name": "perish_timer",
+            "width": 1
+          },
+          {
+            "address": 33555100,
+            "name": "no_op_action",
+            "value": 13,
+            "width": 1
+          }
+        ],
+        "source": "expansion@e8bd1cd7:src/battle_end_turn.c:1000-1013; data/battle_scripts_1.s:3486-3492; src/battle_controller_player.c:154-180; compiler BattlePokemon.volatiles/Volatiles.perishSong/perishSongTimer; ROM SetControllerToPlayer store sequence/pool +0x28..+0x34 installs PlayerBufferExecCompleted|1; PlayerBufferExecCompleted prefix/pool +0x70/+0x74/+0x80 returns to PlayerBufferRunCommand|1",
+        "stride": 4,
+        "symbol": "gBattlerControllerFuncs",
+        "value": 134586889,
+        "value_symbol": "PlayerBufferExecCompleted",
+        "width": 4
+      },
+      "version": "gen3-battle-v1"
+    },
+    "cpu": {
+      "census": "docs/gen3_emerald/probes/census_exp_center_2026-09-27.txt",
+      "irq_entry": {
+        "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
+        "evidence": "docs/gen3_emerald/probes/exp_cpu_irq_bios_2026-09-27.txt",
+        "lr_max": 504,
+        "lr_min": 504,
+        "mode": 18,
+        "pc": [
+          28
+        ],
+        "thumb": 0
+      },
+      "mode": 31,
+      "observed_pc": 135768890,
+      "pc_max": 135768895,
+      "pc_min": 135768888,
+      "symbol": "AgbMainLoop (inlined WaitForVBlank, wireless busy-wait)",
+      "thumb": 1
+    },
+    "gift_areas": [],
+    "open": {
+      "battle_handoff": "source and ROM handoff shape bound; natural-play Perish KO pending",
+      "gift_areas": "expansion script-derived gift/static census pending; no vanilla gift maps copied"
+    },
+    "pointers": {
+      "gPokemonStoragePtr": {
+        "address": 50352584,
+        "source": "build .sym",
+        "symbol": "gPokemonStoragePtr"
+      },
+      "gSaveBlock1Ptr": {
+        "address": 50352580,
+        "source": "build .sym",
+        "symbol": "gSaveBlock1Ptr"
+      },
+      "gSaveBlock2Ptr": {
+        "address": 50352576,
+        "source": "build .sym",
+        "symbol": "gSaveBlock2Ptr"
+      }
+    },
+    "predicates": {
+      "callback1": {
+        "address": 50357952,
+        "expect": 135868577,
+        "expect_symbol": "CB1_Overworld",
+        "offset": 0,
+        "source": "facts.structs.Main.fields.callback1; build .sym",
+        "symbol": "gMain",
+        "width": 4
+      },
+      "callback2": {
+        "address": 50357952,
+        "expect": 135879677,
+        "expect_symbol": "CB2_Overworld",
+        "offset": 4,
+        "source": "facts.structs.Main.fields.callback2; build .sym",
+        "symbol": "gMain",
+        "width": 4
+      },
+      "field_controls_locked": {
+        "address": 50337476,
+        "expect": 0,
+        "offset": 0,
+        "source": "build:pokemon.sym:901",
+        "symbol": "sLockFieldControls",
+        "width": 1
+      },
+      "in_battle": {
+        "address": 50357952,
+        "expect": 0,
+        "mask": 2,
+        "offset": 1081,
+        "source": "facts.structs.Main.bitfields.inBattle",
+        "symbol": "gMain",
+        "width": 1
+      },
+      "link_callback": {
+        "address": 33582116,
+        "expect": 0,
+        "offset": 0,
+        "source": "build:pokemon.sym:348",
+        "symbol": "sLinkOpen",
+        "width": 1
+      },
+      "link_players_received": {
+        "address": 50341292,
+        "expect": 0,
+        "offset": 0,
+        "source": "build:pokemon.sym:1005",
+        "symbol": "gReceivedRemoteLinkPlayers",
+        "width": 1
+      },
+      "link_transferring": {
+        "address": 50357945,
+        "expect": 0,
+        "offset": 0,
+        "source": "build:pokemon.sym:1050",
+        "symbol": "gLinkTransferringData",
+        "width": 1
+      },
+      "palette_fade_active": {
+        "address": 33755796,
+        "expect": 0,
+        "mask": 128,
+        "offset": 15,
+        "source": "facts.structs.PaletteFadeControl.bitfields.active",
+        "symbol": "gPaletteFade",
+        "width": 1
+      },
+      "script_context_status": {
+        "address": 50337477,
+        "expect": 2,
+        "offset": 0,
+        "source": "build:pokemon.sym:902",
+        "symbol": "sGlobalScriptContextStatus",
+        "width": 1
+      },
+      "soft_reset_disabled": {
+        "address": 50357944,
+        "expect": 0,
+        "offset": 0,
+        "source": "build:pokemon.sym:1049",
+        "symbol": "gSoftResetDisabled",
+        "width": 1
+      }
+    },
+    "sound": {
+      "fields": [
+        {
+          "name": "songHeader",
+          "offset": 0,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "status",
+          "offset": 4,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "trackCount",
+          "offset": 8,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "priority",
+          "offset": 9,
+          "on": "player",
+          "size": 1
+        },
+        {
+          "name": "clock",
+          "offset": 12,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "tracks",
+          "offset": 44,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "ident",
+          "offset": 52,
+          "on": "player",
+          "size": 4
+        },
+        {
+          "name": "flags",
+          "offset": 0,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "bendRange",
+          "offset": 15,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "volX",
+          "offset": 19,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "lfoSpeed",
+          "offset": 25,
+          "on": "track",
+          "size": 1
+        },
+        {
+          "name": "chan",
+          "offset": 32,
+          "on": "track",
+          "size": 4
+        },
+        {
+          "name": "cmdPtr",
+          "offset": 64,
+          "on": "track",
+          "size": 4
+        }
+      ],
+      "ident_magic": 1752395091,
+      "ident_off": 52,
+      "iwram_max": 50364416,
+      "iwram_min": 50331648,
+      "player_head_off": 36,
+      "player_next_off": 60,
+      "player_se1": {
+        "address": 50353208,
+        "source": "build .sym",
+        "symbol": "gMPlayInfo_SE1"
+      },
+      "se_ids": {
+        "16": 16,
+        "17": 17,
+        "22": 22,
+        "25": 31,
+        "26": 32,
+        "95": 102
+      },
+      "sound_info": {
+        "address": 50353864,
+        "source": "build .sym",
+        "symbol": "gSoundInfo"
+      },
+      "sound_info_ptr": {
+        "address": 50364400,
+        "source": "build .sym",
+        "symbol": "SOUND_INFO_PTR"
+      },
+      "source": "compiler facts from include/gba/m4a_internal.h",
+      "track0_off": 0,
+      "tracks_off": 44,
+      "version": "gen3-sound-v1"
+    },
+    "source": {
+      "facts_sha256": "9f3691e0d7439f1947428101c2e0d0b50d08725d72711a30155766268becc4bf",
+      "rom_sha1": "28877d733492299599f2b8fff50493109d72653c",
+      "source_commit": "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+      "symbols_sha256": "ac24a47c0137ab9b2233ccf37bf0cabe8b6eb08b715aa7e87f15787507a1f01e"
+    },
+    "tasks": {
+      "address": 50359328,
+      "allowed_overworld_tasks": {
+        "Task_InitUnionRoom": 136506312,
+        "Task_MapNamePopUpWindow": 135782348,
+        "Task_MuddySlope": 135574380,
+        "Task_RunPerStepCallback": 135574236,
+        "Task_RunTimeBasedEvents": 135574284,
+        "Task_SearchForChildOrParent": 136503020,
+        "Task_UnionRoomListen": 135740576,
+        "Task_WeatherMain": 135578036
+      },
+      "census": "docs/gen3_emerald/probes/census_exp_overworld_2026-09-27.txt",
+      "count": 16,
+      "forbidden_inventory": {
+        "CB2_ContestMain": 135215588,
+        "CB2_FrontierPass": 135610412,
+        "CB2_HandleStartMultiBattle": 134750804,
+        "CB2_HandleStartMultiPartnerBattle": 134751964,
+        "CB2_LoadBerryBlender": 135143980,
+        "CB2_PreInitMultiBattle": 134747928,
+        "CB2_StartBlenderLink": 135150744,
+        "CB2_StartBlenderLocal": 135149232,
+        "CB2_StartContest": 135231284,
+        "CB2_UnionRoomBattle": 136497972,
+        "Task_BattlePyramidChooseMonHeldItems": 135905580,
+        "Task_DoRecordMixing": 136224272,
+        "Task_EnterSecretBase": 136309528,
+        "Task_LinkContest_CalculateRound1Em": 135253676,
+        "Task_LinkContest_CalculateTurnOrderEm": 135253720,
+        "Task_LinkContest_CalculateTurnOrderRS": 135261280,
+        "Task_LinkContest_CommunicateAIMonsEm": 135253904,
+        "Task_LinkContest_CommunicateAppealsState": 135252232,
+        "Task_LinkContest_CommunicateCategoryEm": 135254156,
+        "Task_LinkContest_CommunicateCategoryRS": 135251324,
+        "Task_LinkContest_CommunicateFinalStandings": 135251852,
+        "Task_LinkContest_CommunicateLeaderIdsEm": 135254340,
+        "Task_LinkContest_CommunicateLeaderIdsRS": 135252664,
+        "Task_LinkContest_CommunicateMonIdxs": 135251560,
+        "Task_LinkContest_CommunicateMonsEm": 135254520,
+        "Task_LinkContest_CommunicateMonsRS": 135250856,
+        "Task_LinkContest_CommunicateMoveSelections": 135251664,
+        "Task_LinkContest_CommunicateRngEm": 135253756,
+        "Task_LinkContest_CommunicateRngRS": 135251180,
+        "Task_LinkContest_CommunicateRound1Points": 135252856,
+        "Task_LinkContest_CommunicateTurnOrder": 135253052,
+        "Task_LinkContest_Disconnect": 135258260,
+        "Task_LinkContest_FinalizeConnection": 135262448,
+        "Task_LinkContest_Init": 135250708,
+        "Task_LinkContest_InitFlags": 135250472,
+        "Task_LinkContest_SetUpContestEm": 135253332,
+        "Task_LinkContest_SetUpContestRS": 135266752,
+        "Task_LinkContest_StartCommunicateCategoryEm": 135253304,
+        "Task_LinkContest_StartCommunicateLeaderIdsEm": 135253276,
+        "Task_LinkContest_StartCommunicateRngEm": 135253248,
+        "Task_LinkContest_StartCommunicationEm": 135254760,
+        "Task_LinkContest_StartInitFlags": 135250444,
+        "Task_LinkContest_WaitDisconnect": 135262580,
+        "Task_RecordMixing_Main": 136229568,
+        "Task_StartContest": 135261708,
+        "Task_TrainerHillWaitForPaletteFade": 134861836,
+        "Task_WarpOutOfSecretBase": 136310112
+      },
+      "func_offset": 0,
+      "is_active_offset": 4,
+      "new_non_allowed_task_names": [
+        "Task_AbilityCapsule",
+        "Task_AbilityPatch",
+        "Task_AccessPokemonBoxLink",
+        "Task_AnimateElevatorWindowView",
+        "Task_BannedSpeciesWindowInput",
+        "Task_BattleStart_Debug",
+        "Task_BounceBall",
+        "Task_CancelPokemonLeagueLightingEffect",
+        "Task_ChooseBoxMon",
+        "Task_DebugMenuFadeIn",
+        "Task_DebugMenuFadeOut",
+        "Task_DebugMenuProcessInput",
+        "Task_DisplayCaughtMonDexPageHGSS",
+        "Task_DisplayPokeFluteMessage",
+        "Task_DoTrainerTowerBattle",
+        "Task_DrawTeleporterCable",
+        "Task_DrawTeleporterHousing",
+        "Task_DynamaxCandy",
+        "Task_ElevatorShake",
+        "Task_ExitStairs",
+        "Task_ExpansionIntro_HandleBlend",
+        "Task_FadeAndCloseBagMenuIfMulch",
+        "Task_FldEffUseVsSeeker",
+        "Task_FollowerNPCOutOfDoor",
+        "Task_FreeAbilityPopUpGfx",
+        "Task_HandleExpansionIntro",
+        "Task_HandleScrollingMultichoiceInput",
+        "Task_HandleStopLearningMove",
+        "Task_HideFollowerNPCForTeleport",
+        "Task_HideNPCFollowerAfterMovementFinish",
+        "Task_Hof_ApplauseAndConfetti",
+        "Task_Hof_DelayAfterSave",
+        "Task_Hof_PlayMonCryAndPrintInfo",
+        "Task_Hof_SpawnPlayerPic",
+        "Task_Hof_StartDisplayingMons",
+        "Task_Hof_WaitBorderFadeAway",
+        "Task_InitVsSeekerAndCheckForTrainersOnScreen",
+        "Task_ItemUse_CloseMessageBoxAndReturnToField_VsSeeker",
+        "Task_LearnMove",
+        "Task_LoadBagSortOptions",
+        "Task_MapPreviewScreen_FadeIn",
+        "Task_MapPreviewScreen_NonFade",
+        "Task_MapPreviewScreen_Script",
+        "Task_Mint",
+        "Task_MoveNPCFollowerAfterForcedMovement",
+        "Task_MoveRelearner_Giveup_Answer",
+        "Task_MoveRelearner_Giveup_Prompt",
+        "Task_MoveRelearner_HandleInput",
+        "Task_MoveRelearner_LearnMove",
+        "Task_MoveRelearner_Quit",
+        "Task_Mugshot",
+        "Task_OWEApproachForBattle",
+        "Task_OpenDexNavFromStartMenu",
+        "Task_OpenStartMenu",
+        "Task_OvwldCredits_FadeOut",
+        "Task_OvwldCredits_WaitFade",
+        "Task_PartyMenuItemUseFromField",
+        "Task_PhotoFlash",
+        "Task_PlayPokeFlute",
+        "Task_ReloadAreaScreen",
+        "Task_ResetObjectsRematchWantedState",
+        "Task_ReturnToFieldWhileLearningMove",
+        "Task_RunPokemonLeagueLightingEffect",
+        "Task_RushInjuredPokemonToCenter",
+        "Task_SSAnneFinish",
+        "Task_SSAnneInit",
+        "Task_SSAnneRun",
+        "Task_Seagallop_0",
+        "Task_Seagallop_1",
+        "Task_Seagallop_2",
+        "Task_SetControllerToWaitForString",
+        "Task_ShakeScreen",
+        "Task_ShowAiKnowledge",
+        "Task_ShowAiParty",
+        "Task_ShowAiPoints",
+        "Task_SmoothBlendLayers",
+        "Task_SortFinish",
+        "Task_StairWarp",
+        "Task_StartUseLure",
+        "Task_TossItemFromBag",
+        "Task_TryItemUseFormChange",
+        "Task_TryItemUseFusionChange",
+        "Task_TryLoadInfoScreen_HGSS",
+        "Task_UpdatePokedexAreaScreen",
+        "Task_UseHoneyOnField",
+        "Task_UseLure",
+        "Task_UseORASDowsingMachine",
+        "Task_UseRockClimb",
+        "Task_WaitAfterMultiPartnerFullParty",
+        "Task_WaitBeforeMultiPartnerFullParty"
+      ],
+      "non_allowed_task_census": {
+        "Task_AbilityCapsule": [
+          135925692
+        ],
+        "Task_AbilityPatch": [
+          135926164
+        ],
+        "Task_AcceptMinBet": [
+          136251324
+        ],
+        "Task_AccessPokemonBoxLink": [
+          135698192
+        ],
+        "Task_AngledWipes": [
+          134989092
+        ],
+        "Task_AnimateAfterDelay": [
+          136024840,
+          136083656
+        ],
+        "Task_AnimateAudience": [
+          135217508
+        ],
+        "Task_AnimateBg": [
+          135468780
+        ],
+        "Task_AnimateBgGoingDown": [
+          135188464
+        ],
+        "Task_AnimateBgGoingUp": [
+          135189196
+        ],
+        "Task_AnimateCardFlipDown": [
+          136426840
+        ],
+        "Task_AnimateCardFlipUp": [
+          136426568
+        ],
+        "Task_AnimateDoor": [
+          135491352
+        ],
+        "Task_AnimateElevatorWindowView": [
+          135552920
+        ],
+        "Task_AnimateUnionRoomPlayers": [
+          136531652
+        ],
+        "Task_AnimateWirelessSignal": [
+          136405124
+        ],
+        "Task_AnnouncePreliminaryResults": [
+          135263276
+        ],
+        "Task_AnnounceRound2Results": [
+          135263168
+        ],
+        "Task_AnnounceWinner": [
+          135262696
+        ],
+        "Task_AppealSetup": [
+          135223948
+        ],
+        "Task_ApplauseOverflowAnimation": [
+          135218104
+        ],
+        "Task_Aqua": [
+          134986088
+        ],
+        "Task_AskConfirmStarter": [
+          136366164
+        ],
+        "Task_AskKeepPlaying": [
+          136251240
+        ],
+        "Task_BagMenu_HandleInput": [
+          135692588
+        ],
+        "Task_BannedSpeciesWindowInput": [
+          135619632
+        ],
+        "Task_BardSong": [
+          135793160
+        ],
+        "Task_BattlePyramidChooseMonHeldItems": [
+          135905580
+        ],
+        "Task_BattleStart": [
+          134953068
+        ],
+        "Task_BattleStart_Debug": [
+          134953176
+        ],
+        "Task_BattleTransition": [
+          134985724
+        ],
+        "Task_BattleTransition_Intro": [
+          134989172
+        ],
+        "Task_BeginCardFlip": [
+          136429056
+        ],
+        "Task_BeginEvolutionScene": [
+          135476024
+        ],
+        "Task_BeginPaletteFade": [
+          134861876
+        ],
+        "Task_BicycleBgAnimation": [
+          135669108
+        ],
+        "Task_BigPokeball": [
+          134986036
+        ],
+        "Task_BikeScene": [
+          135274264
+        ],
+        "Task_Blackhole": [
+          134988288
+        ],
+        "Task_BlackholePulsate": [
+          134988340
+        ],
+        "Task_BlendAudienceBackground": [
+          135217956
+        ],
+        "Task_BlendLogoIn": [
+          135658608
+        ],
+        "Task_BlendLogoOut": [
+          135658420
+        ],
+        "Task_BlendPalettesGradually": [
+          135883948
+        ],
+        "Task_Blur": [
+          134985776
+        ],
+        "Task_BounceBall": [
+          134730892
+        ],
+        "Task_BounceMonIconInBox": [
+          135259492
+        ],
+        "Task_BufferDecorSelectionAndCloseWindow": [
+          136425516
+        ],
+        "Task_BuyHowManyDialogueHandleInput": [
+          136325240
+        ],
+        "Task_BuyHowManyDialogueInit": [
+          136321072
+        ],
+        "Task_BuyMenu": [
+          136325824
+        ],
+        "Task_CableCar": [
+          135189512
+        ],
+        "Task_CallItemUseOnFieldCallback": [
+          135698728
+        ],
+        "Task_CallYesOrNoCallback": [
+          135807392
+        ],
+        "Task_CancelAfterAorBPress": [
+          135922008
+        ],
+        "Task_CancelChooseMonYesNo": [
+          135902612
+        ],
+        "Task_CancelParticipationYesNo": [
+          135902036
+        ],
+        "Task_CancelPokemonLeagueLightingEffect": [
+          135555920
+        ],
+        "Task_CardOrNewsOverWireless": [
+          136506824
+        ],
+        "Task_CardOrNewsWithFriend": [
+          136512512
+        ],
+        "Task_ChangeBgYForZoom": [
+          136192876
+        ],
+        "Task_ChangeScreen": [
+          136107384
+        ],
+        "Task_ChangeSummaryMon": [
+          136159820
+        ],
+        "Task_ChasesAway_AnimateBg": [
+          136210280
+        ],
+        "Task_ChasesAway_AnimateRing": [
+          136212124
+        ],
+        "Task_ChildSearchForParent": [
+          135737384
+        ],
+        "Task_ChooseAnswer": [
+          134236508
+        ],
+        "Task_ChooseBoxMon": [
+          135199052
+        ],
+        "Task_ChooseContestMon": [
+          135905376
+        ],
+        "Task_ChooseHowManyToDeposit": [
+          135687136
+        ],
+        "Task_ChooseHowManyToSell": [
+          135693452
+        ],
+        "Task_ChooseHowManyToToss": [
+          134849840,
+          135687360
+        ],
+        "Task_ChooseItemsToTossFromPyramidBag": [
+          134852756
+        ],
+        "Task_ChooseMonForMoveRelearner": [
+          135905512
+        ],
+        "Task_ChooseNewMonForSoftboiled": [
+          135606908
+        ],
+        "Task_ChoosePartyMon": [
+          135905444
+        ],
+        "Task_ClearBitWhenBattleTableAnimDone": [
+          134712664
+        ],
+        "Task_ClearBitWhenSpecialAnimDone": [
+          134712748
+        ],
+        "Task_ClearBoard": [
+          136264140
+        ],
+        "Task_ClearMonBg": [
+          134381504
+        ],
+        "Task_ClearMonBgStatic": [
+          134385204
+        ],
+        "Task_ClearSaveData": [
+          135200708
+        ],
+        "Task_ClearSaveDataScreenYesNoChoice": [
+          135200768
+        ],
+        "Task_ClockwiseWipe": [
+          134986500
+        ],
+        "Task_CloseBagMenu": [
+          135692200
+        ],
+        "Task_CloseBattlePikeCurtain": [
+          135552740
+        ],
+        "Task_CloseBattlePyramidBagMessage": [
+          134849588
+        ],
+        "Task_CloseBerryTagScreen": [
+          135171424
+        ],
+        "Task_CloseBoxWhileHoldingItem": [
+          136119132
+        ],
+        "Task_CloseCantUseKeyItemMessage": [
+          135697212
+        ],
+        "Task_CloseCenterWhiteColumn": [
+          136404932
+        ],
+        "Task_CloseItemfinderMessage": [
+          135697248
+        ],
+        "Task_CloseMonPic": [
+          134693772
+        ],
+        "Task_ClosePartyMenu": [
+          135892648
+        ],
+        "Task_ClosePartyMenuAfterText": [
+          135904052
+        ],
+        "Task_ClosePartyMenuAndSetCB2": [
+          135901952
+        ],
+        "Task_ClosePokedex": [
+          135978424
+        ],
+        "Task_ClosePokedexFromSearchResultsStartMenu": [
+          135972824
+        ],
+        "Task_ClosePyramidBag": [
+          134849716
+        ],
+        "Task_CloseTrainerHillRecordsOnButton": [
+          134861956
+        ],
+        "Task_CommunicateFinalStandings": [
+          135225368
+        ],
+        "Task_CommunicateMonIdxs": [
+          135216028
+        ],
+        "Task_CommunicateMonIdxsForResults": [
+          135261168
+        ],
+        "Task_CommunicateMonInfo": [
+          135356988,
+          136070616
+        ],
+        "Task_ComputerScreenCloseEffect": [
+          135601712
+        ],
+        "Task_ComputerScreenOpenEffect": [
+          135601260
+        ],
+        "Task_ContestReturnToField": [
+          135220416
+        ],
+        "Task_ContinueChoosingHalfParty": [
+          135927484
+        ],
+        "Task_ContinuePlaying": [
+          136251056
+        ],
+        "Task_ContinuePuttingAwayDecorations": [
+          135320908
+        ],
+        "Task_ContinueTaskAfterMessagePrints": [
+          135807460
+        ],
+        "Task_CopyReceiveBuffer": [
+          136224668
+        ],
+        "Task_CreateConfetti": [
+          135258528
+        ],
+        "Task_CreatePikaPowerBolt": [
+          136329080
+        ],
+        "Task_CreateSparkles": [
+          135658264
+        ],
+        "Task_CreateStarterLabel": [
+          136367036
+        ],
+        "Task_CreateTradeMenu": [
+          136499208
+        ],
+        "Task_CreditsMain": [
+          135270200
+        ],
+        "Task_CreditsSoftReset": [
+          135275316
+        ],
+        "Task_CreditsTheEnd1": [
+          135270344
+        ],
+        "Task_CreditsTheEnd2": [
+          135275096
+        ],
+        "Task_CreditsTheEnd3": [
+          135275684
+        ],
+        "Task_CreditsTheEnd4": [
+          135270412
+        ],
+        "Task_CreditsTheEnd5": [
+          135275484
+        ],
+        "Task_CreditsTheEnd6": [
+          135275148
+        ],
+        "Task_CurrentMenuOptionGlow": [
+          136188128
+        ],
+        "Task_CycleEvolutionMonSprite_Init": [
+          135464604
+        ],
+        "Task_CycleEvolutionMonSprite_TryEnd": [
+          135464828
+        ],
+        "Task_CycleEvolutionMonSprite_UpdateSize": [
+          135465880
+        ],
+        "Task_CycleSceneryPalette": [
+          135274716
+        ],
+        "Task_DebugMenuFadeIn": [
+          134633564
+        ],
+        "Task_DebugMenuFadeOut": [
+          134639008
+        ],
+        "Task_DebugMenuProcessInput": [
+          134643380
+        ],
+        "Task_DeclineMinBet": [
+          136251176
+        ],
+        "Task_DeclineStarter": [
+          136366012
+        ],
+        "Task_DeoxysRockCameraShake": [
+          135500060
+        ],
+        "Task_DeoxysRockInteraction": [
+          135555572
+        ],
+        "Task_DepositMenu": [
+          136127092
+        ],
+        "Task_DestroyDeoxysRock": [
+          135496484
+        ],
+        "Task_DestroySelf": [
+          135727488
+        ],
+        "Task_DigitalDisplay": [
+          136338668
+        ],
+        "Task_DiplomaFadeIn": [
+          135337344
+        ],
+        "Task_DiplomaFadeOut": [
+          135337496
+        ],
+        "Task_DiplomaWaitForKeyPress": [
+          135337428
+        ],
+        "Task_DisplayAnotherBerry": [
+          135171548
+        ],
+        "Task_DisplayAppealNumberText": [
+          135236172
+        ],
+        "Task_DisplayCaughtMonDexPage": [
+          135983828
+        ],
+        "Task_DisplayCaughtMonDexPageHGSS": [
+          135998448
+        ],
+        "Task_DisplayGaveMailFromBagMessage": [
+          135912988
+        ],
+        "Task_DisplayGaveMailFromPartyMessage": [
+          135913152
+        ],
+        "Task_DisplayHPRestoredMessage": [
+          135606808,
+          135911484
+        ],
+        "Task_DisplayLevelUpStatsPg1": [
+          135897664
+        ],
+        "Task_DisplayLevelUpStatsPg2": [
+          135897544
+        ],
+        "Task_DisplayMainMenu": [
+          135773012
+        ],
+        "Task_DisplayMainMenuInvalidActionError": [
+          135774740
+        ],
+        "Task_DisplayPokeFluteMessage": [
+          135699340
+        ],
+        "Task_DoAbnormalWeather": [
+          135584600
+        ],
+        "Task_DoAppeals": [
+          135236472
+        ],
+        "Task_DoCableClubWarp": [
+          135544120
+        ],
+        "Task_DoCardFlipTask": [
+          136426384
+        ],
+        "Task_DoClearSaveDataScreenYesNo": [
+          135200616
+        ],
+        "Task_DoContestHallWarp": [
+          135544224
+        ],
+        "Task_DoDomeConfetti": [
+          135637764
+        ],
+        "Task_DoDoorWarp": [
+          135548696
+        ],
+        "Task_DoFieldMove_Init": [
+          135605956
+        ],
+        "Task_DoFieldMove_RunFunc": [
+          135606120
+        ],
+        "Task_DoFieldMove_ShowMonAfterPose": [
+          135606228
+        ],
+        "Task_DoFieldMove_WaitForMon": [
+          135606300
+        ],
+        "Task_DoLearnedMoveFanfareAfterText": [
+          135897380
+        ],
+        "Task_DoPlayerSpinEntrance": [
+          135533304
+        ],
+        "Task_DoPlayerSpinExit": [
+          135533776
+        ],
+        "Task_DoPokeballSendOutAnim": [
+          135953772
+        ],
+        "Task_DoRecordMixing": [
+          136224272
+        ],
+        "Task_DoStatusAnimation": [
+          134539456
+        ],
+        "Task_DoStatusInflictionScreenFlash": [
+          134845288
+        ],
+        "Task_DoTrainerTowerBattle": [
+          136452656
+        ],
+        "Task_DodrioGame_Leader": [
+          135350956
+        ],
+        "Task_DodrioGame_Member": [
+          135350692
+        ],
+        "Task_DrawEscalator": [
+          135599116
+        ],
+        "Task_DrawFieldMessage": [
+          135529252
+        ],
+        "Task_DrawFinalStandingNumber": [
+          135259164
+        ],
+        "Task_DrawFlippedCardSide": [
+          136431872
+        ],
+        "Task_DrawSelectionSummary": [
+          136398616
+        ],
+        "Task_DrawSelectionTrade": [
+          136407472
+        ],
+        "Task_DrawTeleporterCable": [
+          135554876
+        ],
+        "Task_DrawTeleporterHousing": [
+          135554636
+        ],
+        "Task_DropCurtainAtAppealsEnd": [
+          135214468
+        ],
+        "Task_DropCurtainAtRoundEnd": [
+          135217472
+        ],
+        "Task_DuckBGMForPokemonCry": [
+          136350708
+        ],
+        "Task_DuoFightAnim": [
+          136214872
+        ],
+        "Task_DuoFightEnd": [
+          136217620
+        ],
+        "Task_DuoFight_AnimateClouds": [
+          136208072
+        ],
+        "Task_DynamaxCandy": [
+          135911752
+        ],
+        "Task_EReader": [
+          135382348
+        ],
+        "Task_EasyChatScreen": [
+          135373652
+        ],
+        "Task_EggHatch": [
+          135378220
+        ],
+        "Task_EggHatchPlayBGM": [
+          135378084
+        ],
+        "Task_ElevatorShake": [
+          135557448
+        ],
+        "Task_EnableScriptAfterMusicFade": [
+          135544772
+        ],
+        "Task_EndAfterFadeScreen": [
+          136216952
+        ],
+        "Task_EndAppeals": [
+          135233856
+        ],
+        "Task_EndCardFlip": [
+          136429016
+        ],
+        "Task_EndCommunicateFinalStandings": [
+          135216156
+        ],
+        "Task_EndCommunicateMonIdxs": [
+          135214164
+        ],
+        "Task_EndCommunicateMoveSelections": [
+          135216632
+        ],
+        "Task_EndIntroMovie": [
+          135658240
+        ],
+        "Task_EndShowContestResults": [
+          135261936
+        ],
+        "Task_EndTrainerApproach": [
+          136446128
+        ],
+        "Task_EndTurn": [
+          136253044
+        ],
+        "Task_EndWaitForLink": [
+          135216224
+        ],
+        "Task_EnterCableClubSeat": [
+          135193948
+        ],
+        "Task_EnterCaveTransition1": [
+          135599576
+        ],
+        "Task_EnterCaveTransition2": [
+          135600104
+        ],
+        "Task_EnterCaveTransition3": [
+          135600264
+        ],
+        "Task_EnterCaveTransition4": [
+          135600416
+        ],
+        "Task_EnterNewlyCreatedSecretBase": [
+          136310600
+        ],
+        "Task_EnterSecretBase": [
+          136309528
+        ],
+        "Task_EscalatorWarpIn": [
+          135492340
+        ],
+        "Task_EscalatorWarpOut": [
+          135492288
+        ],
+        "Task_EscapeRopeWarpIn": [
+          135492964
+        ],
+        "Task_EscapeRopeWarpOut": [
+          135492920
+        ],
+        "Task_EvolutionScene": [
+          135469464
+        ],
+        "Task_ExchangeCards": [
+          136499420
+        ],
+        "Task_ExecuteFuncAfterButtonPress": [
+          134238096
+        ],
+        "Task_ExitBuyMenu": [
+          136321832
+        ],
+        "Task_ExitCaughtMonPage": [
+          135973668
+        ],
+        "Task_ExitCaveTransition1": [
+          135599548
+        ],
+        "Task_ExitCaveTransition2": [
+          135599840
+        ],
+        "Task_ExitCaveTransition3": [
+          135599688
+        ],
+        "Task_ExitCaveTransition4": [
+          135599996
+        ],
+        "Task_ExitCaveTransition5": [
+          135600364
+        ],
+        "Task_ExitDoor": [
+          135543736
+        ],
+        "Task_ExitInfoScreen": [
+          135978880
+        ],
+        "Task_ExitNonAnimDoor": [
+          135543384
+        ],
+        "Task_ExitNonDoor": [
+          135543296
+        ],
+        "Task_ExitPartyMenu": [
+          135896336
+        ],
+        "Task_ExitPokeblockFeed": [
+          135961748
+        ],
+        "Task_ExitRoulette": [
+          136260260
+        ],
+        "Task_ExitSearch": [
+          135970804
+        ],
+        "Task_ExitSearchWaitForFade": [
+          135978844
+        ],
+        "Task_ExitStairs": [
+          135547564
+        ],
+        "Task_ExitTrainerHillRecords": [
+          134862748
+        ],
+        "Task_ExpansionIntro_HandleBlend": [
+          135476916
+        ],
+        "Task_FadeAndCloseBagMenu": [
+          135678268
+        ],
+        "Task_FadeAndCloseBagMenuIfMulch": [
+          135683056
+        ],
+        "Task_FadeMon_ToBallColor": [
+          134543012
+        ],
+        "Task_FadeMon_ToNormal": [
+          134544920
+        ],
+        "Task_FadeMon_ToNormal_Step": [
+          134542016
+        ],
+        "Task_FadeOutPokeblockFeed": [
+          135961264
+        ],
+        "Task_FadeToBg": [
+          134387216
+        ],
+        "Task_FadeToRouletteGame": [
+          136260040
+        ],
+        "Task_FadeToSlotMachine": [
+          136329908
+        ],
+        "Task_FallWarpFieldEffect": [
+          135492236
+        ],
+        "Task_Fanfare": [
+          136350660
+        ],
+        "Task_FieldMoveExitAreaYesNo": [
+          135902100
+        ],
+        "Task_FieldMoveShowMonIndoors": [
+          135493324
+        ],
+        "Task_FieldMoveShowMonOutdoors": [
+          135493096
+        ],
+        "Task_FieldMoveWaitForFade": [
+          135897192
+        ],
+        "Task_FieldPoisonEffect": [
+          135602132
+        ],
+        "Task_FinishRoundOfAppeals": [
+          135229652
+        ],
+        "Task_FinishSoftboiled": [
+          135606956
+        ],
+        "Task_Fishing": [
+          135593572
+        ],
+        "Task_FlashBallOnWinningSquare": [
+          136259096
+        ],
+        "Task_FlashJudgeAttentionEye": [
+          135218280
+        ],
+        "Task_FlashPokeballIcons": [
+          136180744
+        ],
+        "Task_FlashSlotMachineLights": [
+          136330420
+        ],
+        "Task_FlashStarsAndHearts": [
+          135258976
+        ],
+        "Task_FldEffUseVsSeeker": [
+          135493732
+        ],
+        "Task_FlyIn": [
+          135493504
+        ],
+        "Task_FlyIntoMap": [
+          135507928
+        ],
+        "Task_FlyOut": [
+          135493460
+        ],
+        "Task_FollowerNPCOutOfDoor": [
+          135608360
+        ],
+        "Task_FossilFallAndSink": [
+          135823788
+        ],
+        "Task_FreeAbilityPopUpGfx": [
+          134732944
+        ],
+        "Task_FreeDataAndExitPokeblockCase": [
+          135954584
+        ],
+        "Task_FreezeObjectAndPlayer": [
+          135385372
+        ],
+        "Task_FreezePlayer": [
+          135385520
+        ],
+        "Task_FreezeSelectedObjectAndPlayer": [
+          135385236
+        ],
+        "Task_FrontierCirclesAsymmetricSpiral": [
+          135008520
+        ],
+        "Task_FrontierCirclesAsymmetricSpiralInSeq": [
+          135008728
+        ],
+        "Task_FrontierCirclesCross": [
+          135008468
+        ],
+        "Task_FrontierCirclesCrossInSeq": [
+          135008676
+        ],
+        "Task_FrontierCirclesMeet": [
+          135008416
+        ],
+        "Task_FrontierCirclesMeetInSeq": [
+          135008624
+        ],
+        "Task_FrontierCirclesSymmetricSpiral": [
+          135008572
+        ],
+        "Task_FrontierCirclesSymmetricSpiralInSeq": [
+          135008780
+        ],
+        "Task_FrontierLogoWave": [
+          134989276
+        ],
+        "Task_FrontierLogoWiggle": [
+          134989224
+        ],
+        "Task_FrontierSquares": [
+          134989364
+        ],
+        "Task_FrontierSquaresScroll": [
+          134989468
+        ],
+        "Task_FrontierSquaresSpiral": [
+          134989416
+        ],
+        "Task_GiveExpToMon": [
+          134591472
+        ],
+        "Task_GiveExpWithExpBar": [
+          134588212
+        ],
+        "Task_GiveHoldItem": [
+          135912804
+        ],
+        "Task_GiveItemFromBag": [
+          136100492
+        ],
+        "Task_GiveMovingItemToMon": [
+          136132244
+        ],
+        "Task_GivePayout": [
+          136253308
+        ],
+        "Task_GoToBuyOrSellMenu": [
+          136320652
+        ],
+        "Task_GridSquares": [
+          134989040
+        ],
+        "Task_Groudon": [
+          134988848
+        ],
+        "Task_HallOfFameRecord": [
+          135492152
+        ],
+        "Task_HandleBerryMaster": [
+          135139968
+        ],
+        "Task_HandleBetGridInput": [
+          136258140
+        ],
+        "Task_HandleBoxOptions": [
+          136111468
+        ],
+        "Task_HandleCancelChooseMonYesNoInput": [
+          135919120
+        ],
+        "Task_HandleCancelParticipationYesNoInput": [
+          135905876
+        ],
+        "Task_HandleCaughtMonPageInput": [
+          135973788
+        ],
+        "Task_HandleChooseMonInput": [
+          135923408
+        ],
+        "Task_HandleConfirmStarterInput": [
+          136367176
+        ],
+        "Task_HandleCopyReceivedLinkBuffersData": [
+          134610124
+        ],
+        "Task_HandleCryScreenInput": [
+          135974552
+        ],
+        "Task_HandleDaycareLevelMenuInput": [
+          135277508
+        ],
+        "Task_HandleDuoFight": [
+          136213440
+        ],
+        "Task_HandleDuoFightPre": [
+          136217732
+        ],
+        "Task_HandleExpansionIntro": [
+          135476996
+        ],
+        "Task_HandleFieldMoveExitAreaYesNoInput": [
+          135919008
+        ],
+        "Task_HandleFrontierMap": [
+          135613204
+        ],
+        "Task_HandleFrontierPassInput": [
+          135612532
+        ],
+        "Task_HandleGetDecorationMenuInput": [
+          136425604
+        ],
+        "Task_HandleInfoCardInput": [
+          134666004
+        ],
+        "Task_HandleInfoScreenInput": [
+          135974168
+        ],
+        "Task_HandleInput": [
+          135171300,
+          135853940,
+          136155556
+        ],
+        "Task_HandleInputCantForgetHMsMoves": [
+          136153728
+        ],
+        "Task_HandleInput_MovePositionSwitch": [
+          136151784
+        ],
+        "Task_HandleInput_MoveSelect": [
+          136149380
+        ],
+        "Task_HandleLoseMailMessageYesNoInput": [
+          135911316
+        ],
+        "Task_HandleMainMenuAPressed": [
+          135775328
+        ],
+        "Task_HandleMainMenuBPressed": [
+          135775240
+        ],
+        "Task_HandleMainMenuInput": [
+          135771040
+        ],
+        "Task_HandleMonAnimation": [
+          135998652
+        ],
+        "Task_HandleMoveSelectInput": [
+          135226440
+        ],
+        "Task_HandleMovingMonFromParty": [
+          136126528
+        ],
+        "Task_HandleMultichoiceGridInput": [
+          136298168
+        ],
+        "Task_HandleMultichoiceInput": [
+          136298364
+        ],
+        "Task_HandleOpponent1": [
+          135142120
+        ],
+        "Task_HandleOpponent2": [
+          135140348
+        ],
+        "Task_HandleOpponent3": [
+          135141848
+        ],
+        "Task_HandlePageSwapAnim": [
+          135853592
+        ],
+        "Task_HandlePlayerInput": [
+          136520928
+        ],
+        "Task_HandlePokeblockActionsInput": [
+          135955424
+        ],
+        "Task_HandlePokeblockFeed": [
+          135962512
+        ],
+        "Task_HandlePokeblockMenuInput": [
+          135958284
+        ],
+        "Task_HandlePokeblocksSwapInput": [
+          135956876
+        ],
+        "Task_HandlePokedexAreaScreenInput": [
+          135965128
+        ],
+        "Task_HandlePokedexInput": [
+          135992816
+        ],
+        "Task_HandlePokedexStartMenuInput": [
+          135991156
+        ],
+        "Task_HandlePorthole": [
+          135573512
+        ],
+        "Task_HandlePyramidBagInput": [
+          134851420
+        ],
+        "Task_HandleRayCharges": [
+          136213192
+        ],
+        "Task_HandleRayChasesAway": [
+          136210600
+        ],
+        "Task_HandleRayDescends": [
+          136217216
+        ],
+        "Task_HandleRayTakesFlight": [
+          136211716
+        ],
+        "Task_HandleReplaceMoveInput": [
+          136153212
+        ],
+        "Task_HandleReplaceMoveYesNoInput": [
+          135908340
+        ],
+        "Task_HandleScrollingMultichoiceInput": [
+          136297048
+        ],
+        "Task_HandleSearchMenuInput": [
+          135994636
+        ],
+        "Task_HandleSearchParameterInput": [
+          135975488
+        ],
+        "Task_HandleSearchResultsInput": [
+          135992380
+        ],
+        "Task_HandleSearchResultsStartMenuInput": [
+          135990680
+        ],
+        "Task_HandleSearchTopBarInput": [
+          135994200
+        ],
+        "Task_HandleSelectionMenuInput": [
+          135922788
+        ],
+        "Task_HandleSendLinkBuffersData": [
+          134610588
+        ],
+        "Task_HandleSendMailToPCYesNoInput": [
+          135911156
+        ],
+        "Task_HandleShopMenuBuy": [
+          136320764
+        ],
+        "Task_HandleShopMenuQuit": [
+          136320708
+        ],
+        "Task_HandleShopMenuSell": [
+          136320824
+        ],
+        "Task_HandleSizeScreenInput": [
+          135971164
+        ],
+        "Task_HandleSpinTradeYesNoInput": [
+          135918924
+        ],
+        "Task_HandleStarterChooseInput": [
+          136366396
+        ],
+        "Task_HandleStaticTourneyTreeInput": [
+          134650504
+        ],
+        "Task_HandleStopLearningMove": [
+          135897304
+        ],
+        "Task_HandleSwappingItemsInput": [
+          135684724
+        ],
+        "Task_HandleSwitchItemsFromBagYesNoInput": [
+          135912036
+        ],
+        "Task_HandleSwitchItemsYesNoInput": [
+          135913556
+        ],
+        "Task_HandleTossHeldItemYesNoInput": [
+          135909956
+        ],
+        "Task_HandleTourneyTreeInput": [
+          134647896
+        ],
+        "Task_HandleTruckSequence": [
+          135572424
+        ],
+        "Task_HandleWallpapers": [
+          136118172
+        ],
+        "Task_HandleWhichMoveInput": [
+          135935960
+        ],
+        "Task_HandleYesNoInput": [
+          136297708
+        ],
+        "Task_HiddenItemNearby": [
+          135698808
+        ],
+        "Task_HideApplauseMeterForAppealStart": [
+          135220336
+        ],
+        "Task_HideFollowerNPCForTeleport": [
+          135895168
+        ],
+        "Task_HideMoveSelectScreen": [
+          135225492
+        ],
+        "Task_HideNPCFollowerAfterMovementFinish": [
+          135609904
+        ],
+        "Task_HidePartyPokemon": [
+          136126616
+        ],
+        "Task_HidePartyStatusSummary": [
+          134737504
+        ],
+        "Task_HidePartyStatusSummary_BattleStart_1": [
+          134729100
+        ],
+        "Task_HidePartyStatusSummary_BattleStart_2": [
+          134729400
+        ],
+        "Task_HidePartyStatusSummary_DuringBattle": [
+          134729192
+        ],
+        "Task_HidePokenavMessageWhenDone": [
+          135529412
+        ],
+        "Task_HighlightSelectedMainMenuItem": [
+          135769816
+        ],
+        "Task_HighlightWinnersBox": [
+          135258872
+        ],
+        "Task_HofPC_CopySaveData": [
+          135638592,
+          135645340
+        ],
+        "Task_HofPC_DrawSpritesPrintText": [
+          135636840,
+          135644140
+        ],
+        "Task_HofPC_ExitOnButtonPress": [
+          135634712,
+          135641992
+        ],
+        "Task_HofPC_HandleExit": [
+          135638728,
+          135645476
+        ],
+        "Task_HofPC_HandleInput": [
+          135637276,
+          135644560
+        ],
+        "Task_HofPC_HandlePaletteOnExit": [
+          135637580,
+          135644852
+        ],
+        "Task_HofPC_PrintDataIsCorrupted": [
+          135637668,
+          135644916
+        ],
+        "Task_HofPC_PrintMonInfo": [
+          135640252,
+          135646952
+        ],
+        "Task_Hof_ApplauseAndConfetti": [
+          135647392
+        ],
+        "Task_Hof_DelayAfterSave": [
+          135641916
+        ],
+        "Task_Hof_DisplayMon": [
+          135635372,
+          135642668
+        ],
+        "Task_Hof_DisplayPlayer": [
+          135635968
+        ],
+        "Task_Hof_DoConfetti": [
+          135640740
+        ],
+        "Task_Hof_ExitOnKeyPressed": [
+          135638244,
+          135645092
+        ],
+        "Task_Hof_HandleExit": [
+          135638296,
+          135645144
+        ],
+        "Task_Hof_HandlePaletteOnExit": [
+          135636124,
+          135643360
+        ],
+        "Task_Hof_InitMonData": [
+          135634752,
+          135642036
+        ],
+        "Task_Hof_InitTeamSaveData": [
+          135635124,
+          135642404
+        ],
+        "Task_Hof_PaletteFadeAndPrintWelcomeText": [
+          135639516,
+          135646208
+        ],
+        "Task_Hof_PlayMonCryAndPrintInfo": [
+          135647240
+        ],
+        "Task_Hof_PrintMonInfoAfterAnimating": [
+          135640532
+        ],
+        "Task_Hof_SetMonDisplayTask": [
+          135634684
+        ],
+        "Task_Hof_SpawnPlayerPic": [
+          135643224
+        ],
+        "Task_Hof_StartDisplayingMons": [
+          135641964
+        ],
+        "Task_Hof_TryDisplayAnotherMon": [
+          135635680,
+          135642936
+        ],
+        "Task_Hof_TrySaveData": [
+          135638136,
+          135642604
+        ],
+        "Task_Hof_WaitAndPrintPlayerInfo": [
+          135638848,
+          135645556
+        ],
+        "Task_Hof_WaitBorderFadeAway": [
+          135643160
+        ],
+        "Task_Hof_WaitToDisplayMon": [
+          135634636
+        ],
+        "Task_Hof_WaitToDisplayPlayer": [
+          135635904
+        ],
+        "Task_Idle": [
+          135735964
+        ],
+        "Task_InGameTrade": [
+          136407012
+        ],
+        "Task_InfoBox": [
+          136329172
+        ],
+        "Task_InitBallRoll": [
+          136254768
+        ],
+        "Task_InitBox": [
+          136121764
+        ],
+        "Task_InitDecorationItemsWindow": [
+          135314720
+        ],
+        "Task_InitEasyChatScreen": [
+          135369352
+        ],
+        "Task_InitMultiPartnerPartySlideIn": [
+          135896020
+        ],
+        "Task_InitPokeStorage": [
+          136134012
+        ],
+        "Task_InitUpdateMonBg": [
+          134379616
+        ],
+        "Task_InitVsSeekerAndCheckForTrainersOnScreen": [
+          136542016
+        ],
+        "Task_Intro": [
+          135000316
+        ],
+        "Task_ItemContext_Deposit": [
+          135681248
+        ],
+        "Task_ItemContext_GiveToPC": [
+          135694448
+        ],
+        "Task_ItemContext_GiveToParty": [
+          135694156
+        ],
+        "Task_ItemContext_MultipleRows": [
+          135688108
+        ],
+        "Task_ItemContext_Normal": [
+          135690616
+        ],
+        "Task_ItemContext_Sell": [
+          135693772
+        ],
+        "Task_ItemContext_SingleRow": [
+          135688484
+        ],
+        "Task_ItemStorage_Deposit": [
+          135942984
+        ],
+        "Task_ItemSwapHandleInput": [
+          134848844
+        ],
+        "Task_ItemToBag": [
+          136133424
+        ],
+        "Task_ItemUse_CloseMessageBoxAndReturnToField_VsSeeker": [
+          135704872
+        ],
+        "Task_JumpBox": [
+          136121444
+        ],
+        "Task_Kyogre": [
+          134986348
+        ],
+        "Task_LaunchLvlUpAnim": [
+          134588104
+        ],
+        "Task_LavaridgeGym1FWarp": [
+          135492780
+        ],
+        "Task_LavaridgeGymB1FWarp": [
+          135492580
+        ],
+        "Task_LavaridgeGymB1FWarpExit": [
+          135492680
+        ],
+        "Task_LearnMove": [
+          135555796
+        ],
+        "Task_LearnNextMoveOrClosePartyMenu": [
+          135908976
+        ],
+        "Task_LearnedMove": [
+          135909388
+        ],
+        "Task_LinkContestWaitForConnection": [
+          135261316
+        ],
+        "Task_LinkContest_CalculateRound1Em": [
+          135253676
+        ],
+        "Task_LinkContest_CalculateTurnOrderEm": [
+          135253720
+        ],
+        "Task_LinkContest_CalculateTurnOrderRS": [
+          135261280
+        ],
+        "Task_LinkContest_CommunicateAIMonsEm": [
+          135253904
+        ],
+        "Task_LinkContest_CommunicateAppealsState": [
+          135252232
+        ],
+        "Task_LinkContest_CommunicateCategoryEm": [
+          135254156
+        ],
+        "Task_LinkContest_CommunicateCategoryRS": [
+          135251324
+        ],
+        "Task_LinkContest_CommunicateFinalStandings": [
+          135251852
+        ],
+        "Task_LinkContest_CommunicateLeaderIdsEm": [
+          135254340
+        ],
+        "Task_LinkContest_CommunicateLeaderIdsRS": [
+          135252664
+        ],
+        "Task_LinkContest_CommunicateMonIdxs": [
+          135251560
+        ],
+        "Task_LinkContest_CommunicateMonsEm": [
+          135254520
+        ],
+        "Task_LinkContest_CommunicateMonsRS": [
+          135250856
+        ],
+        "Task_LinkContest_CommunicateMoveSelections": [
+          135251664
+        ],
+        "Task_LinkContest_CommunicateRngEm": [
+          135253756
+        ],
+        "Task_LinkContest_CommunicateRngRS": [
+          135251180
+        ],
+        "Task_LinkContest_CommunicateRound1Points": [
+          135252856
+        ],
+        "Task_LinkContest_CommunicateTurnOrder": [
+          135253052
+        ],
+        "Task_LinkContest_Disconnect": [
+          135258260
+        ],
+        "Task_LinkContest_FinalizeConnection": [
+          135262448
+        ],
+        "Task_LinkContest_Init": [
+          135250708
+        ],
+        "Task_LinkContest_InitFlags": [
+          135250472
+        ],
+        "Task_LinkContest_SetUpContestEm": [
+          135253332
+        ],
+        "Task_LinkContest_SetUpContestRS": [
+          135266752
+        ],
+        "Task_LinkContest_StartCommunicateCategoryEm": [
+          135253304
+        ],
+        "Task_LinkContest_StartCommunicateLeaderIdsEm": [
+          135253276
+        ],
+        "Task_LinkContest_StartCommunicateRngEm": [
+          135253248
+        ],
+        "Task_LinkContest_StartCommunicationEm": [
+          135254760
+        ],
+        "Task_LinkContest_StartInitFlags": [
+          135250444
+        ],
+        "Task_LinkContest_WaitDisconnect": [
+          135262580
+        ],
+        "Task_LinkFullSave": [
+          136273116
+        ],
+        "Task_LinkRetireStatusWithBattleTowerPartner": [
+          135554060
+        ],
+        "Task_LinkupAwaitConfirmation": [
+          135196612
+        ],
+        "Task_LinkupAwaitConnection": [
+          135195600
+        ],
+        "Task_LinkupAwaitTrainerCardData": [
+          135197136
+        ],
+        "Task_LinkupCheckStatusAfterConfirm": [
+          135193088
+        ],
+        "Task_LinkupConfirm": [
+          135194636
+        ],
+        "Task_LinkupConfirmWhenReady": [
+          135195476
+        ],
+        "Task_LinkupConnectionError": [
+          135195308
+        ],
+        "Task_LinkupExchangeDataWithLeader": [
+          135196276
+        ],
+        "Task_LinkupFailed": [
+          135195224
+        ],
+        "Task_LinkupStart": [
+          135192952
+        ],
+        "Task_LinkupTryConfirmation": [
+          135195784
+        ],
+        "Task_ListenForCompatiblePartners": [
+          136502604
+        ],
+        "Task_ListenForWonderDistributor": [
+          136502012
+        ],
+        "Task_ListenToWireless": [
+          136504748
+        ],
+        "Task_LoadAreaScreen": [
+          135983200
+        ],
+        "Task_LoadBagSortOptions": [
+          135686548
+        ],
+        "Task_LoadCableCar": [
+          135192868
+        ],
+        "Task_LoadCryScreen": [
+          135984496
+        ],
+        "Task_LoadInfoScreen": [
+          135985144
+        ],
+        "Task_LoadInfoScreenWaitForFade": [
+          135973192
+        ],
+        "Task_LoadSearchMenu": [
+          135996120
+        ],
+        "Task_LoadShowMons": [
+          135270480
+        ],
+        "Task_LoadSizeScreen": [
+          135985892
+        ],
+        "Task_LoopAndPlaySE": [
+          134378960
+        ],
+        "Task_LoopWingFlapSE": [
+          135551732
+        ],
+        "Task_LoseMailMessageYesNo": [
+          135902164
+        ],
+        "Task_LotteryCornerComputerEffect": [
+          135552296
+        ],
+        "Task_Magma": [
+          134986140
+        ],
+        "Task_MainMenuCheckBattery": [
+          135776344
+        ],
+        "Task_MainMenuCheckSaveFile": [
+          135774380
+        ],
+        "Task_MapPreviewScreen_FadeIn": [
+          135783048
+        ],
+        "Task_MapPreviewScreen_NonFade": [
+          135784440
+        ],
+        "Task_MapPreviewScreen_Script": [
+          135783980
+        ],
+        "Task_MinigameCountdown": [
+          135820284
+        ],
+        "Task_Mint": [
+          135926596
+        ],
+        "Task_MixingRecordsRecv": [
+          136225612
+        ],
+        "Task_MoveBgDots": [
+          136187732
+        ],
+        "Task_MoveDeoxysRock": [
+          135506636
+        ],
+        "Task_MoveElevator": [
+          135553436
+        ],
+        "Task_MoveElevatorWindowLights": [
+          135552464
+        ],
+        "Task_MoveMon": [
+          136104100
+        ],
+        "Task_MoveNPCFollowerAfterForcedMovement": [
+          135609900
+        ],
+        "Task_MoveRelearner_Giveup_Answer": [
+          135831248
+        ],
+        "Task_MoveRelearner_Giveup_Prompt": [
+          135828800
+        ],
+        "Task_MoveRelearner_HandleInput": [
+          135832844
+        ],
+        "Task_MoveRelearner_LearnMove": [
+          135830088
+        ],
+        "Task_MoveRelearner_Quit": [
+          135828932
+        ],
+        "Task_MoveStarterChooseCursor": [
+          136366360
+        ],
+        "Task_Mugshot": [
+          134986656
+        ],
+        "Task_MultiPartnerPartySlideIn": [
+          135895884
+        ],
+        "Task_MysteryGift": [
+          135844668
+        ],
+        "Task_NameBox": [
+          136102196
+        ],
+        "Task_NamingScreen": [
+          135859772
+        ],
+        "Task_NewGameBirchSpeechSub_InitPokeBall": [
+          135772116
+        ],
+        "Task_NewGameBirchSpeechSub_WaitForLotad": [
+          135771424
+        ],
+        "Task_NewGameBirchSpeech_AndYouAre": [
+          135776112
+        ],
+        "Task_NewGameBirchSpeech_AreYouReady": [
+          135780224
+        ],
+        "Task_NewGameBirchSpeech_BoyOrGirl": [
+          135776928
+        ],
+        "Task_NewGameBirchSpeech_ChooseGender": [
+          135779020
+        ],
+        "Task_NewGameBirchSpeech_Cleanup": [
+          135776276
+        ],
+        "Task_NewGameBirchSpeech_CreateNameYesNo": [
+          135779188
+        ],
+        "Task_NewGameBirchSpeech_FadeInTarget1OutTarget2": [
+          135771812
+        ],
+        "Task_NewGameBirchSpeech_FadeOutTarget1InTarget2": [
+          135771608
+        ],
+        "Task_NewGameBirchSpeech_FadePlatformIn": [
+          135771716
+        ],
+        "Task_NewGameBirchSpeech_FadePlatformOut": [
+          135771920
+        ],
+        "Task_NewGameBirchSpeech_FadePlayerToWhite": [
+          135775084
+        ],
+        "Task_NewGameBirchSpeech_Init": [
+          135777252
+        ],
+        "Task_NewGameBirchSpeech_MainSpeech": [
+          135776048
+        ],
+        "Task_NewGameBirchSpeech_ProcessNameYesNoMenu": [
+          135779604
+        ],
+        "Task_NewGameBirchSpeech_ReshowBirchLotad": [
+          135779912
+        ],
+        "Task_NewGameBirchSpeech_ReturnFromNamingScreenShowTextbox": [
+          135772016
+        ],
+        "Task_NewGameBirchSpeech_ShrinkPlayer": [
+          135772260
+        ],
+        "Task_NewGameBirchSpeech_SlideInNewGenderSprite": [
+          135769528
+        ],
+        "Task_NewGameBirchSpeech_SlideOutOldGenderSprite": [
+          135770240
+        ],
+        "Task_NewGameBirchSpeech_SlidePlatformAway": [
+          135769696
+        ],
+        "Task_NewGameBirchSpeech_SlidePlatformAway2": [
+          135769756
+        ],
+        "Task_NewGameBirchSpeech_SoItsPlayerName": [
+          135776808
+        ],
+        "Task_NewGameBirchSpeech_StartBirchLotadPlatformFade": [
+          135779432
+        ],
+        "Task_NewGameBirchSpeech_StartNamingScreen": [
+          135779276
+        ],
+        "Task_NewGameBirchSpeech_StartPlayerFadeIn": [
+          135770400
+        ],
+        "Task_NewGameBirchSpeech_ThisIsAPokemon": [
+          135776184
+        ],
+        "Task_NewGameBirchSpeech_WaitForPlayerFadeIn": [
+          135769460
+        ],
+        "Task_NewGameBirchSpeech_WaitForPlayerShrink": [
+          135769612
+        ],
+        "Task_NewGameBirchSpeech_WaitForSpriteFadeInAndTextPrinter": [
+          135776488
+        ],
+        "Task_NewGameBirchSpeech_WaitForSpriteFadeInWelcome": [
+          135778376
+        ],
+        "Task_NewGameBirchSpeech_WaitForWhatsYourNameToPrint": [
+          135772076
+        ],
+        "Task_NewGameBirchSpeech_WaitPressBeforeNameChoice": [
+          135775016
+        ],
+        "Task_NewGameBirchSpeech_WaitToShowBirch": [
+          135779760
+        ],
+        "Task_NewGameBirchSpeech_WaitToShowGenderMenu": [
+          135772432
+        ],
+        "Task_NewGameBirchSpeech_WhatsYourName": [
+          135776868
+        ],
+        "Task_NewGameIntro": [
+          135352532
+        ],
+        "Task_NotEnoughForMinBet": [
+          136251096
+        ],
+        "Task_OWEApproachForBattle": [
+          136555252
+        ],
+        "Task_OnBPressed": [
+          136117604
+        ],
+        "Task_OnCloseBoxPressed": [
+          136116532
+        ],
+        "Task_OnSelectedMon": [
+          136123428
+        ],
+        "Task_OpenCenterWhiteColumn": [
+          136405332
+        ],
+        "Task_OpenDexNavFromStartMenu": [
+          135334960
+        ],
+        "Task_OpenInfoScreenAfterMonMovement": [
+          135971900
+        ],
+        "Task_OpenMonPic": [
+          134692564
+        ],
+        "Task_OpenPokedexMainPage": [
+          135990488
+        ],
+        "Task_OpenRegisteredPokeblockCase": [
+          135698872
+        ],
+        "Task_OpenSearchResults": [
+          135990584
+        ],
+        "Task_OpenSearchResultsInfoScreenAfterMonMovement": [
+          135971772
+        ],
+        "Task_OpenStartMenu": [
+          135485440
+        ],
+        "Task_OpponentMiss": [
+          135136700
+        ],
+        "Task_OptionBlend": [
+          136188644
+        ],
+        "Task_OptionMenuFadeIn": [
+          135861820
+        ],
+        "Task_OptionMenuFadeOut": [
+          135862844
+        ],
+        "Task_OptionMenuProcessInput": [
+          135862888
+        ],
+        "Task_OptionMenuSave": [
+          135861860
+        ],
+        "Task_OrbEffect": [
+          135545436
+        ],
+        "Task_OvwldCredits_FadeOut": [
+          135868260
+        ],
+        "Task_OvwldCredits_WaitFade": [
+          135878984
+        ],
+        "Task_PCMainMenu": [
+          136111852
+        ],
+        "Task_PCTurnOnEffect": [
+          135552060
+        ],
+        "Task_PanFromInitialToTarget": [
+          134379052
+        ],
+        "Task_ParentSearchForChildren": [
+          135739968
+        ],
+        "Task_PartyMenuItemUseFromField": [
+          135698764
+        ],
+        "Task_PartyMenuModifyHP": [
+          135899804
+        ],
+        "Task_PartyMenuReplaceMove": [
+          135909624
+        ],
+        "Task_PartyMenuWaitForFade": [
+          135897268
+        ],
+        "Task_PassAreaZoom": [
+          135611332
+        ],
+        "Task_Payout": [
+          136328292
+        ],
+        "Task_PetalburgGymSlideOpenRoomDoors": [
+          135555096
+        ],
+        "Task_PhotoFlash": [
+          135505184
+        ],
+        "Task_PlaceBet": [
+          136249852
+        ],
+        "Task_PlaceDecoration": [
+          135322852
+        ],
+        "Task_PlaceMon": [
+          136099212
+        ],
+        "Task_PlayCryWhenReleasedFromBall": [
+          135950080
+        ],
+        "Task_PlayMapChosenOrBattleBGM": [
+          136041956
+        ],
+        "Task_PlayPokeFlute": [
+          135698600
+        ],
+        "Task_PlayPokeblockFanfare": [
+          135137676
+        ],
+        "Task_PlayerController_RestoreBgmAfterCry": [
+          134592680
+        ],
+        "Task_PlayerExchange": [
+          135736464
+        ],
+        "Task_PlayerExchangeChat": [
+          135739392
+        ],
+        "Task_PlayerExchangeUpdate": [
+          135735968
+        ],
+        "Task_PlayerThrow_Wait": [
+          134544764
+        ],
+        "Task_PokeStorageMain": [
+          136124556
+        ],
+        "Task_PokeballsTrail": [
+          134986448
+        ],
+        "Task_PokecenterHeal": [
+          135492108
+        ],
+        "Task_PokemonJump_Leader": [
+          136077404
+        ],
+        "Task_PokemonJump_Member": [
+          136076824
+        ],
+        "Task_PokemonPicWindow": [
+          136298264
+        ],
+        "Task_PokemonSummaryAnimateAfterDelay": [
+          136024904
+        ],
+        "Task_Pokenav": [
+          136161096
+        ],
+        "Task_PopSecretBaseBalloon": [
+          135602952
+        ],
+        "Task_PrepareToGiveExpWithExpBar": [
+          134587904
+        ],
+        "Task_PressStopReelButton": [
+          136328944
+        ],
+        "Task_PrintAndWaitForText": [
+          135897076
+        ],
+        "Task_PrintAtePokeblockMessage": [
+          135961368
+        ],
+        "Task_PrintBattleMoves": [
+          136148684
+        ],
+        "Task_PrintCantStoreMail": [
+          136111720
+        ],
+        "Task_PrintContestMoves": [
+          136147072
+        ],
+        "Task_PrintInfoPage": [
+          136150560
+        ],
+        "Task_PrintMinBet": [
+          136259892
+        ],
+        "Task_PrintPayout": [
+          136250900
+        ],
+        "Task_PrintRouletteEntryMsg": [
+          136250588
+        ],
+        "Task_PrintRoundResultText": [
+          135243716
+        ],
+        "Task_PrintSkillsPage": [
+          136144980
+        ],
+        "Task_PrintSpinResult": [
+          136252696
+        ],
+        "Task_PushBoulder": [
+          135531408
+        ],
+        "Task_PutAwayDecoration": [
+          135320228
+        ],
+        "Task_RaiseCurtainAtStart": [
+          135219296
+        ],
+        "Task_RayChargesAnim": [
+          136217900
+        ],
+        "Task_RayChargesEnd": [
+          136217540
+        ],
+        "Task_RayCharges_FlyOffscreen": [
+          136213012
+        ],
+        "Task_RayCharges_ShakeRayquaza": [
+          136213692
+        ],
+        "Task_RayChasesAwayAnim": [
+          136212412
+        ],
+        "Task_RayChasesAwayEnd": [
+          136210476
+        ],
+        "Task_RayDescendsAnim": [
+          136213780
+        ],
+        "Task_RayDescendsEnd": [
+          136217012
+        ],
+        "Task_RayTakesFlightAnim": [
+          136214292
+        ],
+        "Task_Rayquaza": [
+          134988900
+        ],
+        "Task_RayquazaAttack": [
+          135659992
+        ],
+        "Task_ReUpdateHeartSliders": [
+          135221452
+        ],
+        "Task_ReadyBikeScene": [
+          135275036
+        ],
+        "Task_ReadyShowMons": [
+          135274976
+        ],
+        "Task_ReadyStartLinkContest": [
+          135219600
+        ],
+        "Task_ReadyUpdateHeartSliders": [
+          135217136
+        ],
+        "Task_ReceiveChatMessage": [
+          136527436
+        ],
+        "Task_ReceivePacket": [
+          136227256
+        ],
+        "Task_ReconnectWithLinkPlayers": [
+          135198580
+        ],
+        "Task_RecordBallHit": [
+          136259276
+        ],
+        "Task_RecordMixing_Main": [
+          136229568
+        ],
+        "Task_RecordMixing_SoundEffect": [
+          136224220
+        ],
+        "Task_RectangularSpiral": [
+          134988392
+        ],
+        "Task_RedArrowCursor": [
+          135752800
+        ],
+        "Task_RedOutlineCursor": [
+          135752804
+        ],
+        "Task_Reel": [
+          136328344
+        ],
+        "Task_ReelTime": [
+          136329128
+        ],
+        "Task_ReestablishLink": [
+          135193540
+        ],
+        "Task_ReestablishLinkAwaitConfirmation": [
+          135194768
+        ],
+        "Task_ReestablishLinkAwaitConnection": [
+          135194500
+        ],
+        "Task_ReestablishLinkLeader": [
+          135193036
+        ],
+        "Task_Regice": [
+          134986192
+        ],
+        "Task_Regirock": [
+          134986296
+        ],
+        "Task_Registeel": [
+          134986244
+        ],
+        "Task_ReinitializeDecorationMenuHandler": [
+          135314608
+        ],
+        "Task_ReleaseMon": [
+          136127728
+        ],
+        "Task_ReloadAreaScreen": [
+          135976792
+        ],
+        "Task_RemoveItemFromBag": [
+          135684032
+        ],
+        "Task_ReplaceMoveYesNo": [
+          135902228
+        ],
+        "Task_ResetForNextRound": [
+          135230592
+        ],
+        "Task_ResetObjectsRematchWantedState": [
+          136541428
+        ],
+        "Task_ResetRtcScreen": [
+          136240872
+        ],
+        "Task_ResetRtc_Exit": [
+          136238960
+        ],
+        "Task_ResetRtc_HandleInput": [
+          136240264
+        ],
+        "Task_ResetRtc_Init": [
+          136239960
+        ],
+        "Task_ResetRtc_SetFinished": [
+          136238936
+        ],
+        "Task_ReshowPokeStorage": [
+          136112948
+        ],
+        "Task_RestorePlttBufferUnfaded": [
+          135214284
+        ],
+        "Task_ReturnToChooseMonAfterText": [
+          135918684
+        ],
+        "Task_ReturnToFieldCableLink": [
+          135547308
+        ],
+        "Task_ReturnToFieldNoScript": [
+          135544804
+        ],
+        "Task_ReturnToFieldRecordMixing": [
+          135549524
+        ],
+        "Task_ReturnToFieldWhileLearningMove": [
+          135555848
+        ],
+        "Task_ReturnToFieldWirelessLink": [
+          135547412
+        ],
+        "Task_ReturnToItemListAfterDecorationPurchase": [
+          136322828
+        ],
+        "Task_ReturnToItemListAfterItemPurchase": [
+          136325020
+        ],
+        "Task_ReturnToPartyMenuWhileLearningMove": [
+          135913324
+        ],
+        "Task_ReturnToPokedexFromSearchResults": [
+          135978628
+        ],
+        "Task_ReturnToShopMenu": [
+          136321704
+        ],
+        "Task_ReturnToWorldFromLinkRoom": [
+          135544332
+        ],
+        "Task_RfuReconnectWithParent": [
+          135738164
+        ],
+        "Task_Ripple": [
+          134986552
+        ],
+        "Task_RollBall": [
+          136251936
+        ],
+        "Task_RunLoopedTask": [
+          136160492
+        ],
+        "Task_RunLoopedTask_LinkMode": [
+          136160868
+        ],
+        "Task_RunPokeJumpGfxFunc": [
+          136071728
+        ],
+        "Task_RunPokemonLeagueLightingEffect": [
+          135551552
+        ],
+        "Task_RunScriptAndFadeToActivity": [
+          136501476
+        ],
+        "Task_RunTrainerSeeFuncList": [
+          136445284
+        ],
+        "Task_RunUnionRoom": [
+          136513424
+        ],
+        "Task_RushInjuredPokemonToCenter": [
+          135546740
+        ],
+        "Task_SSAnneFinish": [
+          136365176
+        ],
+        "Task_SSAnneInit": [
+          136365540
+        ],
+        "Task_SSAnneRun": [
+          136365256
+        ],
+        "Task_SacredAshDisplayHPRestored": [
+          135911644
+        ],
+        "Task_SacredAshLoop": [
+          135916180
+        ],
+        "Task_SaveAfterLinkBattle": [
+          136368944
+        ],
+        "Task_Scene1_End": [
+          135656160
+        ],
+        "Task_Scene1_FadeIn": [
+          135657608
+        ],
+        "Task_Scene1_Load": [
+          135665720
+        ],
+        "Task_Scene1_PanUp": [
+          135664232
+        ],
+        "Task_Scene1_WaterDrops": [
+          135661576
+        ],
+        "Task_Scene2_BikeRide": [
+          135658904
+        ],
+        "Task_Scene2_CreateSprites": [
+          135657904
+        ],
+        "Task_Scene2_End": [
+          135656204
+        ],
+        "Task_Scene2_Load": [
+          135657820
+        ],
+        "Task_Scene3_Clouds": [
+          135656960
+        ],
+        "Task_Scene3_EndNarrowWindow": [
+          135656288
+        ],
+        "Task_Scene3_Groudon": [
+          135667100
+        ],
+        "Task_Scene3_InitClouds": [
+          135656788
+        ],
+        "Task_Scene3_InitGroudonBg": [
+          135666932
+        ],
+        "Task_Scene3_Kyogre": [
+          135667960
+        ],
+        "Task_Scene3_Lightning": [
+          135659484
+        ],
+        "Task_Scene3_Load": [
+          135666604
+        ],
+        "Task_Scene3_LoadClouds1": [
+          135657200
+        ],
+        "Task_Scene3_LoadClouds2": [
+          135657400
+        ],
+        "Task_Scene3_LoadGroudon": [
+          135664488
+        ],
+        "Task_Scene3_LoadKyogre": [
+          135667764
+        ],
+        "Task_Scene3_LoadLightning": [
+          135659280
+        ],
+        "Task_Scene3_LoadRayquazaAttack": [
+          135657464
+        ],
+        "Task_Scene3_NarrowWindow": [
+          135656708
+        ],
+        "Task_Scene3_Rayquaza": [
+          135656488
+        ],
+        "Task_Scene3_SpinPokeball": [
+          135666784
+        ],
+        "Task_Scene3_StartGroudon": [
+          135659420
+        ],
+        "Task_Scene3_WaitGroudon": [
+          135656248
+        ],
+        "Task_ScrollBg": [
+          134991580
+        ],
+        "Task_ScrollIndicatorArrowPair": [
+          135751808
+        ],
+        "Task_ScrollIndicatorArrowPairOnMainMenu": [
+          135753720
+        ],
+        "Task_ScrollableMultichoice_ReturnToList": [
+          135553760
+        ],
+        "Task_ScrollableMultichoice_WaitReturnToList": [
+          135551104
+        ],
+        "Task_Seagallop_0": [
+          136307668
+        ],
+        "Task_Seagallop_1": [
+          136308900
+        ],
+        "Task_Seagallop_2": [
+          136308964
+        ],
+        "Task_SealedChamberShakingEffect": [
+          135186292
+        ],
+        "Task_SearchCompleteWaitForInput": [
+          135972956
+        ],
+        "Task_SecretBaseMusicNoteMatSound": [
+          135602504
+        ],
+        "Task_SecretBasePCTurnOn": [
+          135602804
+        ],
+        "Task_SelectFirstEmptySquare": [
+          136263964
+        ],
+        "Task_SelectLocation": [
+          135313244
+        ],
+        "Task_SelectSearchMenuItem": [
+          135975336
+        ],
+        "Task_SelectedMove": [
+          135226240
+        ],
+        "Task_SendDisconnectCommand": [
+          135738924
+        ],
+        "Task_SendMailToPCYesNo": [
+          135902420
+        ],
+        "Task_SendMysteryGift": [
+          136509360
+        ],
+        "Task_SendPacket": [
+          136224976
+        ],
+        "Task_SendPacket_SwitchToReceive": [
+          136224136
+        ],
+        "Task_SetBikeScene": [
+          135274172
+        ],
+        "Task_SetBuriedTrainerMovement": [
+          136445940
+        ],
+        "Task_SetCardFlipped": [
+          136431752
+        ],
+        "Task_SetClock_AskConfirm": [
+          136543672
+        ],
+        "Task_SetClock_Confirmed": [
+          136543780
+        ],
+        "Task_SetClock_Exit": [
+          136544740
+        ],
+        "Task_SetClock_HandleConfirmInput": [
+          136544644
+        ],
+        "Task_SetClock_HandleInput": [
+          136544808
+        ],
+        "Task_SetClock_WaitFadeIn": [
+          136542916
+        ],
+        "Task_SetControllerToWaitForString": [
+          134586432
+        ],
+        "Task_SetHandleReplaceMoveInput": [
+          136155512
+        ],
+        "Task_SetNextAnim": [
+          136216836
+        ],
+        "Task_SetPyramidFloorPalette": [
+          134857060
+        ],
+        "Task_SetSacredAshCB": [
+          135896076
+        ],
+        "Task_SetSeenWinnerMon": [
+          135261844
+        ],
+        "Task_ShakeCamera": [
+          135553332
+        ],
+        "Task_ShakeScreen": [
+          135557556
+        ],
+        "Task_ShatterSecretBaseBreakableDoor": [
+          135603744
+        ],
+        "Task_ShiftMon": [
+          136106648
+        ],
+        "Task_ShinyStars": [
+          134543864
+        ],
+        "Task_ShinyStars_Wait": [
+          134542108
+        ],
+        "Task_ShopMenu": [
+          136321772
+        ],
+        "Task_ShowAiKnowledge": [
+          134638124
+        ],
+        "Task_ShowAiParty": [
+          134642112
+        ],
+        "Task_ShowAiPoints": [
+          134639260
+        ],
+        "Task_ShowAndUpdateApplauseMeter": [
+          135224096
+        ],
+        "Task_ShowContestEntryMonPic": [
+          135261400
+        ],
+        "Task_ShowContestResults": [
+          135263788
+        ],
+        "Task_ShowDecorationItemsWindow": [
+          135319636
+        ],
+        "Task_ShowDodrioBerryPickingRecords": [
+          135343560
+        ],
+        "Task_ShowItemInfo": [
+          136116980
+        ],
+        "Task_ShowMarkMenu": [
+          136111180
+        ],
+        "Task_ShowMinBetYesNo": [
+          136251212
+        ],
+        "Task_ShowMonSummary": [
+          136105832
+        ],
+        "Task_ShowMons": [
+          135270880
+        ],
+        "Task_ShowMoveSelectScreen": [
+          135235348
+        ],
+        "Task_ShowPartyPokemon": [
+          136114224
+        ],
+        "Task_ShowPokeStorage": [
+          136100852
+        ],
+        "Task_ShowPokedexAreaScreen": [
+          135967536
+        ],
+        "Task_ShowPokemonJumpRecords": [
+          136071000
+        ],
+        "Task_ShowPreliminaryResults": [
+          135260080
+        ],
+        "Task_ShowRankings": [
+          135160476
+        ],
+        "Task_ShowResetRtcPrompt": [
+          136240588
+        ],
+        "Task_ShowRound2Results": [
+          135260220
+        ],
+        "Task_ShowScrollableMultichoice": [
+          135556032
+        ],
+        "Task_ShowSecretBaseRegistryMenu": [
+          136311368
+        ],
+        "Task_ShowStartMenu": [
+          136368828
+        ],
+        "Task_ShowSummaryScreenToForgetMove": [
+          135904140
+        ],
+        "Task_ShowTMHMContainedMessage": [
+          135698920
+        ],
+        "Task_ShowTourneyInfoCard": [
+          134665124
+        ],
+        "Task_ShowTourneyTree": [
+          134648964
+        ],
+        "Task_ShowWinnerMonBanner": [
+          135257700
+        ],
+        "Task_ShredSplit": [
+          134987440
+        ],
+        "Task_Shuffle": [
+          134985932
+        ],
+        "Task_Slice": [
+          134987196
+        ],
+        "Task_SlideAppealJamWindow": [
+          136142708
+        ],
+        "Task_SlideApplauseMeterIn": [
+          135216680
+        ],
+        "Task_SlideApplauseMeterOut": [
+          135216256
+        ],
+        "Task_SlideContestResultsBg": [
+          135256864
+        ],
+        "Task_SlideGridOffscreen": [
+          136258956
+        ],
+        "Task_SlideGridOnscreen": [
+          136249184
+        ],
+        "Task_SlidePowerAccWindow": [
+          136137868
+        ],
+        "Task_SlideSelectedSlotsOffscreen": [
+          135914740
+        ],
+        "Task_SlideSelectedSlotsOnscreen": [
+          135919368
+        ],
+        "Task_SlideStatusWindow": [
+          136140976
+        ],
+        "Task_SlotMachine": [
+          136328120
+        ],
+        "Task_SmoothBlendLayers": [
+          135797236
+        ],
+        "Task_SoftboiledRestoreHealth": [
+          135606724
+        ],
+        "Task_SortFinish": [
+          135683944
+        ],
+        "Task_Sparkles_ArcDown": [
+          135465176
+        ],
+        "Task_Sparkles_ArcDown_End": [
+          135464684
+        ],
+        "Task_Sparkles_ArcDown_Init": [
+          135467148
+        ],
+        "Task_Sparkles_CircleInward": [
+          135465484
+        ],
+        "Task_Sparkles_CircleInward_End": [
+          135467052
+        ],
+        "Task_Sparkles_CircleInward_Init": [
+          135467068
+        ],
+        "Task_Sparkles_SpiralUpward": [
+          135464972
+        ],
+        "Task_Sparkles_SpiralUpward_End": [
+          135464640
+        ],
+        "Task_Sparkles_SpiralUpward_Init": [
+          135467228
+        ],
+        "Task_Sparkles_SprayAndFlash": [
+          135466908
+        ],
+        "Task_Sparkles_SprayAndFlashTrade": [
+          135466768
+        ],
+        "Task_Sparkles_SprayAndFlashTrade_Init": [
+          135466228
+        ],
+        "Task_Sparkles_SprayAndFlash_End": [
+          135464700
+        ],
+        "Task_Sparkles_SprayAndFlash_Init": [
+          135467332
+        ],
+        "Task_SpinEnterWarp": [
+          135544024
+        ],
+        "Task_SpinExitWarp": [
+          135548164
+        ],
+        "Task_SpinPokenavIcon": [
+          135787940
+        ],
+        "Task_SpinTradeYesNo": [
+          135902356
+        ],
+        "Task_SpinWheel": [
+          136251464
+        ],
+        "Task_StairWarp": [
+          135548308
+        ],
+        "Task_StandingOnHiddenItem": [
+          135698040
+        ],
+        "Task_StartActivity": [
+          136505632
+        ],
+        "Task_StartAfterCountdown": [
+          136219296
+        ],
+        "Task_StartBattleAfterTransition": [
+          134709800,
+          134964544
+        ],
+        "Task_StartCommunicateCategoryRS": [
+          135261252
+        ],
+        "Task_StartCommunicateLeaderIdsRS": [
+          135261224
+        ],
+        "Task_StartCommunicateRngRS": [
+          135261196
+        ],
+        "Task_StartCommunication": [
+          135262368
+        ],
+        "Task_StartContest": [
+          135261708
+        ],
+        "Task_StartContestWaitFade": [
+          135214120
+        ],
+        "Task_StartDodrioGame": [
+          135345752
+        ],
+        "Task_StartDropCurtainAtRoundEnd": [
+          135215648
+        ],
+        "Task_StartHandleBetGridInput": [
+          136255920
+        ],
+        "Task_StartHighlightWinnersBox": [
+          135258740
+        ],
+        "Task_StartNewRoundOfAppeals": [
+          135214424
+        ],
+        "Task_StartPlaying": [
+          136261688
+        ],
+        "Task_StartPokedexSearch": [
+          135980904
+        ],
+        "Task_StartPokemonJump": [
+          136075532
+        ],
+        "Task_StartRaiseCurtainAtRoundEnd": [
+          135215708
+        ],
+        "Task_StartSendOutAnim": [
+          134628996
+        ],
+        "Task_StartShowContestResults": [
+          135261744
+        ],
+        "Task_StartSpin": [
+          136252624
+        ],
+        "Task_StartUnionRoomTrade": [
+          136500856
+        ],
+        "Task_StartUseLure": [
+          135697796
+        ],
+        "Task_StartUseRepel": [
+          135697732
+        ],
+        "Task_StartWiredCableClubBattle": [
+          135195968
+        ],
+        "Task_StartWiredTrade": [
+          135194100
+        ],
+        "Task_StartWirelessCableClubBattle": [
+          135194816
+        ],
+        "Task_StartWirelessTrade": [
+          135194248
+        ],
+        "Task_StarterChoose": [
+          136366940
+        ],
+        "Task_StopFlashJudgeAttentionEye": [
+          135217836
+        ],
+        "Task_StopLinkup": [
+          135195392
+        ],
+        "Task_StopPlaying": [
+          136253176
+        ],
+        "Task_StopPuttingAwayDecorations": [
+          135321700
+        ],
+        "Task_StopSurfingInit": [
+          135532336
+        ],
+        "Task_StoryListMenu": [
+          135792452
+        ],
+        "Task_SurfFieldEffect": [
+          135493416
+        ],
+        "Task_Swirl": [
+          134985828
+        ],
+        "Task_SwitchBagPocket": [
+          135691572
+        ],
+        "Task_SwitchHoldItemsPrompt": [
+          135912668
+        ],
+        "Task_SwitchItemsFromBagYesNo": [
+          135902484
+        ],
+        "Task_SwitchItemsYesNo": [
+          135902292
+        ],
+        "Task_SwitchScreensFromAreaScreen": [
+          135973352
+        ],
+        "Task_SwitchScreensFromCryScreen": [
+          135973464
+        ],
+        "Task_SwitchScreensFromInfoScreen": [
+          135973092
+        ],
+        "Task_SwitchScreensFromSizeScreen": [
+          135973576
+        ],
+        "Task_SwitchSelectedItem": [
+          136132760
+        ],
+        "Task_SwitchToSearchMenu": [
+          135995848
+        ],
+        "Task_SwitchToSearchMenuTopBar": [
+          135995768
+        ],
+        "Task_TakeItemForMoving": [
+          136131616
+        ],
+        "Task_TakesFlight_CreateSmoke": [
+          136214712
+        ],
+        "Task_TeleportWarpIn": [
+          135493052
+        ],
+        "Task_TeleportWarpOut": [
+          135493008
+        ],
+        "Task_TitleScreenPhase1": [
+          136396068
+        ],
+        "Task_TitleScreenPhase2": [
+          136396828
+        ],
+        "Task_TitleScreenPhase3": [
+          136396404
+        ],
+        "Task_TossHeldItem": [
+          135899120
+        ],
+        "Task_TossHeldItemYesNo": [
+          135902548
+        ],
+        "Task_TossItem": [
+          134854056
+        ],
+        "Task_TossItemFromBag": [
+          135684224
+        ],
+        "Task_TradeEvolutionScene": [
+          135472484
+        ],
+        "Task_TrainerCard": [
+          136433304
+        ],
+        "Task_TrainerHillWaitForPaletteFade": [
+          134861836
+        ],
+        "Task_TriggerHandshake": [
+          135727504
+        ],
+        "Task_Truck1": [
+          135573268
+        ],
+        "Task_Truck2": [
+          135572752
+        ],
+        "Task_Truck3": [
+          135573100
+        ],
+        "Task_TryBecomeLinkLeader": [
+          136510564
+        ],
+        "Task_TryCommunicateFinalStandings": [
+          135216056
+        ],
+        "Task_TryConnectToUnionRoomParent": [
+          135738384
+        ],
+        "Task_TryCreateSelectionWindow": [
+          135922996
+        ],
+        "Task_TryDisconnectLinkPartners": [
+          135263704
+        ],
+        "Task_TryFieldPoisonWhiteOut": [
+          135541776
+        ],
+        "Task_TryIncrementWins": [
+          136252872
+        ],
+        "Task_TryItemUseFormChange": [
+          135932288
+        ],
+        "Task_TryItemUseFusionChange": [
+          135931108
+        ],
+        "Task_TryJoinLinkGroup": [
+          136507708
+        ],
+        "Task_TryLearnNewMoves": [
+          135909120
+        ],
+        "Task_TryLearningNextMove": [
+          135908776
+        ],
+        "Task_TryLearningNextMoveAfterText": [
+          135909088
+        ],
+        "Task_TryLoadInfoScreen_HGSS": [
+          135998432
+        ],
+        "Task_TryPrintEndTurnMsg": [
+          136257692
+        ],
+        "Task_TryReadyCloseLink": [
+          135738876
+        ],
+        "Task_TryRunGfxFunc": [
+          135339844
+        ],
+        "Task_TrySetContestInterviewData": [
+          135258296
+        ],
+        "Task_TryShowMoveSelectScreen": [
+          135224272
+        ],
+        "Task_TryStartLinkContest": [
+          135225944
+        ],
+        "Task_TryStartNextRoundOfAppeals": [
+          135223660
+        ],
+        "Task_TryUseSoftboiledOnPartyMon": [
+          135607184
+        ],
+        "Task_UnusedBlend": [
+          135218408
+        ],
+        "Task_UpdateAppealHearts": [
+          135223076
+        ],
+        "Task_UpdateBgDotsPalette": [
+          136188848
+        ],
+        "Task_UpdateBgPalette": [
+          135467956
+        ],
+        "Task_UpdateBonus": [
+          136070416
+        ],
+        "Task_UpdateButtonFlash": [
+          135854316
+        ],
+        "Task_UpdateContestResultBar": [
+          135260356
+        ],
+        "Task_UpdateContestantBoxOrder": [
+          135219564
+        ],
+        "Task_UpdateCurtainDropAtRoundEnd": [
+          135220172
+        ],
+        "Task_UpdateHeartSliders": [
+          135218744
+        ],
+        "Task_UpdateHeldItemSprite": [
+          135918800
+        ],
+        "Task_UpdateHeldItemSpriteAndClosePartyMenu": [
+          135904308
+        ],
+        "Task_UpdateLvlInHealthbox": [
+          134584552
+        ],
+        "Task_UpdateMonBg": [
+          134379936
+        ],
+        "Task_UpdatePage": [
+          135272296
+        ],
+        "Task_UpdatePokedexAreaScreen": [
+          135968304
+        ],
+        "Task_UpdateRaiseCurtainAtRoundEnd": [
+          135215188
+        ],
+        "Task_UseDigEscapeRopeOnField": [
+          135698388
+        ],
+        "Task_UseDive": [
+          135492508
+        ],
+        "Task_UseFly": [
+          135507660
+        ],
+        "Task_UseHoneyOnField": [
+          135698576
+        ],
+        "Task_UseItemfinder": [
+          135699420
+        ],
+        "Task_UseLure": [
+          135699148
+        ],
+        "Task_UseORASDowsingMachine": [
+          135865488
+        ],
+        "Task_UseRepel": [
+          135699928
+        ],
+        "Task_UseRockClimb": [
+          135493656
+        ],
+        "Task_UseWaterfall": [
+          135492392
+        ],
+        "Task_UsedBlackWhiteFlute": [
+          135697860
+        ],
+        "Task_ValidateChosenHalfParty": [
+          135927040
+        ],
+        "Task_ValidateMixingGameLanguage": [
+          135193344
+        ],
+        "Task_ViewClock_Exit": [
+          136544776
+        ],
+        "Task_ViewClock_FadeOut": [
+          136543848
+        ],
+        "Task_ViewClock_HandleInput": [
+          136544592
+        ],
+        "Task_ViewClock_WaitFadeIn": [
+          136542956
+        ],
+        "Task_WaitAfterMultiPartnerFullParty": [
+          135906080
+        ],
+        "Task_WaitAfterMultiPartnerPartySlideIn": [
+          135905980
+        ],
+        "Task_WaitAndCompleteSearch": [
+          135975232
+        ],
+        "Task_WaitAndPlaySE": [
+          134378888
+        ],
+        "Task_WaitBeforeMultiPartnerFullParty": [
+          135892568
+        ],
+        "Task_WaitCloseErrorMessage": [
+          134849676
+        ],
+        "Task_WaitForAreaScreenInput": [
+          135969572
+        ],
+        "Task_WaitForAtePokeblockMessage": [
+          135961600
+        ],
+        "Task_WaitForBatteryDryErrorWindow": [
+          135777552
+        ],
+        "Task_WaitForBattleTowerLinkSave": [
+          136370272
+        ],
+        "Task_WaitForExitInfoScreen": [
+          135969392
+        ],
+        "Task_WaitForExitSearch": [
+          135976092
+        ],
+        "Task_WaitForExitSearchResultsInfoScreen": [
+          135969232
+        ],
+        "Task_WaitForFadeAndEnableScriptCtx": [
+          135544880
+        ],
+        "Task_WaitForFadeOut": [
+          135830032
+        ],
+        "Task_WaitForFadeShowStartMenu": [
+          135544732
+        ],
+        "Task_WaitForFlashUpdate": [
+          135544840
+        ],
+        "Task_WaitForHeartSliders": [
+          135221912
+        ],
+        "Task_WaitForHeartSlidersAgain": [
+          135214764
+        ],
+        "Task_WaitForLinkAndReturnToChooseMon": [
+          135919220
+        ],
+        "Task_WaitForLinkPartnerMonIdxs": [
+          135261780
+        ],
+        "Task_WaitForLinkPartnersBeforeResults": [
+          135261648
+        ],
+        "Task_WaitForLinkPartnersDisconnect": [
+          135262180
+        ],
+        "Task_WaitForLinkPlayerConnection": [
+          135194384
+        ],
+        "Task_WaitForNextTask": [
+          136251812
+        ],
+        "Task_WaitForOutOfTimeMsg": [
+          135220668
+        ],
+        "Task_WaitForPaletteFade": [
+          135649020
+        ],
+        "Task_WaitForPrintingMessage": [
+          134238164
+        ],
+        "Task_WaitForSaveFileErrorWindow": [
+          135777624
+        ],
+        "Task_WaitForScroll": [
+          135971012
+        ],
+        "Task_WaitForSearchResultsScroll": [
+          135971088
+        ],
+        "Task_WaitForSliderHeartAnim": [
+          135216412
+        ],
+        "Task_WaitForStarterSprite": [
+          136365932
+        ],
+        "Task_WaitForUnionRoomFade": [
+          135543140
+        ],
+        "Task_WaitHideApplauseMeterForAppealStart": [
+          135214196
+        ],
+        "Task_WaitPaletteFade": [
+          135269960
+        ],
+        "Task_WaitPrintRoundResult": [
+          135214364
+        ],
+        "Task_WaitRaiseCurtainAtRoundEnd": [
+          135215240
+        ],
+        "Task_WaitReceivePacket": [
+          136224172
+        ],
+        "Task_WaitStopSurfing": [
+          135532532
+        ],
+        "Task_WaitToRaiseCurtainAtStart": [
+          135219892
+        ],
+        "Task_WaitWeather": [
+          136394920
+        ],
+        "Task_WallyTutorialBagMenu": [
+          135691916
+        ],
+        "Task_WarpAndLoadMap": [
+          135544468
+        ],
+        "Task_WarpOutOfSecretBase": [
+          136310112
+        ],
+        "Task_WateringBerryTreeAnim": [
+          135601232
+        ],
+        "Task_WateringBerryTreeAnim_Continue": [
+          135603428
+        ],
+        "Task_WateringBerryTreeAnim_End": [
+          135603524
+        ],
+        "Task_WateringBerryTreeAnim_Start": [
+          135603328
+        ],
+        "Task_Wave": [
+          134986604
+        ],
+        "Task_WeatherInit": [
+          135578196
+        ],
+        "Task_WhiteBarsFade": [
+          134988952
+        ],
+        "Task_WirelessCommunicationScreen": [
+          136561980
+        ],
+        "Task_WithdrawMon": [
+          136113908
+        ],
+        "Task_WriteMailToGiveMonAfterText": [
+          135904224
+        ]
+      },
+      "source": "expansion@e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7:src/field_tasks.c:169-209; field_weather.c; union_room.c; link_rfu_2.c; map_name_popup.c.",
+      "status": "CENSUS",
+      "struct_size": 40,
+      "symbol": "gTasks",
+      "transferred_emerald_task_names": [
+        "Task_RunPerStepCallback",
+        "Task_RunTimeBasedEvents",
+        "Task_WeatherMain",
+        "Task_InitUnionRoom",
+        "Task_SearchForChildOrParent",
+        "Task_UnionRoomListen",
+        "Task_MuddySlope",
+        "Task_MapNamePopUpWindow"
+      ]
+    },
+    "title": "emerald_expansion_28877d73",
+    "version": "gen3-overworld-v1",
+    "witnesses": {
+      "save_dialog_cb": {
+        "address": 33776676,
+        "expect": 0,
+        "offset": 0,
+        "source": "build:pokemon.sym:632",
+        "symbol": "sSaveDialogCallback",
+        "width": 4
+      }
+    }
+  }
+}

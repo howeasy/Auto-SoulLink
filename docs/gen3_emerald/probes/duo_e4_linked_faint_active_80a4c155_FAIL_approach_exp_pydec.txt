@@ -1,0 +1,23 @@
+attempt 1 of 1
+IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=c76e4438a66fd19168ccff5fa3e9eb05e9267d5a11ca0fb8e12ae19e1a0169ab b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=00e033ba7f8f09d9d7ddddf69659d4b9d200a128795c858c36bdcbed3458bc27 source=d5df96b05ecaea74e2c6a6e66aac1039936c98c7
+RESULT_LINE a: RESULT: PASS (natural faint of the active linked 4D55444B:20250925)
+RESULT_LINE b: RESULT: PASS (P+H: engine Perish KO in battle with no input (wild))
+SAVE_WITNESS_SHA256 inst=a site=4b6ba39d33c270a2fb010d5341ed3c3f8434fae54018484b7320ba7f9b8837da file=4b6ba39d33c270a2fb010d5341ed3c3f8434fae54018484b7320ba7f9b8837da match=true saves=1 counter=2->3 rtc=normalized
+SAVE_WITNESS_SHA256 inst=b site=97d53503348b457414cd1f74ce95a8167ed0fb4398a45fa6f25bd82c7f54b3f9 file=97d53503348b457414cd1f74ce95a8167ed0fb4398a45fa6f25bd82c7f54b3f9 match=true saves=1 counter=2->3 rtc=normalized
+MARKER a: ENGINE_FAINT_SITE frame=10035 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+MARKER a: TX faint 4D55444B:20250925 {"area_id":"route_103","event":"faint","key":"4D55444B:20250925","player":"a","seq":320}
+MARKER a: TX memorialize_done 4D55444B:20250925 {"box":13,"event":"memorialize_done","key":"4D55444B:20250925","player":"a","seq":412}
+MARKER a: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_a_1_witness.bin bytes=131072 saves=1 frame=13513 counter=3
+MARKER b: READY_ACTIVE 4D55444B:DFDAF6DA case=wild
+MARKER b: RX force_faint key=4D55444B:DFDAF6DA
+MARKER b: [client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 4D55444B:DFDAF6DA
+MARKER b: ACTIVE_COMMIT 4D55444B:DFDAF6DA frame=10232 writes=5 attempted=41 handoff=1 status3=0x20 ctrl=0x0805748D counter=0 last_move=0 pp=32/40/0/0 why="active faint committed" case=wild
+MARKER b: HANDOFF 4D55444B:DFDAF6DA from=0x0805748D to=0x08057505 frames=1 exec_bit0=0
+MARKER b: ACTIVE_KO 4D55444B:DFDAF6DA frame=10692 in_battle=1 battle_hp=0 status3=0x0 pp=32/40/0/0 last_move=0 inputs=0 keys=0x0 hp_writes=0 attempted=41 case=wild
+MARKER b: ACTIVE_FAINT_SITE 4D55444B:DFDAF6DA frame=10692 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+MARKER b: SENT_OUT slot=1 battler_slot=1
+MARKER b: ACTIVE_OUTCOME 4D55444B:DFDAF6DA outcome=4 sent_out=1 whiteout_tx=0
+MARKER b: SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_gen3_b_1_witness.bin bytes=131072 saves=1 frame=12368 counter=3
+MARKER b: FORCED_HP0 4D55444B:DFDAF6DA frame=10692 in_battle=1 battler=1
+MARKER b: TX memorialize_done 4D55444B:DFDAF6DA {"box":13,"event":"memorialize_done","key":"4D55444B:DFDAF6DA","player":"b","seq":374}
+PYDEC: FAIL b: the memorial 4D55444B:DFDAF6DA differs from the fixture record in [('evs', {'hp': 0, 'attack': 0, 'defense': 0, 'speed': 0, 'sp_attack': 0, 'sp_defense': 0}, {'hp': 0, 'attack': 1, 'defense': 0, 'speed': 0, 'sp_attack': 0, 'sp_defense': 0}), ('experience', 135, 158)]

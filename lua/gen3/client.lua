@@ -27,7 +27,7 @@
 --   native:hello_fields() -> table merged into hello (panel/sfx capabilities)
 --   native:replace_rival_team(cmd) / show_menu(cmd) / show_choices(cmd) / choose_mon(cmd) /
 --   link_panel(cmd) / config(cmd) / play_sound(id) / transfer(step, args, done) (the trade FSM
---   below owns apply_trade: identity, preflight, lifecycle, readback, fallback, trade_done)
+--   trade.lua owns prepare/apply/withdraw, milestones, readback and owed completion)
 --
 -- Reducer model (the Gen 1 rule, lua/gen1/client.lua:14-17): events are derived from engine
 -- signals, never from polling. A signal marks WHAT kind of change the engine made this frame;
@@ -39,30 +39,25 @@
 -- settle -> one capture; SendMonToPC (pc_move) is acquisition to storage, not a user deposit.
 local Client = {}
 
--- Record geometry and game constants the packs do not ship yet (requested from C4-2a).
--- pret/pokefirered@c75f352 include/pokemon.h struct Pokemon / struct BattlePokemon, and the
--- old client's production values (archive/gen3-old-client:lua/memory_gba.lua:395-416); CFRU keeps the same layout.
+-- Record geometry and game constants the packs do not ship yet (requested from C4-2a), the same
+-- on every admitted title: pret/pokefirered@c75f352 include/pokemon.h struct Pokemon / struct
+-- BattlePokemon and the old client's production values (archive/gen3-old-client:lua/memory_gba.lua:395-416);
+-- CFRU keeps the same layout, and so does pret/pokeemerald@c65e93f2 (include/pokemon.h:219-231 hp
+-- at 0x56, :268 moves, :281 pp; include/constants/moves.h:157; include/battle.h:27).
 local PARTY_HP_OFF = 0x56            -- struct Pokemon.hp (u16)
-local BATTLE_MON_MOVES_OFF = 0x0C    -- BattlePokemon.moves[4] (u16 each)
-local BATTLE_MON_PP_OFF = 0x24       -- BattlePokemon.pp[4] (u8 each)
 local MOVE_EXPLOSION = 153           -- include/constants/moves.h
 local EXPLODE_PP = 5                 -- Explosion's PP, so a PP drop proves the move executed
 -- CFRU action-commit values (archive/gen3-old-client:lua/memory_gba.lua:1318-1345, production-tested on RR):
 local B_ACTION_USE_MOVE = 0
-local STATE_ACTION_CONFIRMED_STANDBY = 3
 local TARGET_FOE_PRIMARY = 1
+-- (the committed state, STATE_WAIT_ACTION_CONFIRMED_STANDBY, is per title: p.commit_guard.value)
 -- The m4a SE1 poke (the old client's M.playSE, archive/gen3-old-client:lua/memory_gba.lua:2021-2066, production-tested
--- on FR/LG and RR). Every address and field offset comes from the checkpoint pack's sound block
+-- on FR/LG and RR). Every address, field offset and title SE id (se_ids) comes from the checkpoint pack's sound block
 -- (p.sound: player_se1 / sound_info_ptr, player_head_off / player_next_off / tracks_off, and
 -- `fields`, the exact m4a fields a sound write may touch); only the VALUES the old client
 -- stores are here.
 local TRK_START = 0xC0                        -- MusicPlayerTrack.flags: EXIST | START
 local TRK_BEND, TRK_VOLX, TRK_LFO = 2, 64, 22 -- the old client's per-track defaults
--- Gift/static areas (server/adapters/gen3_frlge.py via lua/games/gen3_frlge.lua:27-37): no
--- NEW ENCOUNTER banner and never a no_catch there.
-local GIFT_AREAS = { oaks_lab = true, intro = true, gift = true, cinnabar_lab = true,
-                     celadon_condominiums = true, silph_co_7f = true, saffron_dojo = true,
-                     route_4_pokecenter = true }
 local PC_KINDS = { pc_deposit = true, pc_withdraw = true, pc_box_place = true,
                    pc_release_begin = true, pc_release = true }
 local MENU_CMDS = { "show_menu", "show_choices", "choose_mon" }
@@ -75,21 +70,88 @@ end
 -- json null decodes to a table sentinel: only a number is an address
 local function num(v) return type(v) == "number" and v or nil end
 
+-- A death banner names a mon for the player. Several server death paths send a blank
+-- nickname (server/state.py), and a decoded record may itself have an empty or space-only
+-- name. "" is truthy in Lua: it used to blank the banner and mask a valid record nickname.
+-- The first non-blank candidate wins, with the command still outranking the record. A decoded
+-- mon always has a string nickname, so the old raw-key fallback was unreachable on that path;
+-- a nameless mon now gets generic text. No species is guessed here.
+local NO_NAME = "Your Pokemon"
+local function hud_name(...)
+    for i = 1, select("#", ...) do
+        local candidate = select(i, ...)
+        if type(candidate) == "string" and candidate:find("%S") then return candidate end
+    end
+    return NO_NAME
+end
+
 function Client.new(p)
     local reads, R, profile = assert(p.reads, "reads"), assert(p.R, "R"), assert(p.profile, "profile")
     local writes, policy, boxes = assert(p.writes, "writes"), assert(p.policy, "policy"), p.boxes
     local json, hud, io, native = assert(p.json, "json"), assert(p.hud, "hud"), assert(p.io, "io"), p.native
     local core = assert(p.core, "core")
+    local trade
+    local journal = io.trade_journal
+    local trade_run_id, trade_run_ot
+    local pending_trade_finals = {}
+    local pending_apply_trade
+    local awaiting_trade_run = journal and not journal:ready() or false
+    local reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
+    local reload_witness_live = false
+    local owed = p.owed_reports and p.owed_reports.new() or nil
+    local trade_epoch, trade_connected = 0, false
+    local trade_reset_epoch = 0
+    local trade_report_epochs = setmetatable({}, {__mode="k"})
+    local owed_hold = nil       -- the reason the last owed report is held, logged once per hold
     local a, d = profile.ram, profile.derived
+    -- Expansion BattlePokemon is 140 bytes and places pp at +37. Older packs predate these
+    -- geometry keys; retain their established offsets until their profiles carry the keys.
+    local BATTLE_MON_MOVES_OFF = d.BATTLE_MON_MOVES_OFF or 0x0C
+    local BATTLE_MON_PP_OFF = d.BATTLE_MON_PP_OFF or 0x24
     local arr = json.array
     local area_map, locations = p.area_map or {}, p.locations or {}
     local sink = p.log or function() end
     local TAG = "[SLink-gen3]"
     local function log(msg) sink(TAG .. " " .. msg) end
+    -- E3-CLIENT: title facts come from the pack, never FR literals, and a missing one fails
+    -- closed (logged once, here). STANDBY is this title's STATE_WAIT_ACTION_CONFIRMED_STANDBY
+    -- (battle.commit_guard.value: FR/LG/RR 3, Emerald 4); without it no battle commit is written.
+    local STANDBY = type(p.commit_guard) == "table" and num(p.commit_guard.value) or nil
+    if not STANDBY then log("pack has no battle.commit_guard.value: battle commits refused") end
+    -- Gift areas (the pack's gift_areas.ids): no NEW ENCOUNTER banner and never a no_catch there.
+    -- Without the list EVERY area counts as one: an area is never dead-zoned on a guess.
+    local gift_area
+    do
+        local ids = type(p.gift_areas) == "table" and p.gift_areas.ids
+        local set = ids and json.kind(ids) == "array" and {} or nil
+        for _, id in ipairs(set and ids or {}) do
+            -- a non-string or empty id would build a set nothing matches (fail OPEN): the whole
+            -- list is untrusted then, and takes the missing-list fallback
+            if type(id) ~= "string" or id == "" then set = nil; break end
+            set[id] = true
+        end
+        if set then
+            gift_area = function(id) return set[id] == true end
+        else
+            log("pack has no valid gift_areas.ids: every area treated as a gift area (no banner, no no_catch)")
+            gift_area = function() return true end
+        end
+    end
     local key = reads.key
     local session
     local function send(event, fields) return session.send(event, fields) end
+    local function owe(event, fields)
+        -- INV-CLIENT-2: native removals use the same reply-bound outbox as trade.
+        if not owed then error("durable reports unavailable for " .. event) end
+        for _, report in ipairs(owed.list) do
+            if report.event == event and report.fields.key == fields.key then return end
+        end
+        owed.list[#owed.list + 1] = {event = event, fields = fields}
+    end
     local function eligible() return session ~= nil and session:eligible() end
+    local function recovery_hidden()
+        return journal and (journal:hidden() or (awaiting_trade_run and journal:has_entries())) or false
+    end
     -- The BLOCKER gate (C4-2d): native and sound arms need an eligible session. Wrapping the
     -- injected policy covers every arm made through the one sink, including a job native.lua
     -- queued while eligible and tries to post after a pause.
@@ -128,6 +190,14 @@ function Client.new(p)
             session_nonce = nil
         end
     end
+    if native and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and native.bind_match_call_session and session_nonce then
+        -- The production nonce's first word is the persisted session counter.
+        -- Short explicit harness seeds are also u32s; never invent an epoch.
+        local epoch_seed = #session_nonce == 16 and session_nonce:sub(1,8)
+                           or (#session_nonce <= 8 and session_nonce or nil)
+        local epoch = epoch_seed and tonumber(epoch_seed, 16)
+        if epoch and epoch > 0 then native:bind_match_call_session(epoch) end
+    end
     local battle_seq = 0
     -- RIVAL AUTHORITY (C5-11c BLOCKER 2). The battle that may accept a rival swap, as the immutable
     -- {session, battle_id, trainer_id} triple. It is opened when this client ANNOUNCES a battle
@@ -144,23 +214,20 @@ function Client.new(p)
     local rival_authority = nil
     local sig_src = nil          -- the signal source drv.start armed; its health gates the authority
     local st = {
-        known = {},        -- every key this save has shown us (party + boxes): acquisitions are NEW keys
+        known = {},        -- already acquired non-egg keys (party + boxes)
+        eggs = {},         -- observed eggs stay pending until the native hatch signal
         alive = {},        -- keys last seen with hp > 0: a faint is alive -> hp 0 at a faint site
         commanded = {},    -- keys WE zeroed: their faint is not reported (old client force_fainted_keys)
         party_prev = {},   -- key -> { slot, level, max_hp } at the last settle (PC diff baseline)
         carried = {},      -- keys that left the party into the PC cursor, not yet placed
-        box_cache = {}, boxes_ok = false,
+        box_cache = {}, boxes_ok = false, box_generation = 0,
         battle = nil,      -- battle_begin .. battle_end lifecycle
         frozen = false,    -- a borrowed party is in RAM
         flags = {},        -- what the signals of this frame said changed
         has_pokeballs = false, last_area = nil, trade = nil, sound_frame = nil, sound_logged = {},
         baselined = false, seen_count = nil, observe_at = nil,
         trade_apply = nil, trade_settle_until = 0,
-        trade_unresolved = {},   -- token -> the unresolved transaction, each watched for its own late fact
-        -- field_wait: frames an apply waits for a clear field before the silent swap (old client
-        -- :2250); backstop: frames after the scene post before a lost ACK is reconciled from the
-        -- slot, LONGER than the patch's own ~5400-frame scene timeout (old client :563-566)
-        trade_limits = { field_wait = 1800, backstop = 6000, settle = 30 },
+        trade_limits = { settle = 30 },
         bframe = nil, bcache = nil,
     }
 
@@ -279,9 +346,15 @@ function Client.new(p)
             end
         end
         st.box_cache, st.boxes_ok = cache, ok
+        if ok then st.box_generation = st.box_generation + 1 end
         return cache
     end
+    -- the ONE box-generation accessor: (raw generation, whether the last scan was complete) for
+    -- the core (lua/core/session.lua); a wire field takes `ok and gen or nil` of it, so the two
+    -- can never disagree
+    local function box_generation() return st.box_generation, st.boxes_ok end
     local function pc_boxes_wire()
+        if not st.boxes_ok then return nil end
         local out = arr({})
         for _, e in ipairs(st.box_cache) do
             out[#out + 1] = { box = e.box, slot = e.slot, key = e.key, species_id = e.species_id,
@@ -313,8 +386,15 @@ function Client.new(p)
         observe_hp(party)
     end
     local function seed_known(party)
-        for _, m in ipairs(party) do st.known[key(m)] = true end
-        for _, e in ipairs(st.box_cache) do st.known[e.key] = true end
+        for _, m in ipairs(party) do
+            local k = key(m)
+            if m.is_egg == 1 then st.eggs[k] = true
+            elseif not st.eggs[k] then st.known[k] = true end
+        end
+        for _, e in ipairs(st.box_cache) do
+            if e.is_egg == 1 then st.eggs[e.key] = true
+            elseif not st.eggs[e.key] then st.known[e.key] = true end
+        end
     end
     local function mark_commanded(k)
         st.commanded[k], st.alive[k] = true, nil
@@ -361,24 +441,30 @@ function Client.new(p)
     local function settle_acquisitions(party, area_id, caught)
         local gift = not caught
         local function resolve_area()
-            if area_id ~= "" and not GIFT_AREAS[area_id] and not gift then session.resolved_areas[area_id] = true end
+            if area_id ~= "" and not gift_area(area_id) and not gift then session.resolved_areas[area_id] = true end
         end
         local found = false
         for _, m in ipairs(party) do
             local k = key(m)
-            if not st.known[k] then
+            if m.is_egg == 1 then st.eggs[k] = true end
+            -- O-15: eggs are acquired at native hatch, never at GiveEgg.
+            if not st.known[k] and not st.eggs[k] and m.is_egg == 0 and m.is_bad_egg == 0 then
                 st.known[k], found = true, true
                 resolve_area()
                 send("capture", { key = k, area_id = area_id, species_id = m.species, level = m.level,
                                   hp = m.hp, maxHP = m.max_hp, nickname = m.nickname,
-                                  held_item_id = m.held_item, is_egg = m.is_egg == 1, gift = gift or nil })
+                                  held_item_id = m.held_item, is_egg = m.is_egg == 1,
+                                  stats = stats_of(m), gift = gift or nil })
             end
         end
         if found then return end
         -- party full: the mon went to the PC (SendMonToPC)
         rescan_boxes()
         local fresh = {}
-        for _, e in ipairs(st.box_cache) do if not st.known[e.key] then fresh[#fresh + 1] = e end end
+        for _, e in ipairs(st.box_cache) do
+            if e.is_egg == 1 then st.eggs[e.key] = true end
+            if not st.known[e.key] and not st.eggs[e.key] and e.is_egg == 0 then fresh[#fresh + 1] = e end
+        end
         for _, e in ipairs(fresh) do st.known[e.key] = true end
         if #fresh == 1 then
             local e = fresh[1]
@@ -396,6 +482,20 @@ function Client.new(p)
         elseif #fresh > 1 then
             -- more than one unknown boxed key cannot be attributed to this acquisition
             log("acquisition: " .. #fresh .. " new boxed keys, none reported (ambiguous)")
+        end
+    end
+
+    local function settle_hatches(hatches)
+        for _, m in ipairs(hatches or {}) do
+            local k = key(m)
+            st.eggs[k] = nil
+            if not st.known[k] then
+                st.known[k] = true
+                send("capture", { key = k, area_id = "gift_daycare", species_id = m.species,
+                                  level = m.level, hp = m.hp, maxHP = m.max_hp,
+                                  nickname = m.nickname, held_item_id = m.held_item,
+                                  is_egg = false, stats = stats_of(m), gift = true })
+            end
         end
     end
 
@@ -417,15 +517,19 @@ function Client.new(p)
                 send("party_to_box", { key = k, stats = prev.stats })
             elseif now[k] then
                 st.carried[k] = nil                            -- a party shuffle, not a move
-            elseif released then
+            elseif released and released[k] then
                 st.carried[k] = nil
-                log("released " .. k)
             end
+        end
+        for k in pairs(released or {}) do
+            st.known[k], st.alive[k] = nil, nil
+            owe("release", {key = k})
         end
         for k in pairs(now) do
             if not st.party_prev[k] then
                 if st.known[k] then send("box_to_party", { key = k, area_id = area_id })
-                else st.known[k] = true end                    -- the PC cannot create a mon
+                elseif now[k].is_egg == 1 then st.eggs[k] = true
+                elseif not st.eggs[k] then st.known[k] = true end -- eggs still await native hatch
             end
         end
     end
@@ -444,8 +548,11 @@ function Client.new(p)
                 st.known[k] = true
                 if m.hp and m.hp > 0 then st.alive[k] = true end
                 session.identity:begin_alias(old, k, m, party, io.framecount())
-                send("key_change", { old_key = old, new_key = k, reason = "npc_trade",
-                                     new_species = m.species, new_nickname = m.nickname })
+                -- KEY-SCOPE-5: kept on the alias so a retryable refusal can resend this exact
+                -- message once a newer complete box census has gone out (core/session.lua).
+                session.identity.pending.msg = { old_key = old, new_key = k, reason = "npc_trade",
+                                                 new_species = m.species, new_nickname = m.nickname }
+                send("key_change", session.identity.pending.msg)
             end
         end
     end
@@ -455,7 +562,7 @@ function Client.new(p)
         local here = area_id .. "|" .. loc
         if st.last_area ~= nil and st.last_area ~= here then
             send("area_enter", { area_id = area_id, loc_name = loc })
-            if st.has_pokeballs and session.seeded and area_id ~= "" and not GIFT_AREAS[area_id]
+            if st.has_pokeballs and session.seeded and area_id ~= "" and not gift_area(area_id)
                and not session.resolved_areas[area_id] and not in_battle() then
                 hud.show("** NEW ENCOUNTER **  " .. loc, 255, 220, 60, 240)
             end
@@ -509,7 +616,7 @@ function Client.new(p)
         local exempt = num(d.BATTLE_TYPE_NO_CATCH_MASK) and bt.type_flags
                        and (bt.type_flags & d.BATTLE_TYPE_NO_CATCH_MASK) ~= 0
         if not caught and bt.is_trainer == false and not exempt and bt.foe and st.has_pokeballs
-           and area_id ~= "" and not GIFT_AREAS[area_id] and not session.resolved_areas[area_id] then
+           and area_id ~= "" and not gift_area(area_id) and not session.resolved_areas[area_id] then
             session.resolved_areas[area_id] = true
             send("no_catch", { area_id = area_id, species_id = bt.foe.species, level = bt.foe.level })
         end
@@ -518,8 +625,23 @@ function Client.new(p)
     local function settle()
         local f = st.flags
         if not next(f) then return end
-        st.flags = {}
         if f.save and io.saveram then pcall(io.saveram) end
+        f.save = nil -- a host flush is one-shot even while a journal read is temporarily hidden
+        if recovery_hidden() then
+            -- Retain observer evidence only for a temporary guard collision outside a posted
+            -- native trade. A genuinely unsettled/failed journal or a posted trade owns the
+            -- party change; replaying its signal after the settle window could report the
+            -- received mon as a catch. A transient empty-journal read instead needs this flag
+            -- until visibility returns, so observe_known cannot silently seed its new key.
+            local posted = st.trade_apply and (st.trade_apply.posted or st.trade_apply.possibly_posted)
+            if not (journal and journal.busy and not journal.failure
+                    and not awaiting_trade_run and not posted) then
+                st.flags = {}
+            end
+            st.trade, f.trade = nil, nil
+            return
+        end
+        st.flags = {}
         local party = party_read(f.pc)                          -- a PC settle reads occupancy
         if not party then
             f.save = nil
@@ -542,11 +664,12 @@ function Client.new(p)
         -- not from the queued phase: a post that is refused or held writes nothing, and until
         -- something is written the party can only change the ordinary way, so ordinary reduction
         -- keeps going
-        local trading = (st.trade_apply ~= nil and st.trade_apply.posted == true)
+        local trading = (st.trade_apply ~= nil and (st.trade_apply.posted == true or st.trade_apply.possibly_posted == true))
                         or io.framecount() < st.trade_settle_until
         if trading then st.trade = nil end
         if not st.frozen and not trading then
             if f.faint or f.battle_end or f.whiteout then settle_faints(party, area_id) end
+            settle_hatches(f.hatches)
             if f.acquire then settle_acquisitions(party, area_id, f.caught or (st.battle and st.battle.caught)) end
             if f.pc then settle_pc(party, area_id, f.release) end
             if f.trade then settle_trade(party) end
@@ -563,14 +686,18 @@ function Client.new(p)
     -- ── in-battle writes (owner ruling 2026-09-23: parity with RR on vanilla) ──────
     local explode_capable = num(a.BATTLE_MONS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
                             and num(a.CHOSEN_MOVE_ADDR) and num(a.BATTLE_COMM_ADDR) and true or false
-    -- mechanism P (C4-ACTIVE-FAINT-P): its own flag, so the P fields never flip explode_capable
-    -- (vanilla ships CHOSEN_ACTION/BATTLE_COMM but no CHOSEN_MOVE). RR ships no STATUS3 /
-    -- DISABLE_STRUCTS (CFRU layout OPEN, G5), so it keeps the hold by data, not by title.
-    local active_faint_capable = num(a.BATTLE_MONS_ADDR) and num(a.STATUS3_ADDR)
+    -- Mechanism P has its own required fields, independent of the Explosion binding.
+    local expansion_perish = num(a.BATTLE_MONS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
+                             and num(a.BATTLE_COMM_ADDR) and num(d.BATTLE_MON_PERISH_FLAG_OFF)
+                             and num(d.BATTLE_MON_PERISH_FLAG_MASK) and num(d.BATTLE_MON_PERISH_TIMER_OFF)
+                             and num(d.BATTLE_MON_PERISH_TIMER_KEEP) and num(d.B_ACTION_NOTHING_FAINTED)
+                             and policy.handoff_entry and policy:handoff_entry(0) and true or false
+    local vanilla_perish = num(a.BATTLE_MONS_ADDR) and num(a.STATUS3_ADDR)
                                  and num(a.DISABLE_STRUCTS_ADDR) and num(a.CHOSEN_ACTION_ADDR)
                                  and num(a.BATTLE_COMM_ADDR) and num(d.STATUS3_PERISH_SONG)
                                  and num(d.DISABLE_STRUCT_SIZE) and num(d.DISABLE_STRUCT_PERISH_TIMER_OFF)
                                  and num(d.B_ACTION_NOTHING_FAINTED) and true or false
+    local active_faint_capable = expansion_perish or vanilla_perish
 
     -- one armed window, one reason, one allow set; returns true or nil, why
     -- args: what the reason's clause set needs (battle_commit: {battler}; sound: {player, track})
@@ -586,6 +713,7 @@ function Client.new(p)
         return type(v) == "number" and v % 1 == 0 and v >= 0 and v <= max
     end
     local function armed_write(reason, plan, args)
+        if recovery_hidden() then return nil, "trade recovery withholds party writes" end
         if args then args.plan = plan end                     -- G4-PH: the policy judges the plan itself
         for i, w in ipairs(plan) do
             local max = UINT_MAX[w[2]]
@@ -631,19 +759,18 @@ function Client.new(p)
         if not hp then return nil end
         local plan = { { hp, 2, 0 } }
         if battler and num(a.BATTLE_MONS_ADDR) then
-            plan[2] = { a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF, 2, 0 }
+            plan[2] = { a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE + reads.BATTLE_MON_HP_OFF, 2, 0 }
         end
         return plan
     end
 
     -- The Variant-3 menu skip (archive/gen3-old-client:lua/memory_gba.lua:1303-1345): every move slot of the battler
     -- reads Explosion, and the action-commit state says "already chosen", so the action menu is
-    -- skipped. Addresses come from the pack (RR pins CHOSEN_*/BATTLE_COMM/BATTLE_STRUCT_PTR);
-    -- a pack without them (vanilla FRLG) is not explode_capable and force_explode is a faint.
+    -- skipped. Addresses come from each title's pack; a pack without those facts stays held.
     local function commit_plan(battler, with_moves)
         local plan = {}
         if with_moves then
-            local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
+            local base = a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE
             for i = 0, 3 do
                 plan[#plan + 1] = { base + BATTLE_MON_MOVES_OFF + i * 2, 2, MOVE_EXPLOSION }
                 plan[#plan + 1] = { base + BATTLE_MON_PP_OFF + i, 1, EXPLODE_PP }
@@ -661,11 +788,9 @@ function Client.new(p)
             end
         end
         -- the committing state is itself the battle_commit guard (gBattleCommunication[battler]
-        -- < 3) and writes.lua re-validates before every write, so only the hand-off may follow it
-        plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY }
-        -- G5-EXPLODE-HANDOFF (owner ruling 19): where the pack proves the Explode+H shape (RR,
-        -- whose parked CFRU menu outlives the commit), the same hand-off as P ends the menu, so
-        -- Explosion fires with no press. FR/LG packs carry no such shape: plan unchanged there.
+        -- < STANDBY, the pack's commit_guard.value) and writes.lua re-validates before every write, so only the hand-off may follow it
+        plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STANDBY }
+        -- The pinned Explode+H shape ends the menu without a press on every bound title.
         local h = policy.handoff_entry and policy:handoff_entry(battler, "explode")
         if h then plan[#plan + 1] = { h[1], h[2], h[3] }; plan.handoff = true end
         return plan
@@ -679,12 +804,17 @@ function Client.new(p)
     -- user survived (Damp). The entry then degrades to the force_faint rule for an active
     -- battler: held until switch-out or battle end. UNVERIFIED on hardware (no emulator lane).
     local function explode_step(e, slot, mon, battler)
-        local base = a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE
-        local bhp = io.read_u16(base + R.BATTLE_MON_HP_OFF)
+        -- The proved window is controller 0. Never strand a menu with a tail-less commit.
+        if not (policy.handoff_entry and policy:handoff_entry(battler, "explode")) then
+            return "hold", "active battler"
+        end
+        local base = a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE
+        local bhp = io.read_u16(base + reads.BATTLE_MON_HP_OFF)
         local pp0 = io.read_u8(base + BATTLE_MON_PP_OFF)
         local comm = io.read_u8(a.BATTLE_COMM_ADDR + battler)
         local ex = e.explode
         if ex and ex.failed then return "hold", ex.why end
+        if not STANDBY then return "hold", "pack has no battle.commit_guard.value" end
         -- A pre-existing multi-turn lock (Thrash/Outrage/Rollout: gLockedMoves[battler] ~= 0)
         -- owns the next action; committing Explosion over it would fight the engine. Held as
         -- the active battler instead, and nothing is written. Sleep and flinch need no case:
@@ -697,18 +827,18 @@ function Client.new(p)
         end
         if ex and bhp == 0 then
             e.explode = nil
-            hud.show("!! " .. (mon.nickname or key(mon)) .. " BOOM!", 255, 80, 80, 360)
+            hud.show("!! " .. hud_name(mon.nickname) .. " BOOM!", 255, 80, 80, 360)
             return "done"
         end
         if ex and pp0 < EXPLODE_PP then
-            if comm < STATE_ACTION_CONFIRMED_STANDBY then
+            if comm < STANDBY then
                 ex.failed, ex.why = true, "explosion failed; held as the active battler"
                 log("force_explode: Explosion executed and the battler survived; held as active " .. e.key)
                 return "hold", "explosion failed; held as the active battler"
             end
             return "hold", "explosion executing"
         end
-        if ex and comm >= STATE_ACTION_CONFIRMED_STANDBY then return "hold", "explosion committed" end
+        if ex and comm >= STANDBY then return "hold", "explosion committed" end
         -- first commit, or the engine reset the commit state at turn start: (re)write it
         local plan = commit_plan(battler, not ex)
         local ok, why = armed_write("battle_commit", plan, { battler = battler })
@@ -736,16 +866,27 @@ function Client.new(p)
     -- The engine then ends the menu itself: no A press on any title, and CFRU's parked menu (the
     -- RR L-throw) is gone. Without the block the plan is P alone and the player presses A once.
     local function perish_plan(battler)
-        local s3 = a.STATUS3_ADDR + battler * 4
-        local timer = a.DISABLE_STRUCTS_ADDR + battler * d.DISABLE_STRUCT_SIZE + d.DISABLE_STRUCT_PERISH_TIMER_OFF
-        local plan = {
-            { s3, 4, io.read_u32(s3) | d.STATUS3_PERISH_SONG },
-            -- timer 0 (low nibble); the high nibble is kept, as the engine's own decrement does
-            { timer, 1, io.read_u8(timer) & 0xF0 },
-            { a.CHOSEN_ACTION_ADDR + battler, 1, d.B_ACTION_NOTHING_FAINTED },
-            -- comm is the battle_commit guard: only the hand-off may follow it
-            { a.BATTLE_COMM_ADDR + battler, 1, STATE_ACTION_CONFIRMED_STANDBY },
-        }
+        local plan
+        if expansion_perish then
+            local base = a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE
+            local status = base + d.BATTLE_MON_PERISH_FLAG_OFF
+            local timer = base + d.BATTLE_MON_PERISH_TIMER_OFF
+            plan = {
+                { status, 1, io.read_u8(status) | d.BATTLE_MON_PERISH_FLAG_MASK },
+                { timer, 1, io.read_u8(timer) & d.BATTLE_MON_PERISH_TIMER_KEEP },
+            }
+        else
+            local s3 = a.STATUS3_ADDR + battler * 4
+            local timer = a.DISABLE_STRUCTS_ADDR + battler * d.DISABLE_STRUCT_SIZE + d.DISABLE_STRUCT_PERISH_TIMER_OFF
+            plan = {
+                { s3, 4, io.read_u32(s3) | d.STATUS3_PERISH_SONG },
+                -- timer 0 (low nibble); the high nibble is kept, as the engine's own decrement does
+                { timer, 1, io.read_u8(timer) & 0xF0 },
+            }
+        end
+        plan[#plan + 1] = { a.CHOSEN_ACTION_ADDR + battler, 1, d.B_ACTION_NOTHING_FAINTED }
+        -- comm is the battle_commit guard: only the hand-off may follow it
+        plan[#plan + 1] = { a.BATTLE_COMM_ADDR + battler, 1, STANDBY }
         local h = policy.handoff_entry and policy:handoff_entry(battler)
         if h then plan[#plan + 1] = { h[1], h[2], h[3] }; plan.handoff = true end
         return plan
@@ -753,9 +894,9 @@ function Client.new(p)
 
     -- commit -> held until gBattleMons[b].hp == 0 (done: the engine's faint, or a foe KO first).
     -- The battler leaving (Roar) takes battle_write's bench path; the battle ending first (flee,
-    -- catch) takes its overworld path. A reset commit (comm < 3) with the mon alive is re-armed;
+    -- catch) takes its overworld path. A reset commit (comm < STANDBY) with the mon alive is re-armed;
     -- mid-turn the permit refuses that, so it can only land at a parked menu.
-    -- Review follow-up 2: the commit's comm[b] = 3 fails every later battle_faint (battle_comm_0)
+    -- Review follow-up 2: the commit's comm[b] = STANDBY fails every later battle_faint (battle_comm_0)
     -- until the next parked menu, which comes AFTER the Perish KO's party screen, where a bench
     -- mon still alive could be sent in. So the commit waits while another pending entry resolves
     -- to a bench slot: that entry lands later in this same flush (same permit, minus the guard)
@@ -774,14 +915,15 @@ function Client.new(p)
     end
 
     local function active_faint_step(e, mon, battler, b)
-        local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * R.BATTLE_MON_SIZE + R.BATTLE_MON_HP_OFF)
+        if not STANDBY then return "hold", "pack has no battle.commit_guard.value" end
+        local bhp = io.read_u16(a.BATTLE_MONS_ADDR + battler * reads.BATTLE_MON_SIZE + reads.BATTLE_MON_HP_OFF)
         if e.perish and bhp == 0 then
-            hud.show("!! " .. (e.nickname or mon.nickname or key(mon)) .. " fainted", 255, 80, 80, 360)
+            hud.show("!! " .. hud_name(e.nickname, mon.nickname) .. " fainted", 255, 80, 80, 360)
             return "done"
         end
         -- the carrier's contract (W2, G4-PH): e.why is exactly "active faint committed" after a
         -- hand-off; a pack without battle.handoff keeps the press hint
-        if e.perish and io.read_u8(a.BATTLE_COMM_ADDR + battler) >= STATE_ACTION_CONFIRMED_STANDBY then
+        if e.perish and io.read_u8(a.BATTLE_COMM_ADDR + battler) >= STANDBY then
             return "hold", e.handoff and "active faint committed" or "active faint committed (press A)"
         end
         if bench_write_pending(e, b) then return "hold", "bench write first" end
@@ -810,7 +952,10 @@ function Client.new(p)
         local b = battle_now()
         local battler = battler_of(b, slot)
         if battler then
-            if e.cmd == "force_explode" and explode_capable then return explode_step(e, slot, mon, battler) end
+            if e.cmd == "force_explode" and explode_capable and battler == 0
+               and b.battlers_count == 2 and b.is_doubles ~= true then
+                return explode_step(e, slot, mon, battler)
+            end
             -- P is the linked-faint path ONLY (owner 2026-09-23: Explode Mode is untouched, so a
             -- non-capable force_explode keeps its hold below). Singles only: in doubles a partner
             -- B-cancel resets battler 0's commit while the Perish flag stays (scope doc §2.1), and
@@ -828,7 +973,7 @@ function Client.new(p)
         local ok, why = armed_write("battle_faint", plan)
         if not ok then return "hold", why end                  -- C4-B: refusal = hold, not defer
         mark_commanded(k)
-        hud.show("!! " .. (e.nickname or mon.nickname or k) .. " KO'd", 255, 80, 80, 360)
+        hud.show("!! " .. hud_name(e.nickname, mon.nickname) .. " KO'd", 255, 80, 80, 360)
         return "done"
     end
 
@@ -874,10 +1019,15 @@ function Client.new(p)
     drv.read_party = party_read
     drv.in_battle = in_battle
     drv.battle_write = battle_write
+    -- KEY-SCOPE-5: the core's key_change retry hook. st.box_generation only bumps on a complete
+    -- rescan, so it IS the raw generation counter core/session.lua needs. This is the same
+    -- accessor the hello census field reads, not a second one that could drift away from it.
+    drv.box_generation = box_generation
+    drv.rescan_boxes = rescan_boxes
     function drv.party_borrowed()
         local party = party_read()
         if party then update_frozen(party) end
-        return st.frozen
+        return st.frozen or recovery_hidden()
     end
 
     function drv.game_is_live()
@@ -886,6 +1036,7 @@ function Client.new(p)
         if reads.read_sb2 and not reads.read_sb2() then return false, "save blocks not set" end
         local t = trainer()
         if t and t.ot_id == 0 and #party == 0 then return false, "pre-game (title/new game)" end
+        reload_witness_live = true
         return true
     end
     function drv.save_cleared()
@@ -901,6 +1052,7 @@ function Client.new(p)
     -- the deferred queue's gate: box moves wait while a PC trade swaps a party slot
     -- (docs/protocol.md §6.2 item 6)
     function drv.checkpoint_ok()
+        if recovery_hidden() then return false, "trade recovery withholds party" end
         if st.trade_apply then return false, "PC trade in flight" end
         return overworld_ok()
     end
@@ -911,30 +1063,73 @@ function Client.new(p)
         return overworld_ok()
     end
     function drv.on_reset()
+        st.release_snapshot = nil
+        st.eggs = {}
+        trade_reset_epoch = trade_reset_epoch + 1
+        -- Pre-CONTINUE validation can see OT=0 after a real cleared boot interval.
+        -- That is still the same boot episode. A save clear after live play revokes
+        -- its earlier witness; a subsequent cleared interval may establish a new one.
+        if reload_witness_live then reload_boot_seen = false end
+        if trade then trade:reset() end
         st.known, st.alive, st.commanded, st.party_prev, st.carried = {}, {}, {}, {}, {}
         st.box_cache, st.boxes_ok, st.battle, st.frozen, st.flags = {}, false, nil, false, {}
         st.last_area, st.trade = nil, nil
         st.opp_seen, st.pre_announced_id = nil, nil
         st.baselined, st.seen_count, st.observe_at = false, nil, nil
-        st.trade_apply, st.trade_settle_until, st.trade_unresolved = nil, 0, {}   -- the save is gone
+        st.trade_apply, st.trade_settle_until = nil, 0
         -- C5-11d MAJOR 3: the battle the authority named is gone with the save, whatever the
         -- battle RAM still says; a queued job must not ride it (reducer lifecycle or not)
         rival_authority = nil
     end
+    function drv.on_disconnect()
+        trade_connected = false
+        if trade_run_id then awaiting_trade_run = true end
+    end
 
+    -- One read-only cartridge snapshot per session, including cached failure. The Gen 3
+    -- reader owns bounds/pointer walking; this hook only binds table metadata and transport.
+    local content_cache = {attempted=false}
+    local function rom_content()
+        if p.artifact_kind ~= "rand" and p.artifact_kind ~= "rand_companion" then return nil end
+        if not content_cache.attempted then
+            content_cache.attempted = true
+            local ok, payload, why = pcall(function()
+                local source = assert(profile.rom_tables, "profile has no rom_tables")
+                local tables = {rom_size=p.rom_size} -- reader's documented 32 MiB window default if absent
+                for _, name in ipairs({"gTrainers", "gWildMonHeaders", "gEvolutionTable", "gSpeciesInfo", "gTrainerClassNames"}) do
+                    local row = assert(source[name], "missing ROM table " .. name)
+                    tables[name] = {address=tonumber(row.address), count=tonumber(row.count), size=tonumber(row.size)}
+                end
+                local reader = assert(p.rom_content_new, "ROM content reader unavailable")(tables, {read_u8=io.read_u8})
+                return reader:payload()
+            end)
+            if ok and type(payload) == "table" and type(payload.tables) == "table" and type(payload.fingerprint) == "string" then
+                content_cache.payload = payload
+            else
+                log("rom_content unavailable: " .. tostring(ok and (why or "invalid reader result") or payload))
+            end
+        end
+        return content_cache.payload
+    end
     -- No wire side effect here (no area_enter, no banner): hello is the connection's first line.
     function drv.hello_fields()
+        if not trade_connected and p.net.connected() then
+            trade_epoch, trade_connected = trade_epoch + 1, true
+        end
         local party = party_read() or {}
         update_frozen(party)
         rescan_boxes()
         -- a borrowed party is never published nor learned as ours (docs/protocol.md §9 item 11):
         -- hello.party stays present and empty, exactly like tick_fields' guard
-        local own = st.frozen and {} or party
+        local hidden = st.frozen or (trade and trade:hide_party()) or recovery_hidden()
+        session.hello_visible = not hidden
+        if not hidden then st.trade_hello_pending = nil end
+        local own = hidden and {} or party
         -- Once a baseline exists hello REPORTS and never learns: the session builds hello before
         -- this frame's signals drain, so a mon added since the last quiet frame (its acquisition
         -- hook firing this frame or the next) must stay unknown for settle to report it as a
         -- capture right after the hello. Only the very first baseline is taken here.
-        if not st.baselined and not st.frozen then
+        if not st.baselined and not hidden then
             seed_known(own)                                    -- box-key seeding at connect
             rebaseline(party)
             st.baselined = true
@@ -944,8 +1139,12 @@ function Client.new(p)
         latch_balls(false)                                     -- a resume, not an acquisition
         local area_id, loc = area_now()
         st.last_area = area_id .. "|" .. loc
-        local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind,
+        local gen, gen_ok = box_generation()                -- advertised only when the scan was complete
+        -- Companion is a local native capability; randomized pairing stays the
+        -- existing wire kind and still carries its cartridge's ROM content.
+        local f = { rom_type = p.rom_type, foundation = p.foundation, artifact_kind = p.artifact_kind == "rand_companion" and "rand" or p.artifact_kind,
                     rom_sha1 = p.rom_sha1, party = party_wire(own), pc_boxes = pc_boxes_wire(),
+                    pc_boxes_generation = gen_ok and gen or nil,
                     area_id = area_id, loc_name = loc, has_pokeballs = st.has_pokeballs,
                     in_battle = in_battle(), badges = badges(), ball_count = ball_count() }
         if session_nonce then
@@ -955,10 +1154,18 @@ function Client.new(p)
             f.battle_identity = true
         end
         local t = trainer()
-        if t then f.ot_id, f.trainer_name = t.ot_id, t.name end
+        if t then f.ot_id, f.trainer_name, f.player_gender = t.ot_id, t.name, t.player_gender end
         if native and native.hello_fields then
             for k, v in pairs(native:hello_fields() or {}) do f[k] = v end
         end
+        if hidden then
+            f.party_hidden = true
+            f.pc_boxes, f.pc_boxes_generation = nil, nil
+        end
+        local outstanding = journal and not awaiting_trade_run and journal:outstanding()
+        if outstanding and #outstanding > 0 then f.trade_outstanding = outstanding end
+        f.trade_prepare = not awaiting_trade_run and trade ~= nil and trade:capable() == true
+        f.rom_content = rom_content()
         return f
     end
 
@@ -966,7 +1173,7 @@ function Client.new(p)
         local party = party_read()
         if not party then return nil end
         update_frozen(party)
-        if not st.frozen then observe_hp(party) end
+        if not st.frozen and not recovery_hidden() then observe_hp(party) end
         local area_id, loc = check_area()
         local b = in_battle() and battle_now() or nil
         if b then note_battle(b) end
@@ -975,10 +1182,16 @@ function Client.new(p)
                     is_trainer_battle = b and b.is_trainer or false, is_doubles = b and b.is_doubles or false,
                     trainer_id = b and b.is_trainer and num(b.trainer_id) or nil,
                     enemy_party = enemy_wire(b), ball_count = n, badges = badges() }
-        if not st.frozen then f.party = party_wire(party) end
-        if st.boxes_ok then f.pc_boxes = pc_boxes_wire() end
+        local hidden = st.frozen or (trade and trade:hide_party()) or recovery_hidden()
+        if hidden then f.party_hidden = true else f.party = party_wire(party) end
+        -- the ONE box-generation accessor, the same one hello_fields reads (review F4): the tick
+        -- path can never publish a different verdict than the hello did
+        local gen, gen_ok = box_generation()
+        if gen_ok and not hidden then
+            f.pc_boxes, f.pc_boxes_generation = pc_boxes_wire(), gen
+        end
         local t = trainer()
-        if t then f.trainer_name = t.name end
+        if t then f.trainer_name, f.player_gender = t.name, t.player_gender end
         return f
     end
 
@@ -1006,9 +1219,86 @@ function Client.new(p)
             end
             if had then log("rival authority closed by " .. tostring(sig and sig.kind)) end
         end
+        local function capture_trade_before(sig)
+            sig.trade_reset_epoch = trade_reset_epoch
+            local party, why = party_read()
+            if not party then
+                log("NPC trade preimage unavailable: " .. tostring(why))
+                return
+            end
+            -- TradeMons entry still holds the outgoing identities. By signal
+            -- drain time the swap is complete, and the quiet/PC cache may be empty.
+            sig.trade_before = {}
+            for _, mon in ipairs(party) do sig.trade_before[mon.slot] = key(mon) end
+        end
+        local function release_census()
+            -- Read through this title's profile at the native hooks. The party
+            -- count can still include the purged slot until compaction follows.
+            local party = party_read()
+            if not party then return nil end
+            local census = {}
+            for _, mon in ipairs(party) do
+                if mon.has_species == 1 and mon.species ~= 0 then
+                    local k = key(mon)
+                    if census[k] then return nil end
+                    census[k] = {where = "party", slot = mon.slot}
+                end
+            end
+            for box = 0, (num(d.BOXES_PER_STORE) or 0) - 1 do
+                local mons = call("read_box", box)
+                if not mons then return nil end
+                for _, mon in ipairs(mons) do
+                    if mon.has_species == 1 and mon.species ~= 0 then
+                        local k = key(mon)
+                        if census[k] then return nil end
+                        census[k] = {where = "box", box = box, slot = mon.slot}
+                    end
+                end
+            end
+            return census
+        end
+        local function release_begin(sig)
+            st.release_snapshot = {keys = release_census(), epoch = trade_reset_epoch, sp = sig.sp}
+        end
+        local function release_done(sig)
+            local before = st.release_snapshot
+            st.release_snapshot = nil
+            -- ReleaseMon entry SP and its pre-pop return SP differ by saved LR.
+            if not before or not before.keys or before.epoch ~= trade_reset_epoch
+               or before.sp ~= sig.sp + 4 then return end
+            local after, gone = release_census(), nil
+            if not after then return end
+            for k in pairs(after) do if not before.keys[k] then return end end
+            for k, location in pairs(before.keys) do
+                if not after[k] then
+                    if gone then return end -- ambiguous removal: no guessed key
+                    gone = {key = k, location = location}
+                end
+            end
+            if gone then
+                sig.release_key, sig.release_source = gone.key, gone.location
+                sig.release_epoch = trade_reset_epoch
+            end
+        end
+        local function capture_hatch(sig)
+            -- All pinned AddHatchedMonToParty returns leave the mon pointer in R5.
+            -- Read AT the completed mutation, before later callbacks can move the party.
+            local base, ptr = call("party_base"), sig.point and sig.point.R5
+            local party = party_read()
+            if not base or not ptr or not party then return end
+            for _, mon in ipairs(party) do
+                if ptr == base + mon.slot * R.PARTY_MON_SIZE and mon.species ~= 0 and mon.is_egg == 0
+                   and mon.is_bad_egg == 0 and mon.checksum_ok ~= false then
+                    sig.hatch_mon, sig.hatch_epoch = mon, trade_reset_epoch
+                    return
+                end
+            end
+        end
         sig_src = p.Signals.new(profile, p.sites, io, p.ev,
                                 {battle_begin = close_authority, battle_end = close_authority,
-                                 whiteout = close_authority})
+                                 whiteout = close_authority, trade_begin = capture_trade_before,
+                                 pc_release_begin = release_begin, pc_release = release_done,
+                                 hatch = capture_hatch})
         return sig_src
     end
 
@@ -1037,14 +1327,19 @@ function Client.new(p)
             f.acquire, f.caught = true, true
             if st.battle then st.battle.caught = true end
         elseif k == "mon_given" or k == "pc_move" then f.acquire = true
+        elseif k == "hatch" and sig.hatch_mon and sig.hatch_epoch == trade_reset_epoch then
+            f.hatches = f.hatches or {}
+            f.hatches[#f.hatches + 1] = sig.hatch_mon
         elseif PC_KINDS[k] then
             f.pc = true
-            if k == "pc_release" then f.release = true end
+            if k == "pc_release" and sig.release_key and sig.release_epoch == trade_reset_epoch then
+                f.release = f.release or {}
+                f.release[sig.release_key] = true
+            end
         elseif k == "map_load" then f.map = true
         elseif k == "save" then f.save = true
         elseif k == "trade_begin" then                          -- OPEN kind, not PHYSICAL
-            st.trade = {}
-            for pk, prev in pairs(st.party_prev) do st.trade[prev.slot] = pk end
+            st.trade = sig.trade_reset_epoch == trade_reset_epoch and sig.trade_before or nil
         elseif k == "trade_done" then f.trade = true            -- OPEN kind, not PHYSICAL
         end
         -- evolve_species_store / trade_evolve_species_store (OPEN, not PHYSICAL): a Gen 3
@@ -1077,7 +1372,7 @@ function Client.new(p)
         local party = party_read()
         if not party then return end
         update_frozen(party)
-        if st.frozen then return end                           -- a borrowed party is never ours
+        if st.frozen or recovery_hidden() then return end      -- withheld RAM is never a baseline
         if not st.baselined then rescan_boxes(); st.baselined = true end
         seed_known(party)
         st.seen_count = count
@@ -1233,6 +1528,7 @@ function Client.new(p)
             -- so a stale doubles bit would refuse a singles swap here.
             if not eligible() then
                 log("replace_rival_team: session not eligible (writes paused); nothing staged")
+                refuse("writes_paused")
             elseif native and native.replace_rival_team then
                 log("replace_rival_team staged for the window (battle " .. tostring(ra.battle_id) .. ")")
                 native:replace_rival_team(cmd, function(epoch)
@@ -1275,6 +1571,7 @@ function Client.new(p)
                 refuse(why)
             elseif not eligible() then
                 log("replace_rival_team: session not eligible (writes paused); nothing staged")
+                refuse("writes_paused")
             elseif native and native.replace_rival_team then
                 native:replace_rival_team(cmd, rival_epoch_guard)
             else
@@ -1284,233 +1581,193 @@ function Client.new(p)
         return true
     end
 
-    -- the disabled-foundation write guard (PLAN §10): no trade path -> nothing written, no reply
-    -- ── the RR PC trade (apply_trade), PLAN §5.6, docs/protocol.md §6.2 ───────────
-    -- The Gen 1 standard's shape (lua/gen1/client.lua:1594-1765) over the old RR client's native
-    -- sequence (archive/gen3-old-client:lua/clients/gen3_frlge_client.lua:2211-2293): every byte is a native.lua transfer, i.e.
-    -- writes:arm("native") over the mailbox and BLOB_BUF; this FSM writes nothing itself.
-    --   wait      buffered until a clear field (the overworld checkpoint) with an eligible
-    --             session; the offered mon is re-located by old_key (the slot is a snapshot).
-    --             Nothing is owned yet: unrelated signals keep reducing normally.
-    --   stage     transfer("enemy", {blob}) = OP_SET_ENEMY_PARTY: the partner mon into
-    --             gEnemyParty[0] (no slot involved)
-    --   scene     transfer("scene", {slot}) = OP_TRADE_SCENE
-    --   fallback  transfer("party", {slot, blob}) = OP_SET_PARTY_MON, the silent faithful swap
-    --   scene_lost the scene's ACK was lost: nothing is written, wait the backstop
-    --   readback  the op reported done (or its ACK was lost): read the party back by KEY
-    -- Every slot op carries a DISPATCH-TIME guard (native.lua runs it just before posting, in
-    -- the same frame-end callback): the offered key is re-located at that instant; moved means
-    -- re-post at its new slot, unreadable means try again, gone means nothing is posted.
-    -- Completions report only FACTS read back: the partner's key present = the swap landed; the
-    -- offered key still present after a done/lost op = unchanged. When the trade failed or the
-    -- result cannot be read (stage poisoned, silent swap failed, no conclusive read-back) NO
-    -- trade_done is sent and nothing is purged: the trade is "unresolved", the server watchdog's
-    -- inferred-key commit settles it (PLAN §5.6/§10, the recorded limit), and a later read-back
-    -- that finds the partner's mon still reports that fact. The one unchanged-key trade_done
-    -- without a read-back fact stays the Gen 1 standard's: the offered mon cannot be located
-    -- unambiguously, so no bystander slot is ever written (old client :692 ponytail).
-    local function partner_key_of(hex)
-        local function u32(off)
-            local v = 0
-            for i = 3, 0, -1 do v = v * 256 + tonumber(hex:sub(2 * (off + i) + 1, 2 * (off + i) + 2), 16) end
-            return v
-        end
-        return string.format("%08X:%08X", u32(0), u32(4))
+    -- Durable trade is a separate protocol owner. It never writes; native owns every stage.
+    -- V1 companions have no save witness and therefore cannot implement this capability.
+    local function sync_trade()
+        if not trade then return end
+        local active, prepared = trade:state()
+        st.trade_apply = active or prepared
     end
-    -- where are the partner's mon and the offered mon now (by key, so a reorder cannot fool it)
-    local function trade_evidence(t)
-        local party = party_read()
-        if not party then return nil end
-        local got, old
-        for _, m in ipairs(party) do
-            local k = key(m)
-            if k == t.partner_key then got = m end
-            if k == t.old_key then old = m end
-        end
-        return party, got, old
-    end
-    local function trade_report(t, party, mon, changed, how)
-        local new_key = changed and key(mon) or t.old_key
-        local slot = mon and mon.slot or t.slot
-        local species = changed and mon.species or 0
-        if st.trade_apply == t then st.trade_apply = nil end
-        if st.trade_unresolved[t.token] == t then st.trade_unresolved[t.token] = nil end
-        st.trade_settle_until = io.framecount() + st.trade_limits.settle
-        if changed then
-            -- a local key migration only (protocol §6.5): the server re-keys from trade_done
-            st.known[t.old_key], st.alive[t.old_key], st.commanded[t.old_key] = nil, nil, nil
-            st.known[new_key] = true
-            -- box moves queued for either key are stale now the mon changed players (old :3423-3429)
-            local items = session.deferred.items
-            for i = #items, 1, -1 do
-                local q = items[i]
-                if (q.key == t.old_key or q.key == new_key)
-                   and (q.cmd == "box_mon" or q.cmd == "party_mon" or q.cmd == "memorialize") then
-                    log("trade: purged the queued " .. q.cmd .. " " .. tostring(q.key))
-                    table.remove(items, i)
+    if p.Trade and owed and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and (native or journal) then
+        local trade_policy = assert(p.trade_policy, "pack trade policy required")
+        trade = p.Trade.new({native=native or {trade_capable=function() return false end}, journal=journal,
+            frame=io.framecount, eligible=function() return not awaiting_trade_run and eligible() end,
+            intent_committed=function()
+                reload_empty_frames, reload_boot_seen, reload_check_frame = 0, false, -1000
+            end,
+            saveram=function()
+                assert(io.saveram, "SaveRAM host API unavailable")
+                return io.saveram()
+            end,
+            log=log, hud=hud,
+            epoch=function() return trade_epoch end,
+            prepare_frames=trade_policy.prepare_frames, apply_frames=trade_policy.apply_frames,
+            ready_to_send=function()
+                return not awaiting_trade_run and (not journal or journal:ready())
+                    and session and session.hello_sent and p.net.connected()
+            end,
+            publish_visible_snapshot=function()
+                if not session or not session:eligible() then return false end
+                local fields = drv.tick_fields()
+                if type(fields) ~= "table" or fields.party_hidden == true
+                   or type(fields.party) ~= "table" or #fields.party == 0 then return false end
+                -- The same TCP stream orders this fresh census before apply_ready. A pre-save
+                -- hidden tick must not be the server's last view when it commits the pair.
+                return session:send("tick", fields) == true
+            end,
+            clear=function() return not in_battle() and overworld_ok() end,
+            party=party_read, key=key, capacity=d.PARTY_CAPACITY or 6, mon_size=R.PARTY_MON_SIZE,
+            decode_blob=function(hex)
+                local bytes = {}
+                for i=1,#hex,2 do bytes[#bytes+1] = tonumber(hex:sub(i,i+1),16) end
+                return reads.decode_party_mon(bytes)
+            end,
+            report_pending=function(epoch, value)
+                for _, row in ipairs(owed.list) do
+                    if row.event == "trade_done" and row.fields.token == value
+                       and trade_report_epochs[row.fields] == epoch then return true end
                 end
-            end
-        end
-        if party then seed_known(party); rebaseline(party) end
-        log("trade: " .. how .. "; trade_done " .. t.old_key .. " -> " .. new_key)
-        send("trade_done", { token = t.token, slot = slot, new_key = new_key, new_species = species })
+                return false
+            end,
+            send=function(event, fields, epoch)
+                if event == "trade_done" then
+                    trade_report_epochs[fields] = epoch
+                    owed.list[#owed.list+1] = {event=event, fields=fields}
+                    return true
+                end
+                return send(event, fields)
+            end,
+            completed=function(t, changed, party, mon)
+                if changed then
+                    local new_key = key(mon)
+                    st.known[t.old_key], st.alive[t.old_key], st.commanded[t.old_key] = nil, nil, nil
+                    st.known[new_key] = true
+                    local items = session.deferred.items
+                    for i=#items,1,-1 do
+                        local q=items[i]
+                        if (q.key == t.old_key or q.key == new_key)
+                           and (q.cmd == "box_mon" or q.cmd == "party_mon" or q.cmd == "memorialize") then
+                            table.remove(items,i)
+                        end
+                    end
+                    seed_known(party); rebaseline(party)
+                    st.trade_settle_until = io.framecount() + st.trade_limits.settle
+                end
+                -- The write-ahead interval withheld our party from the server.
+                -- Publish the now-durable (or proved unchanged) party before
+                -- releasing trade_done. Core gates this HELLO on its field
+                -- checkpoint and sends it before owed reports. Another hidden
+                -- party reason must not turn that ordering into a false proof.
+                if t.journaled and journal and journal:ready() and not journal:hidden() then
+                    st.trade_hello_pending, st.trade_hello_check = true, nil
+                    session.hello_visible = false
+                    session.hello_sent = false
+                end
+            end})
     end
-    local function trade_unresolved(t, why)
-        if st.trade_apply ~= t then return end
-        st.trade_apply = nil
-        st.trade_unresolved[t.token] = t
-        t.phase = "unresolved"
-        log("TRADE UNRESOLVED: " .. why .. "; no trade_done, nothing purged (the server watchdog settles it)")
-        hud.show("TRADE UNRESOLVED: " .. why, 255, 120, 60, 600)
-    end
-    local function trade_abort(t, why)
-        if st.trade_apply ~= t then return end
-        st.trade_apply = nil
-        log("trade ABORTED: " .. why .. "; no swap performed, no completion")
-    end
-    -- the owned op said done (or went silent): report what the party shows, else keep reading
-    local function trade_readback(t, how)
-        if st.trade_apply ~= t then return end
-        local party, got, old = trade_evidence(t)
-        if party and got then return trade_report(t, party, got, true, how) end
-        if party and old then return trade_report(t, party, old, false, how .. " (unchanged)") end
-        if t.phase ~= "readback" then
-            t.phase, t.readback_why, t.readback_since = "readback", how, io.framecount()
-            log("trade: " .. how .. "; no conclusive read-back yet, no trade_done")
-        end
-    end
-    -- one native transfer; done(why, result) fires exactly once (native.lua calls it on refusal
-    -- at enqueue too; an argument refusal returns without calling it). The returned job handle is
-    -- this post's own dispatch receipt: `handle.posted` is set when native.lua publishes that
-    -- job's opcode -- and never for a refused, guarded-off or still-queued job.
-    local function transfer(t, step, args, on_done, valid)
-        local fired = false
-        local handle, why = native:transfer(step, args, function(w, r) fired = true; on_done(w, r) end, valid)
-        if not handle and not fired then on_done(why or "transfer refused") end
-        if handle then
-            t.posts = t.posts or {}
-            t.posts[#t.posts + 1] = handle
-        end
-        return handle
-    end
-    -- the dispatch-time guard for a slot op: the offered key must be exactly at t.slot NOW
-    local function slot_guard(t)
-        return function()
-            if st.trade_apply ~= t then return false, "guard:stale" end
-            local party = party_read()
-            if not party then return false, "guard:unreadable" end
-            local slot = session.identity:find_party_slot(t.old_key, party)
-            if slot == nil then return false, "guard:lost" end
-            if slot ~= t.slot then t.moved_to = slot; return false, "guard:moved" end
-            return true
-        end
-    end
-    local post_fallback
-    local function post_scene(t)
-        t.phase, t.scene_frame = "scene", t.scene_frame or io.framecount()
-        transfer(t, "scene", { slot = t.slot }, function(swhy)
-            if st.trade_apply ~= t or swhy == "guard:stale" then return end
-            if not swhy then return trade_readback(t, "native scene complete") end
-            if swhy == "guard:moved" then t.slot = t.moved_to; return post_scene(t) end
-            if swhy == "guard:unreadable" then return post_scene(t) end
-            if swhy == "guard:lost" then
-                -- nothing was posted for the slot and the offered mon cannot be located: the
-                -- Gen 1 standard's "nothing changed"
-                return trade_report(t, party_read(), nil, false, "the offered mon left the party before the scene")
-            end
-            if swhy == "native refused" or swhy == "native absent" then
-                return post_fallback(t, "scene " .. swhy)
-            end
-            -- the ACK was lost (timeout, overwritten sequence): the scene may still be running
-            -- natively, so nothing is written; the backstop reads the party back
-            t.phase = "scene_lost"
-            log("trade: scene ACK lost (" .. swhy .. "); waiting the backstop, no overwrite")
-        end, slot_guard(t))
-    end
-    post_fallback = function(t, why)
-        t.phase = "fallback"
-        transfer(t, "party", { slot = t.slot, blob_hex = t.blob_hex }, function(fwhy)
-            if st.trade_apply ~= t or fwhy == "guard:stale" then return end
-            if not fwhy then return trade_readback(t, "silent swap after " .. why) end
-            if fwhy == "guard:moved" then t.slot = t.moved_to; return post_fallback(t, why) end
-            if fwhy == "guard:unreadable" then return post_fallback(t, why) end
-            if fwhy == "guard:lost" then
-                -- the pre-trade mon is not in the party: never swap on top of a scene that may
-                -- have swapped (the old "pairs break" double write); read back what is there
-                return trade_readback(t, why .. "; the offered mon is gone before the silent swap")
-            end
-            trade_unresolved(t, "silent swap failed (" .. fwhy .. ") after " .. why)
-        end, slot_guard(t))
-    end
-    local function post_stage(t)
-        t.phase = "stage"
-        st.known[t.partner_key] = true                             -- never a capture if it lands
-        transfer(t, "enemy", { blobs_hex = { t.blob_hex } }, function(why)
-            if st.trade_apply ~= t or why == "guard:stale" then return end
-            if why == "native absent" then return trade_abort(t, "companion absent") end
-            if why then return post_fallback(t, "stage " .. why) end
-            post_scene(t)
-        end, function()
-            if st.trade_apply ~= t then return false, "guard:stale" end
-            return true
-        end)
-    end
-    local function trade_tick()
-        local f = io.framecount()
-        for _, u in pairs(st.trade_unresolved) do
-            -- a later read-back that finds a transaction's partner mon is a fact worth reporting
-            local party, got = trade_evidence(u)
-            if party and got then trade_report(u, party, got, true, "late read-back: the swap landed") end
-        end
-        local t = st.trade_apply
-        if not t then return end
-        if t.phase == "scene_lost" then
-            if f - t.scene_frame >= st.trade_limits.backstop then trade_readback(t, "scene ACK lost") end
-            return
-        end
-        if t.phase == "readback" then
-            if f - t.readback_since >= st.trade_limits.backstop then
-                return trade_unresolved(t, "no conclusive read-back (" .. t.readback_why .. ")")
-            end
-            return trade_readback(t, t.readback_why)
-        end
-        if t.phase ~= "wait" or not eligible() or in_battle() then return end
-        local party = party_read()
-        if not party then return end
-        local clear = overworld_ok()
-        if not clear and f - t.since < st.trade_limits.field_wait then return end
-        -- re-locate by key: the slot index is a snapshot from mon_chosen (protocol §6.2 item 2)
-        local slot, _, _, why = session.identity:find_party_slot(t.old_key, party)
-        if not slot then
-            return trade_report(t, party, nil, false, "the offered mon is " .. (why or "not in the party"))
-        end
-        t.slot = slot
-        if clear then return post_stage(t) end
-        post_fallback(t, "the field never cleared")                -- the old client's :2250 rule
-    end
-    drv.after_receive = trade_tick
-    C.apply_trade = function(cmd)
-        -- the disabled-foundation guard (PLAN §10): no native part (vanilla FRLG, RR clean) means no
-        -- trade path -- nothing written, no reply (the old client's no-patch abort, :2233-2242)
-        if not (native and native.transfer) then
-            log("apply_trade refused: no trade path on this cartridge (nothing written) " .. tostring(cmd.old_key))
-            return true
-        end
-        if st.trade_apply then
-            log("apply_trade ignored: a trade is already in flight " .. tostring(cmd.old_key))
-            return true
-        end
-        local hex = cmd.blob_hex
-        if type(hex) ~= "string" or #hex ~= 2 * R.PARTY_MON_SIZE or hex:find("[^%x]")
-           or type(cmd.old_key) ~= "string" or cmd.old_key == "" then
-            log("apply_trade: bad blob_hex or old_key, skipped")      -- the old client's :983
-            return true
-        end
-        st.trade_apply = { token = cmd.token or "", slot = cmd.slot, old_key = cmd.old_key,
-                           blob_hex = hex, partner_key = partner_key_of(hex), phase = "wait",
-                           since = io.framecount() }
-        log("apply_trade received for " .. cmd.old_key .. ": queued for the native trade")
+    C.apply_prepare = function(cmd)
+        if trade then trade:prepare(cmd); sync_trade()
+        else send("apply_ready", {token=cmd.token, ok=false}) end
         return true
+    end
+    local function hold_busy_apply(cmd)
+        if not (trade and journal and journal.busy and not awaiting_trade_run) then return false end
+        local _, prepared = trade:state()
+        if not prepared or prepared.token ~= cmd.token or prepared.old_key ~= cmd.old_key then return false end
+        if not pending_apply_trade then
+            pending_apply_trade = {cmd=cmd, run_id=trade_run_id, ot_id=trade_run_ot,
+                                   prepared=prepared, epoch=prepared.epoch,
+                                   deadline=prepared.prepare_deadline}
+            log("apply_trade held: journal lock busy")
+        end
+        return true
+    end
+    C.apply_trade = function(cmd)
+        if trade and trade:capable() then trade:apply(cmd); sync_trade()
+        elseif hold_busy_apply(cmd) then return true
+        else
+            log("apply_trade refused: durable native trade unavailable")
+            -- A replay during journal recovery cannot truthfully report
+            -- "unchanged"; the earlier intent may already have committed.
+            -- Its qualified uncertainty declaration owns the next report.
+            if journal and journal:hidden() then return true end
+            if type(cmd.token) == "string" and cmd.token ~= "" and type(cmd.old_key) == "string" and cmd.old_key ~= "" then
+                local fields = {token=cmd.token, slot=cmd.slot, new_key=cmd.old_key, new_species=0}
+                local cancel = {token=cmd.token, choice=0, withdraw=true}
+                if owed then
+                    -- This branch owes a NON-uncertain trade_done, and the owed gate
+                    -- (drv.after_receive) refuses one while the hello is hidden.
+                    -- session.hello_visible only refreshes when a NEW hello is BUILT, and
+                    -- core/session.lua sends one only while hello_sent is false -- so without
+                    -- an armer the report (and the menu_result cancel behind it) stalls
+                    -- until a reconnect. trade.lua's completed() is the other armer; arm the
+                    -- same recovery here. The report stays NON-uncertain on purpose: this
+                    -- refusal can only justify "unchanged", which is server semantics.
+                    if not session.hello_visible then
+                        st.trade_hello_pending, st.trade_hello_check = true, nil
+                    end
+                    owed.list[#owed.list+1] = {event="trade_done", fields=fields}
+                    owed.list[#owed.list+1] = {event="menu_result", fields=cancel}
+                else send("trade_done", fields); send("menu_result", cancel) end
+            end
+        end
+        return true
+    end
+    C.withdraw_trade = function(cmd)
+        if trade then trade:withdraw(cmd); sync_trade() end
+        return true
+    end
+    C.trade_final = function(cmd)
+        if journal and (awaiting_trade_run or (not journal:ready() and not journal.busy)) then return true end
+        local ok, why
+        if trade then ok, why = trade:server_final(cmd)
+        elseif journal then ok, why = journal:final(cmd.token,cmd.epoch,cmd.verdict) end
+        if why == "trade journal lock busy" then
+            pending_trade_finals[#pending_trade_finals+1] = {
+                token=cmd.token, epoch=cmd.epoch, verdict=cmd.verdict,
+                run_id=trade_run_id, ot_id=trade_run_ot,
+            }
+        end
+        return true
+    end
+    drv.after_receive = function()
+        if trade then trade:tick(); sync_trade() end
+        if owed then
+            local refresh=false
+            owed:step(p.net.connected(), session.hello_sent == true, function(event, fields)
+                -- Uncertainty declarations deliberately precede the later
+                -- visible recovery HELLO; gating those would deadlock recovery.
+                if event == "trade_done" and not fields.uncertain
+                   and (not session.hello_visible or st.frozen
+                        or (trade and trade:hide_party()) or recovery_hidden()) then return false end
+                local sent=send(event,fields)
+                if sent and event == "trade_done" and fields.uncertain and fields.after_reset
+                   and trade and trade:declaration_sent(fields.token) then
+                    refresh=true
+                end
+                return sent
+            end, function(event)
+                if event ~= "trade_done" and event ~= "menu_result" then owed_hold = nil return true end
+                local why = nil
+                if awaiting_trade_run then why = "trade run not bound"
+                elseif journal and not journal:ready() then why = "trade journal not ready" end
+                if why then
+                    -- owed:step runs on EVERY after_receive, and a held head blocks every
+                    -- later report (lua/owed_reports.lua:62). Name the reason once per
+                    -- hold; a second line would only be per-frame noise.
+                    if owed_hold ~= why then
+                        owed_hold = why
+                        log(string.format("owed %s held: %s", event, why))
+                    end
+                    return false
+                end
+                owed_hold = nil
+                return true
+            end)
+            -- Server only consumes a hello AFTER the uncertainty declaration. This second
+            -- hello is allowed only after the real reset boundary, never from unsaved RAM.
+            if refresh then session.hello_sent=false end
+        end
     end
     -- native pickers/menus (RR PC trade NPC); otherwise the core answers with the cancel sentinels
     -- Once native takes a prompt it owns the answer (its done callback replies, including the
@@ -1529,6 +1786,27 @@ function Client.new(p)
         return true
     end
     C.config = function(cmd)                                   -- the session stores it too
+        if journal then
+            local t = trainer()
+            local ot = t and type(t.ot_id) == "number" and string.format("%08X",t.ot_id) or nil
+            if type(cmd.run_id) ~= "string" or cmd.run_id == "" or not ot then
+                journal:unbind()
+                trade_run_id, trade_run_ot = nil, nil
+                awaiting_trade_run = true
+                log("trade journal binding refused: server run identity or trainer unavailable")
+            elseif awaiting_trade_run or trade_run_id ~= cmd.run_id or trade_run_ot ~= ot then
+                local ok, why = journal:bind(cmd.run_id,ot)
+                if ok then
+                    trade_run_id, trade_run_ot = cmd.run_id, ot
+                    awaiting_trade_run = false
+                    session.hello_sent = false
+                else
+                    journal:unbind()
+                    trade_run_id, trade_run_ot, awaiting_trade_run = nil, nil, true
+                    log("trade journal binding refused: " .. tostring(why))
+                end
+            end
+        end
         if native and native.config then native:config(cmd) end
         return false
     end
@@ -1562,6 +1840,7 @@ function Client.new(p)
         if #nodes < 2 then return nil, "m4a player list not initialised" end
         return nodes[#nodes - 1]
     end
+    -- id: the TITLE's song id (drv.play_sound translates the wire id once, for both paths)
     local function m4a_plan(id)
         local snd = p.sound
         if type(snd) ~= "table" or type(snd.fields) ~= "table" then
@@ -1624,35 +1903,136 @@ function Client.new(p)
         local f = io.framecount()
         if st.sound_frame == f then return end              -- one cue per frame
         st.sound_frame = f
-        if native and native.play_sound and native:play_sound(id) then return end
-        local plan, args = m4a_plan(id)
+        -- the wire id keeps FR numbering (docs/protocol.md "play_sound ids"); the pack's se_ids
+        -- maps it to this title's song id, and an id it does not map is refused. Translated ONCE,
+        -- before either path: the companion's OP_PLAY_SE plays a song number of the running ROM
+        -- (native.lua play_sound), exactly what the m4a poke needs, so both take the title id.
+        -- (RR's map is identity today; asserting identity would only refuse a future native title.)
+        local snd = type(p.sound) == "table" and p.sound or {}
+        local sid = type(snd.se_ids) == "table" and num(snd.se_ids[tostring(id)]) or nil
+        if not sid then return sound_refused("pack maps no title SE for wire id " .. tostring(id)) end
+        if native and native.play_sound and native:play_sound(sid) then return end
+        local plan, args = m4a_plan(sid)
         if not plan then return sound_refused(args) end
         local ok, awhy = armed_write("sound", plan, args)
         if not ok then sound_refused(tostring(awhy)) end
     end
+    local trade_frame
     drv.pre_pump = function()
+        if trade_frame and io.framecount() < trade_frame then
+            if trade then trade:reset(); sync_trade() end
+            reload_empty_frames, reload_boot_seen = 0, false
+            session.hello_sent = false
+        end
+        trade_frame = io.framecount()
+        local held_apply = pending_apply_trade
+        if held_apply and p.net.connected() and not awaiting_trade_run then
+            local _, current_prepared = trade:state()
+            if held_apply.run_id ~= trade_run_id or held_apply.ot_id ~= trade_run_ot then
+                pending_apply_trade = nil
+                log("pending apply_trade discarded: server run/trainer binding changed")
+            elseif current_prepared ~= held_apply.prepared or current_prepared.epoch ~= held_apply.epoch then
+                pending_apply_trade = nil
+                log("pending apply_trade discarded: preparation binding changed")
+            elseif (held_apply.deadline and io.framecount() > held_apply.deadline)
+                   or trade:capable() then
+                pending_apply_trade = nil
+                trade:apply(held_apply.cmd) -- checks the original prepare deadline and epoch
+                sync_trade()
+            elseif not journal.busy then
+                pending_apply_trade = nil
+                C.apply_trade(held_apply.cmd) -- named non-busy refusal, with no scene write
+            end
+        end
+        local pending = pending_trade_finals[1]
+        if pending and p.net.connected() and not awaiting_trade_run then
+            if pending.run_id ~= trade_run_id or pending.ot_id ~= trade_run_ot then
+                table.remove(pending_trade_finals,1) -- a different run cannot inherit this final
+                log("pending trade_final discarded: server run/trainer binding changed")
+            elseif journal and (journal:ready() or journal.busy) then
+                local _, why
+                if trade then _, why = trade:server_final(pending)
+                else _, why = journal:final(pending.token,pending.epoch,pending.verdict) end
+                if why ~= "trade journal lock busy" then table.remove(pending_trade_finals,1) end
+            end
+        end
+        if owed then owed:step(p.net.connected(), false, send) end
+        if journal then
+            local empty = reads.read_sb1 and not reads.read_sb1() and reads.read_sb2 and not reads.read_sb2()
+                and num(a.PARTY_COUNT_ADDR) and io.read_u8(a.PARTY_COUNT_ADDR) == 0
+            if empty then reload_empty_frames = reload_empty_frames + 1
+            elseif reload_empty_frames >= 2 then
+                reload_boot_seen, reload_empty_frames = true, 0
+                reload_witness_live = false
+            else reload_empty_frames = 0 end
+            if reload_boot_seen and trade and journal:ready() and journal:hidden()
+               and not st.frozen and not in_battle() and io.trade_reload_proof
+               and io.framecount() - reload_check_frame >= 30 and overworld_ok() then
+                reload_check_frame = io.framecount()
+                local ok, proof, why = pcall(io.trade_reload_proof, p.rom_type, profile, reload_boot_seen)
+                if ok and proof and trade:qualify_reload(proof) then session.hello_sent = false
+                elseif not ok or why then log("trade reload held: " .. tostring(ok and why or proof)) end
+            end
+        end
+        -- the hidden-HELLO recovery runs with or without a native part: a clean cartridge's
+        -- refused apply_trade owes reports behind it too (OMP cx-2e644e72 F1)
+        if st.trade_hello_pending and session.hello_sent and not session.hello_visible
+           and (not st.trade_hello_check or io.framecount()-st.trade_hello_check >= 30)
+           and not in_battle() and overworld_ok() then
+            st.trade_hello_check = io.framecount()
+            update_frozen(party_read() or {})
+            if not st.frozen and not (trade and trade:hide_party()) and not recovery_hidden() then
+                session.hello_sent = false -- one refresh when visibility returns, no hidden-HELLO spin
+            end
+        end
         if not (native and native.service) then return end
         -- C5-11c MAJOR 3: this used to clear st.battle on a live boundary, which made
         -- finish_battle skip the encounter result (RR companion then sent no no_catch where RR
         -- clean did). The rival authority above replaces it and never touches the lifecycle.
         native:service()
-        -- the trade's first actual post is the posting job's OWN dispatch receipt (native.lua sets
-        -- `posted` when it publishes that job's opcode). Never infer it from sink bytes: a
-        -- completion callback (e.g. a panel page job) or a panel/NPC callback can write
-        -- through the same sink in this very call while our job is refused at its guard.
-        local t = st.trade_apply
-        if t and t.posts then
-            for _, handle in ipairs(t.posts) do
-                if handle.posted == true then t.posted = true break end
-            end
-        end
+        sync_trade() -- each native job's own publication receipt, never inferred from sink bytes
     end
 
     local Id = core.Identity.new({ key = key })
     local Q = core.Deferred.new({ exec = exec, memorial_box = memorial_box })
-    session = core.Session.new({ net = p.net, json = json, hud = hud, log = sink, tag = TAG,
+    local transport = setmetatable({
+            send=function(line)
+                -- safe has no snapshot-building seam in the shared core. Mark only
+                -- this Gen 3 transport's withheld safe; Gen 1/2 bytes stay unchanged.
+                local ok, fields = pcall(json.decode,line)
+                if ok and type(fields) == "table" and fields.event == "safe"
+                   and (st.frozen or (trade and trade:hide_party()) or recovery_hidden()) then
+                    fields.party_hidden = true
+                    line = json.encode(fields)
+                end
+                local result=p.net.send(line)
+                if owed then owed:line_sent() end
+                return result
+            end,
+            receive=function()
+                local line=p.net.receive()
+                if line ~= nil and owed then
+                    owed:line_received()
+                    local ok, reply=pcall(json.decode,line)
+                    if ok and type(reply)=="table" and type(reply.commands)=="table" then owed:answer(reply.commands) end
+                end
+                return line
+            end}, {__index=p.net})
+    session = core.Session.new({ net = transport, json = json, hud = hud, log = sink, tag = TAG,
                                  player = p.player, game = drv, identity = Id, deferred = Q })
     session.driver, session.state = drv, st
+    if native and (p.artifact_kind == "companion" or p.artifact_kind == "rand_companion") and native.request_match_call then
+        local base_command = session.handle_command
+        function session:handle_command(cmd)
+            -- Same optional tag seam as gen2/client.lua: the original command
+            -- still runs, and unsupported cartridges silently ignore the tag.
+            if cmd.cmd ~= "noop" and cmd.phone ~= nil then
+                local ok, why = pcall(native.request_match_call, native, cmd.phone, cmd.phone_data)
+                if not ok then log("match_call request failed: " .. tostring(why)) end
+            end
+            return base_command(self, cmd)
+        end
+    end
     local base_send = session.send
     session.send = function(a, b, c)
         local event = (a == session) and b or a

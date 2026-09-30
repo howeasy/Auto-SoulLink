@@ -5,8 +5,12 @@ Each supported game family provides an adapter implementing GameAdapter.
 The registry maps game_id strings to adapter classes.
 """
 
+import logging
+
 # The two ABCs are re-exported for adapter authors, not used here.
 from .base import GameAdapter, GamePresentationAdapter, GameRulesAdapter  # noqa: F401
+
+log = logging.getLogger(__name__)
 
 # Registry: game_id -> adapter class
 _REGISTRY: dict[str, type[GameAdapter]] = {}
@@ -39,6 +43,7 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
     "firered": "gen3_frlge", "leafgreen": "gen3_frlge", "emerald": "gen3_frlge",
     "firered_ap": "gen3_frlge", "leafgreen_ap": "gen3_frlge",
     "firered_rr": "gen3_frlge",
+    "emerald_expansion_28877d73": "gen3_exp",
     "heartgold": "gen4_hgsspt", "soulsilver": "gen4_hgsspt",
     "platinum": "gen4_hgsspt", "hgss": "gen4_hgsspt",
     "renegade_platinum": "gen4_hgsspt",  # Drayano60 difficulty hack on Platinum
@@ -85,7 +90,8 @@ _ROM_TYPE_TO_GAME_ID: dict[str, str] = {
 _VARIANT_LABEL: dict[str, str] = {
     "firered": "FireRed", "leafgreen": "LeafGreen",
     "firered_ap": "FireRed (AP)", "leafgreen_ap": "LeafGreen (AP)",
-    "firered_rr": "Radical Red",
+    "firered_rr": "Radical Red", "emerald": "Emerald",
+    "emerald_expansion_28877d73": "Emerald Expansion 1.17.0 (28877d73)",
     "heartgold": "HeartGold", "soulsilver": "SoulSilver",
     "platinum": "Platinum", "hgss": "HGSS",
     "Red": "Red", "Blue": "Blue", "Yellow": "Yellow",
@@ -103,12 +109,81 @@ _VARIANT_LABEL: dict[str, str] = {
 }
 
 
+# ── TEST-ONLY ROUTE OVERRIDE (ruling 39, the expansion's still-open track) ────────────────────
+# The expansion duos (`tools/e2e_duo.py --game gen3_exp`) must keep running against a server
+# that refuses that cartridge by name -- the same shape as the client half of that lane, which
+# admits and routes the build through its own logged TEST-ONLY seam
+# (lua/tests/duo/duo_gen3_main.lua `test_admission_codec`). This is the server's half.
+#
+# FAIL-CLOSED BY CONSTRUCTION, and deliberately NOT an environment variable: every lane on
+# this machine shares one environment file, so an exported variable would hand the seam to the
+# FR/LG, RR and Emerald rows running in the same shell too. It is a process flag
+# (`server.server --test-only-route ROM_TYPE`) that no client message, no run registry and no
+# Manager row can set, it can only ever enable a rom_type named in `_TEST_ONLY_ROUTES` below
+# (anything else is refused rather than routed), and every route it does enable is logged with
+# `production:false` so a receipt can tell a routed run from a TEST-ONLY one.
+_TEST_ONLY_ROUTES: dict[str, str] = {
+    "emerald_expansion_28877d73": "gen3_exp",
+}
+_TEST_ONLY_ROUTE_OVERRIDES: dict[str, str] = {}
+
+
+def set_test_only_routes(rom_types) -> dict[str, str]:
+    """Enable the TEST-ONLY routes named in rom_types; returns the ones actually enabled.
+
+    REPLACES whatever was enabled: a server calls this once, at startup, a test resets it in a
+    finally. Naming a rom_type that is not a TEST-ONLY route is refused and logged -- the
+    override can open a ruling's seam, never invent a route.
+    """
+    _TEST_ONLY_ROUTE_OVERRIDES.clear()
+    for rom_type in rom_types or ():
+        game_id = _TEST_ONLY_ROUTES.get(rom_type)
+        if not game_id:
+            log.warning("TEST-ONLY route requested for %r, which is not a TEST-ONLY route; "
+                        "refused, routing is unchanged", rom_type)
+            continue
+        _TEST_ONLY_ROUTE_OVERRIDES[rom_type] = game_id
+        log.warning("TEST-ONLY route of %s -> %s enabled (production refuses it by name; "
+                    "production:false)", rom_type, game_id)
+    return dict(_TEST_ONLY_ROUTE_OVERRIDES)
+
+
+def test_only_routes() -> dict[str, str]:
+    """The TEST-ONLY routes enabled in THIS process, as rom_type -> game_id."""
+    return dict(_TEST_ONLY_ROUTE_OVERRIDES)
+
+
+def _test_only_routed(game_id: str) -> bool:
+    """True when a TEST-ONLY route enabled in this process points at game_id."""
+    return game_id in _TEST_ONLY_ROUTE_OVERRIDES.values()
+
+
+def _route(rom_type) -> str | None:
+    """The game_id a rom_type routes to in THIS process, or None when nothing routes it.
+
+    Three answers, in this order: a TEST-ONLY override (the duo's lane), a ruling that refuses
+    the rom_type by name, and only then `_ROM_TYPE_TO_GAME_ID`. So a refusal WINS over the
+    table -- the expansion keeps its row there, so the capabilities fixture, the dashboard and
+    the calc bridge can still NAME the cartridge, while no production hello can bind it --
+    and the one process that opened the seam routes it deliberately.
+    """
+    if not isinstance(rom_type, str) or not rom_type:
+        return None
+    override = _TEST_ONLY_ROUTE_OVERRIDES.get(rom_type)
+    if override:
+        return override
+    if rom_type in _REFUSED_ROM_TYPES:
+        return None
+    return _ROM_TYPE_TO_GAME_ID.get(rom_type)
+
+
 def game_id_for_rom_type(rom_type: str) -> str | None:
     """Resolve a ROM-type string (as sent by the Lua client) to an adapter game_id.
 
-    Returns None when the rom_type isn't recognized.
+    None when the rom_type isn't recognized, and None when a ruling refuses it by name --
+    which is what refuses its hello at the server's gate (see `_route`).
     """
-    return _ROM_TYPE_TO_GAME_ID.get(rom_type)
+    return _route(rom_type)
 
 
 def shared_calc_profile(profiles) -> dict | None:
@@ -124,10 +199,22 @@ def shared_calc_profile(profiles) -> dict | None:
     return shared if "gen" in shared and "dex" in shared else None
 
 
-# ROM types an owner ruling REFUSES (never routed), with the reason a refused hello names.
+# ROM types an owner ruling REFUSES, with the reason a refused hello names.
+#
+# A refusal here WINS over `_ROM_TYPE_TO_GAME_ID` (see `_route`), so a refused rom_type may
+# keep its row in that table and still route to nothing: the expansion does, because the
+# dashboard, the capabilities fixture and the calc bridge still have to be able to NAME the
+# cartridge. crystal_ap is the older shape -- no row either, because its adapter is gone too.
 _ARCHIPELAGO_CRYSTAL = "Archipelago Crystal is not supported (O-25)"
+# Owner ruling 39 (2026-09-27): the expansion is REGISTERED (gen3_exp has its adapter class and
+# its pack) and UNROUTED. Its XG track is still open, so no production run may use it; the
+# duo lane reaches it only through the logged TEST-ONLY route above.
+_EMERALD_EXPANSION_UNROUTED = (
+    "the Emerald expansion (pokeemerald-expansion 28877d73) is not routed yet (ruling 39); "
+    "its XG track is still open, so this server refuses it until the owner routes it")
 _REFUSED_ROM_TYPES: dict[str, str] = {
     "crystal_ap": _ARCHIPELAGO_CRYSTAL, "Crystal (AP)": _ARCHIPELAGO_CRYSTAL,
+    "emerald_expansion_28877d73": _EMERALD_EXPANSION_UNROUTED,
 }
 
 
@@ -152,12 +239,27 @@ _RETIRED_GAME_IDS: dict[str, str] = {
 }
 
 
+# game_ids that are REGISTERED but UNROUTED: the adapter class is there and its pack loads,
+# but no rom_type routes to it yet, so a run persisted under one is refused at load (exactly
+# like a retired one, through persisted_migration_refusal) rather than reopened under a
+# cartridge the server refuses to route. The TEST-ONLY route lifts this too, so the duo lane
+# that opened the seam can still reload its own data dir.
+_UNROUTED_GAME_IDS: dict[str, str] = {
+    "gen3_exp": _EMERALD_EXPANSION_UNROUTED,
+}
+
+
 def persisted_migration_refusal(old_game_id: str, new_game_id: str | None) -> str | None:
     """None if a run persisted under old_game_id may reload under new_game_id.
 
-    Otherwise, the operator-facing reason it must not (see _RETIRED_GAME_IDS). new_game_id
-    is what the run's rom_type resolves to today, or None when it no longer routes.
+    Otherwise, the operator-facing reason it must not (see _UNROUTED_GAME_IDS and
+    _RETIRED_GAME_IDS). new_game_id is what the run's rom_type resolves to today, or None when
+    it no longer routes.
     """
+    unrouted = _UNROUTED_GAME_IDS.get(old_game_id)
+    if unrouted and not _test_only_routed(old_game_id):
+        return (f"this run was saved under adapter {old_game_id!r}, and {unrouted}. Archive "
+                f"or delete this run's links.json to start a fresh run.")
     retired = _RETIRED_GAME_IDS.get(old_game_id)
     if not retired:
         return None
@@ -176,9 +278,13 @@ def persisted_migration_refusal(old_game_id: str, new_game_id: str | None) -> st
 # already fine-grained enough (the Gen 1 packs differ by game_id: gen1_rby vs
 # gen1_purergb). Adding a Gen 3 ROM variant: add it here too (docs/gen3/PLAN.md §5.1).
 _ROM_TYPE_TO_FOUNDATION: dict[str, str] = {
-    "firered": "gen3_frlg", "leafgreen": "gen3_frlg", "emerald": "gen3_frlg",
+    "firered": "gen3_frlg", "leafgreen": "gen3_frlg",
     "firered_ap": "gen3_frlg", "leafgreen_ap": "gen3_frlg",
     "firered_rr": "gen3_rr",
+    # Emerald shares Gen3Adapter (game_id gen3_frlge) but not FR/LG's layout or maps: its own
+    # pack, so it pairs only with Emerald (docs/gen3_emerald/PLAN.md §2 decision 5).
+    "emerald": "gen3_emerald",
+    "emerald_expansion_28877d73": "gen3_exp",
     # Gen 2 (docs/gen2/PLAN.md §5.9, owner O-16): ONE foundation for Gold, Silver and
     # Crystal, so every Gen 2 pairing is admitted with no title relation in shared code.
     # EVERY spelling has a row: the title-cased ones are what both clients send and what
@@ -197,19 +303,20 @@ def foundation_for_rom_type(rom_type: str) -> str | None:
     agree with this. An unknown rom_type answers None so the caller refuses it instead
     of silently reusing whichever adapter is already installed.
     """
-    game_id = _ROM_TYPE_TO_GAME_ID.get(rom_type)
+    game_id = _route(rom_type)
     if game_id is None:
         return None
     return _ROM_TYPE_TO_FOUNDATION.get(rom_type, game_id)
 
 
 def adapter_class_for_rom_type(rom_type: str) -> type[GameAdapter] | None:
-    """The registered adapter CLASS for a ROM type, without instantiating it.
+    """The registered adapter CLASS for a rom_type, without instantiating it.
 
     For pure class-level lookups (`pairing_kind`) on a hello that may still be refused:
-    no candidate adapter is installed to answer the question. None when unrecognized.
+    no candidate adapter is installed to answer the question. None when unrecognized --
+    and None when a ruling refuses the rom_type, which is the same answer.
     """
-    game_id = _ROM_TYPE_TO_GAME_ID.get(rom_type)
+    game_id = _route(rom_type)
     return _REGISTRY.get(game_id) if game_id else None
 
 
@@ -224,6 +331,10 @@ from .gen3_frlge import Gen3Adapter  # noqa: E402
 register_adapter("gen3_frlge", Gen3Adapter)
 # Backward compat: "frlg" was the old game_id; alias to gen3_frlge
 register_adapter("frlg", Gen3Adapter)
+
+from .gen3_expansion import Gen3ExpansionAdapter  # noqa: E402
+
+register_adapter("gen3_exp", Gen3ExpansionAdapter)
 
 from .gen4_hgsspt import Gen4Adapter  # noqa: E402
 

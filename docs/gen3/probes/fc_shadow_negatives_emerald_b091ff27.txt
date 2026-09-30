@@ -1,0 +1,109 @@
+# gen3_final_cut row=shadow_negatives_emerald item=§13.5_probe cut=b091ff27cfd68103c521c2f84c3dc7bedda7d329
+# lane=C:/slink-wt/g3-lane2
+# command: python tools/gen3_shadow_negatives.py docs/gen3_emerald/negatives_manifest.json   (cwd=C:/slink-wt/g3-lane2)
+# env: (none)
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T19:13:31 cpu=38% emuhawk=1 python=8
+start_utc=2026-09-27T23:13:29Z tracked_clean_before=True
+source_head: 414afb92
+PRESENT docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] map_load count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] pc_move count=6
+PRESENT docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] save count=1
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] battle_begin count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] battle_end count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] faint count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] evolve_species_store count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] trade_done count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_pc_2026-09-26.shadow.log [emerald_clean; observer] poison_faint count=0
+PRESENT docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] battle_begin count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] battle_end count=1
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] pc_move count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] save count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] evolve_species_store count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] trade_done count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] poison_faint count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] map_load count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_battle_2026-09-26.shadow.log [emerald_clean; observer] faint count=0
+PRESENT docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] battle_begin count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] battle_end count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] capture_wild count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] mon_given count=1
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] pc_move count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] save count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] evolve_species_store count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] trade_done count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] poison_faint count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] map_load count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_catch_2026-09-26.shadow.log [emerald_clean; observer] faint count=0
+PRESENT docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] battle_begin count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] battle_end count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] faint count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] whiteout count=1
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] pc_move count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] save count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] evolve_species_store count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] trade_done count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] poison_faint count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_lowhp_2026-09-26.shadow.log [emerald_clean; observer] map_load count=0
+PRESENT docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] battle_begin count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] battle_end count=1
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] pc_move count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] save count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] evolve_species_store count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] trade_done count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] poison_faint count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] map_load count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_trainer_2026-09-26.shadow.log [emerald_clean; observer] faint count=0
+PRESENT docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] battle_begin count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] battle_end count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] evolve_species_store count=1
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] pc_move count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] save count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] trade_done count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] poison_faint count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] map_load count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_evolve_2026-09-26.shadow.log [emerald_clean; observer] faint count=0
+PRESENT docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] faint count=1
+PRESENT docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] poison_faint count=1
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] pc_move count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] save count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] battle_begin count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] battle_end count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] mon_given count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] evolve_species_store count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] trade_done count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_poison_2026-09-26.shadow.log [emerald_clean; observer] map_load count=0
+PRESENT docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] mon_given count=1
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] pc_move count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] capture_wild count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] whiteout count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] save count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] battle_begin count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] battle_end count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] faint count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] evolve_species_store count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] trade_done count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] poison_faint count=0
+EXPECTED-ZERO PASS docs/gen3_emerald/probes/shadow_emerald_gift_2026-09-26.shadow.log [emerald_clean; observer] map_load count=0
+SUMMARY PASS receipts=8 checks=75 passed=75 failed=0
+Scope: normalized receipt counts; excerpts and log-format checks do not qualify hooks.
+exit=0 end_utc=2026-09-27T23:13:32Z tracked_clean_after=True classification=pass

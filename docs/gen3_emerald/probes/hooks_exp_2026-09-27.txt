@@ -1,0 +1,156 @@
+# X3 (EXP-X23) P1 hook probe on the expansion reference build, ROM sha1 28877d733492299599f2b8fff50493109d72653c, 2026-09-27.
+# SLINK_LIVE=1 pytest tests/live/test_gen3_probe_gates.py::test_gen3_hook_probe[exp] -> 1 passed; sites/checkpoint from data/games/gen3_exp/28877d73.
+DOMAIN EWRAM size=262144
+DOMAIN BIOS size=16384
+DOMAIN PALRAM size=1024
+DOMAIN VRAM size=98304
+DOMAIN OAM size=1024
+DOMAIN ROM size=33554432
+DOMAIN SRAM size=131072
+DOMAIN Combined WRAM size=294912
+DOMAIN System Bus size=268435456
+DOMAIN CPU registers size=288
+DOMAIN IWRAM size=32768
+PROBE g PASS flash=SRAM size=131072 scopes_bus=true params_exists=true params_call=true params=true
+BIND variant=emerald_expansion_28877d73 return=0x08082C94 watch=0x030066C4
+REGISTER frame addr=0x0817AAC0 id=bed07f5d-6014-4286-af9c-4cd2573d1c87 valid=true
+REGISTER return addr=0x08082C94 id=d960bf43-ae14-4e16-9461-0b82abddd8e7 valid=true
+REGISTER write0 addr=0x030066C4 id=c6a8a5ea-1ce2-495c-ae28-3fc1eefe963d valid=true
+REGISTER write1 addr=0x030066C5 id=73ad3cb3-e872-4781-b98f-8e54983e357a valid=true
+REGISTER write2 addr=0x030066C6 id=a65f1ffa-0687-43f9-bcff-d790d33fe52e valid=true
+REGISTER negative addr=0x09FFFFC0 id=44f73dfb-6369-4859-9406-4f1b56713ca8 valid=true
+PROBE a PASS frame_hits=30 bad=0 return_registration=true expected_addr=0x0817AAC0 first_raw_r15=0x0817AAC2
+PROBE a-return OPEN hits=0 bad=0 battle_not_required=true
+PROBE b-base PASS natural_hits=3 old_byte_differs_from_val=3 pre_store_bytes_in_HIT=true width_and_origin_unavailable=true
+PROBE b-interior OPEN registered=true plus1_hits=0 plus2_hits=0 overlap_counts_not_access_counts=true byte_halfword_word_origins_UNVERIFIED
+PROBE c PASS same_value=true callback_delta=0 error=nil
+PROBE e PASS addr=0x09FFFFC0 filler=true hits=0 claim=observed_window_only
+REGISTER after-reset addr=0x0817AAC0 id=d0f0871a-3edf-4ad6-8019-5473fb8667a2 valid=true
+REGISTER liveness addr=0x0817AAC0 id=c0ced9a0-0584-443a-99e6-6db9feb92f66 valid=true
+PROBE d PASS removed=true reset_call=true reset_seen=true post_reset_hits=30 after_unregister=0 live_control=60 reset_error=nil
+PROBE f OPEN sites=0 registered=true frames_off=600 frames_on=600 fps_off=60.0 fps_on=60.0 wall_clock_resolution_s=1 instruction_walk_UNVERIFIED=true
+HIT write+0 phase=natural addr=0x030066C4 val=0x081617D1 flags=8192 r15=0x0817AC4A cpsr=0x4000003F T=1 mode=31 frame=12 armed=12 before=0
+HIT write+0 phase=natural addr=0x030066C4 val=0x081617D1 flags=8192 r15=0x0817AC4A cpsr=0x4000003F T=1 mode=31 frame=12 armed=12 before=0
+HIT write+0 phase=natural addr=0x030066C4 val=0x081617D1 flags=8192 r15=0x0817AC4A cpsr=0x4000003F T=1 mode=31 frame=12 armed=12 before=0
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x0000003F T=1 mode=31 frame=13 armed=13 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=15 armed=15 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=16 armed=16 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=17 armed=17 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=18 armed=18 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=19 armed=19 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=20 armed=20 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=21 armed=21 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=22 armed=22 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=23 armed=23 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=24 armed=24 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=25 armed=25 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=26 armed=26 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=27 armed=27 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=28 armed=28 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=29 armed=29 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=30 armed=30 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=31 armed=31 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=32 armed=32 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=33 armed=33 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=34 armed=34 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=35 armed=35 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=36 armed=36 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=37 armed=37 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=38 armed=38 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=39 armed=39 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=40 armed=40 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=41 armed=41 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=42 armed=42 before=nil
+HIT frame_control phase=natural addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=43 armed=43 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x0000003F T=1 mode=31 frame=13 armed=13 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=15 armed=15 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=16 armed=16 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=17 armed=17 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=18 armed=18 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=19 armed=19 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=20 armed=20 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=21 armed=21 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=22 armed=22 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=23 armed=23 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=24 armed=24 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=25 armed=25 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=26 armed=26 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=27 armed=27 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=28 armed=28 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=29 armed=29 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=30 armed=30 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=31 armed=31 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=32 armed=32 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=33 armed=33 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=34 armed=34 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=35 armed=35 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=36 armed=36 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=37 armed=37 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=38 armed=38 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=39 armed=39 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=40 armed=40 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=41 armed=41 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=42 armed=42 before=nil
+HIT after_reset phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=43 armed=43 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=44 armed=44 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=45 armed=45 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=46 armed=46 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=47 armed=47 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=48 armed=48 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=49 armed=49 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=50 armed=50 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=51 armed=51 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=52 armed=52 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=53 armed=53 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=54 armed=54 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=55 armed=55 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=56 armed=56 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=57 armed=57 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=58 armed=58 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=59 armed=59 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=60 armed=60 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=61 armed=61 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=62 armed=62 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=63 armed=63 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=64 armed=64 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=65 armed=65 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=66 armed=66 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=67 armed=67 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=68 armed=68 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=69 armed=69 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=70 armed=70 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=71 armed=71 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=72 armed=72 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=73 armed=73 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=74 armed=74 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=75 armed=75 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=76 armed=76 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=77 armed=77 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=78 armed=78 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=79 armed=79 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=80 armed=80 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=81 armed=81 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=82 armed=82 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=83 armed=83 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=84 armed=84 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=85 armed=85 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=86 armed=86 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=87 armed=87 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=88 armed=88 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=89 armed=89 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=90 armed=90 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=91 armed=91 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=92 armed=92 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=93 armed=93 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=94 armed=94 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=95 armed=95 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=96 armed=96 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=97 armed=97 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=98 armed=98 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=99 armed=99 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=100 armed=100 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=101 armed=101 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=102 armed=102 before=nil
+HIT liveness phase=reset addr=0x0817AAC0 val=0x00000000 flags=16384 r15=0x0817AAC2 cpsr=0x6000003F T=1 mode=31 frame=103 armed=103 before=nil
+COUNTERS callback_errors=0 dropped=0
+RESULT: PASS

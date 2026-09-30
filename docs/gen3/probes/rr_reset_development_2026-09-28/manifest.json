@@ -1,0 +1,618 @@
+{
+  "files": [
+    {
+      "archived": "success_runner.log",
+      "bytes": 2955,
+      "role": "success raw runner receipt",
+      "sha256": "b481c4768973760a76fb07f6bff0209f2e74a1dbe2da6a7104bb76b630282fd6",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383.log"
+    },
+    {
+      "archived": "success_a_initial.txt",
+      "bytes": 12034,
+      "role": "success a initial Lua receipt",
+      "sha256": "5a381c0674f7db2a76f2b596c94ae98ca9101e4edbe4028d241f96ac26451f57",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/patch/build/e2e_trade_reset_success_gen3_a_result.txt"
+    },
+    {
+      "archived": "success_a_reload.txt",
+      "bytes": 2942,
+      "role": "success a reload Lua receipt",
+      "sha256": "77522ea9adfe4ddffccd4e53e6d4c38f999a63650a2caba85450326de904de09",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/patch/build/e2e_trade_reset_success_gen3_a_rr_reset_reload_result.txt"
+    },
+    {
+      "archived": "success_b_initial.txt",
+      "bytes": 10116,
+      "role": "success b initial Lua receipt",
+      "sha256": "7bee2c80b9bab5f72612c510bb88283c1d10e372e406704fe1d4975cb17b5f1b",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/patch/build/e2e_trade_reset_success_gen3_b_result.txt"
+    },
+    {
+      "archived": "success_b_reload.txt",
+      "bytes": 1131,
+      "role": "success b reload Lua receipt",
+      "sha256": "7328a979258bc5bedf12f265397d817624664c0b7bc1a4b9c84019bc52d36e7f",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/patch/build/e2e_trade_reset_success_gen3_b_rr_reset_reload_result.txt"
+    },
+    {
+      "archived": "success_pydec.txt",
+      "bytes": 1775,
+      "role": "success PYDEC oracle receipt",
+      "sha256": "64a2ad441c866d4ae75dc882d2d614072666621bd80d1050e41d1e9f25d7de1f",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/patch/build/e2e_trade_reset_success_gen3_pydec_result.txt"
+    },
+    {
+      "archived": "success_final_links.json",
+      "bytes": 3149,
+      "role": "success raw server link state",
+      "sha256": "55bce0be5c05531774c2d6f046df2d1913b9d764f079ac78a9190a0df0bbcedd",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/links.json"
+    },
+    {
+      "archived": "success_initial_links.json",
+      "bytes": 3149,
+      "role": "success raw server link state",
+      "sha256": "55bce0be5c05531774c2d6f046df2d1913b9d764f079ac78a9190a0df0bbcedd",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/links.json"
+    },
+    {
+      "bytes": 321833,
+      "role": "success server wire a full private wire",
+      "sha256": "5ce76783a9607a41b57691d28d3bcf83192e67caf60e8711153f62e56c7d110e",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/wire/wire_a.jsonl"
+    },
+    {
+      "archived": "success_wire_a_excerpt.jsonl",
+      "bytes": 5613,
+      "excerpt_of": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/wire/wire_a.jsonl",
+      "role": "success server wire a exact raw-line excerpt",
+      "sha256": "339af8bf9ba1957620ed500127e0d901bef1ae8645b51f3820762ee1c6be3f78",
+      "source": "C:/slink-wt/core-rr-reset/docs/gen3/probes/rr_reset_development_2026-09-28/success_wire_a_excerpt.jsonl",
+      "source_lines": [
+        6,
+        388,
+        390,
+        391,
+        585,
+        586,
+        587,
+        594
+      ]
+    },
+    {
+      "bytes": 337744,
+      "role": "success server wire b full private wire",
+      "sha256": "de36920f5c0be55bee8bc71268e8d07d3abccec13499f558627d1cc29cf51b72",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/wire/wire_b.jsonl"
+    },
+    {
+      "archived": "success_wire_b_excerpt.jsonl",
+      "bytes": 5544,
+      "excerpt_of": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/wire/wire_b.jsonl",
+      "role": "success server wire b exact raw-line excerpt",
+      "sha256": "9aca0c82b5bdace5ab87a20e878cdd640fc1ec4b1ada91bbb82ca33a9a55dc3d",
+      "source": "C:/slink-wt/core-rr-reset/docs/gen3/probes/rr_reset_development_2026-09-28/success_wire_b_excerpt.jsonl",
+      "source_lines": [
+        6,
+        406,
+        408,
+        409,
+        431,
+        616,
+        618,
+        619,
+        631
+      ]
+    },
+    {
+      "bytes": 2874,
+      "role": "success retained private run artifact",
+      "sha256": "f18a6f2dea196e05ee19ce9ca4dced58dbffa35df2a49210daf92fd9ce90d17d",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/events.json"
+    },
+    {
+      "bytes": 3149,
+      "role": "success retained private run artifact",
+      "sha256": "55bce0be5c05531774c2d6f046df2d1913b9d764f079ac78a9190a0df0bbcedd",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/links.json"
+    },
+    {
+      "bytes": 131088,
+      "role": "success retained private run artifact",
+      "sha256": "20280d9d1aaa83d1a527fa93601b54fc0454a2a18e38574e3052b4de596f98e0",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/a_battery.bin"
+    },
+    {
+      "bytes": 131072,
+      "role": "success retained private run artifact",
+      "sha256": "32450be9677bc75376e40e7a298b8c4c6cdb87dddd700561797ab538eeab8476",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/a_e2e_trade_reset_success_gen3_a_1_witness.bin"
+    },
+    {
+      "bytes": 8160,
+      "role": "success retained private run artifact",
+      "sha256": "4a5bcb337f8c3e138948993081e3fee9293a41b4dcb529e30f71c0d33d21a0eb",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/a_e2e_trade_reset_success_gen3_a_1_witness_ext.bin"
+    },
+    {
+      "bytes": 80,
+      "role": "success retained private run artifact",
+      "sha256": "749cf26baadac9951e872ff1c2577adb68f65db25447b5d794031c968171e7a5",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/a_native_witness.bin"
+    },
+    {
+      "bytes": 12034,
+      "role": "success retained private run artifact",
+      "sha256": "5a381c0674f7db2a76f2b596c94ae98ca9101e4edbe4028d241f96ac26451f57",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/a_receipt.txt"
+    },
+    {
+      "bytes": 131088,
+      "role": "success retained private run artifact",
+      "sha256": "ad6c8dec7b75bdd306f613a0b70e369644979c5d5f25878bb931ea2d5993fa86",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/b_battery.bin"
+    },
+    {
+      "bytes": 131072,
+      "role": "success retained private run artifact",
+      "sha256": "c00a16e293719e4c917d00bb9295b0c3693460c3a5b8fc42d7bbde88df870f18",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/b_e2e_trade_reset_success_gen3_b_1_witness.bin"
+    },
+    {
+      "bytes": 8160,
+      "role": "success retained private run artifact",
+      "sha256": "4a5bcb337f8c3e138948993081e3fee9293a41b4dcb529e30f71c0d33d21a0eb",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/b_e2e_trade_reset_success_gen3_b_1_witness_ext.bin"
+    },
+    {
+      "bytes": 80,
+      "role": "success retained private run artifact",
+      "sha256": "ec04de4dd646445f6df77f0e60a817c4a44cc54b4b957b7979e718cfcda22f31",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/b_native_witness.bin"
+    },
+    {
+      "bytes": 10116,
+      "role": "success retained private run artifact",
+      "sha256": "7bee2c80b9bab5f72612c510bb88283c1d10e372e406704fe1d4975cb17b5f1b",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/b_receipt.txt"
+    },
+    {
+      "bytes": 3149,
+      "role": "success retained private run artifact",
+      "sha256": "55bce0be5c05531774c2d6f046df2d1913b9d764f079ac78a9190a0df0bbcedd",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/links.json"
+    },
+    {
+      "bytes": 36,
+      "role": "success retained private run artifact",
+      "sha256": "8557bca585565652fcaa867cbbcc370322c9868cfbac37d95648639dcfb8303f",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/slink_gen3_trade.guard"
+    },
+    {
+      "bytes": 1191,
+      "role": "success retained private run artifact",
+      "sha256": "f9b8c52169eeacd4229dc024672d874ab5947638f4249451eafcc8959df5dd3b",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/rr_reset_initial/slink_gen3_trade.log"
+    },
+    {
+      "bytes": 131088,
+      "role": "success retained private run artifact",
+      "sha256": "18a54259c98d8951e2ea175d6b64c2726401e7f0b0ad8745c9728d6615a951eb",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/saveram_a/slink RR.SaveRAM"
+    },
+    {
+      "bytes": 131088,
+      "role": "success retained private run artifact",
+      "sha256": "20280d9d1aaa83d1a527fa93601b54fc0454a2a18e38574e3052b4de596f98e0",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/saveram_a/slink RR.SaveRAM.bak"
+    },
+    {
+      "bytes": 131088,
+      "role": "success retained private run artifact",
+      "sha256": "b68e24266c0736ca528008732ae25d7b7563044e6bde968c43ca46c932075466",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/saveram_b/slink RR.SaveRAM"
+    },
+    {
+      "bytes": 131088,
+      "role": "success retained private run artifact",
+      "sha256": "ad6c8dec7b75bdd306f613a0b70e369644979c5d5f25878bb931ea2d5993fa86",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/saveram_b/slink RR.SaveRAM.bak"
+    },
+    {
+      "bytes": 4551,
+      "role": "success retained private run artifact",
+      "sha256": "5d8a0d2e8733ad82915d0e091d85dc5670e31578e2faec2c1ab68189da22b00c",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/server.log"
+    },
+    {
+      "bytes": 5131,
+      "role": "success retained private run artifact",
+      "sha256": "18a52117223176b0ece7bbc09099b976343eaf05bd2871cf037a26e4a540daa1",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_success_gen3_7t_jz54n/slink.log"
+    },
+    {
+      "bytes": 33554432,
+      "role": "success source/input patch/build/slink_RR.gba",
+      "sha256": "d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/patch/build/slink_RR.gba"
+    },
+    {
+      "bytes": 131072,
+      "role": "success source/input tests/fixtures/gen3/rr_battle2.sav",
+      "sha256": "4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/tests/fixtures/gen3/rr_battle2.sav"
+    },
+    {
+      "bytes": 131072,
+      "role": "success source/input tests/fixtures/gen3/rr_battle2_b.sav",
+      "sha256": "7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/tests/fixtures/gen3/rr_battle2_b.sav"
+    },
+    {
+      "bytes": 22806,
+      "role": "success source/input data/games/gen3_rr/profile.json",
+      "sha256": "96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/data/games/gen3_rr/profile.json"
+    },
+    {
+      "bytes": 17844,
+      "role": "success source/input data/games/gen3_rr/write_checkpoint.json",
+      "sha256": "f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/data/games/gen3_rr/write_checkpoint.json"
+    },
+    {
+      "bytes": 24416,
+      "role": "success source/input lua/gen3/run.lua",
+      "sha256": "33b3e804a68fd80669cc2d5d009e93b58fd30079e3479208c7c32074430e6ca5",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/lua/gen3/run.lua"
+    },
+    {
+      "bytes": 117571,
+      "role": "success source/input lua/gen3/client.lua",
+      "sha256": "f9462c814232506dae55534a6f026e8fdc588f2d61e094eb470b26f0cb105b59",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/lua/gen3/client.lua"
+    },
+    {
+      "bytes": 23568,
+      "role": "success source/input lua/gen3/trade_journal.lua",
+      "sha256": "a84a2539357788497a194f4084abd4ea3ca324aaff5f4ad4ab61351575157e4a",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/lua/gen3/trade_journal.lua"
+    },
+    {
+      "bytes": 272834,
+      "role": "success source/input server/state.py",
+      "sha256": "1e2ced936950fd15e25de24af51c05ec213981946835888d748e16bc00769af0",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/server/state.py"
+    },
+    {
+      "bytes": 644224,
+      "role": "success source/input tools/e2e_duo.py",
+      "sha256": "3acf7304030d7cb57559d659acd13cd9400100ec193a33dca80395c35bb00a93",
+      "source": "C:/slink-wt/rr-reset-success-dev-3383/tools/e2e_duo.py"
+    },
+    {
+      "archived": "commit_runner.log",
+      "bytes": 2947,
+      "role": "commit raw runner receipt",
+      "sha256": "bebac8a252ab1a83be319f775aa3276d00582e04507a85c310337e4271090e39",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e.log"
+    },
+    {
+      "archived": "commit_a_initial.txt",
+      "bytes": 12677,
+      "role": "commit a initial Lua receipt",
+      "sha256": "45167eb3a95c2fdd6d03edcb07caee9d325248a58ef3523d9e54b1c9d5e6e3fc",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/patch/build/e2e_trade_reset_commit_gen3_a_result.txt"
+    },
+    {
+      "archived": "commit_a_reload.txt",
+      "bytes": 4285,
+      "role": "commit a reload Lua receipt",
+      "sha256": "c6c46e56e113259ec1173606f786419446c0c11c7c79a5496b926eb3fc20e446",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/patch/build/e2e_trade_reset_commit_gen3_a_rr_reset_reload_result.txt"
+    },
+    {
+      "archived": "commit_b_initial.txt",
+      "bytes": 9358,
+      "role": "commit b initial Lua receipt",
+      "sha256": "d0d8b3e9c7e25fe47f57324d9600f94c948ec24f22aea62a6bd6d2decec4d117",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/patch/build/e2e_trade_reset_commit_gen3_b_result.txt"
+    },
+    {
+      "archived": "commit_b_reload.txt",
+      "bytes": 1130,
+      "role": "commit b reload Lua receipt",
+      "sha256": "f83ef5cfa2d5063d4af006bce4bbff2a7a6fda2b0012fbd6441d60434c382bf5",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/patch/build/e2e_trade_reset_commit_gen3_b_rr_reset_reload_result.txt"
+    },
+    {
+      "archived": "commit_pydec.txt",
+      "bytes": 1773,
+      "role": "commit PYDEC oracle receipt",
+      "sha256": "32b8210320935467cd5e623f38c43305c424185d85be23594c93923852e9ece8",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/patch/build/e2e_trade_reset_commit_gen3_pydec_result.txt"
+    },
+    {
+      "archived": "commit_final_links.json",
+      "bytes": 4254,
+      "role": "commit raw server link state",
+      "sha256": "3825bd74b9f7a20b36f38bc1cad958cd9f29d5a38006aed7e55689362b542cf9",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/links.json"
+    },
+    {
+      "archived": "commit_initial_links.json",
+      "bytes": 4103,
+      "role": "commit raw server link state",
+      "sha256": "70209acb2d8f6bcfc839838ea965bcf7a79709d464cccd8c4cc0128f9f685f27",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/links.json"
+    },
+    {
+      "archived": "commit_staged_links.json",
+      "bytes": 372,
+      "role": "commit raw pre-GO link baseline",
+      "sha256": "08f6b0cbb27055972748780f8e5195ed5a2adb55ffdfe238cf81aedae99ead48",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_staged_links.json"
+    },
+    {
+      "bytes": 319916,
+      "role": "commit server wire a full private wire",
+      "sha256": "13e48813752d664964f15b3fbca3736d9fdb1282a7fb79736785c0863195ea79",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/wire/wire_a.jsonl"
+    },
+    {
+      "archived": "commit_wire_a_excerpt.jsonl",
+      "bytes": 5939,
+      "excerpt_of": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/wire/wire_a.jsonl",
+      "role": "commit server wire a exact raw-line excerpt",
+      "sha256": "1235a1dc6f4791861cd7f8dd3bb6da4568646327fe466f32619be75d13602158",
+      "source": "C:/slink-wt/core-rr-reset/docs/gen3/probes/rr_reset_development_2026-09-28/commit_wire_a_excerpt.jsonl",
+      "source_lines": [
+        6,
+        462,
+        464,
+        465,
+        470,
+        471,
+        472,
+        473,
+        476
+      ]
+    },
+    {
+      "bytes": 356526,
+      "role": "commit server wire b full private wire",
+      "sha256": "c2c514f17284b17320f99550ef5f33b2dcce7856960508b27e33b07740c6efcb",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/wire/wire_b.jsonl"
+    },
+    {
+      "archived": "commit_wire_b_excerpt.jsonl",
+      "bytes": 4958,
+      "excerpt_of": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/wire/wire_b.jsonl",
+      "role": "commit server wire b exact raw-line excerpt",
+      "sha256": "f6cc74cc60e66b3f785d14b10fe9f623452ebed46078ceb8db719df74607d1f6",
+      "source": "C:/slink-wt/core-rr-reset/docs/gen3/probes/rr_reset_development_2026-09-28/commit_wire_b_excerpt.jsonl",
+      "source_lines": [
+        6,
+        466,
+        468,
+        469,
+        487,
+        672,
+        676,
+        677
+      ]
+    },
+    {
+      "bytes": 2890,
+      "role": "commit retained private run artifact",
+      "sha256": "28d25a83eb75dbdcb080bb936cd3ed238deddc81ac8984344f1bd655e4b4fc91",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/events.json"
+    },
+    {
+      "bytes": 4254,
+      "role": "commit retained private run artifact",
+      "sha256": "3825bd74b9f7a20b36f38bc1cad958cd9f29d5a38006aed7e55689362b542cf9",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/links.json"
+    },
+    {
+      "bytes": 131088,
+      "role": "commit retained private run artifact",
+      "sha256": "b0b15e43cd7f632c799abb43d0906b10b494dce875c5c63ba7feca025ea7d965",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/a_battery.bin"
+    },
+    {
+      "bytes": 131072,
+      "role": "commit retained private run artifact",
+      "sha256": "09f8ee33da230af7bea09e0bf773cdf04bb5bc998d613c3b3bc2fd26e2f8477f",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/a_e2e_trade_reset_commit_gen3_a_1_witness.bin"
+    },
+    {
+      "bytes": 8160,
+      "role": "commit retained private run artifact",
+      "sha256": "4a5bcb337f8c3e138948993081e3fee9293a41b4dcb529e30f71c0d33d21a0eb",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/a_e2e_trade_reset_commit_gen3_a_1_witness_ext.bin"
+    },
+    {
+      "bytes": 80,
+      "role": "commit retained private run artifact",
+      "sha256": "7b863a1e31cdd66acbc796f0245d46de914639f9647af2f83d4de5489bc917d2",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/a_native_witness.bin"
+    },
+    {
+      "bytes": 12677,
+      "role": "commit retained private run artifact",
+      "sha256": "45167eb3a95c2fdd6d03edcb07caee9d325248a58ef3523d9e54b1c9d5e6e3fc",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/a_receipt.txt"
+    },
+    {
+      "bytes": 131088,
+      "role": "commit retained private run artifact",
+      "sha256": "cc5c353ed77187c66ba795dfca8b988ea3fad1dfe6b44c81aef737b1734b955a",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/b_battery.bin"
+    },
+    {
+      "bytes": 131072,
+      "role": "commit retained private run artifact",
+      "sha256": "8ad70218abbfdf32175ad122032007602bfdf2400fde145eb4c25f93753fd6e1",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/b_e2e_trade_reset_commit_gen3_b_1_witness.bin"
+    },
+    {
+      "bytes": 8160,
+      "role": "commit retained private run artifact",
+      "sha256": "4a5bcb337f8c3e138948993081e3fee9293a41b4dcb529e30f71c0d33d21a0eb",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/b_e2e_trade_reset_commit_gen3_b_1_witness_ext.bin"
+    },
+    {
+      "bytes": 80,
+      "role": "commit retained private run artifact",
+      "sha256": "9ae449b5458c122178e8e1a05157064f73296a3e2fe52eb86a5788f5dcca16e0",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/b_native_witness.bin"
+    },
+    {
+      "bytes": 9358,
+      "role": "commit retained private run artifact",
+      "sha256": "d0d8b3e9c7e25fe47f57324d9600f94c948ec24f22aea62a6bd6d2decec4d117",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/b_receipt.txt"
+    },
+    {
+      "bytes": 4103,
+      "role": "commit retained private run artifact",
+      "sha256": "70209acb2d8f6bcfc839838ea965bcf7a79709d464cccd8c4cc0128f9f685f27",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/links.json"
+    },
+    {
+      "bytes": 35,
+      "role": "commit retained private run artifact",
+      "sha256": "61ef2379c7a1d2cfa7dcb2c02f31ad8753b895d1d3ba16c33655ed0bea67dc6d",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/slink_gen3_trade.guard"
+    },
+    {
+      "bytes": 883,
+      "role": "commit retained private run artifact",
+      "sha256": "1ce7058a4a7918f5863b2d3223420fd22dfdbe637cea788d082a125cb07bc6a8",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_initial/slink_gen3_trade.log"
+    },
+    {
+      "bytes": 372,
+      "role": "commit retained private run artifact",
+      "sha256": "08f6b0cbb27055972748780f8e5195ed5a2adb55ffdfe238cf81aedae99ead48",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/rr_reset_staged_links.json"
+    },
+    {
+      "bytes": 131088,
+      "role": "commit retained private run artifact",
+      "sha256": "0a4ec4afe14f6b0176cea14f45abeb27abfa6087caf3abb7cafb83e8dd672612",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/saveram_a/slink RR.SaveRAM"
+    },
+    {
+      "bytes": 131088,
+      "role": "commit retained private run artifact",
+      "sha256": "b0b15e43cd7f632c799abb43d0906b10b494dce875c5c63ba7feca025ea7d965",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/saveram_a/slink RR.SaveRAM.bak"
+    },
+    {
+      "bytes": 131088,
+      "role": "commit retained private run artifact",
+      "sha256": "58289e8d2536d4a20e33e6343793e6527ce7512fb5344d0a83399c8c3012aa5e",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/saveram_b/slink RR.SaveRAM"
+    },
+    {
+      "bytes": 131088,
+      "role": "commit retained private run artifact",
+      "sha256": "cc5c353ed77187c66ba795dfca8b988ea3fad1dfe6b44c81aef737b1734b955a",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/saveram_b/slink RR.SaveRAM.bak"
+    },
+    {
+      "bytes": 4600,
+      "role": "commit retained private run artifact",
+      "sha256": "cdf0117fc6d2b1ebf367489fb01a2469e9ec27c89c8d99d8e59b27a6dc81d421",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/server.log"
+    },
+    {
+      "bytes": 5180,
+      "role": "commit retained private run artifact",
+      "sha256": "5ed6ef70417232a3da533969245c4acb9b22b971ec1f8b6021647722874b561e",
+      "source": "C:/Users/howar/AppData/Local/Temp/slink_duo_trade_reset_commit_gen3_rp368q57/slink.log"
+    },
+    {
+      "bytes": 33554432,
+      "role": "commit source/input patch/build/slink_RR.gba",
+      "sha256": "d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/patch/build/slink_RR.gba"
+    },
+    {
+      "bytes": 131072,
+      "role": "commit source/input tests/fixtures/gen3/rr_battle2.sav",
+      "sha256": "4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/tests/fixtures/gen3/rr_battle2.sav"
+    },
+    {
+      "bytes": 131072,
+      "role": "commit source/input tests/fixtures/gen3/rr_battle2_b.sav",
+      "sha256": "7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/tests/fixtures/gen3/rr_battle2_b.sav"
+    },
+    {
+      "bytes": 22806,
+      "role": "commit source/input data/games/gen3_rr/profile.json",
+      "sha256": "96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/data/games/gen3_rr/profile.json"
+    },
+    {
+      "bytes": 17844,
+      "role": "commit source/input data/games/gen3_rr/write_checkpoint.json",
+      "sha256": "f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/data/games/gen3_rr/write_checkpoint.json"
+    },
+    {
+      "bytes": 24416,
+      "role": "commit source/input lua/gen3/run.lua",
+      "sha256": "33b3e804a68fd80669cc2d5d009e93b58fd30079e3479208c7c32074430e6ca5",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/lua/gen3/run.lua"
+    },
+    {
+      "bytes": 117982,
+      "role": "commit source/input lua/gen3/client.lua",
+      "sha256": "346201ecb705c739d4d27d2d27ce735eb47eaf962b1058917f2e4d131c1c1efa",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/lua/gen3/client.lua"
+    },
+    {
+      "bytes": 23568,
+      "role": "commit source/input lua/gen3/trade_journal.lua",
+      "sha256": "a84a2539357788497a194f4084abd4ea3ca324aaff5f4ad4ab61351575157e4a",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/lua/gen3/trade_journal.lua"
+    },
+    {
+      "bytes": 272834,
+      "role": "commit source/input server/state.py",
+      "sha256": "1e2ced936950fd15e25de24af51c05ec213981946835888d748e16bc00769af0",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/server/state.py"
+    },
+    {
+      "bytes": 646756,
+      "role": "commit source/input tools/e2e_duo.py",
+      "sha256": "beed87e3af33eecbdd837c7715d6b4c0bae5471ec464a475844f6e113812dba2",
+      "source": "C:/slink-wt/rr-reset-commit-dev-b1e/tools/e2e_duo.py"
+    }
+  ],
+  "runs": {
+    "commit": {
+      "command": "python tools/e2e_duo.py --game gen3_rr --scenario trade_reset_commit_gen3 --keep-data --lane rr-reset-commit-dev-b1e",
+      "private_data": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_reset_commit_gen3_rp368q57",
+      "result": "PASS (attempt 1 of 1)",
+      "root": "C:\\slink-wt\\rr-reset-commit-dev-b1e",
+      "scenario": "trade_reset_commit_gen3",
+      "source": "b1e039f85706896a5ccc05ef7e236fc800237835"
+    },
+    "success": {
+      "command": "python tools/e2e_duo.py --game gen3_rr --scenario trade_reset_success_gen3 --keep-data --lane rr-reset-success-dev-3383",
+      "private_data": "C:\\Users\\howar\\AppData\\Local\\Temp\\slink_duo_trade_reset_success_gen3_7t_jz54n",
+      "result": "PASS (attempt 1 of 1)",
+      "root": "C:\\slink-wt\\rr-reset-success-dev-3383",
+      "scenario": "trade_reset_success_gen3",
+      "source": "3383c8d28a5895ca5f296c7b0d73ab836e4cdd6a"
+    }
+  },
+  "schema": 1
+}

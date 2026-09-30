@@ -1,0 +1,281 @@
+duo instance b scenario=linked_faint_active_lhammer_gen3 phase=initial title=radical_red attempt=1
+[client] [SLink] TCP connecting to 127.0.0.1:56026 (non-blocking)…
+[client] [SLink-gen3] session counter unavailable (slink_gen3_session.baton held or unreadable at the install root); native trade is off this session
+[client] [SLink-gen3] gen3_rr/radical_red (companion by hash) player b -> 127.0.0.1:56026 (rom da579690)
+client built by lua/gen3/run.lua: title=radical_red player=b -> 127.0.0.1:56026
+[client] [SLink] TCP connected to 127.0.0.1:56026
+[client] [SLink-gen3] writes ENABLED
+[client] [gen3] phase field frame=545 map=(3,19)
+MYKEY 0 EBEF11DA:D4223740
+PARTY slot=0 key=EBEF11DA:D4223740 species=277 level=6 hp=22/22
+MYKEY 1 F56D8C1D:D4223740
+PARTY slot=1 key=F56D8C1D:D4223740 species=1324 level=4 hp=18/18
+booted frame=545 map=map=787 at=(12,37) balls=9
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_id":3559012160,"party":
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+TX hello - {"area_id":"route_1","artifact_kind":"companion","badges":0,"ball_count":9,"event":"hello","foundation":"gen3_rr","has_pokeballs":true,"in_battle":false,"loc_name":"route1","ot_id":3559012160,"party":
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 618
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 618
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 620
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 620
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+JITTER requested=0 applied=0 attempt=1
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 663
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 663
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 663
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 663
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 663
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 663
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 663
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 663
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 663
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 663
+[client] [gen3] phase encounter-found frame=840 linked_faint_active lhammer: cycle 2 mid-step Left at (13,38)
+[client] [gen3] phase battle-state-saved frame=840 C:/slink-wt/g3-lane3-state/slink_fr_battle.State
+READY_ACTIVE EBEF11DA:D4223740 case=lhammer
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2283
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 2283
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 2283
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2283
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2283
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2283
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2283
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2283
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2283
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2283
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 2673
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 2673
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 2673
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 2673
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 2673
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 2673
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 2673
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 2673
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 2673
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 2673
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 3093
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 3093
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 3093
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 3093
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 3093
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 3093
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 3093
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 3093
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 3093
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 3093
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 3483
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 3483
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 3483
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 3483
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 3483
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 3483
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 3483
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 3483
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 3483
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 3483
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 3783
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 3783
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 3783
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 3783
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 3783
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 3783
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 3783
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 3783
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 3783
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 3783
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4173
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 4173
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 4173
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 4173
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 4173
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 4173
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 4173
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 4173
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 4173
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 4173
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4533
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 4533
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 4533
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 4533
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 4533
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 4533
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 4533
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 4533
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 4533
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 4533
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 4833
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 4833
+[client] [SLink-gen3] write native 0x0203FD6C +22 frame 4833
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 4833
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 4833
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 4833
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 4833
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 4833
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 4833
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 4833
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5073
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 5073
+[client] [SLink-gen3] write native 0x0203FD6C +21 frame 5073
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5073
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5073
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5073
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5073
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5073
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5073
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5073
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5283
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 5283
+[client] [SLink-gen3] write native 0x0203FD6C +20 frame 5283
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5283
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5283
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5283
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5283
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5283
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5283
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5283
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5553
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 5553
+[client] [SLink-gen3] write native 0x0203FD6C +20 frame 5553
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5553
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5553
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5553
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5553
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5553
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5553
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5553
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5793
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 5793
+[client] [SLink-gen3] write native 0x0203FD6C +19 frame 5793
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5793
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5793
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5793
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5793
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5793
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5793
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5793
+RX force_faint key=EBEF11DA:D4223740
+RX play_sound
+RX memorialize key=EBEF11DA:D4223740
+RX game_over
+RX link_panel
+[client] [SLink-gen3] write battle_commit 0x02023DFC +4 frame 5822
+[client] [SLink-gen3] write battle_commit 0x02023E1B +1 frame 5822
+[client] [SLink-gen3] write battle_commit 0x02023D7C +1 frame 5822
+[client] [SLink-gen3] write battle_commit 0x02023E82 +1 frame 5822
+[client] [SLink-gen3] write battle_commit 0x03004FE0 +4 frame 5822
+[client] [SLink-gen3] force_faint: Perish commit battler=0 handoff=1 EBEF11DA:D4223740
+ACTIVE_COMMIT EBEF11DA:D4223740 frame=5822 writes=5 attempted=1215 handoff=1 status3=0x80020 ctrl=0x0802E33D counter=0 last_move=0 pp=35/30/25/35 why="active faint committed" case=lhammer
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5823
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 5823
+[client] [SLink-gen3] write native 0x0203FD6C +19 frame 5823
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5823
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5823
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5823
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5823
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5823
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5823
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5823
+HANDOFF EBEF11DA:D4223740 from=0x0802E33D to=0x0802E3B5 frames=1 exec_bit0=0
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 5943
+[client] [SLink-gen3] write native 0x0203FD4C +25 frame 5943
+[client] [SLink-gen3] write native 0x0203FD6C +19 frame 5943
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 5943
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 5943
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 5943
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 5943
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 5943
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 5943
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 5943
+ACTIVE_KO EBEF11DA:D4223740 frame=6062 in_battle=1 battle_hp=0 status3=0x80000 pp=35/30/25/35 last_move=0 inputs=119 keys=0x200 hp_writes=0 attempted=1411 case=lhammer
+FORCED_HP0 EBEF11DA:D4223740 frame=6062 in_battle=1 battler=1
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 6093
+[client] [SLink-gen3] write native 0x0203FD4C +22 frame 6093
+[client] [SLink-gen3] write native 0x0203FD6C +19 frame 6093
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 6093
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 6093
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 6093
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 6093
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 6093
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 6093
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 6093
+[client] [SLink-gen3] held: memorialize x1 (C:/slink-wt/g3-lane3/lua/gen3/safety.lua:105: forbidden state: callback1)
+TIMEOUT waiting for the faint site (hands-off) [tasks=[] storage_state=-1 script_status=2 result=0 menu_cursor=0]
+ENGINE_FAINT_SITE frame=6996 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=1
+ACTIVE_FAINT_SITE EBEF11DA:D4223740 frame=6996 active=0 battler0_slot=0 battle_hp=0 party_hp=0 counter=0->1
+LHAMMER_BALLS EBEF11DA:D4223740 balls=9 ball_id=0 unchanged
+SENT_OUT slot=1 battler_slot=1
+TX no_catch - {"area_id":"route_1","event":"no_catch","level":2,"player":"b","seq":234,"species_id":1222}
+TX safe - {"event":"safe","player":"b","seq":235}
+RX play_sound
+RX msgbox text=Route 1 is a dead zone!
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 7555
+[client] [SLink-gen3] write native 0x0203FD4C +22 frame 7555
+[client] [SLink-gen3] write native 0x0203FD6C +19 frame 7555
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 7555
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 7555
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 7555
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 7555
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 7555
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 7555
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 7555
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 7555
+[client] [SLink-gen3] held: memorialize x1 (C:/slink-wt/g3-lane3/lua/gen3/safety.lua:105: forbidden state: callback2)
+[client] [SLink-gen3] write overworld 0x02024638 +58 frame 7589
+[client] [SLink-gen3] write overworld 0x02024284 +100 frame 7589
+[client] [SLink-gen3] write overworld 0x020242E8 +100 frame 7589
+[client] [SLink-gen3] write overworld 0x02024029 +1 frame 7589
+TX memorialize_done EBEF11DA:D4223740 {"box":24,"event":"memorialize_done","key":"EBEF11DA:D4223740","player":"b","seq":237}
+RX link_panel
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 7592
+[client] [SLink-gen3] write native 0x0203FD4C +23 frame 7592
+[client] [SLink-gen3] write native 0x0203FD6C +19 frame 7592
+[client] [SLink-gen3] write native 0x0203FD8C +16 frame 7592
+[client] [SLink-gen3] write native 0x0203FDAC +13 frame 7592
+[client] [SLink-gen3] write native 0x0203FDCC +11 frame 7592
+[client] [SLink-gen3] write native 0x0203FDEC +10 frame 7592
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 7592
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 7592
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 7592
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 7592
+ACTIVE_OUTCOME EBEF11DA:D4223740 outcome=4 sent_out=1 whiteout_tx=0
+[client] [gen3] phase save-menu frame=7718 counter=4
+[client] [gen3] phase save-dialog frame=7865 row=4
+[client] [gen3] phase saved frame=7928 counter=4->5
+[client] [gen3] phase slot-complete frame=8802 sectors=14/14
+SAVE_WITNESS_DUMP path=patch/build/e2e_linked_faint_active_lhammer_gen3_b_1_witness.bin bytes=131072 saves=1 frame=8844 counter=5
+SAVE_WITNESS_EXT path=patch/build/e2e_linked_faint_active_lhammer_gen3_b_1_witness_ext.bin bytes=8160 saves=1
+SAVE_WITNESS linked_faint_active counter=4->5
+WRITES 204
+RESULT: PASS (P+H: engine Perish KO in battle with alternating L input (lhammer))

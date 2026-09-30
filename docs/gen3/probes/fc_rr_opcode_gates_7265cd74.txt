@@ -1,0 +1,20 @@
+# gen3_final_cut row=rr_opcode_gates item=G5-GATES-LIVE cut=7265cd745ecc75c567328d7e51c34bcad0fe09f8
+# lane=C:/slink-wt/g3-lane3
+# command: python -m pytest tests/live/test_lua_gates.py -q -p no:randomly -rs   (cwd=C:/slink-wt/g3-lane3)
+# env: SLINK_LIVE=1
+# verdict: PASS
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T23:29:06 cpu=79% emuhawk=3 python=15
+start_utc=2026-09-28T03:29:04Z tracked_clean_before=True
+...........................ssssssssssss                                                                         [100%]
+=========================== short test summary info ===========================
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_BATTLE_MESSAGE) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [6] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_MESSAGE; OP_PLAY_FANFARE rides with it) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: native text disabled for the RC (owner 2026-09-23, docs/gen3/TODO.md) (OP_SHOW_MESSAGE) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) (OP_GHOST_SPAWN talk-to-ghost) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:202: DEFERRED: peer ghost deferred post-RC (owner 2026-09-22, docs/gen3/TODO.md) (OP_SPAWN/DESPAWN_PEER_NPC, the ghost's engine NPC) — set SLINK_GATES_DEFERRED=1 to run it
+SKIPPED [1] tests\live\test_lua_gates.py:206: got empty parameter set for (gate)
+27 passed, 12 skipped in 120.02s (0:02:00)
+exit=0 end_utc=2026-09-28T03:31:08Z tracked_clean_after=True classification=pass

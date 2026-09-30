@@ -9,7 +9,18 @@ NOTE: Species IDs use Radical Red 4.1 (CFRU/DPE) internal ordering, NOT National
 Gen 1–2 IDs (1–251) match NatDex. Gen 3+ uses CFRU IDs which diverge.
 Gen 9 and RR-exclusive Sevii forms occupy custom slots.
 Regenerate with: python tools/gen_rr_species.py + tools/gen_rr_natdex.py
+RR families: python tools/gen_rr_evolutions.py --rom <clean RR ROM>
 """
+
+import json as _family_json
+from pathlib import Path as _FamilyPath
+
+# Required RR data, generated from the admitted ROM. Never fall back to the
+# generic name chains when a regional evolution is missing from those chains.
+_rr_family_path = _FamilyPath(__file__).resolve().parents[1] / "data/games/gen3_rr/evolution_families.json"
+_RR_EVO_FAMILY = {int(k): v for k, v in _family_json.loads(
+    _rr_family_path.read_text(encoding="utf-8"))["families"].items()}
+del _family_json, _FamilyPath, _rr_family_path
 
 # ── RR 4.1 internal species IDs → display names (1329 species) ──────────────
 # Keyed by RR internal ID (NOT national dex number).
@@ -576,13 +587,27 @@ for _cfru_id, _name in SPECIES_NAMES.items():
 del _cfru_id, _name, _nat
 
 
+def _rr_species_names() -> dict[int, str]:
+    import json
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[1] / "data/games/gen3_frlge/rr_species.json"
+    if not path.exists():
+        return {}
+    return {int(sid): name for sid, name in json.loads(path.read_text(encoding="utf-8")).items()}
+
+
+_RR_SPECIES_NAMES = _rr_species_names()
+
+
 def species_name(species_id: int, is_rr: bool = False) -> str:
     """Look up a species display name by ID.
 
     species_id is ALWAYS a CFRU internal ID (all ROM types use this).
-    SPECIES_NAMES is keyed by CFRU ID, so we always use it directly.
-    The is_rr parameter is kept for API compat but no longer changes behavior.
+    RR uses its generated catalog; generic/NatDex names retain the existing map.
     """
+    if is_rr and species_id in _RR_SPECIES_NAMES:
+        return _RR_SPECIES_NAMES[species_id]
     return SPECIES_NAMES.get(species_id, f"#{species_id}")
 
 
@@ -1545,9 +1570,11 @@ def base_form(species_id: int, is_rr: bool = True) -> int:
 
     Single-stage mons and base forms return themselves.
     species_id is ALWAYS a CFRU internal ID (all ROM types use this).
-    The is_rr parameter is kept for API compat but no longer changes behavior.
+    RR uses its own ROM evolution graph, including distinct regional chains.
+    Other titles keep the generic CFRU table used by their existing adapters.
     """
-    return EVO_FAMILY.get(species_id, species_id)
+    families = _RR_EVO_FAMILY if is_rr else EVO_FAMILY
+    return families.get(species_id, species_id)
 
 
 def natdex_base_form(natdex_id: int) -> int:

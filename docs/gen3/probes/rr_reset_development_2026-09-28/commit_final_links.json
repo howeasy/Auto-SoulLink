@@ -1,0 +1,202 @@
+{
+  "game_id": "gen3_frlge",
+  "rules": {
+    "species_lock": false,
+    "gender_lock": false,
+    "type_lock": false,
+    "explode_mode": false,
+    "rival_team_swap": false,
+    "overworld_presence": false,
+    "native_messages": false,
+    "native_sounds": false,
+    "battle_calc": true,
+    "pc_trade_npc": true
+  },
+  "links": [
+    {
+      "area_id": "duo",
+      "a": {
+        "key": "F56D8C1D:2BDDC8BF",
+        "level": 4,
+        "species": 1324,
+        "nickname": "Aaaaaaaaaa",
+        "is_shiny": false
+      },
+      "b": {
+        "key": "F56D8C1D:D4223740",
+        "level": 4,
+        "species": 1324,
+        "nickname": "Aaaaaaaaaa",
+        "is_shiny": false
+      },
+      "status": "alive",
+      "encounter_a": null,
+      "encounter_b": null,
+      "killed_at": null,
+      "cause": "",
+      "killer": null,
+      "initiating_player": ""
+    },
+    {
+      "area_id": "route_1",
+      "a": null,
+      "b": null,
+      "status": "dead",
+      "encounter_a": {
+        "key": "",
+        "level": 3,
+        "species": 288,
+        "nickname": "",
+        "is_shiny": false
+      },
+      "encounter_b": null,
+      "killed_at": "2026-09-28T14:31:02.341642+00:00",
+      "cause": "dead_zone",
+      "killer": null,
+      "initiating_player": "a"
+    }
+  ],
+  "area_states": {
+    "duo": "linked",
+    "route_1": "dead_zone",
+    "viridian_city": "pending_b"
+  },
+  "pending_captures": {},
+  "mon_stats": {
+    "a": {
+      "EBEF11DA:2BDDC8BF": {
+        "level": 6,
+        "maxHP": 22
+      },
+      "F56D8C1D:2BDDC8BF": {
+        "level": 4,
+        "maxHP": 18
+      }
+    },
+    "b": {
+      "EBEF11DA:D4223740": {
+        "level": 6,
+        "maxHP": 22
+      },
+      "F56D8C1D:D4223740": {
+        "level": 4,
+        "maxHP": 18
+      },
+      "F56D8C1D:2BDDC8BF": {
+        "level": 4,
+        "maxHP": 18
+      }
+    }
+  },
+  "pokeballs_obtained": {
+    "a": true,
+    "b": true
+  },
+  "rom_type": "firered_rr",
+  "artifact_kind": "companion",
+  "trainer_names": {
+    "a": "B",
+    "b": "BB"
+  },
+  "player_identity": {
+    "a": {
+      "ot_id": "735955135",
+      "trainer_name": "B"
+    },
+    "b": {
+      "ot_id": "3559012160",
+      "trainer_name": "BB"
+    }
+  },
+  "pending_memorials": {
+    "a": [],
+    "b": []
+  },
+  "retry_areas": {
+    "a": [],
+    "b": []
+  },
+  "bonus_keys": {
+    "a": [],
+    "b": []
+  },
+  "pending_bonus": {
+    "a": [],
+    "b": []
+  },
+  "ambiguous_keys": {
+    "a": {},
+    "b": {}
+  },
+  "key_migration_ledger": {
+    "a": [],
+    "b": []
+  },
+  "run_over": false,
+  "attempts_count": 0,
+  "pending_trade": {
+    "phase": "conflict",
+    "initiator": "a",
+    "token": "t1",
+    "reprompts": 0,
+    "age": 0,
+    "a_slot": 1,
+    "b_slot": 1,
+    "a_blob_hex": "1d8c6df5bfc8dd2bbbd5d5d5d5d5d5d5d5d50202bcffffffffffff00000000002c05000060000000003203002100e600000000002314000000000000000000000000000000650402ffffff3f000000000000000004ff1200120009000900080009000a00",
+    "b_blob_hex": "1d8c6df5403722d4bbd5d5d5d5d5d5d5d5d50202bcbcffffffffff00000000002c05000060000000003203002100e600000000002314000000000000000000000000000000650402ffffff3f000000000000000004ff1200120009000900080009000a00",
+    "a_key": "F56D8C1D:2BDDC8BF",
+    "b_key": "F56D8C1D:D4223740",
+    "a_label": "Aaaaaaaaaa",
+    "b_label": "Aaaaaaaaaa",
+    "ready": {
+      "a": true,
+      "b": true
+    },
+    "done": {
+      "a": true,
+      "b": true
+    },
+    "new": {
+      "a": null,
+      "b": [
+        "F56D8C1D:2BDDC8BF",
+        1324
+      ]
+    },
+    "verdict": {
+      "a": "none",
+      "b": "traded"
+    },
+    "recovery_epochs": {
+      "a": [
+        2
+      ]
+    },
+    "hello_only": {
+      "a": true
+    },
+    "problem": "a: none; b: traded",
+    "link_index": 0
+  },
+  "trade_token": 1,
+  "rebuild_pending": {
+    "a": null,
+    "b": null
+  },
+  "trade_recovery": {
+    "a": {
+      "pending": false,
+      "hidden": false,
+      "problem": ""
+    },
+    "b": {
+      "pending": false,
+      "hidden": false,
+      "problem": ""
+    }
+  },
+  "trade_finals": {
+    "a": [],
+    "b": []
+  }
+}

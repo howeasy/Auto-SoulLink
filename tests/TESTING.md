@@ -10,7 +10,7 @@ Tests 1–3 are diagnostic; **Test 4 (`slink.lua` or `slink_gen3.lua`) is the pr
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.11+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, or Radical Red 4.1); `lua/slink.lua` refuses an older BizHawk on the Gen 3 route |
+| BizHawk 2.11+ | Both instances open, each with a FireRed or LeafGreen US 1.0 save loaded (vanilla, randomized, or Radical Red 4.1), or both with an Emerald (US) save loaded (Emerald pairs only with Emerald, never with FRLG/RR); `lua/slink.lua` refuses an older BizHawk on the Gen 3 route |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
 | Python server | `python -m server.server --host 127.0.0.1 --port 54321` (run from project root; needed from Test 4 onward — Tests 1-3 were the old client's and are removed) |
 | Status page | `http://localhost:8080/` — flicker-free auto-refresh every 2 s (HTMX + idiomorph morph swap); shows player areas, gym badges, party, Pokéball counts, encounters table; battle display above party |
@@ -70,7 +70,7 @@ There is no `capture(battle)`/`capture(box)`/`capture(gift)` split — it is one
 | `** NEW ENCOUNTER **  <location>` (yellow) | `area_enter` into an unresolved route, Pokéball gate open, not a gift area |
 | `WHITED OUT` (red) | `whiteout` |
 | `Nuzlocke Start!` | `has_pokeballs` first latches true (not on a reconnect resume) |
-| `!! <nickname> KO'd`, `!! <nickname> fainted`, `!! <nickname> BOOM!` (red) | The client wrote a battle faint, committed the Perish-Song active-battler faint, or committed Explode Mode's forced Explosion |
+| `!! <nickname> KO'd`, `!! <nickname> fainted`, `!! <nickname> BOOM!` (red) | The client wrote a battle faint, committed the Perish-Song active-battler faint, or committed Explode Mode's forced Explosion; a missing or blank name displays `Your Pokemon` instead of an identity key |
 | `TRADE UNRESOLVED: <why>` (orange) | The native link-trade FSM parked without resolving |
 | Any other `hud_show`/`msgbox` text | Server-driven (`server/state.py`) — wrong-save banner, dead-zone/linked/duplicate-capture notices, trade prompts, etc. Sent as plain text, not glyph-decorated |
 
@@ -155,7 +155,7 @@ Let all of Player A's party mons faint at once. Expect: B's **party** linked mon
 
 ### Trade (Radical Red / companion patch only)
 
-Vanilla and AP FireRed/LeafGreen have no native trade scene — server-driven trade prompts are cancelled outright on those foundations (`docs/gen3/PLAN.md`). On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. There is **no** automated trade duo on the rewritten client (the old client's `trade`/`infopanel` scenarios were retired and not rebuilt — `tools/e2e_duo.py` RR-only block comment); automated coverage is the native opcode gates (`tradescene`) and `native_absent_gen3`. This manual walkthrough is therefore the only end-to-end trade check.
+Vanilla and AP FireRed/LeafGreen have no native trade scene — server-driven trade prompts are cancelled outright on those foundations (`docs/gen3/PLAN.md`). Emerald has no companion patch either, so it cancels trade prompts the same way today; a vanilla trade duo (FR<->FR and E<->E) is planned but not yet built (`docs/gen3_emerald/REQUIREMENTS.md` ED-3). On a patched RR ROM, talking to the companion patch's Pokémon Center trade NPC (`drive_trade_npc` in `patch/src/handlers.c`; enabled while Overworld Presence is off, which it must be — see `docs/gen3/TODO.md`) sends `trade_request`; the resulting exchange runs entirely through the native mailbox (`lua/gen3/native.lua`) and ends in a `trade_done` event or a `TRADE UNRESOLVED: <why>` HUD notice if it parks. There is **no** automated trade duo on the rewritten client (the old client's `trade`/`infopanel` scenarios were retired and not rebuilt — `tools/e2e_duo.py` RR-only block comment); automated coverage is the native opcode gates (`tradescene`) and `native_absent_gen3`. This manual walkthrough is therefore the only end-to-end trade check.
 
 ---
 
@@ -201,7 +201,7 @@ Run the Feature Checklist setup (`lua/slink.lua` on both BizHawks, patched RR RO
 - **Unpatched ROM** → no `native` part is built at all (`pack=="gen3_rr"` with `artifact_kind=="companion"` is required), so the swap acks `rival_team_replaced` with `error="patch_required"`; no swap, no crash.
 - Out of battle when the command arrives → ack with `error="not_in_battle"`.
 - Stale/mismatched battle identity (a command queued for a battle that has since ended) → ack with `error="stale_battle_id"`.
-- A failed ack shows a red `Rival Swap failed: <error>` HUD banner and a `rival team swap FAILED: <error>` server log line.
+- A failed ack shows a red `Rival Swap failed - see the SLink log` HUD banner and a `rival team swap FAILED: <error>` server log line. The banner is player-facing (HUD-PLAYER-FACING), so the `<error>` code stays in the log.
 - Partner offline (B disconnected, no cached party blobs) → no swap; A fights the original rival. Server log: `auto-trigger skipped: partner 'b' has no cached party blobs`.
 - Non-rival trainer → `is_rival=False`; nothing queued.
 - Vanilla / AP ROM loaded → the adapter's rival-id set is empty, so it never matches (still logs `trainer_battle_start`, `is_rival=False`).
@@ -325,17 +325,26 @@ python tools/e2e_duo.py --list                # print exactly what `all` would r
 `--scenario all` means "all scenarios that apply to `--game`", not "every key in `SCENARIOS`" —
 the dict now holds Gen 1 and Gen 2 entries too. `scenarios_for()` in `tools/e2e_duo.py` is the
 single source of truth for that question (a scenario with no `games` key applies to every title),
-and `tests/e2e/test_duo.py` imports it rather than hand-rolling a second copy — the two answers
-had drifted apart when it did. `all` **names** what it filtered out rather than silently
+and the Gen 3 wrapper's list is pinned against `scenarios_for()` rather than hand-rolled —
+`tests/unit/test_e2e_duo_scenario_selection.py::test_gen3_rr_selection_is_exactly_the_radical_red_set`
+is the drift guard. `all` **names** what it filtered out rather than silently
 narrowing, because "all passed" over an empty selection is the worst way to report no coverage.
 
 Scenarios: `faint`, `boxsync`, `trade`, `ghost` (runs with `--overworld-presence`), `explode` (runs with `--explode-mode`), `infopanel` (three injected pairs, then drives the native SOULLINK menu end to end: the `link_panel` payload crosses the wire, renders as pairs, opens from the START menu, pages on A and closes on B). Each instance loads a generated stub (`patch/build/duo_{a,b}.lua`) that runs the **real production client** plus a scenario coroutine from `lua/tests/duo/`. Windows-only; needs `E:/Howard/Bizhawk` and the patched ROM.
 
-The pytest wrapper `tests/e2e/test_duo.py` parametrizes the same six scenarios (it derives them from `scenarios_for("gen3_rr")`, so the list cannot drift from the runner's) but is skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
+The pytest wrapper `tests/e2e/test_duo_gen3.py` covers the new client per title — explicit
+`gen3_frlg`, `gen3_lgfr` and `gen3_rr` tuples plus one `gen3_emerald` case, each cross-checked
+against `scenarios_for()` by the unit suite so the list cannot drift from the runner's. It is
+skipped unless explicitly requested (each takes minutes and spawns EmuHawk twice):
 
 ```bash
-SLINK_E2E=1 pytest tests/e2e/test_duo.py -q   # Gen 3 only; `tests/e2e/` also picks up Gen 1 + Gen 2
+SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py -q   # Gen 3 only; `tests/e2e/` also picks up Gen 1 + Gen 2
 ```
+
+The savestate-driven wrapper `tests/e2e/test_duo.py` was deleted with the old Gen 3 client
+(`archive/gen3-old-client`). It was already broken: its `_states_for` read a `savestate` key that
+no current scenario declares — only the two retired `faint`/`boxsync` rows ever carried one — so
+every parameter raised `KeyError`.
 
 ### Desync safeguards (Gen 3)
 

@@ -3,12 +3,15 @@
 SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs in [BizHawk](https://github.com/TASEmulators/BizHawk). Each emulator runs a Lua client that reads game RAM every frame and sends JSON events (area entered, capture, faint, etc.) to a central Python server over TCP. The server enforces Soul Link rules — linking encounters by area, propagating faints, syncing party/box state, moving dead pairs to a memorial box — and returns commands back to the Lua clients in the same response.
 
 **Supported Games:**
-- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps) and Radical Red 4.1 (CFRU, clean or companion-patched)
-  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the frozen-cut gate passes FR/LG
-  43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`, `G5_request_draft.md`); the
-  owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM hash (`lua/slink.lua`);
-  randomized and other unpinned builds are refused by name.
-- **Gen 3** — Emerald and the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
+- **Gen 3** — FireRed, LeafGreen (pinned US 1.0 dumps), Radical Red 4.1 (CFRU, clean or companion-patched)
+  — 🟡 **Release candidate** on the rewritten client under `lua/gen3/`: the
+  frozen-cut gate passes FR/LG 43/43 and RR 19/19 on real cartridges (`docs/gen3/G4_request_draft.md`,
+  `G5_request_draft.md`); the owner's G4/G5 sign-off is pending. Only pinned cartridges are admitted, by ROM
+  hash (`lua/slink.lua`); randomized and other unpinned builds are refused by name.
+- **Gen 3** — Emerald (pinned US dump) — 🟡 **Release candidate** on its own `gen3_emerald` pack under
+  `lua/gen3/`; admitted by ROM hash or by its engine-site anchors (header-only builds refused) and pairs only with itself, never with FRLG/RR. The owner's EG4
+  sign-off is pending (`docs/gen3_emerald/PLAN.md` §10, `docs/gen3_emerald/`).
+- **Gen 3** — the Archipelago FireRed/LeafGreen builds — ❌ **Not supported.** They ran only on
   the old Gen 3 client, archived at C5-6 (tag `archive/gen3-old-client`, owner ruling 24); `lua/slink.lua`
   refuses them by name until they are ported to `lua/gen3/`.
 - **Gen 1** — Red, Blue, Yellow (US English) — 🟡 **Partially verified.** The Soul Link
@@ -136,8 +139,8 @@ SLink automates a **Soul Link Nuzlocke** across two simultaneous Pokémon runs i
 
 | Requirement | Detail |
 |---|---|
-| BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen or Radical Red ROMs. **Gen 4:** Two instances with US HGSS ROMs |
-| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 2:** Crystal (US 1.0 or 1.1), Gold, Silver (US); the overlay is applied from `patch/dist/SLink-*.ups`. **Gen 3:** the pinned FireRed/LeafGreen US 1.0 dumps, or Radical Red 4.1 (clean or with the SLink companion patch), admitted by ROM hash — randomized builds are refused. **Gen 4:** HeartGold/SoulSilver US |
+| BizHawk 2.11+ (Gen 1, Gen 3), 2.9+ (Gen 2) | **Gen 1:** Two instances with US Red/Blue/Yellow ROMs (Gambatte core); pureRGB needs Console Mode **GBC**. **Gen 3:** Two instances with US 1.0 FireRed/LeafGreen, Radical Red, or Emerald ROMs (Emerald pairs only with Emerald, never with FRLG/RR). **Gen 4:** Two instances with US HGSS ROMs |
+| ROMs | **Gen 1:** Red/Blue/Yellow (US), or the pinned pureRGB v2.7.6 builds (PureRed/PureBlue/PureGreen; `tools/build_purergb_syms.py`). **Gen 2:** Crystal (US 1.0 or 1.1), Gold, Silver (US); the overlay is applied from `patch/dist/SLink-*.ups`. **Gen 3:** the pinned FireRed/LeafGreen US 1.0 dumps, Radical Red 4.1 (clean or with the SLink companion patch), or the pinned Emerald (US) dump on its own `gen3_emerald` pack — admitted by ROM hash, randomized builds refused; Emerald pairs only with Emerald. **Gen 4:** HeartGold/SoulSilver US |
 | Python 3.11+ | `pip install -r requirements.txt` (CI runs 3.12; `ruff.toml` targets py311) |
 | Scripts in `lua/` | `slink.lua` (universal entry point), `gen3/`, `connector.lua`, `socket.lua` |
 | LuaSocket DLL | Already committed at `lua/x64/socket-windows-5-4.dll` — nothing to install |
@@ -791,9 +794,10 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | Nuzlocke gate | Dead zone and faint propagation are inactive until the player obtains Pokéballs |
 | Gift capture detection | Captures classified as gifts when (a) the area is a configured gift area (`is_gift_area()`) or (b) the captured mon is an egg in a non-daycare encounter area (NPC egg-gifts like Route 5 Togepi). The Lua client reads `is_egg` from `OFF_FLAGS` bit 2 and forwards it; `_is_gift_capture(area_id, is_egg)` in `server/state.py` combines this with `is_daycare_area()` so daycare-bred eggs (Route 5/Four Island day cares in Gen 3) remain normal captures. Gifts/eggs link under a dedicated **`gift_<area>`** namespace (adapter `gift_link_area()`): they form standalone gift pairs that bypass the dead-zone / linked-wild-slot guards, skip the unlinked-capture quarantine, and never satisfy the Pokéball gate — a gift received in a real encounter area no longer locks that area. The Lua client tags these captures with `gift=true`. |
 | Whiteout | All of A's party mons faint → all of B's linked party mons are force-fainted |
-| Species clause (opt-in) | `--species-clause` — rejects links where both mons share the same evolution family (e.g. Charmander ↔ Charmeleon). Also rejects captures where the **same player** already has an alive linked mon of the same evo family (same-save duplicate prevention). Dead/memorial pairs don't block. The violating capture is force-fainted; the area stays pending for retry |
+| Species clause (opt-in) | `--species-clause` — rejects links where both mons share the same evolution family (e.g. Charmander ↔ Charmeleon). Also rejects captures where **either player** already has an alive linked mon of the same evo family (dupes prevention). Dead/memorial pairs don't block. The violating capture is force-fainted; the area stays pending for retry |
 | Gender clause (opt-in) | `--gender-clause` — rejects links where both mons are the same gender (♂+♂ or ♀+♀). Genderless mons are exempt. The violating capture is force-fainted; the area stays pending for retry |
 | Type clause (opt-in) | `--type-clause` — rejects links where both mons share any type (e.g. Charizard Fire/Flying ↔ Pidgey Normal/Flying — shared Flying). Uses RR type data when available; falls back to vanilla Gen I–III types. The violating capture is force-fainted; the area stays pending for retry |
+| NPC-trade mutation clauses (all generations) | Owner ruling 35: after an NPC exchange, accept the new key/species, then check the enabled species/family, type and gender clauses while excluding the current pair from its own duplicate lookup. A violation retires **the changed pair only**, cause `npc_trade_clause` ("NPC trade clause violation"); both received/current halves are force-fainted and memorialized. Other pairs and the resolved encounter area remain unchanged: no capture-time reroll and no identity-loss penalty. Disabled clauses and existing genderless/unknown-gender exemptions remain off/exempt. |
 | Explode mode (opt-in) | `--explode-mode` — **Radical Red and Gen 1 R/B/Y.** Gen 1 needs no ROM patch for it: Explosion is move 153 and the engine reads the player's choice from `wPlayerSelectedMove`, so coercing it is a plain RAM write. When a linked mon dies mid-battle, its partner receives a `force_explode` command instead of the deferred `force_faint`, coercing the partner's active Pokémon into using Explosion. Bench mons and vanilla/AP/Emerald fall back to `force_faint`. Gated on `adapter.supports_explode_mode()`, not on a game id. Persisted in `links.json` under `rules.explode_mode`. |
 | Rival team swap (opt-in) | `--rival-team-swap` — **Radical Red and Gen 1 R/B/Y.** On a `trainer_battle_start` against a configured rival ID (`adapter.rival_trainer_ids()`), the server sends `replace_rival_team` carrying the *partner's* live party blobs; the client byte-copies them into `gEnemyParty` (EWRAM-only) via the companion patch's native `OP_SET_ENEMY_PARTY` and acks with `rival_team_replaced`. On Gen 3 this **requires the RR companion patch** ([patch/README.md](../patch/README.md)) — no unpatched fallback; unpatched clients ack `error="patch_required"` and skip. Gen 1 needs no patch: `wEnemyMons` is ordinary WRAM, so the client writes the blobs directly (validated in full before any byte is written). Supplied per-launch from the Manager run registry. |
 | Shiny Clause (always on) | When a player catches a shiny, their partner's **next encounter** becomes the shiny's Soul Link partner (a bonus pair). The bonus pair goes through all normal Soul Link rules — lock clauses apply, faint propagation is enforced, party sync is required. The area that triggered the shiny is not consumed. If multiple shinies are caught before bonuses are claimed, bonuses queue up (FIFO). Gen 1 is naturally excluded (`is_shiny()` always returns `False`). The catching player receives a shiny sound effect and GUI prompt; the partner is notified that a bonus encounter is pending. |
@@ -808,6 +812,7 @@ curl -X POST http://localhost:8080/api/debug/rollback \
 | ROM validation (FireRed/LeafGreen US 1.0) | ✅ Working |
 | Archipelago (AP) patched ROM support | ❌ Not supported — AP FireRed/LeafGreen ran only on the old, now-archived Gen 3 client; `lua/slink.lua` refuses them by name until they are ported to `lua/gen3/` |
 | Radical Red 4.1 (CFRU) support | ✅ Working |
+| Emerald (pinned US dump, `gen3_emerald` pack, E<->E pairing only) | 🟡 Release candidate — EG4 owner sign-off pending (`docs/gen3_emerald/`) |
 | Area mapping (all FRLG routes/dungeons/locations) | ✅ Working |
 | Encounter linking | ✅ Working |
 | Nuzlocke gate (Pokéball check) | ✅ Working |
@@ -1025,7 +1030,7 @@ pytest tests/integration/test_phase1_comms.py -v
 
 ### BizHawk live tests
 
-**Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo.py` (16 scenarios on the patched RR ROM) plus `SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py` (the `lua/gen3/` client on vanilla FRLG/LGFR and Radical Red).
+**Gen 3** is a manual procedure: see `tests/TESTING.md` for the full 9-step end-to-end test. Load `lua/slink.lua` on both instances and run through Steps 1–9 in order. Its automated pieces are `SLINK_LIVE=1 pytest tests/live/test_lua_gates.py` (savestate-driven; rebuild states with `tools/mkstates.py` after a BizHawk upgrade) and `SLINK_E2E=1 pytest tests/e2e/test_duo_gen3.py` (the `lua/gen3/` client on vanilla FRLG/LGFR, Radical Red and Emerald). The savestate-driven Gen 3 wrapper that the old client had was deleted with that client (`archive/gen3-old-client`); `tools/e2e_duo.py` is still the runner behind every Gen 3 duo scenario.
 
 **Gen 1 and Gen 2** have no manual procedure — all of it is automated and skips cleanly when EmuHawk, a cartridge dump or a fixture is missing:
 
@@ -1069,7 +1074,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{cryst
 | `lua/gen1/run.lua` | **Gen 1 production client entry point** — both launchers (`lua/slink.lua`'s GB/GBC route, `lua/slink_gen1.lua`) `dofile` this. BizHawk bootstrap: title detection via `entry.lua`'s `Entry.detect_title`, connector/HUD setup, guarded frame callback and shutdown (commit `ca17a26`). |
 | `lua/gen1/entry.lua` | Composition root over injected io/net/HUD — wires reads/writes/signals/boxes/rom/trade_overlay/panel; the same construction path serves production and the model test harness. |
 | `lua/gen1/{client,reads,writes,signals,boxes,rom,panel,trade_overlay}.lua` | The rewritten Gen 1 modules `entry.lua` composes: engine-signal dispatch, guarded write windows, party/box/PC decoding, cartridge dex/base-stat tables, the native trade overlay and the native info panel — Red, Blue and Yellow via profile, not per-title branches. |
-| `lua/gen3/run.lua`, `lua/gen3/entry.lua` | **Gen 3 production client** (FireRed/LeafGreen/Radical Red) — `lua/slink.lua`'s GBA route admits the cartridge (`Entry.admit`, hash then anchors) and dofiles `run.lua`; `entry.lua` wires `lua/gen3/{client,reads,signals,writes,safety,boxes,native}.lua` over `lua/core/` |
+| `lua/gen3/run.lua`, `lua/gen3/entry.lua` | **Gen 3 production client** (FireRed/LeafGreen/Radical Red/Emerald) — `lua/slink.lua`'s GBA route admits the cartridge (`Entry.admit`, hash then anchors) and dofiles `run.lua`; `entry.lua` wires `lua/gen3/{client,reads,signals,writes,safety,boxes,native}.lua` over `lua/core/`; Emerald is its own `gen3_emerald` pack, pairing only with itself |
 | `lua/clients/gen4_hgsspt_client.lua` | Gen 4 production client — HeartGold/SoulSilver. NDS memory model, LCRNG-aware, HP debounce. |
 | `lua/clients/gen5_bw_client.lua` | Gen 5 production client — Black, White, Black 2, White 2. PID:OTID keys, 220-byte PKM structs, shared NDS helpers. |
 | `lua/memory_nds.lua` | Gen 4/5 NDS RAM helpers — LCRNG encryption/decryption, 2-level pointer chain, HP debounce, party/box/battle reads |
@@ -1090,6 +1095,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{cryst
 | `data/games/gen1_rby/` | Gen 1 game data — generated JSON tables the rewritten client's `entry.lua` opens directly (`profile.json`, `engine_signals.json`, `area_map.json`, `write_checkpoint.json`, `wild_encounter_sites.json`, plus `evolutions.json`, `trainers.json`, `species_index.json`, `static_encounters.json`, `continue_sites.json`, `moves.json`, `floor_labels.json`); the old `gen1_rby_areas.lua`/`gen1_rby_locations.lua` mapping files were deleted with the legacy client (`21ff0d7`) |
 | `data/games/gen3_frlge/` | Gen 3 game data — area maps, RR items/sprites/types/species/trainers |
 | `data/games/gen3_frlge/rr_priority_trainers.json` | Generated RR priority/key-trainer roster (areas → trainers, parties, level caps) feeding the Upcoming Key Trainers panel + calc Prep tab |
+| `data/games/gen3_emerald/` | Emerald game data — its own profile, engine signals, checkpoint, area map, statics and gift areas; pairs only with itself |
 | `data/games/gen4_hgsspt/` | Gen 4 game data — HGSS area map |
 | `data/games/gen5_bw/` | Gen 5 game data — BW/BW2 area maps and location tables |
 | `data/links.json` | Persisted link table — written after every state change |
@@ -1111,7 +1117,7 @@ Fixtures live in `tests/fixtures/gen1/*.SaveRAM` and `tests/fixtures/gen2/{cryst
 | `tools/gen_rr_priority_trainers.py` | Generator for `rr_priority_trainers.json` + the calc `slink_priority.js` setdex (RR priority/key trainers) |
 | `tools/lua_syntax_check.py` | Syntax-checks `lua/**/*.lua` with lupa (Lua 5.5) — catches `goto`/bitwise errors the system luac 5.1 rejects |
 | `tools/inject_full_mocks.py` | Injects full mock state (6 linked pairs, dead-zone, boxed pair, memorial, enemy battle w/ held items) into a running server for UI testing |
-| `tools/e2e_duo.py` | Two-instance headless E2E harness — throwaway server + two EmuHawk instances running scripted scenarios (faint, boxsync, trade, explode, rival swap; peer ghost's `ghost` scenario was dropped when Overworld Presence was deferred post-RC); pytest wrapper in `tests/e2e/test_duo.py` (gated behind `SLINK_E2E=1`) |
+| `tools/e2e_duo.py` | Two-instance headless E2E harness — throwaway server + two EmuHawk instances running scripted scenarios (faint, boxsync, trade, explode, rival swap; peer ghost's `ghost` scenario was dropped when Overworld Presence was deferred post-RC); per-generation pytest wrappers in `tests/e2e/` (all gated behind `SLINK_E2E=1`): `test_duo_gen3.py` (Gen 3), `test_duo_gen1_new.py` / `test_duo_gen1_pure.py` (Gen 1), `test_duo_gen2_new.py` (Gen 2) |
 | `ruff.toml` / `requirements-dev.txt` | Ruff lint config + pinned dev dependency (`pip install -r requirements-dev.txt`; `ruff check .`) |
 | `tests/TESTING.md` | Live BizHawk test guide |
 | **Damage Calculator** | |

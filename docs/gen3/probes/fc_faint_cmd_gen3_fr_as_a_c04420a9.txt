@@ -1,0 +1,52 @@
+# gen3_final_cut row=faint_cmd_gen3_fr_as_a item=§2-3_item1-2 cut=c04420a95ea4f535d6bc1fe5bccadea7ce981645
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_frlg --scenario faint_cmd_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: PASS
+# inputs: rom:firered=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T18:54:19 cpu=54% emuhawk=1 python=8
+start_utc=2026-09-27T22:54:18Z tracked_clean_before=True
+
+========== scenario: faint_cmd_gen3 ==========
+[duo] faint_cmd_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=firered:rom=3d0c79f1627022e18765766f6cb5ea067f6b5bf7dca115552189ad65a5c3a8ac:fixture=db60478826f16ff02c04ff5dc7df67579cf3e32ef99ca4dfbb36cd976047e213 b=leafgreen:rom=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc:fixture=b2f4e5476a179973f3016bb0391baed5c91df72b818973bbb500024569a21db2 write_checkpoint.json=5e7742267603556d1f01bf09071fa46cc6ad61d92208e072720910862b0e627c profile.json=426778800b30911874cec9abec0a567d7cc8a72b2ff9de313f566bf707578f92 source=c04420a95ea4f535d6bc1fe5bccadea7ce981645
+[duo] server up: tcp=54949 http=54950 data=C:\Users\howar\AppData\Local\Temp\slink_duo_faint_cmd_gen3_igcibr9w
+[duo] timing server 0.6s
+[duo] cleared 9 stale artifact(s) for faint_cmd_gen3: e2e_faint_cmd_gen3_a_1_witness.bin, e2e_faint_cmd_gen3_a_1_witness_ext.bin, e2e_faint_cmd_gen3_a_attempt1_result.txt, e2e_faint_cmd_gen3_a_result.txt, e2e_faint_cmd_gen3_b_1_witness.bin, e2e_faint_cmd_gen3_b_1_witness_ext.bin, e2e_faint_cmd_gen3_b_attempt1_result.txt, e2e_faint_cmd_gen3_b_result.txt, e2e_faint_cmd_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.1s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=2D356A90:99DE0D8A b=BC73F9B0:1C600D89
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 263620B6:99DE0D8A <-> F6B6A64D:1C600D89
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] queued for a: {'cmd': 'memorialize', 'key': '263620B6:99DE0D8A'}
+[duo] queued for a: {'cmd': 'game_over'}
+[duo] injected A faint 263620B6:99DE0D8A -> force_faint B F6B6A64D:1C600D89; re-queued to A: ['memorialize', 'game_over']
+[duo] timing orchestrate 5.5s
+[duo] timing results 3.2s
+[duo] RESULT_LINE a: RESULT: PASS (memorialized 263620B6:99DE0D8A)
+[duo] RESULT_LINE b: RESULT: PASS (memorialized F6B6A64D:1C600D89)
+[duo] SAVE_WITNESS_SHA256 inst=a site=792d6765fc6e2306683a26bb65cbdac19be9d4662bde0858fe928df2c68280d4 file=792d6765fc6e2306683a26bb65cbdac19be9d4662bde0858fe928df2c68280d4 match=true saves=1 counter=4->5 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=6df72bc9bff2396e6dc9c38cd6926c476e2d58b9d028b923c6be130e34696150 file=6df72bc9bff2396e6dc9c38cd6926c476e2d58b9d028b923c6be130e34696150 match=true saves=1 counter=3->4 rtc=normalized
+[duo] faint_cmd: 263620B6:99DE0D8A and F6B6A64D:1C600D89 saved once each in box 14; B's HP 0 came from an overworld-armed write
+[duo] MARKER a: RX memorialize key=263620B6:99DE0D8A
+[duo] MARKER a: TX memorialize_done 263620B6:99DE0D8A {"box":13,"event":"memorialize_done","key":"263620B6:99DE0D8A","player":"a","seq":17}
+[duo] MARKER b: RX force_faint key=F6B6A64D:1C600D89
+[duo] MARKER b: FORCED_HP0 F6B6A64D:1C600D89 frame=963 in_battle=0 battler=0
+[duo] MARKER b: RX memorialize key=F6B6A64D:1C600D89
+[duo] MARKER b: TX memorialize_done F6B6A64D:1C600D89 {"box":13,"event":"memorialize_done","key":"F6B6A64D:1C600D89","player":"b","seq":19}
+[duo] MARKER b: [client] [SLink-gen3] write overworld 0x0202433E +2 frame 963
+[duo] timing oracle 0.3s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] faint_cmd_gen3: a=PASS b=PASS
+
+========== summary ==========
+  faint_cmd_gen3: PASS (attempt 1 of 1)
+exit=0 end_utc=2026-09-27T22:54:30Z tracked_clean_after=True classification=pass

@@ -1,0 +1,11 @@
+# G4 final cut 1d4498da6ee20e1155f3d6e41f5068a8a3035652 -- tools/gen3_final_cut.py summary (written 2026-09-30T00:40:38Z)
+# RUN 2 / CARRIED 0 / CACHED 0 / FAIL 2
+
+| # | row | runbook | verdict | attempts | receipt |
+|---|---|---|---|---|---|
+| 1 | linked_faint_active_whiteout_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_linked_faint_active_whiteout_gen3_rr_as_a_1d4498da.txt |
+| 2 | boxsync_gen3_rr_as_a | §14 P5 RR duo | PASS | 1 | fc_boxsync_gen3_rr_as_a_1d4498da.txt |
+| 3 | species_clause_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_species_clause_gen3_rr_as_a_1d4498da.txt |
+| 4 | release_gen3_rr_as_a | §14 P5 RR duo | FAIL exit=1 | 1 | fc_release_gen3_rr_as_a_1d4498da.txt |
+
+OVERALL: FAIL (2/4 rows)

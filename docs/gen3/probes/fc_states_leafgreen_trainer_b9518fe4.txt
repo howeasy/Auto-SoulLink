@@ -1,0 +1,20 @@
+# gen3_final_cut row=states_leafgreen_trainer item=§1.1_build cut=b9518fe437909097f07ad7fea05ddaf597125e40
+# lane=C:/slink-wt/g3-core
+# command: python tools/mkstates_gen3.py --title leafgreen --kind trainer --out-dir C:/slink-wt/g3-core/patch/build/gen3_probe_states_c4p2/leafgreen --rom 'patch/build/gen3_Pokemon_-_LeafGreen_Version_(USA).gba'   (cwd=C:/slink-wt/g3-core)
+# env: (none)
+# verdict: PASS
+# inputs: rom:leafgreen=78d310d557ceebc593bd393acc52d1b19a8f023fec40bc200e6063880d8531fc
+--- attempt 1 of 1 ---
+LOAD 2026-09-30T01:16:19 cpu=27% emuhawk=0 python=3
+start_utc=2026-09-30T05:16:18Z tracked_clean_before=True
+seeded C:\slink-wt\g3-core\patch\build\gen3_fixture_runs\mkstates_leafgreen_trainer\Pokemon - LeafGreen Version (USA).SaveRAM from C:\slink-wt\g3-core\tests\fixtures\gen3\leafgreen_party_town.sav; states -> C:\slink-wt\g3-core\patch\build\gen3_probe_states_c4p2\leafgreen
+[gate] E:/Howard/Bizhawk/EmuHawk.exe --config=patch/build/gate_cfg_mkstates_gen3.ini --lua=lua/tests/mkstates_gen3.lua patch/build/gen3_gen3_Pokemon_-_LeafGreen_Version_(USA).gba
+[gate] mkstates_gen3: RESULT: PASS trainer states in C:/slink-wt/g3-core/patch/build/gen3_probe_states_c4p2/leafgreen  (13s)
+phase start frame=1 title=leafgreen kind=trainer dir=C:/slink-wt/g3-core/patch/build/gen3_probe_states_c4p2/leafgreen
+phase field frame=778 map=(3,1)
+phase settled frame=1087
+phase state-saved frame=4822 slink_pretrainer.State main=08014041 comm0=1 flags=00000001 ctrl=0802E439 outcome=0 type=0000000C hp0=23
+phase state-saved frame=10584 slink_prefaint.State turn=8 main=080155C9 comm0=4 flags=00000000 ctrl=0802E3B5 outcome=0 type=0000000C hp0=0
+phase send-out-prompt frame=10798 main=08015C01 comm0=4 flags=00000001 ctrl=08030685 outcome=0 type=0000000C hp0=0
+RESULT: PASS trainer states in C:/slink-wt/g3-core/patch/build/gen3_probe_states_c4p2/leafgreen
+exit=0 end_utc=2026-09-30T05:16:33Z tracked_clean_after=True classification=pass

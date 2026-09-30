@@ -1,0 +1,69 @@
+# gen3_final_cut row=reconnect_gen3_rr_as_a item=§14_P5_RR_duo cut=02ba8ed1a4420e13097fd099524f6a04cbbfb847
+# lane=C:/slink-wt/g3-lane3
+# command: python tools/e2e_duo.py --game gen3_rr --scenario reconnect_gen3   (cwd=C:/slink-wt/g3-lane3)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 2 ---
+LOAD 2026-09-27T21:17:13 cpu=44% emuhawk=0 python=7
+start_utc=2026-09-28T01:17:12Z tracked_clean_before=True
+
+========== scenario: reconnect_gen3 ==========
+[duo] reconnect_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=02ba8ed1a4420e13097fd099524f6a04cbbfb847
+[duo] server up: tcp=59767 http=59768 data=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3_jt2n5zsd
+[duo] timing server 0.6s
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] terminated a pid=8952; server retained
+[duo] launched a phase=same_save seed=False
+[duo] timing orchestrate 38.9s
+[duo] PYDEC: FAIL timed out after 30s waiting for durable accepted reconnect hello
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3_jt2n5zsd
+[duo] reconnect_gen3: attempt 1 aborted — TimeoutError: timed out after 30s waiting for durable accepted reconnect hello
+
+========== summary ==========
+  reconnect_gen3: FAIL (attempt 1 of 1) — TimeoutError: timed out after 30s waiting for durable accepted reconnect hello
+exit=1 end_utc=2026-09-28T01:17:54Z tracked_clean_after=True classification=contention
+--- attempt 2 of 2 ---
+LOAD 2026-09-27T21:17:56 cpu=28% emuhawk=0 python=4
+start_utc=2026-09-28T01:17:54Z tracked_clean_before=True
+
+========== scenario: reconnect_gen3 ==========
+[duo] reconnect_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=02ba8ed1a4420e13097fd099524f6a04cbbfb847
+[duo] server up: tcp=54376 http=54377 data=C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3__uzjozmn
+[duo] timing server 0.6s
+[duo] cleared 6 stale artifact(s) for reconnect_gen3: e2e_reconnect_gen3_a_attempt1_result.txt, e2e_reconnect_gen3_a_result.txt, e2e_reconnect_gen3_a_same_save_result.txt, e2e_reconnect_gen3_b_attempt1_result.txt, e2e_reconnect_gen3_b_result.txt, e2e_reconnect_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked F56D8C1D:2BDDC8BF <-> F56D8C1D:D4223740
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] terminated a pid=48960; server retained
+[duo] launched a phase=same_save seed=False
+[duo] timing orchestrate 38.8s
+[duo] PYDEC: FAIL timed out after 30s waiting for durable accepted reconnect hello
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_reconnect_gen3__uzjozmn
+[duo] reconnect_gen3: attempt 1 aborted — TimeoutError: timed out after 30s waiting for durable accepted reconnect hello
+
+========== summary ==========
+  reconnect_gen3: FAIL (attempt 1 of 1) — TimeoutError: timed out after 30s waiting for durable accepted reconnect hello
+exit=1 end_utc=2026-09-28T01:18:36Z tracked_clean_after=True classification=contention

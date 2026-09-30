@@ -1,0 +1,128 @@
+# T3-R4 Emerald NPC trade receipt
+# source=eca04eb1bcc3cd6b54c4c33906f64cde1b9c9bc3
+# worktree=C:/slink-wt/em-t3 branch=claude/gen3-emerald-t3
+# command=python tools/e2e_duo.py --game gen3_emerald --scenario npc_trade_gen3 --lane r4verified --keep-data
+# SLINK_STATE_DIR=C:/slink-wt/em-t3/.lane/r4_npc_verified
+# TMPDIR=C:/slink-wt/em-t3/.lane/r4_npc_verified
+# verdict=PASS exit=0
+# SYNTH setup: committed emerald_trade.sav; A trades its fixture Ralts for the native Seedot.
+# B idles; the harness establishes the initial link. A uses ordinary game input and native save UI.
+# PHYSICAL: TradeMons begin/done, npc_trade key_change + ACK, live link migration, saved-state oracle.
+# No SLink cartridge writes. This does not qualify companion ABI v2 or native save-before-DONE.
+# The harness terminates only its own recorded EmuHawk PIDs; process inventory is empty after cleanup.
+
+
+# --- runner ---
+
+
+========== scenario: npc_trade_gen3 ==========
+[duo] npc_trade_gen3: attempt 1 of 1
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=9dff9cf03d160ff07d06ed98779e0713eeae0e8f091e0f0e29ac6d99a0edbba8 b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=61b438518f92c74833279f3e1f044b0c3d8ae909ef85aa9baed755e219b15b7f source=eca04eb1bcc3cd6b54c4c33906f64cde1b9c9bc3
+[duo] server up: tcp=59141 http=59142 data=C:\slink-wt\em-t3\.lane\r4_npc_verified\slink_duo_npc_trade_gen3_cb3di0jc
+[duo] timing server 1.2s
+[duo] cleared 6 stale artifact(s) for npc_trade_gen3: e2e_npc_trade_gen3_a_1_witness.bin, e2e_npc_trade_gen3_a_attempt1_result.txt, e2e_npc_trade_gen3_a_result.txt, e2e_npc_trade_gen3_b_attempt1_result.txt, e2e_npc_trade_gen3_b_result.txt, e2e_npc_trade_gen3_pydec_attempt1_result.txt
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.1s
+[duo] two EmuHawk instances launched
+[duo] keys: a=4D55444B:20250925 b=4D55444B:DFDAF6DA
+[duo] both players connected
+[duo] pokeballs_obtained set for both players
+[duo] linked 52414C5C:20250925 <-> 504F4F4D:DFDAF6DA
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 5.9s
+[duo] timing results 12.3s
+[duo] RESULT_LINE a: RESULT: PASS (traded 52414C5C:20250925 -> 00000084:00009746)
+[duo] RESULT_LINE b: RESULT: PASS (idled while A traded)
+[duo] SAVE_WITNESS_SHA256 inst=a site=52066b39bfd5fdf015918b2162a28f27501a5a1e166ea683c93667efd71875f0 file=52066b39bfd5fdf015918b2162a28f27501a5a1e166ea683c93667efd71875f0 match=true saves=1 counter=2->3 rtc=normalized
+[duo] SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+[duo] npc_trade: 52414C5C:20250925 -> 00000084:00009746 key_change npc_trade emitted after trade_done; reply sequence ['RX key_change_ack']; links.json [('alive', '00000084:00009746', '504F4F4D:DFDAF6DA')]
+[duo] MARKER a: SIGNAL trade_begin frame=3203 address=0x0807B4D0
+[duo] MARKER a: SIGNAL trade_done frame=3203 address=0x0807B58E
+[duo] MARKER a: TX key_change - {"event":"key_change","new_key":"00000084:00009746","new_nickname":"DOTS","new_species":298,"old_key":"52414C5C:20250925","player":"a","reason":"npc_trade","seq":91}
+[duo] timing oracle 0.4s
+[duo] PYDEC: PASS asserted scenario facts
+[duo] npc_trade_gen3: a=PASS b=PASS
+[duo] data dir kept: C:\slink-wt\em-t3\.lane\r4_npc_verified\slink_duo_npc_trade_gen3_cb3di0jc
+
+========== summary ==========
+  npc_trade_gen3: PASS (attempt 1 of 1)
+
+# --- client a ---
+
+duo instance a scenario=npc_trade_gen3 phase=initial title=emerald attempt=1
+SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
+[client] [SLink] TCP connecting to 127.0.0.1:59141 (non-blocking)…
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player a -> 127.0.0.1:59141 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=a -> 127.0.0.1:59141
+[client] [SLink] TCP connected to 127.0.0.1:59141
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"rustboro_city_hous
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=580 map=(11,10)
+MYKEY 0 4D55444B:20250925
+PARTY slot=0 key=4D55444B:20250925 species=283 level=5 hp=20/20
+MYKEY 1 52414C5C:20250925
+PARTY slot=1 key=52414C5C:20250925 species=392 level=7 hp=21/21
+booted frame=580 map=map=2826 at=(6,5) balls=5
+JITTER requested=0 applied=0 attempt=1
+WHERE map=2826 at=(6,5)
+READY 52414C5C:20250925
+PICKED slot=1 52414C5C:20250925
+SIGNAL trade_begin frame=3203 address=0x0807B4D0
+SIGNAL trade_done frame=3203 address=0x0807B58E
+TX key_change - {"event":"key_change","new_key":"00000084:00009746","new_nickname":"DOTS","new_species":298,"old_key":"52414C5C:20250925","player":"a","reason":"npc_trade","seq":91}
+RX key_change_ack
+NPC_TRADE old=52414C5C:20250925 new=00000084:00009746 reason=npc_trade species=298
+[client] [gen3] phase save-menu frame=3652 counter=2
+[client] [gen3] phase save-dialog frame=3712 row=3/6
+[client] [gen3] phase saved frame=4112 counter=2->3
+SAVE_WITNESS_DUMP path=patch/build/e2e_npc_trade_gen3_a_1_witness.bin bytes=131072 saves=1 frame=4346 counter=3
+SAVE_WITNESS npc_trade counter=2->3
+WRITES 0
+RESULT: PASS (traded 52414C5C:20250925 -> 00000084:00009746)
+
+# --- client b ---
+
+duo instance b scenario=npc_trade_gen3 phase=initial title=emerald attempt=1
+SYMS_ABSENT emerald Task_AnimateWin0v,sSaveDialogCB,SaveDialogCB_ReturnSuccess,task50_save_game,Task_StartMenuHandleInput,sSaveDialogDelay,SaveDialogCB_AskSaveHandleInput,SaveDialogCB_AskOverwriteOrReplacePreviousFileHandleInput,sNumStartMenuItems,sStartMenuOrder
+[client] [SLink] TCP connecting to 127.0.0.1:59141 (non-blocking)…
+[client] [SLink-gen3] gen3_emerald/emerald (clean by hash) player b -> 127.0.0.1:59141 (rom f3ae0881)
+client built by lua/gen3/run.lua: title=emerald player=b -> 127.0.0.1:59141
+[client] [SLink] TCP connected to 127.0.0.1:59141
+[client] [SLink-gen3] writes ENABLED
+TX hello - {"area_id":"","artifact_kind":"clean","badges":0,"ball_count":5,"battle_identity":true,"event":"hello","foundation":"gen3_emerald","has_pokeballs":true,"in_battle":false,"loc_name":"oldale_town","ot_i
+RX resolved_areas
+RX config
+RX dead_keys
+[client] [SLink-gen3] unhandled command dead_keys
+[client] [gen3] phase field frame=580 map=(0,10)
+MYKEY 0 4D55444B:DFDAF6DA
+PARTY slot=0 key=4D55444B:DFDAF6DA species=283 level=5 hp=20/20
+MYKEY 1 504F4F4D:DFDAF6DA
+PARTY slot=1 key=504F4F4D:DFDAF6DA species=286 level=3 hp=15/15
+booted frame=580 map=map=10 at=(6,17) balls=5
+JITTER requested=0 applied=0 attempt=1
+READY 504F4F4D:DFDAF6DA
+WRITES 0
+RESULT: PASS (idled while A traded)
+
+# --- independent saved-state oracle ---
+
+attempt 1 of 1
+IDENTITY a=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=9dff9cf03d160ff07d06ed98779e0713eeae0e8f091e0f0e29ac6d99a0edbba8 b=emerald:rom=a9dec84dfe7f62ab2220bafaef7479da0929d066ece16a6885f6226db19085af:fixture=75d39076a90f1f6dc3e38dc99a8ed69c542c8512f55e3158ff2cdc1979a692b6 write_checkpoint.json=99f2c58a16b8801c9c2a67099429f0654824dccaa284b49d3f48eb0848b8ce61 profile.json=61b438518f92c74833279f3e1f044b0c3d8ae909ef85aa9baed755e219b15b7f source=eca04eb1bcc3cd6b54c4c33906f64cde1b9c9bc3
+RESULT_LINE a: RESULT: PASS (traded 52414C5C:20250925 -> 00000084:00009746)
+RESULT_LINE b: RESULT: PASS (idled while A traded)
+SAVE_WITNESS_SHA256 inst=a site=52066b39bfd5fdf015918b2162a28f27501a5a1e166ea683c93667efd71875f0 file=52066b39bfd5fdf015918b2162a28f27501a5a1e166ea683c93667efd71875f0 match=true saves=1 counter=2->3 rtc=normalized
+SAVE_WITNESS_SHA256 inst=b site=- file=- match=- saves=0 skipped (no_save)
+npc_trade: 52414C5C:20250925 -> 00000084:00009746 key_change npc_trade emitted after trade_done; reply sequence ['RX key_change_ack']; links.json [('alive', '00000084:00009746', '504F4F4D:DFDAF6DA')]
+MARKER a: SIGNAL trade_begin frame=3203 address=0x0807B4D0
+MARKER a: SIGNAL trade_done frame=3203 address=0x0807B58E
+MARKER a: TX key_change - {"event":"key_change","new_key":"00000084:00009746","new_nickname":"DOTS","new_species":298,"old_key":"52414C5C:20250925","player":"a","reason":"npc_trade","seq":91}
+PYDEC: PASS asserted scenario facts

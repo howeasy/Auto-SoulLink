@@ -116,13 +116,15 @@ const pending = [];
 const window = { CUSTOMSETDEX_C: { Onix: { 'Leader Falkner': {} } } };
 const document = { createElement: () => ({}), head: { appendChild: s => pending.push(s) } };
 let _gameSetdex = null, _gameIndex = {}, _gameSetsLoadStarted = false, _gameSetsFile = null,
-    _gameSetsLoad = 0, _setdexReady = false;
+    _gameSetsLoad = 0, _setdexReady = false, _prepDeferred = true, _activeTab = 'a';
 const _isRR = () => false, _buildTrainerIndex = d => d, _enrichEnemyMons = () => {},
-      refreshPanel = () => {};
+      refreshPanel = () => {}, _supportsPrepTab = () => !!_gameSetdex;
 eval(fn);
 const crystal = { sets: { file: 'Crystal.js', var: 'CUSTOMSETDEX_C' } };
 _maybeLoadGameSets(crystal); pending.shift().onload();
 const loaded = !!_gameSetdex;
+// a ?prep= link that arrived before the sets loaded lands on Prep once they do
+const prepRestored = _activeTab === 'prep' && _prepDeferred === false;
 _maybeLoadGameSets({ gen: 2 });                       // Gold joins: set-less profile
 const cleared = _gameSetdex === null && Object.keys(_gameIndex).length === 0;
 _maybeLoadGameSets(crystal); const late = pending.shift();
@@ -132,7 +134,7 @@ _maybeLoadGameSets(crystal); const first = pending.shift();   // back to Crystal
 _maybeLoadGameSets({ gen: 2 });
 _maybeLoadGameSets(crystal); pending.shift().onload();
 first.onerror();                                      // the older attempt fails late
-console.log(JSON.stringify({ loaded, cleared, lateIgnored, staleErrorIgnored: !!_gameSetdex }));
+console.log(JSON.stringify({ loaded, cleared, lateIgnored, staleErrorIgnored: !!_gameSetdex, prepRestored }));
 """
 
 
@@ -148,4 +150,4 @@ def test_the_bridge_drops_trainer_sets_when_the_profile_loses_them():
                          capture_output=True, text=True, timeout=30)
     assert res.returncode == 0, res.stderr
     assert json.loads(res.stdout) == {"loaded": True, "cleared": True, "lateIgnored": True,
-                                       "staleErrorIgnored": True}
+                                       "staleErrorIgnored": True, "prepRestored": True}

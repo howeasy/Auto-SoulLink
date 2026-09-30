@@ -1,0 +1,78 @@
+# gen3_final_cut row=release_gate_quick item=§11_gate cut=02ba8ed1a4420e13097fd099524f6a04cbbfb847
+# lane=C:/slink-wt/g3-lane
+# command: python tools/verify_gen3_release.py --quick   (cwd=C:/slink-wt/g3-lane)
+# env: SLINK_ARMGCC=E:/Google Drive/SLink\patch\vendor\armgcc\xpack-arm-none-eabi-gcc-15.2.1-1.1\bin
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-27T21:13:45 cpu=47% emuhawk=0 python=4
+start_utc=2026-09-28T01:13:44Z tracked_clean_before=True
+Gen 3 release gate — 5 lanes
+
+[ .. ] unit
+  skips with no entry in ALLOWED_SKIPS:
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:180: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:264: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_exp_pack.py:290: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+    - SKIPPED [1] tests\unit\test_gen3_rom_content_lua.py:286: UPR scratch FireRed_allowed.gba absent: C:\Users\howar\AppData\Local\Temp\claude\E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45\30c21a7a-9a9b-44db-b573-10e09226bcc8\scratchpad\FireRed_allowed.gba
+    - SKIPPED [1] tests\unit\test_gen3_rom_content_lua.py:286: UPR scratch LeafGreen_allowed.gba absent: C:\Users\howar\AppData\Local\Temp\claude\E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45\30c21a7a-9a9b-44db-b573-10e09226bcc8\scratchpad\LeafGreen_allowed.gba
+    - SKIPPED [1] tests\unit\test_gen3_rom_ingest.py:261: Manager-made pair absent: C:\slink-wt\rand_roms\r3_run (set SLINK_GEN3_RAND_ROMS)
+....................................... [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 63%]
+........................................................................ [ 64%]
+.................................................s.s.................... [ 66%]
+.........s.............................................................. [ 67%]
+........................................................................ [ 69%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 76%]
+........................................................................ [ 78%]
+........................................................................ [ 79%]
+........................................................................ [ 81%]
+........................................................................ [ 82%]
+........................................................................ [ 84%]
+........................................................................ [ 85%]
+........................................................................ [ 87%]
+........................................................................ [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 93%]
+........................................................................ [ 94%]
+........................................................................ [ 96%]
+........................................................................ [ 98%]
+........................................................................ [ 99%]
+.......................                                                  [100%]
+============================== warnings summary ===============================
+tests\unit\test_e2e_duo_gen3.py:4631
+  C:\slink-wt\g3-lane\tests\unit\test_e2e_duo_gen3.py:4631: SyntaxWarning: invalid escape sequence '\d'
+    """EXPLODE-B-MASK: `active_faint_chain`'s explode branch pins a bare `outcome=\d+`
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:180: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:264: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+SKIPPED [1] tests\unit\test_gen3_exp_pack.py:290: pokeemerald not cloned: C:\slink-wt\g3-lane\.cache\expansion-src
+SKIPPED [1] tests\unit\test_gen3_rom_content_lua.py:286: UPR scratch FireRed_allowed.gba absent: C:\Users\howar\AppData\Local\Temp\claude\E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45\30c21a7a-9a9b-44db-b573-10e09226bcc8\scratchpad\FireRed_allowed.gba
+SKIPPED [1] tests\unit\test_gen3_rom_content_lua.py:286: UPR scratch LeafGreen_allowed.gba absent: C:\Users\howar\AppData\Local\Temp\claude\E--Google-Drive-SLink--claude-worktrees-gen3-migration-planning-5d8e45\30c21a7a-9a9b-44db-b573-10e09226bcc8\scratchpad\LeafGreen_allowed.gba
+SKIPPED [1] tests\unit\test_gen3_rom_ingest.py:261: Manager-made pair absent: C:\slink-wt\rand_roms\r3_run (set SLINK_GEN3_RAND_ROMS)
+4769 passed, 6 skipped, 1 warning in 237.81s (0:03:57)
+
+[FAIL] unit               4769 passed, 6 skipped (6 unexplained), 0 failed, 0 xfailed, 0 deselected  (239s)
+[ .. ] lua-parse
+[PASS] lua-parse          exit 0  (0s)
+[ .. ] pins
+[PASS] pins               exit 0  (0s)
+[ .. ] profile-generated
+[PASS] profile-generated  exit 0  (1s)
+[ .. ] shadow-negatives-emerald
+[PASS] shadow-negatives-emerald exit 0  (0s)
+
+GATE FAILED — unit
+A skipped, xfailed or deselected test counts as a failure here: it did not run, and 'did not run' is not 'passed'.
+exit=1 end_utc=2026-09-28T01:17:46Z tracked_clean_after=True classification=real

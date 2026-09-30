@@ -1,0 +1,90 @@
+# gen3_final_cut row=species_clause_gen3_rr_as_a item=§14_P5_RR_duo cut=1d4498da6ee20e1155f3d6e41f5068a8a3035652
+# lane=C:/slink-wt/g3-lane
+# command: python tools/e2e_duo.py --game gen3_rr --scenario species_clause_gen3   (cwd=C:/slink-wt/g3-lane)
+# env: (none)
+# verdict: FAIL exit=1
+# inputs: (none)
+--- attempt 1 of 1 ---
+LOAD 2026-09-29T20:34:16 cpu=45% emuhawk=0 python=4
+start_utc=2026-09-30T00:34:14Z tracked_clean_before=True
+
+========== scenario: species_clause_gen3 ==========
+[duo] species_clause_gen3: attempt 1 of 8
+[duo] JITTER requested=0 attempt=1
+[duo] IDENTITY a=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=4145232bca94592323a46fcbe606e153abde52a89594fd86ae790c93abd276ac b=radical_red:rom=d945a8d8c279917b7760f240f3f838f63c194c8f434a64d6b04e02427316a7c5:fixture=7fd07ae381ab550e928e97d2f591738c9ef471d71e8f4f76e86886c28706fc97 write_checkpoint.json=f052c07481c6c6df8b191e7572d9da4b262df8e5bf4eb74447f71b623feffc79 profile.json=96058e430564100f0fdbcaffef5e35a025afbf54f78815e990a503b40b350a36 source=1d4498da6ee20e1155f3d6e41f5068a8a3035652
+[duo] server up: tcp=55495 http=55496 data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_1l1qk8ez
+[duo] timing server 0.6s
+[duo] cleared 9 stale artifact(s) for species_clause_gen3: e2e_species_clause_gen3_a_8_witness.bin, e2e_species_clause_gen3_a_8_witness_ext.bin, e2e_species_clause_gen3_a_attempt8_result.txt, e2e_species_clause_gen3_a_result.txt, e2e_species_clause_gen3_b_8_witness.bin, e2e_species_clause_gen3_b_8_witness_ext.bin, e2e_species_clause_gen3_b_attempt8_result.txt, e2e_species_clause_gen3_b_result.txt, e2e_species_clause_gen3_pydec_attempt8_result.txt
+[duo] JOURNAL attempt=1 inst=a phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_1l1qk8ez path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_1l1qk8ez\slink_gen3_trade
+[duo] launched a phase=initial seed=True
+[duo] timing launch_a 0.0s
+[duo] JOURNAL attempt=1 inst=b phase=initial scope=private data=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_1l1qk8ez path=C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_1l1qk8ez\slink_gen3_trade
+[duo] launched b phase=initial seed=True
+[duo] timing launch_b 0.0s
+[duo] two EmuHawk instances launched
+[duo] keys: a=EBEF11DA:2BDDC8BF b=EBEF11DA:D4223740
+[duo] both players connected
+[duo] go-file written for a
+[duo] go-file written for b
+[duo] timing orchestrate 29.9s
+[duo] RESULT_LINE a: RESULT: FAIL (no species-clause verdict (partner-gone))
+[duo] RESULT_LINE b: RESULT: FAIL (native capture has no production TX)
+[duo] PYDEC: FAIL client RESULT before a: clause disposition ready
+[duo] species_clause_gen3: a client finished before 'a: clause disposition ready' (a: RESULT: FAIL (no species-clause verdict (partner-gone)); b: RESULT: FAIL (native capture has no production TX))
+--- species_clause_gen3 a result (last 25 lines) ---
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:229: saved/live party bytes mismatch
+WRITES 19
+RESULT: FAIL (no species-clause verdict (partner-gone))
+--- species_clause_gen3 b result (last 25 lines) ---
+[client] [SLink-gen3] write native 0x0203F8D4 +1 frame 622
+[client] [SLink-gen3] write native 0x0203F8D8 +1 frame 622
+RX link_panel
+RULE_RX {"cmd":"link_panel","rows":["No linked pairs yet","Pairs alive|0/0","Dead zones|0","Badges|0/8"]}
+[client] [SLink-gen3] write native 0x0203FD44 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4C +20 frame 633
+[client] [SLink-gen3] write native 0x0203FD6C +16 frame 633
+[client] [SLink-gen3] write native 0x0203FD8C +13 frame 633
+[client] [SLink-gen3] write native 0x0203FDAC +11 frame 633
+[client] [SLink-gen3] write native 0x0203FE2C +9 frame 633
+[client] [SLink-gen3] write native 0x0203FD48 +2 frame 633
+[client] [SLink-gen3] write native 0x0203FD47 +1 frame 633
+[client] [SLink-gen3] write native 0x0203FD4A +1 frame 633
+RX hud_show text=Partner caught Poochyena in Route 1
+RULE_RX {"b":255,"cmd":"hud_show","frames":300,"g":180,"r":100,"text":"Partner caught Poochyena in Route 1"}
+A_PENDING {"area_id":"route_1","event":"capture","held_item_id":0,"hp":14,"is_egg":false,"key":"E5C1DFEF:2BDDC8BF","level":2,"maxHP":14,"nickname":"Poochyena","player":"a","seq":65,"species_id":286,"stats":{"attack":7,"defense":7,"level":2,"maxHP":14,"pp1":35,"pp2":0,"pp3":0,"pp4":0,"spAtk":6,"spDef":5,"speed":7}}
+[client] [gen3] phase encounter-found frame=3049 clause: cycle 6 mid-step Right at (12,37)
+[client] [gen3] phase battle-state-saved frame=3049 C:/slink-wt/g3-lane/patch/build/resume_01a0ef8a/slink_fr_battle.State
+CLAUSE_ENCOUNTER {"dupe":false,"n":1,"species":1208}
+THREW 1
+TX safe - {"event":"safe","player":"b","seq":140}
+[client] [SLink-gen3] trade reload held: C:/slink-wt/g3-lane/lua/gen3/trade_journal.lua:226: saved/live party count mismatch
+CAUGHT 45890E05:D4223740
+WRITES 16
+RESULT: FAIL (native capture has no production TX)
+[duo] data dir kept: C:\Users\howar\AppData\Local\Temp\slink_duo_species_clause_gen3_1l1qk8ez
+
+========== summary ==========
+  species_clause_gen3: FAIL (attempt 1 of 8)
+exit=1 end_utc=2026-09-30T00:34:48Z tracked_clean_after=True classification=real

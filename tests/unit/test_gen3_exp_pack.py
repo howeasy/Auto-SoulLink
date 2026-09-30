@@ -1,0 +1,527 @@
+"""Unadmitted expansion pack: exact build facts, bytes, and additive generation."""
+
+import copy
+import hashlib
+import json
+import os
+import re
+import subprocess
+from pathlib import Path
+
+import lupa
+import pytest
+
+from tools import (
+    extract_expansion_data as ex,
+    gen_area_map as areas,
+    gen_gen3_engine_signals as signals,
+    gen_gen3_profile as profile,
+    gen_gen3_write_checkpoint as checkpoint,
+    pin_gen3_site as pins,
+)
+
+ROOT = profile.REPO
+PACK = ROOT / "data/games/gen3_exp/28877d73"
+TITLE = profile.EXPANSION_TITLE
+
+
+def read(name):
+    return json.loads((PACK / name).read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def context():
+    path = Path(os.environ.get("SLINK_EXPANSION_ARTIFACTS", ROOT / ".cache/expansion-output/reference"))
+    for name in ("pokeemerald.gba", "pokeemerald.sym", "pokeemerald.map"):
+        if not (path / name).is_file():
+            pytest.skip(f"local copyrighted ROMs absent: {path / name}")
+    return profile.expansion_inputs(artifacts=path)
+
+
+def test_expansion_is_not_admitted_and_removed_fields_are_absent():
+    p = read("profile.json")["titles"][TITLE]
+    assert p["admitted"] is False
+    assert p["rom_sha1"] == profile.EXPANSION_SHA1
+    forbidden = {"STATUS3_ADDR", "DISABLE_STRUCTS_ADDR", "TRAINER_OPPONENT_ADDR", "BATTLE_INTRO_GET_MONS_DATA_ADDR",
+                 "STATUS3_PERISH_SONG", "DISABLE_STRUCT_SIZE", "DISABLE_STRUCT_PERISH_TIMER_OFF"}
+    for section in ("ram", "rom", "derived"):
+        assert not forbidden.intersection(p[section])
+        assert all(value is not None for value in p[section].values())
+    assert p["derived"]["SHEDINJA_SPECIES_ID"] == 292
+    assert p["derived"]["BATTLE_MON_SIZE"] == 140
+    battle = json.loads((PACK / "facts.json").read_text())["structs"]["BattlePokemon"]["fields"]
+    assert p["derived"]["BATTLE_MON_MOVES_OFF"] == battle["moves"]["offset"] == 12
+    assert p["derived"]["BATTLE_MON_PP_OFF"] == battle["pp"]["offset"] == 37
+    perish = json.loads((PACK / "facts.json").read_text())["structs"]["Volatiles"]["bitfields"]
+    volatiles_off = battle["volatiles"]["offset"]
+    assert p["derived"]["BATTLE_MON_PERISH_FLAG_OFF"] == volatiles_off + perish["perishSong"]["offset"] == 94
+    assert p["derived"]["BATTLE_MON_PERISH_FLAG_MASK"] == int(perish["perishSong"]["mask"], 16) == 0x80
+    assert p["derived"]["BATTLE_MON_PERISH_TIMER_OFF"] == volatiles_off + perish["perishSongTimer"]["offset"] == 114
+    assert p["derived"]["BATTLE_MON_PERISH_TIMER_KEEP"] == 0xFF ^ int(perish["perishSongTimer"]["mask"], 16) == 0xF3
+    # X2: the 12-char nickname lanes in the reads.lua/gen3_codec layout shape (bit 53 and 86
+    # of the Growth substruct: nickname11 = experience u32 bits 21-28, nickname12 = +10 bits 6-13)
+    chars = p["derived"]["NICKNAME_EXTRA"]["chars"]
+    assert [c["word_off"] * 8 + c["shift"] for c in chars] == [53, 86] and {c["width"] for c in chars} == {8}
+    assert "NICKNAME_EXTRA_OFFS" not in p["derived"] and "NICKNAME11_FIELD" not in p["derived"]
+
+
+def test_every_profile_address_resolves_in_build_symbols(context):
+    p = read("profile.json")["titles"][TITLE]
+    symbols = {row["address"] for rows in context["symbols"].values() for row in rows}
+    derived = context["facts"]["derived_addresses"]
+    assert p["ram"]["PARTY_BASE"] == derived["player_party"]
+    assert p["ram"]["ENEMY_BASE"] == derived["enemy_party_a"]
+    assert p["ram"]["PARTY_COUNT_ADDR"] == derived["player_party_count"]
+    assert p["ram"]["ENEMY_COUNT_ADDR"] == derived["enemy_party_a_count"]
+    for key, value in p["ram"].items():
+        assert value in symbols or value in derived.values(), key
+    for key, value in p["rom"].items():
+        values = value.values() if isinstance(value, dict) else value if isinstance(value, list) else [value]
+        for address in values:
+            assert address in symbols or address - 1 in symbols, key
+    assert p["ram"]["PARTY_COUNT_ADDR"] != profile.expansion_symbol(context, "gPlayerPartyCountPtr")["address"]
+
+
+def test_profile_signals_checkpoint_reproduce(context):
+    for name, make in (("profile.json", profile.build_expansion), ("engine_signals.json", signals.build_expansion),
+                       ("write_checkpoint.json", checkpoint.build_expansion)):
+        assert make(context) == read(name), name
+
+
+def test_every_engine_and_checkpoint_pin_matches_rom(context):
+    pack = read("engine_signals.json")
+    assert pack["live_verified"] is False
+    sites = pack["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    assert len(sites) == 21
+    assert {kind for kind, row in pack["inventory"].items() if row["status"] == "OPEN"} == set()
+    for kind, row in sites.items():
+        data = bytes.fromhex(row["expected_hex"])
+        offset = row["rom_offset"]
+        assert context["rom"][offset:offset + len(data)] == data, kind
+        assert pins.find_offsets(context["rom"], data) == [offset], kind
+        assert row["capture_offset"] in pins.instruction_offsets(data, "thumb"), kind
+        fn = profile.expansion_symbol(context, row["symbol"])
+        pc = row["address"] + row["capture_offset"]
+        assert fn["address"] <= pc < fn["address"] + fn["size"]
+        enclosing = row["context"]
+        pattern = bytes.fromhex(enclosing["expected_hex"])
+        assert context["rom"][enclosing["rom_offset"]:enclosing["rom_offset"] + len(pattern)] == pattern
+    for row in read("write_checkpoint.json")[TITLE]["anchors"].values():
+        data = bytes.fromhex(row["expected_hex"]["clean"])
+        assert context["rom"][row["rom_offset"]:row["rom_offset"] + len(data)] == data
+
+
+def test_inlined_pc_sites_have_proven_caller_contracts(context):
+    pack = signals.build_expansion(context)
+    sites = pack["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    expected = {
+        "pc_deposit": ("Task_DepositMenu", 0x16E, {"R4", "R5", "R7", "R15", "CPSR"}),
+        "pc_release_begin": ("Task_ReleaseMon", 0xFA, {"R5", "R15", "CPSR"}),
+        "pc_release": ("Task_ReleaseMon", 0x17C, {"R5", "R15", "CPSR"}),
+    }
+    for kind, (symbol, capture, registers) in expected.items():
+        row = sites[kind]
+        fn = profile.expansion_symbol(context, symbol)
+        assert pack["inventory"][kind]["status"] == "PINNED_SOURCE_ONLY"
+        assert row["symbol"] == symbol
+        assert row["address"] + row["capture_offset"] == fn["address"] + capture
+        assert set(row["point"]) == registers
+        anchor = bytes.fromhex(row["expected_hex"])
+        assert pins.find_offsets(context["rom"], anchor) == [row["rom_offset"]]
+        assert row["capture_offset"] in pins.instruction_offsets(anchor, "thumb")
+        body = bytes.fromhex(row["context"]["expected_hex"])
+        assert context["rom"][fn["address"] - pins.ROM_BASE:fn["address"] - pins.ROM_BASE + 16] == body
+
+    changed = dict(context)
+    bad = bytearray(context["rom"])
+    bad[profile.expansion_symbol(context, "Task_ReleaseMon")["address"] - pins.ROM_BASE] ^= 1
+    changed["rom"] = bytes(bad)
+    with pytest.raises(ValueError, match="identity mismatch"):
+        signals.build_expansion(changed)
+
+
+def test_pc_cursor_globals_are_sym_bound_with_consistent_offsets(context):
+    """STATIC only: each cursor global is uniquely named in the .sym and sits at &sStorage+off.
+
+    Proves symbol identity and address layout. It says nothing about runtime liveness -- a value
+    that exists and is correctly placed can still be stale or dead at any capture point. That is
+    the PHYSICAL run's job and is not claimed here.
+    """
+    pack = signals.build_expansion(context)
+    cursors = pack["titles"][TITLE]["artifacts"]["clean"]["cursor_symbols"]
+    assert set(cursors) == {"sStorage", "sCursorArea", "sIsMonBeingMoved", "sCursorPosition"}
+    storage = cursors["sStorage"]["address"]
+    for name, row in cursors.items():
+        hit = profile.expansion_symbol(context, name)
+        assert row["address"] == hit["address"], name
+        assert row["size"] == hit["size"], name
+        assert row["address"] == storage + row["from_sStorage"], name
+        assert row["from_sStorage"] == signals.EXPANSION_CURSOR_SYMBOLS[name], name
+        assert row["size_evidence"] == "verified_build_symbol", name
+    # Offsets are the ROM's, not the brief's: sCursorPosition is 0x18 (24), not 18.
+    assert cursors["sCursorPosition"]["from_sStorage"] == 0x18
+    assert cursors["sCursorPosition"]["address"] - storage == 0x18
+
+
+def test_cursor_offsets_are_refused_when_a_sym_row_disagrees(context):
+    """A wrong value in the symbol table must stop generation, not be emitted as a fact."""
+    bad = dict(context)
+    rows = dict(context["symbols"])
+    rows["sCursorArea"] = [dict(context["symbols"]["sCursorArea"][0], address=0x020324FF)]
+    bad["symbols"] = rows
+    with pytest.raises(ValueError, match="sCursorArea is 0x020324FF, expected &sStorage"):
+        signals.build_expansion(bad)
+
+    dup = dict(context)
+    rows = dict(context["symbols"])
+    rows["sStorage"] = context["symbols"]["sStorage"] * 2
+    dup["symbols"] = rows
+    with pytest.raises(ValueError, match="occurrences of sStorage"):
+        signals.build_expansion(dup)
+
+
+def test_r5_pool_resolves_to_sstorage_by_decoding_not_by_literal(context):
+    """STATIC compiled def-use: the LDR at each PC task's entry pools &sStorage into R5.
+
+    Reads the literal out of the verified ROM. It proves the compile-time value only; whether R5
+    is still live at the capture offset is runtime_liveness=OPEN_PHYSICAL and is not claimed.
+    """
+    proof = signals.build_expansion(context)["titles"][TITLE]["artifacts"]["clean"]["register_pool_proof"]
+    storage = profile.expansion_symbol(context, "sStorage")["address"]
+    for symbol in ("Task_DepositMenu", "Task_ReleaseMon"):
+        row = proof[symbol]
+        assert row["register"] == "R5", symbol
+        assert row["function_offset"] == 8, symbol
+        assert row["pool_value"] == storage, symbol
+        assert row["evidence"] == "COMPILED_DEF_USE", symbol
+        assert row["runtime_liveness"] == "OPEN_PHYSICAL", symbol
+        # Double entry: the test re-decodes from the same verified bytes, so a decode bug on
+        # either side shows as a mismatch. It is NOT an independent re-derivation - both
+        # sides use the same Thumb LDR-literal rule, so this proves placement, not the rule.
+        fn = profile.expansion_symbol(context, symbol)
+        base = fn["address"] - pins.ROM_BASE
+        ins = int.from_bytes(context["rom"][base + 8:base + 10], "little")
+        assert ins & 0xF800 == 0x4800 and (ins >> 8) & 7 == 5, symbol
+        pool = ((8 + 4) & ~3) + (ins & 0xFF) * 4
+        assert pool == row["pool_function_offset"], symbol
+        assert int.from_bytes(context["rom"][base + pool:base + pool + 4], "little") == storage, symbol
+
+    # Negative control, and an honest limit: mutating the ROM is refused by the SHA-1 identity
+    # gate BEFORE any pool word is decoded, so a "drifted pool is rejected" negative is
+    # unreachable by construction. Recorded rather than worked around -- the pool proof is a
+    # positive fact about the verified ROM, not a mutation-robustness claim.
+    bad = dict(context)
+    rom = bytearray(context["rom"])
+    fn = profile.expansion_symbol(context, "Task_ReleaseMon")
+    base = fn["address"] - pins.ROM_BASE
+    ins = int.from_bytes(context["rom"][base + 8:base + 10], "little")
+    pool = ((8 + 4) & ~3) + (ins & 0xFF) * 4
+    rom[base + pool:base + pool + 4] = (0x02030000).to_bytes(4, "little")
+    bad["rom"] = bytes(rom)
+    with pytest.raises(ValueError, match="identity mismatch"):
+        signals.build_expansion(bad)
+
+
+
+
+def test_release_snapshot_latch_is_a_contract_with_no_consumer(context):
+    """The one-shot pairing is metadata only. Nothing in the tree consumes `snapshot` yet."""
+    sites = signals.build_expansion(context)["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    begin, release = sites["pc_release_begin"]["snapshot"], sites["pc_release"]["snapshot"]
+    assert begin["one_shot"] is True
+    assert begin["emits"] == "pc_release_begin"
+    assert release["consumes"] == "pc_release_begin"
+    assert set(begin["cleared_by"]) == {"pc_release", "release_cancel", "task_change", "storage_reset"}
+    assert "moved-mon" in begin["contract"] and "SAME Task_ReleaseMon" in begin["contract"]
+    # Every cursor a site claims to read must be one the generator actually bound.
+    for kind, row in sites.items():
+        if row.get("snapshot"):
+            for name in row["snapshot"].get("reads", ()):
+                assert name in signals.EXPANSION_CURSOR_SYMBOLS, (kind, name)
+    # Additive only: the pre-existing site keys a consumer reads are untouched.
+    for kind, row in sites.items():
+        for key in ("address", "expected_hex", "rom_offset", "capture_offset", "point", "mode", "symbol"):
+            assert key in row, (kind, key)
+    # The emerald pack is a different generator path and is not touched by this card; the
+    # additive claim is checked by key-set parity above, not by reaching into another pack.
+
+
+def test_snapshot_metadata_is_not_aliased_across_builds(context, monkeypatch):
+    """A returned pack is caller-owned: mutating it must not poison the next build."""
+    first = signals.build_expansion(context)
+    sites = first["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    sites["pc_release_begin"]["snapshot"]["one_shot"] = "MUTATED"
+    sites["pc_release_begin"]["snapshot"]["cleared_by"].append("injected")
+    sites["pc_release_begin"]["snapshot"]["contract"] = "MUTATED"
+
+    second = signals.build_expansion(context)
+    again = second["titles"][TITLE]["artifacts"]["clean"]["sites"]["pc_release_begin"]["snapshot"]
+    assert again["one_shot"] is True
+    assert again["contract"] != "MUTATED"
+    assert "injected" not in again["cleared_by"]
+    # And the module constant itself is untouched, so a third build is still clean.
+    assert signals.EXPANSION_SNAPSHOT_PROVENANCE["pc_release_begin"]["one_shot"] is True
+    assert "injected" not in signals.EXPANSION_SNAPSHOT_PROVENANCE["pc_release_begin"]["cleared_by"]
+    third = signals.build_expansion(context)["titles"][TITLE]["artifacts"]["clean"]["sites"]
+    assert third["pc_release_begin"]["snapshot"] == again
+
+
+def test_provenance_emits_must_name_its_own_site(context, monkeypatch):
+    """A mislabelled provenance block is a fact error, not a cosmetic one: refuse it."""
+    pristine = copy.deepcopy(signals.EXPANSION_SNAPSHOT_PROVENANCE)
+    broken = copy.deepcopy(pristine)
+    broken["pc_release"]["emits"] = "pc_deposit"
+    monkeypatch.setattr(signals, "EXPANSION_SNAPSHOT_PROVENANCE", broken)
+    with pytest.raises(ValueError, match=r"pc_release provenance declares emits='pc_deposit'"):
+        signals.build_expansion(context)
+
+    missing = copy.deepcopy(pristine)
+    del missing["pc_deposit"]["emits"]
+    monkeypatch.setattr(signals, "EXPANSION_SNAPSHOT_PROVENANCE", missing)
+    with pytest.raises(ValueError, match=r"pc_deposit provenance declares emits=None"):
+        signals.build_expansion(context)
+
+
+def test_cursor_base_is_sstorage_not_the_first_table_key(context, monkeypatch):
+    """The offset base is &sStorage explicitly; table order must not define it."""
+    reordered = dict(reversed(list(signals.EXPANSION_CURSOR_SYMBOLS.items())))
+    monkeypatch.setattr(signals, "EXPANSION_CURSOR_SYMBOLS", reordered)
+    sites = signals.build_expansion(context)
+    cursors = sites["titles"][TITLE]["artifacts"]["clean"]["cursor_symbols"]
+    assert set(cursors) == set(signals.EXPANSION_CURSOR_SYMBOLS)
+    storage = profile.expansion_symbol(context, "sStorage")["address"]
+    for name, row in cursors.items():
+        assert row["address"] == storage + row["from_sStorage"], name
+    assert cursors["sCursorPosition"]["address"] - storage == 0x18
+
+
+def test_generated_pack_is_current_and_reproducible(context):
+    on_disk = read("engine_signals.json")
+    assert json.loads(json.dumps(signals.build_expansion(context))) == on_disk
+    body = {k: v for k, v in on_disk.items() if k != "sha256"}
+    assert on_disk["sha256"] == hashlib.sha256(
+        json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+    assert on_disk["live_verified"] is False
+
+
+def test_wrong_rom_cannot_generate_pins(context):
+    bad = dict(context)
+    data = bytearray(context["rom"])
+    data[0x1000] ^= 1
+    bad["rom"] = bytes(data)
+    with pytest.raises(ValueError, match="identity mismatch"):
+        signals.build_expansion(bad)
+
+
+def test_expansion_pin_explicit_path_is_not_ignored(tmp_path):
+    path = tmp_path / "bad.gba"
+    path.write_bytes(b"wrong ROM")
+    with pytest.raises(ValueError, match="identity mismatch"):
+        pins.load_rom("exp", path)
+
+
+def test_checkpoint_uses_expansion_geometry_and_keeps_unsupported_clauses_open():
+    p = read("write_checkpoint.json")[TITLE]
+    facts = read("facts.json")
+    field = facts["structs"]["PaletteFadeControl"]["bitfields"]["active"]
+    assert p["predicates"]["palette_fade_active"]["offset"] == field["offset"] == 15
+    assert p["predicates"]["palette_fade_active"]["mask"] == int(field["mask"], 16)
+    assert p["tasks"]["struct_size"] == facts["structs"]["Task"]["size"] == 40
+    assert len(p["tasks"]["allowed_overworld_tasks"]) == 8
+    assert not set(p["tasks"]["allowed_overworld_tasks"]) & set(p["tasks"]["non_allowed_task_census"])
+    # X3: the BIOS park + IntrWait IRQ entry from the live census/IRQ receipts (test_gen3_exp_safety.py)
+    assert (p["cpu"]["mode"], p["cpu"]["thumb"], p["cpu"]["observed_pc"]) == (0x1F, 1, 0x0817AB3A)
+    assert p["cpu"]["irq_entry"]["lr_min"] == p["cpu"]["irq_entry"]["lr_max"] == 0x1F8
+    assert "cpu" not in p["open"] and p["tasks"]["status"] == "CENSUS"
+    handoff = p["battle"]["handoff"]
+    derived = read("profile.json")["titles"][TITLE]["derived"]
+    assert p["battle"]["commit_hold"].startswith("HOLD")
+    assert handoff["address"] == 0x030023EC and handoff["value"] == 0x0805A209
+    assert [row["name"] for row in handoff["head"]] == ["perish_status", "perish_timer", "no_op_action"]
+    battle_mons = read("profile.json")["titles"][TITLE]["ram"]["BATTLE_MONS_ADDR"]
+    assert handoff["head"][0] == {
+        "name": "perish_status", "address": battle_mons + derived["BATTLE_MON_PERISH_FLAG_OFF"],
+        "width": 1, "set": derived["BATTLE_MON_PERISH_FLAG_MASK"]}
+    assert handoff["head"][1] == {
+        "name": "perish_timer", "address": battle_mons + derived["BATTLE_MON_PERISH_TIMER_OFF"],
+        "width": 1, "keep": derived["BATTLE_MON_PERISH_TIMER_KEEP"]}
+    assert p["battle"]["commit_guard"]["value"] == facts["constants"]["STATE_WAIT_ACTION_CONFIRMED_STANDBY"]
+    assert next(c for c in p["battle"]["clauses"] if c["name"] == "battle_engine_loaded")["offset"] == 46
+
+
+def test_expansion_handoff_refuses_rom_body_or_pool_drift(context):
+    original = checkpoint.expansion_handoff(context)
+    fn = profile.expansion_symbol(context, "PlayerBufferExecCompleted", "src/battle_controller_player.o")
+    for rel in (0, 0x70, 0x74, 0x80):
+        changed = dict(context)
+        rom = bytearray(context["rom"])
+        rom[fn["address"] - checkpoint.ROM_BASE + rel] ^= 1
+        changed["rom"] = bytes(rom)
+        with pytest.raises(ValueError, match="ROM prefix changed|pool .* changed"):
+            checkpoint.expansion_handoff(changed)
+    installer = profile.expansion_symbol(context, "SetControllerToPlayer", "src/battle_controller_player.o")
+    for rel in (0x0A, 0x28, 0x2C, 0x30, 0x34):
+        changed = dict(context)
+        rom = bytearray(context["rom"])
+        rom[installer["address"] - checkpoint.ROM_BASE + rel] ^= 1
+        changed["rom"] = bytes(rom)
+        with pytest.raises(ValueError, match="ROM stores changed|pool .* changed"):
+            checkpoint.expansion_handoff(changed)
+    assert original["value"] == fn["address"] | 1
+
+
+def test_task_census_and_player_controller_are_symbol_bound(context):
+    p = read("write_checkpoint.json")[TITLE]
+    for name, address in p["tasks"]["allowed_overworld_tasks"].items():
+        assert profile.expansion_symbol(context, name)["address"] == address
+    for name, address in p["tasks"]["forbidden_inventory"].items():
+        assert profile.expansion_symbol(context, name)["address"] == address
+    for name, addresses in p["tasks"]["non_allowed_task_census"].items():
+        assert addresses == [r["address"] for r in context["symbols"][name]]
+    controller = next(c for c in p["battle"]["clauses"] if c["name"] == "battle_input_controller")
+    assert controller["expect"] == profile.expansion_symbol(context, "HandleInputChooseAction", "src/battle_controller_player.o")["address"] | 1
+    with pytest.raises(ValueError, match="occurrences"):
+        profile.expansion_symbol(context, "HandleInputChooseAction")
+
+
+def test_existing_profiles_still_generate_identically():
+    text = (ROOT / profile.SRC).read_text(encoding="utf-8")
+    parsed = profile.parse_profiles(text)
+    source = profile.source_block(text)
+    for name in profile.PACKS:
+        assert profile.render(profile.build(name, parsed, source)) == (ROOT / "data/games" / name / "profile.json").read_text(encoding="utf-8")
+    assert profile.render(profile.build_emerald()) == (ROOT / "data/games/gen3_emerald/profile.json").read_text(encoding="utf-8")
+
+
+def test_frlg_area_check_writes_nothing_and_detects_drift(tmp_path, monkeypatch):
+    folder = tmp_path / "data/games/gen3_frlge"
+    folder.mkdir(parents=True)
+    for name in ("area_map.json", "gen3_frlge_areas.lua", "gen3_frlge_locations.lua"):
+        (folder / name).write_bytes((ROOT / "data/games/gen3_frlge" / name).read_bytes())
+    monkeypatch.chdir(tmp_path)
+    before = {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.iterdir()}
+    assert areas.generate_frlg(check=True)
+    assert {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in folder.iterdir()} == before
+    (folder / "area_map.json").write_text("{}")
+    assert not areas.generate_frlg(check=True)
+    assert (folder / "area_map.json").read_text() == "{}"
+
+
+def test_expansion_area_outputs_from_own_source(tmp_path):
+    source = ROOT / ".cache/expansion-src"
+    if not source.exists():
+        pytest.skip(f"pokeemerald not cloned: {source}")
+    assert subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip() == "e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7"
+    assert not subprocess.check_output(["git", "-C", str(source), "status", "--porcelain", "--untracked-files=no"], text=True)
+    assert areas.generate_emerald(source=source, output_dir=tmp_path, expansion=True)
+    for name in ("area_map.json", "gen3_exp_areas.lua", "gen3_exp_locations.lua"):
+        assert (tmp_path / name).read_text(encoding="utf-8") == (PACK / name).read_text(encoding="utf-8")
+    mapping = read("area_map.json")
+    assert len(mapping) == 240
+    assert {"altering_cave", "altering_cave_frlg", "victory_road", "kanto_victory_road"} <= set(mapping.values())
+    for name in ("gen3_exp_areas.lua", "gen3_exp_locations.lua"):
+        text = (PACK / name).read_text(encoding="utf-8")
+        assert text.count("return {") == 1
+    assert len(re.findall(r'^  \["', (PACK / "gen3_exp_locations.lua").read_text(), re.M)) == 935
+
+
+# ── F1: gen3_exp is data-only -- nothing routes a real cartridge into it ────────────────────
+def test_gen3_exp_is_unreachable_from_entry_lua_and_manager():
+    """The pack is deliberately UNADMITTED (module docstring). X3 (the E2-ENTRY precedent) registers
+    it in lua/gen3/entry.lua's Entry.PACKS so its hash names its OWN pack (never gen3_emerald's) and
+    the launcher refuses it as unrouted (test_gen3_exp_entry.py); it must stay out of Entry.ROUTED,
+    carry no header_code (no by-name admission), keep its profile unadmitted, and server/manager.py
+    must not offer it as a playable GAMES entry or even list it as a named UNADMITTED_GAMES key."""
+    lua = lupa.LuaRuntime(unpack_returned_tuples=True)
+    entry_path = (ROOT / "lua/gen3/entry.lua").as_posix()
+    Entry = lua.eval(f'dofile("{entry_path}")')
+    assert "gen3_exp" in {key for key, _ in Entry.PACKS.items()}
+    assert Entry.PACKS.gen3_exp.header_code is None
+    assert "gen3_exp" not in {key for key, _ in Entry.ROUTED.items()}
+    assert read("profile.json")["titles"][TITLE]["admitted"] is False
+
+    from server.manager import GAMES, UNADMITTED_GAMES
+    assert "gen3_exp" not in {key for key, _, _ in GAMES}
+    assert "gen3_exp" not in UNADMITTED_GAMES
+
+
+# ── F3/F4: a ROM-value oracle independent of the generator's own decode path ────────────────
+def _rom_table_row(context, layout, table, row_id):
+    """Decode one row of a layout.json table straight off the reference ROM bytes, using only
+    ex.Rom/ex.number (never gen_expansion_facts.py's own pipeline) as an independent check that
+    layout.json's offsets/widths/shifts actually land on the values the compiler emitted."""
+    rom = ex.Rom(context["rom"])
+    spec = layout["tables"][table]
+    pointer = context["facts"]["headers"]["gf"][table]
+    base = rom.address(pointer, spec["stride"] * (row_id + 1))
+    pos = base + row_id * spec["stride"]
+    return {key: ex.number(rom, pos, field, spec["stride"]) for key, field in spec["fields"].items()}
+
+
+def test_move_priority_matches_the_rom_for_four_known_moves(context):
+    # ids from this build's own include/constants/moves.h (Quick Attack=98, Extreme Speed=245,
+    # Protect=182, Pound=1) -- never a vanilla id (owner note: RR types/ids are non-standard).
+    layout = read("layout.json")
+    expected = {1: 0, 98: 1, 182: 4, 245: 2}  # Pound, Quick Attack, Protect, Extreme Speed
+    for move_id, priority in expected.items():
+        row = _rom_table_row(context, layout, "moves", move_id)
+        assert row["priority"] == priority, move_id
+
+
+def test_species_base_stats_match_the_rom_for_bulbasaur(context):
+    layout = read("layout.json")  # SPECIES_BULBASAUR = 1 (this build's constants/species.h)
+    row = _rom_table_row(context, layout, "species", 1)
+    assert (row["baseHP"], row["baseAttack"], row["baseDefense"], row["baseSpeed"],
+            row["baseSpAttack"], row["baseSpDefense"]) == (45, 49, 49, 45, 65, 65)
+
+
+def test_item_row_matches_the_rom_for_potion(context):
+    layout = read("layout.json")  # ITEM_POTION = 28; I_PRICE=GEN_LATEST(9)>=GEN_7 -> 200
+    row = _rom_table_row(context, layout, "items", 28)
+    assert row["price"] == 200
+    assert row["holdEffectParam"] == 20
+
+
+# ── F2 -> X3: the task allow-list names its qualification; cpu is a measured clause ──────────
+def test_tasks_allow_list_carries_its_census_and_cpu_is_measured():
+    p = read("write_checkpoint.json")[TITLE]
+    assert p["tasks"]["status"] == "CENSUS" and (ROOT / p["tasks"]["census"]).is_file()
+    assert "status" not in p["cpu"] and (ROOT / p["cpu"]["census"]).is_file()
+    assert (ROOT / p["cpu"]["irq_entry"]["evidence"]).is_file()
+
+
+# ── F6: a ValueError from generate_emerald(check=...) is a message, not a traceback ─────────
+def test_area_map_main_turns_expansion_value_error_into_exit_1(monkeypatch, capsys):
+    source = ROOT / ".cache/expansion-src"
+    if not source.exists():
+        pytest.skip(f"pokeemerald not cloned: {source}")
+
+    def boom(*_args, **_kwargs):
+        raise ValueError("area_id 'x' would merge unrelated maps")
+
+    monkeypatch.setattr(areas, "generate_emerald", boom)
+    monkeypatch.setattr("sys.argv", ["gen_area_map.py", "--game", "emerald",
+                                     "--expansion", "28877d73", "--source", str(source)])
+    assert areas.main() == 1
+    assert "area_id 'x' would merge unrelated maps" in capsys.readouterr().err
+
+
+# ── F7: facts.json's on-disk bytes are exactly gen_gen3_profile.render's serialization ──────
+def test_facts_json_bytes_match_profiles_render_and_its_recorded_sha256():
+    # a CRLF (core.autocrlf) checkout still hashes the LF bytes the generator wrote and pinned
+    raw = (PACK / "facts.json").read_bytes().replace(b"\r\n", b"\n")
+    assert profile.render(json.loads(raw)).encode("utf-8") == raw
+    digest = hashlib.sha256(raw).hexdigest()
+    assert read("profile.json")["source"]["facts_sha256"] == digest
+    assert read("write_checkpoint.json")[TITLE]["source"]["facts_sha256"] == digest
+
+
+# ── F8: the generated Lua headers are bound to the exact source JSON they were built from ──
+def test_expansion_area_lua_headers_carry_the_source_sha256():
+    source = ROOT / ".cache/expansion-src"
+    if not source.exists():
+        pytest.skip(f"pokeemerald not cloned: {source}")
+    expected = f"-- source_sha256: {areas._expansion_source_sha256(source)}"
+    for name in ("gen3_exp_areas.lua", "gen3_exp_locations.lua"):
+        lines = (PACK / name).read_text(encoding="utf-8").splitlines()
+        assert expected in lines[:5], name

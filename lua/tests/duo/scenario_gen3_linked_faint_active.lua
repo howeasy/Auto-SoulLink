@@ -50,7 +50,6 @@
 -- whiteout case) keeps its slot after game_over: its memorialize is dropped, logged LAST_MON_KEPT.
 local fmt = string.format
 local SLOT, BENCH = 0, 1
-local PERISH = 0x20                    -- STATUS3_PERISH_SONG, include/constants/battle.h:138
 local OUTCOME_LOST, OUTCOME_RAN = 2, 4 -- include/constants/battle.h
 local PLAN_ENTRIES = 5                 -- status3, perish timer, chosen action, comm, hand-off
 local RR_BALL_ID = 0x0203AD30          -- rr_active_faint_parity_scope §3.1 (the L-throw's store)
@@ -63,6 +62,8 @@ local function hexbytes(t) local o = {} for i, v in ipairs(t) do o[i] = fmt("%d"
 local function observe(ctx, key, slot, hammer, explode, case)
     local o = {}
     local H = ctx.handoff
+    local PERISH = ctx.perish_mask or 0x20
+    local perish_label = ctx.perish_label or "gStatuses3[0]"
     local w0, att0, in0, site0 = #ctx.write_lines(), ctx.attempted(), ctx.inputs(), #ctx.faint_sites()
     local hp_addr = ctx.hp_addrs(slot)
     local l_held = false
@@ -119,15 +120,19 @@ local function observe(ctx, key, slot, hammer, explode, case)
                 if not (e and e.explode and e.why == "explosion committed") then
                     return fail("the entry is not a committed Explosion: why=" .. tostring(e and e.why))
                 end
+                for i = 1, 4 do
+                    if s.pp[i] ~= 5 then return fail("Explosion commit PP was not initialized to 5") end
+                end
             else
-                if s.status3 & PERISH == 0 then return fail("gStatuses3[0] lacks the Perish flag after the commit") end
+                if s.status3 & PERISH == 0 then return fail(perish_label .. " lacks the Perish flag after the commit") end
                 if not (e and e.perish and e.handoff and e.why == "active faint committed") then
                     return fail("the entry is not a handed-off Perish commit: why=" .. tostring(e and e.why))
                 end
             end
             o.base = o.base or s
             o.keys = s.keys                               -- 0: the pre-commit guard ran this frame
-            o.commit = { frame = s.frame, attempted = ctx.attempted() - att0, ctrl = s.ctrl0 }
+            o.commit = { frame = s.frame, attempted = ctx.attempted() - att0, ctrl = s.ctrl0,
+                         pp = {s.pp[1], s.pp[2], s.pp[3], s.pp[4]} }
             ctx.log(fmt('ACTIVE_COMMIT %s frame=%d writes=%d attempted=%d handoff=1 status3=0x%X ctrl=0x%08X '
                         .. 'counter=%d last_move=%d pp=%s why="%s" case=%s', key, s.frame, #c, o.commit.attempted,
                         s.status3, s.ctrl0, o.base.counter, o.base.last_move, hexbytes(o.base.pp), e.why, case))
@@ -161,6 +166,13 @@ local function observe(ctx, key, slot, hammer, explode, case)
             if hammer then set_l(false) end
             if explode then
                 if s.last_move ~= MOVE_EXPLOSION then return fail("the KO came without the Explosion action") end
+                local dropped = false
+                for i = 1, 4 do
+                    if s.pp[i] < 0 or s.pp[i] > o.commit.pp[i] then return fail("Explosion PP readback invalid") end
+                    if s.pp[i] < o.commit.pp[i] then dropped = true end
+                end
+                if not dropped then return fail("PP did not drop for Explosion") end
+                ctx.log(fmt("EXPLOSION_PP %s committed=%s ko=%s", key, hexbytes(o.commit.pp), hexbytes(s.pp)))
             else
                 if s.status3 & PERISH ~= 0 then return fail("the Perish flag is still set at the KO") end
                 if not ctx.rr and s.last_move ~= o.base.last_move then return fail("lastUsedMovePlayer moved: the mon acted") end

@@ -89,6 +89,7 @@
   // Non-RR trainer sets (task 5/8): the vendored, pret-verified setdex named by the
   // payload's calc.sets = {file, var}. One flat setdex (no Normal/Hardcore split like RR).
   var _gameSetdex        = null;  // window[calc.sets.var] once loaded
+  var _prepDeferred      = false; // a Prep request that arrived before this game's sets loaded
   var _gameIndex         = {};    // _buildTrainerIndex(_gameSetdex), for the Prep tab
   var _gameSetsLoadStarted = false;
   var _gameSetsFile      = null;  // the file currently loaded/loading; a dex switch reloads
@@ -240,6 +241,7 @@
       _gameIndex  = _buildTrainerIndex(_gameSetdex, true); // skipSplit: vendored keys are per-fight already
       _setdexReady = true;
       _enrichEnemyMons();
+      if (_prepDeferred) { _prepDeferred = false; if (_supportsPrepTab()) _activeTab = 'prep'; }
       refreshPanel();
     };
     s.onerror = function () {
@@ -1446,7 +1448,12 @@
 
     // Prep tab needs a trainer setdex (RR's dual index, or a non-RR game's loaded sets);
     // bounce off it once we know none is available for this game.
-    if (_activeTab === 'prep' && !_supportsPrepTab()) _activeTab = 'a';
+    // A ?prep= link can arrive before a non-RR game's sets file has loaded: remember it, so the
+    // sets onload restores the Prep tab instead of leaving the player on Party for good.
+    if (_activeTab === 'prep' && !_supportsPrepTab()) {
+      if (!_setdexReady) _prepDeferred = true;
+      _activeTab = 'a';
+    }
 
     // Prep tab is available even without SLink data (it only needs the SETDEX)
     if (!_data && _activeTab !== 'prep') {
@@ -1531,7 +1538,7 @@
       }
 
       tab.onclick = (function (s) {
-        return function () { _activeTab = s; refreshPanel(); };
+        return function () { _activeTab = s; _prepDeferred = false; refreshPanel(); };
       })(side);
 
       tabRow.appendChild(tab);
