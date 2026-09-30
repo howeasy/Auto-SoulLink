@@ -1,0 +1,24 @@
+{
+  "created_at_utc": "2026-09-30T06:50:55.550830+00:00",
+  "source_head": "067768b920d1e797e6f8fc39d2bd6a872126ee23",
+  "archive": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\core-ignored-evidence.zip",
+  "archive_sha256": "5cda63e1eec94a7923367c2a63a1664140b4a095512a3025e80f4e296653331b",
+  "archive_crc_and_member_sha256_verified": true,
+  "external_links_not_followed": {
+    ".cache/expansion-src": "C:\\slink-cache\\expansion\\e8bd1cd7b03fc032ea37e3ecd38b379b5d01a1e7",
+    ".cache/purergb": "E:\\Google Drive\\SLink\\.cache\\purergb",
+    ".cache/purergb-overlay": "E:\\Google Drive\\SLink\\.cache\\purergb-overlay",
+    ".cache/slink-upr": "E:\\Google Drive\\SLink\\.cache\\slink-upr",
+    ".cache/pret/pokeyellow": "E:\\Google Drive\\SLink\\.cache\\pret\\pokeyellow"
+  },
+  "environment": {
+    "path": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\qualification-env.ps1",
+    "sha256": "0d77b0210c021f4efd2465b21cf7de9cfb60cb67b9f3da1fe8e42e6ba912479e"
+  },
+  "source_inputs": "Existing stable/main inputs retained; external link targets remain untouched.",
+  "file_count": 1765,
+  "member_bytes": 721922127,
+  "full_manifest": "C:\\slink-cache\\gen3-inputs\\core-2026-09-30\\core-ignored-manifest.json",
+  "full_manifest_sha256": "72fc10389c108a9347aec051a1b73f33f7ae2e10055b9b5c0458889e27ae9174",
+  "cleanup_status": "Preserved and verified before authorized main integration and task checkout retirement."
+}
