@@ -83,7 +83,7 @@ def test_opponent_script_target_and_actual_party_callee_are_bound():
         if not path.is_file(): pytest.skip(f"absent pinned ROM: {path}")
         rom = path.read_bytes()
         facts = rr.census(rom)["borrowed_party"]
-        assert facts["opponent_begin"] == 0x090790C8
+        assert facts["opponent_entry"] == 0x090790C8 and facts["opponent_begin"] == 0x090790E4
         assert facts["opponent_script_call"] == 0x09051C11
         assert facts["opponent_var"] == 0x512B and facts["opponent_branch_values"] == [6, 7]
         assert facts["bodies"]["opponent_builder"]["size"] == 72
@@ -93,3 +93,27 @@ def test_opponent_script_target_and_actual_party_callee_are_bound():
         altered[0x01051C12] ^= 2
         with pytest.raises(ValueError, match="script binding changed"):
             rr.borrowed_contract(bytes(altered))
+
+
+@pytest.mark.parametrize("value,expected_hit", [(0,False),(5,False),(6,True),(7,True),(8,False),(0xFFFF,False)])
+def test_opponent_prewrite_point_is_reached_only_by_actual_six_seven_branches(value,expected_hit):
+    """Follow the ROM's bounded Thumb control flow after the VAR512B read."""
+    from capstone import Cs, CS_ARCH_ARM, CS_MODE_THUMB
+    path = ROM_SPECS["rr"][3]
+    if not path.is_file(): pytest.skip(f"absent pinned ROM: {path}")
+    rom = path.read_bytes()
+    decoded = {i.address:i for i in Cs(CS_ARCH_ARM,CS_MODE_THUMB).disasm(
+        rr.take(rom,0x090790D2,40),0x090790D2)}
+    pc,eq,hit = 0x090790D2,False,False
+    for _ in range(24):
+        if pc == 0x090790E4:
+            hit=True;break
+        instruction=decoded[pc]
+        if instruction.mnemonic=="pop": break
+        if instruction.mnemonic=="cmp":
+            assert instruction.op_str.startswith("r0, #")
+            eq=value==int(instruction.op_str.split("#")[1],0)
+        if instruction.mnemonic=="bne" and not eq or instruction.mnemonic=="b":
+            pc=int(instruction.op_str.removeprefix("#"),0)
+        else: pc+=instruction.size
+    assert hit is expected_hit

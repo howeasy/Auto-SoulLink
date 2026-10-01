@@ -178,7 +178,8 @@ for _kind, _symbol, _contract in (
      "Nested/replayed begin must not replace the original own-party baseline."),
     ("borrowed_party_opponent_begin", "RR School opponent team builder",
      "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. "
-     "Capture ENTRY before opponent-builder may overwrite gPlayerParty, same own-records/keys/count "
+     "Capture shared callsite090790E4 BEFORE BL09078F9C, reached only by VAR512B6/7 paths; "
+     "unsupported values return090790E8 without a begin hit. Same own-records/keys/count "
      "and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. "
      "Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that "
      "callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. "
@@ -189,7 +190,8 @@ for _kind, _symbol, _contract in (
      "six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed "
      "epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. "
      "Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school "
-     "postbattle restore caller UNRESOLVED. Borrowed own-party writes remain held until verified restore.")):
+     "postbattle restore caller UNRESOLVED. Both own/opponent begins share the first active own baseline; "
+     "later begin hits cannot replace it. Borrowed own-party writes remain held until verified restore.")):
     CANDIDATES.append(candidate(_kind, _symbol, "src/pokemon.c", _contract,
                                 reason="RR-only school borrow lifecycle; not applicable to vanilla pack"))
 
@@ -855,7 +857,7 @@ def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
             flat = body["address"] - ROM_BASE
             code_size = 100 if kind == "borrowed_party_begin" else 52 if kind == "borrowed_party_opponent_begin" else 64
             data = rom[flat:flat + code_size]
-            capture = 0x32 if kind == "borrowed_party_end" else 0
+            capture = 0x32 if kind == "borrowed_party_end" else 0x1C if kind == "borrowed_party_opponent_begin" else 0
             site = make_site(rom, flat, data, capture_offset=capture,
                              symbol=c["symbol"], point=["R15", "CPSR"])
             site.update(source="rr_school_script_binary",
@@ -863,9 +865,17 @@ def rr_resolution(c: dict, name: str, rom: bytes) -> dict | None:
                         context={"rom_offset": flat, "expected_hex": body["expected_hex"]},
                         function={"address": body["address"], "size": code_size,
                                   "capture_offset": capture, "anchor_offset": 0,
-                                  "symbol": c["symbol"], "size_evidence": "reviewed ROM code/return boundary"},
+                                  "symbol": c["symbol"], "context_size": body["size"],
+                                  "size_evidence": ("52-byte executable span includes NOP090790FA; "
+                                                    "72-byte context adds20-byte pool090790FC..0907910F"
+                                                    if kind == "borrowed_party_opponent_begin" else
+                                                    "reviewed ROM code/return boundary")},
                         caller={"map": [5, 2], "npc_local_id": 1, "script": 0x09051ABF},
-                        pair_contract={"begin": kind if kind != "borrowed_party_end" else "borrowed_party_begin", "end": "borrowed_party_end",
+                        pair_contract={"begin": kind if kind != "borrowed_party_end" else
+                                       ["borrowed_party_begin", "borrowed_party_opponent_begin"],
+                                       "accepted_begins": ["borrowed_party_begin", "borrowed_party_opponent_begin"],
+                                       "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                                       "end": "borrowed_party_end",
                                        "party_base": facts["party_base"], "stride": 100,
                                        "baseline": "own raw records/keys/count before builder",
                                        "restore": "active epoch only; exact own keys/count match",

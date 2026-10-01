@@ -406,18 +406,18 @@ Unless an RR-specific binding is described below, RR entry checks use the FR ent
 
 ### borrowed_party_opponent_begin — RR School opponent team builder
 
-[pret src/pokemon.c](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c). School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture ENTRY before opponent-builder may overwrite gPlayerParty, same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.
+[pret src/pokemon.c](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c). School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture shared callsite090790E4 BEFORE BL09078F9C, reached only by VAR512B6/7 paths; unsupported values return090790E8 without a begin hit. Same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|
 | fr | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only school borrow lifecycle; not applicable to vanilla pack; bytes, if shown, are diagnostic only |
 | lg | UNVERIFIED | not resolved; no capture offset authorized | not established | RR-only school borrow lifecycle; not applicable to vanilla pack; bytes, if shown, are diagnostic only |
-| rr | PINNED | 090790C8 / +0 / 10790C8 | 13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046 | SOURCE only; capture contract above |
-| rr_companion | PINNED | 090790C8 / +0 / 10790C8 | 13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046 | SOURCE only; capture contract above |
+| rr | PINNED | 090790C8 / +1C / 10790C8 | 13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046 | SOURCE only; capture contract above |
+| rr_companion | PINNED | 090790C8 / +1C / 10790C8 | 13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C046 | SOURCE only; capture contract above |
 
 ### borrowed_party_end — LoadPlayerParty restored-party completion
 
-[pret src/pokemon.c](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c). RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Borrowed own-party writes remain held until verified restore.
+[pret src/pokemon.c](https://github.com/pret/pokefirered/blob/c75f352304d529f6ba92d4f74b9cf8b5c3810788/src/pokemon.c). RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Both own/opponent begins share the first active own baseline; later begin hits cannot replace it. Borrowed own-party writes remain held until verified restore.
 
 | ROM | Status | Anchor address / capture offset / flat | Expected bytes | Reason |
 |---|---|---|---|---|

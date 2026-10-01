@@ -75,7 +75,8 @@ def borrowed_contract(rom: bytes) -> dict:
         bodies[name] = {"address": address, "size": size, "sha256": sha256,
                         "anchor_occurrences": 1, "expected_hex": body.hex().upper()}
     return {"status": "SOURCE_PIN", "npc": npc, "map": [5, 2], "bodies": bodies,
-            "begin": 0x09079300, "opponent_begin": 0x090790C8, "end": 0x0804C262,
+            "begin": 0x09079300, "opponent_entry": 0x090790C8,
+            "opponent_begin": 0x090790E4, "end": 0x0804C262,
             "opponent_script_call": 0x09051C11, "opponent_var": 0x512B,
             "opponent_branch_values": [6, 7], "opponent_callee": 0x09078F9C,
             "opponent_party_pointer_literal": 0x09079108,

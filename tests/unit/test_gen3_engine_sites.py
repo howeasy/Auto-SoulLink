@@ -326,11 +326,17 @@ def test_opponent_begin_is_separate_from_own_team_builder(roms, name):
     result = gen.resolve(candidate, name, roms[name])
     assert result["status"] == "PINNED"
     site = result["site"]
-    assert site["address"] == 0x090790C8 and site["capture_offset"] == 0
+    assert site["address"] == 0x090790C8 and site["capture_offset"] == 0x1C
     assert site["address"] != 0x09079300 and len(bytes.fromhex(site["expected_hex"])) == 52
     assert site["pair_contract"]["end"] == "borrowed_party_end"
     assert site["point"] == ["R15", "CPSR"]
     assert find_offsets(roms[name], bytes.fromhex(site["expected_hex"])) == [0x010790C8]
+    assert site["function"]["size"] == 52 and site["function"]["context_size"] == 72
+    assert site["pair_contract"]["accepted_begins"] == ["borrowed_party_begin", "borrowed_party_opponent_begin"]
+    end_candidate = next(c for c in gen.CANDIDATES if c["kind"] == "borrowed_party_end")
+    end_site = gen.resolve(end_candidate, name, roms[name])["site"]
+    assert end_site["pair_contract"]["begin"] == site["pair_contract"]["accepted_begins"]
+    assert "first active own baseline" in end_site["pair_contract"]["baseline_precedence"]
     for vanilla in ("fr", "lg"):
         if vanilla in roms:
             assert gen.resolve(candidate, vanilla, roms[vanilla])["status"] == "UNVERIFIED"

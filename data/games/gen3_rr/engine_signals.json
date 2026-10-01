@@ -3,7 +3,7 @@
   "live_verified": false,
   "pack": "gen3_rr",
   "schema": "gen3-engine-signals-v1",
-  "sha256": "76129bc90929a01923258e2075c7886508cfb211474746b940c2ef0e0f5eb559",
+  "sha256": "9eabff699cd807a0d3a6dce8e97ea860edf982cde965b792378cf522d8c137d4",
   "titles": {
     "radical_red": {
       "artifacts": {
@@ -89,13 +89,19 @@
                 "address": 151491328,
                 "anchor_offset": 0,
                 "capture_offset": 0,
+                "context_size": 120,
                 "size": 100,
                 "size_evidence": "reviewed ROM code/return boundary",
                 "symbol": "RR School rental team builder"
               },
               "mode": "thumb",
               "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
                 "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
                 "begin": "borrowed_party_begin",
                 "end": "borrowed_party_end",
                 "party_base": 33702532,
@@ -121,7 +127,7 @@
                 "npc_local_id": 1,
                 "script": 151329471
               },
-              "capture_contract": "RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Borrowed own-party writes remain held until verified restore.",
+              "capture_contract": "RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Both own/opponent begins share the first active own baseline; later begin hits cannot replace it. Borrowed own-party writes remain held until verified restore.",
               "capture_offset": 50,
               "context": {
                 "expected_hex": "30B50C490C48006834300078087000240A4D6420221C424350190749096889183831642299F110FE0134052CF1DD30BC01BC0047294002020850000384420202",
@@ -132,14 +138,23 @@
                 "address": 134529584,
                 "anchor_offset": 0,
                 "capture_offset": 50,
+                "context_size": 64,
                 "size": 64,
                 "size_evidence": "reviewed ROM code/return boundary",
                 "symbol": "LoadPlayerParty restored-party completion"
               },
               "mode": "thumb",
               "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
                 "baseline": "own raw records/keys/count before builder",
-                "begin": "borrowed_party_begin",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                "begin": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
                 "end": "borrowed_party_end",
                 "party_base": 33702532,
                 "reset": "clear unmatched borrow on reset",
@@ -164,8 +179,8 @@
                 "npc_local_id": 1,
                 "script": 151329471
               },
-              "capture_contract": "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture ENTRY before opponent-builder may overwrite gPlayerParty, same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.",
-              "capture_offset": 0,
+              "capture_contract": "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture shared callsite090790E4 BEFORE BL09078F9C, reached only by VAR512B6/7 paths; unsupported values return090790E8 without a begin hit. Same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.",
+              "capture_offset": 28,
               "context": {
                 "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C04669E506082B51000008C912098442020260C81209",
                 "rom_offset": 17273032
@@ -174,14 +189,20 @@
               "function": {
                 "address": 151490760,
                 "anchor_offset": 0,
-                "capture_offset": 0,
+                "capture_offset": 28,
+                "context_size": 72,
                 "size": 52,
-                "size_evidence": "reviewed ROM code/return boundary",
+                "size_evidence": "52-byte executable span includes NOP090790FA; 72-byte context adds20-byte pool090790FC..0907910F",
                 "symbol": "RR School opponent team builder"
               },
               "mode": "thumb",
               "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
                 "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
                 "begin": "borrowed_party_opponent_begin",
                 "end": "borrowed_party_end",
                 "party_base": 33702532,
@@ -917,13 +938,19 @@
                 "address": 151491328,
                 "anchor_offset": 0,
                 "capture_offset": 0,
+                "context_size": 120,
                 "size": 100,
                 "size_evidence": "reviewed ROM code/return boundary",
                 "symbol": "RR School rental team builder"
               },
               "mode": "thumb",
               "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
                 "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
                 "begin": "borrowed_party_begin",
                 "end": "borrowed_party_end",
                 "party_base": 33702532,
@@ -949,7 +976,7 @@
                 "npc_local_id": 1,
                 "script": 151329471
               },
-              "capture_contract": "RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Borrowed own-party writes remain held until verified restore.",
+              "capture_contract": "RR special28 -> LoadPlayerParty0804C230; capture0804C262 BX R0 after count restoration and six 100-byte copies from *gSaveBlock1Ptr+0x38. Generic restore call: end ONLY an active borrowed epoch whose restored own keys/count match the saved preimage; unrelated loads never end/emit. Clear on reset and reject invalid/mismatched restore. School cancel special28 proven; school postbattle restore caller UNRESOLVED. Both own/opponent begins share the first active own baseline; later begin hits cannot replace it. Borrowed own-party writes remain held until verified restore.",
               "capture_offset": 50,
               "context": {
                 "expected_hex": "30B50C490C48006834300078087000240A4D6420221C424350190749096889183831642299F110FE0134052CF1DD30BC01BC0047294002020850000384420202",
@@ -960,14 +987,23 @@
                 "address": 134529584,
                 "anchor_offset": 0,
                 "capture_offset": 50,
+                "context_size": 64,
                 "size": 64,
                 "size_evidence": "reviewed ROM code/return boundary",
                 "symbol": "LoadPlayerParty restored-party completion"
               },
               "mode": "thumb",
               "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
                 "baseline": "own raw records/keys/count before builder",
-                "begin": "borrowed_party_begin",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
+                "begin": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
                 "end": "borrowed_party_end",
                 "party_base": 33702532,
                 "reset": "clear unmatched borrow on reset",
@@ -992,8 +1028,8 @@
                 "npc_local_id": 1,
                 "script": 151329471
               },
-              "capture_contract": "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture ENTRY before opponent-builder may overwrite gPlayerParty, same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.",
-              "capture_offset": 0,
+              "capture_contract": "School ViewOppTeam option1: script09051C06 sets VAR512B=7, callnative09051C11->090790C8. Capture shared callsite090790E4 BEFORE BL09078F9C, reached only by VAR512B6/7 paths; unsupported values return090790E8 without a begin hit. Same own-records/keys/count and reset-epoch preimage contract as borrowed_party_begin; never replace active own baseline. Function reads VAR512B and only values6/7 invoke09078F9C with party pointer02024284; that callee computes100*i and calls CreateMon09078C48. Other values return without overwriting. Begin hit alone is not proof of party divergence or PHYSICAL qualification. Restore only on borrowed_party_end with exact own keys/count; clear on reset. SOURCE ROM, not guessed backup RAM.",
+              "capture_offset": 28,
               "context": {
                 "expected_hex": "13B50C4B0C4803F0E9FE0100072808D100220624094B0A4801920094FFF75AFF13BD0628FCD10022064B054801920091F4E7C04669E506082B51000008C912098442020260C81209",
                 "rom_offset": 17273032
@@ -1002,14 +1038,20 @@
               "function": {
                 "address": 151490760,
                 "anchor_offset": 0,
-                "capture_offset": 0,
+                "capture_offset": 28,
+                "context_size": 72,
                 "size": 52,
-                "size_evidence": "reviewed ROM code/return boundary",
+                "size_evidence": "52-byte executable span includes NOP090790FA; 72-byte context adds20-byte pool090790FC..0907910F",
                 "symbol": "RR School opponent team builder"
               },
               "mode": "thumb",
               "pair_contract": {
+                "accepted_begins": [
+                  "borrowed_party_begin",
+                  "borrowed_party_opponent_begin"
+                ],
                 "baseline": "own raw records/keys/count before builder",
+                "baseline_precedence": "first active own baseline preserved; later begin hits never replace it",
                 "begin": "borrowed_party_opponent_begin",
                 "end": "borrowed_party_end",
                 "party_base": 33702532,
