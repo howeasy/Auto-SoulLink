@@ -316,7 +316,10 @@ def rr_scenarios():
     or stone holder is reachable by normal inputs early in RR). Derived from e2e_duo's own table
     -- never duplicated here -- so a new RR scenario there is picked up automatically."""
     import e2e_duo
-    names = e2e_duo.scenarios_for("gen3_rr")   # the canonical selector (honours not_yet)
+    # Final-cut selects every applicable probe explicitly, including feature and recovery
+    # rows excluded from e2e_duo's ordinary --scenario all sweep. Keep its applicability
+    # rules (including not_yet), registry order, and the signed-limit guard below.
+    names = [s for s in e2e_duo.SCENARIOS if e2e_duo.scenario_applies(s, "gen3_rr")]
     limited = {s for s in names if e2e_duo.SCENARIOS[s].get("signed_limit")}
     if limited - RR_SIGNED_LIMITS:
         raise RuntimeError(f"new RR signed limit(s) {sorted(limited - RR_SIGNED_LIMITS)}: "
@@ -355,7 +358,20 @@ def build_plan_rr(cut, lane, master):
     and the release zip built, checked and booted on the RR companion build (zip_rows, ZIP_BOOT).
     `master` is accepted for CLI-signature parity with build_plan but unused (no item6 row)."""
     del master
-    rows = [_duo(s, "gen3_rr", "§14 P5 RR duo", lane) for s in rr_scenarios()]
+    import e2e_duo
+    rows = []
+    for s in rr_scenarios():
+        row = _duo(s, "gen3_rr", "§14 P5 RR duo", lane)
+        cfg = e2e_duo.SCENARIOS[s]
+        if cfg.get("journal_lock_probe") or cfg.get("rr_reset_trade"):
+            row.argv.append("--keep-data")
+        if cfg.get("journal_lock_probe"):
+            # The contention oracle intentionally locks the install-root journal; its
+            # prerequisite requires an exact private lane and a distinct state directory.
+            row.env.update(SLINK_JOURNAL_PROBE_ROOT=os.path.realpath(lane),
+                           SLINK_STATE_DIR=os.path.realpath(os.path.join(lane, "patch", "build",
+                                                                      "rr_journal_probe_states")))
+        rows.append(row)
     rows.append(Row("rr_opcode_gates", "G5-GATES-LIVE",
                     [PY, "-m", "pytest", "tests/live/test_lua_gates.py", "-q", "-p", "no:randomly",
                      "-rs"], lane, 3600, env={"SLINK_LIVE": "1"},

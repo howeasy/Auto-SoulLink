@@ -101,15 +101,53 @@ def test_rows_selects_by_glob_or_item_keeping_order():
 
 def _rr_scenario_ids():
     """The expected RR duo row ids, derived from e2e_duo.SCENARIOS itself (never hard-coded
-    twice) -- every scenario whose games names gen3_rr, minus an owner-signed limit or an
-    explicit_only row (card RR-SYNTH: evolve_gen3 names gen3_rr in its games but stays
-    explicit_only -- never part of the automatic RR final-cut sweep, same as scenarios_for/
-    rr_scenarios's own filter -- so this helper must apply the same exclusion or it drifts
-    from what rr_scenarios() actually returns)."""
+    twice) -- every applicable scenario, including explicitly selected feature/recovery
+    probes, minus the owner-signed limit."""
     import e2e_duo
     return [f"{s}_rr_as_a" for s, cfg in e2e_duo.SCENARIOS.items()
-            if "gen3_rr" in cfg.get("games", ()) and not cfg.get("signed_limit")
-            and not cfg.get("explicit_only")]
+            if e2e_duo.scenario_applies(s, "gen3_rr") and not cfg.get("signed_limit")]
+
+
+def test_rr_plan_includes_explicit_feature_and_recovery_probes():
+    required = {"gift_gen3", "egg_hatch_gen3", "evolve_gen3", "npc_trade_gen3",
+                "species_family_gen3", "shiny_bonus_gen3", "trade_lock_probe_gen3",
+                "trade_reset_commit_gen3", "trade_reset_success_gen3"}
+    rows = fc.build_plan_rr(CUT, LANE, MASTER)
+    missing = required - {r.id.removesuffix("_rr_as_a") for r in rows}
+    assert not missing, f"RR plan omits applicable probes: {sorted(missing)}"
+
+
+def test_rr_plan_picks_up_future_explicit_rows_and_honors_applicability(monkeypatch):
+    import e2e_duo
+    monkeypatch.setitem(e2e_duo.SCENARIOS, "future_rr_probe", {
+        "games": ("gen3_rr",), "explicit_only": True, "timeout": 1, "flags": []})
+    monkeypatch.setitem(e2e_duo.SCENARIOS, "unavailable_rr_probe", {
+        "games": ("gen3_rr",), "explicit_only": True, "timeout": 1, "flags": []})
+    monkeypatch.setitem(e2e_duo.GAMES["gen3_rr"], "not_yet",
+                        (*e2e_duo.GAMES["gen3_rr"].get("not_yet", ()), "unavailable_rr_probe"))
+    names = fc.rr_scenarios()
+    assert names[-1] == "future_rr_probe"
+    assert "unavailable_rr_probe" not in names
+    assert len(names) == len(set(names))
+
+
+def test_rr_recovery_rows_keep_evidence_and_lock_probe_has_private_env(tmp_path):
+    import e2e_duo
+    lane = str(tmp_path / "lane")
+    rows = fc.build_plan_rr(CUT, lane, MASTER)
+    for name, cfg in e2e_duo.SCENARIOS.items():
+        if not e2e_duo.scenario_applies(name, "gen3_rr") or cfg.get("signed_limit"):
+            continue
+        row = next(r for r in rows if r.id == name + "_rr_as_a")
+        recovery = cfg.get("journal_lock_probe") or cfg.get("rr_reset_trade")
+        assert ("--keep-data" in row.argv) == bool(recovery)
+        if cfg.get("journal_lock_probe"):
+            assert os.path.realpath(row.env["SLINK_JOURNAL_PROBE_ROOT"]) == os.path.realpath(lane)
+            state = os.path.realpath(row.env["SLINK_STATE_DIR"])
+            assert state != os.path.realpath(lane)
+            assert os.path.commonpath([state, os.path.realpath(lane)]) == os.path.realpath(lane)
+        else:
+            assert row.env == {}
 
 
 def test_title_defaults_to_frlg_and_leaves_the_default_plan_unchanged():
