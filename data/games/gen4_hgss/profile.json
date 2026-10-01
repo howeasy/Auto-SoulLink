@@ -87,9 +87,14 @@
   "schema": "gen4-profile-v1",
   "schema_notes": {
     "address": "integers; address_hex is the same value for humans",
+    "admission": "titles.<t>.admission is how lua/gen4/entry.lua treats the title: the lock status string for HG/SS (G0_IDENTITY_ONLY: a pinned md5/sha1 hit AND the static-ARM9 anchors, so an hge ROM can never pass as vanilla); HASH_ONLY for hge (a pinned md5/sha1 hit, no anchors: its arm9 entries are redirected); BIND_ONLY_NOT_ADMITTED for Platinum (refused by name). The top-level artifact_status is the G0 ledger status from the sources lock, a different (release-process) fact, and is not what the Lua client reads. Both the md5 and the sha1 of every title are pinned (BizHawk getromhash() is the md5 for gamedb ROMs and the sha1 for the rest)",
+    "admission_anchors": "HG/SS titles.<t>.admission_anchors[] = {name, address, image arm9, length, hex, hge_differs, evidence}: FILE bytes of the vanilla static ARM9 (decompressed) that entry.lua compares with RAM (it reads only address + hex). The `nitromain_hge_hook_site` row (0x02000CD0, hg-engine's Main() hook, armips/asm/syntheticoverlay.s:8) is the one hge overwrites; hge titles.<t>.admission_check records the hge bytes there and the generator FAILS if they equal vanilla or are not a call to load_arm9_expansion",
+    "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE); battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
+    "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
     "collision_pairs": "titles.<t>.collision_pairs[]: symbols from different images at ONE cpu address, each a full site row (image, register_hex, fire_hex) plus resident_when per site: a capture must be attributed by residency, and the first words differ",
     "comparison": "address_differs counts distinct names whose address differs between HG and SS; differing_names_by_image attributes a name to each image it differs in, so it sums to differing_name_image_pairs = address_differs + the names listed in differing_names_in_several_images (file-local statics defined in two images)",
+    "diagnostic_sites": "titles.<t>.diagnostic_sites{id: site row}: HOT exec sites for performance characterization ONLY (how much an exec hook per call costs). Never armed in production: not in `sites`, not a phase candidate and not in any phase_case (checked by the generator and a test)",
     "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL. probe_field_evidence also uses ASM (asm-corroborated SOURCE) and SOURCE_PROJECTION (hge: vanilla layout, FILE-checked)",
     "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
     "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
@@ -102,11 +107,44 @@
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
     "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
     "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source (derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R (the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
+    "system": "profile.system: symbol, address (the gSystem RAM address, also title.symbols.gSystem, so the checkpoint needs no symbol table), vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
     "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)"
   },
   "titles": {
     "heartgold": {
       "admission": "G0_IDENTITY_ONLY",
+      "admission_anchors": [
+        {
+          "address": 33557712,
+          "address_hex": "0x02000cd0",
+          "evidence": "FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain 0x02000ca4+0x1c8, main.o); SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b armips/asm/syntheticoverlay.s:8 (hge patches Main() here)",
+          "hex": "0020032102f00af80120032102f006f8",
+          "hge_differs": true,
+          "image": "arm9",
+          "length": 16,
+          "name": "nitromain_hge_hook_site"
+        },
+        {
+          "address": 33557668,
+          "address_hex": "0x02000ca4",
+          "evidence": "FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain 0x02000ca4+0x1c8, main.o)",
+          "hex": "f8b519f0abfa19f04dfb19f0d3fb0020",
+          "hge_differs": false,
+          "image": "arm9",
+          "length": 16,
+          "name": "nitromain_entry"
+        },
+        {
+          "address": 33557728,
+          "address_hex": "0x02000ce0",
+          "evidence": "FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain 0x02000ca4+0x1c8, main.o)",
+          "hex": "0320011c02f002f800215848c9438161",
+          "hge_differs": false,
+          "image": "arm9",
+          "length": 16,
+          "name": "nitromain_after_hook"
+        }
+      ],
       "collision_pairs": [
         {
           "address": 35543296,
@@ -260,6 +298,44 @@
           "wrong_owner_capture": "registering title_init_ov60 while the field runs (or field_vblank_ov1 at the title) fires at the same CPU address with the OTHER image's word: fire_hex differs, so a capture that checks residency and fire_hex rejects it"
         }
       ],
+      "diagnostic_sites": {
+        "hot_disable_interrupts": {
+          "address": 34421304,
+          "address_hex": "0x020d3a38",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "e10f0000",
+          "image": "arm9",
+          "mode": "arm",
+          "mode_evidence": "xMAP $t/$a mapping symbol at the symbol address",
+          "overlay_id": null,
+          "phase": "diagnostic",
+          "register_hex": "00000fe1801080e301f021e1800000e2",
+          "role": "HOT: NitroSDK critical-section entry, fires many times per frame (perf cost of an exec hook per call)",
+          "section": ".text",
+          "symbol": "OS_DisableInterrupts",
+          "symbol_size": 20
+        },
+        "hot_idle_halt": {
+          "address": 34422616,
+          "address_hex": "0x020d3f58",
+          "collides_with": [],
+          "extent": 12,
+          "fire_hex": "e3a00000",
+          "image": "arm9",
+          "mode": "arm",
+          "mode_evidence": "xMAP $t/$a mapping symbol at the symbol address",
+          "overlay_id": null,
+          "phase": "diagnostic",
+          "register_hex": "0000a0e3900f07ee1eff2fe1",
+          "role": "idle-thread halt, once per halt entry: the G1 row m frame-end PC (0x020D3F64) is the ARM pipeline PC of its `mcr` (OS_Halt+4, +8), not a fetchable address; the hook is the entry",
+          "sampled_pc": 34422628,
+          "sampled_pc_evidence": "docs/gen4/research/platform.md:102 (G1 row m: frame-end PC 0x020D3F64, 300/600 overworld, 120/120 party; C1-1 receipt 600/600): OS_Halt is 0xC bytes (xMAP), its `mcr p15` halt instruction is at +4, and a halted ARM core reads PC = instruction + 8",
+          "section": ".text",
+          "symbol": "OS_Halt",
+          "symbol_size": 12
+        }
+      },
       "open": {
         "array_footer": "SaveArrayFooter (per-array, include/save.h:28-34) location is not pinned; the chunk footer is the signature",
         "battle_offsets_live_read": "battle offsets are SOURCE/asm-literal derived; a live read is a G1/G3 cell",
@@ -2546,13 +2622,234 @@
           "ability_off": 39,
           "ability_width": 1,
           "ctx_off": 48,
+          "fainted_flag_mask": 251658240,
+          "fainted_flag_off": 8508,
+          "fainted_flag_shift": 24,
           "hp_off": 76,
           "hp_signed": true,
           "hp_width": 4,
+          "level_off": 52,
+          "man_data_off": 28,
+          "max_battlers": 4,
+          "max_hp_off": 80,
           "mon_size": 192,
           "mons_off": 11584,
-          "selected_off": 8604
+          "otid_off": 116,
+          "outcome_mask": 63,
+          "outcome_off": 9248,
+          "personality_off": 104,
+          "selected_off": 8604,
+          "species_off": 0,
+          "template_id": 12,
+          "template_off": 12,
+          "type_off": 44
         },
+        "battle_enums": {
+          "evidence": {
+            "battle_types": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:133-148; src/encounter.c:137; src/encounter.c:696-716",
+            "outcomes": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:112-118; the byte is the BATTLE_RESULT_* flags (same numbers, include/constants/battle.h:122-130) masked to 0x3F"
+          },
+          "exempt_mask": 2147489468,
+          "exempt_roles": {
+            "bug_contest": "BATTLE_TYPE_BUG_CONTEST",
+            "debug": "BATTLE_TYPE_DEBUG",
+            "frontier": "BATTLE_TYPE_FRONTIER",
+            "link": "BATTLE_TYPE_LINK",
+            "multi": "BATTLE_TYPE_MULTI",
+            "pal_park": "BATTLE_TYPE_PAL_PARK",
+            "safari": "BATTLE_TYPE_SAFARI",
+            "tag": "BATTLE_TYPE_TAG",
+            "tutorial": "BATTLE_TYPE_TUTORIAL"
+          },
+          "no_catch_mask": 2147489468,
+          "no_catch_mask_note": "same value as exempt_mask under the name lua/gen4/poll_events.lua cfg.no_catch_mask uses",
+          "not_exempt": {
+            "BATTLE_TYPE_11": "a SetupAndStartTrainerBattle option set on single trainer battles (src/encounter.c:712): still a trainer battle",
+            "BATTLE_TYPE_13": "a modifier read only next to FRONTIER / a special trainer id (battle_input.c:4555, battle_system.c:1368), never alone",
+            "BATTLE_TYPE_AI": "a partner or AI-controlled side. HGSS wild/trainer battles with a follower are DOUBLES|MULTI|AI, src/encounter.c:705 and src/field/encounter_check.c:280, so they are already exempt through MULTI; AI alone is not a rule change",
+            "BATTLE_TYPE_DOUBLES": "a layout, not a rule change (a double wild battle is DOUBLES|MULTI|AI and exempt through MULTI)",
+            "BATTLE_TYPE_ROAMER": "a roaming wild battle is an ordinary catchable overworld encounter (src/encounter.c:137,864 treat it like BATTLE_TYPE_NONE)",
+            "BATTLE_TYPE_TRAINER": "the trainer bit itself: trainer_mask"
+          },
+          "outcome_consts": {
+            "caught": "BATTLE_OUTCOME_MON_CAUGHT",
+            "draw": "BATTLE_OUTCOME_DRAW",
+            "foe_fled": "BATTLE_OUTCOME_FOE_FLED",
+            "lose": "BATTLE_OUTCOME_LOSE",
+            "none": "BATTLE_OUTCOME_NONE",
+            "player_fled": "BATTLE_OUTCOME_PLAYER_FLED",
+            "win": "BATTLE_OUTCOME_WIN"
+          },
+          "outcome_encoding": "the battle result byte at bs+battle.outcome_off, masked with battle.outcome_mask (0x3F); numeric codes are identical for BATTLE_OUTCOME_* and BATTLE_RESULT_*",
+          "outcomes": {
+            "caught": 4,
+            "draw": 3,
+            "foe_fled": 6,
+            "lose": 2,
+            "none": 0,
+            "player_fled": 5,
+            "win": 1
+          },
+          "trainer_const": "BATTLE_TYPE_TRAINER",
+          "trainer_mask": 1,
+          "type_bits": {
+            "BATTLE_TYPE_11": 2048,
+            "BATTLE_TYPE_13": 8192,
+            "BATTLE_TYPE_AI": 64,
+            "BATTLE_TYPE_BUG_CONTEST": 4096,
+            "BATTLE_TYPE_DEBUG": 2147483648,
+            "BATTLE_TYPE_DOUBLES": 2,
+            "BATTLE_TYPE_FRONTIER": 128,
+            "BATTLE_TYPE_LINK": 4,
+            "BATTLE_TYPE_MULTI": 8,
+            "BATTLE_TYPE_PAL_PARK": 512,
+            "BATTLE_TYPE_ROAMER": 256,
+            "BATTLE_TYPE_SAFARI": 32,
+            "BATTLE_TYPE_TAG": 16,
+            "BATTLE_TYPE_TRAINER": 1,
+            "BATTLE_TYPE_TUTORIAL": 1024
+          }
+        },
+        "battle_evidence": {
+          "ability_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:230 (u8 ability at 0x27)",
+            "class": "SOURCE"
+          },
+          "ability_width": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:230 (u8)",
+            "class": "SOURCE"
+          },
+          "ctx_off": {
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM) BattleSystem_GetBattleContext = ldr r0,[r0,#0x30]; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:540; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_022378C0.s:1802 (BattleContext_New result stored at bs+0x30)",
+            "class": "FILE"
+          },
+          "fainted_flag_mask": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:520 (BATTLE_STATUS_FAINTED = 15 << 24)",
+            "class": "SOURCE"
+          },
+          "fainted_flag_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:359 (BattleContext.battleStatus, u32); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_10_trainer_ai.s:6922 (literal 0x213C)",
+            "class": "ASM"
+          },
+          "fainted_flag_shift": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:523 (BATTLE_STATUS_FAINTED_SHIFT 24: battler b fainting = bit 24+b)",
+            "class": "SOURCE"
+          },
+          "hp_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:248 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "hp_signed": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:248 (s32)",
+            "class": "SOURCE"
+          },
+          "hp_width": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:248 (s32: all four bytes are the value, a 2-byte write leaves a stale high half); docs/gen4/research/battle_faint.md",
+            "class": "SOURCE"
+          },
+          "level_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:245 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "man_data_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28 (template 0x10, exec_state 0x10, proc_state 0x14, args 0x18, data 0x1C); asm/overlay_12_022378C0.s:4268 (OverlayManager_CreateAndGetData(man, 0x2490, HEAP_ID_BATTLE) allocates the BattleSystem into manager->data); docs/gen4/research/battle_pointer.md",
+            "class": "ASM"
+          },
+          "max_battlers": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:10 (BATTLER_MAX 4); BattleContext arrays are [4]",
+            "class": "SOURCE"
+          },
+          "max_hp_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:249 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "mon_size": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (sizeof(BattleMon) = 0xC0, equal to the hge `// 0xc0` and battle_pointer.md); PHYSICAL: battler 1 read and written at +0xC0 live (profile.battle_physical)",
+            "class": "SOURCE"
+          },
+          "mons_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:394 (BattleContext.battleMons); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_battle_controller.s:341 (literal 0x2DBE = 0x2D40 + BattleMon.gender 0x7E); docs/gen4/research/battle_pointer.md (asm-literal-derived; not 0x2D4C, which is moves[0])",
+            "class": "ASM"
+          },
+          "otid_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:255 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "outcome_mask": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_022378C0.s:964-968 (the outcome copy stores byte & 0x3F into BattleSetup.winFlag); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:122-130 (BATTLE_RESULT_TRY_FLEE_WAIT 0x40 and TRY_FLEE 0x80 are transient flag bits above the 0x3F result bits)",
+            "class": "ASM"
+          },
+          "outcome_off": {
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM) BattleSystem_GetBattleOutcomeFlags = ldrb r0,[r0,#0x2420 literal]; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:605 (BattleSystem.battleOutcomeFlag, u8); asm/overlay_12_022378C0.s:857",
+            "class": "FILE"
+          },
+          "personality_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:252 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "selected_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:383; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_10_trainer_ai.s:2148 (literal 0x219C, ldrb)",
+            "class": "ASM"
+          },
+          "species_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:208 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "template_id": {
+            "cite": "FILE: OverlayManagerTemplate.ovy_id read from the ROM at gOverlayTemplate_Battle (phase_cases[].predicate_file_check); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28: the template is embedded at offset 0, ovy_id is its 4th word (+0x0C)",
+            "class": "FILE"
+          },
+          "template_off": {
+            "cite": "FILE: OverlayManagerTemplate.ovy_id read from the ROM at gOverlayTemplate_Battle (phase_cases[].predicate_file_check); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28: the template is embedded at offset 0, ovy_id is its 4th word (+0x0C)",
+            "class": "FILE"
+          },
+          "type_off": {
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM) BattleSystem_GetBattleType = ldr r0,[r0,#0x2c]; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:539",
+            "class": "FILE"
+          }
+        },
+        "battle_file_checks": {
+          "BattleSystem_GetBattleContext": {
+            "address": 35891172,
+            "bytes": "006b7047",
+            "decodes_as": "ldr r0,[r0,#0x30]; bx lr",
+            "field": "ctx_off",
+            "image": "ov12",
+            "symbol": "BattleSystem_GetBattleContext",
+            "value": 48
+          },
+          "BattleSystem_GetBattleOutcomeFlags": {
+            "address": 35896596,
+            "bytes": "0149405c7047c04620240000",
+            "decodes_as": "ldr r1,[pc,#4]; ldrb r0,[r0,r1]; bx lr; nop; .word 0x2420",
+            "field": "outcome_off",
+            "image": "ov12",
+            "symbol": "BattleSystem_GetBattleOutcomeFlags",
+            "value": 9248
+          },
+          "BattleSystem_GetBattleType": {
+            "address": 35891168,
+            "bytes": "c06a7047",
+            "decodes_as": "ldr r0,[r0,#0x2c]; bx lr",
+            "field": "type_off",
+            "image": "ov12",
+            "symbol": "BattleSystem_GetBattleType",
+            "value": 44
+          }
+        },
+        "battle_physical": [
+          {
+            "commit": "89b957d1",
+            "ctx": 36451032,
+            "fs": 36307436,
+            "what": "zero-hook chain sFieldSysPtr -> unk0 -> unk4 -> man+0x1C -> bs+0x30 acquired live, wild PIDGEY L2 at the FIGHT menu"
+          },
+          {
+            "commit": "a15b7d74",
+            "doc": "docs/gen4/research/battle_faint_seam.md section 9",
+            "what": "live HG: both HP copies written at ctx+0x2D40+0xC0*b+0x4C (4 bytes), FAINTED bit set at ctx+0x213C and consumed by TryFaintMon, game result byte bs+0x2420 == 2 (LOSE)"
+          }
+        ],
         "box_modified_flag_off": 73732,
         "boxes": 18,
         "fieldsys_ptr": {
@@ -2731,6 +3028,8 @@
           "width": 4
         },
         "system": {
+          "address": 35459340,
+          "address_evidence": "xMAP gSystem (the same symbol row as title.symbols.gSystem); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 src/system.c:10 defines it",
           "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57 (vblankCounter @0x2C, frameCounter @0x30); src/main.c:113-124,173 increments vblankCounter once per main-loop frame (frameCounter is the per-VBlank count, src/system.c:24); MEASURED +1 per frame at +0x2C (platform.md)",
           "frame_counter_off": 48,
           "symbol": "gSystem",
@@ -3931,6 +4230,24 @@
           "section": ".text",
           "size": 112
         },
+        "NitroMain": {
+          "address": 33557668,
+          "address_hex": "0x02000ca4",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "main.o",
+          "section": ".text",
+          "size": 456
+        },
+        "OS_DisableInterrupts": {
+          "address": 34421304,
+          "address_hex": "0x020d3a38",
+          "image": "arm9",
+          "mode": "arm",
+          "object": "os_system.o",
+          "section": ".text",
+          "size": 20
+        },
         "OS_Halt": {
           "address": 34422616,
           "address_hex": "0x020d3f58",
@@ -4760,6 +5077,38 @@
     },
     "soulsilver": {
       "admission": "G0_IDENTITY_ONLY",
+      "admission_anchors": [
+        {
+          "address": 33557712,
+          "address_hex": "0x02000cd0",
+          "evidence": "FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain 0x02000ca4+0x1c8, main.o); SOURCE hg-engine fork@fc517576498305ecb5f5e1de44681c6e3822361b armips/asm/syntheticoverlay.s:8 (hge patches Main() here)",
+          "hex": "0020032102f00af80120032102f006f8",
+          "hge_differs": true,
+          "image": "arm9",
+          "length": 16,
+          "name": "nitromain_hge_hook_site"
+        },
+        {
+          "address": 33557668,
+          "address_hex": "0x02000ca4",
+          "evidence": "FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain 0x02000ca4+0x1c8, main.o)",
+          "hex": "f8b519f0abfa19f04dfb19f0d3fb0020",
+          "hge_differs": false,
+          "image": "arm9",
+          "length": 16,
+          "name": "nitromain_entry"
+        },
+        {
+          "address": 33557728,
+          "address_hex": "0x02000ce0",
+          "evidence": "FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain 0x02000ca4+0x1c8, main.o)",
+          "hex": "0320011c02f002f800215848c9438161",
+          "hge_differs": false,
+          "image": "arm9",
+          "length": 16,
+          "name": "nitromain_after_hook"
+        }
+      ],
       "collision_pairs": [
         {
           "address": 35543296,
@@ -4913,6 +5262,44 @@
           "wrong_owner_capture": "registering title_init_ov60 while the field runs (or field_vblank_ov1 at the title) fires at the same CPU address with the OTHER image's word: fire_hex differs, so a capture that checks residency and fire_hex rejects it"
         }
       ],
+      "diagnostic_sites": {
+        "hot_disable_interrupts": {
+          "address": 34421304,
+          "address_hex": "0x020d3a38",
+          "collides_with": [],
+          "extent": 16,
+          "fire_hex": "e10f0000",
+          "image": "arm9",
+          "mode": "arm",
+          "mode_evidence": "xMAP $t/$a mapping symbol at the symbol address",
+          "overlay_id": null,
+          "phase": "diagnostic",
+          "register_hex": "00000fe1801080e301f021e1800000e2",
+          "role": "HOT: NitroSDK critical-section entry, fires many times per frame (perf cost of an exec hook per call)",
+          "section": ".text",
+          "symbol": "OS_DisableInterrupts",
+          "symbol_size": 20
+        },
+        "hot_idle_halt": {
+          "address": 34422616,
+          "address_hex": "0x020d3f58",
+          "collides_with": [],
+          "extent": 12,
+          "fire_hex": "e3a00000",
+          "image": "arm9",
+          "mode": "arm",
+          "mode_evidence": "xMAP $t/$a mapping symbol at the symbol address",
+          "overlay_id": null,
+          "phase": "diagnostic",
+          "register_hex": "0000a0e3900f07ee1eff2fe1",
+          "role": "idle-thread halt, once per halt entry: the G1 row m frame-end PC (0x020D3F64) is the ARM pipeline PC of its `mcr` (OS_Halt+4, +8), not a fetchable address; the hook is the entry",
+          "sampled_pc": 34422628,
+          "sampled_pc_evidence": "docs/gen4/research/platform.md:102 (G1 row m: frame-end PC 0x020D3F64, 300/600 overworld, 120/120 party; C1-1 receipt 600/600): OS_Halt is 0xC bytes (xMAP), its `mcr p15` halt instruction is at +4, and a halted ARM core reads PC = instruction + 8",
+          "section": ".text",
+          "symbol": "OS_Halt",
+          "symbol_size": 12
+        }
+      },
       "open": {
         "array_footer": "SaveArrayFooter (per-array, include/save.h:28-34) location is not pinned; the chunk footer is the signature",
         "battle_offsets_live_read": "battle offsets are SOURCE/asm-literal derived; a live read is a G1/G3 cell",
@@ -7199,13 +7586,222 @@
           "ability_off": 39,
           "ability_width": 1,
           "ctx_off": 48,
+          "fainted_flag_mask": 251658240,
+          "fainted_flag_off": 8508,
+          "fainted_flag_shift": 24,
           "hp_off": 76,
           "hp_signed": true,
           "hp_width": 4,
+          "level_off": 52,
+          "man_data_off": 28,
+          "max_battlers": 4,
+          "max_hp_off": 80,
           "mon_size": 192,
           "mons_off": 11584,
-          "selected_off": 8604
+          "otid_off": 116,
+          "outcome_mask": 63,
+          "outcome_off": 9248,
+          "personality_off": 104,
+          "selected_off": 8604,
+          "species_off": 0,
+          "template_id": 12,
+          "template_off": 12,
+          "type_off": 44
         },
+        "battle_enums": {
+          "evidence": {
+            "battle_types": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:133-148; src/encounter.c:137; src/encounter.c:696-716",
+            "outcomes": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:112-118; the byte is the BATTLE_RESULT_* flags (same numbers, include/constants/battle.h:122-130) masked to 0x3F"
+          },
+          "exempt_mask": 2147489468,
+          "exempt_roles": {
+            "bug_contest": "BATTLE_TYPE_BUG_CONTEST",
+            "debug": "BATTLE_TYPE_DEBUG",
+            "frontier": "BATTLE_TYPE_FRONTIER",
+            "link": "BATTLE_TYPE_LINK",
+            "multi": "BATTLE_TYPE_MULTI",
+            "pal_park": "BATTLE_TYPE_PAL_PARK",
+            "safari": "BATTLE_TYPE_SAFARI",
+            "tag": "BATTLE_TYPE_TAG",
+            "tutorial": "BATTLE_TYPE_TUTORIAL"
+          },
+          "no_catch_mask": 2147489468,
+          "no_catch_mask_note": "same value as exempt_mask under the name lua/gen4/poll_events.lua cfg.no_catch_mask uses",
+          "not_exempt": {
+            "BATTLE_TYPE_11": "a SetupAndStartTrainerBattle option set on single trainer battles (src/encounter.c:712): still a trainer battle",
+            "BATTLE_TYPE_13": "a modifier read only next to FRONTIER / a special trainer id (battle_input.c:4555, battle_system.c:1368), never alone",
+            "BATTLE_TYPE_AI": "a partner or AI-controlled side. HGSS wild/trainer battles with a follower are DOUBLES|MULTI|AI, src/encounter.c:705 and src/field/encounter_check.c:280, so they are already exempt through MULTI; AI alone is not a rule change",
+            "BATTLE_TYPE_DOUBLES": "a layout, not a rule change (a double wild battle is DOUBLES|MULTI|AI and exempt through MULTI)",
+            "BATTLE_TYPE_ROAMER": "a roaming wild battle is an ordinary catchable overworld encounter (src/encounter.c:137,864 treat it like BATTLE_TYPE_NONE)",
+            "BATTLE_TYPE_TRAINER": "the trainer bit itself: trainer_mask"
+          },
+          "outcome_consts": {
+            "caught": "BATTLE_OUTCOME_MON_CAUGHT",
+            "draw": "BATTLE_OUTCOME_DRAW",
+            "foe_fled": "BATTLE_OUTCOME_FOE_FLED",
+            "lose": "BATTLE_OUTCOME_LOSE",
+            "none": "BATTLE_OUTCOME_NONE",
+            "player_fled": "BATTLE_OUTCOME_PLAYER_FLED",
+            "win": "BATTLE_OUTCOME_WIN"
+          },
+          "outcome_encoding": "the battle result byte at bs+battle.outcome_off, masked with battle.outcome_mask (0x3F); numeric codes are identical for BATTLE_OUTCOME_* and BATTLE_RESULT_*",
+          "outcomes": {
+            "caught": 4,
+            "draw": 3,
+            "foe_fled": 6,
+            "lose": 2,
+            "none": 0,
+            "player_fled": 5,
+            "win": 1
+          },
+          "trainer_const": "BATTLE_TYPE_TRAINER",
+          "trainer_mask": 1,
+          "type_bits": {
+            "BATTLE_TYPE_11": 2048,
+            "BATTLE_TYPE_13": 8192,
+            "BATTLE_TYPE_AI": 64,
+            "BATTLE_TYPE_BUG_CONTEST": 4096,
+            "BATTLE_TYPE_DEBUG": 2147483648,
+            "BATTLE_TYPE_DOUBLES": 2,
+            "BATTLE_TYPE_FRONTIER": 128,
+            "BATTLE_TYPE_LINK": 4,
+            "BATTLE_TYPE_MULTI": 8,
+            "BATTLE_TYPE_PAL_PARK": 512,
+            "BATTLE_TYPE_ROAMER": 256,
+            "BATTLE_TYPE_SAFARI": 32,
+            "BATTLE_TYPE_TAG": 16,
+            "BATTLE_TYPE_TRAINER": 1,
+            "BATTLE_TYPE_TUTORIAL": 1024
+          }
+        },
+        "battle_evidence": {
+          "ability_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:230 (u8 ability at 0x27)",
+            "class": "SOURCE"
+          },
+          "ability_width": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:230 (u8)",
+            "class": "SOURCE"
+          },
+          "ctx_off": {
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM) BattleSystem_GetBattleContext = ldr r0,[r0,#0x30]; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:540; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_022378C0.s:1802 (BattleContext_New result stored at bs+0x30)",
+            "class": "FILE"
+          },
+          "fainted_flag_mask": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:520 (BATTLE_STATUS_FAINTED = 15 << 24)",
+            "class": "SOURCE"
+          },
+          "fainted_flag_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:359 (BattleContext.battleStatus, u32); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_10_trainer_ai.s:6922 (literal 0x213C)",
+            "class": "ASM"
+          },
+          "fainted_flag_shift": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:523 (BATTLE_STATUS_FAINTED_SHIFT 24: battler b fainting = bit 24+b)",
+            "class": "SOURCE"
+          },
+          "hp_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:248 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "hp_signed": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:248 (s32)",
+            "class": "SOURCE"
+          },
+          "hp_width": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:248 (s32: all four bytes are the value, a 2-byte write leaves a stale high half); docs/gen4/research/battle_faint.md",
+            "class": "SOURCE"
+          },
+          "level_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:245 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "man_data_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28 (template 0x10, exec_state 0x10, proc_state 0x14, args 0x18, data 0x1C); asm/overlay_12_022378C0.s:4268 (OverlayManager_CreateAndGetData(man, 0x2490, HEAP_ID_BATTLE) allocates the BattleSystem into manager->data); docs/gen4/research/battle_pointer.md",
+            "class": "ASM"
+          },
+          "max_battlers": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:10 (BATTLER_MAX 4); BattleContext arrays are [4]",
+            "class": "SOURCE"
+          },
+          "max_hp_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:249 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "mon_size": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 (sizeof(BattleMon) = 0xC0, equal to the hge `// 0xc0` and battle_pointer.md); PHYSICAL: battler 1 read and written at +0xC0 live (profile.battle_physical)",
+            "class": "SOURCE"
+          },
+          "mons_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:394 (BattleContext.battleMons); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_battle_controller.s:341 (literal 0x2DBE = 0x2D40 + BattleMon.gender 0x7E); docs/gen4/research/battle_pointer.md (asm-literal-derived; not 0x2D4C, which is moves[0])",
+            "class": "ASM"
+          },
+          "otid_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:255 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "outcome_mask": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_12_022378C0.s:964-968 (the outcome copy stores byte & 0x3F into BattleSetup.winFlag); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/constants/battle.h:122-130 (BATTLE_RESULT_TRY_FLEE_WAIT 0x40 and TRY_FLEE 0x80 are transient flag bits above the 0x3F result bits)",
+            "class": "ASM"
+          },
+          "outcome_off": {
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM) BattleSystem_GetBattleOutcomeFlags = ldrb r0,[r0,#0x2420 literal]; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:605 (BattleSystem.battleOutcomeFlag, u8); asm/overlay_12_022378C0.s:857",
+            "class": "FILE"
+          },
+          "personality_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:252 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "selected_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:383; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 asm/overlay_10_trainer_ai.s:2148 (literal 0x219C, ldrb)",
+            "class": "ASM"
+          },
+          "species_off": {
+            "cite": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:207-266 / include/battle/battle.h:208 (field order; offset hand-counted and equal to the hge comment)",
+            "class": "SOURCE"
+          },
+          "template_id": {
+            "cite": "FILE: OverlayManagerTemplate.ovy_id read from the ROM at gOverlayTemplate_Battle (phase_cases[].predicate_file_check); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28: the template is embedded at offset 0, ovy_id is its 4th word (+0x0C)",
+            "class": "FILE"
+          },
+          "template_off": {
+            "cite": "FILE: OverlayManagerTemplate.ovy_id read from the ROM at gOverlayTemplate_Battle (phase_cases[].predicate_file_check); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/overlay_manager.h:20-28: the template is embedded at offset 0, ovy_id is its 4th word (+0x0C)",
+            "class": "FILE"
+          },
+          "type_off": {
+            "cite": "FILE: profile.battle_file_checks (accessor body in the ROM) BattleSystem_GetBattleType = ldr r0,[r0,#0x2c]; pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/battle/battle.h:539",
+            "class": "FILE"
+          }
+        },
+        "battle_file_checks": {
+          "BattleSystem_GetBattleContext": {
+            "address": 35891172,
+            "bytes": "006b7047",
+            "decodes_as": "ldr r0,[r0,#0x30]; bx lr",
+            "field": "ctx_off",
+            "image": "ov12",
+            "symbol": "BattleSystem_GetBattleContext",
+            "value": 48
+          },
+          "BattleSystem_GetBattleOutcomeFlags": {
+            "address": 35896596,
+            "bytes": "0149405c7047c04620240000",
+            "decodes_as": "ldr r1,[pc,#4]; ldrb r0,[r0,r1]; bx lr; nop; .word 0x2420",
+            "field": "outcome_off",
+            "image": "ov12",
+            "symbol": "BattleSystem_GetBattleOutcomeFlags",
+            "value": 9248
+          },
+          "BattleSystem_GetBattleType": {
+            "address": 35891168,
+            "bytes": "c06a7047",
+            "decodes_as": "ldr r0,[r0,#0x2c]; bx lr",
+            "field": "type_off",
+            "image": "ov12",
+            "symbol": "BattleSystem_GetBattleType",
+            "value": 44
+          }
+        },
+        "battle_physical": [],
         "box_modified_flag_off": 73732,
         "boxes": 18,
         "fieldsys_ptr": {
@@ -7384,6 +7980,8 @@
           "width": 4
         },
         "system": {
+          "address": 35459340,
+          "address_evidence": "xMAP gSystem (the same symbol row as title.symbols.gSystem); pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 src/system.c:10 defines it",
           "evidence": "pret/pokeheartgold@ad7a3afa0cfc144fe6837c410cb95b2727217f54 include/system.h:21-57 (vblankCounter @0x2C, frameCounter @0x30); src/main.c:113-124,173 increments vblankCounter once per main-loop frame (frameCounter is the per-VBlank count, src/system.c:24); MEASURED +1 per frame at +0x2C (platform.md)",
           "frame_counter_off": 48,
           "symbol": "gSystem",
@@ -8583,6 +9181,24 @@
           "object": "main.o",
           "section": ".text",
           "size": 112
+        },
+        "NitroMain": {
+          "address": 33557668,
+          "address_hex": "0x02000ca4",
+          "image": "arm9",
+          "mode": "thumb",
+          "object": "main.o",
+          "section": ".text",
+          "size": 456
+        },
+        "OS_DisableInterrupts": {
+          "address": 34421304,
+          "address_hex": "0x020d3a38",
+          "image": "arm9",
+          "mode": "arm",
+          "object": "os_system.o",
+          "section": ".text",
+          "size": 20
         },
         "OS_Halt": {
           "address": 34422616,

@@ -373,7 +373,7 @@ SYMBOL_NAMES = [
     "Save_WriteManFinish", "Save_WriteFileAsync",
     "BtlCmd_TryFaintMon", "BtlCmd_PlayFaintAnimation", "TryFaintMon", "RunBattleScript",
     "BattleSystem_GetPartyMon", "ov12_02238A68", "ov12_0223843C",
-    "MainMenuApp_Main", "MainMenuApp_Init",
+    "MainMenuApp_Main", "MainMenuApp_Init", "OS_DisableInterrupts", "NitroMain",
 ]
 
 # Platinum names differ; roles are mapped here (platinum_bind.md, platform.md).
@@ -779,7 +779,8 @@ def hgss_profile(xm: XMap, build: str = "hgss", hge_checks: dict | None = None) 
         "fieldsys_ptr": {"symbol": "sFieldSysPtr", "address": xm.lookup("sFieldSysPtr").address, "width": 4,
                          "save_data_off": 0x0C,
                          "evidence": f"xMAP; {PRET_HG} include/field_system.h (saveData at +0x0C; probe row h agreement)"},
-        "system": {"symbol": "gSystem", "vblank_counter_off": 0x2C, "frame_counter_off": 0x30,
+        "system": {"symbol": "gSystem", "address": xm.lookup("gSystem").address, "vblank_counter_off": 0x2C, "frame_counter_off": 0x30,
+                   "address_evidence": f"xMAP gSystem (the same symbol row as title.symbols.gSystem); {PRET_HG} {S_GSYSTEM} defines it",
                    "evidence": f"{PRET_HG} include/system.h:21-57 (vblankCounter @0x2C, frameCounter @0x30); src/main.c:113-124,173 "
                                "increments vblankCounter once per main-loop frame (frameCounter is the per-VBlank count, "
                                "src/system.c:24); MEASURED +1 per frame at +0x2C (platform.md)"},
@@ -1689,6 +1690,418 @@ def validate_collision_pairs(title: dict) -> list[str]:
 # --------------------------------------------------------------------------------------------
 # Pack builders
 # --------------------------------------------------------------------------------------------
+# --------------------------------------------------------------------------------------------
+# Battle block, battle enums, admission anchors, diagnostic sites (card C1-2d)
+# --------------------------------------------------------------------------------------------
+# Every value carries SOURCE / ASM / FILE evidence with a citation; an unknown is null with its reason in `open`. Citations into
+# the three source trees are registered so a test re-reads the first line of each from the pinned clone (CITE_NEEDLES: pokeheartgold,
+# CITE_NEEDLES_HGE: the hg-engine fork, CITE_NEEDLES_PT: pokeplatinum).
+CITE_NEEDLES_HGE: list[tuple[str, int, str]] = []  # (path in the hg-engine fork @fc517576, first line, text that line must contain)
+CITE_NEEDLES_PT: list[tuple[str, int, str]] = []  # (path in pokeplatinum @c248fb3f, first line, text that line must contain)
+
+
+def _cite(bucket: list, path: str, spec: str, needle: str) -> str:
+    bucket.append((path, int(spec.split("-")[0]), needle))
+    return f"{path}:{spec}"
+
+
+def _ch(path: str, spec: str, needle: str) -> str:
+    return _cite(CITE_NEEDLES_HGE, path, spec, needle)
+
+
+def _cp(path: str, spec: str, needle: str) -> str:
+    return _cite(CITE_NEEDLES_PT, path, spec, needle)
+
+
+_BH, _CB = "include/battle/battle.h", "include/constants/battle.h"
+_ASM12 = "asm/overlay_12_022378C0.s"
+S_GSYSTEM = _c("src/system.c", "10", "struct System gSystem")
+S_BS_MGR_ALLOC = _c(_ASM12, "4268", "=0x00002490")
+S_BS_STRUCT = _c(_BH, "527-540", "struct BattleSystem {")
+S_BS_TYPE, S_BS_CTX = _c(_BH, "539", "u32 battleType"), _c(_BH, "540", "BattleContext *ctx")
+S_BS_OUTCOME = _c(_BH, "605", "u8 battleOutcomeFlag")
+S_BS_OUTCOME_ASM = _c(_ASM12, "964-968", "ldrb r3, [r4, r1]")  # ldrb [bs+0x2414+0xC]; mov r1,#0x3f; and; str [setup+0x14]
+S_BS_OUTCOME_LIT = _c(_ASM12, "857", "=0x00002420")
+S_BS_CTX_ASM = _c(_ASM12, "1802", "str r0, [r4, #0x30]")
+S_CTX_STATUS = _c(_BH, "359", "u32 battleStatus")
+S_CTX_SEL = _c(_BH, "383", "u8 selectedMonIndex")
+S_CTX_MONS = _c(_BH, "394", "BattleMon battleMons")
+S_CTX_SEL_ASM = _c("asm/overlay_10_trainer_ai.s", "2148", "=0x0000219C")
+S_CTX_STATUS_ASM = _c("asm/overlay_10_trainer_ai.s", "6922", "=0x0000213C")
+S_CTX_MONS_ASM = _c("asm/overlay_12_battle_controller.s", "341", "=0x00002DBE")  # 0x2D40 + BattleMon.gender 0x7E
+S_MON_STRUCT = _c(_BH, "207-266", "typedef struct BattleMon {")
+S_MON = {k: _c(_BH, str(n), needle) for k, (n, needle) in {
+    "species": (208, "u16 species"), "ability": (230, "u8 ability"), "level": (245, "u8 level"), "hp": (248, "s32 hp"),
+    "max_hp": (249, "u32 maxHp"), "personality": (252, "u32 personality"), "otid": (255, "u32 otid")}.items()}
+S_BATTLER_MAX = _c(_CB, "10", "BATTLER_MAX")
+S_OUTCOMES = _c(_CB, "112-118", "BATTLE_OUTCOME_NONE")
+S_RESULTS = _c(_CB, "122-130", "BATTLE_RESULT_WIN")
+S_TYPES = _c(_CB, "133-148", "BATTLE_TYPE_NONE")
+S_FAINTED, S_FAINTED_SHIFT = _c(_CB, "520", "BATTLE_STATUS_FAINTED"), _c(_CB, "523", "BATTLE_STATUS_FAINTED_SHIFT")
+S_ENC_WILD_TYPES = _c("src/encounter.c", "137", "BATTLE_TYPE_ROAMER")
+S_ENC_TRAINER_TYPES = _c("src/encounter.c", "696-716", "SetupAndStartTrainerBattle")
+
+H_BS_TYPE, H_BS_CTX = _ch("include/battle.h", "1586", "u32 battleType"), _ch("include/battle.h", "1587", "struct BattleStruct *sp")
+H_CTX_MONS, H_CTX_SEL = _ch("include/battle.h", "1403", "battlemon[CLIENT_MAX]"), _ch("include/battle.h", "1392", "sel_mons_no[CLIENT_MAX]")
+H_CTX_STATUS = _ch("include/battle.h", "1365", "server_status_flag")
+H_MON_STRUCT = _ch("include/battle.h", "859", "struct BattlePokemon")
+H_MON = {k: _ch("include/battle.h", str(n), needle) for k, (n, needle) in {
+    "species": (860, "u16 species"), "level": (902, "u8 level"), "hp": (905, "s32 hp"), "max_hp": (906, "u32 maxhp"),
+    "personality": (909, "u32 personal_rnd"), "otid": (912, "u32 id_no"), "ability": (914, "u16 ability")}.items()}
+H_CLIENT_MAX = _ch("include/battle.h", "14", "CLIENT_MAX 4")
+H_FAINTED, H_FAINTED_SHIFT = _ch("include/battle.h", "614", "BATTLE_STATUS_FAINTED"), _ch("include/battle.h", "617", "BATTLE_STATUS_FAINTED_SHIFT")
+H_TYPES = _ch("include/battle.h", "159-172", "BATTLE_TYPE_SINGLE")
+H_OUTCOMES = _ch("include/battle_controller_player.h", "7-13", "BATTLE_OUTCOME_NONE")
+
+P_TYPES, P_RESULTS = _cp("include/constants/battle.h", "24-37", "BATTLE_TYPE_SINGLES"), _cp("include/constants/battle.h", "72-80", "BATTLE_RESULT_WIN")
+P_SYSTEM = _cp("include/system.h", "30-66", "typedef struct System {")
+P_VBLANK = _cp("include/system.h", "42", "u32 vblankCounter")
+P_VBLANK_INC = _cp("src/main.c", "138", "gSystem.vblankCounter++")
+
+_PHYS_HG = "docs/gen4/research/battle_faint_seam.md"
+# PHYSICAL corroboration (heap addresses of one run; NOT values to match against, and never pack inputs).
+BATTLE_PHYSICAL = {
+    "heartgold": [
+        {"commit": "89b957d1", "ctx": 0x022C32D8, "fs": 0x022A01EC,
+         "what": "zero-hook chain sFieldSysPtr -> unk0 -> unk4 -> man+0x1C -> bs+0x30 acquired live, wild PIDGEY L2 at the FIGHT menu"},
+        {"commit": "a15b7d74", "doc": f"{_PHYS_HG} section 9",
+         "what": "live HG: both HP copies written at ctx+0x2D40+0xC0*b+0x4C (4 bytes), FAINTED bit set at ctx+0x213C and consumed by "
+                 "TryFaintMon, game result byte bs+0x2420 == 2 (LOSE)"},
+    ],
+    "soulsilver": [],
+    "heartgold_hge": [
+        {"commit": "89b957d1", "ctx": 0x022D38A4, "fs": 0x022AC208,
+         "what": "zero-hook chain acquired live on the pinned hge build, wild PIDGEY L3 at the FIGHT menu, battleMons[0] = Cyndaquil"},
+        {"commit": "0f75c938", "doc": f"{_PHYS_HG} section 10",
+         "what": "live hge: both HP copies + FAINTED bit via the command-9 seam, bs+0x2420 == 2 (LOSE), save HP 0 at HealParty entry"},
+    ],
+}
+
+# The BattleSystem accessors whose whole bodies pin three offsets in the ROM bytes (FILE): `ldr r0,[r0,#imm]; bx lr` (Thumb).
+BATTLE_ACCESSORS = (
+    ("BattleSystem_GetBattleType", "c06a7047", "ldr r0,[r0,#0x2c]; bx lr", "type_off", 0x2C),
+    ("BattleSystem_GetBattleContext", "006b7047", "ldr r0,[r0,#0x30]; bx lr", "ctx_off", 0x30),
+    ("BattleSystem_GetBattleOutcomeFlags", "0149405c7047c04620240000",
+     "ldr r1,[pc,#4]; ldrb r0,[r0,r1]; bx lr; nop; .word 0x2420", "outcome_off", 0x2420),
+)
+OUTCOME_STORE_SEQ = bytes.fromhex("635c3f21283219407961")  # ldrb r3,[r4,r1]; movs r1,#0x3f; adds r2,#0x28; ands r1,r3; str r1,[r7,#0x14]
+
+
+def battle_file_checks(xm: XMap, images: Images) -> dict:
+    """FILE: each accessor body in the declared ROM image is the expected Thumb sequence (HG==SS and hge-identical by construction)."""
+    out = {}
+    for sym, want, decodes, field, value in BATTLE_ACCESSORS:
+        s = xm.lookup(sym)
+        got = images.read(s.image, s.address, s.size).hex()
+        if got != want:
+            raise Fail(f"{sym} bytes {got} != the pinned accessor {want}: {field} {value:#x} is no longer ROM-proven")
+        out[sym] = {"symbol": sym, "address": s.address, "image": s.image, "bytes": got, "decodes_as": decodes,
+                    "field": field, "value": value}
+    return out
+
+
+def hge_battle_checks(xm: XMap, hg: Images, hge: Images) -> dict:
+    """FILE: the hge image keeps the accessors and the outcome store (vanilla ov12_0223843C differs only in one hooked window)."""
+    out = {"accessors_identical": {}}
+    for sym, *_ in BATTLE_ACCESSORS:
+        s = xm.lookup(sym)
+        if hge.read(s.image, s.address, s.size) != hg.read(s.image, s.address, s.size):
+            raise Fail(f"hge {sym} differs from vanilla: its battle offset is no longer a projection")
+        out["accessors_identical"][sym] = True
+    s = xm.lookup("ov12_0223843C")
+    a, b = hg.read(s.image, s.address, s.size), hge.read(s.image, s.address, s.size)
+    diff = [i for i in range(len(a)) if a[i] != b[i]]
+    k = a.find(OUTCOME_STORE_SEQ)
+    if k < 0 or b[k:k + len(OUTCOME_STORE_SEQ)] != OUTCOME_STORE_SEQ or any(k <= d < k + len(OUTCOME_STORE_SEQ) for d in diff):
+        raise Fail("hge changed the BattleSystem outcome store (ldrb [bs+0x2420]; and #0x3f; str [setup+0x14])")
+    if struct.pack("<I", 0x2420) not in b:
+        raise Fail("hge ov12_0223843C lost the 0x2420 literal")
+    return {**out, "outcome_store": {
+        "symbol": "ov12_0223843C", "function_address": s.address, "store_address": s.address + k, "bytes": OUTCOME_STORE_SEQ.hex(),
+        "identical_in_hge": True, "literal_0x2420_present": True,
+        "function_differs_at": sorted({s.address + d for d in diff}),
+        "note": "the function differs from vanilla only at the listed hooked bytes, away from the store"},
+        "evidence": "FILE: vanilla xMAP symbol bytes compared in the hge image (declared image)"}
+
+
+def _ev(cls: str, *parts: str) -> dict:
+    return {"class": cls, "cite": "; ".join(parts)}
+
+
+def battle_evidence(build: str, template: dict) -> dict:
+    """{field: {class, cite}} for profile.battle. build = hgss (HG and SS: same ROM code, asserted) | hge."""
+    hge = build == "hge"
+
+    def R(hge_ref: str, hg_ref: str) -> str:
+        return f"{HGE_SRC} {hge_ref}" if hge else f"{PRET_HG} {hg_ref}"
+
+    file_acc = "FILE: profile.battle_file_checks (accessor body in the ROM" + (", byte-identical in hge)" if hge else ")")
+    ovl = (f"FILE: OverlayManagerTemplate.ovy_id read from the ROM at {template['symbol']} (phase_cases[].predicate_file_check); "
+           f"{PRET_HG} {S_OVLMGR}: the template is embedded at offset 0, ovy_id is its 4th word (+0x0C)")
+
+    def mon(key: str) -> dict:
+        return _ev("SOURCE", R(f"{H_MON_STRUCT} / {H_MON[key]} (explicit offset comment)",
+                               f"{S_MON_STRUCT} / {S_MON[key]} (field order; offset hand-counted and equal to the hge comment)"))
+
+    hp_ref = R(H_MON["hp"], S_MON["hp"])
+    ev = {
+        "man_data_off": _ev("ASM", f"{PRET_HG} {S_OVLMGR} (template 0x10, exec_state 0x10, proc_state 0x14, args 0x18, data 0x1C)",
+                            f"{S_BS_MGR_ALLOC} (OverlayManager_CreateAndGetData(man, 0x2490, HEAP_ID_BATTLE) allocates the BattleSystem into manager->data)",
+                            "docs/gen4/research/battle_pointer.md"),
+        "ctx_off": _ev("FILE", file_acc + " BattleSystem_GetBattleContext = ldr r0,[r0,#0x30]", R(H_BS_CTX, S_BS_CTX),
+                       f"{PRET_HG} {S_BS_CTX_ASM} (BattleContext_New result stored at bs+0x30)"),
+        "type_off": _ev("FILE", file_acc + " BattleSystem_GetBattleType = ldr r0,[r0,#0x2c]", R(H_BS_TYPE, S_BS_TYPE)),
+        "outcome_off": _ev("FILE", file_acc + " BattleSystem_GetBattleOutcomeFlags = ldrb r0,[r0,#0x2420 literal]",
+                           f"{PRET_HG} {S_BS_OUTCOME} (BattleSystem.battleOutcomeFlag, u8); {S_BS_OUTCOME_LIT}"),
+        "outcome_mask": _ev("FILE" if hge else "ASM",
+                            f"{PRET_HG} {S_BS_OUTCOME_ASM} (the outcome copy stores byte & 0x3F into BattleSetup.winFlag)",
+                            f"{PRET_HG} {S_RESULTS} (BATTLE_RESULT_TRY_FLEE_WAIT 0x40 and TRY_FLEE 0x80 are transient flag bits above the 0x3F result bits)"
+                            + ("; hge: profile.battle_hge_checks.outcome_store (the same bytes, FILE)" if hge else "")),
+        "template_off": _ev("FILE", ovl), "template_id": _ev("FILE", ovl),
+        "max_battlers": _ev("SOURCE", R(H_CLIENT_MAX + " (CLIENT_MAX 4)", S_BATTLER_MAX + " (BATTLER_MAX 4); BattleContext arrays are [4]")),
+        "mons_off": _ev("ASM", R(H_CTX_MONS + " (`/*0x2D40*/ battlemon[CLIENT_MAX]`, explicit)", S_CTX_MONS + " (BattleContext.battleMons)"),
+                        f"{PRET_HG} {S_CTX_MONS_ASM} (literal 0x2DBE = 0x2D40 + BattleMon.gender 0x7E)",
+                        "docs/gen4/research/battle_pointer.md (asm-literal-derived; not 0x2D4C, which is moves[0])"),
+        "mon_size": _ev("SOURCE", R(H_CTX_MONS + " (`// 0xc0`)", S_MON_STRUCT + " (sizeof(BattleMon) = 0xC0, equal to the hge `// 0xc0` and battle_pointer.md)"),
+                        "PHYSICAL: battler 1 read and written at +0xC0 live (profile.battle_physical)"),
+        "selected_off": _ev("ASM", R(H_CTX_SEL + " (`/*0x219C*/ sel_mons_no`, explicit)", S_CTX_SEL),
+                            f"{PRET_HG} {S_CTX_SEL_ASM} (literal 0x219C, ldrb)"),
+        "species_off": mon("species"), "level_off": mon("level"), "hp_off": mon("hp"), "max_hp_off": mon("max_hp"),
+        "personality_off": mon("personality"), "otid_off": mon("otid"),
+        "hp_width": _ev("SOURCE", hp_ref + " (s32: all four bytes are the value, a 2-byte write leaves a stale high half)",
+                        "docs/gen4/research/battle_faint.md"),
+        "hp_signed": _ev("SOURCE", hp_ref + " (s32)"),
+        "fainted_flag_off": _ev("ASM", R(H_CTX_STATUS + " (`/*0x213C*/ server_status_flag // battleStatus`)", S_CTX_STATUS + " (BattleContext.battleStatus, u32)"),
+                                f"{PRET_HG} {S_CTX_STATUS_ASM} (literal 0x213C)"),
+        "fainted_flag_shift": _ev("SOURCE", R(H_FAINTED_SHIFT, S_FAINTED_SHIFT) + " (BATTLE_STATUS_FAINTED_SHIFT 24: battler b fainting = bit 24+b)"),
+        "fainted_flag_mask": _ev("SOURCE", R(H_FAINTED, S_FAINTED) + " (BATTLE_STATUS_FAINTED = 15 << 24)"),
+        "ability_off": _ev("SOURCE", f"{HGE_SRC} {H_MON['ability']} (u16 ability at 0x7A, moved from 0x27)") if hge
+        else _ev("SOURCE", f"{PRET_HG} {S_MON['ability']} (u8 ability at 0x27)"),
+        "ability_width": _ev("SOURCE", f"{HGE_SRC} {H_MON['ability']} (u16)") if hge else _ev("SOURCE", f"{PRET_HG} {S_MON['ability']} (u8)"),
+    }
+    if hge:
+        for key in ("man_data_off", "mons_off", "mon_size", "selected_off"):
+            ev[key]["note"] = ("SOURCE_PROJECTION onto hge where the fork declares no offset; hge allocates its own BattleStruct but keeps "
+                               "the vanilla OverlayManager code; PHYSICAL: profile.battle_physical")
+        ev["outcome_off"]["note"] = "ROM accessor byte-identical in hge; PHYSICAL: result byte 2 at bs+0x2420 observed on the pinned hge build"
+    return ev
+
+
+def battle_values(template: dict, build: str) -> dict:
+    return {
+        "man_data_off": 0x1C, "ctx_off": 0x30, "type_off": 0x2C, "outcome_off": 0x2420, "outcome_mask": 0x3F,
+        "template_off": template["ovy_id_off"], "template_id": template["ovy_id"], "max_battlers": 4,
+        "mons_off": 0x2D40, "mon_size": 0xC0, "selected_off": 0x219C,
+        "species_off": 0, "level_off": 0x34, "hp_off": 0x4C, "hp_width": 4, "hp_signed": True, "max_hp_off": 0x50,
+        "personality_off": 0x68, "otid_off": 0x74,
+        "fainted_flag_off": 0x213C, "fainted_flag_shift": 24, "fainted_flag_mask": 0x0F000000,
+        "ability_off": 0x7A if build == "hge" else 0x27, "ability_width": 2 if build == "hge" else 1,
+    }
+
+
+# ---- battle enums (poll_events cfg: outcomes / trainer_mask / exempt_mask) ------------------------
+OUTCOME_CODES = {"none": 0, "win": 1, "lose": 2, "draw": 3, "caught": 4, "player_fled": 5, "foe_fled": 6}
+EXEMPT_ROLES = ("link", "multi", "tag", "safari", "frontier", "pal_park", "tutorial", "bug_contest", "debug")
+_PIN_AI = ("a partner or AI-controlled side. HGSS wild/trainer battles with a follower are DOUBLES|MULTI|AI, "
+           "src/encounter.c:705 and src/field/encounter_check.c:280, so they are already exempt through MULTI; AI alone is not a rule change")
+BATTLE_TYPE_TABLES = {
+    "hgss": {
+        "bits": {"BATTLE_TYPE_TRAINER": 1 << 0, "BATTLE_TYPE_DOUBLES": 1 << 1, "BATTLE_TYPE_LINK": 1 << 2, "BATTLE_TYPE_MULTI": 1 << 3,
+                 "BATTLE_TYPE_TAG": 1 << 4, "BATTLE_TYPE_SAFARI": 1 << 5, "BATTLE_TYPE_AI": 1 << 6, "BATTLE_TYPE_FRONTIER": 1 << 7,
+                 "BATTLE_TYPE_ROAMER": 1 << 8, "BATTLE_TYPE_PAL_PARK": 1 << 9, "BATTLE_TYPE_TUTORIAL": 1 << 10, "BATTLE_TYPE_11": 1 << 11,
+                 "BATTLE_TYPE_BUG_CONTEST": 1 << 12, "BATTLE_TYPE_13": 1 << 13, "BATTLE_TYPE_DEBUG": 1 << 31},
+        "trainer": "BATTLE_TYPE_TRAINER",
+        "exempt": {"link": "BATTLE_TYPE_LINK", "multi": "BATTLE_TYPE_MULTI", "tag": "BATTLE_TYPE_TAG", "safari": "BATTLE_TYPE_SAFARI",
+                   "frontier": "BATTLE_TYPE_FRONTIER", "pal_park": "BATTLE_TYPE_PAL_PARK", "tutorial": "BATTLE_TYPE_TUTORIAL",
+                   "bug_contest": "BATTLE_TYPE_BUG_CONTEST", "debug": "BATTLE_TYPE_DEBUG"},
+        "not_exempt": {
+            "BATTLE_TYPE_TRAINER": "the trainer bit itself: trainer_mask",
+            "BATTLE_TYPE_DOUBLES": "a layout, not a rule change (a double wild battle is DOUBLES|MULTI|AI and exempt through MULTI)",
+            "BATTLE_TYPE_AI": _PIN_AI,
+            "BATTLE_TYPE_ROAMER": "a roaming wild battle is an ordinary catchable overworld encounter (src/encounter.c:137,864 treat it like BATTLE_TYPE_NONE)",
+            "BATTLE_TYPE_11": "a SetupAndStartTrainerBattle option set on single trainer battles (src/encounter.c:712): still a trainer battle",
+            "BATTLE_TYPE_13": "a modifier read only next to FRONTIER / a special trainer id (battle_input.c:4555, battle_system.c:1368), never alone",
+        },
+        "consts_src": S_TYPES, "outcome_names": {k: f"BATTLE_OUTCOME_{v}" for k, v in {
+            "none": "NONE", "win": "WIN", "lose": "LOSE", "draw": "DRAW", "caught": "MON_CAUGHT", "player_fled": "PLAYER_FLED",
+            "foe_fled": "FOE_FLED"}.items()},
+        "outcome_cite": f"{PRET_HG} {S_OUTCOMES}; the byte is the BATTLE_RESULT_* flags (same numbers, {S_RESULTS}) masked to 0x3F",
+        "types_cite": f"{PRET_HG} {S_TYPES}; {S_ENC_WILD_TYPES}; {S_ENC_TRAINER_TYPES}",
+    },
+    "hge": {
+        "bits": {"BATTLE_TYPE_SINGLE": 0x00, "BATTLE_TYPE_TRAINER": 0x01, "BATTLE_TYPE_DOUBLE": 0x02, "BATTLE_TYPE_WIRELESS": 0x04,
+                 "BATTLE_TYPE_MULTI": 0x08, "BATTLE_TYPE_TAG": 0x10, "BATTLE_TYPE_SAFARI": 0x20, "BATTLE_TYPE_NPC_MULTI": 0x40,
+                 "BATTLE_TYPE_BATTLE_TOWER": 0x80, "BATTLE_TYPE_ROAMER": 0x100, "BATTLE_TYPE_PAL_PARK": 0x200,
+                 "BATTLE_TYPE_CATCHING_DEMO": 0x400, "BATTLE_TYPE_CAN_LOSE": 0x800, "BATTLE_TYPE_BUG_CONTEST": 0x1000},
+        "trainer": "BATTLE_TYPE_TRAINER",
+        "exempt": {"link": "BATTLE_TYPE_WIRELESS", "multi": "BATTLE_TYPE_MULTI", "tag": "BATTLE_TYPE_TAG", "safari": "BATTLE_TYPE_SAFARI",
+                   "frontier": "BATTLE_TYPE_BATTLE_TOWER", "pal_park": "BATTLE_TYPE_PAL_PARK", "tutorial": "BATTLE_TYPE_CATCHING_DEMO",
+                   "bug_contest": "BATTLE_TYPE_BUG_CONTEST"},
+        "not_exempt": {
+            "BATTLE_TYPE_SINGLE": "0: no bit",
+            "BATTLE_TYPE_TRAINER": "the trainer bit itself: trainer_mask",
+            "BATTLE_TYPE_DOUBLE": "a layout, not a rule change",
+            "BATTLE_TYPE_NPC_MULTI": "the vanilla AI bit (0x40): " + _PIN_AI,
+            "BATTLE_TYPE_ROAMER": "a roaming wild battle is an ordinary catchable overworld encounter",
+            "BATTLE_TYPE_CAN_LOSE": "the vanilla BATTLE_TYPE_11 bit (0x800): a trainer-battle option; still a trainer battle",
+        },
+        "consts_src": H_TYPES, "outcome_names": {k: f"BATTLE_OUTCOME_{v}" for k, v in {
+            "none": "NONE", "win": "WIN", "lose": "LOSE", "draw": "DRAW", "caught": "MON_CAUGHT", "player_fled": "PLAYER_FLED",
+            "foe_fled": "FOE_FLED"}.items()},
+        "outcome_cite": f"{HGE_SRC} {H_OUTCOMES} (the vanilla values; hge keeps the 0x3F outcome store, profile.battle_hge_checks)",
+        "types_cite": f"{HGE_SRC} {H_TYPES}: the same bit values as vanilla under hge's own names",
+    },
+    "pt": {
+        "bits": {"BATTLE_TYPE_SINGLES": 0, "BATTLE_TYPE_TRAINER": 1 << 0, "BATTLE_TYPE_DOUBLES": 1 << 1, "BATTLE_TYPE_LINK": 1 << 2,
+                 "BATTLE_TYPE_2vs2": 1 << 3, "BATTLE_TYPE_TAG": 1 << 4, "BATTLE_TYPE_SAFARI": 1 << 5, "BATTLE_TYPE_AI": 1 << 6,
+                 "BATTLE_TYPE_FRONTIER": 1 << 7, "BATTLE_TYPE_ROAMER": 1 << 8, "BATTLE_TYPE_PAL_PARK": 1 << 9,
+                 "BATTLE_TYPE_CATCH_TUTORIAL": 1 << 10, "BATTLE_TYPE_DEBUG": 1 << 31},
+        "trainer": "BATTLE_TYPE_TRAINER",
+        "exempt": {"link": "BATTLE_TYPE_LINK", "multi": "BATTLE_TYPE_2vs2", "tag": "BATTLE_TYPE_TAG", "safari": "BATTLE_TYPE_SAFARI",
+                   "frontier": "BATTLE_TYPE_FRONTIER", "pal_park": "BATTLE_TYPE_PAL_PARK", "tutorial": "BATTLE_TYPE_CATCH_TUTORIAL",
+                   "debug": "BATTLE_TYPE_DEBUG"},
+        "not_exempt": {
+            "BATTLE_TYPE_SINGLES": "0: no bit",
+            "BATTLE_TYPE_TRAINER": "the trainer bit itself: trainer_mask",
+            "BATTLE_TYPE_DOUBLES": "a layout, not a rule change",
+            "BATTLE_TYPE_AI": "a partner or AI-controlled side (BATTLE_TYPE_AI_PARTNER = DOUBLES|2vs2|AI is exempt through 2vs2)",
+            "BATTLE_TYPE_ROAMER": "a roaming wild battle is an ordinary catchable overworld encounter",
+        },
+        "consts_src": P_TYPES, "outcome_names": {k: f"BATTLE_RESULT_{v}" for k, v in {
+            "win": "WIN", "lose": "LOSE", "draw": "DRAW", "caught": "CAPTURED_MON", "player_fled": "PLAYER_FLED",
+            "foe_fled": "ENEMY_FLED"}.items()} | {"none": "BATTLE_IN_PROGRESS"},
+        "outcome_cite": f"{PRET_PT} {P_RESULTS} (BATTLE_RESULT_* flags: WIN 1, LOSE 2, CAPTURED_MON 4; DRAW/PLAYER_FLED/ENEMY_FLED are their ORs)",
+        "types_cite": f"{PRET_PT} {P_TYPES} (no bug-catching-contest type in Platinum)",
+    },
+}
+
+
+def battle_enums(build: str) -> dict:
+    """profile.battle_enums: the poll_events cfg values (outcomes / trainer_mask / exempt_mask), derived from the per-title bit tables."""
+    t = BATTLE_TYPE_TABLES[build]
+    bits, exempt = t["bits"], t["exempt"]
+    covered = set(exempt.values()) | set(t["not_exempt"])
+    if covered != set(bits):
+        raise Fail(f"battle_enums {build}: every battle-type constant must be exempt or explained; unclassified: "
+                   f"{sorted(set(bits) ^ covered)}")
+    if not set(exempt) <= set(EXEMPT_ROLES) or len(set(exempt.values())) != len(exempt):
+        raise Fail(f"battle_enums {build}: exempt roles {sorted(exempt)} are not distinct known roles")
+    mask = 0
+    for const in exempt.values():
+        mask |= bits[const]
+    if bits[t["trainer"]] != 1 or mask & 1:
+        raise Fail(f"battle_enums {build}: the trainer bit must be 1 and outside the exempt mask")
+    return {
+        "outcomes": dict(OUTCOME_CODES), "outcome_consts": dict(t["outcome_names"]),
+        "outcome_encoding": "the battle result byte at bs+battle.outcome_off, masked with battle.outcome_mask (0x3F); numeric codes "
+                            "are identical for BATTLE_OUTCOME_* and BATTLE_RESULT_*",
+        "trainer_mask": bits[t["trainer"]], "trainer_const": t["trainer"],
+        "exempt_mask": mask, "no_catch_mask": mask,
+        "no_catch_mask_note": "same value as exempt_mask under the name lua/gen4/poll_events.lua cfg.no_catch_mask uses",
+        "exempt_roles": dict(exempt), "type_bits": dict(bits), "not_exempt": dict(t["not_exempt"]),
+        "evidence": {"outcomes": t["outcome_cite"], "battle_types": t["types_cite"]},
+    }
+
+
+# ---- admission anchors (vanilla HG/SS ARM9 bytes the hge ROM must not match) -----------------------
+HGE_HOOK_SITE = 0x02000CD0  # armips/asm/syntheticoverlay.s:8 `.org 0x02000CD0 // branch from Main(), run once` (bl load_arm9_expansion)
+ADMISSION_ANCHOR_SPECS = (
+    # name, address or (symbol, offset), length, hge differs here
+    ("nitromain_hge_hook_site", HGE_HOOK_SITE, 16, True),
+    ("nitromain_entry", ("NitroMain", 0), 16, False),
+    ("nitromain_after_hook", HGE_HOOK_SITE + 0x10, 16, False),
+)
+
+
+def admission_anchors(xm: XMap, images: Images) -> list[dict]:
+    """FILE: the vanilla static-ARM9 bytes entry.lua compares with RAM (decompressed ndspy arm9, RAM base 0x02000000)."""
+    main = xm.lookup("NitroMain")
+    rows = []
+    for name, where, n, differs in ADMISSION_ANCHOR_SPECS:
+        addr = xm.lookup(where[0]).address + where[1] if isinstance(where, tuple) else where
+        if not (main.address <= addr and addr + n <= main.address + main.size):
+            raise Fail(f"admission anchor {name} {addr:#x}+{n} is outside NitroMain {main.address:#x}+{main.size:#x}")
+        rows.append({
+            "name": name, "address": addr, "address_hex": f"{addr:#010x}", "image": "arm9", "length": n,
+            "hex": images.read("arm9", addr, n).hex(), "hge_differs": differs,
+            "evidence": f"FILE: decompressed static ARM9 of the pinned ROM (inside xMAP NitroMain {main.address:#010x}+{main.size:#x}, main.o)"
+                        + (f"; SOURCE {HGE_SRC} armips/asm/syntheticoverlay.s:8 (hge patches Main() here)" if differs else "")})
+    return rows
+
+
+def hge_admission_check(hg: Images, hge: Images, anchors: list[dict], hook_target: int) -> dict:
+    """The hge ROM must NOT show the vanilla bytes at the discriminating anchor (else entry.lua's anchors prove nothing). FAIL otherwise."""
+    row = next(a for a in anchors if a["hge_differs"])
+    mine = hge.read("arm9", row["address"], row["length"])
+    if mine.hex() == row["hex"]:
+        raise Fail(f"the hge ROM shows the vanilla bytes at {row['address']:#x}: the Main() hook anchor cannot tell hge from vanilla")
+    redirect = decode_redirect(row["address"], mine)
+    if redirect is None or redirect["target"] != hook_target:
+        raise Fail(f"hge bytes at {row['address']:#x} are not a call to load_arm9_expansion {hook_target:#x}: {redirect}")
+    others = {a["name"]: hge.read("arm9", a["address"], a["length"]).hex() == a["hex"] for a in anchors if not a["hge_differs"]}
+    return {"address": row["address"], "address_hex": row["address_hex"], "length": row["length"], "vanilla_hex": row["hex"],
+            "hge_hex": mine.hex(), "differs": True, "hge_hook": redirect, "other_anchors_same_in_hge": others,
+            "evidence": f"FILE: the pinned hge ROM raw arm9; SOURCE {HGE_SRC} armips/asm/syntheticoverlay.s:8-10 (bl load_arm9_expansion at "
+                        "the Main() site) and :15 (the .area at 0x02110334)"}
+
+
+# ---- diagnostic sites (performance characterization only; never armed in production) -------------
+DIAGNOSTIC_SPECS = [
+    ("hot_disable_interrupts", "OS_DisableInterrupts", "diagnostic",
+     "HOT: NitroSDK critical-section entry, fires many times per frame (perf cost of an exec hook per call)", "KEPT"),
+    ("hot_idle_halt", "OS_Halt", "diagnostic",
+     "idle-thread halt, once per halt entry: the G1 row m frame-end PC (0x020D3F64) is the ARM pipeline PC of its `mcr` (OS_Halt+4, +8), "
+     "not a fetchable address; the hook is the entry", "KEPT"),
+]
+
+
+def diagnostic_sites(xm: XMap, images: Images, hge: Images | None = None) -> dict[str, dict]:
+    rows = vanilla_sites(xm, images, DIAGNOSTIC_SPECS)
+    for sid, r in rows.items():
+        if r["mode"] != "arm" or r["image"] != "arm9":
+            raise Fail(f"diagnostic site {sid} must be a static ARM9 ARM function, got {r['image']}/{r['mode']}")
+        if hge is not None:
+            if hge.read(r["image"], r["address"], r["extent"]).hex() != r["register_hex"]:
+                raise Fail(f"hge diagnostic site {sid} differs from vanilla at {r['address']:#x}")
+            r["hge_status"] = "KEPT"
+    rows["hot_idle_halt"]["sampled_pc"] = 0x020D3F64
+    rows["hot_idle_halt"]["sampled_pc_evidence"] = (
+        "docs/gen4/research/platform.md:102 (G1 row m: frame-end PC 0x020D3F64, 300/600 overworld, 120/120 party; C1-1 receipt 600/600): "
+        "OS_Halt is 0xC bytes (xMAP), its `mcr p15` halt instruction is at +4, and a halted ARM core reads PC = instruction + 8")
+    return rows
+
+
+def validate_diagnostic_sites(title: dict, images: Images) -> list[str]:
+    """Diagnostic rows are real image bytes and are NOT production: never a site id, a phase candidate or a phase-case site."""
+    diag = title.get("diagnostic_sites") or {}
+    errs = validate_sites(diag, images, "diagnostic")
+    for sid, r in diag.items():
+        if r.get("phase") != "diagnostic":
+            errs.append(f"diagnostic:{sid}: phase must be 'diagnostic'")
+        if sid in title["sites"]:
+            errs.append(f"diagnostic:{sid}: also a production site id")
+        for pname, ph in title["phases"].items():
+            if sid in ph.get("candidate_sites", []):
+                errs.append(f"diagnostic:{sid}: listed as a {pname} candidate_site")
+        for case in [*title.get("phase_cases", []), *title.get("phase_cases_blocked", [])]:
+            if sid in (case.get("sites") or []) or case.get("producer_site") == sid:
+                errs.append(f"diagnostic:{sid}: used by phase case {case.get('name')}")
+    return errs
+
+
+def battle_profile(build: str, title: str, xm: XMap, images: Images, hge_vs: Images | None = None) -> dict:
+    """The profile keys the card adds: battle (+ evidence, FILE checks, physical corroboration) and battle_enums."""
+    template = template_check(xm, images, "gOverlayTemplate_Battle", 12)
+    out = {
+        "battle": battle_values(template, build), "battle_evidence": battle_evidence(build, template),
+        "battle_file_checks": battle_file_checks(xm, images), "battle_enums": battle_enums("hge" if build == "hge" else "hgss"),
+        "battle_physical": copy.deepcopy(BATTLE_PHYSICAL[title]),
+    }
+    if hge_vs is not None:  # build == hge: `images` is the hge image, `hge_vs` the vanilla baseline
+        out["battle_hge_checks"] = hge_battle_checks(xm, hge_vs, images)
+    return out
+
+
 def lock_provenance(inputs: Inputs) -> dict:
     return {"path": "data/gen4_sources.lock.json", "sha256": hashlib.sha256(inputs.lock.read_bytes()).hexdigest()}
 
@@ -1704,6 +2117,8 @@ def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str,
         raise Fail(f"{label}: sOverlayRegions size {ovr.size:#x} != 3 regions x 8 x 8 bytes")
     sites = vanilla_sites(xm, images)
     ui = ui_geometry(xm, images, other, other_label)
+    profile = hgss_profile(xm)
+    profile.update(battle_profile("hgss", label, xm, images))
     return {
         "rom": {k: rom[k] for k in ("sha1", "md5", "header_code")},
         "admission": admission,
@@ -1711,7 +2126,9 @@ def title_block(xm: XMap, images: Images, rom: dict, admission: str, label: str,
         "overlays": images.overlay_table(),
         "overlay_table": {"symbol": "sOverlayRegions", "address": ovr.address, "regions": 3, "per_region": 8,
                           "entry_size": 8, "id_off": 0, "active_off": 4},
-        "profile": hgss_profile(xm),
+        "profile": profile,
+        "admission_anchors": admission_anchors(xm, images),
+        "diagnostic_sites": diagnostic_sites(xm, images),
         "phases": phase_table(sites, "hgss"),
         **build_phase_cases(xm, images),
         "ui_geometry": ui,
@@ -1762,6 +2179,32 @@ SCHEMA_NOTES = {
     "comparison": "address_differs counts distinct names whose address differs between HG and SS; differing_names_by_image attributes a name "
                   "to each image it differs in, so it sums to differing_name_image_pairs = address_differs + the names listed in "
                   "differing_names_in_several_images (file-local statics defined in two images)",
+    "admission": "titles.<t>.admission is how lua/gen4/entry.lua treats the title: the lock status string for HG/SS (G0_IDENTITY_ONLY: a "
+                 "pinned md5/sha1 hit AND the static-ARM9 anchors, so an hge ROM can never pass as vanilla); HASH_ONLY for hge (a pinned "
+                 "md5/sha1 hit, no anchors: its arm9 entries are redirected); BIND_ONLY_NOT_ADMITTED for Platinum (refused by name). The "
+                 "top-level artifact_status is the G0 ledger status from the sources lock, a different (release-process) fact, and is not "
+                 "what the Lua client reads. Both the md5 and the sha1 of every title are pinned (BizHawk getromhash() is the md5 for "
+                 "gamedb ROMs and the sha1 for the rest)",
+    "admission_anchors": "HG/SS titles.<t>.admission_anchors[] = {name, address, image arm9, length, hex, hge_differs, evidence}: FILE bytes of "
+                         "the vanilla static ARM9 (decompressed) that entry.lua compares with RAM (it reads only address + hex). The "
+                         "`nitromain_hge_hook_site` row (0x02000CD0, hg-engine's Main() hook, armips/asm/syntheticoverlay.s:8) is the one hge "
+                         "overwrites; hge titles.<t>.admission_check records the hge bytes there and the generator FAILS if they equal vanilla "
+                         "or are not a call to load_arm9_expansion",
+    "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge "
+              "difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] "
+              "& outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off "
+              "+ b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] "
+              "(fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE); "
+              "battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap "
+              "addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
+    "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= "
+                    "no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, "
+                    "bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
+    "system": "profile.system: symbol, address (the gSystem RAM address, also title.symbols.gSystem, so the checkpoint needs no symbol table), "
+              "vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
+    "diagnostic_sites": "titles.<t>.diagnostic_sites{id: site row}: HOT exec sites for performance characterization ONLY (how much an exec hook "
+                        "per call costs). Never armed in production: not in `sites`, not a phase candidate and not in any phase_case (checked by "
+                        "the generator and a test)",
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that "
                           "tests == true stays off until it implements the located bit",
 }
@@ -1780,9 +2223,11 @@ def build_hgss(inputs: Inputs) -> dict:
         titles[title] = title_block(xms[title], imgs[title], roms[title], lock["artifacts"][title]["admission"], title,
                                     load_images(inputs.paths[other]), other)
     errs = validate_hg_ss(titles["heartgold"], titles["soulsilver"])
+    if titles["heartgold"]["diagnostic_sites"] != titles["soulsilver"]["diagnostic_sites"]:
+        errs.append("diagnostic_sites differ between HG and SS")
     for t in titles_order():
         errs += (validate_sites(titles[t]["sites"], imgs[t], t) + validate_phase_cases(titles[t]) + validate_route_legs(titles[t])
-                 + validate_collision_pairs(titles[t]))
+                 + validate_collision_pairs(titles[t]) + validate_diagnostic_sites(titles[t], imgs[t]))
     if errs:
         raise Fail("; ".join(errs))
     return {
@@ -2026,7 +2471,7 @@ def build_hge(inputs: Inputs) -> dict:
                       "ability_msb": {"word_block": "A", "word_off": 8, "bit": 31, "low_byte_block": "A",
                                       "low_byte_off": 0xD,
                                       "evidence": f"SOURCE {HGE_SRC} include/pokemon.h:226-232 (exp:21, unused:10, abilityMSB:1)"}}
-    profile["battle"] = {**BATTLE_BASE, "ability_off": 0x7A, "ability_width": 2}
+    profile.update(battle_profile("hge", "heartgold_hge", xm, hge_img, hg_img))
     profile["boxes"], profile["mons_per_box"], profile["memorial_box"] = 30, 30, 29
 
     open_ = {
@@ -2056,7 +2501,9 @@ def build_hge(inputs: Inputs) -> dict:
     }
     title = {
         "rom": {k: hge_rom[k] for k in ("sha1", "md5", "header_code")},
-        "admission": "RECORDED_NOT_ADMITTED",
+        "admission": "HASH_ONLY",
+        "admission_check": hge_admission_check(hg_img, hge_img, admission_anchors(xm, hg_img), HGE_SOURCE_SITES[0][2]),
+        "diagnostic_sites": diagnostic_sites(xm, hg_img, hge_img),
         "symbols": symbols, "hge_replacements": replacements, "sites": sites,
         "overlays": hge_img.overlay_table(),
         "overlay_table": {"symbol": "sOverlayRegions", "address": ovr.address, "regions": 3, "per_region": 8,
@@ -2071,7 +2518,8 @@ def build_hge(inputs: Inputs) -> dict:
         "in the hge image (profile.probe_field_hge_checks) and the templates carry the same ovy_id; battle_faint_cmd and the pc_* "
         "sites are the hge REPLACEMENT addresses (ov130 / ov129). Whether hge keeps the vanilla battle scripts and the PC UI callers "
         "is a G1 PHYSICAL cell")
-    errs = validate_phase_cases(title) + validate_route_legs(title) + validate_collision_pairs(title)
+    errs = (validate_phase_cases(title) + validate_route_legs(title) + validate_collision_pairs(title)
+            + validate_diagnostic_sites(title, hge_img))
     if errs:
         raise Fail("; ".join(errs))
     return {
@@ -2145,7 +2593,7 @@ def pt_profile() -> dict:
         "pkm": {"box_size": 0x88, "party_size": 0xEC, "exp_bits": 32, "ability_msb": None, "party_hp_width": 2,
                 "ball_off_block_d": 0x1B, "block_d_0x1E": "unused in Platinum (HGSS ball/mood)"},
         "boxes": 18, "mons_per_box": 30, "memorial_box": None,
-        "battle": None,
+        "battle": None, "battle_enums": battle_enums("pt"),
         "probe_field": None, "probe_wrong_write_offset": None,
         "system": {"symbol": "gSystem", "vblank_counter_off": None},
         "idle": {"taskman_clause": "NOT valid (+0x10 is a transient FieldTask*)",
@@ -2153,13 +2601,38 @@ def pt_profile() -> dict:
     }
 
 
+# pokeplatinum include/system.h:30-66 `struct System`, in declaration order up to frameCounter (every slot a 4-byte pointer/u32).
+PT_SYSTEM_HEAD = ("vblankCallback", "vblankCallbackData", "hblankCallback", "hblankCallbackData", "dummyCallback_10", "dummyCallback_14",
+                  "mainTaskMgr", "vBlankTaskMgr", "postVBlankTaskMgr", "printTaskMgr", "unused_28", "vblankCounter", "frameCounter")
+# ...then buttonMode, 3 Raw u32, 3 held/pressed/repeatable u32, 3 autorepeat ints (10 words); 4 x u16 touch; 4 x u8; inhibitReset + padding_69[3];
+# BOOL showTitleScreenIntro; u32 *heapCanary: the sizeof is cross-checked against the xMAP gSystem size (0x74).
+PT_SYSTEM_TAIL_BYTES = 4 * 10 + 4 * 2 + 4 + 4 + 4 + 4
+
+
+def pt_system(gsys: dict) -> dict:
+    offs = {name: 4 * i for i, name in enumerate(PT_SYSTEM_HEAD)}
+    size = 4 * len(PT_SYSTEM_HEAD) + PT_SYSTEM_TAIL_BYTES
+    if size != gsys["size"]:
+        raise Fail(f"Platinum System layout {size:#x} != xMAP gSystem size {gsys['size']:#x}: the vblankCounter offset is unproven")
+    return {
+        "symbol": "gSystem", "address": gsys["address"], "vblank_counter_off": offs["vblankCounter"],
+        "frame_counter_off": offs["frameCounter"],
+        "address_evidence": "xMAP gSystem (the same symbol row as title.symbols.gSystem)",
+        "evidence": f"SOURCE {PRET_PT} {P_SYSTEM} (struct System: 11 four-byte callback/pointer slots, then vblankCounter {P_VBLANK}, then "
+                    f"frameCounter); FILE: the struct's computed size {size:#x} equals the xMAP gSystem size; {P_VBLANK_INC} "
+                    "(main loop increments vblankCounter). PHYSICAL: none (no Platinum emulator work, D3)"}
+
+
 def pt_open() -> dict:
     return {
-        "probe_field": "bind-only: Platinum FieldSystem probe offsets (processManager parent/child, save driver) are not established",
-        "probe_wrong_write_offset": "no Platinum gSystem layout was audited",
-        "system.vblank_counter_off": "Platinum gSystem layout not verified here (xMAP gSystem is 0x74 bytes vs HGSS 0x78)",
+        "probe_field": "bind-only and structurally different: Platinum has no FieldSystemUnkSub0 (launched-app / field-app / isPaused cells) and "
+                       "no HGSS save-driver SysTask; its application state is FieldProcessManager parent/child (offsets not established, "
+                       "platinum_bind.md) and taskman is a transient FieldTask*. The HGSS probe_field keys have no Platinum counterpart to fill",
+        "probe_wrong_write_offset": "no Platinum gSystem padding-byte audit (the struct layout is derived for system.vblank_counter_off only)",
         "memorial_box": "bind-only: no Platinum Soul Link box policy exists; not guessed",
-        "battle": "Platinum battle context offsets are not established; do not derive from HGSS",
+        "battle": "Platinum battle context offsets are not established (BattleContext/BattleMon have no offset annotations or accessor pins "
+                  "in pokeplatinum, and a hand-counted layout of those nested structs was not attempted); do not derive from HGSS. "
+                  "profile.battle_enums IS filled: the constants are plain bit values in include/constants/battle.h",
         "pc.modified_flag_off": "Platinum has no per-box modified flag; the dirty clause is the whole-save fullSaveRequired flag",
         "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
         "codec": "no populated Platinum save (local save is blank): codec bind cell is OPEN (D3)",
@@ -2190,6 +2663,7 @@ def build_pt(inputs: Inputs) -> dict:
     if table["size"] != 0xC0:
         raise Fail(f"Platinum overlay table size {table['size']:#x} != 0xC0")
     profile = pt_profile()
+    profile["system"] = pt_system(symbols["gSystem"])
     profile["save_ptr"]["address"] = symbols["sSaveDataPtr"]["address"]
     profile["fieldsys_ptr"]["address"] = symbols["sFieldSystem"]["address"]
     return {

@@ -411,7 +411,9 @@ def test_pack_gaps_are_named_not_hard_coded(lua_reads):
     lua2, no_pk4 = make_lua()
     no_pk4.pk4 = None
     refused(no_pk4.party(ram.adapter(lua2), to_lua(lua2, prof)), "no_pk4")
-    refused(reads.battle(mem, to_lua(lua, prof)), "pack_gap:battle.man_data_off")  # the pack carries no BattleSystem offsets yet
+    nb = copy.deepcopy(prof)
+    del nb["battle"]["man_data_off"]  # the real pack now carries the battle block; a deleted key is a named gap
+    refused(reads.battle(mem, to_lua(lua, nb)), "pack_gap:battle.man_data_off")
     refused(reads.save_data(mem, lua.table_from({})), "pack_gap:save_ptr")
 
 
@@ -466,9 +468,8 @@ def test_probe_dump_confirms_the_embedded_array_table_and_codec_layout():
 
 
 # -- reads.battle: the zero-hook chain (C1-9 live values) -------------------------------------
-# PACK GAP, supplied here as a labelled MODEL entry (never in reads.lua): the pack's `battle` block carries
-# ctx_off/mons_off/mon_size/selected_off/hp_off but not the OverlayManager.data offset, the battler count, the
-# battle-type / outcome offsets or the BattleMon field offsets. SOURCE for each:
+# The pack's `battle` block now carries these (hgss + hge); BATTLE_MODEL is the expected-values oracle the
+# real pack is asserted against (test_real_pack_battle_block_equals_the_model). SOURCE for each:
 # docs/gen4/research/battle_pointer.md (man+0x1C, bs+0x2C, species/level/hp/maxHp) and checkpoint.md section 2
 # (outcome byte bs+0x2420, `& 0x3F`), battle_faint_seam.md section 6 (personality +0x68, OTID +0x74).
 BATTLE_MODEL = {"man_data_off": 0x1C, "max_battlers": 4, "type_off": 0x2C, "outcome_off": 0x2420,
@@ -479,12 +480,15 @@ FS, SUB, MAN, BS, CTX = 0x022A01EC, 0x022A0334, 0x022A6B04, 0x022C020C, 0x022C32
 OWN_PID, FOE_PID, PLAYER_OTID = 0x11111111, 0x1A2B3C4D, 0x0BB83039
 
 
-def battle_title(model: bool = True) -> dict:
+def battle_title() -> dict:
     doc = json.loads((ROOT / "data/games/gen4_hgss/profile.json").read_text(encoding="utf-8"))
-    title = copy.deepcopy(doc["titles"]["heartgold"])
-    if model:
-        title["profile"]["battle"].update(BATTLE_MODEL)
-    return title
+    return copy.deepcopy(doc["titles"]["heartgold"])
+
+
+@pytest.mark.parametrize("pack, title", [("hgss", "heartgold"), ("hge", "heartgold_hge")])
+def test_real_pack_battle_block_equals_the_model(pack, title):
+    b = json.loads((ROOT / f"data/games/gen4_{pack}/profile.json").read_text(encoding="utf-8"))["titles"][title]["profile"]["battle"]
+    assert {k: b.get(k) for k in BATTLE_MODEL} == BATTLE_MODEL
 
 
 FS_CELL = battle_title()["profile"]["fieldsys_ptr"]["address"]
@@ -541,17 +545,22 @@ def test_battle_chain_template_comes_from_the_pack_phase_case_or_the_battle_bloc
     lua, reads = lua_reads
     ram = battle_ram()
     title = battle_title()
-    assert read_battle(lua, reads, ram, title["profile"])[1] == "pack_gap:battle.template_id|phase_cases.battle.predicate"
-    assert is_ok(read_battle(lua, reads, ram, title))            # the title object's battle predicate
+    assert is_ok(read_battle(lua, reads, ram, title))            # the real pack's battle block states it
     sect = copy.deepcopy(title["profile"])
-    sect["battle"].update({"template_off": 0x0C, "template_id": 12})     # or stated in the battle block
-    assert is_ok(read_battle(lua, reads, ram, sect))
+    del sect["battle"]["template_id"]                            # profile alone, no title predicate: a named gap
+    assert read_battle(lua, reads, ram, sect)[1] == "pack_gap:battle.template_id|phase_cases.battle.predicate"
+    del title["profile"]["battle"]["template_id"]                # the title's battle phase_case predicate still serves
+    assert is_ok(read_battle(lua, reads, ram, title))
 
 
 def test_battle_pack_gaps_are_named_never_guessed(lua_reads):
     lua, reads = lua_reads
     ram = battle_ram()
-    refused(read_battle(lua, reads, ram, battle_title(model=False)), "pack_gap:battle.man_data_off")
+    t = battle_title()
+    for k in BATTLE_MODEL.keys() - {"man_data_off"}:
+        t["profile"]["battle"].pop(k)
+    t["profile"]["battle"].pop("man_data_off")
+    refused(read_battle(lua, reads, ram, t), "pack_gap:battle.man_data_off")
     for k in BATTLE_MODEL:
         t = battle_title()
         del t["profile"]["battle"][k]

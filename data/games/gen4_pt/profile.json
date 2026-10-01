@@ -36,9 +36,14 @@
   "schema": "gen4-profile-v1",
   "schema_notes": {
     "address": "integers; address_hex is the same value for humans",
+    "admission": "titles.<t>.admission is how lua/gen4/entry.lua treats the title: the lock status string for HG/SS (G0_IDENTITY_ONLY: a pinned md5/sha1 hit AND the static-ARM9 anchors, so an hge ROM can never pass as vanilla); HASH_ONLY for hge (a pinned md5/sha1 hit, no anchors: its arm9 entries are redirected); BIND_ONLY_NOT_ADMITTED for Platinum (refused by name). The top-level artifact_status is the G0 ledger status from the sources lock, a different (release-process) fact, and is not what the Lua client reads. Both the md5 and the sha1 of every title are pinned (BizHawk getromhash() is the md5 for gamedb ROMs and the sha1 for the rest)",
+    "admission_anchors": "HG/SS titles.<t>.admission_anchors[] = {name, address, image arm9, length, hex, hge_differs, evidence}: FILE bytes of the vanilla static ARM9 (decompressed) that entry.lua compares with RAM (it reads only address + hex). The `nitromain_hge_hook_site` row (0x02000CD0, hg-engine's Main() hook, armips/asm/syntheticoverlay.s:8) is the one hge overwrites; hge titles.<t>.admission_check records the hge bytes there and the generator FAILS if they equal vanilla or are not a call to load_arm9_expansion",
+    "battle": "profile.battle: the zero-hook battle chain and BattleMon layout (lua/gen4/reads.lua R.battle; ability_* is the one HG/hge difference). bs = u32[man + man_data_off]; ctx = u32[bs + ctx_off]; btype = u32[bs + type_off]; result = u8[bs + outcome_off] & outcome_mask; man + template_off == template_id; battler b = ctx + mons_off + b*mon_size, selected slot u8[ctx + selected_off + b] (6 = none), hp is s32 (all four bytes); FAINTED for battler b = bit (fainted_flag_shift + b) of u32[ctx + fainted_flag_off] (fainted_flag_mask covers the four). profile.battle_evidence gives class + citation per key (FILE ROM bytes / ASM / SOURCE); battle_file_checks are the ROM accessor bodies, battle_hge_checks the hge identity facts, battle_physical the live heap addresses seen (corroboration only, never match targets). Platinum: battle is null, reason in open",
+    "battle_enums": "profile.battle_enums: outcomes (win 1 ... foe_fled 6, none 0), trainer_mask (BATTLE_TYPE_TRAINER = 1) and exempt_mask (= no_catch_mask, the cfg name lua/gen4/poll_events.lua uses): link, multi, tag, safari, frontier, pal_park, tutorial, bug_contest (not in Platinum), debug. type_bits is the full constant table, not_exempt says why each remaining bit is not exempt",
     "collides_with": "other images whose bytes share this address range: residency + byte checks are mandatory",
     "collision_pairs": "titles.<t>.collision_pairs[]: symbols from different images at ONE cpu address, each a full site row (image, register_hex, fire_hex) plus resident_when per site: a capture must be attributed by residency, and the first words differ",
     "comparison": "address_differs counts distinct names whose address differs between HG and SS; differing_names_by_image attributes a name to each image it differs in, so it sums to differing_name_image_pairs = address_differs + the names listed in differing_names_in_several_images (file-local statics defined in two images)",
+    "diagnostic_sites": "titles.<t>.diagnostic_sites{id: site row}: HOT exec sites for performance characterization ONLY (how much an exec hook per call costs). Never armed in production: not in `sites`, not a phase candidate and not in any phase_case (checked by the generator and a test)",
     "evidence_classes": "SOURCE (pinned source), FILE (pinned artifact bytes), OPEN (null + reason in `open`); nothing here is PHYSICAL. probe_field_evidence also uses ASM (asm-corroborated SOURCE) and SOURCE_PROJECTION (hge: vanilla layout, FILE-checked)",
     "fire_hex": "8 hex digits: int.from_bytes(register_hex[:4],'little') \u2014 the callback's unsigned `val` word",
     "hge_status": "hge sites: KEPT = the extent bytes are identical to vanilla in the declared image (not a whole-function claim); REPLACED = vanilla entry clobbered, the site is the exported replacement; SOURCE_ONLY = address from hge source",
@@ -51,25 +56,25 @@
     "pkm.hidden_ability": "hge only: {block, byte_off, bit, mask} of the hidden-ability flag; a table (not true) so a consumer that tests == true stays off until it implements the located bit",
     "register_hex": "full extent bytes read from the declared image (extent = min(16, symbol size), >=4)",
     "route_legs": "titles.<t>.route_legs{leg: {steps, until, max_frames, route_status, evidence, source, open, starts_from, note}}: declarative button recipes. steps = [{press:[buttons], hold_frames, then_wait_frames}] run in order and the cycle repeats while `until` is false, for at most max_frames; `until` = {symbol, deref[], offset, value|nonzero:true|zero:true} in the phase-predicate shape (u32 read at deref-chain + offset) and must be evaluated every frame; route_status recipe_source (derived from the pinned source/ROM tables) | open (steps [], until null, reason in `open`); evidence SOURCE|FILE|OPEN; source = 'path:lines' in pokeheartgold@ad7a3afa (a test re-reads each first line from the clone); `note`/`starts_from` are free text. Button names are exactly BizHawk's NDS joypad names: A B X Y Start Select Up Down Left Right L R (the lua/tests/gen4_route_play.lua and probe play_route spelling). titles.<t>.route (rows b/m: battle + menu) and persistence_route (row i: native SAVE) are lists of leg names; every phase_cases[].route name also exists in route_legs",
+    "system": "profile.system: symbol, address (the gSystem RAM address, also title.symbols.gSystem, so the checkpoint needs no symbol table), vblank_counter_off, frame_counter_off. Platinum's offsets are derived from the struct and size-checked against the xMAP",
     "ui_geometry": "titles.<t>.ui_geometry: FILE-read battle cursor tables, start-menu neighbour/layout tables and the derived D-pad paths; code_identity lists the UI functions whose full bytes are identical to the compared ROM (HG<->SS, hge<->HG)"
   },
   "titles": {
     "platinum": {
       "admission": "BIND_ONLY_NOT_ADMITTED",
       "open": {
-        "battle": "Platinum battle context offsets are not established; do not derive from HGSS",
+        "battle": "Platinum battle context offsets are not established (BattleContext/BattleMon have no offset annotations or accessor pins in pokeplatinum, and a hand-counted layout of those nested structs was not attempted); do not derive from HGSS. profile.battle_enums IS filled: the constants are plain bit values in include/constants/battle.h",
         "codec": "no populated Platinum save (local save is blank): codec bind cell is OPEN (D3)",
         "collision_pairs": "bind-only: no Platinum shared-address pair was derived (FieldMap_VBlankCallback is not in the Platinum xMAP)",
         "memorial_box": "bind-only: no Platinum Soul Link box policy exists; not guessed",
         "pc.modified_flag_off": "Platinum has no per-box modified flag; the dirty clause is the whole-save fullSaveRequired flag",
-        "probe_field": "bind-only: Platinum FieldSystem probe offsets (processManager parent/child, save driver) are not established",
-        "probe_wrong_write_offset": "no Platinum gSystem layout was audited",
+        "probe_field": "bind-only and structurally different: Platinum has no FieldSystemUnkSub0 (launched-app / field-app / isPaused cells) and no HGSS save-driver SysTask; its application state is FieldProcessManager parent/child (offsets not established, platinum_bind.md) and taskman is a transient FieldTask*. The HGSS probe_field keys have no Platinum counterpart to fill",
+        "probe_wrong_write_offset": "no Platinum gSystem padding-byte audit (the struct layout is derived for system.vblank_counter_off only)",
         "process_manager_parent_child_offsets": "offsets of parent/child inside FieldProcessManager not established (platinum_bind.md)",
         "pt_pack_not_runtime": "a generated profile does not prove every module reusable (platinum_bind.md evidence limits)",
         "route_legs": "bind-only: no Platinum probe route, button recipe or UI geometry was derived (pokeplatinum menus differ; D3)",
         "save.footer.runtime": "RAM footer address (block_info + footer.addr) is SOURCE only; lua/gen4/reads.lua still uses a structural page-table check for Platinum until it consumes save.footer / save.block_info",
         "sites": "bind-only pack pins no execute sites; symbols and the overlay table only",
-        "system.vblank_counter_off": "Platinum gSystem layout not verified here (xMAP gSystem is 0x74 bytes vs HGSS 0x78)",
         "trainer.badges": "TrainerInfo has one badgeMask byte (8 Sinnoh badges): trainer.badge_mask_off, no johto/kanto pair"
       },
       "overlay_table": {
@@ -697,6 +702,68 @@
       "phases": {},
       "profile": {
         "battle": null,
+        "battle_enums": {
+          "evidence": {
+            "battle_types": "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/constants/battle.h:24-37 (no bug-catching-contest type in Platinum)",
+            "outcomes": "pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/constants/battle.h:72-80 (BATTLE_RESULT_* flags: WIN 1, LOSE 2, CAPTURED_MON 4; DRAW/PLAYER_FLED/ENEMY_FLED are their ORs)"
+          },
+          "exempt_mask": 2147485372,
+          "exempt_roles": {
+            "debug": "BATTLE_TYPE_DEBUG",
+            "frontier": "BATTLE_TYPE_FRONTIER",
+            "link": "BATTLE_TYPE_LINK",
+            "multi": "BATTLE_TYPE_2vs2",
+            "pal_park": "BATTLE_TYPE_PAL_PARK",
+            "safari": "BATTLE_TYPE_SAFARI",
+            "tag": "BATTLE_TYPE_TAG",
+            "tutorial": "BATTLE_TYPE_CATCH_TUTORIAL"
+          },
+          "no_catch_mask": 2147485372,
+          "no_catch_mask_note": "same value as exempt_mask under the name lua/gen4/poll_events.lua cfg.no_catch_mask uses",
+          "not_exempt": {
+            "BATTLE_TYPE_AI": "a partner or AI-controlled side (BATTLE_TYPE_AI_PARTNER = DOUBLES|2vs2|AI is exempt through 2vs2)",
+            "BATTLE_TYPE_DOUBLES": "a layout, not a rule change",
+            "BATTLE_TYPE_ROAMER": "a roaming wild battle is an ordinary catchable overworld encounter",
+            "BATTLE_TYPE_SINGLES": "0: no bit",
+            "BATTLE_TYPE_TRAINER": "the trainer bit itself: trainer_mask"
+          },
+          "outcome_consts": {
+            "caught": "BATTLE_RESULT_CAPTURED_MON",
+            "draw": "BATTLE_RESULT_DRAW",
+            "foe_fled": "BATTLE_RESULT_ENEMY_FLED",
+            "lose": "BATTLE_RESULT_LOSE",
+            "none": "BATTLE_IN_PROGRESS",
+            "player_fled": "BATTLE_RESULT_PLAYER_FLED",
+            "win": "BATTLE_RESULT_WIN"
+          },
+          "outcome_encoding": "the battle result byte at bs+battle.outcome_off, masked with battle.outcome_mask (0x3F); numeric codes are identical for BATTLE_OUTCOME_* and BATTLE_RESULT_*",
+          "outcomes": {
+            "caught": 4,
+            "draw": 3,
+            "foe_fled": 6,
+            "lose": 2,
+            "none": 0,
+            "player_fled": 5,
+            "win": 1
+          },
+          "trainer_const": "BATTLE_TYPE_TRAINER",
+          "trainer_mask": 1,
+          "type_bits": {
+            "BATTLE_TYPE_2vs2": 8,
+            "BATTLE_TYPE_AI": 64,
+            "BATTLE_TYPE_CATCH_TUTORIAL": 1024,
+            "BATTLE_TYPE_DEBUG": 2147483648,
+            "BATTLE_TYPE_DOUBLES": 2,
+            "BATTLE_TYPE_FRONTIER": 128,
+            "BATTLE_TYPE_LINK": 4,
+            "BATTLE_TYPE_PAL_PARK": 512,
+            "BATTLE_TYPE_ROAMER": 256,
+            "BATTLE_TYPE_SAFARI": 32,
+            "BATTLE_TYPE_SINGLES": 0,
+            "BATTLE_TYPE_TAG": 16,
+            "BATTLE_TYPE_TRAINER": 1
+          }
+        },
         "boxes": 18,
         "dirty": {
           "full_save_flag": {
@@ -837,8 +904,12 @@
           "width": 4
         },
         "system": {
+          "address": 35387004,
+          "address_evidence": "xMAP gSystem (the same symbol row as title.symbols.gSystem)",
+          "evidence": "SOURCE pret/pokeplatinum@c248fb3f8cc9934ded800e489567c5c0eeee92eb include/system.h:30-66 (struct System: 11 four-byte callback/pointer slots, then vblankCounter include/system.h:42, then frameCounter); FILE: the struct's computed size 0x74 equals the xMAP gSystem size; src/main.c:138 (main loop increments vblankCounter). PHYSICAL: none (no Platinum emulator work, D3)",
+          "frame_counter_off": 48,
           "symbol": "gSystem",
-          "vblank_counter_off": null
+          "vblank_counter_off": 44
         },
         "trainer": {
           "appearance_off": 27,

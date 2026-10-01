@@ -24,9 +24,14 @@ HGE = DOC["hge"]["titles"]["heartgold_hge"]
 PT = DOC["pt"]["titles"]["platinum"]
 
 
+HOOK_SITE = 0x02000CD0  # hg-engine's Main() hook: the one anchor hge overwrites
+
+
 def arm9_vanilla() -> dict[int, bytes]:
-    return {s["address"]: bytes.fromhex(s["register_hex"]) for s in HG["sites"].values()
-            if s["image"] == "arm9" and s.get("register_hex")}
+    img = {s["address"]: bytes.fromhex(s["register_hex"]) for s in HG["sites"].values()
+           if s["image"] == "arm9" and s.get("register_hex")}
+    img.update({a["address"]: bytes.fromhex(a["hex"]) for a in HG["admission_anchors"]})  # FILE bytes entry.lua compares
+    return img
 
 
 def arm9_hge() -> dict[int, bytes]:
@@ -35,7 +40,18 @@ def arm9_hge() -> dict[int, bytes]:
         r = s.get("replaces")
         if r and r["vanilla_image"] == "arm9":
             img[r["vanilla_address"]] = bytes.fromhex(r["vanilla_entry_hex"])
+    img[HOOK_SITE] = bytes.fromhex(HGE["admission_check"]["hge_hex"])
     return img
+
+
+def test_hge_image_behind_an_hg_hash_is_refused_by_the_hook_site_anchor(env):
+    """Only the 0x02000CD0 anchor differs for hge among the pack anchors, so that is what refuses it."""
+    assert HGE["admission_check"]["address"] == HOOK_SITE
+    image = arm9_vanilla()
+    image[HOOK_SITE] = arm9_hge()[HOOK_SITE]
+    row, why = env.admit(HG["rom"]["sha1"], "IPKE", image)
+    assert HG["admission_anchors"][0]["address"] == HOOK_SITE  # the refusal names anchor [1] = the hook site
+    assert row is None and "admission_anchors[1] does not match" in why
 
 
 def test_models_actually_differ():
