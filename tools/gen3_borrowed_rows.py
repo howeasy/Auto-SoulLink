@@ -24,7 +24,9 @@ def own_facts(run):
     doors=[w for w in city.warps if (w.map_group,w.map_num)==(5,2)]
     if len(doors)!=1 or (doors[0].x,doors[0].y)!=(25,18):raise RuntimeError("school door changed")
     door=doors[0];dest=school.warps[door.warp_id]
-    arrival=[dest.x,dest.y+1] # same door step/arrival semantics as verified Center door
+    # Raw School warp destination, independently witnessed at cd888b59:
+    # expected5.2(4,8) failed against actual5.2(4,7). Center's +1 is not transferable.
+    arrival=[dest.x,dest.y]
     paths=dict(city=city.bfs((26,27),(door.x,door.y+1)),school=school.bfs(tuple(arrival),(6,4)))
     if any(p is None or len(p)>=100 for p in paths.values()):raise RuntimeError("school BFS route absent")
     x,y=26,27

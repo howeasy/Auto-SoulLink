@@ -37,7 +37,9 @@ def receipts(r):
 def test_actual_duorun_rom_route_and_both_rows():
     for case in ("menu","battle"):
         r=runner(case);f=d.own_facts(r)
-        assert f["arrival"]==[4,8] and len(f["paths"]["city"])==13 and len(f["paths"]["school"])==6
+        # School's raw destination warp is (4,7); retained cd888b59 physical
+        # destination confirms it. Center's separate +1 landing cannot be transferred here.
+        assert f["arrival"]==[4,7] and len(f["paths"]["city"])==13 and len(f["paths"]["school"])==5
         assert f["menu_option"]==(0 if case=="menu" else 3)
         assert r.cfg["no_save"]==("b",)
 
