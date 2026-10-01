@@ -15,7 +15,8 @@ Pk4.PARTY_MON_SIZE = 0xEC
 local BLOCK, HEADER, TAIL = 0x20, 8, 0x88
 
 -- Variants as data (mirrors gen4_codec.PROFILES): exp field width, hge 9-bit ability (abilityMSB
--- = bit 31 of the block A exp word) and hge hidden-ability bit (block B +0x19 bit 0).
+-- = bit 31 of the block A exp word) and hge hidden-ability bit (block B +0x19 bit 6; bit 0 is
+-- HGSS_shinyLeaves, bit 7 the crit flag: pret pokemon_types_def.h:96-98, fork pokemon.h:21-23).
 Pk4.PROFILES = {
     hgss = { exp_bits = 32, ability_msb = false, hidden_ability = false },
     hge  = { exp_bits = 21, ability_msb = true,  hidden_ability = true },
@@ -177,7 +178,7 @@ function Pk4.decode_plain(plain, profile)
         nature = pid % 25,
         shiny = (sid ~ tid ~ (pid >> 16) ~ (pid & 0xFFFF)) < 8,
     }
-    if profile.hidden_ability then mon.hidden_ability = p[b + 0x19 + 1] & 1 end
+    if profile.hidden_ability then mon.hidden_ability = (p[b + 0x19 + 1] >> 6) & 1 end
     if #p == Pk4.PARTY_MON_SIZE then
         mon.status, mon.level, mon.capsule = u(p, TAIL, 4), p[TAIL + 4 + 1], p[TAIL + 5 + 1]
         mon.hp, mon.max_hp = u(p, TAIL + 6, 2), u(p, TAIL + 8, 2)

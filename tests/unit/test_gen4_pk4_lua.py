@@ -124,7 +124,7 @@ def build_plain(pid: int, *, party=True, species=250, otid=0x1234_5678, exp=1_00
     struct.pack_into("<4H", p, b, 33, 45, 52, 0)
     struct.pack_into("<I", p, b + 0x10, 0x8000_0000 | 0x1F | (7 << 5))
     p[b + 0x18] = (form << 3) | 1
-    p[b + 0x19] = hidden
+    p[b + 0x19] = (hidden << 6) | 0x81  # bit 6; set bit 0 (leaf crown) + bit 7 (crit) as decoys
     struct.pack_into("<11H", p, c, *codec.encode_name("Lugi", 11))
     struct.pack_into("<8H", p, d, *codec.encode_name("RED", 8))
     p[d + 0x17] = 7
@@ -159,6 +159,9 @@ def test_hge_nine_bit_ability_form_and_hidden_bit(pk4):
     vanilla = decode_lua(pk4, raw, "hgss", True)  # same bytes, hgss profile: no MSB, no hidden bit
     assert vanilla["ability"] == 0x2A and "hidden_ability" not in vanilla
     assert_matches_oracle(vanilla, codec.decode_party_mon(raw, codec.PROFILES["hgss"]))
+    # bit 6 clear, decoys (bit 0 leaf crown, bit 7 crit flag) still set: not a hidden ability
+    off = enc(build_plain(0x0000_C000 | 0x1357, msb=1, ability8=0x2A, form=0x15, hidden=0))
+    assert decode_lua(pk4, off, "hge", True)["hidden_ability"] == 0
 
 
 def test_core_mon_shape_and_key(pk4):

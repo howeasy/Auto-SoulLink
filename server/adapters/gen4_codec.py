@@ -34,7 +34,7 @@ checksum fails or that is held in the plaintext "locked" representation.  The pa
 no checksum, so a wrong-seed tail is flagged through ``tail_plausible`` instead.
 
 Not decoded: the hg-engine nature/IV-override/ability-slot word (block B +0x1A) and the
-hidden-ability bit (block B +0x19 bit 0).
+hidden-ability bit (block B +0x19 bit 6).
 """
 
 from __future__ import annotations

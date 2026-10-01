@@ -251,14 +251,17 @@ def test_trainer_money_badges_match_codec(world):
 
 
 def test_location_via_pack_supplied_entry_matches_the_save_layout(lua_reads):
-    """PACK GAP: the HGSS pack has no Location offsets, so this supplies them (model entry) and checks the
-    reads path against tools/gen4_routes.py's own decode (general+0x1234, Location = 5 x int)."""
+    """The HGSS pack's Location entry (added by the pack generator) is checked against
+    tools/gen4_routes.py's own decode (general+0x1234, Location = 5 x int); without it, a named gap."""
     lua, reads = lua_reads
     ram, planted, prof = build_ram("hg")
     mem = ram.adapter(lua)
-    nil, why = reads.location(mem, to_lua(lua, prof))
+    loc = prof["location"]
+    assert {k: loc[k] for k in ("array_id", "map_off", "warp_off", "x_off", "y_off", "dir_off")} == {
+        "array_id": 5, "map_off": 0, "warp_off": 4, "x_off": 8, "y_off": 12, "dir_off": 16}
+    gap = {k: v for k, v in prof.items() if k != "location"}
+    nil, why = reads.location(mem, to_lua(lua, gap))
     assert nil is None and why == "pack_gap:location"
-    prof["location"] = {"array_id": 5, "map_off": 0, "warp_off": 4, "x_off": 8, "y_off": 12, "dir_off": 16}
     m, w, x, y, d = struct.unpack_from("<iiiii", planted.general, 0x1234)
     got = py(reads.location(mem, to_lua(lua, prof)))
     assert got == {"map_id": m, "warp_id": w, "x": x, "y": y, "dir": d} and (m, x, y) != (0, 0, 0)
@@ -398,7 +401,9 @@ def test_pack_gaps_are_named_not_hard_coded(lua_reads):
     ram, planted, prof = build_ram("hg")
     mem = ram.adapter(lua)
     hge = json.loads((ROOT / "data/games/gen4_hge/profile.json").read_text(encoding="utf-8"))
-    hp = to_lua(lua, hge["titles"]["heartgold_hge"]["profile"])
+    # the hge pack now carries party_off/trainer (FILE); strip them to prove a gap is named, not guessed
+    hprof = {k: v for k, v in hge["titles"]["heartgold_hge"]["profile"].items() if k not in ("party_off", "trainer")}
+    hp = to_lua(lua, hprof)
     refused(reads.party(mem, hp), "pack_gap:party_off")
     assert reads.trainer(mem, hp)[1].startswith("pack_gap:trainer")
     assert reads.badges(mem, hp)[1].startswith("pack_gap:trainer")

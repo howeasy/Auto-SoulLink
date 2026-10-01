@@ -185,9 +185,9 @@ end
 local function pk4_profile(p)
     local m, why = need(p, "pkm", "exp_bits")
     if not m then return nil, why end
-    -- hge's hidden-ability bit is not in the pack yet (pack gap, read only if a pack carries it).
+    -- hge's hidden-ability bit: the pack carries its location ({byte_off 0x19, bit 6}) as a table.
     return { exp_bits = p.pkm.exp_bits, ability_msb = type(p.pkm.ability_msb) == "table",
-             hidden_ability = p.pkm.hidden_ability == true }
+             hidden_ability = type(p.pkm.hidden_ability) == "table" }
 end
 
 -- Party as core mon records (pk4.to_core_mon) plus `slot` (0-based) and `decoded` (the full pk4
