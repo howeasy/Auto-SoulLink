@@ -149,6 +149,12 @@ return function(ctx)
             if at%2~=to%2 then return to%2>at%2 and "Right" or "Left" end
             return to>at and "Down" or "Up"
         end
+        -- The shared in-battle party_pick (duo_gen3_main) is still single-column; lend it
+        -- the grid step and this row's own picker so ctx.send_out/switch_to navigate the
+        -- same 2-column chooser. Both stay nil for every other scenario, so their
+        -- default behaviour is unchanged.
+        ctx.party_cursor_step=rr_grid_step
+        ctx.party_picker_ready=picker
         local available=ctx.party()
         if not available or #available<1 or #available>6 then return false,"loan UI party unreadable" end
         local selection_count=math.min(#available,facts.party_selection_max)

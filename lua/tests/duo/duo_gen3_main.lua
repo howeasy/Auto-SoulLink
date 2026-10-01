@@ -1458,14 +1458,28 @@ end
 --- switch, SEND OUT on the forced one after a faint -- pret src/data/party_menu.h), then wait for
 --- battler 0 to become `slot`.
 local function party_pick(slot)
-    if not ctx.wait_until(function() return party_menu_up() and party_task(S.Task_HandleChooseMonInput) end,
-                          20, "the in-battle party menu") then
+    -- A borrower may supply RR's 2-column grid helper and its own picker predicate
+    -- (scenario_gen3_borrowed binds both before the battle). With them absent the
+    -- original vertical rule and task check below run exactly as before.
+    local ready
+    if ctx.party_picker_ready then
+        ready = ctx.party_picker_ready      -- present: its false HOLDS, never falls back
+    else
+        ready = function() return party_menu_up() and party_task(S.Task_HandleChooseMonInput) end
+    end
+    if not ctx.wait_until(ready, 20, "the in-battle party menu") then
         return false, "the party menu never took input"
     end
     for _ = 1, 8 do
         local at = memory.read_u8(S.gPartyMenu + 9)       -- gPartyMenu.slotId, include/party_menu.h
         if at == slot then break end
-        G.tap(at < slot and "Down" or "Up", 3, 20)
+        local step
+        if ctx.party_cursor_step then
+            step = ctx.party_cursor_step
+        else
+            step = function(a, b) return a < b and "Down" or "Up" end
+        end
+        G.tap(step(at, slot), 3, 20)
     end
     if memory.read_u8(S.gPartyMenu + 9) ~= slot then return false, "party cursor never reached slot " .. slot end
     local pok, pwhy = press("A", 20)

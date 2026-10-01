@@ -405,3 +405,61 @@ def test_actual_rr_grid_selection_movement_refuses_a_cell_off_the_grid():
     """The stall branch is reachable: no input reaches a cell the two-column grid lacks."""
     reached,presses,at=_walk(0,7)
     assert not reached and at<=5,(presses,at)
+
+
+MAIN="lua/tests/duo/duo_gen3_main.lua"
+_PARTY_PICK=[None]
+
+def _party_pick():
+    """The shared party_pick exactly as written, replayed with RR's two-column cursor and
+    the scenario's own rr_grid_step; the optional callbacks are supplied or withheld."""
+    if _PARTY_PICK[0] is None:
+        from lupa import LuaRuntime
+        main=(ROOT/MAIN).read_text();borrow=(ROOT/SCENARIO).read_text()
+        pick=main[main.index("local function party_pick(slot)"):main.index("--- POK")]
+        start=borrow.index('        local function rr_grid_step(at,to)')
+        grid=borrow[start:borrow.index("\n        end\n",start)+len("\n        end\n")]
+        _PARTY_PICK[0]=LuaRuntime(unpack_returned_tuples=True).execute('''
+            local CURSOR,TAPS,SENT,TARGET,STEP,READY,COLUMNS=0,{},false,0,nil,nil,2
+            local S={gPartyMenu=0x0203C750,Task_HandleChooseMonInput='choose',Task_HandleSelectionMenuInput='popup'}
+            local memory={read_u8=function(address) if address==S.gPartyMenu+9 then return CURSOR end return 0 end}
+            local G={tap=function(button)
+                TAPS[#TAPS+1]=button
+                local delta={Down=COLUMNS,Up=-COLUMNS,Right=1,Left=-1}
+                if delta[button] then CURSOR=math.max(0,math.min(CURSOR+delta[button],5)) end
+            end}
+            local press=function(key) if key=='A' then SENT=true end return true end
+            local party_menu_up=function() return true end
+            local party_task=function() return true end
+            local ctx={wait_until=function(p) return p() end,
+                battler_slot=function() return SENT and TARGET or -1 end}
+        '''+grid+pick+'''
+            local function run(at,slot,step,ready,columns)
+                CURSOR,TAPS,SENT,TARGET,COLUMNS=at,{},false,slot,columns
+                STEP=step=="grid" and rr_grid_step or nil
+                READY=ready=="never" and function() return false end or nil
+                ctx.party_cursor_step=STEP;ctx.party_picker_ready=READY
+                local ok,why=party_pick(slot)
+                return ok,why,#TAPS,table.concat(TAPS,","),CURSOR
+            end
+            return run
+        ''')
+    return _PARTY_PICK[0]
+
+def test_actual_party_pick_uses_the_bound_rr_grid_step_for_the_live_send_out():
+    """The retained live failure: ctx.send_out(1) under the vertical rule could not cross
+    to the next column; the scenario-bound rr_grid_step reaches it."""
+    ok,why,taps,pressed,cursor=_party_pick()(0,1,"grid",None,2)
+    assert ok and cursor==1,(why,pressed)
+
+def test_actual_party_pick_without_the_optional_callbacks_keeps_the_vertical_default():
+    ok,why,taps,pressed,cursor=_party_pick()(0,1,None,None,1)
+    assert ok and pressed=="Down",(why,pressed)
+
+def test_actual_party_pick_refuses_while_a_borrower_picker_predicate_is_false():
+    """A supplied predicate outranks the old task check and presses nothing; here that
+    default would have proceeded, so this cannot pass through a Lua and/or fallback."""
+    pick=_party_pick()
+    assert pick(0,1,"grid",None,2)[0] is True
+    ok,why,taps,pressed,cursor=pick(0,1,"grid","never",2)
+    assert not ok and pressed=="" and "never took input" in why,(why,pressed)
