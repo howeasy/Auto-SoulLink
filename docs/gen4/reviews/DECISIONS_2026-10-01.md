@@ -83,3 +83,18 @@ Owner, replying to the paced HG floor (receipt `heartgold-8355974c3c30`), "Thats
   - 2+ mon replacement is the primary production path.
   - The one-mon whiteout stays as a second scenario.
 - **Why:** the OMP adversarial review cx-fd56a73d graded "row o proven only on a one-mon whiteout" as a BLOCKER. With 2+ mons the write takes the D540 replacement branch, which is the path players actually hit.
+
+## Owner standing rule: SYNTH setup is allowed (2026-10-01)
+
+Owner: "Synth tests ARE allowed."
+
+- **Scope:** any row may use a disclosed SYNTH setup in place of long manual play. Examples are extra party members, box mons and story flags, built by tools such as `gen4_synth_save.py`.
+- **Conditions:**
+  - Every such receipt carries `setup: SYNTH` and the sidecar hash.
+  - The behaviour under test (the hook, write, game effect, save or reload) always runs natively from normal inputs.
+- **Supersedes:** this replaces the earlier natural-only restrictions in the row i and row o notes above.
+
+## Coordinator: emulator lanes
+
+- **Up to two concurrent functional lanes** (different `C:/slink/g4/<lane>` dirs, own PIDs) are allowed to cut wall time.
+- **Performance receipts (row f / gen4-PERF)** still need a quiet machine. No other Gen 4 lane runs during them, and foreign PIDs are recorded.
